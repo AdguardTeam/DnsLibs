@@ -1,0 +1,15 @@
+[submodule "third-party/ldns/ldns"]
+	path = third-party/ldns/ldns
+	url = https://github.com/NLnetLabs/ldns.git
+[submodule "third-party/libevent"]
+	path = third-party/libevent/libevent
+	url = https://github.com/libevent/libevent.git
+[submodule "third-party/openssl"]
+	path = third-party/openssl
+	url = https://github.com/openssl/openssl.git
+[submodule "third-party/fmt"]
+	path = third-party/fmt
+	url = https://github.com/fmtlib/fmt
+[submodule "third-party/googletest"]
+	path = third-party/googletest
+	url = https://github.com/google/googletest.git
