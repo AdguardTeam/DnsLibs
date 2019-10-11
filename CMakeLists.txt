@@ -4,3 +4,4 @@ project(agdns C CXX)
 set(CMAKE_CXX_STANDARD 17)
 
 add_subdirectory(upstream)
+add_subdirectory(dnsstamp)

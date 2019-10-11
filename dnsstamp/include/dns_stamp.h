@@ -1,0 +1,93 @@
+#ifndef AGDNS_DNSSTAMP_DNS_STAMP_H
+#define AGDNS_DNSSTAMP_DNS_STAMP_H
+
+#include <cstdint>
+#include <string>
+#include <string_view>
+#include <utility>
+#include <vector>
+
+namespace ag {
+
+using stamp_port_t = uint16_t;
+
+constexpr stamp_port_t DEFAULT_DOH_PORT = 443;
+constexpr stamp_port_t DEFAULT_DOT_PORT = 843;
+constexpr stamp_port_t DEFAULT_PLAIN_PORT = 53;
+constexpr auto STAMP_URL_PREFIX_WITH_SCHEME = "sdns://";
+
+/**
+ * server_informal_properties represents informal properties about the resolver
+ */
+enum server_informal_properties : uint64_t {
+    /** dnssec means resolver does DNSSEC validation */
+    DNSSEC = 1 << 0,
+    /** no_log means resolver does not record logs */
+    NO_LOG = 1 << 1,
+    /** no_filter means resolver doesn't intentionally block domains */
+    NO_FILTER = 1 << 2,
+};
+
+/**
+ * stamp_proto_type is a stamp protocol type
+ */
+enum class stamp_proto_type : uint8_t {
+    /** plain is plain DNS */
+    PLAIN = 0x00,
+    /** dnscrypt is DNSCrypt */
+    DNSCRYPT = 0x01,
+    /** doh is DNS-over-HTTPS */
+    DOH = 0x02,
+    /** tls is DNS-over-TLS */
+    TLS = 0x03,
+};
+
+/**
+ * server_stamp is the DNS stamp representation
+ */
+struct server_stamp {
+    /**
+     * Creates string from variables stored in struct
+     * @return
+     */
+    std::string str() const;
+
+    /**
+     * Creates stamp struct from URL
+     * @param url URL string
+     * @return stamp struct or error
+     */
+    static std::pair<server_stamp, std::string> from_string(std::string_view url);
+
+    /** Server address with port */
+    std::string server_addr_str;
+
+    /** The DNSCrypt provider’s Ed25519 public key, as 32 raw bytes. Empty for other types. */
+    std::vector<std::byte> server_pk;
+
+    /** Hash is the SHA256 digest of one of the TBS certificate found in the validation chain, typically
+     * the certificate used to sign the resolver’s certificate. Multiple hashes can be provided for seamless
+     * rotations. */
+    std::vector<std::vector<std::byte>> hashes;
+
+    /**
+     * Provider means different things depending on the stamp type
+     * DNSCrypt: the DNSCrypt provider name
+     * DOH and DOT: server's hostname
+     * Plain DNS: not specified
+     */
+    std::string provider_name;
+
+    /** Path is the HTTP path, and it has a meaning for DoH stamps only. */
+    std::string path;
+
+    /** Server properties (DNSSec, NoLog, NoFilter). */
+    server_informal_properties props;
+
+    /** Stamp protocol. */
+    stamp_proto_type proto;
+};
+
+} // namespace ag
+
+#endif // AGDNS_DNSSTAMP_DNS_STAMP_H

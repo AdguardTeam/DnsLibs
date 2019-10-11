@@ -2,6 +2,8 @@ cmake_minimum_required(VERSION 3.6)
 project(agdns_upstream C CXX)
 
 set(CMAKE_CXX_STANDARD 17)
+cmake_policy(SET CMP0076 NEW)
+cmake_policy(SET CMP0079 NEW)
 
 if (NOT TARGET event_core)
     add_subdirectory(../third-party/libevent ${CMAKE_BINARY_DIR}/libevent)
@@ -14,7 +16,6 @@ endif ()
 add_library(upstream EXCLUDE_FROM_ALL
         include/upstream.h
         src/connection_pool.cpp
-        src/dns_stamp.cpp
         src/upstream.cpp
         src/upstream_doh.cpp
         src/upstream_dot.cpp
