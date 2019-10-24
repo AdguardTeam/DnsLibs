@@ -62,10 +62,10 @@ TEST_F(dnsstamp_test, test_dnscrypt_stamp_create) {
 	// same as exampleStamp in dnscrypt-stamper
 	static constexpr auto expected = "sdns://AQcAAAAAAAAACTEyNy4wLjAuMSDDhGvyS56TymQnTA7GfB7MXgJP_KzS10AZNQ6B_lRq5BkyLmRuc2NyeXB0LWNlcnQubG9jYWxob3N0";
 	ag::server_stamp stamp{};
-	stamp.props = {
-        ag::server_informal_properties::DNSSEC |
-        ag::server_informal_properties::NO_LOG |
-        ag::server_informal_properties::NO_FILTER
+	stamp.props = ag::server_informal_properties{
+		(uint64_t)ag::server_informal_properties::DNSSEC |
+		(uint64_t)ag::server_informal_properties::NO_LOG |
+		(uint64_t)ag::server_informal_properties::NO_FILTER
 	};
 	stamp.proto = ag::stamp_proto_type::DNSCRYPT;
 	stamp.server_addr_str = "127.0.0.1";
@@ -87,10 +87,10 @@ TEST_F(dnsstamp_test, test_dnscrypt_stamp_parse) {
 TEST_F(dnsstamp_test, test_doh_stamp) {
 	static constexpr auto expected = "sdns://AgcAAAAAAAAACTEyNy4wLjAuMSDDhGvyS56TymQnTA7GfB7MXgJP_KzS10AZNQ6B_lRq5AtleGFtcGxlLmNvbQovZG5zLXF1ZXJ5";
 	ag::server_stamp stamp{};
-	stamp.props = {
-        ag::server_informal_properties::DNSSEC |
-        ag::server_informal_properties::NO_LOG |
-        ag::server_informal_properties::NO_FILTER
+	stamp.props = ag::server_informal_properties{
+		(uint64_t)ag::server_informal_properties::DNSSEC |
+		(uint64_t)ag::server_informal_properties::NO_LOG |
+		(uint64_t)ag::server_informal_properties::NO_FILTER
     };
 	stamp.server_addr_str = "127.0.0.1";
 	stamp.proto = ag::stamp_proto_type::DOH;
@@ -122,10 +122,10 @@ TEST_F(dnsstamp_test, test_doh_stamp_parse) {
 TEST_F(dnsstamp_test, test_dot_stamp) {
     static constexpr auto expected = "sdns://AwcAAAAAAAAACTEyNy4wLjAuMSDDhGvyS56TymQnTA7GfB7MXgJP_KzS10AZNQ6B_lRq5AtleGFtcGxlLmNvbQ";
 	ag::server_stamp stamp{};
-	stamp.props = {
-        ag::server_informal_properties::DNSSEC |
-        ag::server_informal_properties::NO_LOG |
-        ag::server_informal_properties::NO_FILTER
+	stamp.props = ag::server_informal_properties{
+		(uint64_t)ag::server_informal_properties::DNSSEC |
+		(uint64_t)ag::server_informal_properties::NO_LOG |
+		(uint64_t)ag::server_informal_properties::NO_FILTER
 	};
 	stamp.server_addr_str = "127.0.0.1";
 	stamp.proto = ag::stamp_proto_type::TLS;
@@ -145,13 +145,13 @@ TEST_F(dnsstamp_test, test_dot_short_stamp) {
 TEST_F(dnsstamp_test, test_plain_stamp) {
 	static constexpr auto expected = "sdns://AAcAAAAAAAAABzguOC44Ljg";
 	ag::server_stamp stamp{};
-	stamp.props = {
-        ag::server_informal_properties::DNSSEC |
-        ag::server_informal_properties::NO_LOG |
-        ag::server_informal_properties::NO_FILTER
+	stamp.props = ag::server_informal_properties{
+		(uint64_t)ag::server_informal_properties::DNSSEC |
+		(uint64_t)ag::server_informal_properties::NO_LOG |
+		(uint64_t)ag::server_informal_properties::NO_FILTER
 	};
 	stamp.server_addr_str = "127.0.0.1";
-	stamp.proto = ag::stamp_proto_type ::PLAIN;
+	stamp.proto = ag::stamp_proto_type::PLAIN;
 	stamp.server_addr_str = "8.8.8.8";
 	test_server_stamp_create(stamp, expected);
 }

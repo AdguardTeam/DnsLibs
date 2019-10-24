@@ -13,6 +13,7 @@
 #include <event2/thread.h>
 #include <socket_address.h>
 #include <upstream_util.h>
+#include <ag_logger.h>
 #include "event_loop.h"
 
 using event_base_ptr = std::shared_ptr<event_base>;
@@ -73,6 +74,7 @@ public:
 
 
 private:
+    logger m_log;
     /** Connection pool */
     tcp_connection_pool *m_pool;
     /** Connection handle */

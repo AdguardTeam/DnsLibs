@@ -2,8 +2,12 @@ cmake_minimum_required(VERSION 3.6)
 project(agdns_dnsstamp C CXX)
 
 set(CMAKE_CXX_STANDARD 17)
-cmake_policy(SET CMP0076 NEW)
-cmake_policy(SET CMP0079 NEW)
+
+set(THIRD_PARTY_DIR ${CMAKE_CURRENT_SOURCE_DIR}/../third-party)
+
+if (NOT TARGET libevent)
+    add_subdirectory(${THIRD_PARTY_DIR}/libevent ${CMAKE_BINARY_DIR}/libevent)
+endif ()
 
 add_library(dnsstamp EXCLUDE_FROM_ALL
         include/base64.h
@@ -12,14 +16,16 @@ add_library(dnsstamp EXCLUDE_FROM_ALL
         src/dns_stamp.cpp)
 
 target_include_directories(dnsstamp PUBLIC include)
+target_link_libraries(dnsstamp libevent)
 
 enable_testing()
 if (NOT TARGET tests)
-    add_subdirectory(../third-party/googletest googletest)
-    add_executable(tests EXCLUDE_FROM_ALL)
-    target_link_libraries(tests gtest_main)
-    add_test(tests tests)
+    add_subdirectory(${THIRD_PARTY_DIR}/googletest ${CMAKE_BINARY_DIR}/googletest)
+    add_custom_target(tests)
 endif ()
 
-target_sources(tests PRIVATE test/dns_stamp_test.cpp)
-target_link_libraries(tests dnsstamp)
+link_libraries(gtest gtest_main dnsstamp)
+
+add_executable(dns_stamp_test EXCLUDE_FROM_ALL test/dns_stamp_test.cpp)
+add_test(dns_stamp_test dns_stamp_test)
+add_dependencies(tests dns_stamp_test)

@@ -27,12 +27,7 @@ public:
     socket_address(ag::vector_view addr, int port);
 
     bool operator<(const socket_address &other) const;
-
     bool operator==(const socket_address &other) const;
-
-    class hash {
-        size_t operator()(const socket_address &address);
-    };
 
     /**
      * @return Pointer to sockaddr_storage structure

@@ -29,11 +29,6 @@ if(NOT TARGET pcre2)
     add_subdirectory(${THIRD_PARTY_DIR}/pcre2 ${CMAKE_BINARY_DIR}/third-party/pcre2)
 endif(NOT TARGET pcre2)
 
-if(NOT TARGET spdlog)
-    set(SPDLOG_NO_EXCEPTIONS ON CACHE BOOL "" FORCE)
-    add_subdirectory(${THIRD_PARTY_DIR}/spdlog ${CMAKE_BINARY_DIR}/third-party/spdlog)
-endif(NOT TARGET spdlog)
-
 if(NOT TARGET dnslibs_common)
     add_subdirectory(${DNSLIBS_DIR}/common ${CMAKE_BINARY_DIR}/common)
 endif(NOT TARGET dnslibs_common)
@@ -43,7 +38,7 @@ target_include_directories(dnsfilter PUBLIC ./include)
 target_include_directories(dnsfilter PRIVATE ${THIRD_PARTY_DIR}/klib)
 target_include_directories(dnsfilter PRIVATE ${CMAKE_BINARY_DIR}/third-party/pcre2)
 target_compile_definitions(dnsfilter PUBLIC PCRE2_STATIC=1 PCRE2_CODE_UNIT_WIDTH=8)
-target_link_libraries(dnsfilter dnslibs_common spdlog pcre2-8)
+target_link_libraries(dnsfilter dnslibs_common pcre2-8)
 
 target_compile_options(dnsfilter PRIVATE -Wall -Wextra -Wformat=2 -Wno-unused-parameter)
 if (NOT MSVC)
@@ -74,5 +69,4 @@ link_libraries(gtest gtest_main dnsfilter)
 
 add_executable(dnsfilter_test EXCLUDE_FROM_ALL ${TEST_DIR}/dnsfilter_test.cpp)
 add_test(dnsfilter_test dnsfilter_test)
-
 add_dependencies(tests dnsfilter_test)
