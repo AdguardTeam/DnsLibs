@@ -14,28 +14,28 @@ namespace {
 // openssl x509 -noout -fingerprint -sha256 -inform pem -in /etc/ssl/certs/Go_Daddy_Class_2_CA.pem
 constexpr const auto pk_str = "C3:84:6B:F2:4B:9E:93:CA:64:27:4C:0E:C6:7C:1E:CC:5E:02:4F:FC:AC:D2:D7:40:19:35:0E:81:FE:54:6A:E4";
 
-std::vector<std::byte> to_bytes(std::string_view sv, char separator) {
-    std::vector<std::byte> bin;
+std::vector<uint8_t> to_bytes(std::string_view sv, char separator) {
+    std::vector<uint8_t> bin;
     for (auto i = std::begin(sv), e = std::end(sv); i < e; ++i) {
         auto separator_i = std::find(i, e, separator);
         uint8_t y;
         if (std::from_chars(i, separator_i, y, 16).ec != std::errc{}) {
             return {};
         }
-        bin.emplace_back(std::byte{y});
+        bin.emplace_back(y);
         i = separator_i;
     }
     return bin;
 }
 
-class dnsstamp_test : public  ::testing::Test {
+class dnsstamp_test : public ::testing::Test {
 protected:
     void SetUp() override {
         pk1 = to_bytes(pk_str, ':');
     }
     void TearDown() override {
     }
-    std::vector<std::byte> pk1;
+    std::vector<uint8_t> pk1;
 };
 
 void test_server_stamp_create(const ag::server_stamp &stamp, std::string_view expected) {

@@ -63,12 +63,12 @@ struct server_stamp {
     std::string server_addr_str;
 
     /** The DNSCrypt provider’s Ed25519 public key, as 32 raw bytes. Empty for other types. */
-    std::vector<std::byte> server_pk;
+    std::vector<uint8_t> server_pk;
 
     /** Hash is the SHA256 digest of one of the TBS certificate found in the validation chain, typically
      * the certificate used to sign the resolver’s certificate. Multiple hashes can be provided for seamless
      * rotations. */
-    std::vector<std::vector<std::byte>> hashes;
+    std::vector<std::vector<uint8_t>> hashes;
 
     /**
      * Provider means different things depending on the stamp type
