@@ -4,13 +4,15 @@
 #include <ldns/wire2host.h>
 #include <event2/buffer.h>
 #include <socket_address.h>
+#include <ag_logger.h>
 
 int ag::dns_framed_connection::write(vector_view buf) {
+    infolog(m_log, "{} len={}", __func__, buf.size());
     dns_framed_connection_ptr ptr = shared_from_this();
     if (buf.size() < 2) {
+        infolog(m_log, "{} returned -1", __func__);
         return -1;
     }
-    fprintf(stderr, "%s:%d\n", __func__, __LINE__);
     uint16_t id = *(uint16_t *) buf.data();
     {
         std::scoped_lock l(m_mutex);
@@ -26,18 +28,16 @@ int ag::dns_framed_connection::write(vector_view buf) {
 
         m_requests[id] = std::nullopt;
     }
+    infolog(m_log, "{} returned {}", __func__, id);
     return id;
 }
 
 ag::dns_framed_connection::dns_framed_connection(tcp_connection_pool *pool, bufferevent *bev, const socket_address &address)
-        : m_pool(pool), m_bev(bev), m_socket_address(address) {
+        : m_log(ag::create_logger(__func__)), m_pool(pool), m_bev(bev), m_socket_address(address) {
     bufferevent_setcb(m_bev, [](bufferevent *, void *arg) {
         auto conn = (ag::dns_framed_connection *) arg;
         conn->on_read();
-    }, [](bufferevent *, void *arg) {
-        auto conn = (ag::dns_framed_connection *) arg;
-        fprintf(stderr, "on_write\n");
-    }, [](bufferevent *, short what, void *arg) {
+    }, nullptr, [](bufferevent *, short what, void *arg) {
         auto conn = (ag::dns_framed_connection *) arg;
         conn->on_event(what);
     }, this);
@@ -53,8 +53,8 @@ ag::dns_framed_connection_ptr ag::dns_framed_connection::create(tcp_connection_p
 }
 
 void ag::dns_framed_connection::on_read() {
+    infolog(m_log, "{}", __func__);
     dns_framed_connection_ptr ptr = shared_from_this();
-    fprintf(stderr, "%s:%d\n", __func__, __LINE__);
     auto *input = bufferevent_get_input(m_bev);
     for (;;) {
         if (evbuffer_get_length(input) < 2) {
@@ -82,12 +82,12 @@ void ag::dns_framed_connection::on_read() {
             m_cond.notify_all();
         }
     }
-    fprintf(stderr, "%s:%d\n", __func__, __LINE__);
+    infolog(m_log, "{} finished", __func__);
 }
 
 void ag::dns_framed_connection::on_event(int what) {
+    infolog(m_log, "{}", __func__);
     dns_framed_connection_ptr ptr = shared_from_this();
-    fprintf(stderr, "%s:%d %d\n", __func__, __LINE__, what);
     if (what & BEV_EVENT_CONNECTED) {
         m_pool->add(shared_from_this());
     }
@@ -101,7 +101,7 @@ void ag::dns_framed_connection::on_event(int what) {
         }
         m_cond.notify_all();
     }
-    fprintf(stderr, "%s:%d\n", __func__, __LINE__);
+    infolog(m_log, "{} finished", __func__);
 }
 
 ag::connection::result ag::dns_framed_connection::read(int request_id, std::chrono::milliseconds timeout) {

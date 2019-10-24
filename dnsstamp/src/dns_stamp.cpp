@@ -7,7 +7,7 @@
 #include <type_traits>
 #include <utility>
 #include <vector>
-#include <netdb.h>
+#include <event2/util.h>
 #include <base64.h>
 #include <dns_stamp.h>
 
