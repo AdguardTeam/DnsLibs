@@ -1,3 +1,4 @@
+#include <cstddef>
 #include <cstdint>
 #include <array>
 #include <vector>
@@ -74,11 +75,11 @@ constexpr auto PADDING = '=';
 
 } // namespace
 
-std::string encode_to_base64(bytes_view_t data, bool url_safe)
+std::string encode_to_base64(uint8_view_t data, bool url_safe)
 {
     const auto base64_table = url_safe ? BASE64_TABLE_URL_SAFE : BASE64_TABLE_DEFAULT;
-    auto in_pos = reinterpret_cast<const uint8_t *>(data.data());
-    auto end = reinterpret_cast<const uint8_t *>(data.data() + data.size());
+    auto in_pos = data.data();
+    auto end = data.data() + data.size();
     std::string result;
     result.reserve(encode_base64_size(data.size()));
     while (in_pos + 2 < end) {
@@ -106,12 +107,12 @@ std::string encode_to_base64(bytes_view_t data, bool url_safe)
     return result;
 }
 
-std::optional<std::vector<std::byte>> decode_base64(const std::string_view &data, bool url_safe)
+std::optional<std::vector<uint8_t>> decode_base64(const std::string_view &data, bool url_safe)
 {
     const auto &basis = url_safe ? BASIS_URL_SAFE : BASIS_DEFAULT;
-    auto src = reinterpret_cast<const uint8_t *>(data.data());
+    auto src = data.data();
     auto src_len = data.size();
-    size_t len;
+    size_t len = 0;
     for (len = 0; len < src_len; len++) {
         if (src[len] == PADDING) {
             break;
@@ -123,21 +124,21 @@ std::optional<std::vector<std::byte>> decode_base64(const std::string_view &data
     if (len % 4 == 1) {
         return std::nullopt;
     }
-    std::vector<std::byte> result;
+    std::vector<uint8_t> result;
     result.reserve(decode_base64_size(src_len));
     auto s = src;
     while (len > 3) {
-        result.emplace_back(static_cast<std::byte>(basis[s[0]] << 2 | basis[s[1]] >> 4));
-        result.emplace_back(static_cast<std::byte>(basis[s[1]] << 4 | basis[s[2]] >> 2));
-        result.emplace_back(static_cast<std::byte>(basis[s[2]] << 6 | basis[s[3]]));
+        result.emplace_back(basis[s[0]] << 2 | basis[s[1]] >> 4);
+        result.emplace_back(basis[s[1]] << 4 | basis[s[2]] >> 2);
+        result.emplace_back(basis[s[2]] << 6 | basis[s[3]]);
         s += 4;
         len -= 4;
     }
     if (len > 1) {
-        result.emplace_back(static_cast<std::byte>(basis[s[0]] << 2 | basis[s[1]] >> 4));
+        result.emplace_back(basis[s[0]] << 2 | basis[s[1]] >> 4);
     }
     if (len > 2) {
-        result.emplace_back(static_cast<std::byte>(basis[s[1]] << 4 | basis[s[2]] >> 2));
+        result.emplace_back(basis[s[1]] << 4 | basis[s[2]] >> 2);
     }
     return result;
 }
