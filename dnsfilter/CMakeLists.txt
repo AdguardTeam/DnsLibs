@@ -38,7 +38,7 @@ target_include_directories(dnsfilter PUBLIC ./include)
 target_include_directories(dnsfilter PRIVATE ${THIRD_PARTY_DIR}/klib)
 target_include_directories(dnsfilter PRIVATE ${CMAKE_BINARY_DIR}/third-party/pcre2)
 target_compile_definitions(dnsfilter PUBLIC PCRE2_STATIC=1 PCRE2_CODE_UNIT_WIDTH=8)
-target_link_libraries(dnsfilter dnslibs_common spdlog pcre2-8)
+target_link_libraries(dnsfilter dnslibs_common pcre2-8)
 
 target_compile_options(dnsfilter PRIVATE -Wall -Wextra -Wformat=2 -Wno-unused-parameter)
 if (NOT MSVC)
