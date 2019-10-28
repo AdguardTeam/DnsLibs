@@ -5,7 +5,7 @@
 #include <upstream.h>
 #include <event2/event.h>
 #include <ldns/net.h>
-#include "connection_pool.h"
+#include "upstream_pool.h"
 
 namespace ag {
 
@@ -31,7 +31,7 @@ public:
 
 private:
     /** TCP connection pool */
-    tcp_connection_pool m_pool;
+    tcp_pool m_pool;
     /** DNS server socket address */
     socket_address m_socket_address;
     /** Timeout */

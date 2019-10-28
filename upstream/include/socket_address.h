@@ -1,13 +1,11 @@
-#ifndef AGDNS_UPSTREAM_SOCKET_ADDRESS_H
-#define AGDNS_UPSTREAM_SOCKET_ADDRESS_H
+#pragma once
 
 #include <string_view>
 #include <vector>
 #include <event2/util.h> // for sockaddr, sockaddr_storage, getaddrinfo, getnameinfo
+#include <ag_defs.h>
 
 namespace ag {
-
-using vector_view = std::basic_string_view<uint8_t>;
 
 /**
  * Socket address (IP address and port)
@@ -24,7 +22,7 @@ public:
      * @param addr Vector containing IP address bytes. Should be 4 or 16 bytes length
      * @param port Port number
      */
-    socket_address(ag::vector_view addr, int port);
+    socket_address(ag::uint8_view_t addr, int port);
 
     bool operator<(const socket_address &other) const;
     bool operator==(const socket_address &other) const;
@@ -70,6 +68,3 @@ struct hash<ag::socket_address> {
     }
 };
 } // namespace std
-
-
-#endif //AGDNS_UPSTREAM_SOCKET_ADDRESS_H

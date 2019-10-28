@@ -51,7 +51,7 @@ bool ag::file::is_valid(const handle f) {
 }
 
 ag::file::handle ag::file::open(std::string_view path, int flags) {
-    return ::_open(path.data(), flags | _O_BINARY, _S_IWRITE);
+    return ::_wopen(ag::utils::to_wstring(path).c_str(), flags | _O_BINARY, _S_IWRITE);
 }
 
 void ag::file::close(handle f) {
@@ -65,9 +65,10 @@ int ag::file::read(const handle f, char *buf, size_t size) {
 }
 
 int ag::file::pread(const handle f, char *buf, size_t size, size_t pos) {
+    size_t old_pos = get_position(f);
     set_position(f, pos);
     int r = read(f, buf, size);
-    set_position(f, pos);
+    set_position(f, old_pos);
     return r;
 }
 
@@ -93,11 +94,8 @@ int ag::file::get_size(const handle f) {
 #endif
 
 int ag::file::for_each_line(const handle f, line_action action, void *arg) {
-    constexpr size_t CHUNK_SIZE = 1 * 1024 * 1024;
-    char *buffer = new(std::nothrow) char[CHUNK_SIZE];
-    if (buffer == nullptr) {
-        return -1;
-    }
+    static constexpr size_t CHUNK_SIZE = 1 * 1024 * 1024;
+    std::vector<char> buffer(CHUNK_SIZE);
 
     std::string_view line;
     size_t buffer_offset = 0;
@@ -115,7 +113,6 @@ int ag::file::for_each_line(const handle f, line_action action, void *arg) {
             line = { &buffer[from], line_length };
             ag::utils::trim(line);
             if (!action(file_idx + from, line, arg)) {
-                delete[] buffer;
                 return 0;
             }
             from = i + 1;
@@ -123,23 +120,19 @@ int ag::file::for_each_line(const handle f, line_action action, void *arg) {
 
         buffer_offset = CHUNK_SIZE - from;
         file_idx += from;
-        std::memmove(buffer, &buffer[from], buffer_offset);
+        std::memmove(&buffer[0], &buffer[from], buffer_offset);
     }
 
-    delete[] buffer;
     return r;
 }
 
 std::optional<std::string> ag::file::read_line(const handle f, size_t pos) {
-    constexpr size_t CHUNK_SIZE = 4 * 1024;
-    char *buffer = new(std::nothrow) char[CHUNK_SIZE];
-    if (buffer == nullptr) {
-        return std::nullopt;
-    }
+    static constexpr size_t CHUNK_SIZE = 4 * 1024;
+    std::vector<char> buffer(CHUNK_SIZE);
 
     std::string line;
     int r;
-    while (0 < (r = ag::file::pread(f, buffer, CHUNK_SIZE, pos))) {
+    while (0 < (r = ag::file::pread(f, &buffer[0], CHUNK_SIZE, pos))) {
         int from = 0;
         int i;
         for (i = 0; i < r; ++i) {
@@ -154,12 +147,11 @@ std::optional<std::string> ag::file::read_line(const handle f, size_t pos) {
         if (i < r) {
             break;
         } else {
-            line.append(buffer, r);
+            line.append(&buffer[0], r);
             set_position(f, pos + r);
         }
     }
 
-    delete[] buffer;
     ag::utils::trim(line);
     return std::make_optional(std::move(line));
 }

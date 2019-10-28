@@ -1,5 +1,4 @@
-#ifndef AGDNS_DNSSTAMP_DNS_STAMP_H
-#define AGDNS_DNSSTAMP_DNS_STAMP_H
+#pragma once
 
 #include <cstdint>
 #include <string>
@@ -89,5 +88,3 @@ struct server_stamp {
 };
 
 } // namespace ag
-
-#endif // AGDNS_DNSSTAMP_DNS_STAMP_H

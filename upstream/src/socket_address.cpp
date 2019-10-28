@@ -85,7 +85,7 @@ std::string ag::socket_address::str() const {
     }
 }
 
-ag::socket_address::socket_address(ag::vector_view addr, int port)
+ag::socket_address::socket_address(ag::uint8_view_t addr, int port)
         : m_ss{} {
     if (addr.size() == 16) {
         auto &sin6 = (sockaddr_in6 &) m_ss;

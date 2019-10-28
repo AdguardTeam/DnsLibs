@@ -3,6 +3,8 @@
 #include <cstdarg>
 #include <cstring>
 #include <array>
+#include <locale>
+#include <codecvt>
 #include <ag_utils.h>
 
 std::vector<std::string_view> ag::utils::split_by(std::string_view str, std::string_view delim) {
@@ -208,4 +210,12 @@ bool ag::utils::is_valid_ip6(std::string_view str) {
     }
 
     return true;
+}
+
+std::wstring ag::utils::to_wstring(std::string_view sv) {
+    return std::wstring_convert<std::codecvt_utf8<wchar_t>>().from_bytes(sv.begin(), sv.end());
+}
+
+std::string ag::utils::from_wstring(std::wstring_view wsv) {
+    return std::wstring_convert<std::codecvt_utf8<wchar_t>>().to_bytes(wsv.begin(), wsv.end());
 }
