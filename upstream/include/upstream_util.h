@@ -1,5 +1,4 @@
-#ifndef AGDNS_UPSTREAM_UPSTREAM_UTIL_H
-#define AGDNS_UPSTREAM_UPSTREAM_UTIL_H
+#pragma once
 
 #include <string>
 #include <optional>
@@ -8,11 +7,6 @@
 #include <unordered_map>
 
 namespace ag {
-
-using opt_string = std::optional<std::string>;
-using err_string = opt_string;
-template <class K, class V>
-using hash_map = std::unordered_map<K, V>;
 
 namespace util {
 
@@ -41,5 +35,3 @@ timeval duration_to_timeval(std::chrono::microseconds usecs);
 } // namespace ag::util
 
 } // namespace ag
-
-#endif //AGDNS_UPSTREAM_UPSTREAM_UTIL_H

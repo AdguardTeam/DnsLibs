@@ -1,6 +1,6 @@
-#ifndef AGDNS_UPSTREAM_UPSTREAM_H
-#define AGDNS_UPSTREAM_UPSTREAM_H
+#pragma once
 
+#include <ag_defs.h>
 #include <string>
 #include <memory>
 #include <ldns/packet.h>
@@ -66,5 +66,3 @@ public:
 };
 
 } // namespace ag
-
-#endif // AGDNS_UPSTREAM_UPSTREAM_H

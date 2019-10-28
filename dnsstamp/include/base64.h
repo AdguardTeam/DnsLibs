@@ -1,14 +1,12 @@
-#ifndef AGDNS_DNSSTAMP_BASE64_H
-#define AGDNS_DNSSTAMP_BASE64_H
+#pragma once
 
 #include <optional>
 #include <string>
 #include <string_view>
 #include <vector>
+#include <ag_defs.h>
 
 namespace ag {
-
-using uint8_view_t = std::basic_string_view<uint8_t>;
 
 /**
  * Creates Base64-encoded string from data
@@ -27,5 +25,3 @@ std::string encode_to_base64(uint8_view_t data, bool url_safe);
 std::optional<std::vector<uint8_t>> decode_base64(const std::string_view &data, bool url_safe);
 
 } // namespace ag
-
-#endif // AGDNS_DNSSTAMP_BASE64_H

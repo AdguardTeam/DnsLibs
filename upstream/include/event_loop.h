@@ -1,5 +1,4 @@
-#ifndef AGDNS_UPSTREAM_EVENT_LOOP_H
-#define AGDNS_UPSTREAM_EVENT_LOOP_H
+#pragma once
 
 #include <memory>
 #include <thread>
@@ -52,6 +51,3 @@ private:
 };
 
 } // namespace ag
-
-
-#endif //AGDNS_UPSTREAM_EVENT_LOOP_H

@@ -1,8 +1,7 @@
 #include <errno.h>
 #include <cstring>
 #include <ag_sys.h>
-#include <locale>
-#include <codecvt>
+#include <ag_utils.h>
 
 #if defined(__linux__) || defined(__LINUX__) || defined(__MACH__)
 #include <sys/resource.h>
@@ -39,7 +38,7 @@ int ag::sys::error_code() {
 }
 
 std::string ag::sys::error_string(int err) {
-    return std::wstring_convert<std::codecvt_utf8<wchar_t>>().to_bytes(_wcserror(err));
+    return ag::utils::from_wstring(_wcserror(err));
 }
 
 size_t ag::sys::current_rss() {

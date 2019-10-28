@@ -128,4 +128,18 @@ namespace ag::utils {
         return hash;
     }
 
+    /**
+     * Convert UTF-8 string to wide char string
+     * @param sv UTF-8 string
+     * @return Wide char string
+     */
+    std::wstring to_wstring(std::string_view sv);
+
+    /**
+     * Convert wide char string to UTF-8 string
+     * @param wsv Wide char string
+     * @return UTF-8 string
+     */
+    std::string from_wstring(std::wstring_view wsv);
+
 } // namespace ag::utils
