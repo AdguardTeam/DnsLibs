@@ -37,6 +37,7 @@ public:
         uint32_t filter_id; // id of a filter which contains the matched rule
         std::string text; // rule text
         std::bitset<RP_NUM> props; // properties (see `rule_props`)
+        std::optional<std::string> ip; // non-nullopt if the rule has hosts syntax
     };
 
     dnsfilter();

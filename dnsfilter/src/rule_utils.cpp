@@ -123,7 +123,7 @@ static std::optional<rule_utils::rule> parse_host_file_rule(std::string_view str
         return std::nullopt;
     }
 
-    r.public_part = { 0, std::string(str), {} };
+    r.public_part = { 0, std::string(str), {}, std::make_optional(std::string(parts[0])) };
     return std::make_optional(std::move(r));
 }
 
@@ -293,7 +293,7 @@ std::optional<rule_utils::rule> rule_utils::parse(std::string_view str, ag::logg
         return std::nullopt;
     }
 
-    rule r = { { 0, std::string(orig_str), props }, {}, {} };
+    rule r = { { 0, std::string(orig_str), props, std::nullopt }, {}, {} };
     if (props.test(ag::dnsfilter::RP_BADFILTER)) {
         return std::make_optional(std::move(r));
     }
