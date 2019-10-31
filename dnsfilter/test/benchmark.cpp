@@ -101,13 +101,13 @@ static int apply_filter_to_base(test_result_t *tr, ag::dnsfilter *filter, ag::dn
     for (size_t i = 0; i < domains_num; ++i) {
         TICK(before);
         std::vector<ag::dnsfilter::rule> rules = filter->match(handle, domains[i]);
-        const ag::dnsfilter::rule *effective_rule = ag::dnsfilter::get_effective_rule(rules);
+        std::vector<const ag::dnsfilter::rule *> effective_rules = ag::dnsfilter::get_effective_rules(rules);
         TICK(after);
 
         tr->match_domains.total_matches += rules.size();
 
-        if (effective_rule != nullptr) {
-            if (!effective_rule->props.test(ag::dnsfilter::RP_EXCEPTION)) {
+        if (!effective_rules.empty()) {
+            if (!effective_rules[0]->props.test(ag::dnsfilter::RP_EXCEPTION)) {
                 ++tr->match_domains.effective_blocking_matches;
             } else {
                 ++tr->match_domains.effective_exception_matches;
