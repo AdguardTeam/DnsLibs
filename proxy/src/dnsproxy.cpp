@@ -15,12 +15,12 @@
 #include <ldns/rdata.h>
 
 
-#define warnlog_id(l_, pkt_, fmt_, ...) warnlog(l_,  "[%" PRIu16 "] " fmt_, ldns_pkt_id(pkt_), ##__VA_ARGS__)
-#define warnlog_fid(l_, pkt_, fmt_, ...) warnlog(l_, "[%" PRIu16 "] %s " fmt_, ldns_pkt_id(pkt_), __func__, ##__VA_ARGS__)
-#define dbglog_id(l_, pkt_, fmt_, ...) dbglog(l_,  "[%" PRIu16 "] " fmt_, ldns_pkt_id(pkt_), ##__VA_ARGS__)
-#define dbglog_fid(l_, pkt_, fmt_, ...) dbglog(l_, "[%" PRIu16 "] %s " fmt_, ldns_pkt_id(pkt_), __func__, ##__VA_ARGS__)
-#define tracelog_id(l_, pkt_, fmt_, ...) tracelog(l_, "[%" PRIu16 "] " fmt_, ldns_pkt_id(pkt_), ##__VA_ARGS__)
-#define tracelog_fid(l_, pkt_, fmt_, ...) tracelog(l_, "[%" PRIu16 "] %s " fmt_, ldns_pkt_id(pkt_), __func__, ##__VA_ARGS__)
+#define warnlog_id(l_, pkt_, fmt_, ...) warnlog((l_), "[%" PRIu16 "] " fmt_, ldns_pkt_id(pkt_), ##__VA_ARGS__)
+#define warnlog_fid(l_, pkt_, fmt_, ...) warnlog((l_), "[%" PRIu16 "] %s " fmt_, ldns_pkt_id(pkt_), __func__, ##__VA_ARGS__)
+#define dbglog_id(l_, pkt_, fmt_, ...) dbglog((l_), "[%" PRIu16 "] " fmt_, ldns_pkt_id(pkt_), ##__VA_ARGS__)
+#define dbglog_fid(l_, pkt_, fmt_, ...) dbglog((l_), "[%" PRIu16 "] %s " fmt_, ldns_pkt_id(pkt_), __func__, ##__VA_ARGS__)
+#define tracelog_id(l_, pkt_, fmt_, ...) tracelog((l_), "[%" PRIu16 "] " fmt_, ldns_pkt_id(pkt_), ##__VA_ARGS__)
+#define tracelog_fid(l_, pkt_, fmt_, ...) tracelog((l_), "[%" PRIu16 "] %s " fmt_, ldns_pkt_id(pkt_), __func__, ##__VA_ARGS__)
 
 
 using namespace ag;
@@ -324,7 +324,7 @@ std::vector<uint8_t> dnsproxy::handle_message(ag::uint8_view_t message) {
     if ((type == LDNS_RR_TYPE_A || type == LDNS_RR_TYPE_AAAA)
             && 0 == strcmp(domain.get(), "use-application-dns.net.")) {
         ldns_pkt *response = proxy->create_nxdomain_response(request);
-        log_packet(proxy->log, response, "mozilla doh request");
+        log_packet(proxy->log, response, "mozilla doh blocking response");
         return transform_response_to_raw_data(response);
     }
 
