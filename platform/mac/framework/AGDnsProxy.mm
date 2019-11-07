@@ -169,11 +169,13 @@ static NSData *create_response_packet(const struct iphdr *ip_header, const struc
 - (instancetype) init: (NSString *) address
         bootstrap: (NSArray<NSString *> *) bootstrap
         timeout: (NSInteger) timeout
+        serverIp: (NSData *) serverIp
 {
     self = [super init];
     _address = address;
     _bootstrap = bootstrap;
     _timeout = timeout;
+    _serverIp = serverIp;
     return self;
 }
 @end
@@ -276,13 +278,27 @@ static NSData *create_response_packet(const struct iphdr *ip_header, const struc
         settings.upstreams.reserve([config.upstreams count]);
         for (AGDnsUpstream *upstream in config.upstreams) {
             std::vector<std::string> bootstrap;
-            bootstrap.reserve([upstream.bootstrap count]);
-            for (NSString *server in upstream.bootstrap) {
-                bootstrap.emplace_back([server UTF8String]);
+            if (upstream.bootstrap != nil) {
+                bootstrap.reserve([upstream.bootstrap count]);
+                for (NSString *server in upstream.bootstrap) {
+                    bootstrap.emplace_back([server UTF8String]);
+                }
+            }
+            ag::upstream::options::address_container addr;
+            if (upstream.serverIp != nil && [upstream.serverIp length] == 4) {
+                addr.emplace<ag::uint8_array<4>>();
+                std::memcpy(std::get<ag::uint8_array<4>>(addr).data(),
+                    [upstream.serverIp bytes], [upstream.serverIp length]);
+            } else if (upstream.serverIp != nil && [upstream.serverIp length] == 16) {
+                addr.emplace<ag::uint8_array<16>>();
+                std::memcpy(std::get<ag::uint8_array<16>>(addr).data(),
+                    [upstream.serverIp bytes], [upstream.serverIp length]);
+            } else {
+                addr.emplace<std::monostate>();
             }
             settings.upstreams.emplace_back(
                 ag::dnsproxy_settings::upstream_settings{ [upstream.address UTF8String],
-                    { std::move(bootstrap), std::chrono::milliseconds(upstream.timeout) } });
+                    { std::move(bootstrap), std::chrono::milliseconds(upstream.timeout), addr } });
         }
     }
 

@@ -1,8 +1,17 @@
 #include <chrono>
 #include <ag_utils.h>
 #include <ag_logger.h>
+#include <sodium.h>
 #include "upstream_dnscrypt.h"
 #include <dns_crypt_client.h>
+
+struct initializer {
+    initializer() {
+        if (sodium_init() == -1) {
+            SPDLOG_ERROR("Failed to initialize libsodium");
+        }
+    }
+};
 
 static const ag::logger &upstream_dnscrypt_log() {
     static auto result = ag::create_logger("ag::dnscrypt::upstream_dnscrypt");
@@ -16,7 +25,9 @@ struct ag::upstream_dnscrypt::impl {
 
 ag::upstream_dnscrypt::upstream_dnscrypt(server_stamp &&stamp, std::chrono::milliseconds timeout) :
         m_stamp(std::move(stamp)), m_timeout(timeout)
-{}
+{
+    static const initializer ensure_initialized;
+}
 
 ag::upstream_dnscrypt::~upstream_dnscrypt() = default;
 

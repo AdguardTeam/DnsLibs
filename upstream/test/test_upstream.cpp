@@ -1,13 +1,14 @@
 #include <gtest/gtest.h>
 #include <upstream.h>
 #include <dns_crypt_ldns.h>
-#include <sodium.h>
+#include <ag_logger.h>
 #include <ldns/packet.h>
 #include <ldns/rbtree.h>
 #include <ldns/keys.h>
 #include <ldns/wire2host.h>
 #include <ldns/host2str.h>
 #include <ldns/dname.h>
+#include <thread>
 
 struct upstream_test_data {
     std::string_view address;
@@ -18,15 +19,15 @@ static ag::ldns_pkt_ptr create_test_message(const char *str) {
     ldns_pkt *pkt = ldns_pkt_query_new(
             ldns_dname_new_frm_str(str),
             LDNS_RR_TYPE_A, LDNS_RR_CLASS_IN, LDNS_RD);
+    static size_t id = 0;
+    ldns_pkt_set_id(pkt, id++);
     return ag::ldns_pkt_ptr(pkt);
 }
 
 class upstream_test : public ::testing::Test {
 protected:
     void SetUp() override {
-        if (sodium_init() == -1) {
-            FAIL();
-        }
+        ag::set_default_log_level(ag::TRACE);
     }
 };
 
@@ -34,13 +35,13 @@ class upstream_test_with_data : public upstream_test, public ::testing::WithPara
 
 // See the details here: https://github.com/AdguardTeam/AdGuardHome/issues/524
 TEST_F(upstream_test, test_dns_crypt_truncated) {
-	// AdGuard DNS (DNSCrypt)
+    // AdGuard DNS (DNSCrypt)
     static constexpr auto address = "sdns://AQIAAAAAAAAAFDE3Ni4xMDMuMTMwLjEzMDo1NDQzINErR_JS3PLCu_iZEIbq95zkSV2LFsigxDIuUso_OQhzIjIuZG5zY3J5cHQuZGVmYXVsdC5uczEuYWRndWFyZC5jb20";
 #if 0
-	// Cisco OpenDNS (DNSCrypt)
-	static constexpr auto address = "sdns://AQAAAAAAAAAADjIwOC42Ny4yMjAuMjIwILc1EUAgbyJdPivYItf9aR6hwzzI1maNDL4Ev6vKQ_t5GzIuZG5zY3J5cHQtY2VydC5vcGVuZG5zLmNvbQ";
+    // Cisco OpenDNS (DNSCrypt)
+    static constexpr auto address = "sdns://AQAAAAAAAAAADjIwOC42Ny4yMjAuMjIwILc1EUAgbyJdPivYItf9aR6hwzzI1maNDL4Ev6vKQ_t5GzIuZG5zY3J5cHQtY2VydC5vcGVuZG5zLmNvbQ";
 #endif
-    auto[upstream, upstream_err] = ag::upstream::address_to_upstream(address, {});
+    auto[upstream, upstream_err] = ag::upstream::address_to_upstream(address, {.timeout=std::chrono::seconds(5)});
     ASSERT_FALSE(upstream_err) << "Error while creating an upstream: " << *upstream_err;
     auto request = ag::dnscrypt::create_request_ldns_pkt(LDNS_RR_TYPE_TXT, LDNS_RR_CLASS_IN, LDNS_RD,
                                                          "unit-test2.dns.adguard.com.", std::nullopt);
@@ -106,6 +107,10 @@ static const upstream_test_data upstream_test_addresses[]{
         "sdns://AQAAAAAAAAAADjIwOC42Ny4yMjAuMjIwILc1EUAgbyJdPivYItf9aR6hwzzI1maNDL4Ev6vKQ_t5GzIuZG5zY3J5cHQtY2VydC5vcGVuZG5zLmNvbQ",
         {}
     },
+    {
+        "https://dns.cloudflare.com/dns-query",
+        default_bootstrap_list
+    },
 };
 
 TEST_P(upstream_test_with_data, test_dns_query) {
@@ -134,6 +139,40 @@ TEST_P(upstream_test_with_data, test_dns_query) {
 INSTANTIATE_TEST_CASE_P(test_dns_query,
                         upstream_test_with_data,
                         testing::ValuesIn(upstream_test_addresses));
+
+TEST_F(upstream_test, DISABLED_doh_concurrent_requests) {
+    static constexpr size_t REQUESTS_NUM = 128;
+    static constexpr size_t WORKERS_NUM = 16;
+
+    ag::upstream::options opts = {
+        .bootstrap = default_bootstrap_list,
+        .timeout = std::chrono::milliseconds(5000),
+        // .server_ip = ag::uint8_array<4>{ 104, 19, 199, 29 },
+        // .server_ip = ag::uint8_array<16>{ 0x26, 0x06, 0x47, 0x00, 0x30, 0x0a, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x68, 0x13, 0xc7, 0x1d },
+    };
+    auto[upstream, err1] = ag::upstream::address_to_upstream("https://dns.cloudflare.com/dns-query", opts);
+    ASSERT_FALSE(err1) << *err1;
+
+    std::thread workers[WORKERS_NUM];
+
+    for (size_t i = 0; i < WORKERS_NUM; ++i) {
+        workers[i] = std::thread(
+            [us = upstream.get(), i] () {
+                for (size_t j = 0; j < REQUESTS_NUM; ++j) {
+                    ag::ldns_pkt_ptr pkt = create_test_message("google-public-dns-a.google.com.");
+                    auto[reply, err2] = us->exchange(pkt.get());
+                    ASSERT_FALSE(err2) << "i=" << i << ": " << *err2;
+                    ASSERT_NE(reply, nullptr);
+                    assert_response(reply.get());
+                }
+            });
+    }
+
+    for (size_t i = 0; i < WORKERS_NUM; ++i) {
+        workers[i].join();
+        SPDLOG_INFO("worker #{} done", i);
+    }
+}
 
 #if 0 // The Simon's method
 

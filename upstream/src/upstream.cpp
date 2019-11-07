@@ -4,6 +4,7 @@
 #include "upstream_plain.h"
 #include "upstream_dot.h"
 #include "upstream_dnscrypt.h"
+#include "upstream_doh.h"
 
 ag::upstream::address_to_upstream_result ag::upstream::address_to_upstream(std::string_view address, const ag::upstream::options &opts) {
     bool prefer_tcp = false;
@@ -16,8 +17,11 @@ ag::upstream::address_to_upstream_result ag::upstream::address_to_upstream(std::
             prefer_tcp = true;
         } else if (utils::starts_with(address, "tls://")) {
             address.remove_prefix(6);
-            bootstrapper_ptr bootstrapper = std::make_shared<ag::bootstrapper>(address, dns_over_tls::DEFAULT_PORT, true, opts.bootstrap);
+            bootstrapper_ptr bootstrapper = std::make_shared<ag::bootstrapper>(address,
+                dns_over_tls::DEFAULT_PORT, true, opts.bootstrap);
             return {std::make_shared<dns_over_tls>(bootstrapper, opts.timeout), std::nullopt};
+        } else if (utils::starts_with(address, dns_over_https::SCHEME)) {
+            return { std::make_shared<dns_over_https>(address, opts), std::nullopt };
         }
     }
     // we don't have scheme in the url, so it's just a plain DNS host:port

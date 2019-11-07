@@ -108,6 +108,8 @@
         [filters setObject: filterFiles[idx] forKey: [[NSNumber alloc] initWithUnsignedLong: idx]];
     }];
     AGDnsProxyConfig *cfg = [[AGDnsProxyConfig alloc] init: nil
+        // for DOH testing
+        // init: @[[[AGDnsUpstream alloc] init: @"https://dns.cloudflare.com/dns-query" bootstrap: @[@"8.8.8.8"] timeout: 10000 serverIp: nil]]
         filters: filters blockedResponseTtl: 0];
 
     AGDnsProxyEvents *events = [[AGDnsProxyEvents alloc] init];
