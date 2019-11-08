@@ -37,6 +37,7 @@ public:
         uint32_t filter_id; // id of a filter which contains the matched rule
         std::string text; // rule text
         std::bitset<RP_NUM> props; // properties (see `rule_props`)
+        std::optional<std::string> ip; // non-nullopt if the rule has hosts syntax
     };
 
     dnsfilter();
@@ -72,11 +73,13 @@ public:
     std::vector<rule> match(handle obj, std::string_view domain);
 
     /**
-     * @brief      Select the rule which should be applied to the request
+     * @brief      Select the rules which should be applied to the request
+     * @detail     In the case of several rules which have hosts file syntax were matched this
+     *             function returns all those rules. In other cases returns just the only rule.
      * @param[in]  rules  matched rules
-     * @return     Selected rule (may be null, which should be considered as none matched)
+     * @return     Selected rules
      */
-    static const dnsfilter::rule *get_effective_rule(const std::vector<rule> &rules);
+    static std::vector<const rule *> get_effective_rules(const std::vector<rule> &rules);
 };
 
 } // namespace ag

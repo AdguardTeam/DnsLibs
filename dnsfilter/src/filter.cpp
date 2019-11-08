@@ -1,5 +1,6 @@
 #include <string_view>
 #include <cstdlib>
+#include <inttypes.h>
 #include <algorithm>
 #include <cassert>
 #include <tuple>
@@ -308,7 +309,11 @@ bool filter::impl::load_line(uint32_t file_idx, std::string_view line, void *arg
 }
 
 int filter::load(const ag::dnsfilter::filter_params &p) {
-    this->pimpl->log = ag::create_logger(p.path);
+    size_t last_slash = p.path.rfind('/');
+    std::string logger_name = ag::utils::fmt_string("%" PRIu32 "::%s"
+        , p.id, (last_slash != p.path.npos) ? &p.path[last_slash + 1] : p.path.c_str());
+    this->pimpl->log = ag::create_logger(logger_name);
+
     ag::file::handle fd = ag::file::open(p.path.data(), ag::file::RDONLY);
     if (!ag::file::is_valid(fd)) {
         errlog(pimpl->log, "failed to read file: {} ({})",

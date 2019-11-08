@@ -76,12 +76,6 @@ TEST_F(dnsfilter_test, successful_rule_parsing) {
             { "@@||flashx.tv/js/xfs.js", { { .props = { 1 << ag::dnsfilter::RP_EXCEPTION } }, rule_utils::rule::MMID_DOMAINS } },
             { "||adminpromotion.com^", { {}, rule_utils::rule::MMID_DOMAINS } },
             { "||travelstool.com^", { {}, rule_utils::rule::MMID_DOMAINS } },
-
-            { "0.0.0.0 example.org", { { .props = {} }, rule_utils::rule::MMID_DOMAINS } },
-            { "1:1:: example.org", { { .props = {} }, rule_utils::rule::MMID_DOMAINS } },
-            { "1:1:1:1:1:1:1:1 example.org", { { .props = {} }, rule_utils::rule::MMID_DOMAINS } },
-            { "::1:1 example.org", { { .props = {} }, rule_utils::rule::MMID_DOMAINS } },
-            { "::FFFF:1.1.1.1 example.org", { { .props = {} }, rule_utils::rule::MMID_DOMAINS } },
         };
 
     ag::logger log = ag::create_logger("dnsfilter_test");
@@ -91,6 +85,39 @@ TEST_F(dnsfilter_test, successful_rule_parsing) {
         std::optional<rule_utils::rule> rule = rule_utils::parse(entry.text, &log);
         ASSERT_TRUE(rule.has_value());
         ASSERT_EQ(rule->public_part.props, entry.expected_rule.public_part.props);
+        ASSERT_FALSE(rule->public_part.ip.has_value());
+        ASSERT_EQ(rule->match_method, entry.expected_rule.match_method);
+    }
+}
+
+TEST_F(dnsfilter_test, successful_host_syntax_rule_parsing) {
+    struct test_data {
+        std::string text;
+        rule_utils::rule expected_rule;
+    };
+
+    const test_data TEST_DATA[] =
+        {
+            { "0.0.0.0 example.org",
+                { { .props = {}, .ip = std::make_optional("0.0.0.0") }, rule_utils::rule::MMID_DOMAINS } },
+            { "1:1:: example.org",
+                { { .props = {}, .ip = std::make_optional("1:1::") }, rule_utils::rule::MMID_DOMAINS } },
+            { "1:1:1:1:1:1:1:1 example.org",
+                { { .props = {}, .ip = std::make_optional("1:1:1:1:1:1:1:1") }, rule_utils::rule::MMID_DOMAINS } },
+            { "::1:1 example.org",
+                { { .props = {}, .ip = std::make_optional("::1:1") }, rule_utils::rule::MMID_DOMAINS } },
+            { "::FFFF:1.1.1.1 example.org",
+                { { .props = {}, .ip = std::make_optional("::FFFF:1.1.1.1") }, rule_utils::rule::MMID_DOMAINS } },
+        };
+
+    ag::logger log = ag::create_logger("dnsfilter_test");
+
+    for (const test_data &entry : TEST_DATA) {
+        SPDLOG_INFO("testing {}", entry.text);
+        std::optional<rule_utils::rule> rule = rule_utils::parse(entry.text, &log);
+        ASSERT_TRUE(rule.has_value());
+        ASSERT_EQ(rule->public_part.props, entry.expected_rule.public_part.props);
+        ASSERT_EQ(rule->public_part.ip, entry.expected_rule.public_part.ip);
         ASSERT_EQ(rule->match_method, entry.expected_rule.match_method);
     }
 }
@@ -176,12 +203,12 @@ TEST_F(dnsfilter_test, basic_rules_match) {
         for (const ag::dnsfilter::rule &r : rules) {
             ASSERT_EQ(r.filter_id, 10);
         }
-        const ag::dnsfilter::rule *effective_rule = ag::dnsfilter::get_effective_rule(rules);
-        ASSERT_TRUE(effective_rule != nullptr);
+        std::vector<const ag::dnsfilter::rule *> effective_rules = ag::dnsfilter::get_effective_rules(rules);
+        ASSERT_EQ(effective_rules.size(), 1);
         if (entry.expect_blocked) {
-            ASSERT_FALSE(effective_rule->props.test(ag::dnsfilter::RP_EXCEPTION));
+            ASSERT_FALSE(effective_rules[0]->props.test(ag::dnsfilter::RP_EXCEPTION));
         } else {
-            ASSERT_TRUE(effective_rule->props.test(ag::dnsfilter::RP_EXCEPTION));
+            ASSERT_TRUE(effective_rules[0]->props.test(ag::dnsfilter::RP_EXCEPTION));
         }
     }
 
@@ -358,8 +385,8 @@ TEST_F(dnsfilter_test, badfilter) {
         SPDLOG_INFO("testing {}", entry.domain);
         std::vector<ag::dnsfilter::rule> rules = filter.match(handle.value(), entry.domain);
         ASSERT_EQ(rules.size(), 2);
-        const ag::dnsfilter::rule *effective_rule = ag::dnsfilter::get_effective_rule(rules);
-        ASSERT_EQ(effective_rule, nullptr);
+        std::vector<const ag::dnsfilter::rule *> effective_rules = ag::dnsfilter::get_effective_rules(rules);
+        ASSERT_EQ(effective_rules.size(), 0);
     }
 
     filter.destroy(handle.value());
@@ -400,13 +427,57 @@ TEST_F(dnsfilter_test, multifilters) {
         SPDLOG_INFO("testing {}", entry.domain);
         std::vector<ag::dnsfilter::rule> rules = filter.match(handle.value(), entry.domain);
         ASSERT_GT(rules.size(), 0);
-        const ag::dnsfilter::rule *effective_rule = ag::dnsfilter::get_effective_rule(rules);
-        ASSERT_TRUE(effective_rule != nullptr);
-        ASSERT_EQ(effective_rule->text, entry.expected_rule);
+        std::vector<const ag::dnsfilter::rule *> effective_rules = ag::dnsfilter::get_effective_rules(rules);
+        ASSERT_EQ(effective_rules.size(), 1);
+        ASSERT_EQ(effective_rules[0]->text, entry.expected_rule);
     }
 
     filter.destroy(handle.value());
 
     std::remove(file_by_filter_name(TEST_FILTER_NAME + "1").c_str());
     std::remove(file_by_filter_name(TEST_FILTER_NAME + "2").c_str());
+}
+
+TEST_F(dnsfilter_test, rule_selection) {
+    struct test_data {
+        std::vector<std::string> rules;
+        std::vector<size_t> expected_ids;
+    };
+
+    const std::vector<test_data> TEST_DATA =
+        {
+            { { "example.org", "example.org$badfilter" }, {} },
+            { { "example.org$important", "example.org$badfilter" }, { 0 } },
+            { { "@@example.org", "example.org" }, { 0 } },
+            { { "@@example.org", "example.org", "example.org$important" }, { 2 } },
+            { { "@@example.org", "@@example.org$important", "example.org$important" }, { 1 } },
+            { { "0.0.0.0 example.org", "example.org" }, { 0 } },
+            { { "example.org", "0.0.0.0 example.org" }, { 1 } },
+            { { "example.org", "0.0.0.0 example.org", "0.0.0.1 example.org" }, { 1, 2 } },
+            { { "0.0.0.0 example.org", "example.org", "1::1 example.org" }, { 0, 2 } },
+            { { "0.0.0.0 example.org", "@@example.org" }, { 1 } },
+            { { "0.0.0.0 example.org", "example.org$important" }, { 1 } },
+        };
+
+    for (const test_data &entry : TEST_DATA) {
+        std::vector<ag::dnsfilter::rule> rules;
+        for (const std::string &text : entry.rules) {
+            std::optional<rule_utils::rule> rule = rule_utils::parse(text, nullptr);
+            ASSERT_TRUE(rule.has_value());
+            rules.push_back(rule->public_part);
+        }
+
+        std::vector<const ag::dnsfilter::rule *> effective_rules = ag::dnsfilter::get_effective_rules(rules);
+        ASSERT_EQ(effective_rules.size(), entry.expected_ids.size());
+        for (size_t id : entry.expected_ids) {
+            const std::string &wanted_rule = entry.rules[id];
+            auto found = std::find_if(effective_rules.begin(), effective_rules.end(),
+                [&wanted_rule] (const ag::dnsfilter::rule *rule) -> bool {
+                    return wanted_rule == rule->text;
+                });
+            ASSERT_NE(found, effective_rules.end()) << wanted_rule;
+            effective_rules.erase(found);
+        }
+        ASSERT_EQ(effective_rules.size(), 0);
+    }
 }

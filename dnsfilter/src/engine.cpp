@@ -81,10 +81,11 @@ static bool has_higher_priority(const dnsfilter::rule &l, const dnsfilter::rule 
             return l.props == p;
         }
     }
-    return false;
+    // a rule with hosts file syntax has higher priority
+    return !l.ip.has_value() && r.ip.has_value();
 }
 
-const dnsfilter::rule *dnsfilter::get_effective_rule(const std::vector<rule> &rules) {
+std::vector<const dnsfilter::rule *> dnsfilter::get_effective_rules(const std::vector<rule> &rules) {
     const rule *effective_rules[rules.size()];
     size_t effective_rules_num = 0;
     const rule *badfilter_rules[rules.size()];
@@ -107,14 +108,39 @@ const dnsfilter::rule *dnsfilter::get_effective_rule(const std::vector<rule> &ru
         badfilter_rule_texts[i] = rule_utils::get_text_without_badfilter(*r);
     }
 
-    for (size_t i = 0; i < effective_rules_num; ++i) {
+    std::string *badfilter_rules_end = badfilter_rule_texts + badfilter_rules_num;
+    size_t i;
+    for (i = 0; i < effective_rules_num; ++i) {
         const rule *r = effective_rules[i];
-        const std::string *found = std::find(badfilter_rule_texts,
-            badfilter_rule_texts + badfilter_rules_num, r->text);
-        if (found == badfilter_rule_texts + badfilter_rules_num) {
-            return r;
+        const std::string *found = std::find(badfilter_rule_texts, badfilter_rules_end, r->text);
+        if (found == badfilter_rules_end) {
+            if (!r->ip.has_value()) {
+                // faced with some more important rule than the one with hosts file syntax
+                // or there are no such rules in the list
+                return { r };
+            } else {
+                break;
+            }
         }
     }
 
-    return nullptr;
+    // there are no suitable rules at all
+    if (i >= effective_rules_num) {
+        return {};
+    }
+
+    // if we got here, there should be some number of the rules with hosts file syntax, which are
+    // needed to be extracted
+    size_t seek = i;
+    while (seek < effective_rules_num && effective_rules[seek]->ip.has_value()) {
+        ++seek;
+    }
+    assert(seek > i);
+
+    std::vector<const rule *> result;
+    result.reserve(seek - i);
+    for (; i < seek; ++i) {
+        result.emplace_back(effective_rules[i]);
+    }
+    return result;
 }
