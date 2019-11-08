@@ -18,6 +18,7 @@ ag::event_loop::event_loop() : m_base() {
 ag::event_loop::~event_loop() {
     stop();
     m_base_thread->join();
+    event_base_free(m_base);
     delete m_base_thread;
 }
 
