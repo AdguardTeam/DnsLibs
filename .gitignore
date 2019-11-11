@@ -2,6 +2,9 @@ cmake-build-debug
 .idea
 build/
 
+# mac/ios test app
+platform/mac/testapp/framework/
+
 # OS X
 .DS_Store
 
