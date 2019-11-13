@@ -113,7 +113,7 @@ struct type {
 ```
 type.cc
 ```c++
-constexpr auto FIVE = 5;
+static constexpr auto FIVE = 5;
 
 ag::type() : x(0)
 {
