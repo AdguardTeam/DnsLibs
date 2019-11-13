@@ -37,7 +37,8 @@
 
 ### Indentation and style
 - K&R style, but:
-    - Basic indent - 4 spaces
+    - Basic indent - 4 spaces. Tabs are not allowed.
+    - UTF-8 encoding, `\n` line endings
     - Function body start: same line
     - Constructor body start: next line after member initializers
     - Binary operators like `+`, `-`, etc. should have spaces around them.
