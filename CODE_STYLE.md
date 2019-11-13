@@ -5,7 +5,7 @@
 
 ### Naming
 - under_score naming for classes, members, functions and variables
-- UNDER_SCORE naming for constants, enums
+- UNDER_SCORE naming for constants, enum constants
 - Namespaces:
     - We use `ag` namespace for our classes
     - We use `namespace ... {}` for declarations (usually in headers)
@@ -20,11 +20,12 @@
 - Using:
     - Always use `using` instead of `typedef`
     - Both `using` and `using namespace` is allowed, except:
-    - `using namespace std;` is forbidden 
+    - `using namespace std;` is forbidden
+    - `using namespace` in global scope is forbidden in headers
 - Enums:
     - Both `enum` and `enum class` are allowed, depending on desired visibility of constants.
 - Trailing return type
-    - Use only with templates
+    - Use only with templates and only if necessary
 - Switch cases:
     - Use `[[fallthrough]]` if switch case should fall through.
     - Don't mix `return` and `break` inside switch: 
@@ -37,7 +38,7 @@
 ### Indentation and style
 - K&R style, but:
     - Basic indent - 4 spaces
-    - Method/Function body start: same line
+    - Function body start: same line
     - Constructor body start: next line after member initializers
     - Binary operators like `+`, `-`, etc. should have spaces around them.
     - `if()`, `for()`, `while()`:
