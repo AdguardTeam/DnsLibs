@@ -1,0 +1,86 @@
+## Coding style
+
+### Language
+- We write in C++17
+
+### Naming
+- under_score naming for classes, members, functions and variables
+- UNDER_SCORE naming for constants, enums
+- Namespaces:
+    - We use `ag` namespace for our classes
+    - We use `namespace ... {}` for declarations (usually in headers)
+    - Don't use `namespace ... {}` (inc. anonymous namespaces) for definitions (usually in source file)
+- Prefixes: 
+    - Hungarian notation is prohibited in non-third-party code. 
+    - Only allowed prefixes is `_` and `m_`. 
+- Suffixes: 
+    - No suffixes, even `_t`
+
+### Language features
+- Using:
+    - Always use `using` instead of `typedef`
+    - Both `using` and `using namespace` is allowed, except:
+    - `using namespace std;` is forbidden 
+- Enums:
+    - Both `enum` and `enum class` are allowed, depending on desired visibility of constants.
+- Trailing return type
+    - Use only with templates
+- Switch cases:
+    - Use `[[fallthrough]]` if switch case should fall through.
+    - Don't mix `return` and `break` inside switch: 
+      If one switch case ends with `break`, all other should end with `break` or `[[fallthrough]]`.
+      If one switch case ends with `return`, all other should end with `return` or `[[fallthrough]]`.
+     
+### Indentation and style
+- K&R style, but:
+    - Basic indent - 4 spaces
+    - Method/Function body start: same line
+    - Constructor body start: next line after member initializers
+    - `if()`, `for()`, `while()`:
+        - Use compound statement even if is contains single statement
+        - If loop has no body, use compound statement with `// do nothing`
+        - Compound statement braces start: same line
+        - `else`: same line with compound statement end
+    - Namespace content not indented
+    - Switch cases are not indented
+    - Pointer and reference symbols: space between type and `*` or `&`, 
+      no space between identifier and `*` or `&`
+
+### Header guard
+Use non-standard but useful extension `#pragma once`. 
+`#ifdef` style guards are not allowed in non-third-party code.
+    
+### Code sample
+type.h
+```c++
+namespace ag {
+    struct type {
+        int x;
+        type();
+        std::string *func(const std::string &param);
+    }
+} // namespace ag
+```
+type.cc
+```c++
+constexpr auto FIVE = 5;
+
+ag::type() : x(0)
+{
+}
+
+std::string *ag::func(const std::string &param) {
+    if (time(nullptr) % 2 == 0) {
+        return new std::string(param);
+    } else {
+        for (int i = x; i < 10; i++) {
+            switch (i) {
+            case FIVE:
+                return new std::string(std::to_string(FIVE) + ", not " + param);
+            default:
+                std::clog << "not " << FIVE << " yet" << std::endl;
+            }
+        }
+    }
+}
+```
