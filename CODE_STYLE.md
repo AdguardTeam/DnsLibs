@@ -77,7 +77,7 @@ Use non-standard but useful extension `#pragma once`.
 Examples:
 ```
 /**
- * @brief Sum of x and y.
+ * Sum of x and y.
  * This function is usually used to get sum of x and y.
  * @param x The x
  * @param yy The y
