@@ -101,11 +101,13 @@ enum class t {
 type.h
 ```c++
 namespace ag {
-    struct type {
-        int x;
-        type();
-        std::string *func(const std::string &param);
-    }
+
+struct type {
+    int x;
+    type();
+    std::string *func(const std::string &param);
+}
+
 } // namespace ag
 ```
 type.cc
