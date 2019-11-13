@@ -30,12 +30,16 @@
     - Don't mix `return` and `break` inside switch: 
       If one switch case ends with `break`, all other should end with `break` or `[[fallthrough]]`.
       If one switch case ends with `return`, all other should end with `return` or `[[fallthrough]]`.
-     
+- Comments
+    - Should start from capital letter.
+    - See "Doxygen comments" for info about Doxygen comments.
+
 ### Indentation and style
 - K&R style, but:
     - Basic indent - 4 spaces
     - Method/Function body start: same line
     - Constructor body start: next line after member initializers
+    - Binary operators like `+`, `-`, etc. should have spaces around them.
     - `if()`, `for()`, `while()`:
         - Use compound statement even if is contains single statement
         - If loop has no body, use compound statement with `// do nothing`
@@ -45,10 +49,53 @@
     - Switch cases are not indented
     - Pointer and reference symbols: space between type and `*` or `&`, 
       no space between identifier and `*` or `&`
+    - Line wrapping for conditions:
+        ```c++
+        //USE THIS INDENTATION INSTEAD
+        if ((condition1 && condition2)
+                || (condition3 && condition4)
+                || !(condition5 && condition6)) {
+                doSomethingAboutIt();
+        }
+        ```
 
 ### Header guard
 Use non-standard but useful extension `#pragma once`. 
 `#ifdef` style guards are not allowed in non-third-party code.
+
+### Doxygen comments
+- All public methods and functions should be documented.
+- We use Javadoc style with `autobrief` feature.
+- `autobrief` means that first statement of long description is automatically become brief description.
+  So `@brief` is redundant.
+- Use `@return`, not `@returns`
+- Use `[out]` in `@param` only if code is not explanatory.
+- Don't use `[in]` in `@param`.
+- Don't use extra line endings.
+- Use infinitive instead of third person in brief descriptions.
+- Descriptions should start from capital letter.
+
+Examples:
+```
+/**
+ * @brief Sum of x and y.
+ * This function is usually used to get sum of x and y.
+ * @param x The x
+ * @param yy The y
+ * @return Sum of x and y.
+int plus(int x, int yy) {
+    return x + yy;
+}
+enum class t {
+    A, /**< One-line post-identifier comment */
+    /** Another one-line comment */
+    B,
+    /** Third one-line comment */
+    C,
+    D, /**< One-line post-identifier comment */
+}
+```
+
     
 ### Code sample
 type.h
