@@ -24,11 +24,11 @@
     - `using namespace` in global scope is forbidden in headers
 - Enums:
     - Both `enum` and `enum class` are allowed, depending on desired visibility of constants.
-- Trailing return type
+- Trailing return type:
     - Use only with templates and only if necessary
 - Switch cases:
     - Use `[[fallthrough]]` if switch case contains one or more statements and should fall through to the next switch case.
-- Comments
+- Comments:
     - Should start from capital letter.
     - See "Doxygen comments" for info about Doxygen comments.
 
@@ -54,7 +54,7 @@
         if ((condition1 && condition2)
                 || (condition3 && condition4)
                 || !(condition5 && condition6)) {
-                doSomethingAboutIt();
+            do_something_about_it();
         }
         ```
 
