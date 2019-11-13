@@ -122,14 +122,18 @@ std::string *ag::func(const std::string &param) {
     if (time(nullptr) % 2 == 0) {
         return new std::string(param);
     } else {
+        std::string *ret = nullptr;
         for (int i = x; i < 10; i++) {
             switch (i) {
             case FIVE:
-                return new std::string(std::to_string(FIVE) + ", not " + param);
+                ret = new std::string(std::to_string(FIVE) + ", not " + param);
+                break;
             default:
-                std::clog << "not " << FIVE << " yet" << std::endl;
+                std::clog << "not " << FIVE << std::endl;
+                break;
             }
         }
+        return ret;
     }
 }
 ```
