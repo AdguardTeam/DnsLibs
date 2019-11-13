@@ -28,9 +28,6 @@
     - Use only with templates and only if necessary
 - Switch cases:
     - Use `[[fallthrough]]` if switch case should fall through.
-    - Don't mix `return` and `break` inside switch: 
-      If one switch case ends with `break`, all other should end with `break` or `[[fallthrough]]`.
-      If one switch case ends with `return`, all other should end with `return` or `[[fallthrough]]`.
 - Comments
     - Should start from capital letter.
     - See "Doxygen comments" for info about Doxygen comments.
