@@ -7,8 +7,8 @@
 - under_score naming for classes, members, functions and variables
 - UNDER_SCORE naming for constants, enum constants
 - Namespaces:
-    - We use `ag` namespace for our classes
-    - We use `namespace ... {}` for declarations (usually in headers)
+    - Use `ag` namespace for our classes
+    - Use `namespace ... {}` for declarations (usually in headers)
     - Don't use `namespace ... {}` (inc. anonymous namespaces) for definitions (usually in source file)
 - Prefixes: 
     - Hungarian notation is prohibited in non-third-party code. 
@@ -27,7 +27,7 @@
 - Trailing return type
     - Use only with templates and only if necessary
 - Switch cases:
-    - Use `[[fallthrough]]` if switch case should fall through.
+    - Use `[[fallthrough]]` if switch case contains one or more statements and should fall through to the next switch case.
 - Comments
     - Should start from capital letter.
     - See "Doxygen comments" for info about Doxygen comments.
@@ -64,7 +64,7 @@ Use non-standard but useful extension `#pragma once`.
 
 ### Doxygen comments
 - All public methods and functions should be documented.
-- We use Javadoc style with `autobrief` feature.
+- Use Javadoc style with `autobrief` feature.
 - `autobrief` means that first statement of long description is automatically become brief description.
   So `@brief` is redundant.
 - Use `@return`, not `@returns`
