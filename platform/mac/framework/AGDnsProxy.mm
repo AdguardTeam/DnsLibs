@@ -141,7 +141,7 @@ extern "C" void AGSetLogLevel(AGLogLevel level) {
 @implementation AGDnsUpstream
 - (instancetype) initWithNative: (const ag::dnsproxy_settings::upstream_settings *) settings
 {
-    [super init];
+    self = [super init];
     _address = [NSString stringWithUTF8String: settings->dns_server.c_str()];
     NSMutableArray<NSString *> *bootstrap =
         [[NSMutableArray alloc] initWithCapacity: settings->options.bootstrap.size()];
@@ -157,7 +157,7 @@ extern "C" void AGSetLogLevel(AGLogLevel level) {
         bootstrap: (NSArray<NSString *> *) bootstrap
         timeout: (NSInteger) timeout
 {
-    [super init];
+    self = [super init];
     _address = address;
     _bootstrap = bootstrap;
     _timeout = timeout;
@@ -170,7 +170,7 @@ extern "C" void AGSetLogLevel(AGLogLevel level) {
 
 - (instancetype) initWithNative: (const ag::dnsproxy_settings *) settings
 {
-    [super init];
+    self = [super init];
     NSMutableArray<AGDnsUpstream *> *upstreams =
         [[NSMutableArray alloc] initWithCapacity: settings->upstreams.size()];
     for (const ag::dnsproxy_settings::upstream_settings &us : settings->upstreams) {
@@ -187,7 +187,7 @@ extern "C" void AGSetLogLevel(AGLogLevel level) {
         blockedResponseTtl: (NSInteger) blockedResponseTtl
 {
     const ag::dnsproxy_settings &defaultSettings = ag::dnsproxy_settings::get_default();
-    [self initWithNative: &defaultSettings];
+    self = [self initWithNative: &defaultSettings];
     if (upstreams != nil) {
         _upstreams = upstreams;
     }
@@ -205,19 +205,52 @@ extern "C" void AGSetLogLevel(AGLogLevel level) {
 }
 @end
 
+@implementation AGDnsRequestProcessedEvent
+- (instancetype) init: (ag::dns_request_processed_event &)event
+{
+    _domain = [NSString stringWithUTF8String: event.domain.c_str()];
+    _type = [NSString stringWithUTF8String: event.type.c_str()];
+    _startTime = event.start_time;
+    _elapsed = event.elapsed;
+    _answer = [NSString stringWithUTF8String: event.answer.c_str()];
+    _upstreamAddr = [NSString stringWithUTF8String: event.upstream_addr.c_str()];
+    _bytesSent = event.bytes_sent;
+    _bytesReceived = event.bytes_received;
+
+    NSMutableArray<NSString *> *rules =
+        [[NSMutableArray alloc] initWithCapacity: event.rules.size()];
+    NSMutableArray<NSNumber *> *filterListIds =
+        [[NSMutableArray alloc] initWithCapacity: event.rules.size()];
+    for (size_t i = 0; i < event.rules.size(); ++i) {
+        [rules addObject: [NSString stringWithUTF8String: event.rules[i].c_str()]];
+        [filterListIds addObject: [NSNumber numberWithInteger: event.filter_list_ids[i]]];
+    }
+    _rules = rules;
+    _filterListIds = filterListIds;
+
+    _whitelist = event.whitelist;
+    _error = [NSString stringWithUTF8String: event.error.c_str()];
+
+    return self;
+}
+@end
+
+@implementation AGDnsProxyEvents
+@end
 
 @implementation AGDnsProxy {
     ag::dnsproxy proxy;
     ag::logger log;
+    AGDnsProxyEvents *events;
 }
 
 - (void) dealloc
 {
     self->proxy.deinit();
-    [super dealloc];
 }
 
 - (instancetype) init: (AGDnsProxyConfig *) config
+        withHandler: (AGDnsProxyEvents *)handler
 {
     ag::set_logger_factory_callback(nslog_sink::create);
     self->log = ag::create_logger("AGDnsProxy");
@@ -250,7 +283,18 @@ extern "C" void AGSetLogLevel(AGLogLevel level) {
         }
     }
 
-    if (!self->proxy.init(std::move(settings))) {
+    void *obj = (__bridge void *)self;
+    self->events = handler;
+    ag::dnsproxy_events native_events = {};
+    if (handler != nil && handler.onRequestProcessed != nil) {
+         native_events.on_request_processed =
+            [obj] (ag::dns_request_processed_event event) {
+                AGDnsProxy *sself = (__bridge AGDnsProxy *)obj;
+                sself->events.onRequestProcessed([[AGDnsRequestProcessedEvent alloc] init: event]);
+            };
+    }
+
+    if (!self->proxy.init(std::move(settings), std::move(native_events))) {
         errlog(self->log, "Failed to initialize filtering module");
         return nil;
     }

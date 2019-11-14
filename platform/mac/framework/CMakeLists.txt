@@ -37,7 +37,11 @@ set(DNS_LIBS_DIR ../../..)
 add_compile_options(-fno-strict-aliasing -fno-exceptions -fno-rtti)
 add_definitions(-DFMT_EXCEPTIONS=0)
 
-add_library(AGDnsProxy SHARED AGDnsProxy.h AGDnsProxy.mm)
+add_library(AGDnsProxy SHARED
+    AGDnsProxy.h
+    AGDnsProxyEvents.h
+    AGDnsProxy.mm
+)
 set_property(TARGET AGDnsProxy PROPERTY POSITION_INDEPENDENT_CODE ON)
 
 set_target_properties(AGDnsProxy PROPERTIES
@@ -50,7 +54,10 @@ set_target_properties(AGDnsProxy PROPERTIES
     BUILD_WITH_INSTALL_RPATH 1
     COMPILE_FLAGS "-fobjc-arc"
 )
-set_property(TARGET AGDnsProxy PROPERTY PUBLIC_HEADER AGDnsProxy.h)
+set_property(TARGET AGDnsProxy PROPERTY PUBLIC_HEADER
+    AGDnsProxy.h
+    AGDnsProxyEvents.h
+)
 
 if (NOT TARGET dnsproxy)
     add_subdirectory(${DNS_LIBS_DIR}/proxy ${CMAKE_BINARY_DIR}/proxy)

@@ -106,7 +106,15 @@
     AGDnsProxyConfig *cfg = [[AGDnsProxyConfig alloc] init: nil
         filters: filters blockedResponseTtl: 0];
 
-    self->proxy = [[AGDnsProxy alloc] init: cfg];
+    AGDnsProxyEvents *events = [[AGDnsProxyEvents alloc] init];
+    events.onRequestProcessed = ^(const AGDnsRequestProcessedEvent *event) {
+        NSLog(@"onRequestProcessed domain: %@", event.domain);
+        NSLog(@"onRequestProcessed answer: %@", event.answer);
+        NSLog(@"onRequestProcessed error: %@", event.error);
+        NSLog(@"onRequestProcessed upstream: %@", event.upstreamAddr);
+    };
+
+    self->proxy = [[AGDnsProxy alloc] init: cfg withHandler: events];
     if (self->proxy == nil) {
         NSLog(@"failed to initialize dns proxy");
         NSDictionary *info = [NSDictionary dictionaryWithObject: @[@"failed to initialize dns proxy"]

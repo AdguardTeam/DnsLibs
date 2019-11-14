@@ -1,5 +1,7 @@
 #import <Foundation/Foundation.h>
 
+#import "AGDnsProxyEvents.h"
+
 
 /**
  * Logging levels
@@ -84,8 +86,10 @@ void AGSetLogLevel(AGLogLevel level);
  * @brief Initialize DNS proxy with the given configuration
  *
  * @param config proxy configuration
+ * @param events proxy events handler
  */
-- (instancetype) init: (AGDnsProxyConfig *) config;
+- (instancetype) init: (AGDnsProxyConfig *) config
+        withHandler: (AGDnsProxyEvents *)events;
 
 /**
  * @brief Process UDP/TCP packet payload

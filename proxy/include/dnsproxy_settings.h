@@ -5,6 +5,7 @@
 #include <ag_logger.h>
 #include <dnsfilter.h>
 #include <upstream.h>
+#include <dnsproxy_events.h>
 
 namespace ag {
 
