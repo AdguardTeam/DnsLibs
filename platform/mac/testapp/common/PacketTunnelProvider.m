@@ -42,7 +42,11 @@
 {
     NSLog(@"startTunnelWithOptions");
 
-    AGSetLogLevel(AGLL_TRACE);
+    [AGLogger setLevel: AGLL_TRACE];
+    [AGLogger setCallback:
+        ^(const char *msg, int length) {
+            NSLog(@"%.*s", (int)length, msg);
+        }];
 
     self->onStarted = completionHandler;
 

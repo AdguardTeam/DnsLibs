@@ -10,6 +10,21 @@
 #include <spdlog/sinks/base_sink.h>
 
 
+static logCallback logFunc;
+
+@implementation AGLogger
++ (void) setLevel: (AGLogLevel) level
+{
+    ag::set_default_log_level((ag::log_level)level);
+}
+
++ (void) setCallback: (logCallback) func
+{
+    logFunc = func;
+}
+@end
+
+
 class nslog_sink : public spdlog::sinks::base_sink<std::mutex> {
 public:
     static ag::logger create(const std::string &logger_name) {
@@ -20,7 +35,9 @@ private:
     void sink_it_(const spdlog::details::log_msg &msg) override {
         spdlog::memory_buf_t formatted;
         this->formatter_->format(msg, formatted);
-        NSLog(@"%.*s", (int)formatted.size(), formatted.data());
+        if (logFunc != nil) {
+            logFunc(formatted.data(), formatted.size());
+        }
     }
 
     void flush_() override {}
@@ -133,10 +150,6 @@ static NSData *create_response_packet(const struct iphdr *ip_header, const struc
     return reverse_packet;
 }
 
-
-extern "C" void AGSetLogLevel(AGLogLevel level) {
-    ag::set_default_log_level((ag::log_level)level);
-}
 
 @implementation AGDnsUpstream
 - (instancetype) initWithNative: (const ag::dnsproxy_settings::upstream_settings *) settings

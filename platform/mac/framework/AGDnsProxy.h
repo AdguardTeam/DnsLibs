@@ -14,20 +14,25 @@ typedef NS_ENUM(NSInteger, AGLogLevel) {
     AGLL_ERR,
 };
 
-#ifdef __cplusplus
-extern "C" {
-#endif
+@interface AGLogger : NSObject
 
 /**
- * @brief Set the default logging level
+ * Set the default logging level
  *
  * @param level logging level to be set
  */
-void AGSetLogLevel(AGLogLevel level);
++ (void) setLevel: (AGLogLevel) level;
 
-#ifdef __cplusplus
-}
-#endif
+typedef void (^logCallback)(const char *msg, int length);
+
+/**
+ * Set log callback
+ *
+ * @param func logging function
+ */
++ (void) setCallback: (logCallback) func;
+
+@end
 
 
 @interface AGDnsUpstream : NSObject
