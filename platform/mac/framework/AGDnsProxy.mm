@@ -272,6 +272,7 @@ static NSData *create_response_packet(const struct iphdr *ip_header, const struc
 
     ag::dnsproxy_settings settings = ag::dnsproxy_settings::get_default();
     if (config.upstreams != nil) {
+        settings.upstreams.clear();
         settings.upstreams.reserve([config.upstreams count]);
         for (AGDnsUpstream *upstream in config.upstreams) {
             std::list<std::string> bootstrap;
