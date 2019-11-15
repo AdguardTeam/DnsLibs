@@ -15,14 +15,14 @@
 #include <ldns/rdata.h>
 
 
-#define errlog_id(l_, pkt_, fmt_, ...) errlog((l_), "[%" PRIu16 "] " fmt_, ldns_pkt_id(pkt_), ##__VA_ARGS__)
-#define errlog_fid(l_, pkt_, fmt_, ...) errlog((l_), "[%" PRIu16 "] %s " fmt_, ldns_pkt_id(pkt_), __func__, ##__VA_ARGS__)
-#define warnlog_id(l_, pkt_, fmt_, ...) warnlog((l_), "[%" PRIu16 "] " fmt_, ldns_pkt_id(pkt_), ##__VA_ARGS__)
-#define warnlog_fid(l_, pkt_, fmt_, ...) warnlog((l_), "[%" PRIu16 "] %s " fmt_, ldns_pkt_id(pkt_), __func__, ##__VA_ARGS__)
-#define dbglog_id(l_, pkt_, fmt_, ...) dbglog((l_), "[%" PRIu16 "] " fmt_, ldns_pkt_id(pkt_), ##__VA_ARGS__)
-#define dbglog_fid(l_, pkt_, fmt_, ...) dbglog((l_), "[%" PRIu16 "] %s " fmt_, ldns_pkt_id(pkt_), __func__, ##__VA_ARGS__)
-#define tracelog_id(l_, pkt_, fmt_, ...) tracelog((l_), "[%" PRIu16 "] " fmt_, ldns_pkt_id(pkt_), ##__VA_ARGS__)
-#define tracelog_fid(l_, pkt_, fmt_, ...) tracelog((l_), "[%" PRIu16 "] %s " fmt_, ldns_pkt_id(pkt_), __func__, ##__VA_ARGS__)
+#define errlog_id(l_, pkt_, fmt_, ...) errlog((l_), "[{}] " fmt_, ldns_pkt_id(pkt_), ##__VA_ARGS__)
+#define errlog_fid(l_, pkt_, fmt_, ...) errlog((l_), "[{}] {} " fmt_, ldns_pkt_id(pkt_), __func__, ##__VA_ARGS__)
+#define warnlog_id(l_, pkt_, fmt_, ...) warnlog((l_), "[{}] " fmt_, ldns_pkt_id(pkt_), ##__VA_ARGS__)
+#define warnlog_fid(l_, pkt_, fmt_, ...) warnlog((l_), "[{}] {} " fmt_, ldns_pkt_id(pkt_), __func__, ##__VA_ARGS__)
+#define dbglog_id(l_, pkt_, fmt_, ...) dbglog((l_), "[{}] " fmt_, ldns_pkt_id(pkt_), ##__VA_ARGS__)
+#define dbglog_fid(l_, pkt_, fmt_, ...) dbglog((l_), "[{}] {} " fmt_, ldns_pkt_id(pkt_), __func__, ##__VA_ARGS__)
+#define tracelog_id(l_, pkt_, fmt_, ...) tracelog((l_), "[{}] " fmt_, ldns_pkt_id(pkt_), ##__VA_ARGS__)
+#define tracelog_fid(l_, pkt_, fmt_, ...) tracelog((l_), "[{}] {} " fmt_, ldns_pkt_id(pkt_), __func__, ##__VA_ARGS__)
 
 
 using namespace ag;
@@ -48,7 +48,7 @@ const dnsproxy_settings &dnsproxy_settings::get_default() {
 
 
 struct dnsproxy::impl {
-    ag::logger log = ag::create_logger("dnsproxy");
+    ag::logger log;
     std::vector<upstream_ptr> upstreams;
     dnsfilter filter;
     dnsfilter::handle filter_handle = nullptr;
@@ -77,10 +77,10 @@ static void log_packet(const ag::logger &log, const ldns_pkt *packet, const char
     ldns_buffer *str_dns = ldns_buffer_new(512);
     ldns_status status = ldns_pkt2buffer_str(str_dns, packet);
     if (status != LDNS_STATUS_OK) {
-        dbglog_id(log, packet, "failed to print %s: %s (%d)"
+        dbglog_id(log, packet, "failed to print {}: {} ({})"
             , pkt_name, ldns_get_errorstr_by_id(status), status);
     } else {
-        dbglog_id(log, packet, "%s:\n%s", pkt_name, (char*)ldns_buffer_begin(str_dns));
+        dbglog_id(log, packet, "{}:\n{}", pkt_name, (char*)ldns_buffer_begin(str_dns));
     }
     ldns_buffer_free(str_dns);
 }
@@ -297,16 +297,17 @@ dnsproxy::~dnsproxy() = default;
 
 bool dnsproxy::init(dnsproxy_settings settings, dnsproxy_events events) {
     std::unique_ptr<impl> &proxy = this->pimpl;
+    pimpl->log = ag::create_logger("dnsproxy");
 
     infolog(proxy->log, "Initializing proxy module...");
 
     infolog(proxy->log, "Initializing upstreams...");
     proxy->upstreams.reserve(settings.upstreams.size());
     for (dnsproxy_settings::upstream_settings &us : settings.upstreams) {
-        infolog(proxy->log, "Initializing upstream %s...");
+        infolog(proxy->log, "Initializing upstream {}...", us.dns_server);
         auto[upstream, err] = ag::upstream::address_to_upstream(us.dns_server, us.options);
         if (err.has_value()) {
-            errlog(proxy->log, "Failed to create upstream: %s", err.value().c_str());
+            errlog(proxy->log, "Failed to create upstream: {}", err.value().c_str());
         } else {
             proxy->upstreams.emplace_back(std::move(upstream));
             infolog(proxy->log, "Upstream created successfully");
@@ -356,7 +357,7 @@ std::vector<uint8_t> dnsproxy::handle_message(ag::uint8_view_t message) {
     ldns_pkt *request;
     ldns_status status = ldns_wire2pkt(&request, message.data(), message.length());
     if (status != LDNS_STATUS_OK) {
-        std::string err = ag::utils::fmt_string("failed to parse payload: %s (%d)",
+        std::string err = ag::utils::fmt_string("failed to parse payload: {} ({})",
             ldns_get_errorstr_by_id(status), status);
         errlog(proxy->log, "{} {}", __func__, err.c_str());
         proxy->complete_processed_event(std::move(event), nullptr, nullptr, {}, std::move(err));
@@ -384,19 +385,18 @@ std::vector<uint8_t> dnsproxy::handle_message(ag::uint8_view_t message) {
     if (ldns_dname_str_absolute(domain.get())) {
         pure_domain.remove_suffix(1); // drop trailing dot
     }
-    tracelog_fid(proxy->log, request, "query domain: %.*s"
-        , (int)pure_domain.length(), pure_domain.data());
+    tracelog_fid(proxy->log, request, "query domain: {}", pure_domain);
 
     std::vector<ag::dnsfilter::rule> rules = proxy->filter.match(proxy->filter_handle, pure_domain);
     for (const ag::dnsfilter::rule &rule : rules) {
-        tracelog_fid(proxy->log, request, "matched rule: %s", rule.text.c_str());
+        tracelog_fid(proxy->log, request, "matched rule: {}", rule.text.c_str());
     }
 
     std::vector<const ag::dnsfilter::rule *> effective_rules =
         ag::dnsfilter::get_effective_rules(rules);
     if (effective_rules.size() > 0
             && !effective_rules[0]->props.test(ag::dnsfilter::RP_EXCEPTION)) {
-        dbglog_fid(proxy->log, request, "dns query blocked by rule: %s", effective_rules[0]->text.c_str());
+        dbglog_fid(proxy->log, request, "dns query blocked by rule: {}", effective_rules[0]->text.c_str());
         ldns_pkt_ptr response = { proxy->create_blocking_response(request, effective_rules), &ldns_pkt_free };
         log_packet(proxy->log, response.get(), "rule blocked response");
         std::vector<uint8_t> raw_response = transform_response_to_raw_data(response.get());
@@ -407,7 +407,7 @@ std::vector<uint8_t> dnsproxy::handle_message(ag::uint8_view_t message) {
     auto[response, err] = proxy->upstreams[0]->exchange(request);
     event.upstream_addr = proxy->upstreams[0]->address();
     if (err.has_value()) {
-        std::string err_str = ag::utils::fmt_string("Upstream failed to perform dns query: %s",
+        std::string err_str = ag::utils::fmt_string("Upstream failed to perform dns query: {}",
             err.value().c_str());
         errlog_fid(proxy->log, request, "{}" , err_str.c_str());
         proxy->complete_processed_event(std::move(event), request, nullptr, effective_rules, std::move(err_str));
