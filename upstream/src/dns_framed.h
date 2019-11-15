@@ -1,24 +1,15 @@
 #pragma once
 
-#include <thread>
-#include <memory> // for std::shared_ptr, std::unique_ptr
-#include <list>
-#include <map>
+#include <ag_logger.h>
 #include <mutex>
+#include <list>
 #include <condition_variable>
-#include <utility>
 #include <event2/event.h>
 #include <event2/bufferevent.h>
-#include <event2/thread.h>
-#include <socket_address.h>
-#include <upstream_util.h>
-#include <ag_defs.h>
-#include <ag_logger.h>
-#include "event_loop.h"
+#include <event_loop.h>
 #include "connection.h"
 
-using event_base_ptr = std::shared_ptr<event_base>;
-using bufferevent_ptr = std::shared_ptr<bufferevent>;
+using bufferevent_ptr = std::unique_ptr<bufferevent, ag::ftor<&bufferevent_free>>;
 
 namespace ag {
 
@@ -28,9 +19,22 @@ class dns_framed_connection;
 
 using dns_framed_connection_ptr = std::shared_ptr<dns_framed_connection>;
 
+/**
+ * DNS framed connection class.
+ * It uses format specified in DNS RFC for TCP connections:
+ * - Header is 2 bytes - length of payload
+ * - Payload is DNS packet content as sent by UDP
+ */
 class dns_framed_connection : public connection,
                               public std::enable_shared_from_this<dns_framed_connection> {
 public:
+    /**
+     * Creates DNS framed connection from bufferevent.
+     * @param pool DNS pool that creates this connection
+     * @param bev Bufferevent
+     * @param address Destination address
+     * @return Newly created DNS framed connection
+     */
     static dns_framed_connection_ptr create(dns_framed_pool *pool, bufferevent *bev, const socket_address &address);
 
     ~dns_framed_connection() override;
@@ -39,15 +43,18 @@ public:
 
     result read(int request_id, std::chrono::milliseconds timeout) override;
 
+    /**
+     * @return Destionation address of this connection
+     */
     const socket_address &address() const;
 
-
 private:
+    /** Logger */
     logger m_log;
     /** Connection pool */
     dns_framed_pool *m_pool;
     /** Connection handle */
-    bufferevent *m_bev;
+    bufferevent_ptr m_bev;
     /** Mutex for syncronizing reads and access */
     std::mutex m_mutex;
     /** Conditional variable for waiting reads */
@@ -64,18 +71,22 @@ private:
     void on_event(int what);
 };
 
-class dns_framed_pool {
+/**
+ * Abstract pool of DNS framed connections
+ */
+class dns_framed_pool : public connection_pool {
 public:
+    /**
+     * @param loop Event loop
+     */
     explicit dns_framed_pool(event_loop_ptr loop) : m_loop(std::move(loop)) {
     }
 
-    ~dns_framed_pool() = default;
+    ~dns_framed_pool() override = default;
 
     // Copy is prohibited
     dns_framed_pool(const dns_framed_pool &) = delete;
     dns_framed_pool &operator=(const dns_framed_pool &) = delete;
-    dns_framed_pool(dns_framed_pool &&) = delete;
-    dns_framed_pool &operator=(dns_framed_pool &&) = delete;
 
     friend class dns_framed_connection;
 
@@ -83,7 +94,7 @@ protected:
     /** Event loop */
     event_loop_ptr m_loop;
     /** Connected connections. They may receive requests */
-    ag::hash_map<socket_address, connection_ptr> m_connections;
+    std::list<connection_ptr> m_connections;
     /** Pending connections. They may not receive requests yet */
     ag::hash_set<connection_ptr> m_pending_connections;
 
@@ -92,20 +103,6 @@ protected:
     void add_connected(const dns_framed_connection_ptr &ptr);
 
     void remove_from_all(const dns_framed_connection_ptr &ptr);
-};
-
-class tcp_pool : public dns_framed_pool {
-public:
-    explicit tcp_pool(event_loop_ptr loop) : dns_framed_pool(std::move(loop)) {
-    }
-    virtual connection_ptr get_connection_to(const socket_address &dst) {
-        int options = BEV_OPT_THREADSAFE | BEV_OPT_DEFER_CALLBACKS | BEV_OPT_UNLOCK_CALLBACKS;
-        bufferevent *bev = bufferevent_socket_new(m_loop->c_base(), -1, options);
-        dns_framed_connection_ptr connection = ag::dns_framed_connection::create(this, bev, dst);
-        int r = bufferevent_socket_connect(bev, dst.c_sockaddr(), dst.c_socklen());
-        add_pending_connection(connection);
-        return connection;
-    }
 };
 
 } // namespace ag

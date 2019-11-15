@@ -15,7 +15,7 @@ const sockaddr *ag::socket_address::c_sockaddr() const {
     return reinterpret_cast<const sockaddr *>(&m_ss);
 }
 
-int ag::socket_address::c_socklen() const {
+ev_socklen_t ag::socket_address::c_socklen() const {
     return m_ss.ss_family == AF_INET6 ? sizeof(sockaddr_in6) :
            m_ss.ss_family == AF_INET ? sizeof(sockaddr_in) :
            0;
@@ -104,4 +104,8 @@ ag::socket_address::socket_address(ag::uint8_view_t addr, int port)
         sin.sin_port = htons(port);
         std::memcpy(&sin.sin_addr, addr.data(), addr.size());
     }
+}
+
+bool ag::socket_address::valid() const {
+    return m_ss.ss_family != AF_UNSPEC;
 }

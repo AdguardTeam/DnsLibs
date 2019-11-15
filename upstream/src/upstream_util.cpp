@@ -1,6 +1,6 @@
 #include <upstream_util.h>
 
-std::pair <std::string_view, std::string_view> ag::util::split_host_port(std::string_view address_string) {
+std::pair<std::string_view, std::string_view> ag::util::split_host_port(std::string_view address_string) {
 
     if (!address_string.empty() && address_string.front() == '[') {
         auto pos = address_string.find("]:");

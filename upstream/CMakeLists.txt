@@ -20,12 +20,10 @@ endif ()
 
 add_library(upstream EXCLUDE_FROM_ALL
         include/upstream.h
-        src/upstream_pool.cpp
         src/upstream.cpp
         src/upstream_doh.cpp
         src/upstream_dot.cpp
         src/upstream_plain.cpp
-        src/upstream_pool.h
         src/upstream_plain.h
         src/socket_address.cpp
         include/socket_address.h
@@ -34,10 +32,10 @@ add_library(upstream EXCLUDE_FROM_ALL
         include/upstream_util.h
         src/upstream_util.cpp
         src/connection.cpp
-        src/connection.h)
+        src/connection.h src/upstream_dot.h src/dns_framed.cpp src/dns_framed.h src/bootstrapper.cpp src/bootstrapper.h)
 
 target_include_directories(upstream PUBLIC include)
-target_link_libraries(upstream dnslibs_common libevent ldns)
+target_link_libraries(upstream dnslibs_common libevent ldns ssl crypto)
 
 enable_testing()
 if (NOT TARGET tests)

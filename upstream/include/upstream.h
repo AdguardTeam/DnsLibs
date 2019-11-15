@@ -14,6 +14,7 @@ namespace ag {
 class upstream;
 
 using upstream_ptr = std::shared_ptr<upstream>;
+using ldns_pkt_ptr = std::unique_ptr<ldns_pkt, ag::ftor<&ldns_pkt_free>>;
 
 /**
  * Upstream is interface for handling DNS requests to upstream servers
@@ -26,7 +27,7 @@ public:
      */
     struct options {
         /** List of plain DNS servers to be used to resolve DOH/DOT hostnames (if any) */
-        std::list<std::string> bootstrap;
+        std::vector<std::string> bootstrap;
 
         /**
          * Default upstream timeout. Also, it is used as a timeout for bootstrap DNS requests.
@@ -46,17 +47,18 @@ public:
      *                  https://dns.adguard.com/dns-query -- DNS-over-HTTPS
      *                  sdns://... -- DNS stamp (see https://dnscrypt.info/stamps-specifications)
      * @param opts      Options for upstream creation
-     * @return
+     * @return Pointer to newly created upstream or error
      */
-    static std::pair<upstream_ptr, err_string> address_to_upstream(std::string_view address, upstream::options &opts);
+    static std::pair<upstream_ptr, err_string> address_to_upstream(std::string_view address, const upstream::options &opts = upstream::options{});
 
     virtual ~upstream() = default;
 
     /**
      * Do DNS request
-     * @return Packet or an error
+     * @param request DNS request packet
+     * @return DNS response packet or an error
      */
-    virtual std::pair<ldns_pkt *, err_string> exchange(ldns_pkt *) = 0;
+    virtual std::pair<ldns_pkt_ptr, err_string> exchange(ldns_pkt *request) = 0;
 
     /**
      * Receive DNS server address

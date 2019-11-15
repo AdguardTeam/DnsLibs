@@ -10,10 +10,21 @@ namespace ag {
 
 using opt_string = std::optional<std::string>;
 using err_string = opt_string;
-template <class K, class V>
+template <typename K, typename V>
 using hash_map = std::unordered_map<K, V>;
-template <class K>
+template <typename K>
 using hash_set = std::unordered_set<K>;
 using uint8_view_t = std::basic_string_view<uint8_t>;
+
+// Functor template for zero-storage static deleters in unique_ptr
+template<auto func>
+struct ftor
+{
+    template<typename... Ts>
+    inline auto operator()(Ts&&... ts) const
+    {
+        return func(std::forward<Ts...>(ts...));
+    }
+};
 
 }

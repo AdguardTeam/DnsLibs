@@ -35,7 +35,7 @@ public:
     /**
      * @return sizeof(sockaddr_in) for IPv4 and sizeof(sockaddr_in6) for IPv6
      */
-    int c_socklen() const;
+    ev_socklen_t c_socklen() const;
 
     /**
      * @return IP address bytes
@@ -51,6 +51,11 @@ public:
      * @return String containing IP address and port
      */
     std::string str() const;
+
+    /**
+     * @return True if IP is valid (AF_INET or AF_INET6)
+     */
+    bool valid() const;
 
 private:
     /** sockaddr_storage structure. Internally this is just sockaddr_storage wrapper */

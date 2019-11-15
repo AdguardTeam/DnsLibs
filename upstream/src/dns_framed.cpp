@@ -1,40 +1,41 @@
-#include "upstream_pool.h"
+#include "dns_framed.h"
 #include <vector>
 #include <mutex>
+#include <list>
 #include <ldns/wire2host.h>
 #include <event2/buffer.h>
 #include <socket_address.h>
 #include <ag_logger.h>
 
 int ag::dns_framed_connection::write(ag::uint8_view_t buf) {
-    infolog(m_log, "{} len={}", __func__, buf.size());
+    tracelog(m_log, "{} len={}", __func__, buf.size());
     dns_framed_connection_ptr ptr = shared_from_this();
     if (buf.size() < 2) {
-        infolog(m_log, "{} returned -1", __func__);
+        tracelog(m_log, "{} returned -1", __func__);
         return -1;
     }
     uint16_t id = *(uint16_t *) buf.data();
     {
         std::scoped_lock l(m_mutex);
 
-        using evbuffer_ptr = std::unique_ptr<evbuffer, decltype(&evbuffer_free)>;
-        evbuffer_ptr packet_buf = {evbuffer_new(), &evbuffer_free};
+        using evbuffer_ptr = std::unique_ptr<evbuffer, ag::ftor<&evbuffer_free>>;
+        evbuffer_ptr packet_buf{evbuffer_new()};
 
         uint16_t pkt_len_net = htons((uint16_t) buf.size());
         evbuffer_add(&*packet_buf, &pkt_len_net, 2);
         evbuffer_add(&*packet_buf, buf.data(), buf.size());
 
-        bufferevent_write_buffer(m_bev, &*packet_buf);
+        bufferevent_write_buffer(&*m_bev, &*packet_buf);
 
         m_requests[id] = std::nullopt;
     }
-    infolog(m_log, "{} returned {}", __func__, id);
+    tracelog(m_log, "{} returned {}", __func__, id);
     return id;
 }
 
 ag::dns_framed_connection::dns_framed_connection(dns_framed_pool *pool, bufferevent *bev, const socket_address &address)
         : m_log(ag::create_logger(__func__)), m_pool(pool), m_bev(bev), m_socket_address(address) {
-    bufferevent_setcb(m_bev, [](bufferevent *, void *arg) {
+    bufferevent_setcb(&*m_bev, [](bufferevent *, void *arg) {
         auto conn = (ag::dns_framed_connection *) arg;
         conn->on_read();
     }, nullptr, [](bufferevent *, short what, void *arg) {
@@ -45,7 +46,6 @@ ag::dns_framed_connection::dns_framed_connection(dns_framed_pool *pool, bufferev
 }
 
 ag::dns_framed_connection::~dns_framed_connection() {
-    bufferevent_free(m_bev);
 }
 
 ag::dns_framed_connection_ptr ag::dns_framed_connection::create(dns_framed_pool *pool, bufferevent *bev, const socket_address &address) {
@@ -53,9 +53,9 @@ ag::dns_framed_connection_ptr ag::dns_framed_connection::create(dns_framed_pool 
 }
 
 void ag::dns_framed_connection::on_read() {
-    infolog(m_log, "{}", __func__);
+    tracelog(m_log, "{}", __func__);
     dns_framed_connection_ptr ptr = shared_from_this();
-    auto *input = bufferevent_get_input(m_bev);
+    auto *input = bufferevent_get_input(&*m_bev);
     for (;;) {
         if (evbuffer_get_length(input) < 2) {
             break;
@@ -82,26 +82,33 @@ void ag::dns_framed_connection::on_read() {
             m_cond.notify_all();
         }
     }
-    infolog(m_log, "{} finished", __func__);
+    tracelog(m_log, "{} finished", __func__);
 }
 
 void ag::dns_framed_connection::on_event(int what) {
-    infolog(m_log, "{}", __func__);
+    tracelog(m_log, "{}", __func__);
     dns_framed_connection_ptr ptr = shared_from_this();
     if (what & BEV_EVENT_CONNECTED) {
+        tracelog(m_log, "{} connected", __func__);
         m_pool->add_connected(shared_from_this());
     }
     if (what & (BEV_EVENT_EOF | BEV_EVENT_ERROR)) {
+        if (what & BEV_EVENT_EOF) {
+            tracelog(m_log, "{} eof", __func__);
+        } else {
+            tracelog(m_log, "{} error", __func__);
+        }
         m_pool->remove_from_all(shared_from_this());
         std::unique_lock l(m_mutex);
-        for (auto &[_, result] : m_requests) {
+        for (auto &entry : m_requests) {
             std::string error = (what & BEV_EVENT_EOF) ? "Unexpected EOF" :
-                    evutil_socket_error_to_string(evutil_socket_geterror(bufferevent_getfd(m_bev)));
-            result = {std::vector<uint8_t>{}, {std::move(error)}};
+                                evutil_socket_error_to_string(evutil_socket_geterror(bufferevent_getfd(&*m_bev)));
+            // Set result
+            entry.second = {std::vector<uint8_t>{}, {std::move(error)}};
         }
         m_cond.notify_all();
     }
-    infolog(m_log, "{} finished", __func__);
+    tracelog(m_log, "{} finished", __func__);
 }
 
 ag::connection::result ag::dns_framed_connection::read(int request_id, std::chrono::milliseconds timeout) {
@@ -127,13 +134,12 @@ const ag::socket_address &ag::dns_framed_connection::address() const {
 
 void ag::dns_framed_pool::add_connected(const dns_framed_connection_ptr &ptr) {
     m_pending_connections.erase(ptr);
-    m_connections.erase(ptr->address());
-    m_connections[ptr->address()] = ptr;
+    m_connections.push_back(ptr);
 }
 
 void ag::dns_framed_pool::remove_from_all(const dns_framed_connection_ptr &ptr) {
     m_pending_connections.erase(ptr);
-    m_connections.erase(ptr->address());
+    m_connections.remove(ptr);
 }
 
 void ag::dns_framed_pool::add_pending_connection(const ag::dns_framed_connection_ptr &ptr) {

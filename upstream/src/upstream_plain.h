@@ -1,13 +1,35 @@
-#ifndef AGDNS_UPSTREAM_UPSTREAM_PLAIN_H
-#define AGDNS_UPSTREAM_UPSTREAM_PLAIN_H
+#pragma once
 
 #include <utility>
 #include <upstream.h>
 #include <event2/event.h>
 #include <ldns/net.h>
-#include "upstream_pool.h"
+#include "dns_framed.h"
 
 namespace ag {
+
+/**
+ * Pool of TCP connections
+ */
+class tcp_pool : public dns_framed_pool {
+public:
+    /**
+     * Create pool of TCP connections
+     * @param loop Event loop
+     * @param address Destination socket address
+     */
+    tcp_pool(event_loop_ptr loop, const socket_address &address) : dns_framed_pool(std::move(loop)),
+                                                                   m_address(address) {
+    }
+
+    get_result get() override;
+
+private:
+    /** Destination socket address */
+    socket_address m_address;
+
+    get_result create();
+};
 
 /**
  * Plain DNS upstream
@@ -16,7 +38,7 @@ class plain_dns : public ag::upstream {
 public:
     /**
      * Create plain DNS upstream
-     * @param address Server address. If port is not specified, default servce port will be used
+     * @param address Server address. If port is not specified, default service port will be used
      * @param timeout Timeout in milliseconds resolution
      * @param prefer_tcp If true, query will always be sent via TCP, otherwise it will be sent via tcp
      *                   only if contains `truncated` flag.
@@ -27,7 +49,7 @@ public:
 
     std::string address() override;
 
-    std::pair<ldns_pkt *, err_string> exchange(ldns_pkt *request_pkt) override;
+    std::pair<ldns_pkt_ptr, err_string> exchange(ldns_pkt *request_pkt) override;
 
 private:
     /** TCP connection pool */
@@ -41,5 +63,3 @@ private:
 };
 
 } // namespace ag
-
-#endif //AGDNS_UPSTREAM_UPSTREAM_PLAIN_H

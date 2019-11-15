@@ -16,14 +16,12 @@ protected:
     }
 };
 
-static ldns_pkt *create_test_message() {
+static ag::ldns_pkt_ptr create_test_message() {
     ldns_pkt *pkt = ldns_pkt_query_new(
             ldns_dname_new_frm_str("google-public-dns-a.google.com."),
             LDNS_RR_TYPE_A, LDNS_RR_CLASS_IN, LDNS_RD);
-    return pkt;
+    return ag::ldns_pkt_ptr(pkt);
 }
-
-using vector_view = std::basic_string_view<uint8_t>;
 
 static void assert_response(ldns_pkt *reply) {
     ASSERT_EQ(1, ldns_pkt_ancount(reply))
@@ -36,32 +34,38 @@ static void assert_response(ldns_pkt *reply) {
                                 << ldns_rr_type2str(ldns_rr_get_type(first_rr));
 
     auto rdf = ldns_rr_rdf(first_rr, 0);
-    vector_view ip{ldns_rdf_data(rdf), ldns_rdf_size(rdf)};
-    std::vector<uint8_t> ip8888 = {8, 8, 8, 8};
+    ag::uint8_view_t ip{ldns_rdf_data(rdf), ldns_rdf_size(rdf)};
+    static constexpr uint8_t ip8888bytes[] = {8, 8, 8, 8};
+    ag::uint8_view_t ip8888{ip8888bytes, std::size(ip8888bytes)};
 
-    ASSERT_EQ((vector_view{ip8888.data(), ip8888.size()}), ip)
+    ASSERT_EQ(ip, ip8888)
             << "DNS upstream returned wrong answer instead of 8.8.8.8";
 }
 
 TEST_P(upstream_test, test_dns_query) {
-    ldns_pkt *pkt = create_test_message();
+    ag::ldns_pkt_ptr pkt = create_test_message();
 
     ag::upstream::options opts = {
+            .bootstrap = {"8.8.8.8", "1.1.1.1"},
             .timeout = std::chrono::milliseconds(5000)
     };
     auto[upstream, err1] = ag::upstream::address_to_upstream(GetParam(), opts);
     ASSERT_FALSE(err1) << *err1;
-    auto[reply, err2] = upstream->exchange(pkt);
+    auto[reply, err2] = upstream->exchange(&*pkt);
     ASSERT_FALSE(err2) << *err2;
     ASSERT_NE(reply, nullptr);
-    assert_response(reply);
-    ldns_pkt_print(stderr, reply);
-    ldns_pkt_free(pkt);
+    assert_response(&*reply);
+    ldns_pkt_print(stderr, &*reply);
+    upstream->exchange(&*pkt);
+    sleep(2);
+    upstream->exchange(&*pkt);
+    sleep(3);
+    upstream->exchange(&*pkt);
 }
 
 INSTANTIATE_TEST_CASE_P(test_dns_query,
                         upstream_test,
-                        testing::Values("8.8.8.8", "1.1.1.1", "tcp://8.8.8.8", "tcp://1.1.1.1"));
+                        testing::Values("8.8.8.8", "1.1.1.1", "tcp://8.8.8.8", "tcp://1.1.1.1", "tls://one.one.one.one"));
 
 #if 0 // The Simon's method
 
