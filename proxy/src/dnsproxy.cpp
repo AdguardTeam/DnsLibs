@@ -30,7 +30,7 @@ using namespace std::chrono;
 using ldns_pkt_ptr = std::unique_ptr<ldns_pkt, decltype(&ldns_pkt_free)>;
 
 
-static constexpr milliseconds DEFAULT_UPSTREAM_TIMEOUT = milliseconds(30);
+static constexpr milliseconds DEFAULT_UPSTREAM_TIMEOUT = milliseconds(30000);
 static constexpr std::string_view MOZILLA_DOH_HOST = "use-application-dns.net.";
 
 static const dnsproxy_settings DEFAULT_PROXY_SETTINGS = {
@@ -422,4 +422,3 @@ std::vector<uint8_t> dnsproxy::handle_message(ag::uint8_view_t message) {
     proxy->complete_processed_event(std::move(event), request, response, effective_rules, "");
     return raw_response;
 }
-
