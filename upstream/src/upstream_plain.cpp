@@ -10,9 +10,9 @@ std::string ag::plain_dns::address() {
 ag::plain_dns::plain_dns(std::string_view address, const std::chrono::milliseconds &timeout,
                          bool prefer_tcp) :
         m_pool(event_loop::create(), socket_address(address)),
+        m_socket_address(address),
         m_timeout(timeout),
-        m_prefer_tcp(prefer_tcp),
-        m_socket_address(address) {
+        m_prefer_tcp(prefer_tcp) {
 
     if (m_socket_address.port() == 0) {
         auto addr = m_socket_address.addr();
