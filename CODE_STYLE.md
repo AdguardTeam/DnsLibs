@@ -7,50 +7,51 @@
 - under_score naming for classes, members, functions and variables
 - UNDER_SCORE naming for constants, enum constants
 - Namespaces:
-    - Use `ag` namespace for our classes
-    - Use `namespace ... {}` for declarations (usually in headers)
-    - Don't use `namespace ... {}` (inc. anonymous namespaces) for definitions (usually in source file)
+    - Use `ag` namespace for our classes.
+    - Use `namespace ... {}` for declarations (usually in headers).
+    - Don't use `namespace ... {}` (inc. anonymous namespaces) for definitions (usually in source file).
 - Prefixes: 
-    - Hungarian notation is prohibited in non-third-party code. 
+    - Hungarian notation is prohibited in non-third-party code.
     - Only allowed prefixes is `_` and `m_`. 
 - Suffixes: 
     - No suffixes, even `_t`
 
 ### Language features
 - Using:
-    - Always use `using` instead of `typedef`
+    - Always use `using` instead of `typedef`.
     - Both `using` and `using namespace` is allowed, except:
-    - `using namespace std;` is forbidden
-    - `using namespace` in global scope is forbidden in headers
+    - `using namespace std;` is forbidden.
+    - `using namespace` in global scope is forbidden in headers.
 - Enums:
     - Both `enum` and `enum class` are allowed, depending on desired visibility of constants.
 - Trailing return type:
-    - Use only with templates and only if necessary
+    - Use only with templates and only if necessary.
 - Switch cases:
     - Use `[[fallthrough]]` if switch case contains one or more statements and should fall through to the next switch case.
 - Comments:
     - Should start from capital letter.
     - See "Doxygen comments" for info about Doxygen comments.
+- Exceptions:
+    - C++ exceptions should not be used.
 
 ### Indentation and style
 - K&R style, but:
     - Basic indent - 4 spaces. Tabs are not allowed.
-    - UTF-8 encoding, `\n` line endings
-    - Function body start: same line
-    - Constructor body start: next line after member initializers
+    - UTF-8 encoding, `\n` line endings.
+    - Function body start: same line.
+    - Constructor body start: next line after member initializers.
     - Binary operators like `+`, `-`, etc. should have spaces around them.
     - `if()`, `for()`, `while()`:
-        - Use compound statement even if is contains single statement
-        - If loop has no body, use compound statement with `// do nothing`
-        - Compound statement braces start: same line
-        - `else`: same line with compound statement end
-    - Namespace content not indented
-    - Switch cases are not indented
+        - Use compound statement even if is contains single statement.
+        - If loop has no body, use compound statement with `// do nothing`.
+        - Compound statement braces start: same line.
+        - `else`: same line with compound statement end.
+    - Namespace content not indented.
+    - Switch cases are not indented.
     - Pointer and reference symbols: space between type and `*` or `&`, 
-      no space between identifier and `*` or `&`
+      no space between identifier and `*` or `&`.
     - Line wrapping for conditions:
         ```c++
-        //USE THIS INDENTATION INSTEAD
         if ((condition1 && condition2)
                 || (condition3 && condition4)
                 || !(condition5 && condition6)) {
@@ -95,6 +96,15 @@ enum class t {
 }
 ```
 
+### Logging
+    - Log messages should start from capital letter.
+    - Use WARN/ERROR level only for internal logic warnings/errors and network errors that make library unusable.
+    - Use INFO level for messages of regular proxy operation that regular users will see in their log.
+    - Use DEBUG level for messages that will be logged only with debug logging on.
+      This includes non-fatal network errors, malformed responses, etc. Why network-related errors are usually
+      "DEBUG" level? These errors are part of regular operation of network client,
+      so they reported in reply to client of library.
+    - Use TRACE debug level for trace messages.
     
 ### Code sample
 type.h
