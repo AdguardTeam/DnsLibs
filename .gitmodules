@@ -22,3 +22,6 @@
 [submodule "third-party/pcre2"]
 	path = third-party/pcre2
 	url = https://salsa.debian.org/debian/pcre2.git
+[submodule "third-party/boringssl/boringssl"]
+	path = third-party/boringssl/boringssl
+	url = https://boringssl.googlesource.com/boringssl
