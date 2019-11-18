@@ -1,5 +1,7 @@
 #import <Foundation/Foundation.h>
 
+#import "AGDnsProxyEvents.h"
+
 
 /**
  * Logging levels
@@ -12,20 +14,25 @@ typedef NS_ENUM(NSInteger, AGLogLevel) {
     AGLL_ERR,
 };
 
-#ifdef __cplusplus
-extern "C" {
-#endif
+@interface AGLogger : NSObject
 
 /**
- * @brief Set the default logging level
+ * Set the default logging level
  *
  * @param level logging level to be set
  */
-void AGSetLogLevel(AGLogLevel level);
++ (void) setLevel: (AGLogLevel) level;
 
-#ifdef __cplusplus
-}
-#endif
+typedef void (^logCallback)(const char *msg, int length);
+
+/**
+ * Set log callback
+ *
+ * @param func logging function
+ */
++ (void) setCallback: (logCallback) func;
+
+@end
 
 
 @interface AGDnsUpstream : NSObject
@@ -84,8 +91,10 @@ void AGSetLogLevel(AGLogLevel level);
  * @brief Initialize DNS proxy with the given configuration
  *
  * @param config proxy configuration
+ * @param events proxy events handler
  */
-- (instancetype) init: (AGDnsProxyConfig *) config;
+- (instancetype) init: (AGDnsProxyConfig *) config
+        withHandler: (AGDnsProxyEvents *)events;
 
 /**
  * @brief Process UDP/TCP packet payload

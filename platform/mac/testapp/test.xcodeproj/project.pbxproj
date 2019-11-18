@@ -7,16 +7,34 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		C4423F7D23794F3200FD1D4C /* NetworkExtension.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = F4D5969A1F7C01BD00538851 /* NetworkExtension.framework */; };
+		C4423F942379559900FD1D4C /* Main.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = C4423F922379559900FD1D4C /* Main.storyboard */; };
+		C4423F962379559D00FD1D4C /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = C4423F952379559D00FD1D4C /* Assets.xcassets */; };
+		C4423F992379559D00FD1D4C /* LaunchScreen.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = C4423F972379559D00FD1D4C /* LaunchScreen.storyboard */; };
+		C4423FA3237955C400FD1D4C /* NetworkExtension.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = F4D5969A1F7C01BD00538851 /* NetworkExtension.framework */; };
+		C44240102379BB2600FD1D4C /* AppDelegate.m in Sources */ = {isa = PBXBuildFile; fileRef = C4423F8A2379559900FD1D4C /* AppDelegate.m */; };
+		C44240112379BB2900FD1D4C /* ViewController.m in Sources */ = {isa = PBXBuildFile; fileRef = C4423F902379559900FD1D4C /* ViewController.m */; };
+		C44240122379BB2F00FD1D4C /* main.m in Sources */ = {isa = PBXBuildFile; fileRef = C4423F9B2379559D00FD1D4C /* main.m */; };
+		C44240132379BB3800FD1D4C /* SceneDelegate.m in Sources */ = {isa = PBXBuildFile; fileRef = C4423F8D2379559900FD1D4C /* SceneDelegate.m */; };
+		C4AEED15237AC8A10021E53F /* AGDnsProxy.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = C4AEED14237AC8A10021E53F /* AGDnsProxy.framework */; };
+		C4AEED16237AC90C0021E53F /* AGDnsProxy.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = C4AEED14237AC8A10021E53F /* AGDnsProxy.framework */; };
+		C4AEED17237AC9100021E53F /* AGDnsProxy.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = C4AEED14237AC8A10021E53F /* AGDnsProxy.framework */; };
+		C4AEED18237AC9140021E53F /* AGDnsProxy.framework in Embed Frameworks */ = {isa = PBXBuildFile; fileRef = C4AEED14237AC8A10021E53F /* AGDnsProxy.framework */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
+		C4AEED19237AC9170021E53F /* AGDnsProxy.framework in Embed Frameworks */ = {isa = PBXBuildFile; fileRef = C4AEED14237AC8A10021E53F /* AGDnsProxy.framework */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
+		C4AEED1A237AC9260021E53F /* AGDnsProxy.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = C4AEED14237AC8A10021E53F /* AGDnsProxy.framework */; };
 		C4B58FDB237184390044CE54 /* NetworkExtension.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = F4D5969A1F7C01BD00538851 /* NetworkExtension.framework */; };
-		C4B58FEB237195E90044CE54 /* AGDnsProxy.framework in Embed Frameworks */ = {isa = PBXBuildFile; fileRef = C4B58FE323718A380044CE54 /* AGDnsProxy.framework */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
-		C4B58FF323719CDF0044CE54 /* AGDnsProxy.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = C4B58FE323718A380044CE54 /* AGDnsProxy.framework */; };
-		C4B58FF423719CDF0044CE54 /* AGDnsProxy.framework in Embed Frameworks */ = {isa = PBXBuildFile; fileRef = C4B58FE323718A380044CE54 /* AGDnsProxy.framework */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
-		C4B590062371BEB20044CE54 /* filter.txt in Resources */ = {isa = PBXBuildFile; fileRef = C4B590052371BEB20044CE54 /* filter.txt */; };
+		C4FAE493237BE37100ECE0B2 /* AGDnsProxy.framework in Embed Frameworks */ = {isa = PBXBuildFile; fileRef = C4AEED14237AC8A10021E53F /* AGDnsProxy.framework */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
+		C4FAE494237BE37600ECE0B2 /* AGDnsProxy.framework in Embed Frameworks */ = {isa = PBXBuildFile; fileRef = C4AEED14237AC8A10021E53F /* AGDnsProxy.framework */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
+		C4FAE495237BE41A00ECE0B2 /* ext-ios.appex in Embed App Extensions */ = {isa = PBXBuildFile; fileRef = C4423F7023794EA900FD1D4C /* ext-ios.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+		C4FAE4A4237BE78900ECE0B2 /* filter.txt in Resources */ = {isa = PBXBuildFile; fileRef = C4FAE4A2237BE77800ECE0B2 /* filter.txt */; };
+		C4FAE4A5237BE78E00ECE0B2 /* filter.txt in Resources */ = {isa = PBXBuildFile; fileRef = C4FAE4A2237BE77800ECE0B2 /* filter.txt */; };
+		C4FAE4A6237BE79300ECE0B2 /* PacketTunnelProvider.m in Sources */ = {isa = PBXBuildFile; fileRef = C4FAE4A3237BE77800ECE0B2 /* PacketTunnelProvider.m */; };
+		C4FAE4A7237BE79600ECE0B2 /* PacketTunnelProvider.m in Sources */ = {isa = PBXBuildFile; fileRef = C4FAE4A3237BE77800ECE0B2 /* PacketTunnelProvider.m */; };
+		C4FAE4AB237BE7A900ECE0B2 /* vpn.m in Sources */ = {isa = PBXBuildFile; fileRef = C4FAE49F237BE77800ECE0B2 /* vpn.m */; };
+		C4FAE4AC237BE7BB00ECE0B2 /* vpn.m in Sources */ = {isa = PBXBuildFile; fileRef = C4FAE49F237BE77800ECE0B2 /* vpn.m */; };
 		F40E749C206D1D6B000F5A41 /* Cocoa.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = F499C4451F6A9D0D00FB55F8 /* Cocoa.framework */; };
-		F44A92BB1F876E6A00C0FD32 /* vpn.m in Sources */ = {isa = PBXBuildFile; fileRef = F44A92BA1F876E6A00C0FD32 /* vpn.m */; };
 		F499C4461F6A9D0D00FB55F8 /* Cocoa.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = F499C4451F6A9D0D00FB55F8 /* Cocoa.framework */; };
-		F499C44E1F6A9D0D00FB55F8 /* PacketTunnelProvider.m in Sources */ = {isa = PBXBuildFile; fileRef = F499C44D1F6A9D0D00FB55F8 /* PacketTunnelProvider.m */; };
-		F499C4521F6A9D0D00FB55F8 /* ext.appex in Embed App Extensions */ = {isa = PBXBuildFile; fileRef = F499C4441F6A9D0D00FB55F8 /* ext.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+		F499C4521F6A9D0D00FB55F8 /* ext-macos.appex in Embed App Extensions */ = {isa = PBXBuildFile; fileRef = F499C4441F6A9D0D00FB55F8 /* ext-macos.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		F4AF338D1F696BEE00CA0E84 /* AppDelegate.m in Sources */ = {isa = PBXBuildFile; fileRef = F4AF338C1F696BEE00CA0E84 /* AppDelegate.m */; };
 		F4AF33901F696BEE00CA0E84 /* main.m in Sources */ = {isa = PBXBuildFile; fileRef = F4AF338F1F696BEE00CA0E84 /* main.m */; };
 		F4AF33931F696BEE00CA0E84 /* ViewController.m in Sources */ = {isa = PBXBuildFile; fileRef = F4AF33921F696BEE00CA0E84 /* ViewController.m */; };
@@ -26,6 +44,20 @@
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
+		C41BB40D2379C1B40068C106 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = F4AF33801F696BEE00CA0E84 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = C41BB4092379C19B0068C106;
+			remoteInfo = "AGDnsProxy-ios";
+		};
+		C4423FA4237955FC00FD1D4C /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = F4AF33801F696BEE00CA0E84 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = C4423F6F23794EA900FD1D4C;
+			remoteInfo = "test-ios";
+		};
 		C4B58FE1237189310044CE54 /* PBXContainerItemProxy */ = {
 			isa = PBXContainerItemProxy;
 			containerPortal = F4AF33801F696BEE00CA0E84 /* Project object */;
@@ -49,9 +81,42 @@
 			dstPath = "";
 			dstSubfolderSpec = 10;
 			files = (
-				C4B58FEB237195E90044CE54 /* AGDnsProxy.framework in Embed Frameworks */,
+				C4FAE493237BE37100ECE0B2 /* AGDnsProxy.framework in Embed Frameworks */,
 			);
 			name = "Embed Frameworks";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		C4423F7C23794F2F00FD1D4C /* Embed Frameworks */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "";
+			dstSubfolderSpec = 10;
+			files = (
+				C4AEED19237AC9170021E53F /* AGDnsProxy.framework in Embed Frameworks */,
+			);
+			name = "Embed Frameworks";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		C4423FA2237955B000FD1D4C /* Embed Frameworks */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "";
+			dstSubfolderSpec = 10;
+			files = (
+				C4FAE494237BE37600ECE0B2 /* AGDnsProxy.framework in Embed Frameworks */,
+			);
+			name = "Embed Frameworks";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		C44240072379B26E00FD1D4C /* Embed App Extensions */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "";
+			dstSubfolderSpec = 13;
+			files = (
+				C4FAE495237BE41A00ECE0B2 /* ext-ios.appex in Embed App Extensions */,
+			);
+			name = "Embed App Extensions";
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 		C4B58FF523719CDF0044CE54 /* Embed Frameworks */ = {
@@ -60,7 +125,7 @@
 			dstPath = "";
 			dstSubfolderSpec = 10;
 			files = (
-				C4B58FF423719CDF0044CE54 /* AGDnsProxy.framework in Embed Frameworks */,
+				C4AEED18237AC9140021E53F /* AGDnsProxy.framework in Embed Frameworks */,
 			);
 			name = "Embed Frameworks";
 			runOnlyForDeploymentPostprocessing = 0;
@@ -71,7 +136,7 @@
 			dstPath = "";
 			dstSubfolderSpec = 13;
 			files = (
-				F499C4521F6A9D0D00FB55F8 /* ext.appex in Embed App Extensions */,
+				F499C4521F6A9D0D00FB55F8 /* ext-macos.appex in Embed App Extensions */,
 			);
 			name = "Embed App Extensions";
 			runOnlyForDeploymentPostprocessing = 0;
@@ -79,19 +144,34 @@
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
-		C4B58FE0237189240044CE54 /* build_dnsproxy_framework.sh */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.script.sh; path = build_dnsproxy_framework.sh; sourceTree = "<group>"; };
-		C4B58FE323718A380044CE54 /* AGDnsProxy.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = AGDnsProxy.framework; path = ext/build/AGDnsProxy.framework; sourceTree = "<group>"; };
-		C4B590052371BEB20044CE54 /* filter.txt */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text; path = filter.txt; sourceTree = "<group>"; };
-		F44A92B91F876E3300C0FD32 /* vpn.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = vpn.h; sourceTree = "<group>"; };
-		F44A92BA1F876E6A00C0FD32 /* vpn.m */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.objc; path = vpn.m; sourceTree = "<group>"; };
+		C4423F7023794EA900FD1D4C /* ext-ios.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = "ext-ios.appex"; sourceTree = BUILT_PRODUCTS_DIR; };
+		C4423F7523794EA900FD1D4C /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
+		C4423F7623794EA900FD1D4C /* ext_ios.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = ext_ios.entitlements; sourceTree = "<group>"; };
+		C4423F872379559900FD1D4C /* test-ios.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "test-ios.app"; sourceTree = BUILT_PRODUCTS_DIR; };
+		C4423F892379559900FD1D4C /* AppDelegate.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = AppDelegate.h; sourceTree = "<group>"; };
+		C4423F8A2379559900FD1D4C /* AppDelegate.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = AppDelegate.m; sourceTree = "<group>"; };
+		C4423F8C2379559900FD1D4C /* SceneDelegate.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = SceneDelegate.h; sourceTree = "<group>"; };
+		C4423F8D2379559900FD1D4C /* SceneDelegate.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = SceneDelegate.m; sourceTree = "<group>"; };
+		C4423F8F2379559900FD1D4C /* ViewController.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = ViewController.h; sourceTree = "<group>"; };
+		C4423F902379559900FD1D4C /* ViewController.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = ViewController.m; sourceTree = "<group>"; };
+		C4423F932379559900FD1D4C /* Base */ = {isa = PBXFileReference; lastKnownFileType = file.storyboard; name = Base; path = Base.lproj/Main.storyboard; sourceTree = "<group>"; };
+		C4423F952379559D00FD1D4C /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+		C4423F982379559D00FD1D4C /* Base */ = {isa = PBXFileReference; lastKnownFileType = file.storyboard; name = Base; path = Base.lproj/LaunchScreen.storyboard; sourceTree = "<group>"; };
+		C4423F9A2379559D00FD1D4C /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
+		C4423F9B2379559D00FD1D4C /* main.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = main.m; sourceTree = "<group>"; };
+		C4AEED14237AC8A10021E53F /* AGDnsProxy.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = AGDnsProxy.framework; path = framework/AGDnsProxy.framework; sourceTree = "<group>"; };
+		C4FAE49E237BE77800ECE0B2 /* build_dnsproxy_framework.sh */ = {isa = PBXFileReference; lastKnownFileType = text.script.sh; path = build_dnsproxy_framework.sh; sourceTree = "<group>"; };
+		C4FAE49F237BE77800ECE0B2 /* vpn.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = vpn.m; sourceTree = "<group>"; };
+		C4FAE4A0237BE77800ECE0B2 /* PacketTunnelProvider.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = PacketTunnelProvider.h; sourceTree = "<group>"; };
+		C4FAE4A1237BE77800ECE0B2 /* vpn.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = vpn.h; sourceTree = "<group>"; };
+		C4FAE4A2237BE77800ECE0B2 /* filter.txt */ = {isa = PBXFileReference; lastKnownFileType = text; path = filter.txt; sourceTree = "<group>"; };
+		C4FAE4A3237BE77800ECE0B2 /* PacketTunnelProvider.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = PacketTunnelProvider.m; sourceTree = "<group>"; };
 		F499C4371F6A6EF100FB55F8 /* test.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = test.entitlements; sourceTree = "<group>"; };
-		F499C4441F6A9D0D00FB55F8 /* ext.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = ext.appex; sourceTree = BUILT_PRODUCTS_DIR; };
+		F499C4441F6A9D0D00FB55F8 /* ext-macos.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = "ext-macos.appex"; sourceTree = BUILT_PRODUCTS_DIR; };
 		F499C4451F6A9D0D00FB55F8 /* Cocoa.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Cocoa.framework; path = System/Library/Frameworks/Cocoa.framework; sourceTree = SDKROOT; };
 		F499C44B1F6A9D0D00FB55F8 /* ext.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = ext.entitlements; sourceTree = "<group>"; };
-		F499C44C1F6A9D0D00FB55F8 /* PacketTunnelProvider.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = PacketTunnelProvider.h; sourceTree = "<group>"; };
-		F499C44D1F6A9D0D00FB55F8 /* PacketTunnelProvider.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = PacketTunnelProvider.m; sourceTree = "<group>"; };
 		F499C44F1F6A9D0D00FB55F8 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
-		F4AF33881F696BEE00CA0E84 /* test.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = test.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		F4AF33881F696BEE00CA0E84 /* test-macos.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "test-macos.app"; sourceTree = BUILT_PRODUCTS_DIR; };
 		F4AF338B1F696BEE00CA0E84 /* AppDelegate.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = AppDelegate.h; sourceTree = "<group>"; };
 		F4AF338C1F696BEE00CA0E84 /* AppDelegate.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = AppDelegate.m; sourceTree = "<group>"; };
 		F4AF338F1F696BEE00CA0E84 /* main.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = main.m; sourceTree = "<group>"; };
@@ -104,13 +184,31 @@
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
+		C4423F6D23794EA900FD1D4C /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				C4423F7D23794F3200FD1D4C /* NetworkExtension.framework in Frameworks */,
+				C4AEED16237AC90C0021E53F /* AGDnsProxy.framework in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		C4423F842379559900FD1D4C /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				C4423FA3237955C400FD1D4C /* NetworkExtension.framework in Frameworks */,
+				C4AEED1A237AC9260021E53F /* AGDnsProxy.framework in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		F499C4411F6A9D0D00FB55F8 /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				C4B58FF323719CDF0044CE54 /* AGDnsProxy.framework in Frameworks */,
 				F499C4461F6A9D0D00FB55F8 /* Cocoa.framework in Frameworks */,
 				C4B58FDB237184390044CE54 /* NetworkExtension.framework in Frameworks */,
+				C4AEED17237AC9100021E53F /* AGDnsProxy.framework in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -119,6 +217,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				F40E749C206D1D6B000F5A41 /* Cocoa.framework in Frameworks */,
+				C4AEED15237AC8A10021E53F /* AGDnsProxy.framework in Frameworks */,
 				F4D5969B1F7C01BD00538851 /* NetworkExtension.framework in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -126,42 +225,73 @@
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
+		C4423F7123794EA900FD1D4C /* ext-ios */ = {
+			isa = PBXGroup;
+			children = (
+				C4423F7523794EA900FD1D4C /* Info.plist */,
+				C4423F7623794EA900FD1D4C /* ext_ios.entitlements */,
+			);
+			path = "ext-ios";
+			sourceTree = "<group>";
+		};
+		C4423F882379559900FD1D4C /* test-ios */ = {
+			isa = PBXGroup;
+			children = (
+				C4423F892379559900FD1D4C /* AppDelegate.h */,
+				C4423F8A2379559900FD1D4C /* AppDelegate.m */,
+				C4423F8C2379559900FD1D4C /* SceneDelegate.h */,
+				C4423F8D2379559900FD1D4C /* SceneDelegate.m */,
+				C4423F8F2379559900FD1D4C /* ViewController.h */,
+				C4423F902379559900FD1D4C /* ViewController.m */,
+				C4423F922379559900FD1D4C /* Main.storyboard */,
+				C4423F952379559D00FD1D4C /* Assets.xcassets */,
+				C4423F972379559D00FD1D4C /* LaunchScreen.storyboard */,
+				C4423F9A2379559D00FD1D4C /* Info.plist */,
+				C4423F9B2379559D00FD1D4C /* main.m */,
+			);
+			path = "test-ios";
+			sourceTree = "<group>";
+		};
+		C4FAE49D237BE77800ECE0B2 /* common */ = {
+			isa = PBXGroup;
+			children = (
+				C4FAE49E237BE77800ECE0B2 /* build_dnsproxy_framework.sh */,
+				C4FAE49F237BE77800ECE0B2 /* vpn.m */,
+				C4FAE4A0237BE77800ECE0B2 /* PacketTunnelProvider.h */,
+				C4FAE4A1237BE77800ECE0B2 /* vpn.h */,
+				C4FAE4A2237BE77800ECE0B2 /* filter.txt */,
+				C4FAE4A3237BE77800ECE0B2 /* PacketTunnelProvider.m */,
+			);
+			path = common;
+			sourceTree = "<group>";
+		};
 		F499C4341F6A6EF100FB55F8 /* Frameworks */ = {
 			isa = PBXGroup;
 			children = (
-				C4B58FE323718A380044CE54 /* AGDnsProxy.framework */,
+				C4AEED14237AC8A10021E53F /* AGDnsProxy.framework */,
 				F4D5969A1F7C01BD00538851 /* NetworkExtension.framework */,
 				F499C4451F6A9D0D00FB55F8 /* Cocoa.framework */,
 			);
 			name = Frameworks;
 			sourceTree = "<group>";
 		};
-		F499C4471F6A9D0D00FB55F8 /* ext */ = {
+		F499C4471F6A9D0D00FB55F8 /* ext-macos */ = {
 			isa = PBXGroup;
 			children = (
-				C4B590052371BEB20044CE54 /* filter.txt */,
-				C4B58FE0237189240044CE54 /* build_dnsproxy_framework.sh */,
-				F499C44C1F6A9D0D00FB55F8 /* PacketTunnelProvider.h */,
-				F499C44D1F6A9D0D00FB55F8 /* PacketTunnelProvider.m */,
 				F499C44F1F6A9D0D00FB55F8 /* Info.plist */,
-				F499C44A1F6A9D0D00FB55F8 /* Supporting Files */,
-			);
-			path = ext;
-			sourceTree = "<group>";
-		};
-		F499C44A1F6A9D0D00FB55F8 /* Supporting Files */ = {
-			isa = PBXGroup;
-			children = (
 				F499C44B1F6A9D0D00FB55F8 /* ext.entitlements */,
 			);
-			name = "Supporting Files";
+			path = "ext-macos";
 			sourceTree = "<group>";
 		};
 		F4AF337F1F696BEE00CA0E84 = {
 			isa = PBXGroup;
 			children = (
-				F4AF338A1F696BEE00CA0E84 /* test */,
-				F499C4471F6A9D0D00FB55F8 /* ext */,
+				C4FAE49D237BE77800ECE0B2 /* common */,
+				F4AF338A1F696BEE00CA0E84 /* test-macos */,
+				F499C4471F6A9D0D00FB55F8 /* ext-macos */,
+				C4423F7123794EA900FD1D4C /* ext-ios */,
+				C4423F882379559900FD1D4C /* test-ios */,
 				F4AF33891F696BEE00CA0E84 /* Products */,
 				F499C4341F6A6EF100FB55F8 /* Frameworks */,
 			);
@@ -170,13 +300,15 @@
 		F4AF33891F696BEE00CA0E84 /* Products */ = {
 			isa = PBXGroup;
 			children = (
-				F4AF33881F696BEE00CA0E84 /* test.app */,
-				F499C4441F6A9D0D00FB55F8 /* ext.appex */,
+				F4AF33881F696BEE00CA0E84 /* test-macos.app */,
+				F499C4441F6A9D0D00FB55F8 /* ext-macos.appex */,
+				C4423F7023794EA900FD1D4C /* ext-ios.appex */,
+				C4423F872379559900FD1D4C /* test-ios.app */,
 			);
 			name = Products;
 			sourceTree = "<group>";
 		};
-		F4AF338A1F696BEE00CA0E84 /* test */ = {
+		F4AF338A1F696BEE00CA0E84 /* test-macos */ = {
 			isa = PBXGroup;
 			children = (
 				F499C4371F6A6EF100FB55F8 /* test.entitlements */,
@@ -187,11 +319,9 @@
 				F4AF33941F696BEE00CA0E84 /* Assets.xcassets */,
 				F4AF33961F696BEE00CA0E84 /* Main.storyboard */,
 				F4AF33991F696BEE00CA0E84 /* Info.plist */,
-				F44A92B91F876E3300C0FD32 /* vpn.h */,
-				F44A92BA1F876E6A00C0FD32 /* vpn.m */,
 				F4AF338E1F696BEE00CA0E84 /* Supporting Files */,
 			);
-			path = test;
+			path = "test-macos";
 			sourceTree = "<group>";
 		};
 		F4AF338E1F696BEE00CA0E84 /* Supporting Files */ = {
@@ -205,26 +335,79 @@
 /* End PBXGroup section */
 
 /* Begin PBXLegacyTarget section */
-		C4B58FDC237188E50044CE54 /* AGDnsProxy */ = {
+		C41BB4092379C19B0068C106 /* AGDnsProxy-ios */ = {
 			isa = PBXLegacyTarget;
-			buildArgumentsString = "$(SRCROOT)/ext/build_dnsproxy_framework.sh $(ACTION)";
-			buildConfigurationList = C4B58FDD237188E50044CE54 /* Build configuration list for PBXLegacyTarget "AGDnsProxy" */;
+			buildArgumentsString = "$(SRCROOT)/common/build_dnsproxy_framework.sh $(ACTION) --os ios";
+			buildConfigurationList = C41BB40C2379C19B0068C106 /* Build configuration list for PBXLegacyTarget "AGDnsProxy-ios" */;
 			buildPhases = (
 			);
 			buildToolPath = /bin/sh;
-			buildWorkingDirectory = "$(SRCROOT)/ext";
+			buildWorkingDirectory = "$(SRCROOT)/ext-ios";
 			dependencies = (
 			);
-			name = AGDnsProxy;
+			name = "AGDnsProxy-ios";
+			passBuildSettingsInEnvironment = 1;
+			productName = "AGDnsProxy-ios";
+		};
+		C4B58FDC237188E50044CE54 /* AGDnsProxy-macos */ = {
+			isa = PBXLegacyTarget;
+			buildArgumentsString = "$(SRCROOT)/common/build_dnsproxy_framework.sh $(ACTION) --os macos";
+			buildConfigurationList = C4B58FDD237188E50044CE54 /* Build configuration list for PBXLegacyTarget "AGDnsProxy-macos" */;
+			buildPhases = (
+			);
+			buildToolPath = /bin/sh;
+			buildWorkingDirectory = "$(SRCROOT)/ext-macos";
+			dependencies = (
+			);
+			name = "AGDnsProxy-macos";
 			passBuildSettingsInEnvironment = 1;
 			productName = DnsProxy;
 		};
 /* End PBXLegacyTarget section */
 
 /* Begin PBXNativeTarget section */
-		F499C4431F6A9D0D00FB55F8 /* ext */ = {
+		C4423F6F23794EA900FD1D4C /* ext-ios */ = {
 			isa = PBXNativeTarget;
-			buildConfigurationList = F499C4531F6A9D0D00FB55F8 /* Build configuration list for PBXNativeTarget "ext" */;
+			buildConfigurationList = C4423F7723794EA900FD1D4C /* Build configuration list for PBXNativeTarget "ext-ios" */;
+			buildPhases = (
+				C4423F6C23794EA900FD1D4C /* Sources */,
+				C4423F6D23794EA900FD1D4C /* Frameworks */,
+				C4423F6E23794EA900FD1D4C /* Resources */,
+				C4423F7C23794F2F00FD1D4C /* Embed Frameworks */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				C41BB40E2379C1B40068C106 /* PBXTargetDependency */,
+			);
+			name = "ext-ios";
+			productName = "test-ios";
+			productReference = C4423F7023794EA900FD1D4C /* ext-ios.appex */;
+			productType = "com.apple.product-type.app-extension";
+		};
+		C4423F862379559900FD1D4C /* test-ios */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = C4423F9D2379559D00FD1D4C /* Build configuration list for PBXNativeTarget "test-ios" */;
+			buildPhases = (
+				C4423F832379559900FD1D4C /* Sources */,
+				C4423F842379559900FD1D4C /* Frameworks */,
+				C4423F852379559900FD1D4C /* Resources */,
+				C44240072379B26E00FD1D4C /* Embed App Extensions */,
+				C4423FA2237955B000FD1D4C /* Embed Frameworks */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				C4423FA5237955FC00FD1D4C /* PBXTargetDependency */,
+			);
+			name = "test-ios";
+			productName = "test-ios";
+			productReference = C4423F872379559900FD1D4C /* test-ios.app */;
+			productType = "com.apple.product-type.application";
+		};
+		F499C4431F6A9D0D00FB55F8 /* ext-macos */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = F499C4531F6A9D0D00FB55F8 /* Build configuration list for PBXNativeTarget "ext-macos" */;
 			buildPhases = (
 				F499C4401F6A9D0D00FB55F8 /* Sources */,
 				F499C4411F6A9D0D00FB55F8 /* Frameworks */,
@@ -236,14 +419,14 @@
 			dependencies = (
 				C4B58FE2237189310044CE54 /* PBXTargetDependency */,
 			);
-			name = ext;
+			name = "ext-macos";
 			productName = ext;
-			productReference = F499C4441F6A9D0D00FB55F8 /* ext.appex */;
+			productReference = F499C4441F6A9D0D00FB55F8 /* ext-macos.appex */;
 			productType = "com.apple.product-type.app-extension";
 		};
-		F4AF33871F696BEE00CA0E84 /* test */ = {
+		F4AF33871F696BEE00CA0E84 /* test-macos */ = {
 			isa = PBXNativeTarget;
-			buildConfigurationList = F4AF339C1F696BEE00CA0E84 /* Build configuration list for PBXNativeTarget "test" */;
+			buildConfigurationList = F4AF339C1F696BEE00CA0E84 /* Build configuration list for PBXNativeTarget "test-macos" */;
 			buildPhases = (
 				F4AF33841F696BEE00CA0E84 /* Sources */,
 				F4AF33851F696BEE00CA0E84 /* Frameworks */,
@@ -256,9 +439,9 @@
 			dependencies = (
 				F499C4511F6A9D0D00FB55F8 /* PBXTargetDependency */,
 			);
-			name = test;
+			name = "test-macos";
 			productName = test;
-			productReference = F4AF33881F696BEE00CA0E84 /* test.app */;
+			productReference = F4AF33881F696BEE00CA0E84 /* test-macos.app */;
 			productType = "com.apple.product-type.application";
 		};
 /* End PBXNativeTarget section */
@@ -271,6 +454,15 @@
 				LastUpgradeCheck = 1110;
 				ORGANIZATIONNAME = "";
 				TargetAttributes = {
+					C41BB4092379C19B0068C106 = {
+						CreatedOnToolsVersion = 11.1;
+					};
+					C4423F6F23794EA900FD1D4C = {
+						CreatedOnToolsVersion = 11.1;
+					};
+					C4423F862379559900FD1D4C = {
+						CreatedOnToolsVersion = 11.1;
+					};
 					C4B58FDC237188E50044CE54 = {
 						CreatedOnToolsVersion = 11.1;
 					};
@@ -324,19 +516,40 @@
 			projectDirPath = "";
 			projectRoot = "";
 			targets = (
-				F4AF33871F696BEE00CA0E84 /* test */,
-				F499C4431F6A9D0D00FB55F8 /* ext */,
-				C4B58FDC237188E50044CE54 /* AGDnsProxy */,
+				F4AF33871F696BEE00CA0E84 /* test-macos */,
+				C4423F862379559900FD1D4C /* test-ios */,
+				F499C4431F6A9D0D00FB55F8 /* ext-macos */,
+				C4423F6F23794EA900FD1D4C /* ext-ios */,
+				C4B58FDC237188E50044CE54 /* AGDnsProxy-macos */,
+				C41BB4092379C19B0068C106 /* AGDnsProxy-ios */,
 			);
 		};
 /* End PBXProject section */
 
 /* Begin PBXResourcesBuildPhase section */
+		C4423F6E23794EA900FD1D4C /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				C4FAE4A4237BE78900ECE0B2 /* filter.txt in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		C4423F852379559900FD1D4C /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				C4423F992379559D00FD1D4C /* LaunchScreen.storyboard in Resources */,
+				C4423F962379559D00FD1D4C /* Assets.xcassets in Resources */,
+				C4423F942379559900FD1D4C /* Main.storyboard in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		F499C4421F6A9D0D00FB55F8 /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				C4B590062371BEB20044CE54 /* filter.txt in Resources */,
+				C4FAE4A5237BE78E00ECE0B2 /* filter.txt in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -352,11 +565,31 @@
 /* End PBXResourcesBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
+		C4423F6C23794EA900FD1D4C /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				C4FAE4A7237BE79600ECE0B2 /* PacketTunnelProvider.m in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		C4423F832379559900FD1D4C /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				C4FAE4AB237BE7A900ECE0B2 /* vpn.m in Sources */,
+				C44240102379BB2600FD1D4C /* AppDelegate.m in Sources */,
+				C44240112379BB2900FD1D4C /* ViewController.m in Sources */,
+				C44240122379BB2F00FD1D4C /* main.m in Sources */,
+				C44240132379BB3800FD1D4C /* SceneDelegate.m in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		F499C4401F6A9D0D00FB55F8 /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				F499C44E1F6A9D0D00FB55F8 /* PacketTunnelProvider.m in Sources */,
+				C4FAE4A6237BE79300ECE0B2 /* PacketTunnelProvider.m in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -364,8 +597,8 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				F44A92BB1F876E6A00C0FD32 /* vpn.m in Sources */,
 				F4AF33931F696BEE00CA0E84 /* ViewController.m in Sources */,
+				C4FAE4AC237BE7BB00ECE0B2 /* vpn.m in Sources */,
 				F4AF33901F696BEE00CA0E84 /* main.m in Sources */,
 				F4AF338D1F696BEE00CA0E84 /* AppDelegate.m in Sources */,
 			);
@@ -374,19 +607,45 @@
 /* End PBXSourcesBuildPhase section */
 
 /* Begin PBXTargetDependency section */
+		C41BB40E2379C1B40068C106 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = C41BB4092379C19B0068C106 /* AGDnsProxy-ios */;
+			targetProxy = C41BB40D2379C1B40068C106 /* PBXContainerItemProxy */;
+		};
+		C4423FA5237955FC00FD1D4C /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = C4423F6F23794EA900FD1D4C /* ext-ios */;
+			targetProxy = C4423FA4237955FC00FD1D4C /* PBXContainerItemProxy */;
+		};
 		C4B58FE2237189310044CE54 /* PBXTargetDependency */ = {
 			isa = PBXTargetDependency;
-			target = C4B58FDC237188E50044CE54 /* AGDnsProxy */;
+			target = C4B58FDC237188E50044CE54 /* AGDnsProxy-macos */;
 			targetProxy = C4B58FE1237189310044CE54 /* PBXContainerItemProxy */;
 		};
 		F499C4511F6A9D0D00FB55F8 /* PBXTargetDependency */ = {
 			isa = PBXTargetDependency;
-			target = F499C4431F6A9D0D00FB55F8 /* ext */;
+			target = F499C4431F6A9D0D00FB55F8 /* ext-macos */;
 			targetProxy = F499C4501F6A9D0D00FB55F8 /* PBXContainerItemProxy */;
 		};
 /* End PBXTargetDependency section */
 
 /* Begin PBXVariantGroup section */
+		C4423F922379559900FD1D4C /* Main.storyboard */ = {
+			isa = PBXVariantGroup;
+			children = (
+				C4423F932379559900FD1D4C /* Base */,
+			);
+			name = Main.storyboard;
+			sourceTree = "<group>";
+		};
+		C4423F972379559D00FD1D4C /* LaunchScreen.storyboard */ = {
+			isa = PBXVariantGroup;
+			children = (
+				C4423F982379559D00FD1D4C /* Base */,
+			);
+			name = LaunchScreen.storyboard;
+			sourceTree = "<group>";
+		};
 		F4AF33961F696BEE00CA0E84 /* Main.storyboard */ = {
 			isa = PBXVariantGroup;
 			children = (
@@ -398,6 +657,202 @@
 /* End PBXVariantGroup section */
 
 /* Begin XCBuildConfiguration section */
+		C41BB40A2379C19B0068C106 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CODE_SIGN_STYLE = Automatic;
+				DEBUGGING_SYMBOLS = YES;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				DEVELOPMENT_TEAM = N33TQXN8C7;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GCC_GENERATE_DEBUGGING_SYMBOLS = YES;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
+				MTL_FAST_MATH = YES;
+				OTHER_CFLAGS = "";
+				OTHER_LDFLAGS = "";
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+			};
+			name = Debug;
+		};
+		C41BB40B2379C19B0068C106 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CODE_SIGN_STYLE = Automatic;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				DEVELOPMENT_TEAM = N33TQXN8C7;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				MTL_FAST_MATH = YES;
+				OTHER_CFLAGS = "";
+				OTHER_LDFLAGS = "";
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+			};
+			name = Release;
+		};
+		C4423F7823794EA900FD1D4C /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ARCHS = (
+					"$(ARCHS_STANDARD_INCLUDING_64_BIT)",
+					arm64,
+					i386,
+					x86_64,
+				);
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CODE_SIGN_ENTITLEMENTS = "ext-ios/ext_ios.entitlements";
+				CODE_SIGN_IDENTITY = "Apple Development";
+				CODE_SIGN_STYLE = Automatic;
+				DEVELOPMENT_TEAM = N33TQXN8C7;
+				FRAMEWORK_SEARCH_PATHS = (
+					"$(inherited)",
+					"$(DEVELOPER_FRAMEWORKS_DIR)",
+					"$(DEVELOPER_LIBRARY_DIR)/Frameworks",
+					"$(SDKROOT)/Developer/Library/Frameworks",
+					"$(PROJECT_DIR)/framework",
+				);
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				INFOPLIST_FILE = "ext-ios/Info.plist";
+				IPHONEOS_DEPLOYMENT_TARGET = 13.1;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
+				MTL_FAST_MATH = YES;
+				PRODUCT_BUNDLE_IDENTIFIER = "a.test.adguard-ios.ext";
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				PROVISIONING_PROFILE_SPECIFIER = "";
+				SDKROOT = iphoneos;
+				SKIP_INSTALL = YES;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		C4423F7923794EA900FD1D4C /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ARCHS = (
+					"$(ARCHS_STANDARD_INCLUDING_64_BIT)",
+					arm64,
+					i386,
+					x86_64,
+				);
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CODE_SIGN_ENTITLEMENTS = "ext-ios/ext_ios.entitlements";
+				CODE_SIGN_IDENTITY = "Apple Development";
+				CODE_SIGN_STYLE = Automatic;
+				DEVELOPMENT_TEAM = N33TQXN8C7;
+				FRAMEWORK_SEARCH_PATHS = (
+					"$(inherited)",
+					"$(DEVELOPER_FRAMEWORKS_DIR)",
+					"$(DEVELOPER_LIBRARY_DIR)/Frameworks",
+					"$(SDKROOT)/Developer/Library/Frameworks",
+					"$(PROJECT_DIR)/framework",
+				);
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				INFOPLIST_FILE = "ext-ios/Info.plist";
+				IPHONEOS_DEPLOYMENT_TARGET = 13.1;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MTL_FAST_MATH = YES;
+				PRODUCT_BUNDLE_IDENTIFIER = "a.test.adguard-ios.ext";
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				PROVISIONING_PROFILE_SPECIFIER = "";
+				SDKROOT = iphoneos;
+				SKIP_INSTALL = YES;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				VALIDATE_PRODUCT = YES;
+			};
+			name = Release;
+		};
+		C4423F9E2379559D00FD1D4C /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ARCHS = (
+					"$(ARCHS_STANDARD_INCLUDING_64_BIT)",
+					arm64,
+					x86_64,
+					i386,
+				);
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CODE_SIGN_IDENTITY = "Apple Development";
+				CODE_SIGN_STYLE = Automatic;
+				DEVELOPMENT_TEAM = N33TQXN8C7;
+				FRAMEWORK_SEARCH_PATHS = (
+					"$(inherited)",
+					"$(PROJECT_DIR)/framework",
+				);
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				INFOPLIST_FILE = "test-ios/Info.plist";
+				IPHONEOS_DEPLOYMENT_TARGET = 13.1;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
+				MTL_FAST_MATH = YES;
+				PRODUCT_BUNDLE_IDENTIFIER = "a.test.adguard-ios";
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		C4423F9F2379559D00FD1D4C /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ARCHS = (
+					"$(ARCHS_STANDARD_INCLUDING_64_BIT)",
+					arm64,
+					x86_64,
+					i386,
+				);
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CODE_SIGN_IDENTITY = "Apple Development";
+				CODE_SIGN_STYLE = Automatic;
+				DEVELOPMENT_TEAM = N33TQXN8C7;
+				FRAMEWORK_SEARCH_PATHS = (
+					"$(inherited)",
+					"$(PROJECT_DIR)/framework",
+				);
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				INFOPLIST_FILE = "test-ios/Info.plist";
+				IPHONEOS_DEPLOYMENT_TARGET = 13.1;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				MTL_FAST_MATH = YES;
+				PRODUCT_BUNDLE_IDENTIFIER = "a.test.adguard-ios";
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				VALIDATE_PRODUCT = YES;
+			};
+			name = Release;
+		};
 		C4B58FDE237188E50044CE54 /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
@@ -416,6 +871,7 @@
 				OTHER_CFLAGS = "";
 				OTHER_LDFLAGS = "";
 				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = macos;
 			};
 			name = Debug;
 		};
@@ -433,6 +889,7 @@
 				OTHER_CFLAGS = "";
 				OTHER_LDFLAGS = "";
 				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = macos;
 			};
 			name = Release;
 		};
@@ -440,17 +897,17 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				CLANG_CXX_LANGUAGE_STANDARD = "c++17";
-				CODE_SIGN_ENTITLEMENTS = ext/ext.entitlements;
+				CODE_SIGN_ENTITLEMENTS = "ext-macos/ext.entitlements";
 				CODE_SIGN_IDENTITY = "Apple Development";
 				DEVELOPMENT_TEAM = N33TQXN8C7;
 				ENABLE_HARDENED_RUNTIME = YES;
 				FRAMEWORK_SEARCH_PATHS = (
 					"$(inherited)",
-					"$(PROJECT_DIR)/ext/build",
+					"$(PROJECT_DIR)/framework",
 				);
 				GCC_C_LANGUAGE_STANDARD = c11;
 				HEADER_SEARCH_PATHS = "";
-				INFOPLIST_FILE = ext/Info.plist;
+				INFOPLIST_FILE = "ext-macos/Info.plist";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/../Frameworks",
@@ -470,17 +927,17 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				CLANG_CXX_LANGUAGE_STANDARD = "c++17";
-				CODE_SIGN_ENTITLEMENTS = ext/ext.entitlements;
+				CODE_SIGN_ENTITLEMENTS = "ext-macos/ext.entitlements";
 				CODE_SIGN_IDENTITY = "Apple Development";
 				DEVELOPMENT_TEAM = N33TQXN8C7;
 				ENABLE_HARDENED_RUNTIME = YES;
 				FRAMEWORK_SEARCH_PATHS = (
 					"$(inherited)",
-					"$(PROJECT_DIR)/ext/build",
+					"$(PROJECT_DIR)/framework",
 				);
 				GCC_C_LANGUAGE_STANDARD = c11;
 				HEADER_SEARCH_PATHS = "";
-				INFOPLIST_FILE = ext/Info.plist;
+				INFOPLIST_FILE = "ext-macos/Info.plist";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/../Frameworks",
@@ -606,15 +1063,18 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CLANG_CXX_LANGUAGE_STANDARD = "c++17";
-				CODE_SIGN_ENTITLEMENTS = test/test.entitlements;
+				CODE_SIGN_ENTITLEMENTS = "test-macos/test.entitlements";
 				CODE_SIGN_IDENTITY = "Mac Developer";
 				COMBINE_HIDPI_IMAGES = YES;
 				DEVELOPMENT_TEAM = N33TQXN8C7;
 				ENABLE_HARDENED_RUNTIME = YES;
-				FRAMEWORK_SEARCH_PATHS = "$(inherited)";
+				FRAMEWORK_SEARCH_PATHS = (
+					"$(inherited)",
+					"$(PROJECT_DIR)/framework",
+				);
 				GCC_C_LANGUAGE_STANDARD = c11;
 				HEADER_SEARCH_PATHS = "";
-				INFOPLIST_FILE = test/Info.plist;
+				INFOPLIST_FILE = "test-macos/Info.plist";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/../Frameworks",
@@ -633,15 +1093,18 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CLANG_CXX_LANGUAGE_STANDARD = "c++17";
-				CODE_SIGN_ENTITLEMENTS = test/test.entitlements;
+				CODE_SIGN_ENTITLEMENTS = "test-macos/test.entitlements";
 				CODE_SIGN_IDENTITY = "Mac Developer";
 				COMBINE_HIDPI_IMAGES = YES;
 				DEVELOPMENT_TEAM = N33TQXN8C7;
 				ENABLE_HARDENED_RUNTIME = YES;
-				FRAMEWORK_SEARCH_PATHS = "$(inherited)";
+				FRAMEWORK_SEARCH_PATHS = (
+					"$(inherited)",
+					"$(PROJECT_DIR)/framework",
+				);
 				GCC_C_LANGUAGE_STANDARD = c11;
 				HEADER_SEARCH_PATHS = "";
-				INFOPLIST_FILE = test/Info.plist;
+				INFOPLIST_FILE = "test-macos/Info.plist";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/../Frameworks",
@@ -658,7 +1121,34 @@
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
-		C4B58FDD237188E50044CE54 /* Build configuration list for PBXLegacyTarget "AGDnsProxy" */ = {
+		C41BB40C2379C19B0068C106 /* Build configuration list for PBXLegacyTarget "AGDnsProxy-ios" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				C41BB40A2379C19B0068C106 /* Debug */,
+				C41BB40B2379C19B0068C106 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		C4423F7723794EA900FD1D4C /* Build configuration list for PBXNativeTarget "ext-ios" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				C4423F7823794EA900FD1D4C /* Debug */,
+				C4423F7923794EA900FD1D4C /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		C4423F9D2379559D00FD1D4C /* Build configuration list for PBXNativeTarget "test-ios" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				C4423F9E2379559D00FD1D4C /* Debug */,
+				C4423F9F2379559D00FD1D4C /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		C4B58FDD237188E50044CE54 /* Build configuration list for PBXLegacyTarget "AGDnsProxy-macos" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
 				C4B58FDE237188E50044CE54 /* Debug */,
@@ -667,7 +1157,7 @@
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
 		};
-		F499C4531F6A9D0D00FB55F8 /* Build configuration list for PBXNativeTarget "ext" */ = {
+		F499C4531F6A9D0D00FB55F8 /* Build configuration list for PBXNativeTarget "ext-macos" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
 				F499C4541F6A9D0D00FB55F8 /* Debug */,
@@ -685,7 +1175,7 @@
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
 		};
-		F4AF339C1F696BEE00CA0E84 /* Build configuration list for PBXNativeTarget "test" */ = {
+		F4AF339C1F696BEE00CA0E84 /* Build configuration list for PBXNativeTarget "test-macos" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
 				F4AF339D1F696BEE00CA0E84 /* Debug */,

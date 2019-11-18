@@ -1,5 +1,28 @@
 cmake_minimum_required(VERSION 3.0)
-set(CMAKE_OSX_DEPLOYMENT_TARGET "10.14" CACHE STRING "Minimum macOS deployment version")
+
+set(TARGET_OS "macos" CACHE STRING "Target OS")
+
+string(TOLOWER "${TARGET_OS}" TARGET_OS)
+
+message(STATUS "EFFECTIVE_PLATFORM_NAME=$ENV{EFFECTIVE_PLATFORM_NAME}")
+set(EFFECTIVE_PLATFORM $ENV{EFFECTIVE_PLATFORM_NAME})
+
+if (EFFECTIVE_PLATFORM STREQUAL "-iphonesimulator")
+    set(CMAKE_OSX_SYSROOT iphonesimulator)
+elseif (("${TARGET_OS}" STREQUAL "macos") OR ())
+    set(CMAKE_OSX_DEPLOYMENT_TARGET "10.14" CACHE STRING "Minimum macOS deployment version")
+    set(CMAKE_ASM_FLAGS "-mmacosx-version-min=10.14")
+elseif ("${TARGET_OS}" STREQUAL "ios")
+    set(CMAKE_SYSTEM_PROCESSOR "arm64")
+    set(CMAKE_OSX_ARCHITECTURES "arm64")
+    set(CMAKE_SYSTEM_NAME "Darwin")
+    set(CMAKE_OSX_SYSROOT iphoneos)
+    set(CMAKE_C_COMPILER_ARG1 "-arch ${CMAKE_SYSTEM_PROCESSOR}")
+    set(CMAKE_CXX_COMPILER_ARG1 "-arch ${CMAKE_SYSTEM_PROCESSOR}")
+else ()
+    message(FATAL_ERROR "unknown os: ${TARGET_OS}")
+endif ()
+
 
 project(dnsproxy_framework)
 
@@ -11,12 +34,14 @@ set(CMAKE_CXX_STANDARD 17)
 
 set(DNS_LIBS_DIR ../../..)
 
-add_compile_options(-fno-strict-aliasing -fno-exceptions)
+add_compile_options(-fno-strict-aliasing -fno-exceptions -fno-rtti)
 add_definitions(-DFMT_EXCEPTIONS=0)
 
-set(CMAKE_ASM_FLAGS "-mmacosx-version-min=10.14")
-
-add_library(AGDnsProxy SHARED AGDnsProxy.h AGDnsProxy.mm)
+add_library(AGDnsProxy SHARED
+    AGDnsProxy.h
+    AGDnsProxyEvents.h
+    AGDnsProxy.mm
+)
 set_property(TARGET AGDnsProxy PROPERTY POSITION_INDEPENDENT_CODE ON)
 
 set_target_properties(AGDnsProxy PROPERTIES
@@ -25,8 +50,14 @@ set_target_properties(AGDnsProxy PROPERTIES
     VERSION 1.0
     MACOSX_FRAMEWORK_IDENTIFIER a.test.adguard
     XCODE_ATTRIBUTE_CODE_SIGN_IDENTITY "Developer ID Application: Performiks OOO (N33TQXN8C7)"
+    INSTALL_NAME_DIR "@rpath"
+    BUILD_WITH_INSTALL_RPATH 1
+    COMPILE_FLAGS "-fobjc-arc"
 )
-set_property(TARGET AGDnsProxy PROPERTY PUBLIC_HEADER AGDnsProxy.h)
+set_property(TARGET AGDnsProxy PROPERTY PUBLIC_HEADER
+    AGDnsProxy.h
+    AGDnsProxyEvents.h
+)
 
 if (NOT TARGET dnsproxy)
     add_subdirectory(${DNS_LIBS_DIR}/proxy ${CMAKE_BINARY_DIR}/proxy)

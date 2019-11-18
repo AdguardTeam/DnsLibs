@@ -15,18 +15,23 @@
 #include <ldns/rdata.h>
 
 
-#define warnlog_id(l_, pkt_, fmt_, ...) warnlog((l_), "[%" PRIu16 "] " fmt_, ldns_pkt_id(pkt_), ##__VA_ARGS__)
-#define warnlog_fid(l_, pkt_, fmt_, ...) warnlog((l_), "[%" PRIu16 "] %s " fmt_, ldns_pkt_id(pkt_), __func__, ##__VA_ARGS__)
-#define dbglog_id(l_, pkt_, fmt_, ...) dbglog((l_), "[%" PRIu16 "] " fmt_, ldns_pkt_id(pkt_), ##__VA_ARGS__)
-#define dbglog_fid(l_, pkt_, fmt_, ...) dbglog((l_), "[%" PRIu16 "] %s " fmt_, ldns_pkt_id(pkt_), __func__, ##__VA_ARGS__)
-#define tracelog_id(l_, pkt_, fmt_, ...) tracelog((l_), "[%" PRIu16 "] " fmt_, ldns_pkt_id(pkt_), ##__VA_ARGS__)
-#define tracelog_fid(l_, pkt_, fmt_, ...) tracelog((l_), "[%" PRIu16 "] %s " fmt_, ldns_pkt_id(pkt_), __func__, ##__VA_ARGS__)
+#define errlog_id(l_, pkt_, fmt_, ...) errlog((l_), "[{}] " fmt_, ldns_pkt_id(pkt_), ##__VA_ARGS__)
+#define errlog_fid(l_, pkt_, fmt_, ...) errlog((l_), "[{}] {} " fmt_, ldns_pkt_id(pkt_), __func__, ##__VA_ARGS__)
+#define warnlog_id(l_, pkt_, fmt_, ...) warnlog((l_), "[{}] " fmt_, ldns_pkt_id(pkt_), ##__VA_ARGS__)
+#define warnlog_fid(l_, pkt_, fmt_, ...) warnlog((l_), "[{}] {} " fmt_, ldns_pkt_id(pkt_), __func__, ##__VA_ARGS__)
+#define dbglog_id(l_, pkt_, fmt_, ...) dbglog((l_), "[{}] " fmt_, ldns_pkt_id(pkt_), ##__VA_ARGS__)
+#define dbglog_fid(l_, pkt_, fmt_, ...) dbglog((l_), "[{}] {} " fmt_, ldns_pkt_id(pkt_), __func__, ##__VA_ARGS__)
+#define tracelog_id(l_, pkt_, fmt_, ...) tracelog((l_), "[{}] " fmt_, ldns_pkt_id(pkt_), ##__VA_ARGS__)
+#define tracelog_fid(l_, pkt_, fmt_, ...) tracelog((l_), "[{}] {} " fmt_, ldns_pkt_id(pkt_), __func__, ##__VA_ARGS__)
 
 
 using namespace ag;
+using namespace std::chrono;
+using ldns_pkt_ptr = std::unique_ptr<ldns_pkt, decltype(&ldns_pkt_free)>;
 
 
-static constexpr std::chrono::milliseconds DEFAULT_UPSTREAM_TIMEOUT = std::chrono::milliseconds(30);
+static constexpr milliseconds DEFAULT_UPSTREAM_TIMEOUT = milliseconds(30000);
+static constexpr std::string_view MOZILLA_DOH_HOST = "use-application-dns.net.";
 
 static const dnsproxy_settings DEFAULT_PROXY_SETTINGS = {
     .upstreams = {
@@ -43,11 +48,12 @@ const dnsproxy_settings &dnsproxy_settings::get_default() {
 
 
 struct dnsproxy::impl {
-    ag::logger log = ag::create_logger("dnsproxy");
+    ag::logger log;
     std::vector<upstream_ptr> upstreams;
     dnsfilter filter;
     dnsfilter::handle filter_handle = nullptr;
     dnsproxy_settings settings;
+    dnsproxy_events events;
 
     ldns_rr *create_soa(const ldns_pkt *request) const;
     ldns_pkt *create_nxdomain_response(const ldns_pkt *request) const;
@@ -57,6 +63,10 @@ struct dnsproxy::impl {
         const std::vector<const ag::dnsfilter::rule *> &rules) const;
     ldns_pkt *create_blocking_response(const ldns_pkt *request,
         const std::vector<const ag::dnsfilter::rule *> &rules) const;
+
+    void complete_processed_event(dns_request_processed_event event,
+        const ldns_pkt *request, const ldns_pkt *response,
+        const std::vector<const dnsfilter::rule *> &rules, std::string error) const;
 };
 
 static void log_packet(const ag::logger &log, const ldns_pkt *packet, const char *pkt_name) {
@@ -67,10 +77,10 @@ static void log_packet(const ag::logger &log, const ldns_pkt *packet, const char
     ldns_buffer *str_dns = ldns_buffer_new(512);
     ldns_status status = ldns_pkt2buffer_str(str_dns, packet);
     if (status != LDNS_STATUS_OK) {
-        dbglog_id(log, packet, "failed to print %s: %s (%d)"
+        dbglog_id(log, packet, "failed to print {}: {} ({})"
             , pkt_name, ldns_get_errorstr_by_id(status), status);
     } else {
-        dbglog_id(log, packet, "%s:\n%s", pkt_name, (char*)ldns_buffer_begin(str_dns));
+        dbglog_id(log, packet, "{}:\n{}", pkt_name, (char*)ldns_buffer_begin(str_dns));
     }
     ldns_buffer_free(str_dns);
 }
@@ -232,7 +242,43 @@ ldns_pkt *dnsproxy::impl::create_blocking_response(const ldns_pkt *request,
     return response;
 }
 
-static std::vector<uint8_t> transform_response_to_raw_data(ldns_pkt *message) {
+void dnsproxy::impl::complete_processed_event(dns_request_processed_event event,
+        const ldns_pkt *request, const ldns_pkt *response,
+        const std::vector<const dnsfilter::rule *> &rules, std::string error) const {
+    if (this->events.on_request_processed == nullptr) {
+        return;
+    }
+
+    if (request != nullptr) {
+        const ldns_rr *question = ldns_rr_list_rr(ldns_pkt_question(request), 0);
+        char *type = ldns_rr_type2str(ldns_rr_get_type(question));
+        event.type = type;
+        free(type);
+    }
+
+    event.elapsed = duration_cast<milliseconds>(steady_clock::now().time_since_epoch()).count() - event.start_time;
+
+    if (response != nullptr) {
+        char *answer = ldns_rr_list2str(ldns_pkt_answer(response));
+        event.answer = answer;
+        free(answer);
+    }
+
+    event.rules.reserve(rules.size());
+    event.filter_list_ids.reserve(rules.size());
+    for (const dnsfilter::rule *rule : rules) {
+        event.rules.push_back(rule->text);
+        event.filter_list_ids.push_back(rule->filter_id);
+    }
+
+    event.whitelist = rules.size() > 0 && rules[0]->props.test(dnsfilter::RP_EXCEPTION);
+
+    event.error = std::move(error);
+
+    this->events.on_request_processed(std::move(event));
+}
+
+static std::vector<uint8_t> transform_response_to_raw_data(const ldns_pkt *message) {
     ldns_buffer *buffer = ldns_buffer_new(512);
     ldns_status status = ldns_pkt2buffer_wire(buffer, message);
     assert(status == LDNS_STATUS_OK);
@@ -240,7 +286,6 @@ static std::vector<uint8_t> transform_response_to_raw_data(ldns_pkt *message) {
     std::vector<uint8_t> data =
         { ldns_buffer_at(buffer, 0), ldns_buffer_at(buffer, 0) + ldns_buffer_position(buffer) };
     ldns_buffer_free(buffer);
-    ldns_pkt_free(message);
     return data;
 }
 
@@ -250,18 +295,19 @@ dnsproxy::dnsproxy()
 
 dnsproxy::~dnsproxy() = default;
 
-bool dnsproxy::init(dnsproxy_settings settings) {
+bool dnsproxy::init(dnsproxy_settings settings, dnsproxy_events events) {
     std::unique_ptr<impl> &proxy = this->pimpl;
+    pimpl->log = ag::create_logger("dnsproxy");
 
     infolog(proxy->log, "Initializing proxy module...");
 
     infolog(proxy->log, "Initializing upstreams...");
     proxy->upstreams.reserve(settings.upstreams.size());
     for (dnsproxy_settings::upstream_settings &us : settings.upstreams) {
-        infolog(proxy->log, "Initializing upstream %s...");
+        infolog(proxy->log, "Initializing upstream {}...", us.dns_server);
         auto[upstream, err] = ag::upstream::address_to_upstream(us.dns_server, us.options);
         if (err.has_value()) {
-            errlog(proxy->log, "Failed to create upstream: %s", err.value().c_str());
+            errlog(proxy->log, "Failed to create upstream: {}", err.value().c_str());
         } else {
             proxy->upstreams.emplace_back(std::move(upstream));
             infolog(proxy->log, "Upstream created successfully");
@@ -285,6 +331,7 @@ bool dnsproxy::init(dnsproxy_settings settings) {
     infolog(proxy->log, "Filtering module initialized");
 
     proxy->settings = std::move(settings);
+    proxy->events = std::move(events);
 
     infolog(proxy->log, "Proxy module initialized");
     return true;
@@ -302,15 +349,18 @@ const dnsproxy_settings &dnsproxy::get_settings() const {
 }
 
 std::vector<uint8_t> dnsproxy::handle_message(ag::uint8_view_t message) {
-    using ldns_pkt_ptr = std::unique_ptr<ldns_pkt, decltype(&ldns_pkt_free)>;
+    dns_request_processed_event event = {};
+    event.start_time = duration_cast<milliseconds>(steady_clock::now().time_since_epoch()).count();
 
     std::unique_ptr<impl> &proxy = this->pimpl;
 
     ldns_pkt *request;
     ldns_status status = ldns_wire2pkt(&request, message.data(), message.length());
     if (status != LDNS_STATUS_OK) {
-        warnlog(proxy->log, "%s failed to parse payload: %s (%d)"
-            , __func__, ldns_get_errorstr_by_id(status), status);
+        std::string err = ag::utils::fmt_string("failed to parse payload: {} ({})",
+            ldns_get_errorstr_by_id(status), status);
+        errlog(proxy->log, "{} {}", __func__, err.c_str());
+        proxy->complete_processed_event(std::move(event), nullptr, nullptr, {}, std::move(err));
         return {};
     }
     ldns_pkt_ptr req_holder = ldns_pkt_ptr(request, ldns_pkt_free);
@@ -318,44 +368,57 @@ std::vector<uint8_t> dnsproxy::handle_message(ag::uint8_view_t message) {
 
     const ldns_rr *question = ldns_rr_list_rr(ldns_pkt_question(request), 0);
     auto domain = std::unique_ptr<char, decltype(&free)>(ldns_rdf2str(ldns_rr_owner(question)), free);
+    event.domain = domain.get();
 
     // disable Mozilla DoH
     ldns_rr_type type = ldns_rr_get_type(question);
     if ((type == LDNS_RR_TYPE_A || type == LDNS_RR_TYPE_AAAA)
-            && 0 == strcmp(domain.get(), "use-application-dns.net.")) {
-        ldns_pkt *response = proxy->create_nxdomain_response(request);
-        log_packet(proxy->log, response, "mozilla doh blocking response");
-        return transform_response_to_raw_data(response);
+            && 0 == strcmp(domain.get(), MOZILLA_DOH_HOST.data())) {
+        ldns_pkt_ptr response = { proxy->create_nxdomain_response(request), &ldns_pkt_free };
+        log_packet(proxy->log, response.get(), "mozilla doh blocking response");
+        std::vector<uint8_t> raw_response = transform_response_to_raw_data(response.get());
+        proxy->complete_processed_event(std::move(event), request, response.get(), {}, "");
+        return raw_response;
     }
 
     std::string_view pure_domain = domain.get();
     if (ldns_dname_str_absolute(domain.get())) {
         pure_domain.remove_suffix(1); // drop trailing dot
     }
-    tracelog_fid(proxy->log, request, "query domain: %.*s"
-        , (int)pure_domain.length(), pure_domain.data());
+    tracelog_fid(proxy->log, request, "query domain: {}", pure_domain);
 
     std::vector<ag::dnsfilter::rule> rules = proxy->filter.match(proxy->filter_handle, pure_domain);
     for (const ag::dnsfilter::rule &rule : rules) {
-        tracelog_fid(proxy->log, request, "matched rule: %s", rule.text.c_str());
+        tracelog_fid(proxy->log, request, "matched rule: {}", rule.text.c_str());
     }
 
     std::vector<const ag::dnsfilter::rule *> effective_rules =
         ag::dnsfilter::get_effective_rules(rules);
     if (effective_rules.size() > 0
             && !effective_rules[0]->props.test(ag::dnsfilter::RP_EXCEPTION)) {
-        dbglog_fid(proxy->log, request, "dns query blocked by rule: %s", effective_rules[0]->text.c_str());
-        return transform_response_to_raw_data(proxy->create_blocking_response(request, effective_rules));
+        dbglog_fid(proxy->log, request, "dns query blocked by rule: {}", effective_rules[0]->text.c_str());
+        ldns_pkt_ptr response = { proxy->create_blocking_response(request, effective_rules), &ldns_pkt_free };
+        log_packet(proxy->log, response.get(), "rule blocked response");
+        std::vector<uint8_t> raw_response = transform_response_to_raw_data(response.get());
+        proxy->complete_processed_event(std::move(event), request, response.get(), effective_rules, "");
+        return raw_response;
     }
 
     auto[response, err] = proxy->upstreams[0]->exchange(request);
+    event.upstream_addr = proxy->upstreams[0]->address();
     if (err.has_value()) {
-        warnlog_fid(proxy->log, request, "Upstream failed to perform dns query: %s"
-            , err.value().c_str());
+        std::string err_str = ag::utils::fmt_string("Upstream failed to perform dns query: {}",
+            err.value().c_str());
+        errlog_fid(proxy->log, request, "{}" , err_str.c_str());
+        proxy->complete_processed_event(std::move(event), request, nullptr, effective_rules, std::move(err_str));
         return {};
     }
 
+    ldns_pkt_ptr resp_holder = { response, &ldns_pkt_free };
     log_packet(proxy->log, response, "upstream dns response");
-    return transform_response_to_raw_data(response);
+    std::vector<uint8_t> raw_response = transform_response_to_raw_data(response);
+    event.bytes_received = raw_response.size();
+    event.bytes_sent = message.size();
+    proxy->complete_processed_event(std::move(event), request, response, effective_rules, "");
+    return raw_response;
 }
-
