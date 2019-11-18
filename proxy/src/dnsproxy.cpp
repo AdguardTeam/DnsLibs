@@ -27,7 +27,7 @@
 
 using namespace ag;
 using namespace std::chrono;
-using ldns_pkt_ptr = std::unique_ptr<ldns_pkt, decltype(&ldns_pkt_free)>;
+using ldns_pkt_ptr = std::unique_ptr<ldns_pkt, ag::ftor<&ldns_pkt_free>>;
 
 
 static constexpr milliseconds DEFAULT_UPSTREAM_TIMEOUT = milliseconds(30000);
@@ -363,7 +363,7 @@ std::vector<uint8_t> dnsproxy::handle_message(ag::uint8_view_t message) {
         proxy->complete_processed_event(std::move(event), nullptr, nullptr, {}, std::move(err));
         return {};
     }
-    ldns_pkt_ptr req_holder = ldns_pkt_ptr(request, ldns_pkt_free);
+    ldns_pkt_ptr req_holder = ldns_pkt_ptr(request);
     log_packet(proxy->log, request, "client dns request");
 
     const ldns_rr *question = ldns_rr_list_rr(ldns_pkt_question(request), 0);
@@ -374,7 +374,7 @@ std::vector<uint8_t> dnsproxy::handle_message(ag::uint8_view_t message) {
     ldns_rr_type type = ldns_rr_get_type(question);
     if ((type == LDNS_RR_TYPE_A || type == LDNS_RR_TYPE_AAAA)
             && 0 == strcmp(domain.get(), MOZILLA_DOH_HOST.data())) {
-        ldns_pkt_ptr response = { proxy->create_nxdomain_response(request), &ldns_pkt_free };
+        ldns_pkt_ptr response = ldns_pkt_ptr(proxy->create_nxdomain_response(request));
         log_packet(proxy->log, response.get(), "mozilla doh blocking response");
         std::vector<uint8_t> raw_response = transform_response_to_raw_data(response.get());
         proxy->complete_processed_event(std::move(event), request, response.get(), {}, "");
@@ -397,7 +397,7 @@ std::vector<uint8_t> dnsproxy::handle_message(ag::uint8_view_t message) {
     if (effective_rules.size() > 0
             && !effective_rules[0]->props.test(ag::dnsfilter::RP_EXCEPTION)) {
         dbglog_fid(proxy->log, request, "dns query blocked by rule: {}", effective_rules[0]->text.c_str());
-        ldns_pkt_ptr response = { proxy->create_blocking_response(request, effective_rules), &ldns_pkt_free };
+        ldns_pkt_ptr response = ldns_pkt_ptr(proxy->create_blocking_response(request, effective_rules));
         log_packet(proxy->log, response.get(), "rule blocked response");
         std::vector<uint8_t> raw_response = transform_response_to_raw_data(response.get());
         proxy->complete_processed_event(std::move(event), request, response.get(), effective_rules, "");
@@ -414,11 +414,10 @@ std::vector<uint8_t> dnsproxy::handle_message(ag::uint8_view_t message) {
         return {};
     }
 
-    ldns_pkt_ptr resp_holder = { response, &ldns_pkt_free };
-    log_packet(proxy->log, response, "upstream dns response");
-    std::vector<uint8_t> raw_response = transform_response_to_raw_data(response);
+    log_packet(proxy->log, response.get(), "upstream dns response");
+    std::vector<uint8_t> raw_response = transform_response_to_raw_data(response.get());
     event.bytes_received = raw_response.size();
     event.bytes_sent = message.size();
-    proxy->complete_processed_event(std::move(event), request, response, effective_rules, "");
+    proxy->complete_processed_event(std::move(event), request, response.get(), effective_rules, "");
     return raw_response;
 }
