@@ -98,10 +98,10 @@ ag::dnscrypt::server_info::fetch_result ag::dnscrypt::server_info::fetch_current
             continue;
         }
         if (rec_cert_info.serial == local_cert_info.serial) {
-            if (rec_cert_info.crypto_construction > local_cert_info.crypto_construction) {
+            if (rec_cert_info.encryption_algorithm > local_cert_info.encryption_algorithm) {
                 warnlog(server_info_log(), "[{}] Upgrading the construction from {} to {}", m_provider_name,
-                       crypto_construction_str(local_cert_info.crypto_construction),
-                       crypto_construction_str(rec_cert_info.crypto_construction));
+                       crypto_construction_str(local_cert_info.encryption_algorithm),
+                       crypto_construction_str(rec_cert_info.encryption_algorithm));
             } else {
                 warnlog(server_info_log(), "[{}] Keeping the previous, preferred crypto construction", m_provider_name);
                 continue;
@@ -109,7 +109,7 @@ ag::dnscrypt::server_info::fetch_result ag::dnscrypt::server_info::fetch_current
         }
         local_cert_info = rec_cert_info;
     }
-    if (local_cert_info.crypto_construction == crypto_construction::UNDEFINED) {
+    if (local_cert_info.encryption_algorithm == crypto_construction::UNDEFINED) {
         return make_error("No usable certificate found");
     }
     return {local_cert_info, exchange_rtt, std::nullopt};
@@ -140,7 +140,7 @@ ag::dnscrypt::server_info::encrypt_result ag::dnscrypt::server_info::encrypt(pro
     if (pad_error) {
         return {uint8_vector{}, uint8_vector{}, std::move(pad_error)};
     }
-    if (auto[encrypted, seal_err] = cipher_seal(m_server_cert.crypto_construction, utils::to_string_view(packet), nonce,
+    if (auto[encrypted, seal_err] = cipher_seal(m_server_cert.encryption_algorithm, utils::to_string_view(packet), nonce,
                                                 m_server_cert.shared_key);
         !seal_err) {
         auto result = ag::utils::join<uint8_vector>(m_server_cert.magic_query, m_public_key, client_nonce, encrypted);
@@ -168,7 +168,7 @@ ag::dnscrypt::server_info::decrypt_result ag::dnscrypt::server_info::decrypt(uin
     uint8_vector packet;
     auto encrypted_without_header = encrypted;
     encrypted_without_header.remove_prefix(response_header_len);
-    auto[decrypted, open_err] = cipher_open(m_server_cert.crypto_construction, encrypted_without_header, server_nonce,
+    auto[decrypted, open_err] = cipher_open(m_server_cert.encryption_algorithm, encrypted_without_header, server_nonce,
                                             shared_key);
     if (open_err) {
         return make_error(std::move(open_err));
@@ -210,7 +210,7 @@ ag::dnscrypt::server_info::txt_to_cert_info_result ag::dnscrypt::server_info::tx
     switch (crypto_construction es_version{ntohs(field_cref<uint16_t>(bin_cert, ES_VERSION_FIELD))}) {
     case crypto_construction::X_SALSA_20_POLY_1305:
     case crypto_construction::X_CHACHA_20_POLY_1305:
-        local_cert_info.crypto_construction = es_version;
+        local_cert_info.encryption_algorithm = es_version;
         break;
     default:
         return make_error("Unsupported crypto construction: " + utils::enum_to_string(es_version));
@@ -235,7 +235,7 @@ ag::dnscrypt::server_info::txt_to_cert_info_result ag::dnscrypt::server_info::tx
         return make_error("Certificate not valid at the current date");
     }
     auto server_pk = utils::to_array(field_c_array_cref<uint8_t, KEY_SIZE>(bin_cert, RESOLVER_PK_FIELD));
-    auto[computed_shared_key, shared_key_err] = cipher_shared_key(local_cert_info.crypto_construction, m_secret_key,
+    auto[computed_shared_key, shared_key_err] = cipher_shared_key(local_cert_info.encryption_algorithm, m_secret_key,
                                                                   server_pk);
     if (shared_key_err) {
         return make_error(std::move(shared_key_err));

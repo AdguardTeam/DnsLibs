@@ -16,7 +16,7 @@ namespace ag::dnscrypt {
 class client {
 public:
     struct dial_result {
-        server_info server_info;
+        server_info server;
         std::chrono::milliseconds round_trip_time;
         err_string error;
     };
