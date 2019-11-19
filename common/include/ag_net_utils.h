@@ -6,9 +6,7 @@
 #include <time.h>
 #include <unordered_map>
 
-namespace ag {
-
-namespace util {
+namespace ag::utils {
 
 /**
  * Split address string to host and port
@@ -32,6 +30,4 @@ std::string join_host_port(std::string_view host, std::string_view port);
  */
 timeval duration_to_timeval(std::chrono::microseconds usecs);
 
-} // namespace ag::util
-
-} // namespace ag
+} // namespace ag::utils

@@ -11,6 +11,8 @@ set(SRCS
         ${SRC_DIR}/sys.cpp
         ${SRC_DIR}/file.cpp
         ${SRC_DIR}/logger.cpp
+        ${SRC_DIR}/socket_address.cpp
+        ${SRC_DIR}/net_utils.cpp
     )
 
 add_library(dnslibs_common STATIC EXCLUDE_FROM_ALL ${SRCS})
@@ -29,9 +31,17 @@ if(NOT TARGET spdlog)
     add_subdirectory(${THIRD_PARTY_DIR}/spdlog ${CMAKE_BINARY_DIR}/third-party/spdlog)
 endif(NOT TARGET spdlog)
 
+if (NOT TARGET libevent)
+    add_subdirectory(${THIRD_PARTY_DIR}/libevent ${CMAKE_BINARY_DIR}/libevent)
+endif ()
+
+if (NOT TARGET ldns)
+    add_subdirectory(${THIRD_PARTY_DIR}/ldns ${CMAKE_BINARY_DIR}/ldns)
+endif ()
+
 set_target_properties(dnslibs_common PROPERTIES POSITION_INDEPENDENT_CODE ON)
 target_include_directories(dnslibs_common PUBLIC ./include)
-target_link_libraries(dnslibs_common spdlog)
+target_link_libraries(dnslibs_common spdlog libevent ldns)
 
 target_compile_options(dnslibs_common PRIVATE -Wall -Wextra)
 if (NOT MSVC)

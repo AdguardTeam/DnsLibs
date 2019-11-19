@@ -1,5 +1,7 @@
 #include <gtest/gtest.h>
 #include <upstream.h>
+#include <dns_crypt_ldns.h>
+#include <sodium.h>
 #include <ldns/packet.h>
 #include <ldns/rbtree.h>
 #include <ldns/keys.h>
@@ -7,20 +9,44 @@
 #include <ldns/host2str.h>
 #include <ldns/dname.h>
 
-class upstream_test : public ::testing::TestWithParam<std::string> {
+struct upstream_test_data {
+    std::string_view address;
+    std::initializer_list<std::string> bootstrap;
+};
+
+static ag::ldns_pkt_ptr create_test_message(const char *str) {
+    ldns_pkt *pkt = ldns_pkt_query_new(
+            ldns_dname_new_frm_str(str),
+            LDNS_RR_TYPE_A, LDNS_RR_CLASS_IN, LDNS_RD);
+    return ag::ldns_pkt_ptr(pkt);
+}
+
+class upstream_test : public ::testing::Test {
 protected:
     void SetUp() override {
-    }
-
-    void TearDown() override {
+        if (sodium_init() == -1) {
+            FAIL();
+        }
     }
 };
 
-static ag::ldns_pkt_ptr create_test_message() {
-    ldns_pkt *pkt = ldns_pkt_query_new(
-            ldns_dname_new_frm_str("google-public-dns-a.google.com."),
-            LDNS_RR_TYPE_A, LDNS_RR_CLASS_IN, LDNS_RD);
-    return ag::ldns_pkt_ptr(pkt);
+class upstream_test_with_data : public upstream_test, public ::testing::WithParamInterface<upstream_test_data> {};
+
+// See the details here: https://github.com/AdguardTeam/AdGuardHome/issues/524
+TEST_F(upstream_test, test_dns_crypt_truncated) {
+	// AdGuard DNS (DNSCrypt)
+    static constexpr auto address = "sdns://AQIAAAAAAAAAFDE3Ni4xMDMuMTMwLjEzMDo1NDQzINErR_JS3PLCu_iZEIbq95zkSV2LFsigxDIuUso_OQhzIjIuZG5zY3J5cHQuZGVmYXVsdC5uczEuYWRndWFyZC5jb20";
+#if 0
+	// Cisco OpenDNS (DNSCrypt)
+	static constexpr auto address = "sdns://AQAAAAAAAAAADjIwOC42Ny4yMjAuMjIwILc1EUAgbyJdPivYItf9aR6hwzzI1maNDL4Ev6vKQ_t5GzIuZG5zY3J5cHQtY2VydC5vcGVuZG5zLmNvbQ";
+#endif
+    auto[upstream, upstream_err] = ag::upstream::address_to_upstream(address, {});
+    ASSERT_FALSE(upstream_err) << "Error while creating an upstream: " << *upstream_err;
+    auto request = ag::dnscrypt::create_request_ldns_pkt(LDNS_RR_TYPE_TXT, LDNS_RR_CLASS_IN, LDNS_RD,
+                                                         "unit-test2.dns.adguard.com.", std::nullopt);
+    auto[res, err] = upstream->exchange(request.get());
+    ASSERT_FALSE(err) << "Error while making a request: " << *err;
+    ASSERT_FALSE(ldns_pkt_tc(res.get())) << "Response must NOT be truncated";
 }
 
 static void assert_response(ldns_pkt *reply) {
@@ -34,22 +60,64 @@ static void assert_response(ldns_pkt *reply) {
                                 << ldns_rr_type2str(ldns_rr_get_type(first_rr));
 
     auto rdf = ldns_rr_rdf(first_rr, 0);
-    ag::uint8_view_t ip{ldns_rdf_data(rdf), ldns_rdf_size(rdf)};
+    ag::uint8_view ip{ldns_rdf_data(rdf), ldns_rdf_size(rdf)};
     static constexpr uint8_t ip8888bytes[] = {8, 8, 8, 8};
-    ag::uint8_view_t ip8888{ip8888bytes, std::size(ip8888bytes)};
+    ag::uint8_view ip8888{ip8888bytes, std::size(ip8888bytes)};
 
     ASSERT_EQ(ip, ip8888)
             << "DNS upstream returned wrong answer instead of 8.8.8.8";
 }
 
-TEST_P(upstream_test, test_dns_query) {
-    ag::ldns_pkt_ptr pkt = create_test_message();
+static const std::initializer_list<std::string> default_bootstrap_list{"8.8.8.8", "1.1.1.1"};
+
+static const upstream_test_data upstream_test_addresses[]{
+    {
+        "8.8.8.8",
+        default_bootstrap_list
+    },
+    {
+        "1.1.1.1",
+        default_bootstrap_list
+    },
+    {
+        "tcp://8.8.8.8",
+        default_bootstrap_list
+    },
+    {
+        "tcp://1.1.1.1",
+        default_bootstrap_list
+    },
+    {
+        "tls://one.one.one.one",
+        default_bootstrap_list
+    },
+    {
+        // AdGuard DNS (DNSCrypt)
+        "sdns://AQIAAAAAAAAAFDE3Ni4xMDMuMTMwLjEzMDo1NDQzINErR_JS3PLCu_iZEIbq95zkSV2LFsigxDIuUso_OQhzIjIuZG5zY3J5cHQuZGVmYXVsdC5uczEuYWRndWFyZC5jb20",
+        {}
+    },
+    {
+        // AdGuard Family (DNSCrypt)
+        "sdns://AQIAAAAAAAAAFDE3Ni4xMDMuMTMwLjEzMjo1NDQzILgxXdexS27jIKRw3C7Wsao5jMnlhvhdRUXWuMm1AFq6ITIuZG5zY3J5cHQuZmFtaWx5Lm5zMS5hZGd1YXJkLmNvbQ",
+        {}
+    },
+    {
+        // Cisco OpenDNS (DNSCrypt)
+        "sdns://AQAAAAAAAAAADjIwOC42Ny4yMjAuMjIwILc1EUAgbyJdPivYItf9aR6hwzzI1maNDL4Ev6vKQ_t5GzIuZG5zY3J5cHQtY2VydC5vcGVuZG5zLmNvbQ",
+        {}
+    },
+};
+
+TEST_P(upstream_test_with_data, test_dns_query) {
+    const auto &address = GetParam().address;
+    const auto &bootstrap_list = GetParam().bootstrap;
+    ag::ldns_pkt_ptr pkt = create_test_message("google-public-dns-a.google.com.");
 
     ag::upstream::options opts = {
-            .bootstrap = {"8.8.8.8", "1.1.1.1"},
-            .timeout = std::chrono::milliseconds(5000)
+        .bootstrap = bootstrap_list,
+        .timeout = std::chrono::milliseconds(5000)
     };
-    auto[upstream, err1] = ag::upstream::address_to_upstream(GetParam(), opts);
+    auto[upstream, err1] = ag::upstream::address_to_upstream(address, opts);
     ASSERT_FALSE(err1) << *err1;
     auto[reply, err2] = upstream->exchange(&*pkt);
     ASSERT_FALSE(err2) << *err2;
@@ -64,8 +132,8 @@ TEST_P(upstream_test, test_dns_query) {
 }
 
 INSTANTIATE_TEST_CASE_P(test_dns_query,
-                        upstream_test,
-                        testing::Values("8.8.8.8", "1.1.1.1", "tcp://8.8.8.8", "tcp://1.1.1.1", "tls://one.one.one.one"));
+                        upstream_test_with_data,
+                        testing::ValuesIn(upstream_test_addresses));
 
 #if 0 // The Simon's method
 

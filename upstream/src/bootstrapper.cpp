@@ -36,7 +36,8 @@ ag::bootstrapper::ret ag::bootstrapper::get() {
 ag::bootstrapper::bootstrapper(std::string_view address_string, int default_port,
         bool ipv6_avail, const std::vector<std::string> &bootstrap)
         : m_ipv6_avail(ipv6_avail) {
-    auto[host, port] = ag::util::split_host_port(address_string);
+    std::atomic_init(&m_round_robin_num, 0);
+    auto[host, port] = utils::split_host_port(address_string);
     m_server_port = std::strtol(std::string(port).c_str(), nullptr, 10)
                     ?: default_port;
     m_server_name = host;
@@ -70,7 +71,7 @@ static std::vector<ag::socket_address> socket_address_from_reply(ldns_pkt *reply
     for (size_t i = 0; i < ldns_rr_list_rr_count(answer); i++) {
         auto rr = ldns_rr_list_rr(answer, i);
         ldns_rdf *rdf = ldns_rr_a_address(rr);
-        ag::uint8_view_t ip{ldns_rdf_data(rdf), ldns_rdf_size(rdf)};
+        ag::uint8_view ip{ldns_rdf_data(rdf), ldns_rdf_size(rdf)};
         addrs.emplace_back(ip, port);
     }
     return addrs;
@@ -78,7 +79,7 @@ static std::vector<ag::socket_address> socket_address_from_reply(ldns_pkt *reply
 
 std::vector<ag::socket_address>
 ag::resolver::resolve(std::string_view host, int port, milliseconds timeout, bool ipv6_avail) {
-    ag::socket_address numeric_ip(ag::util::join_host_port(host, std::to_string(port)));
+    ag::socket_address numeric_ip(utils::join_host_port(host, std::to_string(port)));
     if (numeric_ip.valid()) {
         return {numeric_ip};
     }

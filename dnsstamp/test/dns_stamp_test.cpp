@@ -41,8 +41,8 @@ protected:
 void test_server_stamp_create(const ag::server_stamp &stamp, std::string_view expected) {
     auto stamp_str = stamp.str();
     ASSERT_EQ(stamp_str, expected);
-    auto [parsed_stamp, err] = ag::server_stamp::from_string(stamp_str);
-    ASSERT_TRUE(err.empty());
+    auto[parsed_stamp, err] = ag::server_stamp::from_string(stamp_str);
+    ASSERT_FALSE(err);
     auto ps = parsed_stamp.str();
     ASSERT_EQ(ps, stamp_str);
 }
@@ -50,8 +50,8 @@ void test_server_stamp_create(const ag::server_stamp &stamp, std::string_view ex
 void test_server_stamp_parse(std::string_view stamp_str,
                              const std::function<bool(const ag::server_stamp &)> &function) {
     // AdGuard DNSCrypt
-    auto [stamp, err] = ag::server_stamp::from_string(stamp_str);
-    ASSERT_TRUE(err.empty());
+    auto[stamp, err] = ag::server_stamp::from_string(stamp_str);
+    ASSERT_FALSE(err);
     ASSERT_FALSE(stamp.provider_name.empty());
     ASSERT_FALSE(function(stamp));
 }

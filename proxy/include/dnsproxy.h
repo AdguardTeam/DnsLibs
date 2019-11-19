@@ -49,7 +49,7 @@ public:
      *         a DNS resolver response in case of the message was passed,
      *         an empty buffer in case of error
      */
-    std::vector<uint8_t> handle_message(ag::uint8_view_t message);
+    std::vector<uint8_t> handle_message(ag::uint8_view message);
 
 private:
     struct impl;

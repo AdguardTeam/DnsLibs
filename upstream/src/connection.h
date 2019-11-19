@@ -1,7 +1,7 @@
 #pragma once
 
 #include <ag_defs.h>
-#include <socket_address.h>
+#include <ag_socket_address.h>
 #include <memory>
 #include <vector>
 #include <chrono>
@@ -28,7 +28,7 @@ public:
      * @param v DNS packet
      * @return Request ID to wait
      */
-    virtual int write(uint8_view_t buf) = 0;
+    virtual int write(uint8_view buf) = 0;
 
     /**
      * Reads given DNS packet for given request id from framed connection

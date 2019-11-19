@@ -22,7 +22,7 @@ public:
      * @param addr Vector containing IP address bytes. Should be 4 or 16 bytes length
      * @param port Port number
      */
-    socket_address(ag::uint8_view_t addr, int port);
+    socket_address(ag::uint8_view addr, int port);
 
     bool operator<(const socket_address &other) const;
     bool operator==(const socket_address &other) const;

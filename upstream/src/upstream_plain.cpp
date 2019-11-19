@@ -34,7 +34,7 @@ std::pair<ag::ldns_pkt_ptr, ag::err_string> ag::plain_dns::exchange(ldns_pkt *re
         // UDP request
         uint8_t *reply_data;
         size_t reply_size;
-        timeval tv = ag::util::duration_to_timeval(m_timeout);
+        timeval tv = utils::duration_to_timeval(m_timeout);
         status = ldns_udp_send(&reply_data, &*buffer, (const sockaddr_storage *) m_socket_address.c_sockaddr(),
                                m_socket_address.c_socklen(), tv, &reply_size);
         if (status != LDNS_STATUS_OK) {
@@ -58,7 +58,7 @@ std::pair<ag::ldns_pkt_ptr, ag::err_string> ag::plain_dns::exchange(ldns_pkt *re
     if (!conn) {
         return {nullptr, err};
     }
-    ag::uint8_view_t buf{ldns_buffer_begin(&*buffer), ldns_buffer_position(&*buffer)};
+    ag::uint8_view buf{ldns_buffer_begin(&*buffer), ldns_buffer_position(&*buffer)};
     int id = conn->write(buf);
 
     auto timeout = m_timeout - duration_cast<milliseconds>(elapsed);

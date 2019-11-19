@@ -14,7 +14,7 @@ namespace ag {
  * @param url_safe is string should be url safe or not
  * @return Base64 encoded string
  */
-std::string encode_to_base64(uint8_view_t data, bool url_safe);
+std::string encode_to_base64(uint8_view data, bool url_safe);
 
 /**
  * Decode data from Base64-encoded string

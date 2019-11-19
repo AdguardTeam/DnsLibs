@@ -348,7 +348,7 @@ const dnsproxy_settings &dnsproxy::get_settings() const {
     return this->pimpl->settings;
 }
 
-std::vector<uint8_t> dnsproxy::handle_message(ag::uint8_view_t message) {
+std::vector<uint8_t> dnsproxy::handle_message(ag::uint8_view message) {
     dns_request_processed_event event = {};
     event.start_time = duration_cast<milliseconds>(steady_clock::now().time_since_epoch()).count();
 

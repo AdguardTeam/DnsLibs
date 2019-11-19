@@ -59,7 +59,7 @@ std::pair<ag::ldns_pkt_ptr, ag::err_string> ag::dns_over_tls::exchange(ldns_pkt 
     if (!conn) {
         return {nullptr, err};
     }
-    ag::uint8_view_t buf{ldns_buffer_begin(&*buffer), ldns_buffer_position(&*buffer)};
+    ag::uint8_view buf{ldns_buffer_begin(&*buffer), ldns_buffer_position(&*buffer)};
     int id = conn->write(buf);
 
     auto timeout = m_timeout - duration_cast<milliseconds>(elapsed);

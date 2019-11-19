@@ -6,9 +6,17 @@ set(CMAKE_CXX_STANDARD 17)
 set(THIRD_PARTY_DIR ${CMAKE_CURRENT_SOURCE_DIR}/../third-party)
 set(DNSLIBS_DIR ${CMAKE_CURRENT_SOURCE_DIR}/..)
 
-if(NOT TARGET dnslibs_common)
+if (NOT TARGET dnslibs_common)
     add_subdirectory(${DNSLIBS_DIR}/common ${CMAKE_BINARY_DIR}/common)
-endif(NOT TARGET dnslibs_common)
+endif ()
+
+if (NOT TARGET agdns_dnsstamp)
+    add_subdirectory(${DNSLIBS_DIR}/dnsstamp ${CMAKE_BINARY_DIR}/dnsstamp)
+endif ()
+
+if (NOT TARGET agdns_dnscrypt)
+    add_subdirectory(${DNSLIBS_DIR}/dnscrypt ${CMAKE_BINARY_DIR}/dnscrypt)
+endif ()
 
 if (NOT TARGET libevent)
     add_subdirectory(${THIRD_PARTY_DIR}/libevent ${CMAKE_BINARY_DIR}/libevent)
@@ -18,6 +26,16 @@ if (NOT TARGET ldns)
     add_subdirectory(${THIRD_PARTY_DIR}/ldns ${CMAKE_BINARY_DIR}/ldns)
 endif ()
 
+include(FindOpenSSL)
+
+if (OPENSSL_FOUND)
+    message(STATUS "OpenSSL version ${OPENSSL_VERSION}")
+    message(STATUS "OPENSSL_INCLUDE_DIR = ${OPENSSL_INCLUDE_DIR}")
+    message(STATUS "OPENSSL_LIBRARIES = ${OPENSSL_LIBRARIES}")
+else ()
+    message(FATAL_ERROR "OpenSSL not found")
+endif ()
+
 add_library(upstream EXCLUDE_FROM_ALL
         include/upstream.h
         src/upstream.cpp
@@ -25,17 +43,16 @@ add_library(upstream EXCLUDE_FROM_ALL
         src/upstream_dot.cpp
         src/upstream_plain.cpp
         src/upstream_plain.h
-        src/socket_address.cpp
-        include/socket_address.h
         src/event_loop.cpp
         include/event_loop.h
-        include/upstream_util.h
-        src/upstream_util.cpp
         src/connection.cpp
-        src/connection.h src/upstream_dot.h src/dns_framed.cpp src/dns_framed.h src/bootstrapper.cpp src/bootstrapper.h)
+        src/connection.h src/upstream_dot.h src/dns_framed.cpp src/dns_framed.h src/bootstrapper.cpp src/bootstrapper.h
+        src/upstream_dnscrypt.cpp
+        src/upstream_dnscrypt.h)
 
 target_include_directories(upstream PUBLIC include)
-target_link_libraries(upstream dnslibs_common libevent ldns ssl crypto)
+target_include_directories(upstream PRIVATE ${OPENSSL_INCLUDE_DIR})
+target_link_libraries(upstream dnslibs_common dnsstamp dnscrypt libevent ldns ${OPENSSL_LIBRARIES})
 
 enable_testing()
 if (NOT TARGET tests)

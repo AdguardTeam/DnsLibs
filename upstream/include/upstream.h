@@ -7,7 +7,7 @@
 #include <list>
 #include <chrono>
 #include <vector>
-#include "upstream_util.h"
+#include "ag_net_utils.h"
 
 namespace ag {
 
@@ -21,6 +21,7 @@ using ldns_pkt_ptr = std::unique_ptr<ldns_pkt, ag::ftor<&ldns_pkt_free>>;
  */
 class upstream {
 public:
+    using address_to_upstream_result = std::pair<upstream_ptr, err_string>;
 
     /**
      * Options for upstream
@@ -39,6 +40,8 @@ public:
         std::vector<uint8_t> server_ip;
     };
 
+    using exchange_result = std::pair<ldns_pkt_ptr, err_string>;
+
     /**
      * Convert the specified address to an upstream instance
      * @param address   8.8.8.8:53 -- plain DNS
@@ -49,7 +52,7 @@ public:
      * @param opts      Options for upstream creation
      * @return Pointer to newly created upstream or error
      */
-    static std::pair<upstream_ptr, err_string> address_to_upstream(std::string_view address, const upstream::options &opts = upstream::options{});
+    static address_to_upstream_result address_to_upstream(std::string_view address, const upstream::options &opts = upstream::options{});
 
     virtual ~upstream() = default;
 
@@ -58,7 +61,7 @@ public:
      * @param request DNS request packet
      * @return DNS response packet or an error
      */
-    virtual std::pair<ldns_pkt_ptr, err_string> exchange(ldns_pkt *request) = 0;
+    virtual exchange_result exchange(ldns_pkt *request) = 0;
 
     /**
      * Receive DNS server address

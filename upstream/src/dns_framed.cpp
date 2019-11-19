@@ -4,10 +4,10 @@
 #include <list>
 #include <ldns/wire2host.h>
 #include <event2/buffer.h>
-#include <socket_address.h>
+#include <ag_socket_address.h>
 #include <ag_logger.h>
 
-int ag::dns_framed_connection::write(ag::uint8_view_t buf) {
+int ag::dns_framed_connection::write(ag::uint8_view buf) {
     tracelog(m_log, "{} len={}", __func__, buf.size());
     dns_framed_connection_ptr ptr = shared_from_this();
     if (buf.size() < 2) {

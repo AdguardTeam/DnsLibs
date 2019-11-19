@@ -1,6 +1,6 @@
-#include <upstream_util.h>
+#include <ag_net_utils.h>
 
-std::pair<std::string_view, std::string_view> ag::util::split_host_port(std::string_view address_string) {
+std::pair<std::string_view, std::string_view> ag::utils::split_host_port(std::string_view address_string) {
 
     if (!address_string.empty() && address_string.front() == '[') {
         auto pos = address_string.find("]:");
@@ -18,7 +18,7 @@ std::pair<std::string_view, std::string_view> ag::util::split_host_port(std::str
     return {address_string, {}};
 }
 
-std::string ag::util::join_host_port(std::string_view host, std::string_view port) {
+std::string ag::utils::join_host_port(std::string_view host, std::string_view port) {
     if (host.find(':') != std::string_view::npos) {
         std::string result = "[";
         result += host;
@@ -32,7 +32,7 @@ std::string ag::util::join_host_port(std::string_view host, std::string_view por
     return result;
 }
 
-timeval ag::util::duration_to_timeval(std::chrono::microseconds usecs) {
+timeval ag::utils::duration_to_timeval(std::chrono::microseconds usecs) {
     timeval tv;
     int denom = decltype(usecs)::period::den;
     tv.tv_sec = long(usecs.count() / denom);

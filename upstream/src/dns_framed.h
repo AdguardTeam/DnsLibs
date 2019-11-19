@@ -39,7 +39,7 @@ public:
 
     ~dns_framed_connection() override;
 
-    int write(uint8_view_t buf) override;
+    int write(uint8_view buf) override;
 
     result read(int request_id, std::chrono::milliseconds timeout) override;
 

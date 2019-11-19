@@ -5,6 +5,7 @@
 #include <string_view>
 #include <utility>
 #include <vector>
+#include <ag_defs.h>
 
 namespace ag {
 
@@ -45,6 +46,8 @@ enum class stamp_proto_type : uint8_t {
  * server_stamp is the DNS stamp representation
  */
 struct server_stamp {
+    using from_str_result = std::pair<server_stamp, err_string>;
+
     /**
      * Creates string from variables stored in struct
      * @return
@@ -56,7 +59,7 @@ struct server_stamp {
      * @param url URL string
      * @return stamp struct or error
      */
-    static std::pair<server_stamp, std::string> from_string(std::string_view url);
+    static from_str_result from_string(std::string_view url);
 
     /** Server address with port */
     std::string server_addr_str;

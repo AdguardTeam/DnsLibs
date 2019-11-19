@@ -1,7 +1,7 @@
-#include <socket_address.h>
+#include <ag_socket_address.h>
 #include <cstring>
 #include <string>
-#include <upstream_util.h>
+#include <ag_net_utils.h>
 
 bool ag::socket_address::operator<(const ag::socket_address &other) const {
     return std::memcmp(&m_ss, &other.m_ss, c_socklen()) < 0;
@@ -33,7 +33,7 @@ ag::socket_address::socket_address(std::string_view address_string)
     addrinfo_hints.ai_family = AF_UNSPEC;
     addrinfo_hints.ai_flags = AI_NUMERICHOST | AI_NUMERICSERV;
 
-    auto[host, port] = ag::util::split_host_port(address_string);
+    auto[host, port] = ag::utils::split_host_port(address_string);
     auto getaddrinfo_result = getaddrinfo(std::string(host).c_str(), port.empty() ? nullptr : std::string(port).c_str(),
                                           &addrinfo_hints, &addrinfo_res);
 
@@ -85,7 +85,7 @@ std::string ag::socket_address::str() const {
     }
 }
 
-ag::socket_address::socket_address(ag::uint8_view_t addr, int port)
+ag::socket_address::socket_address(ag::uint8_view addr, int port)
         : m_ss{} {
     if (addr.size() == 16) {
         auto &sin6 = (sockaddr_in6 &) m_ss;
