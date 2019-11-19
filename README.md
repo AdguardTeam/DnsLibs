@@ -13,14 +13,12 @@ TODO
 
 ## Code rules 
 
-(TODO: write them)
-
-- C++17
-- underscore naming for classes, members, functions and variables
-- ag:: namespace
 - use already written third-party libraries (Google Test for tests, etc.)
 - use submodules
 - use CMake
+- for code style see CODE_STYLE.md
+
+## Project structure
 
 Every subproject consists of the following directories and files:
 - `include/` - public headers
