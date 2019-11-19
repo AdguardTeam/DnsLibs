@@ -4,9 +4,6 @@
 [submodule "third-party/libevent"]
 	path = third-party/libevent/libevent
 	url = https://github.com/libevent/libevent.git
-[submodule "third-party/openssl"]
-	path = third-party/openssl
-	url = https://github.com/openssl/openssl.git
 [submodule "third-party/fmt"]
 	path = third-party/fmt
 	url = https://github.com/fmtlib/fmt
@@ -22,6 +19,9 @@
 [submodule "third-party/pcre2"]
 	path = third-party/pcre2
 	url = https://salsa.debian.org/debian/pcre2.git
+[submodule "third-party/boringssl/boringssl"]
+	path = third-party/boringssl/boringssl
+	url = https://boringssl.googlesource.com/boringssl
 [submodule "third-party/sodium/libsodium"]
 	path = third-party/sodium/libsodium
 	url = https://github.com/jedisct1/libsodium.git

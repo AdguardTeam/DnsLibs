@@ -2,6 +2,9 @@
 #include <cstring>
 #include <string>
 #include <ag_net_utils.h>
+#ifdef _WIN32
+#include <ws2tcpip.h>
+#endif
 
 bool ag::socket_address::operator<(const ag::socket_address &other) const {
     return std::memcmp(&m_ss, &other.m_ss, c_socklen()) < 0;

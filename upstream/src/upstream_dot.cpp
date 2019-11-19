@@ -1,8 +1,8 @@
 #include <event2/event.h>
 #include <event2/bufferevent.h>
 #include <event2/thread.h>
-#include <openssl/x509v3.h>
 #include <event2/bufferevent_ssl.h>
+#include <openssl/x509v3.h>
 #include <openssl/ssl.h>
 #include "upstream_dot.h"
 #include <ag_defs.h>

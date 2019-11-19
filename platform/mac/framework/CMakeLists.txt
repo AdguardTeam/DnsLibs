@@ -19,6 +19,9 @@ elseif ("${TARGET_OS}" STREQUAL "ios")
     set(CMAKE_OSX_SYSROOT iphoneos)
     set(CMAKE_C_COMPILER_ARG1 "-arch ${CMAKE_SYSTEM_PROCESSOR}")
     set(CMAKE_CXX_COMPILER_ARG1 "-arch ${CMAKE_SYSTEM_PROCESSOR}")
+    set(CMAKE_XCODE_ATTRIBUTE_BITCODE_GENERATION_MODE bitcode CACHE INTERNAL "")
+    set(SDK_NAME_VERSION_FLAGS "-mios-version-min=$ENV{IPHONEOS_DEPLOYMENT_TARGET}")
+    add_compile_options(-arch ${CMAKE_SYSTEM_PROCESSOR} -fembed-bitcode)
 else ()
     message(FATAL_ERROR "unknown os: ${TARGET_OS}")
 endif ()
@@ -34,7 +37,7 @@ set(CMAKE_CXX_STANDARD 17)
 
 set(DNS_LIBS_DIR ../../..)
 
-add_compile_options(-fno-strict-aliasing -fno-exceptions -fno-rtti)
+add_compile_options(-fno-strict-aliasing -fno-exceptions -fno-rtti -fobjc-abi-version=2)
 add_definitions(-DFMT_EXCEPTIONS=0)
 
 add_library(AGDnsProxy SHARED

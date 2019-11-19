@@ -275,7 +275,8 @@ static NSData *create_response_packet(const struct iphdr *ip_header, const struc
         settings.upstreams.clear();
         settings.upstreams.reserve([config.upstreams count]);
         for (AGDnsUpstream *upstream in config.upstreams) {
-            std::list<std::string> bootstrap;
+            std::vector<std::string> bootstrap;
+            bootstrap.reserve([upstream.bootstrap count]);
             for (NSString *server in upstream.bootstrap) {
                 bootstrap.emplace_back([server UTF8String]);
             }

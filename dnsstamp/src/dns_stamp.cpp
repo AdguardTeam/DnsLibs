@@ -10,6 +10,9 @@
 #include <event2/util.h>
 #include <base64.h>
 #include <dns_stamp.h>
+#ifdef _WIN32
+#include <ws2tcpip.h>
+#endif
 
 namespace ag {
 

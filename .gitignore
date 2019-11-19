@@ -25,3 +25,6 @@ xcuserdata/
 
 # Debug files
 *.dSYM
+
+# BoringSSL go.mod
+third-party/boringssl/boringssl/go.mod
