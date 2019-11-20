@@ -26,15 +26,9 @@ if (NOT TARGET ldns)
     add_subdirectory(${THIRD_PARTY_DIR}/ldns ${CMAKE_BINARY_DIR}/ldns)
 endif ()
 
-include(FindOpenSSL)
-
-if (OPENSSL_FOUND)
-    message(STATUS "OpenSSL version ${OPENSSL_VERSION}")
-    message(STATUS "OPENSSL_INCLUDE_DIR = ${OPENSSL_INCLUDE_DIR}")
-    message(STATUS "OPENSSL_LIBRARIES = ${OPENSSL_LIBRARIES}")
-else ()
-    message(FATAL_ERROR "OpenSSL not found")
-endif ()
+if (NOT TARGET boringssl_static)
+    add_subdirectory(${THIRD_PARTY_DIR}/boringssl ${CMAKE_BINARY_DIR}/boringssl)
+endif()
 
 add_library(upstream EXCLUDE_FROM_ALL
         include/upstream.h
