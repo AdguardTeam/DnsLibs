@@ -182,6 +182,7 @@ err_string read_stamp_proto_props_server_addr_str(server_stamp &stamp, size_t &p
     if (getaddrinfo_result == 0 && (addrinfo_res->ai_family == AF_INET || addrinfo_res->ai_family == AF_INET6)) {
         stamp.server_addr_str += ":"s + std::to_string(port);
     }
+    freeaddrinfo(addrinfo_res);
     return std::nullopt;
 }
 
