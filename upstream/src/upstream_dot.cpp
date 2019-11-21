@@ -20,7 +20,7 @@ ag::connection_pool::get_result ag::tls_pool::get() {
 ag::connection_pool::get_result ag::tls_pool::create() {
     SSL_CTX *ctx = SSL_CTX_new(TLS_client_method());
     SSL *ssl = SSL_new(ctx);
-    int options = BEV_OPT_THREADSAFE | BEV_OPT_DEFER_CALLBACKS | BEV_OPT_UNLOCK_CALLBACKS;
+    int options = BEV_OPT_THREADSAFE | BEV_OPT_DEFER_CALLBACKS | BEV_OPT_UNLOCK_CALLBACKS | BEV_OPT_CLOSE_ON_FREE;
     bufferevent *bev = bufferevent_openssl_socket_new(m_loop->c_base(), -1, ssl,
                                                       BUFFEREVENT_SSL_CONNECTING,
                                                       options);
@@ -32,6 +32,7 @@ ag::connection_pool::get_result ag::tls_pool::create() {
     dns_framed_connection_ptr connection = ag::dns_framed_connection::create(this, bev, *opts.address);
     bufferevent_socket_connect(bev, opts.address->c_sockaddr(), opts.address->c_socklen());
     add_pending_connection(connection);
+    SSL_CTX_free(ctx);
     return {connection, opts.time_elapsed, std::nullopt};
 }
 
