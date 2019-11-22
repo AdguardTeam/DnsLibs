@@ -82,7 +82,7 @@ ag::connection_pool::get_result ag::tcp_pool::get() {
 }
 
 ag::connection_pool::get_result ag::tcp_pool::create() {
-    int options = BEV_OPT_THREADSAFE | BEV_OPT_DEFER_CALLBACKS | BEV_OPT_UNLOCK_CALLBACKS;
+    int options = BEV_OPT_THREADSAFE | BEV_OPT_DEFER_CALLBACKS | BEV_OPT_UNLOCK_CALLBACKS | BEV_OPT_CLOSE_ON_FREE;
     bufferevent *bev = bufferevent_socket_new(m_loop->c_base(), -1, options);
     dns_framed_connection_ptr connection = ag::dns_framed_connection::create(this, bev, m_address);
     bufferevent_socket_connect(bev, m_address.c_sockaddr(), m_address.c_socklen());

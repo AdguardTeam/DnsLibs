@@ -88,12 +88,13 @@ ag::dnscrypt::client::exchange_result ag::dnscrypt::client::exchange(ldns_pkt &m
     if (encrypt_err) {
         return make_error(std::move(encrypt_err));
     }
-    ldns_buffer_ptr encrypted_query_buffer(ldns_buffer_new(0));
-    ldns_buffer_new_frm_data(encrypted_query_buffer.get(), encrypted_query.data(), encrypted_query.size());
-    ldns_buffer_set_position(encrypted_query_buffer.get(), encrypted_query.size());
+    ldns_buffer encrypted_query_buffer = {};
+    ldns_buffer_new_frm_data(&encrypted_query_buffer, encrypted_query.data(), encrypted_query.size());
+    ldns_buffer_set_position(&encrypted_query_buffer, encrypted_query.size());
     auto[encrypted_response, encrypted_response_size, exchange_rtt, exchange_err] =
             dns_exchange_allocated(m_timeout, socket_address(local_server_info.m_server_address),
-                                   *encrypted_query_buffer, m_protocol);
+                                   encrypted_query_buffer, m_protocol);
+    free(ldns_buffer_export(&encrypted_query_buffer));
     if (exchange_err) {
         return make_error(std::move(exchange_err));
     }

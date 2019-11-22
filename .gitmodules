@@ -26,3 +26,9 @@
 	path = third-party/sodium/libsodium
 	url = https://github.com/jedisct1/libsodium.git
 	branch = stable
+[submodule "third-party/curl/curl"]
+	path = third-party/curl/curl
+	url = https://github.com/curl/curl
+[submodule "third-party/nghttp2/nghttp2"]
+	path = third-party/nghttp2/nghttp2
+	url = https://github.com/nghttp2/nghttp2

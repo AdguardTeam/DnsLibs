@@ -38,8 +38,10 @@ ag::bootstrapper::bootstrapper(std::string_view address_string, int default_port
         : m_ipv6_avail(ipv6_avail) {
     std::atomic_init(&m_round_robin_num, 0);
     auto[host, port] = utils::split_host_port(address_string);
-    m_server_port = std::strtol(std::string(port).c_str(), nullptr, 10)
-                    ?: default_port;
+    m_server_port = std::strtol(std::string(port).c_str(), nullptr, 10);
+    if (m_server_port == 0) {
+        m_server_port = default_port;
+    }
     m_server_name = host;
     for (auto &server : bootstrap) {
         m_resolvers.push_back(std::make_shared<resolver>(server));

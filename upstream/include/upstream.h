@@ -2,11 +2,13 @@
 
 #include <ag_defs.h>
 #include <string>
+#include <string_view>
 #include <memory>
 #include <ldns/packet.h>
 #include <list>
 #include <chrono>
 #include <vector>
+#include <variant>
 #include "ag_net_utils.h"
 
 namespace ag {
@@ -37,7 +39,8 @@ public:
         std::chrono::milliseconds timeout;
 
         /** Resolver's IP address. In the case if it's specified, bootstrap DNS servers won't be used at all. */
-        std::vector<uint8_t> server_ip;
+        using address_container = std::variant<std::monostate, uint8_array<4>, uint8_array<16>>;
+        address_container server_ip;
     };
 
     using exchange_result = std::pair<ldns_pkt_ptr, err_string>;

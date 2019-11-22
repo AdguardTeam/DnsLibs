@@ -17,7 +17,7 @@ struct cert_info {
     key_array server_pk; /** Server public key */
     key_array shared_key; /** Shared key */
     client_magic_array magic_query;
-    crypto_construction crypto_construction; /** Encryption algorithm */
+    crypto_construction encryption_algorithm; /** Encryption algorithm */
     uint32_t not_before; /** Cert is valid starting from this date (epoch time) */
     uint32_t not_after; /** Cert is valid until this date (epoch time) */
 };
@@ -27,7 +27,7 @@ struct cert_info {
  */
 struct server_info {
     struct fetch_result {
-        cert_info cert_info;
+        cert_info certificate;
         std::chrono::milliseconds round_trip_time;
         err_string error;
     };
@@ -76,7 +76,7 @@ struct server_info {
 
 private:
     struct txt_to_cert_info_result {
-        cert_info cert_info;
+        cert_info certificate;
         err_string error;
     };
 

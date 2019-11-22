@@ -367,6 +367,12 @@ std::vector<uint8_t> dnsproxy::handle_message(ag::uint8_view message) {
     log_packet(proxy->log, request, "client dns request");
 
     const ldns_rr *question = ldns_rr_list_rr(ldns_pkt_question(request), 0);
+    if (question == nullptr) {
+        std::string err = ag::utils::fmt_string("Message has no question section");
+        dbglog_fid(proxy->log, request, "{}", err.c_str());
+        proxy->complete_processed_event(std::move(event), nullptr, nullptr, {}, std::move(err));
+        return {};
+    }
     auto domain = std::unique_ptr<char, decltype(&free)>(ldns_rdf2str(ldns_rr_owner(question)), free);
     event.domain = domain.get();
 

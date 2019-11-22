@@ -54,10 +54,16 @@ typedef void (^logCallback)(const char *msg, int length);
  * timeout = 0 means infinite timeout.
  */
 @property(nonatomic, readonly) NSInteger timeout;
+/**
+ * Resolver's IP address. In the case if it's specified,
+ * bootstrap DNS servers won't be used at all.
+ */
+@property(nonatomic, readonly) NSData *serverIp;
 
 - (instancetype) init: (NSString *) address
         bootstrap: (NSArray<NSString *> *) bootstrap
-        timeout: (NSInteger) timeout;
+        timeout: (NSInteger) timeout
+        serverIp: (NSArray *) serverIp;
 @end
 
 
