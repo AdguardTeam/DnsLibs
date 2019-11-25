@@ -12,6 +12,10 @@ std::pair<std::string_view, std::string_view> ag::utils::split_host_port(std::st
     } else {
         auto pos = address_string.find(':');
         if (pos != std::string_view::npos) {
+            auto rpos = address_string.rfind(':');
+            if (pos != rpos) { // This is an IPv6 address without a port
+                return {address_string, {}};
+            }
             return {address_string.substr(0, pos), address_string.substr(pos + 1)};
         }
     }

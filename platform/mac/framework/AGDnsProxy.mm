@@ -152,7 +152,7 @@ static NSData *create_response_packet(const struct iphdr *ip_header, const struc
 
 
 @implementation AGDnsUpstream
-- (instancetype) initWithNative: (const ag::dnsproxy_settings::upstream_settings *) settings
+- (instancetype) initWithNative: (const ag::upstream_settings *) settings
 {
     self = [super init];
     _address = [NSString stringWithUTF8String: settings->dns_server.c_str()];
@@ -166,7 +166,7 @@ static NSData *create_response_packet(const struct iphdr *ip_header, const struc
     return self;
 }
 
-- (instancetype) init: (NSString *) address
+- (instancetype) initWithAddress: (NSString *) address
         bootstrap: (NSArray<NSString *> *) bootstrap
         timeout: (NSInteger) timeout
         serverIp: (NSData *) serverIp
@@ -180,6 +180,27 @@ static NSData *create_response_packet(const struct iphdr *ip_header, const struc
 }
 @end
 
+@implementation AGDns64Settings
+- (instancetype) initWithNative: (const ag::dns64_settings *) settings
+{
+    self = [super init];
+    _upstream = [[AGDnsUpstream alloc] initWithNative: &settings->upstream];
+    _maxTries = settings->max_tries;
+    _waitTime = settings->wait_time.count();
+    return self;
+}
+
+- (instancetype) initWithUpstream: (AGDnsUpstream *) upstream
+                         maxTries: (NSInteger) maxTries waitTime: (NSInteger) waitTime
+{
+    self = [super init];
+    _upstream = upstream;
+    _maxTries = maxTries;
+    _waitTime = waitTime;
+    return self;
+}
+
+@end
 
 @implementation AGDnsProxyConfig
 
@@ -188,18 +209,22 @@ static NSData *create_response_packet(const struct iphdr *ip_header, const struc
     self = [super init];
     NSMutableArray<AGDnsUpstream *> *upstreams =
         [[NSMutableArray alloc] initWithCapacity: settings->upstreams.size()];
-    for (const ag::dnsproxy_settings::upstream_settings &us : settings->upstreams) {
+    for (const ag::upstream_settings &us : settings->upstreams) {
         [upstreams addObject: [[AGDnsUpstream alloc] initWithNative: &us]];
     }
     _upstreams = upstreams;
     _filters = nil;
     _blockedResponseTtl = settings->blocked_response_ttl;
+    if (settings->dns64.has_value()) {
+        _dns64Settings = [[AGDns64Settings alloc] initWithNative: &settings->dns64.value()];
+    }
     return self;
 }
 
-- (instancetype) init: (NSArray<AGDnsUpstream *> *) upstreams
+- (instancetype) initWithUpstreams: (NSArray<AGDnsUpstream *> *) upstreams
         filters: (NSDictionary<NSNumber *,NSString *> *) filters
         blockedResponseTtl: (NSInteger) blockedResponseTtl
+        dns64Settings: (AGDns64Settings *) dns64Settings
 {
     const ag::dnsproxy_settings &defaultSettings = ag::dnsproxy_settings::get_default();
     self = [self initWithNative: &defaultSettings];
@@ -210,6 +235,7 @@ static NSData *create_response_packet(const struct iphdr *ip_header, const struc
     if (blockedResponseTtl != 0) {
         _blockedResponseTtl = blockedResponseTtl;
     }
+    _dns64Settings = dns64Settings;
     return self;
 }
 
@@ -264,8 +290,8 @@ static NSData *create_response_packet(const struct iphdr *ip_header, const struc
     self->proxy.deinit();
 }
 
-- (instancetype) init: (AGDnsProxyConfig *) config
-        withHandler: (AGDnsProxyEvents *)handler
+- (instancetype) initWithConfig: (AGDnsProxyConfig *) config
+        handler: (AGDnsProxyEvents *)handler
 {
     ag::set_logger_factory_callback(nslog_sink::create);
     self->log = ag::create_logger("AGDnsProxy");
@@ -297,7 +323,7 @@ static NSData *create_response_packet(const struct iphdr *ip_header, const struc
                 addr.emplace<std::monostate>();
             }
             settings.upstreams.emplace_back(
-                ag::dnsproxy_settings::upstream_settings{ [upstream.address UTF8String],
+                ag::upstream_settings{ [upstream.address UTF8String],
                     { std::move(bootstrap), std::chrono::milliseconds(upstream.timeout), addr } });
         }
     }
@@ -323,6 +349,29 @@ static NSData *create_response_packet(const struct iphdr *ip_header, const struc
                 AGDnsProxy *sself = (__bridge AGDnsProxy *)obj;
                 sself->events.onRequestProcessed([[AGDnsRequestProcessedEvent alloc] init: event]);
             };
+    }
+
+    if (config.dns64Settings != nil) {
+        const AGDnsUpstream * const upstream = config.dns64Settings.upstream;
+        if (upstream == nil) {
+            dbglog(self->log, "DNS64 upstream is nil");
+        } else {
+            std::vector<std::string> bootstrap;
+            bootstrap.reserve([upstream.bootstrap count]);
+
+            for (NSString *server in upstream.bootstrap) {
+                bootstrap.emplace_back([server UTF8String]);
+            }
+
+            settings.dns64 = ag::dns64_settings{
+                    .upstream = {[upstream.address UTF8String],
+                                 {std::move(bootstrap),
+                                  std::chrono::milliseconds(upstream.timeout)}},
+                    .wait_time = std::chrono::milliseconds(config.dns64Settings.waitTime),
+                    .max_tries = config.dns64Settings.maxTries > 0
+                                 ? static_cast<uint32_t>(config.dns64Settings.maxTries) : 0,
+            };
+        }
     }
 
     if (!self->proxy.init(std::move(settings), std::move(native_events))) {

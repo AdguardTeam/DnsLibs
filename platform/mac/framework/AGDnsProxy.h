@@ -60,12 +60,34 @@ typedef void (^logCallback)(const char *msg, int length);
  */
 @property(nonatomic, readonly) NSData *serverIp;
 
-- (instancetype) init: (NSString *) address
+- (instancetype) initWithAddress: (NSString *) address
         bootstrap: (NSArray<NSString *> *) bootstrap
         timeout: (NSInteger) timeout
         serverIp: (NSArray *) serverIp;
 @end
 
+@interface AGDns64Settings : NSObject
+
+/**
+ * The upstream to use for discovery of DNS64 prefixes
+ */
+@property(nonatomic, readonly) AGDnsUpstream *upstream;
+
+/**
+ * How many times, at most, to try DNS64 prefixes discovery before giving up
+ */
+@property(nonatomic, readonly) NSInteger maxTries;
+
+/**
+ * How long to wait before a dns64 prefixes discovery attempt, in milliseconds
+ */
+@property(nonatomic, readonly) NSInteger waitTime;
+
+- (instancetype) initWithUpstream: (AGDnsUpstream *) upstream
+            maxTries: (NSInteger) maxTries
+            waitTime: (NSInteger) waitTime;
+
+@end
 
 @interface AGDnsProxyConfig : NSObject
 /**
@@ -80,10 +102,15 @@ typedef void (^logCallback)(const char *msg, int length);
  * TTL of the record for the blocked domains (in seconds)
  */
 @property(nonatomic, readonly) NSInteger blockedResponseTtl;
+/**
+ * DNS64 settings. If nil, DNS64 is disabled
+ */
+@property(nonatomic, readonly) AGDns64Settings *dns64Settings;
 
-- (instancetype) init: (NSArray<AGDnsUpstream *> *) upstreams
+- (instancetype) initWithUpstreams: (NSArray<AGDnsUpstream *> *) upstreams
         filters: (NSDictionary<NSNumber *,NSString *> *) filters
-        blockedResponseTtl: (NSInteger) blockedResponseTtl;
+        blockedResponseTtl: (NSInteger) blockedResponseTtl
+        dns64Settings: (AGDns64Settings *) dns64Settings;
 
 /**
  * @brief Get default DNS proxy settings
@@ -99,8 +126,8 @@ typedef void (^logCallback)(const char *msg, int length);
  * @param config proxy configuration
  * @param events proxy events handler
  */
-- (instancetype) init: (AGDnsProxyConfig *) config
-        withHandler: (AGDnsProxyEvents *)events;
+- (instancetype) initWithConfig: (AGDnsProxyConfig *) config
+        handler: (AGDnsProxyEvents *)events;
 
 /**
  * @brief Process UDP/TCP packet payload
