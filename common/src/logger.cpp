@@ -5,7 +5,15 @@ static ag::log_level default_log_level = ag::INFO;
 static ag::create_logger_cb create_logger_callback =
     [] (const std::string &name) { return spdlog::stdout_logger_mt(name); };
 
+struct pattern_inititlizer {
+    pattern_inititlizer() {
+        spdlog::set_pattern("[%Y-%m-%d %H:%M:%S.%f] [%t] [%n] [%l] %v");
+    }
+};
+
 ag::logger ag::create_logger(const std::string &name) {
+    static const pattern_inititlizer set_pattern;
+
     ag::logger logger = spdlog::get(name);
     if (logger == nullptr) {
         logger = create_logger_callback(name);
