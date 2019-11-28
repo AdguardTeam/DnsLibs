@@ -26,7 +26,7 @@ ag::connection_pool::get_result ag::tls_pool::create() {
                                                       options);
     auto opts = m_bootstrapper->get();
     if (!opts.address) {
-        return {nullptr, opts.time_elapsed, opts.error};
+        return {nullptr, opts.time_elapsed, std::move(opts.error).value_or("No address")}; // TODO
     }
     SSL_set_tlsext_host_name(ssl, opts.server_name.c_str());
     dns_framed_connection_ptr connection = ag::dns_framed_connection::create(this, bev, *opts.address);

@@ -7,8 +7,7 @@ std::string ag::plain_dns::address() {
     return m_socket_address.str();
 }
 
-ag::plain_dns::plain_dns(std::string_view address, const std::chrono::milliseconds &timeout,
-                         bool prefer_tcp) :
+ag::plain_dns::plain_dns(std::string_view address, std::chrono::milliseconds timeout, bool prefer_tcp) :
         m_pool(event_loop::create(), socket_address(address)),
         m_socket_address(address),
         m_timeout(timeout),

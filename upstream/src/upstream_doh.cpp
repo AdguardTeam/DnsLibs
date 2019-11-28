@@ -142,7 +142,7 @@ static std::string_view get_host_name(std::string_view url) {
     return host;
 }
 
-static curl_slist_ptr create_resolved_hosts_list(std::string_view url, const upstream::options::address_container &addr) {
+static curl_slist_ptr create_resolved_hosts_list(std::string_view url, const ag::ip_address_variant &addr) {
     if (std::holds_alternative<std::monostate>(addr)) {
         return nullptr;
     }

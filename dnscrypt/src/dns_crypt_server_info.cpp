@@ -75,7 +75,7 @@ ag::dnscrypt::server_info::fetch_result ag::dnscrypt::server_info::fetch_current
         return make_error("Invalid public key length");
     }
     auto query = create_request_ldns_pkt(LDNS_RR_TYPE_TXT, LDNS_RR_CLASS_IN, LDNS_RD, m_provider_name,
-                                         utils::make_optional_if(local_protocol == protocol::TCP,
+                                         utils::make_optional_if(local_protocol == protocol::UDP,
                                                                  MAX_DNS_UDP_SAFE_PACKET_SIZE));
     ldns_pkt_set_random_id(query.get());
     auto[exchange_reply, exchange_rtt, exchange_err] = dns_exchange_from_ldns_pkt(timeout,
@@ -138,12 +138,12 @@ ag::dnscrypt::server_info::encrypt_result ag::dnscrypt::server_info::encrypt(pro
     }
     auto pad_error = pad(packet, padded_length - QUERY_OVERHEAD);
     if (pad_error) {
-        return {uint8_vector{}, uint8_vector{}, std::move(pad_error)};
+        return make_error(std::move(pad_error));
     }
     if (auto[encrypted, seal_err] = cipher_seal(m_server_cert.encryption_algorithm, utils::to_string_view(packet), nonce,
                                                 m_server_cert.shared_key);
         !seal_err) {
-        auto result = ag::utils::join<uint8_vector>(m_server_cert.magic_query, m_public_key, client_nonce, encrypted);
+        auto result = utils::join<uint8_vector>(m_server_cert.magic_query, m_public_key, client_nonce, encrypted);
         return {std::move(result), std::move(client_nonce), std::nullopt};
     } else {
         return make_error(std::move(seal_err));
@@ -241,8 +241,8 @@ ag::dnscrypt::server_info::txt_to_cert_info_result ag::dnscrypt::server_info::tx
         return make_error(std::move(shared_key_err));
     }
     local_cert_info.shared_key = computed_shared_key;
-	std::memcpy(local_cert_info.server_pk.data(), server_pk.data(), server_pk.size());
-	std::memcpy(local_cert_info.magic_query.data(), &bin_cert[CLIENT_MAGIC_FIELD.offset],
-	            local_cert_info.magic_query.size());
-	return {local_cert_info, std::nullopt};
+    std::memcpy(local_cert_info.server_pk.data(), server_pk.data(), server_pk.size());
+    std::memcpy(local_cert_info.magic_query.data(), &bin_cert[CLIENT_MAGIC_FIELD.offset],
+                local_cert_info.magic_query.size());
+    return {local_cert_info, std::nullopt};
 }

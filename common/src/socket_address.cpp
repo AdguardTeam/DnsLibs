@@ -1,7 +1,8 @@
-#include <ag_socket_address.h>
 #include <cstring>
 #include <string>
 #include <ag_net_utils.h>
+#include <ag_socket_address.h>
+#include <ag_utils.h>
 #ifdef _WIN32
 #include <ws2tcpip.h>
 #endif
@@ -63,6 +64,20 @@ std::vector<uint8_t> ag::socket_address::addr() const {
         }
         default:
             return {};
+    }
+}
+
+ag::ip_address_variant ag::socket_address::addr_variant() const {
+    static constexpr auto ipv4_size = std::tuple_size<ipv4_address_array>::value;
+    static constexpr auto ipv6_size = std::tuple_size<ipv6_address_array>::value;
+    auto bytes = addr();
+    switch (bytes.size()) {
+    case ipv4_size:
+        return utils::to_array<ipv4_size>(bytes.data());
+    case ipv6_size:
+        return utils::to_array<ipv6_size>(bytes.data());
+    default:
+        return std::monostate{};
     }
 }
 

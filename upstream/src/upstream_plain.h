@@ -43,7 +43,7 @@ public:
      * @param prefer_tcp If true, query will always be sent via TCP, otherwise it will be sent via tcp
      *                   only if contains `truncated` flag.
      */
-    plain_dns(std::string_view address, const std::chrono::milliseconds &timeout, bool prefer_tcp);
+    plain_dns(std::string_view address, std::chrono::milliseconds timeout, bool prefer_tcp);
 
     ~plain_dns() override = default;
 

@@ -1,15 +1,14 @@
 #pragma once
 
-#include <ag_defs.h>
+#include <chrono>
+#include <list>
+#include <memory>
 #include <string>
 #include <string_view>
-#include <memory>
-#include <ldns/packet.h>
-#include <list>
-#include <chrono>
 #include <vector>
-#include <variant>
-#include "ag_net_utils.h"
+#include <ldns/packet.h>
+#include <ag_defs.h>
+#include <ag_net_utils.h>
 
 namespace ag {
 
@@ -24,6 +23,7 @@ using ldns_pkt_ptr = std::unique_ptr<ldns_pkt, ag::ftor<&ldns_pkt_free>>;
 class upstream {
 public:
     using address_to_upstream_result = std::pair<upstream_ptr, err_string>;
+    using exchange_result = std::pair<ldns_pkt_ptr, err_string>;
 
     /**
      * Options for upstream
@@ -39,11 +39,8 @@ public:
         std::chrono::milliseconds timeout;
 
         /** Resolver's IP address. In the case if it's specified, bootstrap DNS servers won't be used at all. */
-        using address_container = std::variant<std::monostate, uint8_array<4>, uint8_array<16>>;
-        address_container server_ip;
+        ip_address_variant server_ip;
     };
-
-    using exchange_result = std::pair<ldns_pkt_ptr, err_string>;
 
     /**
      * Convert the specified address to an upstream instance
@@ -55,7 +52,7 @@ public:
      * @param opts      Options for upstream creation
      * @return Pointer to newly created upstream or error
      */
-    static address_to_upstream_result address_to_upstream(std::string_view address, const upstream::options &opts = upstream::options{});
+    static address_to_upstream_result address_to_upstream(std::string_view address, const options &opts = {});
 
     virtual ~upstream() = default;
 
@@ -71,6 +68,11 @@ public:
      * @return DNS server address
      */
     virtual std::string address() = 0;
+
+private:
+    static address_to_upstream_result url_to_upstream(std::string_view address, const options &opts);
+    static address_to_upstream_result stamp_to_upstream(std::string_view stamp_address, options opts);
+
 };
 
 } // namespace ag

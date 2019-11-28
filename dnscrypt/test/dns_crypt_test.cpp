@@ -1,10 +1,12 @@
 #include <gtest/gtest.h>
 #include <dns_crypt_client.h>
+#include <algorithm>
 #include <chrono>
 #include <arpa/inet.h>
 #include <sodium.h>
 #include <spdlog/spdlog.h>
 #include <ag_utils.h>
+#include <dns_crypt_cipher.h>
 #include <dns_crypt_ldns.h>
 #include <dns_stamp.h>
 
@@ -16,7 +18,74 @@ class dnscrypt_test : public ::testing::Test {
     }
 };
 
-using parse_stamp_test_data_t = std::tuple<const char *, void(*)(const char *, const ag::server_stamp &)>;
+template<typename... Ts>
+struct dnscrypt_test_with_param : dnscrypt_test, ::testing::WithParamInterface<Ts...> {};
+
+struct cipher_test_data {
+    ag::dnscrypt::crypto_construction encryption_algorithm;
+    ag::uint8_vector valid_cipher_text;
+    ag::dnscrypt::key_array valid_shared_key;
+};
+
+struct cipher_test : dnscrypt_test_with_param<cipher_test_data> {};
+
+static const cipher_test_data cipher_test_data_values[]{
+    {
+        ag::dnscrypt::crypto_construction::X_SALSA_20_POLY_1305,
+        {139, 242, 162, 127, 140, 91, 194, 244, 122, 119, 21, 54, 123, 181, 235, 143, 173, 238, 20, 225, 93, 40, 236, 118, 44, 122},
+        {88, 33, 20, 231, 222, 79, 169, 44, 137, 176, 138, 40, 176, 0, 214, 187, 82, 98, 99, 86, 30, 16, 48, 15, 42, 208, 235, 6, 131, 9, 118, 95}
+    },
+    {
+        ag::dnscrypt::crypto_construction::X_CHACHA_20_POLY_1305,
+        {239, 152, 51, 4, 230, 57, 196, 97, 228, 162, 121, 34, 100, 81, 169, 123, 25, 0, 158, 102, 177, 198, 60, 174, 14, 125},
+        {100, 100, 146, 92, 58, 10, 170, 0, 17, 33, 109, 34, 144, 43, 156, 88, 186, 251, 1, 50, 56, 177, 31, 86, 28, 240, 96, 67, 1, 152, 252, 86}
+    },
+};
+
+static const auto cipher_key = [] {
+    ag::dnscrypt::key_array result;
+    std::generate(result.begin(), result.end(), [n = 0]() mutable { return n++; });
+    return result;
+}();
+
+static const auto cipher_nonce = [] {
+    ag::dnscrypt::nonce_array result;
+    std::generate(result.begin(), result.end(), [n = result.size()]() mutable { return --n; });
+    return result;
+}();
+
+static const auto cipher_src = [] {
+    ag::uint8_array<10> result;
+    result.fill(42);
+    return result;
+}();
+
+TEST_P(cipher_test, cipher) {
+    const auto &[encryption_algorithm, valid_cipher_text, valid_shared_key] = GetParam();
+    auto[ciphertext, seal_err] = ag::dnscrypt::cipher_seal(encryption_algorithm, ag::utils::to_string_view(cipher_src),
+                                                           cipher_nonce, cipher_key);
+    ASSERT_FALSE(seal_err) << "Seal error: " << *seal_err;
+    ASSERT_TRUE(std::equal(ciphertext.begin(), ciphertext.end(), std::begin(valid_cipher_text),
+                           std::end(valid_cipher_text)));
+    auto[decrypted, open_err] = ag::dnscrypt::cipher_open(encryption_algorithm, ag::utils::to_string_view(ciphertext),
+                                                          cipher_nonce, cipher_key);
+    ASSERT_FALSE(open_err) << "Open error: " << *open_err;
+    ASSERT_TRUE(std::equal(cipher_src.begin(), cipher_src.end(), decrypted.begin(), decrypted.end()))
+            << "Src and decrypted not equal";
+    ++ciphertext.front();
+    auto[bad_decrypted, bad_decrypted_err] = ag::dnscrypt::cipher_open(encryption_algorithm,
+                                                                       ag::utils::to_string_view(ciphertext),
+                                                                       cipher_nonce, cipher_key);
+    ASSERT_TRUE(bad_decrypted_err) << "Tag validation failed";
+    auto[shared_key, shared_key_err] = ag::dnscrypt::cipher_shared_key(encryption_algorithm, cipher_key, cipher_key);
+    ASSERT_FALSE(shared_key_err) << "Can not shared key: " << *shared_key_err;
+    ASSERT_TRUE(std::equal(shared_key.begin(), shared_key.end(), std::begin(valid_shared_key),
+                           std::end(valid_shared_key)));
+}
+
+INSTANTIATE_TEST_CASE_P(cipher_test_instantiation, cipher_test, ::testing::ValuesIn(cipher_test_data_values));
+
+using parse_stamp_test_data_type = std::tuple<const char *, void(*)(const char *, const ag::server_stamp &)>;
 
 static void parse_stamp_test_data_log(const char *stamp_str, const ag::server_stamp &stamp) {
     SPDLOG_INFO(stamp_str);
@@ -25,7 +94,7 @@ static void parse_stamp_test_data_log(const char *stamp_str, const ag::server_st
     SPDLOG_INFO("Path={}", stamp.path);
 }
 
-static constexpr parse_stamp_test_data_t parse_stamp_test_data[]{
+static constexpr parse_stamp_test_data_type parse_stamp_test_data[]{
     {
         // Google DoH
         "sdns://AgUAAAAAAAAAAAAOZG5zLmdvb2dsZS5jb20NL2V4cGVyaW1lbnRhbA",
@@ -42,7 +111,7 @@ static constexpr parse_stamp_test_data_t parse_stamp_test_data[]{
     },
 };
 
-class parse_stamp_test : public dnscrypt_test, public ::testing::WithParamInterface<parse_stamp_test_data_t> {};
+struct parse_stamp_test : dnscrypt_test_with_param<parse_stamp_test_data_type> {};
 
 TEST_P(parse_stamp_test, parse_stamp) {
     const auto &stamp_str = std::get<0>(GetParam());
@@ -72,13 +141,13 @@ TEST_F(dnscrypt_test, timeout_on_dial_error) {
 
 TEST_F(dnscrypt_test, timeout_on_dial_exchange) {
     using namespace std::literals::chrono_literals;
-	// AdGuard DNS
+    // AdGuard DNS
     static constexpr auto stamp_str = "sdns://AQIAAAAAAAAAFDE3Ni4xMDMuMTMwLjEzMDo1NDQzINErR_JS3PLCu_iZEIbq95zkSV2LFsigxDIuUso_OQhzIjIuZG5zY3J5cHQuZGVmYXVsdC5uczEuYWRndWFyZC5jb20";
     ag::dnscrypt::client client(300ms);
-	auto[server_info, _, dial_err] = client.dial(stamp_str);
-	ASSERT_FALSE(dial_err) << "Could not establish connection with " << stamp_str;
-	// Point it to an IP where there's no DNSCrypt server
-	server_info.set_server_address("8.8.8.8:5443");
+    auto[server_info, _, dial_err] = client.dial(stamp_str);
+    ASSERT_FALSE(dial_err) << "Could not establish connection with " << stamp_str;
+    // Point it to an IP where there's no DNSCrypt server
+    server_info.set_server_address("8.8.8.8:5443");
     auto req = ag::dnscrypt::create_request_ldns_pkt(LDNS_RR_TYPE_A, LDNS_RR_CLASS_IN, LDNS_RD,
                                                      "google-public-dns-a.google.com.",
                                                      ag::dnscrypt::MAX_DNS_UDP_SAFE_PACKET_SIZE);
@@ -109,24 +178,23 @@ static constexpr ag::dnscrypt::protocol check_dns_crypt_server_test_protocols[]{
     ag::dnscrypt::protocol::TCP,
 };
 
-class check_dns_crypt_server_test :
-        public dnscrypt_test, public ::testing::WithParamInterface<::testing::tuple<std::string_view,
-                                                                                    ag::dnscrypt::protocol>> {};
+struct check_dns_crypt_server_test : dnscrypt_test_with_param<::testing::tuple<std::string_view,
+                                                                               ag::dnscrypt::protocol>> {};
 
 TEST_P(check_dns_crypt_server_test, check_dns_crypt_server) {
     using namespace std::literals::chrono_literals;
     const auto &stamp_str = std::get<0>(GetParam());
     const auto &protocol = std::get<1>(GetParam());
-	ag::dnscrypt::client client(protocol, 10s);
-	auto[server_info, dial_rtt, dial_err] = client.dial(stamp_str);
-	ASSERT_FALSE(dial_err) << "Could not establish connection with " << stamp_str;
-	SPDLOG_INFO("Established a connection with {}, ttl={}, rtt={}ms, protocol={}", server_info.get_provider_name(),
-	            ag::utils::time_to_str(server_info.get_server_cert().not_after), dial_rtt.count(),
-	            ag::dnscrypt::protocol_str(protocol));
+    ag::dnscrypt::client client(protocol, 10s);
+    auto[server_info, dial_rtt, dial_err] = client.dial(stamp_str);
+    ASSERT_FALSE(dial_err) << "Could not establish connection with " << stamp_str;
+    SPDLOG_INFO("Established a connection with {}, ttl={}, rtt={}ms, protocol={}", server_info.get_provider_name(),
+                ag::utils::time_to_str(server_info.get_server_cert().not_after), dial_rtt.count(),
+                ag::dnscrypt::protocol_str(protocol));
     auto req = ag::dnscrypt::create_request_ldns_pkt(LDNS_RR_TYPE_A, LDNS_RR_CLASS_IN, LDNS_RD,
                                                      "google-public-dns-a.google.com.",
                                                       ag::utils::make_optional_if(
-                                                              protocol == ag::dnscrypt::protocol::TCP,
+                                                              protocol == ag::dnscrypt::protocol::UDP,
                                                               ag::dnscrypt::MAX_DNS_UDP_SAFE_PACKET_SIZE));
     ldns_pkt_set_random_id(req.get());
     auto[reply, exchange_rtt, exchange_err] = client.exchange(*req, server_info);

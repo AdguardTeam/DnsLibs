@@ -54,14 +54,14 @@ public:
      * Data received during this call is then used for DNS requests encryption/decryption
      * @param stamp_str Stamp string is an sdns:// address which is parsed using dnsstamps library
      */
-    dial_result dial(std::string_view stamp_str);
+    dial_result dial(std::string_view stamp_str) const;
 
      /**
       * Dial fetches and validates DNSCrypt certificate from the given server
       * Data received during this call is then used for DNS requests encryption/decryption
       * @param stamp Stamp
       */
-    dial_result dial(const server_stamp &stamp);
+    dial_result dial(const server_stamp &stamp) const;
 
     /**
      * Exchange performs a synchronous DNS query to the specified DNSCrypt server and returns a DNS response.
@@ -71,7 +71,7 @@ public:
      * @param server_info Server info
      * @return Result of exchange
      */
-    exchange_result exchange(ldns_pkt &message, const server_info &server_info);
+    exchange_result exchange(ldns_pkt &message, const server_info &server_info) const;
 
 private:
     protocol m_protocol;

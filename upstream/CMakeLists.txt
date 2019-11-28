@@ -50,6 +50,10 @@ if (NOT TARGET libcurl)
     add_subdirectory(${THIRD_PARTY_DIR}/curl ${CMAKE_BINARY_DIR}/third-party/curl)
 endif ()
 
+if (NOT TARGET boringssl_static)
+    add_subdirectory(${THIRD_PARTY_DIR}/boringssl ${CMAKE_BINARY_DIR}/boringssl)
+endif()
+
 target_include_directories(upstream PUBLIC include)
 target_include_directories(upstream PRIVATE ${OPENSSL_INCLUDE_DIR})
 target_link_libraries(upstream dnslibs_common dnsstamp dnscrypt)

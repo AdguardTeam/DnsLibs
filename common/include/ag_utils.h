@@ -1,19 +1,20 @@
 #pragma once
 
-
+#include <algorithm>
+#include <array>
 #include <chrono>
-#include <string>
-#include <string_view>
-#include <sstream>
+#include <functional>
+#include <future>
 #include <iomanip>
 #include <iterator>
-#include <vector>
-#include <array>
-#include <algorithm>
-#include <utility>
-#include <type_traits>
-#include <functional>
 #include <optional>
+#include <sstream>
+#include <string>
+#include <string_view>
+#include <thread>
+#include <type_traits>
+#include <utility>
+#include <vector>
 #include <ag_defs.h>
 
 /**
@@ -235,24 +236,35 @@ std::wstring to_wstring(std::string_view sv);
  */
 std::string from_wstring(std::wstring_view wsv);
 
+namespace detail {
+
+template<typename T>
+static inline constexpr auto to_string_view_impl(const T& value) {
+    using value_type = std::decay_t<decltype(*std::begin(value))>;
+    return std::basic_string_view<value_type>(&*std::begin(value), std::size(value));
+}
+
+} // namespace detail
+
 /**
- * Create string view from container-like value with data() and size() member functions
+ * Create string view from container or C array
  * @param value Value
  * @return String view pointed to value's data and size
  */
 template<typename T>
 static inline constexpr auto to_string_view(const T& value) {
-    return std::basic_string_view<typename T::value_type>(value.data(), value.size());
+    return detail::to_string_view_impl(value);
 }
 
 /**
- * Create string view from array with known size S
+ * Create string view from initializer list
+ * @tparam T Value type (can be deduced)
  * @param value Value
- * @return String view pointed to value and size S
+ * @return String view pointed to value's data and size
  */
-template<typename T, size_t S>
-static inline constexpr auto to_string_view(const T (&value)[S]) {
-    return std::basic_string_view<T>(value, S);
+template<typename T>
+static inline constexpr auto to_string_view(std::initializer_list<T> value) {
+    return detail::to_string_view_impl(value);
 }
 
 /**
@@ -340,6 +352,21 @@ static inline std::string time_to_str(time_t timer, std::string_view format = "%
     return ss.str();
 }
 
+/**
+ * Like std::async(std::launch::async, f, vs...) but result future does not block on destructor
+ * @param f Function to execute
+ * @param vs Function parameters
+ * @return Future with result of function
+ */
+template<typename F, typename... Ts>
+auto async_detached(F&& f, Ts&&... vs) {
+    using R = std::invoke_result_t<std::decay_t<F>, std::decay_t<Ts>...>;
+    std::packaged_task<R(std::decay_t<Ts>...)> packaged_task(std::forward<F>(f));
+    auto future = packaged_task.get_future();
+    std::thread(std::move(packaged_task), std::forward<Ts>(vs)...).detach();
+    return future;
+}
+
 namespace detail {
 
 struct convertible_to_any {
@@ -350,7 +377,7 @@ struct convertible_to_any {
 } // namespace detail
 
 /**
- * Defines value list_initializable_with_n_params<T, N> to checks is posible to list init T{...with N params...}
+ * Defines value list_initializable_with_n_params<T, N> to checks is possible to list init T{...with N params...}
  */
 AG_UTILS_DECLARE_CHECK_EXPRESSION_WITH_N(list_initializable_with_n_params, T{(Is, convertible_to_any{})...})
 

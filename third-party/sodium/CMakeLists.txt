@@ -19,6 +19,8 @@ message("SODIUM_LIBRARY_VERSION_MINOR: ${SODIUM_LIBRARY_VERSION_MINOR}")
 
 project(sodium VERSION ${VERSION} LANGUAGES C ASM)
 
+add_compile_options(-w)
+
 include(CheckCSourceCompiles)
 include(CheckFunctionExists)
 include(CheckIncludeFile)
