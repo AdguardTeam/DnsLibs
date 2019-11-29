@@ -14,6 +14,9 @@ struct pattern_inititlizer {
 ag::logger ag::create_logger(const std::string &name) {
     static const pattern_inititlizer set_pattern;
 
+    static std::mutex guard;
+    std::scoped_lock lock(guard);
+
     ag::logger logger = spdlog::get(name);
     if (logger == nullptr) {
         logger = create_logger_callback(name);
