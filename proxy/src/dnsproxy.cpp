@@ -44,7 +44,6 @@ static const dnsproxy_settings DEFAULT_PROXY_SETTINGS = {
     .dns64 = std::nullopt,
     .blocked_response_ttl = 3600,
     .filter_params = {},
-    .listeners = {}
 };
 
 const dnsproxy_settings &dnsproxy_settings::get_default() {
