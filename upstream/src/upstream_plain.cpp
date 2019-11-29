@@ -75,6 +75,7 @@ std::pair<ag::ldns_pkt_ptr, ag::err_string> ag::plain_dns::exchange(ldns_pkt *re
 }
 
 ag::connection_pool::get_result ag::tcp_pool::get() {
+    std::scoped_lock l(m_mutex);
     if (!m_connections.empty()) {
         return {*m_connections.begin(), std::chrono::seconds(0), std::nullopt};
     }

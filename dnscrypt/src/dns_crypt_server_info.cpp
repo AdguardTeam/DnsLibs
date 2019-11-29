@@ -2,7 +2,9 @@
 #include <cstdlib>
 #include <iterator>
 #include <utility>
+#ifndef _WIN32
 #include <arpa/inet.h>
+#endif
 #include <ldns/net.h>
 #include <sodium.h>
 #include "dns_crypt_cipher.h"

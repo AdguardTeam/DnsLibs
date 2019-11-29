@@ -11,6 +11,7 @@ using std::chrono::milliseconds;
 using std::chrono::duration_cast;
 
 ag::connection_pool::get_result ag::tls_pool::get() {
+    std::scoped_lock l(m_mutex);
     if (!m_connections.empty()) {
         return {*m_connections.rbegin(), std::chrono::seconds(0), std::nullopt};
     }

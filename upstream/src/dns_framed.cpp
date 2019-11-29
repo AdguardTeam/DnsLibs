@@ -49,7 +49,16 @@ ag::dns_framed_connection::~dns_framed_connection() {
 }
 
 ag::dns_framed_connection_ptr ag::dns_framed_connection::create(dns_framed_pool *pool, bufferevent *bev, const socket_address &address) {
-    return ag::dns_framed_connection_ptr{new dns_framed_connection(pool, bev, address)};
+    return ag::dns_framed_connection_ptr{new dns_framed_connection(pool, bev, address), [](dns_framed_connection *conn){
+        if (conn->m_bev) {
+            event_base_once(bufferevent_get_base(conn->m_bev.get()), -1, EV_TIMEOUT,
+                            [](evutil_socket_t, short, void *ptr) {
+                                delete (dns_framed_connection *) ptr;
+                            }, conn, nullptr);
+        } else {
+            delete conn;
+        }
+    }};
 }
 
 void ag::dns_framed_connection::on_read() {
@@ -120,8 +129,10 @@ ag::connection::result ag::dns_framed_connection::read(int request_id, std::chro
     });
 
     if (!request_replied) {
+        l.unlock();
         // Request timed out, don't accept new connections on this endpoint
         m_pool->remove_from_all(shared_from_this());
+        l.lock();
         return {{}, {"Timed out"}};
     }
     auto result_node = m_requests.extract(request_id);
@@ -133,11 +144,13 @@ const ag::socket_address &ag::dns_framed_connection::address() const {
 }
 
 void ag::dns_framed_pool::add_connected(const dns_framed_connection_ptr &ptr) {
+    std::scoped_lock l(m_mutex);
     m_pending_connections.erase(ptr);
     m_connections.push_back(ptr);
 }
 
 void ag::dns_framed_pool::remove_from_all(const dns_framed_connection_ptr &ptr) {
+    std::scoped_lock l(m_mutex);
     m_pending_connections.erase(ptr);
     m_connections.remove(ptr);
 }

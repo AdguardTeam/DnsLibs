@@ -1,5 +1,7 @@
 project(third_party_boringssl)
 
+enable_language(ASM)
+
 if (WIN32)
     link_libraries(ws2_32)
     add_definitions(-D__USE_MINGW_ANSI_STDIO=1)
