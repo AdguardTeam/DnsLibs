@@ -32,4 +32,33 @@ function(install)
 # install is disabled
 endfunction()
 
+function(apply_patch patch)
+    execute_process(
+        COMMAND git apply -R --check
+        WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/curl"
+        INPUT_FILE "${patch}"
+        RESULT_VARIABLE RESULT
+    )
+
+    if (RESULT EQUAL 0)
+        message(STATUS "Patch is already applied ${patch}")
+    else ()
+        message(STATUS "Applying ${patch}")
+        execute_process(
+            COMMAND git apply --verbose --no-index --ignore-whitespace
+            WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/curl"
+            INPUT_FILE "${patch}"
+            RESULT_VARIABLE RESULT
+        )
+
+        if (RESULT EQUAL 0)
+            message(STATUS "Patch applied: ${patch}")
+        else ()
+            message(FATAL_ERROR "Error applying patch ${patch}")
+        endif ()
+    endif ()
+endfunction()
+
+apply_patch("${CMAKE_CURRENT_SOURCE_DIR}/easy_reuse.patch")
+
 add_subdirectory(curl)
