@@ -7,7 +7,8 @@
 #include <mutex>
 #include <thread>
 #include <atomic>
-#include <condition_variable>
+#include <future>
+#include <deque>
 
 #include <ag_logger.h>
 #include <ag_defs.h>
@@ -18,12 +19,17 @@
 #include <ldns/packet.h>
 #include <curl/curl.h>
 #include <curl/multi.h>
+#include <event2/event.h>
+#include <event2/event_struct.h>
+
+#include "event_loop.h"
 
 
 namespace ag {
 
 using curl_slist_ptr = std::unique_ptr<curl_slist, ftor<&curl_slist_free_all>>;
 using curl_pool_ptr = std::unique_ptr<CURLM, ftor<&curl_multi_cleanup>>;
+using event_ptr = std::unique_ptr<event, ftor<&event_free>>;
 
 class dns_over_https : public upstream {
 public:
@@ -38,29 +44,52 @@ public:
     ~dns_over_https() override;
 
     struct query_handle;
+    struct socket_handle;
 
 private:
     std::pair<ldns_pkt_ptr, err_string> exchange(ldns_pkt *) override;
     std::string address() override;
 
     std::unique_ptr<query_handle> create_handle(ldns_pkt *request, std::chrono::milliseconds timeout) const;
+    curl_pool_ptr create_pool() const;
+    void add_socket(curl_socket_t socket, int action);
+    void read_messages();
 
-    static void run(dns_over_https *us);
+    /**
+     * Must be called in worker thread
+     */
+    void stop_all_with_error(err_string e);
 
-    bool stop = false;
+    static int on_pool_timer_event(CURLM *multi, long timeout_ms, dns_over_https *upstream);
+    static int on_socket_update(CURL *handle, curl_socket_t socket, int what,
+        dns_over_https *upstream, socket_handle *socket_data);
+    static void on_event_timeout(int fd, short kind, void *arg);
+    static void on_socket_event(int fd, short kind, void *arg);
+
+    static void submit_request(int, short, void *arg);
+    static void defy_request(int, short, void *arg);
+
+    static void stop(int, short, void *arg);
+
     logger log = create_logger("DOH upstream");
     const std::chrono::milliseconds timeout;
     const std::string server_url;
     curl_slist_ptr resolved = nullptr;
-    curl_pool_ptr handle_pool = nullptr;
+    curl_slist_ptr request_headers = nullptr;
     bootstrapper_ptr bootstrapper;
-    std::list<query_handle *> pending_queue;
-    std::list<query_handle *> running_queue;
-    struct {
-        std::mutex guard;
-        std::condition_variable run_condition;
-        std::thread thread;
-    } worker;
+    std::mutex guard;
+
+    struct worker_descriptor {
+        event_loop_ptr loop = event_loop::create();
+        std::deque<query_handle *> running_queue;
+    };
+    worker_descriptor worker;
+
+    struct pool_descriptor {
+        curl_pool_ptr handle = nullptr;
+        event_ptr timer_event = nullptr;
+    };
+    pool_descriptor pool;
 };
 
 }

@@ -10,6 +10,7 @@ set(THIRD_PARTY_DIR ${DNSLIBS_DIR}/third-party)
 
 set(SRCS
         ${SRC_DIR}/dnsproxy.cpp
+        ${SRC_DIR}/dns64.cpp
     )
 
 add_library(dnsproxy EXCLUDE_FROM_ALL ${SRCS})
@@ -48,3 +49,17 @@ endif()
 
 
 enable_testing()
+if (NOT TARGET tests)
+    add_subdirectory(${THIRD_PARTY_DIR}/googletest ${CMAKE_BINARY_DIR}/googletest)
+    add_custom_target(tests)
+endif ()
+
+link_libraries(gtest gtest_main dnsproxy)
+
+add_executable(dns64_test EXCLUDE_FROM_ALL test/dns64_test.cpp)
+add_test(dns64_test dns64_test)
+add_dependencies(tests dns64_test)
+
+add_executable(dnsproxy_test EXCLUDE_FROM_ALL test/dnsproxy_test.cpp)
+add_test(dnsproxy_test dnsproxy_test)
+add_dependencies(tests dnsproxy_test)

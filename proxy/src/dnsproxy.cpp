@@ -1,5 +1,6 @@
 #include <dnsproxy.h>
 #include <upstream.h>
+#include <dns64.h>
 #include <dnsfilter.h>
 #include <ag_logger.h>
 #include <ag_utils.h>
@@ -14,6 +15,9 @@
 #include <ldns/rr.h>
 #include <ldns/rdata.h>
 
+#include <mutex>
+#include <thread>
+#include <atomic>
 
 #define errlog_id(l_, pkt_, fmt_, ...) errlog((l_), "[{}] " fmt_, ldns_pkt_id(pkt_), ##__VA_ARGS__)
 #define errlog_fid(l_, pkt_, fmt_, ...) errlog((l_), "[{}] {} " fmt_, ldns_pkt_id(pkt_), __func__, ##__VA_ARGS__)
@@ -27,7 +31,6 @@
 
 using namespace ag;
 using namespace std::chrono;
-using ldns_pkt_ptr = std::unique_ptr<ldns_pkt, ag::ftor<&ldns_pkt_free>>;
 
 
 static constexpr milliseconds DEFAULT_UPSTREAM_TIMEOUT = milliseconds(30000);
@@ -48,7 +51,6 @@ const dnsproxy_settings &dnsproxy_settings::get_default() {
     return DEFAULT_PROXY_SETTINGS;
 }
 
-
 struct dnsproxy::impl {
     ag::logger log;
     std::vector<upstream_ptr> upstreams;
@@ -56,6 +58,8 @@ struct dnsproxy::impl {
     dnsfilter::handle filter_handle = nullptr;
     dnsproxy_settings settings;
     dnsproxy_events events;
+
+    std::shared_ptr<with_mtx<std::vector<ag::uint8_vector>>> dns64_prefixes;
 
     ldns_rr *create_soa(const ldns_pkt *request) const;
     ldns_pkt *create_nxdomain_response(const ldns_pkt *request) const;
@@ -69,6 +73,9 @@ struct dnsproxy::impl {
     void complete_processed_event(dns_request_processed_event event,
         const ldns_pkt *request, const ldns_pkt *response,
         const std::vector<const dnsfilter::rule *> &rules, std::string error) const;
+
+    ldns_pkt_ptr try_dns64_aaaa_synthesis(upstream_ptr &upstream,
+            const ldns_pkt_ptr &request, const ldns_pkt_ptr &response) const;
 };
 
 static void log_packet(const ag::logger &log, const ldns_pkt *packet, const char *pkt_name) {
@@ -280,6 +287,107 @@ void dnsproxy::impl::complete_processed_event(dns_request_processed_event event,
     this->events.on_request_processed(std::move(event));
 }
 
+// If we know any DNS64 prefixes, request A RRs from `upstream` and
+// return a synthesized AAAA response or nullptr if synthesis was unsuccessful
+ldns_pkt_ptr dnsproxy::impl::try_dns64_aaaa_synthesis(upstream_ptr &upstream,
+                                                      const ldns_pkt_ptr &request,
+                                                      const ldns_pkt_ptr &response) const {
+    std::scoped_lock l(this->dns64_prefixes->mtx);
+
+    if (this->dns64_prefixes->val.empty()) {
+        // No prefixes
+        return nullptr;
+    }
+
+    const auto question = ldns_rr_list_rr(ldns_pkt_question(request.get()), 0);
+    if (!question || !ldns_rr_owner(question)) {
+        dbglog_fid(this->log, request.get(), "DNS64: could not synthesize AAAA response: invalid request");
+        return nullptr;
+    }
+
+    const ldns_pkt_ptr request_a(
+            ldns_pkt_query_new(
+                    ldns_rdf_clone(ldns_rr_owner(question)),
+                    LDNS_RR_TYPE_A,
+                    LDNS_RR_CLASS_IN,
+                    0));
+
+    ldns_pkt_set_cd(request_a.get(), ldns_pkt_cd(request.get()));
+    ldns_pkt_set_rd(request_a.get(), ldns_pkt_rd(request.get()));
+
+    const auto[response_a, err] = upstream->exchange(request_a.get());
+    if (err.has_value()) {
+        dbglog_fid(this->log,
+                   request.get(),
+                   "DNS64: could not synthesize AAAA response: upstream failed to perform A query: {}",
+                   err.value().c_str());
+        return nullptr;
+    }
+
+    const size_t ancount = ldns_pkt_ancount(response_a.get());
+    if (ancount == 0) {
+        dbglog_fid(this->log,
+                   request.get(),
+                   "DNS64: could not synthesize AAAA response: upstream returned no A records");
+        return nullptr;
+    }
+
+    auto aaaa_list = ldns_rr_list_new();
+    for (size_t i = 0; i < ancount; ++i) {
+        const auto a_rr = ldns_rr_list_rr(ldns_pkt_answer(response_a.get()), i);
+
+        if (LDNS_RR_TYPE_A != ldns_rr_get_type(a_rr)) {
+            continue;
+        }
+
+        const auto rdf = ldns_rr_rdf(a_rr, 0); // first and only field
+        if (!rdf) {
+            continue;
+        }
+
+        const uint8_view ip4{ldns_rdf_data(rdf), ldns_rdf_size(rdf)};
+
+        for (const auto &pref : this->dns64_prefixes->val) { // assume `dns64_prefixes->mtx` is held
+            const auto[ip6, err_synth] = synthesize_ipv4_embedded_ipv6_address({pref.data(), std::size(pref)}, ip4);
+            if (err_synth.has_value()) {
+                dbglog_fid(this->log,
+                           request.get(),
+                           "DNS64: could not synthesize IPv4-embedded IPv6: {}",
+                           err_synth.value().c_str());
+                continue; // Try the next prefix
+            }
+
+            const auto aaaa_rr = ldns_rr_clone(a_rr);
+            ldns_rr_set_type(aaaa_rr, LDNS_RR_TYPE_AAAA);
+            ldns_rdf_deep_free(ldns_rr_pop_rdf(aaaa_rr)); // ip4 view becomes invalid here
+            ldns_rr_push_rdf(aaaa_rr, ldns_rdf_new_frm_data(LDNS_RDF_TYPE_AAAA, ip6.size(), ip6.data()));
+
+            ldns_rr_list_push_rr(aaaa_list, aaaa_rr);
+        }
+    }
+
+    const size_t aaaa_rr_count = ldns_rr_list_rr_count(aaaa_list);
+    dbglog_fid(this->log, request.get(), "DNS64: synthesized AAAA RRs: {}", aaaa_rr_count);
+    if (aaaa_rr_count > 0) {
+        ldns_pkt_ptr aaaa_resp(ldns_pkt_new());
+
+        ldns_pkt_set_id(aaaa_resp.get(), ldns_pkt_id(request.get()));
+        ldns_pkt_set_rd(aaaa_resp.get(), ldns_pkt_rd(request.get()));
+
+        ldns_pkt_push_rr_list(aaaa_resp.get(),
+                              LDNS_SECTION_QUESTION,
+                              ldns_rr_list_clone(ldns_pkt_question(request.get())));
+
+        ldns_pkt_push_rr_list(aaaa_resp.get(), LDNS_SECTION_ANSWER, aaaa_list);
+
+        return aaaa_resp;
+    } else {
+        ldns_rr_list_free(aaaa_list);
+    }
+
+    return nullptr;
+}
+
 static std::vector<uint8_t> transform_response_to_raw_data(const ldns_pkt *message) {
     ldns_buffer *buffer = ldns_buffer_new(512);
     ldns_status status = ldns_pkt2buffer_wire(buffer, message);
@@ -305,7 +413,7 @@ bool dnsproxy::init(dnsproxy_settings settings, dnsproxy_events events) {
 
     infolog(proxy->log, "Initializing upstreams...");
     proxy->upstreams.reserve(settings.upstreams.size());
-    for (dnsproxy_settings::upstream_settings &us : settings.upstreams) {
+    for (upstream_settings &us : settings.upstreams) {
         infolog(proxy->log, "Initializing upstream {}...", us.dns_server);
         auto[upstream, err] = ag::upstream::address_to_upstream(us.dns_server, us.options);
         if (err.has_value()) {
@@ -321,6 +429,49 @@ bool dnsproxy::init(dnsproxy_settings settings, dnsproxy_events events) {
         return false;
     }
     infolog(proxy->log, "Upstreams initialized");
+
+    proxy->dns64_prefixes = std::make_shared<ag::with_mtx<std::vector<ag::uint8_vector>>>();
+    if (settings.dns64.has_value()) {
+        infolog(proxy->log, "DNS64 discovery is enabled");
+
+        std::thread prefixes_discovery_thread([uss = settings.dns64.value().upstream,
+                                               prefixes = proxy->dns64_prefixes,
+                                               logger = proxy->log,
+                                               max_tries = settings.dns64.value().max_tries,
+                                               wait_time = settings.dns64.value().wait_time]() {
+            auto i = max_tries;
+            while (i--) {
+                std::this_thread::sleep_for(wait_time);
+
+                auto[upstream, err_upstream] = ag::upstream::address_to_upstream(uss.dns_server, uss.options);
+                if (err_upstream.has_value()) {
+                    dbglog(logger, "DNS64: failed to create DNS64 upstream: {}", err_upstream.value().c_str());
+                    continue;
+                }
+
+                auto[result, err_prefixes] = ag::discover_dns64_prefixes(upstream);
+                if (err_prefixes.has_value()) {
+                    dbglog(logger, "DNS64: error discovering prefixes: {}", err_prefixes.value().c_str());
+                    continue;
+                }
+
+                if (result.empty()) {
+                    dbglog(logger, "DNS64: no prefixes discovered, retrying");
+                    continue;
+                }
+
+                std::scoped_lock l(prefixes->mtx);
+                prefixes->val = std::move(result);
+
+                infolog(logger, "DNS64 prefixes discovered: {}", prefixes->val.size());
+                return;
+            }
+
+            errlog(logger, "DNS64: failed to discover any prefixes");
+        });
+
+        prefixes_discovery_thread.detach();
+    }
 
     infolog(proxy->log, "Initializing filtering module...");
     std::optional<ag::dnsfilter::handle> handle = proxy->filter.create(settings.filter_params);
@@ -379,7 +530,7 @@ std::vector<uint8_t> dnsproxy::handle_message(ag::uint8_view message) {
     event.domain = domain.get();
 
     // disable Mozilla DoH
-    ldns_rr_type type = ldns_rr_get_type(question);
+    const ldns_rr_type type = ldns_rr_get_type(question);
     if ((type == LDNS_RR_TYPE_A || type == LDNS_RR_TYPE_AAAA)
             && 0 == strcmp(domain.get(), MOZILLA_DOH_HOST.data())) {
         ldns_pkt_ptr response = ldns_pkt_ptr(proxy->create_nxdomain_response(request));
@@ -415,7 +566,7 @@ std::vector<uint8_t> dnsproxy::handle_message(ag::uint8_view message) {
     auto[response, err] = proxy->upstreams[0]->exchange(request);
     event.upstream_addr = proxy->upstreams[0]->address();
     if (err.has_value()) {
-        std::string err_str = ag::utils::fmt_string("Upstream failed to perform dns query: {}",
+        std::string err_str = ag::utils::fmt_string("Upstream failed to perform dns query: %s",
             err.value().c_str());
         errlog_fid(proxy->log, request, "{}" , err_str.c_str());
         proxy->complete_processed_event(std::move(event), request, nullptr, effective_rules, std::move(err_str));
@@ -423,6 +574,18 @@ std::vector<uint8_t> dnsproxy::handle_message(ag::uint8_view message) {
     }
 
     log_packet(proxy->log, response.get(), "upstream dns response");
+
+    if (LDNS_RR_TYPE_AAAA == type
+            && LDNS_RCODE_NOERROR == ldns_pkt_get_rcode(response.get())
+            && ldns_pkt_ancount(request) == 0) {
+
+        auto synth_response = proxy->try_dns64_aaaa_synthesis(proxy->upstreams[0], req_holder, response);
+        if (synth_response) {
+            response = std::move(synth_response);
+            log_packet(proxy->log, response.get(), "dns64 synthesized response");
+        }
+    }
+
     std::vector<uint8_t> raw_response = transform_response_to_raw_data(response.get());
     event.bytes_received = raw_response.size();
     event.bytes_sent = message.size();
