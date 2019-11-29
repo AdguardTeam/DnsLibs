@@ -1,6 +1,6 @@
-#include <future>
 #include <cinttypes>
 #include <cassert>
+#include <algorithm>
 
 #include <ag_utils.h>
 #include <ag_defs.h>
@@ -17,11 +17,11 @@
 #include <ldns/host2str.h>
 
 
-#define errlog_id(q_, fmt_, ...) errlog(*((q_)->log), "[{}] " fmt_, (q_)->request_id, #__VA_ARGS__)
-#define infolog_id(q_, fmt_, ...) infolog(*((q_)->log), "[{}] " fmt_, (q_)->request_id, #__VA_ARGS__)
-#define warnlog_id(q_, fmt_, ...) warnlog(*((q_)->log), "[{}] " fmt_, (q_)->request_id, #__VA_ARGS__)
-#define dbglog_id(q_, fmt_, ...) dbglog(*((q_)->log), "[{}] " fmt_, (q_)->request_id, #__VA_ARGS__)
-#define tracelog_id(q_, fmt_, ...) tracelog(*((q_)->log), "[{}] " fmt_, (q_)->request_id, #__VA_ARGS__)
+#define errlog_id(q_, fmt_, ...) errlog(*((q_)->log), "[{}] " fmt_, (q_)->request_id, ##__VA_ARGS__)
+#define infolog_id(q_, fmt_, ...) infolog(*((q_)->log), "[{}] " fmt_, (q_)->request_id, ##__VA_ARGS__)
+#define warnlog_id(q_, fmt_, ...) warnlog(*((q_)->log), "[{}] " fmt_, (q_)->request_id, ##__VA_ARGS__)
+#define dbglog_id(q_, fmt_, ...) dbglog(*((q_)->log), "[{}] " fmt_, (q_)->request_id, ##__VA_ARGS__)
+#define tracelog_id(q_, fmt_, ...) tracelog(*((q_)->log), "[{}] " fmt_, (q_)->request_id, ##__VA_ARGS__)
 
 
 using namespace ag;
@@ -38,25 +38,23 @@ struct initializer {
 };
 
 
-using curl_handle_ptr = std::unique_ptr<CURL, ag::ftor<&curl_easy_cleanup>>;
-
-
 static constexpr std::string_view USER_AGENT = "ag-dns";
 static constexpr size_t VERIFY_DEPTH = 4;
 
 
 struct dns_over_https::query_handle {
-    size_t request_id;
-    const ag::logger *log;
-    curl_handle_ptr curl_handle = nullptr;
-    CURLMcode pool_result = CURLM_OK;
-    CURLcode request_result = CURLE_OK;
-    curl_slist_ptr headers = nullptr;
+    const ag::logger *log = nullptr;
+    dns_over_https *upstream = nullptr;
+    size_t request_id = 0;
+    CURL *curl_handle = nullptr;
+    err_string error;
     ldns_buffer_ptr request = nullptr;
     std::vector<uint8_t> response;
     std::promise<void> barrier;
-};
 
+    CURL *create_curl_handle();
+    void cleanup_request();
+};
 
 static size_t write_callback(void *contents, size_t size, size_t nmemb, void *arg) {
     dns_over_https::query_handle *h = (dns_over_https::query_handle *)arg;
@@ -78,57 +76,65 @@ static CURLcode ssl_callback(CURL *curl, void *sslctx, void *arg) {
     return CURLE_OK;
 }
 
+CURL *dns_over_https::query_handle::create_curl_handle() {
+    CURL *curl = curl_easy_init();
+    if (curl == nullptr) {
+        this->error = utils::fmt_string("Failed to init curl handle");
+        return nullptr;
+    }
+
+    dns_over_https *upstream = this->upstream;
+    ldns_buffer *raw_request = this->request.get();
+    uint64_t timeout = upstream->timeout.count();
+    if (CURLcode e;
+            CURLE_OK != (e = curl_easy_setopt(curl, CURLOPT_URL, upstream->server_url.data()))
+            || CURLE_OK != (e = curl_easy_setopt(curl, CURLOPT_NOPROGRESS, true))
+            || CURLE_OK != (e = curl_easy_setopt(curl, CURLOPT_TIMEOUT_MS, timeout))
+            || CURLE_OK != (e = curl_easy_setopt(curl, CURLOPT_CONNECTTIMEOUT_MS, timeout))
+            || CURLE_OK != (e = curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, write_callback))
+            || CURLE_OK != (e = curl_easy_setopt(curl, CURLOPT_WRITEDATA, this))
+            || CURLE_OK != (e = curl_easy_setopt(curl, CURLOPT_USERAGENT, USER_AGENT.data()))
+            || CURLE_OK != (e = curl_easy_setopt(curl, CURLOPT_POSTFIELDS, ldns_buffer_at(raw_request, 0)))
+            || CURLE_OK != (e = curl_easy_setopt(curl, CURLOPT_POSTFIELDSIZE, ldns_buffer_position(raw_request)))
+            || CURLE_OK != (e = curl_easy_setopt(curl, CURLOPT_HTTPHEADER, upstream->request_headers.get()))
+            || CURLE_OK != (e = curl_easy_setopt(curl, CURLOPT_HTTP_VERSION, CURL_HTTP_VERSION_2))
+            || CURLE_OK != (e = curl_easy_setopt(curl, CURLOPT_PRIVATE, this))
+            || CURLE_OK != (e = curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, true))
+            || CURLE_OK != (e = curl_easy_setopt(curl, CURLOPT_PROTOCOLS, CURLPROTO_HTTPS))
+            || CURLE_OK != (e = curl_easy_setopt(curl, CURLOPT_REDIR_PROTOCOLS, CURLPROTO_HTTPS))
+            || CURLE_OK != (e = curl_easy_setopt(curl, CURLOPT_SSL_CTX_FUNCTION, ssl_callback))
+            || CURLE_OK != (e = curl_easy_setopt(curl, CURLOPT_SSL_CTX_DATA, this))
+            || CURLE_OK != (e = curl_easy_setopt(curl, CURLOPT_SSL_VERIFYPEER, true))
+            || CURLE_OK != (e = curl_easy_setopt(curl, CURLOPT_SSL_VERIFYHOST, true))
+            || CURLE_OK != (e = curl_easy_setopt(curl, CURLOPT_SSL_ENABLE_ALPN, true))
+            || (upstream->resolved != nullptr
+                && CURLE_OK != (e = curl_easy_setopt(curl, CURLOPT_RESOLVE, upstream->resolved.get())))) {
+        this->error = utils::fmt_string("Failed to set options of curl handle: %s (id=%d)",
+            curl_easy_strerror(e), e);
+        curl_easy_cleanup(curl);
+        return nullptr;
+    }
+
+    return curl;
+}
+
+void dns_over_https::query_handle::cleanup_request() {
+    CURLMcode perr = curl_multi_remove_handle(this->upstream->pool.handle.get(), this->curl_handle);
+    assert(perr == CURLM_OK);
+    curl_easy_cleanup(this->curl_handle);
+}
+
 std::unique_ptr<dns_over_https::query_handle> dns_over_https::create_handle(ldns_pkt *request,  milliseconds timeout) const {
     std::unique_ptr<query_handle> h = std::make_unique<query_handle>();
     h->log = &this->log;
+    h->upstream = (dns_over_https *)this;
     h->request_id = ldns_pkt_id(request);
     ldns_pkt_set_id(request, 0);
-
-    h->curl_handle.reset(curl_easy_init());
-    if (h->curl_handle == nullptr) {
-        errlog_id(h, "Failed to init curl handle");
-        return nullptr;
-    }
 
     h->request.reset(ldns_buffer_new(512));
     ldns_status status = ldns_pkt2buffer_wire(h->request.get(), request);
     if (status != LDNS_STATUS_OK) {
         errlog_id(h, "Failed to serialize packet: {}", ldns_get_errorstr_by_id(status));
-        return nullptr;
-    }
-
-    curl_slist *headers;
-    if (nullptr == (headers = curl_slist_append(nullptr, "Content-Type: application/dns-message"))
-            || nullptr == (headers = curl_slist_append(headers, "Accept: application/dns-message"))) {
-        errlog_id(h, "Failed to create http headers for DOH request");
-        return nullptr;
-    }
-    h->headers.reset(headers);
-
-    CURL *curl = h->curl_handle.get();
-    ldns_buffer *raw_request = h->request.get();
-    if (CURLcode e;
-            CURLE_OK != (e = curl_easy_setopt(curl, CURLOPT_URL, this->server_url.data()))
-            || CURLE_OK != (e = curl_easy_setopt(curl, CURLOPT_NOPROGRESS, true))
-            || CURLE_OK != (e = curl_easy_setopt(curl, CURLOPT_TIMEOUT_MS, timeout.count()))
-            || CURLE_OK != (e = curl_easy_setopt(curl, CURLOPT_CONNECTTIMEOUT_MS, timeout.count()))
-            || CURLE_OK != (e = curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, write_callback))
-            || CURLE_OK != (e = curl_easy_setopt(curl, CURLOPT_WRITEDATA, h.get()))
-            || CURLE_OK != (e = curl_easy_setopt(curl, CURLOPT_USERAGENT, USER_AGENT.data()))
-            || CURLE_OK != (e = curl_easy_setopt(curl, CURLOPT_POSTFIELDS, ldns_buffer_at(raw_request, 0)))
-            || CURLE_OK != (e = curl_easy_setopt(curl, CURLOPT_POSTFIELDSIZE, ldns_buffer_position(raw_request)))
-            || CURLE_OK != (e = curl_easy_setopt(curl, CURLOPT_HTTPHEADER, headers))
-            || CURLE_OK != (e = curl_easy_setopt(curl, CURLOPT_HTTP_VERSION, CURL_HTTP_VERSION_2))
-            || CURLE_OK != (e = curl_easy_setopt(curl, CURLOPT_PRIVATE, h.get()))
-            || CURLE_OK != (e = curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, true))
-            || CURLE_OK != (e = curl_easy_setopt(curl, CURLOPT_SSL_CTX_FUNCTION, ssl_callback))
-            || CURLE_OK != (e = curl_easy_setopt(curl, CURLOPT_SSL_CTX_DATA, h.get()))
-            || CURLE_OK != (e = curl_easy_setopt(curl, CURLOPT_SSL_VERIFYPEER, true))
-            || CURLE_OK != (e = curl_easy_setopt(curl, CURLOPT_SSL_VERIFYHOST, true))
-            || CURLE_OK != (e = curl_easy_setopt(curl, CURLOPT_SSL_ENABLE_ALPN, true))
-            || (this->resolved != nullptr
-                && CURLE_OK != (e = curl_easy_setopt(curl, CURLOPT_RESOLVE, this->resolved.get())))) {
-        errlog_id(h, "Failed to set options of curl handle: {}", curl_easy_strerror(e));
         return nullptr;
     }
 
@@ -174,6 +180,26 @@ static std::shared_ptr<ag::bootstrapper> create_bootstrapper(std::string_view ur
     return std::make_shared<ag::bootstrapper>(get_host_name(url), dns_over_https::DEFAULT_PORT, true, opts.bootstrap);
 }
 
+curl_pool_ptr dns_over_https::create_pool() const {
+    CURLM *pool = curl_multi_init();
+    if (pool == nullptr) {
+        return nullptr;
+    }
+    curl_pool_ptr pool_holder = curl_pool_ptr(pool);
+
+    if (CURLMcode e;
+            CURLM_OK != (e = curl_multi_setopt(pool, CURLMOPT_SOCKETFUNCTION, on_socket_update))
+            || CURLM_OK != (e = curl_multi_setopt(pool, CURLMOPT_SOCKETDATA, this))
+            || CURLM_OK != (e = curl_multi_setopt(pool, CURLMOPT_TIMERFUNCTION, on_pool_timer_event))
+            || CURLM_OK != (e = curl_multi_setopt(pool, CURLMOPT_TIMERDATA, this))
+            || CURLM_OK != (e = curl_multi_setopt(pool, CURLMOPT_PIPELINING, CURLPIPE_MULTIPLEX))) {
+        errlog(log, "Failed to set options of curl pool: {} (id={})", curl_multi_strerror(e), e);
+        return nullptr;
+    }
+
+    return pool_holder;
+}
+
 dns_over_https::dns_over_https(std::string_view url, const ag::upstream::options &opts)
     : timeout(opts.timeout)
     , server_url(url)
@@ -181,83 +207,221 @@ dns_over_https::dns_over_https(std::string_view url, const ag::upstream::options
     static const initializer ensure_initialized;
 
     this->resolved = create_resolved_hosts_list(url, opts.server_ip);
-    this->handle_pool = curl_pool_ptr(curl_multi_init());
+
+    curl_slist *headers;
+    if (nullptr == (headers = curl_slist_append(nullptr, "Content-Type: application/dns-message"))
+            || nullptr == (headers = curl_slist_append(headers, "Accept: application/dns-message"))) {
+        errlog(log, "Failed to create http headers for request");
+    }
+    this->request_headers.reset(headers);
+
+    this->pool.handle = create_pool();
+    assert(this->pool.handle != nullptr);
+
     if (this->resolved == nullptr) {
         this->bootstrapper = create_bootstrapper(url, opts);
     }
-    this->worker.thread =
-        std::thread([this] () {
-            while (!this->stop) {
-                run(this);
-            }
-        });
+}
+
+void dns_over_https::stop(int, short, void *arg) {
+    dns_over_https *upstream = (dns_over_https *)arg;
+    upstream->stop_all_with_error("Upstream has been stopped");
 }
 
 dns_over_https::~dns_over_https() {
-    this->worker.guard.lock();
-    this->stop = true;
-    this->worker.run_condition.notify_one();
-    this->worker.guard.unlock();
-    this->worker.thread.join();
+    event_base_once(this->worker.loop->c_base(), 0, EV_TIMEOUT, stop, this, nullptr);
+    this->worker.loop->stop();
 }
 
-void dns_over_https::run(dns_over_https *us) {
-    CURLM *pool = us->handle_pool.get();
+struct dns_over_https::socket_handle {
+    curl_socket_t fd = CURLM_BAD_SOCKET;
+    int action = 0;
+    event event_handle = {};
 
-    {
-        std::unique_lock guard(us->worker.guard);
-        while (us->pending_queue.empty() && us->running_queue.empty() && !us->stop) {
-            us->worker.run_condition.wait(guard);
-        }
-        // @todo: for now it's unsafe to delete an upstream which has in-progress
-        // requests - needs to be fixed or handled on the next higher level
-
-        for (auto i = us->pending_queue.begin(); i != us->pending_queue.end();) {
-            query_handle *handle = *i;
-            curl_multi_add_handle(pool, handle->curl_handle.get());
-            dbglog_id(handle, "Request started");
-            i = us->pending_queue.erase(i);
-            us->running_queue.emplace_back(handle);
-        }
+    ~socket_handle() {
+        event_del(&this->event_handle);
     }
 
-    int still_running = 0;
-    if (CURLMcode err = curl_multi_perform(pool, &still_running); err != CURLM_OK) {
-        std::unique_lock lock(us->worker.guard);
-        for (auto i = us->running_queue.begin(); i != us->running_queue.end();) {
-            query_handle *handle = *i;
-            handle->pool_result = err;
-            handle->barrier.set_value();
-            i = us->running_queue.erase(i);
-        }
-        return;
-    }
+    void init(curl_socket_t socket, int act, dns_over_https *upstream) {
+        int what = ((act & CURL_POLL_IN) ? EV_READ : 0)
+            | ((act & CURL_POLL_OUT) ? EV_WRITE : 0)
+            | EV_PERSIST;
 
+        this->fd = socket;
+        this->action = act;
+        event_del(&this->event_handle);
+        event_assign(&this->event_handle, upstream->worker.loop->c_base(), socket, what,
+            dns_over_https::on_socket_event, upstream);
+        event_add(&this->event_handle, nullptr);
+    }
+};
+using socket_handle = dns_over_https::socket_handle;
+
+int dns_over_https::on_pool_timer_event(CURLM *multi, long timeout_ms, dns_over_https *upstream) {
+    tracelog(upstream->log, "{}: Setting timeout to {}ms", __func__, timeout_ms);
+
+    event_ptr &event = upstream->pool.timer_event;
+    if (event != nullptr) {
+        event_del(event.get());
+    }
+    if (timeout_ms >= 0) {
+        if (event == nullptr) {
+            event.reset(event_new(upstream->worker.loop->c_base(), 0, EV_TIMEOUT, on_event_timeout, upstream));
+        }
+        timeval timeout = { .tv_sec = timeout_ms/1000, .tv_usec = (timeout_ms%1000)*1000, };
+        evtimer_add(event.get(), &timeout);
+    }
+    return 0;
+}
+
+void dns_over_https::read_messages() {
+    CURLM *pool = this->pool.handle.get();
     int queued;
     CURLMsg *message;
+
     while (nullptr != (message = curl_multi_info_read(pool, &queued))) {
         if (message->msg != CURLMSG_DONE) {
             continue;
         }
 
-        query_handle *query_handle;
-        curl_easy_getinfo(message->easy_handle, CURLINFO_PRIVATE, &query_handle);
-        assert(message->easy_handle == query_handle->curl_handle.get());
+        query_handle *handle;
+        curl_easy_getinfo(message->easy_handle, CURLINFO_PRIVATE, &handle);
+        assert(message->easy_handle == handle->curl_handle);
 
-        query_handle->request_result = message->data.result;
-        curl_multi_remove_handle(pool, message->easy_handle);
-        dbglog_id(query_handle, "Got response");
-        query_handle->barrier.set_value();
-        us->worker.guard.lock();
-        us->running_queue.remove(query_handle);
-        us->worker.guard.unlock();
+        if (message->data.result != CURLE_OK) {
+            handle->error = utils::fmt_string("Failed to perform request: %s", curl_easy_strerror(message->data.result));
+        } else {
+            tracelog_id(handle, "Got response {}", (void*)message->easy_handle);
+
+            long response_code;
+            curl_easy_getinfo(message->easy_handle, CURLINFO_RESPONSE_CODE, &response_code);
+            if (response_code < 200 || response_code >= 300) {
+                handle->error = utils::fmt_string("Got bad response status: %ld", response_code);
+            }
+        }
+
+        handle->cleanup_request();
+
+        std::deque<query_handle *> &queue = this->worker.running_queue;
+        queue.erase(std::remove(queue.begin(), queue.end(), handle), queue.end());
+
+        handle->barrier.set_value();
+    }
+}
+
+void dns_over_https::on_socket_event(int fd, short kind, void *arg) {
+    dns_over_https *upstream = (dns_over_https *)arg;
+    pool_descriptor &pool = upstream->pool;
+    int action = ((kind & EV_READ) ? CURL_CSELECT_IN : 0)
+        | ((kind & EV_WRITE) ? CURL_CSELECT_OUT : 0);
+
+    int still_running;
+    CURLMcode err = curl_multi_socket_action(pool.handle.get(), fd, action, &still_running);
+    if (err != CURLM_OK) {
+        upstream->stop_all_with_error(curl_multi_strerror(err));
+        return;
+    }
+
+    upstream->read_messages();
+}
+
+void dns_over_https::on_event_timeout(int fd, short kind, void *arg) {
+    dns_over_https *upstream = (dns_over_https *)arg;
+    pool_descriptor &pool = upstream->pool;
+
+    int still_running;
+    CURLMcode err = curl_multi_socket_action(pool.handle.get(), CURL_SOCKET_TIMEOUT, 0, &still_running);
+    if (err != CURLM_OK) {
+        upstream->stop_all_with_error(curl_multi_strerror(err));
+        return;
+    }
+
+    upstream->read_messages();
+}
+
+void dns_over_https::add_socket(curl_socket_t socket, int action) {
+    socket_handle *handle = new socket_handle();
+    handle->init(socket, action, this);
+    curl_multi_assign(this->pool.handle.get(), socket, handle);
+    tracelog(log, "New socket: {}", (void *)handle);
+}
+
+int dns_over_https::on_socket_update(CURL *handle, curl_socket_t socket, int what,
+        dns_over_https *upstream, socket_handle *socket_data) {
+    static constexpr std::string_view WHAT_STR[] = { "none", "IN", "OUT", "INOUT", "REMOVE" };
+    tracelog(upstream->log, "Socket callback: sock={} curl={} sockh={} what={}", socket, handle, (void*)socket_data, WHAT_STR[what]);
+
+    if (what == CURL_POLL_REMOVE) {
+        tracelog(upstream->log, "Removing socket");
+        delete socket_data;
+        curl_multi_assign(upstream->pool.handle.get(), socket, nullptr);
+    } else {
+        if (socket_data == nullptr) {
+            tracelog(upstream->log, "Adding data: {}", WHAT_STR[what]);
+            upstream->add_socket(socket, what);
+        } else {
+            tracelog(upstream->log, "Changing action from {} to {}", WHAT_STR[socket_data->action], WHAT_STR[what]);
+            socket_data->init(socket, what, upstream);
+        }
+    }
+    return 0;
+}
+
+void dns_over_https::submit_request(int, short, void *arg) {
+    query_handle *handle = (query_handle *)arg;
+    tracelog_id(handle, "Submitting request");
+
+    CURL *curl_handle = handle->create_curl_handle();
+    if (curl_handle == nullptr) {
+        // error set already in `create_curl_handle`
+        handle->barrier.set_value();
+        return;
+    }
+
+    dns_over_https *upstream = handle->upstream;
+    if (CURLMcode e = curl_multi_add_handle(upstream->pool.handle.get(), curl_handle);
+            e != CURLM_OK) {
+        handle->error = utils::fmt_string("Failed to add request in pool: %s", curl_multi_strerror(e));
+        curl_easy_cleanup(curl_handle);
+        handle->barrier.set_value();
+        return;
+    }
+
+    handle->curl_handle = curl_handle;
+    upstream->worker.running_queue.emplace_back(handle);
+}
+
+void dns_over_https::defy_request(int, short, void *arg) {
+    query_handle *handle = (query_handle *)arg;
+    tracelog_id(handle, "Defying request");
+
+    dns_over_https *upstream = handle->upstream;
+    handle->cleanup_request();
+
+    std::deque<query_handle *> &queue = upstream->worker.running_queue;
+    queue.erase(std::remove(queue.begin(), queue.end(), handle), queue.end());
+
+    handle->barrier.set_value();
+}
+
+void dns_over_https::stop_all_with_error(err_string e) {
+    std::deque<query_handle *> &queue = this->worker.running_queue;
+    for (auto i = queue.begin(); i != queue.end();) {
+        query_handle *handle = *i;
+        handle->error = e;
+        handle->cleanup_request();
+        i = queue.erase(i);
+        handle->barrier.set_value();
     }
 }
 
 std::pair<ldns_pkt_ptr, err_string> dns_over_https::exchange(ldns_pkt *request) {
+    // @todo: for now it's unsafe to delete an upstream which has in-progress
+    // requests - needs to be fixed or handled on the next higher level
+
     milliseconds timeout = this->timeout;
 
-    if (std::unique_lock guard(this->worker.guard); this->resolved == nullptr) {
+    if (std::unique_lock guard(this->guard); this->resolved == nullptr) {
         bootstrapper::ret bootstrapper_result = this->bootstrapper->get();
         if (bootstrapper_result.error.has_value()) {
             return { nullptr, std::move(bootstrapper_result.error) };
@@ -287,43 +451,29 @@ std::pair<ldns_pkt_ptr, err_string> dns_over_https::exchange(ldns_pkt *request) 
         return { nullptr, "Failed to create request handle" };
     }
 
-    std::future<void> condition = handle->barrier.get_future();
-
-    this->worker.guard.lock();
-    this->pending_queue.emplace_back(handle.get());
-    this->worker.guard.unlock();
-
-    this->worker.guard.lock();
-    this->worker.run_condition.notify_one();
-    this->worker.guard.unlock();
-
     tracelog_id(handle, "Started");
+
+    std::future<void> request_completed = handle->barrier.get_future();
+    event_base_once(this->worker.loop->c_base(), 0, EV_TIMEOUT, submit_request, handle.get(), nullptr);
 
     err_string err;
     ldns_pkt *response = nullptr;
-    if (std::future_status status = condition.wait_for(timeout);
+    if (std::future_status status = request_completed.wait_for(timeout);
             status != std::future_status::ready) {
         err = utils::fmt_string("Request timed out");
-        this->worker.guard.lock();
-        this->running_queue.remove(handle.get());
-        this->worker.guard.unlock();
-    } else if (handle->pool_result != CURLM_OK) {
-        err = utils::fmt_string("Failed to perform request: %s", curl_multi_strerror(handle->pool_result));
-    } else if (handle->request_result != CURLE_OK) {
-        err = utils::fmt_string("Failed to perform DOH request: %s", curl_easy_strerror(handle->request_result));
-    } else {
-        long response_code;
-        curl_easy_getinfo(handle->curl_handle.get(), CURLINFO_RESPONSE_CODE, &response_code);
-        if (response_code >= 200 && response_code < 300) {
-            if (ldns_status status = ldns_wire2pkt(&response, handle->response.data(), handle->response.size());
-                    status != LDNS_STATUS_OK) {
-                err = utils::fmt_string("Failed to parse DOH response: %s", ldns_get_errorstr_by_id(status));
-            } else {
-                ldns_pkt_set_id(response, handle->request_id);
-            }
-        } else {
-            err = utils::fmt_string("Got bad DOH response status: %ld", response_code);
+        handle->barrier = std::promise<void>();
+        std::future<void> request_defied = handle->barrier.get_future();
+        event_base_once(this->worker.loop->c_base(), 0, EV_TIMEOUT, defy_request, handle.get(), nullptr);
+        if (std::future_status status = request_defied.wait_for(timeout);
+                status != std::future_status::ready) {
+            errlog_id(handle, "Failed to defy the request due to timeout");
+            assert(0);
         }
+    } else if (handle->error.has_value()) {
+        err = utils::fmt_string("Failed to perform request: %s", handle->error->c_str());
+    } else if (ldns_status status = ldns_wire2pkt(&response, handle->response.data(), handle->response.size());
+            status != LDNS_STATUS_OK) {
+        err = utils::fmt_string("Failed to parse response: %s", ldns_get_errorstr_by_id(status));
     }
 
     if (response != nullptr) {
