@@ -49,7 +49,16 @@ ag::dns_framed_connection::~dns_framed_connection() {
 }
 
 ag::dns_framed_connection_ptr ag::dns_framed_connection::create(dns_framed_pool *pool, bufferevent *bev, const socket_address &address) {
-    return ag::dns_framed_connection_ptr{new dns_framed_connection(pool, bev, address)};
+    return ag::dns_framed_connection_ptr{new dns_framed_connection(pool, bev, address), [](dns_framed_connection *conn){
+        if (conn->m_bev) {
+            event_base_once(bufferevent_get_base(conn->m_bev.get()), -1, EV_TIMEOUT,
+                            [](evutil_socket_t, short, void *ptr) {
+                                delete (dns_framed_connection *) ptr;
+                            }, conn, nullptr);
+        } else {
+            delete conn;
+        }
+    }};
 }
 
 void ag::dns_framed_connection::on_read() {
@@ -134,13 +143,6 @@ const ag::socket_address &ag::dns_framed_connection::address() const {
     return m_socket_address;
 }
 
-void ag::dns_framed_connection::close() {
-    dns_framed_connection_ptr *ptr = new dns_framed_connection_ptr(shared_from_this());
-    event_base_once(bufferevent_get_base(m_bev.get()), -1, EV_TIMEOUT, [](evutil_socket_t, short, void *ptr){
-        delete (dns_framed_connection_ptr *)ptr;
-    }, ptr, nullptr);
-}
-
 void ag::dns_framed_pool::add_connected(const dns_framed_connection_ptr &ptr) {
     std::scoped_lock l(m_mutex);
     m_pending_connections.erase(ptr);
@@ -148,12 +150,9 @@ void ag::dns_framed_pool::add_connected(const dns_framed_connection_ptr &ptr) {
 }
 
 void ag::dns_framed_pool::remove_from_all(const dns_framed_connection_ptr &ptr) {
-    {
-        std::scoped_lock l(m_mutex);
-        m_pending_connections.erase(ptr);
-        m_connections.remove(ptr);
-    }
-    ptr->close();
+    std::scoped_lock l(m_mutex);
+    m_pending_connections.erase(ptr);
+    m_connections.remove(ptr);
 }
 
 void ag::dns_framed_pool::add_pending_connection(const ag::dns_framed_connection_ptr &ptr) {

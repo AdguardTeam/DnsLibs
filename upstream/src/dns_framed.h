@@ -48,11 +48,6 @@ public:
      */
     const socket_address &address() const;
 
-    /**
-     * Safely closes connection
-     */
-    void close();
-
 private:
     /** Logger */
     logger m_log;
