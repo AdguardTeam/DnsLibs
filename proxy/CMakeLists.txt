@@ -11,6 +11,7 @@ set(THIRD_PARTY_DIR ${DNSLIBS_DIR}/third-party)
 set(SRCS
         ${SRC_DIR}/dnsproxy.cpp
         ${SRC_DIR}/dns64.cpp
+        ${SRC_DIR}/dns_forwarder.cpp
     )
 
 add_library(dnsproxy EXCLUDE_FROM_ALL ${SRCS})
@@ -40,6 +41,7 @@ endif ()
 
 set_target_properties(dnsproxy PROPERTIES POSITION_INDEPENDENT_CODE ON)
 target_include_directories(dnsproxy PUBLIC ./include)
+target_include_directories(dnsproxy PRIVATE ./src)
 target_link_libraries(dnsproxy dnslibs_common dnsfilter upstream ldns)
 
 target_compile_options(dnsproxy PRIVATE -Wall -Wextra -Wformat=2 -Wno-unused-parameter -Wno-unused-variable)
@@ -55,6 +57,7 @@ if (NOT TARGET tests)
 endif ()
 
 link_libraries(gtest gtest_main dnsproxy)
+include_directories(./src)
 
 add_executable(dns64_test EXCLUDE_FROM_ALL test/dns64_test.cpp)
 add_test(dns64_test dns64_test)
