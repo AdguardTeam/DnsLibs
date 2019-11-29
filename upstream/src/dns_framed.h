@@ -48,6 +48,11 @@ public:
      */
     const socket_address &address() const;
 
+    /**
+     * Safely closes connection
+     */
+    void close();
+
 private:
     /** Logger */
     logger m_log;
@@ -56,9 +61,9 @@ private:
     /** Connection handle */
     bufferevent_ptr m_bev;
     /** Mutex for syncronizing reads and access */
-    std::mutex m_mutex;
+    std::recursive_mutex m_mutex;
     /** Conditional variable for waiting reads */
-    std::condition_variable m_cond;
+    std::condition_variable_any m_cond;
     /** Map of requests to their results */
     ag::hash_map<int, std::optional<result>> m_requests;
     /** Connection remote address */
@@ -93,6 +98,8 @@ public:
 protected:
     /** Event loop */
     event_loop_ptr m_loop;
+    /** Mutex for connections */
+    std::mutex m_mutex;
     /** Connected connections. They may receive requests */
     std::list<connection_ptr> m_connections;
     /** Pending connections. They may not receive requests yet */
