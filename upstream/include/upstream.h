@@ -68,11 +68,6 @@ public:
      * @return DNS server address
      */
     virtual std::string address() = 0;
-
-private:
-    static address_to_upstream_result url_to_upstream(std::string_view address, const options &opts);
-    static address_to_upstream_result stamp_to_upstream(std::string_view stamp_address, options opts);
-
 };
 
 } // namespace ag

@@ -40,6 +40,8 @@ enum class stamp_proto_type : uint8_t {
     DOH = 0x02,
     /** tls is DNS-over-TLS */
     TLS = 0x03,
+    /** Count of enum values */
+    COUNT = 4,
 };
 
 /**

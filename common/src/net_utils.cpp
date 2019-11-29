@@ -37,9 +37,9 @@ std::string ag::utils::join_host_port(std::string_view host, std::string_view po
 }
 
 timeval ag::utils::duration_to_timeval(std::chrono::microseconds usecs) {
-    timeval tv;
-    int denom = decltype(usecs)::period::den;
-    tv.tv_sec = long(usecs.count() / denom);
-    tv.tv_usec = long(usecs.count() % denom);
-    return tv;
+    static constexpr intmax_t denom = decltype(usecs)::period::den;
+    return {
+        .tv_sec = static_cast<decltype(timeval::tv_sec)>(usecs.count() / denom),
+        .tv_usec = static_cast<decltype(timeval::tv_usec)>(usecs.count() % denom)
+    };
 }

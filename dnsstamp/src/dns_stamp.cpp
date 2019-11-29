@@ -308,6 +308,7 @@ server_stamp::from_str_result new_dot_server_stamp(const std::vector<uint8_t> &b
 } // namespace
 
 std::string server_stamp::str() const {
+    static_assert(static_cast<size_t>(ag::stamp_proto_type::COUNT) == 4, "Not all protocols used");
     switch (proto) {
         case stamp_proto_type::PLAIN:
             return stamp_plain_string(*this);

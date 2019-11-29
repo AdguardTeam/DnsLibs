@@ -604,7 +604,7 @@ INSTANTIATE_TEST_CASE_P(upstreams_invalid_bootstrap_test, upstreams_invalid_boot
 struct upstreams_with_server_ip_test_data {
     std::string address;
     std::initializer_list<std::string> bootstrap;
-    std::variant<std::monostate, ag::uint8_array<4>, ag::uint8_array<16>> server_ip;
+    ag::ip_address_variant server_ip;
 };
 
 struct upstreams_with_server_ip_test : upstream_param_test<upstreams_with_server_ip_test_data> {};
@@ -616,12 +616,12 @@ static const upstreams_with_server_ip_test_data test_upstreams_with_server_ip_da
     {
         "tls://dns.adguard.com",
         invalid_bootstrap,
-        ag::uint8_array<4>{176, 103, 130, 130}
+        ag::ipv4_address_array{176, 103, 130, 130}
     },
     {
         "https://dns.adguard.com/dns-query",
         invalid_bootstrap,
-        ag::uint8_array<4>{176, 103, 130, 130}
+        ag::ipv4_address_array{176, 103, 130, 130}
     },
     {
         // AdGuard DNS DOH with the IP address specified

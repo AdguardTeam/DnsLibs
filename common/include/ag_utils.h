@@ -48,12 +48,12 @@ inline constexpr bool TRAITS_NAME = TRAITS_NAME ## _type<T>::value;
 
 /**
  * Macros to create constexpr value and type to check expression depended from number of parameters
- * @example AG_UTILS_DECLARE_CHECK_EXPRESSION(has_f, T((Is, convertible_to_any{})...))
+ * @example AG_UTILS_DECLARE_CHECK_EXPRESSION(can_init, T((Is, convertible_to_any{})...))
  *          // Generates template<typename T, size_t N> inline constexpr bool can_init;
  *          ...
  *          template<typename SomeType>
  *          void f() {
- *              static_assert(can_init<SomeType, 2>, "Failed: Cant init with 2 params SomeType::SomeType(arg1, arg2)");
+ *              static_assert(can_init<SomeType, 2>, "Failed: Can't init with 2 params SomeType(arg1, arg2)");
  *          }
  */
 #define AG_UTILS_DECLARE_CHECK_EXPRESSION_WITH_N(TRAITS_NAME, ...) \
@@ -112,7 +112,7 @@ static inline void trim(std::string_view &str) {
 /**
  * Check if string starts with prefix
  */
-static inline bool starts_with(std::string_view str, std::string_view prefix) {
+static inline constexpr bool starts_with(std::string_view str, std::string_view prefix) {
     return str.length() >= prefix.length()
             && 0 == str.compare(0, prefix.length(), prefix);
 }
@@ -120,7 +120,7 @@ static inline bool starts_with(std::string_view str, std::string_view prefix) {
 /**
  * Check if string ends with suffix
  */
-static inline bool ends_with(std::string_view str, std::string_view suffix) {
+static inline constexpr bool ends_with(std::string_view str, std::string_view suffix) {
     return str.length() >= suffix.length()
             && 0 == str.compare(str.length() - suffix.length(), suffix.length(), suffix);
 }
@@ -148,17 +148,18 @@ std::array<std::string_view, 2> rsplit2_by(std::string_view str, int delim);
 
 /**
  * Check is T has `reserve(size_t{...})` member function or not
- * @example static_assert(has_reserve< std::vector<int> >::value, "std::vector<int> has reserve function");
- *          static_assert(has_reserve< std::list<int> >::value == false, "std::list<int> has no reserve function");
+ * @example static_assert(has_reserve< std::vector<int> >, "std::vector<int> has reserve function");
+ *          static_assert(has_reserve< std::list<int> > == false, "std::list<int> has no reserve function");
  */
 AG_UTILS_DECLARE_CHECK_EXPRESSION(has_reserve, std::declval<T>().reserve(std::declval<size_t>()))
 
 /**
- * Join parts into a single container
+ * Join parts into a single container with result type R
+ * @tparam R Result container type (required)
  */
 template<typename R, typename T>
 static inline R join(const T &parts) {
-    R result{};
+    R result;
     if constexpr (has_reserve<R>) {
         size_t size = 0;
         for (const auto &p : parts) {
@@ -172,27 +173,47 @@ static inline R join(const T &parts) {
     return result;
 }
 
+namespace detail {
+
+template<typename T>
+using iterator_from_begin = decltype(std::begin(std::declval<T>()));
+
+template<typename T>
+using value_type_from_begin = typename std::iterator_traits<iterator_from_begin<T>>::value_type;
+
+template<typename T, typename U>
+using is_same_value_type = std::is_same<value_type_from_begin<T>, U>;
+
+template<typename T>
+inline constexpr bool is_string_or_string_view = std::disjunction_v<is_same_value_type<T, std::string>,
+                                                                    is_same_value_type<T, std::string_view>>;
+
+} // namespace detail
+
 /**
- * Join parts into a single string
+ * Join parts into a single std::string
+ * @param parts Container or C array with std::string or std::string_view
+ * @return std::string with copy of data from parts
  */
 template<typename T>
-static inline std::string join(const T &parts) {
-    static_assert(std::is_same_v<typename T::value_type, std::string>
-        || std::is_same_v<typename T::value_type, std::string_view>,
-        "`ag::join` accepts only `std::string` and `std::string_view`");
-    return join<std::string>(parts);
+static inline std::enable_if<detail::is_string_or_string_view<T>, std::string> join(const T &parts)
+{
+    return (join<std::string>)(parts);
 }
 
 /**
- * Join parts into a single container from comma-separated parts
+ * Join parts into a single container from comma-separated parts with possibly different types
+ * @tparam R Result container type (required)
+ * @param parts Comma-separated containers or C arrays (possibly with different types)
+ * @return Container with type R with copy of data from parts
  */
 template<typename R, typename... Ts>
 static inline std::enable_if_t<sizeof...(Ts) >= 2, R> join(const Ts&... parts) {
-    R result{};
+    R result;
     if constexpr (has_reserve<R>) {
-        result.reserve((... + parts.size()));
+        result.reserve((... + std::size(parts)));
     }
-    (... , result.insert(std::cend(result), std::cbegin(parts), std::cend(parts)));
+    (... , static_cast<void>(result.insert(std::cend(result), std::cbegin(parts), std::cend(parts))));
     return result;
 }
 
@@ -239,9 +260,14 @@ std::string from_wstring(std::wstring_view wsv);
 namespace detail {
 
 template<typename T>
+auto data_from_begin(const T& value) {
+    return &*std::begin(value);
+}
+
+template<typename T>
 static inline constexpr auto to_string_view_impl(const T& value) {
-    using value_type = std::decay_t<decltype(*std::begin(value))>;
-    return std::basic_string_view<value_type>(&*std::begin(value), std::size(value));
+    using value_type = value_type_from_begin<T>;
+    return std::basic_string_view<value_type>(detail::data_from_begin(value), std::size(value));
 }
 
 } // namespace detail
@@ -276,7 +302,7 @@ template<typename T, size_t S>
 static inline auto to_array(const T (&value)[S]) {
     // TODO use std::to_array since C++20
     std::array<std::remove_cv_t<T>, S> result;
-    std::move(std::cbegin(value), std::cend(value), result.begin());
+    std::copy(std::cbegin(value), std::cend(value), result.begin());
     return result;
 }
 
@@ -288,7 +314,7 @@ static inline auto to_array(const T (&value)[S]) {
 template<size_t S, typename T>
 static inline auto to_array(const T *value) {
     std::array<std::remove_cv_t<T>, S> result;
-    std::move(value, value + S, result.begin());
+    std::copy(value, value + S, result.begin());
     return result;
 }
 
@@ -358,9 +384,8 @@ static inline std::string time_to_str(time_t timer, std::string_view format = "%
  * @param vs Function parameters
  * @return Future with result of function
  */
-template<typename F, typename... Ts>
-auto async_detached(F&& f, Ts&&... vs) {
-    using R = std::invoke_result_t<std::decay_t<F>, std::decay_t<Ts>...>;
+template<typename F, typename... Ts, typename R = std::invoke_result_t<std::decay_t<F>, std::decay_t<Ts>...>>
+std::future<R> async_detached(F&& f, Ts&&... vs) {
     std::packaged_task<R(std::decay_t<Ts>...)> packaged_task(std::forward<F>(f));
     auto future = packaged_task.get_future();
     std::thread(std::move(packaged_task), std::forward<Ts>(vs)...).detach();
@@ -390,7 +415,7 @@ constexpr ssize_t list_init_params_count_impl(std::false_type) {
 
 template<typename T, ssize_t C>
 constexpr ssize_t list_init_params_count_impl(std::true_type) {
-    return list_init_params_count_impl<T, C + 1>(list_initializable_with_n_params_type<T, C + 1>{});
+    return (list_init_params_count_impl<T, C + 1>)(list_initializable_with_n_params_type<T, C + 1>{});
 }
 
 } // namespace detail
@@ -424,11 +449,11 @@ AG_UTILS_DECLARE_CHECK_EXPRESSION(has_error, std::declval<T>().error)
 
 namespace detail {
 
-template<typename Result, typename F, typename... Us>
-Result forward_error_impl(F&& f, Us&&... xs) {
-    static_assert(sizeof...(xs) < list_init_params_count<Result>,
+template<typename R, typename F, typename... Us>
+R forward_error_impl(F&& f, Us&&... xs) {
+    static_assert(sizeof...(xs) < list_init_params_count<R>,
                   "Too much parameters to list init. Error initialized twice");
-    Result result{std::forward<Us>(xs)...};
+    R result{std::forward<Us>(xs)...};
     std::forward<F>(f)(result);
     return result;
 }
@@ -438,14 +463,14 @@ Result forward_error_impl(F&& f, Us&&... xs) {
 /**
  * Creates result struct with error. Result is default initialized or initialized with xs parameters.
  * @warning Assumed that error is last member in struct
- * @tparam Result Result type
+ * @tparam R Result type
  * @param err Error
  * @param xs Optional parameters to init result
  * @return Result with error and optional xs parameters
  */
-template<typename Result, typename E, typename... Us>
-std::enable_if_t<has_error<Result>, Result> forward_error(E&& err, Us&&... xs) {
-    return detail::forward_error_impl<Result>(
+template<typename R, typename E, typename... Us>
+std::enable_if_t<has_error<R>, R> forward_error(E&& err, Us&&... xs) {
+    return detail::forward_error_impl<R>(
             [&](auto& result) {
                 result.error = std::forward<E>(err);
             }, std::forward<Us>(xs)...);
@@ -455,13 +480,14 @@ std::enable_if_t<has_error<Result>, Result> forward_error(E&& err, Us&&... xs) {
  * Creates result tuple-like object with error of type err_string. Result is default initialized or initialized
  * with xs parameters.
  * @warning Assumed that error is last member in tuple-like object
+ * @tparam R Result type
  * @param err Error
  * @param xs Optional parameters to init result
  * @return Result with error and optional xs parameters
  */
-template<typename Result, typename E, typename... Us>
-std::enable_if_t<!has_error<Result>, Result> forward_error(E&& err, Us&&... xs) {
-    return detail::forward_error_impl<Result>(
+template<typename R, typename E, typename... Us>
+std::enable_if_t<!has_error<R>, R> forward_error(E&& err, Us&&... xs) {
+    return detail::forward_error_impl<R>(
             [&](auto& result) {
                 std::get<err_string>(result) = std::forward<E>(err);
             }, std::forward<Us>(xs)...);
@@ -485,7 +511,7 @@ class make_error {
 public:
     template<typename... Ts>
     decltype(auto) operator()(Ts&&... xs) const {
-        return forward_error<T>(std::forward<Ts>(xs)...);
+        return (forward_error<T>)(std::forward<Ts>(xs)...);
     }
 };
 
