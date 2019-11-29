@@ -268,7 +268,7 @@ int dns_over_https::on_pool_timer_event(CURLM *multi, long timeout_ms, dns_over_
         if (event == nullptr) {
             event.reset(event_new(upstream->worker.loop->c_base(), 0, EV_TIMEOUT, on_event_timeout, upstream));
         }
-        timeval timeout = { .tv_sec = timeout_ms/1000, .tv_usec = (timeout_ms%1000)*1000, };
+        timeval timeout = utils::duration_to_timeval(milliseconds(timeout_ms));
         evtimer_add(event.get(), &timeout);
     }
     return 0;
