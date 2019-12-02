@@ -142,7 +142,7 @@ static ldns_pkt *create_response_with_ips(const ldns_pkt *request, const dnsprox
     ldns_rr_type type = ldns_rr_get_type(question);
     if (type == LDNS_RR_TYPE_A) {
         const dnsfilter::rule *ipv4_rules[rules.size() + 1];
-        std::fill(ipv4_rules, ipv4_rules + rules.size(), nullptr);
+        std::fill(ipv4_rules, ipv4_rules + rules.size() + 1, nullptr);
         size_t num = 0;
         for (const dnsfilter::rule *r : rules) {
             if (utils::is_valid_ip4(r->ip.value())) {
@@ -154,7 +154,7 @@ static ldns_pkt *create_response_with_ips(const ldns_pkt *request, const dnsprox
         }
     } else if (type == LDNS_RR_TYPE_AAAA) {
         const dnsfilter::rule *ipv6_rules[rules.size() + 1];
-        std::fill(ipv6_rules, ipv6_rules + rules.size(), nullptr);
+        std::fill(ipv6_rules, ipv6_rules + rules.size() + 1, nullptr);
         size_t num = 0;
         for (const dnsfilter::rule *r : rules) {
             if (!utils::is_valid_ip4(r->ip.value())) {
