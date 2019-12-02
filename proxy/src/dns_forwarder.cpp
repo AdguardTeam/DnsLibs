@@ -185,6 +185,12 @@ static ldns_pkt *create_blocking_response(const ldns_pkt *request, const dnsprox
     return response;
 }
 
+static ldns_pkt *create_servfail_response(const ldns_pkt *request) {
+    ldns_pkt *response = create_response_by_request(request);
+    ldns_pkt_set_rcode(response, LDNS_RCODE_SERVFAIL);
+    return response;
+}
+
 void dns_forwarder::finalize_processed_event(dns_request_processed_event &event,
         const ldns_pkt *request, const ldns_pkt *response,
         const std::vector<const dnsfilter::rule *> &rules) const {
@@ -408,6 +414,7 @@ dns_forwarder::result dns_forwarder::handle_message(uint8_view message, dns_requ
             ldns_get_errorstr_by_id(status), status);
         dbglog(log, "{} {}", __func__, err);
         finalize_processed_event(event, nullptr, nullptr, {});
+        // @todo: think out what to do in this case
         return { {}, std::move(err) };
     }
     ldns_pkt_ptr req_holder = ldns_pkt_ptr(request);
@@ -417,8 +424,11 @@ dns_forwarder::result dns_forwarder::handle_message(uint8_view message, dns_requ
     if (question == nullptr) {
         std::string err = "Message has no question section";
         dbglog_fid(log, request, "{}", err);
-        finalize_processed_event(event, nullptr, nullptr, {});
-        return { {}, std::move(err) };
+        ldns_pkt_ptr response(create_servfail_response(request));
+        log_packet(log, response.get(), "Server failure response");
+        finalize_processed_event(event, nullptr, response.get(), {});
+        std::vector<uint8_t> raw_response = transform_response_to_raw_data(response.get());
+        return { std::move(raw_response), std::move(err) };
     }
     auto domain = allocated_ptr<char>(ldns_rdf2str(ldns_rr_owner(question)));
     event.domain = domain.get();
@@ -462,8 +472,11 @@ dns_forwarder::result dns_forwarder::handle_message(uint8_view message, dns_requ
     if (err.has_value()) {
         std::string err_str = utils::fmt_string("Upstream failed to perform dns query: %s", err->c_str());
         dbglog_fid(log, request, "{}", err_str);
-        finalize_processed_event(event, request, nullptr, effective_rules);
-        return { {}, std::move(err_str) };
+        response = ldns_pkt_ptr(create_servfail_response(request));
+        log_packet(log, response.get(), "Server failure response");
+        std::vector<uint8_t> raw_response = transform_response_to_raw_data(response.get());
+        finalize_processed_event(event, request, response.get(), effective_rules);
+        return { std::move(raw_response), std::move(err_str) };
     }
 
     log_packet(log, response.get(), "Upstream dns response");
