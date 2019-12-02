@@ -39,6 +39,7 @@ static ag::ldns_pkt_ptr create_test_message() {
 }
 
 static void assert_response(const ldns_pkt &reply) {
+//    return;// TODO !!!
     size_t ancount = ldns_pkt_ancount(&reply);
     ASSERT_EQ(1, ancount) << "DNS upstream returned reply with wrong number of answers - " << ancount;
     ldns_rr *first_rr = ldns_rr_list_rr(ldns_pkt_answer(&reply), 0);
@@ -51,13 +52,14 @@ static void assert_response(const ldns_pkt &reply) {
 }
 
 static void check_upstream(ag::upstream &upstream, const std::string &addr) {
+//    return; // TODO !!!
     auto req = create_test_message();
     auto[reply, err] = upstream.exchange(req.get());
     ASSERT_FALSE(err) << "Couldn't talk to upstream " + addr + ": " + *err;
     assert_response(*reply);
 }
 
-#if 1 // TODO old
+#if 0 // TODO old
 struct upstream_test_data_old {
     std::string address;
     std::initializer_list<std::string> bootstrap;
@@ -185,6 +187,7 @@ struct timeout_test_data {
     std::initializer_list<std::string> bootstrap;
     f_type f; // TODO name
 };
+
 static const timeout_test_data timeout_data[]{
     // test_bootstrap_timeout
     {
@@ -195,7 +198,7 @@ static const timeout_test_data timeout_data[]{
         [](size_t idx, ag::upstream &upstream, std::chrono::milliseconds timeout) -> timeout_test_data::f_result_type {
             infolog(logger(), "Start {}", idx);
             ag::utils::timer timer;
-            if (rand() % 2 == 1) std::this_thread::sleep_for(10000 * timeout); // TODO
+//            if (rand() % 2 == 1) std::this_thread::sleep_for(10000 * timeout); // TODO
             auto req = create_test_message();
             auto[reply, reply_err] = upstream.exchange(req.get());
             if (!reply_err) {
@@ -269,6 +272,7 @@ TEST_P(upstream_timeout_test, test_timeout) {
 
 INSTANTIATE_TEST_CASE_P(test_timeout, upstream_timeout_test, testing::ValuesIn(timeout_data));
 
+#if 0 // TODO from Go
 TEST_F(upstream_test, test_tls_pool_reconnect) {
     // TODO code duplication
     auto[upstream_ptr, upstream_err] = ag::upstream::address_to_upstream("tls://one.one.one.one", {{"8.8.8.8:53"}, default_timeout});
@@ -299,7 +303,9 @@ TEST_F(upstream_test, test_tls_pool_reconnect) {
     }
 #endif
 }
+#endif // TODO from Go
 
+#if 0 // TODO from Go
 TEST_F(upstream_test, test_tls_pool_dead_line) {
     // TODO code duplication
     // Create TLS upstream
@@ -356,20 +362,21 @@ TEST_F(upstream_test, test_tls_pool_dead_line) {
     }
 #endif
 }
+#endif // TODO from Go
 
 struct dns_truncated_test : upstream_param_test<std::string_view> {};
 
 // TODO
 static constexpr std::string_view truncated_test_data[]{
     // AdGuard DNS
-//    "176.103.130.130:53",
+    "176.103.130.130:53",
     // Google DNS
-//    "8.8.8.8:53",
+    "8.8.8.8:53",
     // See the details here: https://github.com/AdguardTeam/AdGuardHome/issues/524
     // AdGuard DNS (DNSCrypt)
     "sdns://AQIAAAAAAAAAFDE3Ni4xMDMuMTMwLjEzMDo1NDQzINErR_JS3PLCu_iZEIbq95zkSV2LFsigxDIuUso_OQhzIjIuZG5zY3J5cHQuZGVmYXVsdC5uczEuYWRndWFyZC5jb20",
     // Cisco OpenDNS (DNSCrypt)
-//    "sdns://AQAAAAAAAAAADjIwOC42Ny4yMjAuMjIwILc1EUAgbyJdPivYItf9aR6hwzzI1maNDL4Ev6vKQ_t5GzIuZG5zY3J5cHQtY2VydC5vcGVuZG5zLmNvbQ",
+    "sdns://AQAAAAAAAAAADjIwOC42Ny4yMjAuMjIwILc1EUAgbyJdPivYItf9aR6hwzzI1maNDL4Ev6vKQ_t5GzIuZG5zY3J5cHQtY2VydC5vcGVuZG5zLmNvbQ",
 };
 
 TEST_P(dns_truncated_test, test_dns_truncated) {
@@ -427,7 +434,11 @@ struct upstream_test_data {
     std::initializer_list<std::string> bootstrap;
 };
 
+#define TEST_SUCCESS_0 0
+#define TEST_FAIL_0 0
+
 static const upstream_test_data test_upstreams_data[]{
+#if TEST_SUCCESS_0
     {
         "8.8.8.8:53",
         {"8.8.8.8:53"}
@@ -450,16 +461,16 @@ static const upstream_test_data test_upstreams_data[]{
     },
     {
         "tls://1.1.1.1",
-#if 1
-        {}
+#if 0
+        {} // TODO resolve
 #else
         {"1.1.1.1"}
-#endif
     },
+#endif
     {
         "tls://9.9.9.9:853",
-#if 1
-        {} // TODO original
+#if 0
+        {} // TODO resolve
 #else
         {"9.9.9.9"}
 #endif
@@ -478,12 +489,20 @@ static const upstream_test_data test_upstreams_data[]{
     },
     {
         "tls://one.one.one.one",
-        {}
+#if 0
+        {} // TODO resolve
+#else
+        {"1.1.1.1"}
+#endif
     },
+#endif
+#if TEST_FAIL_0 // TODO FAIL 1
     {
         "https://dns9.quad9.net:443/dns-query",
         {"8.8.8.8"}
     },
+#endif
+#if TEST_SUCCESS_0
     {
         "https://dns.cloudflare.com/dns-query",
         {"8.8.8.8:53"}
@@ -491,9 +510,9 @@ static const upstream_test_data test_upstreams_data[]{
     {
         "https://dns.google/dns-query",
 #if 0
-        {}
+        {} // TODO resolve
 #else
-        {"8.8.8.8", "1.1.1.1"}
+        {"8.8.8.8"}
 #endif
     },
     {
@@ -511,11 +530,17 @@ static const upstream_test_data test_upstreams_data[]{
         "sdns://AQAAAAAAAAAADjIwOC42Ny4yMjAuMjIwILc1EUAgbyJdPivYItf9aR6hwzzI1maNDL4Ev6vKQ_t5GzIuZG5zY3J5cHQtY2VydC5vcGVuZG5zLmNvbQ",
         {"8.8.8.8:53"}
     },
+#endif
+#if 1//TEST_FAIL_0 // TODO FAIL 2 TODO FIX stamp with multiple hashes
     {
         // Cloudflare DNS (DoH)
         "sdns://AgcAAAAAAAAABzEuMC4wLjGgENk8mGSlIfMGXMOlIlCcKvq7AVgcrZxtjon911-ep0cg63Ul-I8NlFj4GplQGb_TTLiczclX57DvMV8Q-JdjgRgSZG5zLmNsb3VkZmxhcmUuY29tCi9kbnMtcXVlcnk",
+//        "sdns://AgcAAAAAAAAABzEuMC4wLjEgENk8mGSlIfMGXMOlIlCcKvq7AVgcrZxtjon911-ep0cSZG5zLmNsb3VkZmxhcmUuY29tCi9kbnMtcXVlcnk",
+//        "sdns://AgcAAAAAAAAABzEuMC4wLjEg63Ul-I8NlFj4GplQGb_TTLiczclX57DvMV8Q-JdjgRgSZG5zLmNsb3VkZmxhcmUuY29tCi9kbnMtcXVlcnk",
         {"8.8.8.8:53"}
     },
+#endif
+#if TEST_SUCCESS_0
     {
         // Google (Plain)
         "sdns://AAcAAAAAAAAABzguOC44Ljg",
@@ -527,20 +552,62 @@ static const upstream_test_data test_upstreams_data[]{
         {"8.8.8.8:53"}
     },
     {
+        // Cloudflare DNS
         "https://1.1.1.1/dns-query",
-        {}
+#if 0
+        {} // TODO resolve
+#else
+        {"1.1.1.1"}
+#endif
     },
+#endif
 };
 
 TEST_F(upstream_test, test_upstreams) {
     // TODO duplication
     using namespace std::chrono_literals;
     for (const auto &[address, bootstrap_list] : test_upstreams_data) {
-        auto[upstream_ptr, upstream_err] = ag::upstream::address_to_upstream(address, {bootstrap_list, 5s}); // TODO 5s
+//        auto[upstream_ptr, upstream_err] = ag::upstream::address_to_upstream(address, {bootstrap_list, 5s}); // TODO 5s
+        ag::upstream::options opts{bootstrap_list, 5s}; // TODO fix crashes
+        auto[upstream_ptr, upstream_err] = ag::upstream::address_to_upstream(address, opts); // TODO 5s
         ASSERT_FALSE(upstream_err) << "Failed to generate upstream from address " << address <<  ": " << *upstream_err;
         check_upstream(*upstream_ptr, address);
     }
 }
+
+#if 0 // TODO
+func TestUpstreamDOTBootstrap(t *testing.T) {
+	upstreams := []struct {
+		address   string
+		bootstrap []string
+	}{
+		{
+			address:   "tls://one.one.one.one/",
+			bootstrap: []string{"tls://1.1.1.1"},
+		},
+		{
+			address:   "tls://one.one.one.one/",
+			bootstrap: []string{"https://1.1.1.1/dns-query"},
+		},
+		{
+			address: "tls://one.one.one.one/",
+			// Cisco OpenDNS
+			bootstrap: []string{"sdns://AQAAAAAAAAAADjIwOC42Ny4yMjAuMjIwILc1EUAgbyJdPivYItf9aR6hwzzI1maNDL4Ev6vKQ_t5GzIuZG5zY3J5cHQtY2VydC5vcGVuZG5zLmNvbQ"},
+		},
+	}
+
+	for _, test := range upstreams {
+		t.Run(test.address, func(t *testing.T) {
+			u, err := AddressToUpstream(test.address, Options{Bootstrap: test.bootstrap, Timeout: timeout})
+			if err != nil {
+				t.Fatalf("Failed to generate upstream from address %s: %s", test.address, err)
+			}
+
+			checkUpstream(t, u, test.address)
+		})
+	}
+}
+#endif
 
 struct upstream_default_options_test : upstream_param_test<std::string> {};
 

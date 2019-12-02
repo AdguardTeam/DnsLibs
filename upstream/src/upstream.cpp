@@ -26,6 +26,7 @@ static constexpr std::string_view SCHEME_WITH_SUFFIX[]{
     "https://",
 };
 
+static constexpr auto SCHEME_WITH_SUFFIX_BEGIN = std::begin(SCHEME_WITH_SUFFIX);
 static constexpr auto SCHEME_WITH_SUFFIX_END = std::end(SCHEME_WITH_SUFFIX);
 
 static_assert(std::size(SCHEME_WITH_SUFFIX) + 1 == static_cast<size_t>(scheme::COUNT),
@@ -33,14 +34,13 @@ static_assert(std::size(SCHEME_WITH_SUFFIX) + 1 == static_cast<size_t>(scheme::C
 
 static auto get_address_scheme_iterator(std::string_view address) {
     using namespace std::placeholders;
-    return std::find_if(std::begin(SCHEME_WITH_SUFFIX), SCHEME_WITH_SUFFIX_END,
+    return std::find_if(SCHEME_WITH_SUFFIX_BEGIN, SCHEME_WITH_SUFFIX_END,
                         std::bind(&ag::utils::starts_with, address, _1));
 }
 
 static scheme get_address_scheme(std::string_view address) {
-    auto i = get_address_scheme_iterator(address);
-    if (i != SCHEME_WITH_SUFFIX_END) {
-        return static_cast<scheme>(std::distance(i, SCHEME_WITH_SUFFIX_END));
+    if (auto i = get_address_scheme_iterator(address); i != SCHEME_WITH_SUFFIX_END) {
+        return static_cast<scheme>(std::distance(SCHEME_WITH_SUFFIX_BEGIN, i));
     }
     return scheme::UNDEFINED;
 }
