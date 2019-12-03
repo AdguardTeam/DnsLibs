@@ -195,7 +195,8 @@ err_string read_stamp_server_pk(server_stamp &stamp, size_t &pos, const std::vec
 
 err_string read_stamp_hashes(server_stamp &stamp, size_t &pos, const std::vector<uint8_t> &value) {
     while (true) {
-        uint8_t hash_size = read_size(pos, value) & ~0x80u;
+        uint8_t hash_size_raw = read_size(pos, value);
+        uint8_t hash_size = hash_size_raw & ~0x80u;
         if (!check_size(hash_size, pos, value)) {
             return "invalid stamp";
         }
@@ -203,7 +204,7 @@ err_string read_stamp_hashes(server_stamp &stamp, size_t &pos, const std::vector
             stamp.hashes.emplace_back();
             read_bytes_using_size(stamp.hashes.back(), pos, hash_size, value);
         }
-        if (!(hash_size & 0x80u)) {
+        if (!(hash_size_raw & 0x80u)) {
             break;
         }
     }

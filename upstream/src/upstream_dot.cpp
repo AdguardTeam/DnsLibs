@@ -6,6 +6,7 @@
 #include <openssl/ssl.h>
 #include "upstream_dot.h"
 #include <ag_defs.h>
+#include <ag_utils.h>
 
 using std::chrono::milliseconds;
 using std::chrono::duration_cast;
@@ -19,22 +20,23 @@ ag::connection_pool::get_result ag::tls_pool::get() {
 }
 
 ag::connection_pool::get_result ag::tls_pool::create() {
+    static constexpr utils::make_error<ag::connection_pool::get_result> make_error;
     SSL_CTX *ctx = SSL_CTX_new(TLS_client_method());
     SSL *ssl = SSL_new(ctx);
     int options = BEV_OPT_THREADSAFE | BEV_OPT_DEFER_CALLBACKS | BEV_OPT_UNLOCK_CALLBACKS | BEV_OPT_CLOSE_ON_FREE;
     bufferevent *bev = bufferevent_openssl_socket_new(m_loop->c_base(), -1, ssl,
                                                       BUFFEREVENT_SSL_CONNECTING,
                                                       options);
-    auto opts = m_bootstrapper->get();
-    if (!opts.address) {
-        return {nullptr, opts.time_elapsed, std::move(opts.error).value_or("No address")}; // TODO
+    auto[address, server_name, time_elapsed, error] = m_bootstrapper->get();
+    if (error) {
+        return make_error(std::move(error), nullptr, time_elapsed);
     }
-    SSL_set_tlsext_host_name(ssl, opts.server_name.c_str());
-    dns_framed_connection_ptr connection = ag::dns_framed_connection::create(this, bev, *opts.address);
-    bufferevent_socket_connect(bev, opts.address->c_sockaddr(), opts.address->c_socklen());
+    SSL_set_tlsext_host_name(ssl, server_name.c_str());
+    dns_framed_connection_ptr connection = ag::dns_framed_connection::create(this, bev, *address);
+    bufferevent_socket_connect(bev, address->c_sockaddr(), address->c_socklen());
     add_pending_connection(connection);
     SSL_CTX_free(ctx);
-    return {connection, opts.time_elapsed, std::nullopt};
+    return {connection, time_elapsed, std::nullopt};
 }
 
 ag::bootstrapper_ptr ag::tls_pool::bootstrapper() {

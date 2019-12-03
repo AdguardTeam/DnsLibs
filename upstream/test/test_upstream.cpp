@@ -176,83 +176,43 @@ TEST_F(upstream_test, DISABLED_doh_concurrent_requests) {
 
 #endif // TODO old
 
-struct timeout_test_data {
-    using f_result_type = ag::err_string; // TODO name
-    using f_type = f_result_type(*)(size_t, ag::upstream &, std::chrono::milliseconds); // TODO name
-    using ff_type = f_result_type(size_t, ag::upstream &, std::chrono::milliseconds); // TODO name
-
-    std::chrono::milliseconds timeout;
-    size_t count = 10;
-    std::string_view address;
-    std::initializer_list<std::string> bootstrap;
-    f_type f; // TODO name
-};
-
-static const timeout_test_data timeout_data[]{
-    // test_bootstrap_timeout
-    {
-        std::chrono::milliseconds(100),
-        10,
-        "tls://one.one.one.one",
-        {"8.8.8.8:555"},
-        [](size_t idx, ag::upstream &upstream, std::chrono::milliseconds timeout) -> timeout_test_data::f_result_type {
-            infolog(logger(), "Start {}", idx);
-            ag::utils::timer timer;
-//            if (rand() % 2 == 1) std::this_thread::sleep_for(10000 * timeout); // TODO
-            auto req = create_test_message();
-            auto[reply, reply_err] = upstream.exchange(req.get());
-            if (!reply_err) {
-                return "The upstream must have timed out";
-            }
-            auto elapsed = timer.elapsed<decltype(timeout)>();
-//            if (true || elapsed > 2 * timeout) { // TODO
-            if (elapsed > 2 * timeout) {
-                return "Exchange took more time than the configured timeout: " + std::to_string(elapsed.count()) + "ms"; // TODO use std::chrono::operator<< since C++20
-            }
-            infolog(logger(), "Finished " + std::to_string(idx));
-            return std::nullopt;
-        }
-    },
-// test_upstream_race
-    {
-        std::chrono::milliseconds(5000),
-        5,
-        "tls://1.1.1.1",
-        {},
-        [](size_t idx, ag::upstream &upstream, std::chrono::milliseconds timeout) -> timeout_test_data::f_result_type {
-            infolog(logger(), "Start {}", idx);
-            auto req = create_test_message();
-            auto[reply, reply_err] = upstream.exchange(req.get());
-            if (reply_err) {
-                return "Failed to resolve: " + *reply_err;
-            }
-            assert_response(*reply);
-            infolog(logger(), "Finished " + std::to_string(idx));
-            return std::nullopt;
-        }
-    },
-};
-
-struct upstream_timeout_test : upstream_param_test<timeout_test_data> {};
-
-TEST_P(upstream_timeout_test, test_timeout) {
-    const auto &p = GetParam();
-    // Specifying some wrong port instead so that bootstrap DNS timed out for sure
-    auto[upstream_ptr, upstream_err] = ag::upstream::address_to_upstream(p.address, {p.bootstrap, p.timeout});
-    ASSERT_FALSE(upstream_err) << "Cannot create upstream: " << *upstream_err;
-    std::vector<std::future<timeout_test_data::f_result_type>> futures;
-    futures.reserve(p.count);
-    for (size_t i = 0, e = p.count; i < e; ++i) {
-//        futures.emplace_back(ag::utils::async_detached(p.f, i, std::ref(*upstream_ptr), p.timeout)); // TODO
-        futures.emplace_back(ag::utils::async_detached([f = p.f, i, upstream_ptr = upstream_ptr, timeout = p.timeout] {
-            return f(i, *upstream_ptr, timeout);
-        }));
-
+template<typename F>
+static auto make_indexed_futures(size_t count, const F &f) {
+    std::vector<std::future<ag::err_string>> futures;
+    futures.reserve(count);
+    for (size_t i = 0, e = count; i < e; ++i) {
+        futures.emplace_back(ag::utils::async_detached(f, i));
     }
+    return futures;
+}
+
+TEST_F(upstream_test, test_timeout) {
+    using namespace std::chrono_literals;
+    static constexpr auto timeout = 100ms;
+    static constexpr size_t count = 10;
+    // Specifying some wrong port instead so that bootstrap DNS timed out for sure
+    auto[upstream_ptr, upstream_err] = ag::upstream::address_to_upstream("tls://one.one.one.one", {{"8.8.8.8:555"},
+                                                                                                   timeout});
+    ASSERT_FALSE(upstream_err) << "Cannot create upstream: " << *upstream_err;
+    auto futures = make_indexed_futures(count, [upstream_ptr = upstream_ptr](size_t index) -> ag::err_string {
+        infolog(logger(), "Start {}", index);
+        ag::utils::timer timer;
+        auto req = create_test_message();
+        auto[reply, reply_err] = upstream_ptr->exchange(req.get());
+        if (!reply_err) {
+            return "The upstream must have timed out";
+        }
+        auto elapsed = timer.elapsed<decltype(timeout)>();
+        if (elapsed > 2 * timeout) {
+            return "Exchange took more time than the configured timeout: " + std::to_string(elapsed.count()) + " ms"; // TODO use std::chrono::operator<< since C++20
+        }
+        infolog(logger(), "Finished " + std::to_string(index));
+        return std::nullopt;
+    });
     bool failed = false;
     for (size_t i = 0, e = futures.size(); i < e; ++i) {
         auto &future = futures[i];
-        auto future_status = future.wait_for(10 * p.timeout);
+        auto future_status = future.wait_for(10 * timeout);
         if (future_status == std::future_status::timeout) {
             errlog(logger(), "No response in time for {}", i);
             failed = true;
@@ -266,11 +226,9 @@ TEST_P(upstream_timeout_test, test_timeout) {
         }
     }
     if (failed) {
-//        ASSERT_FALSE(failed); // TODO
+        ASSERT_FALSE(failed);
     }
 }
-
-INSTANTIATE_TEST_CASE_P(test_timeout, upstream_timeout_test, testing::ValuesIn(timeout_data));
 
 #if 0 // TODO from Go
 TEST_F(upstream_test, test_tls_pool_reconnect) {
@@ -434,11 +392,7 @@ struct upstream_test_data {
     std::initializer_list<std::string> bootstrap;
 };
 
-#define TEST_SUCCESS_0 0
-#define TEST_FAIL_0 0
-
 static const upstream_test_data test_upstreams_data[]{
-#if TEST_SUCCESS_0
     {
         "8.8.8.8:53",
         {"8.8.8.8:53"}
@@ -495,14 +449,12 @@ static const upstream_test_data test_upstreams_data[]{
         {"1.1.1.1"}
 #endif
     },
-#endif
-#if TEST_FAIL_0 // TODO FAIL 1
+#if 0 // TODO FAIL host bug
     {
         "https://dns9.quad9.net:443/dns-query",
         {"8.8.8.8"}
     },
 #endif
-#if TEST_SUCCESS_0
     {
         "https://dns.cloudflare.com/dns-query",
         {"8.8.8.8:53"}
@@ -530,17 +482,11 @@ static const upstream_test_data test_upstreams_data[]{
         "sdns://AQAAAAAAAAAADjIwOC42Ny4yMjAuMjIwILc1EUAgbyJdPivYItf9aR6hwzzI1maNDL4Ev6vKQ_t5GzIuZG5zY3J5cHQtY2VydC5vcGVuZG5zLmNvbQ",
         {"8.8.8.8:53"}
     },
-#endif
-#if 1//TEST_FAIL_0 // TODO FAIL 2 TODO FIX stamp with multiple hashes
     {
         // Cloudflare DNS (DoH)
         "sdns://AgcAAAAAAAAABzEuMC4wLjGgENk8mGSlIfMGXMOlIlCcKvq7AVgcrZxtjon911-ep0cg63Ul-I8NlFj4GplQGb_TTLiczclX57DvMV8Q-JdjgRgSZG5zLmNsb3VkZmxhcmUuY29tCi9kbnMtcXVlcnk",
-//        "sdns://AgcAAAAAAAAABzEuMC4wLjEgENk8mGSlIfMGXMOlIlCcKvq7AVgcrZxtjon911-ep0cSZG5zLmNsb3VkZmxhcmUuY29tCi9kbnMtcXVlcnk",
-//        "sdns://AgcAAAAAAAAABzEuMC4wLjEg63Ul-I8NlFj4GplQGb_TTLiczclX57DvMV8Q-JdjgRgSZG5zLmNsb3VkZmxhcmUuY29tCi9kbnMtcXVlcnk",
         {"8.8.8.8:53"}
     },
-#endif
-#if TEST_SUCCESS_0
     {
         // Google (Plain)
         "sdns://AAcAAAAAAAAABzguOC44Ljg",
@@ -560,16 +506,13 @@ static const upstream_test_data test_upstreams_data[]{
         {"1.1.1.1"}
 #endif
     },
-#endif
 };
 
 TEST_F(upstream_test, test_upstreams) {
     // TODO duplication
     using namespace std::chrono_literals;
     for (const auto &[address, bootstrap_list] : test_upstreams_data) {
-//        auto[upstream_ptr, upstream_err] = ag::upstream::address_to_upstream(address, {bootstrap_list, 5s}); // TODO 5s
-        ag::upstream::options opts{bootstrap_list, 5s}; // TODO fix crashes
-        auto[upstream_ptr, upstream_err] = ag::upstream::address_to_upstream(address, opts); // TODO 5s
+        auto[upstream_ptr, upstream_err] = ag::upstream::address_to_upstream(address, {bootstrap_list, 5s}); // TODO 5s
         ASSERT_FALSE(upstream_err) << "Failed to generate upstream from address " << address <<  ": " << *upstream_err;
         check_upstream(*upstream_ptr, address);
     }
