@@ -9,6 +9,7 @@
 #include <ag_defs.h>
 #include <ag_net_consts.h>
 #include <ag_net_utils.h>
+#include <certificate_verifier.h>
 
 namespace ag {
 
@@ -79,6 +80,7 @@ public:
      * The factory configuration
      */
     struct config {
+        const certificate_verifier *cert_verifier = nullptr;
     };
 
     struct create_result {

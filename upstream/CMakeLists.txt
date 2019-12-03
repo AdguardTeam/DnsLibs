@@ -38,6 +38,10 @@ if(NOT TARGET dnslibs_common)
     add_subdirectory(${DNSLIBS_DIR}/common ${CMAKE_BINARY_DIR}/common)
 endif(NOT TARGET dnslibs_common)
 
+if(NOT TARGET agdns_tls)
+    add_subdirectory(${DNSLIBS_DIR}/tls ${CMAKE_BINARY_DIR}/agdns_tls)
+endif(NOT TARGET agdns_tls)
+
 if (NOT TARGET libevent)
     add_subdirectory(${THIRD_PARTY_DIR}/libevent ${CMAKE_BINARY_DIR}/third-party/libevent)
 endif ()
@@ -52,7 +56,7 @@ endif ()
 
 target_include_directories(upstream PUBLIC include)
 target_include_directories(upstream PRIVATE ${OPENSSL_INCLUDE_DIR})
-target_link_libraries(upstream dnslibs_common dnsstamp dnscrypt)
+target_link_libraries(upstream dnslibs_common dnsstamp dnscrypt agdns_tls)
 target_link_libraries(upstream boringssl_static libevent ldns libcurl)
 
 enable_testing()

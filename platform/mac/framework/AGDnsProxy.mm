@@ -326,6 +326,89 @@ static NSData *create_response_packet(const struct iphdr *ip_header, const struc
     self->proxy.deinit();
 }
 
+static SecCertificateRef convertCertificate(const std::vector<uint8_t> &cert) {
+    NSData *data = [NSData dataWithBytesNoCopy: (void *)cert.data() length: cert.size() freeWhenDone: NO];
+    CFDataRef certRef = (__bridge CFDataRef)data;
+    return SecCertificateCreateWithData(NULL, (CFDataRef)certRef);
+}
+
+- (std::optional<std::string>) verifyCertificate: (ag::certificate_verification_event *) event
+{
+    tracelog(self->log, "[Verification] App callback");
+
+    size_t chainLength = event->chain.size() + 1;
+    SecCertificateRef chain[chainLength];
+
+    chain[0] = convertCertificate(event->certificate);
+    if (chain[0] == NULL) {
+        dbglog(self->log, "[Verification] Failed to create certificate object");
+        return "Failed to create certificate object";
+    }
+
+    for (size_t i = 0; i < event->chain.size(); ++i) {
+        chain[i + 1] = convertCertificate(event->chain[i]);
+        if (chain[i + 1] == NULL) {
+            dbglog(self->log, "[Verification] Failed to create certificate object");
+            return "Failed to create certificate object";
+        }
+    }
+
+    NSMutableArray *trustArray = [[NSMutableArray alloc] initWithCapacity: chainLength];
+    for (size_t i = 0; i < chainLength; ++i) {
+        [trustArray addObject: (__bridge id _Nonnull)chain[i]];
+    }
+
+    SecPolicyRef policy = SecPolicyCreateBasicX509();
+    SecTrustRef trust;
+    OSStatus status = SecTrustCreateWithCertificates((__bridge CFTypeRef)trustArray, policy, &trust);
+    if (policy) {
+        CFRelease(policy);
+    }
+
+    if (status != errSecSuccess) {
+        CFStringRef err = SecCopyErrorMessageString(status, NULL);
+        dbglog(self->log, "[Verification] Failed to create trust object from chain: {}",
+            [(__bridge NSString *)err UTF8String]);
+        return [(__bridge NSString *)err UTF8String];
+    }
+
+    SecTrustSetAnchorCertificates(trust, (CFArrayRef) trustArray );
+    SecTrustSetAnchorCertificatesOnly(trust, YES);
+    SecTrustResultType trustResult;
+    SecTrustEvaluate(trust, &trustResult);
+
+    // Unspecified also stands for valid: https://developer.apple.com/library/archive/qa/qa1360/_index.html
+    if (trustResult == kSecTrustResultUnspecified || trustResult == kSecTrustResultProceed) {
+        dbglog(self->log, "[Verification] Succeeded");
+        return std::nullopt;
+    }
+
+    std::string errStr;
+    switch (trustResult) {
+    case kSecTrustResultDeny:
+        errStr = "The user specified that the certificate should not be trusted";
+        break;
+    case kSecTrustResultRecoverableTrustFailure:
+        errStr = "Trust is denied, but recovery may be possible";
+        break;
+    case kSecTrustResultFatalTrustFailure:
+        errStr = "Trust is denied and no simple fix is available";
+        break;
+    case kSecTrustResultOtherError:
+        errStr = "A value that indicates a failure other than trust evaluation";
+        break;
+    case kSecTrustResultInvalid:
+        errStr = "An indication of an invalid setting or result";
+        break;
+    default:
+        errStr = AG_FMT("Unknown error code: {}", trustResult);
+        break;
+    }
+
+    dbglog(self->log, "[Verification] Failed to verify: {}", errStr);
+    return errStr;
+}
+
 - (instancetype) initWithConfig: (AGDnsProxyConfig *) config
         handler: (AGDnsProxyEvents *)handler
 {
@@ -386,6 +469,11 @@ static NSData *create_response_packet(const struct iphdr *ip_header, const struc
                 sself->events.onRequestProcessed([[AGDnsRequestProcessedEvent alloc] init: event]);
             };
     }
+    native_events.on_certificate_verification =
+        [obj] (ag::certificate_verification_event event) -> std::optional<std::string> {
+            AGDnsProxy *sself = (__bridge AGDnsProxy *)obj;
+            return [sself verifyCertificate: &event];
+        };
 
     if (config.dns64Settings != nil) {
         const AGDnsUpstream * const upstream = config.dns64Settings.upstream;

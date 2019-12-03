@@ -9,12 +9,7 @@
 #include <openssl/err.h>
 #include <openssl/ssl.h>
 
-#include <ldns/packet.h>
-#include <ldns/keys.h>
-#include <ldns/rbtree.h>
-#include <ldns/host2wire.h>
-#include <ldns/wire2host.h>
-#include <ldns/host2str.h>
+#include <ldns/ldns.h>
 
 
 #define errlog_id(q_, fmt_, ...) errlog(*((q_)->log), "[{}] " fmt_, (q_)->request_id, ##__VA_ARGS__)
@@ -39,7 +34,6 @@ struct initializer {
 
 
 static constexpr std::string_view USER_AGENT = "ag-dns";
-static constexpr size_t VERIFY_DEPTH = 4;
 
 
 struct dns_over_https::query_handle {
@@ -64,19 +58,6 @@ static size_t write_callback(void *contents, size_t size, size_t nmemb, void *ar
     size_t full_size = size * nmemb;
     h->response.insert(h->response.end(), (uint8_t *)contents, (uint8_t *)contents + full_size);
     return full_size;
-}
-
-static int verify_callback(X509_STORE_CTX *ctx, void *arg) {
-    // @todo
-    return 1;
-}
-
-static CURLcode ssl_callback(CURL *curl, void *sslctx, void *arg) {
-    SSL_CTX *ctx = (SSL_CTX *)sslctx;
-    SSL_CTX_set_verify_depth(ctx, VERIFY_DEPTH);
-    SSL_CTX_set_verify(ctx, SSL_VERIFY_PEER, nullptr);
-    SSL_CTX_set_cert_verify_callback(ctx, verify_callback, arg);
-    return CURLE_OK;
 }
 
 CURL *dns_over_https::query_handle::create_curl_handle() {
@@ -105,7 +86,7 @@ CURL *dns_over_https::query_handle::create_curl_handle() {
             || CURLE_OK != (e = curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, true))
             || CURLE_OK != (e = curl_easy_setopt(curl, CURLOPT_PROTOCOLS, CURLPROTO_HTTPS))
             || CURLE_OK != (e = curl_easy_setopt(curl, CURLOPT_REDIR_PROTOCOLS, CURLPROTO_HTTPS))
-            || CURLE_OK != (e = curl_easy_setopt(curl, CURLOPT_SSL_CTX_FUNCTION, ssl_callback))
+            || CURLE_OK != (e = curl_easy_setopt(curl, CURLOPT_SSL_CTX_FUNCTION, dns_over_https::ssl_callback))
             || CURLE_OK != (e = curl_easy_setopt(curl, CURLOPT_SSL_CTX_DATA, this))
             || CURLE_OK != (e = curl_easy_setopt(curl, CURLOPT_SSL_VERIFYPEER, true))
             || CURLE_OK != (e = curl_easy_setopt(curl, CURLOPT_SSL_VERIFYHOST, true))
@@ -153,6 +134,35 @@ static std::string_view get_host_port(std::string_view url) {
 
 static std::string_view get_host_name(std::string_view url) {
     return utils::split_host_port(get_host_port(url)).first;
+}
+
+int dns_over_https::verify_callback(X509_STORE_CTX *ctx, void *arg) {
+    dns_over_https::query_handle *handle = (dns_over_https::query_handle *)arg;
+    dns_over_https *upstream = handle->upstream;
+
+    if (upstream->cert_verifier == nullptr) {
+        std::string err = "Cannot verify certificate due to verifier is not set";
+        dbglog_id(handle, "{}", err);
+        handle->error = std::move(err);
+        return 0;
+    }
+
+    if (err_string err = upstream->cert_verifier->verify(ctx, get_host_name(upstream->server_url));
+            err.has_value()) {
+        dbglog_id(handle, "Failed to verify certificate: {}", err.value());
+        handle->error = std::move(err);
+        return 0;
+    }
+
+    tracelog_id(handle, "Verified successfully");
+    return 1;
+}
+
+CURLcode dns_over_https::ssl_callback(CURL *curl, void *sslctx, void *arg) {
+    SSL_CTX *ctx = (SSL_CTX *)sslctx;
+    SSL_CTX_set_verify(ctx, SSL_VERIFY_PEER, nullptr);
+    SSL_CTX_set_cert_verify_callback(ctx, verify_callback, arg);
+    return CURLE_OK;
 }
 
 static curl_slist_ptr create_resolved_hosts_list(std::string_view url, const ip_address_variant &addr) {
@@ -206,9 +216,10 @@ curl_pool_ptr dns_over_https::create_pool() const {
     return pool_holder;
 }
 
-dns_over_https::dns_over_https(const ag::upstream::options &opts)
+dns_over_https::dns_over_https(const ag::upstream::options &opts, const ag::upstream_factory::config &config)
     : timeout(opts.timeout)
     , server_url(opts.address)
+    , cert_verifier(config.cert_verifier)
 {
     static const initializer ensure_initialized;
 
@@ -475,7 +486,7 @@ dns_over_https::exchange_result dns_over_https::exchange(ldns_pkt *request) {
             assert(0);
         }
     } else if (handle->error.has_value()) {
-        err = AG_FMT("Failed to perform request: {}", handle->error.value());
+        err = std::move(handle->error);
     } else if (ldns_status status = ldns_wire2pkt(&response, handle->response.data(), handle->response.size());
             status != LDNS_STATUS_OK) {
         err = AG_FMT("Failed to parse response: {}", ldns_get_errorstr_by_id(status));

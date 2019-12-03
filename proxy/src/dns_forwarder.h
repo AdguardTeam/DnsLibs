@@ -7,6 +7,7 @@
 #include <dnsfilter.h>
 #include <dns64.h>
 #include <upstream.h>
+#include <certificate_verifier.h>
 
 
 namespace ag {
@@ -36,6 +37,9 @@ private:
     dnsfilter filter;
     dnsfilter::handle filter_handle = nullptr;
     dns64::prefixes dns64_prefixes;
+    std::shared_ptr<certificate_verifier> cert_verifier;
+
+    struct application_verifier;
 };
 
 }

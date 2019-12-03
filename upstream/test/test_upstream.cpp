@@ -3,21 +3,18 @@
 #include <functional>
 #include <future>
 #include <thread>
-#include <ldns/dname.h>
-#include <ldns/keys.h>
-#include <ldns/rbtree.h>
-#include <ldns/host2str.h> // Requires include keys.h and rbtree.h above
-#include <ldns/packet.h>
-#include <ldns/wire2host.h>
+#include <ldns/ldns.h>
 #include <spdlog/fmt/bundled/chrono.h>
 #include <ag_logger.h>
 #include <ag_utils.h>
 #include <dns_crypt_ldns.h>
+#include <default_verifier.h>
 
 static constexpr std::chrono::seconds DEFAULT_TIMEOUT(10);
 
-static ag::upstream_factory upstream_factory({});
 static ag::upstream_factory::create_result create_upstream(const ag::upstream::options &opts) {
+    static ag::default_verifier cert_verifier;
+    static ag::upstream_factory upstream_factory({&cert_verifier});
     return upstream_factory.create_upstream(opts);
 }
 

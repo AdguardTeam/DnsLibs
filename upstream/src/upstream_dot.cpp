@@ -32,6 +32,8 @@ ag::connection_pool::get_result ag::tls_pool::create() {
         return make_error(std::move(error), nullptr, time_elapsed);
     }
     SSL_set_tlsext_host_name(ssl, server_name.c_str());
+    SSL_set_verify(ssl, SSL_VERIFY_PEER, dns_over_tls::ssl_verify_callback);
+    SSL_set_app_data(ssl, m_upstream);
     dns_framed_connection_ptr connection = ag::dns_framed_connection::create(this, bev, *address);
     bufferevent_socket_connect(bev, address->c_sockaddr(), address->c_socklen());
     add_pending_connection(connection);
@@ -43,11 +45,33 @@ ag::bootstrapper_ptr ag::tls_pool::bootstrapper() {
     return m_bootstrapper;
 }
 
-ag::dns_over_tls::dns_over_tls(const ag::upstream::options &opts)
-        : m_pool(event_loop::create(), std::make_shared<ag::bootstrapper>(&opts.address[SCHEME.length()],
-            DEFAULT_PORT, true, opts.bootstrap))
+ag::dns_over_tls::dns_over_tls(const ag::upstream::options &opts, const ag::upstream_factory::config &config)
+        : m_pool(event_loop::create(), this,
+            std::make_shared<ag::bootstrapper>(&opts.address[SCHEME.length()],
+                DEFAULT_PORT, true, opts.bootstrap))
         , m_timeout(opts.timeout)
+        , m_verifier(config.cert_verifier)
 {}
+
+int ag::dns_over_tls::ssl_verify_callback(int ok, X509_STORE_CTX *ctx) {
+    SSL *ssl = (SSL *)X509_STORE_CTX_get_ex_data(ctx, SSL_get_ex_data_X509_STORE_CTX_idx());
+    ag::dns_over_tls *upstream = (ag::dns_over_tls *)SSL_get_app_data(ssl);
+
+    if (upstream->m_verifier == nullptr) {
+        dbglog(upstream->m_log, "Cannot verify certificate due to verifier is not set");
+        return 0;
+    }
+
+    if (err_string err = upstream->m_verifier->verify(ctx, SSL_get_servername(ssl, SSL_get_servername_type(ssl)));
+            err.has_value()) {
+        dbglog(upstream->m_log, "Failed to verify certificate: {}", err.value());
+        return 0;
+    }
+
+    tracelog(upstream->m_log, "Verified successfully");
+
+    return 1;
+}
 
 ag::dns_over_tls::exchange_result ag::dns_over_tls::exchange(ldns_pkt *request_pkt) {
     ldns_pkt *reply_pkt = nullptr;

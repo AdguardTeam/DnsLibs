@@ -68,24 +68,27 @@ static constexpr size_t get_address_scheme_size(scheme local_scheme) {
     return std::size(get_address_scheme_with_suffix(local_scheme));
 }
 
-static ag::upstream_factory::create_result create_upstream_tls(const ag::upstream::options &opts) {
-    return {std::make_shared<ag::dns_over_tls>(opts), std::nullopt};
+static ag::upstream_factory::create_result create_upstream_tls(const ag::upstream::options &opts,
+        const ag::upstream_factory::config &config) {
+    return {std::make_shared<ag::dns_over_tls>(opts, config), std::nullopt};
 }
 
-static ag::upstream_factory::create_result create_upstream_https(const ag::upstream::options &opts) {
-    return {std::make_shared<ag::dns_over_https>(opts), std::nullopt};
+static ag::upstream_factory::create_result create_upstream_https(const ag::upstream::options &opts,
+        const ag::upstream_factory::config &config) {
+    return {std::make_shared<ag::dns_over_https>(opts, config), std::nullopt};
 }
 
-static ag::upstream_factory::create_result create_upstream_plain(const ag::upstream::options &opts) {
+static ag::upstream_factory::create_result create_upstream_plain(const ag::upstream::options &opts,
+        const ag::upstream_factory::config &config) {
     return {std::make_shared<ag::plain_dns>(opts), std::nullopt};
 }
 
 static ag::upstream_factory::create_result create_upstream_dnscrypt(ag::server_stamp &&stamp,
-                                                                         const ag::upstream::options &opts) {
+        const ag::upstream::options &opts) {
     return {std::make_shared<ag::upstream_dnscrypt>(std::move(stamp), opts.timeout), std::nullopt};
 }
 
-static ag::upstream_factory::create_result create_upstream_sdns(const ag::upstream::options &local_opts) {
+static ag::upstream_factory::create_result create_upstream_sdns(const ag::upstream::options &local_opts, const ag::upstream_factory::config &config) {
     static constexpr ag::utils::make_error<ag::upstream_factory::create_result> make_error;
     auto[stamp, stamp_err] = ag::server_stamp::from_string(local_opts.address);
     if (stamp_err) {
@@ -104,22 +107,22 @@ static ag::upstream_factory::create_result create_upstream_sdns(const ag::upstre
 
     switch (stamp.proto) {
     case ag::stamp_proto_type::PLAIN:
-        return create_upstream_plain(opts);
+        return create_upstream_plain(opts, config);
     case ag::stamp_proto_type::DNSCRYPT:
         return create_upstream_dnscrypt(std::move(stamp), opts);
     case ag::stamp_proto_type::DOH:
         opts.address = AG_FMT("{}{}{}", ag::dns_over_https::SCHEME, stamp.provider_name, stamp.path);
-        return create_upstream_https(opts);
+        return create_upstream_https(opts, config);
     case ag::stamp_proto_type::TLS:
         opts.address = std::move(stamp.provider_name);
-        return create_upstream_tls(opts);
+        return create_upstream_tls(opts, config);
     }
     assert(false);
     return make_error(AG_FMT("Unknown stamp protocol: {}", stamp.proto));
 }
 
 ag::upstream_factory::create_result ag::upstream_factory::impl::create_upstream(const ag::upstream::options &opts) const {
-    using create_function = upstream_factory::create_result (*)(const ag::upstream::options &);
+    using create_function = upstream_factory::create_result (*)(const ag::upstream::options &, const ag::upstream_factory::config &);
     static constexpr create_function create_functions[]{
         &create_upstream_sdns,
         &create_upstream_plain,
@@ -131,7 +134,7 @@ ag::upstream_factory::create_result ag::upstream_factory::impl::create_upstream(
     static_assert(std::size(create_functions) == static_cast<size_t>(scheme::COUNT),
                   "create_functions should contains all create functions for schemes defined in enum");
     auto index = (size_t)get_address_scheme(opts.address);
-    return create_functions[index](opts);
+    return create_functions[index](opts, this->config);
 }
 
 ag::upstream_factory::upstream_factory(config cfg)
@@ -146,5 +149,5 @@ ag::upstream_factory::create_result ag::upstream_factory::create_upstream(const 
         return this->factory->create_upstream(opts);
     }
     // We don't have scheme in the url, so it's just a plain DNS host:port
-    return create_upstream_plain(opts);
+    return create_upstream_plain(opts, this->factory->config);
 }

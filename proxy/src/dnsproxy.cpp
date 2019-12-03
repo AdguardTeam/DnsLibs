@@ -3,6 +3,7 @@
 #include <dns_forwarder.h>
 #include <dnsproxy_listener.h>
 #include <ag_logger.h>
+#include <default_verifier.h>
 
 
 using namespace ag;
@@ -26,7 +27,7 @@ const dnsproxy_settings &dnsproxy_settings::get_default() {
 }
 
 struct dnsproxy::impl {
-    ag::logger log;
+    logger log;
     dns_forwarder forwarder;
     dnsproxy_settings settings;
     dnsproxy_events events;

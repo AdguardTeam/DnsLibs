@@ -38,8 +38,9 @@ public:
 
     /**
      * @param opts upstream settings
+     * @param config factory configuration
      */
-    dns_over_https(const options &opts);
+    dns_over_https(const options &opts, const ag::upstream_factory::config &config);
     ~dns_over_https() override;
 
     struct query_handle;
@@ -59,6 +60,9 @@ private:
      */
     void stop_all_with_error(err_string e);
 
+    static CURLcode ssl_callback(CURL *curl, void *sslctx, void *arg);
+    static int verify_callback(X509_STORE_CTX *ctx, void *arg);
+
     static int on_pool_timer_event(CURLM *multi, long timeout_ms, dns_over_https *upstream);
     static int on_socket_update(CURL *handle, curl_socket_t socket, int what,
         dns_over_https *upstream, socket_handle *socket_data);
@@ -76,6 +80,7 @@ private:
     curl_slist_ptr resolved = nullptr;
     curl_slist_ptr request_headers = nullptr;
     bootstrapper_ptr bootstrapper;
+    const certificate_verifier *cert_verifier = nullptr;
     std::mutex guard;
 
     struct worker_descriptor {

@@ -1,6 +1,7 @@
 #include <thread>
 
 #include <dns_forwarder.h>
+#include <default_verifier.h>
 #include <ag_utils.h>
 
 #include <ldns/ldns.h>
@@ -25,6 +26,57 @@ static constexpr std::string_view MOZILLA_DOH_HOST = "use-application-dns.net.";
 // An ldns_buffer grows automatically.
 // We set the initial capacity so that most responses will fit without reallocations.
 static constexpr size_t RESPONSE_BUFFER_INITIAL_CAPACITY = 512;
+
+
+struct dns_forwarder::application_verifier : public certificate_verifier {
+    const dnsproxy_events *events = nullptr;
+
+    explicit application_verifier(const dnsproxy_events *events)
+        : events(events)
+    {}
+
+    static std::optional<std::vector<uint8_t>> serialize_certificate(X509 *cert) {
+        std::vector<uint8_t> out;
+        if (int len = i2d_X509(cert, nullptr); len <= 0) {
+            return std::nullopt;
+        } else {
+            out.resize(len);
+        }
+        unsigned char *buffer = (unsigned char *)out.data();
+        i2d_X509(cert, (unsigned char **)&buffer);
+        return out;
+    }
+
+    err_string verify(X509_STORE_CTX *ctx, std::string_view host) const override {
+        if (err_string err = verify_host_name(X509_STORE_CTX_get0_cert(ctx), host); err.has_value()) {
+            return err;
+        }
+
+        certificate_verification_event event = {};
+
+        std::optional<std::vector<uint8_t>> serialized = serialize_certificate(X509_STORE_CTX_get0_cert(ctx));
+        if (!serialized.has_value()) {
+            return "Failed to serialize certificate";
+        }
+        event.certificate = std::move(serialized.value());
+
+        STACK_OF(X509) *chain = X509_STORE_CTX_get0_untrusted(ctx);
+        event.chain.reserve(sk_X509_num(chain));
+        for (size_t i = 0; i < sk_X509_num(chain); ++i) {
+            X509 *cert = sk_X509_value(chain, i);
+            serialized = serialize_certificate(cert);
+            if (serialized.has_value()) {
+                event.chain.emplace_back(std::move(serialized.value()));
+            } else {
+                event.chain.clear();
+                break;
+            }
+        }
+
+        return this->events->on_certificate_verification(std::move(event));
+    }
+};
+
 
 static void log_packet(const logger &log, const ldns_pkt *packet, const char *pkt_name) {
     if (!log->should_log((spdlog::level::level_enum)DEBUG)) {
@@ -354,8 +406,14 @@ bool dns_forwarder::init(const dnsproxy_settings &settings, const dnsproxy_event
     this->settings = &settings;
     this->events = &events;
 
+    if (events.on_certificate_verification != nullptr) {
+        this->cert_verifier = std::make_shared<application_verifier>(this->events);
+    } else {
+        this->cert_verifier = std::make_shared<default_verifier>();
+    }
+
     infolog(log, "Initializing upstreams...");
-    upstream_factory us_factory({});
+    upstream_factory us_factory({ this->cert_verifier.get() });
     this->upstreams.reserve(settings.upstreams.size());
     for (const upstream::options &options : settings.upstreams) {
         infolog(log, "Initializing upstream {}...", options.address);
@@ -389,6 +447,7 @@ bool dns_forwarder::init(const dnsproxy_settings &settings, const dnsproxy_event
         infolog(log, "DNS64 discovery is enabled");
 
         std::thread prefixes_discovery_thread([uss = settings.dns64->upstream_settings,
+                                               verifier = this->cert_verifier,
                                                prefixes = this->dns64_prefixes,
                                                logger = this->log,
                                                max_tries = settings.dns64->max_tries,
@@ -397,7 +456,7 @@ bool dns_forwarder::init(const dnsproxy_settings &settings, const dnsproxy_event
                 while (i--) {
                     std::this_thread::sleep_for(wait_time);
 
-                    upstream_factory us_factory({});
+                    upstream_factory us_factory({ verifier.get() });
                     auto[upstream, err_upstream] = us_factory.create_upstream(uss);
                     if (err_upstream.has_value()) {
                         dbglog(logger, "DNS64: failed to create DNS64 upstream: {}", err_upstream->c_str());
