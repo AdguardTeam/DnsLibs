@@ -239,7 +239,9 @@ struct dns_over_https::socket_handle {
     event event_handle = {};
 
     ~socket_handle() {
-        event_del(&this->event_handle);
+        if (this->event_handle.ev_base != nullptr) {
+            event_del(&this->event_handle);
+        }
     }
 
     void init(curl_socket_t socket, int act, dns_over_https *upstream) {
@@ -249,7 +251,9 @@ struct dns_over_https::socket_handle {
 
         this->fd = socket;
         this->action = act;
-        event_del(&this->event_handle);
+        if (this->event_handle.ev_base != nullptr) {
+            event_del(&this->event_handle);
+        }
         event_assign(&this->event_handle, upstream->worker.loop->c_base(), socket, what,
             dns_over_https::on_socket_event, upstream);
         event_add(&this->event_handle, nullptr);

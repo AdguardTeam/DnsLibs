@@ -12,6 +12,7 @@ set(SRCS
         ${SRC_DIR}/dnsproxy.cpp
         ${SRC_DIR}/dns64.cpp
         ${SRC_DIR}/dns_forwarder.cpp
+        ${SRC_DIR}/dnsproxy_listener.cpp
     )
 
 add_library(dnsproxy EXCLUDE_FROM_ALL ${SRCS})
@@ -39,10 +40,14 @@ if (NOT TARGET ldns)
     add_subdirectory(${THIRD_PARTY_DIR}/ldns ${CMAKE_BINARY_DIR}/ldns)
 endif ()
 
+if(NOT TARGET uv)
+    add_subdirectory(${THIRD_PARTY_DIR}/libuv ${CMAKE_BINARY_DIR}/third-party/libuv)
+endif(NOT TARGET uv)
+
 set_target_properties(dnsproxy PROPERTIES POSITION_INDEPENDENT_CODE ON)
 target_include_directories(dnsproxy PUBLIC ./include)
 target_include_directories(dnsproxy PRIVATE ./src)
-target_link_libraries(dnsproxy dnslibs_common dnsfilter upstream ldns)
+target_link_libraries(dnsproxy dnslibs_common dnsfilter upstream ldns uv_a)
 
 target_compile_options(dnsproxy PRIVATE -Wall -Wextra -Wformat=2 -Wno-unused-parameter -Wno-unused-variable)
 if (NOT MSVC)
@@ -66,3 +71,9 @@ add_dependencies(tests dns64_test)
 add_executable(dnsproxy_test EXCLUDE_FROM_ALL test/dnsproxy_test.cpp)
 add_test(dnsproxy_test dnsproxy_test)
 add_dependencies(tests dnsproxy_test)
+
+add_executable(listener_test EXCLUDE_FROM_ALL test/listener_test.cpp)
+add_test(listener_test listener_test)
+add_dependencies(tests listener_test)
+
+add_executable(listener_standalone EXCLUDE_FROM_ALL test/listener_standalone.cpp)

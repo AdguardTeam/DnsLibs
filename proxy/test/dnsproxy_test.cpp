@@ -3,6 +3,7 @@
 #include <ldns/ldns.h>
 #include <thread>
 #include <memory>
+#include <ag_utils.h>
 #include <ag_net_consts.h>
 
 static constexpr auto DNS64_SERVER_ADDR = "2001:67c:27e4::64";
@@ -26,6 +27,7 @@ TEST(dnsproxy_test, test_dns64) {
 
     ag::dnsproxy proxy;
     ASSERT_TRUE(proxy.init(settings, ag::dnsproxy_events{}));
+    ag::utils::scope_exit e([&]{ proxy.deinit(); });
 
     ag::ldns_pkt_ptr pkt(
             ldns_pkt_query_new(
@@ -51,6 +53,4 @@ TEST(dnsproxy_test, test_dns64) {
     const ag::ldns_pkt_ptr response(resp);
 
     ASSERT_GT(ldns_pkt_ancount(response.get()), 0);
-
-    proxy.deinit();
 }

@@ -515,4 +515,22 @@ public:
     }
 };
 
+/**
+ * Calls the supplied function in destructor.
+ * Useful to ensure cleanup if the control flow can exit the scope in multiple different ways.
+ */
+class scope_exit {
+private:
+    std::function<void()> m_f;
+
+public:
+    explicit scope_exit(std::function<void()> &&f) : m_f{std::move(f)} {}
+
+    ~scope_exit() {
+        if (m_f) {
+            m_f();
+        }
+    }
+};
+
 } // namespace ag::utils

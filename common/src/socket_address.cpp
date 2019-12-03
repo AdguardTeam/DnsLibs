@@ -7,6 +7,12 @@
 #include <ws2tcpip.h>
 #endif
 
+static size_t c_socklen(const sockaddr *addr) {
+    return addr->sa_family == AF_INET6 ? sizeof(sockaddr_in6) :
+           addr->sa_family == AF_INET ? sizeof(sockaddr_in) :
+           0;
+}
+
 bool ag::socket_address::operator<(const ag::socket_address &other) const {
     return std::memcmp(&m_ss, &other.m_ss, c_socklen()) < 0;
 }
@@ -20,13 +26,19 @@ const sockaddr *ag::socket_address::c_sockaddr() const {
 }
 
 ev_socklen_t ag::socket_address::c_socklen() const {
-    return m_ss.ss_family == AF_INET6 ? sizeof(sockaddr_in6) :
-           m_ss.ss_family == AF_INET ? sizeof(sockaddr_in) :
-           0;
+    return ::c_socklen((const sockaddr *) &m_ss);
 }
 
 ag::socket_address::socket_address()
         : m_ss{} {
+}
+
+ag::socket_address::socket_address(const sockaddr *addr)
+        : m_ss{} {
+
+    if (addr) {
+        std::memcpy(&m_ss, addr, ::c_socklen(addr));
+    }
 }
 
 ag::socket_address::socket_address(std::string_view address_string)

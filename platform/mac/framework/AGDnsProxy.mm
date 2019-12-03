@@ -202,6 +202,34 @@ static NSData *create_response_packet(const struct iphdr *ip_header, const struc
 
 @end
 
+@implementation AGListenerSettings
+- (instancetype)initWithNative:(const ag::listener_settings *)settings
+{
+    self = [super init];
+    _address = [NSString stringWithUTF8String:settings->address.c_str()];
+    _port = settings->port;
+    _proto = (AGListenerProtocol) ((NSInteger) settings->protocol);
+    _persistent = settings->persistent;
+    _idleTimeout = settings->idle_timeout.count();
+    return self;
+}
+
+- (instancetype)initWithAddress:(NSString *)address
+                           port:(NSInteger)port
+                          proto:(AGListenerProtocol)proto
+                     persistent:(BOOL)persistent
+                    idleTimeout:(NSInteger)idleTimeout
+{
+    self = [super init];
+    _address = address;
+    _port = port;
+    _proto = proto;
+    _persistent = persistent;
+    _idleTimeout = idleTimeout;
+    return self;
+}
+@end
+
 @implementation AGDnsProxyConfig
 
 - (instancetype) initWithNative: (const ag::dnsproxy_settings *) settings
@@ -218,6 +246,12 @@ static NSData *create_response_packet(const struct iphdr *ip_header, const struc
     if (settings->dns64.has_value()) {
         _dns64Settings = [[AGDns64Settings alloc] initWithNative: &settings->dns64.value()];
     }
+    NSMutableArray<AGListenerSettings *> *listeners =
+            [[NSMutableArray alloc] initWithCapacity: settings->listeners.size()];
+    for (const ag::listener_settings &ls : settings->listeners) {
+        [listeners addObject: [[AGListenerSettings alloc] initWithNative: &ls]];
+    }
+    _listeners = listeners;
     return self;
 }
 
@@ -225,6 +259,7 @@ static NSData *create_response_packet(const struct iphdr *ip_header, const struc
         filters: (NSDictionary<NSNumber *,NSString *> *) filters
         blockedResponseTtl: (NSInteger) blockedResponseTtl
         dns64Settings: (AGDns64Settings *) dns64Settings
+        listeners: (NSArray<AGListenerSettings *> *) listeners;
 {
     const ag::dnsproxy_settings &defaultSettings = ag::dnsproxy_settings::get_default();
     self = [self initWithNative: &defaultSettings];
@@ -236,6 +271,7 @@ static NSData *create_response_packet(const struct iphdr *ip_header, const struc
         _blockedResponseTtl = blockedResponseTtl;
     }
     _dns64Settings = dns64Settings;
+    _listeners = listeners;
     return self;
 }
 
@@ -371,6 +407,21 @@ static NSData *create_response_packet(const struct iphdr *ip_header, const struc
                     .max_tries = config.dns64Settings.maxTries > 0
                                  ? static_cast<uint32_t>(config.dns64Settings.maxTries) : 0,
             };
+        }
+    }
+
+    if (config.listeners != nil) {
+        settings.listeners.clear();
+        settings.listeners.reserve([config.listeners count]);
+
+        for (AGListenerSettings *listener in config.listeners) {
+            settings.listeners.push_back({
+                [listener.address UTF8String],
+                (uint16_t) listener.port,
+                (ag::listener_protocol) ((int) listener.proto),
+                (bool) listener.persistent,
+                std::chrono::milliseconds(listener.idleTimeout),
+            });
         }
     }
 

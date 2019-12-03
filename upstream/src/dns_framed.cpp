@@ -125,7 +125,8 @@ ag::connection::result ag::dns_framed_connection::read(int request_id, std::chro
     std::unique_lock l(m_mutex);
 
     bool request_replied = m_cond.wait_until(l, std::chrono::steady_clock::now() + timeout, [&]{
-        return m_requests.at(request_id).has_value();
+        const auto it = m_requests.find(request_id);
+        return it != m_requests.end() && (*it).second.has_value();
     });
 
     if (!request_replied) {
