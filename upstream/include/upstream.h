@@ -8,6 +8,7 @@
 #include <vector>
 #include <ldns/packet.h>
 #include <ag_defs.h>
+#include <ag_net_consts.h>
 #include <ag_net_utils.h>
 
 namespace ag {

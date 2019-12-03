@@ -23,7 +23,7 @@ std::pair<ag::ldns_pkt_ptr, ag::err_string> ag::plain_dns::exchange(ldns_pkt *re
     ldns_status status;
 
     using ldns_buffer_ptr = std::unique_ptr<ldns_buffer, ag::ftor<&ldns_buffer_free>>;
-    ldns_buffer_ptr buffer{ldns_buffer_new(LDNS_MAX_PACKETLEN)};
+    ldns_buffer_ptr buffer{ldns_buffer_new(REQUEST_BUFFER_INITIAL_CAPACITY)};
     status = ldns_pkt2buffer_wire(&*buffer, request_pkt);
     if (status != LDNS_STATUS_OK) {
         return {nullptr, ldns_get_errorstr_by_id(status)};

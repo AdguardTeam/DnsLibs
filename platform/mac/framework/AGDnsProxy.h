@@ -63,7 +63,7 @@ typedef void (^logCallback)(const char *msg, int length);
 - (instancetype) initWithAddress: (NSString *) address
         bootstrap: (NSArray<NSString *> *) bootstrap
         timeout: (NSInteger) timeout
-        serverIp: (NSArray *) serverIp;
+        serverIp: (NSData *) serverIp;
 @end
 
 @interface AGDns64Settings : NSObject

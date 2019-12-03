@@ -3,6 +3,7 @@
 #include <ldns/ldns.h>
 #include <thread>
 #include <memory>
+#include <ag_net_consts.h>
 
 static constexpr auto DNS64_SERVER_ADDR = "2001:67c:27e4::64";
 static constexpr auto IPV4_ONLY_HOST = "ipv4only.arpa.";
@@ -33,7 +34,8 @@ TEST(dnsproxy_test, test_dns64) {
                     LDNS_RR_CLASS_IN,
                     LDNS_RD));
 
-    const auto buffer = std::unique_ptr<ldns_buffer, ag::ftor<ldns_buffer_free>>(ldns_buffer_new(512));
+    const auto buffer = std::unique_ptr<ldns_buffer, ag::ftor<ldns_buffer_free>>(
+            ldns_buffer_new(ag::REQUEST_BUFFER_INITIAL_CAPACITY));
 
     ldns_status status = ldns_pkt2buffer_wire(buffer.get(), pkt.get());
     ASSERT_EQ(status, LDNS_STATUS_OK) << ldns_get_errorstr_by_id(status);

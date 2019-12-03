@@ -11,7 +11,6 @@
 using namespace ag;
 using namespace std::chrono;
 
-
 static constexpr milliseconds DEFAULT_UPSTREAM_TIMEOUT = milliseconds(30000);
 
 static const dnsproxy_settings DEFAULT_PROXY_SETTINGS = {

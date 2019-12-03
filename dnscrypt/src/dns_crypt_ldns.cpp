@@ -3,6 +3,7 @@
 #include "dns_crypt_ldns.h"
 #include <ag_utils.h>
 #include <ag_net_utils.h>
+#include <ag_net_consts.h>
 
 ag::ldns_pkt_ptr ag::dnscrypt::create_request_ldns_pkt(ldns_rr_type rr_type, ldns_rr_class rr_class, uint16_t flags,
                                                        std::string_view dname_str, std::optional<size_t> size_opt) {
@@ -23,7 +24,7 @@ ag::ldns_pkt_ptr ag::dnscrypt::create_request_ldns_pkt(ldns_rr_type rr_type, ldn
 
 ag::dnscrypt::create_ldns_buffer_result ag::dnscrypt::create_ldns_buffer(const ldns_pkt &request_pkt) {
     static constexpr utils::make_error<create_ldns_buffer_result> make_error;
-    ldns_buffer_ptr result(ldns_buffer_new(0));
+    ldns_buffer_ptr result(ldns_buffer_new(REQUEST_BUFFER_INITIAL_CAPACITY));
     ldns_status status = ldns_pkt2buffer_wire(result.get(), &request_pkt);
     if (status != LDNS_STATUS_OK) {
         return make_error(ldns_get_errorstr_by_id(status));
