@@ -107,10 +107,10 @@
     [filterFiles enumerateObjectsUsingBlock:^(id object, NSUInteger idx, BOOL *stop) {
         [filters setObject: filterFiles[idx] forKey: [[NSNumber alloc] initWithUnsignedLong: idx]];
     }];
-    AGDnsProxyConfig *cfg = [[AGDnsProxyConfig alloc] init: nil
+    AGDnsProxyConfig *cfg = [[AGDnsProxyConfig alloc] initWithUpstreams: nil
         // for DOH testing
         // init: @[[[AGDnsUpstream alloc] init: @"https://dns.cloudflare.com/dns-query" bootstrap: @[@"8.8.8.8"] timeout: 10000 serverIp: nil]]
-        filters: filters blockedResponseTtl: 0];
+        filters: filters blockedResponseTtl: 0 dns64Settings: nil];
 
     AGDnsProxyEvents *events = [[AGDnsProxyEvents alloc] init];
     events.onRequestProcessed = ^(const AGDnsRequestProcessedEvent *event) {
@@ -120,7 +120,7 @@
         NSLog(@"onRequestProcessed upstream: %@", event.upstreamAddr);
     };
 
-    self->proxy = [[AGDnsProxy alloc] init: cfg withHandler: events];
+    self->proxy = [[AGDnsProxy alloc] initWithConfig: cfg handler: events];
     if (self->proxy == nil) {
         NSLog(@"failed to initialize dns proxy");
         NSDictionary *info = [NSDictionary dictionaryWithObject: @[@"failed to initialize dns proxy"]
