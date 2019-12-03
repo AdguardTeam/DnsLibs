@@ -131,7 +131,7 @@ std::unique_ptr<dns_over_https::query_handle> dns_over_https::create_handle(ldns
     h->request_id = ldns_pkt_id(request);
     ldns_pkt_set_id(request, 0);
 
-    h->request.reset(ldns_buffer_new(512));
+    h->request.reset(ldns_buffer_new(REQUEST_BUFFER_INITIAL_CAPACITY));
     ldns_status status = ldns_pkt2buffer_wire(h->request.get(), request);
     if (status != LDNS_STATUS_OK) {
         errlog_id(h, "Failed to serialize packet: {}", ldns_get_errorstr_by_id(status));

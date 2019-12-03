@@ -22,13 +22,16 @@ using namespace std::chrono;
 
 static constexpr std::string_view MOZILLA_DOH_HOST = "use-application-dns.net.";
 
+// An ldns_buffer grows automatically.
+// We set the initial capacity so that most responses will fit without reallocations.
+static constexpr size_t RESPONSE_BUFFER_INITIAL_CAPACITY = 512;
 
 static void log_packet(const logger &log, const ldns_pkt *packet, const char *pkt_name) {
     if (!log->should_log((spdlog::level::level_enum)DEBUG)) {
         return;
     }
 
-    ldns_buffer *str_dns = ldns_buffer_new(512);
+    ldns_buffer *str_dns = ldns_buffer_new(RESPONSE_BUFFER_INITIAL_CAPACITY);
     ldns_status status = ldns_pkt2buffer_str(str_dns, packet);
     if (status != LDNS_STATUS_OK) {
         dbglog_id(log, packet, "Failed to print {}: {} ({})"
@@ -302,7 +305,7 @@ ldns_pkt_ptr dns_forwarder::try_dns64_aaaa_synthesis(upstream_ptr &upstream, con
 }
 
 static std::vector<uint8_t> transform_response_to_raw_data(const ldns_pkt *message) {
-    ldns_buffer *buffer = ldns_buffer_new(512);
+    ldns_buffer *buffer = ldns_buffer_new(RESPONSE_BUFFER_INITIAL_CAPACITY);
     ldns_status status = ldns_pkt2buffer_wire(buffer, message);
     assert(status == LDNS_STATUS_OK);
     // @todo: custom allocator will allow to avoid data copy
@@ -356,12 +359,11 @@ bool dns_forwarder::init(const dnsproxy_settings &settings) {
     if (settings.dns64.has_value()) {
         infolog(log, "DNS64 discovery is enabled");
 
-        std::thread prefixes_discovery_thread(
-            [uss = settings.dns64.value().upstream,
-                    prefixes = this->dns64_prefixes,
-                    logger = this->log,
-                    max_tries = settings.dns64->max_tries,
-                    wait_time = settings.dns64->wait_time]() {
+        std::thread prefixes_discovery_thread([uss = settings.dns64.value().upstream,
+                                               prefixes = this->dns64_prefixes,
+                                               logger = this->log,
+                                               max_tries = settings.dns64->max_tries,
+                                               wait_time = settings.dns64->wait_time]() {
                 auto i = max_tries;
                 while (i--) {
                     std::this_thread::sleep_for(wait_time);
@@ -387,6 +389,7 @@ bool dns_forwarder::init(const dnsproxy_settings &settings) {
                     prefixes->val = std::move(result);
 
                     infolog(logger, "DNS64 prefixes discovered: {}", prefixes->val.size());
+                    return;
                 }
 
                 errlog(logger, "DNS64: failed to discover any prefixes");
