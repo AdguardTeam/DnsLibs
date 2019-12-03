@@ -13,7 +13,7 @@
 #include <ag_utils.h>
 #include <dns_crypt_ldns.h>
 
-static constexpr std::chrono::seconds default_timeout(10);
+static constexpr std::chrono::seconds DEFAULT_TIMEOUT(10);
 
 static const ag::logger &logger() {
     static auto result = ag::create_logger("test_upstream_logger");
@@ -30,6 +30,22 @@ protected:
 template<typename... Ts>
 struct upstream_param_test : upstream_test, ::testing::WithParamInterface<Ts...> {};
 
+namespace concat_err_string {
+
+ag::err_string &operator+=(ag::err_string &result, const ag::err_string &err) {
+    if (err) {
+        if (!result) {
+            result = std::string{};
+        }
+        if (result) {
+            *result += *err + '\n';
+        }
+    }
+    return result;
+}
+
+} // namespace concat_err_string
+
 static ag::ldns_pkt_ptr create_test_message() {
     ldns_pkt *pkt = ldns_pkt_query_new(ldns_dname_new_frm_str("google-public-dns-a.google.com."), LDNS_RR_TYPE_A,
                                        LDNS_RR_CLASS_IN, LDNS_RD);
@@ -38,147 +54,39 @@ static ag::ldns_pkt_ptr create_test_message() {
     return ag::ldns_pkt_ptr(pkt);
 }
 
-static void assert_response(const ldns_pkt &reply) {
-//    return;// TODO !!!
+[[nodiscard]] static ag::err_string assert_response(const ldns_pkt &reply) {
+    using namespace std::string_literals;
     size_t ancount = ldns_pkt_ancount(&reply);
-    ASSERT_EQ(1, ancount) << "DNS upstream returned reply with wrong number of answers - " << ancount;
+    if (ancount != 1) {
+        return "DNS upstream returned reply with wrong number of answers - " + std::to_string(ancount);
+    }
     ldns_rr *first_rr = ldns_rr_list_rr(ldns_pkt_answer(&reply), 0);
-    ASSERT_EQ(LDNS_RR_TYPE_A, ldns_rr_get_type(first_rr)) << "DNS upstream returned wrong answer type instead of A: "
-                                                          << ldns_rr_type2str(ldns_rr_get_type(first_rr));
+    if (ldns_rr_get_type(first_rr) != LDNS_RR_TYPE_A) {
+        return "DNS upstream returned wrong answer type instead of A: "s + ldns_rr_type2str(ldns_rr_get_type(first_rr));
+    }
     ldns_rdf *rdf = ldns_rr_rdf(first_rr, 0);
     ag::uint8_view ip{ldns_rdf_data(rdf), ldns_rdf_size(rdf)};
     static const auto ip8888 = ag::utils::to_string_view<uint8_t>({8, 8, 8, 8});
-    ASSERT_EQ(ip, ip8888) << "DNS upstream returned wrong answer instead of 8.8.8.8: ";// << std::string(ip).c_str(); // TODO
+    if (ip != ip8888) {
+        return "DNS upstream returned wrong answer instead of 8.8.8.8: ";
+    }
+    return std::nullopt;
 }
 
-static void check_upstream(ag::upstream &upstream, const std::string &addr) {
-//    return; // TODO !!!
+[[nodiscard]] static ag::err_string check_upstream(ag::upstream &upstream, const std::string &addr) {
     auto req = create_test_message();
     auto[reply, err] = upstream.exchange(req.get());
-    ASSERT_FALSE(err) << "Couldn't talk to upstream " + addr + ": " + *err;
-    assert_response(*reply);
-}
-
-#if 0 // TODO old
-struct upstream_test_data_old {
-    std::string address;
-    std::initializer_list<std::string> bootstrap;
-};
-
-class upstream_test_with_data_old : public upstream_test, public ::testing::WithParamInterface<upstream_test_data_old> {};
-
-static const std::initializer_list<std::string> default_bootstrap_list_old{"8.8.8.8", "1.1.1.1"};
-
-static const upstream_test_data_old upstream_test_addresses_old[]{
-    {
-        "tls://1.1.1.1",
-//        {}
-        default_bootstrap_list_old
-    },
-    {
-        "8.8.8.8",
-        default_bootstrap_list_old
-    },
-    {
-        "1.1.1.1",
-        default_bootstrap_list_old
-    },
-    { // TODO FAIL
-        "tcp://8.8.8.8",
-        default_bootstrap_list_old
-    },
-    {
-        "tcp://1.1.1.1",
-        default_bootstrap_list_old
-    },
-    {
-        "tls://one.one.one.one",
-        default_bootstrap_list_old
-    },
-    { // TODO FAIL
-        // AdGuard DNS (DNSCrypt)
-        "sdns://AQIAAAAAAAAAFDE3Ni4xMDMuMTMwLjEzMDo1NDQzINErR_JS3PLCu_iZEIbq95zkSV2LFsigxDIuUso_OQhzIjIuZG5zY3J5cHQuZGVmYXVsdC5uczEuYWRndWFyZC5jb20",
-        {}
-    },
-    { // TODO FAIL
-        // AdGuard Family (DNSCrypt)
-        "sdns://AQIAAAAAAAAAFDE3Ni4xMDMuMTMwLjEzMjo1NDQzILgxXdexS27jIKRw3C7Wsao5jMnlhvhdRUXWuMm1AFq6ITIuZG5zY3J5cHQuZmFtaWx5Lm5zMS5hZGd1YXJkLmNvbQ",
-        {}
-    },
-    {
-        // Cisco OpenDNS (DNSCrypt)
-        "sdns://AQAAAAAAAAAADjIwOC42Ny4yMjAuMjIwILc1EUAgbyJdPivYItf9aR6hwzzI1maNDL4Ev6vKQ_t5GzIuZG5zY3J5cHQtY2VydC5vcGVuZG5zLmNvbQ",
-        {}
-    },
-    {
-        "https://dns.cloudflare.com/dns-query",
-        default_bootstrap_list_old
-    },
-};
-
-TEST_P(upstream_test_with_data_old, test_dns_query_old) { // TODO
-    const auto &address = GetParam().address;
-    const auto &bootstrap_list = GetParam().bootstrap;
-    ag::ldns_pkt_ptr pkt = create_test_message();
-    ag::upstream::options opts = {
-        .bootstrap = bootstrap_list,
-        .timeout = std::chrono::milliseconds(5000)
-    };
-    auto[upstream, err1] = ag::upstream::address_to_upstream(address, opts);
-    ASSERT_FALSE(err1) << *err1;
-    auto[reply, err2] = upstream->exchange(&*pkt);
-    ASSERT_FALSE(err2) << *err2;
-    ASSERT_NE(reply, nullptr);
-    assert_response(*reply);
-    ldns_pkt_print(stderr, &*reply);
-    ASSERT_FALSE(std::get<ag::err_string>(upstream->exchange(&*pkt)));
-    sleep(2);
-    ASSERT_FALSE(std::get<ag::err_string>(upstream->exchange(&*pkt)));
-    sleep(3);
-    ASSERT_FALSE(std::get<ag::err_string>(upstream->exchange(&*pkt)));
-}
-
-INSTANTIATE_TEST_CASE_P(test_dns_query, upstream_test_with_data_old, testing::ValuesIn(upstream_test_addresses_old));
-
-TEST_F(upstream_test, DISABLED_doh_concurrent_requests) {
-    static constexpr size_t REQUESTS_NUM = 128;
-    static constexpr size_t WORKERS_NUM = 16;
-
-    ag::upstream::options opts = {
-        .bootstrap = default_bootstrap_list_old,
-        .timeout = std::chrono::milliseconds(5000),
-        // .server_ip = ag::uint8_array<4>{ 104, 19, 199, 29 }, // TODO
-        // .server_ip = ag::uint8_array<16>{ 0x26, 0x06, 0x47, 0x00, 0x30, 0x0a, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x68, 0x13, 0xc7, 0x1d }, // TODO
-    };
-    auto[upstream, err1] = ag::upstream::address_to_upstream("https://dns.cloudflare.com/dns-query", opts);
-    ASSERT_FALSE(err1) << *err1;
-
-    std::thread workers[WORKERS_NUM];
-
-    for (size_t i = 0; i < WORKERS_NUM; ++i) {
-        workers[i] = std::thread(
-            [us = upstream.get(), i] () {
-                for (size_t j = 0; j < REQUESTS_NUM; ++j) {
-                    ag::ldns_pkt_ptr pkt = create_test_message();
-                    auto[reply, err2] = us->exchange(pkt.get());
-                    ASSERT_FALSE(err2) << "i=" << i << ": " << *err2;
-                    ASSERT_NE(reply, nullptr);
-                    assert_response(*reply);
-                }
-            });
+    if (err) {
+        return "Couldn't talk to upstream " + addr + ": " + *err;
     }
-
-    for (size_t i = 0; i < WORKERS_NUM; ++i) {
-        workers[i].join();
-        SPDLOG_INFO("worker #{} done", i);
-    }
+    return assert_response(*reply);
 }
 
-#endif // TODO old
+using err_futures = std::vector<std::future<ag::err_string>>;
 
 template<typename F>
-static auto make_indexed_futures(size_t count, const F &f) {
-    std::vector<std::future<ag::err_string>> futures;
+static err_futures make_indexed_futures(size_t count, const F &f) {
+    err_futures futures;
     futures.reserve(count);
     for (size_t i = 0, e = count; i < e; ++i) {
         futures.emplace_back(ag::utils::async_detached(f, i));
@@ -186,8 +94,45 @@ static auto make_indexed_futures(size_t count, const F &f) {
     return futures;
 }
 
-TEST_F(upstream_test, test_timeout) {
+static void check_all_futures(err_futures &futures) {
+    using namespace concat_err_string;
+    ag::err_string err;
+    for (auto &future : futures) {
+        err += future.get();
+    }
+    ASSERT_FALSE(err) << *err;
+}
+
+template<typename F>
+static void parallel_test_basic_n(size_t count, const F &f) {
+    auto futures = make_indexed_futures(count, f);
+    check_all_futures(futures);
+}
+
+template<typename T, typename F>
+static void parallel_test_basic(const T &data, const F &function) {
+    err_futures futures;
+    futures.reserve(std::size(data));
+    for (const auto &[address, bootstrap, server_ip] : data) {
+        futures.emplace_back(ag::utils::async_detached(function, address, bootstrap, server_ip));
+    }
+    check_all_futures(futures);
+}
+
+template<typename T>
+static void parallel_test(const T &data) {
+    parallel_test_basic(data, [](const auto &address, const auto &bootstrap, const auto &server_ip) -> ag::err_string {
+        auto[upstream_ptr, upstream_err] = ag::upstream::address_to_upstream(address, {bootstrap, DEFAULT_TIMEOUT});
+        if (upstream_err) {
+            return "Failed to generate upstream from address " + address +  ": " + *upstream_err;
+        }
+        return check_upstream(*upstream_ptr, address);
+    });
+}
+
+TEST_F(upstream_test, test_bootstrap_timeout) {
     using namespace std::chrono_literals;
+    using namespace concat_err_string;
     static constexpr auto timeout = 100ms;
     static constexpr size_t count = 10;
     // Specifying some wrong port instead so that bootstrap DNS timed out for sure
@@ -204,127 +149,35 @@ TEST_F(upstream_test, test_timeout) {
         }
         auto elapsed = timer.elapsed<decltype(timeout)>();
         if (elapsed > 2 * timeout) {
-            return "Exchange took more time than the configured timeout: " + std::to_string(elapsed.count()) + " ms"; // TODO use std::chrono::operator<< since C++20
+            return "Exchange took more time than the configured timeout: " + std::to_string(elapsed.count()) + " ms";
         }
         infolog(logger(), "Finished " + std::to_string(index));
         return std::nullopt;
     });
-    bool failed = false;
+    ag::err_string err;
     for (size_t i = 0, e = futures.size(); i < e; ++i) {
         auto &future = futures[i];
         auto future_status = future.wait_for(10 * timeout);
         if (future_status == std::future_status::timeout) {
+            err += "No response in time for " + std::to_string(i);
             errlog(logger(), "No response in time for {}", i);
-            failed = true;
             continue;
         }
         auto result = future.get();
         if (result) {
+            err += result;
             errlog(logger(), "Aborted: {}", *result);
         } else {
             infolog(logger(), "Got result from {}", i);
         }
     }
-    if (failed) {
-        ASSERT_FALSE(failed);
+    if (err) {
+        ASSERT_FALSE(err) << *err;
     }
 }
-
-#if 0 // TODO from Go
-TEST_F(upstream_test, test_tls_pool_reconnect) {
-    // TODO code duplication
-    auto[upstream_ptr, upstream_err] = ag::upstream::address_to_upstream("tls://one.one.one.one", {{"8.8.8.8:53"}, default_timeout});
-    ASSERT_FALSE(upstream_err) << "Cannot create upstream: " << *upstream_err;
-    // Send the first test message
-    auto first_req = create_test_message();
-    auto[reply, reply_err] = upstream_ptr->exchange(first_req.get());
-    ASSERT_FALSE(reply_err) << "First DNS message failed: " + *reply_err;
-    assert_response(*reply);
-#if 0 // TODO ???
-    // Now let's close the pooled connection and return it back to the pool
-    p := u.(*dnsOverTLS)
-    conn, _ := p.pool.Get()
-    conn.Close()
-    p.pool.Put(conn)
-
-    // Send the second test message
-    req = createTestMessage()
-    reply, err = u.Exchange(req)
-    if err != nil {
-        t.Fatalf("second DNS message failed: %s", err)
-    }
-    assertResponse(t, reply)
-
-    // Now assert that the number of connections in the pool is not changed
-    if len(p.pool.conns) != 1 {
-        t.Fatal("wrong number of pooled connections")
-    }
-#endif
-}
-#endif // TODO from Go
-
-#if 0 // TODO from Go
-TEST_F(upstream_test, test_tls_pool_dead_line) {
-    // TODO code duplication
-    // Create TLS upstream
-    auto[upstream_ptr, upstream_err] = ag::upstream::address_to_upstream("tls://one.one.one.one", {{"8.8.8.8:53"}, default_timeout});
-    ASSERT_FALSE(upstream_err) << "Cannot create upstream: " << *upstream_err;
-
-    // Send the first test message
-    auto first_req = create_test_message();
-    auto[reply, reply_err] = upstream_ptr->exchange(first_req.get());
-    ASSERT_FALSE(reply_err) << "First DNS message failed: " + *reply_err;
-    assert_response(*reply);
-#if 0 // TODO ???
-    p := u.(*dnsOverTLS)
-
-    // Now let's get connection from the pool and use it
-    conn, err := p.pool.Get()
-    if err != nil {
-        t.Fatalf("couldn't get connection from pool: %s", err)
-    }
-    response, err = p.exchangeConn(conn, req)
-    if err != nil {
-        t.Fatalf("first DNS message failed: %s", err)
-    }
-    assertResponse(t, response)
-
-    // Update connection's deadLine and put it back to the pool
-    err = conn.SetDeadline(time.Now().Add(10 * time.Hour))
-    if err != nil {
-        t.Fatalf("can't set new deadLine for connection. Looks like it's already closed: %s", err)
-    }
-    p.pool.Put(conn)
-
-    // Get connection from the pool and reuse it
-    conn, err = p.pool.Get()
-    if err != nil {
-        t.Fatalf("couldn't get connection from pool: %s", err)
-    }
-    response, err = p.exchangeConn(conn, req)
-    if err != nil {
-        t.Fatalf("first DNS message failed: %s", err)
-    }
-    assertResponse(t, response)
-
-    // Set connection's deadLine to the past and try to reuse it
-    err = conn.SetDeadline(time.Now().Add(-10 * time.Hour))
-    if err != nil {
-        t.Fatalf("can't set new deadLine for connection. Looks like it's already closed: %s", err)
-    }
-
-    // Connection with expired deadLine can't be used
-    response, err = p.exchangeConn(conn, req)
-    if err == nil {
-        t.Fatalf("this connection should be already closed, got response %s", response)
-    }
-#endif
-}
-#endif // TODO from Go
 
 struct dns_truncated_test : upstream_param_test<std::string_view> {};
 
-// TODO
 static constexpr std::string_view truncated_test_data[]{
     // AdGuard DNS
     "176.103.130.130:53",
@@ -351,45 +204,10 @@ TEST_P(dns_truncated_test, test_dns_truncated) {
 
 INSTANTIATE_TEST_CASE_P(dns_truncated_test, dns_truncated_test, testing::ValuesIn(truncated_test_data));
 
-struct dial_context_test_data {
-    std::initializer_list<std::string> addresses;
-    std::string_view host;
-};
-
-struct dial_context_test : upstream_param_test<dial_context_test_data> {};
-
-static const dial_context_test_data test_dial_context_data[]{
-    {
-        {"216.239.32.59:443"},
-        "dns.google.com"
-    },
-    {
-        {"176.103.130.130:855", "176.103.130.130:853"},
-        "dns.adguard.com"
-    },
-    {
-        {"1.1.1.1:5555", "1.1.1.1:853", "8.8.8.8:85"},
-        "dns.cloudflare.com"
-    },
-};
-
-// See the details here: https://github.com/AdguardTeam/dnsproxy/issues/18
-TEST_P(dial_context_test, test_dial_context) {
-    // TODO
-#if 0
-    dialContext := createDialContext(test.addresses, 2*time.Second)
-    _, err := dialContext(context.TODO(), "tcp", "")
-    if err != nil {
-        t.Fatalf("Couldn't dial to %s: %s", test.host, err)
-    }
-#endif
-}
-
-INSTANTIATE_TEST_CASE_P(dial_context_test, dial_context_test, testing::ValuesIn(test_dial_context_data));
-
 struct upstream_test_data {
     std::string address;
     std::initializer_list<std::string> bootstrap;
+    ag::ip_address_variant server_ip;
 };
 
 static const upstream_test_data test_upstreams_data[]{
@@ -449,7 +267,7 @@ static const upstream_test_data test_upstreams_data[]{
         {"1.1.1.1"}
 #endif
     },
-#if 0 // TODO FAIL host bug
+#if 0 // TODO FAIL port bug
     {
         "https://dns9.quad9.net:443/dns-query",
         {"8.8.8.8"}
@@ -509,48 +327,28 @@ static const upstream_test_data test_upstreams_data[]{
 };
 
 TEST_F(upstream_test, test_upstreams) {
-    // TODO duplication
-    using namespace std::chrono_literals;
-    for (const auto &[address, bootstrap_list] : test_upstreams_data) {
-        auto[upstream_ptr, upstream_err] = ag::upstream::address_to_upstream(address, {bootstrap_list, 5s}); // TODO 5s
-        ASSERT_FALSE(upstream_err) << "Failed to generate upstream from address " << address <<  ": " << *upstream_err;
-        check_upstream(*upstream_ptr, address);
-    }
+    parallel_test(test_upstreams_data);
 }
 
-#if 0 // TODO
-func TestUpstreamDOTBootstrap(t *testing.T) {
-	upstreams := []struct {
-		address   string
-		bootstrap []string
-	}{
-		{
-			address:   "tls://one.one.one.one/",
-			bootstrap: []string{"tls://1.1.1.1"},
-		},
-		{
-			address:   "tls://one.one.one.one/",
-			bootstrap: []string{"https://1.1.1.1/dns-query"},
-		},
-		{
-			address: "tls://one.one.one.one/",
-			// Cisco OpenDNS
-			bootstrap: []string{"sdns://AQAAAAAAAAAADjIwOC42Ny4yMjAuMjIwILc1EUAgbyJdPivYItf9aR6hwzzI1maNDL4Ev6vKQ_t5GzIuZG5zY3J5cHQtY2VydC5vcGVuZG5zLmNvbQ"},
-		},
-	}
+static const upstream_test_data upstream_dot_bootstrap_test_data[]{
+    {
+        "tls://one.one.one.one/",
+        {"tls://1.1.1.1"},
+    },
+    {
+        "tls://one.one.one.one/",
+        {"https://1.1.1.1/dns-query"},
+    },
+    {
+        "tls://one.one.one.one/",
+        // Cisco OpenDNS
+        {"sdns://AQAAAAAAAAAADjIwOC42Ny4yMjAuMjIwILc1EUAgbyJdPivYItf9aR6hwzzI1maNDL4Ev6vKQ_t5GzIuZG5zY3J5cHQtY2VydC5vcGVuZG5zLmNvbQ"},
+    },
+};
 
-	for _, test := range upstreams {
-		t.Run(test.address, func(t *testing.T) {
-			u, err := AddressToUpstream(test.address, Options{Bootstrap: test.bootstrap, Timeout: timeout})
-			if err != nil {
-				t.Fatalf("Failed to generate upstream from address %s: %s", test.address, err)
-			}
-
-			checkUpstream(t, u, test.address)
-		})
-	}
+TEST_F(upstream_test, test_upstream_dot_bootstrap) {
+    parallel_test(upstream_dot_bootstrap_test_data);
 }
-#endif
 
 struct upstream_default_options_test : upstream_param_test<std::string> {};
 
@@ -560,16 +358,15 @@ static const std::string test_upstream_default_options_data[]{
 };
 
 TEST_P(upstream_default_options_test, test_upstream_default_options) {
-    // TODO duplication
     const auto &address = GetParam();
-    auto[upstream_ptr, upstream_err] = ag::upstream::address_to_upstream(address, {{}, default_timeout});
+    auto[upstream_ptr, upstream_err] = ag::upstream::address_to_upstream(address, {{}, DEFAULT_TIMEOUT});
     ASSERT_FALSE(upstream_err) << "Failed to generate upstream from address " << address << ": " << *upstream_err;
-    check_upstream(*upstream_ptr, address);
+    auto err = check_upstream(*upstream_ptr, address);
+    ASSERT_FALSE(err) << *err;
 }
 
-INSTANTIATE_TEST_CASE_P(upstream_default_options_test, upstream_default_options_test, testing::ValuesIn(test_upstream_default_options_data));
-
-struct upstreams_invalid_bootstrap_test : upstream_param_test<upstream_test_data> {};
+INSTANTIATE_TEST_CASE_P(upstream_default_options_test, upstream_default_options_test,
+                        testing::ValuesIn(test_upstream_default_options_data));
 
 static const upstream_test_data test_upstreams_invalid_bootstrap_data[]{
     {
@@ -601,28 +398,16 @@ static const upstream_test_data test_upstreams_invalid_bootstrap_data[]{
 };
 
 // Test for DoH and DoT upstreams with two bootstraps (only one is valid)
-TEST_P(upstreams_invalid_bootstrap_test, test_upstreams_invalid_bootstrap) {
-    // TODO duplication
-    const auto &[address, bootstrap] = GetParam();
-    auto[upstream_ptr, upstream_err] = ag::upstream::address_to_upstream(address, {bootstrap, default_timeout});
-    ASSERT_FALSE(upstream_err) << "Failed to generate upstream from address " << address << ": " << *upstream_err;
-    check_upstream(*upstream_ptr, address);
+TEST_F(upstream_test, test_upstreams_invalid_bootstrap) {
+    parallel_test(test_upstreams_invalid_bootstrap_data);
 }
 
-INSTANTIATE_TEST_CASE_P(upstreams_invalid_bootstrap_test, upstreams_invalid_bootstrap_test, testing::ValuesIn(test_upstreams_invalid_bootstrap_data));
+struct upstreams_with_server_ip_test : upstream_param_test<upstream_test_data> {};
 
-struct upstreams_with_server_ip_test_data {
-    std::string address;
-    std::initializer_list<std::string> bootstrap;
-    ag::ip_address_variant server_ip;
-};
+// Use invalid bootstrap to make sure it fails if tries to use it
+static const std::initializer_list<std::string> invalid_bootstrap{"1.2.3.4:55"};
 
-struct upstreams_with_server_ip_test : upstream_param_test<upstreams_with_server_ip_test_data> {};
-
-// use invalid bootstrap to make sure it fails if tries to use it
-static const std::initializer_list<std::string> invalid_bootstrap{"1.2.3.4:55"}; // TODO name
-
-static const upstreams_with_server_ip_test_data test_upstreams_with_server_ip_data[]{
+static const upstream_test_data test_upstreams_with_server_ip_data[]{
     {
         "tls://dns.adguard.com",
         invalid_bootstrap,
@@ -647,12 +432,38 @@ static const upstreams_with_server_ip_test_data test_upstreams_with_server_ip_da
     },
 };
 
-TEST_P(upstreams_with_server_ip_test, test_upstreams_with_server_ip) {
-    // TODO duplication
-    const auto &[address, bootstrap, server_ip] = GetParam();
-    auto[upstream_ptr, upstream_err] = ag::upstream::address_to_upstream(address, {bootstrap, default_timeout, server_ip});
-    ASSERT_FALSE(upstream_err) << "Failed to generate upstream from address " << address << ": " << *upstream_err;
-    check_upstream(*upstream_ptr, address);
+TEST_F(upstream_test, test_upstreams_with_server_ip) {
+    parallel_test(test_upstreams_with_server_ip_data);
 }
 
-INSTANTIATE_TEST_CASE_P(upstreams_with_server_ip_test, upstreams_with_server_ip_test, testing::ValuesIn(test_upstreams_with_server_ip_data));
+TEST_F(upstream_test, DISABLED_doh_concurrent_requests) {
+    using namespace std::chrono_literals;
+    using namespace concat_err_string;
+    static constexpr size_t REQUESTS_NUM = 128;
+    static constexpr size_t WORKERS_NUM = 16;
+    static const ag::upstream::options opts{
+        .bootstrap = {"8.8.8.8", "1.1.1.1"},
+        .timeout = 5s,
+        // .server_ip = ag::uint8_array<4>{ 104, 19, 199, 29 }, // TODO
+        // .server_ip = ag::uint8_array<16>{ 0x26, 0x06, 0x47, 0x00, 0x30, 0x0a, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x68, 0x13, 0xc7, 0x1d }, // TODO
+    };
+    auto[upstream_ptr, upstream_err] = ag::upstream::address_to_upstream("https://dns.cloudflare.com/dns-query", opts);
+    ASSERT_FALSE(upstream_err) << *upstream_err;
+    parallel_test_basic_n(WORKERS_NUM, [upstream_ptr = upstream_ptr](size_t i) -> ag::err_string {
+        ag::err_string result_err;
+        for (size_t j = 0; j < REQUESTS_NUM; ++j) {
+            ag::ldns_pkt_ptr pkt = create_test_message();
+            auto[reply, reply_err] = upstream_ptr->exchange(pkt.get());
+            if (reply_err) {
+                result_err += "DoH i = " + std::to_string(i) + " reply error: " + *reply_err;
+                continue;
+            }
+            if (!reply) {
+                result_err += "DoH reply is null";
+                continue;
+            }
+            result_err += assert_response(*reply);
+        }
+        return result_err;
+    });
+}
