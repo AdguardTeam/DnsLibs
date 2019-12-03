@@ -65,7 +65,7 @@ public:
     std::vector<socket_address> resolve(std::string_view host, int port, std::chrono::milliseconds timeout, bool ipv6_avail);
 private:
     /** Plain DNS address (@see ag::plain_dns::plain_dns) */
-    std::string_view m_resolver_address;
+    std::string m_resolver_address;
 };
 
 using bootstrapper_ptr = std::shared_ptr<bootstrapper>;
