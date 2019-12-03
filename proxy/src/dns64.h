@@ -3,17 +3,18 @@
 #include <ag_defs.h>
 #include <upstream.h>
 
-namespace ag {
+namespace ag::dns64 {
 
-using dns64_discovery_result = std::pair<std::vector<uint8_vector>, err_string>;
+using discovery_result = std::pair<std::vector<uint8_vector>, err_string>;
 using ipv6_synth_result = std::pair<uint8_array<16>, err_string>;
+using prefixes = std::shared_ptr<with_mtx<std::vector<ag::uint8_vector>>>;
 
 /**
  * Discover DNS64 presence.
  * @param upstream The upstream to query for DNS64 prefixes.
  * @return Unique prefixes, in the same order as returned by the upstream. Empty vector if no prefixes were found.
  */
-dns64_discovery_result discover_dns64_prefixes(const upstream_ptr &upstream);
+discovery_result discover_prefixes(const upstream_ptr &upstream);
 
 /**
  * Make an IPv4-embedded IPv6 address using the specified prefix. Returns all zeros if there was an error (see params).
@@ -23,4 +24,4 @@ dns64_discovery_result discover_dns64_prefixes(const upstream_ptr &upstream);
  */
 ipv6_synth_result synthesize_ipv4_embedded_ipv6_address(uint8_view prefix, uint8_view ip4);
 
-} // namespace ag
+} // namespace ag::dns64

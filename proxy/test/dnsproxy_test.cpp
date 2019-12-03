@@ -19,8 +19,8 @@ TEST(dnsproxy_test, test_dns64) {
                             .timeout = 5000ms
                     }
             },
-            .wait_time = 1s,
             .max_tries = 5,
+            .wait_time = 1s,
     };
 
     ag::dnsproxy proxy;

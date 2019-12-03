@@ -12,7 +12,7 @@ TEST(dns64_test, test_dns64_discovery) {
             });
     ASSERT_FALSE(err_upstream.has_value()) << err_upstream.value();
 
-    const auto[prefs, err_prefs] = ag::discover_dns64_prefixes(upstream);
+    const auto[prefs, err_prefs] = ag::dns64::discover_prefixes(upstream);
     ASSERT_FALSE(err_prefs.has_value()) << err_prefs.value();
 
     ASSERT_FALSE(prefs.empty()) << "No Pref64::/n found";
@@ -24,7 +24,7 @@ TEST(dns64_test, test_dns64_discovery) {
 static void check_synth(const ag::uint8_view pref64,
                         const ag::uint8_view ip4,
                         const ag::uint8_array<16> &expect_result) {
-    auto[result, err] = ag::synthesize_ipv4_embedded_ipv6_address(pref64, ip4);
+    auto[result, err] = ag::dns64::synthesize_ipv4_embedded_ipv6_address(pref64, ip4);
     ASSERT_FALSE(err.has_value()) << err.value();
     ASSERT_EQ(result, expect_result);
 }
@@ -51,6 +51,6 @@ TEST(dns64_test, test_ipv6_synthesis) {
     check_synth({pref, 12}, ip4_v, expect_12);
 
     // Check disallowed pref length...
-    auto[result_10, err_10] = ag::synthesize_ipv4_embedded_ipv6_address({pref, 10}, ip4_v);
+    auto[result_10, err_10] = ag::dns64::synthesize_ipv4_embedded_ipv6_address({pref, 10}, ip4_v);
     ASSERT_TRUE(err_10.has_value());
 }

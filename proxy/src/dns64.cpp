@@ -77,7 +77,7 @@ static ag::uint8_vector find_pref64(const ag::uint8_view ip6) {
     return {};
 }
 
-ag::dns64_discovery_result ag::discover_dns64_prefixes(const ag::upstream_ptr &upstream) {
+ag::dns64::discovery_result ag::dns64::discover_prefixes(const ag::upstream_ptr &upstream) {
     ag::ldns_pkt_ptr pkt(
             ldns_pkt_query_new(
                     ldns_dname_new_frm_str(WKN),
@@ -127,7 +127,7 @@ static bool pref64_valid(const ag::uint8_view pref64) {
     return ((s >= 4 && s <= 8) || (s == 12 && pref64[IPV6_NULL_IDX] == 0));
 }
 
-ag::ipv6_synth_result ag::synthesize_ipv4_embedded_ipv6_address(ag::uint8_view prefix, ag::uint8_view ip4) {
+ag::dns64::ipv6_synth_result ag::dns64::synthesize_ipv4_embedded_ipv6_address(ag::uint8_view prefix, ag::uint8_view ip4) {
     if (!pref64_valid(prefix)) {
         return {{}, "Invalid Pref64::/n"};
     }
