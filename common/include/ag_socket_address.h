@@ -23,6 +23,10 @@ public:
      * @param port Port number
      */
     socket_address(ag::uint8_view addr, int port);
+    /**
+     * @param addr C sockaddr struct
+     */
+    explicit socket_address(const sockaddr* addr);
 
     bool operator<(const socket_address &other) const;
     bool operator==(const socket_address &other) const;

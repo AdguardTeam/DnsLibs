@@ -1,7 +1,7 @@
 #include <dns64.h>
 #include <vector>
 #include <cassert>
-#include <ldns/dname.h>
+#include <ldns/ldns.h>
 #include <ag_utils.h>
 
 // Well-known host used to discover dns64 presence
@@ -16,8 +16,6 @@ static constexpr ag::uint8_view WELL_KNOWN_ADDRESSES[] = {
         {WKA1_BYTES, std::size(WKA1_BYTES)}
 };
 
-static constexpr size_t IPV4_SIZE = 4;
-static constexpr size_t IPV6_SIZE = 16;
 static constexpr size_t IPV6_NULL_IDX = 8;
 
 /**
@@ -26,8 +24,8 @@ static constexpr size_t IPV6_NULL_IDX = 8;
  * @return the prefix, or empty vector if a valid prefix was not found
  */
 static ag::uint8_vector find_pref64(ag::uint8_view ip6, const ag::uint8_view wka) {
-    assert(ip6.size() == IPV6_SIZE);
-    assert(wka.size() == IPV4_SIZE);
+    assert(ip6.size() == LDNS_IP6ADDRLEN);
+    assert(wka.size() == LDNS_IP4ADDRLEN);
 
     if (ip6[8] != 0) {
         // ip6 is invalid (RFC 6052 2.2)
@@ -108,7 +106,7 @@ ag::dns64::discovery_result ag::dns64::discover_prefixes(const ag::upstream_ptr 
         }
 
         const ag::uint8_view ip6{ldns_rdf_data(rdf), ldns_rdf_size(rdf)};
-        if (IPV6_SIZE != ip6.size()) {
+        if (LDNS_IP6ADDRLEN != ip6.size()) {
             continue;
         }
 
@@ -131,16 +129,16 @@ ag::dns64::ipv6_synth_result ag::dns64::synthesize_ipv4_embedded_ipv6_address(ag
     if (!pref64_valid(prefix)) {
         return {{}, "Invalid Pref64::/n"};
     }
-    if (ip4.size() != IPV4_SIZE) {
+    if (ip4.size() != LDNS_IP4ADDRLEN) {
         return {{}, "Invalid IPv4 addr"};
     }
 
-    uint8_array<16> result{};
+    uint8_array<LDNS_IP6ADDRLEN> result{};
 
     std::copy(prefix.cbegin(), prefix.cend(), result.begin());
 
     size_t ip4_idx = 0;
-    for (size_t i = prefix.size(); i < IPV6_SIZE && ip4_idx < IPV4_SIZE; ++i) {
+    for (size_t i = prefix.size(); i < LDNS_IP6ADDRLEN && ip4_idx < LDNS_IP4ADDRLEN; ++i) {
         if (i != IPV6_NULL_IDX) {
             result[i] = ip4[ip4_idx++];
         }

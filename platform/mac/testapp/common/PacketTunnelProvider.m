@@ -110,7 +110,9 @@
     AGDnsProxyConfig *cfg = [[AGDnsProxyConfig alloc] initWithUpstreams: nil
         // for DOH testing
         // init: @[[[AGDnsUpstream alloc] init: @"https://dns.cloudflare.com/dns-query" bootstrap: @[@"8.8.8.8"] timeout: 10000 serverIp: nil]]
-        filters: filters blockedResponseTtl: 0 dns64Settings: nil];
+        filters: filters blockedResponseTtl: 0
+        dns64Settings: nil
+        listeners: nil];
 
     AGDnsProxyEvents *events = [[AGDnsProxyEvents alloc] init];
     events.onRequestProcessed = ^(const AGDnsRequestProcessedEvent *event) {

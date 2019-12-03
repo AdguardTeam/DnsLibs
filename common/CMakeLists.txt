@@ -40,7 +40,7 @@ if (NOT TARGET ldns)
 endif ()
 
 set_target_properties(dnslibs_common PROPERTIES POSITION_INDEPENDENT_CODE ON)
-target_include_directories(dnslibs_common PUBLIC ./include)
+target_include_directories(dnslibs_common PUBLIC ./include ../third-party/magic_enum)
 target_link_libraries(dnslibs_common spdlog libevent ldns)
 
 target_compile_options(dnslibs_common PRIVATE -Wall -Wextra)
