@@ -109,7 +109,7 @@
     }];
     AGDnsProxyConfig *cfg = [[AGDnsProxyConfig alloc] initWithUpstreams: nil
         // for DOH testing
-        // init: @[[[AGDnsUpstream alloc] init: @"https://dns.cloudflare.com/dns-query" bootstrap: @[@"8.8.8.8"] timeout: 10000 serverIp: nil]]
+        // initWithUpstreams: @[[[AGDnsUpstream alloc] initWithAddress: @"https://dns9.quad9.net/dns-query" bootstrap: @[@"8.8.8.8"] timeout: 10000 serverIp: nil]]
         filters: filters blockedResponseTtl: 0
         dns64Settings: nil
         listeners: nil];
