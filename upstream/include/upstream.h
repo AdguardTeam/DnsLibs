@@ -1,7 +1,6 @@
 #pragma once
 
 #include <chrono>
-#include <list>
 #include <memory>
 #include <string>
 #include <string_view>
@@ -23,8 +22,15 @@ using ldns_pkt_ptr = std::unique_ptr<ldns_pkt, ag::ftor<&ldns_pkt_free>>;
  */
 class upstream {
 public:
-    using address_to_upstream_result = std::pair<upstream_ptr, err_string>;
-    using exchange_result = std::pair<ldns_pkt_ptr, err_string>;
+    struct address_to_upstream_result {
+        upstream_ptr upstream;
+        err_string error;
+    };
+
+    struct exchange_result {
+        ldns_pkt_ptr packet;
+        err_string error;
+    };
 
     /**
      * Options for upstream

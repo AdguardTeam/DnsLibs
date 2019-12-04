@@ -319,16 +319,6 @@ static inline auto to_array(const T *value) {
 }
 
 /**
- * Convert enum value to underlying integral type and then converts to string
- * @param value Value
- * @return String representation of integral representation of enum value
- */
-template<typename T>
-static inline std::enable_if_t<std::is_enum_v<T>, std::string> enum_to_string(T value) {
-    return std::to_string(static_cast<std::underlying_type_t<T>>(value));
-}
-
-/**
  * Conditionally returns optional or nullopt
  * @param condition Condition
  * @param value Value

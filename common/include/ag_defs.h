@@ -40,8 +40,10 @@ using ldns_rdf_ptr = std::unique_ptr<ldns_rdf, ftor<&ldns_rdf_free>>;
 template<typename T>
 using allocated_ptr = std::unique_ptr<T, ftor<&std::free>>;
 
-using ipv4_address_array = uint8_array<4>;
-using ipv6_address_array = uint8_array<16>;
+constexpr size_t ipv4_address_size = 4;
+constexpr size_t ipv6_address_size = 16;
+using ipv4_address_array = uint8_array<ipv4_address_size>;
+using ipv6_address_array = uint8_array<ipv6_address_size>;
 using ip_address_variant = std::variant<std::monostate, ipv4_address_array, ipv6_address_array>;
 
 // Convenient struct to tie a value and its mutex together

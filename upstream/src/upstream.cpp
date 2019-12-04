@@ -1,5 +1,6 @@
 #include <cassert>
 #include <functional>
+#include <spdlog/fmt/bundled/format.h>
 #include <upstream.h>
 #include "upstream_dnscrypt.h"
 #include "upstream_doh.h"
@@ -15,7 +16,7 @@ enum class scheme : size_t {
     TLS,
     HTTPS,
     UNDEFINED,
-    COUNT = UNDEFINED + 1,
+    COUNT,
 };
 
 static constexpr std::string_view SCHEME_WITH_SUFFIX[]{
@@ -117,7 +118,6 @@ static ag::upstream::address_to_upstream_result create_upstream_sdns(std::string
         }
         opts.server_ip = ip_address_variant;
     }
-    static_assert(static_cast<size_t>(ag::stamp_proto_type::COUNT) == 4, "Not all protocols used");
     switch (stamp.proto) {
     case ag::stamp_proto_type::PLAIN:
         return create_upstream_dns(stamp.server_addr_str, opts);
@@ -127,10 +127,9 @@ static ag::upstream::address_to_upstream_result create_upstream_sdns(std::string
         return create_upstream_https_without_prefix(stamp.provider_name + stamp.path, opts);
     case ag::stamp_proto_type::TLS:
         return create_upstream_tls_without_prefix(stamp.provider_name, opts);
-    default:
-        assert(false);
-        return make_error("Unknown stamp protocol: " + ag::utils::enum_to_string(stamp.proto));
     }
+    assert(false);
+    return make_error(fmt::format(FMT_STRING("Unknown stamp protocol: {}"), stamp.proto));
 }
 
 static ag::upstream::address_to_upstream_result create_upstream_common(std::string_view address,

@@ -7,6 +7,7 @@
 #endif
 #include <ldns/net.h>
 #include <sodium.h>
+#include <spdlog/fmt/bundled/format.h>
 #include "dns_crypt_cipher.h"
 #include "dns_crypt_consts.h"
 #include "dns_crypt_ldns.h"
@@ -215,7 +216,7 @@ ag::dnscrypt::server_info::txt_to_cert_info_result ag::dnscrypt::server_info::tx
         local_cert_info.encryption_algorithm = es_version;
         break;
     default:
-        return make_error("Unsupported crypto construction: " + utils::enum_to_string(es_version));
+        return make_error(fmt::format(FMT_STRING("Unsupported crypto construction: {}"), es_version));
     }
     // Verify the server public key
     uint8_view signature(&bin_cert[SIGNATURE_FIELD.offset], SIGNATURE_FIELD.size);

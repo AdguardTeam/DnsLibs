@@ -19,7 +19,7 @@ ag::plain_dns::plain_dns(std::string_view address, std::chrono::milliseconds tim
     }
 }
 
-std::pair<ag::ldns_pkt_ptr, ag::err_string> ag::plain_dns::exchange(ldns_pkt *request_pkt) {
+ag::plain_dns::exchange_result ag::plain_dns::exchange(ldns_pkt *request_pkt) {
     ldns_status status;
 
     using ldns_buffer_ptr = std::unique_ptr<ldns_buffer, ag::ftor<&ldns_buffer_free>>;

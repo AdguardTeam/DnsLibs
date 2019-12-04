@@ -9,6 +9,7 @@
 #include <ldns/host2str.h> // Requires include keys.h and rbtree.h above
 #include <ldns/packet.h>
 #include <ldns/wire2host.h>
+#include <spdlog/fmt/bundled/chrono.h>
 #include <ag_logger.h>
 #include <ag_utils.h>
 #include <dns_crypt_ldns.h>
@@ -58,7 +59,7 @@ static ag::ldns_pkt_ptr create_test_message() {
     using namespace std::string_literals;
     size_t ancount = ldns_pkt_ancount(&reply);
     if (ancount != 1) {
-        return "DNS upstream returned reply with wrong number of answers - " + std::to_string(ancount);
+        return fmt::format(FMT_STRING("DNS upstream returned reply with wrong number of answers: {}"), ancount);
     }
     ldns_rr *first_rr = ldns_rr_list_rr(ldns_pkt_answer(&reply), 0);
     if (ldns_rr_get_type(first_rr) != LDNS_RR_TYPE_A) {
@@ -149,9 +150,9 @@ TEST_F(upstream_test, test_bootstrap_timeout) {
         }
         auto elapsed = timer.elapsed<decltype(timeout)>();
         if (elapsed > 2 * timeout) {
-            return "Exchange took more time than the configured timeout: " + std::to_string(elapsed.count()) + " ms";
+            return fmt::format(FMT_STRING("Exchange took more time than the configured timeout: {}"), elapsed);
         }
-        infolog(logger(), "Finished " + std::to_string(index));
+        infolog(logger(), FMT_STRING("Finished {}"), index);
         return std::nullopt;
     });
     ag::err_string err;
@@ -159,7 +160,7 @@ TEST_F(upstream_test, test_bootstrap_timeout) {
         auto &future = futures[i];
         auto future_status = future.wait_for(10 * timeout);
         if (future_status == std::future_status::timeout) {
-            err += "No response in time for " + std::to_string(i);
+            err += fmt::format(FMT_STRING("No response in time for {}"), i);
             errlog(logger(), "No response in time for {}", i);
             continue;
         }
@@ -444,8 +445,8 @@ TEST_F(upstream_test, DISABLED_doh_concurrent_requests) {
     static const ag::upstream::options opts{
         .bootstrap = {"8.8.8.8", "1.1.1.1"},
         .timeout = 5s,
-        // .server_ip = ag::uint8_array<4>{ 104, 19, 199, 29 }, // TODO
-        // .server_ip = ag::uint8_array<16>{ 0x26, 0x06, 0x47, 0x00, 0x30, 0x0a, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x68, 0x13, 0xc7, 0x1d }, // TODO
+//         .server_ip = ag::ipv4_address_size{104, 19, 199, 29}, // Uncomment for test this server IP
+//         .server_ip = ag::ipv6_address_size{0x26, 0x06, 0x47, 0x00, 0x30, 0x0a, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x68, 0x13, 0xc7, 0x1d},  // Uncomment for test this server IP
     };
     auto[upstream_ptr, upstream_err] = ag::upstream::address_to_upstream("https://dns.cloudflare.com/dns-query", opts);
     ASSERT_FALSE(upstream_err) << *upstream_err;
@@ -455,7 +456,7 @@ TEST_F(upstream_test, DISABLED_doh_concurrent_requests) {
             ag::ldns_pkt_ptr pkt = create_test_message();
             auto[reply, reply_err] = upstream_ptr->exchange(pkt.get());
             if (reply_err) {
-                result_err += "DoH i = " + std::to_string(i) + " reply error: " + *reply_err;
+                result_err += fmt::format(FMT_STRING("DoH i = {} reply error: {}"), i, *reply_err);
                 continue;
             }
             if (!reply) {

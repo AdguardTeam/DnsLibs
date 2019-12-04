@@ -1,4 +1,4 @@
-#include <set>
+#include <spdlog/fmt/bundled/format.h>
 #include "bootstrapper.h"
 #include <ag_utils.h>
 
@@ -51,7 +51,7 @@ ag::bootstrapper::bootstrapper(std::string_view address_string, int default_port
 }
 
 std::string ag::bootstrapper::address() {
-    return m_server_name + ":" + std::to_string(m_server_port);
+    return fmt::format(FMT_STRING("{}:{}"), m_server_name, m_server_port);
 }
 
 ag::resolver::resolver(std::string_view resolver_address)
@@ -83,7 +83,7 @@ static std::vector<ag::socket_address> socket_address_from_reply(ldns_pkt *reply
 
 std::vector<ag::socket_address>
 ag::resolver::resolve(std::string_view host, int port, milliseconds timeout, bool ipv6_avail) {
-    ag::socket_address numeric_ip(utils::join_host_port(host, std::to_string(port)));
+    ag::socket_address numeric_ip(utils::join_host_port(host, fmt::to_string(port)));
     if (numeric_ip.valid()) {
         return {numeric_ip};
     }

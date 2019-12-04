@@ -55,7 +55,7 @@ public:
 
     std::string address() override;
 
-    std::pair<ldns_pkt_ptr, err_string> exchange(ldns_pkt *request_pkt) override;
+    exchange_result exchange(ldns_pkt *request_pkt) override;
 
 private:
     /** TLS connection pool */

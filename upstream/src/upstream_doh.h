@@ -47,7 +47,7 @@ public:
     struct socket_handle;
 
 private:
-    std::pair<ldns_pkt_ptr, err_string> exchange(ldns_pkt *) override;
+    exchange_result exchange(ldns_pkt *) override;
     std::string address() override;
 
     std::unique_ptr<query_handle> create_handle(ldns_pkt *request, std::chrono::milliseconds timeout) const;

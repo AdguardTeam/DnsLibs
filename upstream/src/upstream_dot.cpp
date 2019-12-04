@@ -48,7 +48,7 @@ ag::dns_over_tls::dns_over_tls(bootstrapper_ptr bootstrapper, milliseconds timeo
           m_timeout(timeout) {
 }
 
-std::pair<ag::ldns_pkt_ptr, ag::err_string> ag::dns_over_tls::exchange(ldns_pkt *request_pkt) {
+ag::dns_over_tls::exchange_result ag::dns_over_tls::exchange(ldns_pkt *request_pkt) {
     ldns_pkt *reply_pkt = nullptr;
     ldns_status status;
 
