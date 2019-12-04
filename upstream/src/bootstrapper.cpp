@@ -1,4 +1,3 @@
-#include <spdlog/fmt/bundled/format.h>
 #include "bootstrapper.h"
 #include <ag_utils.h>
 
@@ -51,7 +50,7 @@ ag::bootstrapper::bootstrapper(std::string_view address_string, int default_port
 }
 
 std::string ag::bootstrapper::address() {
-    return fmt::format(FMT_STRING("{}:{}"), m_server_name, m_server_port);
+    return AG_FMT("{}:{}", m_server_name, m_server_port);
 }
 
 ag::resolver::resolver(std::string_view resolver_address)

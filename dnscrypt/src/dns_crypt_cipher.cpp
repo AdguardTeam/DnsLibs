@@ -1,7 +1,5 @@
-#include <string>
 #include <utility>
 #include <sodium.h>
-#include <spdlog/fmt/bundled/format.h>
 #include "dns_crypt_cipher.h"
 #include <ag_utils.h>
 
@@ -122,6 +120,6 @@ ag::dnscrypt::create_cipher_result ag::dnscrypt::create_cipher(crypto_constructi
         return {&result, std::nullopt};
     }
     default:
-        return make_error(fmt::format(FMT_STRING("Can not create cipher with value = {}"), value));
+        return make_error(AG_FMT("Can not create cipher with value = {}", value));
     }
 }

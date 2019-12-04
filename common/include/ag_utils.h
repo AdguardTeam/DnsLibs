@@ -16,6 +16,7 @@
 #include <utility>
 #include <vector>
 #include <ag_defs.h>
+#include <spdlog/fmt/bundled/format.h>
 
 /**
  * Macros to create constexpr value and type to check expression
@@ -74,6 +75,11 @@ template<typename T, size_t N> \
 struct TRAITS_NAME ## _type : std::bool_constant<detail:: TRAITS_NAME ## _impl<T, N>::value> {}; \
 template<typename T, size_t N> \
 inline constexpr bool TRAITS_NAME = TRAITS_NAME ## _type<T, N>::value;
+
+/**
+ * Macros for fmt::format with compile-time checked FMT_STRING
+ */
+#define AG_FMT(FORMAT, ...) fmt::format(FMT_STRING(FORMAT), __VA_ARGS__)
 
 namespace ag::utils {
 

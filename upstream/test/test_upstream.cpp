@@ -59,7 +59,7 @@ static ag::ldns_pkt_ptr create_test_message() {
     using namespace std::string_literals;
     size_t ancount = ldns_pkt_ancount(&reply);
     if (ancount != 1) {
-        return fmt::format(FMT_STRING("DNS upstream returned reply with wrong number of answers: {}"), ancount);
+        return AG_FMT("DNS upstream returned reply with wrong number of answers: {}", ancount);
     }
     ldns_rr *first_rr = ldns_rr_list_rr(ldns_pkt_answer(&reply), 0);
     if (ldns_rr_get_type(first_rr) != LDNS_RR_TYPE_A) {
@@ -150,7 +150,7 @@ TEST_F(upstream_test, test_bootstrap_timeout) {
         }
         auto elapsed = timer.elapsed<decltype(timeout)>();
         if (elapsed > 2 * timeout) {
-            return fmt::format(FMT_STRING("Exchange took more time than the configured timeout: {}"), elapsed);
+            return AG_FMT("Exchange took more time than the configured timeout: {}", elapsed);
         }
         infolog(logger(), FMT_STRING("Finished {}"), index);
         return std::nullopt;
@@ -160,7 +160,7 @@ TEST_F(upstream_test, test_bootstrap_timeout) {
         auto &future = futures[i];
         auto future_status = future.wait_for(10 * timeout);
         if (future_status == std::future_status::timeout) {
-            err += fmt::format(FMT_STRING("No response in time for {}"), i);
+            err += AG_FMT("No response in time for {}", i);
             errlog(logger(), "No response in time for {}", i);
             continue;
         }
@@ -456,7 +456,7 @@ TEST_F(upstream_test, DISABLED_doh_concurrent_requests) {
             ag::ldns_pkt_ptr pkt = create_test_message();
             auto[reply, reply_err] = upstream_ptr->exchange(pkt.get());
             if (reply_err) {
-                result_err += fmt::format(FMT_STRING("DoH i = {} reply error: {}"), i, *reply_err);
+                result_err += AG_FMT("DoH i = {} reply error: {}", i, *reply_err);
                 continue;
             }
             if (!reply) {

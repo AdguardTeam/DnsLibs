@@ -1,6 +1,5 @@
 #include <cassert>
 #include <functional>
-#include <spdlog/fmt/bundled/format.h>
 #include <upstream.h>
 #include "upstream_dnscrypt.h"
 #include "upstream_doh.h"
@@ -129,7 +128,7 @@ static ag::upstream::address_to_upstream_result create_upstream_sdns(std::string
         return create_upstream_tls_without_prefix(stamp.provider_name, opts);
     }
     assert(false);
-    return make_error(fmt::format(FMT_STRING("Unknown stamp protocol: {}"), stamp.proto));
+    return make_error(AG_FMT("Unknown stamp protocol: {}", stamp.proto));
 }
 
 static ag::upstream::address_to_upstream_result create_upstream_common(std::string_view address,
@@ -145,7 +144,8 @@ static ag::upstream::address_to_upstream_result create_upstream_common(std::stri
     };
     static_assert(std::size(create_functions) == static_cast<size_t>(scheme::COUNT),
                   "create_functions should contains all create functions for schemes defined in enum");
-    return create_functions[static_cast<size_t>(get_address_scheme(address))](address, opts);
+    auto index = (size_t)get_address_scheme(address);
+    return create_functions[index](address, opts);
 }
 
 ag::upstream::address_to_upstream_result ag::upstream::address_to_upstream(std::string_view address,

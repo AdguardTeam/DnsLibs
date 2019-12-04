@@ -8,7 +8,7 @@
 #include <utility>
 #include <vector>
 #include <event2/util.h>
-#include <spdlog/fmt/bundled/format.h>
+#include <ag_utils.h>
 #include <base64.h>
 #include <dns_stamp.h>
 #ifdef _WIN32
@@ -114,7 +114,7 @@ void write_stamp_proto_props_server_addr_str(std::vector<uint8_t> &bin, const se
                                              stamp_proto_type stamp_proto_type, stamp_port port) {
     bin = {static_cast<uint8_t>(stamp_proto_type)};
     write_bytes(bin, stamp.props);
-    auto port_suffix = fmt::format(FMT_STRING(":{}"), port);
+    auto port_suffix = AG_FMT(":{}", port);
     write_bytes_with_size(bin, remove_suffix_if_exists(stamp.server_addr_str, port_suffix));
 }
 
@@ -179,7 +179,7 @@ err_string read_stamp_proto_props_server_addr_str(server_stamp &stamp, size_t &p
     std::string addr_str_copy_s(addr_str_copy_sv.begin(), addr_str_copy_sv.end());
     auto getaddrinfo_result = getaddrinfo(addr_str_copy_s.c_str(), nullptr, &addrinfo_hints, &addrinfo_res);
     if (getaddrinfo_result == 0 && (addrinfo_res->ai_family == AF_INET || addrinfo_res->ai_family == AF_INET6)) {
-        stamp.server_addr_str += fmt::format(FMT_STRING(":{}"), port);
+        stamp.server_addr_str += AG_FMT(":{}", port);
     }
     freeaddrinfo(addrinfo_res);
     return std::nullopt;
@@ -324,7 +324,7 @@ std::string server_stamp::str() const {
 
 server_stamp::from_str_result server_stamp::from_string(std::string_view url) {
     if (!starts_with(url, STAMP_URL_PREFIX_WITH_SCHEME)) {
-        return {{}, fmt::format(FMT_STRING("stamps are expected to start with {}"), STAMP_URL_PREFIX_WITH_SCHEME)};
+        return {{}, AG_FMT("stamps are expected to start with {}", STAMP_URL_PREFIX_WITH_SCHEME)};
     }
     std::string_view encoded(url);
     encoded.remove_prefix(std::string_view(STAMP_URL_PREFIX_WITH_SCHEME).size());

@@ -67,8 +67,7 @@ std::vector<uint8_t> ag::socket_address::addr() const {
         using T = std::decay_t<decltype(value)>;
         if constexpr (std::is_same_v<T, std::monostate>) {
             return {};
-        }
-        else {
+        } else {
             return {value.begin(), value.end()};
         }
     }, addr_variant());
@@ -77,12 +76,12 @@ std::vector<uint8_t> ag::socket_address::addr() const {
 ag::ip_address_variant ag::socket_address::addr_variant() const {
     switch (m_ss.ss_family) {
     case AF_INET: {
-        auto &sin = reinterpret_cast<const sockaddr_in &>(m_ss);
-        return utils::to_array<ipv4_address_size>(reinterpret_cast<const uint8_t *>(&sin.sin_addr));
+        auto &sin = (const sockaddr_in &)m_ss;
+        return utils::to_array<ipv4_address_size>((const uint8_t *)&sin.sin_addr);
     }
     case AF_INET6: {
-        auto &sin6 = reinterpret_cast<const sockaddr_in6 &>(m_ss);
-        return utils::to_array<ipv6_address_size>(reinterpret_cast<const uint8_t *>(&sin6.sin6_addr));
+        auto &sin6 = (const sockaddr_in6 &)m_ss;
+        return utils::to_array<ipv6_address_size>((const uint8_t *)&sin6.sin6_addr);
     }
     default:
         return std::monostate{};
