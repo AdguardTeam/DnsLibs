@@ -242,12 +242,10 @@ dns_over_https::~dns_over_https() {
 struct dns_over_https::socket_handle {
     curl_socket_t fd = CURLM_BAD_SOCKET;
     int action = 0;
-    event event_handle = {};
+    event_ptr event_handle = nullptr;
 
     ~socket_handle() {
-        if (this->event_handle.ev_base != nullptr) {
-            event_del(&this->event_handle);
-        }
+        this->event_handle.reset();
     }
 
     void init(curl_socket_t socket, int act, dns_over_https *upstream) {
@@ -257,12 +255,9 @@ struct dns_over_https::socket_handle {
 
         this->fd = socket;
         this->action = act;
-        if (this->event_handle.ev_base != nullptr) {
-            event_del(&this->event_handle);
-        }
-        event_assign(&this->event_handle, upstream->worker.loop->c_base(), socket, what,
-            dns_over_https::on_socket_event, upstream);
-        event_add(&this->event_handle, nullptr);
+        this->event_handle.reset(event_new(upstream->worker.loop->c_base(), socket, what,
+            dns_over_https::on_socket_event, upstream));
+        event_add(this->event_handle.get(), nullptr);
     }
 };
 using socket_handle = dns_over_https::socket_handle;
@@ -271,13 +266,10 @@ int dns_over_https::on_pool_timer_event(CURLM *multi, long timeout_ms, dns_over_
     tracelog(upstream->log, "{}: Setting timeout to {}ms", __func__, timeout_ms);
 
     event_ptr &event = upstream->pool.timer_event;
-    if (event != nullptr) {
-        event_del(event.get());
-    }
-    if (timeout_ms >= 0) {
-        if (event == nullptr) {
-            event.reset(event_new(upstream->worker.loop->c_base(), 0, EV_TIMEOUT, on_event_timeout, upstream));
-        }
+    if (timeout_ms < 0) {
+        event.reset();
+    } else {
+        event.reset(event_new(upstream->worker.loop->c_base(), 0, EV_TIMEOUT, on_event_timeout, upstream));
         timeval timeout = utils::duration_to_timeval(milliseconds(timeout_ms));
         evtimer_add(event.get(), &timeout);
     }
