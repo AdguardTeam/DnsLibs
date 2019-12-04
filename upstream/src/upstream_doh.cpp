@@ -54,6 +54,9 @@ struct dns_over_https::query_handle {
 
     CURL *create_curl_handle();
     void cleanup_request();
+    void restore_packet_id(ldns_pkt *packet) const {
+        ldns_pkt_set_id(packet, this->request_id);
+    }
 };
 
 static size_t write_callback(void *contents, size_t size, size_t nmemb, void *arg) {
@@ -457,6 +460,7 @@ dns_over_https::exchange_result dns_over_https::exchange(ldns_pkt *request) {
 
     std::unique_ptr<query_handle> handle = create_handle(request, timeout);
     if (handle == nullptr) {
+        handle->restore_packet_id(request);
         return { nullptr, "Failed to create request handle" };
     }
 
@@ -485,8 +489,9 @@ dns_over_https::exchange_result dns_over_https::exchange(ldns_pkt *request) {
         err = AG_FMT("Failed to parse response: {}", ldns_get_errorstr_by_id(status));
     }
 
+    handle->restore_packet_id(request);
     if (response != nullptr) {
-        ldns_pkt_set_id(response, handle->request_id);
+        handle->restore_packet_id(response);
     }
     tracelog_id(handle, "Completed");
 
