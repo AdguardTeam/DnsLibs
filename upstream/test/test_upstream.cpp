@@ -148,7 +148,7 @@ TEST_F(upstream_test, test_bootstrap_timeout) {
         if (!reply_err) {
             return "The upstream must have timed out";
         }
-        auto elapsed = timer.elapsed<decltype(timeout)>();
+        auto elapsed = timer.elapsed<std::chrono::milliseconds>();
         if (elapsed > 2 * timeout) {
             return AG_FMT("Exchange took more time than the configured timeout: {}", elapsed);
         }
