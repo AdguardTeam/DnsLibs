@@ -450,10 +450,9 @@ static NSData *create_response_packet(const struct iphdr *ip_header, const struc
         , inet_ntoa(ip_header->ip_src), ntohs(udp_header->uh_sport)
         , inet_ntoa(ip_header->ip_dst), ntohs(udp_header->uh_dport));
 
-    NSData *payload = [NSData dataWithBytes: ((Byte *)packet.bytes + udp_header_length)
-        length: (packet.length - udp_header_length)];
-
-    std::vector<uint8_t> response = self->proxy.handle_message({(uint8_t*)[payload bytes], [payload length]});
+    ag::uint8_view payload = { (uint8_t*)packet.bytes + udp_header_length, packet.length - udp_header_length };
+    std::vector<uint8_t> response = self->proxy.handle_message(payload);
     return create_response_packet(ip_header, udp_header, response);
 }
+
 @end
