@@ -4,6 +4,7 @@
 #include <memory>
 #include <dns_stamp.h>
 #include <upstream.h>
+#include <ag_logger.h>
 
 namespace ag {
 
@@ -29,6 +30,7 @@ private:
     err_string setup_impl();
     exchange_result apply_exchange(ldns_pkt &request_pkt);
 
+    logger m_log = create_logger("DNScrypt upstream");
     server_stamp m_stamp;
     std::chrono::milliseconds m_timeout;
     impl_ptr m_impl;

@@ -1,9 +1,10 @@
 #include <chrono>
 #include <ag_utils.h>
-#include <ag_logger.h>
 #include <sodium.h>
 #include "upstream_dnscrypt.h"
 #include <dns_crypt_client.h>
+
+#define tracelog_id(log_, pkt_, fmt_, ...) tracelog(log_, "[{}] " fmt_, ldns_pkt_id(pkt_), ##__VA_ARGS__)
 
 struct initializer {
     initializer() {
@@ -12,11 +13,6 @@ struct initializer {
         }
     }
 };
-
-static const ag::logger &upstream_dnscrypt_log() {
-    static auto result = ag::create_logger("ag::dnscrypt::upstream_dnscrypt");
-    return result;
-}
 
 struct ag::upstream_dnscrypt::impl {
     dnscrypt::client udp_client;
@@ -36,6 +32,7 @@ std::string ag::upstream_dnscrypt::address() {
 }
 
 ag::upstream_dnscrypt::exchange_result ag::upstream_dnscrypt::exchange(ldns_pkt *request_pkt) {
+    tracelog_id(m_log, request_pkt, "Started");
     static constexpr utils::make_error<exchange_result> make_error;
     if (auto setup_impl_err = setup_impl()) {
         return make_error(std::move(setup_impl_err));
@@ -67,7 +64,7 @@ ag::err_string ag::upstream_dnscrypt::setup_impl() {
 ag::upstream_dnscrypt::exchange_result ag::upstream_dnscrypt::apply_exchange(ldns_pkt &request_pkt) {
     auto[udp_reply, udp_reply_rtt, udp_reply_err] = m_impl->udp_client.exchange(request_pkt, m_impl->server_info);
     if (udp_reply && ldns_pkt_tc(udp_reply.get())) {
-        tracelog(upstream_dnscrypt_log(), "Truncated message was received, retrying over TCP");
+        tracelog_id(m_log, &request_pkt, "Truncated message was received, retrying over TCP");
         dnscrypt::client tcp_client(dnscrypt::protocol::TCP, m_timeout);
         auto[tcp_reply, tcp_reply_rtt, tcp_reply_err] = tcp_client.exchange(request_pkt, m_impl->server_info);
         return {std::move(tcp_reply), std::move(tcp_reply_err)};
