@@ -229,8 +229,9 @@ ag::dnscrypt::server_info::txt_to_cert_info_result ag::dnscrypt::server_info::tx
     local_cert_info.not_after = ntohl(field_cref<uint32_t>(bin_cert, TS_END_FIELD));
     // Validate the certificate date
     if (local_cert_info.not_before >= local_cert_info.not_after) {
-        return make_error("Certificate ends before it starts (" + utils::time_to_str(local_cert_info.not_before) +
-                                  " >= " + utils::time_to_str(local_cert_info.not_after) + ")");
+        return make_error(AG_FMT("Certificate ends before it starts ({} >= {})",
+                                 utils::time_to_str(local_cert_info.not_before),
+                                 utils::time_to_str(local_cert_info.not_after)));
     }
     auto now = chrono::duration_cast<chrono::seconds>(chrono::system_clock::now().time_since_epoch()).count();
     if (now > local_cert_info.not_after || now < local_cert_info.not_before) {

@@ -76,7 +76,7 @@ static ag::upstream::address_to_upstream_result create_upstream_https(std::strin
 
 static ag::upstream::address_to_upstream_result create_upstream_https_without_prefix(
         std::string_view address, const ag::upstream::options &opts) {
-    return create_upstream_https(std::string(ag::dns_over_https::SCHEME) + std::string(address), opts);
+    return create_upstream_https(AG_FMT("{}{}", ag::dns_over_https::SCHEME, address), opts);
 }
 
 static ag::upstream::address_to_upstream_result create_upstream_dns_common(std::string_view address,
@@ -113,7 +113,7 @@ static ag::upstream::address_to_upstream_result create_upstream_sdns(std::string
         auto host = ag::utils::split_host_port(stamp.server_addr_str).first;
         auto ip_address_variant = ag::socket_address(host).addr_variant();
         if (std::holds_alternative<std::monostate>(ip_address_variant)) {
-            return make_error("Invalid server address in the stamp: " + stamp.server_addr_str);
+            return make_error(AG_FMT("Invalid server address in the stamp: {}", stamp.server_addr_str));
         }
         opts.server_ip = ip_address_variant;
     }
@@ -123,7 +123,7 @@ static ag::upstream::address_to_upstream_result create_upstream_sdns(std::string
     case ag::stamp_proto_type::DNSCRYPT:
         return create_upstream_dnscrypt(std::move(stamp), opts);
     case ag::stamp_proto_type::DOH:
-        return create_upstream_https_without_prefix(stamp.provider_name + stamp.path, opts);
+        return create_upstream_https_without_prefix(AG_FMT("{}{}", stamp.provider_name, stamp.path), opts);
     case ag::stamp_proto_type::TLS:
         return create_upstream_tls_without_prefix(stamp.provider_name, opts);
     }

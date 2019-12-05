@@ -39,7 +39,7 @@ ag::err_string &operator+=(ag::err_string &result, const ag::err_string &err) {
             result = std::string{};
         }
         if (result) {
-            *result += *err + '\n';
+            *result += AG_FMT("{}\n", *err);
         }
     }
     return result;
@@ -56,20 +56,20 @@ static ag::ldns_pkt_ptr create_test_message() {
 }
 
 [[nodiscard]] static ag::err_string assert_response(const ldns_pkt &reply) {
-    using namespace std::string_literals;
     size_t ancount = ldns_pkt_ancount(&reply);
     if (ancount != 1) {
         return AG_FMT("DNS upstream returned reply with wrong number of answers: {}", ancount);
     }
     ldns_rr *first_rr = ldns_rr_list_rr(ldns_pkt_answer(&reply), 0);
     if (ldns_rr_get_type(first_rr) != LDNS_RR_TYPE_A) {
-        return "DNS upstream returned wrong answer type instead of A: "s + ldns_rr_type2str(ldns_rr_get_type(first_rr));
+        return AG_FMT("DNS upstream returned wrong answer type instead of A: {}",
+                      ldns_rr_type2str(ldns_rr_get_type(first_rr)));
     }
     ldns_rdf *rdf = ldns_rr_rdf(first_rr, 0);
     ag::uint8_view ip{ldns_rdf_data(rdf), ldns_rdf_size(rdf)};
     static const auto ip8888 = ag::utils::to_string_view<uint8_t>({8, 8, 8, 8});
     if (ip != ip8888) {
-        return "DNS upstream returned wrong answer instead of 8.8.8.8: ";
+        return "DNS upstream returned wrong answer instead of 8.8.8.8";
     }
     return std::nullopt;
 }
@@ -78,7 +78,7 @@ static ag::ldns_pkt_ptr create_test_message() {
     auto req = create_test_message();
     auto[reply, err] = upstream.exchange(req.get());
     if (err) {
-        return "Couldn't talk to upstream " + addr + ": " + *err;
+        return AG_FMT("Couldn't talk to upstream {}: {}", addr, *err);
     }
     return assert_response(*reply);
 }
@@ -125,7 +125,7 @@ static void parallel_test(const T &data) {
     parallel_test_basic(data, [](const auto &address, const auto &bootstrap, const auto &server_ip) -> ag::err_string {
         auto[upstream_ptr, upstream_err] = ag::upstream::address_to_upstream(address, {bootstrap, DEFAULT_TIMEOUT});
         if (upstream_err) {
-            return "Failed to generate upstream from address " + address +  ": " + *upstream_err;
+            return AG_FMT("Failed to generate upstream from address {}: {}", address, *upstream_err);
         }
         return check_upstream(*upstream_ptr, address);
     });

@@ -57,7 +57,7 @@ ag::err_string ag::upstream_dnscrypt::setup_impl() {
         dnscrypt::client client(m_timeout);
         auto[dial_server_info, dial_rtt, dial_err] = client.dial(m_stamp);
         if (dial_err) {
-            return "Failed to fetch certificate info from " + address() + " with error: " + *dial_err;
+            return AG_FMT("Failed to fetch certificate info from {} with error: {}", address(), *dial_err);
         }
         m_impl.reset(new impl{client, std::move(dial_server_info)});
     }
