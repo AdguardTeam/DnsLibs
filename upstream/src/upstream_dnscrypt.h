@@ -34,6 +34,7 @@ private:
     server_stamp m_stamp;
     std::chrono::milliseconds m_timeout;
     impl_ptr m_impl;
+    std::mutex m_guard;
 };
 
 } // namespace ag
