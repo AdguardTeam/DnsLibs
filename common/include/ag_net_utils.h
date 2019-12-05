@@ -1,10 +1,9 @@
 #pragma once
 
-#include <string>
-#include <optional>
 #include <chrono>
-#include <time.h>
-#include <unordered_map>
+#include <ctime>
+#include <string>
+#include <string_view>
 
 namespace ag::utils {
 

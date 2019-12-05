@@ -1,5 +1,5 @@
 #include "bootstrapper.h"
-#include <set>
+#include <ag_utils.h>
 
 using std::chrono::steady_clock;
 using std::chrono::duration_cast;
@@ -8,11 +8,10 @@ using std::chrono::milliseconds;
 static constexpr auto MIN_TIMEOUT = std::chrono::milliseconds(50);
 
 ag::bootstrapper::ret ag::bootstrapper::get() {
+    static constexpr utils::make_error<ret> make_error;
     ag::hash_set<ag::socket_address> addrs;
-    auto total_start_time = steady_clock::now().time_since_epoch();
-
+    utils::timer timer;
     std::scoped_lock l(m_resolved_cache_mutex);
-
     if (m_resolved_cache.empty()) {
         milliseconds timeout = std::chrono::seconds(5);
         for (auto &resolver : m_resolvers) {
@@ -26,11 +25,13 @@ ag::bootstrapper::ret ag::bootstrapper::get() {
         }
         m_resolved_cache.assign(std::move_iterator(addrs.begin()), std::move_iterator(addrs.end()));
     }
-
-    return {.address = m_resolved_cache.empty() ?
-                    std::nullopt : std::make_optional(m_resolved_cache[m_round_robin_num++ % m_resolved_cache.size()]),
+    auto elapsed = timer.elapsed<milliseconds>();
+    if (m_resolved_cache.empty()) {
+        return make_error("No address", std::nullopt, m_server_name, elapsed);
+    }
+    return {.address = m_resolved_cache[m_round_robin_num++ % m_resolved_cache.size()],
             .server_name = m_server_name,
-            .time_elapsed = duration_cast<milliseconds>(steady_clock::now().time_since_epoch() - total_start_time)};
+            .time_elapsed = elapsed};
 }
 
 ag::bootstrapper::bootstrapper(std::string_view address_string, int default_port,
@@ -49,7 +50,7 @@ ag::bootstrapper::bootstrapper(std::string_view address_string, int default_port
 }
 
 std::string ag::bootstrapper::address() {
-    return m_server_name + ":" + std::to_string(m_server_port);
+    return AG_FMT("{}:{}", m_server_name, m_server_port);
 }
 
 ag::resolver::resolver(std::string_view resolver_address)
@@ -81,7 +82,7 @@ static std::vector<ag::socket_address> socket_address_from_reply(ldns_pkt *reply
 
 std::vector<ag::socket_address>
 ag::resolver::resolve(std::string_view host, int port, milliseconds timeout, bool ipv6_avail) {
-    ag::socket_address numeric_ip(utils::join_host_port(host, std::to_string(port)));
+    ag::socket_address numeric_ip(utils::join_host_port(host, fmt::to_string(port)));
     if (numeric_ip.valid()) {
         return {numeric_ip};
     }

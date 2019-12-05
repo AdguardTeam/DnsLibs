@@ -7,8 +7,7 @@ std::string ag::plain_dns::address() {
     return m_socket_address.str();
 }
 
-ag::plain_dns::plain_dns(std::string_view address, const std::chrono::milliseconds &timeout,
-                         bool prefer_tcp) :
+ag::plain_dns::plain_dns(std::string_view address, std::chrono::milliseconds timeout, bool prefer_tcp) :
         m_pool(event_loop::create(), socket_address(address)),
         m_socket_address(address),
         m_timeout(timeout),
@@ -20,7 +19,7 @@ ag::plain_dns::plain_dns(std::string_view address, const std::chrono::millisecon
     }
 }
 
-std::pair<ag::ldns_pkt_ptr, ag::err_string> ag::plain_dns::exchange(ldns_pkt *request_pkt) {
+ag::plain_dns::exchange_result ag::plain_dns::exchange(ldns_pkt *request_pkt) {
     ldns_status status;
 
     using ldns_buffer_ptr = std::unique_ptr<ldns_buffer, ag::ftor<&ldns_buffer_free>>;

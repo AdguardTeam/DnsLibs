@@ -47,6 +47,11 @@ public:
     std::vector<uint8_t> addr() const;
 
     /**
+     * @return IP address variant
+     */
+    ip_address_variant addr_variant() const;
+
+    /**
      * @return Port number
      */
     int port() const;

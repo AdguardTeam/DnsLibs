@@ -19,14 +19,14 @@ if (NOT TARGET sodium)
 endif ()
 
 add_library(dnscrypt EXCLUDE_FROM_ALL
+        include/dns_crypt_cipher.h
         include/dns_crypt_client.h
+        include/dns_crypt_consts.h
         include/dns_crypt_ldns.h
         include/dns_crypt_server_info.h
         include/dns_crypt_utils.h
         src/dns_crypt_cipher.cpp
-        src/dns_crypt_cipher.h
         src/dns_crypt_client.cpp
-        src/dns_crypt_consts
         src/dns_crypt_ldns.cpp
         src/dns_crypt_padding.cpp
         src/dns_crypt_padding.h

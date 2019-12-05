@@ -1,7 +1,8 @@
-#include <ag_socket_address.h>
 #include <cstring>
 #include <string>
 #include <ag_net_utils.h>
+#include <ag_socket_address.h>
+#include <ag_utils.h>
 #ifdef _WIN32
 #include <ws2tcpip.h>
 #endif
@@ -62,19 +63,28 @@ ag::socket_address::socket_address(std::string_view address_string)
 }
 
 std::vector<uint8_t> ag::socket_address::addr() const {
-    switch (m_ss.ss_family) {
-        case AF_INET6: {
-            auto &sin6 = (const sockaddr_in6 &) m_ss;
-            return {(uint8_t *) &sin6.sin6_addr,
-                    (uint8_t *) &sin6.sin6_addr + sizeof(sin6.sin6_addr)};
-        }
-        case AF_INET: {
-            auto &sin = (const sockaddr_in &) m_ss;
-            return {(uint8_t *) &sin.sin_addr,
-                    (uint8_t *) &sin.sin_addr + sizeof(sin.sin_addr)};
-        }
-        default:
+    return std::visit([](auto &&value) -> std::vector<uint8_t> {
+        using T = std::decay_t<decltype(value)>;
+        if constexpr (std::is_same_v<T, std::monostate>) {
             return {};
+        } else {
+            return {value.begin(), value.end()};
+        }
+    }, addr_variant());
+}
+
+ag::ip_address_variant ag::socket_address::addr_variant() const {
+    switch (m_ss.ss_family) {
+    case AF_INET: {
+        auto &sin = (const sockaddr_in &)m_ss;
+        return utils::to_array<ipv4_address_size>((const uint8_t *)&sin.sin_addr);
+    }
+    case AF_INET6: {
+        auto &sin6 = (const sockaddr_in6 &)m_ss;
+        return utils::to_array<ipv6_address_size>((const uint8_t *)&sin6.sin6_addr);
+    }
+    default:
+        return std::monostate{};
     }
 }
 

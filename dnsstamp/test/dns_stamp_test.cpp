@@ -59,18 +59,18 @@ void test_server_stamp_parse(std::string_view stamp_str,
 } // namespace
 
 TEST_F(dnsstamp_test, test_dnscrypt_stamp_create) {
-	// same as exampleStamp in dnscrypt-stamper
-	static constexpr auto expected = "sdns://AQcAAAAAAAAACTEyNy4wLjAuMSDDhGvyS56TymQnTA7GfB7MXgJP_KzS10AZNQ6B_lRq5BkyLmRuc2NyeXB0LWNlcnQubG9jYWxob3N0";
-	ag::server_stamp stamp{};
-	stamp.props = ag::server_informal_properties{
-		(uint64_t)ag::server_informal_properties::DNSSEC |
-		(uint64_t)ag::server_informal_properties::NO_LOG |
-		(uint64_t)ag::server_informal_properties::NO_FILTER
-	};
-	stamp.proto = ag::stamp_proto_type::DNSCRYPT;
-	stamp.server_addr_str = "127.0.0.1";
-	stamp.provider_name = "2.dnscrypt-cert.localhost";
-	stamp.server_pk = pk1;
+    // same as exampleStamp in dnscrypt-stamper
+    static constexpr auto expected = "sdns://AQcAAAAAAAAACTEyNy4wLjAuMSDDhGvyS56TymQnTA7GfB7MXgJP_KzS10AZNQ6B_lRq5BkyLmRuc2NyeXB0LWNlcnQubG9jYWxob3N0";
+    ag::server_stamp stamp{};
+    stamp.props = ag::server_informal_properties{
+        (uint64_t)ag::server_informal_properties::DNSSEC |
+        (uint64_t)ag::server_informal_properties::NO_LOG |
+        (uint64_t)ag::server_informal_properties::NO_FILTER
+    };
+    stamp.proto = ag::stamp_proto_type::DNSCRYPT;
+    stamp.server_addr_str = "127.0.0.1";
+    stamp.provider_name = "2.dnscrypt-cert.localhost";
+    stamp.server_pk = pk1;
     test_server_stamp_create(stamp, expected);
 }
 
@@ -85,73 +85,73 @@ TEST_F(dnsstamp_test, test_dnscrypt_stamp_parse) {
 }
 
 TEST_F(dnsstamp_test, test_doh_stamp) {
-	static constexpr auto expected = "sdns://AgcAAAAAAAAACTEyNy4wLjAuMSDDhGvyS56TymQnTA7GfB7MXgJP_KzS10AZNQ6B_lRq5AtleGFtcGxlLmNvbQovZG5zLXF1ZXJ5";
-	ag::server_stamp stamp{};
-	stamp.props = ag::server_informal_properties{
-		(uint64_t)ag::server_informal_properties::DNSSEC |
-		(uint64_t)ag::server_informal_properties::NO_LOG |
-		(uint64_t)ag::server_informal_properties::NO_FILTER
+    static constexpr auto expected = "sdns://AgcAAAAAAAAACTEyNy4wLjAuMSDDhGvyS56TymQnTA7GfB7MXgJP_KzS10AZNQ6B_lRq5AtleGFtcGxlLmNvbQovZG5zLXF1ZXJ5";
+    ag::server_stamp stamp{};
+    stamp.props = ag::server_informal_properties{
+        (uint64_t)ag::server_informal_properties::DNSSEC |
+        (uint64_t)ag::server_informal_properties::NO_LOG |
+        (uint64_t)ag::server_informal_properties::NO_FILTER
     };
-	stamp.server_addr_str = "127.0.0.1";
-	stamp.proto = ag::stamp_proto_type::DOH;
-	stamp.provider_name = "example.com";
-	stamp.hashes = {{pk1}};
-	stamp.path = "/dns-query";
+    stamp.server_addr_str = "127.0.0.1";
+    stamp.proto = ag::stamp_proto_type::DOH;
+    stamp.provider_name = "example.com";
+    stamp.hashes = {{pk1}};
+    stamp.path = "/dns-query";
     test_server_stamp_create(stamp, expected);
 }
 
 TEST_F(dnsstamp_test, test_doh_short_stamp) {
-	static constexpr auto expected = "sdns://AgAAAAAAAAAAAAALZXhhbXBsZS5jb20KL2Rucy1xdWVyeQ";
-	ag::server_stamp stamp{};
-	stamp.proto = ag::stamp_proto_type::DOH;
-	stamp.provider_name = "example.com";
-	stamp.path = "/dns-query";
+    static constexpr auto expected = "sdns://AgAAAAAAAAAAAAALZXhhbXBsZS5jb20KL2Rucy1xdWVyeQ";
+    ag::server_stamp stamp{};
+    stamp.proto = ag::stamp_proto_type::DOH;
+    stamp.provider_name = "example.com";
+    stamp.path = "/dns-query";
     test_server_stamp_create(stamp, expected);
 }
 
 TEST_F(dnsstamp_test, test_doh_stamp_parse) {
-	// Google DoH
-	static constexpr auto stamp_str = "sdns://AgUAAAAAAAAAACAe9iTP_15r07rd8_3b_epWVGfjdymdx-5mdRZvMAzBuQ5kbnMuZ29vZ2xlLmNvbQ0vZXhwZXJpbWVudGFs";
-	test_server_stamp_parse(stamp_str, [](const auto &stamp) {
+    // Google DoH
+    static constexpr auto stamp_str = "sdns://AgUAAAAAAAAAACAe9iTP_15r07rd8_3b_epWVGfjdymdx-5mdRZvMAzBuQ5kbnMuZ29vZ2xlLmNvbQ0vZXhwZXJpbWVudGFs";
+    test_server_stamp_parse(stamp_str, [](const auto &stamp) {
         return stamp.proto != ag::stamp_proto_type::DOH ||
                stamp.provider_name != "dns.google.com" ||
                stamp.path != "/experimental";
-	});
+    });
 }
 
 TEST_F(dnsstamp_test, test_dot_stamp) {
     static constexpr auto expected = "sdns://AwcAAAAAAAAACTEyNy4wLjAuMSDDhGvyS56TymQnTA7GfB7MXgJP_KzS10AZNQ6B_lRq5AtleGFtcGxlLmNvbQ";
-	ag::server_stamp stamp{};
-	stamp.props = ag::server_informal_properties{
-		(uint64_t)ag::server_informal_properties::DNSSEC |
-		(uint64_t)ag::server_informal_properties::NO_LOG |
-		(uint64_t)ag::server_informal_properties::NO_FILTER
-	};
-	stamp.server_addr_str = "127.0.0.1";
-	stamp.proto = ag::stamp_proto_type::TLS;
-	stamp.provider_name = "example.com";
-	stamp.hashes = {{pk1}};
+    ag::server_stamp stamp{};
+    stamp.props = ag::server_informal_properties{
+        (uint64_t)ag::server_informal_properties::DNSSEC |
+        (uint64_t)ag::server_informal_properties::NO_LOG |
+        (uint64_t)ag::server_informal_properties::NO_FILTER
+    };
+    stamp.server_addr_str = "127.0.0.1";
+    stamp.proto = ag::stamp_proto_type::TLS;
+    stamp.provider_name = "example.com";
+    stamp.hashes = {{pk1}};
     test_server_stamp_create(stamp, expected);
 }
 
 TEST_F(dnsstamp_test, test_dot_short_stamp) {
-	static constexpr auto expected = "sdns://AwAAAAAAAAAAAAAPZG5zLmFkZ3VhcmQuY29t";
-	ag::server_stamp stamp{};
-	stamp.proto = ag::stamp_proto_type::TLS;
-	stamp.provider_name = "dns.adguard.com";
+    static constexpr auto expected = "sdns://AwAAAAAAAAAAAAAPZG5zLmFkZ3VhcmQuY29t";
+    ag::server_stamp stamp{};
+    stamp.proto = ag::stamp_proto_type::TLS;
+    stamp.provider_name = "dns.adguard.com";
     test_server_stamp_create(stamp, expected);
 }
 
 TEST_F(dnsstamp_test, test_plain_stamp) {
-	static constexpr auto expected = "sdns://AAcAAAAAAAAABzguOC44Ljg";
-	ag::server_stamp stamp{};
-	stamp.props = ag::server_informal_properties{
-		(uint64_t)ag::server_informal_properties::DNSSEC |
-		(uint64_t)ag::server_informal_properties::NO_LOG |
-		(uint64_t)ag::server_informal_properties::NO_FILTER
-	};
-	stamp.server_addr_str = "127.0.0.1";
-	stamp.proto = ag::stamp_proto_type::PLAIN;
-	stamp.server_addr_str = "8.8.8.8";
-	test_server_stamp_create(stamp, expected);
+    static constexpr auto expected = "sdns://AAcAAAAAAAAABzguOC44Ljg";
+    ag::server_stamp stamp{};
+    stamp.props = ag::server_informal_properties{
+        (uint64_t)ag::server_informal_properties::DNSSEC |
+        (uint64_t)ag::server_informal_properties::NO_LOG |
+        (uint64_t)ag::server_informal_properties::NO_FILTER
+    };
+    stamp.server_addr_str = "127.0.0.1";
+    stamp.proto = ag::stamp_proto_type::PLAIN;
+    stamp.server_addr_str = "8.8.8.8";
+    test_server_stamp_create(stamp, expected);
 }

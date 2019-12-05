@@ -148,7 +148,7 @@ static std::string_view get_host_name(std::string_view url) {
     return host;
 }
 
-static curl_slist_ptr create_resolved_hosts_list(std::string_view url, const upstream::options::address_container &addr) {
+static curl_slist_ptr create_resolved_hosts_list(std::string_view url, const ip_address_variant &addr) {
     if (std::holds_alternative<std::monostate>(addr)) {
         return nullptr;
     }
@@ -419,7 +419,7 @@ void dns_over_https::stop_all_with_error(err_string e) {
     }
 }
 
-std::pair<ldns_pkt_ptr, err_string> dns_over_https::exchange(ldns_pkt *request) {
+dns_over_https::exchange_result dns_over_https::exchange(ldns_pkt *request) {
     // @todo: for now it's unsafe to delete an upstream which has in-progress
     // requests - needs to be fixed or handled on the next higher level
 

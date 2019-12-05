@@ -35,7 +35,7 @@ ag::dnscrypt::client::client(protocol protocol, std::chrono::milliseconds timeou
         m_adjust_payload_size(adjust_payload_size)
 {}
 
-ag::dnscrypt::client::dial_result ag::dnscrypt::client::dial(std::string_view stamp_str) {
+ag::dnscrypt::client::dial_result ag::dnscrypt::client::dial(std::string_view stamp_str) const {
     static constexpr utils::make_error<dial_result> make_error;
     auto[stamp, stamp_err] = ag::server_stamp::from_string(stamp_str);
     if (stamp_err) {
@@ -47,14 +47,14 @@ ag::dnscrypt::client::dial_result ag::dnscrypt::client::dial(std::string_view st
     return dial(stamp);
 }
 
-ag::dnscrypt::client::dial_result ag::dnscrypt::client::dial(const server_stamp &stamp) {
+ag::dnscrypt::client::dial_result ag::dnscrypt::client::dial(const server_stamp &stamp) const {
     static constexpr utils::make_error<dial_result> make_error;
     server_info local_server_info{};
     if (crypto_box_keypair(local_server_info.m_public_key.data(), local_server_info.m_secret_key.data()) != 0) {
         return make_error("Can not generate keypair");
     }
-	// Set the provider properties
-	local_server_info.m_server_public_key = stamp.server_pk;
+    // Set the provider properties
+    local_server_info.m_server_public_key = stamp.server_pk;
     local_server_info.m_server_address = stamp.server_addr_str;
     local_server_info.m_provider_name = stamp.provider_name;
     if (local_server_info.m_provider_name.empty()) {
@@ -63,17 +63,17 @@ ag::dnscrypt::client::dial_result ag::dnscrypt::client::dial(const server_stamp 
     if (local_server_info.m_provider_name.back() != '.') {
         local_server_info.m_provider_name.push_back('.');
     }
-	// Fetch the certificate and validate it
-	auto[cert_info, rtt, err] = local_server_info.fetch_current_dnscrypt_cert(m_protocol, m_timeout);
-	if (err) {
-		return make_error(std::move(err));
-	}
+    // Fetch the certificate and validate it
+    auto[cert_info, rtt, err] = local_server_info.fetch_current_dnscrypt_cert(m_protocol, m_timeout);
+    if (err) {
+        return make_error(std::move(err));
+    }
     local_server_info.m_server_cert = cert_info;
-	return {std::move(local_server_info), rtt, std::nullopt};
+    return {std::move(local_server_info), rtt, std::nullopt};
 }
 
 ag::dnscrypt::client::exchange_result ag::dnscrypt::client::exchange(ldns_pkt &message,
-                                                                     const server_info &local_server_info) {
+                                                                     const server_info &local_server_info) const {
     static constexpr utils::make_error<exchange_result> make_error;
     utils::timer timer;
     if (m_adjust_payload_size) {
@@ -98,10 +98,10 @@ ag::dnscrypt::client::exchange_result ag::dnscrypt::client::exchange(ldns_pkt &m
     if (exchange_err) {
         return make_error(std::move(exchange_err));
     }
-	// Reading the response
-	// In case if the server local_server_info is not valid anymore (for instance, certificate was rotated)
-	// the read operation will most likely time out.
-	// This might be a signal to re-dial for the server certificate.
+    // Reading the response
+    // In case if the server local_server_info is not valid anymore (for instance, certificate was rotated)
+    // the read operation will most likely time out.
+    // This might be a signal to re-dial for the server certificate.
     auto[decrypted, decrypt_err] = local_server_info.decrypt(
             uint8_view(encrypted_response.get(), encrypted_response_size),
             uint8_view(client_nonce.data(), client_nonce.size()));

@@ -8,6 +8,7 @@
 #include <utility>
 #include <vector>
 #include <event2/util.h>
+#include <ag_utils.h>
 #include <base64.h>
 #include <dns_stamp.h>
 #ifdef _WIN32
@@ -26,19 +27,8 @@ constexpr auto DNSCRYPT_STAMP_MIN_SIZE = 66;
 constexpr auto DOH_STAMP_MIN_SIZE = 22;
 constexpr auto DOT_STAMP_MIN_SIZE = 22;
 
-// TODO use starts_with since C++20
-bool starts_with(std::string_view sv, std::string_view sub_sv) {
-    return sv.size() >= sub_sv.size() && sv.compare(0, sub_sv.size(), sub_sv) == 0;
-}
-
-// TODO use ends_with since C++20
-bool ends_with(std::string_view sv, std::string_view sub_sv) {
-    return sv.size() >= sub_sv.size() &&
-           sv.compare(sv.size() - sub_sv.size(), std::string_view::npos, sub_sv) == 0;
-}
-
 std::string_view remove_suffix_if_exists(std::string_view value, std::string_view suffix) {
-    auto suffix_size = (ends_with(value, suffix)) ? suffix.size() : 0;
+    auto suffix_size = (utils::ends_with(value, suffix)) ? suffix.size() : 0;
     std::string_view result(value);
     result.remove_suffix(suffix_size);
     return result;
@@ -110,11 +100,10 @@ void read_bytes(T &result, size_t &pos, const std::vector<uint8_t> &value) {
 }
 
 void write_stamp_proto_props_server_addr_str(std::vector<uint8_t> &bin, const server_stamp &stamp,
-                                             stamp_proto_type stamp_proto_type, stamp_port_t port) {
-    using namespace std::string_literals;
+                                             stamp_proto_type stamp_proto_type, stamp_port port) {
     bin = {static_cast<uint8_t>(stamp_proto_type)};
     write_bytes(bin, stamp.props);
-    auto port_suffix = ":"s + std::to_string(port); // TODO use std::to_chars when Apple Clang will have it
+    auto port_suffix = AG_FMT(":{}", port);
     write_bytes_with_size(bin, remove_suffix_if_exists(stamp.server_addr_str, port_suffix));
 }
 
@@ -144,7 +133,7 @@ void write_stamp_path(std::vector<uint8_t> &bin, const server_stamp &stamp) {
     write_bytes_with_size(bin, stamp.path);
 }
 
-std::string stamp_string(const server_stamp &stamp, stamp_proto_type stamp_proto_type, stamp_port_t port,
+std::string stamp_string(const server_stamp &stamp, stamp_proto_type stamp_proto_type, stamp_port port,
                          std::initializer_list<write_stamp_part_function_t> fs) {
     std::vector<uint8_t> bin;
     write_stamp_proto_props_server_addr_str(bin, stamp, stamp_proto_type, port);
@@ -155,23 +144,22 @@ std::string stamp_string(const server_stamp &stamp, stamp_proto_type stamp_proto
 }
 
 err_string read_stamp_proto_props_server_addr_str(server_stamp &stamp, size_t &pos, const std::vector<uint8_t> &value,
-                                                  stamp_proto_type proto, size_t min_value_size, stamp_port_t port) {
-    using namespace std::string_literals;
+                                                  stamp_proto_type proto, size_t min_value_size, stamp_port port) {
     stamp.proto = proto;
     if (value.size() < min_value_size) {
-        return "stamp is too short";
+        return "Stamp is too short";
     }
     pos = 1;
     read_bytes(stamp.props, pos, value);
     if (!read_bytes_with_size(stamp.server_addr_str, pos, value)) {
-        return "invalid stamp";
+        return "Invalid stamp";
     }
     std::string_view addr_str_copy_sv = stamp.server_addr_str;
     if (auto starts_with_bracket = addr_str_copy_sv.front() == '[', ends_with_bracket = addr_str_copy_sv.back() == ']';
         starts_with_bracket && ends_with_bracket) {
         addr_str_copy_sv = addr_str_copy_sv.substr(1, addr_str_copy_sv.size() - 2);
     } else if (starts_with_bracket || ends_with_bracket) {
-        return "invalid stamp";
+        return "Invalid stamp";
     }
     addrinfo* addrinfo_res = nullptr;
     addrinfo addrinfo_hints{};
@@ -180,7 +168,7 @@ err_string read_stamp_proto_props_server_addr_str(server_stamp &stamp, size_t &p
     std::string addr_str_copy_s(addr_str_copy_sv.begin(), addr_str_copy_sv.end());
     auto getaddrinfo_result = getaddrinfo(addr_str_copy_s.c_str(), nullptr, &addrinfo_hints, &addrinfo_res);
     if (getaddrinfo_result == 0 && (addrinfo_res->ai_family == AF_INET || addrinfo_res->ai_family == AF_INET6)) {
-        stamp.server_addr_str += ":"s + std::to_string(port);
+        stamp.server_addr_str += AG_FMT(":{}", port);
     }
     freeaddrinfo(addrinfo_res);
     return std::nullopt;
@@ -188,22 +176,23 @@ err_string read_stamp_proto_props_server_addr_str(server_stamp &stamp, size_t &p
 
 err_string read_stamp_server_pk(server_stamp &stamp, size_t &pos, const std::vector<uint8_t> &value) {
     if (!read_bytes_with_size(stamp.server_pk, pos, value)) {
-        return "invalid stamp";
+        return "Invalid stamp";
     }
     return std::nullopt;
 }
 
 err_string read_stamp_hashes(server_stamp &stamp, size_t &pos, const std::vector<uint8_t> &value) {
     while (true) {
-        uint8_t hash_size = read_size(pos, value) & ~0x80u;
+        uint8_t hash_size_raw = read_size(pos, value);
+        uint8_t hash_size = hash_size_raw & ~0x80u;
         if (!check_size(hash_size, pos, value)) {
-            return "invalid stamp";
+            return "Invalid stamp";
         }
         if (hash_size > 0) {
             stamp.hashes.emplace_back();
             read_bytes_using_size(stamp.hashes.back(), pos, hash_size, value);
         }
-        if (!(hash_size & 0x80u)) {
+        if (!(hash_size_raw & 0x80u)) {
             break;
         }
     }
@@ -212,14 +201,14 @@ err_string read_stamp_hashes(server_stamp &stamp, size_t &pos, const std::vector
 
 err_string read_stamp_provider_name(server_stamp &stamp, size_t &pos, const std::vector<uint8_t> &value) {
     if (!read_bytes_with_size(stamp.provider_name, pos, value)) {
-        return "invalid stamp";
+        return "Invalid stamp";
     }
     return std::nullopt;
 }
 
 err_string read_stamp_path(server_stamp &stamp, size_t &pos, const std::vector<uint8_t> &value) {
     if (!read_bytes_with_size(stamp.path, pos, value)) {
-        return "invalid stamp";
+        return "Invalid stamp";
     }
     return std::nullopt;
 }
@@ -227,7 +216,7 @@ err_string read_stamp_path(server_stamp &stamp, size_t &pos, const std::vector<u
 err_string check_garbage_after_end([[maybe_unused]] server_stamp &stamp, size_t pos,
                                    const std::vector<uint8_t> &value) {
     if (pos != value.size()) {
-        return "invalid stamp (garbage after end)";
+        return "Invalid stamp (garbage after end)";
     }
     return std::nullopt;
 }
@@ -245,7 +234,7 @@ server_stamp::from_str_result new_server_stamp_basic(const std::vector<uint8_t> 
 }
 
 server_stamp::from_str_result new_server_stamp(const std::vector<uint8_t> &bin, stamp_proto_type proto,
-                                               size_t min_value_size, stamp_port_t port,
+                                               size_t min_value_size, stamp_port port,
                                                std::list<read_stamp_part_function_t> fs) {
     using namespace std::placeholders;
     fs.emplace_front(std::bind(read_stamp_proto_props_server_addr_str, _1, _2, _3, proto, min_value_size, port));
@@ -309,46 +298,44 @@ server_stamp::from_str_result new_dot_server_stamp(const std::vector<uint8_t> &b
 
 std::string server_stamp::str() const {
     switch (proto) {
-        case stamp_proto_type::PLAIN:
-            return stamp_plain_string(*this);
-        case stamp_proto_type::DNSCRYPT:
-            return stamp_dnscrypt_string(*this);
-        case stamp_proto_type::DOH:
-            return stamp_doh_string(*this);
-        case stamp_proto_type::TLS:
-            return stamp_dot_string(*this);
-        default:
-            assert(false);
-            return {};
+    case stamp_proto_type::PLAIN:
+        return stamp_plain_string(*this);
+    case stamp_proto_type::DNSCRYPT:
+        return stamp_dnscrypt_string(*this);
+    case stamp_proto_type::DOH:
+        return stamp_doh_string(*this);
+    case stamp_proto_type::TLS:
+        return stamp_dot_string(*this);
     }
+    assert(false);
+    return {};
 }
 
 server_stamp::from_str_result server_stamp::from_string(std::string_view url) {
-    using namespace std::string_literals;
-    if (!starts_with(url, STAMP_URL_PREFIX_WITH_SCHEME)) {
-        return {{}, "stamps are expected to start with "s + STAMP_URL_PREFIX_WITH_SCHEME};
+    if (!utils::starts_with(url, STAMP_URL_PREFIX_WITH_SCHEME)) {
+        return {{}, AG_FMT("Stamps are expected to start with {}", STAMP_URL_PREFIX_WITH_SCHEME)};
     }
     std::string_view encoded(url);
     encoded.remove_prefix(std::string_view(STAMP_URL_PREFIX_WITH_SCHEME).size());
     auto decoded_optional = decode_base64(encoded, true);
     if (!decoded_optional) {
-        return {{}, "invalid stamp"};
+        return {{}, "Invalid stamp"};
     }
     auto &decoded = *decoded_optional;
     if (decoded.empty()) {
-        return {{}, "stamp is too short"};
+        return {{}, "Stamp is too short"};
     }
     switch (stamp_proto_type{decoded[0]}) {
-        case stamp_proto_type::PLAIN:
-            return new_plain_server_stamp(decoded);
-        case stamp_proto_type::DNSCRYPT:
-            return new_dnscrypt_server_stamp(decoded);
-        case stamp_proto_type::DOH:
-            return new_doh_server_stamp(decoded);
-        case stamp_proto_type::TLS:
-            return new_dot_server_stamp(decoded);
-        default:
-            return {{}, "unsupported stamp version or protocol"};
+    case stamp_proto_type::PLAIN:
+        return new_plain_server_stamp(decoded);
+    case stamp_proto_type::DNSCRYPT:
+        return new_dnscrypt_server_stamp(decoded);
+    case stamp_proto_type::DOH:
+        return new_doh_server_stamp(decoded);
+    case stamp_proto_type::TLS:
+        return new_dot_server_stamp(decoded);
+    default:
+        return {{}, "Unsupported stamp version or protocol"};
     }
 }
 
