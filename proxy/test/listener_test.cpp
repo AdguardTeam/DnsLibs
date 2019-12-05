@@ -1,6 +1,7 @@
 #include <gtest/gtest.h>
 #include <thread>
 #include <atomic>
+#include <condition_variable>
 #include <dnsproxy.h>
 #include <upstream.h>
 #include <ldns/ldns.h>

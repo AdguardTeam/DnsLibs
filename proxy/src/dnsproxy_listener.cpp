@@ -114,6 +114,7 @@ public:
 
     ~listener_base() override {
         await_shutdown();
+        uv_loop_close(&m_loop);
     }
 
     void shutdown() final {
@@ -276,7 +277,7 @@ public:
             m_state = state::RD_PAYLOAD;
         }
         if (m_state == state::RD_PAYLOAD) {
-            if (m_data.size() < 2 + m_size) {
+            if (m_data.size() < (size_t)2 + m_size) {
                 return false; // Need more data
             }
             out = ag::uint8_vector(m_data.begin() + 2, m_data.begin() + 2 + m_size);

@@ -126,7 +126,7 @@ INSTANTIATE_TEST_CASE_P(parse_stamp_test_instantiation, parse_stamp_test, ::test
 
 TEST_F(dnscrypt_test, invalid_stamp) {
     ag::dnscrypt::client client;
-    auto err = client.dial("sdns://AQIAAAAAAAAAFDE").error;
+    auto err = client.dial("sdns://AQIAAAAAAAAAFDE", ag::dnscrypt::client::DEFAULT_TIMEOUT).error;
     ASSERT_TRUE(err) << "Dial must not have been possible";
 }
 
@@ -134,8 +134,8 @@ TEST_F(dnscrypt_test, timeout_on_dial_error) {
     using namespace std::literals::chrono_literals;
     // AdGuard DNS pointing to a wrong IP
     static constexpr auto stamp_str = "sdns://AQIAAAAAAAAADDguOC44Ljg6NTQ0MyDRK0fyUtzywrv4mRCG6vec5EldixbIoMQyLlLKPzkIcyIyLmRuc2NyeXB0LmRlZmF1bHQubnMxLmFkZ3VhcmQuY29t";
-    ag::dnscrypt::client client(300ms);
-    auto err = client.dial(stamp_str).error;
+    ag::dnscrypt::client client;
+    auto err = client.dial(stamp_str, 300ms).error;
     ASSERT_TRUE(err) << "Dial must not have been possible";
 }
 
@@ -143,8 +143,8 @@ TEST_F(dnscrypt_test, timeout_on_dial_exchange) {
     using namespace std::literals::chrono_literals;
     // AdGuard DNS
     static constexpr auto stamp_str = "sdns://AQIAAAAAAAAAFDE3Ni4xMDMuMTMwLjEzMDo1NDQzINErR_JS3PLCu_iZEIbq95zkSV2LFsigxDIuUso_OQhzIjIuZG5zY3J5cHQuZGVmYXVsdC5uczEuYWRndWFyZC5jb20";
-    ag::dnscrypt::client client(300ms);
-    auto[server_info, _, dial_err] = client.dial(stamp_str);
+    ag::dnscrypt::client client;
+    auto[server_info, _, dial_err] = client.dial(stamp_str, 300ms);
     ASSERT_FALSE(dial_err) << "Could not establish connection with " << stamp_str;
     // Point it to an IP where there's no DNSCrypt server
     server_info.set_server_address("8.8.8.8:5443");
@@ -152,7 +152,7 @@ TEST_F(dnscrypt_test, timeout_on_dial_exchange) {
                                                      "google-public-dns-a.google.com.",
                                                      ag::dnscrypt::MAX_DNS_UDP_SAFE_PACKET_SIZE);
     ldns_pkt_set_random_id(req.get());
-    auto exchange_err = client.exchange(*req, server_info).error;
+    auto exchange_err = client.exchange(*req, server_info, 300ms).error;
     ASSERT_TRUE(exchange_err) << "Exchange must not have been possible";
 }
 
@@ -185,8 +185,8 @@ TEST_P(check_dns_crypt_server_test, check_dns_crypt_server) {
     using namespace std::literals::chrono_literals;
     const auto &stamp_str = std::get<0>(GetParam());
     const auto &protocol = std::get<1>(GetParam());
-    ag::dnscrypt::client client(protocol, 10s);
-    auto[server_info, dial_rtt, dial_err] = client.dial(stamp_str);
+    ag::dnscrypt::client client(protocol);
+    auto[server_info, dial_rtt, dial_err] = client.dial(stamp_str, 10s);
     ASSERT_FALSE(dial_err) << "Could not establish connection with " << stamp_str;
     SPDLOG_INFO("Established a connection with {}, ttl={}, rtt={}ms, protocol={}", server_info.get_provider_name(),
                 ag::utils::time_to_str(server_info.get_server_cert().not_after), dial_rtt.count(),
@@ -197,7 +197,7 @@ TEST_P(check_dns_crypt_server_test, check_dns_crypt_server) {
                                                               protocol == ag::dnscrypt::protocol::UDP,
                                                               ag::dnscrypt::MAX_DNS_UDP_SAFE_PACKET_SIZE));
     ldns_pkt_set_random_id(req.get());
-    auto[reply, exchange_rtt, exchange_err] = client.exchange(*req, server_info);
+    auto[reply, exchange_rtt, exchange_err] = client.exchange(*req, server_info, 10s);
     ASSERT_FALSE(exchange_err) << "Couldn't talk to upstream " << server_info.get_provider_name() << ": "
                                << *exchange_err;
     ldns_rr_list *reply_answer = ldns_pkt_answer(reply.get());
