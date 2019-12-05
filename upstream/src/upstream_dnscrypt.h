@@ -27,8 +27,13 @@ private:
     struct impl;
     using impl_ptr = std::unique_ptr<impl>;
 
-    err_string setup_impl();
-    exchange_result apply_exchange(ldns_pkt &request_pkt);
+    struct setup_result {
+        std::chrono::milliseconds rtt;
+        err_string error;
+    };
+
+    setup_result setup_impl();
+    exchange_result apply_exchange(ldns_pkt &request_pkt, std::chrono::milliseconds timeout);
 
     logger m_log = create_logger("DNScrypt upstream");
     server_stamp m_stamp;
