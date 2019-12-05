@@ -134,6 +134,19 @@ TEST_P(listener_test, listens_and_responds) {
     ASSERT_GT(successful_requests, NTHREADS * REQUESTS_PER_THREAD * .9);
 }
 
+TEST(listener_test, shuts_down) {
+    ag::dnsproxy proxy;
+    auto proxy_settings = ag::dnsproxy_settings::get_default();
+    proxy_settings.listeners = {
+            {LISTEN_ADDR, PORT, ag::listener_protocol::UDP},
+            {LISTEN_ADDR, PORT, ag::listener_protocol::TCP, true, 1000ms},
+    };
+    if (proxy.init(proxy_settings, {})) {
+        proxy.deinit();
+    }
+    SUCCEED();
+}
+
 INSTANTIATE_TEST_CASE_P(
         listener_protocols,
         listener_test,

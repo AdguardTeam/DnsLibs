@@ -6,6 +6,7 @@
 #include <atomic>
 #include <magic_enum.hpp>
 #include <algorithm>
+#include <cassert>
 
 // Set the libuv thread pool size. Must happen before any libuv usage to have effect.
 static const int THREAD_POOL_SIZE_RESULT [[maybe_unused]] = uv_os_setenv("UV_THREADPOOL_SIZE", "128");
@@ -39,16 +40,15 @@ protected:
     ag::dnsproxy *m_proxy{nullptr};
     std::thread m_loop_thread;
     uv_loop_t m_loop{};
-    uv_idle_t m_escape_hatch{};
-    std::atomic_bool m_keep_running{true};
+    uv_async_t m_escape_hatch{};
     ag::socket_address m_address;
     ag::listener_settings m_settings;
 
     // Subclass initializes its handles, callbacks, etc.
     // The loop is initialized, but isn't yet running at this point
     // Called on event loop's thread
-    // Return true if the loop should run (success)
-    virtual bool before_run() = 0;
+    // Return nullopt if the loop should run (success)
+    virtual ag::err_string before_run() = 0;
 
     // Subclass cleans up to allow the event loop to exit
     // (close handles, cancel pending work, etc.)
@@ -56,12 +56,10 @@ protected:
     virtual void before_stop() = 0;
 
 private:
-    static void escape_hatch_cb(uv_idle_t *handle) {
+    static void escape_hatch_cb(uv_async_t *handle) {
         auto *self = (listener_base *) handle->data;
-        if (!self->m_keep_running) {
-            self->before_stop();
-            uv_close((uv_handle_t *) &self->m_escape_hatch, nullptr);
-        }
+        self->before_stop();
+        uv_close((uv_handle_t *) &self->m_escape_hatch, nullptr);
     }
 
 public:
@@ -88,25 +86,25 @@ public:
 
         m_settings = settings;
 
-        m_loop_thread = std::thread([this, protocol = settings.protocol]() {
-            int err = 0;
+        int err = 0;
+        // Init the loop
+        if ((err = uv_loop_init(&m_loop)) < 0) {
+            return fmt::format("uv_loop_init failed: {}", uv_strerror(err));
+        }
 
-            // Init the loop
-            if ((err = uv_loop_init(&m_loop)) < 0) {
-                errlog(m_log, "Failed to init uv_loop: {}", uv_strerror(err));
-                return;
-            }
+        // Init the escape hatch
+        if ((err = uv_async_init(&m_loop, &m_escape_hatch, escape_hatch_cb))) {
+            return fmt::format("uv_async_init failed: {}", uv_strerror(err));
+        }
+        m_escape_hatch.data = this;
 
-            // Init the escape hatch
-            uv_idle_init(&m_loop, &m_escape_hatch);
-            m_escape_hatch.data = this;
-            uv_idle_start(&m_escape_hatch, escape_hatch_cb);
+        const auto err_str = before_run();
+        if (err_str.has_value()) {
+            return err_str;
+        }
 
-            if (!before_run()) {
-                return;
-            }
-
-            infolog(m_log, "Listening on {} ({})", m_address.str(), magic_enum::enum_name(protocol));
+        m_loop_thread = std::thread([this]() {
+            infolog(m_log, "Listening on {} ({})", m_address.str(), magic_enum::enum_name(m_settings.protocol));
             uv_run(&m_loop, UV_RUN_DEFAULT);
             infolog(m_log, "Finished listening");
         });
@@ -120,7 +118,9 @@ public:
 
     void shutdown() final {
         // The next invocation of escape_hatch_cb will close all handles, allowing the loop to exit
-        m_keep_running = false;
+        if (this == m_escape_hatch.data) { // Check async initialized
+            uv_async_send(&m_escape_hatch);
+        }
     }
 
     void await_shutdown() final {
@@ -217,27 +217,24 @@ private:
     }
 
 protected:
-    bool before_run() override {
+    ag::err_string before_run() override {
         int err = 0;
 
         // Init UDP
         if ((err = uv_udp_init(&m_loop, &m_udp_handle)) < 0) {
-            errlog(m_log, "uv_udp_init failed: {}", uv_strerror(err));
-            return false;
+            return fmt::format("uv_udp_init failed: {}", uv_strerror(err));
         }
         m_udp_handle.data = this;
 
         if ((err = uv_udp_bind(&m_udp_handle, m_address.c_sockaddr(), UV_UDP_REUSEADDR)) < 0) {
-            errlog(m_log, "uv_udp_bind failed: {}", uv_strerror(err));
-            return false;
+            return fmt::format("uv_udp_bind failed: {}", uv_strerror(err));
         }
 
         if ((err = uv_udp_recv_start(&m_udp_handle, udp_alloc_cb, recv_cb)) < 0) {
-            errlog(m_log, "uv_udp_recv_start failed: {}", uv_strerror(err));
-            return false;
+            return fmt::format("uv_udp_recv_start failed: {}", uv_strerror(err));
         }
 
-        return true;
+        return std::nullopt;
     }
 
     void before_stop() override {
@@ -292,18 +289,12 @@ public:
 
 class tcp_dns_connection {
 public:
-    tcp_dns_connection(uint64_t id)
-            : m_id{id},
-              m_proxy{},
-              m_persistent{},
-              m_incoming_buf{},
-              m_tcp{},
-              m_idle_timer{},
-              m_idle_timeout{},
-              m_close_callback{},
-              m_closed{false} {
-        this->m_tcp.data = this;
-        this->m_idle_timer.data = this;
+    explicit tcp_dns_connection(uint64_t id) : m_id{id} {
+        this->m_tcp = new uv_tcp_t; // Deleted in close_cb
+        this->m_tcp->data = this;
+
+        this->m_idle_timer = new uv_timer_t; // Deleted in close_cb
+        this->m_idle_timer->data = this;
     }
 
     // Call after *handle() is properly initialized
@@ -313,7 +304,14 @@ public:
                std::chrono::milliseconds idle_timeout,
                std::function<void(uint64_t)> close_callback) {
 
-        uv_timer_init(loop, &m_idle_timer);
+        assert(proxy);
+        assert(idle_timeout.count());
+
+        ++m_open_handles; // m_tcp
+
+        uv_timer_init(loop, m_idle_timer);
+        ++m_open_handles;
+
         m_proxy = proxy;
         m_persistent = persistent;
         m_idle_timeout = idle_timeout;
@@ -330,7 +328,7 @@ public:
     }
 
     uv_tcp_t *handle() {
-        return &m_tcp;
+        return m_tcp;
     }
 
 private:
@@ -366,16 +364,17 @@ private:
     };
 
     const uint64_t m_id;
-    ag::dnsproxy *m_proxy;
-    bool m_persistent;
-    uint8_t m_incoming_buf[TCP_RECV_BUF_SIZE];
-    uv_tcp_t m_tcp;
-    uv_timer_t m_idle_timer;
-    std::chrono::milliseconds m_idle_timeout;
+    ag::dnsproxy *m_proxy{};
+    bool m_persistent{false};
+    uint8_t m_incoming_buf[TCP_RECV_BUF_SIZE]{};
+    uv_tcp_t *m_tcp{};
+    uv_timer_t *m_idle_timer{};
+    std::chrono::milliseconds m_idle_timeout{0};
     std::function<void(uint64_t)> m_close_callback;
-    bool m_closed;
+    bool m_closed{false};
     tcp_dns_payload_parser m_parser;
     ag::hash_set<work *> m_pending_works;
+    size_t m_open_handles{0};
 
     static void alloc_cb(uv_handle_t *handle, size_t suggested_size, uv_buf_t *buf) {
         auto *c = (tcp_dns_connection *) handle->data;
@@ -396,7 +395,7 @@ private:
 
         ag::uint8_vector payload;
         while (c->m_parser.next_payload(payload)) {
-            uv_timer_again(&c->m_idle_timer);
+            uv_timer_again(c->m_idle_timer);
 
             auto *w = new work(c, std::move(payload));
 
@@ -446,26 +445,23 @@ private:
     }
 
     void do_read() {
-        if (uv_read_start((uv_stream_t *) &m_tcp, alloc_cb, read_cb) < 0) {
+        if (uv_read_start((uv_stream_t *) m_tcp, alloc_cb, read_cb) < 0) {
             do_close();
             return;
         }
-        uv_timer_start(&m_idle_timer, idle_timeout_cb, m_idle_timeout.count(), m_idle_timeout.count());
+        uv_timer_start(m_idle_timer, idle_timeout_cb, m_idle_timeout.count(), m_idle_timeout.count());
     }
 
     void do_write(ag::uint8_vector &&payload) {
         auto *w = new write(this, std::move(payload));
-        if (uv_write(&w->req, (uv_stream_t *) &m_tcp, w->bufs, 2, write_cb) < 0) {
+        if (uv_write(&w->req, (uv_stream_t *) m_tcp, w->bufs, 2, write_cb) < 0) {
             delete w;
             do_close();
         }
     }
 
     static void close_cb(uv_handle_t *h) {
-        auto *c = (tcp_dns_connection *) h->data;
-        if (c->m_close_callback) {
-            c->m_close_callback(c->m_id);
-        }
+        delete h;
     }
 
     void do_close() {
@@ -474,14 +470,23 @@ private:
         }
         m_closed = true;
 
-        uv_timer_stop(&m_idle_timer);
+        uv_timer_stop(m_idle_timer);
+
+        m_idle_timer->data = nullptr;
+        uv_close((uv_handle_t *) m_idle_timer, close_cb);
 
         std::for_each(m_pending_works.begin(), m_pending_works.end(), [](work *w) {
             std::scoped_lock l{w->mtx};
             uv_cancel((uv_req_t *) &w->req);
             w->canceled = true;
         });
-        uv_close((uv_handle_t *) &m_tcp, close_cb);
+
+        m_tcp->data = nullptr;
+        uv_close((uv_handle_t *) m_tcp, close_cb);
+
+        if (m_close_callback) {
+            m_close_callback(m_id);
+        }
     }
 };
 
@@ -526,26 +531,23 @@ private:
     }
 
 protected:
-    bool before_run() override {
+    ag::err_string before_run() override {
         int err = 0;
 
         if ((err = uv_tcp_init(&m_loop, &m_tcp_handle)) < 0) {
-            errlog(m_log, "uv_tcp_init failed: {}", uv_strerror(err));
-            return false;
+            return fmt::format("uv_tcp_init failed: {}", uv_strerror(err));
         }
         m_tcp_handle.data = this;
 
         if ((err = uv_tcp_bind(&m_tcp_handle, m_address.c_sockaddr(), 0)) < 0) {
-            errlog(m_log, "uv_tcp_bind failed: {}", uv_strerror(err));
-            return false;
+            return fmt::format("uv_tcp_bind failed: {}", uv_strerror(err));
         }
 
         if ((err = uv_listen((uv_stream_t *) &m_tcp_handle, BACKLOG, conn_cb)) < 0) {
-            errlog(m_log, "uv_listen failed: {}", uv_strerror(err));
-            return false;
+            return fmt::format("uv_listen failed: {}", uv_strerror(err));
         }
 
-        return true;
+        return std::nullopt;
     }
 
     void before_stop() override {
