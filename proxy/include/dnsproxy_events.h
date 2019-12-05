@@ -32,7 +32,13 @@ struct dns_request_processed_event {
  * Set of DNS proxy events
  */
 struct dnsproxy_events {
-    /** Raised right after a request was processed */
+    /**
+     * Raised right after a request is processed.
+     * Notes:
+     *  - if there are several upstreams in proxy configuration, the proxy tries each one
+     *    consequently until it gets successful status, so in this case each failed upstream
+     *    fires the event - i.e., several events will be raised for the request
+     */
     std::function<void(dns_request_processed_event)> on_request_processed;
 };
 

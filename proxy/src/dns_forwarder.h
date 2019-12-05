@@ -16,12 +16,10 @@ public:
     dns_forwarder();
     ~dns_forwarder();
 
-    bool init(const dnsproxy_settings &settings);
+    bool init(const dnsproxy_settings &settings, const dnsproxy_events &events);
     void deinit();
 
-    using result = std::pair<std::vector<uint8_t>, err_string>;
-
-    result handle_message(uint8_view message, dns_request_processed_event &event);
+    std::vector<uint8_t> handle_message(uint8_view message);
 
 private:
     ldns_pkt_ptr try_dns64_aaaa_synthesis(upstream_ptr &upstream, const ldns_pkt_ptr &request,
@@ -29,10 +27,11 @@ private:
 
     void finalize_processed_event(dns_request_processed_event &event,
         const ldns_pkt *request, const ldns_pkt *response,
-        const std::vector<const dnsfilter::rule *> &rules) const;
+        const upstream_ptr &upstream, err_string error) const;
 
     logger log;
     const dnsproxy_settings *settings = nullptr;
+    const dnsproxy_events *events = nullptr;
     std::vector<upstream_ptr> upstreams;
     dnsfilter filter;
     dnsfilter::handle filter_handle = nullptr;
