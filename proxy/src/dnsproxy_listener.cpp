@@ -114,6 +114,7 @@ public:
 
     ~listener_base() override {
         await_shutdown();
+        uv_loop_close(&m_loop);
     }
 
     void shutdown() final {
