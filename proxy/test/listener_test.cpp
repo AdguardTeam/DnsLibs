@@ -135,12 +135,14 @@ TEST_P(listener_test, listens_and_responds) {
     ASSERT_GT(successful_requests, NTHREADS * REQUESTS_PER_THREAD * .9);
 }
 
-TEST(listener_test, shuts_down) {
+TEST(listener_test, shuts_down_if_could_not_initialize) {
+    constexpr auto addr = "::1";
+    constexpr auto port = 1023; // Assume bind will fail with "permission denied"
     ag::dnsproxy proxy;
     auto proxy_settings = ag::dnsproxy_settings::get_default();
     proxy_settings.listeners = {
-            {LISTEN_ADDR, PORT, ag::listener_protocol::UDP},
-            {LISTEN_ADDR, PORT, ag::listener_protocol::TCP, true, 1000ms},
+            {addr, port, ag::listener_protocol::UDP},
+            {addr, port, ag::listener_protocol::TCP},
     };
     if (proxy.init(proxy_settings, {})) {
         proxy.deinit();

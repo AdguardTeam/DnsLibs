@@ -48,6 +48,7 @@ protected:
     // The loop is initialized, but isn't yet running at this point
     // Called on event loop's thread
     // Return nullopt if the loop should run (success)
+    // Close any uv_*_init'ed handles before returning in case of an error!
     virtual ag::err_string before_run() = 0;
 
     // Subclass cleans up to allow the event loop to exit
@@ -94,12 +95,21 @@ public:
 
         // Init the escape hatch
         if ((err = uv_async_init(&m_loop, &m_escape_hatch, escape_hatch_cb))) {
+            uv_loop_close(&m_loop);
             return fmt::format("uv_async_init failed: {}", uv_strerror(err));
         }
         m_escape_hatch.data = this;
 
         const auto err_str = before_run();
         if (err_str.has_value()) {
+            uv_close((uv_handle_t *) &m_escape_hatch, nullptr);
+
+            // Run the loop once to let libuv close the handles cleanly
+            err = uv_run(&m_loop, UV_RUN_DEFAULT);
+            assert(0 == err);
+            err = uv_loop_close(&m_loop);
+            assert(0 == err);
+
             return err_str;
         }
 
@@ -228,10 +238,12 @@ protected:
         m_udp_handle.data = this;
 
         if ((err = uv_udp_bind(&m_udp_handle, m_address.c_sockaddr(), UV_UDP_REUSEADDR)) < 0) {
+            uv_close((uv_handle_t *) &m_udp_handle, nullptr);
             return fmt::format("uv_udp_bind failed: {}", uv_strerror(err));
         }
 
         if ((err = uv_udp_recv_start(&m_udp_handle, udp_alloc_cb, recv_cb)) < 0) {
+            uv_close((uv_handle_t *) &m_udp_handle, nullptr);
             return fmt::format("uv_udp_recv_start failed: {}", uv_strerror(err));
         }
 
@@ -541,10 +553,12 @@ protected:
         m_tcp_handle.data = this;
 
         if ((err = uv_tcp_bind(&m_tcp_handle, m_address.c_sockaddr(), 0)) < 0) {
+            uv_close((uv_handle_t *) &m_tcp_handle, nullptr);
             return fmt::format("uv_tcp_bind failed: {}", uv_strerror(err));
         }
 
         if ((err = uv_listen((uv_stream_t *) &m_tcp_handle, BACKLOG, conn_cb)) < 0) {
+            uv_close((uv_handle_t *) &m_tcp_handle, nullptr);
             return fmt::format("uv_listen failed: {}", uv_strerror(err));
         }
 
