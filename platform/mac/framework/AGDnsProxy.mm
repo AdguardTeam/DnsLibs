@@ -346,7 +346,7 @@ static NSData *create_response_packet(const struct iphdr *ip_header, const struc
                     bootstrap.emplace_back([server UTF8String]);
                 }
             }
-            ag::upstream::options::address_container addr;
+            ag::ip_address_variant addr;
             if (upstream.serverIp != nil && [upstream.serverIp length] == 4) {
                 addr.emplace<ag::uint8_array<4>>();
                 std::memcpy(std::get<ag::uint8_array<4>>(addr).data(),
@@ -370,7 +370,7 @@ static NSData *create_response_packet(const struct iphdr *ip_header, const struc
         settings.filter_params.filters.reserve([config.filters count]);
         for (NSNumber *key in config.filters) {
             const char *filterPath = [[config.filters objectForKey: key] UTF8String];
-            dbglog(self->log, "filter id={} path={}", [key intValue], filterPath);
+            dbglog(self->log, "Filter id={} path={}", [key intValue], filterPath);
             settings.filter_params.filters.emplace_back(
                 ag::dnsfilter::filter_params{ (uint32_t)[key intValue], filterPath });
         }
@@ -426,7 +426,7 @@ static NSData *create_response_packet(const struct iphdr *ip_header, const struc
     }
 
     if (!self->proxy.init(std::move(settings), std::move(native_events))) {
-        errlog(self->log, "Failed to initialize filtering module");
+        errlog(self->log, "Failed to initialize core proxy module");
         return nil;
     }
 

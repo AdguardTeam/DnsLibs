@@ -16,6 +16,7 @@
 		C44240112379BB2900FD1D4C /* ViewController.m in Sources */ = {isa = PBXBuildFile; fileRef = C4423F902379559900FD1D4C /* ViewController.m */; };
 		C44240122379BB2F00FD1D4C /* main.m in Sources */ = {isa = PBXBuildFile; fileRef = C4423F9B2379559D00FD1D4C /* main.m */; };
 		C44240132379BB3800FD1D4C /* SceneDelegate.m in Sources */ = {isa = PBXBuildFile; fileRef = C4423F8D2379559900FD1D4C /* SceneDelegate.m */; };
+		C48B7D68239AAB4E004DDDC8 /* filter.txt in Resources */ = {isa = PBXBuildFile; fileRef = C4FAE4A2237BE77800ECE0B2 /* filter.txt */; };
 		C4AEED15237AC8A10021E53F /* AGDnsProxy.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = C4AEED14237AC8A10021E53F /* AGDnsProxy.framework */; };
 		C4AEED16237AC90C0021E53F /* AGDnsProxy.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = C4AEED14237AC8A10021E53F /* AGDnsProxy.framework */; };
 		C4AEED17237AC9100021E53F /* AGDnsProxy.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = C4AEED14237AC8A10021E53F /* AGDnsProxy.framework */; };
@@ -26,7 +27,6 @@
 		C4FAE493237BE37100ECE0B2 /* AGDnsProxy.framework in Embed Frameworks */ = {isa = PBXBuildFile; fileRef = C4AEED14237AC8A10021E53F /* AGDnsProxy.framework */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
 		C4FAE494237BE37600ECE0B2 /* AGDnsProxy.framework in Embed Frameworks */ = {isa = PBXBuildFile; fileRef = C4AEED14237AC8A10021E53F /* AGDnsProxy.framework */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
 		C4FAE495237BE41A00ECE0B2 /* ext-ios.appex in Embed App Extensions */ = {isa = PBXBuildFile; fileRef = C4423F7023794EA900FD1D4C /* ext-ios.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
-		C4FAE4A4237BE78900ECE0B2 /* filter.txt in Resources */ = {isa = PBXBuildFile; fileRef = C4FAE4A2237BE77800ECE0B2 /* filter.txt */; };
 		C4FAE4A5237BE78E00ECE0B2 /* filter.txt in Resources */ = {isa = PBXBuildFile; fileRef = C4FAE4A2237BE77800ECE0B2 /* filter.txt */; };
 		C4FAE4A6237BE79300ECE0B2 /* PacketTunnelProvider.m in Sources */ = {isa = PBXBuildFile; fileRef = C4FAE4A3237BE77800ECE0B2 /* PacketTunnelProvider.m */; };
 		C4FAE4A7237BE79600ECE0B2 /* PacketTunnelProvider.m in Sources */ = {isa = PBXBuildFile; fileRef = C4FAE4A3237BE77800ECE0B2 /* PacketTunnelProvider.m */; };
@@ -531,7 +531,6 @@
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				C4FAE4A4237BE78900ECE0B2 /* filter.txt in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -542,6 +541,7 @@
 				C4423F992379559D00FD1D4C /* LaunchScreen.storyboard in Resources */,
 				C4423F962379559D00FD1D4C /* Assets.xcassets in Resources */,
 				C4423F942379559900FD1D4C /* Main.storyboard in Resources */,
+				C48B7D68239AAB4E004DDDC8 /* filter.txt in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
