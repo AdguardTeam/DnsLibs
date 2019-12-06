@@ -49,7 +49,7 @@ bool dnsproxy::init(dnsproxy_settings settings, dnsproxy_events events) {
     proxy->settings = std::move(settings);
     proxy->events = std::move(events);
 
-    if (!proxy->forwarder.init(proxy->settings)) {
+    if (!proxy->forwarder.init(proxy->settings, proxy->events)) {
         this->deinit();
         return false;
     }
@@ -99,18 +99,7 @@ const dnsproxy_settings &dnsproxy::get_settings() const {
 std::vector<uint8_t> dnsproxy::handle_message(ag::uint8_view message) {
     std::unique_ptr<impl> &proxy = this->pimpl;
 
-    dns_request_processed_event event = {};
-    event.start_time = duration_cast<milliseconds>(steady_clock::now().time_since_epoch()).count();
+    std::vector<uint8_t> response = proxy->forwarder.handle_message(message);
 
-    dns_forwarder::result result = proxy->forwarder.handle_message(message, event);
-
-    event.elapsed = duration_cast<milliseconds>(steady_clock::now().time_since_epoch()).count() - event.start_time;
-    if (err_string err = result.second; err.has_value()) {
-        event.error = err.value();
-    }
-    if (proxy->events.on_request_processed != nullptr) {
-        proxy->events.on_request_processed(std::move(event));
-    }
-
-    return result.first;
+    return response;
 }

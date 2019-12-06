@@ -66,9 +66,9 @@ static ag::ldns_pkt_ptr create_test_message() {
                       ldns_rr_type2str(ldns_rr_get_type(first_rr)));
     }
     ldns_rdf *rdf = ldns_rr_rdf(first_rr, 0);
-    ag::uint8_view ip{ldns_rdf_data(rdf), ldns_rdf_size(rdf)};
-    static const auto ip8888 = ag::utils::to_string_view<uint8_t>({8, 8, 8, 8});
-    if (ip != ip8888) {
+    static constexpr std::array<uint8_t, 4> ip8888 = {8, 8, 8, 8};
+    if (ldns_rdf_size(rdf) != ip8888.size()
+            || 0 != std::memcmp(ldns_rdf_data(rdf), ip8888.data(), ip8888.size())) {
         return "DNS upstream returned wrong answer instead of 8.8.8.8";
     }
     return std::nullopt;
