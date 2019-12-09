@@ -148,6 +148,10 @@ static std::string_view get_host_port(std::string_view url) {
     return host;
 }
 
+static std::string_view get_host_name(std::string_view url) {
+    return utils::split_host_port(get_host_port(url)).first;
+}
+
 static curl_slist_ptr create_resolved_hosts_list(std::string_view url, const ip_address_variant &addr) {
     if (std::holds_alternative<std::monostate>(addr)) {
         return nullptr;
@@ -436,9 +440,11 @@ dns_over_https::exchange_result dns_over_https::exchange(ldns_pkt *request) {
         tracelog(log, "Server address: {}", addr);
 
         auto [ip, port] = utils::split_host_port(addr);
-        std::string_view host = get_host_port(this->server_url);
+        std::string_view host = get_host_name(this->server_url);
         std::string entry = AG_FMT("{}:{}:{}", host, port, ip);
-        this->resolved = curl_slist_ptr(curl_slist_append(this->resolved.release(), entry.c_str()));
+
+        this->resolved = curl_slist_ptr(curl_slist_append(nullptr, entry.c_str()));
+        tracelog(log, "Resolved server for curl: {}", entry);
 
         milliseconds resolve_time = duration_cast<milliseconds>(bootstrapper_result.time_elapsed);
         if (this->timeout < resolve_time) {
