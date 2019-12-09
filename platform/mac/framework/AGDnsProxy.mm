@@ -152,17 +152,17 @@ static NSData *create_response_packet(const struct iphdr *ip_header, const struc
 
 
 @implementation AGDnsUpstream
-- (instancetype) initWithNative: (const ag::upstream_settings *) settings
+- (instancetype) initWithNative: (const ag::upstream::options *) settings
 {
     self = [super init];
-    _address = [NSString stringWithUTF8String: settings->dns_server.c_str()];
+    _address = [NSString stringWithUTF8String: settings->address.c_str()];
     NSMutableArray<NSString *> *bootstrap =
-        [[NSMutableArray alloc] initWithCapacity: settings->options.bootstrap.size()];
-    for (const std::string &server : settings->options.bootstrap) {
+        [[NSMutableArray alloc] initWithCapacity: settings->bootstrap.size()];
+    for (const std::string &server : settings->bootstrap) {
         [bootstrap addObject: [NSString stringWithUTF8String: server.c_str()]];
     }
     _bootstrap = bootstrap;
-    _timeout = settings->options.timeout.count();
+    _timeout = settings->timeout.count();
     return self;
 }
 
@@ -184,7 +184,7 @@ static NSData *create_response_packet(const struct iphdr *ip_header, const struc
 - (instancetype) initWithNative: (const ag::dns64_settings *) settings
 {
     self = [super init];
-    _upstream = [[AGDnsUpstream alloc] initWithNative: &settings->upstream];
+    _upstream = [[AGDnsUpstream alloc] initWithNative: &settings->upstream_settings];
     _maxTries = settings->max_tries;
     _waitTime = settings->wait_time.count();
     return self;
@@ -237,7 +237,7 @@ static NSData *create_response_packet(const struct iphdr *ip_header, const struc
     self = [super init];
     NSMutableArray<AGDnsUpstream *> *upstreams =
         [[NSMutableArray alloc] initWithCapacity: settings->upstreams.size()];
-    for (const ag::upstream_settings &us : settings->upstreams) {
+    for (const ag::upstream::options &us : settings->upstreams) {
         [upstreams addObject: [[AGDnsUpstream alloc] initWithNative: &us]];
     }
     _upstreams = upstreams;
@@ -359,8 +359,8 @@ static NSData *create_response_packet(const struct iphdr *ip_header, const struc
                 addr.emplace<std::monostate>();
             }
             settings.upstreams.emplace_back(
-                ag::upstream_settings{ [upstream.address UTF8String],
-                    { std::move(bootstrap), std::chrono::milliseconds(upstream.timeout), addr } });
+                ag::upstream::options{ [upstream.address UTF8String], std::move(bootstrap),
+                    std::chrono::milliseconds(upstream.timeout), addr });
         }
     }
 
@@ -400,9 +400,9 @@ static NSData *create_response_packet(const struct iphdr *ip_header, const struc
             }
 
             settings.dns64 = ag::dns64_settings{
-                    .upstream = {[upstream.address UTF8String],
-                                 {std::move(bootstrap),
-                                  std::chrono::milliseconds(upstream.timeout)}},
+                    .upstream_settings = {[upstream.address UTF8String],
+                            std::move(bootstrap),
+                            std::chrono::milliseconds(upstream.timeout)},
                     .wait_time = std::chrono::milliseconds(config.dns64Settings.waitTime),
                     .max_tries = config.dns64Settings.maxTries > 0
                                  ? static_cast<uint32_t>(config.dns64Settings.maxTries) : 0,

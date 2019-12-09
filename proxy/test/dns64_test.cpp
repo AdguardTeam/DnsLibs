@@ -5,11 +5,11 @@ static constexpr auto DNS64_SERVER_ADDR = "2001:67c:27e4::64";
 
 TEST(dns64_test, test_dns64_discovery) {
     using namespace std::chrono_literals;
-    const auto[upstream, err_upstream] = ag::upstream::address_to_upstream(
-            DNS64_SERVER_ADDR,
-            ag::upstream::options{
-                    .timeout = 5000ms
-            });
+    ag::upstream_factory upstream_factory({});
+    const auto[upstream, err_upstream] = upstream_factory.create_upstream({
+            .address = DNS64_SERVER_ADDR,
+            .timeout = 5000ms
+        });
     ASSERT_FALSE(err_upstream.has_value()) << err_upstream.value();
 
     const auto[prefs, err_prefs] = ag::dns64::discover_prefixes(upstream);

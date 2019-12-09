@@ -355,10 +355,11 @@ bool dns_forwarder::init(const dnsproxy_settings &settings, const dnsproxy_event
     this->events = &events;
 
     infolog(log, "Initializing upstreams...");
+    upstream_factory us_factory({});
     this->upstreams.reserve(settings.upstreams.size());
-    for (const upstream_settings &us : settings.upstreams) {
-        infolog(log, "Initializing upstream {}...", us.dns_server);
-        auto[upstream, err] = upstream::address_to_upstream(us.dns_server, us.options);
+    for (const upstream::options &options : settings.upstreams) {
+        infolog(log, "Initializing upstream {}...", options.address);
+        auto[upstream, err] = us_factory.create_upstream(options);
         if (err.has_value()) {
             errlog(log, "Failed to create upstream: {}", err.value());
         } else {
@@ -387,7 +388,7 @@ bool dns_forwarder::init(const dnsproxy_settings &settings, const dnsproxy_event
     if (settings.dns64.has_value()) {
         infolog(log, "DNS64 discovery is enabled");
 
-        std::thread prefixes_discovery_thread([uss = settings.dns64.value().upstream,
+        std::thread prefixes_discovery_thread([uss = settings.dns64->upstream_settings,
                                                prefixes = this->dns64_prefixes,
                                                logger = this->log,
                                                max_tries = settings.dns64->max_tries,
@@ -396,7 +397,8 @@ bool dns_forwarder::init(const dnsproxy_settings &settings, const dnsproxy_event
                 while (i--) {
                     std::this_thread::sleep_for(wait_time);
 
-                    auto[upstream, err_upstream] = ag::upstream::address_to_upstream(uss.dns_server, uss.options);
+                    upstream_factory us_factory({});
+                    auto[upstream, err_upstream] = us_factory.create_upstream(uss);
                     if (err_upstream.has_value()) {
                         dbglog(logger, "DNS64: failed to create DNS64 upstream: {}", err_upstream->c_str());
                         continue;

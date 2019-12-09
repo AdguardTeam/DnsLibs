@@ -43,10 +43,11 @@ ag::bootstrapper_ptr ag::tls_pool::bootstrapper() {
     return m_bootstrapper;
 }
 
-ag::dns_over_tls::dns_over_tls(bootstrapper_ptr bootstrapper, milliseconds timeout)
-        : m_pool(event_loop::create(), std::move(bootstrapper)),
-          m_timeout(timeout) {
-}
+ag::dns_over_tls::dns_over_tls(const ag::upstream::options &opts)
+        : m_pool(event_loop::create(), std::make_shared<ag::bootstrapper>(&opts.address[SCHEME.length()],
+            DEFAULT_PORT, true, opts.bootstrap))
+        , m_timeout(opts.timeout)
+{}
 
 ag::dns_over_tls::exchange_result ag::dns_over_tls::exchange(ldns_pkt *request_pkt) {
     ldns_pkt *reply_pkt = nullptr;

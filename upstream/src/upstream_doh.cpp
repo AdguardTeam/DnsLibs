@@ -182,8 +182,8 @@ static curl_slist_ptr create_resolved_hosts_list(std::string_view url, const ip_
     return curl_slist_ptr(curl_slist_append(nullptr, entry.c_str()));
 }
 
-static std::shared_ptr<ag::bootstrapper> create_bootstrapper(std::string_view url, const ag::upstream::options &opts) {
-    return std::make_shared<ag::bootstrapper>(get_host_port(url), dns_over_https::DEFAULT_PORT, true, opts.bootstrap);
+static std::shared_ptr<ag::bootstrapper> create_bootstrapper(const ag::upstream::options &opts) {
+    return std::make_shared<ag::bootstrapper>(get_host_port(opts.address), dns_over_https::DEFAULT_PORT, true, opts.bootstrap);
 }
 
 curl_pool_ptr dns_over_https::create_pool() const {
@@ -206,13 +206,13 @@ curl_pool_ptr dns_over_https::create_pool() const {
     return pool_holder;
 }
 
-dns_over_https::dns_over_https(std::string_view url, const ag::upstream::options &opts)
+dns_over_https::dns_over_https(const ag::upstream::options &opts)
     : timeout(opts.timeout)
-    , server_url(url)
+    , server_url(opts.address)
 {
     static const initializer ensure_initialized;
 
-    this->resolved = create_resolved_hosts_list(url, opts.server_ip);
+    this->resolved = create_resolved_hosts_list(opts.address, opts.resolved_server_ip);
 
     curl_slist *headers;
     if (nullptr == (headers = curl_slist_append(nullptr, "Content-Type: application/dns-message"))
@@ -225,7 +225,7 @@ dns_over_https::dns_over_https(std::string_view url, const ag::upstream::options
     assert(this->pool.handle != nullptr);
 
     if (this->resolved == nullptr) {
-        this->bootstrapper = create_bootstrapper(url, opts);
+        this->bootstrapper = create_bootstrapper(opts);
     }
 }
 

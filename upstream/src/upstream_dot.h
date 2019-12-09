@@ -43,13 +43,13 @@ class dns_over_tls : public ag::upstream {
 public:
     /** Default port for DoT */
     static constexpr auto DEFAULT_PORT = 853;
+    static constexpr std::string_view SCHEME = "tls://";
 
     /**
      * Create DNS-over-TLS upstream
-     * @param bootstrapper Bootstrapper for server address
-     * @param timeout Timeout of requests
+     * @param opts Upstream settings
      */
-    dns_over_tls(bootstrapper_ptr bootstrapper, std::chrono::milliseconds timeout);
+    dns_over_tls(const ag::upstream::options &opts);
 
     ~dns_over_tls() override = default;
 

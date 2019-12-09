@@ -37,10 +37,9 @@ public:
     static constexpr std::string_view SCHEME = "https://";
 
     /**
-     * @param url a DNS server url
      * @param opts upstream settings
      */
-    dns_over_https(std::string_view url, const options &opts);
+    dns_over_https(const options &opts);
     ~dns_over_https() override;
 
     struct query_handle;

@@ -1,3 +1,4 @@
+#include <ag_utils.h>
 #include "upstream_plain.h"
 
 using std::chrono::milliseconds;
@@ -7,12 +8,12 @@ std::string ag::plain_dns::address() {
     return m_socket_address.str();
 }
 
-ag::plain_dns::plain_dns(std::string_view address, std::chrono::milliseconds timeout, bool prefer_tcp) :
-        m_pool(event_loop::create(), socket_address(address)),
-        m_socket_address(address),
-        m_timeout(timeout),
-        m_prefer_tcp(prefer_tcp) {
-
+ag::plain_dns::plain_dns(const ag::upstream::options &opts)
+        : m_prefer_tcp(ag::utils::starts_with(opts.address, TCP_SCHEME))
+        , m_socket_address(m_prefer_tcp ? &opts.address[TCP_SCHEME.length()] : opts.address)
+        , m_pool(event_loop::create(), m_socket_address)
+        , m_timeout(opts.timeout)
+{
     if (m_socket_address.port() == 0) {
         auto addr = m_socket_address.addr();
         m_socket_address = ag::socket_address({addr.data(), addr.size()}, 53);
