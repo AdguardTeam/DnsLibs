@@ -1,34 +1,41 @@
 #include <ag_logger.h>
 #include <spdlog/sinks/stdout_sinks.h>
 
-static ag::log_level default_log_level = ag::INFO;
-static ag::create_logger_cb create_logger_callback =
-    [] (const std::string &name) { return spdlog::stdout_logger_mt(name); };
-
-struct pattern_inititlizer {
-    pattern_inititlizer() {
+struct global_info {
+    global_info() {
         spdlog::set_pattern("[%Y-%m-%d %H:%M:%S.%f] [%t] [%n] [%l] %v");
     }
+
+    ag::log_level default_log_level = ag::INFO;
+    ag::create_logger_cb create_logger_callback =
+        [] (const std::string &name) { return spdlog::stdout_logger_mt(name); };
+    std::mutex guard;
 };
 
-ag::logger ag::create_logger(const std::string &name) {
-    static const pattern_inititlizer set_pattern;
+static global_info *get_globals() {
+    static global_info info;
+    return &info;
+}
 
-    static std::mutex guard;
-    std::scoped_lock lock(guard);
+
+ag::logger ag::create_logger(const std::string &name) {
+    global_info *info = get_globals();
+    std::scoped_lock lock(info->guard);
 
     ag::logger logger = spdlog::get(name);
     if (logger == nullptr) {
-        logger = create_logger_callback(name);
+        logger = info->create_logger_callback(name);
     }
-    logger->set_level((spdlog::level::level_enum)default_log_level);
+    logger->set_level((spdlog::level::level_enum)info->default_log_level);
     return logger;
 }
 
 void ag::set_default_log_level(ag::log_level lvl) {
-    default_log_level = lvl;
+    global_info *info = get_globals();
+    info->default_log_level = lvl;
 }
 
 void ag::set_logger_factory_callback(create_logger_cb cb) {
-    create_logger_callback = cb;
+    global_info *info = get_globals();
+    info->create_logger_callback = cb;
 }
