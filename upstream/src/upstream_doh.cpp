@@ -79,7 +79,7 @@ static CURLcode ssl_callback(CURL *curl, void *sslctx, void *arg) {
 CURL *dns_over_https::query_handle::create_curl_handle() {
     CURL *curl = curl_easy_init();
     if (curl == nullptr) {
-        this->error = utils::fmt_string("Failed to init curl handle");
+        this->error = "Failed to init curl handle";
         return nullptr;
     }
 
@@ -109,7 +109,7 @@ CURL *dns_over_https::query_handle::create_curl_handle() {
             || CURLE_OK != (e = curl_easy_setopt(curl, CURLOPT_SSL_ENABLE_ALPN, true))
             || (upstream->resolved != nullptr
                 && CURLE_OK != (e = curl_easy_setopt(curl, CURLOPT_RESOLVE, upstream->resolved.get())))) {
-        this->error = utils::fmt_string("Failed to set options of curl handle: %s (id=%d)",
+        this->error = AG_FMT("Failed to set options of curl handle: {} (id={})",
             curl_easy_strerror(e), e);
         curl_easy_cleanup(curl);
         return nullptr;
@@ -141,11 +141,15 @@ std::unique_ptr<dns_over_https::query_handle> dns_over_https::create_handle(ldns
     return h;
 }
 
-static std::string_view get_host_name(std::string_view url) {
+static std::string_view get_host_port(std::string_view url) {
     std::string_view host = url;
     host.remove_prefix(dns_over_https::SCHEME.length());
     host = host.substr(0, host.find('/'));
     return host;
+}
+
+static std::string_view get_host_name(std::string_view url) {
+    return utils::split_host_port(get_host_port(url)).first;
 }
 
 static curl_slist_ptr create_resolved_hosts_list(std::string_view url, const ip_address_variant &addr) {
@@ -153,7 +157,7 @@ static curl_slist_ptr create_resolved_hosts_list(std::string_view url, const ip_
         return nullptr;
     }
 
-    std::string_view host_port = get_host_name(url);
+    std::string_view host_port = get_host_port(url);
     auto [host, port_str] = utils::split_host_port(host_port);
     int port = dns_over_https::DEFAULT_PORT;
     if (int p; !port_str.empty() && 0 != (p = std::strtol(std::string(port_str).c_str(), nullptr, 10))) {
@@ -163,12 +167,11 @@ static curl_slist_ptr create_resolved_hosts_list(std::string_view url, const ip_
     std::string entry;
     if (std::holds_alternative<uint8_array<4>>(addr)) {
         const uint8_array<4> &ip = std::get<uint8_array<4>>(addr);
-        entry = utils::fmt_string("%.*s:%d:%d.%d.%d.%d",
-            (int)host.length(), host.data(), port, ip[0], ip[1], ip[2], ip[3]);
+        entry = AG_FMT("{}:{}:{}.{}.{}.{}", host, port, ip[0], ip[1], ip[2], ip[3]);
     } else if (std::holds_alternative<uint8_array<16>>(addr)) {
         const uint8_array<16> &ip = std::get<uint8_array<16>>(addr);
-        entry = utils::fmt_string("%.*s:%d:[%02x%02x:%02x%02x:%02x%02x:%02x%02x:%02x%02x:%02x%02x:%02x%02x:%02x%02x]",
-            (int)host.length(), host.data(), port,
+        entry = AG_FMT("{}:{}:[{:02x}{:02x}:{:02x}{:02x}:{:02x}{:02x}:{:02x}{:02x}:{:02x}{:02x}:{:02x}{:02x}:{:02x}{:02x}:{:02x}{:02x}]",
+            host, port,
             ip[0], ip[1], ip[2], ip[3], ip[4], ip[5], ip[6], ip[7],
             ip[8], ip[9], ip[10], ip[11], ip[12], ip[13], ip[14], ip[15]);
     }
@@ -177,7 +180,7 @@ static curl_slist_ptr create_resolved_hosts_list(std::string_view url, const ip_
 }
 
 static std::shared_ptr<ag::bootstrapper> create_bootstrapper(std::string_view url, const ag::upstream::options &opts) {
-    return std::make_shared<ag::bootstrapper>(get_host_name(url), dns_over_https::DEFAULT_PORT, true, opts.bootstrap);
+    return std::make_shared<ag::bootstrapper>(get_host_port(url), dns_over_https::DEFAULT_PORT, true, opts.bootstrap);
 }
 
 curl_pool_ptr dns_over_https::create_pool() const {
@@ -293,14 +296,14 @@ void dns_over_https::read_messages() {
         assert(message->easy_handle == handle->curl_handle);
 
         if (message->data.result != CURLE_OK) {
-            handle->error = utils::fmt_string("Failed to perform request: %s", curl_easy_strerror(message->data.result));
+            handle->error = AG_FMT("Failed to perform request: {}", curl_easy_strerror(message->data.result));
         } else {
             tracelog_id(handle, "Got response {}", (void*)message->easy_handle);
 
             long response_code;
             curl_easy_getinfo(message->easy_handle, CURLINFO_RESPONSE_CODE, &response_code);
             if (response_code < 200 || response_code >= 300) {
-                handle->error = utils::fmt_string("Got bad response status: %ld", response_code);
+                handle->error = AG_FMT("Got bad response status: {}", response_code);
             }
         }
 
@@ -385,7 +388,7 @@ void dns_over_https::submit_request(int, short, void *arg) {
     dns_over_https *upstream = handle->upstream;
     if (CURLMcode e = curl_multi_add_handle(upstream->pool.handle.get(), curl_handle);
             e != CURLM_OK) {
-        handle->error = utils::fmt_string("Failed to add request in pool: %s", curl_multi_strerror(e));
+        handle->error = AG_FMT("Failed to add request in pool: {}", curl_multi_strerror(e));
         curl_easy_cleanup(curl_handle);
         handle->barrier.set_value();
         return;
@@ -435,16 +438,18 @@ dns_over_https::exchange_result dns_over_https::exchange(ldns_pkt *request) {
 
         std::string addr = bootstrapper_result.address->str();
         tracelog(log, "Server address: {}", addr);
+
         auto [ip, port] = utils::split_host_port(addr);
         std::string_view host = get_host_name(this->server_url);
-        std::string entry = utils::fmt_string("%.*s:%.*s:%.*s",
-            (int)host.length(), host.data(), (int)port.length(), port.data(), (int)ip.length(), ip.data());
-        this->resolved = curl_slist_ptr(curl_slist_append(this->resolved.release(), entry.c_str()));
+        std::string entry = AG_FMT("{}:{}:{}", host, port, ip);
+
+        this->resolved = curl_slist_ptr(curl_slist_append(nullptr, entry.c_str()));
+        tracelog(log, "Resolved server for curl: {}", entry);
 
         milliseconds resolve_time = duration_cast<milliseconds>(bootstrapper_result.time_elapsed);
         if (this->timeout < resolve_time) {
-            return { nullptr, utils::fmt_string("DNS server name resolving took too much time: %" PRId64 "us",
-                (int64_t)bootstrapper_result.time_elapsed.count()) };
+            return { nullptr, AG_FMT("DNS server name resolving took too much time: {}us",
+                bootstrapper_result.time_elapsed.count()) };
         }
 
         timeout = this->timeout - resolve_time;
@@ -464,7 +469,7 @@ dns_over_https::exchange_result dns_over_https::exchange(ldns_pkt *request) {
     ldns_pkt *response = nullptr;
     if (std::future_status status = request_completed.wait_for(timeout);
             status != std::future_status::ready) {
-        err = utils::fmt_string("Request timed out");
+        err = "Request timed out";
         handle->barrier = std::promise<void>();
         std::future<void> request_defied = handle->barrier.get_future();
         event_base_once(this->worker.loop->c_base(), 0, EV_TIMEOUT, defy_request, handle.get(), nullptr);
@@ -474,10 +479,10 @@ dns_over_https::exchange_result dns_over_https::exchange(ldns_pkt *request) {
             assert(0);
         }
     } else if (handle->error.has_value()) {
-        err = utils::fmt_string("Failed to perform request: %s", handle->error->c_str());
+        err = AG_FMT("Failed to perform request: {}", handle->error.value());
     } else if (ldns_status status = ldns_wire2pkt(&response, handle->response.data(), handle->response.size());
             status != LDNS_STATUS_OK) {
-        err = utils::fmt_string("Failed to parse response: %s", ldns_get_errorstr_by_id(status));
+        err = AG_FMT("Failed to parse response: {}", ldns_get_errorstr_by_id(status));
     }
 
     if (response != nullptr) {

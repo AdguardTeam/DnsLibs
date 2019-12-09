@@ -268,12 +268,10 @@ static const upstream_test_data test_upstreams_data[]{
         {"1.1.1.1"}
 #endif
     },
-#if 0 // TODO FAIL port bug
     {
         "https://dns9.quad9.net:443/dns-query",
         {"8.8.8.8"}
     },
-#endif
     {
         "https://dns.cloudflare.com/dns-query",
         {"8.8.8.8:53"}
