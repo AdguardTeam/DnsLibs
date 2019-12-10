@@ -303,10 +303,10 @@ public:
 class tcp_dns_connection {
 public:
     explicit tcp_dns_connection(uint64_t id) : m_id{id} {
-        this->m_tcp = new uv_tcp_t; // Deleted in close_cb
+        this->m_tcp = (uv_tcp_t *)malloc(sizeof(uv_tcp_t)); // Deleted in close_cb
         this->m_tcp->data = this;
 
-        this->m_idle_timer = new uv_timer_t; // Deleted in close_cb
+        this->m_idle_timer = (uv_timer_t *)malloc(sizeof(uv_timer_t)); // Deleted in close_cb
         this->m_idle_timer->data = this;
     }
 
@@ -474,7 +474,7 @@ private:
     }
 
     static void close_cb(uv_handle_t *h) {
-        delete h;
+        free(h);
     }
 
     void do_close() {
