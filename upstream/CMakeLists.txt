@@ -7,18 +7,17 @@ set(THIRD_PARTY_DIR ${CMAKE_CURRENT_SOURCE_DIR}/../third-party)
 set(DNSLIBS_DIR ${CMAKE_CURRENT_SOURCE_DIR}/..)
 
 add_library(upstream EXCLUDE_FROM_ALL
-        include/upstream.h
-        src/upstream.cpp
-        src/upstream_doh.cpp
-        src/upstream_dot.cpp
-        src/upstream_plain.cpp
-        src/upstream_plain.h
-        src/event_loop.cpp
-        include/event_loop.h
-        src/connection.cpp
-        src/connection.h src/upstream_dot.h src/dns_framed.cpp src/dns_framed.h src/bootstrapper.cpp src/bootstrapper.h
-        src/upstream_dnscrypt.cpp
-        src/upstream_dnscrypt.h)
+        include/upstream.h src/upstream.cpp
+        src/upstream_doh.h src/upstream_doh.cpp
+        src/upstream_dot.h src/upstream_dot.cpp
+        src/upstream_plain.h src/upstream_plain.cpp
+        include/event_loop.h src/event_loop.cpp
+        src/connection.h src/connection.cpp
+        src/dns_framed.h src/dns_framed.cpp
+        src/bootstrapper.h src/bootstrapper.cpp
+        src/upstream_dnscrypt.h src/upstream_dnscrypt.cpp
+        src/resolver.h src/resolver.cpp
+    )
 
 set_target_properties(upstream PROPERTIES POSITION_INDEPENDENT_CODE ON)
 

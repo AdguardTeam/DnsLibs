@@ -7,11 +7,13 @@
 #include <ag_socket_address.h>
 #include <ag_logger.h>
 
+#define tracelog_ip(l_, fmt_, ...) tracelog(l_, "[{}] " fmt_, this->m_socket_address.str(), ##__VA_ARGS__)
+
 int ag::dns_framed_connection::write(ag::uint8_view buf) {
-    tracelog(m_log, "{} len={}", __func__, buf.size());
+    tracelog_ip(m_log, "{} len={}", __func__, buf.size());
     dns_framed_connection_ptr ptr = shared_from_this();
     if (buf.size() < 2) {
-        tracelog(m_log, "{} returned -1", __func__);
+        tracelog_ip(m_log, "{} returned -1", __func__);
         return -1;
     }
     uint16_t id = *(uint16_t *) buf.data();
@@ -29,7 +31,7 @@ int ag::dns_framed_connection::write(ag::uint8_view buf) {
 
         m_requests[id] = std::nullopt;
     }
-    tracelog(m_log, "{} returned {}", __func__, id);
+    tracelog_ip(m_log, "{} returned {}", __func__, id);
     return id;
 }
 
@@ -62,7 +64,7 @@ ag::dns_framed_connection_ptr ag::dns_framed_connection::create(dns_framed_pool 
 }
 
 void ag::dns_framed_connection::on_read() {
-    tracelog(m_log, "{}", __func__);
+    tracelog_ip(m_log, "{}", __func__);
     dns_framed_connection_ptr ptr = shared_from_this();
     auto *input = bufferevent_get_input(&*m_bev);
     for (;;) {
@@ -91,33 +93,33 @@ void ag::dns_framed_connection::on_read() {
             m_cond.notify_all();
         }
     }
-    tracelog(m_log, "{} finished", __func__);
+    tracelog_ip(m_log, "{} finished", __func__);
 }
 
 void ag::dns_framed_connection::on_event(int what) {
-    tracelog(m_log, "{}", __func__);
+    tracelog_ip(m_log, "{}", __func__);
     dns_framed_connection_ptr ptr = shared_from_this();
     if (what & BEV_EVENT_CONNECTED) {
-        tracelog(m_log, "{} connected", __func__);
+        tracelog_ip(m_log, "{} connected", __func__);
         m_pool->add_connected(shared_from_this());
     }
     if (what & (BEV_EVENT_EOF | BEV_EVENT_ERROR)) {
         if (what & BEV_EVENT_EOF) {
-            tracelog(m_log, "{} eof", __func__);
+            tracelog_ip(m_log, "{} eof", __func__);
         } else {
-            tracelog(m_log, "{} error", __func__);
+            tracelog_ip(m_log, "{} error {}", __func__, evutil_socket_error_to_string(evutil_socket_geterror(bufferevent_getfd(m_bev.get()))));
         }
         m_pool->remove_from_all(shared_from_this());
         std::unique_lock l(m_mutex);
         for (auto &entry : m_requests) {
             std::string error = (what & BEV_EVENT_EOF) ? "Unexpected EOF" :
-                                evutil_socket_error_to_string(evutil_socket_geterror(bufferevent_getfd(&*m_bev)));
+                                evutil_socket_error_to_string(evutil_socket_geterror(bufferevent_getfd(m_bev.get())));
             // Set result
             entry.second = {std::vector<uint8_t>{}, {std::move(error)}};
         }
         m_cond.notify_all();
     }
-    tracelog(m_log, "{} finished", __func__);
+    tracelog_ip(m_log, "{} finished", __func__);
 }
 
 ag::connection::result ag::dns_framed_connection::read(int request_id, std::chrono::milliseconds timeout) {
@@ -145,17 +147,23 @@ const ag::socket_address &ag::dns_framed_connection::address() const {
 }
 
 void ag::dns_framed_pool::add_connected(const dns_framed_connection_ptr &ptr) {
+    tracelog(ptr->m_log, "[{}] {}", ptr->m_socket_address.str(), __func__);
+
     std::scoped_lock l(m_mutex);
     m_pending_connections.erase(ptr);
     m_connections.push_back(ptr);
 }
 
 void ag::dns_framed_pool::remove_from_all(const dns_framed_connection_ptr &ptr) {
+    tracelog(ptr->m_log, "[{}] {}", ptr->m_socket_address.str(), __func__);
+
     std::scoped_lock l(m_mutex);
     m_pending_connections.erase(ptr);
     m_connections.remove(ptr);
 }
 
 void ag::dns_framed_pool::add_pending_connection(const ag::dns_framed_connection_ptr &ptr) {
+    tracelog(ptr->m_log, "[{}] {}", ptr->m_socket_address.str(), __func__);
+
     m_pending_connections.insert(ptr);
 }

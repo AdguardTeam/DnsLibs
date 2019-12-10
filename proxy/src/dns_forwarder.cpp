@@ -282,7 +282,7 @@ void dns_forwarder::finalize_processed_event(dns_request_processed_event &event,
     }
 
     if (upstream != nullptr) {
-        event.upstream_addr = upstream->address();
+        event.upstream_addr = upstream->opts.address;
     } else {
         event.upstream_addr.clear();
     }

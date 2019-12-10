@@ -19,17 +19,14 @@ struct ag::upstream_dnscrypt::impl {
     dnscrypt::server_info server_info;
 };
 
-ag::upstream_dnscrypt::upstream_dnscrypt(server_stamp &&stamp, std::chrono::milliseconds timeout) :
-        m_stamp(std::move(stamp)), m_timeout(timeout)
+ag::upstream_dnscrypt::upstream_dnscrypt(server_stamp &&stamp, std::chrono::milliseconds timeout)
+    : upstream({ stamp.server_addr_str, {}, timeout })
+    , m_stamp(std::move(stamp))
 {
     static const initializer ensure_initialized;
 }
 
 ag::upstream_dnscrypt::~upstream_dnscrypt() = default;
-
-std::string ag::upstream_dnscrypt::address() {
-    return m_stamp.server_addr_str;
-}
 
 ag::upstream_dnscrypt::exchange_result ag::upstream_dnscrypt::exchange(ldns_pkt *request_pkt) {
     tracelog_id(m_log, request_pkt, "Started");
@@ -38,10 +35,10 @@ ag::upstream_dnscrypt::exchange_result ag::upstream_dnscrypt::exchange(ldns_pkt 
     if (result.error.has_value()) {
         return make_error(std::move(result.error));
     }
-    if (m_timeout < result.rtt) {
+    if (this->opts.timeout < result.rtt) {
         return make_error(AG_FMT("Certificate fetch took too much time: {}ms", result.rtt.count()));
     }
-    auto[reply, reply_err] = apply_exchange(*request_pkt, m_timeout - result.rtt);
+    auto[reply, reply_err] = apply_exchange(*request_pkt, this->opts.timeout - result.rtt);
     if (reply_err) {
         return make_error(std::move(reply_err));
     }
@@ -59,10 +56,10 @@ ag::upstream_dnscrypt::setup_result ag::upstream_dnscrypt::setup_impl() {
     if (std::scoped_lock l(m_guard);
             !m_impl || m_impl->server_info.get_server_cert().not_after < now) {
         ag::dnscrypt::client client;
-        auto[dial_server_info, dial_rtt, dial_err] = client.dial(m_stamp, m_timeout);
+        auto[dial_server_info, dial_rtt, dial_err] = client.dial(m_stamp, this->opts.timeout);
         if (dial_err) {
             return { rtt,
-                AG_FMT("Failed to fetch certificate info from {} with error: {}", address(), *dial_err) };
+                AG_FMT("Failed to fetch certificate info from {} with error: {}", this->opts.address, *dial_err) };
         }
         m_impl.reset(new impl{client, std::move(dial_server_info)});
         rtt = dial_rtt;

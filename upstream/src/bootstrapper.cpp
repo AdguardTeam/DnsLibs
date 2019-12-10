@@ -1,111 +1,113 @@
 #include "bootstrapper.h"
+#include <dns_stamp.h>
 #include <ag_utils.h>
+
 
 using std::chrono::steady_clock;
 using std::chrono::duration_cast;
 using std::chrono::milliseconds;
 
-static constexpr auto MIN_TIMEOUT = std::chrono::milliseconds(50);
 
-ag::bootstrapper::ret ag::bootstrapper::get() {
-    static constexpr utils::make_error<ret> make_error;
+// For each resolver a half of time out is given for a try. If one fails, it's moved to the end
+// of the list to give it a chance in the future.
+//
+// Note: in case of success MUST always return vector of addresses in address field of result
+ag::bootstrapper::resolve_result ag::bootstrapper::resolve() {
+    if (socket_address addr(AG_FMT("{}:{}", m_server_name, m_server_port)); addr.valid()) {
+        return { { addr }, m_server_name, milliseconds(0), std::nullopt };
+    }
+
+    if (m_resolvers.empty()) {
+        return { {}, m_server_name, milliseconds(0), "Empty bootstrap list" };
+    }
+
     ag::hash_set<ag::socket_address> addrs;
-    utils::timer timer;
-    std::scoped_lock l(m_resolved_cache_mutex);
-    if (m_resolved_cache.empty()) {
-        milliseconds timeout = std::chrono::seconds(5);
-        for (auto &resolver : m_resolvers) {
-            auto start_time = steady_clock::now().time_since_epoch();
-            auto list = resolver->resolve(m_server_name, m_server_port, timeout, m_ipv6_avail);
-            std::move(list.begin(), list.end(), std::inserter(addrs, addrs.begin()));
-            timeout -= duration_cast<milliseconds>(steady_clock::now().time_since_epoch() - start_time);
-            if (timeout <= MIN_TIMEOUT) {
-                break;
+    utils::timer whole_resolve_timer;
+    milliseconds timeout = m_timeout;
+    err_string error;
+
+    for (size_t tried = 0, failed = 0, curr = 0;
+            tried < m_resolvers.size();
+            ++tried, curr = tried - failed) {
+        const resolver_ptr &resolver = m_resolvers[curr];
+        utils::timer single_resolve_timer;
+        milliseconds try_timeout = std::max(timeout / 2, resolver::MIN_TIMEOUT);
+        resolver::result result = resolver->resolve(m_server_name, m_server_port, try_timeout, m_ipv6_avail);
+        if (result.error.has_value()) {
+            dbglog(m_log, "Failed to resolve host '{}': {}", m_server_name, result.error.value());
+            std::rotate(m_resolvers.begin() + curr, m_resolvers.begin() + curr + 1, m_resolvers.end());
+            ++failed;
+            if (addrs.empty()) {
+                error = AG_FMT("{}{}\n", error.has_value() ? error.value() : "", result.error.value());
             }
+        } else {
+            std::move(result.addresses.begin(), result.addresses.end(), std::inserter(addrs, addrs.begin()));
+            error.reset();
         }
-        m_resolved_cache.assign(std::move_iterator(addrs.begin()), std::move_iterator(addrs.end()));
+        timeout -= single_resolve_timer.elapsed<milliseconds>();
+        if (timeout <= resolver::MIN_TIMEOUT) {
+            dbglog(m_log, "Stop resolving loop as timeout reached ({})", m_timeout);
+            break;
+        }
     }
-    auto elapsed = timer.elapsed<milliseconds>();
-    if (m_resolved_cache.empty()) {
-        return make_error("No address", std::nullopt, m_server_name, elapsed);
-    }
-    return {.address = m_resolved_cache[m_round_robin_num++ % m_resolved_cache.size()],
-            .server_name = m_server_name,
-            .time_elapsed = elapsed};
+
+    milliseconds elapsed = whole_resolve_timer.elapsed<milliseconds>();
+
+    std::vector<socket_address> addresses(std::move_iterator(addrs.begin()), std::move_iterator(addrs.end()));
+    return { std::move(addresses), m_server_name, elapsed, std::move(error) };
 }
 
-ag::bootstrapper::bootstrapper(std::string_view address_string, int default_port,
-        bool ipv6_avail, const std::vector<std::string> &bootstrap)
-        : m_ipv6_avail(ipv6_avail) {
-    std::atomic_init(&m_round_robin_num, 0);
-    auto[host, port] = utils::split_host_port(address_string);
+ag::bootstrapper::resolve_result ag::bootstrapper::get() {
+    resolve_result result = get_all();
+    if (!result.error.has_value()) {
+        assert(!result.addresses.empty());
+        result.addresses.erase(result.addresses.begin() + 1, result.addresses.end());
+    }
+
+    return result;
+}
+
+ag::bootstrapper::resolve_result ag::bootstrapper::get_all() {
+    std::scoped_lock l(m_resolved_cache_mutex);
+    if (!m_resolved_cache.empty()) {
+        return { m_resolved_cache, m_server_name, milliseconds(0), std::nullopt };
+    }
+
+    resolve_result result = resolve();
+    assert(result.error.has_value() == result.addresses.empty());
+    return result;
+}
+
+static std::vector<ag::resolver_ptr> create_resolvers(const ag::logger &log, const ag::bootstrapper::params &p) {
+    std::vector<ag::resolver_ptr> resolvers;
+    resolvers.reserve(p.bootstrap.size());
+
+    for (const std::string &server : p.bootstrap) {
+        resolvers.push_back(std::make_unique<ag::resolver>(server, p.upstream_config));
+    }
+
+    if (p.bootstrap.empty() && !ag::socket_address(p.address_string).valid()) {
+        warnlog(log, "Got empty list of the servers for bootstrapping");
+    }
+
+    return resolvers;
+}
+
+ag::bootstrapper::bootstrapper(const params &p)
+        : m_log(create_logger(AG_FMT("Bootstrapper {}", p.address_string)))
+        , m_timeout(p.timeout)
+        , m_round_robin_num({0})
+        , m_ipv6_avail(p.ipv6_avail)
+        , m_resolvers(create_resolvers(m_log, p))
+{
+    auto[host, port] = utils::split_host_port(p.address_string);
     m_server_port = std::strtol(std::string(port).c_str(), nullptr, 10);
     if (m_server_port == 0) {
-        m_server_port = default_port;
+        m_server_port = p.default_port;
     }
     m_server_name = host;
-    for (auto &server : bootstrap) {
-        m_resolvers.push_back(std::make_shared<resolver>(server));
-    }
 }
 
-std::string ag::bootstrapper::address() {
+std::string ag::bootstrapper::address() const {
     return AG_FMT("{}:{}", m_server_name, m_server_port);
-}
-
-ag::resolver::resolver(std::string_view resolver_address)
-        : m_resolver_address(resolver_address)
-{
-}
-
-static ag::ldns_pkt_ptr create_req(std::string_view domain_name, ldns_enum_rr_type rr_type) {
-    return ag::ldns_pkt_ptr(ldns_pkt_query_new(
-            ldns_dname_new_frm_str(std::string(domain_name).c_str()),
-            rr_type, LDNS_RR_CLASS_IN, LDNS_RD));
-}
-
-static std::vector<ag::socket_address> socket_address_from_reply(ldns_pkt *reply, int port) {
-    std::vector<ag::socket_address> addrs;
-    addrs.reserve(5);
-    if (!ldns_pkt_ancount(reply)) {
-        return addrs;
-    }
-    auto answer = ldns_pkt_answer(reply);
-    for (size_t i = 0; i < ldns_rr_list_rr_count(answer); i++) {
-        auto rr = ldns_rr_list_rr(answer, i);
-        ldns_rdf *rdf = ldns_rr_a_address(rr);
-        ag::uint8_view ip{ldns_rdf_data(rdf), ldns_rdf_size(rdf)};
-        addrs.emplace_back(ip, port);
-    }
-    return addrs;
-}
-
-std::vector<ag::socket_address>
-ag::resolver::resolve(std::string_view host, int port, milliseconds timeout, bool ipv6_avail) {
-    ag::socket_address numeric_ip(utils::join_host_port(host, fmt::to_string(port)));
-    if (numeric_ip.valid()) {
-        return {numeric_ip};
-    }
-    std::vector<ag::socket_address> addrs;
-    addrs.reserve(5);
-    auto start_time = steady_clock::now().time_since_epoch();
-    ldns_pkt_ptr a_req = create_req(host, LDNS_RR_TYPE_A);
-    auto[a_reply, a_err] = ag::plain_dns({m_resolver_address, {}, timeout}).exchange(&*a_req);
-
-    if (!a_err) {
-        auto a_addrs = socket_address_from_reply(&*a_reply, port);
-        std::move(a_addrs.begin(), a_addrs.end(), std::back_inserter(addrs));
-    }
-    auto finish_time = steady_clock::now().time_since_epoch();
-    timeout -= duration_cast<milliseconds>(finish_time - start_time);
-    if (ipv6_avail && timeout > MIN_TIMEOUT) {
-        ldns_pkt_ptr aaaa_req = create_req(host, LDNS_RR_TYPE_AAAA);
-        auto[aaaa_reply, aaaa_err] = ag::plain_dns({m_resolver_address, {}, timeout}).exchange(&*aaaa_req);
-        if (!aaaa_err) {
-            auto aaaa_addrs = socket_address_from_reply(&*aaaa_reply, port);
-            std::move(aaaa_addrs.begin(), aaaa_addrs.end(), std::back_inserter(addrs));
-        }
-    }
-
-    return addrs;
 }
