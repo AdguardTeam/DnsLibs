@@ -68,6 +68,8 @@ TEST_P(listener_test, listens_and_responds) {
     std::vector<std::thread> workers;
     workers.reserve(NTHREADS);
 
+    ag::upstream_factory upstream_factory({});
+
     const auto address = fmt::format(
             "{}[{}]:{}",
             listener_settings.protocol == ag::listener_protocol::TCP ? "tcp://" : "",
@@ -79,16 +81,14 @@ TEST_P(listener_test, listens_and_responds) {
         workers.emplace_back([&successful_requests,
                                      listener_settings,
                                      address,
+                                     &upstream_factory,
                                      i]() {
             auto logger = ag::create_logger(fmt::format("test_thread_{}", i));
 
-            auto[upstream, error] = ag::upstream::address_to_upstream(
-                    address,
-                    ag::upstream::options{
-                            .bootstrap = {},
-                            .timeout = 1000ms,
-                            .server_ip = {},
-                    });
+            auto[upstream, error] = upstream_factory.create_upstream({
+                    .address = address,
+                    .timeout = 1000ms,
+                });
 
             if (error) {
                 logger->error("Upstream create: {}", *error);

@@ -152,17 +152,17 @@ static NSData *create_response_packet(const struct iphdr *ip_header, const struc
 
 
 @implementation AGDnsUpstream
-- (instancetype) initWithNative: (const ag::upstream_settings *) settings
+- (instancetype) initWithNative: (const ag::upstream::options *) settings
 {
     self = [super init];
-    _address = [NSString stringWithUTF8String: settings->dns_server.c_str()];
+    _address = [NSString stringWithUTF8String: settings->address.c_str()];
     NSMutableArray<NSString *> *bootstrap =
-        [[NSMutableArray alloc] initWithCapacity: settings->options.bootstrap.size()];
-    for (const std::string &server : settings->options.bootstrap) {
+        [[NSMutableArray alloc] initWithCapacity: settings->bootstrap.size()];
+    for (const std::string &server : settings->bootstrap) {
         [bootstrap addObject: [NSString stringWithUTF8String: server.c_str()]];
     }
     _bootstrap = bootstrap;
-    _timeout = settings->options.timeout.count();
+    _timeout = settings->timeout.count();
     return self;
 }
 
@@ -184,7 +184,7 @@ static NSData *create_response_packet(const struct iphdr *ip_header, const struc
 - (instancetype) initWithNative: (const ag::dns64_settings *) settings
 {
     self = [super init];
-    _upstream = [[AGDnsUpstream alloc] initWithNative: &settings->upstream];
+    _upstream = [[AGDnsUpstream alloc] initWithNative: &settings->upstream_settings];
     _maxTries = settings->max_tries;
     _waitTime = settings->wait_time.count();
     return self;
@@ -237,7 +237,7 @@ static NSData *create_response_packet(const struct iphdr *ip_header, const struc
     self = [super init];
     NSMutableArray<AGDnsUpstream *> *upstreams =
         [[NSMutableArray alloc] initWithCapacity: settings->upstreams.size()];
-    for (const ag::upstream_settings &us : settings->upstreams) {
+    for (const ag::upstream::options &us : settings->upstreams) {
         [upstreams addObject: [[AGDnsUpstream alloc] initWithNative: &us]];
     }
     _upstreams = upstreams;
@@ -326,6 +326,89 @@ static NSData *create_response_packet(const struct iphdr *ip_header, const struc
     self->proxy.deinit();
 }
 
+static SecCertificateRef convertCertificate(const std::vector<uint8_t> &cert) {
+    NSData *data = [NSData dataWithBytesNoCopy: (void *)cert.data() length: cert.size() freeWhenDone: NO];
+    CFDataRef certRef = (__bridge CFDataRef)data;
+    return SecCertificateCreateWithData(NULL, (CFDataRef)certRef);
+}
+
+- (std::optional<std::string>) verifyCertificate: (ag::certificate_verification_event *) event
+{
+    tracelog(self->log, "[Verification] App callback");
+
+    size_t chainLength = event->chain.size() + 1;
+    SecCertificateRef chain[chainLength];
+
+    chain[0] = convertCertificate(event->certificate);
+    if (chain[0] == NULL) {
+        dbglog(self->log, "[Verification] Failed to create certificate object");
+        return "Failed to create certificate object";
+    }
+
+    for (size_t i = 0; i < event->chain.size(); ++i) {
+        chain[i + 1] = convertCertificate(event->chain[i]);
+        if (chain[i + 1] == NULL) {
+            dbglog(self->log, "[Verification] Failed to create certificate object");
+            return "Failed to create certificate object";
+        }
+    }
+
+    NSMutableArray *trustArray = [[NSMutableArray alloc] initWithCapacity: chainLength];
+    for (size_t i = 0; i < chainLength; ++i) {
+        [trustArray addObject: (__bridge id _Nonnull)chain[i]];
+    }
+
+    SecPolicyRef policy = SecPolicyCreateBasicX509();
+    SecTrustRef trust;
+    OSStatus status = SecTrustCreateWithCertificates((__bridge CFTypeRef)trustArray, policy, &trust);
+    if (policy) {
+        CFRelease(policy);
+    }
+
+    if (status != errSecSuccess) {
+        CFStringRef err = SecCopyErrorMessageString(status, NULL);
+        dbglog(self->log, "[Verification] Failed to create trust object from chain: {}",
+            [(__bridge NSString *)err UTF8String]);
+        return [(__bridge NSString *)err UTF8String];
+    }
+
+    SecTrustSetAnchorCertificates(trust, (CFArrayRef) trustArray );
+    SecTrustSetAnchorCertificatesOnly(trust, YES);
+    SecTrustResultType trustResult;
+    SecTrustEvaluate(trust, &trustResult);
+
+    // Unspecified also stands for valid: https://developer.apple.com/library/archive/qa/qa1360/_index.html
+    if (trustResult == kSecTrustResultUnspecified || trustResult == kSecTrustResultProceed) {
+        dbglog(self->log, "[Verification] Succeeded");
+        return std::nullopt;
+    }
+
+    std::string errStr;
+    switch (trustResult) {
+    case kSecTrustResultDeny:
+        errStr = "The user specified that the certificate should not be trusted";
+        break;
+    case kSecTrustResultRecoverableTrustFailure:
+        errStr = "Trust is denied, but recovery may be possible";
+        break;
+    case kSecTrustResultFatalTrustFailure:
+        errStr = "Trust is denied and no simple fix is available";
+        break;
+    case kSecTrustResultOtherError:
+        errStr = "A value that indicates a failure other than trust evaluation";
+        break;
+    case kSecTrustResultInvalid:
+        errStr = "An indication of an invalid setting or result";
+        break;
+    default:
+        errStr = AG_FMT("Unknown error code: {}", trustResult);
+        break;
+    }
+
+    dbglog(self->log, "[Verification] Failed to verify: {}", errStr);
+    return errStr;
+}
+
 - (instancetype) initWithConfig: (AGDnsProxyConfig *) config
         handler: (AGDnsProxyEvents *)handler
 {
@@ -346,7 +429,7 @@ static NSData *create_response_packet(const struct iphdr *ip_header, const struc
                     bootstrap.emplace_back([server UTF8String]);
                 }
             }
-            ag::upstream::options::address_container addr;
+            ag::ip_address_variant addr;
             if (upstream.serverIp != nil && [upstream.serverIp length] == 4) {
                 addr.emplace<ag::uint8_array<4>>();
                 std::memcpy(std::get<ag::uint8_array<4>>(addr).data(),
@@ -359,8 +442,8 @@ static NSData *create_response_packet(const struct iphdr *ip_header, const struc
                 addr.emplace<std::monostate>();
             }
             settings.upstreams.emplace_back(
-                ag::upstream_settings{ [upstream.address UTF8String],
-                    { std::move(bootstrap), std::chrono::milliseconds(upstream.timeout), addr } });
+                ag::upstream::options{ [upstream.address UTF8String], std::move(bootstrap),
+                    std::chrono::milliseconds(upstream.timeout), addr });
         }
     }
 
@@ -370,7 +453,7 @@ static NSData *create_response_packet(const struct iphdr *ip_header, const struc
         settings.filter_params.filters.reserve([config.filters count]);
         for (NSNumber *key in config.filters) {
             const char *filterPath = [[config.filters objectForKey: key] UTF8String];
-            dbglog(self->log, "filter id={} path={}", [key intValue], filterPath);
+            dbglog(self->log, "Filter id={} path={}", [key intValue], filterPath);
             settings.filter_params.filters.emplace_back(
                 ag::dnsfilter::filter_params{ (uint32_t)[key intValue], filterPath });
         }
@@ -386,6 +469,11 @@ static NSData *create_response_packet(const struct iphdr *ip_header, const struc
                 sself->events.onRequestProcessed([[AGDnsRequestProcessedEvent alloc] init: event]);
             };
     }
+    native_events.on_certificate_verification =
+        [obj] (ag::certificate_verification_event event) -> std::optional<std::string> {
+            AGDnsProxy *sself = (__bridge AGDnsProxy *)obj;
+            return [sself verifyCertificate: &event];
+        };
 
     if (config.dns64Settings != nil) {
         const AGDnsUpstream * const upstream = config.dns64Settings.upstream;
@@ -400,9 +488,9 @@ static NSData *create_response_packet(const struct iphdr *ip_header, const struc
             }
 
             settings.dns64 = ag::dns64_settings{
-                    .upstream = {[upstream.address UTF8String],
-                                 {std::move(bootstrap),
-                                  std::chrono::milliseconds(upstream.timeout)}},
+                    .upstream_settings = {[upstream.address UTF8String],
+                            std::move(bootstrap),
+                            std::chrono::milliseconds(upstream.timeout)},
                     .wait_time = std::chrono::milliseconds(config.dns64Settings.waitTime),
                     .max_tries = config.dns64Settings.maxTries > 0
                                  ? static_cast<uint32_t>(config.dns64Settings.maxTries) : 0,
@@ -426,7 +514,7 @@ static NSData *create_response_packet(const struct iphdr *ip_header, const struc
     }
 
     if (!self->proxy.init(std::move(settings), std::move(native_events))) {
-        errlog(self->log, "Failed to initialize filtering module");
+        errlog(self->log, "Failed to initialize core proxy module");
         return nil;
     }
 
@@ -450,10 +538,9 @@ static NSData *create_response_packet(const struct iphdr *ip_header, const struc
         , inet_ntoa(ip_header->ip_src), ntohs(udp_header->uh_sport)
         , inet_ntoa(ip_header->ip_dst), ntohs(udp_header->uh_dport));
 
-    NSData *payload = [NSData dataWithBytes: ((Byte *)packet.bytes + udp_header_length)
-        length: (packet.length - udp_header_length)];
-
-    std::vector<uint8_t> response = self->proxy.handle_message({(uint8_t*)[payload bytes], [payload length]});
+    ag::uint8_view payload = { (uint8_t*)packet.bytes + udp_header_length, packet.length - udp_header_length };
+    std::vector<uint8_t> response = self->proxy.handle_message(payload);
     return create_response_packet(ip_header, udp_header, response);
 }
+
 @end

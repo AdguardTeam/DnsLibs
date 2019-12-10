@@ -5,6 +5,7 @@
 #include <functional>
 #include <cstdint>
 #include <vector>
+#include <optional>
 
 
 namespace ag {
@@ -29,6 +30,14 @@ struct dns_request_processed_event {
 };
 
 /**
+ * Certificate verification event
+ */
+struct certificate_verification_event {
+    std::vector<uint8_t> certificate; /** certificate being verified */
+    std::vector<std::vector<uint8_t>> chain; /** certificate chain */
+};
+
+/**
  * Set of DNS proxy events
  */
 struct dnsproxy_events {
@@ -40,6 +49,12 @@ struct dnsproxy_events {
      *    fires the event - i.e., several events will be raised for the request
      */
     std::function<void(dns_request_processed_event)> on_request_processed;
+    /**
+     * Raised when some transaction needs to verify a server certificate.
+     * Notes:
+     *  - if not provided, default verifier will be used
+     */
+    std::function<std::optional<std::string>(certificate_verification_event)> on_certificate_verification;
 };
 
 

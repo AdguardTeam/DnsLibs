@@ -32,6 +32,18 @@ static constexpr auto SCHEME_WITH_SUFFIX_END = std::end(SCHEME_WITH_SUFFIX);
 static_assert(std::size(SCHEME_WITH_SUFFIX) + 1 == static_cast<size_t>(scheme::COUNT),
               "scheme_with_suffix should contain all schemes defined in enum (except UNDEFINED)");
 
+
+struct ag::upstream_factory::impl {
+    upstream_factory::config config;
+
+    impl(upstream_factory::config cfg)
+        : config(std::move(cfg))
+    {}
+
+    upstream_factory::create_result create_upstream(const upstream::options &opts) const;
+};
+
+
 static auto get_address_scheme_iterator(std::string_view address) {
     using namespace std::placeholders;
     return std::find_if(SCHEME_WITH_SUFFIX_BEGIN, SCHEME_WITH_SUFFIX_END,
@@ -56,55 +68,29 @@ static constexpr size_t get_address_scheme_size(scheme local_scheme) {
     return std::size(get_address_scheme_with_suffix(local_scheme));
 }
 
-static ag::upstream::address_to_upstream_result create_upstream_tls_without_prefix(std::string_view address,
-                                                                                   const ag::upstream::options &opts) {
-    auto bootstrapper = std::make_shared<ag::bootstrapper>(address, ag::dns_over_tls::DEFAULT_PORT, true,
-                                                           opts.bootstrap);
-    return {std::make_shared<ag::dns_over_tls>(std::move(bootstrapper), opts.timeout), std::nullopt};
+static ag::upstream_factory::create_result create_upstream_tls(const ag::upstream::options &opts,
+        const ag::upstream_factory::config &config) {
+    return {std::make_shared<ag::dns_over_tls>(opts, config), std::nullopt};
 }
 
-static ag::upstream::address_to_upstream_result create_upstream_tls(std::string_view address,
-                                                                    const ag::upstream::options &opts) {
-    address.remove_prefix(get_address_scheme_size(scheme::TLS));
-    return create_upstream_tls_without_prefix(address, opts);
+static ag::upstream_factory::create_result create_upstream_https(const ag::upstream::options &opts,
+        const ag::upstream_factory::config &config) {
+    return {std::make_shared<ag::dns_over_https>(opts, config), std::nullopt};
 }
 
-static ag::upstream::address_to_upstream_result create_upstream_https(std::string_view address,
-                                                                      const ag::upstream::options &opts) {
-    return {std::make_shared<ag::dns_over_https>(address, opts), std::nullopt};
+static ag::upstream_factory::create_result create_upstream_plain(const ag::upstream::options &opts,
+        const ag::upstream_factory::config &config) {
+    return {std::make_shared<ag::plain_dns>(opts), std::nullopt};
 }
 
-static ag::upstream::address_to_upstream_result create_upstream_https_without_prefix(
-        std::string_view address, const ag::upstream::options &opts) {
-    return create_upstream_https(AG_FMT("{}{}", ag::dns_over_https::SCHEME, address), opts);
-}
-
-static ag::upstream::address_to_upstream_result create_upstream_dns_common(std::string_view address,
-                                                                           const ag::upstream::options &opts,
-                                                                           bool prefer_tcp) {
-    return {std::make_shared<ag::plain_dns>(address, opts.timeout, prefer_tcp), std::nullopt};
-}
-
-static ag::upstream::address_to_upstream_result create_upstream_dns(std::string_view address,
-                                                                    const ag::upstream::options &opts) {
-    return create_upstream_dns_common(address, opts, false);
-}
-
-static ag::upstream::address_to_upstream_result create_upstream_tcp(std::string_view address,
-                                                                    const ag::upstream::options &opts) {
-    address.remove_prefix(get_address_scheme_size(scheme::TCP));
-    return create_upstream_dns_common(address, opts, true);
-}
-
-static ag::upstream::address_to_upstream_result create_upstream_dnscrypt(ag::server_stamp &&stamp,
-                                                                         const ag::upstream::options &opts) {
+static ag::upstream_factory::create_result create_upstream_dnscrypt(ag::server_stamp &&stamp,
+        const ag::upstream::options &opts) {
     return {std::make_shared<ag::upstream_dnscrypt>(std::move(stamp), opts.timeout), std::nullopt};
 }
 
-static ag::upstream::address_to_upstream_result create_upstream_sdns(std::string_view stamp_address,
-                                                                     const ag::upstream::options &local_opts) {
-    static constexpr ag::utils::make_error<ag::upstream::address_to_upstream_result> make_error;
-    auto[stamp, stamp_err] = ag::server_stamp::from_string(stamp_address);
+static ag::upstream_factory::create_result create_upstream_sdns(const ag::upstream::options &local_opts, const ag::upstream_factory::config &config) {
+    static constexpr ag::utils::make_error<ag::upstream_factory::create_result> make_error;
+    auto[stamp, stamp_err] = ag::server_stamp::from_string(local_opts.address);
     if (stamp_err) {
         return make_error(std::move(stamp_err));
     }
@@ -115,45 +101,53 @@ static ag::upstream::address_to_upstream_result create_upstream_sdns(std::string
         if (std::holds_alternative<std::monostate>(ip_address_variant)) {
             return make_error(AG_FMT("Invalid server address in the stamp: {}", stamp.server_addr_str));
         }
-        opts.server_ip = ip_address_variant;
+        opts.resolved_server_ip = ip_address_variant;
     }
+    opts.address = stamp.server_addr_str;
+
     switch (stamp.proto) {
     case ag::stamp_proto_type::PLAIN:
-        return create_upstream_dns(stamp.server_addr_str, opts);
+        return create_upstream_plain(opts, config);
     case ag::stamp_proto_type::DNSCRYPT:
         return create_upstream_dnscrypt(std::move(stamp), opts);
     case ag::stamp_proto_type::DOH:
-        return create_upstream_https_without_prefix(AG_FMT("{}{}", stamp.provider_name, stamp.path), opts);
+        opts.address = AG_FMT("{}{}{}", ag::dns_over_https::SCHEME, stamp.provider_name, stamp.path);
+        return create_upstream_https(opts, config);
     case ag::stamp_proto_type::TLS:
-        return create_upstream_tls_without_prefix(stamp.provider_name, opts);
+        opts.address = std::move(stamp.provider_name);
+        return create_upstream_tls(opts, config);
     }
     assert(false);
     return make_error(AG_FMT("Unknown stamp protocol: {}", stamp.proto));
 }
 
-static ag::upstream::address_to_upstream_result create_upstream_common(std::string_view address,
-                                                                       const ag::upstream::options &opts) {
-    using create_function = decltype(&create_upstream_common);
+ag::upstream_factory::create_result ag::upstream_factory::impl::create_upstream(const ag::upstream::options &opts) const {
+    using create_function = upstream_factory::create_result (*)(const ag::upstream::options &, const ag::upstream_factory::config &);
     static constexpr create_function create_functions[]{
         &create_upstream_sdns,
-        &create_upstream_dns,
-        &create_upstream_tcp,
+        &create_upstream_plain,
+        &create_upstream_plain,
         &create_upstream_tls,
         &create_upstream_https,
-        &create_upstream_dns,
+        &create_upstream_plain,
     };
     static_assert(std::size(create_functions) == static_cast<size_t>(scheme::COUNT),
                   "create_functions should contains all create functions for schemes defined in enum");
-    auto index = (size_t)get_address_scheme(address);
-    return create_functions[index](address, opts);
+    auto index = (size_t)get_address_scheme(opts.address);
+    return create_functions[index](opts, this->config);
 }
 
-ag::upstream::address_to_upstream_result ag::upstream::address_to_upstream(std::string_view address,
-                                                                           const options &opts) {
-    if (address.find("://") != std::string_view::npos) {
+ag::upstream_factory::upstream_factory(config cfg)
+    : factory(std::make_unique<impl>(std::move(cfg)))
+{}
+
+ag::upstream_factory::~upstream_factory() = default;
+
+ag::upstream_factory::create_result ag::upstream_factory::create_upstream(const upstream::options &opts) const {
+    if (opts.address.find("://") != std::string_view::npos) {
         // TODO parse address error
-        return create_upstream_common(address, opts);
+        return this->factory->create_upstream(opts);
     }
     // We don't have scheme in the url, so it's just a plain DNS host:port
-    return create_upstream_dns(address, opts);
+    return create_upstream_plain(opts, this->factory->config);
 }

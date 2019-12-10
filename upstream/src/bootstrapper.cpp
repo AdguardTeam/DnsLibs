@@ -90,7 +90,7 @@ ag::resolver::resolve(std::string_view host, int port, milliseconds timeout, boo
     addrs.reserve(5);
     auto start_time = steady_clock::now().time_since_epoch();
     ldns_pkt_ptr a_req = create_req(host, LDNS_RR_TYPE_A);
-    auto[a_reply, a_err] = ag::plain_dns(m_resolver_address, timeout, false).exchange(&*a_req);
+    auto[a_reply, a_err] = ag::plain_dns({m_resolver_address, {}, timeout}).exchange(&*a_req);
 
     if (!a_err) {
         auto a_addrs = socket_address_from_reply(&*a_reply, port);
@@ -100,7 +100,7 @@ ag::resolver::resolve(std::string_view host, int port, milliseconds timeout, boo
     timeout -= duration_cast<milliseconds>(finish_time - start_time);
     if (ipv6_avail && timeout > MIN_TIMEOUT) {
         ldns_pkt_ptr aaaa_req = create_req(host, LDNS_RR_TYPE_AAAA);
-        auto[aaaa_reply, aaaa_err] = ag::plain_dns(m_resolver_address, timeout, false).exchange(&*aaaa_req);
+        auto[aaaa_reply, aaaa_err] = ag::plain_dns({m_resolver_address, {}, timeout}).exchange(&*aaaa_req);
         if (!aaaa_err) {
             auto aaaa_addrs = socket_address_from_reply(&*aaaa_reply, port);
             std::move(aaaa_addrs.begin(), aaaa_addrs.end(), std::back_inserter(addrs));

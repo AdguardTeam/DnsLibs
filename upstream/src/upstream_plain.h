@@ -36,14 +36,13 @@ private:
  */
 class plain_dns : public ag::upstream {
 public:
+    static constexpr std::string_view TCP_SCHEME = "tcp://";
+
     /**
      * Create plain DNS upstream
-     * @param address Server address. If port is not specified, default service port will be used
-     * @param timeout Timeout in milliseconds resolution
-     * @param prefer_tcp If true, query will always be sent via TCP, otherwise it will be sent via tcp
-     *                   only if contains `truncated` flag.
+     * @param opts Upstream settings
      */
-    plain_dns(std::string_view address, std::chrono::milliseconds timeout, bool prefer_tcp);
+    plain_dns(const ag::upstream::options &opts);
 
     ~plain_dns() override = default;
 
@@ -52,14 +51,14 @@ public:
     exchange_result exchange(ldns_pkt *request_pkt) override;
 
 private:
-    /** TCP connection pool */
-    tcp_pool m_pool;
-    /** DNS server socket address */
-    socket_address m_socket_address;
-    /** Timeout */
-    std::chrono::milliseconds m_timeout;
     /** Prefer TCP */
     bool m_prefer_tcp;
+    /** DNS server socket address */
+    socket_address m_socket_address;
+    /** TCP connection pool */
+    tcp_pool m_pool;
+    /** Timeout */
+    std::chrono::milliseconds m_timeout;
 };
 
 } // namespace ag

@@ -9,6 +9,7 @@
 #include <ag_defs.h>
 #include <ag_net_consts.h>
 #include <ag_net_utils.h>
+#include <certificate_verifier.h>
 
 namespace ag {
 
@@ -22,11 +23,6 @@ using ldns_pkt_ptr = std::unique_ptr<ldns_pkt, ag::ftor<&ldns_pkt_free>>;
  */
 class upstream {
 public:
-    struct address_to_upstream_result {
-        upstream_ptr upstream;
-        err_string error;
-    };
-
     struct exchange_result {
         ldns_pkt_ptr packet;
         err_string error;
@@ -36,6 +32,16 @@ public:
      * Options for upstream
      */
     struct options {
+        /**
+         * Server address, one of the following kinds:
+         *     8.8.8.8:53 -- plain DNS
+         *     tcp://8.8.8.8:53 -- plain DNS over TCP
+         *     tls://1.1.1.1 -- DNS-over-TLS
+         *     https://dns.adguard.com/dns-query -- DNS-over-HTTPS
+         *     sdns://... -- DNS stamp (see https://dnscrypt.info/stamps-specifications)
+         */
+        std::string address;
+
         /** List of plain DNS servers to be used to resolve DOH/DOT hostnames (if any) */
         std::vector<std::string> bootstrap;
 
@@ -46,20 +52,8 @@ public:
         std::chrono::milliseconds timeout;
 
         /** Resolver's IP address. In the case if it's specified, bootstrap DNS servers won't be used at all. */
-        ip_address_variant server_ip;
+        ip_address_variant resolved_server_ip;
     };
-
-    /**
-     * Convert the specified address to an upstream instance
-     * @param address   8.8.8.8:53 -- plain DNS
-     *                  tcp://8.8.8.8:53 -- plain DNS over TCP
-     *                  tls://1.1.1.1 -- DNS-over-TLS
-     *                  https://dns.adguard.com/dns-query -- DNS-over-HTTPS
-     *                  sdns://... -- DNS stamp (see https://dnscrypt.info/stamps-specifications)
-     * @param opts      Options for upstream creation
-     * @return Pointer to newly created upstream or error
-     */
-    static address_to_upstream_result address_to_upstream(std::string_view address, const options &opts = {});
 
     virtual ~upstream() = default;
 
@@ -75,6 +69,38 @@ public:
      * @return DNS server address
      */
     virtual std::string address() = 0;
+};
+
+/**
+ * Upstream factory entity which produces upstreams
+ */
+class upstream_factory {
+public:
+    /**
+     * The factory configuration
+     */
+    struct config {
+        const certificate_verifier *cert_verifier = nullptr;
+    };
+
+    struct create_result {
+        upstream_ptr upstream; // created upstream in case of success
+        err_string error; // non-nullopt in case of error
+    };
+
+    explicit upstream_factory(config cfg);
+    ~upstream_factory();
+
+    /**
+     * Create an upstream
+     * @param opts upstream settings
+     * @return Creation result
+     */
+    create_result create_upstream(const upstream::options &opts) const;
+
+    struct impl;
+private:
+    std::unique_ptr<impl> factory;
 };
 
 } // namespace ag

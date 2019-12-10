@@ -3,18 +3,20 @@
 #include <functional>
 #include <future>
 #include <thread>
-#include <ldns/dname.h>
-#include <ldns/keys.h>
-#include <ldns/rbtree.h>
-#include <ldns/host2str.h> // Requires include keys.h and rbtree.h above
-#include <ldns/packet.h>
-#include <ldns/wire2host.h>
+#include <ldns/ldns.h>
 #include <spdlog/fmt/bundled/chrono.h>
 #include <ag_logger.h>
 #include <ag_utils.h>
 #include <dns_crypt_ldns.h>
+#include <default_verifier.h>
 
 static constexpr std::chrono::seconds DEFAULT_TIMEOUT(10);
+
+static ag::upstream_factory::create_result create_upstream(const ag::upstream::options &opts) {
+    static ag::default_verifier cert_verifier;
+    static ag::upstream_factory upstream_factory({&cert_verifier});
+    return upstream_factory.create_upstream(opts);
+}
 
 static const ag::logger &logger() {
     static auto result = ag::create_logger("test_upstream_logger");
@@ -123,7 +125,7 @@ static void parallel_test_basic(const T &data, const F &function) {
 template<typename T>
 static void parallel_test(const T &data) {
     parallel_test_basic(data, [](const auto &address, const auto &bootstrap, const auto &server_ip) -> ag::err_string {
-        auto[upstream_ptr, upstream_err] = ag::upstream::address_to_upstream(address, {bootstrap, DEFAULT_TIMEOUT});
+        auto[upstream_ptr, upstream_err] = create_upstream({address, bootstrap, DEFAULT_TIMEOUT});
         if (upstream_err) {
             return AG_FMT("Failed to generate upstream from address {}: {}", address, *upstream_err);
         }
@@ -137,8 +139,7 @@ TEST_F(upstream_test, test_bootstrap_timeout) {
     static constexpr auto timeout = 100ms;
     static constexpr size_t count = 10;
     // Specifying some wrong port instead so that bootstrap DNS timed out for sure
-    auto[upstream_ptr, upstream_err] = ag::upstream::address_to_upstream("tls://one.one.one.one", {{"8.8.8.8:555"},
-                                                                                                   timeout});
+    auto[upstream_ptr, upstream_err] = create_upstream({"tls://one.one.one.one", {"8.8.8.8:555"}, timeout});
     ASSERT_FALSE(upstream_err) << "Cannot create upstream: " << *upstream_err;
     auto futures = make_indexed_futures(count, [upstream_ptr = upstream_ptr](size_t index) -> ag::err_string {
         infolog(logger(), "Start {}", index);
@@ -193,7 +194,7 @@ static constexpr std::string_view truncated_test_data[]{
 
 TEST_P(dns_truncated_test, test_dns_truncated) {
     const auto &address = GetParam();
-    auto[upstream, upstream_err] = ag::upstream::address_to_upstream(address, {.timeout=std::chrono::seconds(5)});
+    auto[upstream, upstream_err] = create_upstream({std::string(address), {}, std::chrono::seconds(5)});
     ASSERT_FALSE(upstream_err) << "Error while creating an upstream: " << *upstream_err;
     auto request = ag::dnscrypt::create_request_ldns_pkt(LDNS_RR_TYPE_TXT, LDNS_RR_CLASS_IN, LDNS_RD,
                                                          "unit-test2.dns.adguard.com.", std::nullopt);
@@ -358,7 +359,7 @@ static const std::string test_upstream_default_options_data[]{
 
 TEST_P(upstream_default_options_test, test_upstream_default_options) {
     const auto &address = GetParam();
-    auto[upstream_ptr, upstream_err] = ag::upstream::address_to_upstream(address, {{}, DEFAULT_TIMEOUT});
+    auto[upstream_ptr, upstream_err] = create_upstream({address, {}, DEFAULT_TIMEOUT});
     ASSERT_FALSE(upstream_err) << "Failed to generate upstream from address " << address << ": " << *upstream_err;
     auto err = check_upstream(*upstream_ptr, address);
     ASSERT_FALSE(err) << *err;
@@ -441,12 +442,13 @@ TEST_F(upstream_test, DISABLED_doh_concurrent_requests) {
     static constexpr size_t REQUESTS_NUM = 128;
     static constexpr size_t WORKERS_NUM = 16;
     static const ag::upstream::options opts{
+        .address = "https://dns.cloudflare.com/dns-query",
         .bootstrap = {"8.8.8.8", "1.1.1.1"},
         .timeout = 5s,
-//         .server_ip = ag::ipv4_address_size{104, 19, 199, 29}, // Uncomment for test this server IP
-//         .server_ip = ag::ipv6_address_size{0x26, 0x06, 0x47, 0x00, 0x30, 0x0a, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x68, 0x13, 0xc7, 0x1d},  // Uncomment for test this server IP
+//         .resolved_server_ip = ag::ipv4_address_size{104, 19, 199, 29}, // Uncomment for test this server IP
+//         .resolved_server_ip = ag::ipv6_address_size{0x26, 0x06, 0x47, 0x00, 0x30, 0x0a, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x68, 0x13, 0xc7, 0x1d},  // Uncomment for test this server IP
     };
-    auto[upstream_ptr, upstream_err] = ag::upstream::address_to_upstream("https://dns.cloudflare.com/dns-query", opts);
+    auto[upstream_ptr, upstream_err] = create_upstream(opts);
     ASSERT_FALSE(upstream_err) << *upstream_err;
     parallel_test_basic_n(WORKERS_NUM, [upstream_ptr = upstream_ptr](size_t i) -> ag::err_string {
         ag::err_string result_err;

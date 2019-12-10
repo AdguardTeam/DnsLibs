@@ -3,6 +3,7 @@
 #include <dns_forwarder.h>
 #include <dnsproxy_listener.h>
 #include <ag_logger.h>
+#include <default_verifier.h>
 
 
 using namespace ag;
@@ -12,8 +13,8 @@ static constexpr milliseconds DEFAULT_UPSTREAM_TIMEOUT(1000);
 
 static const dnsproxy_settings DEFAULT_PROXY_SETTINGS = {
     .upstreams = {
-        { "8.8.8.8:53", { {}, DEFAULT_UPSTREAM_TIMEOUT, {} } },
-        { "8.8.4.4:53", { {}, DEFAULT_UPSTREAM_TIMEOUT, {} } },
+        { "8.8.8.8:53", {}, DEFAULT_UPSTREAM_TIMEOUT, {} },
+        { "8.8.4.4:53", {}, DEFAULT_UPSTREAM_TIMEOUT, {} },
     },
     .dns64 = std::nullopt,
     .blocked_response_ttl = 3600,
@@ -26,7 +27,7 @@ const dnsproxy_settings &dnsproxy_settings::get_default() {
 }
 
 struct dnsproxy::impl {
-    ag::logger log;
+    logger log;
     dns_forwarder forwarder;
     dnsproxy_settings settings;
     dnsproxy_events events;
