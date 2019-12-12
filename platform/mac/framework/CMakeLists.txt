@@ -9,9 +9,13 @@ set(EFFECTIVE_PLATFORM $ENV{EFFECTIVE_PLATFORM_NAME})
 
 if (EFFECTIVE_PLATFORM STREQUAL "-iphonesimulator")
     set(CMAKE_OSX_SYSROOT iphonesimulator)
-elseif (("${TARGET_OS}" STREQUAL "macos") OR ())
+
+    set(INFOPLIST_FILE "${CMAKE_CURRENT_SOURCE_DIR}/Info.plist.ios")
+elseif ("${TARGET_OS}" STREQUAL "macos")
     set(CMAKE_OSX_DEPLOYMENT_TARGET "10.14" CACHE STRING "Minimum macOS deployment version")
     set(CMAKE_ASM_FLAGS "-mmacosx-version-min=10.14")
+
+    set(INFOPLIST_FILE "${CMAKE_CURRENT_SOURCE_DIR}/Info.plist.macos")
 elseif ("${TARGET_OS}" STREQUAL "ios")
     set(CMAKE_SYSTEM_PROCESSOR "arm64")
     set(CMAKE_OSX_ARCHITECTURES "arm64")
@@ -22,6 +26,14 @@ elseif ("${TARGET_OS}" STREQUAL "ios")
     set(CMAKE_XCODE_ATTRIBUTE_BITCODE_GENERATION_MODE bitcode CACHE INTERNAL "")
     set(SDK_NAME_VERSION_FLAGS "-mios-version-min=$ENV{IPHONEOS_DEPLOYMENT_TARGET}")
     add_compile_options(-arch ${CMAKE_SYSTEM_PROCESSOR} -fembed-bitcode)
+
+    string(REPLACE "." ";" VERSION_LIST $ENV{IPHONEOS_DEPLOYMENT_TARGET})
+    list(GET VERSION_LIST 0 IOS_VERSION_MAJOR)
+    list(GET VERSION_LIST 1 IOS_VERSION_MINOR)
+    add_definitions(-DIOS_VERSION_MAJOR=${IOS_VERSION_MAJOR})
+    add_definitions(-DIOS_VERSION_MINOR=${IOS_VERSION_MINOR})
+
+    set(INFOPLIST_FILE "${CMAKE_CURRENT_SOURCE_DIR}/Info.plist.ios")
 else ()
     message(FATAL_ERROR "unknown os: ${TARGET_OS}")
 endif ()
@@ -51,7 +63,8 @@ set_target_properties(AGDnsProxy PROPERTIES
     FRAMEWORK TRUE
     FRAMEWORK_VERSION A
     VERSION 1.0
-    MACOSX_FRAMEWORK_IDENTIFIER a.test.adguard
+    MACOSX_FRAMEWORK_INFO_PLIST "${INFOPLIST_FILE}"
+    MACOSX_FRAMEWORK_IDENTIFIER com.adguard.dnsproxy
     XCODE_ATTRIBUTE_CODE_SIGN_IDENTITY "Developer ID Application: Performiks OOO (N33TQXN8C7)"
     INSTALL_NAME_DIR "@rpath"
     BUILD_WITH_INSTALL_RPATH 1

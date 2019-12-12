@@ -332,6 +332,15 @@ static SecCertificateRef convertCertificate(const std::vector<uint8_t> &cert) {
     return SecCertificateCreateWithData(NULL, (CFDataRef)certRef);
 }
 
+static std::string getTrustCreationErrorStr(OSStatus status) {
+#if (!defined TARGET_OS_IPHONE) || (IOS_VERSION_MAJOR >= 11 && IOS_VERSION_MINOR >= 3)
+    CFStringRef err = SecCopyErrorMessageString(status, NULL);
+    return [(__bridge NSString *)err UTF8String];
+#else
+    return AG_FMT("Failed to create trust object from chain: {}", status);
+#endif
+}
+
 - (std::optional<std::string>) verifyCertificate: (ag::certificate_verification_event *) event
 {
     tracelog(self->log, "[Verification] App callback");
@@ -366,10 +375,9 @@ static SecCertificateRef convertCertificate(const std::vector<uint8_t> &cert) {
     }
 
     if (status != errSecSuccess) {
-        CFStringRef err = SecCopyErrorMessageString(status, NULL);
-        dbglog(self->log, "[Verification] Failed to create trust object from chain: {}",
-            [(__bridge NSString *)err UTF8String]);
-        return [(__bridge NSString *)err UTF8String];
+        std::string err = getTrustCreationErrorStr(status);
+        dbglog(self->log, "[Verification] Failed to create trust object from chain: {}", err);
+        return err;
     }
 
     SecTrustSetAnchorCertificates(trust, (CFArrayRef) trustArray );
