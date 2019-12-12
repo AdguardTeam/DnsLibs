@@ -17,6 +17,7 @@
 #include <vector>
 #include <ag_defs.h>
 #include <spdlog/fmt/bundled/format.h>
+#include <spdlog/fmt/bundled/chrono.h>
 
 /**
  * Macros to create constexpr value and type to check expression
