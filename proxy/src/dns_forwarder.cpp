@@ -506,7 +506,7 @@ void dns_forwarder::deinit() {
 
 std::vector<uint8_t> dns_forwarder::handle_message(uint8_view message) {
     dns_request_processed_event event = {};
-    event.start_time = duration_cast<milliseconds>(steady_clock::now().time_since_epoch()).count();
+    event.start_time = duration_cast<milliseconds>(system_clock::now().time_since_epoch()).count();
 
     ldns_pkt *request;
     ldns_status status = ldns_wire2pkt(&request, message.data(), message.length());
