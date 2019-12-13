@@ -377,8 +377,14 @@ ldns_pkt_ptr dns_forwarder::try_dns64_aaaa_synthesis(upstream_ptr &upstream, con
     ldns_pkt *aaaa_resp = ldns_pkt_new();
     ldns_pkt_set_id(aaaa_resp, ldns_pkt_id(request.get()));
     ldns_pkt_set_rd(aaaa_resp, ldns_pkt_rd(request.get()));
-    ldns_pkt_push_rr_list(aaaa_resp, LDNS_SECTION_QUESTION, ldns_rr_list_clone(ldns_pkt_question(request.get())));
-    ldns_pkt_push_rr_list(aaaa_resp, LDNS_SECTION_ANSWER, aaaa_list);
+
+    ldns_rr_list_deep_free(ldns_pkt_question(aaaa_resp));
+    ldns_pkt_set_qdcount(aaaa_resp, ldns_pkt_qdcount(request.get()));
+    ldns_pkt_set_question(aaaa_resp, ldns_pkt_get_section_clone(request.get(), LDNS_SECTION_QUESTION));
+
+    ldns_rr_list_deep_free(ldns_pkt_answer(aaaa_resp));
+    ldns_pkt_set_ancount(aaaa_resp, aaaa_rr_count);
+    ldns_pkt_set_answer(aaaa_resp, aaaa_list);
 
     return ldns_pkt_ptr(aaaa_resp);
 }

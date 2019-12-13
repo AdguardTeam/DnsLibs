@@ -10,6 +10,8 @@ static constexpr auto DNS64_SERVER_ADDR = "2001:67c:27e4::64";
 static constexpr auto IPV4_ONLY_HOST = "ipv4only.arpa.";
 
 TEST(dnsproxy_test, test_dns64) {
+    ag::set_default_log_level(ag::TRACE);
+
     using namespace std::chrono_literals;
 
     // Assume default settings don't include a DNS64 upstream
