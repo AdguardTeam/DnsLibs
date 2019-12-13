@@ -29,7 +29,7 @@
         }
 
         NETunnelProviderProtocol *p = [[NETunnelProviderProtocol alloc] init];
-        p.providerBundleIdentifier = @"a.test.adguard.ext";
+        p.providerBundleIdentifier = @"com.adguard.dnsproxy.ext";
         p.serverAddress = @"127.0.0.1";
 
         NETunnelProviderManager *m = [[NETunnelProviderManager alloc] init];

@@ -7,7 +7,14 @@
 using namespace ag;
 
 
-#if defined __APPLE__ && defined __MACH__
+#if defined __APPLE__ && defined __MACH__ && defined TARGET_OS_IPHONE
+
+static X509_STORE *create_ca_store() {
+    assert(0);
+    return nullptr;
+}
+
+#elif defined __APPLE__ && defined __MACH__
 
 #include <CoreFoundation/CoreFoundation.h>
 #include <Security/Security.h>
