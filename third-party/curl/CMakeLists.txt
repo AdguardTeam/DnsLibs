@@ -60,5 +60,6 @@ function(apply_patch patch)
 endfunction()
 
 apply_patch("${CMAKE_CURRENT_SOURCE_DIR}/easy_reuse.patch")
+apply_patch("${CMAKE_CURRENT_SOURCE_DIR}/find_openssl.patch")
 
 add_subdirectory(curl)

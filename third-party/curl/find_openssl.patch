@@ -1,0 +1,23 @@
+Index: CMakeLists.txt
+IDEA additional info:
+Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
+<+>UTF-8
+===================================================================
+--- CMakeLists.txt	(revision 2e9b725f67d49a9d7a1f053fe52dd4920c9ab1ad)
++++ CMakeLists.txt	(date 1576502029104)
+@@ -344,14 +344,13 @@
+ endif()
+ 
+ if(CMAKE_USE_OPENSSL)
+-  find_package(OpenSSL REQUIRED)
+   set(SSL_ENABLED ON)
+   set(USE_OPENSSL ON)
+ 
+   # Depend on OpenSSL via imported targets if supported by the running
+   # version of CMake.  This allows our dependents to get our dependencies
+   # transitively.
+-  if(NOT CMAKE_VERSION VERSION_LESS 3.4)
++  if(FALSE)
+     list(APPEND CURL_LIBS OpenSSL::SSL OpenSSL::Crypto)
+   else()
+     list(APPEND CURL_LIBS ${OPENSSL_LIBRARIES})
