@@ -6,6 +6,7 @@
 #include "upstream_dot.h"
 #include "upstream_plain.h"
 #include <ag_utils.h>
+#include <ag_logger.h>
 #include <dns_stamp.h>
 
 enum class scheme : size_t {
@@ -34,6 +35,7 @@ static_assert(std::size(SCHEME_WITH_SUFFIX) + 1 == static_cast<size_t>(scheme::C
 
 
 struct ag::upstream_factory::impl {
+    logger log = create_logger("Upstream factory");
     upstream_factory::config config;
 
     impl(upstream_factory::config cfg)
@@ -114,7 +116,7 @@ static ag::upstream_factory::create_result create_upstream_sdns(const ag::upstre
         opts.address = AG_FMT("{}{}{}", ag::dns_over_https::SCHEME, stamp.provider_name, stamp.path);
         return create_upstream_https(opts, config);
     case ag::stamp_proto_type::TLS:
-        opts.address = std::move(stamp.provider_name);
+        opts.address = AG_FMT("{}{}", ag::dns_over_tls::SCHEME, stamp.provider_name);
         return create_upstream_tls(opts, config);
     }
     assert(false);

@@ -37,6 +37,7 @@ private:
 class plain_dns : public ag::upstream {
 public:
     static constexpr std::string_view TCP_SCHEME = "tcp://";
+    static constexpr int DEFAULT_PORT = 53;
 
     /**
      * Create plain DNS upstream
@@ -45,8 +46,6 @@ public:
     plain_dns(const ag::upstream::options &opts);
 
     ~plain_dns() override = default;
-
-    std::string address() override;
 
     exchange_result exchange(ldns_pkt *request_pkt) override;
 
@@ -57,8 +56,6 @@ private:
     socket_address m_socket_address;
     /** TCP connection pool */
     tcp_pool m_pool;
-    /** Timeout */
-    std::chrono::milliseconds m_timeout;
 };
 
 } // namespace ag

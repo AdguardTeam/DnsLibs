@@ -55,6 +55,8 @@ public:
         ip_address_variant resolved_server_ip;
     };
 
+    explicit upstream(const options &opts) : opts(opts) {}
+
     virtual ~upstream() = default;
 
     /**
@@ -64,11 +66,8 @@ public:
      */
     virtual exchange_result exchange(ldns_pkt *request) = 0;
 
-    /**
-     * Receive DNS server address
-     * @return DNS server address
-     */
-    virtual std::string address() = 0;
+    /** Upstream options */
+    const upstream::options opts;
 };
 
 /**

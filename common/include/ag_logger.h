@@ -2,6 +2,8 @@
 
 #include <spdlog/spdlog.h>
 #include <spdlog/sinks/sink.h>
+#include <spdlog/fmt/bundled/format.h>
+#include <spdlog/fmt/bundled/chrono.h>
 
 namespace ag {
 
@@ -37,8 +39,8 @@ namespace ag {
 
 } // namespace ag
 
-#define errlog(l_, ...) do { (l_)->error(__VA_ARGS__); } while (0)
-#define infolog(l_, ...) do { (l_)->info(__VA_ARGS__); } while (0)
-#define warnlog(l_, ...) do { (l_)->warn(__VA_ARGS__); } while(0)
-#define dbglog(l_, ...) do { if ((l_)->should_log(spdlog::level::debug)) (l_)->debug(__VA_ARGS__); } while (0)
-#define tracelog(l_, ...) do { if ((l_)->should_log(spdlog::level::trace)) (l_)->trace(__VA_ARGS__); } while (0)
+#define errlog(l_, fmt_, ...) do { (l_)->error(FMT_STRING(fmt_), ##__VA_ARGS__); } while (0)
+#define infolog(l_, fmt_, ...) do { (l_)->info(FMT_STRING(fmt_), ##__VA_ARGS__); } while (0)
+#define warnlog(l_, fmt_, ...) do { (l_)->warn(FMT_STRING(fmt_), ##__VA_ARGS__); } while(0)
+#define dbglog(l_, fmt_, ...) do { if ((l_)->should_log(spdlog::level::debug)) (l_)->debug(FMT_STRING(fmt_), ##__VA_ARGS__); } while (0)
+#define tracelog(l_, fmt_, ...) do { if ((l_)->should_log(spdlog::level::trace)) (l_)->trace(FMT_STRING(fmt_), ##__VA_ARGS__); } while (0)

@@ -282,7 +282,7 @@ void dns_forwarder::finalize_processed_event(dns_request_processed_event &event,
     }
 
     if (upstream != nullptr) {
-        event.upstream_addr = upstream->address();
+        event.upstream_addr = upstream->opts.address;
     } else {
         event.upstream_addr.clear();
     }
@@ -377,8 +377,14 @@ ldns_pkt_ptr dns_forwarder::try_dns64_aaaa_synthesis(upstream_ptr &upstream, con
     ldns_pkt *aaaa_resp = ldns_pkt_new();
     ldns_pkt_set_id(aaaa_resp, ldns_pkt_id(request.get()));
     ldns_pkt_set_rd(aaaa_resp, ldns_pkt_rd(request.get()));
-    ldns_pkt_push_rr_list(aaaa_resp, LDNS_SECTION_QUESTION, ldns_rr_list_clone(ldns_pkt_question(request.get())));
-    ldns_pkt_push_rr_list(aaaa_resp, LDNS_SECTION_ANSWER, aaaa_list);
+
+    ldns_rr_list_deep_free(ldns_pkt_question(aaaa_resp));
+    ldns_pkt_set_qdcount(aaaa_resp, ldns_pkt_qdcount(request.get()));
+    ldns_pkt_set_question(aaaa_resp, ldns_pkt_get_section_clone(request.get(), LDNS_SECTION_QUESTION));
+
+    ldns_rr_list_deep_free(ldns_pkt_answer(aaaa_resp));
+    ldns_pkt_set_ancount(aaaa_resp, aaaa_rr_count);
+    ldns_pkt_set_answer(aaaa_resp, aaaa_list);
 
     return ldns_pkt_ptr(aaaa_resp);
 }
@@ -500,7 +506,7 @@ void dns_forwarder::deinit() {
 
 std::vector<uint8_t> dns_forwarder::handle_message(uint8_view message) {
     dns_request_processed_event event = {};
-    event.start_time = duration_cast<milliseconds>(steady_clock::now().time_since_epoch()).count();
+    event.start_time = duration_cast<milliseconds>(system_clock::now().time_since_epoch()).count();
 
     ldns_pkt *request;
     ldns_status status = ldns_wire2pkt(&request, message.data(), message.length());

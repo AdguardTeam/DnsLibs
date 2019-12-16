@@ -69,6 +69,7 @@ private:
     void on_read();
 
     void on_event(int what);
+    friend class dns_framed_pool;
 };
 
 /**

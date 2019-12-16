@@ -20,7 +20,6 @@ public:
     upstream_dnscrypt &operator=(const upstream_dnscrypt &) = delete;
     ~upstream_dnscrypt() override;
 
-    std::string address() override;
     exchange_result exchange(ldns_pkt *request_pkt) override;
 
 private:
@@ -37,7 +36,6 @@ private:
 
     logger m_log = create_logger("DNScrypt upstream");
     server_stamp m_stamp;
-    std::chrono::milliseconds m_timeout;
     impl_ptr m_impl;
     std::mutex m_guard;
 };

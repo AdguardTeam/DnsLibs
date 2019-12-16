@@ -31,7 +31,7 @@ public:
     /**
      * @return Bootstrapper for server address
      */
-    bootstrapper_ptr bootstrapper();
+    const ag::bootstrapper *bootstrapper();
 private:
     /** Parent upstream */
     dns_over_tls *m_upstream = nullptr;
@@ -59,8 +59,6 @@ public:
 
     ~dns_over_tls() override = default;
 
-    std::string address() override;
-
     exchange_result exchange(ldns_pkt *request_pkt) override;
 
 private:
@@ -70,10 +68,10 @@ private:
     logger m_log = create_logger("DOT upstream");
     /** TLS connection pool */
     tls_pool m_pool;
-    /** Timeout */
-    std::chrono::milliseconds m_timeout;
     /** Certificate verifier */
     const certificate_verifier *m_verifier = nullptr;
+    /** DNS server name */
+    std::string m_server_name;
 };
 
 } // namespace ag

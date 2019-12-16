@@ -125,7 +125,7 @@ static void parallel_test_basic(const T &data, const F &function) {
 template<typename T>
 static void parallel_test(const T &data) {
     parallel_test_basic(data, [](const auto &address, const auto &bootstrap, const auto &server_ip) -> ag::err_string {
-        auto[upstream_ptr, upstream_err] = create_upstream({address, bootstrap, DEFAULT_TIMEOUT});
+        auto[upstream_ptr, upstream_err] = create_upstream({address, bootstrap, DEFAULT_TIMEOUT, server_ip});
         if (upstream_err) {
             return AG_FMT("Failed to generate upstream from address {}: {}", address, *upstream_err);
         }
@@ -138,11 +138,13 @@ TEST_F(upstream_test, test_bootstrap_timeout) {
     using namespace concat_err_string;
     static constexpr auto timeout = 100ms;
     static constexpr size_t count = 10;
-    // Specifying some wrong port instead so that bootstrap DNS timed out for sure
-    auto[upstream_ptr, upstream_err] = create_upstream({"tls://one.one.one.one", {"8.8.8.8:555"}, timeout});
-    ASSERT_FALSE(upstream_err) << "Cannot create upstream: " << *upstream_err;
-    auto futures = make_indexed_futures(count, [upstream_ptr = upstream_ptr](size_t index) -> ag::err_string {
-        infolog(logger(), "Start {}", index);
+    auto futures = make_indexed_futures(count, [&] (size_t index) -> ag::err_string {
+        SPDLOG_INFO("Start {}", index);
+        // Specifying some wrong port instead so that bootstrap DNS timed out for sure
+        auto[upstream_ptr, upstream_err] = create_upstream({"tls://one.one.one.one", {"8.8.8.8:555"}, timeout});
+        if (upstream_err.has_value()) {
+            return AG_FMT("Failed to create upstream: {}", upstream_err.value());
+        }
         ag::utils::timer timer;
         auto req = create_test_message();
         auto[reply, reply_err] = upstream_ptr->exchange(req.get());
@@ -153,7 +155,7 @@ TEST_F(upstream_test, test_bootstrap_timeout) {
         if (elapsed > 2 * timeout) {
             return AG_FMT("Exchange took more time than the configured timeout: {}", elapsed);
         }
-        infolog(logger(), FMT_STRING("Finished {}"), index);
+        SPDLOG_INFO("Finished {}", index);
         return std::nullopt;
     });
     ag::err_string err;
@@ -162,15 +164,15 @@ TEST_F(upstream_test, test_bootstrap_timeout) {
         auto future_status = future.wait_for(10 * timeout);
         if (future_status == std::future_status::timeout) {
             err += AG_FMT("No response in time for {}", i);
-            errlog(logger(), "No response in time for {}", i);
+            SPDLOG_ERROR("No response in time for {}", i);
             continue;
         }
         auto result = future.get();
         if (result) {
             err += result;
-            errlog(logger(), "Aborted: {}", *result);
+            SPDLOG_ERROR("Aborted: {}", *result);
         } else {
-            infolog(logger(), "Got result from {}", i);
+            SPDLOG_INFO("Got result from {}", i);
         }
     }
     if (err) {
@@ -235,19 +237,11 @@ static const upstream_test_data test_upstreams_data[]{
     },
     {
         "tls://1.1.1.1",
-#if 0
-        {} // TODO resolve
-#else
-        {"1.1.1.1"}
+        {}
     },
-#endif
     {
         "tls://9.9.9.9:853",
-#if 0
-        {} // TODO resolve
-#else
-        {"9.9.9.9"}
-#endif
+        {}
     },
     {
         "tls://dns.adguard.com",
@@ -263,11 +257,7 @@ static const upstream_test_data test_upstreams_data[]{
     },
     {
         "tls://one.one.one.one",
-#if 0
-        {} // TODO resolve
-#else
         {"1.1.1.1"}
-#endif
     },
     {
         "https://dns9.quad9.net:443/dns-query",
@@ -279,11 +269,7 @@ static const upstream_test_data test_upstreams_data[]{
     },
     {
         "https://dns.google/dns-query",
-#if 0
-        {} // TODO resolve
-#else
         {"8.8.8.8"}
-#endif
     },
     {
         // AdGuard DNS (DNSCrypt)
@@ -318,11 +304,7 @@ static const upstream_test_data test_upstreams_data[]{
     {
         // Cloudflare DNS
         "https://1.1.1.1/dns-query",
-#if 0
-        {} // TODO resolve
-#else
-        {"1.1.1.1"}
-#endif
+        {}
     },
 };
 

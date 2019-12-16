@@ -567,7 +567,13 @@ protected:
 
     void before_stop() override {
         uv_close((uv_handle_t *) &m_tcp_handle, nullptr);
-        std::for_each(m_connections.begin(), m_connections.end(), [](auto &kv) { kv.second->close(); });
+        for (auto i = m_connections.begin(); i != m_connections.end();) {
+            // close removes current element from the list
+            auto next = i;
+            std::advance(next, 1);
+            i->second->close();
+            i = next;
+        }
     }
 };
 

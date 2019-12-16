@@ -218,6 +218,7 @@ TEST_P(check_dns_crypt_server_test, check_dns_crypt_server) {
                                                     << inet_ntoa(*reinterpret_cast<in_addr*>(ldns_rdf_data(rdf)));
     SPDLOG_INFO("Got proper response from {}, rtt={}ms, protocol={}", server_info.get_provider_name(),
                 exchange_rtt.count(), ag::dnscrypt::protocol_str(protocol));
+    free(ldns_rdf_data(rdf0.get()));
 }
 
 INSTANTIATE_TEST_CASE_P(check_dns_crypt_server_test_instantiation, check_dns_crypt_server_test,

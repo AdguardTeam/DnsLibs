@@ -44,6 +44,7 @@ target_include_directories(dnslibs_common PUBLIC ./include ../third-party/magic_
 target_link_libraries(dnslibs_common spdlog libevent ldns)
 
 target_compile_options(dnslibs_common PRIVATE -Wall -Wextra)
+target_compile_options(dnslibs_common PUBLIC -Wno-format-nonliteral) # for fmt's chrono build
 if (NOT MSVC)
     target_compile_options(dnslibs_common PRIVATE -fno-exceptions)
 endif()
