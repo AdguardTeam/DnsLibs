@@ -39,7 +39,7 @@ ag::connection_pool::get_result ag::tls_pool::create() {
     SSL_set_app_data(ssl, m_upstream);
 
     const socket_address &address = resolve_result.addresses[0];
-    dns_framed_connection_ptr connection = ag::dns_framed_connection::create(this, bev, address);
+    connection_ptr connection = create_connection(bev, address);
     bufferevent_socket_connect(bev, address.c_sockaddr(), address.c_socklen());
     add_pending_connection(connection);
     SSL_CTX_free(ctx);
