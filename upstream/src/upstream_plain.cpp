@@ -51,18 +51,13 @@ ag::plain_dns::exchange_result ag::plain_dns::exchange(ldns_pkt *request_pkt) {
     }
 
     // TCP request
-    auto[conn, elapsed, err] = m_pool.get();
-    if (!conn) {
-        return {nullptr, err};
+    ag::uint8_view buf{ ldns_buffer_begin(buffer.get()), ldns_buffer_position(buffer.get()) };
+    std::pair<std::vector<uint8_t>, err_string> result = m_pool.perform_request(buf, this->opts.timeout);
+    if (result.second.has_value()) {
+        return { nullptr, std::move(result.second) };
     }
-    ag::uint8_view buf{ldns_buffer_begin(&*buffer), ldns_buffer_position(&*buffer)};
-    int id = conn->write(buf);
 
-    auto timeout = this->opts.timeout - duration_cast<milliseconds>(elapsed);
-    auto[reply, read_error] = conn->read(id, timeout);
-    if (read_error) {
-        return {nullptr, read_error};
-    }
+    const std::vector<uint8_t> &reply = result.first;
     ldns_pkt *reply_pkt = nullptr;
     status = ldns_wire2pkt(&reply_pkt, reply.data(), reply.size());
     if (status != LDNS_STATUS_OK) {

@@ -28,6 +28,8 @@ using dns_framed_connection_ptr = std::shared_ptr<dns_framed_connection>;
 class dns_framed_connection : public connection,
                               public std::enable_shared_from_this<dns_framed_connection> {
 public:
+    static constexpr std::string_view UNEXPECTED_EOF = "Unexpected EOF";
+
     /**
      * Creates DNS framed connection from bufferevent.
      * @param pool DNS pool that creates this connection
@@ -89,6 +91,14 @@ public:
     dns_framed_pool(const dns_framed_pool &) = delete;
     dns_framed_pool &operator=(const dns_framed_pool &) = delete;
 
+    /**
+     * Send given data to the server and get the response
+     * @param buf request data
+     * @param timeout operation timeout
+     * @return Response in case of success, or an error in case of something went wrong
+     */
+    std::pair<std::vector<uint8_t>, err_string> perform_request(ag::uint8_view buf, std::chrono::milliseconds timeout);
+
     friend class dns_framed_connection;
 
 protected:
@@ -106,6 +116,8 @@ protected:
     void add_connected(const dns_framed_connection_ptr &ptr);
 
     void remove_from_all(const dns_framed_connection_ptr &ptr);
+
+    std::pair<std::vector<uint8_t>, err_string> perform_request_inner(ag::uint8_view buf, std::chrono::milliseconds timeout);
 };
 
 } // namespace ag

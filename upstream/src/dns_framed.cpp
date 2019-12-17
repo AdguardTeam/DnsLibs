@@ -6,6 +6,9 @@
 #include <event2/buffer.h>
 #include <ag_socket_address.h>
 #include <ag_logger.h>
+#include <ag_utils.h>
+
+using namespace std::chrono;
 
 #define tracelog_ip(l_, fmt_, ...) tracelog(l_, "[{}] " fmt_, this->m_socket_address.str(), ##__VA_ARGS__)
 
@@ -112,7 +115,7 @@ void ag::dns_framed_connection::on_event(int what) {
         m_pool->remove_from_all(shared_from_this());
         std::unique_lock l(m_mutex);
         for (auto &entry : m_requests) {
-            std::string error = (what & BEV_EVENT_EOF) ? "Unexpected EOF" :
+            std::string error = (what & BEV_EVENT_EOF) ? std::string(UNEXPECTED_EOF) :
                                 evutil_socket_error_to_string(evutil_socket_geterror(bufferevent_getfd(m_bev.get())));
             // Set result
             entry.second = {std::vector<uint8_t>{}, {std::move(error)}};
@@ -166,4 +169,37 @@ void ag::dns_framed_pool::add_pending_connection(const ag::dns_framed_connection
     tracelog(ptr->m_log, "[{}] {}", ptr->m_socket_address.str(), __func__);
 
     m_pending_connections.insert(ptr);
+}
+
+std::pair<std::vector<uint8_t>, ag::err_string> ag::dns_framed_pool::perform_request_inner(uint8_view buf,
+        milliseconds timeout) {
+    auto[conn, elapsed, err] = get();
+    if (!conn) {
+        return { {}, std::move(err) };
+    }
+
+    int id = conn->write(buf);
+    timeout -= duration_cast<milliseconds>(elapsed);
+    if (timeout < milliseconds(0)) {
+        return { {}, AG_FMT("DNS server name resolving took too much time: {}", elapsed) };
+    }
+
+    return conn->read(id, timeout);
+}
+
+std::pair<std::vector<uint8_t>, ag::err_string> ag::dns_framed_pool::perform_request(uint8_view buf,
+        milliseconds timeout) {
+    utils::timer timer;
+    std::pair<std::vector<uint8_t>, err_string> result = perform_request_inner(buf, timeout);
+    // try one more time in case of the server closed the connection before we got the response
+    // https://github.com/AdguardTeam/DnsLibs/issues/24
+    if (result.second.has_value() && result.second.value() == dns_framed_connection::UNEXPECTED_EOF) {
+        timeout -= timer.elapsed<milliseconds>();
+        if (timeout < milliseconds(0)) {
+            result.second.emplace("Timed out");
+        } else {
+            result = perform_request_inner(buf, timeout);
+        }
+    }
+    return result;
 }
