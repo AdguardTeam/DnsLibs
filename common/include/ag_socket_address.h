@@ -3,6 +3,9 @@
 #include <string_view>
 #include <vector>
 #include <event2/util.h> // for sockaddr, sockaddr_storage, getaddrinfo, getnameinfo
+#ifdef __ANDROID__
+#include <netinet/in.h> // not building on android if not included
+#endif // __ANDROID__
 #include <ag_defs.h>
 
 namespace ag {

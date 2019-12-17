@@ -1,5 +1,6 @@
 #include <ag_logger.h>
 #include <spdlog/sinks/stdout_sinks.h>
+#include <utility>
 
 struct global_info {
     global_info() {
@@ -37,5 +38,5 @@ void ag::set_default_log_level(ag::log_level lvl) {
 
 void ag::set_logger_factory_callback(create_logger_cb cb) {
     global_info *info = get_globals();
-    info->create_logger_callback = cb;
+    info->create_logger_callback = std::move(cb);
 }

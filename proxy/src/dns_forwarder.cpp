@@ -413,8 +413,10 @@ bool dns_forwarder::init(const dnsproxy_settings &settings, const dnsproxy_event
     this->events = &events;
 
     if (events.on_certificate_verification != nullptr) {
+        dbglog(log, "Using application_verifier");
         this->cert_verifier = std::make_shared<application_verifier>(this->events);
     } else {
+        dbglog(log, "Using default_verifier");
         this->cert_verifier = std::make_shared<default_verifier>();
     }
 

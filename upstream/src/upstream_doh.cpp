@@ -88,8 +88,8 @@ CURL *dns_over_https::query_handle::create_curl_handle() {
             || CURLE_OK != (e = curl_easy_setopt(curl, CURLOPT_REDIR_PROTOCOLS, CURLPROTO_HTTPS))
             || CURLE_OK != (e = curl_easy_setopt(curl, CURLOPT_SSL_CTX_FUNCTION, dns_over_https::ssl_callback))
             || CURLE_OK != (e = curl_easy_setopt(curl, CURLOPT_SSL_CTX_DATA, this))
-            || CURLE_OK != (e = curl_easy_setopt(curl, CURLOPT_SSL_VERIFYPEER, true))
-            || CURLE_OK != (e = curl_easy_setopt(curl, CURLOPT_SSL_VERIFYHOST, true))
+            || CURLE_OK != (e = curl_easy_setopt(curl, CURLOPT_SSL_VERIFYPEER, false)) // We verify ourselves, see dns_over_https::ssl_callback
+            || CURLE_OK != (e = curl_easy_setopt(curl, CURLOPT_SSL_VERIFYHOST, false)) // We verify ourselves, see dns_over_https::ssl_callback
             || CURLE_OK != (e = curl_easy_setopt(curl, CURLOPT_SSL_ENABLE_ALPN, true))
             || (upstream->resolved != nullptr
                 && CURLE_OK != (e = curl_easy_setopt(curl, CURLOPT_RESOLVE, upstream->resolved.get())))) {

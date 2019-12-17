@@ -77,9 +77,9 @@
 /* #undef HAVE_ECDSA_SIG_GET0 */
 
 /* Define to 1 if you have the `endprotoent' function. */
-#ifndef _WIN32
+#if !defined(_WIN32) && !defined(__ANDROID__)
 #define HAVE_ENDPROTOENT 1
-#endif // _WIN32
+#endif // !defined(_WIN32) && !defined(__ANDROID__)
 
 /* Define to 1 if you have the `endservent' function. */
 #ifndef _WIN32

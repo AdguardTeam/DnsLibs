@@ -16,12 +16,13 @@ struct dns64_settings {
     std::chrono::milliseconds wait_time; // How long to wait before a dns64 prefixes discovery attempt
 };
 
-enum class listener_protocol : int {
-    UDP, TCP
+enum class listener_protocol {
+    UDP,
+    TCP,
 };
 
 struct listener_settings {
-    std::string address{"::1"}; // The address to listen on
+    std::string address{"::"}; // The address to listen on
     uint16_t port{53}; // The port to listen on
     listener_protocol protocol{listener_protocol::UDP}; // The protocol to listen for
     bool persistent{false}; // Don't close the TCP connection after sending the first response
