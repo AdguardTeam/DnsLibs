@@ -454,7 +454,7 @@ dns_over_https::exchange_result dns_over_https::exchange(ldns_pkt *request) {
     milliseconds timeout = this->opts.timeout;
 
     if (std::unique_lock guard(this->guard); this->resolved == nullptr) {
-        bootstrapper::resolve_result resolve_result = this->bootstrapper->get_all();
+        bootstrapper::resolve_result resolve_result = this->bootstrapper->get();
         if (resolve_result.error.has_value()) {
             return { nullptr, std::move(resolve_result.error) };
         }

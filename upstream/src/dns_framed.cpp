@@ -32,7 +32,7 @@ public:
 
     int write(ag::uint8_view buf) override;
 
-    result read(int request_id, std::chrono::milliseconds timeout) override;
+    read_result read(int request_id, std::chrono::milliseconds timeout) override;
 
     /** Logger */
     ag::logger m_log;
@@ -45,9 +45,7 @@ public:
     /** Conditional variable for waiting reads */
     std::condition_variable_any m_cond;
     /** Map of requests to their results */
-    ag::hash_map<int, std::optional<result>> m_requests;
-    /** Connection remote address */
-    ag::socket_address m_socket_address;
+    ag::hash_map<int, std::optional<read_result>> m_requests;
     /** Number of currently called reads */
     int m_pending_reads_count = 0;
     /** Signals when all reads completed */
@@ -86,10 +84,10 @@ int ag::dns_framed_connection::write(uint8_view buf) {
 }
 
 ag::dns_framed_connection::dns_framed_connection(dns_framed_pool *pool, bufferevent *bev, const socket_address &address)
-        : m_log(create_logger(AG_FMT("{} {}", __func__, address.str())))
+        : connection(address)
+        , m_log(create_logger(AG_FMT("{} {}", __func__, address.str())))
         , m_pool(pool)
         , m_bev(bev)
-        , m_socket_address(address)
 {
     bufferevent_setcb(&*m_bev, [](bufferevent *, void *arg) {
         auto conn = (dns_framed_connection *) arg;
@@ -170,7 +168,7 @@ void ag::dns_framed_connection::on_event(int what) {
     tracelog(m_log, "{} finished", __func__);
 }
 
-ag::connection::result ag::dns_framed_connection::read(int request_id, milliseconds timeout) {
+ag::connection::read_result ag::dns_framed_connection::read(int request_id, milliseconds timeout) {
     dns_framed_connection_ptr ptr = shared_from_this();
     std::unique_lock l(m_mutex);
 
@@ -201,7 +199,7 @@ ag::connection::result ag::dns_framed_connection::read(int request_id, milliseco
 
 void ag::dns_framed_pool::add_connected(const connection_ptr &ptr) {
     dns_framed_connection *conn = (dns_framed_connection *)ptr.get();
-    tracelog(conn->m_log, "[{}] {}", conn->m_socket_address.str(), __func__);
+    tracelog(conn->m_log, "[{}] {}", conn->address.str(), __func__);
 
     std::scoped_lock l(m_mutex);
     m_pending_connections.erase(ptr);
@@ -210,7 +208,7 @@ void ag::dns_framed_pool::add_connected(const connection_ptr &ptr) {
 
 void ag::dns_framed_pool::remove_from_all(const connection_ptr &ptr) {
     dns_framed_connection *conn = (dns_framed_connection *)ptr.get();
-    tracelog(conn->m_log, "[{}] {}", conn->m_socket_address.str(), __func__);
+    tracelog(conn->m_log, "[{}] {}", conn->address.str(), __func__);
 
     std::scoped_lock l(m_mutex);
     m_pending_connections.erase(ptr);
@@ -221,7 +219,7 @@ void ag::dns_framed_pool::remove_from_all(const connection_ptr &ptr) {
 
 void ag::dns_framed_pool::add_pending_connection(const connection_ptr &ptr) {
     dns_framed_connection *conn = (dns_framed_connection *)ptr.get();
-    tracelog(conn->m_log, "[{}] {}", conn->m_socket_address.str(), __func__);
+    tracelog(conn->m_log, "[{}] {}", conn->address.str(), __func__);
 
     m_pending_connections.insert(ptr);
 }
@@ -258,32 +256,34 @@ ag::dns_framed_pool::~dns_framed_pool() {
     m_loop.reset();
 }
 
-std::pair<std::vector<uint8_t>, ag::err_string> ag::dns_framed_pool::perform_request_inner(uint8_view buf,
-        milliseconds timeout) {
+ag::connection::read_result ag::dns_framed_pool::perform_request_inner(uint8_view buf, milliseconds timeout) {
     auto[conn, elapsed, err] = get();
     if (!conn) {
         return { {}, std::move(err) };
     }
 
-    int id = conn->write(buf);
     timeout -= duration_cast<milliseconds>(elapsed);
     if (timeout < milliseconds(0)) {
         return { {}, AG_FMT("DNS server name resolving took too much time: {}", elapsed) };
     }
 
+    int id = conn->write(buf);
+    if (id < 0) {
+        return { {}, "Failed to send request" };
+    }
+
     return conn->read(id, timeout);
 }
 
-std::pair<std::vector<uint8_t>, ag::err_string> ag::dns_framed_pool::perform_request(uint8_view buf,
-        milliseconds timeout) {
+ag::connection::read_result ag::dns_framed_pool::perform_request(uint8_view buf, milliseconds timeout) {
     utils::timer timer;
-    std::pair<std::vector<uint8_t>, err_string> result = perform_request_inner(buf, timeout);
+    connection::read_result result = perform_request_inner(buf, timeout);
     // try one more time in case of the server closed the connection before we got the response
     // https://github.com/AdguardTeam/DnsLibs/issues/24
-    if (result.second.has_value() && result.second.value() == dns_framed_connection::UNEXPECTED_EOF) {
+    if (result.error.has_value() && result.error.value() == dns_framed_connection::UNEXPECTED_EOF) {
         timeout -= timer.elapsed<milliseconds>();
         if (timeout < milliseconds(0)) {
-            result.second.emplace("Timed out");
+            result.error.emplace("Timed out");
         } else {
             result = perform_request_inner(buf, timeout);
         }

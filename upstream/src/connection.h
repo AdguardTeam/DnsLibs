@@ -17,9 +17,12 @@ using connection_ptr = std::shared_ptr<connection>;
  */
 class connection {
 public:
-    using result = std::pair<std::vector<uint8_t>, err_string>;
+    struct read_result {
+        std::vector<uint8_t> reply;
+        err_string error;
+    };
 
-    connection() = default;
+    connection(const socket_address &addr) : address(addr) {}
 
     virtual ~connection() = default;
 
@@ -35,11 +38,13 @@ public:
      * @param request_id
      * @return
      */
-    virtual result read(int request_id, std::chrono::milliseconds timeout) = 0;
+    virtual read_result read(int request_id, std::chrono::milliseconds timeout) = 0;
 
     // Copy is prohibited
     connection(const connection &) = delete;
     connection &operator=(const connection &) = delete;
+
+    const socket_address address;
 };
 
 /**

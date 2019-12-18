@@ -1,3 +1,5 @@
+#include <algorithm>
+
 #include "bootstrapper.h"
 #include <dns_stamp.h>
 #include <ag_utils.h>
@@ -51,6 +53,12 @@ ag::bootstrapper::resolve_result ag::bootstrapper::resolve() {
         }
     }
 
+    if (m_log->should_log((spdlog::level::level_enum)DEBUG)) {
+        for (const socket_address &a : addrs) {
+            dbglog(m_log, "Resolved address: {}", a.str());
+        }
+    }
+
     milliseconds elapsed = whole_resolve_timer.elapsed<milliseconds>();
 
     std::vector<socket_address> addresses(std::move_iterator(addrs.begin()), std::move_iterator(addrs.end()));
@@ -58,16 +66,6 @@ ag::bootstrapper::resolve_result ag::bootstrapper::resolve() {
 }
 
 ag::bootstrapper::resolve_result ag::bootstrapper::get() {
-    resolve_result result = get_all();
-    if (!result.error.has_value()) {
-        assert(!result.addresses.empty());
-        result.addresses.erase(result.addresses.begin() + 1, result.addresses.end());
-    }
-
-    return result;
-}
-
-ag::bootstrapper::resolve_result ag::bootstrapper::get_all() {
     std::scoped_lock l(m_resolved_cache_mutex);
     if (!m_resolved_cache.empty()) {
         return { m_resolved_cache, m_server_name, milliseconds(0), std::nullopt };
@@ -75,7 +73,14 @@ ag::bootstrapper::resolve_result ag::bootstrapper::get_all() {
 
     resolve_result result = resolve();
     assert(result.error.has_value() == result.addresses.empty());
+    m_resolved_cache = result.addresses;
     return result;
+}
+
+void ag::bootstrapper::remove_resolved(const socket_address &addr) {
+    std::scoped_lock l(m_resolved_cache_mutex);
+    m_resolved_cache.erase(std::remove(m_resolved_cache.begin(), m_resolved_cache.end(), addr),
+        m_resolved_cache.end());
 }
 
 static std::vector<ag::resolver_ptr> create_resolvers(const ag::logger &log, const ag::bootstrapper::params &p) {

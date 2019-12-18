@@ -37,7 +37,7 @@ public:
      * @param timeout operation timeout
      * @return Response in case of success, or an error in case of something went wrong
      */
-    std::pair<std::vector<uint8_t>, err_string> perform_request(ag::uint8_view buf, std::chrono::milliseconds timeout);
+    connection::read_result perform_request(uint8_view buf, std::chrono::milliseconds timeout);
 
 protected:
     friend class dns_framed_connection;
@@ -49,7 +49,7 @@ protected:
     /** Connected connections. They may receive requests */
     std::list<connection_ptr> m_connections;
     /** Pending connections. They may not receive requests yet */
-    ag::hash_set<connection_ptr> m_pending_connections;
+    hash_set<connection_ptr> m_pending_connections;
 
     void add_pending_connection(const connection_ptr &ptr);
 
@@ -57,7 +57,7 @@ protected:
 
     void remove_from_all(const connection_ptr &ptr);
 
-    std::pair<std::vector<uint8_t>, err_string> perform_request_inner(ag::uint8_view buf, std::chrono::milliseconds timeout);
+    virtual connection::read_result perform_request_inner(uint8_view buf, std::chrono::milliseconds timeout);
 
     /**
      * Creates DNS framed connection from bufferevent.

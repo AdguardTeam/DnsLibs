@@ -33,13 +33,16 @@ public:
     };
 
     /**
-     * Get resolved address from bootstrapper
+     * Get resolved addresses from bootstrapper
      */
     resolve_result get();
+
     /**
-     * Get all the resolved addresses from bootstrapper
+     * Remove resolved address from the cache
+     * @param addr address to remove
      */
-    resolve_result get_all();
+    void remove_resolved(const socket_address &addr);
+
     /**
      * Get address to resolve from bootstrapper
      */
