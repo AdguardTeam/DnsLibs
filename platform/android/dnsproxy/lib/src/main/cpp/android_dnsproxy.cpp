@@ -11,14 +11,13 @@ class java_sink_mt : public spdlog::sinks::base_sink<std::mutex> {
 public:
     static ag::logger create(const std::string &logger_name,
                              JavaVM *vm,
-                             ag::global_ref<jclass> &&logger_class) {
+                             ag::global_ref<jclass> logger_class) {
 
-        return spdlog::default_factory::template create<java_sink_mt>(
-                logger_name, vm, std::move(logger_class));
+        return spdlog::default_factory::template create<java_sink_mt>(logger_name, vm, std::move(logger_class));
     }
 
-    java_sink_mt(JavaVM *vm, ag::global_ref<jclass> &&logger_class)
-            : m_vm(vm), m_logger_class(std::move(logger_class)) {
+    java_sink_mt(JavaVM *vm, ag::global_ref<jclass> logger_class)
+            : m_vm{vm}, m_logger_class{std::move(logger_class)} {
 
         ag::scoped_jni_env env(m_vm, 16);
         m_log_method = env->GetStaticMethodID(m_logger_class.get(), "log", "(ILjava/lang/String;)V");
@@ -36,7 +35,8 @@ private:
         this->formatter_->format(msg, formatted);
 
         std::string s{formatted.data(), formatted.size()};
-        env->CallStaticVoidMethod(m_logger_class.get(), m_log_method, (jint) msg.level, env->NewStringUTF(s.c_str()));
+        env->CallStaticVoidMethod(m_logger_class.get(), m_log_method,
+                                  (jint) msg.level, ag::jni_utils::marshal_string(env.get(), s).get());
 
         if (env->ExceptionCheck()) {
             env->ExceptionClear();
@@ -48,9 +48,20 @@ private:
 };
 
 extern "C"
+JNIEXPORT jint JNICALL
+JNI_OnLoad(JavaVM *vm, void *) {
+    ag::scoped_jni_env env(vm, 1);
+    ag::global_ref dnsproxy_class(vm, env->FindClass(FQN_DNSPROXY));
+    ag::set_logger_factory_callback([vm, dnsproxy_class](const std::string &name) {
+        return java_sink_mt::create(name, vm, dnsproxy_class);
+    });
+    return JNI_VERSION_1_2;
+}
+
+extern "C"
 JNIEXPORT jlong JNICALL
 Java_com_adguard_dnslibs_proxy_DnsProxy_create(JNIEnv *env, jobject jthis) {
-    return (jlong) new ag::android_dnsproxy(env);
+    return (jlong) new ag::android_dnsproxy(ag::get_vm(env));
 }
 
 extern "C"
@@ -69,12 +80,6 @@ extern "C"
 JNIEXPORT jboolean JNICALL
 Java_com_adguard_dnslibs_proxy_DnsProxy_init(JNIEnv *env, jobject thiz, jlong native_ptr,
                                              jobject java_settings, jobject java_events) {
-
-    auto vm = ag::get_vm(env);
-    ag::global_ref dnsproxy_class(vm, env->FindClass(FQN_DNSPROXY));
-    ag::set_logger_factory_callback([vm, dnsproxy_class](const std::string &name) {
-        return java_sink_mt::create(name, vm, ag::global_ref(vm, dnsproxy_class.get()));
-    });
 
     auto *proxy = (ag::android_dnsproxy *) native_ptr;
     assert(proxy);
@@ -566,8 +571,8 @@ jobject ag::android_dnsproxy::get_settings(JNIEnv *env) {
     return env->NewLocalRef(marshal_settings(env, m_actual_proxy.get_settings()).get());
 }
 
-ag::android_dnsproxy::android_dnsproxy(JNIEnv *env) : m_utils(env) {
-    auto vm = get_vm(env);
+ag::android_dnsproxy::android_dnsproxy(JavaVM *vm) : m_utils(vm) {
+    scoped_jni_env env(vm, 16);
 
     jclass c = (m_jclasses.processed_event = global_ref(vm, env->FindClass(FQN_REQ_PROC_EVENT))).get();
     m_processed_event_methods.ctor = env->GetMethodID(c, "<init>", "()V");
@@ -595,7 +600,7 @@ ag::android_dnsproxy::android_dnsproxy(JNIEnv *env) : m_utils(env) {
     m_events_interface_methods.on_certificate_verification = env->GetMethodID(
             c, "onCertificateVerification", "(L" FQN_CERT_VERIFY_EVENT ";)Ljava/lang/String;");
 
-    m_protocol_enum_values = m_utils.get_enum_values(env, FQN_LISTENER_PROTOCOL);
+    m_protocol_enum_values = m_utils.get_enum_values(env.get(), FQN_LISTENER_PROTOCOL);
 
     m_jni_initialized.store(true);
 }

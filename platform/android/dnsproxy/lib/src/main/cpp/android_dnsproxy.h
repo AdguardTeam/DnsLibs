@@ -140,7 +140,7 @@ public:
     /**
      * Initializes global refs.
      */
-    explicit android_dnsproxy(JNIEnv *env);
+    explicit android_dnsproxy(JavaVM *vm);
 
     /**
      * Initialize the actual proxy.

@@ -75,8 +75,8 @@ bool ag::jni_utils::collection_add(JNIEnv *env, jobject collection, jobject o) {
     return ret;
 }
 
-ag::jni_utils::jni_utils(JNIEnv *env) {
-    auto vm = get_vm(env);
+ag::jni_utils::jni_utils(JavaVM *vm) {
+    scoped_jni_env env(vm, 16);
 
     jclass c = (m_jclasses.collection = global_ref(vm, env->FindClass("java/util/Collection"))).get();
     m_collection_methods.add = env->GetMethodID(c, "add", "(Ljava/lang/Object;)Z");

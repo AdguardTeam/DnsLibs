@@ -17,6 +17,13 @@ private:
     JavaVM *m_vm{};
     T m_ref{};
 
+    void delete_global_ref() const {
+        if (m_vm) {
+            scoped_jni_env env(m_vm, 1);
+            env->DeleteGlobalRef(m_ref);
+        }
+    }
+
 public:
     global_ref() = default;
 
@@ -31,7 +38,7 @@ public:
 
     global_ref &operator=(const global_ref &other) {
         if (&other != this) {
-            this->~global_ref();
+            delete_global_ref();
             m_vm = other.m_vm;
             scoped_jni_env env(m_vm, 1);
             m_ref = (T) env->NewGlobalRef(other.m_ref);
@@ -45,7 +52,7 @@ public:
 
     global_ref &operator=(global_ref &&other) noexcept {
         if (&other != this) {
-            this->~global_ref();
+            delete_global_ref();
             m_vm = other.m_vm;
             m_ref = other.m_ref;
             other.m_vm = {};
@@ -55,10 +62,7 @@ public:
     }
 
     ~global_ref() {
-        if (m_vm) {
-            scoped_jni_env env(m_vm, 1);
-            env->DeleteGlobalRef(m_ref);
-        }
+        delete_global_ref();
     }
 
     T get() const {
@@ -80,6 +84,12 @@ private:
     JNIEnv *m_env{};
     T m_ref{};
 
+    void delete_local_ref() {
+        if (m_env) {
+            m_env->DeleteLocalRef(m_ref);
+        }
+    }
+
 public:
     local_ref() = default;
 
@@ -97,7 +107,7 @@ public:
 
     local_ref &operator=(local_ref &&other) noexcept {
         if (&other != this) {
-            this->~local_ref();
+            delete_local_ref();
             m_env = other.m_env;
             m_ref = other.m_ref;
             other.m_env = {};
@@ -107,9 +117,7 @@ public:
     }
 
     ~local_ref() {
-        if (m_env) {
-            m_env->DeleteLocalRef(m_ref);
-        }
+        delete_local_ref();
     }
 
     T get() const {
@@ -156,7 +164,7 @@ public:
     /**
      * Initialize global refs.
      */
-    explicit jni_utils(JNIEnv *env);
+    explicit jni_utils(JavaVM *vm);
 
     /**
      * Call `f` for each object in `iterable`.
@@ -172,12 +180,12 @@ public:
     /**
      * Marshal a C++ string to Java.
      */
-    local_ref<jobject> marshal_string(JNIEnv *env, const std::string &str);
+    static local_ref<jobject> marshal_string(JNIEnv *env, const std::string &str);
 
     /**
      * Copy a uint8_view to a new Java byte array.
      */
-    local_ref<jbyteArray> marshal_uint8_view(JNIEnv *env, uint8_view v);
+    static local_ref<jbyteArray> marshal_uint8_view(JNIEnv *env, uint8_view v);
 
     /**
      * Add `o` to `collection`.

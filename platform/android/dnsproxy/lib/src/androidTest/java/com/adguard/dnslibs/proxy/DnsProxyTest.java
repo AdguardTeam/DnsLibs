@@ -216,6 +216,7 @@ public class DnsProxyTest {
         final DnsProxySettings settings = DnsProxySettings.getDefault();
         settings.getUpstreams().clear();
         settings.getUpstreams().add(us);
+        settings.setIpv6Available(false); // DoT times out trying to reach dns.adguard.com over IPv6
 
         final DnsProxyEvents events = new DnsProxyEvents() {
             @Override
