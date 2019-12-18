@@ -80,6 +80,7 @@ public:
      */
     struct config {
         const certificate_verifier *cert_verifier = nullptr;
+        bool ipv6_available = true; // Passed to the bootstrappers
     };
 
     struct create_result {

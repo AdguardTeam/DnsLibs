@@ -123,14 +123,14 @@ static std::string get_mbox(const ldns_pkt *request) {
 }
 
 // Taken from AdGuardHome/dnsforward.go/genSOA
-static ldns_rr *create_soa(const ldns_pkt *request, const dnsproxy_settings *settings) {
+static ldns_rr *create_soa(const ldns_pkt *request, const dnsproxy_settings *settings, uint32_t retry_secs = 900) {
     const ldns_rr *question = ldns_rr_list_rr(ldns_pkt_question(request), 0);
     std::string mbox = get_mbox(request);
 
     ldns_rr *soa = ldns_rr_new();
     assert(soa != nullptr);
     ldns_rr_set_owner(soa, ldns_rdf_clone(ldns_rr_owner(question)));
-    ldns_rr_set_ttl(soa, settings->blocked_response_ttl);
+    ldns_rr_set_ttl(soa, settings->blocked_response_ttl_secs);
     ldns_rr_set_type(soa, LDNS_RR_TYPE_SOA);
     ldns_rr_set_class(soa, LDNS_RR_CLASS_IN);
     // fill soa rdata
@@ -138,7 +138,7 @@ static ldns_rr *create_soa(const ldns_pkt *request, const dnsproxy_settings *set
     ldns_rr_push_rdf(soa, ldns_dname_new_frm_str(mbox.c_str())); // RNAME
     ldns_rr_push_rdf(soa, ldns_native2rdf_int32(LDNS_RDF_TYPE_TIME, time(nullptr) + 100500)); // SERIAL
     ldns_rr_push_rdf(soa, ldns_native2rdf_int32(LDNS_RDF_TYPE_PERIOD, 1800)); // REFRESH
-    ldns_rr_push_rdf(soa, ldns_native2rdf_int32(LDNS_RDF_TYPE_PERIOD, 900)); // RETRY
+    ldns_rr_push_rdf(soa, ldns_native2rdf_int32(LDNS_RDF_TYPE_PERIOD, retry_secs)); // RETRY
     ldns_rr_push_rdf(soa, ldns_native2rdf_int32(LDNS_RDF_TYPE_PERIOD, 604800)); // EXPIRE
     ldns_rr_push_rdf(soa, ldns_native2rdf_int32(LDNS_RDF_TYPE_PERIOD, 86400)); // MINIMUM
     return soa;
@@ -151,6 +151,13 @@ static ldns_pkt *create_nxdomain_response(const ldns_pkt *request, const dnsprox
     return response;
 }
 
+static ldns_pkt *create_ipv6_blocking_response(const ldns_pkt *request, const dnsproxy_settings *settings) {
+    ldns_pkt *response = create_response_by_request(request);
+    ldns_pkt_set_rcode(response, LDNS_RCODE_NOERROR);
+    ldns_pkt_push_rr(response, LDNS_SECTION_AUTHORITY, create_soa(request, settings, 60));
+    return response;
+}
+
 static ldns_pkt *create_arecord_response(const ldns_pkt *request, const dnsproxy_settings *settings,
         const dnsfilter::rule **rules) {
     const ldns_rr *question = ldns_rr_list_rr(ldns_pkt_question(request), 0);
@@ -158,7 +165,7 @@ static ldns_pkt *create_arecord_response(const ldns_pkt *request, const dnsproxy
     ldns_rr *answer = ldns_rr_new();
     assert(answer != nullptr);
     ldns_rr_set_owner(answer, ldns_rdf_clone(ldns_rr_owner(question)));
-    ldns_rr_set_ttl(answer, settings->blocked_response_ttl);
+    ldns_rr_set_ttl(answer, settings->blocked_response_ttl_secs);
     ldns_rr_set_type(answer, LDNS_RR_TYPE_A);
     ldns_rr_set_class(answer, LDNS_RR_CLASS_IN);
     for (size_t i = 0; rules[i] != nullptr; ++i) {
@@ -178,7 +185,7 @@ static ldns_pkt *create_aaaarecord_response(const ldns_pkt *request, const dnspr
     ldns_rr *answer = ldns_rr_new();
     assert(answer != nullptr);
     ldns_rr_set_owner(answer, ldns_rdf_clone(ldns_rr_owner(question)));
-    ldns_rr_set_ttl(answer, settings->blocked_response_ttl);
+    ldns_rr_set_ttl(answer, settings->blocked_response_ttl_secs);
     ldns_rr_set_type(answer, LDNS_RR_TYPE_AAAA);
     ldns_rr_set_class(answer, LDNS_RR_CLASS_IN);
     for (size_t i = 0; rules[i] != nullptr; ++i) {
@@ -421,7 +428,7 @@ bool dns_forwarder::init(const dnsproxy_settings &settings, const dnsproxy_event
     }
 
     infolog(log, "Initializing upstreams...");
-    upstream_factory us_factory({ this->cert_verifier.get() });
+    upstream_factory us_factory({ this->cert_verifier.get(), this->settings->ipv6_available });
     this->upstreams.reserve(settings.upstreams.size());
     for (const upstream::options &options : settings.upstreams) {
         infolog(log, "Initializing upstream {}...", options.address);
@@ -536,8 +543,19 @@ std::vector<uint8_t> dns_forwarder::handle_message(uint8_view message) {
     auto domain = allocated_ptr<char>(ldns_rdf2str(ldns_rr_owner(question)));
     event.domain = domain.get();
 
-    // disable Mozilla DoH
     const ldns_rr_type type = ldns_rr_get_type(question);
+
+    // IPv6 blocking
+    if (this->settings->block_ipv6 && LDNS_RR_TYPE_AAAA == type) {
+        dbglog_fid(log, request, "AAAA DNS query blocked because IPv6 blocking is enabled");
+        ldns_pkt_ptr response(create_ipv6_blocking_response(request, this->settings));
+        log_packet(log, response.get(), "IPv6 blocking response");
+        std::vector<uint8_t> raw_response = transform_response_to_raw_data(response.get());
+        finalize_processed_event(event, request, response.get(), nullptr, std::nullopt);
+        return raw_response;
+    }
+
+    // disable Mozilla DoH
     if ((type == LDNS_RR_TYPE_A || type == LDNS_RR_TYPE_AAAA)
             && 0 == strcmp(domain.get(), MOZILLA_DOH_HOST.data())) {
         ldns_pkt_ptr response(create_nxdomain_response(request, this->settings));

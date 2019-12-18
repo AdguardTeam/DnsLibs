@@ -96,8 +96,8 @@ static std::vector<ag::resolver_ptr> create_resolvers(const ag::logger &log, con
 ag::bootstrapper::bootstrapper(const params &p)
         : m_log(create_logger(AG_FMT("Bootstrapper {}", p.address_string)))
         , m_timeout(p.timeout)
-        , m_round_robin_num({0})
-        , m_ipv6_avail(p.ipv6_avail)
+        , m_round_robin_num{0}
+        , m_ipv6_avail(p.upstream_config.ipv6_available)
         , m_resolvers(create_resolvers(m_log, p))
 {
     auto[host, port] = utils::split_host_port(p.address_string);

@@ -46,11 +46,15 @@ struct dnsproxy_settings {
 
     std::optional<dns64_settings> dns64; // DNS64 settings
 
-    uint32_t blocked_response_ttl; // TTL of the record for the blocked domains (in seconds)
+    uint32_t blocked_response_ttl_secs; // TTL of the record for the blocked domains (in seconds)
 
     dnsfilter::engine_params filter_params; // a filtering engine parameters (see `dnsfilter::engine_params`)
 
     std::vector<listener_settings> listeners; // List of addresses/ports/protocols/etc... to listen on
+
+    bool block_ipv6; // Block AAAA requests.
+
+    bool ipv6_available; // If false, bootstrappers will fetch only A records.
 };
 
 }

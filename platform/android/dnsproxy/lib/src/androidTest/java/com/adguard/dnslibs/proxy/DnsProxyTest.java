@@ -81,7 +81,7 @@ public class DnsProxyTest {
         tcp.setPort(12345);
         tcp.setProtocol(ListenerSettings.Protocol.TCP);
         tcp.setPersistent(true);
-        tcp.setIdleTimeout(5000);
+        tcp.setIdleTimeoutMs(5000);
         settings.getListeners().add(tcp);
 
         final ListenerSettings udp = new ListenerSettings();
@@ -148,7 +148,7 @@ public class DnsProxyTest {
         tcp.setPort(12345);
         tcp.setProtocol(ListenerSettings.Protocol.TCP);
         tcp.setPersistent(true);
-        tcp.setIdleTimeout(5000);
+        tcp.setIdleTimeoutMs(5000);
         settings.getListeners().add(tcp);
 
         final ListenerSettings udp = new ListenerSettings();
@@ -166,7 +166,10 @@ public class DnsProxyTest {
     public void testSettingsMarshalling() {
         final DnsProxySettings settings = DnsProxySettings.getDefault();
 
-        settings.setBlockedResponseTtl(1234);
+        settings.setBlockedResponseTtlSecs(1234);
+
+        settings.setIpv6Available(ThreadLocalRandom.current().nextBoolean());
+        settings.setBlockIpv6(ThreadLocalRandom.current().nextBoolean());
 
         settings.getFilterParams().put(1, "/Й/И/Л"); // Test CESU-8 encoding
         settings.getFilterParams().put(2, "/A/B/C/D/Ы/Щ");
@@ -178,7 +181,7 @@ public class DnsProxyTest {
         tcp.setPort(12345);
         tcp.setProtocol(ListenerSettings.Protocol.TCP);
         tcp.setPersistent(true);
-        tcp.setIdleTimeout(5000);
+        tcp.setIdleTimeoutMs(5000);
         settings.getListeners().add(tcp);
 
         final ListenerSettings udp = new ListenerSettings();
@@ -190,14 +193,14 @@ public class DnsProxyTest {
         final Dns64Settings dns64 = new Dns64Settings();
         dns64.setUpstream(settings.getUpstreams().get(0));
         dns64.setMaxTries(1234);
-        dns64.setWaitTime(3456);
+        dns64.setWaitTimeMs(3456);
         settings.setDns64(dns64);
 
         final UpstreamSettings dot = new UpstreamSettings();
         dot.setAddress("tls://dns.adguard.com");
         dot.getBootstrap().add("8.8.8.8");
         dot.setServerIp(new byte[]{8, 8, 8, 8});
-        dot.setTimeout(10000);
+        dot.setTimeoutMs(10000);
         settings.getUpstreams().add(dot);
 
         try (final DnsProxy proxy = new DnsProxy(settings)) {
@@ -209,7 +212,7 @@ public class DnsProxyTest {
         final UpstreamSettings us = new UpstreamSettings();
         us.setAddress(upstreamAddr);
         us.getBootstrap().add("8.8.8.8");
-        us.setTimeout(10000);
+        us.setTimeoutMs(10000);
         final DnsProxySettings settings = DnsProxySettings.getDefault();
         settings.getUpstreams().clear();
         settings.getUpstreams().add(us);

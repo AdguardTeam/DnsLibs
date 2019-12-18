@@ -18,13 +18,12 @@ public:
     struct params {
         std::string_view address_string; // host to be resolved
         int default_port; // default to be used if not specified in `address_string`
-        bool ipv6_avail; // true if ipv6 is available
         const std::vector<std::string> &bootstrap; // list of the resolving servers
         std::chrono::milliseconds timeout; // resolve timeout
         const upstream_factory::config &upstream_config; // configuration of the upstream factory which creates resolving upstream
     };
 
-    bootstrapper(const params &p);
+    explicit bootstrapper(const params &p);
 
     struct resolve_result {
         std::vector<socket_address> addresses; // not empty resolved addresses list in case of success

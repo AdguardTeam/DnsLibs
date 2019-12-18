@@ -5,7 +5,7 @@ import java.util.Objects;
 public class Dns64Settings {
     private UpstreamSettings upstream;
     private long maxTries;
-    private long waitTime;
+    private long waitTimeMs;
 
     /**
      * @return The upstream to use for discovery of DNS64 prefixes.
@@ -38,15 +38,15 @@ public class Dns64Settings {
     /**
      * @return How long to wait, in milliseconds, before a dns64 prefixes discovery attempt.
      */
-    public long getWaitTime() {
-        return waitTime;
+    public long getWaitTimeMs() {
+        return waitTimeMs;
     }
 
     /**
-     * @param waitTime How long to wait, in milliseconds, before a dns64 prefixes discovery attempt.
+     * @param waitTimeMs How long to wait, in milliseconds, before a dns64 prefixes discovery attempt.
      */
-    public void setWaitTime(long waitTime) {
-        this.waitTime = waitTime;
+    public void setWaitTimeMs(long waitTimeMs) {
+        this.waitTimeMs = waitTimeMs;
     }
 
     @Override
@@ -55,12 +55,12 @@ public class Dns64Settings {
         if (o == null || getClass() != o.getClass()) return false;
         Dns64Settings that = (Dns64Settings) o;
         return maxTries == that.maxTries &&
-                waitTime == that.waitTime &&
+                waitTimeMs == that.waitTimeMs &&
                 Objects.equals(upstream, that.upstream);
     }
 
     @Override
     public int hashCode() {
-        return Objects.hash(upstream, maxTries, waitTime);
+        return Objects.hash(upstream, maxTries, waitTimeMs);
     }
 }

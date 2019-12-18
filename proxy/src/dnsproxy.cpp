@@ -17,9 +17,11 @@ static const dnsproxy_settings DEFAULT_PROXY_SETTINGS = {
         { "8.8.4.4:53", {}, DEFAULT_UPSTREAM_TIMEOUT, {} },
     },
     .dns64 = std::nullopt,
-    .blocked_response_ttl = 3600,
+    .blocked_response_ttl_secs = 3600,
     .filter_params = {},
-    .listeners = {}
+    .listeners = {},
+    .block_ipv6 = false,
+    .ipv6_available = true,
 };
 
 const dnsproxy_settings &dnsproxy_settings::get_default() {

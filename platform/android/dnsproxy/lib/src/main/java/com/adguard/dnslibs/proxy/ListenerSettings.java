@@ -13,7 +13,7 @@ public class ListenerSettings {
     private int port = 53;
     private Protocol protocol = Protocol.UDP;
     private boolean persistent = false;
-    private long idleTimeout = 3000;
+    private long idleTimeoutMs = 3000;
 
     /**
      * @return The address to listen on.
@@ -74,15 +74,15 @@ public class ListenerSettings {
     /**
      * @return The amount of time, in milliseconds, since the last request received after which the connection will be closed.
      */
-    public long getIdleTimeout() {
-        return idleTimeout;
+    public long getIdleTimeoutMs() {
+        return idleTimeoutMs;
     }
 
     /**
-     * @param idleTimeout The amount of time, in milliseconds, since the last request received after which the connection will be closed.
+     * @param idleTimeoutMs The amount of time, in milliseconds, since the last request received after which the connection will be closed.
      */
-    public void setIdleTimeout(long idleTimeout) {
-        this.idleTimeout = idleTimeout;
+    public void setIdleTimeoutMs(long idleTimeoutMs) {
+        this.idleTimeoutMs = idleTimeoutMs;
     }
 
     @Override
@@ -92,13 +92,13 @@ public class ListenerSettings {
         ListenerSettings that = (ListenerSettings) o;
         return port == that.port &&
                 persistent == that.persistent &&
-                idleTimeout == that.idleTimeout &&
+                idleTimeoutMs == that.idleTimeoutMs &&
                 Objects.equals(address, that.address) &&
                 protocol == that.protocol;
     }
 
     @Override
     public int hashCode() {
-        return Objects.hash(address, port, protocol, persistent, idleTimeout);
+        return Objects.hash(address, port, protocol, persistent, idleTimeoutMs);
     }
 }

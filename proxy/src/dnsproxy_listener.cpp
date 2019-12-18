@@ -362,12 +362,11 @@ private:
 
     struct write {
         uv_write_t req{};
-        tcp_dns_connection *c;
         ag::uint8_vector payload;
         uint16_t size_be; // Big-endian size
         uv_buf_t bufs[2];
 
-        write(tcp_dns_connection *c, ag::uint8_vector &&payload) : c(c), payload(std::move(payload)) {
+        write(ag::uint8_vector &&payload) : payload(std::move(payload)) {
             this->req.data = this;
             this->size_be = this->payload.size();
             this->size_be = htons(this->size_be);
@@ -445,11 +444,14 @@ private:
 
     static void write_cb(uv_write_t *w_req, int status) {
         auto *w = (write *) w_req->data;
-        auto *c = w->c;
-        if (status < 0 || !c->m_persistent) {
+        auto *h = (uv_handle_t *) w_req->handle;
+        auto *c = (tcp_dns_connection *) h->data;
+        delete w;
+        // `c` might be nullptr at this point, e.g. the connection was closed,
+        // but libuv still called the pending write callbacks.
+        if (c && (!c->m_persistent || status < 0)) {
             c->do_close();
         }
-        delete w;
     }
 
     static void idle_timeout_cb(uv_timer_t *h) {
@@ -466,7 +468,7 @@ private:
     }
 
     void do_write(ag::uint8_vector &&payload) {
-        auto *w = new write(this, std::move(payload));
+        auto *w = new write(std::move(payload));
         if (uv_write(&w->req, (uv_stream_t *) m_tcp, w->bufs, 2, write_cb) < 0) {
             delete w;
             do_close();

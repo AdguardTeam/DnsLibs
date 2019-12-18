@@ -110,9 +110,11 @@
     AGDnsProxyConfig *cfg = [[AGDnsProxyConfig alloc] initWithUpstreams: nil
         // for DOH testing
         // initWithUpstreams: @[[[AGDnsUpstream alloc] initWithAddress: @"https://dns9.quad9.net/dns-query" bootstrap: @[@"8.8.8.8"] timeout: 10000 serverIp: nil]]
-        filters: filters blockedResponseTtl: 0
+        filters: filters blockedResponseTtlSecs: 0
         dns64Settings: nil
-        listeners: nil];
+        listeners: nil
+        ipv6Available: true
+        blockIpv6: false];
 
     AGDnsProxyEvents *events = [[AGDnsProxyEvents alloc] init];
     events.onRequestProcessed = ^(const AGDnsRequestProcessedEvent *event) {

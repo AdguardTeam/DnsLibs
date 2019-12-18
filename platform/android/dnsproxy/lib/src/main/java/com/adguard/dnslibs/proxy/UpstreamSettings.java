@@ -8,7 +8,7 @@ import java.util.Objects;
 public class UpstreamSettings {
     private String address;
     private List<String> bootstrap = new ArrayList<>();
-    private long timeout;
+    private long timeoutMs;
     private byte[] serverIp;
 
     /**
@@ -36,16 +36,16 @@ public class UpstreamSettings {
      * @return Default upstream timeout in milliseconds. Also, it is used as a timeout for bootstrap DNS requests.
      * {@code timeout = 0} means infinite timeout.
      */
-    public long getTimeout() {
-        return timeout;
+    public long getTimeoutMs() {
+        return timeoutMs;
     }
 
     /**
-     * @param timeout Default upstream timeout in milliseconds. Also, it is used as a timeout for bootstrap DNS requests.
-     *                {@code timeout = 0} means infinite timeout.
+     * @param timeoutMs Default upstream timeout in milliseconds. Also, it is used as a timeout for bootstrap DNS requests.
+     *                  {@code timeout = 0} means infinite timeout.
      */
-    public void setTimeout(long timeout) {
-        this.timeout = timeout;
+    public void setTimeoutMs(long timeoutMs) {
+        this.timeoutMs = timeoutMs;
     }
 
     /**
@@ -67,7 +67,7 @@ public class UpstreamSettings {
         if (this == o) return true;
         if (o == null || getClass() != o.getClass()) return false;
         UpstreamSettings that = (UpstreamSettings) o;
-        return timeout == that.timeout &&
+        return timeoutMs == that.timeoutMs &&
                 Objects.equals(address, that.address) &&
                 bootstrap.equals(that.bootstrap) &&
                 Arrays.equals(serverIp, that.serverIp);
@@ -75,7 +75,7 @@ public class UpstreamSettings {
 
     @Override
     public int hashCode() {
-        int result = Objects.hash(address, bootstrap, timeout);
+        int result = Objects.hash(address, bootstrap, timeoutMs);
         result = 31 * result + Arrays.hashCode(serverIp);
         return result;
     }

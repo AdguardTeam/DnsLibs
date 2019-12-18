@@ -162,19 +162,19 @@ static NSData *create_response_packet(const struct iphdr *ip_header, const struc
         [bootstrap addObject: [NSString stringWithUTF8String: server.c_str()]];
     }
     _bootstrap = bootstrap;
-    _timeout = settings->timeout.count();
+    _timeoutMs = settings->timeout.count();
     return self;
 }
 
 - (instancetype) initWithAddress: (NSString *) address
         bootstrap: (NSArray<NSString *> *) bootstrap
-        timeout: (NSInteger) timeout
+        timeoutMs: (NSInteger) timeoutMs
         serverIp: (NSData *) serverIp
 {
     self = [super init];
     _address = address;
     _bootstrap = bootstrap;
-    _timeout = timeout;
+    _timeoutMs = timeoutMs;
     _serverIp = serverIp;
     return self;
 }
@@ -186,17 +186,17 @@ static NSData *create_response_packet(const struct iphdr *ip_header, const struc
     self = [super init];
     _upstream = [[AGDnsUpstream alloc] initWithNative: &settings->upstream_settings];
     _maxTries = settings->max_tries;
-    _waitTime = settings->wait_time.count();
+    _waitTimeMs = settings->wait_time.count();
     return self;
 }
 
 - (instancetype) initWithUpstream: (AGDnsUpstream *) upstream
-                         maxTries: (NSInteger) maxTries waitTime: (NSInteger) waitTime
+                         maxTries: (NSInteger) maxTries waitTimeMs: (NSInteger) waitTimeMs
 {
     self = [super init];
     _upstream = upstream;
     _maxTries = maxTries;
-    _waitTime = waitTime;
+    _waitTimeMs = waitTimeMs;
     return self;
 }
 
@@ -210,7 +210,7 @@ static NSData *create_response_packet(const struct iphdr *ip_header, const struc
     _port = settings->port;
     _proto = (AGListenerProtocol) ((NSInteger) settings->protocol);
     _persistent = settings->persistent;
-    _idleTimeout = settings->idle_timeout.count();
+    _idleTimeoutMs = settings->idle_timeout.count();
     return self;
 }
 
@@ -218,14 +218,14 @@ static NSData *create_response_packet(const struct iphdr *ip_header, const struc
                            port:(NSInteger)port
                           proto:(AGListenerProtocol)proto
                      persistent:(BOOL)persistent
-                    idleTimeout:(NSInteger)idleTimeout
+                  idleTimeoutMs:(NSInteger)idleTimeoutMs
 {
     self = [super init];
     _address = address;
     _port = port;
     _proto = proto;
     _persistent = persistent;
-    _idleTimeout = idleTimeout;
+    _idleTimeoutMs = idleTimeoutMs;
     return self;
 }
 @end
@@ -242,7 +242,7 @@ static NSData *create_response_packet(const struct iphdr *ip_header, const struc
     }
     _upstreams = upstreams;
     _filters = nil;
-    _blockedResponseTtl = settings->blocked_response_ttl;
+    _blockedResponseTtlSecs = settings->blocked_response_ttl_secs;
     if (settings->dns64.has_value()) {
         _dns64Settings = [[AGDns64Settings alloc] initWithNative: &settings->dns64.value()];
     }
@@ -252,14 +252,18 @@ static NSData *create_response_packet(const struct iphdr *ip_header, const struc
         [listeners addObject: [[AGListenerSettings alloc] initWithNative: &ls]];
     }
     _listeners = listeners;
+    _ipv6Available = settings->ipv6_available;
+    _blockIpv6 = settings->block_ipv6;
     return self;
 }
 
 - (instancetype) initWithUpstreams: (NSArray<AGDnsUpstream *> *) upstreams
         filters: (NSDictionary<NSNumber *,NSString *> *) filters
-        blockedResponseTtl: (NSInteger) blockedResponseTtl
+        blockedResponseTtlSecs: (NSInteger) blockedResponseTtlSecs
         dns64Settings: (AGDns64Settings *) dns64Settings
-        listeners: (NSArray<AGListenerSettings *> *) listeners;
+        listeners: (NSArray<AGListenerSettings *> *) listeners
+        ipv6Available: (BOOL) ipv6Available
+        blockIpv6: (BOOL) blockIpv6;
 {
     const ag::dnsproxy_settings &defaultSettings = ag::dnsproxy_settings::get_default();
     self = [self initWithNative: &defaultSettings];
@@ -267,11 +271,13 @@ static NSData *create_response_packet(const struct iphdr *ip_header, const struc
         _upstreams = upstreams;
     }
     _filters = filters;
-    if (blockedResponseTtl != 0) {
-        _blockedResponseTtl = blockedResponseTtl;
+    if (blockedResponseTtlSecs != 0) {
+        _blockedResponseTtlSecs = blockedResponseTtlSecs;
     }
     _dns64Settings = dns64Settings;
     _listeners = listeners;
+    _ipv6Available = ipv6Available;
+    _blockIpv6 = blockIpv6;
     return self;
 }
 
@@ -333,7 +339,7 @@ static SecCertificateRef convertCertificate(const std::vector<uint8_t> &cert) {
 }
 
 static std::string getTrustCreationErrorStr(OSStatus status) {
-#if (!defined TARGET_OS_IPHONE) || (IOS_VERSION_MAJOR >= 11 && IOS_VERSION_MINOR >= 3)
+#if !TARGET_OS_IPHONE || (IOS_VERSION_MAJOR >= 11 && IOS_VERSION_MINOR >= 3)
     CFStringRef err = SecCopyErrorMessageString(status, NULL);
     return [(__bridge NSString *)err UTF8String];
 #else
@@ -450,12 +456,12 @@ static std::string getTrustCreationErrorStr(OSStatus status) {
                 addr.emplace<std::monostate>();
             }
             settings.upstreams.emplace_back(
-                ag::upstream::options{ [upstream.address UTF8String], std::move(bootstrap),
-                    std::chrono::milliseconds(upstream.timeout), addr });
+                ag::upstream::options{[upstream.address UTF8String], std::move(bootstrap),
+                                      std::chrono::milliseconds(upstream.timeoutMs), addr });
         }
     }
 
-    settings.blocked_response_ttl = config.blockedResponseTtl;
+    settings.blocked_response_ttl_secs = config.blockedResponseTtlSecs;
 
     if (config.filters != nil) {
         settings.filter_params.filters.reserve([config.filters count]);
@@ -498,8 +504,8 @@ static std::string getTrustCreationErrorStr(OSStatus status) {
             settings.dns64 = ag::dns64_settings{
                     .upstream_settings = {[upstream.address UTF8String],
                             std::move(bootstrap),
-                            std::chrono::milliseconds(upstream.timeout)},
-                    .wait_time = std::chrono::milliseconds(config.dns64Settings.waitTime),
+                            std::chrono::milliseconds(upstream.timeoutMs)},
+                    .wait_time = std::chrono::milliseconds(config.dns64Settings.waitTimeMs),
                     .max_tries = config.dns64Settings.maxTries > 0
                                  ? static_cast<uint32_t>(config.dns64Settings.maxTries) : 0,
             };
@@ -516,10 +522,13 @@ static std::string getTrustCreationErrorStr(OSStatus status) {
                 (uint16_t) listener.port,
                 (ag::listener_protocol) ((int) listener.proto),
                 (bool) listener.persistent,
-                std::chrono::milliseconds(listener.idleTimeout),
+                std::chrono::milliseconds(listener.idleTimeoutMs),
             });
         }
     }
+
+    settings.ipv6_available = config.ipv6Available;
+    settings.block_ipv6 = config.blockIpv6;
 
     if (!self->proxy.init(std::move(settings), std::move(native_events))) {
         errlog(self->log, "Failed to initialize core proxy module");

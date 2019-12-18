@@ -195,7 +195,7 @@ static curl_slist_ptr create_resolved_hosts_list(std::string_view url, const ip_
 static bootstrapper_ptr create_bootstrapper(const upstream::options &opts, const upstream_factory::config &config) {
     return std::make_unique<bootstrapper>(
         bootstrapper::params{ get_host_port(opts.address), dns_over_https::DEFAULT_PORT,
-            true, opts.bootstrap, opts.timeout, config });
+                              opts.bootstrap, opts.timeout, config });
 }
 
 curl_pool_ptr dns_over_https::create_pool() const {

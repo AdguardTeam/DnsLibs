@@ -97,8 +97,8 @@ static ag::bootstrapper_ptr create_bootstrapper(const ag::logger &log, const ag:
     }
 
     return std::make_unique<ag::bootstrapper>(
-        ag::bootstrapper::params{ address, ag::dns_over_tls::DEFAULT_PORT, true,
-            opts.bootstrap, opts.timeout, config });
+        ag::bootstrapper::params{ address, ag::dns_over_tls::DEFAULT_PORT,
+                                  opts.bootstrap, opts.timeout, config });
 }
 
 ag::dns_over_tls::dns_over_tls(const ag::upstream::options &opts, const ag::upstream_factory::config &config)

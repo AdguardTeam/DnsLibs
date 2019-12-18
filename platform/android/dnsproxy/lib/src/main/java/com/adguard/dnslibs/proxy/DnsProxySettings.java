@@ -9,9 +9,11 @@ import java.util.Objects;
 public class DnsProxySettings {
     private List<UpstreamSettings> upstreams = new ArrayList<>();
     private Dns64Settings dns64;
-    private long blockedResponseTtl;
+    private long blockedResponseTtlSecs;
     private LongSparseArray<String> filterParams = new LongSparseArray<>();
     private List<ListenerSettings> listeners = new ArrayList<>();
+    private boolean ipv6Available;
+    private boolean blockIpv6;
 
     /**
      * @return DNS upstreams settings list.
@@ -37,15 +39,15 @@ public class DnsProxySettings {
     /**
      * @return TTL of the record for the blocked domains (in seconds).
      */
-    public long getBlockedResponseTtl() {
-        return blockedResponseTtl;
+    public long getBlockedResponseTtlSecs() {
+        return blockedResponseTtlSecs;
     }
 
     /**
-     * @param blockedResponseTtl TTL of the record for the blocked domains (in seconds).
+     * @param blockedResponseTtlSecs TTL of the record for the blocked domains (in seconds).
      */
-    public void setBlockedResponseTtl(long blockedResponseTtl) {
-        this.blockedResponseTtl = blockedResponseTtl;
+    public void setBlockedResponseTtlSecs(long blockedResponseTtlSecs) {
+        this.blockedResponseTtlSecs = blockedResponseTtlSecs;
     }
 
     /**
@@ -62,21 +64,51 @@ public class DnsProxySettings {
         return listeners;
     }
 
+    /**
+     * @return whether bootstrappers will fetch AAAA records.
+     */
+    public boolean isIpv6Available() {
+        return ipv6Available;
+    }
+
+    /**
+     * @param ipv6Available if {code false}, bootstrappers will only fetch A records.
+     */
+    public void setIpv6Available(boolean ipv6Available) {
+        this.ipv6Available = ipv6Available;
+    }
+
+    /**
+     * @return whether the proxy will block AAAA requests.
+     */
+    public boolean isBlockIpv6() {
+        return blockIpv6;
+    }
+
+    /**
+     * @param blockIpv6 if {@code true}, the proxy will block AAAA requests.
+     */
+    public void setBlockIpv6(boolean blockIpv6) {
+        this.blockIpv6 = blockIpv6;
+    }
+
     @Override
     public boolean equals(Object o) {
         if (this == o) return true;
         if (o == null || getClass() != o.getClass()) return false;
         DnsProxySettings that = (DnsProxySettings) o;
-        return blockedResponseTtl == that.blockedResponseTtl &&
-                upstreams.equals(that.upstreams) &&
+        return blockedResponseTtlSecs == that.blockedResponseTtlSecs &&
+                ipv6Available == that.ipv6Available &&
+                blockIpv6 == that.blockIpv6 &&
+                Objects.equals(upstreams, that.upstreams) &&
                 Objects.equals(dns64, that.dns64) &&
                 longSparseArraysEqual(filterParams, that.filterParams) &&
-                listeners.equals(that.listeners);
+                Objects.equals(listeners, that.listeners);
     }
 
     @Override
     public int hashCode() {
-        return Objects.hash(upstreams, dns64, blockedResponseTtl, filterParams, listeners);
+        return Objects.hash(upstreams, dns64, blockedResponseTtlSecs, filterParams, listeners, ipv6Available, blockIpv6);
     }
 
     // For testing settings marshalling
