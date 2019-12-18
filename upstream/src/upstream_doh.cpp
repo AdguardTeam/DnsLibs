@@ -249,6 +249,13 @@ void dns_over_https::stop(int, short, void *arg) {
 dns_over_https::~dns_over_https() {
     event_base_once(this->worker.loop->c_base(), 0, EV_TIMEOUT, stop, this, nullptr);
     this->worker.loop->stop();
+    this->worker.loop.reset();
+
+    std::unique_lock lock(this->guard);
+    this->worker.no_requests_condition.wait(lock,
+        [this] () -> bool {
+            return this->worker.requests_counter == 0;
+        });
 }
 
 struct dns_over_https::socket_handle {
@@ -430,8 +437,19 @@ void dns_over_https::stop_all_with_error(err_string e) {
 }
 
 dns_over_https::exchange_result dns_over_https::exchange(ldns_pkt *request) {
-    // @todo: for now it's unsafe to delete an upstream which has in-progress
-    // requests - needs to be fixed or handled on the next higher level
+    // register request
+    this->guard.lock();
+    ++this->worker.requests_counter;
+    this->guard.unlock();
+
+    // unregister request at exit for safe destruction
+    utils::scope_exit request_unregister(
+        [this] () {
+            std::scoped_lock lock(this->guard);
+            if (0 == --this->worker.requests_counter) {
+                this->worker.no_requests_condition.notify_one();
+            }
+        });
 
     milliseconds timeout = this->opts.timeout;
 

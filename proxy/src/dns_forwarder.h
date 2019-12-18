@@ -23,12 +23,12 @@ public:
     std::vector<uint8_t> handle_message(uint8_view message);
 
 private:
-    ldns_pkt_ptr try_dns64_aaaa_synthesis(upstream_ptr &upstream, const ldns_pkt_ptr &request,
+    ldns_pkt_ptr try_dns64_aaaa_synthesis(upstream *upstream, const ldns_pkt_ptr &request,
         const ldns_pkt_ptr &response) const;
 
     void finalize_processed_event(dns_request_processed_event &event,
         const ldns_pkt *request, const ldns_pkt *response,
-        const upstream_ptr &upstream, err_string error) const;
+        const upstream *upstream, err_string error) const;
 
     logger log;
     const dnsproxy_settings *settings = nullptr;

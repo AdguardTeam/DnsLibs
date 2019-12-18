@@ -72,22 +72,22 @@ static constexpr size_t get_address_scheme_size(scheme local_scheme) {
 
 static ag::upstream_factory::create_result create_upstream_tls(const ag::upstream::options &opts,
         const ag::upstream_factory::config &config) {
-    return {std::make_shared<ag::dns_over_tls>(opts, config), std::nullopt};
+    return {std::make_unique<ag::dns_over_tls>(opts, config), std::nullopt};
 }
 
 static ag::upstream_factory::create_result create_upstream_https(const ag::upstream::options &opts,
         const ag::upstream_factory::config &config) {
-    return {std::make_shared<ag::dns_over_https>(opts, config), std::nullopt};
+    return {std::make_unique<ag::dns_over_https>(opts, config), std::nullopt};
 }
 
 static ag::upstream_factory::create_result create_upstream_plain(const ag::upstream::options &opts,
         const ag::upstream_factory::config &config) {
-    return {std::make_shared<ag::plain_dns>(opts), std::nullopt};
+    return {std::make_unique<ag::plain_dns>(opts), std::nullopt};
 }
 
 static ag::upstream_factory::create_result create_upstream_dnscrypt(ag::server_stamp &&stamp,
         const ag::upstream::options &opts) {
-    return {std::make_shared<ag::upstream_dnscrypt>(std::move(stamp), opts.timeout), std::nullopt};
+    return {std::make_unique<ag::upstream_dnscrypt>(std::move(stamp), opts.timeout), std::nullopt};
 }
 
 static ag::upstream_factory::create_result create_upstream_sdns(const ag::upstream::options &local_opts, const ag::upstream_factory::config &config) {

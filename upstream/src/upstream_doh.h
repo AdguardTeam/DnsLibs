@@ -83,6 +83,8 @@ private:
     struct worker_descriptor {
         event_loop_ptr loop = event_loop::create();
         std::deque<query_handle *> running_queue;
+        int requests_counter = 0;
+        std::condition_variable no_requests_condition;
     };
     worker_descriptor worker;
 
