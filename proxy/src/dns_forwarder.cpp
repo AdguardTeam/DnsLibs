@@ -270,7 +270,7 @@ static void set_event_rules(dns_request_processed_event &event, const std::vecto
 
 void dns_forwarder::finalize_processed_event(dns_request_processed_event &event,
         const ldns_pkt *request, const ldns_pkt *response,
-        const upstream_ptr &upstream, err_string error) const {
+        const upstream *upstream, err_string error) const {
     if (request != nullptr) {
         const ldns_rr *question = ldns_rr_list_rr(ldns_pkt_question(request), 0);
         char *type = ldns_rr_type2str(ldns_rr_get_type(question));
@@ -308,7 +308,7 @@ void dns_forwarder::finalize_processed_event(dns_request_processed_event &event,
 
 // If we know any DNS64 prefixes, request A RRs from `upstream` and
 // return a synthesized AAAA response or nullptr if synthesis was unsuccessful
-ldns_pkt_ptr dns_forwarder::try_dns64_aaaa_synthesis(upstream_ptr &upstream, const ldns_pkt_ptr &request,
+ldns_pkt_ptr dns_forwarder::try_dns64_aaaa_synthesis(upstream *upstream, const ldns_pkt_ptr &request,
         const ldns_pkt_ptr &response) const {
     std::scoped_lock l(this->dns64_prefixes->mtx);
 
@@ -589,24 +589,24 @@ std::vector<uint8_t> dns_forwarder::handle_message(uint8_view message) {
     }
 
     ldns_pkt_ptr response = nullptr;
-    upstream_ptr successful_upstream = nullptr;
+    upstream *successful_upstream = nullptr;
     for (auto i = this->upstreams.begin(); i != this->upstreams.end(); ++i) {
         upstream_ptr &upstream = *i;
         upstream::exchange_result result = upstream->exchange(request);
         if (!result.error.has_value()) {
-            successful_upstream = upstream;
+            successful_upstream = upstream.get();
             response = std::move(result.packet);
             break;
         }
         std::string err_str = AG_FMT("Upstream failed to perform dns query: {}", result.error.value());
         dbglog_fid(log, request, "{}", err_str);
         if (bool last = (std::distance(i, this->upstreams.end()) == 1); !last) {
-            finalize_processed_event(event, request, nullptr, upstream, std::move(err_str));
+            finalize_processed_event(event, request, nullptr, upstream.get(), std::move(err_str));
         } else {
             response = ldns_pkt_ptr(create_servfail_response(request));
             log_packet(log, response.get(), "Server failure response");
             std::vector<uint8_t> raw_response = transform_response_to_raw_data(response.get());
-            finalize_processed_event(event, request, response.get(), upstream, std::move(err_str));
+            finalize_processed_event(event, request, response.get(), upstream.get(), std::move(err_str));
             return raw_response;
         }
     }

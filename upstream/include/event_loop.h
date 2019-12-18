@@ -8,7 +8,7 @@ struct event_base;
 namespace ag {
 
 class event_loop;
-using event_loop_ptr = std::shared_ptr<event_loop>;
+using event_loop_ptr = std::unique_ptr<event_loop>;
 
 /**
  * Event loop class. Uses libevent.

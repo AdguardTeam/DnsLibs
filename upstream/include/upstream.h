@@ -15,7 +15,7 @@ namespace ag {
 
 class upstream;
 
-using upstream_ptr = std::shared_ptr<upstream>;
+using upstream_ptr = std::unique_ptr<upstream>;
 using ldns_pkt_ptr = std::unique_ptr<ldns_pkt, ag::ftor<&ldns_pkt_free>>;
 
 /**
