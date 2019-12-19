@@ -432,11 +432,11 @@ TEST_F(upstream_test, DISABLED_doh_concurrent_requests) {
     };
     auto[upstream_ptr, upstream_err] = create_upstream(opts);
     ASSERT_FALSE(upstream_err) << *upstream_err;
-    parallel_test_basic_n(WORKERS_NUM, [&upstream_ptr](size_t i) -> ag::err_string {
+    parallel_test_basic_n(WORKERS_NUM, [upstream = upstream_ptr.get()](size_t i) -> ag::err_string {
         ag::err_string result_err;
         for (size_t j = 0; j < REQUESTS_NUM; ++j) {
             ag::ldns_pkt_ptr pkt = create_test_message();
-            auto[reply, reply_err] = upstream_ptr->exchange(pkt.get());
+            auto[reply, reply_err] = upstream->exchange(pkt.get());
             if (reply_err) {
                 result_err += AG_FMT("DoH i = {} reply error: {}", i, *reply_err);
                 continue;

@@ -40,14 +40,35 @@ ag::connection_pool::get_result ag::tls_pool::create() {
 
     const socket_address &address = resolve_result.addresses[0];
     connection_ptr connection = create_connection(bev, address);
-    bufferevent_socket_connect(bev, address.c_sockaddr(), address.c_socklen());
     add_pending_connection(connection);
+    bufferevent_socket_connect(bev, address.c_sockaddr(), address.c_socklen());
     SSL_CTX_free(ctx);
     return { std::move(connection), resolve_result.time_elapsed, std::nullopt };
 }
 
-const ag::bootstrapper *ag::tls_pool::bootstrapper() {
-    return m_bootstrapper.get();
+ag::connection::read_result ag::tls_pool::perform_request_inner(uint8_view buf, std::chrono::milliseconds timeout) {
+    auto[conn, elapsed, err] = get();
+    if (!conn) {
+        return { {}, std::move(err) };
+    }
+
+    timeout -= duration_cast<milliseconds>(elapsed);
+    if (timeout < milliseconds(0)) {
+        return { {}, AG_FMT("DNS server name resolving took too much time: {}", elapsed) };
+    }
+
+    int id = conn->write(buf);
+    if (id < 0) {
+        m_bootstrapper->remove_resolved(conn->address);
+        return { {}, "Failed to send request" };
+    }
+
+    connection::read_result read_result = conn->read(id, timeout);
+    if (read_result.error.has_value()) {
+        m_bootstrapper->remove_resolved(conn->address);
+    }
+
+    return read_result;
 }
 
 static std::optional<std::string> get_resolved_ip(const ag::logger &log, const ag::ip_address_variant &addr) {
@@ -140,12 +161,12 @@ ag::dns_over_tls::exchange_result ag::dns_over_tls::exchange(ldns_pkt *request_p
     }
 
     ag::uint8_view buf{ ldns_buffer_begin(buffer.get()), ldns_buffer_position(buffer.get()) };
-    std::pair<std::vector<uint8_t>, err_string> result = m_pool.perform_request(buf, this->opts.timeout);
-    if (result.second.has_value()) {
-        return { nullptr, std::move(result.second) };
+    connection::read_result result = m_pool.perform_request(buf, this->opts.timeout);
+    if (result.error.has_value()) {
+        return { nullptr, std::move(result.error) };
     }
 
-    const std::vector<uint8_t> &reply = result.first;
+    const std::vector<uint8_t> &reply = result.reply;
     status = ldns_wire2pkt(&reply_pkt, reply.data(), reply.size());
     if (status != LDNS_STATUS_OK) {
         return {nullptr, ldns_get_errorstr_by_id(status)};

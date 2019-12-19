@@ -28,15 +28,13 @@ public:
 
     get_result get() override;
 
-    /**
-     * @return Bootstrapper for server address
-     */
-    const ag::bootstrapper *bootstrapper();
 private:
     /** Parent upstream */
     dns_over_tls *m_upstream = nullptr;
     /** Bootstrapper for server address */
     bootstrapper_ptr m_bootstrapper;
+
+    connection::read_result perform_request_inner(uint8_view buf, std::chrono::milliseconds timeout) override;
 
     get_result create();
 };
