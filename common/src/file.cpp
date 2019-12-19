@@ -94,7 +94,7 @@ int ag::file::get_size(const handle f) {
 #endif
 
 int ag::file::for_each_line(const handle f, line_action action, void *arg) {
-    static constexpr size_t MAX_CHUNK_SIZE = 1 * 1024 * 1024;
+    static constexpr size_t MAX_CHUNK_SIZE = 64 * 1024;
 
     int file_size = file::get_size(f);
     if (file_size < 0) {
