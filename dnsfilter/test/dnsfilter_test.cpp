@@ -227,6 +227,7 @@ TEST_F(dnsfilter_test, basic_rules_no_match) {
             { "|example2.org", "eexample2.org", },
             { "|example3.org|", "eexample3.orgg", },
             { "example4.org^", "example4.orgg", },
+            { "|https://example.com^", "https.test.com", },
         };
 
     for (const test_data &entry : TEST_DATA) {

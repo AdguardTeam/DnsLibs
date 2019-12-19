@@ -214,26 +214,53 @@ static inline bool remove_skippable_suffixes(std::string_view &rule, bool is_reg
     return removed;
 }
 
+static inline bool remove_special_prefixes(std::string_view &rule) {
+    bool r = false;
+    for (std::string_view prefix : SPECIAL_PREFIXES) {
+        if (ag::utils::starts_with(rule, prefix)) {
+            rule.remove_prefix(prefix.length());
+            r = true;
+        }
+    }
+    return r;
+}
+
+static inline bool remove_special_suffixes(std::string_view &rule) {
+    bool r = false;
+    for (std::string_view suffix : SPECIAL_SUFFIXES) {
+        if (ag::utils::ends_with(rule, suffix)) {
+            rule.remove_suffix(suffix.length());
+            r = true;
+        }
+    }
+    return r;
+}
+
 // https://github.com/AdguardTeam/AdguardHome/wiki/Hosts-Blocklists#adblock-style
 static match_info extract_match_info(std::string_view rule) {
     match_info info = { rule, check_regex(rule), 0 };
 
+    // special prefixes come before skippable ones (e.g. `||http://example.org`)
+    // so for the first we should check special ones
+    if (!info.is_regex) {
+        if (remove_special_prefixes(info.text)) {
+            info.pattern_mode |= MPM_LINE_START_ASSERTED;
+        }
+    }
+
     bool has_skippable_prefix = remove_skippable_prefixes(info.text, info.is_regex);
+    // but special suffixes come after skippable ones (e.g. `example.org^asd`)
+    // so for the first we should drop skippable ones
     bool has_skippable_suffix = remove_skippable_suffixes(info.text, info.is_regex);
 
     if (!info.is_regex) {
-        for (std::string_view prefix : SPECIAL_PREFIXES) {
-            if (ag::utils::starts_with(info.text, prefix)) {
-                info.text.remove_prefix(prefix.length());
-                info.pattern_mode |= MPM_LINE_START_ASSERTED;
-            }
+        if (remove_special_suffixes(info.text)) {
+            info.pattern_mode |= MPM_LINE_END_ASSERTED;
         }
-        for (std::string_view suffix : SPECIAL_SUFFIXES) {
-            if (ag::utils::ends_with(info.text, suffix)) {
-                info.text.remove_suffix(suffix.length());
-                info.pattern_mode |= MPM_LINE_END_ASSERTED;
-            }
-        }
+    }
+
+
+    if (!info.is_regex) {
         // check that rule matches exact domain though it has some special characters
         if (info.text.find('*') == info.text.npos
                     // 1) rule is like `||example.org^`
