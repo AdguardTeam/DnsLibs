@@ -225,11 +225,6 @@ static inline std::enable_if_t<sizeof...(Ts) >= 2, R> join(const Ts&... parts) {
 }
 
 /**
- * Create string from a format string
- */
-std::string fmt_string(const char *fmt, ...);
-
-/**
  * Check if string is a valid ipv4 address
  */
 bool is_valid_ip4(std::string_view str);
