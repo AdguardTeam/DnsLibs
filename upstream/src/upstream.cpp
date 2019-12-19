@@ -36,9 +36,9 @@ static_assert(std::size(SCHEME_WITH_SUFFIX) + 1 == static_cast<size_t>(scheme::C
 
 struct ag::upstream_factory::impl {
     logger log = create_logger("Upstream factory");
-    upstream_factory::config config;
+    upstream_factory_config config;
 
-    impl(upstream_factory::config cfg)
+    impl(upstream_factory_config cfg)
         : config(std::move(cfg))
     {}
 
@@ -71,18 +71,18 @@ static constexpr size_t get_address_scheme_size(scheme local_scheme) {
 }
 
 static ag::upstream_factory::create_result create_upstream_tls(const ag::upstream::options &opts,
-        const ag::upstream_factory::config &config) {
+        const ag::upstream_factory_config &config) {
     return {std::make_unique<ag::dns_over_tls>(opts, config), std::nullopt};
 }
 
 static ag::upstream_factory::create_result create_upstream_https(const ag::upstream::options &opts,
-        const ag::upstream_factory::config &config) {
+        const ag::upstream_factory_config &config) {
     return {std::make_unique<ag::dns_over_https>(opts, config), std::nullopt};
 }
 
 static ag::upstream_factory::create_result create_upstream_plain(const ag::upstream::options &opts,
-        const ag::upstream_factory::config &config) {
-    return {std::make_unique<ag::plain_dns>(opts), std::nullopt};
+        const ag::upstream_factory_config &config) {
+    return {std::make_unique<ag::plain_dns>(opts, config), std::nullopt};
 }
 
 static ag::upstream_factory::create_result create_upstream_dnscrypt(ag::server_stamp &&stamp,
@@ -90,7 +90,8 @@ static ag::upstream_factory::create_result create_upstream_dnscrypt(ag::server_s
     return {std::make_unique<ag::upstream_dnscrypt>(std::move(stamp), opts.timeout), std::nullopt};
 }
 
-static ag::upstream_factory::create_result create_upstream_sdns(const ag::upstream::options &local_opts, const ag::upstream_factory::config &config) {
+static ag::upstream_factory::create_result create_upstream_sdns(const ag::upstream::options &local_opts,
+        const ag::upstream_factory_config &config) {
     static constexpr ag::utils::make_error<ag::upstream_factory::create_result> make_error;
     auto[stamp, stamp_err] = ag::server_stamp::from_string(local_opts.address);
     if (stamp_err) {
@@ -124,7 +125,7 @@ static ag::upstream_factory::create_result create_upstream_sdns(const ag::upstre
 }
 
 ag::upstream_factory::create_result ag::upstream_factory::impl::create_upstream(const ag::upstream::options &opts) const {
-    using create_function = upstream_factory::create_result (*)(const ag::upstream::options &, const ag::upstream_factory::config &);
+    using create_function = upstream_factory::create_result (*)(const ag::upstream::options &, const ag::upstream_factory_config &);
     static constexpr create_function create_functions[]{
         &create_upstream_sdns,
         &create_upstream_plain,
@@ -139,17 +140,29 @@ ag::upstream_factory::create_result ag::upstream_factory::impl::create_upstream(
     return create_functions[index](opts, this->config);
 }
 
-ag::upstream_factory::upstream_factory(config cfg)
+ag::upstream_factory::upstream_factory(upstream_factory_config cfg)
     : factory(std::make_unique<impl>(std::move(cfg)))
 {}
 
 ag::upstream_factory::~upstream_factory() = default;
 
 ag::upstream_factory::create_result ag::upstream_factory::create_upstream(const upstream::options &opts) const {
+    create_result result;
     if (opts.address.find("://") != std::string_view::npos) {
         // TODO parse address error
-        return this->factory->create_upstream(opts);
+        result = this->factory->create_upstream(opts);
+    } else {
+        // We don't have scheme in the url, so it's just a plain DNS host:port
+        result = create_upstream_plain(opts, this->factory->config);
     }
-    // We don't have scheme in the url, so it's just a plain DNS host:port
-    return create_upstream_plain(opts, this->factory->config);
+
+    if (!result.error.has_value()) {
+        result.error = result.upstream->init();
+    }
+
+    if (result.error.has_value()) {
+        result.upstream.reset();
+    }
+
+    return result;
 }

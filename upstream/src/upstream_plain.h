@@ -43,13 +43,14 @@ public:
      * Create plain DNS upstream
      * @param opts Upstream settings
      */
-    plain_dns(const ag::upstream::options &opts);
+    plain_dns(const upstream::options &opts, const upstream_factory_config &config);
 
     ~plain_dns() override = default;
 
+private:
+    err_string init() override;
     exchange_result exchange(ldns_pkt *request_pkt) override;
 
-private:
     /** Prefer TCP */
     bool m_prefer_tcp;
     /** DNS server socket address */

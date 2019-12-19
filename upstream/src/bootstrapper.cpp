@@ -34,7 +34,7 @@ ag::bootstrapper::resolve_result ag::bootstrapper::resolve() {
         const resolver_ptr &resolver = m_resolvers[curr];
         utils::timer single_resolve_timer;
         milliseconds try_timeout = std::max(timeout / 2, resolver::MIN_TIMEOUT);
-        resolver::result result = resolver->resolve(m_server_name, m_server_port, try_timeout, m_ipv6_avail);
+        resolver::result result = resolver->resolve(m_server_name, m_server_port, try_timeout);
         if (result.error.has_value()) {
             dbglog(m_log, "Failed to resolve host '{}': {}", m_server_name, result.error.value());
             std::rotate(m_resolvers.begin() + curr, m_resolvers.begin() + curr + 1, m_resolvers.end());
@@ -88,7 +88,12 @@ static std::vector<ag::resolver_ptr> create_resolvers(const ag::logger &log, con
     resolvers.reserve(p.bootstrap.size());
 
     for (const std::string &server : p.bootstrap) {
-        resolvers.push_back(std::make_unique<ag::resolver>(server, p.upstream_config));
+        ag::resolver_ptr resolver = std::make_unique<ag::resolver>(server, p.upstream_config);
+        if (ag::err_string err = resolver->init(); !err.has_value()) {
+            resolvers.emplace_back(std::move(resolver));
+        } else {
+            warnlog(log, "Failed to create resolver '{}': {}", server, err.value());
+        }
     }
 
     if (p.bootstrap.empty() && !ag::socket_address(p.address_string).valid()) {
@@ -101,8 +106,6 @@ static std::vector<ag::resolver_ptr> create_resolvers(const ag::logger &log, con
 ag::bootstrapper::bootstrapper(const params &p)
         : m_log(create_logger(AG_FMT("Bootstrapper {}", p.address_string)))
         , m_timeout(p.timeout)
-        , m_round_robin_num{0}
-        , m_ipv6_avail(p.upstream_config.ipv6_available)
         , m_resolvers(create_resolvers(m_log, p))
 {
     auto[host, port] = utils::split_host_port(p.address_string);
@@ -111,6 +114,14 @@ ag::bootstrapper::bootstrapper(const params &p)
         m_server_port = p.default_port;
     }
     m_server_name = host;
+}
+
+ag::err_string ag::bootstrapper::init() {
+    if (m_resolvers.empty() && !socket_address(m_server_name).valid()) {
+        return "Failed to create any resolver";
+    }
+
+    return std::nullopt;
 }
 
 std::string ag::bootstrapper::address() const {

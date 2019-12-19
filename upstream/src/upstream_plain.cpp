@@ -4,16 +4,24 @@
 using std::chrono::milliseconds;
 using std::chrono::duration_cast;
 
-ag::plain_dns::plain_dns(const ag::upstream::options &opts)
-        : upstream(opts)
-        , m_prefer_tcp(ag::utils::starts_with(opts.address, TCP_SCHEME))
+ag::plain_dns::plain_dns(const upstream::options &opts, const upstream_factory_config &config)
+        : upstream(opts, config)
+        , m_prefer_tcp(utils::starts_with(opts.address, TCP_SCHEME))
         , m_socket_address(m_prefer_tcp ? &opts.address[TCP_SCHEME.length()] : opts.address)
         , m_pool(event_loop::create(), m_socket_address)
 {
     if (m_socket_address.port() == 0) {
         auto addr = m_socket_address.addr();
-        m_socket_address = ag::socket_address({addr.data(), addr.size()}, DEFAULT_PORT);
+        m_socket_address = socket_address({addr.data(), addr.size()}, DEFAULT_PORT);
     }
+}
+
+ag::err_string ag::plain_dns::init() {
+    if (!m_socket_address.valid()) {
+        return AG_FMT("Passed server address is not valid: {}", this->opts.address);
+    }
+
+    return std::nullopt;
 }
 
 ag::plain_dns::exchange_result ag::plain_dns::exchange(ldns_pkt *request_pkt) {

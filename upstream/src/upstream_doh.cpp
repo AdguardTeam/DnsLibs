@@ -140,14 +140,14 @@ int dns_over_https::verify_callback(X509_STORE_CTX *ctx, void *arg) {
     dns_over_https::query_handle *handle = (dns_over_https::query_handle *)arg;
     dns_over_https *upstream = handle->upstream;
 
-    if (upstream->cert_verifier == nullptr) {
+    if (upstream->config.cert_verifier == nullptr) {
         std::string err = "Cannot verify certificate due to verifier is not set";
         dbglog_id(handle, "{}", err);
         handle->error = std::move(err);
         return 0;
     }
 
-    if (err_string err = upstream->cert_verifier->verify(ctx, get_host_name(upstream->opts.address));
+    if (err_string err = upstream->config.cert_verifier->verify(ctx, get_host_name(upstream->opts.address));
             err.has_value()) {
         dbglog_id(handle, "Failed to verify certificate: {}", err.value());
         handle->error = std::move(err);
@@ -192,12 +192,6 @@ static curl_slist_ptr create_resolved_hosts_list(std::string_view url, const ip_
     return curl_slist_ptr(curl_slist_append(nullptr, entry.c_str()));
 }
 
-static bootstrapper_ptr create_bootstrapper(const upstream::options &opts, const upstream_factory::config &config) {
-    return std::make_unique<bootstrapper>(
-        bootstrapper::params{ get_host_port(opts.address), dns_over_https::DEFAULT_PORT,
-                              opts.bootstrap, opts.timeout, config });
-}
-
 curl_pool_ptr dns_over_https::create_pool() const {
     CURLM *pool = curl_multi_init();
     if (pool == nullptr) {
@@ -218,27 +212,49 @@ curl_pool_ptr dns_over_https::create_pool() const {
     return pool_holder;
 }
 
-dns_over_https::dns_over_https(const upstream::options &opts, const upstream_factory::config &config)
-    : upstream(opts)
-    , cert_verifier(config.cert_verifier)
+dns_over_https::dns_over_https(const upstream::options &opts, const upstream_factory_config &config)
+    : upstream(opts, config)
 {
     static const initializer ensure_initialized;
+}
 
-    this->resolved = create_resolved_hosts_list(opts.address, opts.resolved_server_ip);
+err_string dns_over_https::init() {
+    this->resolved = create_resolved_hosts_list(this->opts.address, this->opts.resolved_server_ip);
 
     curl_slist *headers;
     if (nullptr == (headers = curl_slist_append(nullptr, "Content-Type: application/dns-message"))
             || nullptr == (headers = curl_slist_append(headers, "Accept: application/dns-message"))) {
-        errlog(log, "Failed to create http headers for request");
+        std::string err = "Failed to create http headers for request";
+        errlog(log, "{}", err);
+        return err;
     }
     this->request_headers.reset(headers);
 
     this->pool.handle = create_pool();
-    assert(this->pool.handle != nullptr);
+    if (this->pool.handle == nullptr) {
+        return "Failed to create CURL handle pool";
+    }
 
     if (this->resolved == nullptr) {
-        this->bootstrapper = create_bootstrapper(opts, config);
+        if (!this->opts.bootstrap.empty() || socket_address(get_host_name(this->opts.address)).valid()) {
+            bootstrapper_ptr bootstrapper = std::make_unique<ag::bootstrapper>(
+                bootstrapper::params{ get_host_port(opts.address), dns_over_https::DEFAULT_PORT,
+                    opts.bootstrap, opts.timeout, config });
+            if (err_string err = bootstrapper->init(); !err.has_value()) {
+                this->bootstrapper = std::move(bootstrapper);
+            } else {
+                std::string err_message = AG_FMT("Failed to create bootstrapper: {}", err.value());
+                errlog(log, "{}", err_message);
+                return err_message;
+            }
+        } else {
+            constexpr std::string_view err = "At least one the following should be true: server address is specified, url contains valid server address as a host name, bootstrap server is specified";
+            errlog(log, "{}", err);
+            return std::string(err);
+        }
     }
+
+    return std::nullopt;
 }
 
 void dns_over_https::stop(int, short, void *arg) {

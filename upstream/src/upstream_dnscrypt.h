@@ -20,9 +20,10 @@ public:
     upstream_dnscrypt &operator=(const upstream_dnscrypt &) = delete;
     ~upstream_dnscrypt() override;
 
+private:
+    err_string init() override;
     exchange_result exchange(ldns_pkt *request_pkt) override;
 
-private:
     struct impl;
     using impl_ptr = std::unique_ptr<impl>;
 

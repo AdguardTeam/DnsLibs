@@ -90,11 +90,21 @@ static std::string get_server_address(const logger &log, std::string_view addres
 }
 
 
-resolver::resolver(std::string_view resolver_address, const upstream_factory::config &upstream_config)
+resolver::resolver(std::string_view resolver_address, const upstream_factory_config &upstream_config)
     : log(create_logger(AG_FMT("Resolver {}", resolver_address)))
     , resolver_address(get_server_address(this->log, resolver_address))
     , upstream_factory(upstream_config)
 {}
+
+err_string resolver::init() {
+    if (this->resolver_address.empty()) {
+        constexpr std::string_view err = "Failed to get server address";
+        errlog(log, "{}", err);
+        return std::string(err);
+    }
+
+    return std::nullopt;
+}
 
 static ldns_pkt_ptr create_req(std::string_view domain_name, ldns_enum_rr_type rr_type) {
     return ldns_pkt_ptr(ldns_pkt_query_new(
@@ -122,7 +132,7 @@ static std::vector<socket_address> socket_address_from_reply(const logger &log, 
     return addrs;
 }
 
-resolver::result resolver::resolve(std::string_view host, int port, milliseconds timeout, bool ipv6_avail) const {
+resolver::result resolver::resolve(std::string_view host, int port, milliseconds timeout) const {
     tracelog(log, "Resolve {}:{}", host, port);
     socket_address numeric_ip(utils::join_host_port(host, fmt::to_string(port)));
     if (numeric_ip.valid()) {
@@ -159,7 +169,7 @@ resolver::result resolver::resolve(std::string_view host, int port, milliseconds
             host, error.value(), timer.elapsed<milliseconds>());
     }
 
-    if (ipv6_avail && timeout > MIN_TIMEOUT) {
+    if (upstream->config.ipv6_available && timeout > MIN_TIMEOUT) {
         tracelog(log, "Trying to get AAAA record for {}", host);
 
         ldns_pkt_ptr aaaa_req = create_req(host, LDNS_RR_TYPE_AAAA);

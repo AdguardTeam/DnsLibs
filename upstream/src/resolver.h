@@ -30,16 +30,22 @@ public:
      * @param resolver_address Plain DNS address
      * @param upstream_config Upstream factory configuration for resolving upstreams creation
      */
-    resolver(std::string_view resolver_address, const upstream_factory::config &upstream_config);
+    resolver(std::string_view resolver_address, const upstream_factory_config &upstream_config);
+
+    /**
+     * Initialize resolver
+     * @return non-nullopt if something went wrong
+     */
+    err_string init();
+
     /**
      * Resolves host to list of socket addresses with given port attached
      * @param host Destination host to resolve
      * @param port Destination port to place into socket addresses
      * @param timeout Resolve timeout
-     * @param ipv6_avail If false, DNS servers will not be queried for AAAA
      * @return See `resolver::result` structure
      */
-    result resolve(std::string_view host, int port, std::chrono::milliseconds timeout, bool ipv6_avail) const;
+    result resolve(std::string_view host, int port, std::chrono::milliseconds timeout) const;
 private:
     /** Logger */
     logger log;

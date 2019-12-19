@@ -133,6 +133,32 @@ static void parallel_test(const T &data) {
     });
 }
 
+TEST_F(upstream_test, wrong_upstream_options) {
+    static const ag::upstream::options OPTIONS[] = {
+        // malformed ip address
+        { "8..8.8:53" },
+        { "8.a.8.8:53" },
+        { "8.8.8.8:-1" },
+        { "[::1::]" },
+        { "tcp://8..8.8:53" },
+
+        // no bootstrapper and resolved server address
+        { "https://example.com" },
+        { "tls://one.one.one.one" },
+
+        // non-plain DNS bootstrapper has no explicit or malformed ip address
+        { "https://example.com", { "https://example.com" } },
+        { "https://example.com", { "1..1.1" } },
+        { "tls://one.one.one.one", { "https://example.com" } },
+        { "tls://one.one.one.one", { "1..1.1" } },
+    };
+
+    for (const ag::upstream::options &options : OPTIONS) {
+        ag::upstream_factory::create_result r = create_upstream(options);
+        ASSERT_TRUE(r.error.has_value()) << options.address;
+    }
+}
+
 TEST_F(upstream_test, test_bootstrap_timeout) {
     using namespace std::chrono_literals;
     using namespace concat_err_string;

@@ -40,13 +40,14 @@ public:
      * @param opts upstream settings
      * @param config factory configuration
      */
-    dns_over_https(const options &opts, const ag::upstream_factory::config &config);
+    dns_over_https(const options &opts, const upstream_factory_config &config);
     ~dns_over_https() override;
 
     struct query_handle;
     struct socket_handle;
 
 private:
+    err_string init() override;
     exchange_result exchange(ldns_pkt *) override;
 
     std::unique_ptr<query_handle> create_handle(ldns_pkt *request, std::chrono::milliseconds timeout) const;
@@ -77,7 +78,6 @@ private:
     curl_slist_ptr resolved = nullptr;
     curl_slist_ptr request_headers = nullptr;
     bootstrapper_ptr bootstrapper;
-    const certificate_verifier *cert_verifier = nullptr;
     std::mutex guard;
 
     struct worker_descriptor {

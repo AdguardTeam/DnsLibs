@@ -11,7 +11,37 @@
 using std::chrono::milliseconds;
 using std::chrono::duration_cast;
 
-ag::connection_pool::get_result ag::tls_pool::get() {
+
+/**
+ * Pool of TLS connections
+ */
+class ag::dns_over_tls::tls_pool : public ag::dns_framed_pool {
+public:
+    /**
+     * Create TLS pool
+     * @param loop Event loop
+     * @param upstream Parent upstream
+     * @param bootstrapper Bootstrapper (used to resolve original address)
+     */
+    tls_pool(event_loop_ptr loop, dns_over_tls *upstream, bootstrapper_ptr &&bootstrapper)
+            : dns_framed_pool(std::move(loop)), m_upstream(upstream), m_bootstrapper(std::move(bootstrapper)) {
+    }
+
+private:
+    get_result get() override;
+
+    /** Parent upstream */
+    dns_over_tls *m_upstream = nullptr;
+    /** Bootstrapper for server address */
+    bootstrapper_ptr m_bootstrapper;
+
+    connection::read_result perform_request_inner(uint8_view buf, std::chrono::milliseconds timeout) override;
+
+    get_result create();
+};
+
+
+ag::connection_pool::get_result ag::dns_over_tls::tls_pool::get() {
     std::scoped_lock l(m_mutex);
     if (!m_connections.empty()) {
         return {*m_connections.rbegin(), std::chrono::seconds(0), std::nullopt};
@@ -19,7 +49,7 @@ ag::connection_pool::get_result ag::tls_pool::get() {
     return create();
 }
 
-ag::connection_pool::get_result ag::tls_pool::create() {
+ag::connection_pool::get_result ag::dns_over_tls::tls_pool::create() {
     static constexpr utils::make_error<ag::connection_pool::get_result> make_error;
 
     bootstrapper::resolve_result resolve_result = m_bootstrapper->get();
@@ -46,7 +76,7 @@ ag::connection_pool::get_result ag::tls_pool::create() {
     return { std::move(connection), resolve_result.time_elapsed, std::nullopt };
 }
 
-ag::connection::read_result ag::tls_pool::perform_request_inner(uint8_view buf, std::chrono::milliseconds timeout) {
+ag::connection::read_result ag::dns_over_tls::tls_pool::perform_request_inner(uint8_view buf, std::chrono::milliseconds timeout) {
     auto[conn, elapsed, err] = get();
     if (!conn) {
         return { {}, std::move(err) };
@@ -107,7 +137,7 @@ static std::string_view get_host_name(std::string_view url) {
 }
 
 static ag::bootstrapper_ptr create_bootstrapper(const ag::logger &log, const ag::upstream::options &opts,
-        const ag::upstream_factory::config &config) {
+        const ag::upstream_factory_config &config) {
     std::string_view address;
 
     std::optional<std::string> resolved = get_resolved_ip(log, opts.resolved_server_ip);
@@ -122,23 +152,44 @@ static ag::bootstrapper_ptr create_bootstrapper(const ag::logger &log, const ag:
                                   opts.bootstrap, opts.timeout, config });
 }
 
-ag::dns_over_tls::dns_over_tls(const ag::upstream::options &opts, const ag::upstream_factory::config &config)
-        : upstream(opts)
-        , m_pool(event_loop::create(), this, create_bootstrapper(m_log, opts, config))
-        , m_verifier(config.cert_verifier)
+ag::dns_over_tls::dns_over_tls(const upstream::options &opts, const upstream_factory_config &config)
+        : upstream(opts, config)
         , m_server_name(get_host_name(opts.address))
 {}
+
+ag::err_string ag::dns_over_tls::init() {
+    if (this->opts.bootstrap.empty()
+            && std::holds_alternative<std::monostate>(this->opts.resolved_server_ip)
+            && !socket_address(get_host_name(this->opts.address)).valid()) {
+        std::string err = "At least one the following should be true: server address is specified, url contains valid server address as a host name, bootstrap server is specified";
+        errlog(m_log, "{}", err);
+        return err;
+    }
+
+    bootstrapper_ptr bootstrapper = create_bootstrapper(m_log, this->opts, this->config);
+    if (err_string err = bootstrapper->init(); err.has_value()) {
+        std::string err_message = AG_FMT("Failed to create bootstrapper: {}", err.value());
+        errlog(m_log, "{}", err_message);
+        return err_message;
+    }
+
+    m_pool = std::make_unique<tls_pool>(event_loop::create(), this, std::move(bootstrapper));
+
+    return std::nullopt;
+}
+
+ag::dns_over_tls::~dns_over_tls() = default;
 
 int ag::dns_over_tls::ssl_verify_callback(int ok, X509_STORE_CTX *ctx) {
     SSL *ssl = (SSL *)X509_STORE_CTX_get_ex_data(ctx, SSL_get_ex_data_X509_STORE_CTX_idx());
     ag::dns_over_tls *upstream = (ag::dns_over_tls *)SSL_get_app_data(ssl);
 
-    if (upstream->m_verifier == nullptr) {
+    if (upstream->config.cert_verifier == nullptr) {
         dbglog(upstream->m_log, "Cannot verify certificate due to verifier is not set");
         return 0;
     }
 
-    if (err_string err = upstream->m_verifier->verify(ctx, SSL_get_servername(ssl, SSL_get_servername_type(ssl)));
+    if (err_string err = upstream->config.cert_verifier->verify(ctx, SSL_get_servername(ssl, SSL_get_servername_type(ssl)));
             err.has_value()) {
         dbglog(upstream->m_log, "Failed to verify certificate: {}", err.value());
         return 0;
@@ -161,7 +212,7 @@ ag::dns_over_tls::exchange_result ag::dns_over_tls::exchange(ldns_pkt *request_p
     }
 
     ag::uint8_view buf{ ldns_buffer_begin(buffer.get()), ldns_buffer_position(buffer.get()) };
-    connection::read_result result = m_pool.perform_request(buf, this->opts.timeout);
+    connection::read_result result = m_pool->perform_request(buf, this->opts.timeout);
     if (result.error.has_value()) {
         return { nullptr, std::move(result.error) };
     }

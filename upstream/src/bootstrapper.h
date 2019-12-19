@@ -20,10 +20,16 @@ public:
         int default_port; // default to be used if not specified in `address_string`
         const std::vector<std::string> &bootstrap; // list of the resolving servers
         std::chrono::milliseconds timeout; // resolve timeout
-        const upstream_factory::config &upstream_config; // configuration of the upstream factory which creates resolving upstream
+        const upstream_factory_config &upstream_config; // configuration of the upstream factory which creates resolving upstream
     };
 
     explicit bootstrapper(const params &p);
+
+    /**
+     * Initialize bootstrapper
+     * @return non-nullopt if something went wrong
+     */
+    err_string init();
 
     struct resolve_result {
         std::vector<socket_address> addresses; // not empty resolved addresses list in case of success
@@ -66,12 +72,8 @@ private:
     std::vector<socket_address> m_resolved_cache;
     /** Resolved addresses cache mutex */
     std::mutex m_resolved_cache_mutex;
-    /** Round robin number for choosing upstream */
-    std::atomic_int m_round_robin_num;
     /** List of resolvers to use */
     std::vector<resolver_ptr> m_resolvers;
-    /** Is IPv6 available in system */
-    bool m_ipv6_avail;
 };
 
 using bootstrapper_ptr = std::unique_ptr<bootstrapper>;

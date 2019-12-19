@@ -19,6 +19,14 @@ using upstream_ptr = std::unique_ptr<upstream>;
 using ldns_pkt_ptr = std::unique_ptr<ldns_pkt, ag::ftor<&ldns_pkt_free>>;
 
 /**
+ * Upstream factory configuration
+ */
+struct upstream_factory_config {
+    const certificate_verifier *cert_verifier = nullptr;
+    bool ipv6_available = true;
+};
+
+/**
  * Upstream is interface for handling DNS requests to upstream servers
  */
 class upstream {
@@ -55,9 +63,15 @@ public:
         ip_address_variant resolved_server_ip;
     };
 
-    explicit upstream(const options &opts) : opts(opts) {}
+    upstream(const options &opts, const upstream_factory_config &config) : opts(opts), config(config) {}
 
     virtual ~upstream() = default;
+
+    /**
+     * Initialize upstream
+     * @return non-nullopt string in case of error
+     */
+    virtual err_string init() = 0;
 
     /**
      * Do DNS request
@@ -68,6 +82,8 @@ public:
 
     /** Upstream options */
     const upstream::options opts;
+    /** Upstream factory configuration */
+    const upstream_factory_config config;
 };
 
 /**
@@ -75,20 +91,12 @@ public:
  */
 class upstream_factory {
 public:
-    /**
-     * The factory configuration
-     */
-    struct config {
-        const certificate_verifier *cert_verifier = nullptr;
-        bool ipv6_available = true; // Passed to the bootstrappers
-    };
-
     struct create_result {
         upstream_ptr upstream; // created upstream in case of success
         err_string error; // non-nullopt in case of error
     };
 
-    explicit upstream_factory(config cfg);
+    explicit upstream_factory(upstream_factory_config cfg);
     ~upstream_factory();
 
     /**

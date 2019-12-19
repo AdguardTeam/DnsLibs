@@ -20,10 +20,14 @@ struct ag::upstream_dnscrypt::impl {
 };
 
 ag::upstream_dnscrypt::upstream_dnscrypt(server_stamp &&stamp, std::chrono::milliseconds timeout)
-    : upstream({ stamp.server_addr_str, {}, timeout })
+    : upstream({ stamp.server_addr_str, {}, timeout }, {})
     , m_stamp(std::move(stamp))
 {
     static const initializer ensure_initialized;
+}
+
+ag::err_string ag::upstream_dnscrypt::init() {
+    return std::nullopt;
 }
 
 ag::upstream_dnscrypt::~upstream_dnscrypt() = default;
