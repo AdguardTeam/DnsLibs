@@ -310,7 +310,7 @@ bool filter::impl::load_line(uint32_t file_idx, std::string_view line, void *arg
 
 int filter::load(const ag::dnsfilter::filter_params &p) {
     size_t last_slash = p.path.rfind('/');
-    std::string logger_name = ag::utils::fmt_string("%" PRIu32 "::%s"
+    std::string logger_name = AG_FMT("{}::{}"
         , p.id, (last_slash != p.path.npos) ? &p.path[last_slash + 1] : p.path.c_str());
     this->pimpl->log = ag::create_logger(logger_name);
 
@@ -391,12 +391,7 @@ bool filter::impl::match_against_line(match_arg &match, std::string_view line) {
         assert(rule->matching_parts.size() > 0);
         if (match_shortcuts(rule->matching_parts, match.ctx.host)) {
             ag::regex re(rule_utils::get_regex(rule.value()));
-            for (const std::string_view &subdomain : match.ctx.subdomains) {
-                if (re.match(subdomain)) {
-                    matched = true;
-                    break;
-                }
-            }
+            matched = re.match(match.ctx.host);
         }
         break;
     case rule_utils::rule::MMID_REGEX: {
@@ -493,10 +488,8 @@ void filter::impl::search_in_leftovers(match_arg &match) const {
         }
 
         const std::optional<ag::regex> &re = entry.regex;
-        for (const std::string_view &domain : match.ctx.subdomains) {
-            if (!re.has_value() || re->match(domain)) {
-                match_by_file_position(match, entry.file_idx);
-            }
+        if (!re.has_value() || re->match(match.ctx.host)) {
+            match_by_file_position(match, entry.file_idx);
         }
     }
 }

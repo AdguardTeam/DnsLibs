@@ -184,6 +184,8 @@ TEST_F(dnsfilter_test, basic_rules_match) {
             { { "example21." }, "eexample21.org", true, },
             { { "example22.org|" }, "sub.example22.org", true, },
             { { "example23.org^" }, "sub.example23.org", true, },
+            { { "||example24.org" }, "sub.example24.org", true, },
+            { { "||example25.org|" }, "sub.example25.org", true, },
         };
 
     for (const test_data &entry : TEST_DATA) {
@@ -227,7 +229,9 @@ TEST_F(dnsfilter_test, basic_rules_no_match) {
             { "|example2.org", "eexample2.org", },
             { "|example3.org|", "eexample3.orgg", },
             { "example4.org^", "example4.orgg", },
-            { "|https://example.com^", "https.test.com", },
+            { "example5.org|", "example5.org.com", },
+            { "|example6.org", "sub.example6.org", },
+            { "||example7.org", "eeexample7.org", },
         };
 
     for (const test_data &entry : TEST_DATA) {

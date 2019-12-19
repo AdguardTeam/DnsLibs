@@ -17,8 +17,6 @@ static constexpr std::array<std::string_view, 8> SKIPPABLE_PREFIXES =
     { "https", "http", "http*", "ws", "wss", "ws*", ":", "/", };
 static constexpr std::array<std::string_view, 1> SKIPPABLE_SUFFIXES =
     { "/", };
-static constexpr std::string_view SPECIAL_PREFIXES[] =
-    { "||", "|" };
 static constexpr std::string_view SPECIAL_SUFFIXES[] =
     { "|", "^" };
 
@@ -52,6 +50,8 @@ enum match_pattern_mode {
     MPM_NONE = 0,
     MPM_LINE_START_ASSERTED = 1 << 0, // `ample.org` should not match `example.org` (e.g. `|ample.org`)
     MPM_LINE_END_ASSERTED = 1 << 1, // `exampl` should not match `example.org` (e.g. `exampl|`)
+    MPM_DOMAIN_START_ASSERTED = 1 << 2, // `example.org` should not match `eeexample.org`,
+                                        // but should match `sub.example.org` (e.g. `||example.org`)
 };
 
 struct match_info {
@@ -214,23 +214,26 @@ static inline bool remove_skippable_suffixes(std::string_view &rule, bool is_reg
     return removed;
 }
 
-static inline bool remove_special_prefixes(std::string_view &rule) {
-    bool r = false;
-    for (std::string_view prefix : SPECIAL_PREFIXES) {
-        if (ag::utils::starts_with(rule, prefix)) {
-            rule.remove_prefix(prefix.length());
-            r = true;
-        }
+static inline int remove_special_prefixes(std::string_view &rule) {
+    if (ag::utils::starts_with(rule, "||")) {
+        rule.remove_prefix(2);
+        return MPM_DOMAIN_START_ASSERTED;
     }
-    return r;
+
+    if (rule.front() == '|') {
+        rule.remove_prefix(1);
+        return MPM_LINE_START_ASSERTED;
+    }
+
+    return MPM_NONE;
 }
 
-static inline bool remove_special_suffixes(std::string_view &rule) {
-    bool r = false;
+static inline int remove_special_suffixes(std::string_view &rule) {
+    int r = MPM_NONE;
     for (std::string_view suffix : SPECIAL_SUFFIXES) {
         if (ag::utils::ends_with(rule, suffix)) {
             rule.remove_suffix(suffix.length());
-            r = true;
+            r = MPM_LINE_END_ASSERTED;
         }
     }
     return r;
@@ -243,9 +246,7 @@ static match_info extract_match_info(std::string_view rule) {
     // special prefixes come before skippable ones (e.g. `||http://example.org`)
     // so for the first we should check special ones
     if (!info.is_regex) {
-        if (remove_special_prefixes(info.text)) {
-            info.pattern_mode |= MPM_LINE_START_ASSERTED;
-        }
+        info.pattern_mode |= remove_special_prefixes(info.text);
     }
 
     bool has_skippable_prefix = remove_skippable_prefixes(info.text, info.is_regex);
@@ -254,21 +255,23 @@ static match_info extract_match_info(std::string_view rule) {
     bool has_skippable_suffix = remove_skippable_suffixes(info.text, info.is_regex);
 
     if (!info.is_regex) {
-        if (remove_special_suffixes(info.text)) {
-            info.pattern_mode |= MPM_LINE_END_ASSERTED;
-        }
+        info.pattern_mode |= remove_special_suffixes(info.text);
     }
 
-
+    // check that rule matches exact domain though it has some special characters
     if (!info.is_regex) {
-        // check that rule matches exact domain though it has some special characters
-        if (info.text.find('*') == info.text.npos
-                    // 1) rule is like `||example.org^`
-                && (((info.pattern_mode & MPM_LINE_START_ASSERTED) && (info.pattern_mode & MPM_LINE_END_ASSERTED))
-                    // 2) `://example.org^`
-                    || (has_skippable_prefix && (info.pattern_mode & MPM_LINE_END_ASSERTED))
-                    // 3) `||example.org:8080`
-                    || (has_skippable_suffix && (info.pattern_mode & MPM_LINE_START_ASSERTED)))) {
+        // rule is like:
+        // 1) `||example.org^`
+        // 2) `://example.org^`
+        // 3) `||example.org:8080`
+        bool domain_start_asserted = has_skippable_prefix
+            || (info.pattern_mode & MPM_LINE_START_ASSERTED)
+            || (info.pattern_mode & MPM_DOMAIN_START_ASSERTED);
+
+        bool domain_end_asserted = has_skippable_suffix
+            || (info.pattern_mode & MPM_LINE_END_ASSERTED);
+
+        if (info.text.find('*') == info.text.npos && domain_start_asserted && domain_end_asserted) {
             info.pattern_mode = MPM_NONE;
         }
     }
@@ -392,12 +395,13 @@ std::string rule_utils::get_regex(const rule &r) {
         return std::string(info.text);
     }
 
-    bool assert_start = info.pattern_mode & MPM_LINE_START_ASSERTED;
+    bool assert_line_start = info.pattern_mode & MPM_LINE_START_ASSERTED;
+    bool assert_domain_start = info.pattern_mode & MPM_DOMAIN_START_ASSERTED;
     bool assert_end = info.pattern_mode & MPM_LINE_END_ASSERTED;
 
-    std::string re = ag::utils::fmt_string("%s%.*s%s"
-            , assert_start ? "^" : ""
-            , (int)info.text.length(), info.text.data()
+    std::string re = AG_FMT("{}{}{}"
+            , assert_line_start ? "^" : (assert_domain_start ? "^(*.)?" : "")
+            , info.text
             , assert_end ? "$" : "");
     size_t n = std::count_if(re.begin(), re.end(), [] (int ch) { return ch == '*' || ch == '.'; });
     if (n > 0) {
@@ -437,6 +441,5 @@ std::string rule_utils::get_text_without_badfilter(const ag::dnsfilter::rule &r)
         suffix.remove_prefix(1);
     }
 
-    return ag::utils::fmt_string("%.*s%.*s",
-        (int)prefix.length(), prefix.data(), (int)suffix.length(), suffix.data());
+    return AG_FMT("{}{}", prefix, suffix);
 }
