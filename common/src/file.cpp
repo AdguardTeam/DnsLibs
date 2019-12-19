@@ -94,14 +94,21 @@ int ag::file::get_size(const handle f) {
 #endif
 
 int ag::file::for_each_line(const handle f, line_action action, void *arg) {
-    static constexpr size_t CHUNK_SIZE = 1 * 1024 * 1024;
-    std::vector<char> buffer(CHUNK_SIZE);
+    static constexpr size_t MAX_CHUNK_SIZE = 64 * 1024;
+
+    int file_size = file::get_size(f);
+    if (file_size < 0) {
+        return -1;
+    }
+
+    size_t chunk_size = std::min(MAX_CHUNK_SIZE, (size_t)file_size);
+    std::vector<char> buffer(chunk_size);
 
     std::string_view line;
     size_t buffer_offset = 0;
     int r;
     size_t file_idx = 0;
-    while (0 < (r = ag::file::read(f, &buffer[buffer_offset], CHUNK_SIZE - buffer_offset))) {
+    while (0 < (r = file::read(f, &buffer[buffer_offset], chunk_size - buffer_offset))) {
         int from = 0;
         for (int i = 0; i < r; ++i) {
             int c = buffer[i];
@@ -111,16 +118,21 @@ int ag::file::for_each_line(const handle f, line_action action, void *arg) {
 
             size_t line_length = i - from;
             line = { &buffer[from], line_length };
-            ag::utils::trim(line);
+            utils::trim(line);
             if (!action(file_idx + from, line, arg)) {
                 return 0;
             }
             from = i + 1;
         }
 
-        buffer_offset = CHUNK_SIZE - from;
+        buffer_offset = chunk_size - from;
         file_idx += from;
         std::memmove(&buffer[0], &buffer[from], buffer_offset);
+    }
+
+    if ((size_t)(file_size - 1) > file_idx) {
+        line = { &buffer[0], file_size - file_idx };
+        action(file_idx, line, arg);
     }
 
     return r;
@@ -130,9 +142,13 @@ std::optional<std::string> ag::file::read_line(const handle f, size_t pos) {
     static constexpr size_t CHUNK_SIZE = 4 * 1024;
     std::vector<char> buffer(CHUNK_SIZE);
 
+    if (0 > file::set_position(f, pos)) {
+        return std::nullopt;
+    }
+
     std::string line;
     int r;
-    while (0 < (r = ag::file::pread(f, &buffer[0], CHUNK_SIZE, pos))) {
+    while (0 < (r = file::read(f, &buffer[0], CHUNK_SIZE))) {
         int from = 0;
         int i;
         for (i = 0; i < r; ++i) {
@@ -148,10 +164,9 @@ std::optional<std::string> ag::file::read_line(const handle f, size_t pos) {
             break;
         } else {
             line.append(&buffer[0], r);
-            set_position(f, pos + r);
         }
     }
 
-    ag::utils::trim(line);
-    return std::make_optional(std::move(line));
+    utils::trim(line);
+    return line;
 }
