@@ -107,29 +107,6 @@ std::array<std::string_view, 2> ag::utils::rsplit2_by(std::string_view str, int 
     return split2(str, delim, true);
 }
 
-std::string ag::utils::fmt_string(const char *fmt, ...) {
-    va_list va;
-    va_start(va, fmt);
-    int r = vsnprintf(nullptr, 0, fmt, va);
-    va_end(va);
-    if (r < 0) {
-        return {};
-    }
-
-    std::string s;
-    s.resize(r + 1);
-
-    va_start(va, fmt);
-    r = vsnprintf(&s[0], s.capacity(), fmt, va);
-    va_end(va);
-    if (r < 0) {
-        return {};
-    }
-    s.resize(r);
-
-    return s;
-}
-
 bool ag::utils::is_valid_ip4(std::string_view str) {
     if (str.end() != std::find_if(str.begin(), str.end(),
             [] (int ch) -> bool { return !(std::isdigit(ch) || ch == '.'); })) {

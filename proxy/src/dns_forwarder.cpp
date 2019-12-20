@@ -115,7 +115,7 @@ static std::string get_mbox(const ldns_pkt *request) {
     const ldns_rr *question = ldns_rr_list_rr(ldns_pkt_question(request), 0);
 
     char *zone = ldns_rdf2str(ldns_rr_owner(question));
-    std::string mbox = utils::fmt_string("hostmaster.%s",
+    std::string mbox = AG_FMT("hostmaster.{}",
         (zone != nullptr && strlen(zone) > 0 && zone[0] != '.') ? zone : "");
     free(zone);
 
