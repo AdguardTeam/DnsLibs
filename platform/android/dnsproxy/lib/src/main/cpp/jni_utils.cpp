@@ -46,9 +46,8 @@ void ag::jni_utils::iterate(JNIEnv *env,
 void ag::jni_utils::visit_string(JNIEnv *env,
                                  jobject string,
                                  const std::function<void(const char *, jsize)> &f) {
-
-    assert(env->IsInstanceOf(string, m_jclasses.string.get()));
     auto str = env->GetStringUTFChars((jstring) string, nullptr);
+    assert(str != nullptr);
     auto len = env->GetStringUTFLength((jstring) string);
     f(str, len);
     env->ReleaseStringUTFChars((jstring) string, str);

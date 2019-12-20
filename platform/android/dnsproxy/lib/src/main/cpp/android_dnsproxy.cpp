@@ -78,6 +78,19 @@ Java_com_adguard_dnslibs_proxy_DnsProxy_setLogLevel(JNIEnv *env, jclass clazz, j
 
 extern "C"
 JNIEXPORT jboolean JNICALL
+Java_com_adguard_dnslibs_proxy_DnsProxy_isValidRule(JNIEnv *env, jclass clazz, jstring str) {
+    bool result = false;
+
+    ag::jni_utils::visit_string(env, str,
+        [&result] (const char *str, jsize len) {
+            result = ag::dnsfilter::is_valid_rule({ str, (size_t)len });
+        });
+
+    return result;
+}
+
+extern "C"
+JNIEXPORT jboolean JNICALL
 Java_com_adguard_dnslibs_proxy_DnsProxy_init(JNIEnv *env, jobject thiz, jlong native_ptr,
                                              jobject java_settings, jobject java_events) {
 

@@ -28,7 +28,7 @@ public:
     filter &operator=(const filter&) = delete;
 
     /**
-     * @brief      Load rule list
+     * Load rule list
      * @param[in]  params  filter parameters
      * @return     >= 0 if loaded successfully
      *             <0 otherwise
@@ -36,7 +36,7 @@ public:
     int load(const ag::dnsfilter::filter_params &params);
 
     /**
-     * @brief      Match domain against rules
+     * Match domain against rules
      * @param      ctx   match context
      */
     void match(match_context &ctx);

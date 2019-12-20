@@ -194,4 +194,11 @@ typedef void (^logCallback)(const char *msg, int length);
  * @return Response packet payload
  */
 - (NSData *) handlePacket: (NSData *) packet;
+
+/**
+* Check if string is a valid rule
+* @param str string to check
+* @return true if string is a valid rule, false otherwise
+*/
++ (BOOL) isValidRule: (NSString *) str;
 @end

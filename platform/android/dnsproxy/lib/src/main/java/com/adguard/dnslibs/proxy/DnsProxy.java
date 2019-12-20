@@ -248,4 +248,12 @@ public class DnsProxy implements Closeable {
     }
 
     private static native void setLogLevel(int level);
+
+    /**
+     * Check if string is a valid rule
+     * @param str string to check
+     * @return true if string is a valid rule, false otherwise
+     */
+    public static native boolean isValidRule(String str);
+
 }

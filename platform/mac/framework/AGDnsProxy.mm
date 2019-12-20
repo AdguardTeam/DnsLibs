@@ -560,4 +560,9 @@ static std::string getTrustCreationErrorStr(OSStatus status) {
     return create_response_packet(ip_header, udp_header, response);
 }
 
++ (BOOL) isValidRule: (NSString *) str
+{
+    return ag::dnsfilter::is_valid_rule({ [str UTF8String] });
+}
+
 @end

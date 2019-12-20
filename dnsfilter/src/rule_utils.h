@@ -39,14 +39,14 @@ namespace rule_utils {
 
 
     /**
-     * @brief      Check if string is a commentary
+     * Check if string is a commentary
      */
     static inline bool is_comment(std::string_view str) {
         return str[0] == '!' || str[0] == '#';
     }
 
     /**
-     * @brief      Parse rule from given string
+     * Parse rule from given string
      * @param[in]  str   input string
      * @param[in]  log   logger (if null, rule parsing errors won't be logged)
      * @return     A rule if parsed successfully,
@@ -55,14 +55,14 @@ namespace rule_utils {
     std::optional<rule> parse(std::string_view str, ag::logger *log = nullptr);
 
     /**
-     * @brief      Extract a regular expression text from rule
+     * Extract a regular expression text from rule
      * @param[in]  r     rule
      * @return     Regular expression text
      */
     std::string get_regex(const rule &r);
 
     /**
-     * @brief      Generate the rule text without badfilter modifier
+     * Generate the rule text without badfilter modifier
      * @param[in]  r     rule
      * @return     Text without badfilter modifier
      */

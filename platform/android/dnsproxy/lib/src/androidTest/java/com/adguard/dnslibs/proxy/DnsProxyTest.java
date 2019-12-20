@@ -26,6 +26,7 @@ import java.util.concurrent.ThreadLocalRandom;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 
 /**
@@ -248,5 +249,11 @@ public class DnsProxyTest {
     public void testDoH() {
         testCertificateVerification("https://dns.google/dns-query");
         testCertificateVerification("https://dns.cloudflare.com/dns-query");
+    }
+
+    @Test
+    public void testCheckRule() {
+        assertFalse(DnsProxy.isValidRule("||||example"));
+        assertTrue(DnsProxy.isValidRule("||example"));
     }
 }

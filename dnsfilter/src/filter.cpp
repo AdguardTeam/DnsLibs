@@ -147,7 +147,7 @@ void filter::impl::put_in_domain_table(std::string_view domain, uint32_t file_id
         // there is no such domain in non-unique table
         iter = kh_put(hash_to_unique_index, this->unique_domains_table, hash, &ret);
         if (ret < 0) {
-            warnlog(log, "failed to put domain in domains table: {} (rule={})", domain, rule);
+            warnlog(log, "Failed to put domain in domains table: {} (rule={})", domain, rule);
             return;
         }
         already_exists = ret == 0;
@@ -165,13 +165,13 @@ void filter::impl::put_in_domain_table(std::string_view domain, uint32_t file_id
     // create record in non-unique table
     iter = kh_put(hash_to_indexes, this->domains_table, hash, &ret);
     if (ret < 0) {
-        warnlog(log, "failed to put domain in domains table: {} (rule={})", domain, rule);
+        warnlog(log, "Failed to put domain in domains table: {} (rule={})", domain, rule);
         return;
     } else if (ret > 0) {
         // the record is a new one
         std::vector<uint32_t> *positions = new(std::nothrow) std::vector<uint32_t>;
         if (positions == nullptr) {
-            errlog(log, "failed to allocate memory for domains table");
+            errlog(log, "Failed to allocate memory for domains table");
             return;
         }
         kh_value(this->domains_table, iter) = positions;
@@ -189,7 +189,7 @@ void filter::impl::process_string(std::string_view str, uint32_t file_idx) {
     std::optional<rule_utils::rule> rule = rule_utils::parse(str, &log);
     if (!rule.has_value()) {
         if (!str.empty() && !rule_utils::is_comment(str)) {
-            warnlog(log, "failed to parse rule: {}", str);
+            warnlog(log, "Failed to parse rule: {}", str);
         }
         return;
     }
@@ -200,10 +200,10 @@ void filter::impl::process_string(std::string_view str, uint32_t file_idx) {
         int ret;
         khiter_t iter = kh_put(hash_to_unique_index, this->badfilter_table, hash, &ret);
         if (ret < 0) {
-            warnlog(log, "failed to put rule in badfilter table: {}", str);
+            warnlog(log, "Failed to put rule in badfilter table: {}", str);
         } else {
             kh_value(this->badfilter_table, iter) = file_idx;
-            tracelog(log, "rule placed in badfilter table: {}", str);
+            tracelog(log, "Rule placed in badfilter table: {}", str);
         }
         return;
     }
@@ -213,7 +213,7 @@ void filter::impl::process_string(std::string_view str, uint32_t file_idx) {
         for (const std::string &d : rule->matching_parts) {
             put_in_domain_table(d, file_idx, str);
         }
-        tracelog(log, "rule placed in domains table: {}", str);
+        tracelog(log, "Rule placed in domains table: {}", str);
         break;
     case rule_utils::rule::MMID_SHORTCUTS:
     case rule_utils::rule::MMID_SHORTCUTS_AND_REGEX: {
@@ -230,13 +230,13 @@ void filter::impl::process_string(std::string_view str, uint32_t file_idx) {
             int ret;
             khiter_t iter = kh_put(hash_to_indexes, this->shortcuts_table, hash, &ret);
             if (ret < 0) {
-                warnlog(log, "failed to put rule in shortcuts table: {}", str);
+                warnlog(log, "Failed to put rule in shortcuts table: {}", str);
                 return;
             } else if (ret > 0) {
                 // the record is a new one
                 std::vector<uint32_t> *positions = new(std::nothrow) std::vector<uint32_t>;
                 if (positions == nullptr) {
-                    errlog(log, "failed to allocate memory for shortcuts table");
+                    errlog(log, "Failed to allocate memory for shortcuts table");
                     return;
                 }
                 kh_value(this->shortcuts_table, iter) = positions;
@@ -244,7 +244,7 @@ void filter::impl::process_string(std::string_view str, uint32_t file_idx) {
             std::vector<uint32_t> *positions = kh_value(this->shortcuts_table, iter);
             positions->push_back(file_idx);
 
-            tracelog(log, "rule placed in shortcuts table: {} ({})", str, hash);
+            tracelog(log, "Rule placed in shortcuts table: {} ({})", str, hash);
             break;
         }
         [[fallthrough]];
@@ -257,7 +257,7 @@ void filter::impl::process_string(std::string_view str, uint32_t file_idx) {
             : std::make_optional(ag::regex(rule_utils::get_regex(rule.value())));
         assert(!shortcuts.empty() || re.has_value());
         this->leftovers_table.emplace_back(leftover_entry{ std::move(shortcuts), std::move(re), file_idx });
-        tracelog(log, "rule placed in leftovers table: {}", str);
+        tracelog(log, "Rule placed in leftovers table: {}", str);
         break;
     }
     default:
@@ -316,7 +316,7 @@ int filter::load(const ag::dnsfilter::filter_params &p) {
 
     ag::file::handle fd = ag::file::open(p.path.data(), ag::file::RDONLY);
     if (!ag::file::is_valid(fd)) {
-        errlog(pimpl->log, "failed to read file: {} ({})",
+        errlog(pimpl->log, "Failed to read file: {} ({})",
             p.path, ag::sys::error_string(ag::sys::error_code()));
         return -1;
     }
@@ -343,11 +343,11 @@ int filter::load(const ag::dnsfilter::filter_params &p) {
     f->leftovers_table.shrink_to_fit();
     kh_resize(hash_to_unique_index, f->badfilter_table, kh_size(f->badfilter_table));
 
-    dbglog(pimpl->log, "unique domains table size: {}", kh_size(f->unique_domains_table));
-    dbglog(pimpl->log, "non-unique domains table size: {}", kh_size(f->domains_table));
-    dbglog(pimpl->log, "shortcuts table size: {}", kh_size(f->shortcuts_table));
-    dbglog(pimpl->log, "leftovers table size: {}", f->leftovers_table.size());
-    dbglog(pimpl->log, "badfilter table size: {}", kh_size(f->badfilter_table));
+    dbglog(pimpl->log, "Unique domains table size: {}", kh_size(f->unique_domains_table));
+    dbglog(pimpl->log, "Non-unique domains table size: {}", kh_size(f->domains_table));
+    dbglog(pimpl->log, "Shortcuts table size: {}", kh_size(f->shortcuts_table));
+    dbglog(pimpl->log, "Leftovers table size: {}", f->leftovers_table.size());
+    dbglog(pimpl->log, "Badfilter table size: {}", kh_size(f->badfilter_table));
 
     return rc;
 }
@@ -410,7 +410,7 @@ bool filter::impl::match_against_line(match_arg &match, std::string_view line) {
     }
 
     if (matched) {
-        dbglog(match.f.pimpl->log, "domain '{}' matched against rule '{}'", match.ctx.host, line);
+        dbglog(match.f.pimpl->log, "Domain '{}' matched against rule '{}'", match.ctx.host, line);
         match.ctx.matched_rules.emplace_back(std::move(rule->public_part));
     }
 

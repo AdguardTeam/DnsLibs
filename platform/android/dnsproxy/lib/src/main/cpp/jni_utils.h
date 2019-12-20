@@ -175,7 +175,7 @@ public:
      * Call `f` for `string`.
      * Callback receives a C string encoded in UTF8-modified and released after calling `f`.
      */
-    void visit_string(JNIEnv *env, jobject string, const std::function<void(const char *, jsize)> &f);
+    static void visit_string(JNIEnv *env, jobject string, const std::function<void(const char *, jsize)> &f);
 
     /**
      * Marshal a C++ string to Java.

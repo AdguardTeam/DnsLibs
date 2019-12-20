@@ -17,9 +17,9 @@ public:
             filter f = {};
             if (0 == f.load(p.filters[i])) {
                 this->filters.emplace_back(std::move(f));
-                infolog(log, "filter added successfully: {}", p.filters[i].path);
+                infolog(log, "Filter added successfully: {}", p.filters[i].path);
             } else {
-                warnlog(log, "filter was not added: {}", p.filters[i].path);
+                warnlog(log, "Filter was not added: {}", p.filters[i].path);
             }
         }
         this->filters.shrink_to_fit();
@@ -54,7 +54,7 @@ void dnsfilter::destroy(handle obj) {
 std::vector<dnsfilter::rule> dnsfilter::match(handle obj, std::string_view domain) {
     engine *e = (engine *)obj;
 
-    dbglog(e->log, "matching {}", domain);
+    tracelog(e->log, "Matching {}", domain);
 
     filter::match_context context = filter::create_match_context(domain);
 
@@ -62,7 +62,7 @@ std::vector<dnsfilter::rule> dnsfilter::match(handle obj, std::string_view domai
         f.match(context);
     }
 
-    dbglog(e->log, "matched {} rules", context.matched_rules.size());
+    tracelog(e->log, "Matched {} rules", context.matched_rules.size());
 
     return context.matched_rules;
 }
@@ -143,4 +143,8 @@ std::vector<const dnsfilter::rule *> dnsfilter::get_effective_rules(const std::v
         result.emplace_back(effective_rules[i]);
     }
     return result;
+}
+
+bool dnsfilter::is_valid_rule(std::string_view str) {
+    return rule_utils::parse(str).has_value();
 }
