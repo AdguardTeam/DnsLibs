@@ -9,33 +9,37 @@
 
 using namespace std::chrono_literals;
 
-static constexpr auto NTHREADS = 16;
-static constexpr auto REQUESTS_PER_THREAD = 16;
+struct test_params {
+    ag::listener_settings settings;
+    size_t n_threads{1};
+    size_t requests_per_thread{1};
+    const char *request_addr{"::1"};
+    const char *query{"google.com"};
+};
 
-static constexpr auto LISTEN_ADDR = "::";
-static constexpr auto REQUEST_ADDR = "::1";
-static constexpr auto PORT = 1234;
-
-static constexpr auto QUERY = "google.com";
-
-class listener_test : public ::testing::TestWithParam<ag::listener_settings> {
+class listener_test : public ::testing::TestWithParam<test_params> {
 
 };
 
 TEST_P(listener_test, listens_and_responds) {
-//    ag::set_default_log_level(ag::TRACE);
+    ag::set_default_log_level(ag::TRACE);
 
     std::mutex mtx;
     std::condition_variable proxy_cond;
     std::atomic_bool proxy_initialized{false};
     std::atomic_bool proxy_init_result{false};
 
-    const auto listener_settings = GetParam();
+    const auto params = GetParam();
+    const auto listener_settings = params.settings;
 
     std::thread t([&]() {
         auto settings = ag::dnsproxy_settings::get_default();
-        settings.listeners.clear();
-        settings.listeners.push_back(listener_settings);
+        settings.listeners = {listener_settings};
+
+        // Since we do an AAAA query, this will prevent the proxy
+        // from querying its upstream while still allowing to test the listener
+        // (the proxy will return empty NOERROR response in this mode)
+        settings.block_ipv6 = true;
 
         ag::dnsproxy proxy;
         proxy_init_result = proxy.init(settings, {});
@@ -66,23 +70,24 @@ TEST_P(listener_test, listens_and_responds) {
 
     std::atomic_long successful_requests{0};
     std::vector<std::thread> workers;
-    workers.reserve(NTHREADS);
+    workers.reserve(params.n_threads);
 
     ag::upstream_factory upstream_factory({});
 
     const auto address = fmt::format(
             "{}[{}]:{}",
             listener_settings.protocol == ag::listener_protocol::TCP ? "tcp://" : "",
-            REQUEST_ADDR,
-            PORT);
+            params.request_addr,
+            listener_settings.port);
 
-    for (int i = 0; i < NTHREADS; ++i) {
+    for (size_t i = 0; i < params.n_threads; ++i) {
         std::this_thread::sleep_for(10ms);
         workers.emplace_back([&successful_requests,
-                                     listener_settings,
-                                     address,
-                                     &upstream_factory,
-                                     i]() {
+                              listener_settings,
+                              address,
+                              &upstream_factory,
+                              i,
+                              params]() {
             auto logger = ag::create_logger(fmt::format("test_thread_{}", i));
 
             auto[upstream, error] = upstream_factory.create_upstream({
@@ -95,12 +100,10 @@ TEST_P(listener_test, listens_and_responds) {
                 return;
             }
 
-            for (int j = 0; j < REQUESTS_PER_THREAD; ++j) {
-                std::this_thread::sleep_for(100ms); // Don't abuse the upstream
-
+            for (size_t j = 0; j < params.requests_per_thread; ++j) {
                 ag::ldns_pkt_ptr req(
                         ldns_pkt_query_new(
-                                ldns_dname_new_frm_str(QUERY),
+                                ldns_dname_new_frm_str(params.query),
                                 LDNS_RR_TYPE_AAAA,
                                 LDNS_RR_CLASS_IN,
                                 LDNS_RD));
@@ -132,7 +135,7 @@ TEST_P(listener_test, listens_and_responds) {
     proxy_cond.notify_all();
     t.join();
 
-    ASSERT_GT(successful_requests, NTHREADS * REQUESTS_PER_THREAD * .9);
+    ASSERT_GT(successful_requests, params.n_threads * params.requests_per_thread * .9);
 }
 
 TEST(listener_test, shuts_down_if_could_not_initialize) {
@@ -151,29 +154,35 @@ TEST(listener_test, shuts_down_if_could_not_initialize) {
 }
 
 INSTANTIATE_TEST_CASE_P(
-        listener_protocols,
+        listener_logic,
         listener_test,
         ::testing::Values(
-                ag::listener_settings{
-                        .address = LISTEN_ADDR,
-                        .port = PORT,
-                        .protocol = ag::listener_protocol::UDP},
-                ag::listener_settings{
-                        .address = LISTEN_ADDR,
-                        .port = PORT,
-                        .protocol = ag::listener_protocol::TCP,
-                        .persistent = false},
-                ag::listener_settings{
-                        .address = LISTEN_ADDR,
-                        .port = PORT,
-                        .protocol = ag::listener_protocol::TCP,
-                        .persistent = true,
-                        .idle_timeout = 1000ms}),
-        [](const testing::TestParamInfo<ag::listener_settings> &info) {
+                test_params{
+                        ag::listener_settings{
+                                .address = "::1",
+                                .port = 1234,
+                                .protocol = ag::listener_protocol::UDP}
+                },
+                test_params{
+                        ag::listener_settings{
+                                .address = "::1",
+                                .port = 1234,
+                                .protocol = ag::listener_protocol::TCP,
+                                .persistent = false}
+                },
+                test_params{
+                        ag::listener_settings{
+                                .address = "::1",
+                                .port = 1234,
+                                .protocol = ag::listener_protocol::TCP,
+                                .persistent = true,
+                                .idle_timeout = 1000ms}
+                }),
+        [](const testing::TestParamInfo<test_params> &info) {
             return fmt::format("{}{}",
-                               magic_enum::enum_name(info.param.protocol),
-                               info.param.protocol == ag::listener_protocol::TCP
-                               ? info.param.persistent
+                               magic_enum::enum_name(info.param.settings.protocol),
+                               info.param.settings.protocol == ag::listener_protocol::TCP
+                               ? info.param.settings.persistent
                                  ? "_persistent"
                                  : "_not_persistent"
                                : "");
