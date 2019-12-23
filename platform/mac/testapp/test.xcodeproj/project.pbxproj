@@ -160,7 +160,6 @@
 		C4423F9A2379559D00FD1D4C /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		C4423F9B2379559D00FD1D4C /* main.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = main.m; sourceTree = "<group>"; };
 		C4AEED14237AC8A10021E53F /* AGDnsProxy.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = AGDnsProxy.framework; path = framework/AGDnsProxy.framework; sourceTree = "<group>"; };
-		C4FAE49E237BE77800ECE0B2 /* build_dnsproxy_framework.sh */ = {isa = PBXFileReference; lastKnownFileType = text.script.sh; path = build_dnsproxy_framework.sh; sourceTree = "<group>"; };
 		C4FAE49F237BE77800ECE0B2 /* vpn.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = vpn.m; sourceTree = "<group>"; };
 		C4FAE4A0237BE77800ECE0B2 /* PacketTunnelProvider.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = PacketTunnelProvider.h; sourceTree = "<group>"; };
 		C4FAE4A1237BE77800ECE0B2 /* vpn.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = vpn.h; sourceTree = "<group>"; };
@@ -255,7 +254,6 @@
 		C4FAE49D237BE77800ECE0B2 /* common */ = {
 			isa = PBXGroup;
 			children = (
-				C4FAE49E237BE77800ECE0B2 /* build_dnsproxy_framework.sh */,
 				C4FAE49F237BE77800ECE0B2 /* vpn.m */,
 				C4FAE4A0237BE77800ECE0B2 /* PacketTunnelProvider.h */,
 				C4FAE4A1237BE77800ECE0B2 /* vpn.h */,
@@ -337,7 +335,7 @@
 /* Begin PBXLegacyTarget section */
 		C41BB4092379C19B0068C106 /* AGDnsProxy-ios */ = {
 			isa = PBXLegacyTarget;
-			buildArgumentsString = "$(SRCROOT)/common/build_dnsproxy_framework.sh $(ACTION) --os ios";
+			buildArgumentsString = "$(SRCROOT)/../framework/build_dnsproxy_framework.sh $(ACTION) --os ios";
 			buildConfigurationList = C41BB40C2379C19B0068C106 /* Build configuration list for PBXLegacyTarget "AGDnsProxy-ios" */;
 			buildPhases = (
 			);
@@ -349,9 +347,23 @@
 			passBuildSettingsInEnvironment = 1;
 			productName = "AGDnsProxy-ios";
 		};
+		C42068AE23B0D0B800DA1B77 /* AGDnsProxy */ = {
+			isa = PBXLegacyTarget;
+			buildArgumentsString = "$(SRCROOT)/../framework/build_dnsproxy_framework.sh $(ACTION) --iosv 13.0";
+			buildConfigurationList = C42068B123B0D0B800DA1B77 /* Build configuration list for PBXLegacyTarget "AGDnsProxy" */;
+			buildPhases = (
+			);
+			buildToolPath = /bin/sh;
+			buildWorkingDirectory = "$(SRCROOT)/";
+			dependencies = (
+			);
+			name = AGDnsProxy;
+			passBuildSettingsInEnvironment = 1;
+			productName = AGDnsProxy;
+		};
 		C4B58FDC237188E50044CE54 /* AGDnsProxy-macos */ = {
 			isa = PBXLegacyTarget;
-			buildArgumentsString = "$(SRCROOT)/common/build_dnsproxy_framework.sh $(ACTION) --os macos";
+			buildArgumentsString = "$(SRCROOT)/../framework/build_dnsproxy_framework.sh $(ACTION) --os macos";
 			buildConfigurationList = C4B58FDD237188E50044CE54 /* Build configuration list for PBXLegacyTarget "AGDnsProxy-macos" */;
 			buildPhases = (
 			);
@@ -457,6 +469,9 @@
 					C41BB4092379C19B0068C106 = {
 						CreatedOnToolsVersion = 11.1;
 					};
+					C42068AE23B0D0B800DA1B77 = {
+						CreatedOnToolsVersion = 11.1;
+					};
 					C4423F6F23794EA900FD1D4C = {
 						CreatedOnToolsVersion = 11.1;
 					};
@@ -521,6 +536,7 @@
 				C4423F6F23794EA900FD1D4C /* ext-ios */,
 				C4B58FDC237188E50044CE54 /* AGDnsProxy-macos */,
 				C41BB4092379C19B0068C106 /* AGDnsProxy-ios */,
+				C42068AE23B0D0B800DA1B77 /* AGDnsProxy */,
 			);
 		};
 /* End PBXProject section */
@@ -693,6 +709,44 @@
 				OTHER_LDFLAGS = "";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = iphoneos;
+			};
+			name = Release;
+		};
+		C42068AF23B0D0B800DA1B77 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CODE_SIGN_STYLE = Automatic;
+				DEBUGGING_SYMBOLS = YES;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				DEVELOPMENT_TEAM = N33TQXN8C7;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GCC_GENERATE_DEBUGGING_SYMBOLS = YES;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
+				MTL_FAST_MATH = YES;
+				OTHER_CFLAGS = "";
+				OTHER_LDFLAGS = "";
+				PRODUCT_NAME = "$(TARGET_NAME)";
+			};
+			name = Debug;
+		};
+		C42068B023B0D0B800DA1B77 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CODE_SIGN_STYLE = Automatic;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				DEVELOPMENT_TEAM = N33TQXN8C7;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				MTL_FAST_MATH = YES;
+				OTHER_CFLAGS = "";
+				OTHER_LDFLAGS = "";
+				PRODUCT_NAME = "$(TARGET_NAME)";
 			};
 			name = Release;
 		};
@@ -1127,6 +1181,15 @@
 			buildConfigurations = (
 				C41BB40A2379C19B0068C106 /* Debug */,
 				C41BB40B2379C19B0068C106 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		C42068B123B0D0B800DA1B77 /* Build configuration list for PBXLegacyTarget "AGDnsProxy" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				C42068AF23B0D0B800DA1B77 /* Debug */,
+				C42068B023B0D0B800DA1B77 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
