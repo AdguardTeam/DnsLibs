@@ -457,7 +457,7 @@ bool dns_forwarder::init(const dnsproxy_settings &settings, const dnsproxy_event
     this->filter_handle = handle.value();
     infolog(log, "Filtering module initialized");
 
-    this->dns64_prefixes = std::make_shared<ag::with_mtx<std::vector<ag::uint8_vector>>>();
+    this->dns64_prefixes = std::make_shared<with_mtx<std::vector<uint8_vector>>>();
     if (settings.dns64.has_value()) {
         infolog(log, "DNS64 discovery is enabled");
 
@@ -478,7 +478,7 @@ bool dns_forwarder::init(const dnsproxy_settings &settings, const dnsproxy_event
                         continue;
                     }
 
-                    auto[result, err_prefixes] = ag::dns64::discover_prefixes(upstream);
+                    auto[result, err_prefixes] = dns64::discover_prefixes(upstream);
                     if (err_prefixes.has_value()) {
                         dbglog(logger, "DNS64: error discovering prefixes: {}", err_prefixes->c_str());
                         continue;
@@ -571,21 +571,8 @@ std::vector<uint8_t> dns_forwarder::handle_message(uint8_view message) {
     }
     tracelog_fid(log, request, "Query domain: {}", pure_domain);
 
-    std::vector<dnsfilter::rule> rules = this->filter.match(this->filter_handle, pure_domain);
-    for (const dnsfilter::rule &rule : rules) {
-        tracelog_fid(log, request, "Matched rule: {}", rule.text);
-    }
-
-    std::vector<const dnsfilter::rule *> effective_rules = dnsfilter::get_effective_rules(rules);
-    set_event_rules(event, effective_rules);
-    if (effective_rules.size() > 0
-            && !effective_rules[0]->props.test(dnsfilter::RP_EXCEPTION)) {
-        dbglog_fid(log, request, "DNS query blocked by rule: {}", effective_rules[0]->text);
-        ldns_pkt_ptr response(create_blocking_response(request, this->settings, effective_rules));
-        log_packet(log, response.get(), "Rule blocked response");
-        std::vector<uint8_t> raw_response = transform_response_to_raw_data(response.get());
-        finalize_processed_event(event, request, response.get(), nullptr, std::nullopt);
-        return raw_response;
+    if (auto raw_blocking_response = apply_filter(pure_domain, request, event)) {
+        return *raw_blocking_response;
     }
 
     ldns_pkt_ptr response = nullptr;
@@ -612,14 +599,39 @@ std::vector<uint8_t> dns_forwarder::handle_message(uint8_view message) {
     }
 
     log_packet(log, response.get(), "Upstream dns response");
+    const auto ancount = ldns_pkt_ancount(response.get());
+    const auto rcode = ldns_pkt_get_rcode(response.get());
 
-    if (LDNS_RR_TYPE_AAAA == type
-            && LDNS_RCODE_NOERROR == ldns_pkt_get_rcode(response.get())
-            && ldns_pkt_ancount(response.get()) == 0) {
-        ldns_pkt_ptr synth_response = try_dns64_aaaa_synthesis(successful_upstream, req_holder, response);
-        if (synth_response != nullptr) {
-            response = std::move(synth_response);
-            log_packet(log, response.get(), "DNS64 synthesized response");
+    if (LDNS_RCODE_NOERROR == rcode) {
+        // CNAME response blocking
+        for (size_t i = 0; i < ancount; ++i) {
+            auto rr = ldns_rr_list_rr(ldns_pkt_answer(response.get()), i);
+            if (!rr || ldns_rr_get_type(rr) != LDNS_RR_TYPE_CNAME) {
+                continue;
+            }
+            auto rdf = ldns_rr_rdf(rr, 0);
+            if (!rdf) {
+                continue;
+            }
+
+            allocated_ptr<char> cname_ptr(ldns_rdf2str(rdf));
+            std::string_view cname = cname_ptr.get();
+            if (ldns_dname_str_absolute(cname_ptr.get())) {
+                cname.remove_suffix(1); // drop trailing dot
+            }
+            tracelog_fid(log, response.get(), "Response CNAME: {}", cname);
+
+            if (auto raw_blocking_response = apply_filter(cname, request, event)) {
+                return *raw_blocking_response;
+            }
+        }
+
+        // DNS64 synthesis
+        if (settings->dns64.has_value() && LDNS_RR_TYPE_AAAA == type && 0 == ancount) {
+            if (auto synth_response = try_dns64_aaaa_synthesis(successful_upstream, req_holder, response)) {
+                response = std::move(synth_response);
+                log_packet(log, response.get(), "DNS64 synthesized response");
+            }
         }
     }
 
@@ -628,4 +640,27 @@ std::vector<uint8_t> dns_forwarder::handle_message(uint8_view message) {
     event.bytes_received = raw_response.size();
     finalize_processed_event(event, request, response.get(), successful_upstream, std::nullopt);
     return raw_response;
+}
+
+std::optional<uint8_vector> dns_forwarder::apply_filter(std::string_view hostname,
+                                                        const ldns_pkt *request,
+                                                        dns_request_processed_event &event) {
+
+    auto rules = filter.match(filter_handle, hostname);
+    for (const dnsfilter::rule &rule : rules) {
+        tracelog_fid(log, request, "Matched rule: {}", rule.text);
+    }
+
+    auto effective_rules = dnsfilter::get_effective_rules(rules);
+    if (!effective_rules.empty() && !effective_rules[0]->props.test(dnsfilter::RP_EXCEPTION)) {
+        set_event_rules(event, effective_rules);
+        dbglog_fid(log, request, "DNS query blocked by rule: {}", effective_rules[0]->text);
+        ldns_pkt_ptr response(create_blocking_response(request, this->settings, effective_rules));
+        log_packet(log, response.get(), "Rule blocked response");
+        std::vector<uint8_t> raw_response = transform_response_to_raw_data(response.get());
+        finalize_processed_event(event, request, response.get(), nullptr, std::nullopt);
+        return raw_response;
+    }
+
+    return std::nullopt;
 }

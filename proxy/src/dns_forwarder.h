@@ -23,6 +23,10 @@ public:
     std::vector<uint8_t> handle_message(uint8_view message);
 
 private:
+    std::optional<ag::uint8_vector> apply_filter(std::string_view hostname,
+                                                 const ldns_pkt *request,
+                                                 ag::dns_request_processed_event &event);
+
     ldns_pkt_ptr try_dns64_aaaa_synthesis(upstream *upstream, const ldns_pkt_ptr &request,
         const ldns_pkt_ptr &response) const;
 

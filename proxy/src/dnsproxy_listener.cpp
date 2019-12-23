@@ -366,7 +366,7 @@ private:
         uint16_t size_be; // Big-endian size
         uv_buf_t bufs[2];
 
-        write(ag::uint8_vector &&payload) : payload(std::move(payload)) {
+        explicit write(ag::uint8_vector &&payload) : payload(std::move(payload)) {
             this->req.data = this;
             this->size_be = this->payload.size();
             this->size_be = htons(this->size_be);
