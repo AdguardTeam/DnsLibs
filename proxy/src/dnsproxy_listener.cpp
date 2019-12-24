@@ -302,11 +302,13 @@ public:
 
 class tcp_dns_connection {
 public:
-    explicit tcp_dns_connection(uint64_t id) : m_id{id} {
-        this->m_tcp = (uv_tcp_t *)malloc(sizeof(uv_tcp_t)); // Deleted in close_cb
+    explicit tcp_dns_connection(uint64_t id)
+            : m_id{id}
+            , m_log(ag::create_logger(AG_FMT("{} id={}", __func__, m_id)))
+            , m_tcp((uv_tcp_t *)malloc(sizeof(uv_tcp_t))) // Deleted in close_cb
+            , m_idle_timer((uv_timer_t *)malloc(sizeof(uv_timer_t))) // Deleted in close_cb
+    {
         this->m_tcp->data = this;
-
-        this->m_idle_timer = (uv_timer_t *)malloc(sizeof(uv_timer_t)); // Deleted in close_cb
         this->m_idle_timer->data = this;
     }
 
@@ -316,14 +318,12 @@ public:
                bool persistent,
                std::chrono::milliseconds idle_timeout,
                std::function<void(uint64_t)> close_callback) {
+        tracelog(m_log, "{}", __func__);
 
         assert(proxy);
         assert(idle_timeout.count());
 
-        ++m_open_handles; // m_tcp
-
         uv_timer_init(loop, m_idle_timer);
-        ++m_open_handles;
 
         m_proxy = proxy;
         m_persistent = persistent;
@@ -376,6 +376,7 @@ private:
     };
 
     const uint64_t m_id;
+    ag::logger m_log;
     ag::dnsproxy *m_proxy{};
     bool m_persistent{false};
     uint8_t m_incoming_buf[TCP_RECV_BUF_SIZE]{};
@@ -386,7 +387,6 @@ private:
     bool m_closed{false};
     tcp_dns_payload_parser m_parser;
     ag::hash_set<work *> m_pending_works;
-    size_t m_open_handles{0};
 
     static void alloc_cb(uv_handle_t *handle, size_t suggested_size, uv_buf_t *buf) {
         auto *c = (tcp_dns_connection *) handle->data;
@@ -396,6 +396,7 @@ private:
 
     static void read_cb(uv_stream_t *stream, ssize_t nread, const uv_buf_t *buf) {
         auto *c = (tcp_dns_connection *) stream->data;
+        tracelog(c->m_log, "{} {}", __func__, nread);
 
         if (nread < 0) {
             c->do_close();
@@ -446,6 +447,7 @@ private:
         auto *w = (write *) w_req->data;
         auto *h = (uv_handle_t *) w_req->handle;
         auto *c = (tcp_dns_connection *) h->data;
+        tracelog(c->m_log, "{} {}", __func__, status);
         delete w;
         // `c` might be nullptr at this point, e.g. the connection was closed,
         // but libuv still called the pending write callbacks.
@@ -485,6 +487,7 @@ private:
         }
         m_closed = true;
 
+        tracelog(m_log, "{}", __func__);
         uv_timer_stop(m_idle_timer);
 
         m_idle_timer->data = nullptr;
@@ -515,7 +518,6 @@ private:
 
     static void conn_cb(uv_stream_t *server, int status) {
         auto *self = (listener_tcp *) server->data;
-        tracelog(self->m_log, "{}: started", __func__);
 
         if (status < 0) {
             dbglog(self->m_log, "{}: connection failed: {}", __func__, uv_strerror(status));
