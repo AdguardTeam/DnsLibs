@@ -26,7 +26,7 @@ class ag::dns_framed_connection : public connection,
 public:
     static constexpr std::string_view UNEXPECTED_EOF = "Unexpected EOF";
 
-    dns_framed_connection(ag::dns_framed_pool *pool, bufferevent *bev, const ag::socket_address &address);
+    dns_framed_connection(ag::dns_framed_pool *pool, uint32_t id, bufferevent *bev, const ag::socket_address &address);
 
     ~dns_framed_connection() override;
 
@@ -79,13 +79,13 @@ int ag::dns_framed_connection::write(uint8_view buf) {
 
         m_requests[id] = std::nullopt;
     }
-    tracelog(m_log, "{} returned {}", __func__, id);
+    tracelog(m_log, "{} returned {}", __func__, ntohs(id));
     return id;
 }
 
-ag::dns_framed_connection::dns_framed_connection(dns_framed_pool *pool, bufferevent *bev, const socket_address &address)
+ag::dns_framed_connection::dns_framed_connection(dns_framed_pool *pool, uint32_t id, bufferevent *bev, const socket_address &address)
         : connection(address)
-        , m_log(create_logger(AG_FMT("{} {}", __func__, address.str())))
+        , m_log(create_logger(AG_FMT("{} addr={} id={}", __func__, address.str(), id)))
         , m_pool(pool)
         , m_bev(bev)
 {
@@ -225,7 +225,8 @@ void ag::dns_framed_pool::add_pending_connection(const connection_ptr &ptr) {
 }
 
 ag::connection_ptr ag::dns_framed_pool::create_connection(bufferevent *bev, const socket_address &address) {
-    return std::make_shared<dns_framed_connection>(this, bev, address);
+    static std::atomic_uint32_t conn_id{0};
+    return std::make_shared<dns_framed_connection>(this, conn_id++, bev, address);
 }
 
 // A connection should be deleted on the event loop, but some events may raise on already
