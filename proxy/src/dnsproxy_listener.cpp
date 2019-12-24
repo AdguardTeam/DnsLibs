@@ -8,6 +8,10 @@
 #include <algorithm>
 #include <cassert>
 
+
+#define log_id(l_, lvl_, id_, fmt_, ...) lvl_##log(l_, "[{}] " fmt_, id_, ##__VA_ARGS__)
+
+
 // Set the libuv thread pool size. Must happen before any libuv usage to have effect.
 static const int THREAD_POOL_SIZE_RESULT [[maybe_unused]] = uv_os_setenv("UV_THREADPOOL_SIZE", "128");
 
@@ -304,7 +308,7 @@ class tcp_dns_connection {
 public:
     explicit tcp_dns_connection(uint64_t id)
             : m_id{id}
-            , m_log(ag::create_logger(AG_FMT("{} id={}", __func__, m_id)))
+            , m_log(ag::create_logger(__func__))
             , m_tcp((uv_tcp_t *)malloc(sizeof(uv_tcp_t))) // Deleted in close_cb
             , m_idle_timer((uv_timer_t *)malloc(sizeof(uv_timer_t))) // Deleted in close_cb
     {
@@ -318,7 +322,7 @@ public:
                bool persistent,
                std::chrono::milliseconds idle_timeout,
                std::function<void(uint64_t)> close_callback) {
-        tracelog(m_log, "{}", __func__);
+        log_id(m_log, trace, m_id, "{}", __func__);
 
         assert(proxy);
         assert(idle_timeout.count());
@@ -396,7 +400,7 @@ private:
 
     static void read_cb(uv_stream_t *stream, ssize_t nread, const uv_buf_t *buf) {
         auto *c = (tcp_dns_connection *) stream->data;
-        tracelog(c->m_log, "{} {}", __func__, nread);
+        log_id(c->m_log, trace, c->m_id, "{} {}", __func__, nread);
 
         if (nread < 0) {
             c->do_close();
@@ -447,7 +451,7 @@ private:
         auto *w = (write *) w_req->data;
         auto *h = (uv_handle_t *) w_req->handle;
         auto *c = (tcp_dns_connection *) h->data;
-        tracelog(c->m_log, "{} {}", __func__, status);
+        log_id(c->m_log, trace, c->m_id, "{} {}", __func__, status);
         delete w;
         // `c` might be nullptr at this point, e.g. the connection was closed,
         // but libuv still called the pending write callbacks.
@@ -487,7 +491,7 @@ private:
         }
         m_closed = true;
 
-        tracelog(m_log, "{}", __func__);
+        log_id(m_log, trace, m_id, "{}", __func__);
         uv_timer_stop(m_idle_timer);
 
         m_idle_timer->data = nullptr;

@@ -8,6 +8,9 @@
 #include <dns_stamp.h>
 
 
+#define log_ip(l_, lvl_, ip_, fmt_, ...) lvl_##log(l_, "[{}] " fmt_, ip_, ##__VA_ARGS__)
+
+
 using namespace ag;
 using namespace std::chrono;
 
@@ -99,7 +102,7 @@ resolver::resolver(std::string_view resolver_address, const upstream_factory_con
 err_string resolver::init() {
     if (this->resolver_address.empty()) {
         constexpr std::string_view err = "Failed to get server address";
-        errlog(log, "{}", err);
+        log_ip(log, err, this->resolver_address, "{}", err);
         return std::string(err);
     }
 
@@ -133,7 +136,7 @@ static std::vector<socket_address> socket_address_from_reply(const logger &log, 
 }
 
 resolver::result resolver::resolve(std::string_view host, int port, milliseconds timeout) const {
-    tracelog(log, "Resolve {}:{}", host, port);
+    log_ip(log, trace, this->resolver_address, "Resolve {}:{}", host, port);
     socket_address numeric_ip(utils::join_host_port(host, fmt::to_string(port)));
     if (numeric_ip.valid()) {
         return { { numeric_ip }, std::nullopt };
@@ -149,28 +152,29 @@ resolver::result resolver::resolve(std::string_view host, int port, milliseconds
     upstream_factory::create_result factory_result = this->upstream_factory.create_upstream({this->resolver_address, {}, timeout});
     if (factory_result.error != std::nullopt) {
         std::string err = AG_FMT("Failed to create upstream: {}", factory_result.error.value());
-        dbglog(log, "{}", err);
+        log_ip(log, dbg, this->resolver_address, "{}", err);
         return { {}, std::move(err) };
     }
     upstream_ptr &upstream = factory_result.upstream;
 
-    tracelog(log, "Trying to get A record for {}", host);
+    log_ip(log, trace, this->resolver_address, "Trying to get A record for {}", host);
     auto [a_reply, a_err] = upstream->exchange(a_req.get());
 
     timeout -= timer.elapsed<milliseconds>();
 
     if (!a_err) {
-        tracelog(log, "Got A record for host '{}' (elapsed:{})", host, timer.elapsed<milliseconds>());
+        log_ip(log, trace, this->resolver_address, "Got A record for host '{}' (elapsed:{})",
+            host, timer.elapsed<milliseconds>());
         auto a_addrs = socket_address_from_reply(this->log, a_reply.get(), port);
         std::move(a_addrs.begin(), a_addrs.end(), std::back_inserter(addrs));
     } else {
         error = std::move(a_err);
-        dbglog(log, "Failed to get A record for host '{}': {} (elapsed:{})",
+        log_ip(log, dbg, this->resolver_address, "Failed to get A record for host '{}': {} (elapsed:{})",
             host, error.value(), timer.elapsed<milliseconds>());
     }
 
     if (upstream->config.ipv6_available && timeout > MIN_TIMEOUT) {
-        tracelog(log, "Trying to get AAAA record for {}", host);
+        log_ip(log, trace, this->resolver_address, "Trying to get AAAA record for {}", host);
 
         ldns_pkt_ptr aaaa_req = create_req(host, LDNS_RR_TYPE_AAAA);
         auto [aaaa_reply, aaaa_err] = upstream->exchange(aaaa_req.get());
@@ -179,7 +183,8 @@ resolver::result resolver::resolve(std::string_view host, int port, milliseconds
             std::move(aaaa_addrs.begin(), aaaa_addrs.end(), std::back_inserter(addrs));
         } else {
             error = std::move(aaaa_err);
-            dbglog(log, "Failed to get AAAA record for host '{}': {}", host, error.value());
+            log_ip(log, dbg, this->resolver_address, "Failed to get AAAA record for host '{}': {}",
+                host, error.value());
         }
     }
 

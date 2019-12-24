@@ -9,6 +9,9 @@
 #include <ag_utils.h>
 
 
+#define log_conn(l_, lvl_, conn_, fmt_, ...) lvl_##log(l_, "[id={} addr={}] " fmt_, conn_->m_id, conn_->address.str(), ##__VA_ARGS__)
+
+
 using namespace std::chrono;
 
 using bufferevent_ptr = std::unique_ptr<bufferevent, ag::ftor<&bufferevent_free>>;
@@ -36,6 +39,8 @@ public:
 
     /** Logger */
     ag::logger m_log;
+    /** Connection id */
+    uint32_t m_id;
     /** Connection pool */
     ag::dns_framed_pool *m_pool;
     /** Connection handle */
@@ -58,10 +63,10 @@ public:
 
 
 int ag::dns_framed_connection::write(uint8_view buf) {
-    tracelog(m_log, "{} len={}", __func__, buf.size());
+    log_conn(m_log, trace, this, "{} len={}", __func__, buf.size());
     dns_framed_connection_ptr ptr = shared_from_this();
     if (buf.size() < 2) {
-        tracelog(m_log, "{} returned -1", __func__);
+        log_conn(m_log, trace, this, "{} returned -1", __func__);
         return -1;
     }
     uint16_t id = *(uint16_t *) buf.data();
@@ -79,13 +84,14 @@ int ag::dns_framed_connection::write(uint8_view buf) {
 
         m_requests[id] = std::nullopt;
     }
-    tracelog(m_log, "{} returned {}", __func__, ntohs(id));
+    log_conn(m_log, trace, this, "{} returned {}", __func__, ntohs(id));
     return id;
 }
 
 ag::dns_framed_connection::dns_framed_connection(dns_framed_pool *pool, uint32_t id, bufferevent *bev, const socket_address &address)
         : connection(address)
-        , m_log(create_logger(AG_FMT("{} addr={} id={}", __func__, address.str(), id)))
+        , m_log(create_logger(__func__))
+        , m_id(id)
         , m_pool(pool)
         , m_bev(bev)
 {
@@ -108,7 +114,7 @@ ag::dns_framed_connection::~dns_framed_connection() {
 }
 
 void ag::dns_framed_connection::on_read() {
-    tracelog(m_log, "{}", __func__);
+    log_conn(m_log, trace, this, "{}", __func__);
     dns_framed_connection_ptr ptr = shared_from_this();
 
     auto *input = bufferevent_get_input(&*m_bev);
@@ -138,22 +144,22 @@ void ag::dns_framed_connection::on_read() {
             m_cond.notify_all();
         }
     }
-    tracelog(m_log, "{} finished", __func__);
+    log_conn(m_log, trace, this, "{} finished", __func__);
 }
 
 void ag::dns_framed_connection::on_event(int what) {
-    tracelog(m_log, "{}", __func__);
+    log_conn(m_log, trace, this, "{}", __func__);
     dns_framed_connection_ptr ptr = shared_from_this();
 
     if (what & BEV_EVENT_CONNECTED) {
-        tracelog(m_log, "{} connected", __func__);
+        log_conn(m_log, trace, this, "{} connected", __func__);
         m_pool->add_connected(shared_from_this());
     }
     if (what & (BEV_EVENT_EOF | BEV_EVENT_ERROR)) {
         if (what & BEV_EVENT_EOF) {
-            tracelog(m_log, "{} eof", __func__);
+            log_conn(m_log, trace, this, "{} eof", __func__);
         } else {
-            tracelog(m_log, "{} error {}", __func__, evutil_socket_error_to_string(evutil_socket_geterror(bufferevent_getfd(m_bev.get()))));
+            log_conn(m_log, trace, this, "{} error {}", __func__, evutil_socket_error_to_string(evutil_socket_geterror(bufferevent_getfd(m_bev.get()))));
         }
         m_pool->remove_from_all(shared_from_this());
         std::unique_lock l(m_mutex);
@@ -165,7 +171,7 @@ void ag::dns_framed_connection::on_event(int what) {
         }
         m_cond.notify_all();
     }
-    tracelog(m_log, "{} finished", __func__);
+    log_conn(m_log, trace, this, "{} finished", __func__);
 }
 
 ag::connection::read_result ag::dns_framed_connection::read(int request_id, milliseconds timeout) {
@@ -199,7 +205,7 @@ ag::connection::read_result ag::dns_framed_connection::read(int request_id, mill
 
 void ag::dns_framed_pool::add_connected(const connection_ptr &ptr) {
     dns_framed_connection *conn = (dns_framed_connection *)ptr.get();
-    tracelog(conn->m_log, "[{}] {}", conn->address.str(), __func__);
+    log_conn(conn->m_log, trace, conn, "{}", __func__);
 
     std::scoped_lock l(m_mutex);
     m_pending_connections.erase(ptr);
@@ -208,7 +214,7 @@ void ag::dns_framed_pool::add_connected(const connection_ptr &ptr) {
 
 void ag::dns_framed_pool::remove_from_all(const connection_ptr &ptr) {
     dns_framed_connection *conn = (dns_framed_connection *)ptr.get();
-    tracelog(conn->m_log, "[{}] {}", conn->address.str(), __func__);
+    log_conn(conn->m_log, trace, conn, "{}", __func__);
 
     std::scoped_lock l(m_mutex);
     m_pending_connections.erase(ptr);
@@ -219,7 +225,7 @@ void ag::dns_framed_pool::remove_from_all(const connection_ptr &ptr) {
 
 void ag::dns_framed_pool::add_pending_connection(const connection_ptr &ptr) {
     dns_framed_connection *conn = (dns_framed_connection *)ptr.get();
-    tracelog(conn->m_log, "[{}] {}", conn->address.str(), __func__);
+    log_conn(conn->m_log, trace, conn, "{}", __func__);
 
     m_pending_connections.insert(ptr);
 }
