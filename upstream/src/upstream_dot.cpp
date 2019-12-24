@@ -87,13 +87,13 @@ ag::connection::read_result ag::dns_over_tls::tls_pool::perform_request_inner(ui
         return { {}, AG_FMT("DNS server name resolving took too much time: {}", elapsed) };
     }
 
-    int id = conn->write(buf);
-    if (id < 0) {
+    connection::write_result write_result = conn->write(buf);
+    if (write_result.error.has_value()) {
         m_bootstrapper->remove_resolved(conn->address);
-        return { {}, "Failed to send request" };
+        return { {}, std::move(write_result.error) };
     }
 
-    connection::read_result read_result = conn->read(id, timeout);
+    connection::read_result read_result = conn->read(write_result.id, timeout);
     if (read_result.error.has_value()) {
         m_bootstrapper->remove_resolved(conn->address);
     }
