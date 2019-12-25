@@ -5,6 +5,9 @@
 #include <ag_utils.h>
 
 
+#define log_addr(l_, lvl_, addr_, fmt_, ...) lvl_##log(l_, "[{}] " fmt_, addr_, ##__VA_ARGS__)
+
+
 using std::chrono::steady_clock;
 using std::chrono::duration_cast;
 using std::chrono::milliseconds;
@@ -36,7 +39,7 @@ ag::bootstrapper::resolve_result ag::bootstrapper::resolve() {
         milliseconds try_timeout = std::max(timeout / 2, resolver::MIN_TIMEOUT);
         resolver::result result = resolver->resolve(m_server_name, m_server_port, try_timeout);
         if (result.error.has_value()) {
-            dbglog(m_log, "Failed to resolve host '{}': {}", m_server_name, result.error.value());
+            log_addr(m_log, dbg, m_server_name, "Failed to resolve host: {}", result.error.value());
             std::rotate(m_resolvers.begin() + curr, m_resolvers.begin() + curr + 1, m_resolvers.end());
             ++failed;
             if (addrs.empty()) {
@@ -48,14 +51,14 @@ ag::bootstrapper::resolve_result ag::bootstrapper::resolve() {
         }
         timeout -= single_resolve_timer.elapsed<milliseconds>();
         if (timeout <= resolver::MIN_TIMEOUT) {
-            dbglog(m_log, "Stop resolving loop as timeout reached ({})", m_timeout);
+            log_addr(m_log, dbg, m_server_name, "Stop resolving loop as timeout reached ({})", m_timeout);
             break;
         }
     }
 
     if (m_log->should_log((spdlog::level::level_enum)DEBUG)) {
         for (const socket_address &a : addrs) {
-            dbglog(m_log, "Resolved address: {}", a.str());
+            log_addr(m_log, dbg, m_server_name, "Resolved address: {}", a.str());
         }
     }
 
@@ -92,19 +95,19 @@ static std::vector<ag::resolver_ptr> create_resolvers(const ag::logger &log, con
         if (ag::err_string err = resolver->init(); !err.has_value()) {
             resolvers.emplace_back(std::move(resolver));
         } else {
-            warnlog(log, "Failed to create resolver '{}': {}", server, err.value());
+            log_addr(log, warn, p.address_string, "Failed to create resolver '{}': {}", server, err.value());
         }
     }
 
     if (p.bootstrap.empty() && !ag::socket_address(p.address_string).valid()) {
-        warnlog(log, "Got empty list of the servers for bootstrapping");
+        log_addr(log, warn, p.address_string, "Got empty list of the servers for bootstrapping");
     }
 
     return resolvers;
 }
 
 ag::bootstrapper::bootstrapper(const params &p)
-        : m_log(create_logger(AG_FMT("Bootstrapper {}", p.address_string)))
+        : m_log(create_logger(__func__))
         , m_timeout(p.timeout)
         , m_resolvers(create_resolvers(m_log, p))
 {

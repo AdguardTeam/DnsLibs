@@ -69,6 +69,7 @@ TEST_P(listener_test, listens_and_responds) {
     }
 
     std::atomic_long successful_requests{0};
+    static std::atomic_int request_id{0};
     std::vector<std::thread> workers;
     workers.reserve(params.n_threads);
 
@@ -107,10 +108,11 @@ TEST_P(listener_test, listens_and_responds) {
                                 LDNS_RR_TYPE_AAAA,
                                 LDNS_RR_CLASS_IN,
                                 LDNS_RD));
+                ldns_pkt_set_id(req.get(), ++request_id);
 
                 auto[resp, error] = upstream->exchange(req.get());
                 if (error) {
-                    logger->error("Upstream exchange: {}", *error);
+                    logger->error("[id={}] Upstream exchange: {}", ldns_pkt_id(req.get()), *error);
                     continue;
                 }
 
@@ -121,7 +123,7 @@ TEST_P(listener_test, listens_and_responds) {
                     ++successful_requests;
                 } else {
                     char *str = ldns_pkt2str(resp.get());
-                    logger->error("Invalid response:\n{}", str);
+                    logger->error("[id={}] Invalid response:\n{}", ldns_pkt_id(req.get()), str);
                     std::free(str);
                 }
             }

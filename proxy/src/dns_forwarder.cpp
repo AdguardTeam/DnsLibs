@@ -300,7 +300,7 @@ void dns_forwarder::finalize_processed_event(dns_request_processed_event &event,
         event.error.clear();
     }
 
-    event.elapsed = duration_cast<milliseconds>(steady_clock::now().time_since_epoch()).count() - event.start_time;
+    event.elapsed = duration_cast<milliseconds>(system_clock::now().time_since_epoch()).count() - event.start_time;
     if (this->events->on_request_processed != nullptr) {
         this->events->on_request_processed(event);
     }
@@ -642,11 +642,9 @@ std::vector<uint8_t> dns_forwarder::handle_message(uint8_view message) {
     return raw_response;
 }
 
-std::optional<uint8_vector> dns_forwarder::apply_filter(std::string_view hostname,
-                                                        const ldns_pkt *request,
-                                                        dns_request_processed_event &event) {
-
-    auto rules = filter.match(filter_handle, hostname);
+std::optional<uint8_vector> dns_forwarder::apply_filter(std::string_view hostname, const ldns_pkt *request,
+        dns_request_processed_event &event) {
+    auto rules = this->filter.match(this->filter_handle, hostname);
     for (const dnsfilter::rule &rule : rules) {
         tracelog_fid(log, request, "Matched rule: {}", rule.text);
     }

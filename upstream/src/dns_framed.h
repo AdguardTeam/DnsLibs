@@ -11,7 +11,6 @@
 
 namespace ag {
 
-class dns_framed_pool;
 class dns_framed_connection;
 
 /**

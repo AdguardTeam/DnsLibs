@@ -17,9 +17,14 @@ using connection_ptr = std::shared_ptr<connection>;
  */
 class connection {
 public:
+    struct write_result {
+        int id; // Request id
+        err_string error; // Some string in case of error
+    };
+
     struct read_result {
-        std::vector<uint8_t> reply;
-        err_string error;
+        std::vector<uint8_t> reply; // Reply data
+        err_string error; // Some string in case of error
     };
 
     connection(const socket_address &addr) : address(addr) {}
@@ -29,14 +34,14 @@ public:
     /**
      * Writes given DNS packet to framed connection
      * @param v DNS packet
-     * @return Request ID to wait
+     * @return see `write_result`
      */
-    virtual int write(uint8_view buf) = 0;
+    virtual write_result write(uint8_view buf) = 0;
 
     /**
      * Reads given DNS packet for given request id from framed connection
-     * @param request_id
-     * @return
+     * @param request_id request id to wait
+     * @return see `read_result`
      */
     virtual read_result read(int request_id, std::chrono::milliseconds timeout) = 0;
 

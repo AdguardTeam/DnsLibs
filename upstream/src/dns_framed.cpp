@@ -9,6 +9,9 @@
 #include <ag_utils.h>
 
 
+#define log_conn(l_, lvl_, conn_, fmt_, ...) lvl_##log(l_, "[id={} addr={}] " fmt_, conn_->m_id, conn_->address.str(), ##__VA_ARGS__)
+
+
 using namespace std::chrono;
 
 using bufferevent_ptr = std::unique_ptr<bufferevent, ag::ftor<&bufferevent_free>>;
@@ -26,26 +29,31 @@ class ag::dns_framed_connection : public connection,
 public:
     static constexpr std::string_view UNEXPECTED_EOF = "Unexpected EOF";
 
-    dns_framed_connection(ag::dns_framed_pool *pool, bufferevent *bev, const ag::socket_address &address);
+    dns_framed_connection(dns_framed_pool *pool, uint32_t id, bufferevent *bev, const socket_address &address);
 
     ~dns_framed_connection() override;
 
-    int write(ag::uint8_view buf) override;
+    write_result write(uint8_view buf) override;
 
     read_result read(int request_id, std::chrono::milliseconds timeout) override;
 
     /** Logger */
-    ag::logger m_log;
+    logger m_log;
+    /** Connection id */
+    uint32_t m_id;
     /** Connection pool */
-    ag::dns_framed_pool *m_pool;
+    dns_framed_pool *m_pool;
     /** Connection handle */
     bufferevent_ptr m_bev;
     /** Mutex for syncronizing reads and access */
     std::recursive_mutex m_mutex;
     /** Conditional variable for waiting reads */
     std::condition_variable_any m_cond;
+    /** Set to true when EOF is received or connection is considered inoperable anymore
+     *  by inner logic (timeout, error, etc.) */
+    bool m_closed = false;
     /** Map of requests to their results */
-    ag::hash_map<int, std::optional<read_result>> m_requests;
+    hash_map<int, std::optional<read_result>> m_requests;
     /** Number of currently called reads */
     int m_pending_reads_count = 0;
     /** Signals when all reads completed */
@@ -57,16 +65,23 @@ public:
 };
 
 
-int ag::dns_framed_connection::write(uint8_view buf) {
-    tracelog(m_log, "{} len={}", __func__, buf.size());
+ag::connection::write_result ag::dns_framed_connection::write(uint8_view buf) {
+    log_conn(m_log, trace, this, "{} len={}", __func__, buf.size());
     dns_framed_connection_ptr ptr = shared_from_this();
+
     if (buf.size() < 2) {
-        tracelog(m_log, "{} returned -1", __func__);
-        return -1;
+        log_conn(m_log, trace, this, "{} returned -1", __func__);
+        return { -1, "Failed to send request" };
     }
-    uint16_t id = *(uint16_t *) buf.data();
+
+    uint16_t id = ntohs(*(uint16_t *)buf.data());
     {
         std::scoped_lock l(m_mutex);
+
+        if (m_closed) {
+            log_conn(m_log, trace, this, "Already closed");
+            return { -1, std::string(UNEXPECTED_EOF) };
+        }
 
         using evbuffer_ptr = std::unique_ptr<evbuffer, ftor<&evbuffer_free>>;
         evbuffer_ptr packet_buf{evbuffer_new()};
@@ -79,13 +94,14 @@ int ag::dns_framed_connection::write(uint8_view buf) {
 
         m_requests[id] = std::nullopt;
     }
-    tracelog(m_log, "{} returned {}", __func__, id);
-    return id;
+    log_conn(m_log, trace, this, "Request submitted {}", id);
+    return { id, std::nullopt };
 }
 
-ag::dns_framed_connection::dns_framed_connection(dns_framed_pool *pool, bufferevent *bev, const socket_address &address)
+ag::dns_framed_connection::dns_framed_connection(dns_framed_pool *pool, uint32_t id, bufferevent *bev, const socket_address &address)
         : connection(address)
-        , m_log(create_logger(AG_FMT("{} {}", __func__, address.str())))
+        , m_log(create_logger(__func__))
+        , m_id(id)
         , m_pool(pool)
         , m_bev(bev)
 {
@@ -108,8 +124,13 @@ ag::dns_framed_connection::~dns_framed_connection() {
 }
 
 void ag::dns_framed_connection::on_read() {
-    tracelog(m_log, "{}", __func__);
+    log_conn(m_log, trace, this, "{}", __func__);
     dns_framed_connection_ptr ptr = shared_from_this();
+
+    if (std::unique_lock l(m_mutex); m_closed) {
+        log_conn(m_log, trace, this, "Already closed");
+        return;
+    }
 
     auto *input = bufferevent_get_input(&*m_bev);
     for (;;) {
@@ -129,48 +150,64 @@ void ag::dns_framed_connection::on_read() {
         std::vector<uint8_t> buf;
         buf.resize(length);
         evbuffer_remove(input, buf.data(), buf.size());
-        int id = *(uint16_t *)buf.data();
+        int id = ntohs(*(uint16_t *)buf.data());
         {
             std::unique_lock l(m_mutex);
-            if (m_requests.count(id)) {
-                m_requests.at(id) = {std::move(buf), std::nullopt};
+            auto found = m_requests.find(id);
+            if (found != m_requests.end()) {
+                found->second = {std::move(buf), std::nullopt};
             }
             m_cond.notify_all();
         }
+        log_conn(m_log, trace, this, "Got response for {}", id);
     }
-    tracelog(m_log, "{} finished", __func__);
+    log_conn(m_log, trace, this, "{} finished", __func__);
 }
 
 void ag::dns_framed_connection::on_event(int what) {
-    tracelog(m_log, "{}", __func__);
+    log_conn(m_log, trace, this, "{}", __func__);
     dns_framed_connection_ptr ptr = shared_from_this();
 
+    if (std::unique_lock l(m_mutex); m_closed) {
+        log_conn(m_log, trace, this, "Already closed");
+        return;
+    }
+
     if (what & BEV_EVENT_CONNECTED) {
-        tracelog(m_log, "{} connected", __func__);
+        log_conn(m_log, trace, this, "{} connected", __func__);
         m_pool->add_connected(shared_from_this());
     }
     if (what & (BEV_EVENT_EOF | BEV_EVENT_ERROR)) {
         if (what & BEV_EVENT_EOF) {
-            tracelog(m_log, "{} eof", __func__);
+            log_conn(m_log, trace, this, "{} eof", __func__);
         } else {
-            tracelog(m_log, "{} error {}", __func__, evutil_socket_error_to_string(evutil_socket_geterror(bufferevent_getfd(m_bev.get()))));
+            log_conn(m_log, trace, this, "{} error {}", __func__, evutil_socket_error_to_string(evutil_socket_geterror(bufferevent_getfd(m_bev.get()))));
         }
         m_pool->remove_from_all(shared_from_this());
         std::unique_lock l(m_mutex);
+        m_closed = true;
         for (auto &entry : m_requests) {
-            std::string error = (what & BEV_EVENT_EOF) ? std::string(UNEXPECTED_EOF) :
-                                evutil_socket_error_to_string(evutil_socket_geterror(bufferevent_getfd(m_bev.get())));
-            // Set result
-            entry.second = {std::vector<uint8_t>{}, {std::move(error)}};
+            // do not assign error, if we already got response
+            if (!entry.second.has_value()) {
+                std::string error = (what & BEV_EVENT_EOF) ? std::string(UNEXPECTED_EOF) :
+                                    evutil_socket_error_to_string(evutil_socket_geterror(bufferevent_getfd(m_bev.get())));
+                // Set result
+                entry.second = {std::vector<uint8_t>{}, {std::move(error)}};
+            }
         }
         m_cond.notify_all();
     }
-    tracelog(m_log, "{} finished", __func__);
+    log_conn(m_log, trace, this, "{} finished", __func__);
 }
 
 ag::connection::read_result ag::dns_framed_connection::read(int request_id, milliseconds timeout) {
     dns_framed_connection_ptr ptr = shared_from_this();
     std::unique_lock l(m_mutex);
+
+    if (m_closed) {
+        log_conn(m_log, trace, this, "Already closed");
+        return { {}, std::string(UNEXPECTED_EOF) };
+    }
 
     ++m_pending_reads_count;
     utils::scope_exit read_unregister(
@@ -199,7 +236,7 @@ ag::connection::read_result ag::dns_framed_connection::read(int request_id, mill
 
 void ag::dns_framed_pool::add_connected(const connection_ptr &ptr) {
     dns_framed_connection *conn = (dns_framed_connection *)ptr.get();
-    tracelog(conn->m_log, "[{}] {}", conn->address.str(), __func__);
+    log_conn(conn->m_log, trace, conn, "{}", __func__);
 
     std::scoped_lock l(m_mutex);
     m_pending_connections.erase(ptr);
@@ -208,7 +245,7 @@ void ag::dns_framed_pool::add_connected(const connection_ptr &ptr) {
 
 void ag::dns_framed_pool::remove_from_all(const connection_ptr &ptr) {
     dns_framed_connection *conn = (dns_framed_connection *)ptr.get();
-    tracelog(conn->m_log, "[{}] {}", conn->address.str(), __func__);
+    log_conn(conn->m_log, trace, conn, "{}", __func__);
 
     std::scoped_lock l(m_mutex);
     m_pending_connections.erase(ptr);
@@ -219,13 +256,14 @@ void ag::dns_framed_pool::remove_from_all(const connection_ptr &ptr) {
 
 void ag::dns_framed_pool::add_pending_connection(const connection_ptr &ptr) {
     dns_framed_connection *conn = (dns_framed_connection *)ptr.get();
-    tracelog(conn->m_log, "[{}] {}", conn->address.str(), __func__);
+    log_conn(conn->m_log, trace, conn, "{}", __func__);
 
     m_pending_connections.insert(ptr);
 }
 
 ag::connection_ptr ag::dns_framed_pool::create_connection(bufferevent *bev, const socket_address &address) {
-    return std::make_shared<dns_framed_connection>(this, bev, address);
+    static std::atomic_uint32_t conn_id{0};
+    return std::make_shared<dns_framed_connection>(this, conn_id++, bev, address);
 }
 
 // A connection should be deleted on the event loop, but some events may raise on already
@@ -233,6 +271,10 @@ ag::connection_ptr ag::dns_framed_pool::create_connection(bufferevent *bev, cons
 // delete event is called.
 void ag::dns_framed_pool::close_connection(const connection_ptr &conn) {
     dns_framed_connection *framed_conn = (dns_framed_connection *)conn.get();
+    framed_conn->m_closed = true;
+
+    bufferevent_setcb(framed_conn->m_bev.get(), nullptr, nullptr, nullptr, nullptr);
+    bufferevent_disable(framed_conn->m_bev.get(), EV_READ | EV_WRITE);
 
     event_base_once(bufferevent_get_base(framed_conn->m_bev.get()), -1, EV_TIMEOUT,
         [] (evutil_socket_t, short, void *ptr) {
@@ -267,12 +309,12 @@ ag::connection::read_result ag::dns_framed_pool::perform_request_inner(uint8_vie
         return { {}, AG_FMT("DNS server name resolving took too much time: {}", elapsed) };
     }
 
-    int id = conn->write(buf);
-    if (id < 0) {
-        return { {}, "Failed to send request" };
+    connection::write_result write_result = conn->write(buf);
+    if (write_result.error.has_value()) {
+        return { {}, std::move(write_result.error) };
     }
 
-    return conn->read(id, timeout);
+    return conn->read(write_result.id, timeout);
 }
 
 ag::connection::read_result ag::dns_framed_pool::perform_request(uint8_view buf, milliseconds timeout) {
