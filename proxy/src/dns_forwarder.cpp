@@ -300,7 +300,7 @@ void dns_forwarder::finalize_processed_event(dns_request_processed_event &event,
         event.error.clear();
     }
 
-    event.elapsed = duration_cast<milliseconds>(steady_clock::now().time_since_epoch()).count() - event.start_time;
+    event.elapsed = duration_cast<milliseconds>(system_clock::now().time_since_epoch()).count() - event.start_time;
     if (this->events->on_request_processed != nullptr) {
         this->events->on_request_processed(event);
     }
