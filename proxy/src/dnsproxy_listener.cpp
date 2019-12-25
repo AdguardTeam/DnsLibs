@@ -43,7 +43,8 @@ protected:
     ag::logger m_log;
     ag::dnsproxy *m_proxy{nullptr};
     std::thread m_loop_thread;
-    uv_loop_t m_loop{};
+    using uv_loop_ptr = std::unique_ptr<uv_loop_t, ag::ftor<&uv_loop_delete>>;
+    uv_loop_ptr m_loop;
     uv_async_t m_escape_hatch{};
     ag::socket_address m_address;
     ag::listener_settings m_settings;
@@ -93,13 +94,12 @@ public:
 
         int err = 0;
         // Init the loop
-        if ((err = uv_loop_init(&m_loop)) < 0) {
-            return fmt::format("uv_loop_init failed: {}", uv_strerror(err));
+        if (m_loop = uv_loop_ptr(uv_loop_new()); m_loop == nullptr) {
+            return "Failed to create uv loop";
         }
 
         // Init the escape hatch
-        if ((err = uv_async_init(&m_loop, &m_escape_hatch, escape_hatch_cb))) {
-            uv_loop_close(&m_loop);
+        if ((err = uv_async_init(m_loop.get(), &m_escape_hatch, escape_hatch_cb))) {
             return fmt::format("uv_async_init failed: {}", uv_strerror(err));
         }
         m_escape_hatch.data = this;
@@ -109,9 +109,7 @@ public:
             uv_close((uv_handle_t *) &m_escape_hatch, nullptr);
 
             // Run the loop once to let libuv close the handles cleanly
-            err = uv_run(&m_loop, UV_RUN_DEFAULT);
-            assert(0 == err);
-            err = uv_loop_close(&m_loop);
+            err = uv_run(m_loop.get(), UV_RUN_DEFAULT);
             assert(0 == err);
 
             return err_str;
@@ -119,7 +117,7 @@ public:
 
         m_loop_thread = std::thread([this]() {
             infolog(m_log, "Listening on {} ({})", m_address.str(), magic_enum::enum_name(m_settings.protocol));
-            uv_run(&m_loop, UV_RUN_DEFAULT);
+            uv_run(m_loop.get(), UV_RUN_DEFAULT);
             infolog(m_log, "Finished listening");
         });
 
@@ -128,7 +126,6 @@ public:
 
     ~listener_base() override {
         await_shutdown();
-        uv_loop_close(&m_loop);
     }
 
     void shutdown() final {
@@ -227,7 +224,7 @@ private:
         }
 
         auto *m = new task(self, addr, *buf);
-        uv_queue_work(&self->m_loop, &m->work_req, work_cb, after_work_cb);
+        uv_queue_work(self->m_loop.get(), &m->work_req, work_cb, after_work_cb);
         self->m_pending.insert(m);
     }
 
@@ -236,7 +233,7 @@ protected:
         int err = 0;
 
         // Init UDP
-        if ((err = uv_udp_init(&m_loop, &m_udp_handle)) < 0) {
+        if ((err = uv_udp_init(m_loop.get(), &m_udp_handle)) < 0) {
             return fmt::format("uv_udp_init failed: {}", uv_strerror(err));
         }
         m_udp_handle.data = this;
@@ -530,7 +527,7 @@ private:
 
         auto conn = std::make_unique<tcp_dns_connection>(self->m_id_counter++);
 
-        int err = uv_tcp_init(&self->m_loop, conn->handle());
+        int err = uv_tcp_init(self->m_loop.get(), conn->handle());
         if (err < 0) {
             dbglog(self->m_log, "{}: uv_tcp_init failed: {}", __func__, uv_strerror(err));
             return;
@@ -541,7 +538,7 @@ private:
             return;
         }
 
-        conn->start(&self->m_loop,
+        conn->start(self->m_loop.get(),
                     self->m_proxy,
                     self->m_settings.persistent,
                     self->m_settings.idle_timeout,
@@ -555,7 +552,7 @@ protected:
     ag::err_string before_run() override {
         int err = 0;
 
-        if ((err = uv_tcp_init(&m_loop, &m_tcp_handle)) < 0) {
+        if ((err = uv_tcp_init(m_loop.get(), &m_tcp_handle)) < 0) {
             return fmt::format("uv_tcp_init failed: {}", uv_strerror(err));
         }
         m_tcp_handle.data = this;
