@@ -69,7 +69,7 @@ int ag::dns_framed_connection::write(uint8_view buf) {
         log_conn(m_log, trace, this, "{} returned -1", __func__);
         return -1;
     }
-    uint16_t id = *(uint16_t *) buf.data();
+    uint16_t id = ntohs(*(uint16_t *)buf.data());
     {
         std::scoped_lock l(m_mutex);
 
@@ -84,7 +84,7 @@ int ag::dns_framed_connection::write(uint8_view buf) {
 
         m_requests[id] = std::nullopt;
     }
-    log_conn(m_log, trace, this, "{} returned {}", __func__, ntohs(id));
+    log_conn(m_log, trace, this, "Request submitted {}", id);
     return id;
 }
 
@@ -135,7 +135,7 @@ void ag::dns_framed_connection::on_read() {
         std::vector<uint8_t> buf;
         buf.resize(length);
         evbuffer_remove(input, buf.data(), buf.size());
-        int id = *(uint16_t *)buf.data();
+        int id = ntohs(*(uint16_t *)buf.data());
         {
             std::unique_lock l(m_mutex);
             if (m_requests.count(id)) {
@@ -143,6 +143,7 @@ void ag::dns_framed_connection::on_read() {
             }
             m_cond.notify_all();
         }
+        log_conn(m_log, trace, this, "Got response for {}", id);
     }
     log_conn(m_log, trace, this, "{} finished", __func__);
 }
