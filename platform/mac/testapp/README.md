@@ -1,4 +1,3 @@
-
 # MacOS DNS proxy sample application
 
 ## Howto build
