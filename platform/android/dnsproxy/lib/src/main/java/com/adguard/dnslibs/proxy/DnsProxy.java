@@ -44,7 +44,9 @@ public class DnsProxy implements Closeable {
 
         public void onRequestProcessed(DnsRequestProcessedEvent event) {
             try {
-                userEvents.onRequestProcessed(event);
+                if (userEvents != null) {
+                    userEvents.onRequestProcessed(event);
+                }
             } catch (Exception e) {
                 logHandlerException(e);
             }
@@ -120,7 +122,7 @@ public class DnsProxy implements Closeable {
         }
         final EventsAdapter eventsAdapter;
         try {
-            eventsAdapter = events != null ? new EventsAdapter(events) : null;
+            eventsAdapter = new EventsAdapter(events);
         } catch (RuntimeException e) {
             close();
             throw e;
