@@ -17,62 +17,6 @@ import javax.net.ssl.X509TrustManager;
 public class DnsProxy implements Closeable {
     private static final Logger log = LoggerFactory.getLogger(DnsProxy.class);
 
-    private static class EventsAdapter {
-        private static final Logger log = LoggerFactory.getLogger(EventsAdapter.class);
-
-        private final DnsProxyEvents userEvents;
-        private final X509TrustManager trustManager;
-        private final CertificateFactory certificateFactory;
-
-        public EventsAdapter(DnsProxyEvents userEvents) {
-            this.userEvents = userEvents;
-            try {
-                certificateFactory = CertificateFactory.getInstance("X.509");
-                final KeyStore ks = KeyStore.getInstance("AndroidCAStore");
-                ks.load(null);
-                final TrustManagerFactory tmf = TrustManagerFactory.getInstance(TrustManagerFactory.getDefaultAlgorithm());
-                tmf.init(ks);
-                trustManager = (X509TrustManager) tmf.getTrustManagers()[0];
-            } catch (Exception e) {
-                throw new RuntimeException("Failed to initialize X509 stuff", e);
-            }
-        }
-
-        private static void logHandlerException(Exception e) {
-            log.error("Unexpected exception in event handler: ", e);
-        }
-
-        public void onRequestProcessed(DnsRequestProcessedEvent event) {
-            try {
-                userEvents.onRequestProcessed(event);
-            } catch (Exception e) {
-                logHandlerException(e);
-            }
-        }
-
-        public String onCertificateVerification(CertificateVerificationEvent event) {
-            try {
-                final List<X509Certificate> chain = new ArrayList<>();
-
-                chain.add((X509Certificate) certificateFactory.generateCertificate(
-                        new ByteArrayInputStream(event.getCertificate())));
-
-                for (final byte[] cert : event.getChain()) {
-                    chain.add((X509Certificate) certificateFactory.generateCertificate(new ByteArrayInputStream(cert)));
-                }
-
-                final long s = System.nanoTime();
-                trustManager.checkServerTrusted(chain.toArray(new X509Certificate[]{}), "UNKNOWN");
-                final long f = System.nanoTime();
-                log.debug("checkServerTrusted ran for: {} s", ((f - s) / 1e9d));
-
-                return null; // Success
-            } catch (Exception e) {
-                return e.toString(); // Failure
-            }
-        }
-    }
-
     private enum State {
         NEW, INITIALIZED, CLOSED,
     }
@@ -112,24 +56,20 @@ public class DnsProxy implements Closeable {
      * @throws NullPointerException if {@code settings == null}.
      * @throws RuntimeException     if the proxy could not initialize.
      */
-    public DnsProxy(DnsProxySettings settings, DnsProxyEvents events) {
+    public DnsProxy(DnsProxySettings settings, DnsProxyEvents events) throws RuntimeException {
         this();
-        if (settings == null) {
-            close();
-            throw new NullPointerException("settings");
-        }
-        final EventsAdapter eventsAdapter;
         try {
-            eventsAdapter = events != null ? new EventsAdapter(events) : null;
+            if (settings == null) {
+                throw new NullPointerException("settings");
+            }
+            if (!init(nativePtr, settings, new EventsAdapter(events))) {
+                throw new RuntimeException("Failed to initialize the native proxy, see log for details.");
+            }
+            state = State.INITIALIZED;
         } catch (RuntimeException e) {
             close();
             throw e;
         }
-        if (!init(nativePtr, settings, eventsAdapter)) {
-            close();
-            throw new RuntimeException("Failed to initialize the native proxy, see log for details.");
-        }
-        state = State.INITIALIZED;
     }
 
     /**
@@ -143,7 +83,7 @@ public class DnsProxy implements Closeable {
      * an empty array in case of an error.
      * @throws IllegalStateException if the proxy is closed.
      */
-    public byte[] handleMessage(byte[] message) {
+    public byte[] handleMessage(byte[] message) throws IllegalStateException {
         if (state != State.INITIALIZED) {
             throw new IllegalStateException("Closed");
         }
@@ -175,7 +115,7 @@ public class DnsProxy implements Closeable {
      * @return the effective proxy settings.
      * @throws IllegalStateException if the proxy is closed.
      */
-    public DnsProxySettings getSettings() {
+    public DnsProxySettings getSettings() throws IllegalStateException {
         if (state != State.INITIALIZED) {
             throw new IllegalStateException("Closed");
         }
@@ -256,4 +196,66 @@ public class DnsProxy implements Closeable {
      */
     public static native boolean isValidRule(String str);
 
+    /**
+     * Events adapter implementatoin.
+     * Callbacks from this class are called from native code.
+     * This class is private. See {@link DnsProxyEvents} for user events interface.
+     */
+    private static class EventsAdapter {
+        private static final Logger log = LoggerFactory.getLogger(EventsAdapter.class);
+
+        private final DnsProxyEvents userEvents;
+        private final X509TrustManager trustManager;
+        private final CertificateFactory certificateFactory;
+
+        EventsAdapter(DnsProxyEvents userEvents) {
+            this.userEvents = userEvents;
+            try {
+                certificateFactory = CertificateFactory.getInstance("X.509");
+                final KeyStore ks = KeyStore.getInstance("AndroidCAStore");
+                ks.load(null);
+                final TrustManagerFactory tmf = TrustManagerFactory.getInstance(TrustManagerFactory.getDefaultAlgorithm());
+                tmf.init(ks);
+                trustManager = (X509TrustManager) tmf.getTrustManagers()[0];
+            } catch (Exception e) {
+                throw new RuntimeException("Failed to initialize X509 stuff", e);
+            }
+        }
+
+        private static void logHandlerException(Exception e) {
+            log.error("Unexpected exception in event handler: ", e);
+        }
+
+        public void onRequestProcessed(DnsRequestProcessedEvent event) {
+            try {
+                if (userEvents != null) {
+                    userEvents.onRequestProcessed(event);
+                }
+            } catch (Exception e) {
+                logHandlerException(e);
+            }
+        }
+
+        public String onCertificateVerification(CertificateVerificationEvent event) {
+            try {
+                final List<X509Certificate> chain = new ArrayList<>();
+
+                chain.add((X509Certificate) certificateFactory.generateCertificate(
+                        new ByteArrayInputStream(event.getCertificate())));
+
+                for (final byte[] cert : event.getChain()) {
+                    chain.add((X509Certificate) certificateFactory.generateCertificate(new ByteArrayInputStream(cert)));
+                }
+
+                final long startTime = System.currentTimeMillis();
+                trustManager.checkServerTrusted(chain.toArray(new X509Certificate[]{}), "UNKNOWN");
+                final long finishTime = System.currentTimeMillis();
+                log.debug("Certificate verification took {}ms", finishTime - startTime);
+
+                return null; // Success
+            } catch (Exception e) {
+                return e.toString(); // Failure
+            }
+        }
+    }
 }

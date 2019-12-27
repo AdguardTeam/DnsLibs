@@ -59,13 +59,14 @@ ag::connection_pool::get_result ag::dns_over_tls::tls_pool::create() {
     assert(!resolve_result.addresses.empty());
 
     SSL_CTX *ctx = SSL_CTX_new(TLS_client_method());
+    SSL_CTX_set_verify(ctx, SSL_VERIFY_PEER, nullptr);
+    SSL_CTX_set_cert_verify_callback(ctx, dns_over_tls::ssl_verify_callback, nullptr);
     SSL *ssl = SSL_new(ctx);
     int options = BEV_OPT_THREADSAFE | BEV_OPT_DEFER_CALLBACKS | BEV_OPT_UNLOCK_CALLBACKS | BEV_OPT_CLOSE_ON_FREE;
     bufferevent *bev = bufferevent_openssl_socket_new(m_loop->c_base(), -1, ssl,
                                                       BUFFEREVENT_SSL_CONNECTING,
                                                       options);
     SSL_set_tlsext_host_name(ssl, m_upstream->m_server_name.c_str());
-    SSL_set_verify(ssl, SSL_VERIFY_PEER, dns_over_tls::ssl_verify_callback);
     SSL_set_app_data(ssl, m_upstream);
 
     const socket_address &address = resolve_result.addresses[0];
@@ -180,7 +181,7 @@ ag::err_string ag::dns_over_tls::init() {
 
 ag::dns_over_tls::~dns_over_tls() = default;
 
-int ag::dns_over_tls::ssl_verify_callback(int ok, X509_STORE_CTX *ctx) {
+int ag::dns_over_tls::ssl_verify_callback(X509_STORE_CTX *ctx, void *arg) {
     SSL *ssl = (SSL *)X509_STORE_CTX_get_ex_data(ctx, SSL_get_ex_data_X509_STORE_CTX_idx());
     ag::dns_over_tls *upstream = (ag::dns_over_tls *)SSL_get_app_data(ssl);
 

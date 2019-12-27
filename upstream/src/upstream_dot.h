@@ -31,7 +31,7 @@ private:
     err_string init() override;
     exchange_result exchange(ldns_pkt *request_pkt) override;
 
-    static int ssl_verify_callback(int ok, X509_STORE_CTX *store_ctx);
+    static int ssl_verify_callback(X509_STORE_CTX *store_ctx, void *arg);
     class tls_pool;
 
     logger m_log = create_logger("DOT upstream");
