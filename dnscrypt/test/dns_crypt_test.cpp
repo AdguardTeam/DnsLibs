@@ -169,8 +169,10 @@ static constexpr std::string_view check_dns_crypt_server_test_stamps[]{
     // Quad9 (anycast) dnssec/no-log/filter 9.9.9.9
     "sdns://AQMAAAAAAAAADDkuOS45Ljk6ODQ0MyBnyEe4yHWM0SAkVUO-dWdG3zTfHYTAC4xHA2jfgh2GPhkyLmRuc2NyeXB0LWNlcnQucXVhZDkubmV0",
 #endif
+#if 0 // Yandex is down temporarily
     // Yandex DNS
     "sdns://AQQAAAAAAAAAEDc3Ljg4LjguNzg6MTUzNTMg04TAccn3RmKvKszVe13MlxTUB7atNgHhrtwG1W1JYyciMi5kbnNjcnlwdC1jZXJ0LmJyb3dzZXIueWFuZGV4Lm5ldA",
+#endif
 };
 
 static constexpr ag::dnscrypt::protocol check_dns_crypt_server_test_protocols[]{
