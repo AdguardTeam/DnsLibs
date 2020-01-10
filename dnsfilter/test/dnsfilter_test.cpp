@@ -73,9 +73,15 @@ TEST_F(dnsfilter_test, successful_rule_parsing) {
             { "example.org$badfilter", { { .props = { 1 << ag::dnsfilter::RP_BADFILTER } } } },
             { "-ad-banner.", { {} , rule_utils::rule::MMID_SHORTCUTS } },
             { "-ad-unit/", { {} , rule_utils::rule::MMID_SHORTCUTS } },
-            { "@@||flashx.tv/js/xfs.js", { { .props = { 1 << ag::dnsfilter::RP_EXCEPTION } }, rule_utils::rule::MMID_DOMAINS } },
             { "||adminpromotion.com^", { {}, rule_utils::rule::MMID_DOMAINS } },
             { "||travelstool.com^", { {}, rule_utils::rule::MMID_DOMAINS } },
+            { "example.org:8080", { {}, rule_utils::rule::MMID_DOMAINS } },
+            { "//example.org:8080", { {}, rule_utils::rule::MMID_DOMAINS } },
+            { "://example.org", { {}, rule_utils::rule::MMID_DOMAINS } },
+            { "://example.org/", { {}, rule_utils::rule::MMID_DOMAINS } },
+            { "http://example.org/", { {}, rule_utils::rule::MMID_DOMAINS } },
+            { "https://example.org|", { {}, rule_utils::rule::MMID_DOMAINS } },
+            { "ws://example.org|", { {}, rule_utils::rule::MMID_DOMAINS } },
         };
 
     ag::logger log = ag::create_logger("dnsfilter_test");
@@ -141,6 +147,19 @@ TEST_F(dnsfilter_test, wrong_rule_parsing) {
             "&admeld_",
             "+advertorial.",
             "?ad_partner=",
+            "@@||flashx.tv/js/xfs.js",
+            "example.com/page",
+            "example.com^some",
+            "example.com|some",
+            "example.com/^page",
+            "|||example.com",
+            "example.com^|",
+            "example.com:8o",
+            "example.com:111111",
+            "hhtp://example.com:111111",
+            "example.com//",
+            "/example.com",
+            "///example.com",
         };
 
     ag::logger log = ag::create_logger("dnsfilter_test");
@@ -174,9 +193,7 @@ TEST_F(dnsfilter_test, basic_rules_match) {
             { { "http://example11.org" }, "example11.org", true, },
             { { "://example12.org" }, "example12.org", true, },
             { { "//example13.org" }, "sub.example13.org", true, },
-            { { "example14.org^sdsd" }, "example14.org", true, },
             { { "example15.org/" }, "example15.org", true, },
-            { { "example16.org/sdsda" }, "example16.org", true, },
             { { "example17.org:8080" }, "example17.org", true, },
             { { "example18.org|" }, "eexample18.org", true, },
             { { "example19.org^" }, "eexample19.org", true, },
@@ -232,6 +249,9 @@ TEST_F(dnsfilter_test, basic_rules_no_match) {
             { "example5.org|", "example5.org.com", },
             { "|example6.org", "sub.example6.org", },
             { "||example7.org", "eeexample7.org", },
+            { "://example8.org", "eeexample8.org", },
+            { "http://example9.org", "eeexample9.org", },
+            { "example10.org/", "example10.orgg", },
         };
 
     for (const test_data &entry : TEST_DATA) {

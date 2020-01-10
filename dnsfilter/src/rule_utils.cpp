@@ -13,9 +13,9 @@
 static constexpr int MODIFIERS_MARKER = '$';
 static constexpr int MODIFIERS_DELIMITER = ',';
 static constexpr std::string_view EXCEPTION_MARKER = "@@";
-static constexpr std::array<std::string_view, 8> SKIPPABLE_PREFIXES =
-    { "https", "http", "http*", "ws", "wss", "ws*", ":", "/", };
-static constexpr std::array<std::string_view, 1> SKIPPABLE_SUFFIXES =
+static constexpr std::string_view SKIPPABLE_PREFIXES[] =
+    { "https://", "http://", "http*://", "ws://", "wss://", "ws*://", "://", "//" };
+static constexpr std::string_view SKIPPABLE_SUFFIXES[] =
     { "/", };
 static constexpr std::string_view SPECIAL_SUFFIXES[] =
     { "|", "^" };
@@ -162,56 +162,44 @@ static inline bool check_regex(std::string_view str) {
     return str.length() > 1 && str.front() == '/' && str.back() == '/';
 }
 
-static inline bool remove_skippable_prefixes(std::string_view &rule, bool is_regex) {
-    bool removed = false;
+static std::string_view remove_skippable_prefixes(std::string_view rule, bool is_regex) {
     if (!is_regex) {
-        decltype(SKIPPABLE_PREFIXES)::const_iterator prefix;
-        while (SKIPPABLE_PREFIXES.end() != (prefix = std::find_if(SKIPPABLE_PREFIXES.begin(), SKIPPABLE_PREFIXES.end(),
-                [&rule] (std::string_view prefix) { return ag::utils::starts_with(rule, prefix); }))) {
-            rule.remove_prefix(prefix->length());
-            removed = true;
+        for (std::string_view prefix : SKIPPABLE_PREFIXES) {
+            if (ag::utils::starts_with(rule, prefix)) {
+                rule.remove_prefix(prefix.length());
+                break;
+            }
         }
     } else {
         rule.remove_prefix(1);
-        removed = true;
     }
-    return removed;
+    return rule;
 }
 
-static inline bool remove_skippable_suffixes(std::string_view &rule, bool is_regex) {
-    bool removed = false;
+static inline bool is_valid_port(std::string_view str) {
+    return str.length() > 0
+        && str.length() < 6
+        && str.cend() == std::find_if(str.cbegin(), str.cend(), std::not_fn((int (*)(int))std::isdigit));
+}
+
+static std::string_view remove_skippable_suffixes(std::string_view rule, bool is_regex) {
     if (!is_regex) {
-        decltype(SKIPPABLE_SUFFIXES)::const_iterator suffix;
-        while (SKIPPABLE_SUFFIXES.end() != (suffix = std::find_if(SKIPPABLE_SUFFIXES.begin(), SKIPPABLE_SUFFIXES.end(),
-                [&rule] (std::string_view suffix) { return ag::utils::ends_with(rule, suffix); }))) {
-            rule.remove_suffix(suffix->length());
-            removed = true;
+        for (std::string_view suffix : SKIPPABLE_SUFFIXES) {
+            if (ag::utils::ends_with(rule, suffix)) {
+                rule.remove_suffix(suffix.length());
+                break;
+            }
         }
 
-        // drop trailing part after special suffix (e.g. `example.com^somethig` -> `example.com^`)
-        for (std::string_view suffix : SPECIAL_SUFFIXES) {
-            // skip the same characters at the begining
-            size_t skipped = 0;
-            while (skipped < rule.length() && 0 == rule.compare(skipped, suffix.length(), suffix)) {
-                skipped += suffix.length();
-            }
-            std::vector<std::string_view> parts = ag::utils::split_by(rule.substr(skipped), suffix);
-            size_t remaining_length = parts[0].length();
-            if (parts.size() > 1 || parts[0].length() < rule.length() - skipped) {
-                remaining_length += suffix.length();
-            }
-            rule = { parts[0].data() - skipped, remaining_length + skipped };
+        // drop port (e.g. `example.com:8080` -> `example.com`)
+        std::array<std::string_view, 2> parts = ag::utils::split2_by(rule, ':');
+        if (is_valid_port(parts[1])) {
+            rule = (parts[0].data() == rule.data()) ? parts[0] : "";
         }
-
-        // drop common copy-paste trailers (like `:<port>`, `example.org/<page>`)
-        std::vector<std::string_view> parts = ag::utils::split_by_any_of(rule, "/:&");
-        removed = removed || parts.size() > 1 || parts[0].length() < rule.length();
-        rule = (parts[0].data() == rule.data()) ? parts[0] : "";
     } else {
         rule.remove_suffix(1);
-        removed = true;
     }
-    return removed;
+    return rule;
 }
 
 static inline int remove_special_prefixes(std::string_view &rule) {
@@ -234,6 +222,7 @@ static inline int remove_special_suffixes(std::string_view &rule) {
         if (ag::utils::ends_with(rule, suffix)) {
             rule.remove_suffix(suffix.length());
             r = MPM_LINE_END_ASSERTED;
+            break;
         }
     }
     return r;
@@ -243,16 +232,23 @@ static inline int remove_special_suffixes(std::string_view &rule) {
 static match_info extract_match_info(std::string_view rule) {
     match_info info = { rule, check_regex(rule), 0 };
 
+    // rules with wrong special and skippable prefixes and suffixes will be dropped by
+    // domain validity check
+
     // special prefixes come before skippable ones (e.g. `||http://example.org`)
     // so for the first we should check special ones
     if (!info.is_regex) {
         info.pattern_mode |= remove_special_prefixes(info.text);
     }
 
-    bool has_skippable_prefix = remove_skippable_prefixes(info.text, info.is_regex);
-    // but special suffixes come after skippable ones (e.g. `example.org^asd`)
+    std::string_view clean_rule_text = remove_skippable_prefixes(info.text, info.is_regex);
+    bool has_skippable_prefix = info.text.length() > clean_rule_text.length();
+    info.text = clean_rule_text;
+    // but special suffixes come after skippable ones (e.g. `example.org^`)
     // so for the first we should drop skippable ones
-    bool has_skippable_suffix = remove_skippable_suffixes(info.text, info.is_regex);
+    clean_rule_text = remove_skippable_suffixes(info.text, info.is_regex);
+    bool has_skippable_suffix = info.text.length() > clean_rule_text.length();
+    info.text = clean_rule_text;
 
     if (!info.is_regex) {
         info.pattern_mode |= remove_special_suffixes(info.text);
