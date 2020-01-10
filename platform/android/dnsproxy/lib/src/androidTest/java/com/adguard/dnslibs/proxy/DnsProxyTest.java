@@ -191,12 +191,6 @@ public class DnsProxyTest {
         udp.setProtocol(ListenerSettings.Protocol.UDP);
         settings.getListeners().add(udp);
 
-        final Dns64Settings dns64 = new Dns64Settings();
-        dns64.setUpstream(settings.getUpstreams().get(0));
-        dns64.setMaxTries(1234);
-        dns64.setWaitTimeMs(3456);
-        settings.setDns64(dns64);
-
         final UpstreamSettings dot = new UpstreamSettings();
         dot.setAddress("tls://dns.adguard.com");
         dot.getBootstrap().add("8.8.8.8");
@@ -204,8 +198,22 @@ public class DnsProxyTest {
         dot.setTimeoutMs(10000);
         settings.getUpstreams().add(dot);
 
+        final Dns64Settings dns64 = new Dns64Settings();
+        dns64.setUpstream(dot);
+        dns64.setMaxTries(1234);
+        dns64.setWaitTimeMs(3456);
+        settings.setDns64(dns64);
+
+        settings.setListeners(settings.getListeners());
+        settings.setUpstreams(settings.getUpstreams());
+        settings.setFilterParams(settings.getFilterParams());
+        settings.getDns64().getUpstream().setBootstrap(settings.getDns64().getUpstream().getBootstrap());
+
         try (final DnsProxy proxy = new DnsProxy(settings)) {
             assertEquals(settings, proxy.getSettings());
+            assertFalse(proxy.getSettings().getListeners().isEmpty());
+            assertFalse(proxy.getSettings().getUpstreams().isEmpty());
+            assertFalse(proxy.getSettings().getDns64().getUpstream().getBootstrap().isEmpty());
         }
     }
 

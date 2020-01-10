@@ -30,10 +30,6 @@ public class DnsRequestProcessedEvent {
     /** If not {@code null}, contains the error text (occurred while processing the DNS query) */
     private String error;
 
-    private DnsRequestProcessedEvent() {
-        // Initialized from native code
-    }
-
     public String getDomain() {
         return domain;
     }
@@ -80,6 +76,54 @@ public class DnsRequestProcessedEvent {
 
     public String getError() {
         return error;
+    }
+
+    public void setDomain(String domain) {
+        this.domain = domain;
+    }
+
+    public void setType(String type) {
+        this.type = type;
+    }
+
+    public void setStartTime(long startTime) {
+        this.startTime = startTime;
+    }
+
+    public void setElapsed(int elapsed) {
+        this.elapsed = elapsed;
+    }
+
+    public void setAnswer(String answer) {
+        this.answer = answer;
+    }
+
+    public void setUpstreamAddr(String upstreamAddr) {
+        this.upstreamAddr = upstreamAddr;
+    }
+
+    public void setBytesSent(int bytesSent) {
+        this.bytesSent = bytesSent;
+    }
+
+    public void setBytesReceived(int bytesReceived) {
+        this.bytesReceived = bytesReceived;
+    }
+
+    public void setRules(List<String> rules) {
+        this.rules = rules;
+    }
+
+    public void setFilterListIds(int[] filterListIds) {
+        this.filterListIds = filterListIds;
+    }
+
+    public void setWhitelist(boolean whitelist) {
+        this.whitelist = whitelist;
+    }
+
+    public void setError(String error) {
+        this.error = error;
     }
 
     @Override

@@ -28,8 +28,15 @@ public class UpstreamSettings {
     /**
      * @return List of plain DNS servers to be used to resolve DOH/DOT hostnames (if any).
      */
-    public List<String> getBootstrap() {
+    List<String> getBootstrap() {
         return bootstrap;
+    }
+
+    /**
+     * @param bootstrap List of plain DNS servers to be used to resolve DOH/DOT hostnames (if any).
+     */
+    public void setBootstrap(List<String> bootstrap) {
+        this.bootstrap = new ArrayList<>(bootstrap);
     }
 
     /**

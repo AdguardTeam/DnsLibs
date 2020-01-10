@@ -4,6 +4,7 @@ import android.util.LongSparseArray;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 
 public class DnsProxySettings {
@@ -18,8 +19,15 @@ public class DnsProxySettings {
     /**
      * @return DNS upstreams settings list.
      */
-    public List<UpstreamSettings> getUpstreams() {
+    List<UpstreamSettings> getUpstreams() {
         return upstreams;
+    }
+
+    /**
+     * @param upstreams DNS upstreams settings list.
+     */
+    public void setUpstreams(List<UpstreamSettings> upstreams) {
+        this.upstreams = new ArrayList<>(upstreams);
     }
 
     /**
@@ -53,15 +61,42 @@ public class DnsProxySettings {
     /**
      * @return Filter engine parameters. Filter files with identifiers.
      */
-    public LongSparseArray<String> getFilterParams() {
+    LongSparseArray<String> getFilterParams() {
         return filterParams;
+    }
+
+    /**
+     * @param filterParams Filter engine parameters. Filter files with identifiers.
+     */
+    public void setFilterParams(LongSparseArray<String> filterParams) {
+        this.filterParams = new LongSparseArray<>(filterParams.size());
+        for (int i = 0; i < filterParams.size(); ++i) {
+            getFilterParams().put(filterParams.keyAt(i), filterParams.valueAt(i));
+        }
+    }
+
+    /**
+     * @param filterParams Filter engine parameters. Filter files with identifiers.
+     */
+    public void setFilterParams(Map<Long, String> filterParams) {
+        this.filterParams = new LongSparseArray<>(filterParams.size());
+        for (final Map.Entry<Long, String> e : filterParams.entrySet()) {
+            getFilterParams().put(e.getKey(), e.getValue());
+        }
     }
 
     /**
      * @return List of addresses/ports/protocols/etc... to listen on.
      */
-    public List<ListenerSettings> getListeners() {
+    List<ListenerSettings> getListeners() {
         return listeners;
+    }
+
+    /**
+     * @param listeners List of addresses/ports/protocols/etc... to listen on.
+     */
+    public void setListeners(List<ListenerSettings> listeners) {
+        this.listeners = new ArrayList<>(listeners);
     }
 
     /**
