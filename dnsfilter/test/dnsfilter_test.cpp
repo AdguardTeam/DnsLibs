@@ -205,7 +205,6 @@ TEST_F(dnsfilter_test, basic_rules_match) {
             { { "example23.org^" }, "sub.example23.org", true, },
             { { "||example24.org" }, "sub.example24.org", true, },
             { { "||example25.org|" }, "sub.example25.org", true, },
-            { { "example22.org|" }, "sub.example22.org", true, },
         };
 
     for (const test_data &entry : TEST_DATA) {
