@@ -45,10 +45,10 @@ TEST_F(dnsproxy_test, test_dns64) {
     // Assume default settings don't include a DNS64 upstream
     ag::dnsproxy_settings settings = ag::dnsproxy_settings::get_default();
     settings.dns64 = ag::dns64_settings{
-            .upstream_settings = {
+            .upstreams = {{
                     .address = DNS64_SERVER_ADDR,
                     .timeout = 5000ms,
-            },
+            }},
             .max_tries = 5,
             .wait_time = 1s,
     };

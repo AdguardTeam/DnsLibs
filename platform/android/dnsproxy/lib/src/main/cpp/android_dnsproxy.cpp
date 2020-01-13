@@ -218,14 +218,16 @@ ag::dns64_settings ag::android_dnsproxy::marshal_dns64(JNIEnv *env, jobject java
     auto clazz = env->FindClass(FQN_DNS64_SETTINGS);
     assert(env->IsInstanceOf(java_dns64_settings, clazz));
 
-    auto upstream_field = env->GetFieldID(clazz, "upstream", "L" FQN_UPSTREAM_SETTINGS ";");
+    auto upstreams_field = env->GetFieldID(clazz, "upstreams", "Ljava/util/List;");
     auto max_tries_field = env->GetFieldID(clazz, "maxTries", "J");
     auto wait_time_field = env->GetFieldID(clazz, "waitTimeMs", "J");
 
     ag::dns64_settings settings;
 
-    if (auto upstream = env->GetObjectField(java_dns64_settings, upstream_field)) {
-        settings.upstream_settings = marshal_upstream(env, upstream);
+    if (auto upstreams = env->GetObjectField(java_dns64_settings, upstreams_field)) {
+        m_utils.iterate(env, upstreams, [&](local_ref<jobject> upstream) {
+            settings.upstreams.push_back(marshal_upstream(env, upstream.get()));
+        });
     }
 
     settings.max_tries = env->GetLongField(java_dns64_settings, max_tries_field);
@@ -237,7 +239,7 @@ ag::dns64_settings ag::android_dnsproxy::marshal_dns64(JNIEnv *env, jobject java
 ag::local_ref<jobject> ag::android_dnsproxy::marshal_dns64(JNIEnv *env, const ag::dns64_settings &settings) {
     auto clazz = env->FindClass(FQN_DNS64_SETTINGS);
     auto ctor = env->GetMethodID(clazz, "<init>", "()V");
-    auto upstream_field = env->GetFieldID(clazz, "upstream", "L" FQN_UPSTREAM_SETTINGS ";");
+    auto upstreams_field = env->GetFieldID(clazz, "upstreams", "Ljava/util/List;");
     auto max_tries_field = env->GetFieldID(clazz, "maxTries", "J");
     auto wait_time_field = env->GetFieldID(clazz, "waitTimeMs", "J");
 
@@ -245,7 +247,12 @@ ag::local_ref<jobject> ag::android_dnsproxy::marshal_dns64(JNIEnv *env, const ag
 
     env->SetLongField(java_dns64, max_tries_field, settings.max_tries);
     env->SetLongField(java_dns64, wait_time_field, settings.wait_time.count());
-    env->SetObjectField(java_dns64, upstream_field, marshal_upstream(env, settings.upstream_settings).get());
+
+    if (auto upstreams = env->GetObjectField(java_dns64, upstreams_field)) {
+        for (auto &us : settings.upstreams) {
+            m_utils.collection_add(env, upstreams, marshal_upstream(env, us).get());
+        }
+    }
 
     return local_ref(env, java_dns64);
 }

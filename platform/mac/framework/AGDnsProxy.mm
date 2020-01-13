@@ -184,17 +184,21 @@ static NSData *create_response_packet(const struct iphdr *ip_header, const struc
 - (instancetype) initWithNative: (const ag::dns64_settings *) settings
 {
     self = [super init];
-    _upstream = [[AGDnsUpstream alloc] initWithNative: &settings->upstream_settings];
+    NSMutableArray<AGDnsUpstream *> *upstreams = [[NSMutableArray alloc] initWithCapacity: settings->upstreams.size()];
+    for (auto &us : settings->upstreams) {
+        [upstreams addObject: [[AGDnsUpstream alloc] initWithNative: &us]];
+    }
+    _upstreams = upstreams;
     _maxTries = settings->max_tries;
     _waitTimeMs = settings->wait_time.count();
     return self;
 }
 
-- (instancetype) initWithUpstream: (AGDnsUpstream *) upstream
-                         maxTries: (NSInteger) maxTries waitTimeMs: (NSInteger) waitTimeMs
+- (instancetype) initWithUpstreams: (NSArray<AGDnsUpstream *> *) upstreams
+                          maxTries: (NSInteger) maxTries waitTimeMs: (NSInteger) waitTimeMs
 {
     self = [super init];
-    _upstream = upstream;
+    _upstreams = upstreams;
     _maxTries = maxTries;
     _waitTimeMs = waitTimeMs;
     return self;
@@ -490,25 +494,34 @@ static std::string getTrustCreationErrorStr(OSStatus status) {
         };
 
     if (config.dns64Settings != nil) {
-        const AGDnsUpstream * const upstream = config.dns64Settings.upstream;
-        if (upstream == nil) {
-            dbglog(self->log, "DNS64 upstream is nil");
+        const NSArray<AGDnsUpstream *> const *upstreams = config.dns64Settings.upstreams;
+        if (upstreams == nil) {
+            dbglog(self->log, "DNS64 upstreams list is nil");
+        } else if ([upstreams count] == 0) {
+            dbglog(self->log, "DNS64 upstreams list is empty");
         } else {
-            std::vector<std::string> bootstrap;
-            bootstrap.reserve([upstream.bootstrap count]);
-
-            for (NSString *server in upstream.bootstrap) {
-                bootstrap.emplace_back([server UTF8String]);
-            }
-
             settings.dns64 = ag::dns64_settings{
-                    .upstream_settings = {[upstream.address UTF8String],
-                            std::move(bootstrap),
-                            std::chrono::milliseconds(upstream.timeoutMs)},
+                    .upstreams = {},
                     .wait_time = std::chrono::milliseconds(config.dns64Settings.waitTimeMs),
                     .max_tries = config.dns64Settings.maxTries > 0
                                  ? static_cast<uint32_t>(config.dns64Settings.maxTries) : 0,
             };
+            settings.dns64->upstreams.reserve([upstreams count]);
+
+            for (AGDnsUpstream *upstream in upstreams) {
+                std::vector<std::string> bootstrap;
+                bootstrap.reserve([upstream.bootstrap count]);
+
+                for (NSString *server in upstream.bootstrap) {
+                    bootstrap.emplace_back([server UTF8String]);
+                }
+
+                settings.dns64->upstreams.push_back({
+                    [upstream.address UTF8String],
+                    std::move(bootstrap),
+                    std::chrono::milliseconds(upstream.timeoutMs),
+                });
+            }
         }
     }
 

@@ -11,7 +11,7 @@
 namespace ag {
 
 struct dns64_settings {
-    upstream::options upstream_settings; // The upstream to use for discovery of DNS64 prefixes
+    std::vector<upstream::options> upstreams; // The upstreams to use for discovery of DNS64 prefixes
     uint32_t max_tries; // How many times, at most, to try DNS64 prefixes discovery before giving up
     std::chrono::milliseconds wait_time; // How long to wait before a dns64 prefixes discovery attempt
 };

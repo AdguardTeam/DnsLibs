@@ -199,7 +199,7 @@ public class DnsProxyTest {
         settings.getUpstreams().add(dot);
 
         final Dns64Settings dns64 = new Dns64Settings();
-        dns64.setUpstream(dot);
+        dns64.setUpstreams(Collections.singletonList(dot));
         dns64.setMaxTries(1234);
         dns64.setWaitTimeMs(3456);
         settings.setDns64(dns64);
@@ -207,13 +207,13 @@ public class DnsProxyTest {
         settings.setListeners(settings.getListeners());
         settings.setUpstreams(settings.getUpstreams());
         settings.setFilterParams(settings.getFilterParams());
-        settings.getDns64().getUpstream().setBootstrap(settings.getDns64().getUpstream().getBootstrap());
+        settings.getUpstreams().get(0).setBootstrap(Collections.singletonList("1.1.1.1"));
 
         try (final DnsProxy proxy = new DnsProxy(settings)) {
             assertEquals(settings, proxy.getSettings());
             assertFalse(proxy.getSettings().getListeners().isEmpty());
             assertFalse(proxy.getSettings().getUpstreams().isEmpty());
-            assertFalse(proxy.getSettings().getDns64().getUpstream().getBootstrap().isEmpty());
+            assertFalse(proxy.getSettings().getUpstreams().get(0).getBootstrap().isEmpty());
         }
     }
 
