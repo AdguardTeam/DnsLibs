@@ -218,13 +218,18 @@ static inline int remove_special_prefixes(std::string_view &rule) {
 
 static inline int remove_special_suffixes(std::string_view &rule) {
     int r = MPM_NONE;
-    for (std::string_view suffix : SPECIAL_SUFFIXES) {
-        if (ag::utils::ends_with(rule, suffix)) {
-            rule.remove_suffix(suffix.length());
-            r = MPM_LINE_END_ASSERTED;
-            break;
-        }
+
+    std::vector<std::string_view> suffixes_to_remove(SPECIAL_SUFFIXES, SPECIAL_SUFFIXES + std::size(SPECIAL_SUFFIXES));
+    std::vector<std::string_view>::iterator iter;
+    while (suffixes_to_remove.end() != (iter = std::find_if(suffixes_to_remove.begin(), suffixes_to_remove.end(),
+            [&rule] (std::string_view suffix) {
+                return ag::utils::ends_with(rule, suffix);
+            }))) {
+        rule.remove_suffix(iter->length());
+        r = MPM_LINE_END_ASSERTED;
+        suffixes_to_remove.erase(iter);
     }
+
     return r;
 }
 
