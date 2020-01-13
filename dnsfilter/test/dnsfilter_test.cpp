@@ -82,6 +82,8 @@ TEST_F(dnsfilter_test, successful_rule_parsing) {
             { "http://example.org/", { {}, rule_utils::rule::MMID_DOMAINS } },
             { "https://example.org|", { {}, rule_utils::rule::MMID_DOMAINS } },
             { "ws://example.org|", { {}, rule_utils::rule::MMID_DOMAINS } },
+            { "example.org^|", { {}, rule_utils::rule::MMID_SHORTCUTS_AND_REGEX } },
+            { "example.org|^", { {}, rule_utils::rule::MMID_SHORTCUTS_AND_REGEX } },
         };
 
     ag::logger log = ag::create_logger("dnsfilter_test");
@@ -153,7 +155,7 @@ TEST_F(dnsfilter_test, wrong_rule_parsing) {
             "example.com|some",
             "example.com/^page",
             "|||example.com",
-            "example.com^|",
+            "example.com^|^",
             "example.com:8o",
             "example.com:111111",
             "hhtp://example.com:111111",
