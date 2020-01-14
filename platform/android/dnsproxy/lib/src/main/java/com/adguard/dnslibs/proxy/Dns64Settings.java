@@ -1,24 +1,26 @@
 package com.adguard.dnslibs.proxy;
 
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Objects;
 
 public class Dns64Settings {
-    private UpstreamSettings upstream;
+    private List<UpstreamSettings> upstreams = new ArrayList<>();
     private long maxTries;
     private long waitTimeMs;
 
     /**
-     * @return The upstream to use for discovery of DNS64 prefixes.
+     * @return The upstreams to use for discovery of DNS64 prefixes.
      */
-    public UpstreamSettings getUpstream() {
-        return upstream;
+    List<UpstreamSettings> getUpstreams() {
+        return upstreams;
     }
 
     /**
-     * @param upstream The upstream to use for discovery of DNS64 prefixes.
+     * @param upstreams The upstreams to use for discovery of DNS64 prefixes.
      */
-    public void setUpstream(UpstreamSettings upstream) {
-        this.upstream = upstream;
+    public void setUpstreams(List<UpstreamSettings> upstreams) {
+        this.upstreams = new ArrayList<>(upstreams);
     }
 
     /**
@@ -56,11 +58,11 @@ public class Dns64Settings {
         Dns64Settings that = (Dns64Settings) o;
         return maxTries == that.maxTries &&
                 waitTimeMs == that.waitTimeMs &&
-                Objects.equals(upstream, that.upstream);
+                Objects.equals(upstreams, that.upstreams);
     }
 
     @Override
     public int hashCode() {
-        return Objects.hash(upstream, maxTries, waitTimeMs);
+        return Objects.hash(upstreams, maxTries, waitTimeMs);
     }
 }

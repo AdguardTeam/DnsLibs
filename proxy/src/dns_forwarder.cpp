@@ -461,39 +461,40 @@ bool dns_forwarder::init(const dnsproxy_settings &settings, const dnsproxy_event
     if (settings.dns64.has_value()) {
         infolog(log, "DNS64 discovery is enabled");
 
-        std::thread prefixes_discovery_thread([uss = settings.dns64->upstream_settings,
+        std::thread prefixes_discovery_thread([uss = settings.dns64->upstreams,
                                                verifier = this->cert_verifier,
                                                prefixes = this->dns64_prefixes,
                                                logger = this->log,
                                                max_tries = settings.dns64->max_tries,
                                                wait_time = settings.dns64->wait_time]() {
+                upstream_factory us_factory({ verifier.get() });
                 auto i = max_tries;
                 while (i--) {
                     std::this_thread::sleep_for(wait_time);
+                    for (auto &us : uss) {
+                        auto[upstream, err_upstream] = us_factory.create_upstream(us);
+                        if (err_upstream.has_value()) {
+                            dbglog(logger, "DNS64: failed to create DNS64 upstream: {}", err_upstream->c_str());
+                            continue;
+                        }
 
-                    upstream_factory us_factory({ verifier.get() });
-                    auto[upstream, err_upstream] = us_factory.create_upstream(uss);
-                    if (err_upstream.has_value()) {
-                        dbglog(logger, "DNS64: failed to create DNS64 upstream: {}", err_upstream->c_str());
-                        continue;
+                        auto[result, err_prefixes] = dns64::discover_prefixes(upstream);
+                        if (err_prefixes.has_value()) {
+                            dbglog(logger, "DNS64: error discovering prefixes: {}", err_prefixes->c_str());
+                            continue;
+                        }
+
+                        if (result.empty()) {
+                            dbglog(logger, "DNS64: no prefixes discovered, retrying");
+                            continue;
+                        }
+
+                        std::scoped_lock l(prefixes->mtx);
+                        prefixes->val = std::move(result);
+
+                        infolog(logger, "DNS64 prefixes discovered: {}", prefixes->val.size());
+                        return;
                     }
-
-                    auto[result, err_prefixes] = dns64::discover_prefixes(upstream);
-                    if (err_prefixes.has_value()) {
-                        dbglog(logger, "DNS64: error discovering prefixes: {}", err_prefixes->c_str());
-                        continue;
-                    }
-
-                    if (result.empty()) {
-                        dbglog(logger, "DNS64: no prefixes discovered, retrying");
-                        continue;
-                    }
-
-                    std::scoped_lock l(prefixes->mtx);
-                    prefixes->val = std::move(result);
-
-                    infolog(logger, "DNS64 prefixes discovered: {}", prefixes->val.size());
-                    return;
                 }
 
                 errlog(logger, "DNS64: failed to discover any prefixes");

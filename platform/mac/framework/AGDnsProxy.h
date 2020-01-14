@@ -79,7 +79,7 @@ typedef void (^logCallback)(const char *msg, int length);
 /**
  * The upstream to use for discovery of DNS64 prefixes
  */
-@property(nonatomic, readonly) AGDnsUpstream *upstream;
+@property(nonatomic, readonly) NSArray<AGDnsUpstream *> *upstreams;
 
 /**
  * How many times, at most, to try DNS64 prefixes discovery before giving up
@@ -91,7 +91,7 @@ typedef void (^logCallback)(const char *msg, int length);
  */
 @property(nonatomic, readonly) NSInteger waitTimeMs;
 
-- (instancetype) initWithUpstream: (AGDnsUpstream *) upstream
+- (instancetype) initWithUpstreams: (NSArray<AGDnsUpstream *> *) upstreams
             maxTries: (NSInteger) maxTries
             waitTimeMs: (NSInteger) waitTimeMs;
 
