@@ -61,6 +61,7 @@ private:
     } m_cert_verify_event_methods{};
 
     std::vector<global_ref<jobject>> m_protocol_enum_values;
+    std::vector<global_ref<jobject>> m_blocking_mode_values;
 
     /**
      * Marshal upstream settings from Java to C++.
@@ -81,16 +82,6 @@ private:
      * Marshal DNS64 settings from C++ to Java.
      */
     local_ref<jobject> marshal_dns64(JNIEnv *env, const dns64_settings &settings);
-
-    /**
-     * Marshal listener protocol from Java to C++;
-     */
-    listener_protocol marshal_protocol(JNIEnv *env, jobject java_protocol);
-
-    /**
-     * Marshal listener protocol from C++ to Java.
-     */
-    local_ref<jobject> marshal_protocol(JNIEnv *env, listener_protocol protocol);
 
     /**
      * Marshal listener settings from Java to C++.

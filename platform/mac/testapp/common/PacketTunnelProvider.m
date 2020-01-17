@@ -115,6 +115,9 @@
         listeners: nil
         ipv6Available: true
         blockIpv6: false
+        blockingMode: AGBM_DEFAULT
+        customBlockingIpv4: nil
+        customBlockingIpv6: nil
         dnsCacheSize: 128];
 
     AGDnsProxyEvents *events = [[AGDnsProxyEvents alloc] init];

@@ -8,6 +8,25 @@ import java.util.Map;
 import java.util.Objects;
 
 public class DnsProxySettings {
+    /**
+     * Specifies how to respond to filtered requests
+     */
+    public enum BlockingMode {
+        // MUST keep names and ordinals in sync with ag::blocking_mode
+
+        /** AdBlock-style filters -> NXDOMAIN, hosts-style filters -> unspecified address */
+        DEFAULT,
+
+        /** Always return NXDOMAIN */
+        NXDOMAIN,
+
+        /** Always return unspecified address */
+        UNSPECIFIED_ADDRESS,
+
+        /** Always return custom configured IP address (See {@link DnsProxySettings}) */
+        CUSTOM_ADDRESS
+    }
+
     private List<UpstreamSettings> upstreams = new ArrayList<>();
     private Dns64Settings dns64;
     private long blockedResponseTtlSecs;
@@ -15,6 +34,9 @@ public class DnsProxySettings {
     private List<ListenerSettings> listeners = new ArrayList<>();
     private boolean ipv6Available;
     private boolean blockIpv6;
+    private BlockingMode blockingMode;
+    private String customBlockingIpv4;
+    private String customBlockingIpv6;
     private long dnsCacheSize;
 
     /**
@@ -29,6 +51,52 @@ public class DnsProxySettings {
      */
     public void setDnsCacheSize(long dnsCacheSize) {
         this.dnsCacheSize = dnsCacheSize;
+    }
+
+    /**
+     * @return Custom IPv4 address to return for filtered requests
+     */
+    public String getCustomBlockingIpv4() {
+        return customBlockingIpv4;
+    }
+
+    /**
+     * @param customBlockingIpv4 Custom IPv4 address to return for filtered requests,
+     *                           must be either empty/{@code null}, or a valid IPv4 address;
+     *                           ignored if {@link #getBlockingMode()} != {@link BlockingMode#CUSTOM_ADDRESS}
+     */
+    public void setCustomBlockingIpv4(String customBlockingIpv4) {
+        this.customBlockingIpv4 = customBlockingIpv4;
+    }
+
+    /**
+     * @return Custom IPv6 address to return for filtered requests
+     */
+    public String getCustomBlockingIpv6() {
+        return customBlockingIpv6;
+    }
+
+    /**
+     * @param customBlockingIpv6 Custom IPv6 address to return for filtered requests,
+     *                           must be either empty/{@code null}, or a valid IPv6 address;
+     *                           ignored if {@link #getBlockingMode()} != {@link BlockingMode#CUSTOM_ADDRESS}
+     */
+    public void setCustomBlockingIpv6(String customBlockingIpv6) {
+        this.customBlockingIpv6 = customBlockingIpv6;
+    }
+
+    /**
+     * @return The blocking mode
+     */
+    public BlockingMode getBlockingMode() {
+        return blockingMode;
+    }
+
+    /**
+     * @param blockingMode The blocking mode
+     */
+    public void setBlockingMode(BlockingMode blockingMode) {
+        this.blockingMode = blockingMode;
     }
 
     /**
@@ -154,12 +222,16 @@ public class DnsProxySettings {
                 Objects.equals(dns64, that.dns64) &&
                 longSparseArraysEqual(filterParams, that.filterParams) &&
                 Objects.equals(listeners, that.listeners) &&
+                blockingMode == that.blockingMode &&
+                Objects.equals(customBlockingIpv4, that.customBlockingIpv4) &&
+                Objects.equals(customBlockingIpv6, that.customBlockingIpv6) &&
                 dnsCacheSize == that.dnsCacheSize;
     }
 
     @Override
     public int hashCode() {
-        return Objects.hash(upstreams, dns64, blockedResponseTtlSecs, filterParams, listeners, ipv6Available, blockIpv6, dnsCacheSize);
+        return Objects.hash(upstreams, dns64, blockedResponseTtlSecs, filterParams, listeners,
+                ipv6Available, blockIpv6, blockingMode, customBlockingIpv4, customBlockingIpv6, dnsCacheSize);
     }
 
     // For testing settings marshalling

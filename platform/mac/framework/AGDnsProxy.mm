@@ -212,7 +212,7 @@ static NSData *create_response_packet(const struct iphdr *ip_header, const struc
     self = [super init];
     _address = [NSString stringWithUTF8String:settings->address.c_str()];
     _port = settings->port;
-    _proto = (AGListenerProtocol) ((NSInteger) settings->protocol);
+    _proto = (AGListenerProtocol) settings->protocol;
     _persistent = settings->persistent;
     _idleTimeoutMs = settings->idle_timeout.count();
     return self;
@@ -258,6 +258,9 @@ static NSData *create_response_packet(const struct iphdr *ip_header, const struc
     _listeners = listeners;
     _ipv6Available = settings->ipv6_available;
     _blockIpv6 = settings->block_ipv6;
+    _blockingMode = (AGBlockingMode) settings->blocking_mode;
+    _customBlockingIpv4 = [NSString stringWithUTF8String: settings->custom_blocking_ipv4.c_str()];
+    _customBlockingIpv6 = [NSString stringWithUTF8String: settings->custom_blocking_ipv6.c_str()];
     _dnsCacheSize = settings->dns_cache_size;
     return self;
 }
@@ -269,6 +272,9 @@ static NSData *create_response_packet(const struct iphdr *ip_header, const struc
         listeners: (NSArray<AGListenerSettings *> *) listeners
         ipv6Available: (BOOL) ipv6Available
         blockIpv6: (BOOL) blockIpv6
+        blockingMode: (AGBlockingMode) blockingMode
+        customBlockingIpv4: (NSString *) customBlockingIpv4
+        customBlockingIpv6: (NSString *) customBlockingIpv6
         dnsCacheSize: (NSUInteger) dnsCacheSize;
 {
     const ag::dnsproxy_settings &defaultSettings = ag::dnsproxy_settings::get_default();
@@ -284,6 +290,9 @@ static NSData *create_response_packet(const struct iphdr *ip_header, const struc
     _listeners = listeners;
     _ipv6Available = ipv6Available;
     _blockIpv6 = blockIpv6;
+    _blockingMode = blockingMode;
+    _customBlockingIpv4 = customBlockingIpv4;
+    _customBlockingIpv6 = customBlockingIpv6;
     _dnsCacheSize = dnsCacheSize;
     return self;
 }
@@ -499,7 +508,7 @@ static std::string getTrustCreationErrorStr(OSStatus status) {
         };
 
     if (config.dns64Settings != nil) {
-        const NSArray<AGDnsUpstream *> const *upstreams = config.dns64Settings.upstreams;
+        const NSArray<AGDnsUpstream *> *const upstreams = config.dns64Settings.upstreams;
         if (upstreams == nil) {
             dbglog(self->log, "DNS64 upstreams list is nil");
         } else if ([upstreams count] == 0) {
@@ -538,7 +547,7 @@ static std::string getTrustCreationErrorStr(OSStatus status) {
             settings.listeners.push_back({
                 [listener.address UTF8String],
                 (uint16_t) listener.port,
-                (ag::listener_protocol) ((int) listener.proto),
+                (ag::listener_protocol) listener.proto,
                 (bool) listener.persistent,
                 std::chrono::milliseconds(listener.idleTimeoutMs),
             });
@@ -547,6 +556,14 @@ static std::string getTrustCreationErrorStr(OSStatus status) {
 
     settings.ipv6_available = config.ipv6Available;
     settings.block_ipv6 = config.blockIpv6;
+
+    settings.blocking_mode = (ag::blocking_mode) config.blockingMode;
+    if (config.customBlockingIpv4 != nil) {
+        settings.custom_blocking_ipv4 = [config.customBlockingIpv4 UTF8String];
+    }
+    if (config.customBlockingIpv6 != nil) {
+        settings.custom_blocking_ipv6 = [config.customBlockingIpv6 UTF8String];
+    }
 
     settings.dns_cache_size = config.dnsCacheSize;
 

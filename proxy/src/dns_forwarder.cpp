@@ -30,6 +30,9 @@ static constexpr std::string_view MOZILLA_DOH_HOST = "use-application-dns.net.";
 // We set the initial capacity so that most responses will fit without reallocations.
 static constexpr size_t RESPONSE_BUFFER_INITIAL_CAPACITY = 512;
 
+static constexpr uint32_t SOA_RETRY_DEFAULT = 900;
+static constexpr uint32_t SOA_RETRY_IPV6_BLOCK = 60;
+
 
 struct dns_forwarder::application_verifier : public certificate_verifier {
     const dnsproxy_events *events = nullptr;
@@ -126,7 +129,7 @@ static std::string get_mbox(const ldns_pkt *request) {
 }
 
 // Taken from AdGuardHome/dnsforward.go/genSOA
-static ldns_rr *create_soa(const ldns_pkt *request, const dnsproxy_settings *settings, uint32_t retry_secs = 900) {
+static ldns_rr *create_soa(const ldns_pkt *request, const dnsproxy_settings *settings, uint32_t retry_secs) {
     const ldns_rr *question = ldns_rr_list_rr(ldns_pkt_question(request), 0);
     std::string mbox = get_mbox(request);
 
@@ -150,14 +153,14 @@ static ldns_rr *create_soa(const ldns_pkt *request, const dnsproxy_settings *set
 static ldns_pkt *create_nxdomain_response(const ldns_pkt *request, const dnsproxy_settings *settings) {
     ldns_pkt *response = create_response_by_request(request);
     ldns_pkt_set_rcode(response, LDNS_RCODE_NXDOMAIN);
-    ldns_pkt_push_rr(response, LDNS_SECTION_AUTHORITY, create_soa(request, settings));
+    ldns_pkt_push_rr(response, LDNS_SECTION_AUTHORITY, create_soa(request, settings, 900));
     return response;
 }
 
-static ldns_pkt *create_ipv6_blocking_response(const ldns_pkt *request, const dnsproxy_settings *settings) {
+static ldns_pkt *create_soa_response(const ldns_pkt *request, const dnsproxy_settings *settings, uint32_t retry_secs) {
     ldns_pkt *response = create_response_by_request(request);
     ldns_pkt_set_rcode(response, LDNS_RCODE_NOERROR);
-    ldns_pkt_push_rr(response, LDNS_SECTION_AUTHORITY, create_soa(request, settings, 60));
+    ldns_pkt_push_rr(response, LDNS_SECTION_AUTHORITY, create_soa(request, settings, retry_secs));
     return response;
 }
 
@@ -231,9 +234,59 @@ static ldns_pkt *create_response_with_ips(const ldns_pkt *request, const dnsprox
         }
     }
     // empty response
+    return create_soa_response(request, settings, SOA_RETRY_DEFAULT);
+}
+
+static ldns_pkt *create_unspec_or_custom_address_response(const ldns_pkt *request, const dnsproxy_settings *settings) {
+    ldns_rr *question = ldns_rr_list_rr(ldns_pkt_question(request), 0);
+    ldns_rr_type type = ldns_rr_get_type(question);
+    assert(type == LDNS_RR_TYPE_A || type == LDNS_RR_TYPE_AAAA);
+
+    if (settings->blocking_mode == blocking_mode::CUSTOM_ADDRESS) {
+        if (type == LDNS_RR_TYPE_A && settings->custom_blocking_ipv4.empty()) {
+            return create_soa_response(request, settings, SOA_RETRY_DEFAULT);
+        } else if (type == LDNS_RR_TYPE_AAAA && settings->custom_blocking_ipv6.empty()) {
+            return create_soa_response(request, settings, SOA_RETRY_DEFAULT);
+        }
+    }
+
+    ldns_rr *rr = ldns_rr_new();
+    ldns_rr_set_owner(rr, ldns_rdf_clone(ldns_rr_owner(question)));
+    ldns_rr_set_ttl(rr, settings->blocked_response_ttl_secs);
+    ldns_rr_set_type(rr, type);
+    ldns_rr_set_class(rr, ldns_rr_get_class(question));
+
+    if (type == LDNS_RR_TYPE_A) {
+        if (settings->blocking_mode == blocking_mode::CUSTOM_ADDRESS) {
+            assert(utils::is_valid_ip4(settings->custom_blocking_ipv4));
+            ldns_rr_push_rdf(rr, ldns_rdf_new_frm_str(LDNS_RDF_TYPE_A, settings->custom_blocking_ipv4.c_str()));
+        } else {
+            ldns_rr_push_rdf(rr, ldns_rdf_new_frm_str(LDNS_RDF_TYPE_A, "0.0.0.0"));
+        }
+    } else {
+        if (settings->blocking_mode == blocking_mode::CUSTOM_ADDRESS) {
+            assert(utils::is_valid_ip6(settings->custom_blocking_ipv6));
+            ldns_rr_push_rdf(rr, ldns_rdf_new_frm_str(LDNS_RDF_TYPE_AAAA, settings->custom_blocking_ipv6.c_str()));
+        } else {
+            ldns_rr_push_rdf(rr, ldns_rdf_new_frm_str(LDNS_RDF_TYPE_AAAA, "::"));
+        }
+    }
+
     ldns_pkt *response = create_response_by_request(request);
-    ldns_pkt_push_rr(response, LDNS_SECTION_AUTHORITY, create_soa(request, settings));
+    ldns_pkt_push_rr(response, LDNS_SECTION_ANSWER, rr);
     return response;
+}
+
+// Whether the given set of rules contains IPs considered "blocking",
+// i.e. the proxy must respond with a blocking response according to the blocking_mode
+static bool rules_contain_blocking_ip(const std::vector<const dnsfilter::rule *> &rules) {
+    static const ag::hash_set<std::string> BLOCKING_IPS = {"0.0.0.0", "127.0.0.1", "::", "::1", "[::]", "[::1]"};
+    for (const auto &rule : rules) {
+        if (rule->ip && BLOCKING_IPS.count(*rule->ip)) {
+            return true;
+        }
+    }
+    return false;
 }
 
 static ldns_pkt *create_blocking_response(const ldns_pkt *request, const dnsproxy_settings *settings,
@@ -241,10 +294,20 @@ static ldns_pkt *create_blocking_response(const ldns_pkt *request, const dnsprox
     const ldns_rr *question = ldns_rr_list_rr(ldns_pkt_question(request), 0);
     ldns_rr_type type = ldns_rr_get_type(question);
     ldns_pkt *response;
-    if ((type != LDNS_RR_TYPE_A && type != LDNS_RR_TYPE_AAAA)
-            || !rules[0]->ip.has_value()) {
-        response = create_nxdomain_response(request, settings);
-    } else {
+    if (type != LDNS_RR_TYPE_A && type != LDNS_RR_TYPE_AAAA) { // Can only respond with NXDOMAIN or NOERROR+SOA
+        response = (settings->blocking_mode == blocking_mode::NXDOMAIN)
+                   ? create_nxdomain_response(request, settings)
+                   : create_soa_response(request, settings, SOA_RETRY_IPV6_BLOCK);
+    } else if (!rules[0]->ip.has_value()) { // Adblock-style rule
+        response = (settings->blocking_mode == blocking_mode::UNSPECIFIED_ADDRESS
+                    || settings->blocking_mode == blocking_mode::CUSTOM_ADDRESS)
+                   ? create_unspec_or_custom_address_response(request, settings)
+                   : create_nxdomain_response(request, settings);
+    } else if (rules_contain_blocking_ip(rules)) { // hosts-style blocking rule
+        response = (settings->blocking_mode == blocking_mode::NXDOMAIN)
+                   ? create_nxdomain_response(request, settings)
+                   : create_unspec_or_custom_address_response(request, settings);
+    } else { // hosts-style custom IP rule
         response = create_response_with_ips(request, settings, rules);
     }
     return response;
@@ -464,6 +527,23 @@ bool dns_forwarder::init(const dnsproxy_settings &settings, const dnsproxy_event
 
     this->settings = &settings;
     this->events = &events;
+
+    if (settings.blocking_mode == blocking_mode::CUSTOM_ADDRESS) {
+        // Check custom IPv4
+        if (settings.custom_blocking_ipv4.empty()) {
+            warnlog(this->log, "Custom blocking IPv4 not set: blocking responses to A queries will be empty");
+        } else if (!utils::is_valid_ip4(settings.custom_blocking_ipv4)) {
+            errlog(this->log, "Invalid custom blocking IPv4 address: {}", settings.custom_blocking_ipv4);
+            return false;
+        }
+        // Check custom IPv6
+        if (settings.custom_blocking_ipv6.empty()) {
+            warnlog(this->log, "Custom blocking IPv6 not set: blocking responses to AAAA queries will be empty");
+        } else if (!utils::is_valid_ip6(settings.custom_blocking_ipv6)) {
+            errlog(this->log, "Invalid custom blocking IPv6 address: {}", settings.custom_blocking_ipv6);
+            return false;
+        }
+    }
 
     if (events.on_certificate_verification != nullptr) {
         dbglog(log, "Using application_verifier");
@@ -748,7 +828,7 @@ std::vector<uint8_t> dns_forwarder::handle_message(uint8_view message) {
     // IPv6 blocking
     if (this->settings->block_ipv6 && LDNS_RR_TYPE_AAAA == type) {
         dbglog_fid(log, request, "AAAA DNS query blocked because IPv6 blocking is enabled");
-        ldns_pkt_ptr response(create_ipv6_blocking_response(request, this->settings));
+        ldns_pkt_ptr response(create_soa_response(request, this->settings, SOA_RETRY_IPV6_BLOCK));
         log_packet(log, response.get(), "IPv6 blocking response");
         std::vector<uint8_t> raw_response = transform_response_to_raw_data(response.get());
         finalize_processed_event(event, request, response.get(), nullptr, nullptr, std::nullopt);

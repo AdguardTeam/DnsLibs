@@ -21,6 +21,16 @@ enum class listener_protocol {
     TCP,
 };
 
+/**
+ * Specifies how to respond to filtered requests
+ */
+enum class blocking_mode {
+    DEFAULT, // AdBlock-style filters -> NXDOMAIN, hosts-style filters -> unspecified address
+    NXDOMAIN, // Always return NXDOMAIN
+    UNSPECIFIED_ADDRESS, // Always return unspecified address
+    CUSTOM_ADDRESS, // Always return custom configured IP address (see dnsproxy_settings)
+};
+
 struct listener_settings {
     std::string address{"::"}; // The address to listen on
     uint16_t port{53}; // The port to listen on
@@ -48,13 +58,18 @@ struct dnsproxy_settings {
 
     uint32_t blocked_response_ttl_secs; // TTL of the record for the blocked domains (in seconds)
 
-    dnsfilter::engine_params filter_params; // a filtering engine parameters (see `dnsfilter::engine_params`)
+    dnsfilter::engine_params filter_params; // Filtering engine parameters (see `dnsfilter::engine_params`)
 
     std::vector<listener_settings> listeners; // List of addresses/ports/protocols/etc... to listen on
 
     bool block_ipv6; // Block AAAA requests.
 
     bool ipv6_available; // If false, bootstrappers will fetch only A records.
+
+    blocking_mode blocking_mode; // How to respond to filtered requests
+
+    std::string custom_blocking_ipv4; // Custom IPv4 address to return for filtered requests
+    std::string custom_blocking_ipv6; // Custom IPv6 address to return for filtered requests
 
     size_t dns_cache_size; // Maximum number of cached responses
 };

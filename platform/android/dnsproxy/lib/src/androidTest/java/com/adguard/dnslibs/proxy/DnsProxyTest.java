@@ -209,6 +209,10 @@ public class DnsProxyTest {
         settings.setFilterParams(settings.getFilterParams());
         settings.getUpstreams().get(0).setBootstrap(Collections.singletonList("1.1.1.1"));
 
+        settings.setBlockingMode(DnsProxySettings.BlockingMode.CUSTOM_ADDRESS);
+        settings.setCustomBlockingIpv4("4.3.2.1");
+        settings.setCustomBlockingIpv6("43::21");
+
         settings.setDnsCacheSize(42);
 
         try (final DnsProxy proxy = new DnsProxy(settings)) {
@@ -216,6 +220,17 @@ public class DnsProxyTest {
             assertFalse(proxy.getSettings().getListeners().isEmpty());
             assertFalse(proxy.getSettings().getUpstreams().isEmpty());
             assertFalse(proxy.getSettings().getUpstreams().get(0).getBootstrap().isEmpty());
+        }
+
+        settings.setCustomBlockingIpv4(null);
+        settings.setCustomBlockingIpv6(null);
+
+        try (final DnsProxy proxy = new DnsProxy(settings)) {
+            assertTrue(proxy.getSettings().getCustomBlockingIpv4().isEmpty());
+            assertTrue(proxy.getSettings().getCustomBlockingIpv6().isEmpty());
+            settings.setCustomBlockingIpv4("");
+            settings.setCustomBlockingIpv6("");
+            assertEquals(settings, proxy.getSettings());
         }
     }
 
