@@ -525,4 +525,23 @@ public:
     }
 };
 
+namespace detail {
+// From boost 1.72
+template <typename SizeT>
+void hash_combine_impl(SizeT& seed, SizeT value) {
+    seed ^= value + 0x9e3779b9 + (seed<<6) + (seed>>2);
+}
+} // namespace detail
+
+/**
+ * Compute and return the combined hash of objs
+ * @param objs std::hash must be specialized for each of these objects
+ */
+template <typename... Ts>
+size_t hash_combine(const Ts&... objs) {
+    size_t seed = 0;
+    (detail::hash_combine_impl(seed, std::hash<std::decay_t<Ts>>{}(objs)), ...);
+    return seed;
+}
+
 } // namespace ag::utils

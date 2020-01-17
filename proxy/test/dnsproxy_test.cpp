@@ -1,3 +1,4 @@
+#include <ag_clock.h>
 #include <gtest/gtest.h>
 #include <dnsproxy.h>
 #include <ldns/ldns.h>
@@ -5,6 +6,7 @@
 #include <memory>
 #include <ag_utils.h>
 #include <ag_net_consts.h>
+#include <cstring>
 
 static constexpr auto DNS64_SERVER_ADDR = "2001:67c:27e4::64";
 static constexpr auto IPV4_ONLY_HOST = "ipv4only.arpa.";
@@ -23,7 +25,14 @@ protected:
     }
 };
 
-static void perform_request(ag::dnsproxy &proxy, ag::ldns_pkt_ptr &request, ag::ldns_pkt_ptr &response) {
+static ag::ldns_pkt_ptr create_request(const std::string &domain, ldns_rr_type type, uint16_t flags,
+                                       ldns_rr_class cls = LDNS_RR_CLASS_IN) {
+    return ag::ldns_pkt_ptr(
+            ldns_pkt_query_new(
+                    ldns_dname_new_frm_str(domain.c_str()), type, cls, flags));
+}
+
+static void perform_request(ag::dnsproxy &proxy, const ag::ldns_pkt_ptr &request, ag::ldns_pkt_ptr &response) {
     const std::unique_ptr<ldns_buffer, ag::ftor<ldns_buffer_free>> buffer(
             ldns_buffer_new(ag::REQUEST_BUFFER_INITIAL_CAPACITY));
 
@@ -56,13 +65,7 @@ TEST_F(dnsproxy_test, test_dns64) {
     ASSERT_TRUE(proxy.init(settings, ag::dnsproxy_events{}));
     std::this_thread::sleep_for(5s); // Let DNS64 discovery happen
 
-    ag::ldns_pkt_ptr pkt(
-            ldns_pkt_query_new(
-                    ldns_dname_new_frm_str(IPV4_ONLY_HOST),
-                    LDNS_RR_TYPE_AAAA, // Request AAAA for an IPv4 only host, forcing synthesis
-                    LDNS_RR_CLASS_IN,
-                    LDNS_RD));
-
+    ag::ldns_pkt_ptr pkt = create_request(IPV4_ONLY_HOST, LDNS_RR_TYPE_AAAA, LDNS_RD);
     ag::ldns_pkt_ptr response;
     ASSERT_NO_FATAL_FAILURE(perform_request(proxy, pkt, response));
 
@@ -76,13 +79,7 @@ TEST_F(dnsproxy_test, test_ipv6_blocking) {
 
     ASSERT_TRUE(proxy.init(settings, {}));
 
-    ag::ldns_pkt_ptr pkt(
-            ldns_pkt_query_new(
-                    ldns_dname_new_frm_str(IPV4_ONLY_HOST),
-                    LDNS_RR_TYPE_AAAA,
-                    LDNS_RR_CLASS_IN,
-                    LDNS_RD));
-
+    ag::ldns_pkt_ptr pkt = create_request(IPV4_ONLY_HOST, LDNS_RR_TYPE_AAAA, LDNS_RD);
     ag::ldns_pkt_ptr response;
     ASSERT_NO_FATAL_FAILURE(perform_request(proxy, pkt, response));
 
@@ -97,16 +94,131 @@ TEST_F(dnsproxy_test, test_cname_blocking) {
 
     ASSERT_TRUE(proxy.init(settings, {}));
 
-    ag::ldns_pkt_ptr pkt(
-            ldns_pkt_query_new(
-                    ldns_dname_new_frm_str(CNAME_BLOCKING_HOST),
-                    LDNS_RR_TYPE_A,
-                    LDNS_RR_CLASS_IN,
-                    LDNS_RD));
-
+    ag::ldns_pkt_ptr pkt = create_request(CNAME_BLOCKING_HOST, LDNS_RR_TYPE_A, LDNS_RD);
     ag::ldns_pkt_ptr response;
     ASSERT_NO_FATAL_FAILURE(perform_request(proxy, pkt, response));
 
     ASSERT_EQ(ldns_pkt_ancount(response.get()), 0);
     ASSERT_EQ(ldns_pkt_get_rcode(response.get()), LDNS_RCODE_NXDOMAIN);
+}
+
+class dnsproxy_cache_test : public ::testing::Test {
+protected:
+    ag::dnsproxy proxy;
+    ag::dns_request_processed_event last_event{};
+
+    void TearDown() override {
+        proxy.deinit();
+    }
+
+    void SetUp() override {
+        ag::set_default_log_level(ag::TRACE);
+        ag::dnsproxy_settings settings = ag::dnsproxy_settings::get_default();
+        settings.dns_cache_size = 1;
+
+        ag::dnsproxy_events events{
+            .on_request_processed = [this](ag::dns_request_processed_event event) {
+                last_event = std::move(event);
+            }
+        };
+
+        ASSERT_TRUE(proxy.init(settings, events));
+    }
+};
+
+TEST_F(dnsproxy_cache_test, cache_works) {
+    ag::ldns_pkt_ptr pkt = create_request("google.com", LDNS_RR_TYPE_A, LDNS_RD);
+    ag::ldns_pkt_ptr res;
+    ASSERT_NO_FATAL_FAILURE(perform_request(proxy, pkt, res));
+    ASSERT_GT(last_event.elapsed, 1);
+    ASSERT_NO_FATAL_FAILURE(perform_request(proxy, pkt, res));
+    ASSERT_LE(last_event.elapsed, 1);
+}
+
+TEST_F(dnsproxy_cache_test, cached_response_ttl_decreases) {
+    ag::ldns_pkt_ptr pkt = create_request("com", LDNS_RR_TYPE_SOA, LDNS_RD);
+    ag::ldns_pkt_ptr res;
+    ASSERT_NO_FATAL_FAILURE(perform_request(proxy, pkt, res));
+    ASSERT_GT(last_event.elapsed, 1);
+
+    const uint32_t ttl = ldns_rr_ttl(ldns_rr_list_rr(ldns_pkt_answer(res.get()), 0));
+    ASSERT_GT(ttl, 1);
+    ag::steady_clock::add_time_shift(std::chrono::seconds((ttl / 2) + 1));
+
+    ASSERT_NO_FATAL_FAILURE(perform_request(proxy, pkt, res));
+    ASSERT_LE(last_event.elapsed, 1);
+    const uint32_t cached_ttl = ldns_rr_ttl(ldns_rr_list_rr(ldns_pkt_answer(res.get()), 0));
+    ASSERT_LT(cached_ttl, ttl / 2);
+}
+
+TEST_F(dnsproxy_cache_test, cached_response_expires) {
+    ag::ldns_pkt_ptr pkt = create_request("ru", LDNS_RR_TYPE_SOA, LDNS_RD);
+    ag::ldns_pkt_ptr res;
+    ASSERT_NO_FATAL_FAILURE(perform_request(proxy, pkt, res));
+    ASSERT_GT(last_event.elapsed, 1);
+
+    const uint32_t ttl = ldns_rr_ttl(ldns_rr_list_rr(ldns_pkt_answer(res.get()), 0));
+    ASSERT_GT(ttl, 0);
+    ag::steady_clock::add_time_shift(std::chrono::seconds(ttl + 1));
+
+    ASSERT_NO_FATAL_FAILURE(perform_request(proxy, pkt, res));
+    ASSERT_GT(last_event.elapsed, 1); // Not from cache
+}
+
+TEST_F(dnsproxy_cache_test, cached_response_question_matches_request) {
+    ag::ldns_pkt_ptr pkt = create_request("GoOGLe.CoM", LDNS_RR_TYPE_A, LDNS_RD);
+    ag::ldns_pkt_ptr res;
+    ASSERT_NO_FATAL_FAILURE(perform_request(proxy, pkt, res));
+    ASSERT_GT(last_event.elapsed, 1);
+    ASSERT_NO_FATAL_FAILURE(perform_request(proxy, pkt, res));
+    ASSERT_LE(last_event.elapsed, 1);
+
+    ldns_rr *resp_question = ldns_rr_list_rr(ldns_pkt_question(res.get()), 0);
+    ag::allocated_ptr<char> resp_question_domain(ldns_rdf2str(ldns_rr_owner(resp_question)));
+    ag::allocated_ptr<char> req_question_domain(ldns_rdf2str(ldns_rr_owner(ldns_rr_list_rr(ldns_pkt_question(pkt.get()), 0))));
+
+    ASSERT_EQ(0, std::strcmp(req_question_domain.get(), resp_question_domain.get()));
+    ASSERT_EQ(LDNS_RR_TYPE_A, ldns_rr_get_type(resp_question));
+}
+
+TEST_F(dnsproxy_cache_test, cache_size_is_set) {
+    // Cache size is 1 for this test
+    ag::ldns_pkt_ptr res;
+    ASSERT_NO_FATAL_FAILURE(perform_request(proxy, create_request("google.com", LDNS_RR_TYPE_A, LDNS_RD), res));
+    ASSERT_GT(last_event.elapsed, 1);
+    ASSERT_NO_FATAL_FAILURE(perform_request(proxy, create_request("yandex.ru", LDNS_RR_TYPE_A, LDNS_RD), res));
+    ASSERT_GT(last_event.elapsed, 1);
+    ASSERT_NO_FATAL_FAILURE(perform_request(proxy, create_request("yandex.ru", LDNS_RR_TYPE_A, LDNS_RD), res));
+    ASSERT_LE(last_event.elapsed, 1);
+    ASSERT_NO_FATAL_FAILURE(perform_request(proxy, create_request("google.com", LDNS_RR_TYPE_A, LDNS_RD), res));
+    ASSERT_GT(last_event.elapsed, 1);
+}
+
+TEST_F(dnsproxy_cache_test, cache_key_test) {
+    ag::ldns_pkt_ptr res;
+
+    ASSERT_NO_FATAL_FAILURE(perform_request(proxy, create_request("google.com", LDNS_RR_TYPE_A, LDNS_RD), res));
+    ASSERT_GT(last_event.elapsed, 1);
+
+    // Check case doesn't matter
+    ASSERT_NO_FATAL_FAILURE(perform_request(proxy, create_request("GoOgLe.CoM", LDNS_RR_TYPE_A, LDNS_RD), res));
+    ASSERT_LE(last_event.elapsed, 1);
+
+    // Check class matters
+    ASSERT_NO_FATAL_FAILURE(perform_request(proxy, create_request("google.com", LDNS_RR_TYPE_A, LDNS_RD, LDNS_RR_CLASS_CH), res));
+    ASSERT_GT(last_event.elapsed, 1);
+
+    // Check type matters
+    ASSERT_NO_FATAL_FAILURE(perform_request(proxy, create_request("google.com", LDNS_RR_TYPE_AAAA, LDNS_RD), res));
+    ASSERT_GT(last_event.elapsed, 1);
+
+    // Check CD flag matters
+    ASSERT_NO_FATAL_FAILURE(perform_request(proxy, create_request("google.com", LDNS_RR_TYPE_A, LDNS_RD | LDNS_CD), res));
+    ASSERT_GT(last_event.elapsed, 1);
+
+    // Check DO flag matters
+    ag::ldns_pkt_ptr req = create_request("google.com", LDNS_RR_TYPE_A, LDNS_RD);
+    ldns_pkt_set_edns_do(req.get(), true);
+    ASSERT_NO_FATAL_FAILURE(perform_request(proxy, req, res));
+    ASSERT_GT(last_event.elapsed, 1);
 }

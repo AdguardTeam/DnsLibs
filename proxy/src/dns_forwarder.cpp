@@ -3,6 +3,9 @@
 #include <dns_forwarder.h>
 #include <default_verifier.h>
 #include <ag_utils.h>
+#include <ag_cache.h>
+#include <string>
+#include <cstring>
 
 #include <ldns/ldns.h>
 
@@ -547,6 +550,11 @@ bool dns_forwarder::init(const dnsproxy_settings &settings, const dnsproxy_event
         prefixes_discovery_thread.detach();
     }
 
+    {
+        std::scoped_lock l(this->response_cache.mtx);
+        this->response_cache.val.set_capacity(this->settings->dns_cache_size);
+    }
+
     infolog(log, "Forwarder initialized");
     return true;
 }
@@ -555,6 +563,139 @@ void dns_forwarder::deinit() {
     this->settings = nullptr;
     this->upstreams.clear();
     this->filter.destroy(this->filter_handle);
+    {
+        std::scoped_lock l(this->response_cache.mtx);
+        this->response_cache.val.clear();
+    }
+}
+
+// Returns a response synthesized from the cached template, or nullptr if no cache entry satisfies the given key
+ldns_pkt_ptr dns_forwarder::create_response_from_cache(const cache_key &key, const ldns_pkt *request) {
+    if (!this->settings->dns_cache_size) {
+        // Caching disabled
+        return nullptr;
+    }
+
+    ldns_pkt_ptr response = nullptr;
+    uint32_t ttl = 0;
+    {
+        std::shared_lock l(this->response_cache.mtx);
+        auto &cache = this->response_cache.val;
+
+        const cached_response *cached_response = cache.get(key);
+        if (!cached_response) {
+            return nullptr;
+        }
+
+        auto cached_response_ttl = duration_cast<seconds>(cached_response->expires_at - ag::steady_clock::now());
+        if (cached_response_ttl.count() <= 0) {
+            cache.erase(key);
+            return nullptr;
+        }
+
+        ttl = cached_response_ttl.count();
+        response.reset(ldns_pkt_clone(cached_response->response.get()));
+    }
+
+    // Patch response id
+    ldns_pkt_set_id(response.get(), ldns_pkt_id(request));
+
+    // Patch response question section
+    assert(!ldns_pkt_question(response.get()));
+    ldns_pkt_set_qdcount(response.get(), ldns_pkt_qdcount(request));
+    ldns_pkt_set_question(response.get(), ldns_pkt_get_section_clone(request, LDNS_SECTION_QUESTION));
+
+    // Patch response TTLs
+    for (int_fast32_t i = 0; i < ldns_pkt_ancount(response.get()); ++i) {
+        ldns_rr_set_ttl(ldns_rr_list_rr(ldns_pkt_answer(response.get()), i), ttl);
+    }
+
+    return response;
+}
+
+uint32_t compute_min_rr_ttl(const ldns_pkt *pkt) {
+    uint32_t min_rr_ttl = UINT32_MAX;
+    for (int_fast32_t i = 0; i < ldns_pkt_ancount(pkt); ++i) {
+        min_rr_ttl = std::min(min_rr_ttl, ldns_rr_ttl(ldns_rr_list_rr(ldns_pkt_answer(pkt), i)));
+    }
+    for (int_fast32_t i = 0; i < ldns_pkt_arcount(pkt); ++i) {
+        min_rr_ttl = std::min(min_rr_ttl, ldns_rr_ttl(ldns_rr_list_rr(ldns_pkt_additional(pkt), i)));
+    }
+    for (int_fast32_t i = 0; i < ldns_pkt_nscount(pkt); ++i) {
+        min_rr_ttl = std::min(min_rr_ttl, ldns_rr_ttl(ldns_rr_list_rr(ldns_pkt_authority(pkt), i)));
+    }
+    if (min_rr_ttl == UINT32_MAX) { // No RRs in pkt (or insanely large TTL)
+        min_rr_ttl = 0;
+    }
+    return min_rr_ttl;
+}
+
+// Checks cacheability and puts an eligible response to the cache
+void dns_forwarder::put_response_to_cache(cache_key key, ldns_pkt_ptr response) {
+    if (!this->settings->dns_cache_size) {
+        // Caching disabled
+        return;
+    }
+
+    if (ldns_pkt_tc(response.get()) // Truncated
+        || ldns_pkt_qdcount(response.get()) != 1 // Invalid
+        || ldns_pkt_get_rcode(response.get()) != LDNS_RCODE_NOERROR // Error
+        ) {
+        // Not cacheable
+        return;
+    }
+
+    if (key.qtype == LDNS_RR_TYPE_A || key.qtype == LDNS_RR_TYPE_AAAA) {
+        // Check contains at least one record of requested type
+        bool found = false;
+        for (int_fast32_t i = 0; i < ldns_pkt_ancount(response.get()); ++i) {
+            const ldns_rr *rr = ldns_rr_list_rr(ldns_pkt_answer(response.get()), 0);
+            if (rr && ldns_rr_get_type(rr) == key.qtype) {
+                found = true;
+                break;
+            }
+        }
+        if (!found) {
+            // Not cacheable
+            return;
+        }
+    }
+
+    // Will be patched when returning the cached response
+    ldns_rr_list_deep_free(ldns_pkt_question(response.get()));
+    ldns_pkt_set_question(response.get(), nullptr);
+    ldns_pkt_set_qdcount(response.get(), 0);
+
+    // Remove OPT RRs
+    ldns_rr_list *cached_additional = ldns_rr_list_new();
+    ldns_rr_list *resp_additional = ldns_pkt_additional(response.get());
+    for (int_fast32_t i = 0; i < ldns_pkt_arcount(response.get()); ++i) {
+        ldns_rr *rr = ldns_rr_list_rr(resp_additional, i);
+        if (rr && ldns_rr_get_type(rr) != LDNS_RR_TYPE_OPT) { // OPT RRs MUST NOT be cached (RFC6891 6.1.1)
+            ldns_rr_list_push_rr(cached_additional, ldns_rr_clone(rr));
+        }
+    }
+    ldns_rr_list_deep_free(resp_additional);
+    ldns_pkt_set_additional(response.get(), cached_additional);
+    ldns_pkt_set_arcount(response.get(), ldns_rr_list_rr_count(cached_additional));
+
+    // This is NOT an authoritative answer
+    ldns_pkt_set_aa(response.get(), false);
+
+    // Compute the TTL of the cached response as the minimum of the response RR's TTLs
+    uint32_t min_rr_ttl = compute_min_rr_ttl(response.get());
+    if (min_rr_ttl == 0) {
+        // Not cacheable
+        return;
+    }
+
+    cached_response cached_response{
+        .response = std::move(response),
+        .expires_at = ag::steady_clock::now() + seconds(min_rr_ttl),
+    };
+
+    std::scoped_lock l(this->response_cache.mtx);
+    this->response_cache.val.insert(std::move(key), std::move(cached_response));
 }
 
 std::vector<uint8_t> dns_forwarder::handle_message(uint8_view message) {
@@ -588,6 +729,21 @@ std::vector<uint8_t> dns_forwarder::handle_message(uint8_view message) {
     event.domain = domain.get();
 
     const ldns_rr_type type = ldns_rr_get_type(question);
+
+    cache_key cache_key{
+            .domain = utils::to_lower(domain.get()),
+            .do_bit = ldns_pkt_edns_do(request),
+            .cd_bit = ldns_pkt_cd(request),
+            .qtype = type,
+            .qclass = ldns_rr_get_class(question)};
+
+    if (auto cached_response = create_response_from_cache(cache_key, request)) {
+        dbglog_fid(log, request, "Cached response found");
+        log_packet(log, cached_response.get(), "Cached response");
+        std::vector<uint8_t> raw_response = transform_response_to_raw_data(cached_response.get());
+        finalize_processed_event(event, request, cached_response.get(), nullptr, std::nullopt);
+        return raw_response;
+    }
 
     // IPv6 blocking
     if (this->settings->block_ipv6 && LDNS_RR_TYPE_AAAA == type) {
@@ -683,6 +839,7 @@ std::vector<uint8_t> dns_forwarder::handle_message(uint8_view message) {
     event.bytes_sent = message.size();
     event.bytes_received = raw_response.size();
     finalize_processed_event(event, request, response.get(), nullptr, successful_upstream, std::nullopt);
+    put_response_to_cache(std::move(cache_key), std::move(response));
     return raw_response;
 }
 
@@ -706,4 +863,17 @@ std::optional<uint8_vector> dns_forwarder::apply_filter(std::string_view hostnam
     }
 
     return std::nullopt;
+}
+
+bool cache_key::operator==(const cache_key &rhs) const {
+    return (this == &rhs) || (std::tie(domain, do_bit, cd_bit, qtype, qclass) ==
+                              std::tie(rhs.domain, rhs.do_bit, rhs.cd_bit, rhs.qtype, rhs.qclass));
+}
+
+bool cache_key::operator!=(const cache_key &rhs) const {
+    return !(rhs == *this);
+}
+
+size_t std::hash<cache_key>::operator()(const cache_key &key) const {
+    return utils::hash_combine(key.domain, key.do_bit, key.cd_bit, key.qtype, key.qclass);
 }

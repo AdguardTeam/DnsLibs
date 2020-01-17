@@ -161,6 +161,10 @@ typedef void (^logCallback)(const char *msg, int length);
  * Block AAAA requests.
  */
 @property(nonatomic, readonly) BOOL blockIpv6;
+/**
+ * Maximum number of cached responses
+ */
+@property(nonatomic, readonly) NSUInteger dnsCacheSize;
 
 - (instancetype) initWithUpstreams: (NSArray<AGDnsUpstream *> *) upstreams
         filters: (NSDictionary<NSNumber *,NSString *> *) filters
@@ -168,7 +172,8 @@ typedef void (^logCallback)(const char *msg, int length);
         dns64Settings: (AGDns64Settings *) dns64Settings
         listeners: (NSArray<AGListenerSettings *> *) listeners
         ipv6Available: (BOOL) ipv6Available
-        blockIpv6: (BOOL) blockIpv6;
+        blockIpv6: (BOOL) blockIpv6
+        dnsCacheSize: (NSUInteger) dnsCacheSize;
 
 /**
  * @brief Get default DNS proxy settings
