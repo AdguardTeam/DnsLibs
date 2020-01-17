@@ -701,7 +701,7 @@ std::optional<uint8_vector> dns_forwarder::apply_filter(std::string_view hostnam
         ldns_pkt_ptr response(create_blocking_response(request, this->settings, effective_rules));
         log_packet(log, response.get(), "Rule blocked response");
         std::vector<uint8_t> raw_response = transform_response_to_raw_data(response.get());
-        finalize_processed_event(event, request, response.get(), nullptr, nullptr, std::nullopt);
+        finalize_processed_event(event, request, response.get(), original_response, nullptr, std::nullopt);
         return raw_response;
     }
 
