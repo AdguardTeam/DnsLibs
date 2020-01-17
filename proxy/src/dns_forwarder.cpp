@@ -268,9 +268,37 @@ static void set_event_rules(dns_request_processed_event &event, const std::vecto
     event.whitelist = rules.size() > 0 && rules[0]->props.test(dnsfilter::RP_EXCEPTION);
 }
 
-void dns_forwarder::finalize_processed_event(dns_request_processed_event &event,
-        const ldns_pkt *request, const ldns_pkt *response,
-        const upstream *upstream, err_string error) const {
+static std::string rr_list_to_string(const ldns_rr_list *rr_list) {
+    if (rr_list == nullptr) {
+        return {};
+    }
+    ag::allocated_ptr<char> answer(ldns_rr_list2str(rr_list));
+    if (answer == nullptr) {
+        return {};
+    }
+    std::string_view answer_view = answer.get();
+    std::string out;
+    out.reserve(answer_view.size());
+    auto answer_parts = ag::utils::split_by(answer_view, '\t');
+    auto it = answer_parts.begin();
+    if (answer_parts.size() >= 4) {
+        it++; // Skip owner
+        it++; // Skip ttl
+        it++; // Skip class
+        out += *it++; // Add type
+        out += ',';
+        // Add serialized RDFs
+        while (it != answer_parts.end()) {
+            out += ' ';
+            out += *it++;
+        }
+    }
+    return out;
+}
+
+void dns_forwarder::finalize_processed_event(dns_request_processed_event &event, const ldns_pkt *request,
+                                             const ldns_pkt *response, const ldns_pkt *original_response,
+                                             const upstream *upstream, err_string error) const {
     if (request != nullptr) {
         const ldns_rr *question = ldns_rr_list_rr(ldns_pkt_question(request), 0);
         char *type = ldns_rr_type2str(ldns_rr_get_type(question));
@@ -281,11 +309,18 @@ void dns_forwarder::finalize_processed_event(dns_request_processed_event &event,
     }
 
     if (response != nullptr) {
-        char *answer = ldns_rr_list2str(ldns_pkt_answer(response));
-        event.answer = answer;
-        free(answer);
+        auto status = ag::allocated_ptr<char>(ldns_pkt_rcode2str(ldns_pkt_get_rcode(response)));
+        event.status = status != nullptr ? status.get() : "";
+        event.answer = rr_list_to_string(ldns_pkt_answer(response));
     } else {
+        event.status.clear();
         event.answer.clear();
+    }
+
+    if (original_response != nullptr) {
+        event.original_answer = rr_list_to_string(ldns_pkt_answer(original_response));
+    } else {
+        event.original_answer.clear();
     }
 
     if (upstream != nullptr) {
@@ -524,7 +559,7 @@ std::vector<uint8_t> dns_forwarder::handle_message(uint8_view message) {
         std::string err = AG_FMT("Failed to parse payload: {} ({})",
             ldns_get_errorstr_by_id(status), status);
         dbglog(log, "{} {}", __func__, err);
-        finalize_processed_event(event, nullptr, nullptr, nullptr, std::move(err));
+        finalize_processed_event(event, nullptr, nullptr, nullptr, nullptr, std::move(err));
         // @todo: think out what to do in this case
         return {};
     }
@@ -537,7 +572,7 @@ std::vector<uint8_t> dns_forwarder::handle_message(uint8_view message) {
         dbglog_fid(log, request, "{}", err);
         ldns_pkt_ptr response(create_servfail_response(request));
         log_packet(log, response.get(), "Server failure response");
-        finalize_processed_event(event, nullptr, response.get(), nullptr, std::move(err));
+        finalize_processed_event(event, nullptr, response.get(), nullptr, nullptr, std::move(err));
         std::vector<uint8_t> raw_response = transform_response_to_raw_data(response.get());
         return raw_response;
     }
@@ -552,7 +587,7 @@ std::vector<uint8_t> dns_forwarder::handle_message(uint8_view message) {
         ldns_pkt_ptr response(create_ipv6_blocking_response(request, this->settings));
         log_packet(log, response.get(), "IPv6 blocking response");
         std::vector<uint8_t> raw_response = transform_response_to_raw_data(response.get());
-        finalize_processed_event(event, request, response.get(), nullptr, std::nullopt);
+        finalize_processed_event(event, request, response.get(), nullptr, nullptr, std::nullopt);
         return raw_response;
     }
 
@@ -562,7 +597,7 @@ std::vector<uint8_t> dns_forwarder::handle_message(uint8_view message) {
         ldns_pkt_ptr response(create_nxdomain_response(request, this->settings));
         log_packet(log, response.get(), "Mozilla DOH blocking response");
         std::vector<uint8_t> raw_response = transform_response_to_raw_data(response.get());
-        finalize_processed_event(event, request, response.get(), nullptr, std::nullopt);
+        finalize_processed_event(event, request, response.get(), nullptr, nullptr, std::nullopt);
         return raw_response;
     }
 
@@ -572,7 +607,7 @@ std::vector<uint8_t> dns_forwarder::handle_message(uint8_view message) {
     }
     tracelog_fid(log, request, "Query domain: {}", pure_domain);
 
-    if (auto raw_blocking_response = apply_filter(pure_domain, request, event)) {
+    if (auto raw_blocking_response = apply_filter(pure_domain, request, nullptr, event)) {
         return *raw_blocking_response;
     }
 
@@ -589,12 +624,12 @@ std::vector<uint8_t> dns_forwarder::handle_message(uint8_view message) {
         std::string err_str = AG_FMT("Upstream failed to perform dns query: {}", result.error.value());
         dbglog_fid(log, request, "{}", err_str);
         if (bool last = (std::distance(i, this->upstreams.end()) == 1); !last) {
-            finalize_processed_event(event, request, nullptr, upstream.get(), std::move(err_str));
+            finalize_processed_event(event, request, nullptr, nullptr, upstream.get(), std::move(err_str));
         } else {
             response = ldns_pkt_ptr(create_servfail_response(request));
             log_packet(log, response.get(), "Server failure response");
             std::vector<uint8_t> raw_response = transform_response_to_raw_data(response.get());
-            finalize_processed_event(event, request, response.get(), upstream.get(), std::move(err_str));
+            finalize_processed_event(event, request, response.get(), nullptr, upstream.get(), std::move(err_str));
             return raw_response;
         }
     }
@@ -622,7 +657,7 @@ std::vector<uint8_t> dns_forwarder::handle_message(uint8_view message) {
             }
             tracelog_fid(log, response.get(), "Response CNAME: {}", cname);
 
-            if (auto raw_blocking_response = apply_filter(cname, request, event)) {
+            if (auto raw_blocking_response = apply_filter(cname, request, response.get(), event)) {
                 return *raw_blocking_response;
             }
         }
@@ -639,12 +674,13 @@ std::vector<uint8_t> dns_forwarder::handle_message(uint8_view message) {
     std::vector<uint8_t> raw_response = transform_response_to_raw_data(response.get());
     event.bytes_sent = message.size();
     event.bytes_received = raw_response.size();
-    finalize_processed_event(event, request, response.get(), successful_upstream, std::nullopt);
+    finalize_processed_event(event, request, response.get(), nullptr, successful_upstream, std::nullopt);
     return raw_response;
 }
 
 std::optional<uint8_vector> dns_forwarder::apply_filter(std::string_view hostname, const ldns_pkt *request,
-        dns_request_processed_event &event) {
+                                                        const ldns_pkt *original_response,
+                                                        dns_request_processed_event &event) {
     auto rules = this->filter.match(this->filter_handle, hostname);
     for (const dnsfilter::rule &rule : rules) {
         tracelog_fid(log, request, "Matched rule: {}", rule.text);
@@ -657,7 +693,7 @@ std::optional<uint8_vector> dns_forwarder::apply_filter(std::string_view hostnam
         ldns_pkt_ptr response(create_blocking_response(request, this->settings, effective_rules));
         log_packet(log, response.get(), "Rule blocked response");
         std::vector<uint8_t> raw_response = transform_response_to_raw_data(response.get());
-        finalize_processed_event(event, request, response.get(), nullptr, std::nullopt);
+        finalize_processed_event(event, request, response.get(), nullptr, nullptr, std::nullopt);
         return raw_response;
     }
 
