@@ -268,6 +268,14 @@ static void set_event_rules(dns_request_processed_event &event, const std::vecto
     event.whitelist = rules.size() > 0 && rules[0]->props.test(dnsfilter::RP_EXCEPTION);
 }
 
+/**
+ * Format RR list using the following format:
+ * <Type>, <RDFs, space separated>\n
+ * e.g.:
+ * A, 1.2.3.4
+ * AAAA, 12::34
+ * CNAME, google.com.
+ */
 static std::string rr_list_to_string(const ldns_rr_list *rr_list) {
     if (rr_list == nullptr) {
         return {};
