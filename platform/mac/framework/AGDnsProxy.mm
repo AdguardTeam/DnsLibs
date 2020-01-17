@@ -258,6 +258,7 @@ static NSData *create_response_packet(const struct iphdr *ip_header, const struc
     _listeners = listeners;
     _ipv6Available = settings->ipv6_available;
     _blockIpv6 = settings->block_ipv6;
+    _dnsCacheSize = settings->dns_cache_size;
     return self;
 }
 
@@ -267,7 +268,8 @@ static NSData *create_response_packet(const struct iphdr *ip_header, const struc
         dns64Settings: (AGDns64Settings *) dns64Settings
         listeners: (NSArray<AGListenerSettings *> *) listeners
         ipv6Available: (BOOL) ipv6Available
-        blockIpv6: (BOOL) blockIpv6;
+        blockIpv6: (BOOL) blockIpv6
+        dnsCacheSize: (NSUInteger) dnsCacheSize;
 {
     const ag::dnsproxy_settings &defaultSettings = ag::dnsproxy_settings::get_default();
     self = [self initWithNative: &defaultSettings];
@@ -282,6 +284,7 @@ static NSData *create_response_packet(const struct iphdr *ip_header, const struc
     _listeners = listeners;
     _ipv6Available = ipv6Available;
     _blockIpv6 = blockIpv6;
+    _dnsCacheSize = dnsCacheSize;
     return self;
 }
 
@@ -542,6 +545,8 @@ static std::string getTrustCreationErrorStr(OSStatus status) {
 
     settings.ipv6_available = config.ipv6Available;
     settings.block_ipv6 = config.blockIpv6;
+
+    settings.dns_cache_size = config.dnsCacheSize;
 
     if (!self->proxy.init(std::move(settings), std::move(native_events))) {
         errlog(self->log, "Failed to initialize core proxy module");

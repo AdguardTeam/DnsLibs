@@ -13,6 +13,7 @@ set(SRCS
         ${SRC_DIR}/logger.cpp
         ${SRC_DIR}/socket_address.cpp
         ${SRC_DIR}/net_utils.cpp
+        ${SRC_DIR}/clock.cpp
     )
 
 add_library(dnslibs_common STATIC EXCLUDE_FROM_ALL ${SRCS})
@@ -48,3 +49,15 @@ target_compile_options(dnslibs_common PUBLIC -Wno-format-nonliteral) # for fmt's
 if (NOT MSVC)
     target_compile_options(dnslibs_common PRIVATE -fno-exceptions)
 endif()
+
+enable_testing()
+if (NOT TARGET tests)
+    add_subdirectory(${THIRD_PARTY_DIR}/googletest ${CMAKE_BINARY_DIR}/googletest)
+    add_custom_target(tests)
+endif ()
+
+link_libraries(gtest gtest_main dnslibs_common)
+
+add_executable(cache_test EXCLUDE_FROM_ALL test/cache_test.cpp)
+add_test(cache_test cache_test)
+add_dependencies(tests cache_test)

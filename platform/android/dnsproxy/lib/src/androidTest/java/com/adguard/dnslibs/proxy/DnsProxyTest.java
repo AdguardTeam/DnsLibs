@@ -209,6 +209,8 @@ public class DnsProxyTest {
         settings.setFilterParams(settings.getFilterParams());
         settings.getUpstreams().get(0).setBootstrap(Collections.singletonList("1.1.1.1"));
 
+        settings.setDnsCacheSize(42);
+
         try (final DnsProxy proxy = new DnsProxy(settings)) {
             assertEquals(settings, proxy.getSettings());
             assertFalse(proxy.getSettings().getListeners().isEmpty());

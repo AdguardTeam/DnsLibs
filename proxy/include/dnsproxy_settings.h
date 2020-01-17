@@ -55,6 +55,8 @@ struct dnsproxy_settings {
     bool block_ipv6; // Block AAAA requests.
 
     bool ipv6_available; // If false, bootstrappers will fetch only A records.
+
+    size_t dns_cache_size; // Maximum number of cached responses
 };
 
 }

@@ -15,6 +15,21 @@ public class DnsProxySettings {
     private List<ListenerSettings> listeners = new ArrayList<>();
     private boolean ipv6Available;
     private boolean blockIpv6;
+    private long dnsCacheSize;
+
+    /**
+     * @return Maximum number of cached responses
+     */
+    public long getDnsCacheSize() {
+        return dnsCacheSize;
+    }
+
+    /**
+     * @param dnsCacheSize Maximum number of cached responses
+     */
+    public void setDnsCacheSize(long dnsCacheSize) {
+        this.dnsCacheSize = dnsCacheSize;
+    }
 
     /**
      * @return DNS upstreams settings list.
@@ -138,12 +153,13 @@ public class DnsProxySettings {
                 Objects.equals(upstreams, that.upstreams) &&
                 Objects.equals(dns64, that.dns64) &&
                 longSparseArraysEqual(filterParams, that.filterParams) &&
-                Objects.equals(listeners, that.listeners);
+                Objects.equals(listeners, that.listeners) &&
+                dnsCacheSize == that.dnsCacheSize;
     }
 
     @Override
     public int hashCode() {
-        return Objects.hash(upstreams, dns64, blockedResponseTtlSecs, filterParams, listeners, ipv6Available, blockIpv6);
+        return Objects.hash(upstreams, dns64, blockedResponseTtlSecs, filterParams, listeners, ipv6Available, blockIpv6, dnsCacheSize);
     }
 
     // For testing settings marshalling

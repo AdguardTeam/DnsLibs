@@ -369,6 +369,7 @@ ag::dnsproxy_settings ag::android_dnsproxy::marshal_settings(JNIEnv *env,
     auto filter_params_field = env->GetFieldID(clazz, "filterParams", "Landroid/util/LongSparseArray;");
     auto ipv6_avail_field = env->GetFieldID(clazz, "ipv6Available", "Z");
     auto block_ipv6_field = env->GetFieldID(clazz, "blockIpv6", "Z");
+    auto cache_size_field = env->GetFieldID(clazz, "dnsCacheSize", "J");
 
     ag::dnsproxy_settings settings{};
 
@@ -397,6 +398,8 @@ ag::dnsproxy_settings ag::android_dnsproxy::marshal_settings(JNIEnv *env,
     settings.ipv6_available = env->GetBooleanField(java_dnsproxy_settings, ipv6_avail_field);
     settings.block_ipv6 = env->GetBooleanField(java_dnsproxy_settings, block_ipv6_field);
 
+    settings.dns_cache_size = std::max((jlong) 0, env->GetLongField(java_dnsproxy_settings, cache_size_field));
+
     return settings;
 }
 
@@ -411,6 +414,7 @@ ag::local_ref<jobject> ag::android_dnsproxy::marshal_settings(JNIEnv *env, const
     auto filter_params_field = env->GetFieldID(clazz, "filterParams", "Landroid/util/LongSparseArray;");
     auto ipv6_avail_field = env->GetFieldID(clazz, "ipv6Available", "Z");
     auto block_ipv6_field = env->GetFieldID(clazz, "blockIpv6", "Z");
+    auto cache_size_field = env->GetFieldID(clazz, "dnsCacheSize", "J");
 
     auto java_settings = env->NewObject(clazz, ctor);
 
@@ -435,6 +439,8 @@ ag::local_ref<jobject> ag::android_dnsproxy::marshal_settings(JNIEnv *env, const
     env->SetObjectField(java_settings, filter_params_field, marshal_filter_params(env, settings.filter_params).get());
     env->SetBooleanField(java_settings, ipv6_avail_field, (jboolean) settings.ipv6_available);
     env->SetBooleanField(java_settings, block_ipv6_field, (jboolean) settings.block_ipv6);
+
+    env->SetLongField(java_settings, cache_size_field, settings.dns_cache_size);
 
     return local_ref(env, java_settings);
 }

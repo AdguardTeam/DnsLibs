@@ -22,6 +22,7 @@ static const dnsproxy_settings DEFAULT_PROXY_SETTINGS = {
     .listeners = {},
     .block_ipv6 = false,
     .ipv6_available = true,
+    .dns_cache_size = 128,
 };
 
 const dnsproxy_settings &dnsproxy_settings::get_default() {

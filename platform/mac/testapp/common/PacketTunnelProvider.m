@@ -114,7 +114,8 @@
         dns64Settings: nil
         listeners: nil
         ipv6Available: true
-        blockIpv6: false];
+        blockIpv6: false
+        dnsCacheSize: 128];
 
     AGDnsProxyEvents *events = [[AGDnsProxyEvents alloc] init];
     events.onRequestProcessed = ^(const AGDnsRequestProcessedEvent *event) {
