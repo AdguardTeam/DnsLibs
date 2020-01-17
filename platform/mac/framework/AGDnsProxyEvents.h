@@ -10,7 +10,7 @@
 @property(nonatomic, readonly) NSInteger elapsed; /**< Time elapsed on processing (in milliseconds) */
 @property(nonatomic, readonly) NSString *status; /**< DNS answer's status */
 @property(nonatomic, readonly) NSString *answer; /**< DNS Answers string representation */
-@property(nonatomic, readonly) NSString *originalAnswer; /**< DNS original answer's string representation */
+@property(nonatomic, readonly) NSString *originalAnswer; /**< If blocked by CNAME, here will be DNS original answer's string representation */
 @property(nonatomic, readonly) NSString *upstreamAddr; /**< Address of the upstream used to resolve */
 @property(nonatomic, readonly) NSUInteger bytesSent; /**< Number of bytes sent to a server */
 @property(nonatomic, readonly) NSUInteger bytesReceived; /**< Number of bytes received from a server */

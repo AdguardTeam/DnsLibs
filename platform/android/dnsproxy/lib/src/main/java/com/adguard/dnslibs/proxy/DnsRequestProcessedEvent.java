@@ -17,7 +17,7 @@ public class DnsRequestProcessedEvent {
     private String status;
     /** DNS Answers string representation */
     private String answer;
-    /** DNS original answer's string representation */
+    /** If blocked by CNAME, here will be DNS original answer's string representation */
     private String originalAnswer;
     /** Address of the upstream used to resolve */
     private String upstreamAddr;

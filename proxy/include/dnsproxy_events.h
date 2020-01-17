@@ -21,7 +21,7 @@ struct dns_request_processed_event {
     int elapsed; /**< Time elapsed on processing (in milliseconds) */
     std::string status; /**< DNS answer's status */
     std::string answer; /**< DNS Answers string representation */
-    std::string original_answer; /**< DNS original answer's string representation */
+    std::string original_answer; /**< If blocked by CNAME, here will be DNS original answer's string representation */
     std::string upstream_addr; /**< Address of the upstream used to resolve */
     int bytes_sent; /**< Number of bytes sent to a server */
     int bytes_received; /**< Number of bytes received from a server */
