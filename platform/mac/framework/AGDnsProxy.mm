@@ -302,7 +302,9 @@ static NSData *create_response_packet(const struct iphdr *ip_header, const struc
     _type = [NSString stringWithUTF8String: event.type.c_str()];
     _startTime = event.start_time;
     _elapsed = event.elapsed;
+    _status = [NSString stringWithUTF8String: event.status.c_str()];
     _answer = [NSString stringWithUTF8String: event.answer.c_str()];
+    _originalAnswer = [NSString stringWithUTF8String: event.original_answer.c_str()];
     _upstreamAddr = [NSString stringWithUTF8String: event.upstream_addr.c_str()];
     _bytesSent = event.bytes_sent;
     _bytesReceived = event.bytes_received;

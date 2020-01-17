@@ -55,13 +55,13 @@ private:
     void put_response_to_cache(cache_key key, ldns_pkt_ptr response);
 
     std::optional<uint8_vector> apply_filter(std::string_view hostname, const ldns_pkt *request,
-        dns_request_processed_event &event);
+        const ldns_pkt *original_response, dns_request_processed_event &event);
 
     ldns_pkt_ptr try_dns64_aaaa_synthesis(upstream *upstream, const ldns_pkt_ptr &request,
         const ldns_pkt_ptr &response) const;
 
     void finalize_processed_event(dns_request_processed_event &event,
-        const ldns_pkt *request, const ldns_pkt *response,
+        const ldns_pkt *request, const ldns_pkt *response, const ldns_pkt *original_response,
         const upstream *upstream, err_string error) const;
 
     logger log;

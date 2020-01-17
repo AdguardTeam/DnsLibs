@@ -13,8 +13,12 @@ public class DnsRequestProcessedEvent {
     private long startTime;
     /** Time elapsed on processing (in milliseconds) */
     private int elapsed;
+    /** DNS answer's status */
+    private String status;
     /** DNS Answers string representation */
     private String answer;
+    /** If blocked by CNAME, here will be DNS original answer's string representation */
+    private String originalAnswer;
     /** Address of the upstream used to resolve */
     private String upstreamAddr;
     /** Number of bytes sent to a server */
@@ -46,8 +50,16 @@ public class DnsRequestProcessedEvent {
         return elapsed;
     }
 
+    public String getStatus() {
+        return status;
+    }
+
     public String getAnswer() {
         return answer;
+    }
+
+    public String getOriginalAnswer() {
+        return originalAnswer;
     }
 
     public String getUpstreamAddr() {
@@ -94,8 +106,16 @@ public class DnsRequestProcessedEvent {
         this.elapsed = elapsed;
     }
 
+    public void setStatus(String status) {
+        this.status = status;
+    }
+
     public void setAnswer(String answer) {
         this.answer = answer;
+    }
+
+    public void setOriginalAnswer(String originalAnswer) {
+        this.originalAnswer = originalAnswer;
     }
 
     public void setUpstreamAddr(String upstreamAddr) {
@@ -133,7 +153,9 @@ public class DnsRequestProcessedEvent {
                 ", type='" + type + '\'' +
                 ", startTime=" + startTime +
                 ", elapsed=" + elapsed +
+                ", status='" + status + '\'' +
                 ", answer='" + answer + '\'' +
+                ", originalAnswer='" + originalAnswer + '\'' +
                 ", upstreamAddr='" + upstreamAddr + '\'' +
                 ", bytesSent=" + bytesSent +
                 ", bytesReceived=" + bytesReceived +

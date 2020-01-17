@@ -35,7 +35,9 @@ private:
         jfieldID type;
         jfieldID start_time;
         jfieldID elapsed;
+        jfieldID status;
         jfieldID answer;
+        jfieldID original_answer;
         jfieldID upstream_addr;
         jfieldID bytes_sent;
         jfieldID bytes_received;
