@@ -2,6 +2,7 @@
 
 #include <unordered_map>
 #include <list>
+#include <ag_defs.h>
 
 namespace ag {
 
@@ -13,7 +14,41 @@ class lru_cache {
 public:
     using node = std::pair<const Key, Val>;
 
+private:
+    /** Cache capacity */
+    size_t m_max_size;
+
+    /** MRU gravitate to the front, LRU gravitate to the back */
+    mutable with_mtx<std::list<node>> m_key_values;
+
+    /** The main map */
+    using map_type = std::unordered_map<Key, typename std::list<node>::iterator>;
+    mutable map_type m_mapped_values;
+
+public:
     static constexpr size_t DEFAULT_CAPACITY = 128;
+
+    /** A pointer-like object for accessing the cached value */
+    struct accessor {
+        using it_type = typename map_type::iterator;
+        it_type m_it{};
+
+        accessor() = default;
+
+        explicit accessor(typename map_type::iterator it) : m_it{it} {}
+
+        explicit operator bool() const {
+            return m_it != it_type{};
+        }
+
+        const Val &operator*() const {
+            return m_it->second->second;
+        }
+
+        const Val *operator->() const {
+            return &m_it->second->second;
+        }
+    };
 
     /**
      * Initialize a new cache
@@ -34,18 +69,21 @@ public:
     bool insert(Key k, Val v) {
         auto i = m_mapped_values.find(k);
         if (i != m_mapped_values.end()) {
-            m_key_values.splice(m_key_values.begin(), m_key_values, i->second);
+            m_key_values.mtx.lock();
+            m_key_values.val.splice(m_key_values.val.begin(), m_key_values.val, i->second);
+            i->second = m_key_values.val.begin();
+            m_key_values.mtx.unlock();
             i->second->second = std::move(v);
-            i->second = m_key_values.begin();
             return false;
         } else {
             assert(m_max_size);
-            if (m_key_values.size() == m_max_size) {
-                m_mapped_values.erase(m_key_values.back().first);
-                m_key_values.pop_back();
+            std::unique_lock l(m_key_values.mtx);
+            if (m_key_values.val.size() == m_max_size) {
+                m_mapped_values.erase(m_key_values.val.back().first);
+                m_key_values.val.pop_back();
             }
-            m_key_values.push_front(std::make_pair(k, std::move(v)));
-            m_mapped_values.emplace(std::make_pair(std::move(k), m_key_values.begin()));
+            m_key_values.val.push_front(std::make_pair(k, std::move(v)));
+            m_mapped_values.emplace(std::make_pair(std::move(k), m_key_values.val.begin()));
             return true;
         }
     }
@@ -58,14 +96,24 @@ public:
      * @return pointer to the found value, or
      *         nullptr if nothing was found
      */
-    const Val *get(const Key &k) const {
+    accessor get(const Key &k) const {
         auto i = m_mapped_values.find(k);
         if (i != m_mapped_values.end()) {
-            m_key_values.splice(m_key_values.begin(), m_key_values, i->second);
-            return &m_key_values.front().second;
+            std::unique_lock l(m_key_values.mtx);
+            m_key_values.val.splice(m_key_values.val.begin(), m_key_values.val, i->second);
+            return accessor(i);
         } else {
-            return nullptr;
+            return {};
         }
+    }
+
+    /**
+     * Forcibly make the specified cache entry least-recently-used
+     * @param acc the accessor for the cache entry to become LRU
+     */
+    void make_lru(accessor acc) {
+        std::unique_lock l(m_key_values.mtx);
+        m_key_values.val.splice(m_key_values.val.end(), m_key_values.val, acc.m_it->second);
     }
 
     /**
@@ -75,7 +123,8 @@ public:
     void erase(const Key &k) {
         auto i = m_mapped_values.find(k);
         if (i != m_mapped_values.end()) {
-            m_key_values.erase(i->second);
+            std::unique_lock l(m_key_values.mtx);
+            m_key_values.val.erase(i->second);
             m_mapped_values.erase(i);
         }
     }
@@ -84,7 +133,8 @@ public:
      * Clear the cache
      */
     void clear() {
-        m_key_values.clear();
+        std::unique_lock l(m_key_values.mtx);
+        m_key_values.val.clear();
         m_mapped_values.clear();
     }
 
@@ -92,7 +142,7 @@ public:
      * @return current cache size
      */
     size_t size() const {
-        return m_key_values.size();
+        return m_mapped_values.size();
     }
 
     /**
@@ -113,19 +163,14 @@ public:
         }
         if (max_size < size()) {
             size_t diff = size() - max_size;
+            std::unique_lock l(m_key_values.mtx);
             for (size_t i = 0; i < diff; i++) {
-                m_mapped_values.erase(m_key_values.back().first);
-                m_key_values.pop_back();
+                m_mapped_values.erase(m_key_values.val.back().first);
+                m_key_values.val.pop_back();
             }
         }
         m_max_size = max_size;
     }
-
-private:
-    /** Cache capacity */
-    size_t m_max_size;
-    mutable std::list<node> m_key_values;
-    mutable std::unordered_map<Key, typename decltype(m_key_values)::iterator> m_mapped_values;
 };
 
 } // namespace ag

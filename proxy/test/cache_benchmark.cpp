@@ -6,8 +6,8 @@
 #include <thread>
 #include <iostream>
 
-static constexpr int N_PER_THREAD = 100000;
-static constexpr int N_THREADS = 10;
+static constexpr int N_REQUESTS = 1000000;
+static constexpr int N_THREADS = 12;
 
 /**
  * @return The run time of f(args...) in seconds.
@@ -51,7 +51,7 @@ int main() {
         for (auto &t : tt) {
             t = std::thread([&]() {
                 int j;
-                for (j = 0; j < N_PER_THREAD; ++j) {
+                for (j = 0; j < N_REQUESTS / N_THREADS; ++j) {
                     const auto r = proxy.handle_message({ldns_buffer_at(buf.get(), 0),
                                                          ldns_buffer_position(buf.get())});
                     if (r.empty()) {

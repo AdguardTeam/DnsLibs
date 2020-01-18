@@ -692,23 +692,22 @@ ldns_pkt_ptr dns_forwarder::create_response_from_cache(const std::string &key, c
     ldns_pkt_ptr response = nullptr;
     uint32_t ttl = 0;
     {
-        // FIXME: TODO: refactor lru_cache to be able to use a shared lock here again
-        std::unique_lock l(this->response_cache.mtx);
+        std::shared_lock l(this->response_cache.mtx);
         auto &cache = this->response_cache.val;
 
-        const cached_response *cached_response = cache.get(key);
-        if (!cached_response) {
+        auto cached_response_acc = cache.get(key);
+        if (!cached_response_acc) {
             return nullptr;
         }
 
-        auto cached_response_ttl = duration_cast<seconds>(cached_response->expires_at - ag::steady_clock::now());
+        auto cached_response_ttl = duration_cast<seconds>(cached_response_acc->expires_at - ag::steady_clock::now());
         if (cached_response_ttl.count() <= 0) {
-            cache.erase(key);
+            cache.make_lru(cached_response_acc);
             return nullptr;
         }
 
         ttl = cached_response_ttl.count();
-        response.reset(ldns_pkt_clone(cached_response->response.get()));
+        response.reset(ldns_pkt_clone(cached_response_acc->response.get()));
     }
 
     // Patch response id

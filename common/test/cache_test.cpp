@@ -32,8 +32,8 @@ TEST_F(lru_cache_test, clear) {
 TEST_F(lru_cache_test, insert_and_get) {
     // check that values were inserted
     for (size_t i = 0; i < CACHE_SIZE; ++i) {
-        const std::string *v = cache.get(i);
-        ASSERT_NE(v, nullptr);
+        auto v = cache.get(i);
+        ASSERT_TRUE(v);
         ASSERT_EQ(*v, std::to_string(i));
     }
 
@@ -45,13 +45,13 @@ TEST_F(lru_cache_test, insert_and_get) {
 
     // check that old values were displaced
     for (size_t i = 0; i < CACHE_SIZE; ++i) {
-        ASSERT_EQ(cache.get(i), nullptr);
+        ASSERT_FALSE(cache.get(i));
     }
 
     // check that new values were inserted
     for (size_t i = CACHE_SIZE; i < CACHE_SIZE * 2; ++i) {
-        const std::string *v = cache.get(i);
-        ASSERT_NE(v, nullptr);
+        auto v = cache.get(i);
+        ASSERT_TRUE(v);
         ASSERT_EQ(*v, std::to_string(i));
     }
 }
@@ -68,11 +68,23 @@ TEST_F(lru_cache_test, erase) {
     // check that erased entries were deleted and other ones are still in cache
     for (size_t i = 0; i < CACHE_SIZE; ++i) {
         if ((i % 2) == 0) {
-            ASSERT_EQ(cache.get(i), nullptr);
+            ASSERT_FALSE(cache.get(i));
         } else {
-            ASSERT_NE(cache.get(i), nullptr);
+            ASSERT_TRUE(cache.get(i));
         }
     }
+}
+
+TEST_F(lru_cache_test, make_lru) {
+    auto acc = cache.get(CACHE_SIZE - 1);
+    ASSERT_TRUE(acc);
+    cache.make_lru(acc);
+    cache.insert(1234, "1234");
+
+    // Check that the MRU entry that has been made LRU has been pushed out of the cache
+    ASSERT_FALSE(cache.get(CACHE_SIZE - 1));
+    ASSERT_TRUE(cache.get(1234));
+    ASSERT_EQ(CACHE_SIZE, cache.size());
 }
 
 TEST_F(lru_cache_test, displace_order) {
@@ -81,7 +93,7 @@ TEST_F(lru_cache_test, displace_order) {
     size_t i = CACHE_SIZE;
     for (; i < CACHE_SIZE * 2; ++i, ++j) {
         cache.insert(i, std::to_string(i));
-        ASSERT_EQ(cache.get(j), nullptr);
+        ASSERT_FALSE(cache.get(j));
     }
 }
 
@@ -90,20 +102,20 @@ TEST_F(lru_cache_test, refresh_on_insert) {
     cache.insert(0, "42");
     cache.insert(CACHE_SIZE, std::to_string(CACHE_SIZE));
 
-    ASSERT_NE(cache.get(0), nullptr);
+    ASSERT_TRUE(cache.get(0));
     ASSERT_EQ(*cache.get(0), "42");
-    ASSERT_EQ(cache.get(1), nullptr);
-    ASSERT_NE(cache.get(CACHE_SIZE), nullptr);
+    ASSERT_FALSE(cache.get(1));
+    ASSERT_TRUE(cache.get(CACHE_SIZE));
 }
 
 TEST_F(lru_cache_test, refresh_on_get) {
     // check that getting key refreshes entry
-    ASSERT_NE(cache.get(0), nullptr);
+    ASSERT_TRUE(cache.get(0));
     cache.insert(CACHE_SIZE, std::to_string(CACHE_SIZE));
 
-    ASSERT_NE(cache.get(0), nullptr);
-    ASSERT_EQ(cache.get(1), nullptr);
-    ASSERT_NE(cache.get(CACHE_SIZE), nullptr);
+    ASSERT_TRUE(cache.get(0));
+    ASSERT_FALSE(cache.get(1));
+    ASSERT_TRUE(cache.get(CACHE_SIZE));
 }
 
 TEST_F(lru_cache_test, update_capacity) {
@@ -112,6 +124,6 @@ TEST_F(lru_cache_test, update_capacity) {
     ASSERT_EQ(cache.size(), CACHE_SIZE / 2);
 
     for (size_t i = 0; i < CACHE_SIZE / 2; ++i) {
-        ASSERT_EQ(cache.get(i), nullptr) << i << std::endl;
+        ASSERT_FALSE(cache.get(i)) << i << std::endl;
     }
 }
