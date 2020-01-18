@@ -847,6 +847,7 @@ std::vector<uint8_t> dns_forwarder::handle_message(uint8_view message) {
     if (auto cached_response = create_response_from_cache(cache_key, request)) {
         dbglog_fid(log, request, "Cached response found");
         log_packet(log, cached_response.get(), "Cached response");
+        event.cache_hit = true;
         std::vector<uint8_t> raw_response = transform_response_to_raw_data(cached_response.get());
         finalize_processed_event(event, request, cached_response.get(), nullptr, nullptr, std::nullopt);
         return raw_response;
