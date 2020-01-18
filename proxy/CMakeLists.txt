@@ -83,3 +83,4 @@ add_test(listener_test listener_test)
 add_dependencies(tests listener_test)
 
 add_executable(listener_standalone EXCLUDE_FROM_ALL test/listener_standalone.cpp)
+add_executable(cache_benchmark EXCLUDE_FROM_ALL test/cache_benchmark.cpp)

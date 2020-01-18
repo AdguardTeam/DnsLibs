@@ -33,6 +33,39 @@ static constexpr size_t RESPONSE_BUFFER_INITIAL_CAPACITY = 512;
 static constexpr uint32_t SOA_RETRY_DEFAULT = 900;
 static constexpr uint32_t SOA_RETRY_IPV6_BLOCK = 60;
 
+static std::string get_cache_key(const ldns_pkt *request) {
+    const auto *question = ldns_rr_list_rr(ldns_pkt_question(request), 0);
+    std::string key = fmt::format("{}|{}|{}{}|", // '|' is to avoid collisions
+                                  ldns_rr_get_type(question),
+                                  ldns_rr_get_class(question),
+                                  ldns_pkt_edns_do(request) ? "1" : "0",
+                                  ldns_pkt_cd(request) ? "1" : "0");
+
+    // Compute the domain name
+    const auto *owner = ldns_rr_owner(question);
+    const size_t size = ldns_rdf_size(owner);
+    key.reserve(key.size() + size);
+    if (size == 1) {
+        key.push_back('.');
+    } else {
+        auto *data = (uint8_t *) ldns_rdf_data(owner);
+        uint8_t len = data[0];
+        uint8_t src_pos = 0;
+        while ((len > 0) && (src_pos < size)) {
+            ++src_pos;
+            for (int_fast32_t i = 0; i < len; ++i) {
+                key.push_back(std::tolower(data[src_pos]));
+                ++src_pos;
+            }
+            if (src_pos < size) {
+                key.push_back('.');
+            }
+            len = data[src_pos];
+        }
+    }
+
+    return key;
+}
 
 struct dns_forwarder::application_verifier : public certificate_verifier {
     const dnsproxy_events *events = nullptr;
@@ -650,7 +683,7 @@ void dns_forwarder::deinit() {
 }
 
 // Returns a response synthesized from the cached template, or nullptr if no cache entry satisfies the given key
-ldns_pkt_ptr dns_forwarder::create_response_from_cache(const cache_key &key, const ldns_pkt *request) {
+ldns_pkt_ptr dns_forwarder::create_response_from_cache(const std::string &key, const ldns_pkt *request) {
     if (!this->settings->dns_cache_size) {
         // Caching disabled
         return nullptr;
@@ -659,7 +692,8 @@ ldns_pkt_ptr dns_forwarder::create_response_from_cache(const cache_key &key, con
     ldns_pkt_ptr response = nullptr;
     uint32_t ttl = 0;
     {
-        std::shared_lock l(this->response_cache.mtx);
+        // FIXME: TODO: refactor lru_cache to be able to use a shared lock here again
+        std::unique_lock l(this->response_cache.mtx);
         auto &cache = this->response_cache.val;
 
         const cached_response *cached_response = cache.get(key);
@@ -711,7 +745,7 @@ uint32_t compute_min_rr_ttl(const ldns_pkt *pkt) {
 }
 
 // Checks cacheability and puts an eligible response to the cache
-void dns_forwarder::put_response_to_cache(cache_key key, ldns_pkt_ptr response) {
+void dns_forwarder::put_response_to_cache(std::string key, ldns_pkt_ptr response) {
     if (!this->settings->dns_cache_size) {
         // Caching disabled
         return;
@@ -725,12 +759,14 @@ void dns_forwarder::put_response_to_cache(cache_key key, ldns_pkt_ptr response) 
         return;
     }
 
-    if (key.qtype == LDNS_RR_TYPE_A || key.qtype == LDNS_RR_TYPE_AAAA) {
+    const auto *question = ldns_rr_list_rr(ldns_pkt_question(response.get()), 0);
+    const auto type = ldns_rr_get_type(question);
+    if (type == LDNS_RR_TYPE_A || type == LDNS_RR_TYPE_AAAA) {
         // Check contains at least one record of requested type
         bool found = false;
         for (int_fast32_t i = 0; i < ldns_pkt_ancount(response.get()); ++i) {
             const ldns_rr *rr = ldns_rr_list_rr(ldns_pkt_answer(response.get()), 0);
-            if (rr && ldns_rr_get_type(rr) == key.qtype) {
+            if (rr && ldns_rr_get_type(rr) == type) {
                 found = true;
                 break;
             }
@@ -774,8 +810,9 @@ void dns_forwarder::put_response_to_cache(cache_key key, ldns_pkt_ptr response) 
         .expires_at = ag::steady_clock::now() + seconds(min_rr_ttl),
     };
 
-    std::scoped_lock l(this->response_cache.mtx);
-    this->response_cache.val.insert(std::move(key), std::move(cached_response));
+    std::unique_lock l(this->response_cache.mtx);
+    auto &cache = this->response_cache.val;
+    cache.insert(std::move(key), std::move(cached_response));
 }
 
 std::vector<uint8_t> dns_forwarder::handle_message(uint8_view message) {
@@ -805,17 +842,8 @@ std::vector<uint8_t> dns_forwarder::handle_message(uint8_view message) {
         std::vector<uint8_t> raw_response = transform_response_to_raw_data(response.get());
         return raw_response;
     }
-    auto domain = allocated_ptr<char>(ldns_rdf2str(ldns_rr_owner(question)));
-    event.domain = domain.get();
 
-    const ldns_rr_type type = ldns_rr_get_type(question);
-
-    cache_key cache_key{
-            .domain = utils::to_lower(domain.get()),
-            .do_bit = ldns_pkt_edns_do(request),
-            .cd_bit = ldns_pkt_cd(request),
-            .qtype = type,
-            .qclass = ldns_rr_get_class(question)};
+    std::string cache_key = get_cache_key(request);
 
     if (auto cached_response = create_response_from_cache(cache_key, request)) {
         dbglog_fid(log, request, "Cached response found");
@@ -824,6 +852,11 @@ std::vector<uint8_t> dns_forwarder::handle_message(uint8_view message) {
         finalize_processed_event(event, request, cached_response.get(), nullptr, nullptr, std::nullopt);
         return raw_response;
     }
+
+    auto domain = allocated_ptr<char>(ldns_rdf2str(ldns_rr_owner(question)));
+    event.domain = domain.get();
+
+    const ldns_rr_type type = ldns_rr_get_type(question);
 
     // IPv6 blocking
     if (this->settings->block_ipv6 && LDNS_RR_TYPE_AAAA == type) {
@@ -943,17 +976,4 @@ std::optional<uint8_vector> dns_forwarder::apply_filter(std::string_view hostnam
     }
 
     return std::nullopt;
-}
-
-bool cache_key::operator==(const cache_key &rhs) const {
-    return (this == &rhs) || (std::tie(domain, do_bit, cd_bit, qtype, qclass) ==
-                              std::tie(rhs.domain, rhs.do_bit, rhs.cd_bit, rhs.qtype, rhs.qclass));
-}
-
-bool cache_key::operator!=(const cache_key &rhs) const {
-    return !(rhs == *this);
-}
-
-size_t std::hash<cache_key>::operator()(const cache_key &key) const {
-    return utils::hash_combine(key.domain, key.do_bit, key.cd_bit, key.qtype, key.qclass);
 }

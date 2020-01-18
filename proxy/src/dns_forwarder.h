@@ -14,26 +14,6 @@
 #include <shared_mutex>
 
 namespace ag {
-struct cache_key {
-    std::string domain; // should be all lower-case for case-insensitivity
-    bool do_bit;
-    bool cd_bit;
-    ldns_rr_type qtype;
-    ldns_rr_class qclass;
-
-    bool operator==(const cache_key &rhs) const;
-    bool operator!=(const cache_key &rhs) const;
-};
-} // namespace ag
-
-namespace std {
-template<>
-struct hash<ag::cache_key> {
-    size_t operator()(const ag::cache_key &key) const;
-};
-} // namespace std
-
-namespace ag {
 
 struct cached_response {
     ldns_pkt_ptr response;
@@ -51,8 +31,8 @@ public:
     std::vector<uint8_t> handle_message(uint8_view message);
 
 private:
-    ldns_pkt_ptr create_response_from_cache(const cache_key &key, const ldns_pkt *request);
-    void put_response_to_cache(cache_key key, ldns_pkt_ptr response);
+    ldns_pkt_ptr create_response_from_cache(const std::string &key, const ldns_pkt *request);
+    void put_response_to_cache(std::string key, ldns_pkt_ptr response);
 
     std::optional<uint8_vector> apply_filter(std::string_view hostname, const ldns_pkt *request,
         const ldns_pkt *original_response, dns_request_processed_event &event);
@@ -75,7 +55,7 @@ private:
 
     struct application_verifier;
 
-    with_mtx<lru_cache<cache_key, cached_response>, std::shared_mutex> response_cache;
+    with_mtx<lru_cache<std::string, cached_response>, std::shared_mutex> response_cache;
 };
 
 } // namespace ag

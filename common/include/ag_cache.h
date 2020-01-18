@@ -34,8 +34,8 @@ public:
     bool insert(Key k, Val v) {
         auto i = m_mapped_values.find(k);
         if (i != m_mapped_values.end()) {
-            m_key_values.erase(i->second);
-            m_key_values.push_front(std::make_pair(std::move(k), std::move(v)));
+            m_key_values.splice(m_key_values.begin(), m_key_values, i->second);
+            i->second->second = std::move(v);
             i->second = m_key_values.begin();
             return false;
         } else {
@@ -61,9 +61,7 @@ public:
     const Val *get(const Key &k) const {
         auto i = m_mapped_values.find(k);
         if (i != m_mapped_values.end()) {
-            m_key_values.push_front(std::move(*i->second));
-            m_key_values.erase(i->second);
-            i->second = m_key_values.begin();
+            m_key_values.splice(m_key_values.begin(), m_key_values, i->second);
             return &m_key_values.front().second;
         } else {
             return nullptr;
