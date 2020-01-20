@@ -41,7 +41,7 @@ static std::string get_cache_key(const ldns_pkt *request) {
                                   ldns_pkt_edns_do(request) ? "1" : "0",
                                   ldns_pkt_cd(request) ? "1" : "0");
 
-    // Compute the domain name
+    // Compute the domain name, in lower case for case-insensitivity
     const auto *owner = ldns_rr_owner(question);
     const size_t size = ldns_rdf_size(owner);
     key.reserve(key.size() + size);
@@ -275,7 +275,7 @@ static ldns_pkt *create_unspec_or_custom_address_response(const ldns_pkt *reques
     ldns_rr_type type = ldns_rr_get_type(question);
     assert(type == LDNS_RR_TYPE_A || type == LDNS_RR_TYPE_AAAA);
 
-    if (settings->blocking_mode == blocking_mode::CUSTOM_ADDRESS) {
+    if (settings->blocking_mode == dnsproxy_blocking_mode::CUSTOM_ADDRESS) {
         if (type == LDNS_RR_TYPE_A && settings->custom_blocking_ipv4.empty()) {
             return create_soa_response(request, settings, SOA_RETRY_DEFAULT);
         } else if (type == LDNS_RR_TYPE_AAAA && settings->custom_blocking_ipv6.empty()) {
@@ -290,14 +290,14 @@ static ldns_pkt *create_unspec_or_custom_address_response(const ldns_pkt *reques
     ldns_rr_set_class(rr, ldns_rr_get_class(question));
 
     if (type == LDNS_RR_TYPE_A) {
-        if (settings->blocking_mode == blocking_mode::CUSTOM_ADDRESS) {
+        if (settings->blocking_mode == dnsproxy_blocking_mode::CUSTOM_ADDRESS) {
             assert(utils::is_valid_ip4(settings->custom_blocking_ipv4));
             ldns_rr_push_rdf(rr, ldns_rdf_new_frm_str(LDNS_RDF_TYPE_A, settings->custom_blocking_ipv4.c_str()));
         } else {
             ldns_rr_push_rdf(rr, ldns_rdf_new_frm_str(LDNS_RDF_TYPE_A, "0.0.0.0"));
         }
     } else {
-        if (settings->blocking_mode == blocking_mode::CUSTOM_ADDRESS) {
+        if (settings->blocking_mode == dnsproxy_blocking_mode::CUSTOM_ADDRESS) {
             assert(utils::is_valid_ip6(settings->custom_blocking_ipv6));
             ldns_rr_push_rdf(rr, ldns_rdf_new_frm_str(LDNS_RDF_TYPE_AAAA, settings->custom_blocking_ipv6.c_str()));
         } else {
@@ -328,16 +328,16 @@ static ldns_pkt *create_blocking_response(const ldns_pkt *request, const dnsprox
     ldns_rr_type type = ldns_rr_get_type(question);
     ldns_pkt *response;
     if (type != LDNS_RR_TYPE_A && type != LDNS_RR_TYPE_AAAA) { // Can only respond with NXDOMAIN or NOERROR+SOA
-        response = (settings->blocking_mode == blocking_mode::NXDOMAIN)
+        response = (settings->blocking_mode == dnsproxy_blocking_mode::NXDOMAIN)
                    ? create_nxdomain_response(request, settings)
                    : create_soa_response(request, settings, SOA_RETRY_IPV6_BLOCK);
     } else if (!rules[0]->ip.has_value()) { // Adblock-style rule
-        response = (settings->blocking_mode == blocking_mode::UNSPECIFIED_ADDRESS
-                    || settings->blocking_mode == blocking_mode::CUSTOM_ADDRESS)
+        response = (settings->blocking_mode == dnsproxy_blocking_mode::UNSPECIFIED_ADDRESS
+                    || settings->blocking_mode == dnsproxy_blocking_mode::CUSTOM_ADDRESS)
                    ? create_unspec_or_custom_address_response(request, settings)
                    : create_nxdomain_response(request, settings);
     } else if (rules_contain_blocking_ip(rules)) { // hosts-style blocking rule
-        response = (settings->blocking_mode == blocking_mode::NXDOMAIN)
+        response = (settings->blocking_mode == dnsproxy_blocking_mode::NXDOMAIN)
                    ? create_nxdomain_response(request, settings)
                    : create_unspec_or_custom_address_response(request, settings);
     } else { // hosts-style custom IP rule
@@ -561,7 +561,7 @@ bool dns_forwarder::init(const dnsproxy_settings &settings, const dnsproxy_event
     this->settings = &settings;
     this->events = &events;
 
-    if (settings.blocking_mode == blocking_mode::CUSTOM_ADDRESS) {
+    if (settings.blocking_mode == dnsproxy_blocking_mode::CUSTOM_ADDRESS) {
         // Check custom IPv4
         if (settings.custom_blocking_ipv4.empty()) {
             warnlog(this->log, "Custom blocking IPv4 not set: blocking responses to A queries will be empty");

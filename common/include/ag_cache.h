@@ -19,6 +19,8 @@ private:
     size_t m_max_size;
 
     /** MRU gravitate to the front, LRU gravitate to the back */
+    // This is guarded with its own mutex to allow clients to share access to the
+    // "const" (from their point of view) functions, which actually modify this list
     mutable with_mtx<std::list<node>> m_key_values;
 
     /** The main map */
@@ -35,7 +37,7 @@ public:
 
         accessor() = default;
 
-        explicit accessor(typename map_type::iterator it) : m_it{it} {}
+        explicit accessor(it_type it) : m_it{it} {}
 
         explicit operator bool() const {
             return m_it != it_type{};

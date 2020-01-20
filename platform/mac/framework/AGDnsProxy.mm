@@ -332,6 +332,8 @@ static NSData *create_response_packet(const struct iphdr *ip_header, const struc
     _whitelist = event.whitelist;
     _error = [NSString stringWithUTF8String: event.error.c_str()];
 
+    _cacheHit = event.cache_hit;
+
     return self;
 }
 @end
@@ -557,7 +559,7 @@ static std::string getTrustCreationErrorStr(OSStatus status) {
     settings.ipv6_available = config.ipv6Available;
     settings.block_ipv6 = config.blockIpv6;
 
-    settings.blocking_mode = (ag::blocking_mode) config.blockingMode;
+    settings.blocking_mode = (ag::dnsproxy_blocking_mode) config.blockingMode;
     if (config.customBlockingIpv4 != nil) {
         settings.custom_blocking_ipv4 = [config.customBlockingIpv4 UTF8String];
     }
