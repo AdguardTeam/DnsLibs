@@ -215,6 +215,13 @@ public class DnsProxyTest {
 
         settings.setDnsCacheSize(42);
 
+        UpstreamSettings fallbackUpstream = new UpstreamSettings();
+        fallbackUpstream.setAddress("https://fall.back/up/stream");
+        fallbackUpstream.setBootstrap(Collections.singletonList("1.1.1.1"));
+        fallbackUpstream.setServerIp(new byte[]{8, 8, 8, 8});
+        fallbackUpstream.setTimeoutMs(4200);
+        settings.getFallbacks().add(fallbackUpstream);
+
         try (final DnsProxy proxy = new DnsProxy(settings)) {
             assertEquals(settings, proxy.getSettings());
             assertFalse(proxy.getSettings().getListeners().isEmpty());

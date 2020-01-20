@@ -357,6 +357,7 @@ ag::dnsproxy_settings ag::android_dnsproxy::marshal_settings(JNIEnv *env,
     auto blocked_response_ttl_field = env->GetFieldID(clazz, "blockedResponseTtlSecs", "J");
     auto dns64_field = env->GetFieldID(clazz, "dns64", "L" FQN_DNS64_SETTINGS ";");
     auto upstreams_field = env->GetFieldID(clazz, "upstreams", "Ljava/util/List;");
+    auto fallbacks_field = env->GetFieldID(clazz, "fallbacks", "Ljava/util/List;");
     auto listeners_field = env->GetFieldID(clazz, "listeners", "Ljava/util/List;");
     auto filter_params_field = env->GetFieldID(clazz, "filterParams", "Landroid/util/SparseArray;");
     auto ipv6_avail_field = env->GetFieldID(clazz, "ipv6Available", "Z");
@@ -373,6 +374,12 @@ ag::dnsproxy_settings ag::android_dnsproxy::marshal_settings(JNIEnv *env,
     if (local_ref upstreams{env, env->GetObjectField(java_dnsproxy_settings, upstreams_field)}) {
         m_utils.iterate(env, upstreams.get(), [&](local_ref<jobject> &&java_upstream_settings) {
             settings.upstreams.push_back(marshal_upstream(env, java_upstream_settings.get()));
+        });
+    }
+
+    if (local_ref fallbacks{env, env->GetObjectField(java_dnsproxy_settings, fallbacks_field)}) {
+        m_utils.iterate(env, fallbacks.get(), [&](local_ref<jobject> &&java_upstream_settings) {
+            settings.fallbacks.push_back(marshal_upstream(env, java_upstream_settings.get()));
         });
     }
 
@@ -421,6 +428,7 @@ ag::local_ref<jobject> ag::android_dnsproxy::marshal_settings(JNIEnv *env, const
     auto blocked_response_ttl_field = env->GetFieldID(clazz, "blockedResponseTtlSecs", "J");
     auto dns64_field = env->GetFieldID(clazz, "dns64", "L" FQN_DNS64_SETTINGS ";");
     auto upstreams_field = env->GetFieldID(clazz, "upstreams", "Ljava/util/List;");
+    auto fallbacks_field = env->GetFieldID(clazz, "fallbacks", "Ljava/util/List;");
     auto listeners_field = env->GetFieldID(clazz, "listeners", "Ljava/util/List;");
     auto filter_params_field = env->GetFieldID(clazz, "filterParams", "Landroid/util/SparseArray;");
     auto ipv6_avail_field = env->GetFieldID(clazz, "ipv6Available", "Z");
@@ -441,6 +449,12 @@ ag::local_ref<jobject> ag::android_dnsproxy::marshal_settings(JNIEnv *env, const
     if (local_ref upstreams{env, env->GetObjectField(java_settings, upstreams_field)}) {
         for (auto &upstream : settings.upstreams) {
             m_utils.collection_add(env, upstreams.get(), marshal_upstream(env, upstream).get());
+        }
+    }
+
+    if (local_ref fallbacks{env, env->GetObjectField(java_settings, fallbacks_field)}) {
+        for (auto &upstream : settings.fallbacks) {
+            m_utils.collection_add(env, fallbacks.get(), marshal_upstream(env, upstream).get());
         }
     }
 

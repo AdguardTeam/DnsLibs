@@ -588,7 +588,7 @@ bool dns_forwarder::init(const dnsproxy_settings &settings, const dnsproxy_event
 
     infolog(log, "Initializing upstreams...");
     upstream_factory us_factory({ this->cert_verifier.get(), this->settings->ipv6_available });
-    this->upstreams.reserve(settings.upstreams.size());
+    this->upstreams.reserve(settings.upstreams.size() + settings.fallbacks.size());
     for (const upstream::options &options : settings.upstreams) {
         infolog(log, "Initializing upstream {}...", options.address);
         auto[upstream, err] = us_factory.create_upstream(options);
@@ -597,6 +597,16 @@ bool dns_forwarder::init(const dnsproxy_settings &settings, const dnsproxy_event
         } else {
             this->upstreams.emplace_back(std::move(upstream));
             infolog(log, "Upstream created successfully");
+        }
+    }
+    for (const upstream::options &options : settings.fallbacks) {
+        infolog(log, "Initializing fallback upstream {}...", options.address);
+        auto[upstream, err] = us_factory.create_upstream(options);
+        if (err.has_value()) {
+            errlog(log, "Failed to create fallback upstream: {}", err.value());
+        } else {
+            this->upstreams.emplace_back(std::move(upstream));
+            infolog(log, "Fallback upstream created successfully");
         }
     }
     if (this->upstreams.empty()) {

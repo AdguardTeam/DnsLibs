@@ -245,6 +245,12 @@ static NSData *create_response_packet(const struct iphdr *ip_header, const struc
         [upstreams addObject: [[AGDnsUpstream alloc] initWithNative: &us]];
     }
     _upstreams = upstreams;
+    NSMutableArray<AGDnsUpstream *> *fallbacks =
+            [[NSMutableArray alloc] initWithCapacity: settings->fallbacks.size()];
+    for (const ag::upstream::options &us : settings->fallbacks) {
+        [fallbacks addObject: [[AGDnsUpstream alloc] initWithNative: &us]];
+    }
+    _fallbacks = fallbacks;
     _filters = nil;
     _blockedResponseTtlSecs = settings->blocked_response_ttl_secs;
     if (settings->dns64.has_value()) {
@@ -266,6 +272,7 @@ static NSData *create_response_packet(const struct iphdr *ip_header, const struc
 }
 
 - (instancetype) initWithUpstreams: (NSArray<AGDnsUpstream *> *) upstreams
+        fallbacks: (NSArray<AGDnsUpstream *> *) fallbacks
         filters: (NSDictionary<NSNumber *,NSString *> *) filters
         blockedResponseTtlSecs: (NSInteger) blockedResponseTtlSecs
         dns64Settings: (AGDns64Settings *) dns64Settings
@@ -282,6 +289,7 @@ static NSData *create_response_packet(const struct iphdr *ip_header, const struc
     if (upstreams != nil) {
         _upstreams = upstreams;
     }
+    _fallbacks = fallbacks;
     _filters = filters;
     if (blockedResponseTtlSecs != 0) {
         _blockedResponseTtlSecs = blockedResponseTtlSecs;
@@ -443,19 +451,11 @@ static std::string getTrustCreationErrorStr(OSStatus status) {
     return errStr;
 }
 
-- (instancetype) initWithConfig: (AGDnsProxyConfig *) config
-        handler: (AGDnsProxyEvents *)handler
-{
-    ag::set_logger_factory_callback(nslog_sink::create);
-    self->log = ag::create_logger("AGDnsProxy");
-
-    infolog(self->log, "Initializing dns proxy...");
-
-    ag::dnsproxy_settings settings = ag::dnsproxy_settings::get_default();
-    if (config.upstreams != nil) {
-        settings.upstreams.clear();
-        settings.upstreams.reserve([config.upstreams count]);
-        for (AGDnsUpstream *upstream in config.upstreams) {
+std::vector<ag::upstream::options> convert_upstreams(NSArray<AGDnsUpstream *> *upstreams) {
+    std::vector<ag::upstream::options> converted;
+    if (upstreams != nil) {
+        converted.reserve([upstreams count]);
+        for (AGDnsUpstream *upstream in upstreams) {
             std::vector<std::string> bootstrap;
             if (upstream.bootstrap != nil) {
                 bootstrap.reserve([upstream.bootstrap count]);
@@ -467,19 +467,33 @@ static std::string getTrustCreationErrorStr(OSStatus status) {
             if (upstream.serverIp != nil && [upstream.serverIp length] == 4) {
                 addr.emplace<ag::uint8_array<4>>();
                 std::memcpy(std::get<ag::uint8_array<4>>(addr).data(),
-                    [upstream.serverIp bytes], [upstream.serverIp length]);
+                            [upstream.serverIp bytes], [upstream.serverIp length]);
             } else if (upstream.serverIp != nil && [upstream.serverIp length] == 16) {
                 addr.emplace<ag::uint8_array<16>>();
                 std::memcpy(std::get<ag::uint8_array<16>>(addr).data(),
-                    [upstream.serverIp bytes], [upstream.serverIp length]);
+                            [upstream.serverIp bytes], [upstream.serverIp length]);
             } else {
                 addr.emplace<std::monostate>();
             }
-            settings.upstreams.emplace_back(
-                ag::upstream::options{[upstream.address UTF8String], std::move(bootstrap),
-                                      std::chrono::milliseconds(upstream.timeoutMs), addr });
+            converted.emplace_back(
+                    ag::upstream::options{[upstream.address UTF8String], std::move(bootstrap),
+                                          std::chrono::milliseconds(upstream.timeoutMs), addr });
         }
     }
+    return converted;
+}
+
+- (instancetype) initWithConfig: (AGDnsProxyConfig *) config
+        handler: (AGDnsProxyEvents *)handler
+{
+    ag::set_logger_factory_callback(nslog_sink::create);
+    self->log = ag::create_logger("AGDnsProxy");
+
+    infolog(self->log, "Initializing dns proxy...");
+
+    ag::dnsproxy_settings settings = ag::dnsproxy_settings::get_default();
+    settings.upstreams = convert_upstreams(config.upstreams);
+    settings.fallbacks = convert_upstreams(config.fallbacks);
 
     settings.blocked_response_ttl_secs = config.blockedResponseTtlSecs;
 
@@ -510,34 +524,18 @@ static std::string getTrustCreationErrorStr(OSStatus status) {
         };
 
     if (config.dns64Settings != nil) {
-        const NSArray<AGDnsUpstream *> *const upstreams = config.dns64Settings.upstreams;
-        if (upstreams == nil) {
+        NSArray<AGDnsUpstream *> *dns64_upstreams = config.dns64Settings.upstreams;
+        if (dns64_upstreams == nil) {
             dbglog(self->log, "DNS64 upstreams list is nil");
-        } else if ([upstreams count] == 0) {
+        } else if ([dns64_upstreams count] == 0) {
             dbglog(self->log, "DNS64 upstreams list is empty");
         } else {
             settings.dns64 = ag::dns64_settings{
-                    .upstreams = {},
+                    .upstreams = convert_upstreams(dns64_upstreams),
                     .wait_time = std::chrono::milliseconds(config.dns64Settings.waitTimeMs),
                     .max_tries = config.dns64Settings.maxTries > 0
                                  ? static_cast<uint32_t>(config.dns64Settings.maxTries) : 0,
             };
-            settings.dns64->upstreams.reserve([upstreams count]);
-
-            for (AGDnsUpstream *upstream in upstreams) {
-                std::vector<std::string> bootstrap;
-                bootstrap.reserve([upstream.bootstrap count]);
-
-                for (NSString *server in upstream.bootstrap) {
-                    bootstrap.emplace_back([server UTF8String]);
-                }
-
-                settings.dns64->upstreams.push_back({
-                    [upstream.address UTF8String],
-                    std::move(bootstrap),
-                    std::chrono::milliseconds(upstream.timeoutMs),
-                });
-            }
         }
     }
 

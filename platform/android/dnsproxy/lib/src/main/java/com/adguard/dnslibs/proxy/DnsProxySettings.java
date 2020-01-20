@@ -2,6 +2,7 @@ package com.adguard.dnslibs.proxy;
 
 import android.util.SparseArray;
 
+import java.lang.reflect.Array;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -28,6 +29,7 @@ public class DnsProxySettings {
     }
 
     private List<UpstreamSettings> upstreams = new ArrayList<>();
+    private List<UpstreamSettings> fallbacks = new ArrayList<>();
     private Dns64Settings dns64;
     private long blockedResponseTtlSecs;
     private SparseArray<String> filterParams = new SparseArray<>();
@@ -111,6 +113,20 @@ public class DnsProxySettings {
      */
     public void setUpstreams(List<UpstreamSettings> upstreams) {
         this.upstreams = new ArrayList<>(upstreams);
+    }
+
+    /**
+     * @return Fallback DNS upstreams settings list.
+     */
+    public List<UpstreamSettings> getFallbacks() {
+        return fallbacks;
+    }
+
+    /**
+     * @param fallbacks Fallback DNS upstreams settings list.
+     */
+    public void setFallbacks(List<UpstreamSettings> fallbacks) {
+        this.fallbacks = new ArrayList<>(fallbacks);
     }
 
     /**
@@ -219,6 +235,7 @@ public class DnsProxySettings {
                 ipv6Available == that.ipv6Available &&
                 blockIpv6 == that.blockIpv6 &&
                 Objects.equals(upstreams, that.upstreams) &&
+                Objects.equals(fallbacks, that.fallbacks) &&
                 Objects.equals(dns64, that.dns64) &&
                 longSparseArraysEqual(filterParams, that.filterParams) &&
                 Objects.equals(listeners, that.listeners) &&
@@ -230,7 +247,7 @@ public class DnsProxySettings {
 
     @Override
     public int hashCode() {
-        return Objects.hash(upstreams, dns64, blockedResponseTtlSecs, filterParams, listeners,
+        return Objects.hash(upstreams, fallbacks, dns64, blockedResponseTtlSecs, filterParams, listeners,
                 ipv6Available, blockIpv6, blockingMode, customBlockingIpv4, customBlockingIpv6, dnsCacheSize);
     }
 
