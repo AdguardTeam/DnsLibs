@@ -491,3 +491,30 @@ TEST_F(dnsproxy_test, custom_blocking_address_empty_ipv6) {
     ASSERT_EQ(0, ldns_pkt_ancount(res.get()));
     ASSERT_EQ(1, ldns_pkt_nscount(res.get()));
 }
+
+TEST_F(dnsproxy_test, correct_filter_ids_in_event) {
+    ag::dnsproxy_settings settings = ag::dnsproxy_settings::get_default();
+    settings.filter_params = {{
+        {15, "cname_blocking_test_filter.txt"},
+        {-3, "blocking_modes_test_filter.txt"},
+    }};
+
+    ag::dns_request_processed_event last_event{};
+    ag::dnsproxy_events events{
+        .on_request_processed = [&last_event](const ag::dns_request_processed_event &event) {
+            last_event = event;
+        }
+    };
+
+    proxy.init(settings, events);
+
+    ag::ldns_pkt_ptr res;
+
+    ASSERT_NO_FATAL_FAILURE(perform_request(proxy, create_request(CNAME_BLOCKING_HOST, LDNS_RR_TYPE_A, LDNS_RD), res));
+    ASSERT_EQ(1, last_event.filter_list_ids.size());
+    ASSERT_EQ(15, last_event.filter_list_ids[0]);
+
+    ASSERT_NO_FATAL_FAILURE(perform_request(proxy, create_request("adb-style.com", LDNS_RR_TYPE_A, LDNS_RD), res));
+    ASSERT_EQ(1, last_event.filter_list_ids.size());
+    ASSERT_EQ(-3, last_event.filter_list_ids[0]);
+}

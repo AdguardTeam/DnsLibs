@@ -311,21 +311,21 @@ ag::local_ref<jobject> ag::android_dnsproxy::marshal_listener(JNIEnv *env, const
 ag::dnsfilter::engine_params ag::android_dnsproxy::marshal_filter_params(JNIEnv *env,
                                                                          jobject java_filter_params) {
 
-    auto clazz = env->FindClass("android/util/LongSparseArray");
+    auto clazz = env->FindClass("android/util/SparseArray");
     assert(env->IsInstanceOf(java_filter_params, clazz));
 
     auto size_method = env->GetMethodID(clazz, "size", "()I");
-    auto key_at_method = env->GetMethodID(clazz, "keyAt", "(I)J");
+    auto key_at_method = env->GetMethodID(clazz, "keyAt", "(I)I");
     auto val_at_method = env->GetMethodID(clazz, "valueAt", "(I)Ljava/lang/Object;");
 
     ag::dnsfilter::engine_params params;
 
     jint size = env->CallIntMethod(java_filter_params, size_method);
     for (int64_t i = 0; i < size; ++i) {
-        jlong key = env->CallLongMethod(java_filter_params, key_at_method, i);
+        jint key = env->CallIntMethod(java_filter_params, key_at_method, i);
         local_ref val(env, env->CallObjectMethod(java_filter_params, val_at_method, i));
         m_utils.visit_string(env, val.get(), [&](const char *str, jsize len) {
-            params.filters.push_back({.id = (uint32_t) key, .path = std::string(str, len)});
+            params.filters.push_back({.id = (int32_t) key, .path = std::string(str, len)});
         });
     }
 
@@ -335,14 +335,14 @@ ag::dnsfilter::engine_params ag::android_dnsproxy::marshal_filter_params(JNIEnv 
 ag::local_ref<jobject> ag::android_dnsproxy::marshal_filter_params(JNIEnv *env,
                                                                    const ag::dnsfilter::engine_params &params) {
 
-    auto clazz = env->FindClass("android/util/LongSparseArray");
+    auto clazz = env->FindClass("android/util/SparseArray");
     auto ctor = env->GetMethodID(clazz, "<init>", "()V");
-    auto put_method = env->GetMethodID(clazz, "put", "(JLjava/lang/Object;)V");
+    auto put_method = env->GetMethodID(clazz, "put", "(ILjava/lang/Object;)V");
 
     auto java_params = env->NewObject(clazz, ctor);
 
     for (auto &param : params.filters) {
-        env->CallVoidMethod(java_params, put_method, (jlong) param.id, m_utils.marshal_string(env, param.path).get());
+        env->CallVoidMethod(java_params, put_method, (jint) param.id, m_utils.marshal_string(env, param.path).get());
     }
 
     return local_ref(env, java_params);
@@ -358,7 +358,7 @@ ag::dnsproxy_settings ag::android_dnsproxy::marshal_settings(JNIEnv *env,
     auto dns64_field = env->GetFieldID(clazz, "dns64", "L" FQN_DNS64_SETTINGS ";");
     auto upstreams_field = env->GetFieldID(clazz, "upstreams", "Ljava/util/List;");
     auto listeners_field = env->GetFieldID(clazz, "listeners", "Ljava/util/List;");
-    auto filter_params_field = env->GetFieldID(clazz, "filterParams", "Landroid/util/LongSparseArray;");
+    auto filter_params_field = env->GetFieldID(clazz, "filterParams", "Landroid/util/SparseArray;");
     auto ipv6_avail_field = env->GetFieldID(clazz, "ipv6Available", "Z");
     auto block_ipv6_field = env->GetFieldID(clazz, "blockIpv6", "Z");
     auto blocking_mode_field = env->GetFieldID(clazz, "blockingMode", "L" FQN_BLOCKING_MODE ";");
@@ -422,7 +422,7 @@ ag::local_ref<jobject> ag::android_dnsproxy::marshal_settings(JNIEnv *env, const
     auto dns64_field = env->GetFieldID(clazz, "dns64", "L" FQN_DNS64_SETTINGS ";");
     auto upstreams_field = env->GetFieldID(clazz, "upstreams", "Ljava/util/List;");
     auto listeners_field = env->GetFieldID(clazz, "listeners", "Ljava/util/List;");
-    auto filter_params_field = env->GetFieldID(clazz, "filterParams", "Landroid/util/LongSparseArray;");
+    auto filter_params_field = env->GetFieldID(clazz, "filterParams", "Landroid/util/SparseArray;");
     auto ipv6_avail_field = env->GetFieldID(clazz, "ipv6Available", "Z");
     auto block_ipv6_field = env->GetFieldID(clazz, "blockIpv6", "Z");
     auto blocking_mode_field = env->GetFieldID(clazz, "blockingMode", "L" FQN_BLOCKING_MODE ";");
@@ -489,10 +489,7 @@ ag::local_ref<jobject> ag::android_dnsproxy::marshal_processed_event(JNIEnv *env
     {
         const jsize ids_len = event.filter_list_ids.size();
         local_ref ids(env, env->NewIntArray(ids_len));
-        for (int64_t i = 0; i < ids_len; ++i) {
-            jint e = event.filter_list_ids[i];
-            env->SetIntArrayRegion(ids.get(), i, 1, &e);
-        }
+        env->SetIntArrayRegion(ids.get(), 0, ids_len, (jint *) event.filter_list_ids.data());
         env->SetObjectField(java_event, m_processed_event_fields.filter_list_ids, ids.get());
     }
 

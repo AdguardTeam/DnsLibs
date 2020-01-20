@@ -506,13 +506,15 @@ void filter::impl::search_badfilter_rules(match_arg &match) const {
 void filter::match(match_context &ctx) {
     match_arg m = { ctx, *this, ag::file::INVALID_HANDLE };
 
+    size_t matched_rule_pos = m.ctx.matched_rules.size();
+
     this->pimpl->search_by_domains(m);
     this->pimpl->search_by_shortcuts(m);
     this->pimpl->search_in_leftovers(m);
     this->pimpl->search_badfilter_rules(m);
 
-    for (ag::dnsfilter::rule &rule : m.ctx.matched_rules) {
-        rule.filter_id = this->params.id;
+    for (; matched_rule_pos < m.ctx.matched_rules.size(); ++matched_rule_pos) {
+        m.ctx.matched_rules[matched_rule_pos].filter_id = this->params.id;
     }
 
     ag::file::close(m.file);

@@ -26,7 +26,7 @@ struct dns_request_processed_event {
     int bytes_sent; /**< Number of bytes sent to a server */
     int bytes_received; /**< Number of bytes received from a server */
     std::vector<std::string> rules; /**< Filtering rules texts */
-    std::vector<int> filter_list_ids; /**< Filter lists IDs of corresponding rules */
+    std::vector<int32_t> filter_list_ids; /**< Filter lists IDs of corresponding rules */
     bool whitelist; /**< True if filtering rule is whitelist */
     std::string error; /**< If not empty, contains the error text (occurred while processing the DNS query) */
     bool cache_hit; /**<True if this response was served from the cache */

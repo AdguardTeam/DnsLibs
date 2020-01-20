@@ -18,7 +18,7 @@ public:
     using handle = void*;
 
     struct filter_params {
-        uint32_t id; // filter id
+        int32_t id; // filter id
         std::string path; // path to file with rules
     };
 
@@ -34,7 +34,7 @@ public:
     };
 
     struct rule {
-        uint32_t filter_id; // id of a filter which contains the matched rule
+        int32_t filter_id; // id of a filter which contains the matched rule
         std::string text; // rule text
         std::bitset<RP_NUM> props; // properties (see `rule_props`)
         std::optional<std::string> ip; // non-nullopt if the rule has hosts syntax

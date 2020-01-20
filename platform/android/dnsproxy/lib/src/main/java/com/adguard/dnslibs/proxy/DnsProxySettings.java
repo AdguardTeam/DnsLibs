@@ -1,6 +1,6 @@
 package com.adguard.dnslibs.proxy;
 
-import android.util.LongSparseArray;
+import android.util.SparseArray;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -30,7 +30,7 @@ public class DnsProxySettings {
     private List<UpstreamSettings> upstreams = new ArrayList<>();
     private Dns64Settings dns64;
     private long blockedResponseTtlSecs;
-    private LongSparseArray<String> filterParams = new LongSparseArray<>();
+    private SparseArray<String> filterParams = new SparseArray<>();
     private List<ListenerSettings> listeners = new ArrayList<>();
     private boolean ipv6Available;
     private boolean blockIpv6;
@@ -144,15 +144,15 @@ public class DnsProxySettings {
     /**
      * @return Filter engine parameters. Filter files with identifiers.
      */
-    LongSparseArray<String> getFilterParams() {
+    SparseArray<String> getFilterParams() {
         return filterParams;
     }
 
     /**
      * @param filterParams Filter engine parameters. Filter files with identifiers.
      */
-    public void setFilterParams(LongSparseArray<String> filterParams) {
-        this.filterParams = new LongSparseArray<>(filterParams.size());
+    public void setFilterParams(SparseArray<String> filterParams) {
+        this.filterParams = new SparseArray<>(filterParams.size());
         for (int i = 0; i < filterParams.size(); ++i) {
             getFilterParams().put(filterParams.keyAt(i), filterParams.valueAt(i));
         }
@@ -161,9 +161,9 @@ public class DnsProxySettings {
     /**
      * @param filterParams Filter engine parameters. Filter files with identifiers.
      */
-    public void setFilterParams(Map<Long, String> filterParams) {
-        this.filterParams = new LongSparseArray<>(filterParams.size());
-        for (final Map.Entry<Long, String> e : filterParams.entrySet()) {
+    public void setFilterParams(Map<Integer, String> filterParams) {
+        this.filterParams = new SparseArray<>(filterParams.size());
+        for (final Map.Entry<Integer, String> e : filterParams.entrySet()) {
             getFilterParams().put(e.getKey(), e.getValue());
         }
     }
@@ -236,7 +236,7 @@ public class DnsProxySettings {
 
     // For testing settings marshalling
     // LongSparseArray doesn't override equals() >:\
-    private static boolean longSparseArraysEqual(LongSparseArray a, LongSparseArray b) {
+    private static boolean longSparseArraysEqual(SparseArray<String> a, SparseArray<String> b) {
         if (a == null || b == null) {
             return a == b;
         }

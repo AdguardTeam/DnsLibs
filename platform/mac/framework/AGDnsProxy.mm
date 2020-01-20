@@ -324,7 +324,7 @@ static NSData *create_response_packet(const struct iphdr *ip_header, const struc
         [[NSMutableArray alloc] initWithCapacity: event.rules.size()];
     for (size_t i = 0; i < event.rules.size(); ++i) {
         [rules addObject: [NSString stringWithUTF8String: event.rules[i].c_str()]];
-        [filterListIds addObject: [NSNumber numberWithInteger: event.filter_list_ids[i]]];
+        [filterListIds addObject: [NSNumber numberWithInt: event.filter_list_ids[i]]];
     }
     _rules = rules;
     _filterListIds = filterListIds;
@@ -489,7 +489,7 @@ static std::string getTrustCreationErrorStr(OSStatus status) {
             const char *filterPath = [[config.filters objectForKey: key] UTF8String];
             dbglog(self->log, "Filter id={} path={}", [key intValue], filterPath);
             settings.filter_params.filters.emplace_back(
-                ag::dnsfilter::filter_params{ (uint32_t)[key intValue], filterPath });
+                ag::dnsfilter::filter_params{ (int32_t)[key intValue], filterPath });
         }
     }
 
