@@ -6,6 +6,7 @@
 #include <scoped_jni_env.h>
 #include <jni_defs.h>
 #include <spdlog/sinks/base_sink.h>
+#include "android_dnsproxy.h"
 
 class java_sink_mt : public spdlog::sinks::base_sink<std::mutex> {
 public:
@@ -393,7 +394,7 @@ ag::dnsproxy_settings ag::android_dnsproxy::marshal_settings(JNIEnv *env,
     settings.block_ipv6 = env->GetBooleanField(java_dnsproxy_settings, block_ipv6_field);
 
     if (auto blocking_mode = env->GetObjectField(java_dnsproxy_settings, blocking_mode_field)) {
-        settings.blocking_mode = (ag::blocking_mode) m_utils.get_enum_ordinal(env, blocking_mode);
+        settings.blocking_mode = (ag::dnsproxy_blocking_mode) m_utils.get_enum_ordinal(env, blocking_mode);
     }
 
     if (auto custom_ip4 = env->GetObjectField(java_dnsproxy_settings, custom_blocking_ip4_field)) {
@@ -483,6 +484,7 @@ ag::local_ref<jobject> ag::android_dnsproxy::marshal_processed_event(JNIEnv *env
     env->SetIntField(java_event, m_processed_event_fields.bytes_sent, event.bytes_sent);
     env->SetIntField(java_event, m_processed_event_fields.bytes_received, event.bytes_received);
     env->SetBooleanField(java_event, m_processed_event_fields.whitelist, event.whitelist);
+    env->SetBooleanField(java_event, m_processed_event_fields.cache_hit, event.cache_hit);
 
     {
         const jsize ids_len = event.filter_list_ids.size();
@@ -635,6 +637,7 @@ ag::android_dnsproxy::android_dnsproxy(JavaVM *vm) : m_utils(vm) {
     m_processed_event_fields.whitelist = env->GetFieldID(c, "whitelist", "Z");
     m_processed_event_fields.rules = env->GetFieldID(c, "rules", "Ljava/util/List;");
     m_processed_event_fields.filter_list_ids = env->GetFieldID(c, "filterListIds", "[I");
+    m_processed_event_fields.cache_hit = env->GetFieldID(c, "cacheHit", "Z");
 
     c = (m_jclasses.cert_verify_event = global_ref(vm, env->FindClass(FQN_CERT_VERIFY_EVENT))).get();
     m_cert_verify_event_methods.ctor = env->GetMethodID(c, "<init>", "()V");

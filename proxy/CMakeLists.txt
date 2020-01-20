@@ -53,7 +53,7 @@ target_include_directories(dnsproxy PUBLIC ./include)
 target_include_directories(dnsproxy PRIVATE ./src)
 target_link_libraries(dnsproxy dnslibs_common dnsfilter upstream agdns_tls ldns uv_a)
 
-target_compile_options(dnsproxy PRIVATE -Wall -Wextra -Wformat=2 -Wno-unused-parameter -Wno-unused-variable -Wno-ignored-qualifiers)
+target_compile_options(dnsproxy PRIVATE -Wall -Wextra -Wformat=2 -Wno-unused-parameter -Wno-unused-variable -Wno-ignored-qualifiers -Wno-missing-field-initializers)
 if (NOT MSVC)
     target_compile_options(dnsproxy PRIVATE -fno-exceptions)
 endif()
@@ -83,3 +83,4 @@ add_test(listener_test listener_test)
 add_dependencies(tests listener_test)
 
 add_executable(listener_standalone EXCLUDE_FROM_ALL test/listener_standalone.cpp)
+add_executable(cache_benchmark EXCLUDE_FROM_ALL test/cache_benchmark.cpp)

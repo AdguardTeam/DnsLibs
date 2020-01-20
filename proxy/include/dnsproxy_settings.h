@@ -24,7 +24,7 @@ enum class listener_protocol {
 /**
  * Specifies how to respond to filtered requests
  */
-enum class blocking_mode {
+enum class dnsproxy_blocking_mode {
     DEFAULT, // AdBlock-style filters -> NXDOMAIN, hosts-style filters -> unspecified address
     NXDOMAIN, // Always return NXDOMAIN
     UNSPECIFIED_ADDRESS, // Always return unspecified address
@@ -66,7 +66,7 @@ struct dnsproxy_settings {
 
     bool ipv6_available; // If false, bootstrappers will fetch only A records.
 
-    blocking_mode blocking_mode; // How to respond to filtered requests
+    dnsproxy_blocking_mode blocking_mode; // How to respond to filtered requests
 
     std::string custom_blocking_ipv4; // Custom IPv4 address to return for filtered requests
     std::string custom_blocking_ipv6; // Custom IPv6 address to return for filtered requests

@@ -33,6 +33,39 @@ static constexpr size_t RESPONSE_BUFFER_INITIAL_CAPACITY = 512;
 static constexpr uint32_t SOA_RETRY_DEFAULT = 900;
 static constexpr uint32_t SOA_RETRY_IPV6_BLOCK = 60;
 
+static std::string get_cache_key(const ldns_pkt *request) {
+    const auto *question = ldns_rr_list_rr(ldns_pkt_question(request), 0);
+    std::string key = fmt::format("{}|{}|{}{}|", // '|' is to avoid collisions
+                                  ldns_rr_get_type(question),
+                                  ldns_rr_get_class(question),
+                                  ldns_pkt_edns_do(request) ? "1" : "0",
+                                  ldns_pkt_cd(request) ? "1" : "0");
+
+    // Compute the domain name, in lower case for case-insensitivity
+    const auto *owner = ldns_rr_owner(question);
+    const size_t size = ldns_rdf_size(owner);
+    key.reserve(key.size() + size);
+    if (size == 1) {
+        key.push_back('.');
+    } else {
+        auto *data = (uint8_t *) ldns_rdf_data(owner);
+        uint8_t len = data[0];
+        uint8_t src_pos = 0;
+        while ((len > 0) && (src_pos < size)) {
+            ++src_pos;
+            for (int_fast32_t i = 0; i < len; ++i) {
+                key.push_back(std::tolower(data[src_pos]));
+                ++src_pos;
+            }
+            if (src_pos < size) {
+                key.push_back('.');
+            }
+            len = data[src_pos];
+        }
+    }
+
+    return key;
+}
 
 struct dns_forwarder::application_verifier : public certificate_verifier {
     const dnsproxy_events *events = nullptr;
@@ -242,7 +275,7 @@ static ldns_pkt *create_unspec_or_custom_address_response(const ldns_pkt *reques
     ldns_rr_type type = ldns_rr_get_type(question);
     assert(type == LDNS_RR_TYPE_A || type == LDNS_RR_TYPE_AAAA);
 
-    if (settings->blocking_mode == blocking_mode::CUSTOM_ADDRESS) {
+    if (settings->blocking_mode == dnsproxy_blocking_mode::CUSTOM_ADDRESS) {
         if (type == LDNS_RR_TYPE_A && settings->custom_blocking_ipv4.empty()) {
             return create_soa_response(request, settings, SOA_RETRY_DEFAULT);
         } else if (type == LDNS_RR_TYPE_AAAA && settings->custom_blocking_ipv6.empty()) {
@@ -257,14 +290,14 @@ static ldns_pkt *create_unspec_or_custom_address_response(const ldns_pkt *reques
     ldns_rr_set_class(rr, ldns_rr_get_class(question));
 
     if (type == LDNS_RR_TYPE_A) {
-        if (settings->blocking_mode == blocking_mode::CUSTOM_ADDRESS) {
+        if (settings->blocking_mode == dnsproxy_blocking_mode::CUSTOM_ADDRESS) {
             assert(utils::is_valid_ip4(settings->custom_blocking_ipv4));
             ldns_rr_push_rdf(rr, ldns_rdf_new_frm_str(LDNS_RDF_TYPE_A, settings->custom_blocking_ipv4.c_str()));
         } else {
             ldns_rr_push_rdf(rr, ldns_rdf_new_frm_str(LDNS_RDF_TYPE_A, "0.0.0.0"));
         }
     } else {
-        if (settings->blocking_mode == blocking_mode::CUSTOM_ADDRESS) {
+        if (settings->blocking_mode == dnsproxy_blocking_mode::CUSTOM_ADDRESS) {
             assert(utils::is_valid_ip6(settings->custom_blocking_ipv6));
             ldns_rr_push_rdf(rr, ldns_rdf_new_frm_str(LDNS_RDF_TYPE_AAAA, settings->custom_blocking_ipv6.c_str()));
         } else {
@@ -295,16 +328,16 @@ static ldns_pkt *create_blocking_response(const ldns_pkt *request, const dnsprox
     ldns_rr_type type = ldns_rr_get_type(question);
     ldns_pkt *response;
     if (type != LDNS_RR_TYPE_A && type != LDNS_RR_TYPE_AAAA) { // Can only respond with NXDOMAIN or NOERROR+SOA
-        response = (settings->blocking_mode == blocking_mode::NXDOMAIN)
+        response = (settings->blocking_mode == dnsproxy_blocking_mode::NXDOMAIN)
                    ? create_nxdomain_response(request, settings)
                    : create_soa_response(request, settings, SOA_RETRY_IPV6_BLOCK);
     } else if (!rules[0]->ip.has_value()) { // Adblock-style rule
-        response = (settings->blocking_mode == blocking_mode::UNSPECIFIED_ADDRESS
-                    || settings->blocking_mode == blocking_mode::CUSTOM_ADDRESS)
+        response = (settings->blocking_mode == dnsproxy_blocking_mode::UNSPECIFIED_ADDRESS
+                    || settings->blocking_mode == dnsproxy_blocking_mode::CUSTOM_ADDRESS)
                    ? create_unspec_or_custom_address_response(request, settings)
                    : create_nxdomain_response(request, settings);
     } else if (rules_contain_blocking_ip(rules)) { // hosts-style blocking rule
-        response = (settings->blocking_mode == blocking_mode::NXDOMAIN)
+        response = (settings->blocking_mode == dnsproxy_blocking_mode::NXDOMAIN)
                    ? create_nxdomain_response(request, settings)
                    : create_unspec_or_custom_address_response(request, settings);
     } else { // hosts-style custom IP rule
@@ -528,7 +561,7 @@ bool dns_forwarder::init(const dnsproxy_settings &settings, const dnsproxy_event
     this->settings = &settings;
     this->events = &events;
 
-    if (settings.blocking_mode == blocking_mode::CUSTOM_ADDRESS) {
+    if (settings.blocking_mode == dnsproxy_blocking_mode::CUSTOM_ADDRESS) {
         // Check custom IPv4
         if (settings.custom_blocking_ipv4.empty()) {
             warnlog(this->log, "Custom blocking IPv4 not set: blocking responses to A queries will be empty");
@@ -650,7 +683,7 @@ void dns_forwarder::deinit() {
 }
 
 // Returns a response synthesized from the cached template, or nullptr if no cache entry satisfies the given key
-ldns_pkt_ptr dns_forwarder::create_response_from_cache(const cache_key &key, const ldns_pkt *request) {
+ldns_pkt_ptr dns_forwarder::create_response_from_cache(const std::string &key, const ldns_pkt *request) {
     if (!this->settings->dns_cache_size) {
         // Caching disabled
         return nullptr;
@@ -662,19 +695,19 @@ ldns_pkt_ptr dns_forwarder::create_response_from_cache(const cache_key &key, con
         std::shared_lock l(this->response_cache.mtx);
         auto &cache = this->response_cache.val;
 
-        const cached_response *cached_response = cache.get(key);
-        if (!cached_response) {
+        auto cached_response_acc = cache.get(key);
+        if (!cached_response_acc) {
             return nullptr;
         }
 
-        auto cached_response_ttl = duration_cast<seconds>(cached_response->expires_at - ag::steady_clock::now());
+        auto cached_response_ttl = duration_cast<seconds>(cached_response_acc->expires_at - ag::steady_clock::now());
         if (cached_response_ttl.count() <= 0) {
-            cache.erase(key);
+            cache.make_lru(cached_response_acc);
             return nullptr;
         }
 
         ttl = cached_response_ttl.count();
-        response.reset(ldns_pkt_clone(cached_response->response.get()));
+        response.reset(ldns_pkt_clone(cached_response_acc->response.get()));
     }
 
     // Patch response id
@@ -711,7 +744,7 @@ uint32_t compute_min_rr_ttl(const ldns_pkt *pkt) {
 }
 
 // Checks cacheability and puts an eligible response to the cache
-void dns_forwarder::put_response_to_cache(cache_key key, ldns_pkt_ptr response) {
+void dns_forwarder::put_response_to_cache(std::string key, ldns_pkt_ptr response) {
     if (!this->settings->dns_cache_size) {
         // Caching disabled
         return;
@@ -725,12 +758,14 @@ void dns_forwarder::put_response_to_cache(cache_key key, ldns_pkt_ptr response) 
         return;
     }
 
-    if (key.qtype == LDNS_RR_TYPE_A || key.qtype == LDNS_RR_TYPE_AAAA) {
+    const auto *question = ldns_rr_list_rr(ldns_pkt_question(response.get()), 0);
+    const auto type = ldns_rr_get_type(question);
+    if (type == LDNS_RR_TYPE_A || type == LDNS_RR_TYPE_AAAA) {
         // Check contains at least one record of requested type
         bool found = false;
         for (int_fast32_t i = 0; i < ldns_pkt_ancount(response.get()); ++i) {
             const ldns_rr *rr = ldns_rr_list_rr(ldns_pkt_answer(response.get()), 0);
-            if (rr && ldns_rr_get_type(rr) == key.qtype) {
+            if (rr && ldns_rr_get_type(rr) == type) {
                 found = true;
                 break;
             }
@@ -745,19 +780,6 @@ void dns_forwarder::put_response_to_cache(cache_key key, ldns_pkt_ptr response) 
     ldns_rr_list_deep_free(ldns_pkt_question(response.get()));
     ldns_pkt_set_question(response.get(), nullptr);
     ldns_pkt_set_qdcount(response.get(), 0);
-
-    // Remove OPT RRs
-    ldns_rr_list *cached_additional = ldns_rr_list_new();
-    ldns_rr_list *resp_additional = ldns_pkt_additional(response.get());
-    for (int_fast32_t i = 0; i < ldns_pkt_arcount(response.get()); ++i) {
-        ldns_rr *rr = ldns_rr_list_rr(resp_additional, i);
-        if (rr && ldns_rr_get_type(rr) != LDNS_RR_TYPE_OPT) { // OPT RRs MUST NOT be cached (RFC6891 6.1.1)
-            ldns_rr_list_push_rr(cached_additional, ldns_rr_clone(rr));
-        }
-    }
-    ldns_rr_list_deep_free(resp_additional);
-    ldns_pkt_set_additional(response.get(), cached_additional);
-    ldns_pkt_set_arcount(response.get(), ldns_rr_list_rr_count(cached_additional));
 
     // This is NOT an authoritative answer
     ldns_pkt_set_aa(response.get(), false);
@@ -774,8 +796,9 @@ void dns_forwarder::put_response_to_cache(cache_key key, ldns_pkt_ptr response) 
         .expires_at = ag::steady_clock::now() + seconds(min_rr_ttl),
     };
 
-    std::scoped_lock l(this->response_cache.mtx);
-    this->response_cache.val.insert(std::move(key), std::move(cached_response));
+    std::unique_lock l(this->response_cache.mtx);
+    auto &cache = this->response_cache.val;
+    cache.insert(std::move(key), std::move(cached_response));
 }
 
 std::vector<uint8_t> dns_forwarder::handle_message(uint8_view message) {
@@ -805,25 +828,22 @@ std::vector<uint8_t> dns_forwarder::handle_message(uint8_view message) {
         std::vector<uint8_t> raw_response = transform_response_to_raw_data(response.get());
         return raw_response;
     }
-    auto domain = allocated_ptr<char>(ldns_rdf2str(ldns_rr_owner(question)));
-    event.domain = domain.get();
 
-    const ldns_rr_type type = ldns_rr_get_type(question);
-
-    cache_key cache_key{
-            .domain = utils::to_lower(domain.get()),
-            .do_bit = ldns_pkt_edns_do(request),
-            .cd_bit = ldns_pkt_cd(request),
-            .qtype = type,
-            .qclass = ldns_rr_get_class(question)};
+    std::string cache_key = get_cache_key(request);
 
     if (auto cached_response = create_response_from_cache(cache_key, request)) {
         dbglog_fid(log, request, "Cached response found");
         log_packet(log, cached_response.get(), "Cached response");
+        event.cache_hit = true;
         std::vector<uint8_t> raw_response = transform_response_to_raw_data(cached_response.get());
         finalize_processed_event(event, request, cached_response.get(), nullptr, nullptr, std::nullopt);
         return raw_response;
     }
+
+    auto domain = allocated_ptr<char>(ldns_rdf2str(ldns_rr_owner(question)));
+    event.domain = domain.get();
+
+    const ldns_rr_type type = ldns_rr_get_type(question);
 
     // IPv6 blocking
     if (this->settings->block_ipv6 && LDNS_RR_TYPE_AAAA == type) {
@@ -943,17 +963,4 @@ std::optional<uint8_vector> dns_forwarder::apply_filter(std::string_view hostnam
     }
 
     return std::nullopt;
-}
-
-bool cache_key::operator==(const cache_key &rhs) const {
-    return (this == &rhs) || (std::tie(domain, do_bit, cd_bit, qtype, qclass) ==
-                              std::tie(rhs.domain, rhs.do_bit, rhs.cd_bit, rhs.qtype, rhs.qclass));
-}
-
-bool cache_key::operator!=(const cache_key &rhs) const {
-    return !(rhs == *this);
-}
-
-size_t std::hash<cache_key>::operator()(const cache_key &key) const {
-    return utils::hash_combine(key.domain, key.do_bit, key.cd_bit, key.qtype, key.qclass);
 }

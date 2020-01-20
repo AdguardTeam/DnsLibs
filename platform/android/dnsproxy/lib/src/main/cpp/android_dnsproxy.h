@@ -45,6 +45,7 @@ private:
         jfieldID filter_list_ids;
         jfieldID whitelist;
         jfieldID error;
+        jfieldID cache_hit;
     } m_processed_event_fields{};
 
     struct {

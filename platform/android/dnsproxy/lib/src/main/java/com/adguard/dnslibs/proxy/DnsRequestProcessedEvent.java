@@ -33,6 +33,12 @@ public class DnsRequestProcessedEvent {
     private boolean whitelist;
     /** If not {@code null}, contains the error text (occurred while processing the DNS query) */
     private String error;
+    /** True if this response was served from the cache */
+    private boolean cacheHit;
+
+    public boolean isCacheHit() {
+        return cacheHit;
+    }
 
     public String getDomain() {
         return domain;
@@ -146,6 +152,10 @@ public class DnsRequestProcessedEvent {
         this.error = error;
     }
 
+    public void setCacheHit(boolean cacheHit) {
+        this.cacheHit = cacheHit;
+    }
+
     @Override
     public String toString() {
         return "DnsRequestProcessedEvent{" +
@@ -163,6 +173,7 @@ public class DnsRequestProcessedEvent {
                 ", filterListIds=" + Arrays.toString(filterListIds) +
                 ", whitelist=" + whitelist +
                 ", error='" + error + '\'' +
+                ", cacheHit=" + cacheHit +
                 '}';
     }
 }
