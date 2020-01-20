@@ -781,19 +781,6 @@ void dns_forwarder::put_response_to_cache(std::string key, ldns_pkt_ptr response
     ldns_pkt_set_question(response.get(), nullptr);
     ldns_pkt_set_qdcount(response.get(), 0);
 
-    // Remove OPT RRs
-    ldns_rr_list *cached_additional = ldns_rr_list_new();
-    ldns_rr_list *resp_additional = ldns_pkt_additional(response.get());
-    for (int_fast32_t i = 0; i < ldns_pkt_arcount(response.get()); ++i) {
-        ldns_rr *rr = ldns_rr_list_rr(resp_additional, i);
-        if (rr && ldns_rr_get_type(rr) != LDNS_RR_TYPE_OPT) { // OPT RRs MUST NOT be cached (RFC6891 6.1.1)
-            ldns_rr_list_push_rr(cached_additional, ldns_rr_clone(rr));
-        }
-    }
-    ldns_rr_list_deep_free(resp_additional);
-    ldns_pkt_set_additional(response.get(), cached_additional);
-    ldns_pkt_set_arcount(response.get(), ldns_rr_list_rr_count(cached_additional));
-
     // This is NOT an authoritative answer
     ldns_pkt_set_aa(response.get(), false);
 
