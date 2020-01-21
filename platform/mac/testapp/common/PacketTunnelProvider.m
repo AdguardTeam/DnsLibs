@@ -110,6 +110,7 @@
     AGDnsProxyConfig *cfg = [[AGDnsProxyConfig alloc] initWithUpstreams: nil
         // for DOH testing
         // initWithUpstreams: @[[[AGDnsUpstream alloc] initWithAddress: @"https://dns9.quad9.net/dns-query" bootstrap: @[@"8.8.8.8"] timeout: 10000 serverIp: nil]]
+        fallbacks: nil
         filters: filters blockedResponseTtlSecs: 0
         dns64Settings: nil
         listeners: nil

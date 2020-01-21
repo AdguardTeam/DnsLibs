@@ -53,6 +53,7 @@ struct dnsproxy_settings {
     static const dnsproxy_settings &get_default();
 
     std::vector<upstream::options> upstreams; // DNS upstreams settings list
+    std::vector<upstream::options> fallbacks; // Fallback DNS upstreams settings list
 
     std::optional<dns64_settings> dns64; // DNS64 settings
 
