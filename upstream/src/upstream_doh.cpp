@@ -521,11 +521,7 @@ dns_over_https::exchange_result dns_over_https::exchange(ldns_pkt *request) {
         handle->barrier = std::promise<void>();
         std::future<void> request_defied = handle->barrier.get_future();
         event_base_once(this->worker.loop->c_base(), 0, EV_TIMEOUT, defy_request, handle.get(), nullptr);
-        if (std::future_status status = request_defied.wait_for(timeout);
-                status != std::future_status::ready) {
-            errlog_id(handle, "Failed to defy the request due to timeout");
-            assert(0);
-        }
+        request_defied.wait();
     } else if (handle->error.has_value()) {
         err = std::move(handle->error);
     } else if (ldns_status status = ldns_wire2pkt(&response, handle->response.data(), handle->response.size());
