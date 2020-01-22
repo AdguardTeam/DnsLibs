@@ -127,12 +127,13 @@ protected:
 };
 
 TEST_F(dnsproxy_cache_test, cache_works) {
-    ag::ldns_pkt_ptr pkt = create_request("google.com", LDNS_RR_TYPE_A, LDNS_RD);
+    ag::ldns_pkt_ptr pkt = create_request("google.com.", LDNS_RR_TYPE_A, LDNS_RD);
     ag::ldns_pkt_ptr res;
     ASSERT_NO_FATAL_FAILURE(perform_request(proxy, pkt, res));
     ASSERT_FALSE(last_event.cache_hit);
     ASSERT_NO_FATAL_FAILURE(perform_request(proxy, pkt, res));
     ASSERT_TRUE(last_event.cache_hit);
+    ASSERT_TRUE(last_event.domain == "google.com.");
 }
 
 TEST_F(dnsproxy_cache_test, cached_response_ttl_decreases) {

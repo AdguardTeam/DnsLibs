@@ -861,6 +861,9 @@ std::vector<uint8_t> dns_forwarder::handle_message(uint8_view message) {
         return raw_response;
     }
 
+    auto domain = allocated_ptr<char>(ldns_rdf2str(ldns_rr_owner(question)));
+    event.domain = domain.get();
+
     std::string cache_key = get_cache_key(request);
 
     if (auto cached_response = create_response_from_cache(cache_key, request)) {
@@ -871,9 +874,6 @@ std::vector<uint8_t> dns_forwarder::handle_message(uint8_view message) {
         finalize_processed_event(event, request, cached_response.get(), nullptr, nullptr, std::nullopt);
         return raw_response;
     }
-
-    auto domain = allocated_ptr<char>(ldns_rdf2str(ldns_rr_owner(question)));
-    event.domain = domain.get();
 
     const ldns_rr_type type = ldns_rr_get_type(question);
 
