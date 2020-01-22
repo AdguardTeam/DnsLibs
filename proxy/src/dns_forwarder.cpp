@@ -692,10 +692,20 @@ void dns_forwarder::deinit() {
     }
 }
 
+static bool has_unsupported_extensions(const ldns_pkt *pkt) {
+    return ldns_pkt_edns_data(pkt)
+           || ldns_pkt_edns_extended_rcode(pkt)
+           || ldns_pkt_edns_unassigned(pkt);
+}
+
 // Returns a response synthesized from the cached template, or nullptr if no cache entry satisfies the given key
 ldns_pkt_ptr dns_forwarder::create_response_from_cache(const std::string &key, const ldns_pkt *request) {
     if (!this->settings->dns_cache_size) {
         // Caching disabled
+        return nullptr;
+    }
+
+    if (has_unsupported_extensions(request)) {
         return nullptr;
     }
 
@@ -723,6 +733,11 @@ ldns_pkt_ptr dns_forwarder::create_response_from_cache(const std::string &key, c
     // Patch response id
     ldns_pkt_set_id(response.get(), ldns_pkt_id(request));
 
+    // Patch EDNS UDP SIZE
+    if (ldns_pkt_edns(response.get())) {
+        ldns_pkt_set_edns_udp_size(response.get(), ag::UDP_RECV_BUF_SIZE);
+    }
+
     // Patch response question section
     assert(!ldns_pkt_question(response.get()));
     ldns_pkt_set_qdcount(response.get(), ldns_pkt_qdcount(request));
@@ -731,6 +746,12 @@ ldns_pkt_ptr dns_forwarder::create_response_from_cache(const std::string &key, c
     // Patch response TTLs
     for (int_fast32_t i = 0; i < ldns_pkt_ancount(response.get()); ++i) {
         ldns_rr_set_ttl(ldns_rr_list_rr(ldns_pkt_answer(response.get()), i), ttl);
+    }
+    for (int_fast32_t i = 0; i < ldns_pkt_nscount(response.get()); ++i) {
+        ldns_rr_set_ttl(ldns_rr_list_rr(ldns_pkt_authority(response.get()), i), ttl);
+    }
+    for (int_fast32_t i = 0; i < ldns_pkt_arcount(response.get()); ++i) {
+        ldns_rr_set_ttl(ldns_rr_list_rr(ldns_pkt_additional(response.get()), i), ttl);
     }
 
     return response;
@@ -763,6 +784,7 @@ void dns_forwarder::put_response_to_cache(std::string key, ldns_pkt_ptr response
     if (ldns_pkt_tc(response.get()) // Truncated
         || ldns_pkt_qdcount(response.get()) != 1 // Invalid
         || ldns_pkt_get_rcode(response.get()) != LDNS_RCODE_NOERROR // Error
+        || has_unsupported_extensions(response.get())
         ) {
         // Not cacheable
         return;

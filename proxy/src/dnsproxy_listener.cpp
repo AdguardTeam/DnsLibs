@@ -1,6 +1,7 @@
 #include "dnsproxy_listener.h"
 
 #include <ag_socket_address.h>
+#include <ag_net_consts.h>
 #include <uv.h>
 #include <thread>
 #include <atomic>
@@ -15,22 +16,12 @@
 // Set the libuv thread pool size. Must happen before any libuv usage to have effect.
 static const int THREAD_POOL_SIZE_RESULT [[maybe_unused]] = uv_os_setenv("UV_THREADPOOL_SIZE", "128");
 
-// This is for incoming request packets.
-// RFC 6891 6.2.5 recommends clients to assume that packets of up to 4096 bytes are supported.
-// If the upstream supports less, it will say so in its response, which we forward to the requestor.
-// If the upstream supports more, and the requestor decides to take advantage of that,
-// it's out of luck with our proxy.
-// We could specify LDNS_MAX_PACKETLEN here, but that would waste a lot of memory since most request
-// packets are going to be small anyway
-// (remember, this constant only affects incoming packets, we always send back as much as the upstream returned)
-static constexpr size_t UDP_RECV_BUF_SIZE = 4096;
-
 // For TCP this could be arbitrarily small, but we would prefer to catch the whole request in one buffer.
-static constexpr size_t TCP_RECV_BUF_SIZE = UDP_RECV_BUF_SIZE + 2; // + 2 for payload length
+static constexpr size_t TCP_RECV_BUF_SIZE = ag::UDP_RECV_BUF_SIZE + 2; // + 2 for payload length
 
 static void udp_alloc_cb(uv_handle_t *handle, size_t suggested_size, uv_buf_t *buf) {
-    buf->base = new char[UDP_RECV_BUF_SIZE];
-    buf->len = UDP_RECV_BUF_SIZE;
+    buf->base = new char[ag::UDP_RECV_BUF_SIZE];
+    buf->len = ag::UDP_RECV_BUF_SIZE;
 }
 
 static void dealloc_buf(const uv_buf_t *buf) {
