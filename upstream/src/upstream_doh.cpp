@@ -45,6 +45,7 @@ struct dns_over_https::query_handle {
     ldns_buffer_ptr request = nullptr;
     std::vector<uint8_t> response;
     std::promise<void> barrier;
+    std::promise<void> defy_barrier;
 
     CURL *create_curl_handle();
     void cleanup_request();
@@ -103,9 +104,12 @@ CURL *dns_over_https::query_handle::create_curl_handle() {
 }
 
 void dns_over_https::query_handle::cleanup_request() {
-    CURLMcode perr = curl_multi_remove_handle(this->upstream->pool.handle.get(), this->curl_handle);
-    assert(perr == CURLM_OK);
-    curl_easy_cleanup(this->curl_handle);
+    if (this->curl_handle) {
+        CURLMcode perr = curl_multi_remove_handle(this->upstream->pool.handle.get(), this->curl_handle);
+        assert(perr == CURLM_OK);
+        curl_easy_cleanup(this->curl_handle);
+        this->curl_handle = nullptr;
+    }
 }
 
 std::unique_ptr<dns_over_https::query_handle> dns_over_https::create_handle(ldns_pkt *request,  milliseconds timeout) const {
@@ -438,7 +442,7 @@ void dns_over_https::defy_request(int, short, void *arg) {
     std::deque<query_handle *> &queue = upstream->worker.running_queue;
     queue.erase(std::remove(queue.begin(), queue.end(), handle), queue.end());
 
-    handle->barrier.set_value();
+    handle->defy_barrier.set_value();
 }
 
 void dns_over_https::stop_all_with_error(err_string e) {
@@ -518,8 +522,7 @@ dns_over_https::exchange_result dns_over_https::exchange(ldns_pkt *request) {
     if (std::future_status status = request_completed.wait_for(timeout);
             status != std::future_status::ready) {
         err = "Request timed out";
-        handle->barrier = std::promise<void>();
-        std::future<void> request_defied = handle->barrier.get_future();
+        std::future<void> request_defied = handle->defy_barrier.get_future();
         event_base_once(this->worker.loop->c_base(), 0, EV_TIMEOUT, defy_request, handle.get(), nullptr);
         request_defied.wait();
     } else if (handle->error.has_value()) {
