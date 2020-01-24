@@ -108,8 +108,8 @@ void dns_over_https::query_handle::cleanup_request() {
         CURLMcode perr = curl_multi_remove_handle(this->upstream->pool.handle.get(), this->curl_handle);
         assert(perr == CURLM_OK);
         curl_easy_cleanup(this->curl_handle);
+        this->curl_handle = nullptr;
     }
-    this->curl_handle = nullptr;
 }
 
 std::unique_ptr<dns_over_https::query_handle> dns_over_https::create_handle(ldns_pkt *request,  milliseconds timeout) const {
