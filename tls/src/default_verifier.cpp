@@ -88,6 +88,9 @@ default_verifier::default_verifier(default_verifier &&other) {
 }
 
 default_verifier &default_verifier::operator=(const default_verifier &other) {
+    if (this == &other) {
+        return *this;
+    }
     X509_STORE_free(this->ca_store);
     this->ca_store = other.ca_store;
     X509_STORE_up_ref(this->ca_store);

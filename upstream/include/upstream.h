@@ -63,7 +63,7 @@ public:
         ip_address_variant resolved_server_ip;
     };
 
-    upstream(const options &opts, const upstream_factory_config &config) : opts(opts), config(config) {}
+    upstream(options opts, const upstream_factory_config &config) : opts(std::move(opts)), config(config) {}
 
     virtual ~upstream() = default;
 

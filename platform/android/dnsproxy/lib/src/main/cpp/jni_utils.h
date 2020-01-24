@@ -183,6 +183,11 @@ public:
     static local_ref<jobject> marshal_string(JNIEnv *env, const std::string &str);
 
     /**
+     * Marshal a Java string to C++.
+     */
+    static std::string marshal_string(JNIEnv *env, jstring str);
+
+    /**
      * Copy a uint8_view to a new Java byte array.
      */
     static local_ref<jbyteArray> marshal_uint8_view(JNIEnv *env, uint8_view v);

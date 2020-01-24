@@ -12,7 +12,7 @@ namespace ag {
 using stamp_port = uint16_t;
 
 constexpr stamp_port DEFAULT_DOH_PORT = 443;
-constexpr stamp_port DEFAULT_DOT_PORT = 843;
+constexpr stamp_port DEFAULT_DOT_PORT = 853;
 constexpr stamp_port DEFAULT_PLAIN_PORT = 53;
 constexpr auto STAMP_URL_PREFIX_WITH_SCHEME = "sdns://";
 

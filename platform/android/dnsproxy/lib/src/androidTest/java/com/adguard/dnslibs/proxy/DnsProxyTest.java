@@ -20,7 +20,9 @@ import org.xbill.DNS.Type;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.ThreadLocalRandom;
 
 import static org.junit.Assert.assertEquals;
@@ -287,5 +289,66 @@ public class DnsProxyTest {
     public void testCheckRule() {
         assertFalse(DnsProxy.isValidRule("||||example"));
         assertTrue(DnsProxy.isValidRule("||example"));
+    }
+
+    @Test
+    public void testParseDNSStamp() {
+        Map<String, DnsStamp> testParams = new LinkedHashMap<String, DnsStamp>() {{
+            // Plain
+            put("sdns://AAcAAAAAAAAABzguOC44Ljg",
+                new DnsStamp(DnsStamp.ProtoType.PLAIN, "8.8.8.8:53", "", ""));
+            // AdGuard DNS (DNSCrypt)
+            put("sdns://AQIAAAAAAAAAFDE3Ni4xMDMuMTMwLjEzMDo1NDQzINErR_JS3PLCu_iZEIbq95zkSV2LFsigxDIuUso_OQhzIjIuZG5zY3J5cHQuZGVmYXVsdC5uczEuYWRndWFyZC5jb20",
+                new DnsStamp(DnsStamp.ProtoType.DNSCRYPT, "176.103.130.130:5443", "2.dnscrypt.default.ns1.adguard.com", ""));
+            // DoH
+            put("sdns://AgcAAAAAAAAACTEyNy4wLjAuMSDDhGvyS56TymQnTA7GfB7MXgJP_KzS10AZNQ6B_lRq5AtleGFtcGxlLmNvbQovZG5zLXF1ZXJ5",
+                new DnsStamp(DnsStamp.ProtoType.DOH, "127.0.0.1:443", "example.com", "/dns-query"));
+            // DoT
+            put("sdns://AwcAAAAAAAAACTEyNy4wLjAuMSDDhGvyS56TymQnTA7GfB7MXgJP_KzS10AZNQ6B_lRq5AtleGFtcGxlLmNvbQ",
+                new DnsStamp(DnsStamp.ProtoType.TLS, "127.0.0.1:853", "example.com", ""));
+            // Plain (IPv6)
+            put("sdns://AAcAAAAAAAAAGltmZTgwOjo2ZDZkOmY3MmM6M2FkOjYwYjhd",
+                new DnsStamp(DnsStamp.ProtoType.PLAIN, "[fe80::6d6d:f72c:3ad:60b8]:53", "", ""));
+        }};
+
+        for (Map.Entry<String, DnsStamp> entry : testParams.entrySet()) {
+            DnsStamp validStamp = entry.getValue();
+            try {
+                DnsStamp dnsStamp = DnsProxy.parseDnsStamp(entry.getKey());
+                assertEquals(dnsStamp, validStamp);
+            } catch (Exception e) {
+                fail(e.toString());
+            }
+        }
+        try {
+            DnsStamp dnsStamp = DnsProxy.parseDnsStamp("");
+        } catch (Exception e) {
+            assertFalse(e.toString().isEmpty());
+        }
+    }
+
+    @Test
+    public void testTestUpstream() {
+        final long timeout = 500; // ms
+        IllegalArgumentException e0 = null;
+        try {
+            DnsProxy.testUpstream(new UpstreamSettings("123.12.32.1:1493", new ArrayList<String>(), timeout, null));
+        } catch (IllegalArgumentException e) {
+            e0 = e;
+        }
+        assertNotNull(e0);
+        try {
+            DnsProxy.testUpstream(new UpstreamSettings("8.8.8.8:53", new ArrayList<String>(), 10 * timeout, null));
+        } catch (IllegalArgumentException e) {
+            fail(e.toString());
+        }
+        try {
+            ArrayList<String> bootstrap = new ArrayList<>();
+            bootstrap.add("1.2.3.4");
+            bootstrap.add("8.8.8.8");
+            DnsProxy.testUpstream(new UpstreamSettings("tls://dns.adguard.com", bootstrap, 10 * timeout, null));
+        } catch (IllegalArgumentException e) {
+            fail(e.toString());
+        }
     }
 }

@@ -13,7 +13,7 @@ namespace ag {
 class default_verifier : public certificate_verifier {
 public:
     default_verifier();
-    virtual ~default_verifier();
+    ~default_verifier() override;
 
     default_verifier(const default_verifier &);
     default_verifier(default_verifier &&);

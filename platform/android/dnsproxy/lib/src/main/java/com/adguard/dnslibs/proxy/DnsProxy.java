@@ -10,6 +10,7 @@ import java.security.cert.CertificateFactory;
 import java.security.cert.X509Certificate;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Objects;
 
 import javax.net.ssl.TrustManagerFactory;
 import javax.net.ssl.X509TrustManager;
@@ -195,6 +196,43 @@ public class DnsProxy implements Closeable {
      * @return true if string is a valid rule, false otherwise
      */
     public static native boolean isValidRule(String str);
+
+    /**
+     * Parses a DNS stamp string and returns a instance of DNS stamp or throws on error
+     * @param stampStr DNS stamp string
+     * @throws IllegalArgumentException with explanation
+     * @return stamp instance
+     */
+    public static DnsStamp parseDnsStamp(String stampStr) throws IllegalArgumentException {
+        Objects.requireNonNull(stampStr, "stampStr");
+        Object object;
+        try (final DnsProxy proxy = new DnsProxy()) {
+            object = parseDnsStampNative(proxy.nativePtr, stampStr);
+        }
+        if (object instanceof String) {
+            throw new IllegalArgumentException((String) object);
+        }
+        return (DnsStamp) object;
+    }
+
+    private static native Object parseDnsStampNative(long nativePtr, String stampStr);
+
+    /**
+     * Checks if upstream is valid and available
+     * @param upstreamSettings Upstream settings
+     * @throws IllegalArgumentException with an explanation if check failed
+     */
+    public static void testUpstream(UpstreamSettings upstreamSettings) throws IllegalArgumentException {
+        String error;
+        try (final DnsProxy proxy = new DnsProxy()) {
+            error = testUpstreamNative(proxy.nativePtr, upstreamSettings, new EventsAdapter(null));
+        }
+        if (error != null) {
+            throw new IllegalArgumentException(error);
+        }
+    }
+
+    private static native String testUpstreamNative(long nativePtr, Object upstreamSettings, Object eventsAdapter);
 
     /**
      * Events adapter implementatoin.

@@ -6,7 +6,7 @@
 #include <cstdint>
 #include <vector>
 #include <optional>
-
+#include <application_verifier.h>
 
 namespace ag {
 
@@ -33,14 +33,6 @@ struct dns_request_processed_event {
 };
 
 /**
- * Certificate verification event
- */
-struct certificate_verification_event {
-    std::vector<uint8_t> certificate; /** certificate being verified */
-    std::vector<std::vector<uint8_t>> chain; /** certificate chain */
-};
-
-/**
  * Set of DNS proxy events
  */
 struct dnsproxy_events {
@@ -57,8 +49,8 @@ struct dnsproxy_events {
      * Notes:
      *  - if not provided, default verifier will be used
      */
-    std::function<std::optional<std::string>(certificate_verification_event)> on_certificate_verification;
+    on_certificate_verification_function on_certificate_verification;
 };
 
 
-}
+} // namespace ag

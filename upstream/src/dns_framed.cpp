@@ -1,15 +1,44 @@
 #include "dns_framed.h"
+#include <algorithm>
+#include <iterator>
 #include <vector>
-#include <mutex>
-#include <list>
+#include <string>
 #include <ldns/wire2host.h>
 #include <event2/buffer.h>
+#include <event2/bufferevent_ssl.h>
 #include <ag_socket_address.h>
 #include <ag_logger.h>
 #include <ag_utils.h>
 
 
 #define log_conn(l_, lvl_, conn_, fmt_, ...) lvl_##log(l_, "[id={} addr={}] " fmt_, conn_->m_id, conn_->address.str(), ##__VA_ARGS__)
+
+
+static std::vector<ev_uint32_t> get_all_bufferevent_openssl_errors(bufferevent &bev) {
+    std::vector<ev_uint32_t> result;
+    ev_uint32_t err = 0;
+    while ((err = bufferevent_get_openssl_error(&bev))) {
+        result.push_back(err);
+    }
+    return result;
+}
+
+static ag::err_string get_all_bufferevent_openssl_errors_err_string(bufferevent &bev) {
+    auto all_errors = get_all_bufferevent_openssl_errors(bev);
+    if (all_errors.empty()) {
+        return std::nullopt;
+    }
+    std::vector<std::string> error_strings;
+    error_strings.reserve(all_errors.size());
+    std::transform(all_errors.begin(), all_errors.end(), std::back_inserter(error_strings), [](ev_uint32_t err) {
+        return AG_FMT("{}, ", err);
+    });
+    if (!error_strings.empty()) {
+        error_strings.back().pop_back(); // Remove trailing space
+        error_strings.back().back() = ')'; // Replace ',' by ')'
+    }
+    return AG_FMT("OpenSSL errors[{}]({}", all_errors.size(), ag::utils::join(error_strings));
+}
 
 
 using namespace std::chrono;
@@ -189,8 +218,16 @@ void ag::dns_framed_connection::on_event(int what) {
         for (auto &entry : m_requests) {
             // do not assign error, if we already got response
             if (!entry.second.has_value()) {
-                std::string error = (what & BEV_EVENT_EOF) ? std::string(UNEXPECTED_EOF) :
-                                    evutil_socket_error_to_string(evutil_socket_geterror(bufferevent_getfd(m_bev.get())));
+                std::string error;
+                if (what & BEV_EVENT_EOF) {
+                    error = std::string(UNEXPECTED_EOF);
+                } else if (auto bev_err = evutil_socket_geterror(bufferevent_getfd(m_bev.get())); bev_err > 0) {
+                    error = evutil_socket_error_to_string(bev_err);
+                } else if (auto openssl_errors = get_all_bufferevent_openssl_errors_err_string(*m_bev); openssl_errors) {
+                    error = *openssl_errors;
+                } else {
+                    error = "Unknown error";
+                }
                 // Set result
                 entry.second = {std::vector<uint8_t>{}, {std::move(error)}};
             }

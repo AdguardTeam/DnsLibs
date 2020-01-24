@@ -60,6 +60,14 @@ ag::local_ref<jobject> ag::jni_utils::marshal_string(JNIEnv *env, const std::str
     return local_ref<jobject>(env, env->NewStringUTF(utf8_to_cesu8(str.c_str()).c_str()));
 }
 
+std::string ag::jni_utils::marshal_string(JNIEnv *env, jstring str) {
+    std::string result;
+    ag::jni_utils::visit_string(env, str, [&result](const char *str, jsize len) {
+        result.assign(str, len);
+    });
+    return result;
+}
+
 bool ag::jni_utils::collection_add(JNIEnv *env, jobject collection, jobject o) {
     auto clazz = m_jclasses.collection.get();
     assert(env->IsInstanceOf(collection, clazz));

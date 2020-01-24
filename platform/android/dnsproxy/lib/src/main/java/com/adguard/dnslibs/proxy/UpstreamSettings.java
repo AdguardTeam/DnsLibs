@@ -11,6 +11,23 @@ public class UpstreamSettings {
     private long timeoutMs;
     private byte[] serverIp;
 
+    public UpstreamSettings() {}
+
+    /**
+     * Creates UpstreamSettings
+     * @param address The DNS server's address.
+     * @param bootstrap List of plain DNS servers to be used to resolve DOH/DOT hostnames (if any).
+     * @param timeoutMs Default upstream timeout in milliseconds. Also, it is used as a timeout for bootstrap DNS requests.
+     *                  {@code timeout = 0} means infinite timeout.
+     * @param serverIp Resolver's IP address. In the case if it's specified, bootstrap DNS servers won't be used at all.
+     */
+    public UpstreamSettings(String address, List<String> bootstrap, long timeoutMs, byte[] serverIp) {
+        setAddress(address);
+        setBootstrap(bootstrap);
+        setTimeoutMs(timeoutMs);
+        setServerIp(serverIp);
+    }
+
     /**
      * @return The DNS server's address.
      */

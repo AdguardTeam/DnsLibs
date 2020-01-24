@@ -6,7 +6,7 @@
 #include <scoped_jni_env.h>
 #include <jni_defs.h>
 #include <spdlog/sinks/base_sink.h>
-#include "android_dnsproxy.h"
+#include <upstream_utils.h>
 
 class java_sink_mt : public spdlog::sinks::base_sink<std::mutex> {
 public:
@@ -14,7 +14,7 @@ public:
                              JavaVM *vm,
                              ag::global_ref<jclass> logger_class) {
 
-        return spdlog::default_factory::template create<java_sink_mt>(logger_name, vm, std::move(logger_class));
+        return spdlog::default_factory::create<java_sink_mt>(logger_name, vm, std::move(logger_class));
     }
 
     java_sink_mt(JavaVM *vm, ag::global_ref<jclass> logger_class)
@@ -88,6 +88,22 @@ Java_com_adguard_dnslibs_proxy_DnsProxy_isValidRule(JNIEnv *env, jclass clazz, j
         });
 
     return result;
+}
+
+extern "C"
+JNIEXPORT jobject JNICALL
+Java_com_adguard_dnslibs_proxy_DnsProxy_parseDnsStampNative(JNIEnv *env, jclass clazz, jlong native_ptr,
+                                                            jstring stamp_str) {
+    auto *proxy = (ag::android_dnsproxy *) native_ptr;
+    return proxy->parse_dnsstamp(env, stamp_str);
+}
+
+extern "C"
+JNIEXPORT jstring JNICALL
+Java_com_adguard_dnslibs_proxy_DnsProxy_testUpstreamNative(JNIEnv *env, jclass clazz, jlong native_ptr,
+                                                           jobject upstream_settings, jobject events_adapter) {
+    auto *proxy = (ag::android_dnsproxy *) native_ptr;
+    return proxy->test_upstream(env, upstream_settings, events_adapter);
 }
 
 extern "C"
@@ -629,6 +645,41 @@ jobject ag::android_dnsproxy::get_settings(JNIEnv *env) {
     return env->NewLocalRef(marshal_settings(env, m_actual_proxy.get_settings()).get());
 }
 
+jobject ag::android_dnsproxy::parse_dnsstamp(JNIEnv *env, jstring stamp_str) {
+    auto[stamp, err] = parse_dns_stamp(m_utils.marshal_string(env, stamp_str));
+
+    if (err) {
+        return env->NewLocalRef(m_utils.marshal_string(env, *err).get());
+    }
+
+    auto clazz = env->FindClass(FQN_DNSSTAMP);
+    auto ctor = env->GetMethodID(clazz, "<init>", "()V");
+
+    auto proto_field = env->GetFieldID(clazz, "proto", "L" FQN_DNSSTAMP_PROTOTYPE ";");
+    auto server_addr_field = env->GetFieldID(clazz, "serverAddr", "Ljava/lang/String;");
+    auto provider_name_field = env->GetFieldID(clazz, "providerName", "Ljava/lang/String;");
+    auto path_field = env->GetFieldID(clazz, "path", "Ljava/lang/String;");
+
+    auto dns_stamp = env->NewObject(clazz, ctor);
+
+    env->SetObjectField(dns_stamp, proto_field, m_dnsstamp_prototype_values.at((size_t) stamp.proto).get());
+    env->SetObjectField(dns_stamp, server_addr_field, m_utils.marshal_string(env, stamp.server_addr).get());
+    env->SetObjectField(dns_stamp, provider_name_field, m_utils.marshal_string(env, stamp.provider_name).get());
+    env->SetObjectField(dns_stamp, path_field, m_utils.marshal_string(env, stamp.path).get());
+
+    return dns_stamp;
+}
+
+jstring ag::android_dnsproxy::test_upstream(JNIEnv *env, jobject upstream_settings, jobject events_adapter) {
+    m_events = global_ref(get_vm(env), events_adapter);
+    auto err = ag::test_upstream(marshal_upstream(env, upstream_settings),
+                                 marshal_events(env, events_adapter).on_certificate_verification);
+    if (err) {
+        return (jstring) env->NewLocalRef(m_utils.marshal_string(env, *err).get());
+    }
+    return NULL;
+}
+
 ag::android_dnsproxy::android_dnsproxy(JavaVM *vm) : m_utils(vm) {
     scoped_jni_env env(vm, 16);
 
@@ -663,6 +714,7 @@ ag::android_dnsproxy::android_dnsproxy(JavaVM *vm) : m_utils(vm) {
 
     m_protocol_enum_values = m_utils.get_enum_values(env.get(), FQN_LISTENER_PROTOCOL);
     m_blocking_mode_values = m_utils.get_enum_values(env.get(), FQN_BLOCKING_MODE);
+    m_dnsstamp_prototype_values = m_utils.get_enum_values(env.get(), FQN_DNSSTAMP_PROTOTYPE);
 
     m_jni_initialized.store(true);
 }

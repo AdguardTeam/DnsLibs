@@ -7,10 +7,13 @@
 
 #include <ag_logger.h>
 #include <dnsproxy.h>
+#include <upstream_utils.h>
 #include <spdlog/sinks/base_sink.h>
 
 
 static logCallback logFunc;
+
+NSErrorDomain const AGDnsProxyErrorDomain = @"com.adguard.dnsproxy";
 
 @implementation AGLogger
 + (void) setLevel: (AGLogLevel) level
@@ -28,7 +31,7 @@ static logCallback logFunc;
 class nslog_sink : public spdlog::sinks::base_sink<std::mutex> {
 public:
     static ag::logger create(const std::string &logger_name) {
-        return spdlog::default_factory::template create<nslog_sink>(logger_name);
+        return spdlog::default_factory::create<nslog_sink>(logger_name);
     }
 
 private:
@@ -375,23 +378,23 @@ static std::string getTrustCreationErrorStr(OSStatus status) {
 #endif
 }
 
-- (std::optional<std::string>) verifyCertificate: (ag::certificate_verification_event *) event
++ (std::optional<std::string>) verifyCertificate: (ag::certificate_verification_event *) event log: (ag::logger &) log
 {
-    tracelog(self->log, "[Verification] App callback");
+    tracelog(log, "[Verification] App callback");
 
     size_t chainLength = event->chain.size() + 1;
     SecCertificateRef chain[chainLength];
 
     chain[0] = convertCertificate(event->certificate);
     if (chain[0] == NULL) {
-        dbglog(self->log, "[Verification] Failed to create certificate object");
+        dbglog(log, "[Verification] Failed to create certificate object");
         return "Failed to create certificate object";
     }
 
     for (size_t i = 0; i < event->chain.size(); ++i) {
         chain[i + 1] = convertCertificate(event->chain[i]);
         if (chain[i + 1] == NULL) {
-            dbglog(self->log, "[Verification] Failed to create certificate object");
+            dbglog(log, "[Verification] Failed to create certificate object");
             return "Failed to create certificate object";
         }
     }
@@ -410,7 +413,7 @@ static std::string getTrustCreationErrorStr(OSStatus status) {
 
     if (status != errSecSuccess) {
         std::string err = getTrustCreationErrorStr(status);
-        dbglog(self->log, "[Verification] Failed to create trust object from chain: {}", err);
+        dbglog(log, "[Verification] Failed to create trust object from chain: {}", err);
         return err;
     }
 
@@ -421,7 +424,7 @@ static std::string getTrustCreationErrorStr(OSStatus status) {
 
     // Unspecified also stands for valid: https://developer.apple.com/library/archive/qa/qa1360/_index.html
     if (trustResult == kSecTrustResultUnspecified || trustResult == kSecTrustResultProceed) {
-        dbglog(self->log, "[Verification] Succeeded");
+        dbglog(log, "[Verification] Succeeded");
         return std::nullopt;
     }
 
@@ -447,37 +450,42 @@ static std::string getTrustCreationErrorStr(OSStatus status) {
         break;
     }
 
-    dbglog(self->log, "[Verification] Failed to verify: {}", errStr);
+    dbglog(log, "[Verification] Failed to verify: {}", errStr);
     return errStr;
 }
 
-std::vector<ag::upstream::options> convert_upstreams(NSArray<AGDnsUpstream *> *upstreams) {
+static ag::upstream::options convert_upstream(AGDnsUpstream *upstream) {
+    std::vector<std::string> bootstrap;
+    if (upstream.bootstrap != nil) {
+        bootstrap.reserve([upstream.bootstrap count]);
+        for (NSString *server in upstream.bootstrap) {
+            bootstrap.emplace_back([server UTF8String]);
+        }
+    }
+    ag::ip_address_variant addr;
+    if (upstream.serverIp != nil && [upstream.serverIp length] == 4) {
+        addr.emplace<ag::uint8_array<4>>();
+        std::memcpy(std::get<ag::uint8_array<4>>(addr).data(),
+                    [upstream.serverIp bytes], [upstream.serverIp length]);
+    } else if (upstream.serverIp != nil && [upstream.serverIp length] == 16) {
+        addr.emplace<ag::uint8_array<16>>();
+        std::memcpy(std::get<ag::uint8_array<16>>(addr).data(),
+                    [upstream.serverIp bytes], [upstream.serverIp length]);
+    } else {
+        addr.emplace<std::monostate>();
+    }
+    return ag::upstream::options{[upstream.address UTF8String],
+                                 std::move(bootstrap),
+                                 std::chrono::milliseconds(upstream.timeoutMs),
+                                 addr};
+}
+
+static std::vector<ag::upstream::options> convert_upstreams(NSArray<AGDnsUpstream *> *upstreams) {
     std::vector<ag::upstream::options> converted;
     if (upstreams != nil) {
         converted.reserve([upstreams count]);
         for (AGDnsUpstream *upstream in upstreams) {
-            std::vector<std::string> bootstrap;
-            if (upstream.bootstrap != nil) {
-                bootstrap.reserve([upstream.bootstrap count]);
-                for (NSString *server in upstream.bootstrap) {
-                    bootstrap.emplace_back([server UTF8String]);
-                }
-            }
-            ag::ip_address_variant addr;
-            if (upstream.serverIp != nil && [upstream.serverIp length] == 4) {
-                addr.emplace<ag::uint8_array<4>>();
-                std::memcpy(std::get<ag::uint8_array<4>>(addr).data(),
-                            [upstream.serverIp bytes], [upstream.serverIp length]);
-            } else if (upstream.serverIp != nil && [upstream.serverIp length] == 16) {
-                addr.emplace<ag::uint8_array<16>>();
-                std::memcpy(std::get<ag::uint8_array<16>>(addr).data(),
-                            [upstream.serverIp bytes], [upstream.serverIp length]);
-            } else {
-                addr.emplace<std::monostate>();
-            }
-            converted.emplace_back(
-                    ag::upstream::options{[upstream.address UTF8String], std::move(bootstrap),
-                                          std::chrono::milliseconds(upstream.timeoutMs), addr });
+            converted.emplace_back(convert_upstream(upstream));
         }
     }
     return converted;
@@ -520,7 +528,7 @@ std::vector<ag::upstream::options> convert_upstreams(NSArray<AGDnsUpstream *> *u
     native_events.on_certificate_verification =
         [obj] (ag::certificate_verification_event event) -> std::optional<std::string> {
             AGDnsProxy *sself = (__bridge AGDnsProxy *)obj;
-            return [sself verifyCertificate: &event];
+            return [AGDnsProxy verifyCertificate: &event log: sself->log];
         };
 
     if (config.dns64Settings != nil) {
@@ -603,3 +611,60 @@ std::vector<ag::upstream::options> convert_upstreams(NSArray<AGDnsUpstream *> *u
 }
 
 @end
+
+@implementation AGDnsStamp
+
+- (instancetype) initWithProto: (AGStampProtoType) proto
+                    serverAddr: (NSString *) serverAddr
+                  providerName: (NSString *) providerName
+                          path: (NSString *) path
+{
+    self = [super init];
+    _proto = proto;
+    _serverAddr = serverAddr;
+    _providerName = providerName;
+    _path = path;
+    return self;
+}
+@end
+
+@implementation AGDnsUtils
+
++ (AGDnsStamp *) parseDnsStampWithStampStr: (NSString *) stampStr error: (NSError **) error
+{
+    auto[stamp, stamp_error] = ag::parse_dns_stamp([stampStr UTF8String]);
+    if (stamp_error) {
+        if (error) {
+            *error = [NSError errorWithDomain: AGDnsProxyErrorDomain
+                                         code: AGDPE_PARSE_DNS_STAMP_ERROR
+                                     userInfo: @{
+                                         NSLocalizedDescriptionKey: [NSString stringWithUTF8String:stamp_error->c_str()]
+                                     }];
+        }
+        return nil;
+    }
+    return [[AGDnsStamp alloc] initWithProto: (AGStampProtoType) stamp.proto
+                                  serverAddr: [NSString stringWithUTF8String: stamp.server_addr.c_str()]
+                                providerName: [NSString stringWithUTF8String: stamp.provider_name.c_str()]
+                                        path: [NSString stringWithUTF8String: stamp.path.c_str()]];
+}
+
+static auto dnsUtilsLogger = ag::create_logger("AGDnsUtils");
+
+static std::optional<std::string> verifyCertificate(ag::certificate_verification_event event) {
+    return [AGDnsProxy verifyCertificate: &event log: dnsUtilsLogger];
+}
+
++ (NSError *) testUpstream: (AGDnsUpstream *) opts
+{
+    auto error = ag::test_upstream(convert_upstream(opts), verifyCertificate);
+    if (error) {
+        return [NSError errorWithDomain: AGDnsProxyErrorDomain
+                                   code: AGDPE_TEST_UPSTREAM_ERROR
+                               userInfo: @{NSLocalizedDescriptionKey: [NSString stringWithUTF8String:error->c_str()]}];
+    }
+    return nil;
+}
+
+@end
+

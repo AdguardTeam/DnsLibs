@@ -59,17 +59,6 @@ static scheme get_address_scheme(std::string_view address) {
     return scheme::UNDEFINED;
 }
 
-static constexpr std::string_view get_address_scheme_with_suffix(scheme local_scheme) {
-    if (local_scheme == scheme::UNDEFINED) {
-        return "";
-    }
-    return SCHEME_WITH_SUFFIX[static_cast<size_t>(local_scheme)];
-}
-
-static constexpr size_t get_address_scheme_size(scheme local_scheme) {
-    return std::size(get_address_scheme_with_suffix(local_scheme));
-}
-
 static ag::upstream_factory::create_result create_upstream_tls(const ag::upstream::options &opts,
         const ag::upstream_factory_config &config) {
     return {std::make_unique<ag::dns_over_tls>(opts, config), std::nullopt};

@@ -203,7 +203,7 @@ inline constexpr bool is_string_or_string_view = std::disjunction_v<is_same_valu
  * @return std::string with copy of data from parts
  */
 template<typename T>
-static inline std::enable_if<detail::is_string_or_string_view<T>, std::string> join(const T &parts)
+static inline std::enable_if_t<detail::is_string_or_string_view<T>, std::string> join(const T &parts)
 {
     return (join<std::string>)(parts);
 }

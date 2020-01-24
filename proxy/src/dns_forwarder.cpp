@@ -1,6 +1,7 @@
 #include <thread>
 
 #include <dns_forwarder.h>
+#include <application_verifier.h>
 #include <default_verifier.h>
 #include <ag_utils.h>
 #include <ag_cache.h>
@@ -66,56 +67,6 @@ static std::string get_cache_key(const ldns_pkt *request) {
 
     return key;
 }
-
-struct dns_forwarder::application_verifier : public certificate_verifier {
-    const dnsproxy_events *events = nullptr;
-
-    explicit application_verifier(const dnsproxy_events *events)
-        : events(events)
-    {}
-
-    static std::optional<std::vector<uint8_t>> serialize_certificate(X509 *cert) {
-        std::vector<uint8_t> out;
-        if (int len = i2d_X509(cert, nullptr); len <= 0) {
-            return std::nullopt;
-        } else {
-            out.resize(len);
-        }
-        unsigned char *buffer = (unsigned char *)out.data();
-        i2d_X509(cert, (unsigned char **)&buffer);
-        return out;
-    }
-
-    err_string verify(X509_STORE_CTX *ctx, std::string_view host) const override {
-        if (err_string err = verify_host_name(X509_STORE_CTX_get0_cert(ctx), host); err.has_value()) {
-            return err;
-        }
-
-        certificate_verification_event event = {};
-
-        std::optional<std::vector<uint8_t>> serialized = serialize_certificate(X509_STORE_CTX_get0_cert(ctx));
-        if (!serialized.has_value()) {
-            return "Failed to serialize certificate";
-        }
-        event.certificate = std::move(serialized.value());
-
-        STACK_OF(X509) *chain = X509_STORE_CTX_get0_untrusted(ctx);
-        event.chain.reserve(sk_X509_num(chain));
-        for (size_t i = 0; i < sk_X509_num(chain); ++i) {
-            X509 *cert = sk_X509_value(chain, i);
-            serialized = serialize_certificate(cert);
-            if (serialized.has_value()) {
-                event.chain.emplace_back(std::move(serialized.value()));
-            } else {
-                event.chain.clear();
-                break;
-            }
-        }
-
-        return this->events->on_certificate_verification(std::move(event));
-    }
-};
-
 
 static void log_packet(const logger &log, const ldns_pkt *packet, const char *pkt_name) {
     if (!log->should_log((spdlog::level::level_enum)DEBUG)) {
@@ -580,7 +531,7 @@ bool dns_forwarder::init(const dnsproxy_settings &settings, const dnsproxy_event
 
     if (events.on_certificate_verification != nullptr) {
         dbglog(log, "Using application_verifier");
-        this->cert_verifier = std::make_shared<application_verifier>(this->events);
+        this->cert_verifier = std::make_shared<application_verifier>(this->events->on_certificate_verification);
     } else {
         dbglog(log, "Using default_verifier");
         this->cert_verifier = std::make_shared<default_verifier>();

@@ -53,8 +53,6 @@ private:
     dns64::prefixes dns64_prefixes;
     std::shared_ptr<certificate_verifier> cert_verifier;
 
-    struct application_verifier;
-
     with_mtx<lru_cache<std::string, cached_response>, std::shared_mutex> response_cache;
 };
 

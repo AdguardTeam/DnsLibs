@@ -9,6 +9,7 @@ set(SRC_DIR ${CMAKE_CURRENT_SOURCE_DIR}/src)
 
 add_library(agdns_tls EXCLUDE_FROM_ALL
         ${SRC_DIR}/certificate_verifier.cpp
+        ${SRC_DIR}/application_verifier.cpp
         ${SRC_DIR}/default_verifier.cpp
     )
 
