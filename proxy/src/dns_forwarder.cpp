@@ -329,7 +329,7 @@ std::string dns_forwarder_utils::rr_list_to_string(const ldns_rr_list *rr_list) 
     std::string_view answer_view = answer.get();
     std::string out;
     out.reserve(answer_view.size());
-    for (auto record : ag::utils::split_by(answers_view, '\n')) {
+    for (auto record : ag::utils::split_by(answer_view, '\n')) {
         auto record_parts = ag::utils::split_by(record, '\t');
         auto it = record_parts.begin();
         if (record_parts.size() >= 4) {
