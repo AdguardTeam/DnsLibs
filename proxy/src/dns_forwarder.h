@@ -20,6 +20,18 @@ struct cached_response {
     ag::steady_clock::time_point expires_at;
 };
 
+namespace dns_forwarder_utils {
+/**
+* Format RR list using the following format:
+* <Type>, <RDFs, space separated>\n
+* e.g.:
+* A, 1.2.3.4
+* AAAA, 12::34
+* CNAME, google.com.
+*/
+std::string rr_list_to_string(const ldns_rr_list *rr_list);
+} // namespace dns_forwarder_utils
+
 class dns_forwarder {
 public:
     dns_forwarder();

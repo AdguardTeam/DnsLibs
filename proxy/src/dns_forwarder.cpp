@@ -318,15 +318,7 @@ static void set_event_rules(dns_request_processed_event &event, const std::vecto
     event.whitelist = rules.size() > 0 && rules[0]->props.test(dnsfilter::RP_EXCEPTION);
 }
 
-/**
- * Format RR list using the following format:
- * <Type>, <RDFs, space separated>\n
- * e.g.:
- * A, 1.2.3.4
- * AAAA, 12::34
- * CNAME, google.com.
- */
-static std::string rr_list_to_string(const ldns_rr_list *rr_list) {
+std::string dns_forwarder_utils::rr_list_to_string(const ldns_rr_list *rr_list) {
     if (rr_list == nullptr) {
         return {};
     }
@@ -337,18 +329,21 @@ static std::string rr_list_to_string(const ldns_rr_list *rr_list) {
     std::string_view answer_view = answer.get();
     std::string out;
     out.reserve(answer_view.size());
-    auto answer_parts = ag::utils::split_by(answer_view, '\t');
-    auto it = answer_parts.begin();
-    if (answer_parts.size() >= 4) {
-        it++; // Skip owner
-        it++; // Skip ttl
-        it++; // Skip class
-        out += *it++; // Add type
-        out += ',';
-        // Add serialized RDFs
-        while (it != answer_parts.end()) {
-            out += ' ';
-            out += *it++;
+    for (auto record : ag::utils::split_by(answer_view, '\n')) {
+        auto record_parts = ag::utils::split_by(record, '\t');
+        auto it = record_parts.begin();
+        if (record_parts.size() >= 4) {
+            it++; // Skip owner
+            it++; // Skip ttl
+            it++; // Skip class
+            out += *it++; // Add type
+            out += ',';
+            // Add serialized RDFs
+            while (it != record_parts.end()) {
+                out += ' ';
+                out += *it++;
+            }
+            out += '\n';
         }
     }
     return out;
@@ -369,14 +364,14 @@ void dns_forwarder::finalize_processed_event(dns_request_processed_event &event,
     if (response != nullptr) {
         auto status = ag::allocated_ptr<char>(ldns_pkt_rcode2str(ldns_pkt_get_rcode(response)));
         event.status = status != nullptr ? status.get() : "";
-        event.answer = rr_list_to_string(ldns_pkt_answer(response));
+        event.answer = dns_forwarder_utils::rr_list_to_string(ldns_pkt_answer(response));
     } else {
         event.status.clear();
         event.answer.clear();
     }
 
     if (original_response != nullptr) {
-        event.original_answer = rr_list_to_string(ldns_pkt_answer(original_response));
+        event.original_answer = dns_forwarder_utils::rr_list_to_string(ldns_pkt_answer(original_response));
     } else {
         event.original_answer.clear();
     }
