@@ -596,10 +596,9 @@ static std::vector<ag::upstream::options> convert_upstreams(NSArray<AGDnsUpstrea
     NSInteger ip_header_length = ip_header->ip_hl * 4;
     struct udphdr *udp_header = (struct udphdr *)((Byte *)packet.bytes + ip_header_length);
     NSInteger udp_header_length = ip_header_length + sizeof(struct udphdr);
-    char srcv4_str[INET_ADDRSTRLEN], dstv4_str[INET_ADDRSTRLEN];
     dbglog(self->log, "{}:{} -> {}:{}"
-        , inet_ntop(AF_INET, &ip_header->ip_src, srcv4_str, sizeof(srcv4_str)), ntohs(udp_header->uh_sport)
-        , inet_ntop(AF_INET, &ip_header->ip_dst, dstv4_str, sizeof(dstv4_str)), ntohs(udp_header->uh_dport));
+        , inet_ntoa(ip_header->ip_src), ntohs(udp_header->uh_sport)
+        , inet_ntoa(ip_header->ip_dst), ntohs(udp_header->uh_dport));
 
     ag::uint8_view payload = { (uint8_t*)packet.bytes + udp_header_length, packet.length - udp_header_length };
     std::vector<uint8_t> response = self->proxy.handle_message(payload);
@@ -608,7 +607,7 @@ static std::vector<ag::upstream::options> convert_upstreams(NSArray<AGDnsUpstrea
 
 + (BOOL) isValidRule: (NSString *) str
 {
-    return ag::dnsfilter::is_valid_rule([str UTF8String]);
+    return ag::dnsfilter::is_valid_rule({ [str UTF8String] });
 }
 
 @end
