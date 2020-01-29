@@ -742,7 +742,7 @@ void dns_forwarder::put_response_to_cache(std::string key, ldns_pkt_ptr response
         // Check contains at least one record of requested type
         bool found = false;
         for (int_fast32_t i = 0; i < ldns_pkt_ancount(response.get()); ++i) {
-            const ldns_rr *rr = ldns_rr_list_rr(ldns_pkt_answer(response.get()), 0);
+            const ldns_rr *rr = ldns_rr_list_rr(ldns_pkt_answer(response.get()), i);
             if (rr && ldns_rr_get_type(rr) == type) {
                 found = true;
                 break;
