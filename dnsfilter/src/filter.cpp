@@ -209,7 +209,9 @@ void filter::impl::process_string(std::string_view str, uint32_t file_idx) {
     }
 
     switch (rule->match_method) {
-    case rule_utils::rule::MMID_DOMAINS:
+    case rule_utils::rule::MMID_EXACT:
+    case rule_utils::rule::MMID_SUBDOMAINS:
+        tracelog(log, "Placing a rule in domains table: {}", str);
         for (const std::string &d : rule->matching_parts) {
             put_in_domain_table(d, file_idx, str);
         }
@@ -285,7 +287,8 @@ static bool count_rules(uint32_t idx, std::string_view line, void *arg) {
     }
 
     switch (rule->match_method) {
-    case rule_utils::rule::MMID_DOMAINS:
+    case rule_utils::rule::MMID_EXACT:
+    case rule_utils::rule::MMID_SUBDOMAINS:
         stat->simple_domain_rules += rule->matching_parts.size();
         break;
     case rule_utils::rule::MMID_SHORTCUTS:
@@ -294,8 +297,6 @@ static bool count_rules(uint32_t idx, std::string_view line, void *arg) {
         break;
     case rule_utils::rule::MMID_REGEX:
         ++stat->leftover_rules;
-        break;
-    default:
         break;
     }
 
@@ -379,9 +380,22 @@ bool filter::impl::match_against_line(match_arg &match, std::string_view line) {
     bool matched = false;
 
     switch (rule->match_method) {
-    case rule_utils::rule::MMID_DOMAINS: {
-        // matched already in `search_by_domains`
-        matched = true;
+    case rule_utils::rule::MMID_EXACT:
+        for (auto &part : rule->matching_parts) {
+            if ((matched = (match.ctx.host == part))) {
+                break;
+            }
+        }
+        break;
+    case rule_utils::rule::MMID_SUBDOMAINS: {
+        for (auto &part : rule->matching_parts) {
+            for (auto &subdomain : match.ctx.subdomains) { // assert `subdomains` also contains the full host
+                if ((matched = (subdomain == part))) {
+                    goto loopexit;
+                }
+            }
+        }
+    loopexit:
         break;
     }
     case rule_utils::rule::MMID_SHORTCUTS:

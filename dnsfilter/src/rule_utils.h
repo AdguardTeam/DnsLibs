@@ -15,8 +15,9 @@ namespace rule_utils {
 
     struct rule {
         enum match_method_id {
-            MMID_DOMAINS, // a domain can be matched against such rule by comparing
-                          // with items of `matching_parts`, if it's equal to any it's matched
+            MMID_EXACT, // match by comparing the domain's string repesentation against the rule domain string
+            MMID_SUBDOMAINS, // a domain can be matched against such rule by comparing
+                             // with items of `matching_parts`, if it's equal to any it's matched
             MMID_SHORTCUTS, // a domain can be matched against such rule, if it contains each item
                             // of `matching_parts` in corresponding order
                             // (e.g. `example*.org` -> { `example`, `.org` })

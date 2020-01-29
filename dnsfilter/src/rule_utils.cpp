@@ -56,7 +56,8 @@ enum match_pattern_mode {
 
 struct match_info {
     std::string_view text; // matching text without all prefixes
-    bool is_regex; // true if rule is regex (e.g. `/example/`)
+    bool is_regex_rule; // whether the original rule is a regex rule
+    bool is_exact_match; // whether only the whole text should be matched, without subdomains matching
     int pattern_mode; // see `match_pattern_mode`
 };
 
@@ -106,7 +107,7 @@ static std::optional<rule_utils::rule> parse_host_file_rule(std::string_view str
     }
 
     rule_utils::rule r = {};
-    r.match_method = rule_utils::rule::MMID_DOMAINS;
+    r.match_method = rule_utils::rule::MMID_SUBDOMAINS;
     r.matching_parts.reserve(parts.size() - 1);
     for (size_t i = 1; i < parts.size(); ++i) {
         const std::string_view &domain = parts[i];
@@ -235,44 +236,50 @@ static inline int remove_special_suffixes(std::string_view &rule) {
 
 // https://github.com/AdguardTeam/AdguardHome/wiki/Hosts-Blocklists#adblock-style
 static match_info extract_match_info(std::string_view rule) {
-    match_info info = { rule, check_regex(rule), 0 };
+    match_info info = {.text = rule, .is_regex_rule = check_regex(rule), .is_exact_match = false, .pattern_mode = 0};
 
     // rules with wrong special and skippable prefixes and suffixes will be dropped by
     // domain validity check
 
     // special prefixes come before skippable ones (e.g. `||http://example.org`)
     // so for the first we should check special ones
-    if (!info.is_regex) {
+    if (!info.is_regex_rule) {
         info.pattern_mode |= remove_special_prefixes(info.text);
     }
 
-    std::string_view clean_rule_text = remove_skippable_prefixes(info.text, info.is_regex);
+    std::string_view clean_rule_text = remove_skippable_prefixes(info.text, info.is_regex_rule);
     bool has_skippable_prefix = info.text.length() > clean_rule_text.length();
     info.text = clean_rule_text;
     // but special suffixes come after skippable ones (e.g. `example.org^`)
     // so for the first we should drop skippable ones
-    clean_rule_text = remove_skippable_suffixes(info.text, info.is_regex);
+    clean_rule_text = remove_skippable_suffixes(info.text, info.is_regex_rule);
     bool has_skippable_suffix = info.text.length() > clean_rule_text.length();
     info.text = clean_rule_text;
 
-    if (!info.is_regex) {
+    if (!info.is_regex_rule) {
         info.pattern_mode |= remove_special_suffixes(info.text);
-    }
 
-    // check that rule matches exact domain though it has some special characters
-    if (!info.is_regex) {
+        bool has_wildcard = info.text.npos != info.text.find('*');
+
+        // Exact domain match
+        if (!has_wildcard
+                && (info.pattern_mode & MPM_LINE_START_ASSERTED)
+                && (has_skippable_suffix
+                        || (info.pattern_mode & MPM_LINE_END_ASSERTED))) {
+            info.is_exact_match = true;
+        }
+
+        // check that rule matches exact domain though it has some special characters
         // rule is like:
         // 1) `||example.org^`
         // 2) `://example.org^`
         // 3) `||example.org:8080`
-        bool domain_start_asserted = has_skippable_prefix
-            || (info.pattern_mode & MPM_LINE_START_ASSERTED)
-            || (info.pattern_mode & MPM_DOMAIN_START_ASSERTED);
-
-        bool domain_end_asserted = has_skippable_suffix
-            || (info.pattern_mode & MPM_LINE_END_ASSERTED);
-
-        if (info.text.find('*') == info.text.npos && domain_start_asserted && domain_end_asserted) {
+        if (!has_wildcard
+                && (has_skippable_prefix
+                        || (info.pattern_mode & MPM_DOMAIN_START_ASSERTED)
+                        || (info.pattern_mode & MPM_LINE_START_ASSERTED))
+                && (has_skippable_suffix
+                        || (info.pattern_mode & MPM_LINE_END_ASSERTED))) {
             info.pattern_mode = MPM_NONE;
         }
     }
@@ -315,7 +322,7 @@ std::optional<rule_utils::rule> rule_utils::parse(std::string_view str, ag::logg
         return std::nullopt;
     }
 
-    if (!info.is_regex && !is_valid_domain(str)) {
+    if (!info.is_regex_rule && !is_valid_domain(str)) {
         ru_warnlog(log, "Invalid domain name: {}", str);
         return std::nullopt;
     }
@@ -329,10 +336,10 @@ std::optional<rule_utils::rule> rule_utils::parse(std::string_view str, ag::logg
         return std::make_optional(std::move(r));
     }
 
-    bool need_match_by_regex = info.is_regex || info.pattern_mode != MPM_NONE;
+    bool need_match_by_regex = info.is_regex_rule || info.pattern_mode != MPM_NONE;
     if (!need_match_by_regex) {
         if (is_domain_name(str)) {
-            r.match_method = rule::MMID_DOMAINS;
+            r.match_method = info.is_exact_match ? rule::MMID_EXACT : rule::MMID_SUBDOMAINS;
             r.matching_parts.emplace_back(ag::utils::to_lower(str));
         } else {
             r.match_method = rule::MMID_SHORTCUTS;
@@ -392,7 +399,7 @@ std::string rule_utils::get_regex(const rule &r) {
     }
 
     match_info info = extract_match_info(text);
-    if (info.is_regex) {
+    if (info.is_regex_rule) {
         return std::string(info.text);
     }
 

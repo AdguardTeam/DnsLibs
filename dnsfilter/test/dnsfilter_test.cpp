@@ -54,36 +54,38 @@ TEST_F(dnsfilter_test, successful_rule_parsing) {
 
     const test_data TEST_DATA[] =
         {
-            { "example.org", { {}, rule_utils::rule::MMID_DOMAINS } },
-            { "@@example.org", { { .props = { 1 << ag::dnsfilter::RP_EXCEPTION } }, rule_utils::rule::MMID_DOMAINS } },
-            { "example.org$important", { { .props = { 1 << ag::dnsfilter::RP_IMPORTANT } }, rule_utils::rule::MMID_DOMAINS } },
-            { "@@example.org$important", { { .props = { (1 << ag::dnsfilter::RP_EXCEPTION) | (1 << ag::dnsfilter::RP_IMPORTANT) } }, rule_utils::rule::MMID_DOMAINS } },
+            { "example.org", { {}, rule_utils::rule::MMID_SUBDOMAINS } },
+            { "@@example.org", { { .props = { 1 << ag::dnsfilter::RP_EXCEPTION } }, rule_utils::rule::MMID_SUBDOMAINS } },
+            { "example.org$important", { { .props = { 1 << ag::dnsfilter::RP_IMPORTANT } }, rule_utils::rule::MMID_SUBDOMAINS } },
+            { "@@example.org$important", { { .props = { (1 << ag::dnsfilter::RP_EXCEPTION) | (1 << ag::dnsfilter::RP_IMPORTANT) } }, rule_utils::rule::MMID_SUBDOMAINS } },
             { "|example.org", { {}, rule_utils::rule::MMID_SHORTCUTS_AND_REGEX } },
             { "example.org|", { {}, rule_utils::rule::MMID_SHORTCUTS_AND_REGEX } },
-            { "|example.org|", { {}, rule_utils::rule::MMID_DOMAINS } },
+            { "|example.org|", { {}, rule_utils::rule::MMID_EXACT } },
             { "example", { {}, rule_utils::rule::MMID_SHORTCUTS } },
             { ".example", { {}, rule_utils::rule::MMID_SHORTCUTS } },
             { "example.", { {}, rule_utils::rule::MMID_SHORTCUTS } },
             { "*example.org", { {}, rule_utils::rule::MMID_SHORTCUTS } },
-            { "||example.org|", { {}, rule_utils::rule::MMID_DOMAINS } },
-            { "||example.org^", { {}, rule_utils::rule::MMID_DOMAINS } },
+            { "||example.org|", { {}, rule_utils::rule::MMID_SUBDOMAINS } },
+            { "||example.org^", { {}, rule_utils::rule::MMID_SUBDOMAINS } },
             { "||example.org", { {}, rule_utils::rule::MMID_SHORTCUTS_AND_REGEX } },
             { "/example.org/", { {}, rule_utils::rule::MMID_SHORTCUTS_AND_REGEX } },
             { "/ex[a]?mple.org/", { {}, rule_utils::rule::MMID_REGEX } },
             { "example.org$badfilter", { { .props = { 1 << ag::dnsfilter::RP_BADFILTER } } } },
             { "-ad-banner.", { {} , rule_utils::rule::MMID_SHORTCUTS } },
             { "-ad-unit/", { {} , rule_utils::rule::MMID_SHORTCUTS } },
-            { "||adminpromotion.com^", { {}, rule_utils::rule::MMID_DOMAINS } },
-            { "||travelstool.com^", { {}, rule_utils::rule::MMID_DOMAINS } },
-            { "example.org:8080", { {}, rule_utils::rule::MMID_DOMAINS } },
-            { "//example.org:8080", { {}, rule_utils::rule::MMID_DOMAINS } },
-            { "://example.org", { {}, rule_utils::rule::MMID_DOMAINS } },
-            { "://example.org/", { {}, rule_utils::rule::MMID_DOMAINS } },
-            { "http://example.org/", { {}, rule_utils::rule::MMID_DOMAINS } },
-            { "https://example.org|", { {}, rule_utils::rule::MMID_DOMAINS } },
-            { "ws://example.org|", { {}, rule_utils::rule::MMID_DOMAINS } },
+            { "||adminpromotion.com^", { {}, rule_utils::rule::MMID_SUBDOMAINS } },
+            { "||travelstool.com^", { {}, rule_utils::rule::MMID_SUBDOMAINS } },
+            { "example.org:8080", { {}, rule_utils::rule::MMID_SUBDOMAINS } },
+            { "//example.org:8080", { {}, rule_utils::rule::MMID_SUBDOMAINS } },
+            { "://example.org", { {}, rule_utils::rule::MMID_SUBDOMAINS } },
+            { "://example.org/", { {}, rule_utils::rule::MMID_SUBDOMAINS } },
+            { "http://example.org/", { {}, rule_utils::rule::MMID_SUBDOMAINS } },
+            { "https://example.org|", { {}, rule_utils::rule::MMID_SUBDOMAINS } },
+            { "ws://example.org|", { {}, rule_utils::rule::MMID_SUBDOMAINS } },
             { "example.org^|", { {}, rule_utils::rule::MMID_SHORTCUTS_AND_REGEX } },
             { "example.org|^", { {}, rule_utils::rule::MMID_SHORTCUTS_AND_REGEX } },
+            { "|example.org^", { {}, rule_utils::rule::MMID_EXACT } },
+            { "|https://example31.org/", { {}, rule_utils::rule::MMID_EXACT } },
         };
 
     ag::logger log = ag::create_logger("dnsfilter_test");
@@ -107,15 +109,15 @@ TEST_F(dnsfilter_test, successful_host_syntax_rule_parsing) {
     const test_data TEST_DATA[] =
         {
             { "0.0.0.0 example.org",
-                { { .props = {}, .ip = std::make_optional("0.0.0.0") }, rule_utils::rule::MMID_DOMAINS } },
+                { { .props = {}, .ip = std::make_optional("0.0.0.0") }, rule_utils::rule::MMID_SUBDOMAINS } },
             { "1:1:: example.org",
-                { { .props = {}, .ip = std::make_optional("1:1::") }, rule_utils::rule::MMID_DOMAINS } },
+                { { .props = {}, .ip = std::make_optional("1:1::") }, rule_utils::rule::MMID_SUBDOMAINS } },
             { "1:1:1:1:1:1:1:1 example.org",
-                { { .props = {}, .ip = std::make_optional("1:1:1:1:1:1:1:1") }, rule_utils::rule::MMID_DOMAINS } },
+                { { .props = {}, .ip = std::make_optional("1:1:1:1:1:1:1:1") }, rule_utils::rule::MMID_SUBDOMAINS } },
             { "::1:1 example.org",
-                { { .props = {}, .ip = std::make_optional("::1:1") }, rule_utils::rule::MMID_DOMAINS } },
+                { { .props = {}, .ip = std::make_optional("::1:1") }, rule_utils::rule::MMID_SUBDOMAINS } },
             { "::FFFF:1.1.1.1 example.org",
-                { { .props = {}, .ip = std::make_optional("::FFFF:1.1.1.1") }, rule_utils::rule::MMID_DOMAINS } },
+                { { .props = {}, .ip = std::make_optional("::FFFF:1.1.1.1") }, rule_utils::rule::MMID_SUBDOMAINS } },
         };
 
     ag::logger log = ag::create_logger("dnsfilter_test");
@@ -205,6 +207,9 @@ TEST_F(dnsfilter_test, basic_rules_match) {
             { { "example23.org^" }, "sub.example23.org", true, },
             { { "||example24.org" }, "sub.example24.org", true, },
             { { "||example25.org|" }, "sub.example25.org", true, },
+            { { "|example27.org|" }, "example27.org", true, },
+            { { "|example29.org^" }, "example29.org", true, },
+            { { "|https://example31.org/" }, "example31.org", true, },
         };
 
     for (const test_data &entry : TEST_DATA) {
@@ -254,6 +259,9 @@ TEST_F(dnsfilter_test, basic_rules_no_match) {
             { "://example8.org", "eeexample8.org", },
             { "http://example9.org", "eeexample9.org", },
             { "example10.org/", "example10.orgg", },
+            { { "|example26.org|" }, "sub.example26.org", },
+            { { "|example28.org^" }, "sub.example28.org", },
+            { { "|https://example30.org/" }, "sub.example30.org", },
         };
 
     for (const test_data &entry : TEST_DATA) {
