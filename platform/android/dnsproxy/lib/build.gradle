@@ -1,14 +1,17 @@
 apply plugin: 'com.android.library'
 
+version = [name: '1.0.0', code: 1]
+
 android {
     compileSdkVersion 29
-    buildToolsVersion "29.0.2"
+
     defaultConfig {
         minSdkVersion 21
         targetSdkVersion 29
-        versionCode 1
-        versionName "1.0"
+        versionCode version.code
+        versionName version.name
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
+
         externalNativeBuild {
             cmake {
                 targets "adguard-dns"
@@ -16,6 +19,7 @@ android {
             }
         }
     }
+
     buildTypes {
         debug {
             minifyEnabled false
@@ -25,6 +29,12 @@ android {
             proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
         }
     }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_1_8
+        targetCompatibility JavaVersion.VERSION_1_8
+    }
+
     externalNativeBuild {
         cmake {
             path "CMakeLists.txt"
@@ -34,8 +44,8 @@ android {
 }
 
 dependencies {
-    implementation fileTree(dir: 'libs', include: ['*.jar'])
     implementation 'org.slf4j:slf4j-api:1.7.25'
+
     androidTestImplementation 'androidx.test.ext:junit:1.1.1'
     androidTestImplementation 'androidx.test:rules:1.2.0'
     androidTestImplementation 'androidx.test.espresso:espresso-core:3.2.0'
