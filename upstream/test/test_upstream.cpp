@@ -242,6 +242,14 @@ struct upstream_test_data {
 
 static const upstream_test_data test_upstreams_data[]{
     {
+        "tcp://2001:db8:7c02:1::1",
+        {}
+    },
+    {
+        "tcp://192.168.10.125",
+        {}
+    },
+    {
         "8.8.8.8:53",
         {"8.8.8.8:53"}
     },

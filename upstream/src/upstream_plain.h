@@ -24,6 +24,8 @@ public:
 
     get_result get() override;
 
+    const socket_address &address() const;
+
 private:
     /** Destination socket address */
     socket_address m_address;
@@ -53,8 +55,6 @@ private:
 
     /** Prefer TCP */
     bool m_prefer_tcp;
-    /** DNS server socket address */
-    socket_address m_socket_address;
     /** TCP connection pool */
     tcp_pool m_pool;
 };
