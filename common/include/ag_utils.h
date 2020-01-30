@@ -238,11 +238,19 @@ bool is_valid_ip6(std::string_view str);
  * Calculate hash of string
  */
 static inline uint32_t hash(std::string_view str) {
+    // DJB2 with XOR (Daniel J. Bernstein)
     uint32_t hash = 5381;
     for (size_t i = 0; i < str.length(); ++i) {
         hash = (hash * 33) ^ (uint32_t)str[i];
     }
     return hash;
+}
+
+/**
+ * Calculate the hash of a byte slice
+ */
+static inline uint32_t hash(uint8_view v) {
+    return hash({(const char *) v.data(), v.size()});
 }
 
 /**

@@ -47,7 +47,7 @@ public:
     /**
      * @return IP address bytes
      */
-    std::vector<uint8_t> addr() const;
+    uint8_view addr() const;
 
     /**
      * @return IP address variant

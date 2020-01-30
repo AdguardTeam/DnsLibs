@@ -7,6 +7,7 @@
 #include <ag_regex.h>
 #include <ag_logger.h>
 #include <ag_utils.h>
+#include <ag_net_utils.h>
 #include <ag_file.h>
 #include <ag_sys.h>
 #include <dnsfilter.h>
@@ -68,7 +69,8 @@ public:
         destroy_unique_index_table(this->badfilter_table);
     }
 
-    void put_in_domain_table(std::string_view domain, uint32_t file_idx, std::string_view rule);
+    void put_hash_into_tables(uint32_t hash, uint32_t file_idx,
+                              kh_hash_to_unique_index_t *unique_table, kh_hash_to_indexes_t *multi_table);
     void process_string(std::string_view str, uint32_t file_idx);
 
     static bool load_line(uint32_t file_idx, std::string_view line, void *arg);
@@ -136,47 +138,47 @@ filter &filter::operator=(filter &&other) {
     return *this;
 }
 
-void filter::impl::put_in_domain_table(std::string_view domain, uint32_t file_idx, std::string_view rule) {
-    uint32_t hash = ag::utils::hash(domain);
+void filter::impl::put_hash_into_tables(uint32_t hash, uint32_t file_idx,
+                                        kh_hash_to_unique_index_t *unique_table, kh_hash_to_indexes_t *multi_table) {
     bool already_exists = false;
     size_t stored_idx = 0;
 
     int ret;
-    khiter_t iter = kh_get(hash_to_indexes, this->domains_table, hash);
-    if (iter == kh_end(this->domains_table)) {
+    khiter_t iter = kh_get(hash_to_indexes, multi_table, hash);
+    if (iter == kh_end(multi_table)) {
         // there is no such domain in non-unique table
-        iter = kh_put(hash_to_unique_index, this->unique_domains_table, hash, &ret);
+        iter = kh_put(hash_to_unique_index, unique_table, hash, &ret);
         if (ret < 0) {
-            warnlog(log, "Failed to put domain in domains table: {} (rule={})", domain, rule);
+            errlog(log, "Out of memory");
             return;
         }
         already_exists = ret == 0;
         if (!already_exists) {
             // domain is unique - save index
-            kh_value(this->unique_domains_table, iter) = file_idx;
+            kh_value(unique_table, iter) = file_idx;
             return;
         } else {
             // we have one record for this domain - remove from unique table
-            stored_idx = kh_value(this->unique_domains_table, iter);
-            kh_del(hash_to_unique_index, this->unique_domains_table, iter);
+            stored_idx = kh_value(unique_table, iter);
+            kh_del(hash_to_unique_index, unique_table, iter);
         }
     }
 
     // create record in non-unique table
-    iter = kh_put(hash_to_indexes, this->domains_table, hash, &ret);
+    iter = kh_put(hash_to_indexes, multi_table, hash, &ret);
     if (ret < 0) {
-        warnlog(log, "Failed to put domain in domains table: {} (rule={})", domain, rule);
+        errlog(log, "Out of memory");
         return;
     } else if (ret > 0) {
         // the record is a new one
-        std::vector<uint32_t> *positions = new(std::nothrow) std::vector<uint32_t>;
+        auto *positions = new(std::nothrow) std::vector<uint32_t>;
         if (positions == nullptr) {
-            errlog(log, "Failed to allocate memory for domains table");
+            errlog(log, "Out of memory");
             return;
         }
-        kh_value(this->domains_table, iter) = positions;
+        kh_value(multi_table, iter) = positions;
     }
-    std::vector<uint32_t> *positions = kh_value(this->domains_table, iter);
+    std::vector<uint32_t> *positions = kh_value(multi_table, iter);
     if (already_exists) {
         // put previously stored unique index, if it existed
         positions->reserve(positions->size() + 2);
@@ -213,9 +215,8 @@ void filter::impl::process_string(std::string_view str, uint32_t file_idx) {
     case rule_utils::rule::MMID_SUBDOMAINS:
         tracelog(log, "Placing a rule in domains table: {}", str);
         for (const std::string &d : rule->matching_parts) {
-            put_in_domain_table(d, file_idx, str);
+            put_hash_into_tables(ag::utils::hash(d), file_idx, this->unique_domains_table, this->domains_table);
         }
-        tracelog(log, "Rule placed in domains table: {}", str);
         break;
     case rule_utils::rule::MMID_SHORTCUTS:
     case rule_utils::rule::MMID_SHORTCUTS_AND_REGEX: {
@@ -229,6 +230,7 @@ void filter::impl::process_string(std::string_view str, uint32_t file_idx) {
         }
         if (!sc.empty()) {
             uint32_t hash = ag::utils::hash(sc.substr(0, SHORTCUT_LENGTH));
+            tracelog(log, "Placing a rule in shortcuts table: {} ({})", str, hash);
             int ret;
             khiter_t iter = kh_put(hash_to_indexes, this->shortcuts_table, hash, &ret);
             if (ret < 0) {
@@ -245,8 +247,6 @@ void filter::impl::process_string(std::string_view str, uint32_t file_idx) {
             }
             std::vector<uint32_t> *positions = kh_value(this->shortcuts_table, iter);
             positions->push_back(file_idx);
-
-            tracelog(log, "Rule placed in shortcuts table: {} ({})", str, hash);
             break;
         }
         [[fallthrough]];
@@ -367,17 +367,18 @@ static inline bool match_shortcuts(const std::vector<std::string> &shortcuts, st
 }
 
 bool filter::impl::match_against_line(match_arg &match, std::string_view line) {
+    bool matched = false;
     std::optional<rule_utils::rule> rule = rule_utils::parse(line);
+
     if (!rule.has_value()) {
-        return true;
+        matched = true;
+        goto exit;
     }
 
     if (rule->public_part.props.test(ag::dnsfilter::RP_BADFILTER)) {
-        match.ctx.matched_rules.emplace_back(std::move(rule->public_part));
-        return true;
+        matched = true;
+        goto exit;
     }
-
-    bool matched = false;
 
     switch (rule->match_method) {
     case rule_utils::rule::MMID_EXACT:
@@ -423,12 +424,12 @@ bool filter::impl::match_against_line(match_arg &match, std::string_view line) {
         break;
     }
 
+exit:
     if (matched) {
         dbglog(match.f.pimpl->log, "Domain '{}' matched against rule '{}'", match.ctx.host, line);
         match.ctx.matched_rules.emplace_back(std::move(rule->public_part));
     }
-
-    return true;
+    return matched;
 }
 
 static inline bool is_unique_rule(const std::vector<ag::dnsfilter::rule> &rules, std::string_view line) {

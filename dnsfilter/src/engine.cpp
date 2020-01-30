@@ -1,9 +1,9 @@
 #include <algorithm>
 #include <dnsfilter.h>
 #include <ag_logger.h>
+#include <ag_net_utils.h>
 #include "filter.h"
 #include "rule_utils.h"
-
 
 using namespace ag;
 

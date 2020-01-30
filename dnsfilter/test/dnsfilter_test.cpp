@@ -2,7 +2,6 @@
 #include <numeric>
 #include <string>
 #include <ag_file.h>
-#include <ag_utils.h>
 #include <ag_sys.h>
 #include <ag_logger.h>
 #include <dnsfilter.h>
@@ -69,7 +68,9 @@ TEST_F(dnsfilter_test, successful_rule_parsing) {
             { "||example.org^", { {}, rule_utils::rule::MMID_SUBDOMAINS } },
             { "||example.org", { {}, rule_utils::rule::MMID_SHORTCUTS_AND_REGEX } },
             { "/example.org/", { {}, rule_utils::rule::MMID_SHORTCUTS_AND_REGEX } },
+            { "/example.org/$badfilter", { { .props = { 1 << ag::dnsfilter::RP_BADFILTER } } } },
             { "/ex[a]?mple.org/", { {}, rule_utils::rule::MMID_REGEX } },
+            { "/ex[ab]mple.org/", { {}, rule_utils::rule::MMID_SHORTCUTS_AND_REGEX } },
             { "example.org$badfilter", { { .props = { 1 << ag::dnsfilter::RP_BADFILTER } } } },
             { "-ad-banner.", { {} , rule_utils::rule::MMID_SHORTCUTS } },
             { "-ad-unit/", { {} , rule_utils::rule::MMID_SHORTCUTS } },
@@ -86,6 +87,27 @@ TEST_F(dnsfilter_test, successful_rule_parsing) {
             { "example.org|^", { {}, rule_utils::rule::MMID_SHORTCUTS_AND_REGEX } },
             { "|example.org^", { {}, rule_utils::rule::MMID_EXACT } },
             { "|https://example31.org/", { {}, rule_utils::rule::MMID_EXACT } },
+            { "/127.0.0.1/", { {}, rule_utils::rule::MMID_SHORTCUTS_AND_REGEX } },
+            { "/12:34:56:78::90/", { {}, rule_utils::rule::MMID_REGEX } },
+            { "123.123.123.123", { {}, rule_utils::rule::MMID_EXACT } },
+            { "12:34:56:78::90", { {}, rule_utils::rule::MMID_EXACT } },
+            { "123.123.123.123$badfilter", { { .props = { 1 << ag::dnsfilter::RP_BADFILTER } }, rule_utils::rule::MMID_EXACT } },
+            { "12:34:56:78::90$badfilter", { { .props = { 1 << ag::dnsfilter::RP_BADFILTER } }, rule_utils::rule::MMID_EXACT } },
+            { "@@123.123.123.123", { { .props = { 1 << ag::dnsfilter::RP_EXCEPTION } }, rule_utils::rule::MMID_EXACT } },
+            { "@@12:34:56:78::90", { { .props = { 1 << ag::dnsfilter::RP_EXCEPTION } }, rule_utils::rule::MMID_EXACT } },
+            { "0.0.0.0", { {}, rule_utils::rule::MMID_EXACT } },
+            { "::", { {}, rule_utils::rule::MMID_EXACT } },
+            { "::1", { {}, rule_utils::rule::MMID_EXACT } },
+            { "|123.123.123.123^", { {}, rule_utils::rule::MMID_EXACT } },
+            { "|12:34:56:78::90^", { {}, rule_utils::rule::MMID_EXACT } },
+            { "||123.123.123.123^", { {}, rule_utils::rule::MMID_EXACT } },
+            { "||12:34:56:78::90^", { {}, rule_utils::rule::MMID_EXACT } },
+            { "http://123.123.123.123", { {}, rule_utils::rule::MMID_EXACT } },
+            { "http://12:34:56:78::90^", { {}, rule_utils::rule::MMID_EXACT } },
+            { "https://123.123.123.123", { {}, rule_utils::rule::MMID_EXACT } },
+            { "https://12:34:56:78::90^", { {}, rule_utils::rule::MMID_EXACT } },
+            { "172.16.*.1:80", { {}, rule_utils::rule::MMID_SHORTCUTS } },
+            { "|172.16.*.1:80^", { {}, rule_utils::rule::MMID_SHORTCUTS_AND_REGEX } },
         };
 
     ag::logger log = ag::create_logger("dnsfilter_test");
@@ -158,9 +180,6 @@ TEST_F(dnsfilter_test, wrong_rule_parsing) {
             "example.com/^page",
             "|||example.com",
             "example.com^|^",
-            "example.com:8o",
-            "example.com:111111",
-            "hhtp://example.com:111111",
             "example.com//",
             "/example.com",
             "///example.com",
@@ -210,6 +229,13 @@ TEST_F(dnsfilter_test, basic_rules_match) {
             { { "|example27.org|" }, "example27.org", true, },
             { { "|example29.org^" }, "example29.org", true, },
             { { "|https://example31.org/" }, "example31.org", true, },
+            { { "|https://127.0.0.1/" }, "127.0.0.1", true, },
+            { { "|https://0::1/" }, "::1", true, },
+            { { "|https://1:*:1/" }, "1::1", true, },
+            { { "*.0.0.2" }, "10.0.0.2", true, },
+            { { "|192.168.*.1^" }, "192.168.35.1", true, },
+            { { "172.16.*.1:80" }, "172.16.35.1", true, },
+            { { "|172.165.*.1:80^" }, "172.165.35.1", true, },
         };
 
     for (const test_data &entry : TEST_DATA) {
@@ -259,9 +285,11 @@ TEST_F(dnsfilter_test, basic_rules_no_match) {
             { "://example8.org", "eeexample8.org", },
             { "http://example9.org", "eeexample9.org", },
             { "example10.org/", "example10.orgg", },
-            { { "|example26.org|" }, "sub.example26.org", },
-            { { "|example28.org^" }, "sub.example28.org", },
-            { { "|https://example30.org/" }, "sub.example30.org", },
+            { "|example26.org|", "sub.example26.org", },
+            { "|example28.org^", "sub.example28.org", },
+            { "|https://example30.org/", "sub.example30.org", },
+            { "0.1", "10.0.0.1", },
+            { "|192.168.*.1^", "192.168.35.2",},
         };
 
     for (const test_data &entry : TEST_DATA) {

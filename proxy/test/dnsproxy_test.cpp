@@ -152,10 +152,11 @@ TEST_F(dnsproxy_cache_test, cache_works) {
 }
 
 TEST_F(dnsproxy_cache_test, cached_response_ttl_decreases) {
-    ag::ldns_pkt_ptr pkt = create_request("com", LDNS_RR_TYPE_SOA, LDNS_RD);
+    ag::ldns_pkt_ptr pkt = create_request("example.org.", LDNS_RR_TYPE_SOA, LDNS_RD);
     ag::ldns_pkt_ptr res;
     ASSERT_NO_FATAL_FAILURE(perform_request(proxy, pkt, res));
     ASSERT_FALSE(last_event.cache_hit);
+    ASSERT_GT(ldns_pkt_ancount(res.get()), 0);
 
     const uint32_t ttl = ldns_rr_ttl(ldns_rr_list_rr(ldns_pkt_answer(res.get()), 0));
     ASSERT_GT(ttl, 1);
@@ -168,10 +169,11 @@ TEST_F(dnsproxy_cache_test, cached_response_ttl_decreases) {
 }
 
 TEST_F(dnsproxy_cache_test, cached_response_expires) {
-    ag::ldns_pkt_ptr pkt = create_request("ru", LDNS_RR_TYPE_SOA, LDNS_RD);
+    ag::ldns_pkt_ptr pkt = create_request("example.org.", LDNS_RR_TYPE_SOA, LDNS_RD);
     ag::ldns_pkt_ptr res;
     ASSERT_NO_FATAL_FAILURE(perform_request(proxy, pkt, res));
     ASSERT_FALSE(last_event.cache_hit);
+    ASSERT_GT(ldns_pkt_ancount(res.get()), 0);
 
     const uint32_t ttl = ldns_rr_ttl(ldns_rr_list_rr(ldns_pkt_answer(res.get()), 0));
     ASSERT_GT(ttl, 0);

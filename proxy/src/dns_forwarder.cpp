@@ -881,26 +881,19 @@ std::vector<uint8_t> dns_forwarder::handle_message(uint8_view message) {
     const auto rcode = ldns_pkt_get_rcode(response.get());
 
     if (LDNS_RCODE_NOERROR == rcode) {
-        // CNAME response blocking
         for (size_t i = 0; i < ancount; ++i) {
+            // CNAME response blocking
             auto rr = ldns_rr_list_rr(ldns_pkt_answer(response.get()), i);
-            if (!rr || ldns_rr_get_type(rr) != LDNS_RR_TYPE_CNAME) {
-                continue;
+            if (ldns_rr_get_type(rr) == LDNS_RR_TYPE_CNAME) {
+                if (auto raw_response = apply_cname_filter(rr, request, response.get(), event)) {
+                    return *raw_response;
+                }
             }
-            auto rdf = ldns_rr_rdf(rr, 0);
-            if (!rdf) {
-                continue;
-            }
-
-            allocated_ptr<char> cname_ptr(ldns_rdf2str(rdf));
-            std::string_view cname = cname_ptr.get();
-            if (ldns_dname_str_absolute(cname_ptr.get())) {
-                cname.remove_suffix(1); // drop trailing dot
-            }
-            tracelog_fid(log, response.get(), "Response CNAME: {}", cname);
-
-            if (auto raw_blocking_response = apply_filter(cname, request, response.get(), event)) {
-                return *raw_blocking_response;
+            // IP response blocking
+            if (ldns_rr_get_type(rr) == LDNS_RR_TYPE_A || ldns_rr_get_type(rr) == LDNS_RR_TYPE_AAAA) {
+                if (auto raw_response = apply_ip_filter(rr, request, response.get(), event)) {
+                    return *raw_response;
+                }
             }
         }
 
@@ -921,6 +914,51 @@ std::vector<uint8_t> dns_forwarder::handle_message(uint8_view message) {
     return raw_response;
 }
 
+std::optional<uint8_vector> dns_forwarder::apply_cname_filter(const ldns_rr *cname_rr,
+                                                              const ldns_pkt *request,
+                                                              const ldns_pkt *response,
+                                                              dns_request_processed_event &event) {\
+    assert(ldns_rr_get_type(cname_rr) == LDNS_RR_TYPE_CNAME);
+
+    auto rdf = ldns_rr_rdf(cname_rr, 0);
+    if (!rdf) {
+        return std::nullopt;
+    }
+
+    allocated_ptr<char> cname_ptr(ldns_rdf2str(rdf));
+    if (!cname_ptr) {
+        return std::nullopt;
+    }
+
+    std::string_view cname = cname_ptr.get();
+    if (ldns_dname_str_absolute(cname_ptr.get())) {
+        cname.remove_suffix(1); // drop trailing dot
+    }
+
+    tracelog_fid(log, response, "Response CNAME: {}", cname);
+
+    return apply_filter(cname, request, response, event);
+}
+
+std::optional<uint8_vector> dns_forwarder::apply_ip_filter(const ldns_rr *rr,
+                                                           const ldns_pkt *request,
+                                                           const ldns_pkt *response,
+                                                           dns_request_processed_event &event) {
+    assert(ldns_rr_get_type(rr) == LDNS_RR_TYPE_A || ldns_rr_get_type(rr) == LDNS_RR_TYPE_AAAA);
+
+    auto rdf = ldns_rr_rdf(rr, 0);
+    if (!rdf || (ldns_rdf_size(rdf) != ipv4_address_size
+                 && ldns_rdf_size(rdf) != ipv6_address_size)) {
+        return std::nullopt;
+    }
+    uint8_view addr{ldns_rdf_data(rdf), ldns_rdf_size(rdf)};
+    std::string addr_str = ag::utils::addr_to_str(addr);
+
+    tracelog_fid(log, response, "Response IP: {}", addr_str);
+
+    return apply_filter(addr_str, request, response, event);
+}
+
 std::optional<uint8_vector> dns_forwarder::apply_filter(std::string_view hostname, const ldns_pkt *request,
                                                         const ldns_pkt *original_response,
                                                         dns_request_processed_event &event) {
@@ -928,8 +966,9 @@ std::optional<uint8_vector> dns_forwarder::apply_filter(std::string_view hostnam
     for (const dnsfilter::rule &rule : rules) {
         tracelog_fid(log, request, "Matched rule: {}", rule.text);
     }
-
+    
     auto effective_rules = dnsfilter::get_effective_rules(rules);
+
     if (!effective_rules.empty() && !effective_rules[0]->props.test(dnsfilter::RP_EXCEPTION)) {
         set_event_rules(event, effective_rules);
         dbglog_fid(log, request, "DNS query blocked by rule: {}", effective_rules[0]->text);

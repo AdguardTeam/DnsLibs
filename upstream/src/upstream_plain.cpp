@@ -6,8 +6,7 @@ using std::chrono::duration_cast;
 
 static ag::socket_address prepare_address(ag::socket_address address) {
     if (address.port() == 0) {
-        auto addr = address.addr();
-        return ag::socket_address({addr.data(), addr.size()}, ag::plain_dns::DEFAULT_PORT);
+        return ag::socket_address(address.addr(), ag::plain_dns::DEFAULT_PORT);
     }
     return address;
 }

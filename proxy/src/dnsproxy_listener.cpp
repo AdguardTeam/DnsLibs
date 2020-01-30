@@ -74,8 +74,7 @@ public:
         if (!m_address.valid()) {
             return fmt::format("Failed to parse address: {}", settings.address);
         }
-        const auto addr = m_address.addr();
-        m_address = ag::socket_address({addr.data(), addr.size()}, settings.port); // Assume won't fail
+        m_address = ag::socket_address(m_address.addr(), settings.port); // Assume won't fail
 
         m_log = ag::create_logger(fmt::format("listener({} {})",
                                               magic_enum::enum_name(settings.protocol),

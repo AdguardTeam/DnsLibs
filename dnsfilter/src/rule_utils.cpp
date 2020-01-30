@@ -4,6 +4,8 @@
 #include <ag_logger.h>
 #include <ag_utils.h>
 #include <ag_regex.h>
+#include <ag_socket_address.h>
+#include <ag_net_utils.h>
 #include "rule_utils.h"
 
 
@@ -44,6 +46,8 @@ static constexpr supported_modifier_descriptor SUPPORTED_MODIFIERS[] = {
 static constexpr size_t MAX_DOMAIN_LENGTH = 255;
 // RFC1034 $3.5 Preferred name syntax (https://tools.ietf.org/html/rfc1034#section-3.5)
 static constexpr size_t MAX_LABEL_LENGTH = 63;
+// INET6_ADDRSTRLEN - 1 (they include the trailing null)
+static constexpr size_t MAX_IPADDR_LENTH = 45;
 
 
 enum match_pattern_mode {
@@ -62,7 +66,7 @@ struct match_info {
 };
 
 
-static inline bool are_valid_domain_labels(std::string_view domain) {
+static inline bool check_domain_pattern_labels(std::string_view domain) {
     std::vector<std::string_view> labels = ag::utils::split_by(domain, '.');
     for (const std::string_view &label : labels) {
         if (label.length() > MAX_LABEL_LENGTH) {
@@ -72,7 +76,7 @@ static inline bool are_valid_domain_labels(std::string_view domain) {
     return true;
 }
 
-static inline bool is_valid_domain_char_set(std::string_view domain) {
+static inline bool check_domain_pattern_charset(std::string_view domain) {
     return domain.cend() == std::find_if(domain.cbegin(), domain.cend(),
         [] (int c) -> bool {
             // By RFC1034 $3.5 Preferred name syntax (https://tools.ietf.org/html/rfc1034#section-3.5)
@@ -84,19 +88,50 @@ static inline bool is_valid_domain_char_set(std::string_view domain) {
         });
 }
 
-static inline bool is_valid_domain(std::string_view domain) {
+static inline bool is_valid_domain_pattern(std::string_view domain) {
     return domain.length() <= MAX_DOMAIN_LENGTH
-        && is_valid_domain_char_set(domain)
-        && are_valid_domain_labels(domain);
+        && check_domain_pattern_charset(domain)
+        && check_domain_pattern_labels(domain);
 }
 
-static inline bool is_domain_name(std::string_view str) {
-    int first = str.front();
-    int last = str.back();
-    return (std::isalpha(first) || std::isdigit(first))
-        && (std::isalpha(last) || std::isdigit(last))
-        && str.find('.') != str.npos
-        && str.find('*') == str.npos;
+static inline bool is_eligible_for_subdomains_matching(std::string_view str) {
+    if (str.empty()) {
+        return false;
+    }
+    if (std::string_view::npos == str.find('.')) {
+        return false; // TLD is not eligible
+    }
+    if (!std::isalpha((unsigned char) str.front())
+            || !std::isalnum((unsigned char) str.back())) {
+        return false; // ".example" or "example." is not eligible for subdomain matching
+    }
+    auto parts = ag::utils::split_by(str, '.');
+    for (auto &part : parts) {
+        if (part.empty() || part.length() > MAX_LABEL_LENGTH) {
+            return false;
+        }
+        if (!std::isalpha((unsigned char) part.front())) {
+            return false;
+        }
+        if (!std::isalnum((unsigned char) part.back())) {
+            return false;
+        }
+        if (part.cend() != std::find_if(part.cbegin(), part.cend(), [](unsigned char c) {
+            return !(std::isalnum(c) || c == '-');
+        })) {
+            return false;
+        }
+    }
+    return true;
+}
+
+static inline bool is_valid_ip_pattern(std::string_view str) {
+    if (str.empty() || str.length() > MAX_IPADDR_LENTH) {
+        return false;
+    }
+    return str.cend() == std::find_if(str.cbegin(), str.cend(), [](unsigned char c) {
+        return !(std::isxdigit(c) || c == '.' || c == ':' || c == '[' || c == ']' || c == '*');
+    });
 }
 
 // https://github.com/AdguardTeam/AdguardHome/wiki/Hosts-Blocklists#-etchosts-syntax
@@ -114,7 +149,7 @@ static std::optional<rule_utils::rule> parse_host_file_rule(std::string_view str
         if (domain.empty()) {
             continue;
         }
-        if (!is_valid_domain(domain) || !is_domain_name(domain)) {
+        if (!is_valid_domain_pattern(domain) || !is_eligible_for_subdomains_matching(domain)) {
             return std::nullopt;
         }
         r.matching_parts.emplace_back(ag::utils::to_lower(domain));
@@ -177,12 +212,6 @@ static std::string_view remove_skippable_prefixes(std::string_view rule, bool is
     return rule;
 }
 
-static inline bool is_valid_port(std::string_view str) {
-    return str.length() > 0
-        && str.length() < 6
-        && str.cend() == std::find_if(str.cbegin(), str.cend(), std::not_fn((int (*)(int))std::isdigit));
-}
-
 static std::string_view remove_skippable_suffixes(std::string_view rule, bool is_regex) {
     if (!is_regex) {
         for (std::string_view suffix : SKIPPABLE_SUFFIXES) {
@@ -193,10 +222,7 @@ static std::string_view remove_skippable_suffixes(std::string_view rule, bool is
         }
 
         // drop port (e.g. `example.com:8080` -> `example.com`)
-        std::array<std::string_view, 2> parts = ag::utils::split2_by(rule, ':');
-        if (is_valid_port(parts[1])) {
-            rule = (parts[0].data() == rule.data()) ? parts[0] : "";
-        }
+        rule = ag::utils::split_host_port(rule).first;
     } else {
         rule.remove_suffix(1);
     }
@@ -289,7 +315,7 @@ static match_info extract_match_info(std::string_view rule) {
 
 static inline bool is_host_rule(std::string_view str) {
     std::vector<std::string_view> parts = ag::utils::split_by_any_of(str, " \t");
-    return parts.size() > 0
+    return parts.size() > 1
             && (ag::utils::is_valid_ip4(parts[0]) || ag::utils::is_valid_ip6(parts[0]));
 }
 
@@ -322,7 +348,7 @@ std::optional<rule_utils::rule> rule_utils::parse(std::string_view str, ag::logg
         return std::nullopt;
     }
 
-    if (!info.is_regex_rule && !is_valid_domain(str)) {
+    if (!info.is_regex_rule && !is_valid_domain_pattern(str) && !is_valid_ip_pattern(str)) {
         ru_warnlog(log, "Invalid domain name: {}", str);
         return std::nullopt;
     }
@@ -338,7 +364,11 @@ std::optional<rule_utils::rule> rule_utils::parse(std::string_view str, ag::logg
 
     bool need_match_by_regex = info.is_regex_rule || info.pattern_mode != MPM_NONE;
     if (!need_match_by_regex) {
-        if (is_domain_name(str)) {
+        ag::socket_address addr{info.text};
+        if (addr.valid()) { // info.text is a valid IP address
+            r.match_method = rule::MMID_EXACT;
+            r.matching_parts.emplace_back(ag::utils::addr_to_str(addr.addr())); // strip port, compress
+        } else if (is_eligible_for_subdomains_matching(str)) {
             r.match_method = info.is_exact_match ? rule::MMID_EXACT : rule::MMID_SUBDOMAINS;
             r.matching_parts.emplace_back(ag::utils::to_lower(str));
         } else {
@@ -363,7 +393,7 @@ std::optional<rule_utils::rule> rule_utils::parse(std::string_view str, ag::logg
 
             static constexpr std::string_view SPECIAL_CHARACTERS = "\\^$*+?.()|[]{}";
             std::vector<std::string_view> shortcuts = ag::utils::split_by_any_of(text, SPECIAL_CHARACTERS);
-            if (shortcuts.size() > 0) {
+            if (shortcuts.size() > 1) {
                 r.match_method = rule::MMID_SHORTCUTS_AND_REGEX;
                 r.matching_parts.reserve(shortcuts.size());
                 for (const std::string_view &sc : shortcuts) {

@@ -49,6 +49,12 @@ private:
     std::optional<uint8_vector> apply_filter(std::string_view hostname, const ldns_pkt *request,
         const ldns_pkt *original_response, dns_request_processed_event &event);
 
+    std::optional<uint8_vector> apply_cname_filter(const ldns_rr *cname_rr, const ldns_pkt *request,
+                                                   const ldns_pkt *response, dns_request_processed_event &event);
+
+    std::optional<uint8_vector> apply_ip_filter(const ldns_rr *rr, const ldns_pkt *request,
+                                                const ldns_pkt *response, dns_request_processed_event &event);
+
     ldns_pkt_ptr try_dns64_aaaa_synthesis(upstream *upstream, const ldns_pkt_ptr &request,
         const ldns_pkt_ptr &response) const;
 

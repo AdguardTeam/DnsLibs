@@ -4,6 +4,7 @@
 #include <ctime>
 #include <string>
 #include <string_view>
+#include <ag_defs.h>
 
 namespace ag::utils {
 
@@ -28,5 +29,11 @@ std::string join_host_port(std::string_view host, std::string_view port);
  * @return Timeval with microsecond resolution
  */
 timeval duration_to_timeval(std::chrono::microseconds usecs);
+
+/**
+ * @return a string representation of an IP address, or
+ *         an empty string if an error occured or addr is empty
+ */
+std::string addr_to_str(uint8_view addr);
 
 } // namespace ag::utils

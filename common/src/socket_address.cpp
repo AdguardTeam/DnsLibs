@@ -62,15 +62,19 @@ ag::socket_address::socket_address(std::string_view address_string)
     }
 }
 
-std::vector<uint8_t> ag::socket_address::addr() const {
-    return std::visit([](auto &&value) -> std::vector<uint8_t> {
-        using T = std::decay_t<decltype(value)>;
-        if constexpr (std::is_same_v<T, std::monostate>) {
-            return {};
-        } else {
-            return {value.begin(), value.end()};
-        }
-    }, addr_variant());
+ag::uint8_view ag::socket_address::addr() const {
+    switch (m_ss.ss_family) {
+    case AF_INET: {
+        auto &sin = (const sockaddr_in &) m_ss;
+        return {(uint8_t *) &sin.sin_addr, ipv4_address_size};
+    }
+    case AF_INET6: {
+        auto &sin6 = (const sockaddr_in6 &) m_ss;
+        return {(uint8_t *) &sin6.sin6_addr, ipv6_address_size};
+    }
+    default:
+        return {};
+    }
 }
 
 ag::ip_address_variant ag::socket_address::addr_variant() const {
