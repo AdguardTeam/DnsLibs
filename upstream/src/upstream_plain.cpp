@@ -4,20 +4,26 @@
 using std::chrono::milliseconds;
 using std::chrono::duration_cast;
 
+static ag::socket_address prepare_address(ag::socket_address address) {
+    if (address.port() == 0) {
+        auto addr = address.addr();
+        return ag::socket_address({addr.data(), addr.size()}, ag::plain_dns::DEFAULT_PORT);
+    }
+    return address;
+}
+
 ag::plain_dns::plain_dns(const upstream::options &opts, const upstream_factory_config &config)
         : upstream(opts, config)
         , m_prefer_tcp(utils::starts_with(opts.address, TCP_SCHEME))
-        , m_socket_address(m_prefer_tcp ? &opts.address[TCP_SCHEME.length()] : opts.address)
-        , m_pool(event_loop::create(), m_socket_address)
+        , m_pool(event_loop::create(),
+                 prepare_address(socket_address(m_prefer_tcp
+                                                ? &opts.address[TCP_SCHEME.length()]
+                                                : opts.address)))
 {
-    if (m_socket_address.port() == 0) {
-        auto addr = m_socket_address.addr();
-        m_socket_address = socket_address({addr.data(), addr.size()}, DEFAULT_PORT);
-    }
 }
 
 ag::err_string ag::plain_dns::init() {
-    if (!m_socket_address.valid()) {
+    if (!m_pool.address().valid()) {
         return AG_FMT("Passed server address is not valid: {}", this->opts.address);
     }
 
@@ -39,8 +45,8 @@ ag::plain_dns::exchange_result ag::plain_dns::exchange(ldns_pkt *request_pkt) {
         uint8_t *reply_data;
         size_t reply_size;
         timeval tv = utils::duration_to_timeval(this->opts.timeout);
-        status = ldns_udp_send(&reply_data, &*buffer, (const sockaddr_storage *) m_socket_address.c_sockaddr(),
-                               m_socket_address.c_socklen(), tv, &reply_size);
+        status = ldns_udp_send(&reply_data, &*buffer, (const sockaddr_storage *) m_pool.address().c_sockaddr(),
+                               m_pool.address().c_socklen(), tv, &reply_size);
         if (status != LDNS_STATUS_OK) {
             return {nullptr, ldns_get_errorstr_by_id(status)};
         }
@@ -89,4 +95,8 @@ ag::connection_pool::get_result ag::tcp_pool::create() {
     add_pending_connection(connection);
     bufferevent_socket_connect(bev, m_address.c_sockaddr(), m_address.c_socklen());
     return { std::move(connection), std::chrono::seconds(0), std::nullopt };
+}
+
+const ag::socket_address &ag::tcp_pool::address() const {
+    return m_address;
 }
