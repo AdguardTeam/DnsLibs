@@ -968,9 +968,9 @@ std::optional<uint8_vector> dns_forwarder::apply_filter(std::string_view hostnam
     }
     
     auto effective_rules = dnsfilter::get_effective_rules(rules);
+    set_event_rules(event, effective_rules);
 
     if (!effective_rules.empty() && !effective_rules[0]->props.test(dnsfilter::RP_EXCEPTION)) {
-        set_event_rules(event, effective_rules);
         dbglog_fid(log, request, "DNS query blocked by rule: {}", effective_rules[0]->text);
         ldns_pkt_ptr response(create_blocking_response(request, this->settings, effective_rules));
         log_packet(log, response.get(), "Rule blocked response");
