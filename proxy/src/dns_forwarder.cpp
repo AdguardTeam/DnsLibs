@@ -310,6 +310,12 @@ static void event_append_rules(dns_request_processed_event &event,
 
     for (auto it = additional_rules.rbegin(); it != additional_rules.rend(); ++it) {
         auto rule = *it;
+
+        if (event.rules.cend() != std::find(event.rules.cbegin(), event.rules.cend(), rule->text)) {
+            // Skip non-unique
+            continue;
+        }
+
         event.rules.insert(event.rules.begin(), rule->text);
         event.filter_list_ids.insert(event.filter_list_ids.begin(), rule->filter_id);
     }
