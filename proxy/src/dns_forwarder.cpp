@@ -303,19 +303,20 @@ static ldns_pkt *create_servfail_response(const ldns_pkt *request) {
     return response;
 }
 
-static void set_event_rules(dns_request_processed_event &event, const std::vector<const dnsfilter::rule *> &rules) {
-    event.rules.clear();
-    event.rules.reserve(rules.size());
+static void event_append_rules(dns_request_processed_event &event,
+                               const std::vector<const dnsfilter::rule *> &additional_rules) {
+    event.rules.reserve(event.rules.size() + additional_rules.size());
+    event.filter_list_ids.reserve(event.filter_list_ids.size() + additional_rules.size());
 
-    event.filter_list_ids.clear();
-    event.filter_list_ids.reserve(rules.size());
-
-    for (const dnsfilter::rule *rule : rules) {
-        event.rules.push_back(rule->text);
-        event.filter_list_ids.push_back(rule->filter_id);
+    for (auto it = additional_rules.rbegin(); it != additional_rules.rend(); ++it) {
+        auto rule = *it;
+        event.rules.insert(event.rules.begin(), rule->text);
+        event.filter_list_ids.insert(event.filter_list_ids.begin(), rule->filter_id);
     }
 
-    event.whitelist = rules.size() > 0 && rules[0]->props.test(dnsfilter::RP_EXCEPTION);
+    event.whitelist = event.rules.empty()
+            || additional_rules.empty()
+            || (!additional_rules.empty() && additional_rules[0]->props.test(dnsfilter::RP_EXCEPTION));
 }
 
 std::string dns_forwarder_utils::rr_list_to_string(const ldns_rr_list *rr_list) {
@@ -968,7 +969,7 @@ std::optional<uint8_vector> dns_forwarder::apply_filter(std::string_view hostnam
     }
     
     auto effective_rules = dnsfilter::get_effective_rules(rules);
-    set_event_rules(event, effective_rules);
+    event_append_rules(event, effective_rules);
 
     if (!effective_rules.empty() && !effective_rules[0]->props.test(dnsfilter::RP_EXCEPTION)) {
         dbglog_fid(log, request, "DNS query blocked by rule: {}", effective_rules[0]->text);

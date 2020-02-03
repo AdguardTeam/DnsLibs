@@ -536,3 +536,33 @@ TEST_F(dnsproxy_test, correct_filter_ids_in_event) {
     ASSERT_EQ(1, last_event.filter_list_ids.size());
     ASSERT_EQ(-3, last_event.filter_list_ids[0]);
 }
+
+TEST_F(dnsproxy_test, whitelisted_rule_reported) {
+    ag::dnsproxy_settings settings = ag::dnsproxy_settings::get_default();
+    settings.filter_params = {{
+        {15, "whitelist_test_filter.txt"},
+    }};
+
+    ag::dns_request_processed_event last_event{};
+    ag::dnsproxy_events events{
+        .on_request_processed = [&last_event](const ag::dns_request_processed_event &event) {
+            last_event = event;
+        }
+    };
+
+    proxy.init(settings, events);
+
+    ag::ldns_pkt_ptr res;
+
+    ASSERT_NO_FATAL_FAILURE(perform_request(proxy, create_request("example.org", LDNS_RR_TYPE_A, LDNS_RD), res));
+    ASSERT_EQ(1, last_event.filter_list_ids.size());
+    ASSERT_TRUE(last_event.whitelist);
+
+    ASSERT_NO_FATAL_FAILURE(perform_request(proxy, create_request(CNAME_BLOCKING_HOST, LDNS_RR_TYPE_A, LDNS_RD), res));
+    ASSERT_EQ(2, last_event.filter_list_ids.size()); // Whitelisted by domain,
+    ASSERT_TRUE(last_event.whitelist); // then whitelisted by CNAME
+
+    ASSERT_NO_FATAL_FAILURE(perform_request(proxy, create_request(IPV4_ONLY_HOST, LDNS_RR_TYPE_A, LDNS_RD), res));
+    ASSERT_EQ(2, last_event.filter_list_ids.size()); // Whitelisted by domain,
+    ASSERT_FALSE(last_event.whitelist); // then blocked by IP
+}

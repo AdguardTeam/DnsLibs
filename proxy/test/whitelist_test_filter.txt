@@ -1,0 +1,11 @@
+|example.org^
+@@|example.org^
+
+|test2.meshkov.info^
+@@|test2.meshkov.info^
+
+|ipv4only.arpa^
+@@|ipv4only.arpa^
+
+192.0.0.171
+192.0.0.170
