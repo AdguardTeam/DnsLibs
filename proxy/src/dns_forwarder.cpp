@@ -859,7 +859,8 @@ std::vector<uint8_t> dns_forwarder::handle_message(uint8_view message) {
     }
     tracelog_fid(log, request, "Query domain: {}", pure_domain);
 
-    if (auto raw_blocking_response = apply_filter(pure_domain, request, nullptr, event)) {
+    std::vector<dnsfilter::rule> effective_rules;
+    if (auto raw_blocking_response = apply_filter(pure_domain, request, nullptr, event, effective_rules)) {
         return *raw_blocking_response;
     }
 
@@ -895,13 +896,13 @@ std::vector<uint8_t> dns_forwarder::handle_message(uint8_view message) {
             // CNAME response blocking
             auto rr = ldns_rr_list_rr(ldns_pkt_answer(response.get()), i);
             if (ldns_rr_get_type(rr) == LDNS_RR_TYPE_CNAME) {
-                if (auto raw_response = apply_cname_filter(rr, request, response.get(), event)) {
+                if (auto raw_response = apply_cname_filter(rr, request, response.get(), event, effective_rules)) {
                     return *raw_response;
                 }
             }
             // IP response blocking
             if (ldns_rr_get_type(rr) == LDNS_RR_TYPE_A || ldns_rr_get_type(rr) == LDNS_RR_TYPE_AAAA) {
-                if (auto raw_response = apply_ip_filter(rr, request, response.get(), event)) {
+                if (auto raw_response = apply_ip_filter(rr, request, response.get(), event, effective_rules)) {
                     return *raw_response;
                 }
             }
@@ -927,7 +928,8 @@ std::vector<uint8_t> dns_forwarder::handle_message(uint8_view message) {
 std::optional<uint8_vector> dns_forwarder::apply_cname_filter(const ldns_rr *cname_rr,
                                                               const ldns_pkt *request,
                                                               const ldns_pkt *response,
-                                                              dns_request_processed_event &event) {\
+                                                              dns_request_processed_event &event,
+                                                              std::vector<dnsfilter::rule> &last_effective_rules) {
     assert(ldns_rr_get_type(cname_rr) == LDNS_RR_TYPE_CNAME);
 
     auto rdf = ldns_rr_rdf(cname_rr, 0);
@@ -947,13 +949,14 @@ std::optional<uint8_vector> dns_forwarder::apply_cname_filter(const ldns_rr *cna
 
     tracelog_fid(log, response, "Response CNAME: {}", cname);
 
-    return apply_filter(cname, request, response, event);
+    return apply_filter(cname, request, response, event, last_effective_rules);
 }
 
 std::optional<uint8_vector> dns_forwarder::apply_ip_filter(const ldns_rr *rr,
                                                            const ldns_pkt *request,
                                                            const ldns_pkt *response,
-                                                           dns_request_processed_event &event) {
+                                                           dns_request_processed_event &event,
+                                                           std::vector<dnsfilter::rule> &last_effective_rules) {
     assert(ldns_rr_get_type(rr) == LDNS_RR_TYPE_A || ldns_rr_get_type(rr) == LDNS_RR_TYPE_AAAA);
 
     auto rdf = ldns_rr_rdf(rr, 0);
@@ -966,28 +969,36 @@ std::optional<uint8_vector> dns_forwarder::apply_ip_filter(const ldns_rr *rr,
 
     tracelog_fid(log, response, "Response IP: {}", addr_str);
 
-    return apply_filter(addr_str, request, response, event);
+    return apply_filter(addr_str, request, response, event, last_effective_rules);
 }
 
 std::optional<uint8_vector> dns_forwarder::apply_filter(std::string_view hostname, const ldns_pkt *request,
                                                         const ldns_pkt *original_response,
-                                                        dns_request_processed_event &event) {
+                                                        dns_request_processed_event &event,
+                                                        std::vector<dnsfilter::rule> &last_effective_rules) {
     auto rules = this->filter.match(this->filter_handle, hostname);
     for (const dnsfilter::rule &rule : rules) {
         tracelog_fid(log, request, "Matched rule: {}", rule.text);
     }
-    
+    rules.insert(rules.cend(), last_effective_rules.cbegin(), last_effective_rules.cend());
     auto effective_rules = dnsfilter::get_effective_rules(rules);
+
     event_append_rules(event, effective_rules);
 
-    if (!effective_rules.empty() && !effective_rules[0]->props.test(dnsfilter::RP_EXCEPTION)) {
-        dbglog_fid(log, request, "DNS query blocked by rule: {}", effective_rules[0]->text);
-        ldns_pkt_ptr response(create_blocking_response(request, this->settings, effective_rules));
-        log_packet(log, response.get(), "Rule blocked response");
-        std::vector<uint8_t> raw_response = transform_response_to_raw_data(response.get());
-        finalize_processed_event(event, request, response.get(), original_response, nullptr, std::nullopt);
-        return raw_response;
+    last_effective_rules.clear();
+    for (auto effective_rule : effective_rules) {
+        last_effective_rules.push_back(*effective_rule);
     }
 
-    return std::nullopt;
+    if (effective_rules.empty() || effective_rules[0]->props.test(dnsfilter::RP_EXCEPTION)) {
+        return std::nullopt;
+    }
+
+    dbglog_fid(log, request, "DNS query blocked by rule: {}", effective_rules[0]->text);
+    ldns_pkt_ptr response(create_blocking_response(request, this->settings, effective_rules));
+    log_packet(log, response.get(), "Rule blocked response");
+    std::vector<uint8_t> raw_response = transform_response_to_raw_data(response.get());
+    finalize_processed_event(event, request, response.get(), original_response, nullptr, std::nullopt);
+
+    return raw_response;
 }

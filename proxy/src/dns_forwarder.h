@@ -46,14 +46,19 @@ private:
     ldns_pkt_ptr create_response_from_cache(const std::string &key, const ldns_pkt *request);
     void put_response_to_cache(std::string key, ldns_pkt_ptr response);
 
-    std::optional<uint8_vector> apply_filter(std::string_view hostname, const ldns_pkt *request,
-        const ldns_pkt *original_response, dns_request_processed_event &event);
+    std::optional<uint8_vector> apply_filter(std::string_view hostname,
+                                             const ldns_pkt *request,
+                                             const ldns_pkt *original_response,
+                                             dns_request_processed_event &event,
+                                             std::vector<dnsfilter::rule> &last_effective_rules);
 
     std::optional<uint8_vector> apply_cname_filter(const ldns_rr *cname_rr, const ldns_pkt *request,
-                                                   const ldns_pkt *response, dns_request_processed_event &event);
+                                                   const ldns_pkt *response, dns_request_processed_event &event,
+                                                   std::vector<dnsfilter::rule> &last_effective_rules);
 
     std::optional<uint8_vector> apply_ip_filter(const ldns_rr *rr, const ldns_pkt *request,
-                                                const ldns_pkt *response, dns_request_processed_event &event);
+                                                const ldns_pkt *response, dns_request_processed_event &event,
+                                                std::vector<dnsfilter::rule> &last_effective_rules);
 
     ldns_pkt_ptr try_dns64_aaaa_synthesis(upstream *upstream, const ldns_pkt_ptr &request,
         const ldns_pkt_ptr &response) const;

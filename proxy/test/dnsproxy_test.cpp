@@ -93,12 +93,17 @@ TEST_F(dnsproxy_test, test_cname_blocking) {
     ag::dnsproxy_settings settings = ag::dnsproxy_settings::get_default();
     settings.filter_params = {{{1, "cname_blocking_test_filter.txt"}}};
 
-    ASSERT_TRUE(proxy.init(settings, {}));
+    ag::dns_request_processed_event last_event{};
+    ag::dnsproxy_events events{
+            .on_request_processed = [&last_event](const ag::dns_request_processed_event &event) {
+                last_event = event;
+            }
+    };
 
-    ag::ldns_pkt_ptr pkt = create_request(CNAME_BLOCKING_HOST, LDNS_RR_TYPE_A, LDNS_RD);
+    ASSERT_TRUE(proxy.init(settings, events));
+
     ag::ldns_pkt_ptr response;
-    ASSERT_NO_FATAL_FAILURE(perform_request(proxy, pkt, response));
-
+    ASSERT_NO_FATAL_FAILURE(perform_request(proxy, create_request(CNAME_BLOCKING_HOST, LDNS_RR_TYPE_A, LDNS_RD), response));
     ASSERT_EQ(ldns_pkt_ancount(response.get()), 0);
     ASSERT_EQ(ldns_pkt_get_rcode(response.get()), LDNS_RCODE_NXDOMAIN);
 }
@@ -537,7 +542,7 @@ TEST_F(dnsproxy_test, correct_filter_ids_in_event) {
     ASSERT_EQ(-3, last_event.filter_list_ids[0]);
 }
 
-TEST_F(dnsproxy_test, whitelisted_rule_reported) {
+TEST_F(dnsproxy_test, whitelisting) {
     ag::dnsproxy_settings settings = ag::dnsproxy_settings::get_default();
     settings.filter_params = {{
         {15, "whitelist_test_filter.txt"},
@@ -550,7 +555,7 @@ TEST_F(dnsproxy_test, whitelisted_rule_reported) {
         }
     };
 
-    proxy.init(settings, events);
+    ASSERT_TRUE(proxy.init(settings, events));
 
     ag::ldns_pkt_ptr res;
 
@@ -559,14 +564,19 @@ TEST_F(dnsproxy_test, whitelisted_rule_reported) {
     ASSERT_TRUE(last_event.whitelist);
 
     ASSERT_NO_FATAL_FAILURE(perform_request(proxy, create_request(CNAME_BLOCKING_HOST, LDNS_RR_TYPE_A, LDNS_RD), res));
-    ASSERT_EQ(2, last_event.filter_list_ids.size()); // Whitelisted by domain,
-    ASSERT_TRUE(last_event.whitelist); // then whitelisted by CNAME
+    ASSERT_EQ(1, last_event.filter_list_ids.size()); // Whitelisted by both domain and CNAME
+    ASSERT_TRUE(last_event.whitelist);
 
     ASSERT_NO_FATAL_FAILURE(perform_request(proxy, create_request(IPV4_ONLY_HOST, LDNS_RR_TYPE_A, LDNS_RD), res));
     ASSERT_EQ(2, last_event.filter_list_ids.size()); // Whitelisted by domain,
-    ASSERT_FALSE(last_event.whitelist); // then blocked by IP
+    ASSERT_FALSE(last_event.whitelist); // then blocked by IP, because of $important
 
     ASSERT_NO_FATAL_FAILURE(perform_request(proxy, create_request("google.com", LDNS_RR_TYPE_A, LDNS_RD), res));
     ASSERT_EQ(0, last_event.filter_list_ids.size()); // Not blocked
     ASSERT_FALSE(last_event.whitelist); // Neither whitelisted
+
+    ASSERT_NO_FATAL_FAILURE(perform_request(proxy, create_request("sync.datamind.ru", LDNS_RR_TYPE_A, LDNS_RD), res));
+    ASSERT_GT(ldns_pkt_ancount(res.get()), 0);
+    ASSERT_EQ(ldns_pkt_get_rcode(res.get()), LDNS_RCODE_NOERROR);
+    ASSERT_TRUE(last_event.whitelist);
 }
