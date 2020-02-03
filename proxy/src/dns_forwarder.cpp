@@ -305,6 +305,11 @@ static ldns_pkt *create_servfail_response(const ldns_pkt *request) {
 
 static void event_append_rules(dns_request_processed_event &event,
                                const std::vector<const dnsfilter::rule *> &additional_rules) {
+
+    if (additional_rules.empty()) {
+        return;
+    }
+
     event.rules.reserve(event.rules.size() + additional_rules.size());
     event.filter_list_ids.reserve(event.filter_list_ids.size() + additional_rules.size());
 
@@ -320,9 +325,7 @@ static void event_append_rules(dns_request_processed_event &event,
         event.filter_list_ids.insert(event.filter_list_ids.begin(), rule->filter_id);
     }
 
-    event.whitelist = event.rules.empty()
-            || additional_rules.empty()
-            || (!additional_rules.empty() && additional_rules[0]->props.test(dnsfilter::RP_EXCEPTION));
+    event.whitelist = additional_rules[0]->props.test(dnsfilter::RP_EXCEPTION);
 }
 
 std::string dns_forwarder_utils::rr_list_to_string(const ldns_rr_list *rr_list) {

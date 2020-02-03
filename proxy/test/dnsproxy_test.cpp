@@ -565,4 +565,8 @@ TEST_F(dnsproxy_test, whitelisted_rule_reported) {
     ASSERT_NO_FATAL_FAILURE(perform_request(proxy, create_request(IPV4_ONLY_HOST, LDNS_RR_TYPE_A, LDNS_RD), res));
     ASSERT_EQ(2, last_event.filter_list_ids.size()); // Whitelisted by domain,
     ASSERT_FALSE(last_event.whitelist); // then blocked by IP
+
+    ASSERT_NO_FATAL_FAILURE(perform_request(proxy, create_request("google.com", LDNS_RR_TYPE_A, LDNS_RD), res));
+    ASSERT_EQ(0, last_event.filter_list_ids.size()); // Not blocked
+    ASSERT_FALSE(last_event.whitelist); // Neither whitelisted
 }
