@@ -77,6 +77,7 @@ add_test(dnsproxy_test dnsproxy_test)
 add_dependencies(tests dnsproxy_test)
 configure_file(test/cname_blocking_test_filter.txt cname_blocking_test_filter.txt COPYONLY)
 configure_file(test/blocking_modes_test_filter.txt blocking_modes_test_filter.txt COPYONLY)
+configure_file(test/whitelist_test_filter.txt whitelist_test_filter.txt COPYONLY)
 
 add_executable(listener_test EXCLUDE_FROM_ALL test/listener_test.cpp)
 add_test(listener_test listener_test)
