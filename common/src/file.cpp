@@ -101,38 +101,35 @@ int ag::file::for_each_line(const handle f, line_action action, void *arg) {
         return -1;
     }
 
-    size_t chunk_size = std::min(MAX_CHUNK_SIZE, (size_t)file_size);
-    std::vector<char> buffer(chunk_size);
+    const size_t chunk_size = std::min(MAX_CHUNK_SIZE, (size_t)file_size);
 
-    std::string_view line;
-    size_t buffer_offset = 0;
-    int r;
+    std::vector<char> buffer(chunk_size);
+    std::string line;
     size_t file_idx = 0;
-    while (0 < (r = file::read(f, &buffer[buffer_offset], chunk_size - buffer_offset))) {
-        int from = 0;
+    size_t line_idx = 0;
+    int r;
+    while (0 < (r = file::read(f, &buffer[0], buffer.size()))) {
         for (int i = 0; i < r; ++i) {
             int c = buffer[i];
             if (c != '\r' && c != '\n') {
+                line.push_back(c);
                 continue;
             }
-
-            size_t line_length = i - from;
-            line = { &buffer[from], line_length };
-            utils::trim(line);
-            if (!action(file_idx + from, line, arg)) {
+            std::string_view line_view{line};
+            ag::utils::trim(line_view);
+            if (!action(line_idx, line_view, arg)) {
                 return 0;
             }
-            from = i + 1;
+            line.clear();
+            line_idx = file_idx + i + 1;
         }
-
-        buffer_offset = chunk_size - from;
-        file_idx += from;
-        std::memmove(&buffer[0], &buffer[from], buffer_offset);
+        file_idx += r;
     }
 
-    if ((size_t)(file_size - 1) > file_idx) {
-        line = { &buffer[0], file_size - file_idx };
-        action(file_idx, line, arg);
+    if ((size_t)(file_size - 1) > line_idx) {
+        std::string_view line_view{line};
+        ag::utils::trim(line_view);
+        action(line_idx, line_view, arg);
     }
 
     return r;

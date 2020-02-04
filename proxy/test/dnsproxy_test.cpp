@@ -580,3 +580,9 @@ TEST_F(dnsproxy_test, whitelisting) {
     ASSERT_EQ(ldns_pkt_get_rcode(res.get()), LDNS_RCODE_NOERROR);
     ASSERT_TRUE(last_event.whitelist);
 }
+
+TEST_F(dnsproxy_test, bad_filter_file_does_not_crash) {
+    ag::dnsproxy_settings settings = ag::dnsproxy_settings::get_default();
+    settings.filter_params = {{ {111, "bad_test_filter.txt"}, }};
+    ASSERT_TRUE(proxy.init(settings, {}));
+}
