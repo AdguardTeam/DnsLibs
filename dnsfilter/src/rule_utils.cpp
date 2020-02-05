@@ -18,9 +18,9 @@ static constexpr std::string_view EXCEPTION_MARKER = "@@";
 static constexpr std::string_view SKIPPABLE_PREFIXES[] =
     { "https://", "http://", "http*://", "ws://", "wss://", "ws*://", "://", "//" };
 static constexpr std::string_view SKIPPABLE_SUFFIXES[] =
-    { "/", };
+    {  };
 static constexpr std::string_view SPECIAL_SUFFIXES[] =
-    { "|", "^" };
+    { "|", "^", "/" };
 
 
 static const ag::regex SHORTCUT_REGEXES[] =
