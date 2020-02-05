@@ -21,10 +21,10 @@ else
     TARGET_NAME="${TARGETNAME}"
 fi
 
-if [ -z ${CONFIGURATION+x} ]; then
-    BUILD_TYPE="Release"
+if [ "${CONFIGURATION}" = "Debug" ]; then
+    BUILD_TYPE="Debug"
 else
-    BUILD_TYPE="${CONFIGURATION}"
+    BUILD_TYPE="RelWithDebInfo"
 fi
 
 
@@ -141,6 +141,7 @@ function build_target() {
     echo "target_os=${target_os}"
 
     cmake_opt="-DCMAKE_BUILD_TYPE=${BUILD_TYPE}"
+    cmake_opt="${cmake_opt} -DCMAKE_XCODE_ATTRIBUTE_DEBUG_INFORMATION_FORMAT=\"dwarf-with-dsym\""
     cmake_opt="${cmake_opt} -DTARGET_OS:STRING=${target_os}"
 
     cmake ${cmake_opt} ${FRAMEWORK_DIR}
@@ -154,6 +155,7 @@ function build_target() {
         echo "make error!"
         exit 1
     fi
+    dsymutil -o ../${target_name}.framework.${target_os}.dSYM ${target_name}.framework/${target_name}
 
     cd -
 
