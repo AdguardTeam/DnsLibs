@@ -110,12 +110,12 @@ std::array<std::string_view, 2> ag::utils::rsplit2_by(std::string_view str, int 
 
 bool ag::utils::is_valid_ip4(std::string_view str) {
     ag::socket_address addr(str);
-    return addr.valid() && addr.c_sockaddr()->sa_family == AF_INET;
+    return addr.valid() && addr.c_sockaddr()->sa_family == AF_INET && addr.port() == 0;
 }
 
 bool ag::utils::is_valid_ip6(std::string_view str) {
     ag::socket_address addr(str);
-    return addr.valid() && addr.c_sockaddr()->sa_family == AF_INET6;
+    return addr.valid() && addr.c_sockaddr()->sa_family == AF_INET6 && addr.port() == 0;
 }
 
 std::wstring ag::utils::to_wstring(std::string_view sv) {

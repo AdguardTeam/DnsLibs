@@ -76,7 +76,7 @@ TEST_F(dnsfilter_test, successful_rule_parsing) {
             { "-ad-unit/", { {} , rule_utils::rule::MMID_SHORTCUTS } },
             { "||adminpromotion.com^", { {}, rule_utils::rule::MMID_SUBDOMAINS } },
             { "||travelstool.com^", { {}, rule_utils::rule::MMID_SUBDOMAINS } },
-            { "example.org:8080", { {}, rule_utils::rule::MMID_SUBDOMAINS } },
+            { "example.org:8080", { {}, rule_utils::rule::MMID_SHORTCUTS_AND_REGEX } },
             { "//example.org:8080", { {}, rule_utils::rule::MMID_SUBDOMAINS } },
             { "://example.org", { {}, rule_utils::rule::MMID_SUBDOMAINS } },
             { "://example.org/", { {}, rule_utils::rule::MMID_SUBDOMAINS } },
@@ -106,7 +106,8 @@ TEST_F(dnsfilter_test, successful_rule_parsing) {
             { "http://12:34:56:78::90^", { {}, rule_utils::rule::MMID_EXACT } },
             { "https://123.123.123.123", { {}, rule_utils::rule::MMID_EXACT } },
             { "https://12:34:56:78::90^", { {}, rule_utils::rule::MMID_EXACT } },
-            { "172.16.*.1:80", { {}, rule_utils::rule::MMID_SHORTCUTS } },
+            { "172.16.*.1", { {}, rule_utils::rule::MMID_SHORTCUTS } },
+            { "172.16.*.1:80", { {}, rule_utils::rule::MMID_SHORTCUTS_AND_REGEX } },
             { "|172.16.*.1:80^", { {}, rule_utils::rule::MMID_SHORTCUTS_AND_REGEX } },
         };
 
@@ -183,6 +184,8 @@ TEST_F(dnsfilter_test, wrong_rule_parsing) {
             "example.com//",
             "/example.com",
             "///example.com",
+            "333.333.333.333 example.org",
+            "45:67 example.org",
         };
 
     ag::logger log = ag::create_logger("dnsfilter_test");
@@ -236,6 +239,7 @@ TEST_F(dnsfilter_test, basic_rules_match) {
             { { "|192.168.*.1^" }, "192.168.35.1", true, },
             { { "172.16.*.1:80" }, "172.16.35.1", true, },
             { { "|172.165.*.1:80^" }, "172.165.35.1", true, },
+            { { "example55.org:8080" }, "eexample55.org", true, },
         };
 
     for (const test_data &entry : TEST_DATA) {
@@ -290,6 +294,8 @@ TEST_F(dnsfilter_test, basic_rules_no_match) {
             { "|https://example30.org/", "sub.example30.org", },
             { "0.1", "10.0.0.1", },
             { "|192.168.*.1^", "192.168.35.2",},
+            { "example56.org:8080", "eexample56.orgg"},
+            { "|172.165.*.1:80^", "1172.165.35.11"},
         };
 
     for (const test_data &entry : TEST_DATA) {

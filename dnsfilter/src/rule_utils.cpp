@@ -140,7 +140,9 @@ static std::optional<rule_utils::rule> parse_host_file_rule(std::string_view str
     if (parts.size() < 2) {
         return std::nullopt;
     }
-
+    if (!ag::utils::is_valid_ip4(parts[0]) && !ag::utils::is_valid_ip6(parts[0])) {
+        return std::nullopt;
+    }
     rule_utils::rule r = {};
     r.match_method = rule_utils::rule::MMID_SUBDOMAINS;
     r.matching_parts.reserve(parts.size() - 1);
@@ -220,9 +222,6 @@ static std::string_view remove_skippable_suffixes(std::string_view rule, bool is
                 break;
             }
         }
-
-        // drop port (e.g. `example.com:8080` -> `example.com`)
-        rule = ag::utils::split_host_port(rule).first;
     } else {
         rule.remove_suffix(1);
     }
@@ -260,6 +259,27 @@ static inline int remove_special_suffixes(std::string_view &rule) {
     return r;
 }
 
+static inline bool is_valid_port(std::string_view p) {
+    return p.length() <= 5
+            && (p.cend() == std::find_if_not(p.cbegin(), p.cend(), [](unsigned char c) { return std::isdigit(c); }));
+}
+
+static inline int remove_port(std::string_view &rule) {
+    size_t rpos = rule.rfind(':');
+    if (rpos == std::string_view::npos) {
+        return 0;
+    }
+    size_t fpos = rule.find(':');
+    if (fpos == rpos && (fpos != rule.length() - 1) && is_valid_port(rule.substr(fpos + 1))) {
+        rule = rule.substr(0, fpos);
+        return MPM_LINE_END_ASSERTED;
+    } else if (fpos > 0 && rule[fpos - 1] == ']' && rule[0] == '[') { // IPv6
+        rule = rule.substr(1, rpos - 2);
+        return MPM_LINE_START_ASSERTED | MPM_LINE_END_ASSERTED;
+    }
+    return 0;
+}
+
 // https://github.com/AdguardTeam/AdguardHome/wiki/Hosts-Blocklists#adblock-style
 static match_info extract_match_info(std::string_view rule) {
     match_info info = {.text = rule, .is_regex_rule = check_regex(rule), .is_exact_match = false, .pattern_mode = 0};
@@ -284,6 +304,7 @@ static match_info extract_match_info(std::string_view rule) {
 
     if (!info.is_regex_rule) {
         info.pattern_mode |= remove_special_suffixes(info.text);
+        info.pattern_mode |= remove_port(info.text);
 
         bool has_wildcard = info.text.npos != info.text.find('*');
 

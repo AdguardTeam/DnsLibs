@@ -160,7 +160,9 @@ static ldns_pkt *create_arecord_response(const ldns_pkt *request, const dnsproxy
     ldns_rr_set_class(answer, LDNS_RR_CLASS_IN);
     for (size_t i = 0; rules[i] != nullptr; ++i) {
         const std::string &ip = rules[i]->ip.value();
-        ldns_rr_push_rdf(answer, ldns_rdf_new_frm_str(LDNS_RDF_TYPE_A, ip.c_str()));
+        ldns_rdf *rdf = ldns_rdf_new_frm_str(LDNS_RDF_TYPE_A, ip.c_str());
+        assert(rdf);
+        ldns_rr_push_rdf(answer, rdf);
     }
 
     ldns_pkt *response = create_response_by_request(request);
@@ -180,7 +182,9 @@ static ldns_pkt *create_aaaarecord_response(const ldns_pkt *request, const dnspr
     ldns_rr_set_class(answer, LDNS_RR_CLASS_IN);
     for (size_t i = 0; rules[i] != nullptr; ++i) {
         const std::string &ip = rules[i]->ip.value();
-        ldns_rr_push_rdf(answer, ldns_rdf_new_frm_str(LDNS_RDF_TYPE_AAAA, ip.c_str()));
+        ldns_rdf *rdf = ldns_rdf_new_frm_str(LDNS_RDF_TYPE_AAAA, ip.c_str());
+        assert(rdf);
+        ldns_rr_push_rdf(answer, rdf);
     }
 
     ldns_pkt *response = create_response_by_request(request);
