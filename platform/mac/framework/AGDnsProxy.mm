@@ -1,7 +1,7 @@
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
-#include <assert.h>
+#include <cassert>
 
 #import "AGDnsProxy.h"
 
@@ -10,6 +10,26 @@
 #include <upstream_utils.h>
 #include <spdlog/sinks/base_sink.h>
 
+#include <string>
+#include <ag_cesu8.h>
+
+static NSString *REPLACEMENT_STRING = [NSString stringWithUTF8String: "<out of memory>"];
+
+/**
+ * @param str an STL string
+ * @return an NSString converted from the C++ string, or
+ *         `REPLACEMENT_STRING` if conversion failed for any reason,
+ *         never nil
+ */
+static NSString *convert_string(const std::string &str) {
+    ag::allocated_ptr<char> cesu8{ag::utf8_to_cesu8(str.c_str())};
+    if (cesu8) {
+        if (auto *ns_str = [NSString stringWithUTF8String: cesu8.get()]) {
+            return ns_str;
+        }
+    }
+    return REPLACEMENT_STRING;
+}
 
 static logCallback logFunc;
 
@@ -158,11 +178,11 @@ static NSData *create_response_packet(const struct iphdr *ip_header, const struc
 - (instancetype) initWithNative: (const ag::upstream::options *) settings
 {
     self = [super init];
-    _address = [NSString stringWithUTF8String: settings->address.c_str()];
+    _address = convert_string(settings->address);
     NSMutableArray<NSString *> *bootstrap =
         [[NSMutableArray alloc] initWithCapacity: settings->bootstrap.size()];
     for (const std::string &server : settings->bootstrap) {
-        [bootstrap addObject: [NSString stringWithUTF8String: server.c_str()]];
+        [bootstrap addObject: convert_string(server)];
     }
     _bootstrap = bootstrap;
     _timeoutMs = settings->timeout.count();
@@ -213,7 +233,7 @@ static NSData *create_response_packet(const struct iphdr *ip_header, const struc
 - (instancetype)initWithNative:(const ag::listener_settings *)settings
 {
     self = [super init];
-    _address = [NSString stringWithUTF8String:settings->address.c_str()];
+    _address = convert_string(settings->address);
     _port = settings->port;
     _proto = (AGListenerProtocol) settings->protocol;
     _persistent = settings->persistent;
@@ -268,8 +288,8 @@ static NSData *create_response_packet(const struct iphdr *ip_header, const struc
     _ipv6Available = settings->ipv6_available;
     _blockIpv6 = settings->block_ipv6;
     _blockingMode = (AGBlockingMode) settings->blocking_mode;
-    _customBlockingIpv4 = [NSString stringWithUTF8String: settings->custom_blocking_ipv4.c_str()];
-    _customBlockingIpv6 = [NSString stringWithUTF8String: settings->custom_blocking_ipv6.c_str()];
+    _customBlockingIpv4 = convert_string(settings->custom_blocking_ipv4);
+    _customBlockingIpv6 = convert_string(settings->custom_blocking_ipv6);
     _dnsCacheSize = settings->dns_cache_size;
     return self;
 }
@@ -318,14 +338,14 @@ static NSData *create_response_packet(const struct iphdr *ip_header, const struc
 @implementation AGDnsRequestProcessedEvent
 - (instancetype) init: (ag::dns_request_processed_event &)event
 {
-    _domain = [NSString stringWithUTF8String: event.domain.c_str()];
-    _type = [NSString stringWithUTF8String: event.type.c_str()];
+    _domain = convert_string(event.domain);
+    _type = convert_string(event.type);
     _startTime = event.start_time;
     _elapsed = event.elapsed;
-    _status = [NSString stringWithUTF8String: event.status.c_str()];
-    _answer = [NSString stringWithUTF8String: event.answer.c_str()];
-    _originalAnswer = [NSString stringWithUTF8String: event.original_answer.c_str()];
-    _upstreamAddr = [NSString stringWithUTF8String: event.upstream_addr.c_str()];
+    _status = convert_string(event.status);
+    _answer = convert_string(event.answer);
+    _originalAnswer = convert_string(event.original_answer);
+    _upstreamAddr = convert_string(event.upstream_addr);
     _bytesSent = event.bytes_sent;
     _bytesReceived = event.bytes_received;
 
@@ -334,14 +354,14 @@ static NSData *create_response_packet(const struct iphdr *ip_header, const struc
     NSMutableArray<NSNumber *> *filterListIds =
         [[NSMutableArray alloc] initWithCapacity: event.rules.size()];
     for (size_t i = 0; i < event.rules.size(); ++i) {
-        [rules addObject: [NSString stringWithUTF8String: event.rules[i].c_str()]];
+        [rules addObject: convert_string(event.rules[i])];
         [filterListIds addObject: [NSNumber numberWithInt: event.filter_list_ids[i]]];
     }
     _rules = rules;
     _filterListIds = filterListIds;
 
     _whitelist = event.whitelist;
-    _error = [NSString stringWithUTF8String: event.error.c_str()];
+    _error = convert_string(event.error);
 
     _cacheHit = event.cache_hit;
 
@@ -639,15 +659,15 @@ static std::vector<ag::upstream::options> convert_upstreams(NSArray<AGDnsUpstrea
             *error = [NSError errorWithDomain: AGDnsProxyErrorDomain
                                          code: AGDPE_PARSE_DNS_STAMP_ERROR
                                      userInfo: @{
-                                         NSLocalizedDescriptionKey: [NSString stringWithUTF8String:stamp_error->c_str()]
+                                         NSLocalizedDescriptionKey: convert_string(*stamp_error)
                                      }];
         }
         return nil;
     }
     return [[AGDnsStamp alloc] initWithProto: (AGStampProtoType) stamp.proto
-                                  serverAddr: [NSString stringWithUTF8String: stamp.server_addr.c_str()]
-                                providerName: [NSString stringWithUTF8String: stamp.provider_name.c_str()]
-                                        path: [NSString stringWithUTF8String: stamp.path.c_str()]];
+                                  serverAddr: convert_string(stamp.server_addr)
+                                providerName: convert_string(stamp.provider_name)
+                                        path: convert_string(stamp.path)];
 }
 
 static auto dnsUtilsLogger = ag::create_logger("AGDnsUtils");
@@ -662,7 +682,7 @@ static std::optional<std::string> verifyCertificate(ag::certificate_verification
     if (error) {
         return [NSError errorWithDomain: AGDnsProxyErrorDomain
                                    code: AGDPE_TEST_UPSTREAM_ERROR
-                               userInfo: @{NSLocalizedDescriptionKey: [NSString stringWithUTF8String:error->c_str()]}];
+                               userInfo: @{NSLocalizedDescriptionKey: convert_string(*error)}];
     }
     return nil;
 }

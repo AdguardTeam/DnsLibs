@@ -1,26 +1,6 @@
 #include <jni_utils.h>
 #include <ag_utils.h>
-
-/**
- * @return The length of a CESU-8 representation of the input UTF-8 string,
- * -1 if the input string is not dereferenceable.
- * @param utf8 The input string.
- */
-static ssize_t cesu8_len(const char *utf8);
-
-/**
- * Encode the given string to CESU-8 and append it to the output buffer.
- * @param utf8   The input string.
- * @param output The output buffer.
- */
-static void utf8_to_cesu8(const char *utf8, std::string &output);
-
-/**
- * Encode the given string to CESU-8.
- * @param utf8 The input string.
- * @return The CESU-8 representation of the input string.
- */
-static std::string utf8_to_cesu8(const char *utf8);
+#include <ag_cesu8.h>
 
 void ag::jni_utils::iterate(JNIEnv *env,
                             jobject iterable,
@@ -57,7 +37,7 @@ ag::local_ref<jobject> ag::jni_utils::marshal_string(JNIEnv *env, const std::str
     if (str.empty()) {
         return local_ref<jobject>(env, env->NewStringUTF(""));
     }
-    return local_ref<jobject>(env, env->NewStringUTF(utf8_to_cesu8(str.c_str()).c_str()));
+    return local_ref<jobject>(env, env->NewStringUTF(ag::allocated_ptr<char>{ag::utf8_to_cesu8(str.c_str())}.get()));
 }
 
 std::string ag::jni_utils::marshal_string(JNIEnv *env, jstring str) {
@@ -132,130 +112,4 @@ ag::local_ref<jbyteArray> ag::jni_utils::marshal_uint8_view(JNIEnv *env, ag::uin
         env->SetByteArrayRegion(arr.get(), 0, len, (jbyte *) v.data());
     }
     return arr;
-}
-
-std::string utf8_to_cesu8(const char *utf8) {
-    if (!utf8) {
-        return {};
-    }
-    auto modified_utf_len = cesu8_len(utf8);
-    if (modified_utf_len < 0) {
-        return {};
-    }
-    std::string modified_utf;
-    modified_utf.reserve(modified_utf_len);
-    utf8_to_cesu8(utf8, modified_utf);
-    return modified_utf;
-}
-
-static ssize_t cesu8_len(const char *utf8) {
-    if (!utf8) {
-        return -1;
-    }
-
-    int current_char_len = 0;
-    int utf_chars_remaining = 0;
-    size_t i = 0;
-    for (const auto *p = (const uint8_t *) utf8; *p; p++) {
-        if (utf_chars_remaining > 0) {
-            if ((*p & 0xc0) == 0x80) {
-                current_char_len++;
-                utf_chars_remaining--;
-                if (utf_chars_remaining == 0) {
-                    if (current_char_len == 4) {
-                        current_char_len = 6;
-                    }
-                    i += current_char_len;
-                }
-                continue;
-            } else {
-                // replacement char
-                i += 3;
-                utf_chars_remaining = 0;
-            }
-        }
-
-        if ((*p & 0x80) == 0x0) {
-            i++;
-        } else if ((*p & 0xe0) == 0xc0) {
-            current_char_len = 1;
-            utf_chars_remaining = 1;
-        } else if ((*p & 0xf0) == 0xe0) {
-            current_char_len = 1;
-            utf_chars_remaining = 2;
-        } else if ((*p & 0xf8) == 0xf0) {
-            current_char_len = 1;
-            utf_chars_remaining = 3;
-        } else {
-            // replacement char
-            i += 3;
-            utf_chars_remaining = 0;
-        }
-    }
-
-    return i;
-}
-
-static void utf8_to_cesu8(const char *utf8, std::string &output) {
-    int utf_chars_remaining = 0;
-    int current_uchar = 0;
-    auto &modified_utf = output;
-    for (const auto *p = (const uint8_t *) utf8; *p; ++p) {
-        if (utf_chars_remaining > 0) {
-            if ((*p & 0xc0) == 0x80) {
-                current_uchar <<= 6;
-                current_uchar |= *p & 0x3f;
-                utf_chars_remaining--;
-                if (utf_chars_remaining == 0) {
-                    if (current_uchar <= 0x7ff) {
-                        modified_utf.push_back(0xc0 + ((current_uchar >> 6) & 0x1f));
-                        modified_utf.push_back(0x80 + ((current_uchar) & 0x3f));
-                    } else if (current_uchar <= 0xffff) {
-                        modified_utf.push_back(0xe0 + ((current_uchar >> 12) & 0x0f));
-                        modified_utf.push_back(0x80 + ((current_uchar >> 6) & 0x3f));
-                        modified_utf.push_back(0x80 + ((current_uchar) & 0x3f));
-                    } else { // (current_uchar <= 0x10ffff) is always true
-                        // Split into CESU-8 surrogate pair
-                        // uchar is 21 bit.
-                        // 11101101 1010yyyy 10xxxxxx 11101101 1011xxxx 10xxxxxx
-                        // yyyy - top five bits minus one
-
-                        modified_utf.push_back(0xed);
-                        modified_utf.push_back(0xa0 + (((current_uchar >> 16) - 1) & 0x0f));
-                        modified_utf.push_back(0x80 + ((current_uchar >> 10) & 0x3f));
-
-                        modified_utf.push_back(0xed);
-                        modified_utf.push_back(0xb0 + ((current_uchar >> 6) & 0x0f));
-                        modified_utf.push_back(0x80 + ((current_uchar >> 0) & 0x3f));
-                    }
-                }
-                continue;
-            } else {
-                // replacement char
-                modified_utf.push_back(0xef);
-                modified_utf.push_back(0xbf);
-                modified_utf.push_back(0xbd);
-                utf_chars_remaining = 0;
-            }
-        }
-
-        if ((*p & 0x80) == 0x0) {
-            modified_utf.push_back(*p);
-        } else if ((*p & 0xe0) == 0xc0) {
-            current_uchar = *p & 0x1f;
-            utf_chars_remaining = 1;
-        } else if ((*p & 0xf0) == 0xe0) {
-            current_uchar = *p & 0x0f;
-            utf_chars_remaining = 2;
-        } else if ((*p & 0xf8) == 0xf0) {
-            current_uchar = *p & 0x07;
-            utf_chars_remaining = 3;
-        } else {
-            // replacement char
-            modified_utf.push_back(0xef);
-            modified_utf.push_back(0xbf);
-            modified_utf.push_back(0xbd);
-            utf_chars_remaining = 0;
-        }
-    }
 }
