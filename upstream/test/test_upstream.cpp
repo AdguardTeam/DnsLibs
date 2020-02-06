@@ -11,6 +11,7 @@
 #include <default_verifier.h>
 
 static constexpr std::chrono::seconds DEFAULT_TIMEOUT(10);
+static constexpr std::chrono::milliseconds DELAY_BETWEEN_REQUESTS{500};
 
 static ag::upstream_factory::create_result create_upstream(const ag::upstream::options &opts) {
     static ag::default_verifier cert_verifier;
@@ -125,6 +126,7 @@ static void parallel_test_basic(const T &data, const F &function) {
 template<typename T>
 static void parallel_test(const T &data) {
     parallel_test_basic(data, [](const auto &address, const auto &bootstrap, const auto &server_ip) -> ag::err_string {
+        std::this_thread::sleep_for(DELAY_BETWEEN_REQUESTS);
         auto[upstream_ptr, upstream_err] = create_upstream({address, bootstrap, DEFAULT_TIMEOUT, server_ip});
         if (upstream_err) {
             return AG_FMT("Failed to generate upstream from address {}: {}", address, *upstream_err);
