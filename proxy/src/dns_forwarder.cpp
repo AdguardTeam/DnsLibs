@@ -85,14 +85,20 @@ static void log_packet(const logger &log, const ldns_pkt *packet, const char *pk
 }
 
 static ldns_pkt *create_response_by_request(const ldns_pkt *request) {
-    const ldns_rr *question = ldns_rr_list_rr(ldns_pkt_question(request), 0);
-    ldns_rr_type type = ldns_rr_get_type(question);
-    if (type != LDNS_RR_TYPE_AAAA) {
-        type = LDNS_RR_TYPE_A;
+    ldns_pkt *response = nullptr;
+    if (ldns_rr *question = ldns_rr_list_rr(ldns_pkt_question(request), 0)) {
+        ldns_rr_type type = ldns_rr_get_type(question);
+        if (type != LDNS_RR_TYPE_AAAA) {
+            type = LDNS_RR_TYPE_A;
+        }
+        response = ldns_pkt_query_new(ldns_rdf_clone(ldns_rr_owner(question)),
+                                      type, LDNS_RR_CLASS_IN, LDNS_RD | LDNS_RA);
+        assert(response != nullptr);
+    } else {
+        response = ldns_pkt_new();
+        assert(response != nullptr);
+        ldns_pkt_set_flags(response, LDNS_RD | LDNS_RA);
     }
-    ldns_pkt *response = ldns_pkt_query_new(ldns_rdf_clone(ldns_rr_owner(question)),
-        type, LDNS_RR_CLASS_IN, LDNS_RD | LDNS_RA);
-    assert(response != nullptr);
     ldns_pkt_set_id(response, ldns_pkt_id(request));
     ldns_pkt_set_qr(response, true); // answer flag
     ldns_pkt_set_qdcount(response, ldns_pkt_section_count(request, LDNS_SECTION_QUESTION));
