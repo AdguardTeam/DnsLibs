@@ -69,7 +69,7 @@ static bool check_ip_address(std::string_view address) {
         }
     }
 
-    socket_address numeric_ip = socket_address(address);
+    socket_address numeric_ip = ag::utils::str_to_socket_address(address);
     return numeric_ip.valid();
 }
 
@@ -137,7 +137,7 @@ static std::vector<socket_address> socket_address_from_reply(const logger &log, 
 
 resolver::result resolver::resolve(std::string_view host, int port, milliseconds timeout) const {
     log_ip(log, trace, this->resolver_address, "Resolve {}:{}", host, port);
-    socket_address numeric_ip(utils::join_host_port(host, fmt::to_string(port)));
+    socket_address numeric_ip(host, port);
     if (numeric_ip.valid()) {
         return { { numeric_ip }, std::nullopt };
     }

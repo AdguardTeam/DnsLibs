@@ -1,0 +1,9 @@
+# bad hosts rule
+45:56 example.org
+
+# weird IP rules
+||http://192.0.0.170
+||http://192.0.0.171:888/
+# dns.adguard.com
+||http://2a00:5a60::ad1:ff
+||http://[2a00:5a60::ad2:ff]:853/

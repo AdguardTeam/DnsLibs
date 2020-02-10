@@ -79,6 +79,7 @@ configure_file(test/cname_blocking_test_filter.txt cname_blocking_test_filter.tx
 configure_file(test/blocking_modes_test_filter.txt blocking_modes_test_filter.txt COPYONLY)
 configure_file(test/whitelist_test_filter.txt whitelist_test_filter.txt COPYONLY)
 configure_file(test/bad_test_filter.txt bad_test_filter.txt COPYONLY)
+configure_file(test/crash_regress_test_filter.txt crash_regress_test_filter.txt COPYONLY)
 
 add_executable(listener_test EXCLUDE_FROM_ALL test/listener_test.cpp)
 add_test(listener_test listener_test)

@@ -89,7 +89,7 @@ static ag::upstream_factory::create_result create_upstream_sdns(const ag::upstre
     auto opts = local_opts;
     if (!stamp.server_addr_str.empty()) {
         auto host = ag::utils::split_host_port(stamp.server_addr_str).first;
-        auto ip_address_variant = ag::socket_address(host).addr_variant();
+        auto ip_address_variant = ag::socket_address(host, 0).addr_variant();
         if (std::holds_alternative<std::monostate>(ip_address_variant)) {
             return make_error(AG_FMT("Invalid server address in the stamp: {}", stamp.server_addr_str));
         }

@@ -1,6 +1,5 @@
-#include "gtest/gtest.h"
-#include "ag_cache.h"
-
+#include <gtest/gtest.h>
+#include <ag_cache.h>
 
 static constexpr size_t CACHE_SIZE = 1000u;
 

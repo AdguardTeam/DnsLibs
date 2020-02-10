@@ -41,25 +41,52 @@ ag::socket_address::socket_address(const sockaddr *addr)
     }
 }
 
-ag::socket_address::socket_address(std::string_view address_string)
-        : m_ss{} {
+static sockaddr_storage make_sockaddr_storage(ag::uint8_view addr, uint16_t port) {
+    sockaddr_storage ss{};
+    if (addr.size() == 16) {
+        auto *sin6 = (sockaddr_in6 *) &ss;
+#ifdef SIN6_LEN // Platform with sin*_lens should have this macro
+        sin6->sin6_len = sizeof(sockaddr_in6);
+#endif // SIN6_LEN
+        sin6->sin6_family = AF_INET6;
+        sin6->sin6_port = htons(port);
+        std::memcpy(&sin6->sin6_addr, addr.data(), addr.size());
+    } else if (addr.size() == 4) {
+        auto *sin = (sockaddr_in *) &ss;
+#ifdef SIN6_LEN // Platform with sin*_lens should have this macro
+        sin->sin_len = sizeof(sockaddr_in);
+#endif // SIN6_LEN
+        sin->sin_family = AF_INET;
+        sin->sin_port = htons(port);
+        std::memcpy(&sin->sin_addr, addr.data(), addr.size());
+    }
+    return ss;
+}
 
-    addrinfo *addrinfo_res = nullptr;
-    addrinfo addrinfo_hints{};
-    addrinfo_hints.ai_family = AF_UNSPEC;
-    addrinfo_hints.ai_flags = AI_NUMERICHOST | AI_NUMERICSERV;
+static sockaddr_storage make_sockaddr_storage(std::string_view numeric_host, uint16_t port) {
+    char p[INET6_ADDRSTRLEN];
+    if (numeric_host.size() > sizeof(p) - 1) {
+        return {};
+    }
+    memcpy(p, numeric_host.data(), numeric_host.size());
+    p[numeric_host.size()] = '\0';
 
-    auto[host, port] = ag::utils::split_host_port(address_string);
-    auto getaddrinfo_result = getaddrinfo(std::string(host).c_str(), port.empty() ? nullptr : std::string(port).c_str(),
-                                          &addrinfo_hints, &addrinfo_res);
-
-    if (getaddrinfo_result == 0 && addrinfo_res != nullptr) {
-        memcpy(&m_ss, addrinfo_res->ai_addr, addrinfo_res->ai_addrlen);
+    ag::ipv6_address_array ip;
+    if (1 == evutil_inet_pton(AF_INET, p, ip.data())) {
+        return make_sockaddr_storage({ip.data(), ag::ipv4_address_size}, port);
+    } else if (1 == evutil_inet_pton(AF_INET6, p, ip.data())) {
+        return make_sockaddr_storage({ip.data(), ag::ipv6_address_size}, port);
     }
 
-    if (addrinfo_res != nullptr) {
-        freeaddrinfo(addrinfo_res);
-    }
+    return {};
+}
+
+ag::socket_address::socket_address(std::string_view numeric_host, uint16_t port)
+        : m_ss{make_sockaddr_storage(numeric_host, port)} {
+}
+
+ag::socket_address::socket_address(ag::uint8_view addr, uint16_t port)
+        : m_ss{make_sockaddr_storage(addr, port)} {
 }
 
 ag::uint8_view ag::socket_address::addr() const {
@@ -92,7 +119,7 @@ ag::ip_address_variant ag::socket_address::addr_variant() const {
     }
 }
 
-int ag::socket_address::port() const {
+uint16_t ag::socket_address::port() const {
     switch (m_ss.ss_family) {
         case AF_INET6:
             return ntohs(((const sockaddr_in6 &) m_ss).sin6_port);
@@ -104,34 +131,13 @@ int ag::socket_address::port() const {
 }
 
 std::string ag::socket_address::str() const {
-    char host[INET6_ADDRSTRLEN + 1] = "unknown";
+    char host[INET6_ADDRSTRLEN] = "";
     char port[6] = "0";
     getnameinfo(c_sockaddr(), c_socklen(), host, sizeof(host), port, sizeof(port), NI_NUMERICHOST | NI_NUMERICSERV);
     if (m_ss.ss_family == AF_INET6) {
         return "[" + std::string(host) + "]:" + port;
     } else {
         return host + std::string(":") + port;
-    }
-}
-
-ag::socket_address::socket_address(ag::uint8_view addr, int port)
-        : m_ss{} {
-    if (addr.size() == 16) {
-        auto &sin6 = (sockaddr_in6 &) m_ss;
-#ifdef SIN6_LEN // Platform with sin*_lens should have this macro
-        sin6.sin6_len = sizeof(sockaddr_in6);
-#endif // SIN6_LEN
-        sin6.sin6_family = AF_INET6;
-        sin6.sin6_port = htons(port);
-        std::memcpy(&sin6.sin6_addr, addr.data(), addr.size());
-    } else if (addr.size() == 4) {
-        auto &sin = (sockaddr_in &) m_ss;
-#ifdef SIN6_LEN // Platform with sin*_lens should have this macro
-        sin.sin_len = sizeof(sockaddr_in);
-#endif // SIN6_LEN
-        sin.sin_family = AF_INET;
-        sin.sin_port = htons(port);
-        std::memcpy(&sin.sin_addr, addr.data(), addr.size());
     }
 }
 

@@ -240,7 +240,7 @@ err_string dns_over_https::init() {
     }
 
     if (this->resolved == nullptr) {
-        if (!this->opts.bootstrap.empty() || socket_address(get_host_name(this->opts.address)).valid()) {
+        if (!this->opts.bootstrap.empty() || socket_address(get_host_name(this->opts.address), 0).valid()) {
             bootstrapper_ptr bootstrapper = std::make_unique<ag::bootstrapper>(
                 bootstrapper::params{ get_host_port(opts.address), dns_over_https::DEFAULT_PORT,
                     opts.bootstrap, opts.timeout, config });

@@ -17,8 +17,6 @@ static constexpr int MODIFIERS_DELIMITER = ',';
 static constexpr std::string_view EXCEPTION_MARKER = "@@";
 static constexpr std::string_view SKIPPABLE_PREFIXES[] =
     { "https://", "http://", "http*://", "ws://", "wss://", "ws*://", "://", "//" };
-static constexpr std::string_view SKIPPABLE_SUFFIXES[] =
-    {  };
 static constexpr std::string_view SPECIAL_SUFFIXES[] =
     { "|", "^", "/" };
 
@@ -101,28 +99,12 @@ static inline bool is_eligible_for_subdomains_matching(std::string_view str) {
     if (std::string_view::npos == str.find('.')) {
         return false; // TLD is not eligible
     }
-    if (!std::isalpha((unsigned char) str.front())
-            || !std::isalnum((unsigned char) str.back())) {
-        return false; // ".example" or "example." is not eligible for subdomain matching
-    }
-    auto parts = ag::utils::split_by(str, '.');
-    for (auto &part : parts) {
-        if (part.empty() || part.length() > MAX_LABEL_LENGTH) {
-            return false;
-        }
-        if (!std::isalpha((unsigned char) part.front())) {
-            return false;
-        }
-        if (!std::isalnum((unsigned char) part.back())) {
-            return false;
-        }
-        if (part.cend() != std::find_if(part.cbegin(), part.cend(), [](unsigned char c) {
-            return !(std::isalnum(c) || c == '-');
-        })) {
-            return false;
-        }
-    }
-    return true;
+    // True if it _looks like_ an actual domain name
+    return str.front() != '.'
+            && str.back() != '.'
+            && str.cend() == std::find_if_not(str.cbegin(), str.cend(), [](unsigned char c) {
+                return std::isalnum(c) || c == '-' || c == '_' || c == '.';
+            });
 }
 
 static inline bool is_valid_ip_pattern(std::string_view str) {
@@ -200,32 +182,14 @@ static inline bool check_regex(std::string_view str) {
     return str.length() > 1 && str.front() == '/' && str.back() == '/';
 }
 
-static std::string_view remove_skippable_prefixes(std::string_view rule, bool is_regex) {
-    if (!is_regex) {
-        for (std::string_view prefix : SKIPPABLE_PREFIXES) {
-            if (ag::utils::starts_with(rule, prefix)) {
-                rule.remove_prefix(prefix.length());
-                break;
-            }
+static bool remove_skippable_prefixes(std::string_view &rule) {
+    for (std::string_view prefix : SKIPPABLE_PREFIXES) {
+        if (ag::utils::starts_with(rule, prefix)) {
+            rule.remove_prefix(prefix.length());
+            return true;
         }
-    } else {
-        rule.remove_prefix(1);
     }
-    return rule;
-}
-
-static std::string_view remove_skippable_suffixes(std::string_view rule, bool is_regex) {
-    if (!is_regex) {
-        for (std::string_view suffix : SKIPPABLE_SUFFIXES) {
-            if (ag::utils::ends_with(rule, suffix)) {
-                rule.remove_suffix(suffix.length());
-                break;
-            }
-        }
-    } else {
-        rule.remove_suffix(1);
-    }
-    return rule;
+    return false;
 }
 
 static inline int remove_special_prefixes(std::string_view &rule) {
@@ -284,51 +248,43 @@ static inline int remove_port(std::string_view &rule) {
 static match_info extract_match_info(std::string_view rule) {
     match_info info = {.text = rule, .is_regex_rule = check_regex(rule), .is_exact_match = false, .pattern_mode = 0};
 
+    if (info.is_regex_rule) {
+        info.text.remove_prefix(1); // begin slash
+        info.text.remove_suffix(1); // end slash
+        return info;
+    }
+
     // rules with wrong special and skippable prefixes and suffixes will be dropped by
     // domain validity check
 
     // special prefixes come before skippable ones (e.g. `||http://example.org`)
     // so for the first we should check special ones
-    if (!info.is_regex_rule) {
-        info.pattern_mode |= remove_special_prefixes(info.text);
+    info.pattern_mode |= remove_special_prefixes(info.text);
+    bool has_skippable_prefix = remove_skippable_prefixes(info.text);
+
+    info.pattern_mode |= remove_special_suffixes(info.text);
+    info.pattern_mode |= remove_port(info.text);
+
+    bool has_wildcard = info.text.npos != info.text.find('*');
+
+    // Exact domain match
+    if (!has_wildcard
+            && (info.pattern_mode & MPM_LINE_START_ASSERTED)
+            && (info.pattern_mode & MPM_LINE_END_ASSERTED)) {
+        info.is_exact_match = true;
     }
 
-    std::string_view clean_rule_text = remove_skippable_prefixes(info.text, info.is_regex_rule);
-    bool has_skippable_prefix = info.text.length() > clean_rule_text.length();
-    info.text = clean_rule_text;
-    // but special suffixes come after skippable ones (e.g. `example.org^`)
-    // so for the first we should drop skippable ones
-    clean_rule_text = remove_skippable_suffixes(info.text, info.is_regex_rule);
-    bool has_skippable_suffix = info.text.length() > clean_rule_text.length();
-    info.text = clean_rule_text;
-
-    if (!info.is_regex_rule) {
-        info.pattern_mode |= remove_special_suffixes(info.text);
-        info.pattern_mode |= remove_port(info.text);
-
-        bool has_wildcard = info.text.npos != info.text.find('*');
-
-        // Exact domain match
-        if (!has_wildcard
-                && (info.pattern_mode & MPM_LINE_START_ASSERTED)
-                && (has_skippable_suffix
-                        || (info.pattern_mode & MPM_LINE_END_ASSERTED))) {
-            info.is_exact_match = true;
-        }
-
-        // check that rule matches exact domain though it has some special characters
-        // rule is like:
-        // 1) `||example.org^`
-        // 2) `://example.org^`
-        // 3) `||example.org:8080`
-        if (!has_wildcard
-                && (has_skippable_prefix
-                        || (info.pattern_mode & MPM_DOMAIN_START_ASSERTED)
-                        || (info.pattern_mode & MPM_LINE_START_ASSERTED))
-                && (has_skippable_suffix
-                        || (info.pattern_mode & MPM_LINE_END_ASSERTED))) {
-            info.pattern_mode = MPM_NONE;
-        }
+    // check that rule matches exact domain though it has some special characters
+    // rule is like:
+    // 1) `||example.org^`
+    // 2) `://example.org^`
+    // 3) `||example.org:8080`
+    if (!has_wildcard
+            && (has_skippable_prefix
+                    || (info.pattern_mode & MPM_DOMAIN_START_ASSERTED)
+                    || (info.pattern_mode & MPM_LINE_START_ASSERTED))
+            && (info.pattern_mode & MPM_LINE_END_ASSERTED)) {
+        info.pattern_mode = MPM_NONE;
     }
 
     return info;
@@ -385,8 +341,8 @@ std::optional<rule_utils::rule> rule_utils::parse(std::string_view str, ag::logg
 
     bool need_match_by_regex = info.is_regex_rule || info.pattern_mode != MPM_NONE;
     if (!need_match_by_regex) {
-        ag::socket_address addr{info.text};
-        if (addr.valid()) { // info.text is a valid IP address
+        ag::socket_address addr{info.text, 0};
+        if (info.is_exact_match && addr.valid()) { // info.text is a valid IP address
             r.match_method = rule::MMID_EXACT;
             r.matching_parts.emplace_back(ag::utils::addr_to_str(addr.addr())); // strip port, compress
         } else if (is_eligible_for_subdomains_matching(str)) {

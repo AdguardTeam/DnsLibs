@@ -17,15 +17,17 @@ class socket_address {
 public:
     socket_address();
     socket_address(const socket_address &) = default;
+
     /**
-     * @param address_string String containing IP address and port
+     * @param numeric_host String containing the IP address
+     * @param port         Port number
      */
-    explicit socket_address(std::string_view address_string);
+    socket_address(std::string_view numeric_host, uint16_t port);
     /**
      * @param addr Vector containing IP address bytes. Should be 4 or 16 bytes length
      * @param port Port number
      */
-    socket_address(ag::uint8_view addr, int port);
+    socket_address(ag::uint8_view addr, uint16_t port);
     /**
      * @param addr C sockaddr struct
      */
@@ -57,7 +59,7 @@ public:
     /**
      * @return Port number
      */
-    int port() const;
+    uint16_t port() const;
 
     /**
      * @return String containing IP address and port

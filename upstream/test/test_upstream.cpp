@@ -118,6 +118,7 @@ static void parallel_test_basic(const T &data, const F &function) {
     err_futures futures;
     futures.reserve(std::size(data));
     for (const auto &[address, bootstrap, server_ip] : data) {
+        std::this_thread::sleep_for(DELAY_BETWEEN_REQUESTS);
         futures.emplace_back(ag::utils::async_detached(function, address, bootstrap, server_ip));
     }
     check_all_futures(futures);
@@ -126,7 +127,6 @@ static void parallel_test_basic(const T &data, const F &function) {
 template<typename T>
 static void parallel_test(const T &data) {
     parallel_test_basic(data, [](const auto &address, const auto &bootstrap, const auto &server_ip) -> ag::err_string {
-        std::this_thread::sleep_for(DELAY_BETWEEN_REQUESTS);
         auto[upstream_ptr, upstream_err] = create_upstream({address, bootstrap, DEFAULT_TIMEOUT, server_ip});
         if (upstream_err) {
             return AG_FMT("Failed to generate upstream from address {}: {}", address, *upstream_err);

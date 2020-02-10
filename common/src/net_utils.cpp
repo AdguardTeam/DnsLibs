@@ -1,3 +1,4 @@
+#include <ag_utils.h>
 #include <ag_net_utils.h>
 #include <ag_socket_address.h>
 
@@ -45,9 +46,33 @@ timeval ag::utils::duration_to_timeval(std::chrono::microseconds usecs) {
 }
 
 std::string ag::utils::addr_to_str(uint8_view v) {
-    socket_address addr{v, 0};
-    if (!addr.valid()) {
+    char p[INET6_ADDRSTRLEN];
+    if (v.size() == ipv4_address_size) {
+        if (evutil_inet_ntop(AF_INET, v.data(), p, sizeof(p))) {
+            return p;
+        }
+    } else if (v.size() == ipv6_address_size) {
+        if (evutil_inet_ntop(AF_INET6, v.data(), p, sizeof(p))) {
+            return p;
+        }
+    }
+    return {};
+}
+
+ag::socket_address ag::utils::str_to_socket_address(std::string_view address) {
+    auto [host, port_view] = ag::utils::split_host_port(address);
+
+    if (port_view.empty()) {
+        return socket_address{host, 0};
+    }
+
+    std::string port_str{port_view};
+    char *end = nullptr;
+    auto port = std::strtoll(port_str.c_str(), &end, 10);
+
+    if (end != &port_str.back() + 1 || port < 0 || port > UINT16_MAX) {
         return {};
     }
-    return std::string(split_host_port(addr.str()).first);
+
+    return socket_address{host, (uint16_t) port};
 }

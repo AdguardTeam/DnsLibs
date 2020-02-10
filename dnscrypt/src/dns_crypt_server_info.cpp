@@ -13,6 +13,7 @@
 #include "dns_crypt_padding.h"
 #include <ag_logger.h>
 #include <ag_utils.h>
+#include <ag_net_utils.h>
 #include <dns_crypt_server_info.h>
 #include <dns_crypt_utils.h>
 #include <ag_socket_address.h>
@@ -80,9 +81,8 @@ ag::dnscrypt::server_info::fetch_result ag::dnscrypt::server_info::fetch_current
                                          utils::make_optional_if(local_protocol == protocol::UDP,
                                                                  MAX_DNS_UDP_SAFE_PACKET_SIZE));
     ldns_pkt_set_random_id(query.get());
-    auto[exchange_reply, exchange_rtt, exchange_err] = dns_exchange_from_ldns_pkt(timeout,
-                                                                                  socket_address(m_server_address),
-                                                                                  *query, local_protocol);
+    auto[exchange_reply, exchange_rtt, exchange_err] = dns_exchange_from_ldns_pkt(
+            timeout, ag::utils::str_to_socket_address(m_server_address), *query, local_protocol);
     if (exchange_err) {
         return make_error(std::move(exchange_err));
     }

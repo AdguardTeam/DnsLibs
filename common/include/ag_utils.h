@@ -225,12 +225,12 @@ static inline std::enable_if_t<sizeof...(Ts) >= 2, R> join(const Ts&... parts) {
 }
 
 /**
- * Check if string is a valid ipv4 address
+ * Check if string is a valid IPv4 address
  */
 bool is_valid_ip4(std::string_view str);
 
 /**
- * Check if string is a valid ipv6 address
+ * Check if string is a valid IPv6 address
  */
 bool is_valid_ip6(std::string_view str);
 

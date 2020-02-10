@@ -62,3 +62,7 @@ link_libraries(gtest gtest_main dnslibs_common)
 add_executable(cache_test EXCLUDE_FROM_ALL test/cache_test.cpp)
 add_test(cache_test cache_test)
 add_dependencies(tests cache_test)
+
+add_executable(utils_test EXCLUDE_FROM_ALL test/utils_test.cpp)
+add_test(utils_test utils_test)
+add_dependencies(tests utils_test)

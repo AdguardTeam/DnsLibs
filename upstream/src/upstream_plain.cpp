@@ -4,7 +4,8 @@
 using std::chrono::milliseconds;
 using std::chrono::duration_cast;
 
-static ag::socket_address prepare_address(ag::socket_address address) {
+static ag::socket_address prepare_address(const std::string &address_string) {
+    auto address = ag::utils::str_to_socket_address(address_string);
     if (address.port() == 0) {
         return ag::socket_address(address.addr(), ag::plain_dns::DEFAULT_PORT);
     }
@@ -15,11 +16,9 @@ ag::plain_dns::plain_dns(const upstream::options &opts, const upstream_factory_c
         : upstream(opts, config)
         , m_prefer_tcp(utils::starts_with(opts.address, TCP_SCHEME))
         , m_pool(event_loop::create(),
-                 prepare_address(socket_address(m_prefer_tcp
-                                                ? &opts.address[TCP_SCHEME.length()]
-                                                : opts.address)))
-{
-}
+                 prepare_address(m_prefer_tcp
+                                 ? opts.address.substr(TCP_SCHEME.length())
+                                 : opts.address)) {}
 
 ag::err_string ag::plain_dns::init() {
     if (!m_pool.address().valid()) {

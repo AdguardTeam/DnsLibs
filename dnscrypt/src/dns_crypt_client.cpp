@@ -3,6 +3,7 @@
 #include "dns_crypt_consts.h"
 #include "dns_crypt_ldns.h"
 #include <ag_utils.h>
+#include <ag_net_utils.h>
 #include <dns_crypt_client.h>
 #include <dns_crypt_utils.h>
 #include <dns_stamp.h>
@@ -93,8 +94,10 @@ ag::dnscrypt::client::exchange_result ag::dnscrypt::client::exchange(ldns_pkt &m
     ldns_buffer_new_frm_data(&encrypted_query_buffer, encrypted_query.data(), encrypted_query.size());
     ldns_buffer_set_position(&encrypted_query_buffer, encrypted_query.size());
     auto[encrypted_response, encrypted_response_size, exchange_rtt, exchange_err] =
-            dns_exchange_allocated(timeout, socket_address(local_server_info.m_server_address),
-                                   encrypted_query_buffer, m_protocol);
+            dns_exchange_allocated(timeout,
+                                   ag::utils::str_to_socket_address(local_server_info.m_server_address),
+                                   encrypted_query_buffer,
+                                   m_protocol);
     free(ldns_buffer_export(&encrypted_query_buffer));
     if (exchange_err) {
         return make_error(std::move(exchange_err));

@@ -5,6 +5,7 @@
 #include <string>
 #include <string_view>
 #include <ag_defs.h>
+#include <ag_socket_address.h>
 
 namespace ag::utils {
 
@@ -35,5 +36,11 @@ timeval duration_to_timeval(std::chrono::microseconds usecs);
  *         an empty string if an error occured or addr is empty
  */
 std::string addr_to_str(uint8_view addr);
+
+/**
+ * @param address a numeric IP address, with an optional port number
+ * @return a socket_address parsed from the address string
+ */
+socket_address str_to_socket_address(std::string_view address);
 
 } // namespace ag::utils

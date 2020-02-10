@@ -69,12 +69,10 @@ public:
             return "Proxy is not set";
         }
 
-        // Parse the address
-        m_address = ag::socket_address({settings.address.data(), settings.address.size()});
+        m_address = ag::socket_address{settings.address, settings.port};
         if (!m_address.valid()) {
-            return fmt::format("Failed to parse address: {}", settings.address);
+            return fmt::format("Invalid address: {}", settings.address);
         }
-        m_address = ag::socket_address(m_address.addr(), settings.port); // Assume won't fail
 
         m_log = ag::create_logger(fmt::format("listener({} {})",
                                               magic_enum::enum_name(settings.protocol),

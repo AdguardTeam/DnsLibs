@@ -18,7 +18,7 @@ using std::chrono::milliseconds;
 //
 // Note: in case of success MUST always return vector of addresses in address field of result
 ag::bootstrapper::resolve_result ag::bootstrapper::resolve() {
-    if (socket_address addr(AG_FMT("{}:{}", m_server_name, m_server_port)); addr.valid()) {
+    if (socket_address addr(m_server_name, m_server_port); addr.valid()) {
         return { { addr }, m_server_name, milliseconds(0), std::nullopt };
     }
 
@@ -99,8 +99,8 @@ static std::vector<ag::resolver_ptr> create_resolvers(const ag::logger &log, con
         }
     }
 
-    if (p.bootstrap.empty() && !ag::socket_address(p.address_string).valid()) {
-        log_addr(log, warn, p.address_string, "Got empty list of the servers for bootstrapping");
+    if (p.bootstrap.empty() && !ag::utils::str_to_socket_address(p.address_string).valid()) {
+        log_addr(log, warn, p.address_string, "Got empty or invalid list of servers for bootstrapping");
     }
 
     return resolvers;
@@ -120,7 +120,7 @@ ag::bootstrapper::bootstrapper(const params &p)
 }
 
 ag::err_string ag::bootstrapper::init() {
-    if (m_resolvers.empty() && !socket_address(m_server_name).valid()) {
+    if (m_resolvers.empty() && !socket_address(m_server_name, m_server_port).valid()) {
         return "Failed to create any resolver";
     }
 
