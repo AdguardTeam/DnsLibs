@@ -1,31 +1,50 @@
 #include <algorithm>
 #include <dnsfilter.h>
 #include <ag_logger.h>
-#include <ag_net_utils.h>
 #include "filter.h"
 #include "rule_utils.h"
+#include <ag_utils.h>
 
 using namespace ag;
 
 class engine {
 public:
-    engine(dnsfilter::engine_params p)
-        : log(ag::create_logger("dnsfilter"))
-    {
+    engine() : log(ag::create_logger("dnsfilter")) {}
+
+    ~engine() = default;
+
+    /**
+     * @return {true, optional warning} or {false, error description}
+     */
+    std::pair<bool, err_string> init(const dnsfilter::engine_params &p) {
+        size_t mem_limit = p.mem_limit;
+        std::string warnings;
+
         this->filters.reserve(p.filters.size());
         for (size_t i = 0; i < p.filters.size(); ++i) {
             filter f = {};
-            if (0 == f.load(p.filters[i])) {
+            auto [res, f_mem] = f.load(p.filters[i], mem_limit);
+            if (res == filter::load_result::OK) {
+                mem_limit -= f_mem;
                 this->filters.emplace_back(std::move(f));
                 infolog(log, "Filter added successfully: {}", p.filters[i].path);
-            } else {
-                warnlog(log, "Filter was not added: {}", p.filters[i].path);
+            } else if (res == filter::load_result::ERROR) {
+                auto err = AG_FMT("Filter was not added because of an error: {}\n", p.filters[i].path);
+                errlog(log, "{}", err);
+                filters.clear();
+                return {false, std::move(err)};
+            } else if (res == filter::load_result::MEM_LIMIT_REACHED) {
+                warnings += AG_FMT("Memory limit has been reached, some rules were not loaded\n", p.filters[i].path);
+                break;
             }
         }
         this->filters.shrink_to_fit();
+        if (!warnings.empty()) {
+            warnlog(log, "Filters loaded with warnings:\n{}", warnings);
+            return {true, std::move(warnings)};
+        }
+        return {true, std::nullopt};
     }
-
-    ~engine() {}
 
     ag::logger log;
     std::vector<filter> filters;
@@ -36,14 +55,17 @@ dnsfilter::dnsfilter() = default;
 
 dnsfilter::~dnsfilter() = default;
 
-std::optional<dnsfilter::handle> dnsfilter::create(engine_params p) {
-    engine *e = new(std::nothrow) engine(std::move(p));
-    if (e == nullptr) {
-        SPDLOG_ERROR("no memory to create dns filter");
-        return std::nullopt;
+std::pair<dnsfilter::handle, err_string> dnsfilter::create(const engine_params &p) {
+    auto *e = new(std::nothrow) engine();
+    if (!e) {
+        return {nullptr, "No memory for the filtering engine"};
     }
-
-    return std::make_optional(e);
+    auto [ret, err_or_warn] = e->init(p);
+    if (!ret) {
+        delete e;
+        return {nullptr, std::move(err_or_warn)};
+    }
+    return {e, std::move(err_or_warn)};
 }
 
 void dnsfilter::destroy(handle obj) {

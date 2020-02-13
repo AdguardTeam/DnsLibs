@@ -13,6 +13,8 @@
 #include <string>
 #include <ag_cesu8.h>
 
+static constexpr size_t FILTER_PARAMS_MEM_LIMIT_BYTES = 8 * 1024 * 1024;
+
 static NSString *REPLACEMENT_STRING = [NSString stringWithUTF8String: "<out of memory>"];
 
 /**
@@ -512,7 +514,8 @@ static std::vector<ag::upstream::options> convert_upstreams(NSArray<AGDnsUpstrea
 }
 
 - (instancetype) initWithConfig: (AGDnsProxyConfig *) config
-        handler: (AGDnsProxyEvents *)handler
+                        handler: (AGDnsProxyEvents *) handler
+                          error: (NSError **) error
 {
     ag::set_logger_factory_callback(nslog_sink::create);
     self->log = ag::create_logger("AGDnsProxy");
@@ -533,6 +536,7 @@ static std::vector<ag::upstream::options> convert_upstreams(NSArray<AGDnsUpstrea
             settings.filter_params.filters.emplace_back(
                 ag::dnsfilter::filter_params{ (int32_t)[key intValue], filterPath });
         }
+        settings.filter_params.mem_limit = FILTER_PARAMS_MEM_LIMIT_BYTES;
     }
 
     void *obj = (__bridge void *)self;
@@ -595,9 +599,22 @@ static std::vector<ag::upstream::options> convert_upstreams(NSArray<AGDnsUpstrea
 
     settings.dns_cache_size = config.dnsCacheSize;
 
-    if (!self->proxy.init(std::move(settings), std::move(native_events))) {
-        errlog(self->log, "Failed to initialize core proxy module");
+    auto [ret, err_or_warn] = self->proxy.init(std::move(settings), std::move(native_events));
+    if (!ret) {
+        auto str = AG_FMT("Failed to initialize the DNS proxy: {}", *err_or_warn);
+        errlog(self->log, "{}", str);
+        if (error) {
+            *error = [NSError errorWithDomain: AGDnsProxyErrorDomain
+                                         code: AGDPE_PROXY_INIT_ERROR
+                                     userInfo: @{ NSLocalizedDescriptionKey: convert_string(str) }];
+        }
         return nil;
+    }
+    if (error && err_or_warn) {
+        auto str = AG_FMT("DNS proxy initialized with warnings:\n{}", *err_or_warn);
+        *error = [NSError errorWithDomain: AGDnsProxyErrorDomain
+                                     code: AGDPE_PROXY_INIT_WARNING
+                                 userInfo: @{ NSLocalizedDescriptionKey: convert_string(str) }];
     }
 
     infolog(self->log, "Dns proxy initialized");

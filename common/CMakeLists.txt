@@ -41,9 +41,16 @@ if (NOT TARGET ldns)
     add_subdirectory(${THIRD_PARTY_DIR}/ldns ${CMAKE_BINARY_DIR}/ldns)
 endif ()
 
+if(NOT TARGET pcre2)
+    set(PCRE2_BUILD_PCRE2GREP OFF CACHE BOOL "" FORCE)
+    set(PCRE2_BUILD_TESTS OFF CACHE BOOL "" FORCE)
+    add_subdirectory(${THIRD_PARTY_DIR}/pcre2 ${CMAKE_BINARY_DIR}/third-party/pcre2)
+endif(NOT TARGET pcre2)
+
 set_target_properties(dnslibs_common PROPERTIES POSITION_INDEPENDENT_CODE ON)
-target_include_directories(dnslibs_common PUBLIC ./include ../third-party/magic_enum)
-target_link_libraries(dnslibs_common spdlog libevent ldns)
+target_include_directories(dnslibs_common PUBLIC ./include ../third-party/magic_enum ${CMAKE_BINARY_DIR}/third-party/pcre2)
+target_compile_definitions(dnslibs_common PUBLIC PCRE2_STATIC=1 PCRE2_CODE_UNIT_WIDTH=8)
+target_link_libraries(dnslibs_common spdlog libevent ldns pcre2-8)
 
 target_compile_options(dnslibs_common PRIVATE -Wall -Wextra)
 target_compile_options(dnslibs_common PUBLIC -Wno-format-nonliteral) # for fmt's chrono build

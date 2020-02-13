@@ -5,6 +5,8 @@
 #include <vector>
 #include <optional>
 #include <bitset>
+#include <tuple>
+#include <ag_defs.h>
 
 
 namespace ag {
@@ -24,6 +26,7 @@ public:
 
     struct engine_params {
         std::vector<filter_params> filters; // filter list
+        size_t mem_limit{0}; // the upper limit, in bytes, on the filtering engine memory usage, 0 means no limit
     };
 
     enum rule_props {
@@ -52,9 +55,10 @@ public:
     /**
      * Create filtering engine handle
      * @param[in]  p     engine parameters
-     * @return     Engine handle, or nullopt in case of fatal error
+     * @return     An engine handle with an optional warning string, or
+     *             nullptr with an error string
      */
-    std::optional<handle> create(engine_params p);
+    std::pair<handle, err_string> create(const engine_params &p);
 
     /**
      * Destroy filtering engine handle

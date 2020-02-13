@@ -129,14 +129,23 @@
         NSLog(@"onRequestProcessed upstream: %@", event.upstreamAddr);
     };
 
-    self->proxy = [[AGDnsProxy alloc] initWithConfig: cfg handler: events];
+    NSError *proxy_err = nil;
+    self->proxy = [[AGDnsProxy alloc] initWithConfig: cfg handler: events error: &proxy_err];
     if (self->proxy == nil) {
         NSLog(@"failed to initialize dns proxy");
-        NSDictionary *info = [NSDictionary dictionaryWithObject: @[@"failed to initialize dns proxy"]
-            forKey: NSLocalizedDescriptionKey];
-        NSError *e = [NSError errorWithDomain: @"ag tunnel" code: -1 userInfo: info];
-        self->onStarted(e);
+        if (proxy_err) {
+            self->onStarted(proxy_err);
+        } else {
+            NSDictionary *info = [NSDictionary dictionaryWithObject: @[@"failed to initialize dns proxy"]
+                forKey: NSLocalizedDescriptionKey];
+            NSError *e = [NSError errorWithDomain: @"ag tunnel" code: -1 userInfo: info];
+            self->onStarted(e);
+        }
         return;
+    }
+    if (proxy_err) {
+        // if we got here, the proxy had been initialized with warnings
+        // handle the the proxy initialization warning (proxy_err)
     }
 
     [self startPacketHandling];

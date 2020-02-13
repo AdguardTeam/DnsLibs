@@ -29,7 +29,8 @@ int main() {
     };
 
     ag::dnsproxy proxy;
-    if (!proxy.init(settings, {})) {
+    auto [ret, err] = proxy.init(settings, {});
+    if (!ret) {
         return 1;
     }
 

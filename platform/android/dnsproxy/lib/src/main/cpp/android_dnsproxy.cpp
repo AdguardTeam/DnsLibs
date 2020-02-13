@@ -609,7 +609,8 @@ bool ag::android_dnsproxy::init(JNIEnv *env, jobject settings, jobject events) {
     auto cpp_settings = marshal_settings(env, settings);
     auto cpp_events = marshal_events(env, events);
 
-    return m_actual_proxy.init(cpp_settings, cpp_events);
+    auto [ret, _] = m_actual_proxy.init(cpp_settings, cpp_events);
+    return ret;
 }
 
 void ag::android_dnsproxy::deinit(JNIEnv *env) {

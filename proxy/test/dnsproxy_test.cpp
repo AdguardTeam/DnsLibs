@@ -63,7 +63,8 @@ TEST_F(dnsproxy_test, test_dns64) {
             .wait_time = 1s,
     };
 
-    ASSERT_TRUE(proxy.init(settings, ag::dnsproxy_events{}));
+    auto [ret, err] = proxy.init(settings, {});
+    ASSERT_TRUE(ret) << *err;
     std::this_thread::sleep_for(5s); // Let DNS64 discovery happen
 
     ag::ldns_pkt_ptr pkt = create_request(IPV4_ONLY_HOST, LDNS_RR_TYPE_AAAA, LDNS_RD);
@@ -78,7 +79,8 @@ TEST_F(dnsproxy_test, test_ipv6_blocking) {
     settings.block_ipv6 = true;
     settings.ipv6_available = false;
 
-    ASSERT_TRUE(proxy.init(settings, {}));
+    auto [ret, err] = proxy.init(settings, {});
+    ASSERT_TRUE(ret) << *err;
 
     ag::ldns_pkt_ptr pkt = create_request(IPV4_ONLY_HOST, LDNS_RR_TYPE_AAAA, LDNS_RD);
     ag::ldns_pkt_ptr response;
@@ -100,7 +102,8 @@ TEST_F(dnsproxy_test, test_cname_blocking) {
             }
     };
 
-    ASSERT_TRUE(proxy.init(settings, events));
+    auto [ret, err] = proxy.init(settings, {});
+    ASSERT_TRUE(ret) << *err;
 
     ag::ldns_pkt_ptr response;
     ASSERT_NO_FATAL_FAILURE(perform_request(proxy, create_request(CNAME_BLOCKING_HOST, LDNS_RR_TYPE_A, LDNS_RD), response));
@@ -142,7 +145,8 @@ protected:
             }
         };
 
-        ASSERT_TRUE(proxy.init(settings, events));
+        auto [ret, err] = proxy.init(settings, events);
+        ASSERT_TRUE(ret) << *err;
     }
 };
 
@@ -250,7 +254,8 @@ TEST_F(dnsproxy_test, blocking_mode_default) {
     ag::dnsproxy_settings settings = ag::dnsproxy_settings::get_default();
     settings.filter_params = {{{1, "blocking_modes_test_filter.txt"}}};
 
-    ASSERT_TRUE(proxy.init(settings, {}));
+    auto [ret, err] = proxy.init(settings, {});
+    ASSERT_TRUE(ret) << *err;
 
     ag::ldns_pkt_ptr res;
 
@@ -304,7 +309,8 @@ TEST_F(dnsproxy_test, blocking_mode_nxdomain) {
     settings.filter_params = {{{1, "blocking_modes_test_filter.txt"}}};
     settings.blocking_mode = ag::dnsproxy_blocking_mode::NXDOMAIN;
 
-    ASSERT_TRUE(proxy.init(settings, {}));
+    auto [ret, err] = proxy.init(settings, {});
+    ASSERT_TRUE(ret) << *err;
 
     ag::ldns_pkt_ptr res;
 
@@ -354,7 +360,8 @@ TEST_F(dnsproxy_test, blocking_mode_unspecified_address) {
     settings.filter_params = {{{1, "blocking_modes_test_filter.txt"}}};
     settings.blocking_mode = ag::dnsproxy_blocking_mode::UNSPECIFIED_ADDRESS;
 
-    ASSERT_TRUE(proxy.init(settings, {}));
+    auto [ret, err] = proxy.init(settings, {});
+    ASSERT_TRUE(ret) << *err;
 
     ag::ldns_pkt_ptr res;
 
@@ -412,7 +419,8 @@ TEST_F(dnsproxy_test, blocking_mode_custom_address) {
     settings.custom_blocking_ipv4 = "4.3.2.1";
     settings.custom_blocking_ipv6 = "43::21";
 
-    ASSERT_TRUE(proxy.init(settings, {}));
+    auto [ret, err] = proxy.init(settings, {});
+    ASSERT_TRUE(ret) << *err;
 
     ag::ldns_pkt_ptr res;
 
@@ -466,7 +474,8 @@ TEST_F(dnsproxy_test, blocking_mode_custom_address) {
 TEST_F(dnsproxy_test, custom_blocking_address_validation_1) {
     ag::dnsproxy_settings settings = ag::dnsproxy_settings::get_default();
     settings.blocking_mode = ag::dnsproxy_blocking_mode::CUSTOM_ADDRESS;
-    ASSERT_TRUE(proxy.init(settings, {}));
+    auto [ret, err] = proxy.init(settings, {});
+    ASSERT_TRUE(ret) << *err;
 }
 
 TEST_F(dnsproxy_test, custom_blocking_address_validation_2) {
@@ -474,7 +483,8 @@ TEST_F(dnsproxy_test, custom_blocking_address_validation_2) {
     settings.blocking_mode = ag::dnsproxy_blocking_mode::CUSTOM_ADDRESS;
     settings.custom_blocking_ipv4 = "abracadabra";
     settings.custom_blocking_ipv6 = "::1";
-    ASSERT_FALSE(proxy.init(settings, {}));
+    auto [ret, _] = proxy.init(settings, {});
+    ASSERT_FALSE(ret);
 }
 
 TEST_F(dnsproxy_test, custom_blocking_address_validation_3) {
@@ -482,7 +492,8 @@ TEST_F(dnsproxy_test, custom_blocking_address_validation_3) {
     settings.blocking_mode = ag::dnsproxy_blocking_mode::CUSTOM_ADDRESS;
     settings.custom_blocking_ipv4 = "127.0.0.1";
     settings.custom_blocking_ipv6 = "abracadabra";
-    ASSERT_FALSE(proxy.init(settings, {}));
+    auto [ret, _] = proxy.init(settings, {});
+    ASSERT_FALSE(ret);
 }
 
 TEST_F(dnsproxy_test, custom_blocking_address_empty_ipv4) {
@@ -490,7 +501,8 @@ TEST_F(dnsproxy_test, custom_blocking_address_empty_ipv4) {
     settings.filter_params = {{{1, "blocking_modes_test_filter.txt"}}};
     settings.blocking_mode = ag::dnsproxy_blocking_mode::CUSTOM_ADDRESS;
     settings.custom_blocking_ipv6 = "::1";
-    ASSERT_TRUE(proxy.init(settings, {}));
+    auto [ret, err] = proxy.init(settings, {});
+    ASSERT_TRUE(ret) << *err;
 
     // Check A response is empty
     ag::ldns_pkt_ptr res;
@@ -505,7 +517,8 @@ TEST_F(dnsproxy_test, custom_blocking_address_empty_ipv6) {
     settings.filter_params = {{{1, "blocking_modes_test_filter.txt"}}};
     settings.blocking_mode = ag::dnsproxy_blocking_mode::CUSTOM_ADDRESS;
     settings.custom_blocking_ipv4 = "127.0.0.1";
-    ASSERT_TRUE(proxy.init(settings, {}));
+    auto [ret, err] = proxy.init(settings, {});
+    ASSERT_TRUE(ret) << *err;
 
     // Check AAAA response is empty
     ag::ldns_pkt_ptr res;
@@ -529,7 +542,8 @@ TEST_F(dnsproxy_test, correct_filter_ids_in_event) {
         }
     };
 
-    proxy.init(settings, events);
+    auto [ret, err] = proxy.init(settings, events);
+    ASSERT_TRUE(ret) << *err;
 
     ag::ldns_pkt_ptr res;
 
@@ -555,7 +569,8 @@ TEST_F(dnsproxy_test, whitelisting) {
         }
     };
 
-    ASSERT_TRUE(proxy.init(settings, events));
+    auto [ret, err] = proxy.init(settings, events);
+    ASSERT_TRUE(ret) << *err;
 
     ag::ldns_pkt_ptr res;
 
@@ -584,7 +599,8 @@ TEST_F(dnsproxy_test, whitelisting) {
 TEST_F(dnsproxy_test, bad_filter_file_does_not_crash) {
     ag::dnsproxy_settings settings = ag::dnsproxy_settings::get_default();
     settings.filter_params = {{ {111, "bad_test_filter.txt"}, }};
-    ASSERT_TRUE(proxy.init(settings, {}));
+    auto [ret, err] = proxy.init(settings, {});
+    ASSERT_TRUE(ret) << *err;
 }
 
 TEST_F(dnsproxy_test, ip_blocking_regress) {
@@ -598,7 +614,8 @@ TEST_F(dnsproxy_test, ip_blocking_regress) {
             }
     };
 
-    ASSERT_TRUE(proxy.init(settings, events));
+    auto [ret, err] = proxy.init(settings, events);
+    ASSERT_TRUE(ret) << *err;
 
     ag::ldns_pkt_ptr res;
 
@@ -612,4 +629,23 @@ TEST_F(dnsproxy_test, ip_blocking_regress) {
     ASSERT_NO_FATAL_FAILURE(perform_request(proxy, create_request("dns.adguard.com", LDNS_RR_TYPE_AAAA, LDNS_RD), res));
     ASSERT_EQ(1, last_event.filter_list_ids.size()); // Whitelisted by both domain and CNAME
     ASSERT_FALSE(last_event.whitelist);
+}
+
+TEST_F(dnsproxy_test, warnings) {
+    ag::dnsproxy_settings settings = ag::dnsproxy_settings::get_default();
+
+    settings.filter_params = {{ {15, "blocking_modes_test_filter.txt"}, }};
+    {
+        auto [ret, err_or_warn] = proxy.init(settings, {});
+        ASSERT_TRUE(ret) << *err_or_warn;
+        ASSERT_FALSE(err_or_warn); // No warning
+        proxy.deinit();
+    }
+
+    settings.filter_params.mem_limit = 1;
+    {
+        auto [ret, err_or_warn] = proxy.init(settings, {});
+        ASSERT_TRUE(ret) << *err_or_warn;
+        ASSERT_TRUE(err_or_warn); // Mem usage warning
+    }
 }

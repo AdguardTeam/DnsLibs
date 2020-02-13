@@ -26,9 +26,9 @@ public:
      *
      * @param settings proxy settings (see `dnsproxy_settings`)
      * @param events proxy events (see `dnsproxy_events`)
-     * @return true if initialized successfully, false otherwise
+     * @return {true, opt_warning_description} or {false, error_description}
      */
-    bool init(dnsproxy_settings settings, dnsproxy_events events);
+    std::pair<bool, err_string> init(dnsproxy_settings settings, dnsproxy_events events);
 
     /**
      * @brief Deinitialize the DNS proxy

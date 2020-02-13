@@ -212,22 +212,26 @@ int main(int argc, char **argv) {
     ag::dnsfilter::engine_params filter_params = { { { 0, std::string(filter_list_path) } } };
 
     TICK(result.load_rules.start_ts);
-    std::optional<ag::dnsfilter::handle> handle = filter.create(filter_params);
-    TICK(result.load_rules.end_ts);
-    result.load_rules.end_rss = ag::sys::current_rss();
-    if (!handle.has_value()) {
-        SPDLOG_INFO("...failed to load rules");
+    auto [handle, err_or_warn] = filter.create(filter_params);
+    if (!handle) {
+        SPDLOG_ERROR("...failed to load rules: {}", *err_or_warn);
         exit(-1);
     }
-    SPDLOG_INFO("...rules loaded");
+    TICK(result.load_rules.end_ts);
+    result.load_rules.end_rss = ag::sys::current_rss();
+    if (err_or_warn) {
+        SPDLOG_WARN("... rules loaded with warnings: {}", *err_or_warn);
+    } else {
+        SPDLOG_INFO("...rules loaded");
+    }
 
     SPDLOG_INFO("Matching domains against rules...");
     result.match_domains.start_rss = ag::sys::current_rss();
-    apply_filter_to_base(&result, &filter, handle.value());
+    apply_filter_to_base(&result, &filter, handle);
     result.match_domains.end_rss = ag::sys::current_rss();
     SPDLOG_INFO("...domains matched");
 
-    filter.destroy(handle.value());
+    filter.destroy(handle);
 
     TICK(result.overall.end_ts);
     result.overall.end_rss = ag::sys::current_rss();

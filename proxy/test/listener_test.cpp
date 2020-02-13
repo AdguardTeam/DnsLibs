@@ -42,7 +42,8 @@ TEST_P(listener_test, listens_and_responds) {
         settings.block_ipv6 = true;
 
         ag::dnsproxy proxy;
-        proxy_init_result = proxy.init(settings, {});
+        auto [ret, err] = proxy.init(settings, {});
+        proxy_init_result = ret;
         proxy_initialized = true;
         proxy_cond.notify_all();
         if (!proxy_init_result) {
@@ -149,10 +150,8 @@ TEST(listener_test, shuts_down_if_could_not_initialize) {
             {addr, port, ag::listener_protocol::UDP},
             {addr, port, ag::listener_protocol::TCP},
     };
-    if (proxy.init(proxy_settings, {})) {
-        proxy.deinit();
-    }
-    SUCCEED();
+    auto [ret, err] = proxy.init(proxy_settings, {});
+    ASSERT_FALSE(ret);
 }
 
 INSTANTIATE_TEST_CASE_P(

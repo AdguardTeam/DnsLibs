@@ -24,8 +24,13 @@ double time(Func &&f, Args &&... args) {
 int main() {
     ag::dnsproxy_settings settings = ag::dnsproxy_settings::get_default();
     ag::dnsproxy proxy;
-    if (!proxy.init(settings, {})) {
+    auto [ret, err_or_warn] = proxy.init(settings, {});
+    if (!ret) {
+        std::cout << "Error: " << *err_or_warn << '\n';
         return 1;
+    }
+    if (err_or_warn) {
+        std::cout << "Warn: " << *err_or_warn << '\n';
     }
 
     ag::utils::scope_exit se([&proxy]() { proxy.deinit(); });

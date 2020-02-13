@@ -8,7 +8,6 @@
 #include <spdlog/spdlog.h>
 #include <rule_utils.h>
 
-
 class dnsfilter_test : public ::testing::Test {
 protected:
 
@@ -257,12 +256,12 @@ TEST_F(dnsfilter_test, basic_rules_match) {
     }
 
     ag::dnsfilter::engine_params params = { { { 10, file_by_filter_name(TEST_FILTER_NAME) } } };
-    std::optional<ag::dnsfilter::handle> handle = filter.create(params);
-    ASSERT_TRUE(handle.has_value());
+    auto [handle, err_or_warn] = filter.create(params);
+    ASSERT_TRUE(handle) << *err_or_warn;
 
     for (const test_data &entry : TEST_DATA) {
         SPDLOG_INFO("testing {}", entry.domain);
-        std::vector<ag::dnsfilter::rule> rules = filter.match(handle.value(), entry.domain);
+        std::vector<ag::dnsfilter::rule> rules = filter.match(handle, entry.domain);
         ASSERT_GT(rules.size(), 0);
         for (const ag::dnsfilter::rule &r : rules) {
             ASSERT_EQ(r.filter_id, 10);
@@ -276,7 +275,7 @@ TEST_F(dnsfilter_test, basic_rules_match) {
         }
     }
 
-    filter.destroy(handle.value());
+    filter.destroy(handle);
 }
 
 TEST_F(dnsfilter_test, basic_rules_no_match) {
@@ -315,16 +314,16 @@ TEST_F(dnsfilter_test, basic_rules_no_match) {
     }
 
     ag::dnsfilter::engine_params params = { { { 0, file_by_filter_name(TEST_FILTER_NAME) } } };
-    std::optional<ag::dnsfilter::handle> handle = filter.create(params);
-    ASSERT_TRUE(handle.has_value());
+    auto [handle, err_or_warn] = filter.create(params);
+    ASSERT_TRUE(handle) << *err_or_warn;
 
     for (const test_data &entry : TEST_DATA) {
         SPDLOG_INFO("testing {}", entry.domain);
-        std::vector<ag::dnsfilter::rule> rules = filter.match(handle.value(), entry.domain);
+        std::vector<ag::dnsfilter::rule> rules = filter.match(handle, entry.domain);
         ASSERT_EQ(rules.size(), 0);
     }
 
-    filter.destroy(handle.value());
+    filter.destroy(handle);
 }
 
 TEST_F(dnsfilter_test, wildcard) {
@@ -345,20 +344,20 @@ TEST_F(dnsfilter_test, wildcard) {
     }
 
     ag::dnsfilter::engine_params params = { { { 0, file_by_filter_name(TEST_FILTER_NAME) } } };
-    std::optional<ag::dnsfilter::handle> handle = filter.create(params);
-    ASSERT_TRUE(handle.has_value());
+    auto [handle, err_or_warn] = filter.create(params);
+    ASSERT_TRUE(handle) << *err_or_warn;
 
     for (const test_data &entry : TEST_DATA) {
         for (const std::string &d : entry.domains) {
             SPDLOG_INFO("testing {}", d);
-            std::vector<ag::dnsfilter::rule> rules = filter.match(handle.value(), d);
+            std::vector<ag::dnsfilter::rule> rules = filter.match(handle, d);
             ASSERT_EQ(rules.size(), 1);
             ASSERT_FALSE(rules[0].props.test(ag::dnsfilter::RP_EXCEPTION));
             ASSERT_EQ(rules[0].text, entry.rule);
         }
     }
 
-    filter.destroy(handle.value());
+    filter.destroy(handle);
 }
 
 TEST_F(dnsfilter_test, regex) {
@@ -380,20 +379,19 @@ TEST_F(dnsfilter_test, regex) {
     }
 
     ag::dnsfilter::engine_params params = { { { 0, file_by_filter_name(TEST_FILTER_NAME) } } };
-    std::optional<ag::dnsfilter::handle> handle = filter.create(params);
-    ASSERT_TRUE(handle.has_value());
-
+    auto [handle, err_or_warn] = filter.create(params);
+    ASSERT_TRUE(handle) << *err_or_warn;
     for (const test_data &entry : TEST_DATA) {
         for (const std::string &d : entry.domains) {
             SPDLOG_INFO("testing {}", d);
-            std::vector<ag::dnsfilter::rule> rules = filter.match(handle.value(), d);
+            std::vector<ag::dnsfilter::rule> rules = filter.match(handle, d);
             ASSERT_EQ(rules.size(), 1);
             ASSERT_FALSE(rules[0].props.test(ag::dnsfilter::RP_EXCEPTION));
             ASSERT_EQ(rules[0].text, entry.rule);
         }
     }
 
-    filter.destroy(handle.value());
+    filter.destroy(handle);
 }
 
 TEST_F(dnsfilter_test, hosts_file_syntax) {
@@ -422,13 +420,13 @@ TEST_F(dnsfilter_test, hosts_file_syntax) {
     }
 
     ag::dnsfilter::engine_params params = { { { 0, file_by_filter_name(TEST_FILTER_NAME) } } };
-    std::optional<ag::dnsfilter::handle> handle = filter.create(params);
-    ASSERT_TRUE(handle.has_value());
+    auto [handle, err_or_warn] = filter.create(params);
+    ASSERT_TRUE(handle) << *err_or_warn;
 
     for (const test_data &entry : TEST_DATA) {
         for (const std::string &d : entry.blocked_domains) {
             SPDLOG_INFO("testing {}", d);
-            std::vector<ag::dnsfilter::rule> rules = filter.match(handle.value(), d);
+            std::vector<ag::dnsfilter::rule> rules = filter.match(handle, d);
             ASSERT_EQ(rules.size(), 1);
             ASSERT_EQ(rules[0].text, entry.rule);
             ASSERT_FALSE(rules[0].props.test(ag::dnsfilter::RP_EXCEPTION));
@@ -436,7 +434,7 @@ TEST_F(dnsfilter_test, hosts_file_syntax) {
         }
     }
 
-    filter.destroy(handle.value());
+    filter.destroy(handle);
 }
 
 TEST_F(dnsfilter_test, badfilter) {
@@ -459,18 +457,18 @@ TEST_F(dnsfilter_test, badfilter) {
     }
 
     ag::dnsfilter::engine_params params = { { { 0, file_by_filter_name(TEST_FILTER_NAME) } } };
-    std::optional<ag::dnsfilter::handle> handle = filter.create(params);
-    ASSERT_TRUE(handle.has_value());
+    auto [handle, err_or_warn] = filter.create(params);
+    ASSERT_TRUE(handle) << *err_or_warn;
 
     for (const test_data &entry : TEST_DATA) {
         SPDLOG_INFO("testing {}", entry.domain);
-        std::vector<ag::dnsfilter::rule> rules = filter.match(handle.value(), entry.domain);
+        std::vector<ag::dnsfilter::rule> rules = filter.match(handle, entry.domain);
         ASSERT_EQ(rules.size(), 2);
         std::vector<const ag::dnsfilter::rule *> effective_rules = ag::dnsfilter::get_effective_rules(rules);
         ASSERT_EQ(effective_rules.size(), 0);
     }
 
-    filter.destroy(handle.value());
+    filter.destroy(handle);
 }
 
 TEST_F(dnsfilter_test, multifilters) {
@@ -501,19 +499,19 @@ TEST_F(dnsfilter_test, multifilters) {
     }
 
     ag::dnsfilter::engine_params params = { { { 0, file_by_filter_name(TEST_FILTER_NAME + "1") }, { 1, file_by_filter_name(TEST_FILTER_NAME + "2") } } };
-    std::optional<ag::dnsfilter::handle> handle = filter.create(params);
-    ASSERT_TRUE(handle.has_value());
+    auto [handle, err_or_warn] = filter.create(params);
+    ASSERT_TRUE(handle) << *err_or_warn;
 
     for (const test_data &entry : TEST_DATA) {
         SPDLOG_INFO("testing {}", entry.domain);
-        std::vector<ag::dnsfilter::rule> rules = filter.match(handle.value(), entry.domain);
+        std::vector<ag::dnsfilter::rule> rules = filter.match(handle, entry.domain);
         ASSERT_GT(rules.size(), 0);
         std::vector<const ag::dnsfilter::rule *> effective_rules = ag::dnsfilter::get_effective_rules(rules);
         ASSERT_EQ(effective_rules.size(), 1);
         ASSERT_EQ(effective_rules[0]->text, entry.expected_rule);
     }
 
-    filter.destroy(handle.value());
+    filter.destroy(handle);
 
     std::remove(file_by_filter_name(TEST_FILTER_NAME + "1").c_str());
     std::remove(file_by_filter_name(TEST_FILTER_NAME + "2").c_str());

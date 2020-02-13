@@ -27,13 +27,17 @@ public:
     filter(const filter&) = delete;
     filter &operator=(const filter&) = delete;
 
+    enum class load_result {
+        OK, ERROR, MEM_LIMIT_REACHED
+    };
+
     /**
      * Load rule list
-     * @param[in]  params  filter parameters
-     * @return     >= 0 if loaded successfully
-     *             <0 otherwise
+     * @param      params    filter parameters
+     * @param      mem_limit if not 0, stop loading rules when the approximate memory consumption reaches this limit
+     * @return     {load_result, approximate memory consumption}
      */
-    int load(const ag::dnsfilter::filter_params &params);
+    std::pair<load_result, size_t> load(const ag::dnsfilter::filter_params &params, size_t mem_limit);
 
     /**
      * Match domain against rules

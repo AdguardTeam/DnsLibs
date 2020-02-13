@@ -37,7 +37,7 @@ public:
     dns_forwarder();
     ~dns_forwarder();
 
-    bool init(const dnsproxy_settings &settings, const dnsproxy_events &events);
+    std::pair<bool, err_string> init(const dnsproxy_settings &settings, const dnsproxy_events &events);
     void deinit();
 
     std::vector<uint8_t> handle_message(uint8_view message);

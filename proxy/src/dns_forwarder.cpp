@@ -520,7 +520,7 @@ dns_forwarder::dns_forwarder() = default;
 
 dns_forwarder::~dns_forwarder() = default;
 
-bool dns_forwarder::init(const dnsproxy_settings &settings, const dnsproxy_events &events) {
+std::pair<bool, err_string> dns_forwarder::init(const dnsproxy_settings &settings, const dnsproxy_events &events) {
     this->log = create_logger("DNS forwarder");
     infolog(log, "Initializing forwarder...");
 
@@ -532,15 +532,19 @@ bool dns_forwarder::init(const dnsproxy_settings &settings, const dnsproxy_event
         if (settings.custom_blocking_ipv4.empty()) {
             warnlog(this->log, "Custom blocking IPv4 not set: blocking responses to A queries will be empty");
         } else if (!utils::is_valid_ip4(settings.custom_blocking_ipv4)) {
-            errlog(this->log, "Invalid custom blocking IPv4 address: {}", settings.custom_blocking_ipv4);
-            return false;
+            auto err = AG_FMT("Invalid custom blocking IPv4 address: {}", settings.custom_blocking_ipv4);
+            errlog(this->log, "{}", err);
+            this->deinit();
+            return {false, std::move(err)};
         }
         // Check custom IPv6
         if (settings.custom_blocking_ipv6.empty()) {
             warnlog(this->log, "Custom blocking IPv6 not set: blocking responses to AAAA queries will be empty");
         } else if (!utils::is_valid_ip6(settings.custom_blocking_ipv6)) {
-            errlog(this->log, "Invalid custom blocking IPv6 address: {}", settings.custom_blocking_ipv6);
-            return false;
+            auto err = AG_FMT("Invalid custom blocking IPv6 address: {}", settings.custom_blocking_ipv6);
+            errlog(this->log, "{}", err);
+            this->deinit();
+            return {false, std::move(err)};
         }
     }
 
@@ -576,21 +580,26 @@ bool dns_forwarder::init(const dnsproxy_settings &settings, const dnsproxy_event
         }
     }
     if (this->upstreams.empty()) {
-        errlog(log, "Failed to initialized any upstream");
+        constexpr auto err = "Failed to initialize any upstream";
+        errlog(log, "{}", err);
         this->deinit();
-        return false;
+        return {false, err};
     }
     infolog(log, "Upstreams initialized");
 
-    infolog(log, "Initializing filtering module...");
-    std::optional<dnsfilter::handle> handle = this->filter.create(settings.filter_params);
-    if (!handle.has_value()) {
-        errlog(log, "Failed to initialize filtering module");
+    infolog(log, "Initializing the filtering module...");
+    auto [handle, err_or_warn] = filter.create(settings.filter_params);
+    if (!handle) {
+        errlog(log, "Failed to initialize the filtering module");
         this->deinit();
-        return false;
+        return {false, std::move(err_or_warn)};
     }
-    this->filter_handle = handle.value();
-    infolog(log, "Filtering module initialized");
+    this->filter_handle = handle;
+    if (err_or_warn) {
+        warnlog(log, "Filtering module initialized with warnings:\n{}", *err_or_warn);
+    } else {
+        infolog(log, "Filtering module initialized");
+    }
 
     this->dns64_prefixes = std::make_shared<with_mtx<std::vector<uint8_vector>>>();
     if (settings.dns64.has_value()) {
@@ -645,7 +654,7 @@ bool dns_forwarder::init(const dnsproxy_settings &settings, const dnsproxy_event
     }
 
     infolog(log, "Forwarder initialized");
-    return true;
+    return {true, std::move(err_or_warn)};
 }
 
 void dns_forwarder::deinit() {

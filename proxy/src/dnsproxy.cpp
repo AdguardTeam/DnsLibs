@@ -4,6 +4,7 @@
 #include <dnsproxy_listener.h>
 #include <ag_logger.h>
 #include <default_verifier.h>
+#include <algorithm>
 
 
 using namespace ag;
@@ -45,7 +46,7 @@ dnsproxy::dnsproxy()
 
 dnsproxy::~dnsproxy() = default;
 
-bool dnsproxy::init(dnsproxy_settings settings, dnsproxy_events events) {
+std::pair<bool, err_string> dnsproxy::init(dnsproxy_settings settings, dnsproxy_events events) {
     std::unique_ptr<impl> &proxy = this->pimpl;
     pimpl->log = ag::create_logger("DNS proxy");
 
@@ -54,9 +55,10 @@ bool dnsproxy::init(dnsproxy_settings settings, dnsproxy_events events) {
     proxy->settings = std::move(settings);
     proxy->events = std::move(events);
 
-    if (!proxy->forwarder.init(proxy->settings, proxy->events)) {
+    auto [result, err_or_warn] = proxy->forwarder.init(proxy->settings, proxy->events);
+    if (!result) {
         this->deinit();
-        return false;
+        return {false, err_or_warn};
     }
 
     if (!proxy->settings.listeners.empty()) {
@@ -71,14 +73,15 @@ bool dnsproxy::init(dnsproxy_settings settings, dnsproxy_events events) {
             }
         }
         if (proxy->listeners.empty()) {
-            errlog(proxy->log, "Failed to initialize any listeners");
+            auto err = "Failed to initialize any listeners";
+            errlog(proxy->log, "{}", err);
             this->deinit();
-            return false;
+            return {false, err};
         }
     }
 
     infolog(proxy->log, "Proxy module initialized");
-    return true;
+    return {true, std::move(err_or_warn)};
 }
 
 void dnsproxy::deinit() {
