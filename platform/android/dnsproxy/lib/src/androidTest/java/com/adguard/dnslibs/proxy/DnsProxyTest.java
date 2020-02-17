@@ -174,10 +174,11 @@ public class DnsProxyTest {
         settings.setIpv6Available(ThreadLocalRandom.current().nextBoolean());
         settings.setBlockIpv6(ThreadLocalRandom.current().nextBoolean());
 
-        settings.getFilterParams().put(1, "/Й/И/Л"); // Test CESU-8 encoding
-        settings.getFilterParams().put(-2, "/A/B/C/D/Ы/Щ");
-        settings.getFilterParams().put(Integer.MAX_VALUE, "/A/B/Я/З/Ъ");
-        settings.getFilterParams().put(Integer.MIN_VALUE, "a/b\u0000c/d");
+// FIXME can't do these anymore: wrong filter path == proxy won't initialize
+//        settings.getFilterParams().put(1, "/Й/И/Л"); // Test CESU-8 encoding
+//        settings.getFilterParams().put(-2, "/A/B/C/D/Ы/Щ");
+//        settings.getFilterParams().put(Integer.MAX_VALUE, "/A/B/Я/З/Ъ");
+//        settings.getFilterParams().put(Integer.MIN_VALUE, "a/b\u0000c/d");
 
         final ListenerSettings tcp = new ListenerSettings();
         tcp.setAddress("::");

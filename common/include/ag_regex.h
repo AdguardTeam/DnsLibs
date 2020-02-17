@@ -10,8 +10,8 @@ namespace ag {
 
 class regex {
 public:
-    explicit regex(std::string_view text)
-        : re(compile_regex(text))
+    explicit regex(std::string_view text, uint32_t pcre2_compile_options = PCRE2_CASELESS)
+        : re(compile_regex(text, pcre2_compile_options))
     {}
 
     ~regex() {
@@ -102,11 +102,11 @@ public:
 private:
     pcre2_code *re;
 
-    static pcre2_code *compile_regex(std::string_view text) {
+    static pcre2_code *compile_regex(std::string_view text, uint32_t options) {
         int err = 0;
         PCRE2_SIZE err_offset = 0;
         pcre2_code *re = pcre2_compile((PCRE2_SPTR8)text.data(), text.length(),
-            0, &err, &err_offset, nullptr);
+            options, &err, &err_offset, nullptr);
         if (re == nullptr) {
             PCRE2_UCHAR error_message[256];
             pcre2_get_error_message(err, error_message, sizeof(error_message));

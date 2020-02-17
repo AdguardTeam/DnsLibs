@@ -59,10 +59,17 @@ enum match_pattern_mode {
 struct match_info {
     std::string_view text; // matching text without all prefixes
     bool is_regex_rule; // whether the original rule is a regex rule
-    bool is_exact_match; // whether only the whole text should be matched, without subdomains matching
+    bool has_wildcard;
     int pattern_mode; // see `match_pattern_mode`
 };
 
+static inline bool pattern_exact(int pattern_mode) {
+    return pattern_mode == (MPM_LINE_START_ASSERTED | MPM_LINE_END_ASSERTED);
+}
+
+static inline bool pattern_subdomains(int pattern_mode) {
+    return pattern_mode == (MPM_DOMAIN_START_ASSERTED | MPM_LINE_END_ASSERTED);
+}
 
 static inline bool check_domain_pattern_labels(std::string_view domain) {
     std::vector<std::string_view> labels = ag::utils::split_by(domain, '.');
@@ -92,21 +99,6 @@ static inline bool is_valid_domain_pattern(std::string_view domain) {
         && check_domain_pattern_labels(domain);
 }
 
-static inline bool is_eligible_for_subdomains_matching(std::string_view str) {
-    if (str.empty()) {
-        return false;
-    }
-    if (std::string_view::npos == str.find('.')) {
-        return false; // TLD is not eligible
-    }
-    // True if it _looks like_ an actual domain name
-    return str.front() != '.'
-            && str.back() != '.'
-            && str.cend() == std::find_if_not(str.cbegin(), str.cend(), [](unsigned char c) {
-                return std::isalnum(c) || c == '-' || c == '_' || c == '.';
-            });
-}
-
 static inline bool is_valid_ip_pattern(std::string_view str) {
     if (str.empty() || str.length() > MAX_IPADDR_LENTH) {
         return false;
@@ -133,7 +125,7 @@ static std::optional<rule_utils::rule> parse_host_file_rule(std::string_view str
         if (domain.empty()) {
             continue;
         }
-        if (!is_valid_domain_pattern(domain) || !is_eligible_for_subdomains_matching(domain)) {
+        if (!is_valid_domain_pattern(domain) && domain.npos == domain.find('*')) {
             return std::nullopt;
         }
         r.matching_parts.emplace_back(ag::utils::to_lower(domain));
@@ -182,14 +174,14 @@ static inline bool check_regex(std::string_view str) {
     return str.length() > 1 && str.front() == '/' && str.back() == '/';
 }
 
-static bool remove_skippable_prefixes(std::string_view &rule) {
+static int remove_skippable_prefixes(std::string_view &rule) {
     for (std::string_view prefix : SKIPPABLE_PREFIXES) {
         if (ag::utils::starts_with(rule, prefix)) {
             rule.remove_prefix(prefix.length());
-            return true;
+            return MPM_DOMAIN_START_ASSERTED;
         }
     }
-    return false;
+    return 0;
 }
 
 static inline int remove_special_prefixes(std::string_view &rule) {
@@ -246,7 +238,7 @@ static inline int remove_port(std::string_view &rule) {
 
 // https://github.com/AdguardTeam/AdguardHome/wiki/Hosts-Blocklists#adblock-style
 static match_info extract_match_info(std::string_view rule) {
-    match_info info = {.text = rule, .is_regex_rule = check_regex(rule), .is_exact_match = false, .pattern_mode = 0};
+    match_info info = {.text = rule, .is_regex_rule = check_regex(rule), .has_wildcard = false, .pattern_mode = 0};
 
     if (info.is_regex_rule) {
         info.text.remove_prefix(1); // begin slash
@@ -260,32 +252,15 @@ static match_info extract_match_info(std::string_view rule) {
     // special prefixes come before skippable ones (e.g. `||http://example.org`)
     // so for the first we should check special ones
     info.pattern_mode |= remove_special_prefixes(info.text);
-    bool has_skippable_prefix = remove_skippable_prefixes(info.text);
+    info.pattern_mode |= remove_skippable_prefixes(info.text);
+    if ((info.pattern_mode & MPM_DOMAIN_START_ASSERTED) && (info.pattern_mode & MPM_LINE_START_ASSERTED)) {
+        info.pattern_mode ^= MPM_DOMAIN_START_ASSERTED;
+    }
 
     info.pattern_mode |= remove_special_suffixes(info.text);
     info.pattern_mode |= remove_port(info.text);
 
-    bool has_wildcard = info.text.npos != info.text.find('*');
-
-    // Exact domain match
-    if (!has_wildcard
-            && (info.pattern_mode & MPM_LINE_START_ASSERTED)
-            && (info.pattern_mode & MPM_LINE_END_ASSERTED)) {
-        info.is_exact_match = true;
-    }
-
-    // check that rule matches exact domain though it has some special characters
-    // rule is like:
-    // 1) `||example.org^`
-    // 2) `://example.org^`
-    // 3) `||example.org:8080`
-    if (!has_wildcard
-            && (has_skippable_prefix
-                    || (info.pattern_mode & MPM_DOMAIN_START_ASSERTED)
-                    || (info.pattern_mode & MPM_LINE_START_ASSERTED))
-            && (info.pattern_mode & MPM_LINE_END_ASSERTED)) {
-        info.pattern_mode = MPM_NONE;
-    }
+    info.has_wildcard = info.text.npos != info.text.find('*');
 
     return info;
 }
@@ -339,22 +314,21 @@ std::optional<rule_utils::rule> rule_utils::parse(std::string_view str, ag::logg
         return std::make_optional(std::move(r));
     }
 
-    bool need_match_by_regex = info.is_regex_rule || info.pattern_mode != MPM_NONE;
-    if (!need_match_by_regex) {
-        ag::socket_address addr{info.text, 0};
-        if (info.is_exact_match && addr.valid()) { // info.text is a valid IP address
-            r.match_method = rule::MMID_EXACT;
-            r.matching_parts.emplace_back(ag::utils::addr_to_str(addr.addr())); // strip port, compress
-        } else if (is_eligible_for_subdomains_matching(str)) {
-            r.match_method = info.is_exact_match ? rule::MMID_EXACT : rule::MMID_SUBDOMAINS;
-            r.matching_parts.emplace_back(ag::utils::to_lower(str));
-        } else {
-            r.match_method = rule::MMID_SHORTCUTS;
-            std::vector<std::string_view> shortcuts = ag::utils::split_by(str, '*');
-            r.matching_parts.reserve(shortcuts.size());
-            for (const std::string_view &sc : shortcuts) {
-                r.matching_parts.emplace_back(ag::utils::to_lower(sc));
-            }
+    bool exact_pattern = pattern_exact(info.pattern_mode);
+    bool subdomains_pattern = pattern_subdomains(info.pattern_mode);
+    ag::socket_address addr{info.text, 0};
+    if (!info.is_regex_rule && exact_pattern && addr.valid()) { // info.text is a valid IP address
+        r.match_method = rule::MMID_EXACT;
+        r.matching_parts.emplace_back(ag::utils::addr_to_str(addr.addr())); // strip port, compress
+    } else if (!info.is_regex_rule && !info.has_wildcard && (exact_pattern || subdomains_pattern)) {
+        r.match_method = exact_pattern ? rule::MMID_EXACT : rule::MMID_SUBDOMAINS;
+        r.matching_parts.emplace_back(ag::utils::to_lower(str));
+    } else if (!info.is_regex_rule && info.pattern_mode == 0) {
+        r.match_method = rule::MMID_SHORTCUTS;
+        std::vector<std::string_view> shortcuts = ag::utils::split_by(str, '*');
+        r.matching_parts.reserve(shortcuts.size());
+        for (const std::string_view &sc : shortcuts) {
+            r.matching_parts.emplace_back(ag::utils::to_lower(sc));
         }
     } else {
         if (str.find('?') != str.npos) {
