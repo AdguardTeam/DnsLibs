@@ -236,7 +236,7 @@ typedef void (^logCallback)(const char *msg, int length);
  */
 - (instancetype) initWithConfig: (AGDnsProxyConfig *) config
                         handler: (AGDnsProxyEvents *) events
-                          error: (NSError **) error;
+                          error: (NSError **) error NS_SWIFT_NOTHROW;
 
 /**
  * @brief Process UDP/TCP packet payload
@@ -298,7 +298,8 @@ typedef NS_ENUM(NSInteger, AGStampProtoType) {
  * @error error error
  * @return stamp instance or nil if error
  */
-+ (AGDnsStamp *) parseDnsStampWithStampStr: (NSString *) stampStr error: (NSError **) error;
++ (AGDnsStamp *) parseDnsStampWithStampStr: (NSString *) stampStr
+                                     error: (NSError **) error NS_SWIFT_NOTHROW;
 
 /**
  * Checks if upstream is valid and available
