@@ -250,7 +250,7 @@ bool filter::impl::load_line(uint32_t file_idx, std::string_view line, void *arg
 
     if (!rule) {
         if (!line.empty() && !rule_utils::is_comment(line)) {
-            warnlog(self->log, "Failed to parse rule: {}", line);
+            dbglog(self->log, "Failed to parse rule: {}", line);
         }
         return true;
     }

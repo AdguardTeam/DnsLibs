@@ -10,6 +10,7 @@
 
 
 #define ru_warnlog(l_, ...) do { if ((l_) != nullptr) warnlog(*(l_), __VA_ARGS__); } while (0)
+#define ru_dbglog(l_, ...) do { if ((l_) != nullptr) dbglog(*(l_), __VA_ARGS__); } while (0)
 
 
 static constexpr int MODIFIERS_MARKER = '$';
@@ -159,11 +160,11 @@ static inline bool extract_modifiers(std::string_view modifiers_str,
             if (!props->test(found->id)) {
                 props->set(found->id);
             } else {
-                ru_warnlog(log, "Duplicated modifier: {}", found->name);
+                ru_dbglog(log, "Duplicated modifier: {}", found->name);
                 return false;
             }
         } else {
-            ru_warnlog(log, "Unknown modifier: {}", modifier);
+            ru_dbglog(log, "Unknown modifier: {}", modifier);
             return false;
         }
     }
@@ -296,12 +297,12 @@ std::optional<rule_utils::rule> rule_utils::parse(std::string_view str, ag::logg
     match_info info = extract_match_info(str);
     str = info.text;
     if (str.empty() || str.find_first_not_of(".*") == str.npos) {
-        ru_warnlog(log, "Too wide rule: {}", str);
+        ru_dbglog(log, "Too wide rule: {}", str);
         return std::nullopt;
     }
 
     if (!info.is_regex_rule && !is_valid_domain_pattern(str) && !is_valid_ip_pattern(str)) {
-        ru_warnlog(log, "Invalid domain name: {}", str);
+        ru_dbglog(log, "Invalid domain name: {}", str);
         return std::nullopt;
     }
 
@@ -358,7 +359,7 @@ std::optional<rule_utils::rule> rule_utils::parse(std::string_view str, ag::logg
 
         std::string re = rule_utils::get_regex(r);
         if (!ag::regex(re).is_valid()) {
-            ru_warnlog(log, "Invalid regex: {}", re);
+            ru_dbglog(log, "Invalid regex: {}", re);
             return std::nullopt;
         }
     }
