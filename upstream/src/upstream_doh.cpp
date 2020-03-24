@@ -268,6 +268,8 @@ void dns_over_https::stop(int, short, void *arg) {
 
 dns_over_https::~dns_over_https() {
     event_base_once(this->worker.loop->c_base(), 0, EV_TIMEOUT, stop, this, nullptr);
+    // Delete the event before deleting the loop
+    this->pool.timer_event.reset();
     this->worker.loop->stop();
     this->worker.loop.reset();
 
