@@ -12,7 +12,7 @@ static ag::socket_address prepare_address(const std::string &address_string) {
     return address;
 }
 
-ag::plain_dns::plain_dns(const upstream::options &opts, const upstream_factory_config &config)
+ag::plain_dns::plain_dns(const upstream_options &opts, const upstream_factory_config &config)
         : upstream(opts, config)
         , m_prefer_tcp(utils::starts_with(opts.address, TCP_SCHEME))
         , m_pool(event_loop::create(),
@@ -22,7 +22,7 @@ ag::plain_dns::plain_dns(const upstream::options &opts, const upstream_factory_c
 
 ag::err_string ag::plain_dns::init() {
     if (!m_pool.address().valid()) {
-        return AG_FMT("Passed server address is not valid: {}", this->opts.address);
+        return AG_FMT("Passed server address is not valid: {}", this->m_options.address);
     }
 
     return std::nullopt;
@@ -42,7 +42,7 @@ ag::plain_dns::exchange_result ag::plain_dns::exchange(ldns_pkt *request_pkt) {
         // UDP request
         uint8_t *reply_data;
         size_t reply_size;
-        timeval tv = utils::duration_to_timeval(this->opts.timeout);
+        timeval tv = utils::duration_to_timeval(this->m_options.timeout);
         status = ldns_udp_send(&reply_data, &*buffer, (const sockaddr_storage *) m_pool.address().c_sockaddr(),
                                m_pool.address().c_socklen(), tv, &reply_size);
         if (status != LDNS_STATUS_OK) {
@@ -64,7 +64,7 @@ ag::plain_dns::exchange_result ag::plain_dns::exchange(ldns_pkt *request_pkt) {
 
     // TCP request
     ag::uint8_view buf{ ldns_buffer_begin(buffer.get()), ldns_buffer_position(buffer.get()) };
-    connection::read_result result = m_pool.perform_request(buf, this->opts.timeout);
+    connection::read_result result = m_pool.perform_request(buf, this->m_options.timeout);
     if (result.error.has_value()) {
         return { nullptr, std::move(result.error) };
     }

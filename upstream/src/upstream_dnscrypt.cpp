@@ -39,10 +39,10 @@ ag::upstream_dnscrypt::exchange_result ag::upstream_dnscrypt::exchange(ldns_pkt 
     if (result.error.has_value()) {
         return make_error(std::move(result.error));
     }
-    if (this->opts.timeout < result.rtt) {
+    if (this->m_options.timeout < result.rtt) {
         return make_error(AG_FMT("Certificate fetch took too much time: {}ms", result.rtt.count()));
     }
-    auto[reply, reply_err] = apply_exchange(*request_pkt, this->opts.timeout - result.rtt);
+    auto[reply, reply_err] = apply_exchange(*request_pkt, this->m_options.timeout - result.rtt);
     if (reply_err) {
         return make_error(std::move(reply_err));
     }
@@ -60,10 +60,10 @@ ag::upstream_dnscrypt::setup_result ag::upstream_dnscrypt::setup_impl() {
     if (std::scoped_lock l(m_guard);
             !m_impl || m_impl->server_info.get_server_cert().not_after < now) {
         ag::dnscrypt::client client;
-        auto[dial_server_info, dial_rtt, dial_err] = client.dial(m_stamp, this->opts.timeout);
+        auto[dial_server_info, dial_rtt, dial_err] = client.dial(m_stamp, this->m_options.timeout);
         if (dial_err) {
             return { rtt,
-                AG_FMT("Failed to fetch certificate info from {} with error: {}", this->opts.address, *dial_err) };
+                AG_FMT("Failed to fetch certificate info from {} with error: {}", this->m_options.address, *dial_err) };
         }
         m_impl.reset(new impl{client, std::move(dial_server_info)});
         rtt = dial_rtt;

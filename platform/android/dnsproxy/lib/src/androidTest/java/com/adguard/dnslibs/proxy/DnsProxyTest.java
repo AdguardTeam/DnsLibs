@@ -352,4 +352,14 @@ public class DnsProxyTest {
             fail(e.toString());
         }
     }
+
+    @Test
+    public void testBlockingModeCode() {
+        for (final DnsProxySettings.BlockingMode bm : DnsProxySettings.BlockingMode.values()) {
+            final DnsProxySettings.BlockingMode bmFromCode = DnsProxySettings.BlockingMode.fromCode(bm.getCode());
+            assertEquals(bm, bmFromCode);
+        }
+        assertEquals(DnsProxySettings.BlockingMode.DEFAULT, DnsProxySettings.BlockingMode.fromCode(-1));
+        assertEquals(DnsProxySettings.BlockingMode.DEFAULT, DnsProxySettings.BlockingMode.fromCode(42));
+    }
 }

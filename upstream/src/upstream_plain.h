@@ -45,7 +45,7 @@ public:
      * Create plain DNS upstream
      * @param opts Upstream settings
      */
-    plain_dns(const upstream::options &opts, const upstream_factory_config &config);
+    plain_dns(const upstream_options &opts, const upstream_factory_config &config);
 
     ~plain_dns() override = default;
 

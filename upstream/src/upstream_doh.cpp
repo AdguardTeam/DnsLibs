@@ -70,9 +70,9 @@ CURL *dns_over_https::query_handle::create_curl_handle() {
 
     dns_over_https *upstream = this->upstream;
     ldns_buffer *raw_request = this->request.get();
-    uint64_t timeout = upstream->opts.timeout.count();
+    uint64_t timeout = upstream->m_options.timeout.count();
     if (CURLcode e;
-            CURLE_OK != (e = curl_easy_setopt(curl, CURLOPT_URL, upstream->opts.address.data()))
+            CURLE_OK != (e = curl_easy_setopt(curl, CURLOPT_URL, upstream->m_options.address.data()))
             || CURLE_OK != (e = curl_easy_setopt(curl, CURLOPT_NOPROGRESS, true))
             || CURLE_OK != (e = curl_easy_setopt(curl, CURLOPT_TIMEOUT_MS, timeout))
             || CURLE_OK != (e = curl_easy_setopt(curl, CURLOPT_CONNECTTIMEOUT_MS, timeout))
@@ -144,14 +144,14 @@ int dns_over_https::verify_callback(X509_STORE_CTX *ctx, void *arg) {
     dns_over_https::query_handle *handle = (dns_over_https::query_handle *)arg;
     dns_over_https *upstream = handle->upstream;
 
-    if (upstream->config.cert_verifier == nullptr) {
+    if (upstream->m_config.cert_verifier == nullptr) {
         std::string err = "Cannot verify certificate due to verifier is not set";
         dbglog_id(handle, "{}", err);
         handle->error = std::move(err);
         return 0;
     }
 
-    if (err_string err = upstream->config.cert_verifier->verify(ctx, get_host_name(upstream->opts.address));
+    if (err_string err = upstream->m_config.cert_verifier->verify(ctx, get_host_name(upstream->m_options.address));
             err.has_value()) {
         dbglog_id(handle, "Failed to verify certificate: {}", err.value());
         handle->error = std::move(err);
@@ -216,14 +216,14 @@ curl_pool_ptr dns_over_https::create_pool() const {
     return pool_holder;
 }
 
-dns_over_https::dns_over_https(const upstream::options &opts, const upstream_factory_config &config)
+dns_over_https::dns_over_https(const upstream_options &opts, const upstream_factory_config &config)
     : upstream(opts, config)
 {
     static const initializer ensure_initialized;
 }
 
 err_string dns_over_https::init() {
-    this->resolved = create_resolved_hosts_list(this->opts.address, this->opts.resolved_server_ip);
+    this->resolved = create_resolved_hosts_list(this->m_options.address, this->m_options.resolved_server_ip);
 
     curl_slist *headers;
     if (nullptr == (headers = curl_slist_append(nullptr, "Content-Type: application/dns-message"))
@@ -240,10 +240,10 @@ err_string dns_over_https::init() {
     }
 
     if (this->resolved == nullptr) {
-        if (!this->opts.bootstrap.empty() || socket_address(get_host_name(this->opts.address), 0).valid()) {
+        if (!this->m_options.bootstrap.empty() || socket_address(get_host_name(this->m_options.address), 0).valid()) {
             bootstrapper_ptr bootstrapper = std::make_unique<ag::bootstrapper>(
-                bootstrapper::params{ get_host_port(opts.address), dns_over_https::DEFAULT_PORT,
-                    opts.bootstrap, opts.timeout, config });
+                bootstrapper::params{get_host_port(m_options.address), dns_over_https::DEFAULT_PORT,
+                                     m_options.bootstrap, m_options.timeout, m_config });
             if (err_string err = bootstrapper->init(); !err.has_value()) {
                 this->bootstrapper = std::move(bootstrapper);
             } else {
@@ -473,7 +473,7 @@ dns_over_https::exchange_result dns_over_https::exchange(ldns_pkt *request) {
             }
         });
 
-    milliseconds timeout = this->opts.timeout;
+    milliseconds timeout = this->m_options.timeout;
 
     if (std::unique_lock guard(this->guard); this->resolved == nullptr) {
         bootstrapper::resolve_result resolve_result = this->bootstrapper->get();
@@ -483,11 +483,11 @@ dns_over_https::exchange_result dns_over_https::exchange(ldns_pkt *request) {
         assert(!resolve_result.addresses.empty());
 
         milliseconds resolve_time = duration_cast<milliseconds>(resolve_result.time_elapsed);
-        if (this->opts.timeout < resolve_time) {
+        if (this->m_options.timeout < resolve_time) {
             return { nullptr, AG_FMT("DNS server name resolving took too much time: {}us",
                 resolve_result.time_elapsed.count()) };
         }
-        timeout = this->opts.timeout - resolve_time;
+        timeout = this->m_options.timeout - resolve_time;
 
         std::string entry;
         for (const socket_address &address : resolve_result.addresses) {
@@ -497,7 +497,7 @@ dns_over_https::exchange_result dns_over_https::exchange(ldns_pkt *request) {
             tracelog(log, "Server address: {}", addr);
 
             auto [ip, port] = utils::split_host_port(addr);
-            std::string_view host = get_host_name(this->opts.address);
+            std::string_view host = get_host_name(this->m_options.address);
             if (entry.empty()) {
                 entry = AG_FMT("{}:{}:{}", host, port, ip);
             } else {

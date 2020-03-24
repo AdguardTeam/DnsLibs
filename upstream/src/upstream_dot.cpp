@@ -137,7 +137,7 @@ static std::string_view get_host_name(std::string_view url) {
     return ag::utils::split_host_port(url).first;
 }
 
-static ag::bootstrapper_ptr create_bootstrapper(const ag::logger &log, const ag::upstream::options &opts,
+static ag::bootstrapper_ptr create_bootstrapper(const ag::logger &log, const ag::upstream_options &opts,
         const ag::upstream_factory_config &config) {
     std::string_view address;
 
@@ -153,21 +153,21 @@ static ag::bootstrapper_ptr create_bootstrapper(const ag::logger &log, const ag:
                                   opts.bootstrap, opts.timeout, config });
 }
 
-ag::dns_over_tls::dns_over_tls(const upstream::options &opts, const upstream_factory_config &config)
+ag::dns_over_tls::dns_over_tls(const upstream_options &opts, const upstream_factory_config &config)
         : upstream(opts, config)
         , m_server_name(get_host_name(opts.address))
 {}
 
 ag::err_string ag::dns_over_tls::init() {
-    if (this->opts.bootstrap.empty()
-            && std::holds_alternative<std::monostate>(this->opts.resolved_server_ip)
-            && !socket_address(get_host_name(this->opts.address), 0).valid()) {
+    if (this->m_options.bootstrap.empty()
+            && std::holds_alternative<std::monostate>(this->m_options.resolved_server_ip)
+            && !socket_address(get_host_name(this->m_options.address), 0).valid()) {
         std::string err = "At least one the following should be true: server address is specified, url contains valid server address as a host name, bootstrap server is specified";
         errlog(m_log, "{}", err);
         return err;
     }
 
-    bootstrapper_ptr bootstrapper = create_bootstrapper(m_log, this->opts, this->config);
+    bootstrapper_ptr bootstrapper = create_bootstrapper(m_log, this->m_options, this->m_config);
     if (err_string err = bootstrapper->init(); err.has_value()) {
         std::string err_message = AG_FMT("Failed to create bootstrapper: {}", err.value());
         errlog(m_log, "{}", err_message);
@@ -185,12 +185,12 @@ int ag::dns_over_tls::ssl_verify_callback(X509_STORE_CTX *ctx, void *arg) {
     SSL *ssl = (SSL *)X509_STORE_CTX_get_ex_data(ctx, SSL_get_ex_data_X509_STORE_CTX_idx());
     ag::dns_over_tls *upstream = (ag::dns_over_tls *)SSL_get_app_data(ssl);
 
-    if (upstream->config.cert_verifier == nullptr) {
+    if (upstream->m_config.cert_verifier == nullptr) {
         dbglog(upstream->m_log, "Cannot verify certificate due to verifier is not set");
         return 0;
     }
 
-    if (err_string err = upstream->config.cert_verifier->verify(ctx, SSL_get_servername(ssl, SSL_get_servername_type(ssl)));
+    if (err_string err = upstream->m_config.cert_verifier->verify(ctx, SSL_get_servername(ssl, SSL_get_servername_type(ssl)));
             err.has_value()) {
         dbglog(upstream->m_log, "Failed to verify certificate: {}", err.value());
         return 0;
@@ -213,7 +213,7 @@ ag::dns_over_tls::exchange_result ag::dns_over_tls::exchange(ldns_pkt *request_p
     }
 
     ag::uint8_view buf{ ldns_buffer_begin(buffer.get()), ldns_buffer_position(buffer.get()) };
-    connection::read_result result = m_pool->perform_request(buf, this->opts.timeout);
+    connection::read_result result = m_pool->perform_request(buf, this->m_options.timeout);
     if (result.error.has_value()) {
         return { nullptr, std::move(result.error) };
     }

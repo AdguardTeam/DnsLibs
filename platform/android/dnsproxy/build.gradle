@@ -22,7 +22,8 @@ allprojects {
     }
 }
 
-task clean(type: Delete) {
-    delete rootProject.buildDir
-    rootProject.allprojects { delete new File("${it.projectDir}/.cxx") }
-}
+// FIXME this causes Android Studio to always recompile the native library each time something is being run
+//task clean(type: Delete) {
+//    delete rootProject.buildDir
+//    rootProject.allprojects { delete new File("${it.projectDir}/.cxx") }
+//}

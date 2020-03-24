@@ -177,7 +177,7 @@ static NSData *create_response_packet(const struct iphdr *ip_header, const struc
 
 
 @implementation AGDnsUpstream
-- (instancetype) initWithNative: (const ag::upstream::options *) settings
+- (instancetype) initWithNative: (const ag::upstream_options *) settings
 {
     self = [super init];
     _address = convert_string(settings->address);
@@ -266,13 +266,13 @@ static NSData *create_response_packet(const struct iphdr *ip_header, const struc
     self = [super init];
     NSMutableArray<AGDnsUpstream *> *upstreams =
         [[NSMutableArray alloc] initWithCapacity: settings->upstreams.size()];
-    for (const ag::upstream::options &us : settings->upstreams) {
+    for (const ag::upstream_options &us : settings->upstreams) {
         [upstreams addObject: [[AGDnsUpstream alloc] initWithNative: &us]];
     }
     _upstreams = upstreams;
     NSMutableArray<AGDnsUpstream *> *fallbacks =
             [[NSMutableArray alloc] initWithCapacity: settings->fallbacks.size()];
-    for (const ag::upstream::options &us : settings->fallbacks) {
+    for (const ag::upstream_options &us : settings->fallbacks) {
         [fallbacks addObject: [[AGDnsUpstream alloc] initWithNative: &us]];
     }
     _fallbacks = fallbacks;
@@ -476,7 +476,7 @@ static std::string getTrustCreationErrorStr(OSStatus status) {
     return errStr;
 }
 
-static ag::upstream::options convert_upstream(AGDnsUpstream *upstream) {
+static ag::upstream_options convert_upstream(AGDnsUpstream *upstream) {
     std::vector<std::string> bootstrap;
     if (upstream.bootstrap != nil) {
         bootstrap.reserve([upstream.bootstrap count]);
@@ -496,14 +496,14 @@ static ag::upstream::options convert_upstream(AGDnsUpstream *upstream) {
     } else {
         addr.emplace<std::monostate>();
     }
-    return ag::upstream::options{[upstream.address UTF8String],
+    return ag::upstream_options{[upstream.address UTF8String],
                                  std::move(bootstrap),
                                  std::chrono::milliseconds(upstream.timeoutMs),
                                  addr};
 }
 
-static std::vector<ag::upstream::options> convert_upstreams(NSArray<AGDnsUpstream *> *upstreams) {
-    std::vector<ag::upstream::options> converted;
+static std::vector<ag::upstream_options> convert_upstreams(NSArray<AGDnsUpstream *> *upstreams) {
+    std::vector<ag::upstream_options> converted;
     if (upstreams != nil) {
         converted.reserve([upstreams count]);
         for (AGDnsUpstream *upstream in upstreams) {

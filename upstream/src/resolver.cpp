@@ -173,7 +173,7 @@ resolver::result resolver::resolve(std::string_view host, int port, milliseconds
             host, error.value(), timer.elapsed<milliseconds>());
     }
 
-    if (upstream->config.ipv6_available && timeout > MIN_TIMEOUT) {
+    if (upstream->config().ipv6_available && timeout > MIN_TIMEOUT) {
         log_ip(log, trace, this->resolver_address, "Trying to get AAAA record for {}", host);
 
         ldns_pkt_ptr aaaa_req = create_req(host, LDNS_RR_TYPE_AAAA);

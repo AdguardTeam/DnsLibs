@@ -33,7 +33,7 @@ ag::parse_dns_stamp_result ag::parse_dns_stamp(const std::string &stamp_str) {
     };
 }
 
-ag::err_string ag::test_upstream(const upstream::options &opts, const on_certificate_verification_function &on_certificate_verification) {
+ag::err_string ag::test_upstream(const upstream_options &opts, const on_certificate_verification_function &on_certificate_verification) {
     std::unique_ptr<ag::certificate_verifier> cert_verifier;
     if (on_certificate_verification != nullptr) {
         cert_verifier = std::make_unique<ag::application_verifier>(on_certificate_verification);

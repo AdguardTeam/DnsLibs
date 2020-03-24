@@ -40,7 +40,7 @@ public:
      * @param opts upstream settings
      * @param config factory configuration
      */
-    dns_over_https(const options &opts, const upstream_factory_config &config);
+    dns_over_https(const upstream_options &opts, const upstream_factory_config &config);
     ~dns_over_https() override;
 
     struct query_handle;

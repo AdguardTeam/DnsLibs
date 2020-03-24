@@ -13,7 +13,7 @@
 static constexpr std::chrono::seconds DEFAULT_TIMEOUT(10);
 static constexpr std::chrono::milliseconds DELAY_BETWEEN_REQUESTS{500};
 
-static ag::upstream_factory::create_result create_upstream(const ag::upstream::options &opts) {
+static ag::upstream_factory::create_result create_upstream(const ag::upstream_options &opts) {
     static ag::default_verifier cert_verifier;
     static ag::upstream_factory upstream_factory({&cert_verifier});
     return upstream_factory.create_upstream(opts);
@@ -136,7 +136,7 @@ static void parallel_test(const T &data) {
 }
 
 TEST_F(upstream_test, wrong_upstream_options) {
-    static const ag::upstream::options OPTIONS[] = {
+    static const ag::upstream_options OPTIONS[] = {
         // malformed ip address
         { "8..8.8:53" },
         { "8.a.8.8:53" },
@@ -155,7 +155,7 @@ TEST_F(upstream_test, wrong_upstream_options) {
         { "tls://one.one.one.one", { "1..1.1" } },
     };
 
-    for (const ag::upstream::options &options : OPTIONS) {
+    for (const ag::upstream_options &options : OPTIONS) {
         ag::upstream_factory::create_result r = create_upstream(options);
         ASSERT_TRUE(r.error.has_value()) << options.address;
     }
@@ -459,7 +459,7 @@ TEST_F(upstream_test, DISABLED_doh_concurrent_requests) {
     using namespace concat_err_string;
     static constexpr size_t REQUESTS_NUM = 128;
     static constexpr size_t WORKERS_NUM = 16;
-    static const ag::upstream::options opts{
+    static const ag::upstream_options opts{
         .address = "https://dns.cloudflare.com/dns-query",
         .bootstrap = {"8.8.8.8", "1.1.1.1"},
         .timeout = 5s,

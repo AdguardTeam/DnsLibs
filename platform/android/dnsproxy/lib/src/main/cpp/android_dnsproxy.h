@@ -68,12 +68,12 @@ private:
     /**
      * Marshal upstream settings from Java to C++.
      */
-    upstream::options marshal_upstream(JNIEnv *env, jobject java_upstream_settings);
+    upstream_options marshal_upstream(JNIEnv *env, jobject java_upstream_settings);
 
     /**
      * Marshal upstream settings from C++ to Java.
      */
-    local_ref<jobject> marshal_upstream(JNIEnv *env, const upstream::options &settings);
+    local_ref<jobject> marshal_upstream(JNIEnv *env, const upstream_options &settings);
 
     /**
      * Marshal DNS64 settings from Java to C++;

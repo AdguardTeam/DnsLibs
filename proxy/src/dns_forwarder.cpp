@@ -397,7 +397,7 @@ void dns_forwarder::finalize_processed_event(dns_request_processed_event &event,
     }
 
     if (upstream != nullptr) {
-        event.upstream_addr = upstream->opts.address;
+        event.upstream_addr = upstream->options().address;
     } else {
         event.upstream_addr.clear();
     }
@@ -559,7 +559,7 @@ std::pair<bool, err_string> dns_forwarder::init(const dnsproxy_settings &setting
     infolog(log, "Initializing upstreams...");
     upstream_factory us_factory({ this->cert_verifier.get(), this->settings->ipv6_available });
     this->upstreams.reserve(settings.upstreams.size() + settings.fallbacks.size());
-    for (const upstream::options &options : settings.upstreams) {
+    for (const upstream_options &options : settings.upstreams) {
         infolog(log, "Initializing upstream {}...", options.address);
         auto[upstream, err] = us_factory.create_upstream(options);
         if (err.has_value()) {
@@ -569,7 +569,7 @@ std::pair<bool, err_string> dns_forwarder::init(const dnsproxy_settings &setting
             infolog(log, "Upstream created successfully");
         }
     }
-    for (const upstream::options &options : settings.fallbacks) {
+    for (const upstream_options &options : settings.fallbacks) {
         infolog(log, "Initializing fallback upstream {}...", options.address);
         auto[upstream, err] = us_factory.create_upstream(options);
         if (err.has_value()) {

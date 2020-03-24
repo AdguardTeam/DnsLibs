@@ -23,7 +23,7 @@ public:
      * @param opts Upstream settings
      * @param config Factory configuration
      */
-    dns_over_tls(const upstream::options &opts, const upstream_factory_config &config);
+    dns_over_tls(const upstream_options &opts, const upstream_factory_config &config);
 
     ~dns_over_tls();
 

@@ -11,7 +11,7 @@
 namespace ag {
 
 struct dns64_settings {
-    std::vector<upstream::options> upstreams; // The upstreams to use for discovery of DNS64 prefixes
+    std::vector<upstream_options> upstreams; // The upstreams to use for discovery of DNS64 prefixes
     uint32_t max_tries; // How many times, at most, to try DNS64 prefixes discovery before giving up
     std::chrono::milliseconds wait_time; // How long to wait before a dns64 prefixes discovery attempt
 };
@@ -52,8 +52,8 @@ struct dnsproxy_settings {
      */
     static const dnsproxy_settings &get_default();
 
-    std::vector<upstream::options> upstreams; // DNS upstreams settings list
-    std::vector<upstream::options> fallbacks; // Fallback DNS upstreams settings list
+    std::vector<upstream_options> upstreams; // DNS upstreams settings list
+    std::vector<upstream_options> fallbacks; // Fallback DNS upstreams settings list
 
     std::optional<dns64_settings> dns64; // DNS64 settings
 

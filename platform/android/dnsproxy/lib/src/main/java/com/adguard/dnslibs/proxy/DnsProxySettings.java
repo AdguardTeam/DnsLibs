@@ -15,16 +15,32 @@ public class DnsProxySettings {
         // MUST keep names and ordinals in sync with ag::blocking_mode
 
         /** AdBlock-style filters -> NXDOMAIN, hosts-style filters -> unspecified address */
-        DEFAULT,
+        DEFAULT(0),
 
         /** Always return NXDOMAIN */
-        NXDOMAIN,
+        NXDOMAIN(1),
 
         /** Always return unspecified address */
-        UNSPECIFIED_ADDRESS,
+        UNSPECIFIED_ADDRESS(2),
 
         /** Always return custom configured IP address (See {@link DnsProxySettings}) */
-        CUSTOM_ADDRESS
+        CUSTOM_ADDRESS(3)
+
+        ;
+
+        private final int code;
+        BlockingMode(int code) { this.code = code; }
+
+        public int getCode() { return code; }
+
+        public static BlockingMode fromCode(int code) {
+            for (final BlockingMode m : values()) {
+                if (m.code == code) {
+                    return m;
+                }
+            }
+            return DEFAULT;
+        }
     }
 
     private List<UpstreamSettings> upstreams = new ArrayList<>();
@@ -103,7 +119,7 @@ public class DnsProxySettings {
     /**
      * @return DNS upstreams settings list.
      */
-    List<UpstreamSettings> getUpstreams() {
+    public List<UpstreamSettings> getUpstreams() {
         return upstreams;
     }
 
@@ -159,7 +175,7 @@ public class DnsProxySettings {
     /**
      * @return Filter engine parameters. Filter files with identifiers.
      */
-    SparseArray<String> getFilterParams() {
+    public SparseArray<String> getFilterParams() {
         return filterParams;
     }
 
@@ -186,7 +202,7 @@ public class DnsProxySettings {
     /**
      * @return List of addresses/ports/protocols/etc... to listen on.
      */
-    List<ListenerSettings> getListeners() {
+    public List<ListenerSettings> getListeners() {
         return listeners;
     }
 

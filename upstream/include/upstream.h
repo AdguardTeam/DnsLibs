@@ -4,6 +4,7 @@
 #include <memory>
 #include <string>
 #include <string_view>
+#include <utility>
 #include <vector>
 #include <ldns/packet.h>
 #include <ag_defs.h>
@@ -27,43 +28,49 @@ struct upstream_factory_config {
 };
 
 /**
+ * Options for upstream
+ */
+struct upstream_options {
+    /**
+     * Server address, one of the following kinds:
+     *     8.8.8.8:53 -- plain DNS
+     *     tcp://8.8.8.8:53 -- plain DNS over TCP
+     *     tls://1.1.1.1 -- DNS-over-TLS
+     *     https://dns.adguard.com/dns-query -- DNS-over-HTTPS
+     *     sdns://... -- DNS stamp (see https://dnscrypt.info/stamps-specifications)
+     */
+    std::string address;
+
+    /** List of plain DNS servers to be used to resolve DOH/DOT hostnames (if any) */
+    std::vector<std::string> bootstrap;
+
+    /**
+     * Default upstream timeout. Also, it is used as a timeout for bootstrap DNS requests.
+     * timeout = 0 means infinite timeout.
+     */
+    std::chrono::milliseconds timeout;
+
+    /** Resolver's IP address. In the case if it's specified, bootstrap DNS servers won't be used at all. */
+    ip_address_variant resolved_server_ip;
+};
+
+/**
  * Upstream is interface for handling DNS requests to upstream servers
  */
 class upstream {
 public:
+    static constexpr std::chrono::milliseconds DEFAULT_TIMEOUT{5000};
+
     struct exchange_result {
         ldns_pkt_ptr packet;
         err_string error;
     };
 
-    /**
-     * Options for upstream
-     */
-    struct options {
-        /**
-         * Server address, one of the following kinds:
-         *     8.8.8.8:53 -- plain DNS
-         *     tcp://8.8.8.8:53 -- plain DNS over TCP
-         *     tls://1.1.1.1 -- DNS-over-TLS
-         *     https://dns.adguard.com/dns-query -- DNS-over-HTTPS
-         *     sdns://... -- DNS stamp (see https://dnscrypt.info/stamps-specifications)
-         */
-        std::string address;
-
-        /** List of plain DNS servers to be used to resolve DOH/DOT hostnames (if any) */
-        std::vector<std::string> bootstrap;
-
-        /**
-         * Default upstream timeout. Also, it is used as a timeout for bootstrap DNS requests.
-         * timeout = 0 means infinite timeout.
-         */
-        std::chrono::milliseconds timeout;
-
-        /** Resolver's IP address. In the case if it's specified, bootstrap DNS servers won't be used at all. */
-        ip_address_variant resolved_server_ip;
-    };
-
-    upstream(options opts, const upstream_factory_config &config) : opts(std::move(opts)), config(config) {}
+    upstream(upstream_options opts, const upstream_factory_config &config) : m_options(std::move(opts)), m_config(config) {
+        if (!this->m_options.timeout.count()) {
+            this->m_options.timeout = DEFAULT_TIMEOUT;
+        }
+    }
 
     virtual ~upstream() = default;
 
@@ -80,10 +87,15 @@ public:
      */
     virtual exchange_result exchange(ldns_pkt *request) = 0;
 
+    const upstream_options &options() const { return m_options; }
+
+    const upstream_factory_config &config() const { return m_config; }
+
+protected:
     /** Upstream options */
-    const upstream::options opts;
+    upstream_options m_options;
     /** Upstream factory configuration */
-    const upstream_factory_config config;
+    upstream_factory_config m_config;
 };
 
 /**
@@ -104,7 +116,7 @@ public:
      * @param opts upstream settings
      * @return Creation result
      */
-    create_result create_upstream(const upstream::options &opts) const;
+    create_result create_upstream(const upstream_options &opts) const;
 
     struct impl;
 private:

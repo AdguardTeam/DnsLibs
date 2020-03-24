@@ -36,7 +36,7 @@ parse_dns_stamp_result parse_dns_stamp(const std::string &stamp_str);
  * @param on_certificate_verification Certificate verification callback
  * @return If it is, no error is returned. Otherwise this method returns an error with an explanation.
  */
-err_string test_upstream(const upstream::options &opts,
+err_string test_upstream(const upstream_options &opts,
                          const on_certificate_verification_function &on_certificate_verification);
 
 } // namespace ag

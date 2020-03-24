@@ -10,12 +10,10 @@
 using namespace ag;
 using namespace std::chrono;
 
-static constexpr milliseconds DEFAULT_UPSTREAM_TIMEOUT(1000);
-
 static const dnsproxy_settings DEFAULT_PROXY_SETTINGS = {
     .upstreams = {
-        { "8.8.8.8:53", {}, DEFAULT_UPSTREAM_TIMEOUT, {} },
-        { "8.8.4.4:53", {}, DEFAULT_UPSTREAM_TIMEOUT, {} },
+        { "8.8.8.8:53" },
+        { "8.8.4.4:53" },
     },
     .dns64 = std::nullopt,
     .blocked_response_ttl_secs = 3600,

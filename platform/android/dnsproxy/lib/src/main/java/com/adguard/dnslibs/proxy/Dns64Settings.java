@@ -12,7 +12,7 @@ public class Dns64Settings {
     /**
      * @return The upstreams to use for discovery of DNS64 prefixes.
      */
-    List<UpstreamSettings> getUpstreams() {
+    public List<UpstreamSettings> getUpstreams() {
         return upstreams;
     }
 

@@ -174,7 +174,7 @@ public class DnsProxy implements Closeable {
         };
 
         static LogLevel translate(int spdLogLevel) {
-            if (spdLogLevel < 0 || spdLogLevel > map.length) {
+            if (spdLogLevel < 0 || spdLogLevel >= map.length) {
                 return TRACE;
             }
             return map[spdLogLevel];

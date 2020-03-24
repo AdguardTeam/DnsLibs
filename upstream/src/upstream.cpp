@@ -1,5 +1,6 @@
 #include <cassert>
 #include <functional>
+#include <chrono>
 #include <upstream.h>
 #include "upstream_dnscrypt.h"
 #include "upstream_doh.h"
@@ -42,7 +43,7 @@ struct ag::upstream_factory::impl {
         : config(std::move(cfg))
     {}
 
-    upstream_factory::create_result create_upstream(const upstream::options &opts) const;
+    upstream_factory::create_result create_upstream(const upstream_options &opts) const;
 };
 
 
@@ -59,27 +60,27 @@ static scheme get_address_scheme(std::string_view address) {
     return scheme::UNDEFINED;
 }
 
-static ag::upstream_factory::create_result create_upstream_tls(const ag::upstream::options &opts,
+static ag::upstream_factory::create_result create_upstream_tls(const ag::upstream_options &opts,
         const ag::upstream_factory_config &config) {
     return {std::make_unique<ag::dns_over_tls>(opts, config), std::nullopt};
 }
 
-static ag::upstream_factory::create_result create_upstream_https(const ag::upstream::options &opts,
+static ag::upstream_factory::create_result create_upstream_https(const ag::upstream_options &opts,
         const ag::upstream_factory_config &config) {
     return {std::make_unique<ag::dns_over_https>(opts, config), std::nullopt};
 }
 
-static ag::upstream_factory::create_result create_upstream_plain(const ag::upstream::options &opts,
+static ag::upstream_factory::create_result create_upstream_plain(const ag::upstream_options &opts,
         const ag::upstream_factory_config &config) {
     return {std::make_unique<ag::plain_dns>(opts, config), std::nullopt};
 }
 
 static ag::upstream_factory::create_result create_upstream_dnscrypt(ag::server_stamp &&stamp,
-        const ag::upstream::options &opts) {
+        const ag::upstream_options &opts) {
     return {std::make_unique<ag::upstream_dnscrypt>(std::move(stamp), opts.timeout), std::nullopt};
 }
 
-static ag::upstream_factory::create_result create_upstream_sdns(const ag::upstream::options &local_opts,
+static ag::upstream_factory::create_result create_upstream_sdns(const ag::upstream_options &local_opts,
         const ag::upstream_factory_config &config) {
     static constexpr ag::utils::make_error<ag::upstream_factory::create_result> make_error;
     auto[stamp, stamp_err] = ag::server_stamp::from_string(local_opts.address);
@@ -113,8 +114,8 @@ static ag::upstream_factory::create_result create_upstream_sdns(const ag::upstre
     return make_error(AG_FMT("Unknown stamp protocol: {}", stamp.proto));
 }
 
-ag::upstream_factory::create_result ag::upstream_factory::impl::create_upstream(const ag::upstream::options &opts) const {
-    using create_function = upstream_factory::create_result (*)(const ag::upstream::options &, const ag::upstream_factory_config &);
+ag::upstream_factory::create_result ag::upstream_factory::impl::create_upstream(const ag::upstream_options &opts) const {
+    using create_function = upstream_factory::create_result (*)(const ag::upstream_options &, const ag::upstream_factory_config &);
     static constexpr create_function create_functions[]{
         &create_upstream_sdns,
         &create_upstream_plain,
@@ -135,7 +136,7 @@ ag::upstream_factory::upstream_factory(upstream_factory_config cfg)
 
 ag::upstream_factory::~upstream_factory() = default;
 
-ag::upstream_factory::create_result ag::upstream_factory::create_upstream(const upstream::options &opts) const {
+ag::upstream_factory::create_result ag::upstream_factory::create_upstream(const upstream_options &opts) const {
     create_result result;
     if (opts.address.find("://") != std::string_view::npos) {
         // TODO parse address error

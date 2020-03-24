@@ -148,7 +148,7 @@ Java_com_adguard_dnslibs_proxy_DnsProxy_handleMessage(JNIEnv *env, jobject thiz,
     return proxy->handle_message(env, message);
 }
 
-ag::upstream::options ag::android_dnsproxy::marshal_upstream(JNIEnv *env,
+ag::upstream_options ag::android_dnsproxy::marshal_upstream(JNIEnv *env,
                                                              jobject java_upstream_settings) {
 
     auto clazz = env->FindClass(FQN_UPSTREAM_SETTINGS);
@@ -159,7 +159,7 @@ ag::upstream::options ag::android_dnsproxy::marshal_upstream(JNIEnv *env,
     auto timeout_field = env->GetFieldID(clazz, "timeoutMs", "J");
     auto server_ip_field = env->GetFieldID(clazz, "serverIp", "[B");
 
-    ag::upstream::options upstream{};
+    ag::upstream_options upstream{};
 
     if (local_ref dns_server{env, env->GetObjectField(java_upstream_settings, dns_server_field)}) {
         m_utils.visit_string(env, dns_server.get(), [&](const char *str, jsize len) {
@@ -197,7 +197,7 @@ ag::upstream::options ag::android_dnsproxy::marshal_upstream(JNIEnv *env,
     return upstream;
 }
 
-ag::local_ref<jobject> ag::android_dnsproxy::marshal_upstream(JNIEnv *env, const upstream::options &settings) {
+ag::local_ref<jobject> ag::android_dnsproxy::marshal_upstream(JNIEnv *env, const upstream_options &settings) {
     auto clazz = env->FindClass(FQN_UPSTREAM_SETTINGS);
     auto ctor = env->GetMethodID(clazz, "<init>", "()V");
     auto dns_server_field = env->GetFieldID(clazz, "address", "Ljava/lang/String;");
