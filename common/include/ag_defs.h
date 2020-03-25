@@ -25,6 +25,8 @@ using ftor = std::integral_constant<decltype(func), func>;
 
 using opt_string = std::optional<std::string>;
 using err_string = opt_string;
+using opt_string_view = std::optional<std::string_view>;
+using err_string_view = opt_string_view;
 using uint8_view = std::basic_string_view<uint8_t>;
 using uint8_vector = std::vector<uint8_t>;
 template <typename K, typename V>

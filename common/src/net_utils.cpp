@@ -2,25 +2,44 @@
 #include <ag_net_utils.h>
 #include <ag_socket_address.h>
 
-std::pair<std::string_view, std::string_view> ag::utils::split_host_port(std::string_view address_string) {
+std::tuple<std::string_view, std::string_view, ag::err_string_view> ag::utils::split_host_port_with_err(
+        std::string_view address_string, bool require_ipv6_addr_in_square_brackets, bool require_non_empty_port) {
     if (!address_string.empty() && address_string.front() == '[') {
         auto pos = address_string.find("]:");
         if (pos != std::string_view::npos) {
-            return {address_string.substr(1, pos - 1), address_string.substr(pos + 2)};
+            auto port = address_string.substr(pos + 2);
+            return {address_string.substr(1, pos - 1), port,
+                    (require_non_empty_port && port.empty())
+                    ? err_string_view("Port after colon is empty in IPv6 address")
+                    : std::nullopt};
         } else if (address_string.back() == ']') {
-            return {address_string.substr(1, address_string.size() - 2), {}};
+            return {address_string.substr(1, address_string.size() - 2), {}, std::nullopt};
+        } else {
+            return {address_string, {}, "IPv6 address contains `[` but not contains `]`"};
         }
     } else {
         auto pos = address_string.find(':');
         if (pos != std::string_view::npos) {
             auto rpos = address_string.rfind(':');
             if (pos != rpos) { // This is an IPv6 address without a port
-                return {address_string, {}};
+                return {address_string, {},
+                        require_ipv6_addr_in_square_brackets
+                        ? err_string_view("IPv6 address not in square brackets")
+                        : std::nullopt};
             }
-            return {address_string.substr(0, pos), address_string.substr(pos + 1)};
+            auto port = address_string.substr(pos + 1);
+            return {address_string.substr(0, pos), port,
+                    (require_non_empty_port && port.empty())
+                    ? err_string_view("Port after colon is empty in IPv4 address")
+                    : std::nullopt};
         }
     }
-    return {address_string, {}};
+    return {address_string, {}, std::nullopt};
+}
+
+std::pair<std::string_view, std::string_view> ag::utils::split_host_port(std::string_view address_string) {
+    auto[host, port, err] = split_host_port_with_err(address_string);
+    return {host, port};
 }
 
 std::string ag::utils::join_host_port(std::string_view host, std::string_view port) {

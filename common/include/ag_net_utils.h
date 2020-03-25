@@ -4,10 +4,24 @@
 #include <ctime>
 #include <string>
 #include <string_view>
+#include <tuple>
+#include <utility>
 #include <ag_defs.h>
 #include <ag_socket_address.h>
 
 namespace ag::utils {
+
+
+/**
+ * Split address string to host and port with error
+ * @param address_string Address string
+ * @param require_ipv6_addr_in_square_brackets Require IPv6 address in square brackets
+ * @param require_non_empty_port Require non-empty port after colon
+ * @return Host, port, error
+ */
+std::tuple<std::string_view, std::string_view, err_string_view> split_host_port_with_err(
+        std::string_view address_string, bool require_ipv6_addr_in_square_brackets = false,
+        bool require_non_empty_port = false);
 
 /**
  * Split address string to host and port

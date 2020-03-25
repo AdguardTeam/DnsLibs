@@ -9,6 +9,8 @@
 #include <vector>
 #include <event2/util.h>
 #include <ag_utils.h>
+#include <ag_net_utils.h>
+#include <ag_socket_address.h>
 #include <base64.h>
 #include <dns_stamp.h>
 #ifdef _WIN32
@@ -17,64 +19,62 @@
 
 namespace ag {
 
-namespace {
-
 using write_stamp_part_function_t = std::function<void(std::vector<uint8_t> &, const server_stamp &)>;
 using read_stamp_part_function_t = std::function<err_string(server_stamp &, size_t &, const std::vector<uint8_t> &)>;
 
-constexpr auto PLAIN_STAMP_MIN_SIZE = 17;
-constexpr auto DNSCRYPT_STAMP_MIN_SIZE = 66;
-constexpr auto DOH_STAMP_MIN_SIZE = 22;
-constexpr auto DOT_STAMP_MIN_SIZE = 22;
+static constexpr auto PLAIN_STAMP_MIN_SIZE = 17;
+static constexpr auto DNSCRYPT_STAMP_MIN_SIZE = 66;
+static constexpr auto DOH_STAMP_MIN_SIZE = 22;
+static constexpr auto DOT_STAMP_MIN_SIZE = 22;
 
-std::string_view remove_suffix_if_exists(std::string_view value, std::string_view suffix) {
+static std::string_view remove_suffix_if_exists(std::string_view value, std::string_view suffix) {
     auto suffix_size = (utils::ends_with(value, suffix)) ? suffix.size() : 0;
     std::string_view result(value);
     result.remove_suffix(suffix_size);
     return result;
 }
 
-void write_bytes(std::vector<uint8_t> &result, const void *data, size_t size) {
+static void write_bytes(std::vector<uint8_t> &result, const void *data, size_t size) {
     auto begin = static_cast<const uint8_t *>(data);
     auto end = begin + size;
     result.insert(result.end(), begin, end);
 }
 
 template<typename T>
-std::enable_if_t<std::is_standard_layout_v<T>>
+static std::enable_if_t<std::is_standard_layout_v<T>>
 write_bytes(std::vector<uint8_t> &result, const T &value) {
     write_bytes(result, &value, sizeof value);
 }
 
-void write_bytes_with_size(std::vector<uint8_t> &result, const void *data, size_t size, uint8_t mask = 0) {
+static void write_bytes_with_size(std::vector<uint8_t> &result, const void *data, size_t size, uint8_t mask = 0) {
     uint8_t size_data = size | mask;
     write_bytes(result, size_data);
     write_bytes(result, data, size);
 }
 
 template<typename T>
-decltype(std::declval<T>().data(), void(), std::declval<T>().size(), void())
+static decltype(std::declval<T>().data(), void(), std::declval<T>().size(), void()) // T has .data(), .size()
 write_bytes_with_size(std::vector<uint8_t> &result, const T &value, uint8_t mask = 0) {
     write_bytes_with_size(result, value.data(), value.size(), mask);
 }
 
-size_t read_size(size_t &pos, const std::vector<uint8_t> &value) {
+static size_t read_size(size_t &pos, const std::vector<uint8_t> &value) {
     auto stamp_size = static_cast<size_t>(value[pos]);
     ++pos;
     return stamp_size;
 }
 
-bool check_size(size_t size, size_t pos, const std::vector<uint8_t> &value) {
+static bool check_size(size_t size, size_t pos, const std::vector<uint8_t> &value) {
     return size + pos <= value.size();
 }
 
-bool read_size_with_check(size_t &stamp_size, size_t &pos, const std::vector<uint8_t> &value) {
+static bool read_size_with_check(size_t &stamp_size, size_t &pos, const std::vector<uint8_t> &value) {
     stamp_size = read_size(pos, value);
     return check_size(stamp_size, pos, value);
 }
 
 template<typename T>
-bool read_bytes_using_size(T &result, size_t &pos, size_t stamp_size, const std::vector<uint8_t> &value) {
+static bool read_bytes_using_size(T &result, size_t &pos, size_t stamp_size, const std::vector<uint8_t> &value) {
     result.reserve(stamp_size);
     auto begin = value.data() + pos;
     auto end = begin + stamp_size;
@@ -84,7 +84,7 @@ bool read_bytes_using_size(T &result, size_t &pos, size_t stamp_size, const std:
 }
 
 template<typename T>
-bool read_bytes_with_size(T &result, size_t &pos, const std::vector<uint8_t> &value) {
+static bool read_bytes_with_size(T &result, size_t &pos, const std::vector<uint8_t> &value) {
     size_t stamp_size{};
     if (!read_size_with_check(stamp_size, pos, value)) {
         return false;
@@ -94,24 +94,24 @@ bool read_bytes_with_size(T &result, size_t &pos, const std::vector<uint8_t> &va
 }
 
 template<typename T>
-void read_bytes(T &result, size_t &pos, const std::vector<uint8_t> &value) {
+static void read_bytes(T &result, size_t &pos, const std::vector<uint8_t> &value) {
     memcpy(&result, value.data() + pos, sizeof result);
     pos += sizeof result;
 }
 
-void write_stamp_proto_props_server_addr_str(std::vector<uint8_t> &bin, const server_stamp &stamp,
-                                             stamp_proto_type stamp_proto_type, stamp_port port) {
+static void write_stamp_proto_props_server_addr_str(std::vector<uint8_t> &bin, const server_stamp &stamp,
+                                                    stamp_proto_type stamp_proto_type, stamp_port port) {
     bin = {static_cast<uint8_t>(stamp_proto_type)};
     write_bytes(bin, stamp.props);
     auto port_suffix = AG_FMT(":{}", port);
     write_bytes_with_size(bin, remove_suffix_if_exists(stamp.server_addr_str, port_suffix));
 }
 
-void write_stamp_server_pk(std::vector<uint8_t> &bin, const server_stamp &stamp) {
+static void write_stamp_server_pk(std::vector<uint8_t> &bin, const server_stamp &stamp) {
     write_bytes_with_size(bin, stamp.server_pk);
 }
 
-void write_stamp_hashes(std::vector<uint8_t> &bin, const server_stamp &stamp) {
+static void write_stamp_hashes(std::vector<uint8_t> &bin, const server_stamp &stamp) {
     auto &hashes = stamp.hashes;
     if (hashes.empty()) {
         write_bytes(bin, uint8_t{0});
@@ -125,16 +125,16 @@ void write_stamp_hashes(std::vector<uint8_t> &bin, const server_stamp &stamp) {
     }
 }
 
-void write_stamp_provider_name(std::vector<uint8_t> &bin, const server_stamp &stamp) {
+static void write_stamp_provider_name(std::vector<uint8_t> &bin, const server_stamp &stamp) {
     write_bytes_with_size(bin, stamp.provider_name);
 }
 
-void write_stamp_path(std::vector<uint8_t> &bin, const server_stamp &stamp) {
+static void write_stamp_path(std::vector<uint8_t> &bin, const server_stamp &stamp) {
     write_bytes_with_size(bin, stamp.path);
 }
 
-std::string stamp_string(const server_stamp &stamp, stamp_proto_type stamp_proto_type, stamp_port port,
-                         std::initializer_list<write_stamp_part_function_t> fs) {
+static std::string stamp_string(const server_stamp &stamp, stamp_proto_type stamp_proto_type, stamp_port port,
+                                std::initializer_list<write_stamp_part_function_t> fs) {
     std::vector<uint8_t> bin;
     write_stamp_proto_props_server_addr_str(bin, stamp, stamp_proto_type, port);
     for (const auto &f : fs) {
@@ -143,8 +143,9 @@ std::string stamp_string(const server_stamp &stamp, stamp_proto_type stamp_proto
     return STAMP_URL_PREFIX_WITH_SCHEME + encode_to_base64(uint8_view(bin.data(), bin.size()), true);
 }
 
-err_string read_stamp_proto_props_server_addr_str(server_stamp &stamp, size_t &pos, const std::vector<uint8_t> &value,
-                                                  stamp_proto_type proto, size_t min_value_size, stamp_port port) {
+static err_string read_stamp_proto_props_server_addr_str(server_stamp &stamp, size_t &pos,
+                                                         const std::vector<uint8_t> &value, stamp_proto_type proto,
+                                                         size_t min_value_size, stamp_port default_port) {
     stamp.proto = proto;
     if (value.size() < min_value_size) {
         return "Stamp is too short";
@@ -154,34 +155,26 @@ err_string read_stamp_proto_props_server_addr_str(server_stamp &stamp, size_t &p
     if (!read_bytes_with_size(stamp.server_addr_str, pos, value)) {
         return "Invalid stamp";
     }
-    std::string_view addr_str_copy_sv = stamp.server_addr_str;
-    if (auto starts_with_bracket = addr_str_copy_sv.front() == '[', ends_with_bracket = addr_str_copy_sv.back() == ']';
-        starts_with_bracket && ends_with_bracket) {
-        addr_str_copy_sv = addr_str_copy_sv.substr(1, addr_str_copy_sv.size() - 2);
-    } else if (starts_with_bracket || ends_with_bracket) {
-        return "Invalid stamp";
+    auto[host, port, err] = utils::split_host_port_with_err(stamp.server_addr_str, true, true);
+    if (err) {
+        return err_string(err);
     }
-    addrinfo* addrinfo_res = nullptr;
-    addrinfo addrinfo_hints{};
-    addrinfo_hints.ai_family = AF_UNSPEC;
-    addrinfo_hints.ai_flags = AI_NUMERICHOST;
-    std::string addr_str_copy_s(addr_str_copy_sv.begin(), addr_str_copy_sv.end());
-    auto getaddrinfo_result = getaddrinfo(addr_str_copy_s.c_str(), nullptr, &addrinfo_hints, &addrinfo_res);
-    if (getaddrinfo_result == 0 && (addrinfo_res->ai_family == AF_INET || addrinfo_res->ai_family == AF_INET6)) {
-        stamp.server_addr_str += AG_FMT(":{}", port);
+    socket_address addr(host, 0);
+    sa_family_t family = addr.c_sockaddr()->sa_family;
+    if (port.empty() && addr.valid() && (family == AF_INET || family == AF_INET6)) {
+        stamp.server_addr_str += AG_FMT(":{}", default_port);
     }
-    freeaddrinfo(addrinfo_res);
     return std::nullopt;
 }
 
-err_string read_stamp_server_pk(server_stamp &stamp, size_t &pos, const std::vector<uint8_t> &value) {
+static err_string read_stamp_server_pk(server_stamp &stamp, size_t &pos, const std::vector<uint8_t> &value) {
     if (!read_bytes_with_size(stamp.server_pk, pos, value)) {
         return "Invalid stamp";
     }
     return std::nullopt;
 }
 
-err_string read_stamp_hashes(server_stamp &stamp, size_t &pos, const std::vector<uint8_t> &value) {
+static err_string read_stamp_hashes(server_stamp &stamp, size_t &pos, const std::vector<uint8_t> &value) {
     while (true) {
         uint8_t hash_size_raw = read_size(pos, value);
         uint8_t hash_size = hash_size_raw & ~0x80u;
@@ -199,29 +192,29 @@ err_string read_stamp_hashes(server_stamp &stamp, size_t &pos, const std::vector
     return std::nullopt;
 }
 
-err_string read_stamp_provider_name(server_stamp &stamp, size_t &pos, const std::vector<uint8_t> &value) {
+static err_string read_stamp_provider_name(server_stamp &stamp, size_t &pos, const std::vector<uint8_t> &value) {
     if (!read_bytes_with_size(stamp.provider_name, pos, value)) {
         return "Invalid stamp";
     }
     return std::nullopt;
 }
 
-err_string read_stamp_path(server_stamp &stamp, size_t &pos, const std::vector<uint8_t> &value) {
+static err_string read_stamp_path(server_stamp &stamp, size_t &pos, const std::vector<uint8_t> &value) {
     if (!read_bytes_with_size(stamp.path, pos, value)) {
         return "Invalid stamp";
     }
     return std::nullopt;
 }
 
-err_string check_garbage_after_end([[maybe_unused]] server_stamp &stamp, size_t pos,
-                                   const std::vector<uint8_t> &value) {
+static err_string check_garbage_after_end([[maybe_unused]] server_stamp &stamp, size_t pos,
+                                          const std::vector<uint8_t> &value) {
     if (pos != value.size()) {
         return "Invalid stamp (garbage after end)";
     }
     return std::nullopt;
 }
 
-server_stamp::from_str_result new_server_stamp_basic(const std::vector<uint8_t> &bin,
+static server_stamp::from_str_result new_server_stamp_basic(const std::vector<uint8_t> &bin,
                                                      const std::list<read_stamp_part_function_t> &fs) {
     server_stamp result{};
     size_t pos{};
@@ -233,27 +226,27 @@ server_stamp::from_str_result new_server_stamp_basic(const std::vector<uint8_t> 
     return {std::move(result), std::nullopt};
 }
 
-server_stamp::from_str_result new_server_stamp(const std::vector<uint8_t> &bin, stamp_proto_type proto,
-                                               size_t min_value_size, stamp_port port,
-                                               std::list<read_stamp_part_function_t> fs) {
+static server_stamp::from_str_result new_server_stamp(const std::vector<uint8_t> &bin, stamp_proto_type proto,
+                                                      size_t min_value_size, stamp_port port,
+                                                      std::list<read_stamp_part_function_t> fs) {
     using namespace std::placeholders;
     fs.emplace_front(std::bind(read_stamp_proto_props_server_addr_str, _1, _2, _3, proto, min_value_size, port));
     fs.emplace_back(check_garbage_after_end);
     return new_server_stamp_basic(bin, fs);
 }
 
-std::string stamp_plain_string(const server_stamp &stamp) {
+static std::string stamp_plain_string(const server_stamp &stamp) {
     return stamp_string(stamp, stamp_proto_type::PLAIN, DEFAULT_PLAIN_PORT, {});
 }
 
-std::string stamp_dnscrypt_string(const server_stamp &stamp) {
+static std::string stamp_dnscrypt_string(const server_stamp &stamp) {
     return stamp_string(stamp, stamp_proto_type::DNSCRYPT, DEFAULT_DOH_PORT, {
         write_stamp_server_pk,
         write_stamp_provider_name,
     });
 }
 
-std::string stamp_doh_string(const server_stamp &stamp) {
+static std::string stamp_doh_string(const server_stamp &stamp) {
     return stamp_string(stamp, stamp_proto_type::DOH, DEFAULT_DOH_PORT, {
         write_stamp_hashes,
         write_stamp_provider_name,
@@ -261,25 +254,25 @@ std::string stamp_doh_string(const server_stamp &stamp) {
     });
 }
 
-std::string stamp_dot_string(const server_stamp &stamp) {
+static std::string stamp_dot_string(const server_stamp &stamp) {
     return stamp_string(stamp, stamp_proto_type::TLS, DEFAULT_DOT_PORT, {
         write_stamp_hashes,
         write_stamp_provider_name,
     });
 }
 
-server_stamp::from_str_result new_plain_server_stamp(const std::vector<uint8_t> &bin) {
+static server_stamp::from_str_result new_plain_server_stamp(const std::vector<uint8_t> &bin) {
     return new_server_stamp(bin, stamp_proto_type::PLAIN, PLAIN_STAMP_MIN_SIZE, DEFAULT_PLAIN_PORT, {});
 }
 
-server_stamp::from_str_result new_dnscrypt_server_stamp(const std::vector<uint8_t> &bin) {
+static server_stamp::from_str_result new_dnscrypt_server_stamp(const std::vector<uint8_t> &bin) {
     return new_server_stamp(bin, stamp_proto_type::DNSCRYPT, DNSCRYPT_STAMP_MIN_SIZE, DEFAULT_DOH_PORT, {
         read_stamp_server_pk,
         read_stamp_provider_name,
     });
 }
 
-server_stamp::from_str_result new_doh_server_stamp(const std::vector<uint8_t> &bin) {
+static server_stamp::from_str_result new_doh_server_stamp(const std::vector<uint8_t> &bin) {
     return new_server_stamp(bin, stamp_proto_type::DOH, DOH_STAMP_MIN_SIZE, DEFAULT_DOH_PORT, {
         read_stamp_hashes,
         read_stamp_provider_name,
@@ -287,14 +280,12 @@ server_stamp::from_str_result new_doh_server_stamp(const std::vector<uint8_t> &b
     });
 }
 
-server_stamp::from_str_result new_dot_server_stamp(const std::vector<uint8_t> &bin) {
+static server_stamp::from_str_result new_dot_server_stamp(const std::vector<uint8_t> &bin) {
     return new_server_stamp(bin, stamp_proto_type::TLS, DOT_STAMP_MIN_SIZE, DEFAULT_DOT_PORT, {
         read_stamp_hashes,
         read_stamp_provider_name,
     });
 }
-
-} // namespace
 
 std::string server_stamp::str() const {
     switch (proto) {
