@@ -14,7 +14,7 @@
 
 
 // Set the libuv thread pool size. Must happen before any libuv usage to have effect.
-static const int THREAD_POOL_SIZE_RESULT [[maybe_unused]] = uv_os_setenv("UV_THREADPOOL_SIZE", "128");
+static const int THREAD_POOL_SIZE_RESULT [[maybe_unused]] = uv_os_setenv("UV_THREADPOOL_SIZE", "24");
 
 // For TCP this could be arbitrarily small, but we would prefer to catch the whole request in one buffer.
 static constexpr size_t TCP_RECV_BUF_SIZE = ag::UDP_RECV_BUF_SIZE + 2; // + 2 for payload length
