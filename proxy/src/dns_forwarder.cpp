@@ -852,16 +852,6 @@ std::vector<uint8_t> dns_forwarder::handle_message(uint8_view message) {
 
     const ldns_rr_type type = ldns_rr_get_type(question);
 
-    // IPv6 blocking
-    if (this->settings->block_ipv6 && LDNS_RR_TYPE_AAAA == type) {
-        dbglog_fid(log, request, "AAAA DNS query blocked because IPv6 blocking is enabled");
-        ldns_pkt_ptr response(create_soa_response(request, this->settings, SOA_RETRY_IPV6_BLOCK));
-        log_packet(log, response.get(), "IPv6 blocking response");
-        std::vector<uint8_t> raw_response = transform_response_to_raw_data(response.get());
-        finalize_processed_event(event, request, response.get(), nullptr, nullptr, std::nullopt);
-        return raw_response;
-    }
-
     // disable Mozilla DoH
     if ((type == LDNS_RR_TYPE_A || type == LDNS_RR_TYPE_AAAA)
             && 0 == strcmp(domain.get(), MOZILLA_DOH_HOST.data())) {
@@ -879,6 +869,20 @@ std::vector<uint8_t> dns_forwarder::handle_message(uint8_view message) {
     tracelog_fid(log, request, "Query domain: {}", pure_domain);
 
     std::vector<dnsfilter::rule> effective_rules;
+
+    // IPv6 blocking
+    if (this->settings->block_ipv6 && LDNS_RR_TYPE_AAAA == type) {
+        ldns_pkt_rcode rc = LDNS_RCODE_NOERROR;
+        auto raw_blocking_response = apply_filter(pure_domain, request, nullptr, event, effective_rules, false, &rc);
+        if (!raw_blocking_response || rc != LDNS_RCODE_NXDOMAIN) {
+            dbglog_fid(log, request, "AAAA DNS query blocked because IPv6 blocking is enabled");
+            ldns_pkt_ptr response(create_soa_response(request, this->settings, SOA_RETRY_IPV6_BLOCK));
+            log_packet(log, response.get(), "IPv6 blocking response");
+            return transform_response_to_raw_data(response.get());
+        }
+        return *raw_blocking_response;
+    }
+
     if (auto raw_blocking_response = apply_filter(pure_domain, request, nullptr, event, effective_rules)) {
         return *raw_blocking_response;
     }
@@ -994,7 +998,8 @@ std::optional<uint8_vector> dns_forwarder::apply_ip_filter(const ldns_rr *rr,
 std::optional<uint8_vector> dns_forwarder::apply_filter(std::string_view hostname, const ldns_pkt *request,
                                                         const ldns_pkt *original_response,
                                                         dns_request_processed_event &event,
-                                                        std::vector<dnsfilter::rule> &last_effective_rules) {
+                                                        std::vector<dnsfilter::rule> &last_effective_rules,
+                                                        bool fire_event, ldns_pkt_rcode *out_rcode) {
     auto rules = this->filter.match(this->filter_handle, hostname);
     for (const dnsfilter::rule &rule : rules) {
         tracelog_fid(log, request, "Matched rule: {}", rule.text);
@@ -1016,8 +1021,13 @@ std::optional<uint8_vector> dns_forwarder::apply_filter(std::string_view hostnam
     dbglog_fid(log, request, "DNS query blocked by rule: {}", effective_rules[0]->text);
     ldns_pkt_ptr response(create_blocking_response(request, this->settings, effective_rules));
     log_packet(log, response.get(), "Rule blocked response");
+    if (out_rcode) {
+        *out_rcode = ldns_pkt_get_rcode(response.get());
+    }
     std::vector<uint8_t> raw_response = transform_response_to_raw_data(response.get());
-    finalize_processed_event(event, request, response.get(), original_response, nullptr, std::nullopt);
+    if (fire_event) {
+        finalize_processed_event(event, request, response.get(), original_response, nullptr, std::nullopt);
+    }
 
     return raw_response;
 }

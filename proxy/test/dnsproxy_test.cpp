@@ -78,6 +78,7 @@ TEST_F(dnsproxy_test, test_ipv6_blocking) {
     ag::dnsproxy_settings settings = ag::dnsproxy_settings::get_default();
     settings.block_ipv6 = true;
     settings.ipv6_available = false;
+    settings.filter_params = {{{1, "cname_blocking_test_filter.txt"}}};
 
     auto [ret, err] = proxy.init(settings, {});
     ASSERT_TRUE(ret) << *err;
@@ -88,6 +89,22 @@ TEST_F(dnsproxy_test, test_ipv6_blocking) {
 
     ASSERT_EQ(ldns_pkt_ancount(response.get()), 0);
     ASSERT_EQ(ldns_pkt_get_rcode(response.get()), LDNS_RCODE_NOERROR);
+    ASSERT_EQ(ldns_pkt_nscount(response.get()), 1);
+
+    pkt = create_request("google.com", LDNS_RR_TYPE_AAAA, LDNS_RD);
+    response.reset();
+    ASSERT_NO_FATAL_FAILURE(perform_request(proxy, pkt, response));
+
+    ASSERT_EQ(ldns_pkt_ancount(response.get()), 0);
+    ASSERT_EQ(ldns_pkt_get_rcode(response.get()), LDNS_RCODE_NOERROR);
+    ASSERT_EQ(ldns_pkt_nscount(response.get()), 1);
+
+    pkt = create_request("example.org", LDNS_RR_TYPE_AAAA, LDNS_RD);
+    response.reset();
+    ASSERT_NO_FATAL_FAILURE(perform_request(proxy, pkt, response));
+
+    ASSERT_EQ(ldns_pkt_ancount(response.get()), 0);
+    ASSERT_EQ(ldns_pkt_get_rcode(response.get()), LDNS_RCODE_NXDOMAIN);
     ASSERT_EQ(ldns_pkt_nscount(response.get()), 1);
 }
 

@@ -50,7 +50,8 @@ private:
                                              const ldns_pkt *request,
                                              const ldns_pkt *original_response,
                                              dns_request_processed_event &event,
-                                             std::vector<dnsfilter::rule> &last_effective_rules);
+                                             std::vector<dnsfilter::rule> &last_effective_rules,
+                                             bool fire_event = true, ldns_pkt_rcode *out_rcode = nullptr);
 
     std::optional<uint8_vector> apply_cname_filter(const ldns_rr *cname_rr, const ldns_pkt *request,
                                                    const ldns_pkt *response, dns_request_processed_event &event,
