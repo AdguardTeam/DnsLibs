@@ -337,7 +337,7 @@ ag::dnsfilter::engine_params ag::android_dnsproxy::marshal_filter_params(JNIEnv 
     ag::dnsfilter::engine_params params;
 
     jint size = env->CallIntMethod(java_filter_params, size_method);
-    for (int64_t i = 0; i < size; ++i) {
+    for (jint i = 0; i < size; ++i) {
         jint key = env->CallIntMethod(java_filter_params, key_at_method, i);
         local_ref val(env, env->CallObjectMethod(java_filter_params, val_at_method, i));
         m_utils.visit_string(env, val.get(), [&](const char *str, jsize len) {
