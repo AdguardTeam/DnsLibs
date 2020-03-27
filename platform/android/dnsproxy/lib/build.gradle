@@ -15,7 +15,7 @@ android {
         externalNativeBuild {
             cmake {
                 targets "adguard-dns"
-                arguments "-DANDROID_STL=c++_static", "-C${projectDir}/../../../../cmake/booster.cmake"
+                arguments "-DANDROID_STL=c++_static", "-DCMAKE_BUILD_TYPE=RelWithDebInfo", "-C${projectDir}/../../../../cmake/booster.cmake"
             }
         }
     }
@@ -40,6 +40,13 @@ android {
             path "CMakeLists.txt"
             version "3.10.2"
         }
+    }
+
+    packagingOptions{
+        doNotStrip "*/armeabi/*.so"
+        doNotStrip "*/armeabi-v7a/*.so"
+        doNotStrip "*/x86/*.so"
+        doNotStrip "*/x86_64/*.so"
     }
 }
 
