@@ -61,8 +61,7 @@ private:
                                                 const ldns_pkt *response, dns_request_processed_event &event,
                                                 std::vector<dnsfilter::rule> &last_effective_rules);
 
-    ldns_pkt_ptr try_dns64_aaaa_synthesis(upstream *upstream, const ldns_pkt_ptr &request,
-        const ldns_pkt_ptr &response) const;
+    ldns_pkt_ptr try_dns64_aaaa_synthesis(upstream *upstream, const ldns_pkt_ptr &request) const;
 
     void finalize_processed_event(dns_request_processed_event &event,
         const ldns_pkt *request, const ldns_pkt *response, const ldns_pkt *original_response,

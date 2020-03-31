@@ -416,8 +416,7 @@ void dns_forwarder::finalize_processed_event(dns_request_processed_event &event,
 
 // If we know any DNS64 prefixes, request A RRs from `upstream` and
 // return a synthesized AAAA response or nullptr if synthesis was unsuccessful
-ldns_pkt_ptr dns_forwarder::try_dns64_aaaa_synthesis(upstream *upstream, const ldns_pkt_ptr &request,
-        const ldns_pkt_ptr &response) const {
+ldns_pkt_ptr dns_forwarder::try_dns64_aaaa_synthesis(upstream *upstream, const ldns_pkt_ptr &request) const {
     std::scoped_lock l(this->dns64_prefixes->mtx);
 
     if (this->dns64_prefixes->val.empty()) {
@@ -436,6 +435,7 @@ ldns_pkt_ptr dns_forwarder::try_dns64_aaaa_synthesis(upstream *upstream, const l
 
     ldns_pkt_set_cd(request_a.get(), ldns_pkt_cd(request.get()));
     ldns_pkt_set_rd(request_a.get(), ldns_pkt_rd(request.get()));
+    ldns_pkt_set_random_id(request_a.get());
 
     const auto[response_a, err] = upstream->exchange(request_a.get());
     if (err.has_value()) {
@@ -450,11 +450,13 @@ ldns_pkt_ptr dns_forwarder::try_dns64_aaaa_synthesis(upstream *upstream, const l
         return nullptr;
     }
 
-    ldns_rr_list *aaaa_list = ldns_rr_list_new();
+    ldns_rr_list *rr_list = ldns_rr_list_new();
+    size_t aaaa_rr_count = 0;
     for (size_t i = 0; i < ancount; ++i) {
         const ldns_rr *a_rr = ldns_rr_list_rr(ldns_pkt_answer(response_a.get()), i);
 
         if (LDNS_RR_TYPE_A != ldns_rr_get_type(a_rr)) {
+            ldns_rr_list_push_rr(rr_list, ldns_rr_clone(a_rr));
             continue;
         }
 
@@ -478,28 +480,31 @@ ldns_pkt_ptr dns_forwarder::try_dns64_aaaa_synthesis(upstream *upstream, const l
             ldns_rdf_deep_free(ldns_rr_pop_rdf(aaaa_rr)); // ip4 view becomes invalid here
             ldns_rr_push_rdf(aaaa_rr, ldns_rdf_new_frm_data(LDNS_RDF_TYPE_AAAA, ip6.size(), ip6.data()));
 
-            ldns_rr_list_push_rr(aaaa_list, aaaa_rr);
+            ldns_rr_list_push_rr(rr_list, aaaa_rr);
+            ++aaaa_rr_count;
         }
     }
 
-    const size_t aaaa_rr_count = ldns_rr_list_rr_count(aaaa_list);
     dbglog_fid(log, request.get(), "DNS64: synthesized AAAA RRs: {}", aaaa_rr_count);
     if (aaaa_rr_count == 0) {
-        ldns_rr_list_free(aaaa_list);
+        ldns_rr_list_free(rr_list);
         return nullptr;
     }
 
     ldns_pkt *aaaa_resp = ldns_pkt_new();
     ldns_pkt_set_id(aaaa_resp, ldns_pkt_id(request.get()));
     ldns_pkt_set_rd(aaaa_resp, ldns_pkt_rd(request.get()));
+    ldns_pkt_set_ra(aaaa_resp, ldns_pkt_ra(response_a.get()));
+    ldns_pkt_set_cd(aaaa_resp, ldns_pkt_cd(response_a.get()));
+    ldns_pkt_set_qr(aaaa_resp, true);
 
     ldns_rr_list_deep_free(ldns_pkt_question(aaaa_resp));
     ldns_pkt_set_qdcount(aaaa_resp, ldns_pkt_qdcount(request.get()));
     ldns_pkt_set_question(aaaa_resp, ldns_pkt_get_section_clone(request.get(), LDNS_SECTION_QUESTION));
 
     ldns_rr_list_deep_free(ldns_pkt_answer(aaaa_resp));
-    ldns_pkt_set_ancount(aaaa_resp, aaaa_rr_count);
-    ldns_pkt_set_answer(aaaa_resp, aaaa_list);
+    ldns_pkt_set_ancount(aaaa_resp, ldns_rr_list_rr_count(rr_list));
+    ldns_pkt_set_answer(aaaa_resp, rr_list);
 
     return ldns_pkt_ptr(aaaa_resp);
 }
@@ -932,10 +937,19 @@ std::vector<uint8_t> dns_forwarder::handle_message(uint8_view message) {
         }
 
         // DNS64 synthesis
-        if (settings->dns64.has_value() && LDNS_RR_TYPE_AAAA == type && 0 == ancount) {
-            if (auto synth_response = try_dns64_aaaa_synthesis(successful_upstream, req_holder, response)) {
-                response = std::move(synth_response);
-                log_packet(log, response.get(), "DNS64 synthesized response");
+        if (settings->dns64.has_value() && LDNS_RR_TYPE_AAAA == type) {
+            bool has_aaaa = false;
+            for (size_t i = 0; i < ancount; ++i) {
+                auto rr = ldns_rr_list_rr(ldns_pkt_answer(response.get()), i);
+                if (ldns_rr_get_type(rr) == LDNS_RR_TYPE_AAAA) {
+                    has_aaaa = true;
+                }
+            }
+            if (!has_aaaa) {
+                if (auto synth_response = try_dns64_aaaa_synthesis(successful_upstream, req_holder)) {
+                    response = std::move(synth_response);
+                    log_packet(log, response.get(), "DNS64 synthesized response");
+                }
             }
         }
     }
