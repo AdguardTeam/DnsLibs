@@ -43,7 +43,7 @@ android {
     }
 
     packagingOptions{
-        doNotStrip "*/armeabi/*.so"
+        doNotStrip "*/arm64-v8a/*.so"
         doNotStrip "*/armeabi-v7a/*.so"
         doNotStrip "*/x86/*.so"
         doNotStrip "*/x86_64/*.so"
