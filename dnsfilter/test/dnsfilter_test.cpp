@@ -52,7 +52,7 @@ TEST_F(dnsfilter_test, successful_rule_parsing) {
 
     const test_data TEST_DATA[] =
         {
-            { "example.org", { {}, rule_utils::rule::MMID_SHORTCUTS } },
+            { "example.org", { {}, rule_utils::rule::MMID_EXACT } },
             { "@@example.org", { { .props = { 1 << ag::dnsfilter::RP_EXCEPTION } }, rule_utils::rule::MMID_SHORTCUTS } },
             { "example.org$important", { { .props = { 1 << ag::dnsfilter::RP_IMPORTANT } }, rule_utils::rule::MMID_SHORTCUTS } },
             { "@@example.org$important", { { .props = { (1 << ag::dnsfilter::RP_EXCEPTION) | (1 << ag::dnsfilter::RP_IMPORTANT) } }, rule_utils::rule::MMID_SHORTCUTS } },
@@ -217,7 +217,7 @@ TEST_F(dnsfilter_test, basic_rules_match) {
             { { "*mple7.org" }, "example7.org", true, },
             { { "ExAmPlE8.org" }, "example8.org", true, },
             { { "example9.org" }, "EXAMPLE9.org", true, },
-            { { ".example10.org" }, "sub.example10.org", true, },
+            { { ".example10.org" }, "sub.example10.org", true },
             { { "http://example11.org" }, "example11.org", true, },
             { { "http://example111.org" }, "example111.org1", true, },
             { { "http://example1111.org" }, "sub.example1111.org1", true, },
@@ -247,7 +247,9 @@ TEST_F(dnsfilter_test, basic_rules_match) {
             { { "example55.org:8080" }, "eexample55.org", true, },
             { { "example56.org/^" }, "eexample56.org", true, },
             { { "example56.org^/" }, "eexample56.org", true, },
-            { { "0.1" }, "10.0.0.1", true, },
+            { { "0.1" }, "0.1", true, },
+            { { "confusing." }, "veryconfusing.indeed", true, },
+            { { "reconfusing." }, "even.moreconfusing.indeed", true, },
         };
 
     for (const test_data &entry : TEST_DATA) {
@@ -308,6 +310,8 @@ TEST_F(dnsfilter_test, basic_rules_no_match) {
             { "example15.org^/", "example15.orgg"},
             { "example15.org/^", "example15.orgg"},
             { "||123.123.123.123^", "123.123.123.1234" },
+            { "0.1" , "10.0.0.1" }, // Exact domain matching => no match
+            { "isdotignored." , "isdotignored_no_it_is_not" }, // Dot is not ignored => no match
         };
 
     for (const test_data &entry : TEST_DATA) {

@@ -84,7 +84,7 @@ static inline bool check_domain_pattern_labels(std::string_view domain) {
 
 static inline bool check_domain_pattern_charset(std::string_view domain) {
     return domain.cend() == std::find_if(domain.cbegin(), domain.cend(),
-        [] (int c) -> bool {
+        [] (unsigned char c) -> bool {
             // By RFC1034 $3.5 Preferred name syntax (https://tools.ietf.org/html/rfc1034#section-3.5)
             // plus non-standard:
             //  - '*' for light-weight wildcard regexes
@@ -107,6 +107,20 @@ static inline bool is_valid_ip_pattern(std::string_view str) {
     return str.cend() == std::find_if(str.cbegin(), str.cend(), [](unsigned char c) {
         return !(std::isxdigit(c) || c == '.' || c == ':' || c == '[' || c == ']' || c == '*');
     });
+}
+
+static inline bool is_ip(std::string_view str) {
+    return ag::utils::str_to_socket_address(str).valid();
+}
+
+static inline bool is_domain_name(std::string_view str) {
+    return !str.empty() // Duh
+           && !is_ip(str)
+           && str.npos != str.find('.') // Single label is probably not a real domain name
+           && str.back() != '.' // We consider a domain name ending with '.' a pattern
+           && str.front() != '.' // Valid pattern, but not a valid domain
+           && is_valid_domain_pattern(str) // This is a bit more general than Go dnsproxy's regex, but yolo
+           && str.npos == str.find("*"); // '*' is our special char for pattern matching
 }
 
 // https://github.com/AdguardTeam/AdguardHome/wiki/Hosts-Blocklists#-etchosts-syntax
@@ -272,10 +286,28 @@ static inline bool is_host_rule(std::string_view str) {
             && (ag::utils::is_valid_ip4(parts[0]) || ag::utils::is_valid_ip6(parts[0]));
 }
 
+static inline rule_utils::rule make_exact_domain_name_rule(std::string_view name) {
+    rule_utils::rule r{};
+    r.public_part.text = std::string{name};
+    r.match_method = rule_utils::rule::MMID_EXACT;
+    r.matching_parts = {ag::utils::to_lower(name)};
+    return r;
+}
+
 std::optional<rule_utils::rule> rule_utils::parse(std::string_view str, ag::logger *log) {
     std::string_view orig_str = str;
-    if (str.empty() || is_comment(str)) {
+    if (is_comment(str)) {
         return std::nullopt;
+    }
+
+    ag::utils::trim(str);
+
+    if (str.empty()) {
+        return std::nullopt;
+    }
+
+    if (is_domain_name(str)) {
+        return make_exact_domain_name_rule(str);
     }
 
     if (is_host_rule(str)) {
