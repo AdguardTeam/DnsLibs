@@ -27,8 +27,8 @@ public:
     filter(const filter&) = delete;
     filter &operator=(const filter&) = delete;
 
-    enum class load_result {
-        OK, ERROR, MEM_LIMIT_REACHED
+    enum load_result {
+        LR_OK, LR_ERROR, LR_MEM_LIMIT_REACHED
     };
 
     /**

@@ -8,6 +8,8 @@
 #include <ag_net_consts.h>
 #include <cstring>
 #include <dns_forwarder.h>
+#include <upstream_utils.h>
+#include <ag_logger.h>
 
 static constexpr auto DNS64_SERVER_ADDR = "2001:67c:27e4::64";
 static constexpr auto IPV4_ONLY_HOST = "ipv4only.arpa.";
@@ -17,12 +19,12 @@ class dnsproxy_test : public ::testing::Test {
 protected:
     ag::dnsproxy proxy;
 
-    ~dnsproxy_test() override {
-        proxy.deinit();
-    }
-
     void SetUp() override {
         ag::set_default_log_level(ag::TRACE);
+    }
+
+    void TearDown() override {
+        proxy.deinit();
     }
 };
 
@@ -65,6 +67,13 @@ TEST_F(dnsproxy_test, test_dns64) {
 
     auto [ret, err] = proxy.init(settings, {});
     ASSERT_TRUE(ret) << *err;
+
+    // This is after proxy.init() to not crash in proxy.deinit()
+    if (!ag::test_ipv6_connectivity()) {
+        SPDLOG_WARN("IPv6 is NOT available, skipping this test");
+        return;
+    }
+
     std::this_thread::sleep_for(5s); // Let DNS64 discovery happen
 
     ag::ldns_pkt_ptr pkt = create_request(IPV4_ONLY_HOST, LDNS_RR_TYPE_AAAA, LDNS_RD);

@@ -163,7 +163,7 @@ ag::dnscrypt::server_info::decrypt_result ag::dnscrypt::server_info::decrypt(uin
         !std::equal(std::begin(SERVER_MAGIC), std::end(SERVER_MAGIC), encrypted.begin())) {
         return make_error("Invalid message size or prefix");
     }
-    auto server_nonce = utils::to_array<NONCE_SIZE>(encrypted.begin() + server_magic_len);
+    auto server_nonce = utils::to_array<NONCE_SIZE>(encrypted.data() + server_magic_len);
     if (!std::equal(nonce.begin(), nonce.begin() + HALF_NONCE_SIZE, server_nonce.begin())) {
         return make_error("Unexpected nonce");
     }

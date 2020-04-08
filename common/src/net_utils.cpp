@@ -2,6 +2,11 @@
 #include <ag_net_utils.h>
 #include <ag_socket_address.h>
 
+// To build with mingw
+#ifndef INET6_ADDRSTRLEN
+#define INET6_ADDRSTRLEN 46
+#endif
+
 std::tuple<std::string_view, std::string_view, ag::err_string_view> ag::utils::split_host_port_with_err(
         std::string_view address_string, bool require_ipv6_addr_in_square_brackets, bool require_non_empty_port) {
     if (!address_string.empty() && address_string.front() == '[') {

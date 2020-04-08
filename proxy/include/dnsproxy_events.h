@@ -18,13 +18,13 @@ struct dns_request_processed_event {
     std::string domain; /**< Queried domain name */
     std::string type; /**< Query type */
     int64_t start_time; /**< Time when dnsproxy started processing request (epoch in milliseconds) */
-    int elapsed; /**< Time elapsed on processing (in milliseconds) */
+    int32_t elapsed; /**< Time elapsed on processing (in milliseconds) */
     std::string status; /**< DNS answer's status */
     std::string answer; /**< DNS Answers string representation */
     std::string original_answer; /**< If blocked by CNAME, here will be DNS original answer's string representation */
-    std::string upstream_addr; /**< Address of the upstream used to resolve */
-    int bytes_sent; /**< Number of bytes sent to a server */
-    int bytes_received; /**< Number of bytes received from a server */
+    int32_t upstream_id; /** ID of the upstream that provided this answer */
+    int32_t bytes_sent; /**< Number of bytes sent to a server */
+    int32_t bytes_received; /**< Number of bytes received from a server */
     std::vector<std::string> rules; /**< Filtering rules texts */
     std::vector<int32_t> filter_list_ids; /**< Filter lists IDs of corresponding rules */
     bool whitelist; /**< True if filtering rule is whitelist */

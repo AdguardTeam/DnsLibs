@@ -1,6 +1,9 @@
 cmake_minimum_required(VERSION 3.6)
 project(libevent)
 
+include(../../common/apply_patch.cmake)
+apply_patch("${CMAKE_CURRENT_SOURCE_DIR}/find_openssl.patch" "${CMAKE_CURRENT_SOURCE_DIR}/libevent")
+
 if (NOT TARGET boringssl_static)
     add_subdirectory(../boringssl ${CMAKE_BINARY_DIR}/boringssl)
 endif()

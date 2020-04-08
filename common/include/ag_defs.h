@@ -1,7 +1,13 @@
 #pragma once
 
-#include <array>
 #include <cstdint>
+#include <cstddef>
+
+#ifdef _WIN32
+typedef intptr_t ssize_t;
+#endif
+
+#include <array>
 #include <cstdlib>
 #include <memory>
 #include <mutex>

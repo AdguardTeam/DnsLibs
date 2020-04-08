@@ -1,7 +1,7 @@
 diff --git a/CMake/OtherTests.cmake b/CMake/OtherTests.cmake
 index c1c9aa32a..bf46d880b 100644
---- a/CMake/OtherTests.cmake
-+++ b/CMake/OtherTests.cmake
+--- CMake/OtherTests.cmake
++++ CMake/OtherTests.cmake
 @@ -217,7 +217,7 @@ endif()
  
  unset(CMAKE_TRY_COMPILE_TARGET_TYPE)

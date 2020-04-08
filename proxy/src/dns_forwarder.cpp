@@ -397,9 +397,9 @@ void dns_forwarder::finalize_processed_event(dns_request_processed_event &event,
     }
 
     if (upstream != nullptr) {
-        event.upstream_addr = upstream->options().address;
+        event.upstream_id = upstream->options().id;
     } else {
-        event.upstream_addr.clear();
+        event.upstream_id = {};
     }
 
     if (error.has_value()) {
@@ -680,12 +680,12 @@ static bool has_unsupported_extensions(const ldns_pkt *pkt) {
 
 // Returns a response synthesized from the cached template, or nullptr if no cache entry satisfies the given key
 ldns_pkt_ptr dns_forwarder::create_response_from_cache(const std::string &key, const ldns_pkt *request) {
-    if (!this->settings->dns_cache_size) {
-        // Caching disabled
+    if (!this->settings->dns_cache_size) { // Caching disabled
         return nullptr;
     }
 
     if (has_unsupported_extensions(request)) {
+        dbglog(log, "{}: Request has unsupported extensions", __func__);
         return nullptr;
     }
 
@@ -697,12 +697,14 @@ ldns_pkt_ptr dns_forwarder::create_response_from_cache(const std::string &key, c
 
         auto cached_response_acc = cache.get(key);
         if (!cached_response_acc) {
+            dbglog(log, "{}: Cache miss for key {}", __func__, key);
             return nullptr;
         }
 
         auto cached_response_ttl = duration_cast<seconds>(cached_response_acc->expires_at - ag::steady_clock::now());
         if (cached_response_ttl.count() <= 0) {
             cache.make_lru(cached_response_acc);
+            dbglog(log, "{}: Expired cache entry for key {}", __func__, key);
             return nullptr;
         }
 

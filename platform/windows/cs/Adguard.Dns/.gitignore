@@ -1,0 +1,19 @@
+# DnsLibs install dir
+DnsLibs/
+
+# NuGet packages
+packages/
+*.nupkg
+
+# Build dirs
+bin/
+obj/
+
+# Test results
+Adguard.Dns.Tests/TestResult.xml
+
+# VS
+.vs/
+
+# Python caches
+.pyc

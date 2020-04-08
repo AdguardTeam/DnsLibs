@@ -1,9 +1,16 @@
 #include <gtest/gtest.h>
 #include <dns64.h>
+#include <upstream_utils.h>
+#include <ag_logger.h>
 
 static constexpr auto DNS64_SERVER_ADDR = "2001:67c:27e4::64";
 
 TEST(dns64_test, test_dns64_discovery) {
+    if (!ag::test_ipv6_connectivity()) {
+        SPDLOG_WARN("IPv6 is NOT available, skipping this test");
+        return;
+    }
+
     using namespace std::chrono_literals;
     ag::upstream_factory upstream_factory({});
     const auto[upstream, err_upstream] = upstream_factory.create_upstream({

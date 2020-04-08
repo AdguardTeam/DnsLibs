@@ -15,6 +15,8 @@
 #ifndef LDNS_COMMON_H
 #define LDNS_COMMON_H
 
+#include <ldns/config.h>
+
 /*
  * The build configuration that is used in the distributed headers,
  * as detected and determined by the auto configure script.

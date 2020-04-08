@@ -1,11 +1,9 @@
-#include <errno.h>
+#include <cerrno>
 #include <cstring>
 #include <ag_sys.h>
-#include <ag_utils.h>
 
 #if defined(__linux__) || defined(__LINUX__) || defined(__MACH__)
 #include <sys/resource.h>
-#include <unistd.h>
 
 int ag::sys::error_code() {
     return errno;
@@ -30,6 +28,7 @@ size_t ag::sys::current_rss() {
 #include <stdio.h>
 #include <psapi.h>
 #include <errno.h>
+#include <ag_utils.h>
 
 int ag::sys::error_code() {
     int err;

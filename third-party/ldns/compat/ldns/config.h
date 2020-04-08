@@ -1,3 +1,7 @@
+#pragma once
+
+#include <stdint.h>
+
 /* ldns/config.h.  Generated from config.h.in by configure.  */
 /* ldns/config.h.in.  Generated from configure.ac by autoheader.  */
 
@@ -293,10 +297,14 @@
 /* #undef HAVE_SWIG */
 
 /* Define to 1 if you have the <sys/mount.h> header file. */
+#ifndef _WIN32
 #define HAVE_SYS_MOUNT_H 1
+#endif
 
 /* Define to 1 if you have the <sys/param.h> header file. */
+#ifndef _WIN32
 #define HAVE_SYS_PARAM_H 1
+#endif
 
 /* define if you have sys/socket.h */
 #ifndef _WIN32
@@ -304,10 +312,14 @@
 #endif // _WIN32
 
 /* Define to 1 if you have the <sys/stat.h> header file. */
+#ifndef _WIN32
 #define HAVE_SYS_STAT_H 1
+#endif
 
 /* define if you have sys/types.h */
+#ifndef _WIN32
 #define HAVE_SYS_TYPES_H 1
+#endif
 
 /* Define to 1 if you have the `timegm' function. */
 #ifndef _WIN32
@@ -315,10 +327,14 @@
 #endif
 
 /* Define to 1 if you have the <time.h> header file. */
+#ifndef _WIN32
 #define HAVE_TIME_H 1
+#endif
 
 /* define if you have unistd.h */
+#ifndef _WIN32
 #define HAVE_UNISTD_H 1
+#endif
 
 /* Define to 1 if you have the `vfork' function. */
 #define HAVE_VFORK 1
@@ -541,8 +557,9 @@
 /* Fallback member name for socket family in struct sockaddr_storage */
 /* #undef ss_family */
 
-/* Define to `int' if <sys/types.h> does not define. */
-/* #undef ssize_t */
+#ifdef _WIN32
+typedef intptr_t ssize_t;
+#endif
 
 /* Define to `unsigned short' if <sys/types.h> does not define. */
 /* #undef uint16_t */
@@ -562,7 +579,11 @@
 
 #include <stdio.h>
 #include <string.h>
+
+#if HAVE_UNISTD_H
 #include <unistd.h>
+#endif
+
 #include <assert.h>
 
 #ifndef LITTLE_ENDIAN
@@ -615,10 +636,8 @@
 #ifdef HAVE_WINSOCK2_H
 #define FD_SET_T (u_int)
 #else
-#define FD_SET_T 
+#define FD_SET_T
 #endif
-
-
 
 
 #ifdef __cplusplus
@@ -626,23 +645,21 @@ extern "C" {
 #endif
 
 int ldns_b64_ntop(uint8_t const *src, size_t srclength,
-	 	  char *target, size_t targsize);
+                  char *target, size_t targsize);
 /**
  * calculates the size needed to store the result of b64_ntop
  */
 /*@unused@*/
-static inline size_t ldns_b64_ntop_calculate_size(size_t srcsize)
-{
-	return ((((srcsize + 2) / 3) * 4) + 1);
+static inline size_t ldns_b64_ntop_calculate_size(size_t srcsize) {
+    return ((((srcsize + 2) / 3) * 4) + 1);
 }
 int ldns_b64_pton(char const *src, uint8_t *target, size_t targsize);
 /**
  * calculates the size needed to store the result of ldns_b64_pton
  */
 /*@unused@*/
-static inline size_t ldns_b64_pton_calculate_size(size_t srcsize)
-{
-	return (((((srcsize + 3) / 4) * 3)) + 1);
+static inline size_t ldns_b64_pton_calculate_size(size_t srcsize) {
+    return (((((srcsize + 3) / 4) * 3)) + 1);
 }
 
 /**
@@ -706,9 +723,6 @@ size_t strlcpy(char *dst, const char *src, size_t siz);
 #define close_socket(_s) do { if (_s != SOCK_INVALID) {close(_s); _s = -1;} } while(0)
 #endif
 
-#ifdef __cplusplus
-}
-#endif
 #ifndef HAVE_GETADDRINFO
 #include "compat/fake-rfc2553.h"
 #endif
@@ -716,3 +730,13 @@ size_t strlcpy(char *dst, const char *src, size_t siz);
 #define strtoul (unsigned long)strtol
 #endif
 
+#ifdef _WIN32
+int strcasecmp(const char *s1, const char *s2);
+int strncasecmp(const char *s1, const char *s2, size_t n);
+int gettimeofday(struct timeval *tp, void *tzp);
+unsigned int sleep(unsigned int);
+#endif
+
+#ifdef __cplusplus
+}
+#endif

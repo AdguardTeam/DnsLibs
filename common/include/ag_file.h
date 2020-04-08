@@ -12,7 +12,7 @@
 #if defined(__linux__) || defined(__LINUX__) || defined(__MACH__)
     #include <unistd.h>
 #elif defined(_WIN32)
-    #include <Windows.h>
+    #include <windows.h>
     #include <io.h>
 #endif
 

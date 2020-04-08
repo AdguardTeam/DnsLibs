@@ -7,6 +7,7 @@
 #include <default_verifier.h>
 #include <upstream.h>
 #include "upstream_utils.h"
+#include "upstream_plain.h"
 
 static ag::ldns_pkt_ptr create_message() {
     ldns_pkt *pkt = ldns_pkt_query_new(ldns_dname_new_frm_str("ipv4only.arpa."), LDNS_RR_TYPE_A, LDNS_RR_CLASS_IN,
@@ -33,14 +34,16 @@ ag::parse_dns_stamp_result ag::parse_dns_stamp(const std::string &stamp_str) {
     };
 }
 
-ag::err_string ag::test_upstream(const upstream_options &opts, const on_certificate_verification_function &on_certificate_verification) {
+ag::err_string ag::test_upstream(const upstream_options &opts,
+                                 const on_certificate_verification_function &on_certificate_verification) {
     std::unique_ptr<ag::certificate_verifier> cert_verifier;
     if (on_certificate_verification != nullptr) {
         cert_verifier = std::make_unique<ag::application_verifier>(on_certificate_verification);
     } else {
         cert_verifier = std::make_unique<ag::default_verifier>();
     }
-    ag::upstream_factory upstream_factory({cert_verifier.get()});
+    bool bootstrap_ipv6 = test_ipv6_connectivity();
+    ag::upstream_factory upstream_factory({cert_verifier.get(), bootstrap_ipv6});
     auto[upstream_ptr, upstream_err] = upstream_factory.create_upstream(opts);
     if (upstream_err) {
         return upstream_err;
@@ -54,4 +57,22 @@ ag::err_string ag::test_upstream(const upstream_options &opts, const on_certific
     }
     // Everything else is supposed to be success
     return std::nullopt;
+}
+
+bool ag::test_ipv6_connectivity() {
+    ag::ldns_pkt_ptr query{
+            ldns_pkt_query_new(
+                    ldns_dname_new_frm_str("dns.adguard.com"),
+                    LDNS_RR_TYPE_A, LDNS_RR_CLASS_IN, LDNS_RD)};
+
+    // dns.adguard.com AAAA
+    for (auto &addr : {"2a00:5a60::ad1:ff", "2a00:5a60::ad2:ff"}) {
+        ag::plain_dns upstream({addr, {}, std::chrono::seconds{1}, {}}, {nullptr});
+        auto result = ((ag::upstream *) &upstream)->exchange(query.get());
+        if (!result.error && LDNS_RCODE_NOERROR == ldns_pkt_get_rcode(result.packet.get())) {
+            return true;
+        }
+    }
+
+    return false;
 }

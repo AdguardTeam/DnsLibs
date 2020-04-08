@@ -2,7 +2,7 @@
 #include "upstream_utils.h"
 #include <magic_enum.hpp>
 
-struct stamp_helper_test : ::testing::Test {};
+struct upstream_utils_test : ::testing::Test {};
 
 struct parse_dns_stamp_data {
     std::string stamp_str;
@@ -12,7 +12,7 @@ struct parse_dns_stamp_data {
     std::string path; /** Path (for DOH) */
 };
 
-struct parse_dns_stamp_test : stamp_helper_test, ::testing::WithParamInterface<parse_dns_stamp_data> {};
+struct parse_dns_stamp_test : upstream_utils_test, ::testing::WithParamInterface<parse_dns_stamp_data> {};
 
 static parse_dns_stamp_data parse_dns_stamp_test_data[]{
     // Plain
@@ -68,7 +68,7 @@ TEST_P(parse_dns_stamp_test, parse_dns_stamp) {
 
 INSTANTIATE_TEST_CASE_P(stamp_helper_test, parse_dns_stamp_test, testing::ValuesIn(parse_dns_stamp_test_data));
 
-TEST_F(stamp_helper_test, test_upstream) {
+TEST_F(upstream_utils_test, test_upstream) {
     using namespace std::chrono_literals;
 
     static constexpr auto timeout = 500ms;
@@ -79,6 +79,9 @@ TEST_F(stamp_helper_test, test_upstream) {
     ASSERT_FALSE(err) << "Cannot fail: " << *err;
 
     // Test for DoT with 2 bootstraps. Only one is valid
-    err = ag::test_upstream({"tls://dns.adguard.com", {"1.2.3.4", "8.8.8.8"}, 10 * timeout}, nullptr);
+    // Use stub verifier b/c certificate verification is not part of the tested logic
+    // and would fail on platforms where it is unsupported by ag::default_verifier
+    err = ag::test_upstream({"tls://dns.adguard.com", {"1.2.3.4", "8.8.8.8"}, 10 * timeout},
+                            [](const ag::certificate_verification_event &) { return std::nullopt; });
     ASSERT_FALSE(err) << "Cannot fail: " << *err;
 }

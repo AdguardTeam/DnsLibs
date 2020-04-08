@@ -33,10 +33,12 @@ ag::logger ag::create_logger(const std::string &name) {
 
 void ag::set_default_log_level(ag::log_level lvl) {
     global_info *info = get_globals();
+    std::scoped_lock lock(info->guard);
     info->default_log_level = lvl;
 }
 
 void ag::set_logger_factory_callback(create_logger_cb cb) {
     global_info *info = get_globals();
+    std::scoped_lock lock(info->guard);
     info->create_logger_callback = std::move(cb);
 }

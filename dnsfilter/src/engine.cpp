@@ -24,16 +24,16 @@ public:
         for (size_t i = 0; i < p.filters.size(); ++i) {
             filter f = {};
             auto [res, f_mem] = f.load(p.filters[i], mem_limit);
-            if (res == filter::load_result::OK) {
+            if (res == filter::LR_OK) {
                 mem_limit -= f_mem;
                 this->filters.emplace_back(std::move(f));
                 infolog(log, "Filter added successfully: {}", p.filters[i].path);
-            } else if (res == filter::load_result::ERROR) {
+            } else if (res == filter::LR_ERROR) {
                 auto err = AG_FMT("Filter was not added because of an error: {}\n", p.filters[i].path);
                 errlog(log, "{}", err);
                 filters.clear();
                 return {false, std::move(err)};
-            } else if (res == filter::load_result::MEM_LIMIT_REACHED) {
+            } else if (res == filter::LR_MEM_LIMIT_REACHED) {
                 warnings += AG_FMT("Memory limit has been reached, some rules were not loaded\n", p.filters[i].path);
                 break;
             }

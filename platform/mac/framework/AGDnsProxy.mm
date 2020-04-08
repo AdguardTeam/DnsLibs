@@ -181,6 +181,7 @@ static NSData *create_response_packet(const struct iphdr *ip_header, const struc
 {
     self = [super init];
     _address = convert_string(settings->address);
+    _id = settings->id;
     NSMutableArray<NSString *> *bootstrap =
         [[NSMutableArray alloc] initWithCapacity: settings->bootstrap.size()];
     for (const std::string &server : settings->bootstrap) {
@@ -195,12 +196,14 @@ static NSData *create_response_packet(const struct iphdr *ip_header, const struc
         bootstrap: (NSArray<NSString *> *) bootstrap
         timeoutMs: (NSInteger) timeoutMs
         serverIp: (NSData *) serverIp
+        id: (NSInteger) id
 {
     self = [super init];
     _address = address;
     _bootstrap = bootstrap;
     _timeoutMs = timeoutMs;
     _serverIp = serverIp;
+    _id = id;
     return self;
 }
 @end
@@ -347,7 +350,7 @@ static NSData *create_response_packet(const struct iphdr *ip_header, const struc
     _status = convert_string(event.status);
     _answer = convert_string(event.answer);
     _originalAnswer = convert_string(event.original_answer);
-    _upstreamAddr = convert_string(event.upstream_addr);
+    _upstreamId = event.upstream_id;
     _bytesSent = event.bytes_sent;
     _bytesReceived = event.bytes_received;
 

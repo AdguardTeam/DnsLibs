@@ -237,9 +237,9 @@ static bool count_rules(uint32_t idx, std::string_view line, void *arg) {
     return true;
 }
 
-#define check_mem() do {                                                  \
+#define CHECK_MEM() do {                                                  \
     if (a->mem_limit && a->mem_limit < a->approx_mem + approx_rule_mem) { \
-        a->result = load_result::MEM_LIMIT_REACHED;                       \
+        a->result = LR_MEM_LIMIT_REACHED;                                 \
         return false;                                                     \
     }                                                                     \
 } while (0)
@@ -263,7 +263,7 @@ bool filter::impl::load_line(uint32_t file_idx, std::string_view line, void *arg
         uint32_t hash = ag::utils::hash(text);
 
         approx_rule_mem = 4 * sizeof(uint32_t); // (k + v) * empty buckets coef
-        check_mem();
+        CHECK_MEM();
 
         int ret;
         khiter_t iter = kh_put(hash_to_unique_index, self->badfilter_table, hash, &ret);
@@ -281,7 +281,7 @@ bool filter::impl::load_line(uint32_t file_idx, std::string_view line, void *arg
     case rule_utils::rule::MMID_SUBDOMAINS:
         // count * (k + v) * empty buckets coef (assume non-unique domain rules are rare)
         approx_rule_mem = rule->matching_parts.size() * 4 * sizeof(uint32_t);
-        check_mem();
+        CHECK_MEM();
         tracelog(self->log, "Placing a rule in domains table: {}", str);
         for (const std::string &d : rule->matching_parts) {
             self->put_hash_into_tables(ag::utils::hash(d), file_idx, self->unique_domains_table, self->domains_table);
@@ -325,7 +325,7 @@ bool filter::impl::load_line(uint32_t file_idx, std::string_view line, void *arg
             positions->push_back(file_idx);
             approx_rule_mem += positions->capacity() * sizeof(uint32_t);
             approx_rule_mem *= APPROX_FRAGMENTATION_COEF;
-            check_mem();
+            CHECK_MEM();
             goto next_line;
         }
         [[fallthrough]];
@@ -348,17 +348,17 @@ bool filter::impl::load_line(uint32_t file_idx, std::string_view line, void *arg
             approx_rule_mem += APPROX_COMPILED_REGEX_BYTES;
         }
         approx_rule_mem *= APPROX_FRAGMENTATION_COEF;
-        check_mem();
+        CHECK_MEM();
         goto next_line;
     }
     }
 
 next_line:
     a->approx_mem += approx_rule_mem;
-    a->result = load_result::OK;
+    a->result = LR_OK;
     return true;
 }
-#undef check_mem
+#undef CHECK_MEM
 
 std::pair<filter::load_result, size_t> filter::load(const ag::dnsfilter::filter_params &p, size_t mem_limit) {
     size_t last_slash = p.path.rfind('/');
@@ -369,7 +369,7 @@ std::pair<filter::load_result, size_t> filter::load(const ag::dnsfilter::filter_
     ag::file::handle fd = ag::file::open(p.path.data(), ag::file::RDONLY);
     if (!ag::file::is_valid(fd)) {
         errlog(pimpl->log, "Failed to read file: {} ({})", p.path, ag::sys::error_string(ag::sys::error_code()));
-        return {load_result::ERROR, 0};
+        return {LR_ERROR, 0};
     }
 
     rules_stat stat = {};

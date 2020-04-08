@@ -158,8 +158,10 @@ ag::upstream_options ag::android_dnsproxy::marshal_upstream(JNIEnv *env,
     auto bootstrap_field = env->GetFieldID(clazz, "bootstrap", "Ljava/util/List;");
     auto timeout_field = env->GetFieldID(clazz, "timeoutMs", "J");
     auto server_ip_field = env->GetFieldID(clazz, "serverIp", "[B");
+    auto id_field = env->GetFieldID(clazz, "id", "I");
 
     ag::upstream_options upstream{};
+    upstream.id = env->GetIntField(java_upstream_settings, id_field);
 
     if (local_ref dns_server{env, env->GetObjectField(java_upstream_settings, dns_server_field)}) {
         m_utils.visit_string(env, dns_server.get(), [&](const char *str, jsize len) {
@@ -204,11 +206,13 @@ ag::local_ref<jobject> ag::android_dnsproxy::marshal_upstream(JNIEnv *env, const
     auto bootstrap_field = env->GetFieldID(clazz, "bootstrap", "Ljava/util/List;");
     auto timeout_field = env->GetFieldID(clazz, "timeoutMs", "J");
     auto server_ip_field = env->GetFieldID(clazz, "serverIp", "[B");
+    auto id_field = env->GetFieldID(clazz, "id", "I");
 
     auto java_upstream = env->NewObject(clazz, ctor);
 
     env->SetObjectField(java_upstream, dns_server_field, m_utils.marshal_string(env, settings.address).get());
     env->SetLongField(java_upstream, timeout_field, settings.timeout.count());
+    env->SetIntField(java_upstream, id_field, settings.id);
 
     if (std::holds_alternative<ag::ipv4_address_array>(settings.resolved_server_ip)) {
         auto ipv4 = std::get<ag::ipv4_address_array>(settings.resolved_server_ip);
@@ -507,8 +511,7 @@ ag::local_ref<jobject> ag::android_dnsproxy::marshal_processed_event(JNIEnv *env
     env->SetObjectField(java_event, m_processed_event_fields.answer, m_utils.marshal_string(env, event.answer).get());
     env->SetObjectField(java_event, m_processed_event_fields.original_answer, m_utils.marshal_string(env, event.original_answer).get());
     env->SetObjectField(java_event, m_processed_event_fields.error, m_utils.marshal_string(env, event.error).get());
-    env->SetObjectField(java_event, m_processed_event_fields.upstream_addr,
-                        m_utils.marshal_string(env, event.upstream_addr).get());
+    env->SetIntField(java_event, m_processed_event_fields.upstream_id, event.upstream_id);
     env->SetLongField(java_event, m_processed_event_fields.start_time, event.start_time);
     env->SetIntField(java_event, m_processed_event_fields.elapsed, event.elapsed);
     env->SetIntField(java_event, m_processed_event_fields.bytes_sent, event.bytes_sent);
@@ -690,7 +693,7 @@ ag::android_dnsproxy::android_dnsproxy(JavaVM *vm) : m_utils(vm) {
     m_processed_event_fields.status = env->GetFieldID(c, "status", "Ljava/lang/String;");
     m_processed_event_fields.answer = env->GetFieldID(c, "answer", "Ljava/lang/String;");
     m_processed_event_fields.original_answer = env->GetFieldID(c, "originalAnswer", "Ljava/lang/String;");
-    m_processed_event_fields.upstream_addr = env->GetFieldID(c, "upstreamAddr", "Ljava/lang/String;");
+    m_processed_event_fields.upstream_id = env->GetFieldID(c, "upstreamId", "I");
     m_processed_event_fields.domain = env->GetFieldID(c, "domain", "Ljava/lang/String;");
     m_processed_event_fields.type = env->GetFieldID(c, "type", "Ljava/lang/String;");
     m_processed_event_fields.bytes_received = env->GetFieldID(c, "bytesReceived", "I");

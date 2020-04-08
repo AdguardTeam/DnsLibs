@@ -1,0 +1,104 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="4.0" DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <Import Project="$(MSBuildExtensionsPath)\$(MSBuildToolsVersion)\Microsoft.Common.props" Condition="Exists('$(MSBuildExtensionsPath)\$(MSBuildToolsVersion)\Microsoft.Common.props')" />
+  <Import Project="..\common.props" />
+  <PropertyGroup>
+    <Configuration Condition=" '$(Configuration)' == '' ">Debug</Configuration>
+    <Platform Condition=" '$(Platform)' == '' ">AnyCPU</Platform>
+    <ProjectGuid>{2C37C247-618D-4FE9-A022-CF9181D8781C}</ProjectGuid>
+    <OutputType>Library</OutputType>
+    <AppDesignerFolder>Properties</AppDesignerFolder>
+    <RootNamespace>Adguard.Dns</RootNamespace>
+    <AssemblyName>Adguard.Dns</AssemblyName>
+    <TargetFrameworkVersion>v4.5</TargetFrameworkVersion>
+    <FileAlignment>512</FileAlignment>
+    <LangVersion>5</LangVersion>
+  </PropertyGroup>
+  <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Debug|AnyCPU' ">
+    <PlatformTarget>x86</PlatformTarget>
+    <DebugSymbols>true</DebugSymbols>
+    <DebugType>full</DebugType>
+    <Optimize>false</Optimize>
+    <DefineConstants>DEBUG;TRACE</DefineConstants>
+    <ErrorReport>prompt</ErrorReport>
+    <WarningLevel>4</WarningLevel>
+  </PropertyGroup>
+  <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Release|AnyCPU' ">
+    <PlatformTarget>x86</PlatformTarget>
+    <DebugType>pdbonly</DebugType>
+    <Optimize>true</Optimize>
+    <DefineConstants>TRACE</DefineConstants>
+    <ErrorReport>prompt</ErrorReport>
+    <WarningLevel>4</WarningLevel>
+  </PropertyGroup>
+  <!-- Signing -->
+  <PropertyGroup>
+    <AssemblyOriginatorKeyFile>adguard.pfx</AssemblyOriginatorKeyFile>
+    <SignAssembly>true</SignAssembly>
+  </PropertyGroup>
+  <ItemGroup>
+    <None Include="adguard.pfx" />
+  </ItemGroup>
+  <ItemGroup>
+    <Reference Include="Microsoft.CSharp" />
+    <Reference Include="System" />
+    <Reference Include="System.Core" />
+    <Reference Include="System.Data" />
+    <Reference Include="System.Xml" />
+  </ItemGroup>
+  <ItemGroup>
+    <Compile Include="..\SolutionInfo.cs">
+      <Link>Properties\SolutionInfo.cs</Link>
+    </Compile>
+    <Compile Include="AGDnsApi.cs" />
+    <Compile Include="Api\DnsApi.cs" />
+    <Compile Include="Api\DnsProxyServer\Callbacks\IDnsProxyServerCallbackConfiguration.cs" />
+    <Compile Include="Api\DnsProxyServer\Callbacks\ICertificateVerificationCallback.cs" />
+    <Compile Include="Api\DnsProxyServer\Configs\Dns64Settings.cs" />
+    <Compile Include="Api\DnsProxyServer\Configs\DnsProxyConfiguration.cs" />
+    <Compile Include="Api\DnsProxyServer\Configs\DnsProxySettings.cs" />
+    <Compile Include="Api\DnsProxyServer\Configs\DnsStamp.cs" />
+    <Compile Include="Api\DnsProxyServer\Configs\EngineParams.cs" />
+    <Compile Include="Api\DnsProxyServer\Configs\UpstreamOptions.cs" />
+    <Compile Include="Api\DnsProxyServer\Configs\ListenerSettings.cs" />
+    <Compile Include="Api\DnsProxyServer\EventArgs\CertificateVerificationEventArgs.cs" />
+    <Compile Include="Api\DnsProxyServer\EventArgs\DnsRequestProcessedEventArgs.cs" />
+    <Compile Include="Api\IDnsApi.cs" />
+    <Compile Include="DnsProxyServer\IDnsProxyServer.cs" />
+    <Compile Include="DnsProxyServer\DnsProxyServer.cs" />
+    <Compile Include="Exceptions\AGExceptionApi.cs" />
+    <Compile Include="Exceptions\CoreExceptionHandler.cs" />
+    <Compile Include="Exceptions\IUnhandledExceptionConfiguration.cs" />
+    <Compile Include="Exceptions\UnhandledExceptionCallbackAdapter.cs" />
+    <Compile Include="Helpers\DnsApiConverter.cs" />
+    <Compile Include="Helpers\DynamicDllFunctions.cs" />
+    <Compile Include="Helpers\FileMeta.cs" />
+    <Compile Include="Helpers\ManualMarshalPtrToStringAttribute.cs" />
+    <Compile Include="Helpers\ManualMarshalStringToPtrAttribute.cs" />
+    <Compile Include="Helpers\ManualStringToPtrMarshaler.cs" />
+    <Compile Include="Helpers\MarshalUtils.cs" />
+    <Compile Include="Helpers\NativeNameAttribute.cs" />
+    <Compile Include="Helpers\TestUpstreamCallbacksAdapter.cs" />
+    <Compile Include="Helpers\ProxyServerCallbacksAdapter.cs" />
+    <Compile Include="Logging\ColoredConsoleLogProvider.cs" />
+    <Compile Include="Logging\DnsLoggerAdapter.cs" />
+    <Compile Include="Logging\LibLog.cs" />
+    <Compile Include="Properties\AssemblyInfo.cs" />
+    <Compile Include="Utils\CollectionUtils.cs" />
+    <Compile Include="Utils\DnsUtils.cs" />
+    <Compile Include="Utils\CertificateVerificationCallback.cs" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="AdguardDns.dll" CopyToOutputDirectory="Always" />
+    <None Include="AdguardDns.pdb" CopyToOutputDirectory="Always" />
+  </ItemGroup>
+  <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
+  <!-- Pre build script -->
+  <Target Name="PreBuild" AfterTargets="PreBuildEvent">
+    <Exec Command="python -u $(ProjectDir)/../BuildEvents\Pre\adguardDns.py --solution_dir=$(ProjectDir)/../ --project_dir=$(ProjectDir) --target_dir=$(TargetDir) --configuration_name=$(ConfigurationName) --sentry_dnslibs_version=0.0.1" />
+  </Target>
+  <!-- Post build script -->
+  <Target Name="PostBuild" AfterTargets="PostBuildEvent">
+    <Exec Command="python -u $(ProjectDir)/../BuildEvents\Post\adguardDns.py --solution_dir=$(ProjectDir)/../ --project_dir=$(ProjectDir) --target_dir=$(TargetDir) --configuration_name=$(ConfigurationName) --sentry_dnslibs_version=0.0.1" />
+  </Target>
+</Project>

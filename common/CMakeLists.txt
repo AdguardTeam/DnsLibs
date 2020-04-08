@@ -25,7 +25,10 @@ if (NOT MSVC)
 else ()
     target_compile_options(dnslibs_common PUBLIC -Wno-c++98-compat -Wno-c++98-compat-pedantic
         -Wno-documentation-unknown-command -Wno-newline-eof -Wno-return-std-move-in-c++11)
-    add_definitions(-DFMT_EXCEPTIONS=0)
+    target_compile_definitions(dnslibs_common PUBLIC 
+            FMT_EXCEPTIONS=0
+            WIN32_LEAN_AND_MEAN
+            NOMINMAX)
 endif ()
 
 if(NOT TARGET spdlog)

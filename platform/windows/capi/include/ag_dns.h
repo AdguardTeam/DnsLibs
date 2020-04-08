@@ -1,0 +1,334 @@
+#pragma once
+
+#include <stdint.h>
+#include <stddef.h>
+#include <stdbool.h>
+
+#ifdef _WIN32
+#  define AG_EXPORT extern __declspec(dllexport)
+#elif defined(__GNUC__)
+#  define AG_EXPORT __attribute__ ((visibility("default")))
+#else
+#  define AG_EXPORT
+#endif
+
+#define ARRAY_OF(T) struct { T *data; uint32_t size; }
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+//
+// Public types
+//
+
+typedef enum {
+    AGLL_TRACE,
+    AGLL_DEBUG,
+    AGLL_INFO,
+    AGLL_WARN,
+    AGLL_ERR,
+} ag_log_level;
+
+typedef ARRAY_OF(uint8_t) ag_buffer;
+
+typedef struct {
+    /**
+     * Server address, one of the following kinds:
+     *     8.8.8.8:53 -- plain DNS (must specify IP address, not hostname)
+     *     tcp://8.8.8.8:53 -- plain DNS over TCP (must specify IP address, not hostname)
+     *     tls://dns.adguard.com -- DNS-over-TLS
+     *     https://dns.adguard.com/dns-query -- DNS-over-HTTPS
+     *     sdns://... -- DNS stamp (see https://dnscrypt.info/stamps-specifications)
+     */
+    const char *address;
+
+    /** List of plain DNS servers to be used to resolve the hostname in upstreams's address. */
+    ARRAY_OF(const char *) bootstrap;
+
+    /** Timeout, 0 means "default" */
+    uint32_t timeout_ms;
+
+    /** Upstream's IP address. If specified, the bootstrapper is NOT used. */
+    ag_buffer resolved_ip_address;
+
+    /** User-provided ID for this upstream */
+    int32_t id;
+} ag_upstream_options;
+
+typedef struct {
+    /** The upstreams to use for discovery of DNS64 prefixes (usually the system DNS servers) */
+    ARRAY_OF(ag_upstream_options) upstreams;
+
+    /** How many times, at most, to try DNS64 prefixes discovery before giving up */
+    uint32_t max_tries;
+
+    /** How long to wait before a dns64 prefixes discovery attempt */
+    uint32_t wait_time_ms;
+} ag_dns64_settings;
+
+typedef enum {
+    AGLP_UDP,
+    AGLP_TCP
+} ag_listener_protocol;
+
+typedef enum {
+    /** AdBlock-style filters -> NXDOMAIN, hosts-style filters -> unspecified address */
+    AGBM_DEFAULT,
+
+    /** Always return NXDOMAIN */
+    AGBM_NXDOMAIN,
+
+    /** Always return unspecified address */
+    AGBM_UNSPECIFIED_ADDRESS,
+
+    /** Always return custom configured IP address */
+    AGBM_CUSTOM_ADDRESS,
+} ag_dnsproxy_blocking_mode;
+
+typedef struct {
+    /** The address to listen on */
+    const char *address;
+
+    /** The port to listen on */
+    uint16_t port;
+
+    /** The protocol to listen for */
+    ag_listener_protocol protocol;
+
+    /** If true, don't close the TCP connection after sending the first response */
+    bool persistent;
+
+    /** Close the TCP connection this long after the last request received */
+    uint32_t idle_timeout_ms;
+} ag_listener_settings;
+
+typedef struct {
+    /** Filter ID */
+    int32_t id;
+    /** Path to the filter list file */
+    const char *path;
+} ag_filter_params;
+
+typedef struct {
+    ARRAY_OF(ag_filter_params) filters;
+} ag_filter_engine_params;
+
+typedef struct {
+    /** List of upstreams */
+    ARRAY_OF(ag_upstream_options) upstreams;
+    /** List of fallback upstreams, which will be used if none of the usual upstreams respond */
+    ARRAY_OF(ag_upstream_options) fallbacks;
+    /** (Optional) DNS64 prefix discovery settings */
+    ag_dns64_settings *dns64;
+    /** TTL of a blocking response */
+    uint32_t blocked_response_ttl_secs;
+    /** Filtering engine parameters */
+    ag_filter_engine_params filter_params;
+    /** List of listener parameters */
+    ARRAY_OF(ag_listener_settings) listeners;
+    /** If true, all AAAA requests will be blocked */
+    bool block_ipv6;
+    /** If true, the bootstrappers are allowed to fetch AAAA records */
+    bool ipv6_available;
+    /** How to respond to filtered requests */
+    ag_dnsproxy_blocking_mode blocking_mode;
+    /** Custom IPv4 address to return for filtered requests */
+    const char *custom_blocking_ipv4;
+    /** Custom IPv4 address to return for filtered requests */
+    const char *custom_blocking_ipv6;
+    /** Maximum number of cached responses (may be 0) */
+    uint32_t dns_cache_size;
+} ag_dnsproxy_settings;
+
+typedef struct {
+    /** Queried domain name */
+    const char *domain;
+    /** Query type */
+    const char *type;
+    /** Processing start time, in milliseconds since UNIX epoch */
+    int64_t start_time;
+    /** Time spent on processing */
+    int32_t elapsed;
+    /** DNS reply status */
+    const char *status;
+    /** A string representation of the DNS reply sent */
+    const char *answer;
+    /** A string representation of the original upstream's DNS reply (present when blocked by CNAME) */
+    const char *original_answer;
+    /** ID of the upstream that provided this answer */
+    int32_t upstream_id;
+    /** Number of bytes sent to the upstream */
+    int32_t bytes_sent;
+    /** Number of bytes received from the upstream */
+    int32_t bytes_received;
+    /** List of matched rules (full rule text) */
+    ARRAY_OF(const char *) rules;
+    /** Corresponding filter ID for each matched rule */
+    ARRAY_OF(const int32_t) filter_list_ids;
+    /** True if the matched rule is a whitelist rule */
+    bool whitelist;
+    /** If not NULL, contains the error description */
+    const char *error;
+    /** True if this response was served from the cache */
+    bool cache_hit;
+} ag_dns_request_processed_event;
+
+typedef struct {
+    /** Leaf certificate */
+    ag_buffer certificate;
+    /** Certificate chain */
+    ARRAY_OF(ag_buffer) chain;
+} ag_certificate_verification_event;
+
+/** Called synchronously right after a request has been processed, but before a response is returned. */
+typedef void (*ag_dns_request_processed_cb)(const ag_dns_request_processed_event *);
+
+typedef enum {
+    AGCVR_OK,
+
+    AGCVR_ERROR_CREATE_CERT,
+    AGCVR_ERROR_ACCESS_TO_STORE,
+    AGCVR_ERROR_CERT_VERIFICATION,
+
+    AGCVR_COUNT
+} ag_certificate_verification_result;
+
+/** Called synchronously when a certificate needs to be verified */
+typedef ag_certificate_verification_result (*ag_certificate_verification_cb)(const ag_certificate_verification_event *);
+
+/** Called when we need to log a message */
+typedef void (*ag_log_cb)(void *attachment, const char *name, ag_log_level level, const char *message);
+
+typedef struct {
+    ag_dns_request_processed_cb on_request_processed;
+    ag_certificate_verification_cb on_certificate_verification;
+} ag_dnsproxy_events;
+
+typedef enum {
+    AGSPT_PLAIN = 0x00,
+    AGSPT_DNSCRYPT = 0x01,
+    AGSPT_DOH = 0x02,
+    AGSPT_TLS = 0x03,
+} ag_stamp_proto_type;
+
+typedef struct {
+    /** Protocol */
+    ag_stamp_proto_type proto;
+    /** IP address and/or port */
+    const char *server_addr;
+    /**
+     * Provider means different things depending on the stamp type
+     * DNSCrypt: the DNSCrypt provider name
+     * DOH and DOT: server's hostname
+     * Plain DNS: not specified
+     */
+    const char *provider_name;
+    /** (For DoH) absolute URI path, such as /dns-query */
+    const char *path;
+} ag_dns_stamp;
+
+typedef struct {
+    /** Parsed stamp */
+    ag_dns_stamp stamp;
+    /** If not NULL, contains the error description */
+    const char *error;
+} ag_parse_dns_stamp_result;
+
+
+//
+// API functions
+//
+
+typedef void ag_dnsproxy;
+
+/**
+ * Initialize and start a proxy.
+ * @return a proxy handle, or
+ *         NULL in case of an error
+ */
+AG_EXPORT ag_dnsproxy *ag_dnsproxy_init(const ag_dnsproxy_settings *settings, const ag_dnsproxy_events *events);
+
+/**
+ * Stop and destroy a proxy.
+ * @param proxy a proxy handle
+ */
+AG_EXPORT void ag_dnsproxy_deinit(ag_dnsproxy *proxy);
+
+/**
+ * Process a DNS message and return the response.
+ * The caller is responsible for freeing both buffers with `ag_buffer_free()`.
+ * @param message a DNS request in wire format
+ * @return a DNS response in wire format
+ */
+AG_EXPORT ag_buffer ag_dnsproxy_handle_message(ag_dnsproxy *proxy, ag_buffer message);
+
+/**
+ * Return the current proxy settings. The caller is responsible for freeing
+ * the returned pointer with `ag_dnsproxy_settings_free()`.
+ * @return the current proxy settings
+ */
+AG_EXPORT ag_dnsproxy_settings *ag_dnsproxy_get_settings(ag_dnsproxy *proxy);
+
+/**
+ * Return the default proxy settings. The caller is responsible for freeing
+ * the returned pointer with `ag_dnsproxy_settings_free()`.
+ * @return the default proxy settings
+ */
+AG_EXPORT ag_dnsproxy_settings *ag_dnsproxy_settings_get_default();
+
+/**
+ * Free a dnsproxy_settings pointer.
+ */
+AG_EXPORT void ag_dnsproxy_settings_free(ag_dnsproxy_settings *settings);
+
+/**
+ * Free a buffer.
+ */
+AG_EXPORT void ag_buffer_free(ag_buffer buf);
+
+/**
+ * Set the log verbosity level.
+ */
+AG_EXPORT void ag_set_default_log_level(ag_log_level level);
+
+/**
+ * Set the logging function.
+ * @param attachment an argument to the logging function
+ */
+AG_EXPORT void ag_logger_set_default_callback(ag_log_cb callback, void *attachment);
+
+/**
+ * Parse a DNS stamp string. The caller is responsible for freeing
+ * the result with `ag_parse_dns_stamp_result_free()`.
+ * @return a parsed stamp with an optional error message.
+ */
+AG_EXPORT ag_parse_dns_stamp_result *ag_parse_dns_stamp(const char *stamp_str);
+
+/**
+ * Free a ag_parse_dns_stamp_result pointer.
+ */
+AG_EXPORT void ag_parse_dns_stamp_result_free(ag_parse_dns_stamp_result *result);
+
+/**
+ * Check if an upstream is valid and working.
+ * The caller is responsible for freeing the result with `ag_str_free()`.
+ * @return NULL if everything is ok, or
+ *         an error message.
+ */
+AG_EXPORT const char *ag_test_upstream(const ag_upstream_options *upstream,
+                                       ag_certificate_verification_cb on_certificate_verification);
+
+/**
+ * Return the C API version (hash of this file).
+ */
+AG_EXPORT const char *ag_get_capi_version();
+
+/**
+ * Free a string.
+ */
+AG_EXPORT void ag_str_free(const char *str);
+
+#ifdef __cplusplus
+} // extern "C"
+#endif

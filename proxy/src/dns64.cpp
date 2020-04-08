@@ -2,7 +2,6 @@
 #include <vector>
 #include <cassert>
 #include <ldns/ldns.h>
-#include <ag_utils.h>
 
 // Well-known host used to discover dns64 presence
 static constexpr auto WKN = "ipv4only.arpa.";

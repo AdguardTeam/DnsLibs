@@ -17,7 +17,7 @@ static std::vector<uint8_t> to_bytes(std::string_view sv, char separator) {
     for (auto i = std::begin(sv), e = std::end(sv); i < e; ++i) {
         auto separator_i = std::find(i, e, separator);
         uint8_t y;
-        if (std::from_chars(i, separator_i, y, 16).ec != std::errc{}) {
+        if (std::from_chars(&*i, &*i + (separator_i - i), y, 16).ec != std::errc{}) {
             return {};
         }
         bin.emplace_back(y);

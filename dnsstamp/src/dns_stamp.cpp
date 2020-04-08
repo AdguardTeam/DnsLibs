@@ -160,7 +160,7 @@ static err_string read_stamp_proto_props_server_addr_str(server_stamp &stamp, si
         return err_string(err);
     }
     socket_address addr(host, 0);
-    sa_family_t family = addr.c_sockaddr()->sa_family;
+    auto family = addr.c_sockaddr()->sa_family;
     if (port.empty() && addr.valid() && (family == AF_INET || family == AF_INET6)) {
         stamp.server_addr_str += AG_FMT(":{}", default_port);
     }

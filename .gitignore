@@ -1,5 +1,6 @@
 cmake-build-release
 cmake-build-debug
+cmake-build-win
 .idea
 .vscode
 build/
@@ -30,3 +31,8 @@ xcuserdata/
 
 # BoringSSL go.mod
 third-party/boringssl/boringssl/go.mod
+
+# Win libs
+AdguardDns.dll
+AdguardDns.pdb
+signtool.log

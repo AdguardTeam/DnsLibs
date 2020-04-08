@@ -33,6 +33,7 @@ add_library(dnscrypt EXCLUDE_FROM_ALL
         src/dns_crypt_server_info.cpp
         src/dns_crypt_utils.cpp)
 
+set_target_properties(dnscrypt PROPERTIES POSITION_INDEPENDENT_CODE ON)
 target_include_directories(dnscrypt PUBLIC include)
 target_include_directories(dnscrypt PUBLIC ${THIRD_PARTY_DIR}/sodium/libsodium/src/libsodium/include)
 target_include_directories(dnscrypt PUBLIC ${THIRD_PARTY_DIR}/sodium/libsodium/src/libsodium/include/sodium)

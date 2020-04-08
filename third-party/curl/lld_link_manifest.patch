@@ -1,0 +1,18 @@
+Index: CMakeLists.txt
+IDEA additional info:
+Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
+<+>UTF-8
+===================================================================
+--- CMakeLists.txt	(revision 2cfac302fbeec68f1727cba3d1705e16f02220ad)
++++ CMakeLists.txt	(date 1584618289773)
+@@ -1141,7 +1141,9 @@
+ 
+ if(MSVC)
+   # Disable default manifest added by CMake
+-  set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} /MANIFEST:NO")
++  if(NOT CMAKE_LINKER MATCHES "lld-link") # lld-link doesn't recognize the /MANIFEST flag
++    set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} /MANIFEST:NO")
++  endif()
+ 
+   add_definitions(-D_CRT_SECURE_NO_DEPRECATE -D_CRT_NONSTDC_NO_DEPRECATE)
+   if(CMAKE_C_FLAGS MATCHES "/W[0-4]")

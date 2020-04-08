@@ -1,6 +1,9 @@
 cmake_minimum_required(VERSION 3.6)
 project(ldns)
 
+set(CMAKE_C_STANDARD 11)
+set(CMAKE_CXX_STANDARD 17)
+
 add_library(ldns EXCLUDE_FROM_ALL
         ldns/packet.c
         ldns/rr.c
@@ -28,15 +31,23 @@ add_library(ldns EXCLUDE_FROM_ALL
         ldns/sha1.c
         ldns/sha2.c
         ldns/zone.c)
+
 target_include_directories(ldns PUBLIC ldns)
-target_include_directories(ldns PUBLIC posix)
-if (WIN32)
+target_include_directories(ldns PUBLIC compat)
+
+target_compile_definitions(ldns PRIVATE HAVE_CONFIG_H=1)
+
+if (MSVC)
+    include(../../common/apply_patch.cmake)
+    apply_patch(${CMAKE_CURRENT_SOURCE_DIR}/windows.patch ${CMAKE_CURRENT_SOURCE_DIR}/ldns)
+    
     target_link_libraries(ldns wsock32 ws2_32)
     target_sources(ldns PRIVATE ldns/compat/gmtime_r.c)
-    set_source_files_properties(ldns/compat/gmtime_r.c PROPERTIES COMPILE_DEFINITIONS HAVE_CONFIG_H=1)
     target_sources(ldns PRIVATE ldns/compat/localtime_r.c)
-    set_source_files_properties(ldns/compat/localtime_r.c PROPERTIES COMPILE_DEFINITIONS HAVE_CONFIG_H=1)
+    target_sources(ldns PRIVATE windows/windows.cpp)
+    target_include_directories(ldns PRIVATE windows)
 endif()
+
 if (NOT APPLE)
     target_sources(ldns PRIVATE ldns/compat/strlcpy.c)
 endif ()

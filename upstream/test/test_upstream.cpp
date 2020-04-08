@@ -9,13 +9,22 @@
 #include <ag_utils.h>
 #include <dns_crypt_ldns.h>
 #include <default_verifier.h>
+#include <application_verifier.h>
+#include <upstream_utils.h>
 
 static constexpr std::chrono::seconds DEFAULT_TIMEOUT(10);
 static constexpr std::chrono::milliseconds DELAY_BETWEEN_REQUESTS{500};
 
 static ag::upstream_factory::create_result create_upstream(const ag::upstream_options &opts) {
+#ifndef _WIN32
     static ag::default_verifier cert_verifier;
-    static ag::upstream_factory upstream_factory({&cert_verifier});
+#else
+    static ag::application_verifier cert_verifier{[](const ag::certificate_verification_event &) {
+        return std::nullopt;
+    }};
+#endif
+    static bool ipv6_available = ag::test_ipv6_connectivity();
+    static ag::upstream_factory upstream_factory({&cert_verifier, ipv6_available});
     return upstream_factory.create_upstream(opts);
 }
 
@@ -244,11 +253,7 @@ struct upstream_test_data {
 
 static const upstream_test_data test_upstreams_data[]{
     {
-        "tcp://2001:db8:7c02:1::1",
-        {}
-    },
-    {
-        "tcp://192.168.10.125",
+        "tcp://8.8.8.8",
         {}
     },
     {

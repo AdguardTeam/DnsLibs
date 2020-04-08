@@ -35,7 +35,7 @@ struct listener_settings {
     std::string address{"::"}; // The address to listen on
     uint16_t port{53}; // The port to listen on
     listener_protocol protocol{listener_protocol::UDP}; // The protocol to listen for
-    bool persistent{false}; // Don't close the TCP connection after sending the first response
+    bool persistent{false}; // If true, don't close the TCP connection after sending the first response
     std::chrono::milliseconds idle_timeout{3000}; // Close the TCP connection this long after the last request received
 
     std::string str() const {

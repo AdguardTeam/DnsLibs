@@ -1,5 +1,6 @@
 # From https://github.com/microsoft/vcpkg/blob/master/ports/libsodium/CMakeLists.txt
 # Changed src/libsodium to libsodium/src/libsodium
+# Added compile options for clang-cl
 
 cmake_minimum_required(VERSION 3.9)
 
@@ -35,7 +36,11 @@ set(CMAKE_DISABLE_SOURCE_CHANGES ON)
 set(CMAKE_DISABLE_IN_SOURCE_BUILD ON)
 
 option(BUILD_SHARED_LIBS "Build shared library" ${BUILD_SHARED_LIBS})
-option(ENABLE_SSP "Compile with -fstack-protector" ON)
+if (NOT MINGW)
+    option(ENABLE_SSP "Compile with -fstack-protector" ON)
+else ()
+    set(ENABLE_SSP OFF CACHE BOOL "Compile with -fstack-protector" FORCE)
+endif()
 option(ENABLE_PIE "Compile with -fPIE" ON)
 option(ENABLE_BLOCKING_RANDOM "Enable blocking random" OFF)
 option(ENABLE_MINIMAL "Only compile the minimum set of functions required for the high-level API" OFF)
@@ -72,7 +77,7 @@ if (MSVC)
     enable_language(RC)
 
     list(APPEND sodium_sources
-        builds/msvc/resource.rc
+            ${PROJECT_SOURCE_DIR}/libsodium/builds/msvc/resource.rc
     )
 endif ()
 
@@ -103,6 +108,7 @@ macro (sodium_check_func func var)
 endmacro ()
 
 if (MSVC)
+    message(STATUS "MSVC path")
     target_compile_options(${PROJECT_NAME}
         PRIVATE
             /D_CONSOLE
@@ -114,6 +120,12 @@ if (MSVC)
             /wd4197
             /wd4244 # Macro redefinition
     )
+
+    if (CMAKE_C_COMPILER_ID MATCHES "Clang") #clang-cl
+        target_compile_options(${PROJECT_NAME}
+            PRIVATE
+                -mssse3 -maes -mpclmul -msse4.1)
+    endif ()
 
     target_link_libraries(${PROJECT_NAME}
         PUBLIC

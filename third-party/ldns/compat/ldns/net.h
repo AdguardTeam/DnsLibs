@@ -13,6 +13,8 @@
 #ifndef LDNS_NET_H
 #define LDNS_NET_H
 
+#include <ldns/config.h>
+
 #include <ldns/ldns.h>
 #ifndef _WIN32
 #include <sys/socket.h>

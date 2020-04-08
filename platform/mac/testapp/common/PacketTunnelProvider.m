@@ -126,7 +126,7 @@
         NSLog(@"onRequestProcessed domain: %@", event.domain);
         NSLog(@"onRequestProcessed answer: %@", event.answer);
         NSLog(@"onRequestProcessed error: %@", event.error);
-        NSLog(@"onRequestProcessed upstream: %@", event.upstreamAddr);
+        NSLog(@"onRequestProcessed upstream: %ld", event.upstreamId);
     };
 
     NSError *proxy_err = nil;

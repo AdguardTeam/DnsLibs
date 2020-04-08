@@ -142,8 +142,8 @@ TEST_P(listener_test, listens_and_responds) {
 }
 
 TEST(listener_test, shuts_down_if_could_not_initialize) {
-    constexpr auto addr = "::1";
-    constexpr auto port = 1023; // Assume bind will fail with "permission denied"
+    constexpr auto addr = "12::34";
+    constexpr auto port = 1;
     ag::dnsproxy proxy;
     auto proxy_settings = ag::dnsproxy_settings::get_default();
     proxy_settings.listeners = {

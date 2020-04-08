@@ -1,0 +1,16 @@
+Index: CMakeLists.txt
+IDEA additional info:
+Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
+<+>UTF-8
+===================================================================
+--- CMakeLists.txt	(revision 2cfac302fbeec68f1727cba3d1705e16f02220ad)
++++ CMakeLists.txt	(date 1584031834011)
+@@ -199,7 +199,7 @@
+   endif()
+ endif()
+ 
+-curl_nroff_check()
++#curl_nroff_check()
+ find_package(Perl)
+ 
+ cmake_dependent_option(ENABLE_MANUAL "to provide the built-in manual"

@@ -1,0 +1,81 @@
+using System.Collections.Generic;
+
+namespace Adguard.Dns.Api.DnsProxyServer.EventArgs
+{
+    /// <summary>
+    /// On request processed event data
+    /// </summary>
+    /// <see cref="AGDnsApi.ag_dns_request_processed_event"/>
+    public class DnsRequestProcessedEventArgs
+    {
+        /// <summary>
+        /// Queried domain name
+        /// </summary>
+        public string Domain { get; set; }
+        
+        /// <summary>
+        /// Query type 
+        /// </summary>
+        public string Type { get; set; }
+        
+        /// <summary>
+        /// Time when dnsproxy started processing request (epoch in milliseconds) 
+        /// </summary>
+        public long StartTime { get; set; }
+        
+        /// <summary>
+        /// Time elapsed on processing (in milliseconds) 
+        /// </summary>
+        public int Elapsed { get; set; }
+        
+        /// <summary>
+        /// DNS answer's status 
+        /// </summary>
+        public string Status { get; set; }
+        
+        /// <summary>
+        /// DNS Answers string representation 
+        /// </summary>
+        public string Answer { get; set; }
+        
+        /// <summary>
+        /// If blocked by CNAME, here will be DNS original answer's string representation 
+        /// </summary>
+        public string OriginalAnswer { get; set; }
+        
+        /// <summary>
+        /// Number of bytes sent to a server 
+        /// </summary>
+        public int BytesSent { get; set; }
+        
+        /// <summary>
+        /// Number of bytes received from a server 
+        /// </summary>
+        public int BytesReceived { get; set; }
+        
+        /// <summary>
+        /// Filtering rules texts 
+        /// </summary>
+        public List<string> Rules { get; set; }
+        
+        /// <summary>
+        /// Filter lists IDs of corresponding rules 
+        /// </summary>
+        public List<int> FilterListIds { get; set; }
+        
+        /// <summary>
+        /// True if filtering rule is whitelist 
+        /// </summary>
+        public bool Whitelist { get; set; }
+        
+        /// <summary>
+        /// If not {@code null}, contains the error text (occurred while processing the DNS query) 
+        /// </summary>
+        public string Error { get; set; }
+        
+        /// <summary>
+        /// True if this response was served from the cache 
+        /// </summary>
+        public bool CacheHit { get; set; }
+    }
+}

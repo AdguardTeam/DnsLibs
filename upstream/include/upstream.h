@@ -41,17 +41,17 @@ struct upstream_options {
      */
     std::string address;
 
-    /** List of plain DNS servers to be used to resolve DOH/DOT hostnames (if any) */
+    /** List of plain DNS servers to be used to resolve the hostname in upstreams's address. */
     std::vector<std::string> bootstrap;
 
-    /**
-     * Default upstream timeout. Also, it is used as a timeout for bootstrap DNS requests.
-     * timeout = 0 means infinite timeout.
-     */
+    /** Upstream timeout. 0 means "default". */
     std::chrono::milliseconds timeout;
 
-    /** Resolver's IP address. In the case if it's specified, bootstrap DNS servers won't be used at all. */
+    /** Upstream's IP address. If specified, the bootstrapper is NOT used */
     ip_address_variant resolved_server_ip;
+
+    /** User-provided ID for this upstream */
+    int32_t id;
 };
 
 /**

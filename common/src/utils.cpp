@@ -119,9 +119,9 @@ bool ag::utils::is_valid_ip6(std::string_view str) {
 }
 
 std::wstring ag::utils::to_wstring(std::string_view sv) {
-    return std::wstring_convert<std::codecvt_utf8<wchar_t>>().from_bytes(sv.begin(), sv.end());
+    return std::wstring_convert<std::codecvt_utf8<wchar_t>>().from_bytes(sv.data(), sv.data() + sv.size());
 }
 
 std::string ag::utils::from_wstring(std::wstring_view wsv) {
-    return std::wstring_convert<std::codecvt_utf8<wchar_t>>().to_bytes(wsv.begin(), wsv.end());
+    return std::wstring_convert<std::codecvt_utf8<wchar_t>>().to_bytes(wsv.data(), wsv.data() + wsv.size());
 }

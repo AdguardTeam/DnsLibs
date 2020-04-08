@@ -2,13 +2,19 @@
 #include <dns_crypt_client.h>
 #include <algorithm>
 #include <chrono>
-#include <arpa/inet.h>
 #include <sodium.h>
 #include <spdlog/spdlog.h>
 #include <ag_utils.h>
+#include <ag_net_utils.h>
 #include <dns_crypt_cipher.h>
 #include <dns_crypt_ldns.h>
 #include <dns_stamp.h>
+
+#ifdef _WIN32
+#include <winsock2.h>
+#include <array>
+static const int ensure_sockets [[maybe_unused]] = WSAStartup(0x0202, std::array<WSADATA, 1>().data());
+#endif
 
 class dnscrypt_test : public ::testing::Test {
     void SetUp() override {
@@ -145,7 +151,7 @@ TEST_F(dnscrypt_test, timeout_on_dial_exchange) {
     static constexpr auto stamp_str = "sdns://AQIAAAAAAAAAFDE3Ni4xMDMuMTMwLjEzMDo1NDQzINErR_JS3PLCu_iZEIbq95zkSV2LFsigxDIuUso_OQhzIjIuZG5zY3J5cHQuZGVmYXVsdC5uczEuYWRndWFyZC5jb20";
     ag::dnscrypt::client client;
     auto[server_info, _, dial_err] = client.dial(stamp_str, 300ms);
-    ASSERT_FALSE(dial_err) << "Could not establish connection with " << stamp_str;
+    ASSERT_FALSE(dial_err) << "Could not establish connection with " << stamp_str << " cause: " << *dial_err;
     // Point it to an IP where there's no DNSCrypt server
     server_info.set_server_address("8.8.8.8:5443");
     auto req = ag::dnscrypt::create_request_ldns_pkt(LDNS_RR_TYPE_A, LDNS_RR_CLASS_IN, LDNS_RD,
@@ -187,7 +193,7 @@ TEST_P(check_dns_crypt_server_test, check_dns_crypt_server) {
     const auto &protocol = std::get<1>(GetParam());
     ag::dnscrypt::client client(protocol);
     auto[server_info, dial_rtt, dial_err] = client.dial(stamp_str, 10s);
-    ASSERT_FALSE(dial_err) << "Could not establish connection with " << stamp_str;
+    ASSERT_FALSE(dial_err) << "Could not establish connection with " << stamp_str << " cause: " << *dial_err;
     SPDLOG_INFO("Established a connection with {}, ttl={}, rtt={}ms, protocol={}", server_info.get_provider_name(),
                 ag::utils::time_to_str(server_info.get_server_cert().not_after), dial_rtt.count(),
                 ag::dnscrypt::protocol_str(protocol));
@@ -215,7 +221,7 @@ TEST_P(check_dns_crypt_server_test, check_dns_crypt_server) {
     ASSERT_EQ(sizeof(in_addr), ldns_rdf_size(rdf));
     ASSERT_EQ(ldns_rdf_compare(rdf, rdf0.get()), 0) << "DNS upstream " << server_info.get_provider_name()
                                                     << " returned wrong answer instead of 8.8.8.8: "
-                                                    << inet_ntoa(*reinterpret_cast<in_addr*>(ldns_rdf_data(rdf)));
+                                                    << ag::utils::addr_to_str({ldns_rdf_data(rdf), ldns_rdf_size(rdf)});
     SPDLOG_INFO("Got proper response from {}, rtt={}ms, protocol={}", server_info.get_provider_name(),
                 exchange_rtt.count(), ag::dnscrypt::protocol_str(protocol));
     free(ldns_rdf_data(rdf0.get()));

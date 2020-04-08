@@ -39,4 +39,11 @@ parse_dns_stamp_result parse_dns_stamp(const std::string &stamp_str);
 err_string test_upstream(const upstream_options &opts,
                          const on_certificate_verification_function &on_certificate_verification);
 
+/**
+ * Test if a well-known plain DNS server is reachable over IPv6.
+ * @return true if IPv6 works,
+ *         false otherwise.
+ */
+bool test_ipv6_connectivity();
+
 } // namespace ag

@@ -1,10 +1,10 @@
 #pragma once
 
+#include <future>
 #include <algorithm>
 #include <array>
 #include <chrono>
 #include <functional>
-#include <future>
 #include <iomanip>
 #include <iterator>
 #include <optional>
@@ -18,6 +18,7 @@
 #include <ag_defs.h>
 #include <spdlog/fmt/bundled/format.h>
 #include <spdlog/fmt/bundled/chrono.h>
+#include <cctype>
 
 /**
  * Macros to create constexpr value and type to check expression

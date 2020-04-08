@@ -38,7 +38,7 @@ private:
         jfieldID status;
         jfieldID answer;
         jfieldID original_answer;
-        jfieldID upstream_addr;
+        jfieldID upstream_id;
         jfieldID bytes_sent;
         jfieldID bytes_received;
         jfieldID rules;

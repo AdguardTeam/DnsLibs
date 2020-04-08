@@ -13,9 +13,15 @@
 #ifndef _UTIL_H
 #define _UTIL_H
 
+#include <ldns/config.h>
+
 #include <inttypes.h>
 #include <sys/types.h>
+
+#ifndef _MSC_VER
 #include <unistd.h>
+#endif
+
 #include <ldns/common.h>
 #include <time.h>
 #include <stdio.h>

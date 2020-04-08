@@ -15,9 +15,11 @@ import org.xbill.DNS.Message;
 import org.xbill.DNS.Name;
 import org.xbill.DNS.Rcode;
 import org.xbill.DNS.Record;
+import org.xbill.DNS.TextParseException;
 import org.xbill.DNS.Type;
 
 import java.io.IOException;
+import java.io.UncheckedIOException;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.LinkedHashMap;
@@ -79,19 +81,9 @@ public class DnsProxyTest {
     @Test
     public void testEventsMultithreaded() {
         final DnsProxySettings settings = DnsProxySettings.getDefault();
-        final ListenerSettings tcp = new ListenerSettings();
-        tcp.setAddress("::");
-        tcp.setPort(12345);
-        tcp.setProtocol(ListenerSettings.Protocol.TCP);
-        tcp.setPersistent(true);
-        tcp.setIdleTimeoutMs(5000);
-        settings.getListeners().add(tcp);
-
-        final ListenerSettings udp = new ListenerSettings();
-        udp.setAddress("::");
-        udp.setPort(12345);
-        udp.setProtocol(ListenerSettings.Protocol.UDP);
-        settings.getListeners().add(udp);
+        settings.getUpstreams().clear();
+        settings.getUpstreams().add(new UpstreamSettings(
+                "1.1.1.1", Collections.emptyList(), 10000, new byte[]{}, 42));
 
         final List<DnsRequestProcessedEvent> eventList =
                 Collections.synchronizedList(new ArrayList<DnsRequestProcessedEvent>());
@@ -110,12 +102,13 @@ public class DnsProxyTest {
                 final Thread t = new Thread(new Runnable() {
                     @Override
                     public void run() {
-                        final byte[] request = new byte[64];
-                        ThreadLocalRandom.current().nextBytes(request);
-
-                        final byte[] response = proxy.handleMessage(request);
-                        assertNotNull(response);
-                        assertEquals(0, response.length);
+                        try {
+                            final Message req = Message.newQuery(Record.newRecord(Name.fromString("google.com."), Type.A, DClass.IN));
+                            final Message res = new Message(proxy.handleMessage(req.toWire()));
+                            assertEquals(Rcode.NOERROR, res.getRcode());
+                        } catch (IOException e) {
+                            throw new UncheckedIOException(e);
+                        }
                     }
                 });
                 t.start();
@@ -132,13 +125,14 @@ public class DnsProxyTest {
             assertEquals(threads.size(), eventList.size());
             for (final DnsRequestProcessedEvent event : eventList) {
                 assertNotNull(event.getError());
+                assertTrue(event.getError().isEmpty());
                 assertNotNull(event.getAnswer());
                 assertNotNull(event.getDomain());
-                assertNotNull(event.getUpstreamAddr());
+                assertEquals("google.com.", event.getDomain());
+                assertEquals(42, event.getUpstreamId());
                 assertNotNull(event.getFilterListIds());
                 assertNotNull(event.getRules());
                 assertNotNull(event.getType());
-                assertFalse(event.getError().isEmpty()); // 64 random bytes should result in parsing error...
             }
         }
     }
@@ -199,6 +193,7 @@ public class DnsProxyTest {
         dot.getBootstrap().add("8.8.8.8");
         dot.setServerIp(new byte[]{8, 8, 8, 8});
         dot.setTimeoutMs(10000);
+        dot.setId(42);
         settings.getUpstreams().add(dot);
 
         final Dns64Settings dns64 = new Dns64Settings();
@@ -333,13 +328,13 @@ public class DnsProxyTest {
         final long timeout = 500; // ms
         IllegalArgumentException e0 = null;
         try {
-            DnsProxy.testUpstream(new UpstreamSettings("123.12.32.1:1493", new ArrayList<String>(), timeout, null));
+            DnsProxy.testUpstream(new UpstreamSettings("123.12.32.1:1493", new ArrayList<String>(), timeout, null, 42));
         } catch (IllegalArgumentException e) {
             e0 = e;
         }
         assertNotNull(e0);
         try {
-            DnsProxy.testUpstream(new UpstreamSettings("8.8.8.8:53", new ArrayList<String>(), 10 * timeout, null));
+            DnsProxy.testUpstream(new UpstreamSettings("8.8.8.8:53", new ArrayList<String>(), 10 * timeout, null, 42));
         } catch (IllegalArgumentException e) {
             fail(e.toString());
         }
@@ -347,7 +342,7 @@ public class DnsProxyTest {
             ArrayList<String> bootstrap = new ArrayList<>();
             bootstrap.add("1.2.3.4");
             bootstrap.add("8.8.8.8");
-            DnsProxy.testUpstream(new UpstreamSettings("tls://dns.adguard.com", bootstrap, 10 * timeout, null));
+            DnsProxy.testUpstream(new UpstreamSettings("tls://dns.adguard.com", bootstrap, 10 * timeout, null, 42));
         } catch (IllegalArgumentException e) {
             fail(e.toString());
         }
