@@ -12,6 +12,8 @@ using std::chrono::steady_clock;
 using std::chrono::duration_cast;
 using std::chrono::milliseconds;
 
+static constexpr int64_t RESOLVE_TRYING_INTERVAL_MS = 7000;
+static constexpr int64_t TEMPORARY_DISABLE_INTERVAL_MS = 7000;
 
 // For each resolver a half of time out is given for a try. If one fails, it's moved to the end
 // of the list to give it a chance in the future.
@@ -68,14 +70,49 @@ ag::bootstrapper::resolve_result ag::bootstrapper::resolve() {
     return { std::move(addresses), m_server_name, elapsed, std::move(error) };
 }
 
+ag::err_string ag::bootstrapper::temporary_disabler_check() {
+    using namespace std::chrono;
+    if (m_resolve_fail_times_ms.first) {
+        if (int64_t tries_timeout_ms = m_resolve_fail_times_ms.first + RESOLVE_TRYING_INTERVAL_MS;
+                m_resolve_fail_times_ms.second > tries_timeout_ms) {
+            auto now_ms = duration_cast<milliseconds>(steady_clock::now().time_since_epoch()).count();
+            if (int64_t disabled_for_ms = now_ms - tries_timeout_ms,
+                        remaining_ms = TEMPORARY_DISABLE_INTERVAL_MS - disabled_for_ms;
+                    remaining_ms > 0) {
+                return AG_FMT("Bootstrapping this server is disabled for {}ms, too many failures", remaining_ms);
+            } else {
+                m_resolve_fail_times_ms.first = 0;
+            }
+        }
+    }
+    return std::nullopt;
+}
+
+void ag::bootstrapper::temporary_disabler_update(const err_string &error) {
+    using namespace std::chrono;
+    if (error) {
+        auto now_ms = duration_cast<milliseconds>(steady_clock::now().time_since_epoch()).count();
+        m_resolve_fail_times_ms.second = now_ms;
+        if (!m_resolve_fail_times_ms.first) {
+            m_resolve_fail_times_ms.first = m_resolve_fail_times_ms.second;
+        }
+    } else {
+        m_resolve_fail_times_ms.first = 0;
+    }
+}
+
+
 ag::bootstrapper::resolve_result ag::bootstrapper::get() {
     std::scoped_lock l(m_resolved_cache_mutex);
     if (!m_resolved_cache.empty()) {
         return { m_resolved_cache, m_server_name, milliseconds(0), std::nullopt };
+    } else if (auto error = temporary_disabler_check()) {
+        return { {}, m_server_name, milliseconds(0), error };
     }
 
     resolve_result result = resolve();
     assert(result.error.has_value() == result.addresses.empty());
+    temporary_disabler_update(result.error);
     m_resolved_cache = result.addresses;
     return result;
 }

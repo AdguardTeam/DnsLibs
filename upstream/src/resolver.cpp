@@ -110,9 +110,11 @@ err_string resolver::init() {
 }
 
 static ldns_pkt_ptr create_req(std::string_view domain_name, ldns_enum_rr_type rr_type) {
-    return ldns_pkt_ptr(ldns_pkt_query_new(
+    ldns_pkt *request = ldns_pkt_query_new(
             ldns_dname_new_frm_str(std::string(domain_name).c_str()),
-            rr_type, LDNS_RR_CLASS_IN, LDNS_RD));
+            rr_type, LDNS_RR_CLASS_IN, LDNS_RD);
+    ldns_pkt_set_random_id(request);
+    return ldns_pkt_ptr(request);
 }
 
 static std::vector<socket_address> socket_address_from_reply(const logger &log, ldns_pkt *reply, int port) {

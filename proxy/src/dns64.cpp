@@ -84,6 +84,7 @@ ag::dns64::discovery_result ag::dns64::discover_prefixes(const ag::upstream_ptr 
 
     // Must set CD to 0, otherwise the DNS64 server will not perform IPv6 address synthesis (Section 3 of [RFC6147])
     ldns_pkt_set_cd(pkt.get(), false);
+    ldns_pkt_set_random_id(pkt.get());
 
     auto[reply, err] = upstream->exchange(pkt.get());
 

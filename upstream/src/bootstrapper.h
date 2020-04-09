@@ -58,6 +58,16 @@ public:
     bootstrapper(const bootstrapper &) = delete;
     bootstrapper &operator=(const bootstrapper &) = delete;
 private:
+    /**
+     * Check if bootstrapper should be temporary disabled
+     */
+    err_string temporary_disabler_check();
+    /**
+     * Update information for temporary disabling bootstrapper
+     */
+    void temporary_disabler_update(const err_string &error);
+
+private:
     resolve_result resolve();
 
     /** Logger */
@@ -70,6 +80,8 @@ private:
     std::chrono::milliseconds m_timeout;
     /** Resolved addresses cache */
     std::vector<socket_address> m_resolved_cache;
+    /** Times of first and last remove fails */
+    std::pair<int64_t, int64_t> m_resolve_fail_times_ms;
     /** Resolved addresses cache mutex */
     std::mutex m_resolved_cache_mutex;
     /** List of resolvers to use */
