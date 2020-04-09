@@ -261,7 +261,7 @@ static const upstream_test_data test_upstreams_data[]{
         {"8.8.8.8:53"}
     },
     {
-        "1.1.1.1",
+        "1.0.0.1",
         {}
     },
     {
@@ -298,7 +298,7 @@ static const upstream_test_data test_upstreams_data[]{
     },
     {
         "tls://one.one.one.one",
-        {"1.1.1.1"}
+        {"1.0.0.1"}
     },
     {
         "https://dns9.quad9.net:443/dns-query",
