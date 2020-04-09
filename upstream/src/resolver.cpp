@@ -126,12 +126,13 @@ static std::vector<socket_address> socket_address_from_reply(const logger &log, 
     auto answer = ldns_pkt_answer(reply);
     for (size_t i = 0; i < ldns_rr_list_rr_count(answer); i++) {
         auto rr = ldns_rr_list_rr(answer, i);
-        ldns_rdf *rdf = ldns_rr_a_address(rr);
-        socket_address addr({ ldns_rdf_data(rdf), ldns_rdf_size(rdf) }, port);
-        if (!addr.valid()) {
-            dbglog(log, "Got invalid ip address from server: {}", addr.str());
-        } else {
-            addrs.emplace_back(addr);
+        if (ldns_rdf *rdf = ldns_rr_a_address(rr)) {
+            socket_address addr({ ldns_rdf_data(rdf), ldns_rdf_size(rdf) }, port);
+            if (!addr.valid()) {
+                dbglog(log, "Got invalid ip address from server: {}", addr.str());
+            } else {
+                addrs.emplace_back(addr);
+            }
         }
     }
     return addrs;
