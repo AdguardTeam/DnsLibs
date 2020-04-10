@@ -129,7 +129,8 @@ public class DnsProxyTest {
                 assertNotNull(event.getAnswer());
                 assertNotNull(event.getDomain());
                 assertEquals("google.com.", event.getDomain());
-                assertEquals(42, event.getUpstreamId());
+                assertNotNull(event.getUpstreamId());
+                assertEquals(42, (int) event.getUpstreamId());
                 assertNotNull(event.getFilterListIds());
                 assertNotNull(event.getRules());
                 assertNotNull(event.getType());

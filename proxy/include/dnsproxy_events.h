@@ -22,7 +22,7 @@ struct dns_request_processed_event {
     std::string status; /**< DNS answer's status */
     std::string answer; /**< DNS Answers string representation */
     std::string original_answer; /**< If blocked by CNAME, here will be DNS original answer's string representation */
-    int32_t upstream_id; /** ID of the upstream that provided this answer */
+    std::optional<int32_t> upstream_id; /** ID of the upstream that provided this answer */
     int32_t bytes_sent; /**< Number of bytes sent to a server */
     int32_t bytes_received; /**< Number of bytes received from a server */
     std::vector<std::string> rules; /**< Filtering rules texts */

@@ -157,7 +157,7 @@ typedef struct {
     /** A string representation of the original upstream's DNS reply (present when blocked by CNAME) */
     const char *original_answer;
     /** ID of the upstream that provided this answer */
-    int32_t upstream_id;
+    const int32_t *upstream_id;
     /** Number of bytes sent to the upstream */
     int32_t bytes_sent;
     /** Number of bytes received from the upstream */

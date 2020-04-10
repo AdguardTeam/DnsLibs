@@ -140,6 +140,7 @@ private:
         global_ref<jclass> iterator;
         global_ref<jclass> string;
         global_ref<jclass> enum_base;
+        global_ref<jclass> integer;
     } m_jclasses{};
 
     struct {
@@ -158,6 +159,11 @@ private:
         jmethodID has_next;
         jmethodID next;
     } m_iterator_methods{};
+
+    struct {
+        jmethodID value_of;
+        jmethodID int_value;
+    } m_integer_methods{};
 
 public:
 
@@ -186,6 +192,16 @@ public:
      * Marshal a Java string to C++.
      */
     static std::string marshal_string(JNIEnv *env, jstring str);
+
+    /**
+     * Marshal C++ std::optional<int32_t> to Java Integer.
+     */
+    local_ref<jobject> marshal_integer(JNIEnv *env, const std::optional<int32_t>& value);
+
+    /**
+     * Marshal a Java Integer to C++ std::optional<int32_t>.
+     */
+    std::optional<int32_t> marshal_integer(JNIEnv *env, jobject value);
 
     /**
      * Copy a uint8_view to a new Java byte array.

@@ -350,7 +350,7 @@ static NSData *create_response_packet(const struct iphdr *ip_header, const struc
     _status = convert_string(event.status);
     _answer = convert_string(event.answer);
     _originalAnswer = convert_string(event.original_answer);
-    _upstreamId = event.upstream_id;
+    _upstreamId = event.upstream_id ? [NSNumber numberWithInt:*event.upstream_id] : nil;
     _bytesSent = event.bytes_sent;
     _bytesReceived = event.bytes_received;
 

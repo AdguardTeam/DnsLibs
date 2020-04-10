@@ -331,7 +331,7 @@ static ag::dnsproxy_events marshal_events(const ag_dnsproxy_events *c_events) {
             e.original_answer = c_str_if_not_empty(event.original_answer);
             e.error = c_str_if_not_empty(event.error);
             e.status = c_str_if_not_empty(event.status);
-            e.upstream_id = event.upstream_id;
+            e.upstream_id = event.upstream_id ? &*event.upstream_id : nullptr;
 
             std::vector<const char *> c_rules;
             c_rules.reserve(event.rules.size());

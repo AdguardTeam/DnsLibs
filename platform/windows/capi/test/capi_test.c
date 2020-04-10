@@ -21,7 +21,8 @@ static void on_req(const ag_dns_request_processed_event *event) {
     ASSERT(event->error == NULL);
     ASSERT(event->type);
     ASSERT(event->status);
-    ASSERT(event->upstream_id == 42);
+    ASSERT(event->upstream_id);
+    ASSERT(*event->upstream_id == 42);
 }
 
 static bool on_cert_called = false;

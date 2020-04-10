@@ -511,7 +511,7 @@ ag::local_ref<jobject> ag::android_dnsproxy::marshal_processed_event(JNIEnv *env
     env->SetObjectField(java_event, m_processed_event_fields.answer, m_utils.marshal_string(env, event.answer).get());
     env->SetObjectField(java_event, m_processed_event_fields.original_answer, m_utils.marshal_string(env, event.original_answer).get());
     env->SetObjectField(java_event, m_processed_event_fields.error, m_utils.marshal_string(env, event.error).get());
-    env->SetIntField(java_event, m_processed_event_fields.upstream_id, event.upstream_id);
+    env->SetObjectField(java_event, m_processed_event_fields.upstream_id, m_utils.marshal_integer(env, event.upstream_id).get());
     env->SetLongField(java_event, m_processed_event_fields.start_time, event.start_time);
     env->SetIntField(java_event, m_processed_event_fields.elapsed, event.elapsed);
     env->SetIntField(java_event, m_processed_event_fields.bytes_sent, event.bytes_sent);
@@ -693,7 +693,7 @@ ag::android_dnsproxy::android_dnsproxy(JavaVM *vm) : m_utils(vm) {
     m_processed_event_fields.status = env->GetFieldID(c, "status", "Ljava/lang/String;");
     m_processed_event_fields.answer = env->GetFieldID(c, "answer", "Ljava/lang/String;");
     m_processed_event_fields.original_answer = env->GetFieldID(c, "originalAnswer", "Ljava/lang/String;");
-    m_processed_event_fields.upstream_id = env->GetFieldID(c, "upstreamId", "I");
+    m_processed_event_fields.upstream_id = env->GetFieldID(c, "upstreamId", "Ljava/lang/Integer;");
     m_processed_event_fields.domain = env->GetFieldID(c, "domain", "Ljava/lang/String;");
     m_processed_event_fields.type = env->GetFieldID(c, "type", "Ljava/lang/String;");
     m_processed_event_fields.bytes_received = env->GetFieldID(c, "bytesReceived", "I");

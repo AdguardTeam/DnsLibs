@@ -20,7 +20,7 @@ public class DnsRequestProcessedEvent {
     /** If blocked by CNAME, here will be DNS original answer's string representation */
     private String originalAnswer;
     /** ID of the upstream that provided this answer */
-    private int upstreamId;
+    private Integer upstreamId;
     /** Number of bytes sent to a server */
     private int bytesSent;
     /** Number of bytes received from a server */
@@ -68,7 +68,7 @@ public class DnsRequestProcessedEvent {
         return originalAnswer;
     }
 
-    public int getUpstreamId() {
+    public Integer getUpstreamId() {
         return upstreamId;
     }
 
@@ -124,7 +124,7 @@ public class DnsRequestProcessedEvent {
         this.originalAnswer = originalAnswer;
     }
 
-    public void setUpstreamId(int upstreamId) {
+    public void setUpstreamId(Integer upstreamId) {
         this.upstreamId = upstreamId;
     }
 

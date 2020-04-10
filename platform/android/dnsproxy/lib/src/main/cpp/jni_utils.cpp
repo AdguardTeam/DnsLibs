@@ -79,6 +79,10 @@ ag::jni_utils::jni_utils(JavaVM *vm) {
     m_enum_methods.ordinal = env->GetMethodID(c, "ordinal", "()I");
 
     c = (m_jclasses.string = global_ref(vm, env->FindClass("java/lang/String"))).get();
+
+    c = (m_jclasses.integer = global_ref(vm, env->FindClass("java/lang/Integer"))).get();
+    m_integer_methods.value_of = env->GetStaticMethodID(c, "valueOf", "(I)Ljava/lang/Integer;");
+    m_integer_methods.int_value = env->GetMethodID(c, "intValue", "()I");
 }
 
 std::vector<ag::global_ref<jobject>> ag::jni_utils::get_enum_values(JNIEnv *env, const std::string &enum_class) {
@@ -112,4 +116,17 @@ ag::local_ref<jbyteArray> ag::jni_utils::marshal_uint8_view(JNIEnv *env, ag::uin
         env->SetByteArrayRegion(arr.get(), 0, len, (jbyte *) v.data());
     }
     return arr;
+}
+
+ag::local_ref<jobject> ag::jni_utils::marshal_integer(JNIEnv *env, const std::optional<int32_t> &value) {
+    return local_ref<jobject>(
+            env, value.has_value() ? env->CallStaticObjectMethod(m_jclasses.integer.get(), m_integer_methods.value_of, (jint) *value)
+                                   : nullptr);
+}
+
+std::optional<int32_t> ag::jni_utils::marshal_integer(JNIEnv *env, jobject value) {
+    if (env->IsSameObject(value, nullptr)) {
+        return std::nullopt;
+    }
+    return env->CallIntMethod(value, m_integer_methods.int_value);
 }
