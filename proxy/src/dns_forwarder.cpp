@@ -907,7 +907,10 @@ std::vector<uint8_t> dns_forwarder::handle_message(uint8_view message) {
         std::string err_str = AG_FMT("Upstream failed to perform dns query: {}", result.error.value());
         dbglog_fid(log, request, "{}", err_str);
         if (bool last = (std::distance(i, this->upstreams.end()) == 1); !last) {
+#if 0 /* Seems that these events (with empty status) are just ignored by all library users.
+         However, they may be enabled if there will be statistics about connection failures. */
             finalize_processed_event(event, request, nullptr, nullptr, upstream.get(), std::move(err_str));
+#endif
         } else {
             response = ldns_pkt_ptr(create_servfail_response(request));
             log_packet(log, response.get(), "Server failure response");
