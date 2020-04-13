@@ -13,7 +13,8 @@ namespace Adguard.Dns.Tests.Helpers
                 Address = "8.8.8.8:53",
                 Bootstrap = new List<string>(),
                 TimeoutMs = 500,
-                ServerAddress = null
+                ResolvedIpAddress = null,
+                Id = 42
             };
             
             return upstreamOptions;

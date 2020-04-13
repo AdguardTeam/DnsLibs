@@ -5,7 +5,7 @@ namespace Adguard.Dns.Api.DnsProxyServer.Configs
 {
     /// <summary>
     /// Dns 64 settings,
-    /// managed mirror of <see cref="AGDnsApi.ag_dns64_settings"/>
+    /// Managed mirror of <see cref="AGDnsApi.ag_dns64_settings"/>
     /// </summary>
     public class Dns64Settings
     {

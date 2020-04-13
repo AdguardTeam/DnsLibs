@@ -23,7 +23,7 @@ namespace Adguard.Dns
         /// <summary>
         /// The current API version hash with which the ProxyServer was tested
         /// </summary>
-        private const string API_VERSION_HASH = "8591556fd576152d5cd6a9ae9a888cafc01581b73cbc93f87641fab64a6ea2a1";
+        private const string API_VERSION_HASH = "e24bba661a33731c0a95c05e6743d42e1c9fa064da0455aec1f472f905f69294";
         #endregion
 
         #region API Functions
@@ -157,14 +157,14 @@ namespace Adguard.Dns
             /// How many times, at most, to try DNS64 prefixes discovery before giving up
             /// </summary>
             [MarshalAs(UnmanagedType.U4)]
-            [NativeName("maxTries")]
+            [NativeName("max_tries")]
             internal UInt32 MaxTries;
             
             /// <summary>
             /// How long to wait before a dns64 prefixes discovery attempt
             /// </summary>
             [MarshalAs(UnmanagedType.U4)]
-            [NativeName("waitTime")]
+            [NativeName("wait_time_ms")]
             internal UInt32 WaitTimeMs;
         }
         
@@ -187,7 +187,7 @@ namespace Adguard.Dns
             /// <summary>
             /// The protocol to listen for
             /// </summary>
-            [MarshalAs(UnmanagedType.U4)]
+            [MarshalAs(UnmanagedType.I4)]
             [NativeName("protocol")]
             internal ag_listener_protocol Protocol;
             
@@ -202,7 +202,7 @@ namespace Adguard.Dns
             /// Close the TCP connection this long after the last request received
             /// </summary>
             [MarshalAs(UnmanagedType.U4)]
-            [NativeName("idleTimeout")]
+            [NativeName("idle_timeout_ms")]
             internal UInt32 IdleTimeout;
         }
         
@@ -236,7 +236,7 @@ namespace Adguard.Dns
             /// timeout = 0 means default.
             /// </summary>
             [MarshalAs(UnmanagedType.U4)]
-            [NativeName("timeout")]
+            [NativeName("timeout_ms")]
             internal UInt32 Timeout;
             
             /// <summary>
@@ -245,7 +245,15 @@ namespace Adguard.Dns
             /// (<seealso cref="ag_buffer"/>)
             /// </summary>
             [MarshalAs(UnmanagedType.Struct)]
-            internal ag_buffer resolved_server_ip;
+            internal ag_buffer resolved_ip_address;
+            
+            /// <summary>
+            /// User-provided ID for this upstream
+            /// (<seealso cref="ag_buffer"/>)
+            /// </summary>
+            [MarshalAs(UnmanagedType.I4)]
+            [NativeName("id")]
+            internal Int32 Id;
         }
 
         [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Ansi)]
@@ -264,7 +272,7 @@ namespace Adguard.Dns
         };
         
         [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Ansi)]
-        internal struct ag_engine_params
+        internal struct ag_filter_engine_params
         {
             /// <summary>
             /// List of filters, represented as a <see cref="ag_filter_params"/> structures
@@ -306,10 +314,11 @@ namespace Adguard.Dns
             
             /// <summary>
             /// Filtering engine parameters
-            /// (<seealso cref="ag_engine_params"/>)
+            /// (<seealso cref="ag_filter_engine_params"/>)
             /// </summary>
-            [MarshalAs(UnmanagedType.Struct)] 
-            internal ag_engine_params engine_params; 
+            [MarshalAs(UnmanagedType.Struct)]
+            [NativeName("filter_params")]
+            internal ag_filter_engine_params FilterParams; 
             
             /// <summary>
             /// List of addresses/ports/protocols/etc... to listen on,
@@ -336,7 +345,7 @@ namespace Adguard.Dns
             /// <summary>
             /// How to respond to filtered requests
             /// </summary>
-            [MarshalAs(UnmanagedType.U4)]
+            [MarshalAs(UnmanagedType.I4)]
             [NativeName("blocking_mode")]
             internal ag_dnsproxy_blocking_mode BlockingMode;
             
@@ -373,7 +382,7 @@ namespace Adguard.Dns
             /// <summary>
             /// Protocol
             /// </summary>
-            [MarshalAs(UnmanagedType.U4)]
+            [MarshalAs(UnmanagedType.I4)]
             [NativeName("proto")]
             internal ag_proto_type ProtoType; 
             
@@ -497,6 +506,12 @@ namespace Adguard.Dns
             [ManualMarshalPtrToString]
             [NativeName("original_answer")]
             internal IntPtr OriginalAnswer;
+            
+            /// <summary>
+            /// ID of the upstream that provided this answer
+            /// </summary>
+            [NativeName("upstream_id")]
+            internal IntPtr pUpstreamId;
             
             /// <summary>
             /// Number of bytes sent to a server 

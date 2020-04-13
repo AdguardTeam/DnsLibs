@@ -26,7 +26,7 @@ namespace Adguard.Dns.Api.DnsProxyServer.EventArgs
         /// <summary>
         /// Time elapsed on processing (in milliseconds) 
         /// </summary>
-        public int Elapsed { get; set; }
+        public uint Elapsed { get; set; }
         
         /// <summary>
         /// DNS answer's status 
@@ -42,6 +42,11 @@ namespace Adguard.Dns.Api.DnsProxyServer.EventArgs
         /// If blocked by CNAME, here will be DNS original answer's string representation 
         /// </summary>
         public string OriginalAnswer { get; set; }
+        
+        /// <summary>
+        /// ID of the upstream that provided this answer
+        /// </summary>
+        public int? UpstreamId { get; set; }
         
         /// <summary>
         /// Number of bytes sent to a server 

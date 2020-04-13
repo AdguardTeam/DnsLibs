@@ -5,8 +5,13 @@ namespace Adguard.Dns.Api.DnsProxyServer.Configs
     /// <summary>
     /// Main configuration for the DNS libs api
     /// </summary>
-    public class DnsProxyConfiguration
+    public class DnsApiConfiguration
     {
+        /// <summary>
+        /// Gets or sets value, whether the DNS filtering is enabled of not
+        /// </summary>
+        public bool IsEnabled { get; set; }
+        
         /// <summary>
         /// DNS proxy settings
         /// (<seealso cref="DnsProxySettings"/>)
@@ -32,15 +37,15 @@ namespace Adguard.Dns.Api.DnsProxyServer.Configs
                 return true;
             }
 
-            if (obj.GetType() != typeof(DnsProxyConfiguration))
+            if (obj.GetType() != typeof(DnsApiConfiguration))
             {
                 return false;
             }
 
-            return Equals((DnsProxyConfiguration)obj);
+            return Equals((DnsApiConfiguration)obj);
         }
 
-        private bool Equals(DnsProxyConfiguration other)
+        private bool Equals(DnsApiConfiguration other)
         {
             return Equals(DnsProxySettings, other.DnsProxySettings);
         }

@@ -24,7 +24,7 @@ namespace Adguard.Dns.Api.DnsProxyServer.Configs
         
         /// <summary>
         /// DNS64 settings.
-        /// If <code>null</code>, DNS64 is disabledupstream_addr
+        /// If <code>null</code>, DNS64 is disabled
         /// (<seealso cref="Dns64Settings"/>)
         /// </summary>
         public Dns64Settings Dns64 { get; set; }
@@ -126,15 +126,15 @@ namespace Adguard.Dns.Api.DnsProxyServer.Configs
                 int hashCode = (Upstreams != null ? Upstreams.GetHashCode() : 0);
                 hashCode = (hashCode * 397) ^ (Fallbacks != null ? Fallbacks.GetHashCode() : 0);
                 hashCode = (hashCode * 397) ^ (Dns64 != null ? Dns64.GetHashCode() : 0);
-                hashCode = (hashCode * 397) ^ (int) BlockedResponseTtlSec;
+                hashCode = (hashCode * 397) ^ BlockedResponseTtlSec.GetHashCode();
                 hashCode = (hashCode * 397) ^ (EngineParams != null ? EngineParams.GetHashCode() : 0);
                 hashCode = (hashCode * 397) ^ (Listeners != null ? Listeners.GetHashCode() : 0);
                 hashCode = (hashCode * 397) ^ Ipv6Available.GetHashCode();
                 hashCode = (hashCode * 397) ^ BlockIpv6.GetHashCode();
-                hashCode = (hashCode * 397) ^ (int) BlockingMode;
+                hashCode = (hashCode * 397) ^ BlockingMode.GetHashCode();
                 hashCode = (hashCode * 397) ^ (CustomBlockingIpv4 != null ? CustomBlockingIpv4.GetHashCode() : 0);
                 hashCode = (hashCode * 397) ^ (CustomBlockingIpv6 != null ? CustomBlockingIpv6.GetHashCode() : 0);
-                hashCode = (hashCode * 397) ^ (int) DnsCacheSize;
+                hashCode = (hashCode * 397) ^ DnsCacheSize.GetHashCode();
                 return hashCode;
             }
         }

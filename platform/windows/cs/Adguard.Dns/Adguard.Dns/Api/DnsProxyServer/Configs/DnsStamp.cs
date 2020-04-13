@@ -59,7 +59,7 @@
         {
             unchecked
             {
-                int hashCode = (int) ProtoType;
+                int hashCode = ProtoType.GetHashCode();
                 hashCode = (hashCode * 397) ^ (ServerAddress != null ? ServerAddress.GetHashCode() : 0);
                 hashCode = (hashCode * 397) ^ (ProviderName != null ? ProviderName.GetHashCode() : 0);
                 hashCode = (hashCode * 397) ^ (DoHPath != null ? DoHPath.GetHashCode() : 0);

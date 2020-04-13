@@ -31,12 +31,17 @@ namespace Adguard.Dns.Api.DnsProxyServer.Configs
         /// Default upstream timeout in milliseconds. Also, it is used as a timeout for bootstrap DNS requests.
         /// <code>timeout = 0</code>"/> means infinite timeout.
         /// </summary>
-        public long TimeoutMs { get; set; }
+        public uint TimeoutMs { get; set; }
         
         /// <summary>
         /// Resolver's IP address. In the case if it's specified, bootstrap DNS servers won't be used at all.
         /// </summary>
-        public IPAddress ServerAddress { get; set; }
+        public IPAddress ResolvedIpAddress { get; set; }
+        
+        /// <summary>
+        /// User-provided ID for this upstream
+        /// </summary>
+        public int Id { get; set; }
 
         #region Equals members
 
@@ -65,7 +70,8 @@ namespace Adguard.Dns.Api.DnsProxyServer.Configs
             return Equals(Address, other.Address) && 
                    CollectionUtils.SequenceEqual(Bootstrap, other.Bootstrap) && 
                    TimeoutMs == other.TimeoutMs && 
-                   Equals(ServerAddress, other.ServerAddress);
+                   Equals(ResolvedIpAddress, other.ResolvedIpAddress) &&
+                   Id == other.Id;
         }
 
         public override int GetHashCode()
@@ -75,7 +81,8 @@ namespace Adguard.Dns.Api.DnsProxyServer.Configs
                 int hashCode = (Address != null ? Address.GetHashCode() : 0);
                 hashCode = (hashCode * 397) ^ (Bootstrap != null ? Bootstrap.GetHashCode() : 0);
                 hashCode = (hashCode * 397) ^ TimeoutMs.GetHashCode();
-                hashCode = (hashCode * 397) ^ (ServerAddress != null ? ServerAddress.GetHashCode() : 0);
+                hashCode = (hashCode * 397) ^ (ResolvedIpAddress != null ? ResolvedIpAddress.GetHashCode() : 0);
+                hashCode = (hashCode * 397) ^ Id.GetHashCode();
                 return hashCode;
             }
         }

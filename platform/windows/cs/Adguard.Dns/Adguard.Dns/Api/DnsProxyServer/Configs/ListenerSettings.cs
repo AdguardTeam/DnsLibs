@@ -26,7 +26,7 @@ namespace Adguard.Dns.Api.DnsProxyServer.Configs
         /// <summary>
         /// Close the TCP connection this long after the last request received
         /// </summary>
-        public int IdleTimeoutMs { get; set; }
+        public uint IdleTimeoutMs { get; set; }
 
         #region Equals members
         
@@ -62,10 +62,10 @@ namespace Adguard.Dns.Api.DnsProxyServer.Configs
         {
             unchecked
             {
-                int hashCode = (EndPoint != null ? EndPoint.GetHashCode() : 0);
-                hashCode = (hashCode * 397) ^ (int) Protocol;
+                int hashCode = EndPoint != null ? EndPoint.GetHashCode() : 0;
+                hashCode = (hashCode * 397) ^ Protocol.GetHashCode();
                 hashCode = (hashCode * 397) ^ IsPersistent.GetHashCode();
-                hashCode = (hashCode * 397) ^ IdleTimeoutMs;
+                hashCode = (hashCode * 397) ^ IdleTimeoutMs.GetHashCode();
                 return hashCode;
             }
         }

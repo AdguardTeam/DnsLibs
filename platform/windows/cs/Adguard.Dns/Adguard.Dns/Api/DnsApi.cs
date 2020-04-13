@@ -44,21 +44,38 @@ namespace Adguard.Dns.Api
         /// <summary>
         /// Starts DNS filtering
         /// </summary>
-        /// <param name="dnsProxyConfiguration">Dns proxy configuration
-        /// (<seealso cref="DnsProxyConfiguration"/>)</param>
+        /// <param name="dnsApiConfiguration">Dns proxy configuration
+        /// (<seealso cref="DnsApiConfiguration"/>)</param>
         /// <exception cref="NotSupportedException">Thrown
         /// if current API version is not supported</exception>
-        public void StartDnsFiltering(DnsProxyConfiguration dnsProxyConfiguration)
+        /// <exception cref="ArgumentNullException">Thrown,
+        /// if <see cref="dnsApiConfiguration"/> is not specified</exception>
+        /// <exception cref="InvalidOperationException">Thrown, if cannot starting the proxy server
+        /// for any reason</exception>
+        public void StartDnsFiltering(DnsApiConfiguration dnsApiConfiguration)
         {
             lock (SYNC_ROOT)
             {
                 try
                 {
+                    if (dnsApiConfiguration == null)
+                    {
+                        throw new ArgumentNullException(
+                            "dnsApiConfiguration",
+                            "dnsApiConfiguration is not specified");
+                    }
+                    
+                    if (!dnsApiConfiguration.IsEnabled)
+                    {
+                        LOG.InfoFormat("DNS filtering is disabled, doing nothing");
+                        return;
+                    }
+                    
                     LOG.InfoFormat("Starting the DNS filtering");
                     m_DnsProxyServer = new Dns.DnsProxyServer.DnsProxyServer(
-                        dnsProxyConfiguration.DnsProxySettings, 
-                        dnsProxyConfiguration.DnsProxyServerCallbackConfiguration);
-                    m_CurrentDnsProxySettings = dnsProxyConfiguration.DnsProxySettings;
+                        dnsApiConfiguration.DnsProxySettings, 
+                        dnsApiConfiguration.DnsProxyServerCallbackConfiguration);
+                    m_CurrentDnsProxySettings = dnsApiConfiguration.DnsProxySettings;
                     m_DnsProxyServer.Start();
                     LOG.InfoFormat("Starting the DNS filtering has been successfully completed");
                 }
@@ -75,7 +92,7 @@ namespace Adguard.Dns.Api
         /// If it is not started yet, does nothing.
         /// </summary>
         /// <exception cref="InvalidOperationException">Thrown, if cannot closing the proxy server
-        /// via native method</exception>
+        /// for any reason</exception>
         public void StopDnsFiltering()
         {
             lock (SYNC_ROOT)
@@ -101,10 +118,22 @@ namespace Adguard.Dns.Api
         
         /// <summary>
         /// Reloads DNS filtering
-        /// <param name="dnsProxyConfiguration">Dns proxy configuration
-        /// (<seealso cref="DnsProxyConfiguration"/>)</param>
+        /// <param name="newDnsApiConfiguration">Dns proxy configuration
+        /// (<seealso cref="DnsApiConfiguration"/>)</param>
+        /// <param name="force">Determines, whether the DNS filtering must be reloaded,
+        /// independently of whether configuration changed or not</param>
+        /// <exception cref="ArgumentNullException">Thrown, if <see cref="newDnsApiConfiguration"/>
+        /// is not specified</exception>
+        /// <exception cref="ArgumentException">Thrown, if <see cref="DnsProxySettings"/>
+        /// is not specified within the <see cref="newDnsApiConfiguration"/></exception>
+        /// <exception cref="NotSupportedException">Thrown
+        /// if current API version is not supported</exception>
+        /// <exception cref="InvalidOperationException">Thrown, if cannot starting the proxy server
+        /// for any reason</exception>
+        /// <exception cref="InvalidOperationException">Thrown, if cannot closing the proxy server
+        /// for any reason</exception>
         /// </summary>
-        public void ReloadDnsFiltering(DnsProxyConfiguration dnsProxyConfiguration)
+        public void ReloadDnsFiltering(DnsApiConfiguration newDnsApiConfiguration, bool force)
         {
             lock (SYNC_ROOT)
             {
@@ -119,23 +148,42 @@ namespace Adguard.Dns.Api
                             "Cannot reload the DNS filtering, because the DNS server is not started and/or configurations are not set");
                         return;
                     }
+                    
+                    if (newDnsApiConfiguration == null)
+                    {
+                        throw new ArgumentNullException(
+                            "newDnsApiConfiguration", 
+                            "newDnsApiConfiguration is not specified");
+                    }
+                    
+                    if (newDnsApiConfiguration.DnsProxySettings == null)
+                    {
+                        throw new ArgumentException(
+                            "DnsProxySettings is not initialized", 
+                            "newDnsApiConfiguration");
+                    }
 
-                    bool isConfigurationChanged = !m_CurrentDnsProxySettings.Equals(dnsProxyConfiguration.DnsProxySettings);
-                    if (!isConfigurationChanged)
+                    bool isConfigurationChanged = !m_CurrentDnsProxySettings.Equals(newDnsApiConfiguration.DnsProxySettings);
+                    if (!force &&
+                        !isConfigurationChanged)
                     {
                         LOG.InfoFormat("The DNS server configuration hasn't been changed, no need to reload");
                         return;
                     }
                     
                     newDnsProxyServer = new Dns.DnsProxyServer.DnsProxyServer(
-                        dnsProxyConfiguration.DnsProxySettings, 
-                        dnsProxyConfiguration.DnsProxyServerCallbackConfiguration);
+                        newDnsApiConfiguration.DnsProxySettings, 
+                        newDnsApiConfiguration.DnsProxyServerCallbackConfiguration);
                     
                     m_DnsProxyServer.Stop();
                     m_DnsProxyServer = newDnsProxyServer;
-                    m_DnsProxyServer.Start();
-                    m_CurrentDnsProxySettings = dnsProxyConfiguration.DnsProxySettings;
-                    StartDnsFiltering(dnsProxyConfiguration);
+                    if (newDnsApiConfiguration.IsEnabled)
+                    {
+                        LOG.InfoFormat("DNS filtering is enabled, starting DNS proxy server");
+                        m_DnsProxyServer.Start();
+                    }
+                    
+                    m_CurrentDnsProxySettings = newDnsApiConfiguration.DnsProxySettings;
                     LOG.InfoFormat("Reloading the DNS filtering has been successfully completed");
                 }
                 catch (Exception ex)

@@ -244,13 +244,13 @@ namespace Adguard.Dns.Helpers
         /// </summary>
         /// <param name="pInt">Pointer to the int
         /// (<seealso cref="IntPtr"/></param>
-        /// <returns>Resulting integer
+        /// <returns>Resulting integer or null in case of <see cref="IntPtr.Zero"/>
         /// (<seealso cref="UInt32"/>)</returns>
-        internal static int PtrToInt(IntPtr pInt)
+        internal static int? PtrToNullableInt(IntPtr pInt)
         {
             if (pInt == IntPtr.Zero)
             {
-                return 0;
+                return null;
             }
 
             return Marshal.ReadInt32(pInt);

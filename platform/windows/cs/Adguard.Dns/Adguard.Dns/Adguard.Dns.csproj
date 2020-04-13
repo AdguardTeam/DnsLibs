@@ -55,7 +55,7 @@
     <Compile Include="Api\DnsProxyServer\Callbacks\IDnsProxyServerCallbackConfiguration.cs" />
     <Compile Include="Api\DnsProxyServer\Callbacks\ICertificateVerificationCallback.cs" />
     <Compile Include="Api\DnsProxyServer\Configs\Dns64Settings.cs" />
-    <Compile Include="Api\DnsProxyServer\Configs\DnsProxyConfiguration.cs" />
+    <Compile Include="Api\DnsProxyServer\Configs\DnsApiConfiguration.cs" />
     <Compile Include="Api\DnsProxyServer\Configs\DnsProxySettings.cs" />
     <Compile Include="Api\DnsProxyServer\Configs\DnsStamp.cs" />
     <Compile Include="Api\DnsProxyServer\Configs\EngineParams.cs" />

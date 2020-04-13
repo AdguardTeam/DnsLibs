@@ -1,5 +1,4 @@
 ﻿using System;
-using Adguard.Dns.Api.DnsProxyServer.Callbacks;
 using Adguard.Dns.Api.DnsProxyServer.Configs;
 using Adguard.Dns.Exceptions;
 using Adguard.Dns.Logging;
@@ -13,25 +12,42 @@ namespace Adguard.Dns.Api
         /// <summary>
         /// Starts DNS filtering
         /// </summary>
-        /// <param name="dnsProxyConfiguration">Dns proxy configuration
-        /// (<seealso cref="DnsProxyConfiguration"/>)</param>
-        /// <exception cref="NotSupportedException">Thrown if current API version is not supported</exception>
-        void StartDnsFiltering(DnsProxyConfiguration dnsProxyConfiguration);
+        /// <param name="dnsApiConfiguration">Dns proxy configuration
+        /// (<seealso cref="DnsApiConfiguration"/>)</param>
+        /// <exception cref="ArgumentNullException">Thrown,
+        /// if <see cref="dnsApiConfiguration"/> is not specified</exception>
+        /// <exception cref="NotSupportedException">Thrown
+        /// if current API version is not supported</exception>
+        /// <exception cref="InvalidOperationException">Thrown, if cannot starting the proxy server
+        /// for any reason</exception>
+        void StartDnsFiltering(DnsApiConfiguration dnsApiConfiguration);
         
         /// <summary>
         /// Stops DNS filtering
         /// If it is not started yet, does nothing.
         /// </summary>
         /// <exception cref="InvalidOperationException">Thrown, if cannot closing the proxy server
-        /// via native method</exception>
+        /// for any reason</exception>
         void StopDnsFiltering();
 
         /// <summary>
         /// Reloads DNS filtering
-        /// <param name="dnsProxyConfiguration">Dns proxy configuration
-        /// (<seealso cref="DnsProxyConfiguration"/>)</param>
+        /// <param name="newDnsApiConfiguration">Dns proxy configuration
+        /// (<seealso cref="DnsApiConfiguration"/>)</param>
+        /// <param name="force">Determines, whether the DNS filtering must be reloaded,
+        /// independently of whether configuration changed or not</param>
+        /// <exception cref="ArgumentNullException">Thrown, if <see cref="newDnsApiConfiguration"/>
+        /// is not specified</exception>
+        /// <exception cref="ArgumentException">Thrown, if <see cref="DnsProxySettings"/>
+        /// is not specified within the <see cref="newDnsApiConfiguration"/></exception>
+        /// <exception cref="NotSupportedException">Thrown
+        /// if current API version is not supported</exception>
+        /// <exception cref="InvalidOperationException">Thrown, if cannot starting the proxy server
+        /// for any reason</exception>
+        /// <exception cref="InvalidOperationException">Thrown, if cannot closing the proxy server
+        /// for any reason</exception>
         /// </summary>
-        void ReloadDnsFiltering(DnsProxyConfiguration dnsProxyConfiguration);
+        void ReloadDnsFiltering(DnsApiConfiguration newDnsApiConfiguration, bool force);
 
         /// <summary>
         /// Gets the current DNS proxy settings as a <see cref="DnsProxySettings"/> object

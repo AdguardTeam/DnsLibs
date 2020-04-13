@@ -12,7 +12,7 @@ namespace Adguard.Dns.DnsProxyServer
         /// Starts the DnsProxyServer
         /// </summary>
         /// <exception cref="InvalidOperationException">Thrown,
-        /// if cannot starting the DnsProxyServer via native method</exception>
+        /// if cannot starting the DnsProxyServer for any reason</exception>
         void Start();
 
         /// <summary>
@@ -20,7 +20,7 @@ namespace Adguard.Dns.DnsProxyServer
         /// If it is not started yet, does nothing.
         /// </summary>
         /// <exception cref="InvalidOperationException">Thrown,
-        /// if cannot closing the DnsProxyServer via native method</exception>
+        /// if cannot closing the DnsProxyServer for any reason</exception>
         void Stop();
 
         /// <summary>

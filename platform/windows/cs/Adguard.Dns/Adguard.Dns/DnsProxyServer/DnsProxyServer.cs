@@ -49,7 +49,7 @@ namespace Adguard.Dns.DnsProxyServer
         /// Starts the proxy server
         /// </summary>
         /// <exception cref="InvalidOperationException">Thrown, if cannot starting the proxy server
-        /// via native method</exception>
+        /// for any reason</exception>
         public void Start()
         {
             lock (m_SyncRoot)

@@ -30,8 +30,9 @@ namespace Adguard.Dns.Tests.TestApi
         public void TestGetCurrentDnsProxySettings()
         {
             DnsProxySettings defaultDnsProxySettings = DnsApi.Instance.GetDefaultDnsProxySettings();
-            DnsApi.Instance.StartDnsFiltering(new DnsProxyConfiguration
+            DnsApi.Instance.StartDnsFiltering(new DnsApiConfiguration
             {
+                IsEnabled = true,
                 DnsProxySettings = defaultDnsProxySettings,
                 DnsProxyServerCallbackConfiguration = new DnsProxyServerCallbackConfiguration()
             });
