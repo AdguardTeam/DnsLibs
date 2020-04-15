@@ -31,14 +31,6 @@
     <ErrorReport>prompt</ErrorReport>
     <WarningLevel>4</WarningLevel>
   </PropertyGroup>
-  <!-- Signing -->
-  <PropertyGroup>
-    <AssemblyOriginatorKeyFile>adguard.pfx</AssemblyOriginatorKeyFile>
-    <SignAssembly>true</SignAssembly>
-  </PropertyGroup>
-  <ItemGroup>
-    <None Include="adguard.pfx" />
-  </ItemGroup>
   <ItemGroup>
     <Reference Include="Microsoft.CSharp" />
     <Reference Include="System" />
@@ -93,12 +85,4 @@
     <None Include="AdguardDns.pdb" CopyToOutputDirectory="Always" />
   </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
-  <!-- Pre build script -->
-  <Target Name="PreBuild" AfterTargets="PreBuildEvent">
-    <Exec Command="python -u $(ProjectDir)/../BuildEvents\Pre\adguardDns.py --solution_dir=$(ProjectDir)/../ --project_dir=$(ProjectDir) --target_dir=$(TargetDir) --configuration_name=$(ConfigurationName) --sentry_dnslibs_version=0.0.1" />
-  </Target>
-  <!-- Post build script -->
-  <Target Name="PostBuild" AfterTargets="PostBuildEvent">
-    <Exec Command="python -u $(ProjectDir)/../BuildEvents\Post\adguardDns.py --solution_dir=$(ProjectDir)/../ --project_dir=$(ProjectDir) --target_dir=$(TargetDir) --configuration_name=$(ConfigurationName) --sentry_dnslibs_version=0.0.1" />
-  </Target>
 </Project>
