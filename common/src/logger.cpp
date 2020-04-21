@@ -35,6 +35,7 @@ void ag::set_default_log_level(ag::log_level lvl) {
     global_info *info = get_globals();
     std::scoped_lock lock(info->guard);
     info->default_log_level = lvl;
+    spdlog::set_level((spdlog::level::level_enum)lvl);
 }
 
 void ag::set_logger_factory_callback(create_logger_cb cb) {
