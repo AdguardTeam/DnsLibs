@@ -92,7 +92,7 @@ namespace Adguard.Dns.Logging
             }
             catch (Exception ex)
             {
-                CoreExceptionHandler.HandleManagedException(ex);
+                DnsExceptionHandler.HandleManagedException(ex);
             }
         }
         

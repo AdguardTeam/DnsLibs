@@ -58,12 +58,10 @@
     <Compile Include="Api\IDnsApi.cs" />
     <Compile Include="DnsProxyServer\IDnsProxyServer.cs" />
     <Compile Include="DnsProxyServer\DnsProxyServer.cs" />
-    <Compile Include="Exceptions\AGExceptionApi.cs" />
-    <Compile Include="Exceptions\CoreExceptionHandler.cs" />
+    <Compile Include="Exceptions\DnsExceptionHandler.cs" />
     <Compile Include="Exceptions\IUnhandledExceptionConfiguration.cs" />
     <Compile Include="Exceptions\UnhandledExceptionCallbackAdapter.cs" />
     <Compile Include="Helpers\DnsApiConverter.cs" />
-    <Compile Include="Helpers\DynamicDllFunctions.cs" />
     <Compile Include="Helpers\FileMeta.cs" />
     <Compile Include="Helpers\ManualMarshalPtrToStringAttribute.cs" />
     <Compile Include="Helpers\ManualMarshalStringToPtrAttribute.cs" />

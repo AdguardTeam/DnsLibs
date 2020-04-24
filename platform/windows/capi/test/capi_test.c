@@ -132,5 +132,11 @@ int main() {
     test_proxy();
     test_utils();
 
+#ifdef _WIN32
+    // At least check that we don't crash or something
+    ag_disable_SetUnhandledExceptionFilter();
+    ag_enable_SetUnhandledExceptionFilter();
+#endif
+
     return 0;
 }

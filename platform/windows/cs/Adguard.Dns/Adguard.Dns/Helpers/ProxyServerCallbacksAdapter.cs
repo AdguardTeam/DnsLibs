@@ -63,7 +63,7 @@ namespace Adguard.Dns.Helpers
             }
             catch (Exception ex)
             {
-                CoreExceptionHandler.HandleManagedException(ex);
+                DnsExceptionHandler.HandleManagedException(ex);
             }
         }
         
@@ -87,7 +87,7 @@ namespace Adguard.Dns.Helpers
             }
             catch (Exception ex)
             {
-                CoreExceptionHandler.HandleManagedException(ex);
+                DnsExceptionHandler.HandleManagedException(ex);
                 return AGDnsApi.ag_certificate_verification_result.AGCVR_ERROR_CERT_VERIFICATION;
             }
         }

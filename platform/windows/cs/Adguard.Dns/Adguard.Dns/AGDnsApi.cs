@@ -18,18 +18,18 @@ namespace Adguard.Dns
         /// The DnsLibs dll name.
         /// The entry point to the AdGuard native world
         /// </summary>
-        internal const string DnsLibName = "AdguardDns.dll";
+        private const string DnsLibName = "AdguardDns.dll";
 
         /// <summary>
         /// The current API version hash with which the ProxyServer was tested
         /// </summary>
-        private const string API_VERSION_HASH = "e24bba661a33731c0a95c05e6743d42e1c9fa064da0455aec1f472f905f69294";
+        private const string API_VERSION_HASH = "4ae44862b590ee873fe45dee4591527aa7d677e85cce4ba5c4e73cc3cb2019a9";
         #endregion
 
         #region API Functions
-        
+
         /// <summary>
-        /// Initialize the DNS proxy 
+        /// Initialize the DNS proxy
         /// </summary>
         /// <param name="pDnsProxySettings">Pointer to the
         /// <see cref="ag_dnsproxy_settings"/> object</param>
@@ -38,15 +38,15 @@ namespace Adguard.Dns
         /// <returns>Pointer to the proxy, or <see cref="IntPtr.Zero"/> in case of an error</returns>
         [DllImport(DnsLibName, CallingConvention = CallingConvention.Cdecl)]
         internal static extern IntPtr ag_dnsproxy_init(
-            IntPtr pDnsProxySettings, 
+            IntPtr pDnsProxySettings,
             IntPtr pDnsProxyCallbacks);
-        
+
         /// <summary>
-        /// Deinitializes the DNS proxy 
+        /// Deinitializes the DNS proxy
         /// </summary>
         [DllImport(DnsLibName, CallingConvention = CallingConvention.Cdecl)]
         internal static extern void ag_dnsproxy_deinit(IntPtr pDnsProxyServer);
-        
+
         /// <summary>
         /// Returns the current proxy settings.
         /// The caller is responsible for freeing
@@ -56,7 +56,7 @@ namespace Adguard.Dns
         /// which contains the current DNS proxy settings</returns>
         [DllImport(DnsLibName, CallingConvention = CallingConvention.Cdecl)]
         internal static extern IntPtr ag_dnsproxy_get_settings(IntPtr pDnsProxyServer);
-        
+
         /// <summary>
         /// Returns the default proxy settings.
         /// The caller is responsible for freeing
@@ -66,7 +66,7 @@ namespace Adguard.Dns
         /// which contains the default DNS proxy settings</returns>
         [DllImport(DnsLibName, CallingConvention = CallingConvention.Cdecl)]
         internal static extern IntPtr ag_dnsproxy_settings_get_default();
-        
+
         /// <summary>
         /// Free passed <see cref="pDnsProxySettings"/> pointer.
         /// </summary>
@@ -81,7 +81,7 @@ namespace Adguard.Dns
         /// <param name="buf"><see cref="ag_buffer"/> instance to free</param>
         [DllImport(DnsLibName, CallingConvention = CallingConvention.Cdecl)]
         internal static extern void ag_buffer_free(ag_buffer buf);
-        
+
         /// <summary>
         /// Checks if upstream is valid and available
         /// The caller is responsible for freeing the result with <see cref="ag_str_free"/>
@@ -96,7 +96,7 @@ namespace Adguard.Dns
         internal static extern IntPtr ag_test_upstream(
             IntPtr pUpstreamOptions,
             [MarshalAs(UnmanagedType.FunctionPtr)] cbd_onCertificateVerification onCertificateVerification);
-        
+
         /// <summary>
         /// Parses a DNS stamp string and returns a instance or an error
         /// The caller is responsible for freeing
@@ -117,7 +117,7 @@ namespace Adguard.Dns
         /// </summary>
         [DllImport(DnsLibName, CallingConvention = CallingConvention.Cdecl)]
         internal static extern void ag_parse_dns_stamp_result_free(IntPtr pStampResult);
-        
+
         /// <summary>
         /// Sets the log verbosity level.
         /// </summary>
@@ -125,7 +125,7 @@ namespace Adguard.Dns
         /// (<seealso cref="ag_log_level"/>)</param>
         [DllImport(DnsLibName, CallingConvention = CallingConvention.Cdecl)]
         internal static extern void ag_set_default_log_level(ag_log_level level);
-        
+
         /// <summary>
         /// Sets the default callback for logger
         /// </summary>
@@ -135,7 +135,7 @@ namespace Adguard.Dns
         [DllImport(DnsLibName, CallingConvention = CallingConvention.Cdecl)]
         internal static extern void ag_logger_set_default_callback(
             [MarshalAs(UnmanagedType.FunctionPtr)]
-            cbd_logger_callback_t callback, 
+            cbd_logger_callback_t callback,
             IntPtr pAttachment);
 
         #endregion
@@ -152,14 +152,14 @@ namespace Adguard.Dns
             /// </summary>
             [MarshalAs(UnmanagedType.Struct)]
             internal ag_list upstreams;
-            
+
             /// <summary>
             /// How many times, at most, to try DNS64 prefixes discovery before giving up
             /// </summary>
             [MarshalAs(UnmanagedType.U4)]
             [NativeName("max_tries")]
             internal UInt32 MaxTries;
-            
+
             /// <summary>
             /// How long to wait before a dns64 prefixes discovery attempt
             /// </summary>
@@ -167,7 +167,7 @@ namespace Adguard.Dns
             [NativeName("wait_time_ms")]
             internal UInt32 WaitTimeMs;
         }
-        
+
         [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Ansi)]
         internal struct ag_listener_settings
         {
@@ -177,27 +177,27 @@ namespace Adguard.Dns
             /// </summary>
             [MarshalAs(UnmanagedType.Struct)]
             internal ag_buffer address;
-            
+
             /// <summary>
             /// Protocol to listen on
             /// </summary>
             [MarshalAs(UnmanagedType.U4)]
             internal UInt32 port;
-            
+
             /// <summary>
             /// The protocol to listen for
             /// </summary>
             [MarshalAs(UnmanagedType.I4)]
             [NativeName("protocol")]
             internal ag_listener_protocol Protocol;
-            
+
             /// <summary>
             /// Don't close the TCP connection after sending the first response
             /// </summary>
             [MarshalAs(UnmanagedType.I1)]
             [NativeName("persistent")]
             internal bool Persistent;
-            
+
             /// <summary>
             /// Close the TCP connection this long after the last request received
             /// </summary>
@@ -205,7 +205,7 @@ namespace Adguard.Dns
             [NativeName("idle_timeout_ms")]
             internal UInt32 IdleTimeout;
         }
-        
+
         [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Ansi)]
         internal struct ag_upstream_options
         {
@@ -221,7 +221,7 @@ namespace Adguard.Dns
             [ManualMarshalPtrToString]
             [NativeName("address")]
             internal IntPtr Address;
-            
+
             /// <summary>
             /// List of plain DNS servers to be used to resolve the hostname in upstreams' address,
             /// represented as a <see cref="ag_list"/> with entries with
@@ -230,7 +230,7 @@ namespace Adguard.Dns
             /// </summary>
             [MarshalAs(UnmanagedType.Struct)]
             internal ag_list bootstrap;
-            
+
             /// <summary>
             /// Default upstream timeout. Also, it is used as a timeout for bootstrap DNS requests.
             /// timeout = 0 means default.
@@ -238,7 +238,7 @@ namespace Adguard.Dns
             [MarshalAs(UnmanagedType.U4)]
             [NativeName("timeout_ms")]
             internal UInt32 Timeout;
-            
+
             /// <summary>
             /// Resolver's IP address.
             /// In the case if it's specified, bootstrap DNS servers won't be used at all.
@@ -246,7 +246,7 @@ namespace Adguard.Dns
             /// </summary>
             [MarshalAs(UnmanagedType.Struct)]
             internal ag_buffer resolved_ip_address;
-            
+
             /// <summary>
             /// User-provided ID for this upstream
             /// (<seealso cref="ag_buffer"/>)
@@ -257,20 +257,20 @@ namespace Adguard.Dns
         }
 
         [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Ansi)]
-        internal struct ag_filter_params 
+        internal struct ag_filter_params
         {
             /// <summary>
             /// filter id
             /// </summary>
             [MarshalAs(UnmanagedType.U4)]
-            internal UInt32 id;  
-            
+            internal UInt32 id;
+
             /// <summary>
             /// path to file with rules
             /// </summary>
-            internal IntPtr path; 
+            internal IntPtr path;
         };
-        
+
         [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Ansi)]
         internal struct ag_filter_engine_params
         {
@@ -279,7 +279,7 @@ namespace Adguard.Dns
             /// </summary>
             internal ag_list filters;
         } ;
-        
+
         [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Ansi)]
         internal struct ag_dnsproxy_settings
         {
@@ -290,7 +290,7 @@ namespace Adguard.Dns
             /// </summary>
             [MarshalAs(UnmanagedType.Struct)]
             internal ag_list upstreams;
-            
+
             /// <summary>
             /// List of fallbacks,
             /// represented as a <see cref="ag_list"/> with entries with
@@ -298,57 +298,57 @@ namespace Adguard.Dns
             /// </summary>
             [MarshalAs(UnmanagedType.Struct)]
             internal ag_list fallbacks;
-            
+
             /// <summary>
             /// Pointer to the DNS64 settings
             /// (<seealso cref="ag_dns64_settings"/>)
             /// </summary>
             internal IntPtr pDns64;
-            
+
             /// <summary>
             /// TTL of the record for the blocked domains (in seconds)
             /// </summary>
             [MarshalAs(UnmanagedType.U4)]
             [NativeName("blocked_response_ttl_sec")]
             internal UInt32 BlockedResponseTtlSec;
-            
+
             /// <summary>
             /// Filtering engine parameters
             /// (<seealso cref="ag_filter_engine_params"/>)
             /// </summary>
             [MarshalAs(UnmanagedType.Struct)]
             [NativeName("filter_params")]
-            internal ag_filter_engine_params FilterParams; 
-            
+            internal ag_filter_engine_params FilterParams;
+
             /// <summary>
             /// List of addresses/ports/protocols/etc... to listen on,
             /// represented as a <see cref="ag_list"/> with entries with
             /// the type <see cref="ag_listener_settings"/>
             /// </summary>
-            [MarshalAs(UnmanagedType.Struct)] 
+            [MarshalAs(UnmanagedType.Struct)]
             internal ag_list listeners;
-            
+
             /// <summary>
             /// If true, all AAAA requests will be blocked
             /// </summary>
             [MarshalAs(UnmanagedType.I1)]
             [NativeName("block_ipv6")]
             internal bool BlockIpv6;
-            
+
             /// <summary>
             /// If true, the bootstrappers are allowed to fetch AAAA records
             /// </summary>
             [MarshalAs(UnmanagedType.I1)]
             [NativeName("ipv6_available")]
             internal bool Ipv6Available;
-            
+
             /// <summary>
             /// How to respond to filtered requests
             /// </summary>
             [MarshalAs(UnmanagedType.I4)]
             [NativeName("blocking_mode")]
             internal ag_dnsproxy_blocking_mode BlockingMode;
-            
+
             /// <summary>
             /// Custom IPv4 address to return for filtered requests
             /// (<seealso cref="ManualMarshalPtrToStringAttribute"/>)
@@ -356,15 +356,15 @@ namespace Adguard.Dns
             [ManualMarshalPtrToString]
             [NativeName("custom_blocking_ipv4")]
             internal IntPtr CustomBlockingIpv4;
-            
+
             /// <summary>
             /// Custom IPv6 address to return for filtered requests
             /// (<seealso cref="ManualMarshalPtrToStringAttribute"/>)
             /// </summary>
             [ManualMarshalPtrToString]
             [NativeName("custom_blocking_ipv6")]
-            internal IntPtr CustomBlockingIpv6; 
-            
+            internal IntPtr CustomBlockingIpv6;
+
             /// <summary>
             /// Maximum number of cached responses (may be 0)
             /// </summary>
@@ -372,27 +372,27 @@ namespace Adguard.Dns
             [NativeName("dns_cache_size")]
             internal UInt32 DnsCacheSize;
         }
-        
+
         /// <summary>
         /// DNS stamp structure
         /// </summary>
         [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Ansi)]
-        internal struct ag_dns_stamp 
+        internal struct ag_dns_stamp
         {
             /// <summary>
             /// Protocol
             /// </summary>
             [MarshalAs(UnmanagedType.I4)]
             [NativeName("proto")]
-            internal ag_proto_type ProtoType; 
-            
+            internal ag_proto_type ProtoType;
+
             /// <summary>
             /// Server address
             /// </summary>
             [ManualMarshalPtrToString]
             [NativeName("server_addr")]
-            internal IntPtr ServerAddress; 
-            
+            internal IntPtr ServerAddress;
+
             /// <summary>
             /// Provider means different things depending on the stamp type
             /// DNSCrypt: the DNSCrypt provider name
@@ -402,7 +402,7 @@ namespace Adguard.Dns
             [ManualMarshalPtrToString]
             [NativeName("provider_name")]
             internal IntPtr ProviderName;
-            
+
             /// <summary>
             /// (For DoH) absolute URI path, such as /dns-query
             /// </summary>
@@ -410,21 +410,21 @@ namespace Adguard.Dns
             [NativeName("path")]
             internal IntPtr DoHPath;
         };
-        
+
         /// <summary>
         /// Parsed dns stamp result,
         /// consisted of two parts - the stamp itself (<seealso cref="ag_dns_stamp"/>)
         /// and the pointer to the error if smth went wrong
         /// </summary>
         [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Ansi)]
-        internal struct ag_parse_dns_stamp_result 
+        internal struct ag_parse_dns_stamp_result
         {
             /// <summary>
             /// DNS stamp
             /// </summary>
             [MarshalAs(UnmanagedType.Struct)]
             internal ag_dns_stamp stamp;
-            
+
             /// <summary>
             /// error
             /// </summary>
@@ -432,7 +432,7 @@ namespace Adguard.Dns
         };
 
         #endregion
-        
+
         #region Callback's events
 
         /// <summary>
@@ -461,98 +461,98 @@ namespace Adguard.Dns
             /// <summary>
             /// Queried domain name
             /// </summary>
-            [ManualMarshalPtrToString] 
+            [ManualMarshalPtrToString]
             [NativeName("domain")]
             internal IntPtr Domain;
-            
+
             /// <summary>
-            /// Query type 
+            /// Query type
             /// </summary>
             [ManualMarshalPtrToString]
             [NativeName("type")]
             internal IntPtr Type;
-            
+
             /// <summary>
-            /// Time when dnsproxy started processing request (epoch in milliseconds) 
+            /// Time when dnsproxy started processing request (epoch in milliseconds)
             /// </summary>
             [MarshalAs(UnmanagedType.I8)]
             [NativeName("start_time")]
             internal long StartTime;
-            
+
             /// <summary>
-            /// Time elapsed on processing (in milliseconds) 
+            /// Time elapsed on processing (in milliseconds)
             /// </summary>
             [MarshalAs(UnmanagedType.U4)]
             [NativeName("elapsed")]
             internal UInt32 Elapsed;
-            
+
             /// <summary>
-            /// DNS answer's status 
+            /// DNS answer's status
             /// </summary>
             [ManualMarshalPtrToString]
             [NativeName("status")]
             internal IntPtr Status;
-            
+
             /// <summary>
-            /// DNS Answers string representation 
+            /// DNS Answers string representation
             /// </summary>
             [ManualMarshalPtrToString]
             [NativeName("answer")]
             internal IntPtr Answer;
-            
+
             /// <summary>
-            /// If blocked by CNAME, here will be DNS original answer's string representation 
+            /// If blocked by CNAME, here will be DNS original answer's string representation
             /// </summary>
             [ManualMarshalPtrToString]
             [NativeName("original_answer")]
             internal IntPtr OriginalAnswer;
-            
+
             /// <summary>
             /// ID of the upstream that provided this answer
             /// </summary>
             [NativeName("upstream_id")]
             internal IntPtr pUpstreamId;
-            
+
             /// <summary>
-            /// Number of bytes sent to a server 
+            /// Number of bytes sent to a server
             /// </summary>
             [NativeName("bytes_sent")]
             internal int BytesSent;
-            
+
             /// <summary>
-            /// Number of bytes received from a server 
+            /// Number of bytes received from a server
             /// </summary>
             [NativeName("bytes_received")]
             internal int BytesReceived;
-            
+
             /// <summary>
             /// Pointer Filtering rules texts
-            /// (<seealso cref="ag_list"/>) 
+            /// (<seealso cref="ag_list"/>)
             /// </summary>
             internal ag_list rules;
-            
+
             /// <summary>
             /// Pointer to the filter lists IDs of corresponding rules
-            /// (<seealso cref="ag_list"/>) 
+            /// (<seealso cref="ag_list"/>)
             /// </summary>
             internal ag_list filter_list_ids;
-            
+
             /// <summary>
-            /// True if filtering rule is whitelist 
+            /// True if filtering rule is whitelist
             /// </summary>
             [MarshalAs(UnmanagedType.I1)]
             [NativeName("whitelist")]
             internal bool Whitelist;
-            
+
             /// <summary>
-            /// If not {@code null}, contains the error text (occurred while processing the DNS query) 
+            /// If not {@code null}, contains the error text (occurred while processing the DNS query)
             /// </summary>
             [ManualMarshalPtrToString]
             [NativeName("error")]
             internal IntPtr Error;
-            
+
             /// <summary>
-            /// True if this response was served from the cache 
+            /// True if this response was served from the cache
             /// </summary>
             [MarshalAs(UnmanagedType.I1)]
             [NativeName("cache_hit")]
@@ -560,7 +560,7 @@ namespace Adguard.Dns
         };
 
         #endregion
-        
+
         #region Callbacks
 
         /// <summary>
@@ -580,7 +580,7 @@ namespace Adguard.Dns
         /// (<seealso cref="ag_certificate_verification_result"/>)</returns>
         [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
         [return: MarshalAs(UnmanagedType.I4)]
-        internal delegate ag_certificate_verification_result 
+        internal delegate ag_certificate_verification_result
             cbd_onCertificateVerification(IntPtr pEvent);
 
         /// <summary>
@@ -591,7 +591,7 @@ namespace Adguard.Dns
         {
             [MarshalAs(UnmanagedType.FunctionPtr)]
             internal cbd_onDnsRequestProcessed ag_dns_request_processed_cb;
-            
+
             [MarshalAs(UnmanagedType.FunctionPtr)]
             internal cbd_onCertificateVerification ag_certificate_verification_cb;
         }
@@ -606,7 +606,7 @@ namespace Adguard.Dns
         #endregion
 
         #region Enumerations
-        
+
         /// <summary>
         /// Logger levels
         /// </summary>
@@ -628,30 +628,30 @@ namespace Adguard.Dns
             /// AdBlock-style filters -> NXDOMAIN, hosts-style filters -> unspecified address
             /// </summary>
             DEFAULT,
-        
+
             /// <summary>
             /// Always return NXDOMAIN
             /// </summary>
             NXDOMAIN,
-        
+
             /// <summary>
             /// Always return unspecified address
             /// </summary>
             UNSPECIFIED_ADDRESS,
-        
+
             /// <summary>
             /// Always return custom configured IP address
             /// (<seealso cref="DnsProxySettings"/>)
             /// </summary>
             CUSTOM_ADDRESS
         }
-    
+
         public enum ag_listener_protocol
         {
             UDP,
             TCP
         }
-    
+
         /// <summary>
         /// ag_proto_type is a stamp protocol type
         /// </summary>
@@ -661,23 +661,23 @@ namespace Adguard.Dns
             /// Plain DNS
             /// </summary>
             PLAIN,
-        
+
             /// <summary>
             /// DNSCrypt
             /// </summary>
             DNSCRYPT,
-        
+
             /// <summary>
             /// DNS-over-HTTPS
             /// </summary>
             DOH,
-        
+
             /// <summary>
             /// DNS-over-TLS
             /// </summary>
             TLS
         }
-        
+
         public enum ag_certificate_verification_result
         {
             AGCVR_OK,
@@ -687,12 +687,12 @@ namespace Adguard.Dns
             AGCVR_ERROR_CERT_VERIFICATION,
 
             AGCVR_COUNT
-        } 
+        }
 
         #endregion
 
         #region Validation
-        
+
         /// <summary>
         /// Gets a CAPI version (number of commits in this file history)
         /// NOTE: The value is stored in ..\\platform/windows/capi/src/ag_dns_h_hash.inc
@@ -701,7 +701,7 @@ namespace Adguard.Dns
         /// <returns>Pointer to the API version hash</returns>
         [DllImport(DnsLibName, CallingConvention = CallingConvention.Cdecl)]
         private static extern IntPtr ag_get_capi_version();
-        
+
         /// <summary>
         /// Free a string, specified by a passed <see cref="pStr"/>
         /// </summary>
@@ -733,8 +733,24 @@ namespace Adguard.Dns
 
         #endregion
 
+        #region Crash reporting
+
+        /// <summary>
+        /// Disables the SetUnhandledExceptionFilter function.
+        /// </summary>
+        [DllImport(DnsLibName, CallingConvention = CallingConvention.Cdecl)]
+        internal static extern void ag_disable_SetUnhandledExceptionFilter();
+
+        /// <summary>
+        /// Enables the SetUnhandledExceptionFilter function.
+        /// </summary>
+        [DllImport(DnsLibName, CallingConvention = CallingConvention.Cdecl)]
+        internal static extern void ag_enable_SetUnhandledExceptionFilter();
+
+        #endregion
+
         #region Helpers
-        
+
         /// <summary>
         /// Represents list of elements
         /// </summary>
@@ -742,11 +758,11 @@ namespace Adguard.Dns
         internal struct ag_list
         {
             internal IntPtr entries;
-            
+
             [MarshalAs(UnmanagedType.U4)]
             internal UInt32 num_entries;
         }
-        
+
         /// <summary>
         /// Helper structure-wrapper for storing the byte buffer (<see cref="data"/>)
         /// with fixed <see cref="size"/>

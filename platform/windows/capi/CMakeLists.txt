@@ -34,8 +34,8 @@ if (MSVC)
         string(REPLACE "/RTC1" "" ${CompilerFlag} "${${CompilerFlag}}")
     endforeach ()
 
-    set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} /MT /Zi /EHs-c-")
-    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /MT /Zi /EHs-c- /std:c++latest")
+    set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} /MT /Zi /EHs-c- /W0")
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /MT /Zi /EHs-c- /std:c++latest /W0")
 else ()
     set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -fno-strict-aliasing -fno-exceptions")
     set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fno-strict-aliasing -fno-exceptions")
@@ -57,6 +57,7 @@ if (WIN32)
 endif ()
 
 set(DNS_LIBS_DIR ../../..)
+set(THIRD_PARTY_DIR ../../../third-party)
 
 if (NOT TARGET dnsproxy)
     add_subdirectory(${DNS_LIBS_DIR}/proxy ${CMAKE_BINARY_DIR}/dnsproxy)
@@ -73,6 +74,13 @@ target_include_directories(AdguardDns PUBLIC include)
 set_target_properties(AdguardDns PROPERTIES POSITION_INDEPENDENT_CODE ON)
 
 target_link_libraries(AdguardDns dnsproxy)
+
+if (WIN32)
+    if (NOT TARGET detours)
+        add_subdirectory(${THIRD_PARTY_DIR}/detours ${CMAKE_BINARY_DIR}/detours)
+    endif()
+    target_link_libraries(AdguardDns detours)
+endif()
 
 # (Re)generate ag_dns_h_hash.inc
 file(STRINGS ${CMAKE_CURRENT_SOURCE_DIR}/include/ag_dns.h AG_DNSLIBS_H)

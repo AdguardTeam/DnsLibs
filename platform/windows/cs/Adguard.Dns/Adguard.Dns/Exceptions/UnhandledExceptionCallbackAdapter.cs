@@ -5,12 +5,12 @@ namespace Adguard.Dns.Exceptions
     /// <summary>
     /// An adapter between the native callback and the managed callback
     /// for the <see cref="IUnhandledExceptionConfiguration"/>.
-    /// <seealso cref="AGExceptionApi.cbd_unhandled_native_exception_filter_t"/>
+    /// <seealso cref="DnsExceptionHandler.cbd_unhandled_native_exception_filter_t"/>
     /// </summary>
     internal class UnhandledExceptionCallbackAdapter
     {
         private readonly IUnhandledExceptionConfiguration m_UnhandledExceptionConfiguration;
-        private readonly AGExceptionApi.cbd_unhandled_native_exception_filter_t m_OnUnhandledNativeExceptionFilter;
+        private readonly DnsExceptionHandler.cbd_unhandled_native_exception_filter_t m_OnUnhandledNativeExceptionFilter;
         private readonly object m_UnhandledExceptionSyncRoot = new object();
 
         /// <summary>
@@ -27,10 +27,10 @@ namespace Adguard.Dns.Exceptions
         }
 
         /// <summary>
-        /// Native <see cref="AGExceptionApi.cbd_unhandled_native_exception_filter_t"/> object
+        /// Native <see cref="DnsExceptionHandler.cbd_unhandled_native_exception_filter_t"/> object
         /// </summary>
         // ReSharper disable once ConvertToAutoProperty
-        internal AGExceptionApi.cbd_unhandled_native_exception_filter_t OnUnhandledNativeExceptionFilter
+        internal DnsExceptionHandler.cbd_unhandled_native_exception_filter_t OnUnhandledNativeExceptionFilter
         {
             get { return m_OnUnhandledNativeExceptionFilter; }
         }

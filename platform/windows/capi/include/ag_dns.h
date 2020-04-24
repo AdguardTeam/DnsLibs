@@ -329,6 +329,18 @@ AG_EXPORT const char *ag_get_capi_version();
  */
 AG_EXPORT void ag_str_free(const char *str);
 
+#ifdef _WIN32
+/**
+ * Disable the SetUnhandledExceptionFilter function.
+ */
+AG_EXPORT void ag_disable_SetUnhandledExceptionFilter(void);
+
+/**
+ * Enable the SetUnhandledExceptionFilter function.
+ */
+AG_EXPORT void ag_enable_SetUnhandledExceptionFilter(void);
+#endif
+
 #ifdef __cplusplus
 } // extern "C"
 #endif

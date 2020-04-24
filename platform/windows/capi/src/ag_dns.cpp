@@ -7,6 +7,36 @@
 #include <dnsproxy.h>
 #include <upstream_utils.h>
 
+#ifdef _WIN32
+#include <detours.h>
+
+/**
+ * Deactivated version of SetUnhandledExceptionFilter that does nothing.
+ * This is needed because there are many places in runtime where SetUnhandledExceptionFilter is called.
+ * @param lpTopLevelExceptionFilter Pointer to exception filter function
+ * @return Pointer if success, NULL if error is occurred. This function always succeeds.
+ */
+static LPTOP_LEVEL_EXCEPTION_FILTER WINAPI
+DontSetUnhandledExceptionFilter(LPTOP_LEVEL_EXCEPTION_FILTER lpTopLevelExceptionFilter) {
+    // Do nothing
+    return lpTopLevelExceptionFilter;
+}
+
+static void *detoursHook_SetUnhandledExceptionFilter = (void *)SetUnhandledExceptionFilter;
+
+void ag_disable_SetUnhandledExceptionFilter(void) {
+    DetourTransactionBegin();
+    DetourAttach(&detoursHook_SetUnhandledExceptionFilter, (void *)DontSetUnhandledExceptionFilter);
+    DetourTransactionCommit();
+}
+
+void ag_enable_SetUnhandledExceptionFilter(void) {
+    DetourTransactionBegin();
+    DetourDetach(&detoursHook_SetUnhandledExceptionFilter, (void *)DontSetUnhandledExceptionFilter);
+    DetourTransactionCommit();
+}
+#endif // _WIN32
+
 static constexpr const char *AGCVR_TO_STRING[] = {
         [AGCVR_ERROR_CREATE_CERT] = "ERROR_CREATE_CERT",
         [AGCVR_ERROR_ACCESS_TO_STORE] = "ERROR_ACCESS_TO_STORE",
@@ -488,6 +518,6 @@ private:
 
 void ag_logger_set_default_callback(ag_log_cb callback, void *attachment) {
     ag::set_logger_factory_callback([callback, attachment](const std::string &name) {
-       return callback_sink_mt::create(name, callback, attachment);
+        return callback_sink_mt::create(name, callback, attachment);
     });
 }

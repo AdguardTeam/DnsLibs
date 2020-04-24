@@ -1,22 +1,28 @@
 using System;
-using System.Collections.Generic;
 using System.Runtime.InteropServices;
 
 namespace Adguard.Dns.Exceptions
 {
-    public static class CoreExceptionHandler
+    public static class DnsExceptionHandler
     {
-        // We shouldn't make this variable local (within the SetNativeCrashCallback method)
+        // We shouldn't make this variable local
         // to protect it from the GC
-        private static AGExceptionApi.cbd_unhandled_native_exception_filter_t m_UnhandledNativeExceptionFilterCallback;
+        private static cbd_unhandled_native_exception_filter_t m_UnhandledNativeExceptionFilterCallback;
         private static Func<Exception, bool> m_UnhandledManagedExceptionCallback;
-        private static readonly Dictionary<string, AGExceptionApi> AG_EXCEPTION_APIS =
-            new Dictionary<string, AGExceptionApi>();
         private static IUnhandledExceptionConfiguration m_UnhandledExceptionConfiguration;
         private static readonly object SYNC_ROOT = new object();
 
         /// <summary>
-        /// Initializes the <see cref="CoreExceptionHandler"/> with
+        /// Delegate for native crashes.
+        /// </summary>
+        /// <param name="pException">Pointer to original crash</param>
+        /// <returns>see https://msdn.microsoft.com/ru-RU/library/windows/desktop/ms681401(v=vs.85).aspx</returns>
+        [UnmanagedFunctionPointer(CallingConvention.StdCall)]
+        // ReSharper disable once InconsistentNaming
+        internal delegate uint cbd_unhandled_native_exception_filter_t(IntPtr pException);
+
+        /// <summary>
+        /// Initializes the <see cref="DnsExceptionHandler"/> with
         /// the specified <see cref="unhandledExceptionConfiguration"/>
         /// </summary>
         /// <param name="unhandledExceptionConfiguration">Callbacks
@@ -45,29 +51,13 @@ namespace Adguard.Dns.Exceptions
         /// <summary>
         /// Sets an stored unhandled exception configuration for the specified Dll
         /// </summary>
-        /// <param name="dllName">Dll name, foe which we need to set unhandled exception configuration</param>
-        internal static void SetUnhandledExceptionConfiguration(string dllName)
+        internal static void SetUnhandledExceptionConfiguration()
         {
             lock (SYNC_ROOT)
             {
-                AGExceptionApi agExceptionApi;
-                if (!AG_EXCEPTION_APIS.TryGetValue(dllName, out agExceptionApi))
-                {
-                    agExceptionApi = new AGExceptionApi(dllName);
-                    AG_EXCEPTION_APIS.Add(dllName, agExceptionApi);
-                }
-
-                if (m_UnhandledExceptionConfiguration == null)
-                {
-                    agExceptionApi.EnableSetUnhandledExceptionFilter();
-                    SetUnhandledExceptionFilter(null);
-                    m_UnhandledNativeExceptionFilterCallback = null;
-                    m_UnhandledManagedExceptionCallback = null;
-                    return;
-                }
-
+                AGDnsApi.ag_enable_SetUnhandledExceptionFilter();
                 SetUnhandledExceptionFilter(m_UnhandledNativeExceptionFilterCallback);
-                agExceptionApi.DisableSetUnhandledExceptionFilter();
+                AGDnsApi.ag_disable_SetUnhandledExceptionFilter();
             }
         }
 
@@ -98,14 +88,13 @@ namespace Adguard.Dns.Exceptions
         }
 
         /// <summary>
-        /// Sets delegate <see cref="AGExceptionApi.cbd_unhandled_native_exception_filter_t" />
+        /// Sets delegate <see cref="cbd_unhandled_native_exception_filter_t" />
         /// for native crashes.
-        /// </summary>
-        /// <param name="callback">Callback delegate
-        /// (<seealso cref="AGExceptionApi.cbd_unhandled_native_exception_filter_t"/>)</param>
+        /// </summary> <param name="callback">Callback delegate
+        /// (<seealso cref="cbd_unhandled_native_exception_filter_t"/>)</param>
         [DllImport("kernel32.dll", CallingConvention = CallingConvention.StdCall)]
         private static extern IntPtr SetUnhandledExceptionFilter(
             [MarshalAs(UnmanagedType.FunctionPtr)]
-            AGExceptionApi.cbd_unhandled_native_exception_filter_t callback);
+            cbd_unhandled_native_exception_filter_t callback);
     }
 }

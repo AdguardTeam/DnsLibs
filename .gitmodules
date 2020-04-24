@@ -35,3 +35,6 @@
 [submodule "third-party/libuv"]
 	path = third-party/libuv
 	url = https://github.com/libuv/libuv.git
+[submodule "third-party/detours/detours"]
+	path = third-party/detours/detours
+	url = https://github.com/microsoft/Detours.git

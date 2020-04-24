@@ -16,11 +16,11 @@ namespace Adguard.Dns.Api
         private static readonly ILog LOG = LogProvider.For<DnsApi>();
         private static readonly object SYNC_ROOT = new object();
         private IDnsProxyServer m_DnsProxyServer;
-        private static IDnsApi m_DnsApiInstance;
+        private static readonly Lazy<IDnsApi> LAZY = new Lazy<IDnsApi> (() => new DnsApi());
         private DnsProxySettings m_CurrentDnsProxySettings;
 
         #region Singleton
-        
+
         /// <summary>
         /// Gets a singleton instance of <see cref="DnsApi"/> object
         /// </summary>
@@ -28,12 +28,7 @@ namespace Adguard.Dns.Api
         {
             get
             {
-                if (m_DnsApiInstance == null)
-                {
-                    m_DnsApiInstance = new DnsApi();
-                }
-
-                return m_DnsApiInstance;
+                return LAZY.Value;
             }
         }
 
@@ -64,16 +59,16 @@ namespace Adguard.Dns.Api
                             "dnsApiConfiguration",
                             "dnsApiConfiguration is not specified");
                     }
-                    
+
                     if (!dnsApiConfiguration.IsEnabled)
                     {
                         LOG.InfoFormat("DNS filtering is disabled, doing nothing");
                         return;
                     }
-                    
+
                     LOG.InfoFormat("Starting the DNS filtering");
                     m_DnsProxyServer = new Dns.DnsProxyServer.DnsProxyServer(
-                        dnsApiConfiguration.DnsProxySettings, 
+                        dnsApiConfiguration.DnsProxySettings,
                         dnsApiConfiguration.DnsProxyServerCallbackConfiguration);
                     m_CurrentDnsProxySettings = dnsApiConfiguration.DnsProxySettings;
                     m_DnsProxyServer.Start();
@@ -104,7 +99,7 @@ namespace Adguard.Dns.Api
                     {
                         return;
                     }
-            
+
                     m_DnsProxyServer.Stop();
                     LOG.InfoFormat("Stopping the DNS filtering has been successfully completed");
                 }
@@ -115,7 +110,7 @@ namespace Adguard.Dns.Api
                 }
             }
         }
-        
+
         /// <summary>
         /// Reloads DNS filtering
         /// <param name="newDnsApiConfiguration">Dns proxy configuration
@@ -148,18 +143,18 @@ namespace Adguard.Dns.Api
                             "Cannot reload the DNS filtering, because the DNS server is not started and/or configurations are not set");
                         return;
                     }
-                    
+
                     if (newDnsApiConfiguration == null)
                     {
                         throw new ArgumentNullException(
-                            "newDnsApiConfiguration", 
+                            "newDnsApiConfiguration",
                             "newDnsApiConfiguration is not specified");
                     }
-                    
+
                     if (newDnsApiConfiguration.DnsProxySettings == null)
                     {
                         throw new ArgumentException(
-                            "DnsProxySettings is not initialized", 
+                            "DnsProxySettings is not initialized",
                             "newDnsApiConfiguration");
                     }
 
@@ -170,11 +165,11 @@ namespace Adguard.Dns.Api
                         LOG.InfoFormat("The DNS server configuration hasn't been changed, no need to reload");
                         return;
                     }
-                    
+
                     newDnsProxyServer = new Dns.DnsProxyServer.DnsProxyServer(
-                        newDnsApiConfiguration.DnsProxySettings, 
+                        newDnsApiConfiguration.DnsProxySettings,
                         newDnsApiConfiguration.DnsProxyServerCallbackConfiguration);
-                    
+
                     m_DnsProxyServer.Stop();
                     m_DnsProxyServer = newDnsProxyServer;
                     if (newDnsApiConfiguration.IsEnabled)
@@ -182,7 +177,7 @@ namespace Adguard.Dns.Api
                         LOG.InfoFormat("DNS filtering is enabled, starting DNS proxy server");
                         m_DnsProxyServer.Start();
                     }
-                    
+
                     m_CurrentDnsProxySettings = newDnsApiConfiguration.DnsProxySettings;
                     LOG.InfoFormat("Reloading the DNS filtering has been successfully completed");
                 }
@@ -220,7 +215,7 @@ namespace Adguard.Dns.Api
                     {
                         return null;
                     }
-            
+
                     DnsProxySettings dnsProxySettings = m_DnsProxyServer.GetCurrentDnsProxySettings();
                     LOG.InfoFormat("Getting current DNS proxy settings has been successfully completed");
                     return dnsProxySettings;
@@ -247,7 +242,7 @@ namespace Adguard.Dns.Api
                 try
                 {
                     LOG.InfoFormat("Getting default DNS proxy settings");
-                    DnsProxySettings dnsProxySettings = 
+                    DnsProxySettings dnsProxySettings =
                         Dns.DnsProxyServer.DnsProxyServer.GetDefaultDnsProxySettings();
                     LOG.InfoFormat("Getting default DNS proxy settings has been successfully completed");
                     return dnsProxySettings;
@@ -346,8 +341,20 @@ namespace Adguard.Dns.Api
         public void SetUnhandledExceptionConfiguration(
             IUnhandledExceptionConfiguration unhandledExceptionConfiguration)
         {
-            CoreExceptionHandler.Init(unhandledExceptionConfiguration);
-            CoreExceptionHandler.SetUnhandledExceptionConfiguration(AGDnsApi.DnsLibName);
+            lock (SYNC_ROOT)
+            {
+                try
+                {
+                    LOG.InfoFormat("Setting unhandled exception configuration");
+                    DnsExceptionHandler.Init(unhandledExceptionConfiguration);
+                    DnsExceptionHandler.SetUnhandledExceptionConfiguration();
+                    LOG.InfoFormat("Setting unhandled exception configuration has been successfully completed");
+                }
+                catch (Exception ex)
+                {
+                    LOG.ErrorFormat("Setting unhandled exception configuration failed with an error", ex);
+                }
+            }
         }
 
         #endregion
