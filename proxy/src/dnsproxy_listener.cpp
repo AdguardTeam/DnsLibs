@@ -278,7 +278,7 @@ public:
             m_state = state::RD_PAYLOAD;
         }
         if (m_state == state::RD_PAYLOAD) {
-            if (m_data.size() < (size_t)2 + m_size) {
+            if (m_data.size() < (size_t) 2 + m_size) {
                 return false; // Need more data
             }
             out = ag::uint8_vector(m_data.begin() + 2, m_data.begin() + 2 + m_size);
@@ -294,8 +294,8 @@ public:
     explicit tcp_dns_connection(uint64_t id)
             : m_id{id}
             , m_log(ag::create_logger(__func__))
-            , m_tcp((uv_tcp_t *)malloc(sizeof(uv_tcp_t))) // Deleted in close_cb
-            , m_idle_timer((uv_timer_t *)malloc(sizeof(uv_timer_t))) // Deleted in close_cb
+            , m_tcp((uv_tcp_t *) malloc(sizeof(uv_tcp_t))) // Deleted in close_cb
+            , m_idle_timer((uv_timer_t *) malloc(sizeof(uv_timer_t))) // Deleted in close_cb
     {
         this->m_tcp->data = this;
         this->m_idle_timer->data = this;
@@ -423,11 +423,13 @@ private:
 
     static void after_work_cb(uv_work_t *w_req, int status) {
         auto *w = (work *) w_req->data;
-        std::scoped_lock l{w->mtx};
-        if (status == 0 && !w->canceled) {
-            auto *c = w->c;
-            c->m_pending_works.erase(w);
-            c->do_write(std::move(w->payload));
+        {
+            std::scoped_lock l{w->mtx};
+            if (status == 0 && !w->canceled) {
+                auto *c = w->c;
+                c->m_pending_works.erase(w);
+                c->do_write(std::move(w->payload));
+            }
         }
         delete w;
     }
