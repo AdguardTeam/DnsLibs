@@ -34,7 +34,6 @@ endfunction()
 
 include(../../common/apply_patch.cmake)
 
-apply_patch("${CMAKE_CURRENT_SOURCE_DIR}/easy_reuse.patch" "${CMAKE_CURRENT_SOURCE_DIR}/curl")
 apply_patch("${CMAKE_CURRENT_SOURCE_DIR}/find_openssl.patch" "${CMAKE_CURRENT_SOURCE_DIR}/curl")
 apply_patch("${CMAKE_CURRENT_SOURCE_DIR}/other_tests.patch" "${CMAKE_CURRENT_SOURCE_DIR}/curl")
 apply_patch("${CMAKE_CURRENT_SOURCE_DIR}/check_nroff.patch" "${CMAKE_CURRENT_SOURCE_DIR}/curl")
