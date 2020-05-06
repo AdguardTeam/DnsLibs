@@ -52,6 +52,8 @@ TEST_F(dnsfilter_test, successful_rule_parsing) {
 
     const test_data TEST_DATA[] =
         {
+            { "||*.example.*", { {}, rule_utils::rule::MMID_SHORTCUTS_AND_REGEX } },
+            { "||*example*", { {}, rule_utils::rule::MMID_SHORTCUTS_AND_REGEX } },
             { "example.org", { {}, rule_utils::rule::MMID_EXACT } },
             { "@@example.org", { { .props = { 1 << ag::dnsfilter::RP_EXCEPTION } }, rule_utils::rule::MMID_SHORTCUTS } },
             { "example.org$important", { { .props = { 1 << ag::dnsfilter::RP_IMPORTANT } }, rule_utils::rule::MMID_SHORTCUTS } },
@@ -208,6 +210,8 @@ TEST_F(dnsfilter_test, basic_rules_match) {
 
     const std::vector<test_data> TEST_DATA =
         {
+            { { "||*example-1*" }, "sub.baexample-1ab", true, },
+            { { "||*.example0.*" }, "sub.example0.com", true, },
             { { "example1.org" }, "example1.org", true, },
             { { "example2.org", "@@example2.org" }, "example2.org", false, },
             { { "example3.org", "@@example3.org", "example3.org$important" }, "example3.org", true, },
@@ -289,6 +293,8 @@ TEST_F(dnsfilter_test, basic_rules_no_match) {
 
     const std::vector<test_data> TEST_DATA =
         {
+            { "||*example-1*", "sub.baexaASDFmple-1ab" },
+            { "||*.example0.*", "example0.com" },
             { "example1.org|", "example1.orgg", },
             { "|example2.org", "eexample2.org", },
             { "|example3.org|", "eexample3.orgg", },

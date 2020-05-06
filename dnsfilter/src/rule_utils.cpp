@@ -377,7 +377,9 @@ std::optional<rule_utils::rule> rule_utils::parse(std::string_view str, ag::logg
 
             static constexpr std::string_view SPECIAL_CHARACTERS = "\\^$*+?.()|[]{}";
             std::vector<std::string_view> shortcuts = ag::utils::split_by_any_of(text, SPECIAL_CHARACTERS);
-            if (shortcuts.size() > 1) {
+            if (shortcuts.size() > 1
+                    || std::string_view::npos != SPECIAL_CHARACTERS.find(text.front())
+                    || std::string_view::npos != SPECIAL_CHARACTERS.find(text.back())) {
                 r.match_method = rule::MMID_SHORTCUTS_AND_REGEX;
                 r.matching_parts.reserve(shortcuts.size());
                 for (const std::string_view &sc : shortcuts) {
