@@ -144,7 +144,7 @@ static void parallel_test(const T &data) {
     });
 }
 
-TEST_F(upstream_test, wrong_upstream_options) {
+TEST_F(upstream_test, create_upstream_with_wrong_options) {
     static const ag::upstream_options OPTIONS[] = {
         // malformed ip address
         { "8..8.8:53" },
@@ -167,6 +167,27 @@ TEST_F(upstream_test, wrong_upstream_options) {
     for (const ag::upstream_options &options : OPTIONS) {
         ag::upstream_factory::create_result r = create_upstream(options);
         ASSERT_TRUE(r.error.has_value()) << options.address;
+    }
+}
+
+TEST_F(upstream_test, use_upstream_with_wrong_options) {
+    static const ag::upstream_options OPTIONS[] {
+        // non existent domain, valid bootstrap
+        { "https://qwer.zxcv.asdf.", { "8.8.8.8" } },
+        // existent domain, invalid bootstrap
+        { "https://dns.adguard.com/dnsquery", { "4.3.2.1" } },
+        // DoT
+        { "tls://one.one.two.asdf.", { "8.8.8.8" } }, // invalid/valid
+        { "tls://one.one.one.one", { "4.3.2.1" } }, // valid/invalid
+    };
+
+    for (const ag::upstream_options &options : OPTIONS) {
+        auto[upstream, uerror] = create_upstream(options);
+        ASSERT_FALSE(uerror.has_value()) << uerror.value();
+
+        ag::ldns_pkt_ptr msg = create_test_message();
+        auto[reply, eerror] = upstream->exchange(msg.get());
+        ASSERT_TRUE(eerror.has_value()) << "Expected this upstream to error out: " <<  options.address;
     }
 }
 

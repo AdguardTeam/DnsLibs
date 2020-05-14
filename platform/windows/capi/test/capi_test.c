@@ -122,6 +122,9 @@ static void test_utils() {
     upstream.address = "1.2.3.4.5.6";
     error = ag_test_upstream(&upstream, NULL);
     ASSERT(error);
+    upstream.address = "https://asdf.asdf.asdf/asdfdnsqueryasdf";
+    error = ag_test_upstream(&upstream, NULL);
+    ASSERT(error);
     ag_str_free(error);
     free(upstream.bootstrap.data);
 }

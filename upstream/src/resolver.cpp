@@ -166,9 +166,9 @@ resolver::result resolver::resolve(std::string_view host, int port, milliseconds
     timeout -= timer.elapsed<milliseconds>();
 
     if (!a_err) {
-        log_ip(log, trace, this->resolver_address, "Got A record for host '{}' (elapsed:{})",
-            host, timer.elapsed<milliseconds>());
         auto a_addrs = socket_address_from_reply(this->log, a_reply.get(), port);
+        log_ip(log, trace, this->resolver_address, "Got {} A records for host '{}' (elapsed:{})",
+               a_addrs.size(), host, timer.elapsed<milliseconds>());
         std::move(a_addrs.begin(), a_addrs.end(), std::back_inserter(addrs));
     } else {
         error = std::move(a_err);
@@ -183,6 +183,8 @@ resolver::result resolver::resolve(std::string_view host, int port, milliseconds
         auto [aaaa_reply, aaaa_err] = upstream->exchange(aaaa_req.get());
         if (!aaaa_err) {
             auto aaaa_addrs = socket_address_from_reply(this->log, aaaa_reply.get(), port);
+            log_ip(log, trace, this->resolver_address, "Got {} AAAA records for host '{}' (elapsed:{})",
+                   aaaa_addrs.size(), host, timer.elapsed<milliseconds>());
             std::move(aaaa_addrs.begin(), aaaa_addrs.end(), std::back_inserter(addrs));
         } else {
             error = std::move(aaaa_err);
@@ -192,9 +194,7 @@ resolver::result resolver::resolve(std::string_view host, int port, milliseconds
     }
 
     if (!error.has_value() && addrs.empty()) {
-        // either an error or address list should be present
-        assert(0);
-        error = "No address";
+        error = AG_FMT("Could not resolve {}", host);
     }
 
     return { std::move(addrs), std::move(error) };
