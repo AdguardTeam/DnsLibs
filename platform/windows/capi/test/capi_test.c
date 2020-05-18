@@ -61,13 +61,14 @@ static void test_proxy() {
 
     ag_dnsproxy *proxy = ag_dnsproxy_init(settings, &events);
     ASSERT(proxy);
-    settings->upstreams.data[0].address = ugly_hack;
-    ag_dnsproxy_settings_free(settings);
 
     ag_dnsproxy_settings *actual_settings = ag_dnsproxy_get_settings(proxy);
     ASSERT(actual_settings);
     ASSERT(actual_settings->upstreams.data[0].id == settings->upstreams.data[0].id);
     ag_dnsproxy_settings_free(actual_settings);
+
+    settings->upstreams.data[0].address = ugly_hack;
+    ag_dnsproxy_settings_free(settings);
 
     ldns_pkt *query = ldns_pkt_query_new(ldns_dname_new_frm_str("example.org"),
                                          LDNS_RR_TYPE_A, LDNS_RR_CLASS_IN, LDNS_RD);
