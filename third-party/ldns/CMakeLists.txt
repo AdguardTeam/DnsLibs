@@ -30,17 +30,20 @@ add_library(ldns EXCLUDE_FROM_ALL
         ldns/net.c
         ldns/sha1.c
         ldns/sha2.c
-        ldns/zone.c)
+        ldns/zone.c
+        ext/ag_ext.cpp)
 
 target_include_directories(ldns PUBLIC ldns)
 target_include_directories(ldns PUBLIC compat)
+target_include_directories(ldns PUBLIC ext)
 
 target_compile_definitions(ldns PRIVATE HAVE_CONFIG_H=1)
 
+include(../../common/apply_patch.cmake)
+apply_patch(${CMAKE_CURRENT_SOURCE_DIR}/ag_ext.patch ${CMAKE_CURRENT_SOURCE_DIR}/ldns)
+
 if (MSVC)
-    include(../../common/apply_patch.cmake)
     apply_patch(${CMAKE_CURRENT_SOURCE_DIR}/windows.patch ${CMAKE_CURRENT_SOURCE_DIR}/ldns)
-    
     target_link_libraries(ldns wsock32 ws2_32)
     target_sources(ldns PRIVATE ldns/compat/gmtime_r.c)
     target_sources(ldns PRIVATE ldns/compat/localtime_r.c)

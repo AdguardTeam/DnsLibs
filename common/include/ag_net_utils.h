@@ -8,6 +8,7 @@
 #include <utility>
 #include <ag_defs.h>
 #include <ag_socket_address.h>
+#include <ldns/error.h>
 
 namespace ag::utils {
 
@@ -56,5 +57,12 @@ std::string addr_to_str(uint8_view addr);
  * @return a socket_address parsed from the address string
  */
 socket_address str_to_socket_address(std::string_view address);
+
+/**
+ * Return a description of an LDNS status code.
+ * This function makes use of our extensions to LDNS
+ * to provide a more detailed description for network errors.
+ */
+std::string ldns_status_to_str(ldns_status status);
 
 } // namespace ag::utils

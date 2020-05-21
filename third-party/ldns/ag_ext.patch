@@ -1,0 +1,134 @@
+Index: net.c
+IDEA additional info:
+Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
+<+>UTF-8
+===================================================================
+--- net.c	(revision 53bc57512c19b11eebc403a4cb2bbf7295eb0db1)
++++ net.c	(date 1589976255577)
+@@ -15,6 +15,8 @@
+ 
+ #include <ldns/ldns.h>
+ 
++#include <ldns/ag_ext.h>
++
+ #ifdef HAVE_NETINET_IN_H
+ #include <netinet/in.h>
+ #endif
+@@ -178,12 +180,15 @@
+ 	ret = poll(pfds, 1, (int)(timeout.tv_sec * 1000
+ 				+ timeout.tv_usec / 1000));
+ #endif
+-	if(ret == 0)
+-		/* timeout expired */
+-		return 0;
+-	else if(ret == -1)
+-		/* error */
+-		return 0;
++	if(ret == 0) {
++        ag_ldns_set_socket_error(LDNS_ETIMEDOUT);
++        /* timeout expired */
++        return 0;
++    } else if(ret == -1) {
++        ag_ldns_set_socket_error(ag_ldns_socket_geterror(sockfd));
++        /* error */
++        return 0;
++    }
+ 	return 1;
+ }
+ 
+@@ -198,10 +203,12 @@
+ #ifndef S_SPLINT_S
+ 	if ((sockfd = socket((int)((struct sockaddr*)to)->sa_family, SOCK_STREAM, 
+ 					IPPROTO_TCP)) == SOCK_INVALID) {
++        ag_ldns_set_socket_error(ag_ldns_socket_geterror(sockfd));
+ 		return -1;
+ 	}
+ #endif
+ 	if (from && bind(sockfd, (const struct sockaddr*)from, fromlen) == SOCK_INVALID){
++        ag_ldns_set_socket_error(ag_ldns_socket_geterror(sockfd));
+ 		close_socket(sockfd);
+ 		return -1;
+ 	}
+@@ -209,6 +216,7 @@
+ 	/* perform nonblocking connect, to be able to wait with select() */
+ 	ldns_sock_nonblock(sockfd);
+ 	if (connect(sockfd, (struct sockaddr*)to, tolen) == SOCK_INVALID) {
++        ag_ldns_set_socket_error(ag_ldns_socket_geterror(sockfd));
+ #ifndef USE_WINSOCK
+ #ifdef EINPROGRESS
+ 		if(errno != EINPROGRESS) {
+@@ -254,6 +262,7 @@
+ #endif
+ 		else if(error != 0) {
+ 			close_socket(sockfd);
++            ag_ldns_set_socket_error(error);
+ 			/* error in errno for our user */
+ 			errno = error;
+ 			return -1;
+@@ -265,6 +274,7 @@
+ 			continue;
+ 		else if(error != 0) {
+ 			close_socket(sockfd);
++			ag_ldns_set_socket_error(error);
+ 			errno = error;
+ 			return -1;
+ 		}
+@@ -305,6 +315,7 @@
+ 	sockfd = ldns_tcp_connect_from(to, tolen, from, fromlen, timeout);
+ 	
+ 	if (sockfd >= 0 && ldns_tcp_send_query(qbin, sockfd, to, tolen) == 0) {
++        ag_ldns_set_socket_error(ag_ldns_socket_geterror(sockfd));
+ 		close_socket(sockfd);
+ 		return -1;
+ 	}
+@@ -397,6 +408,15 @@
+ #endif
+ 	return sockfd;
+ }
++
++static int ldns_udp_connect3(const struct sockaddr_storage *to, struct timeval ATTR_UNUSED(timeout)) {
++    int sockfd = socket((int)((struct sockaddr*)to)->sa_family, SOCK_DGRAM, IPPROTO_UDP);
++    if (sockfd == SOCK_INVALID) {
++        ag_ldns_set_socket_error(ag_ldns_socket_geterror(sockfd));
++        return -1;
++    }
++    return sockfd;
++}
+ 
+ static int
+ ldns_udp_bgsend_from(ldns_buffer *qbin,
+@@ -406,18 +426,20 @@
+ {
+ 	int sockfd;
+ 
+-	sockfd = ldns_udp_connect2(to, timeout);
++	sockfd = ldns_udp_connect3(to, timeout);
+ 
+ 	if (sockfd == -1) {
+ 		return -1;
+ 	}
+ 
+ 	if (from && bind(sockfd, (const struct sockaddr*)from, fromlen) == -1){
++        ag_ldns_set_socket_error(ag_ldns_socket_geterror(sockfd));
+ 		close_socket(sockfd);
+ 		return -1;
+ 	}
+ 
+ 	if (ldns_udp_send_query(qbin, sockfd, to, tolen) == 0) {
++        ag_ldns_set_socket_error(ag_ldns_socket_geterror(sockfd));
+ 		close_socket(sockfd);
+ 		return -1;
+ 	}
+@@ -734,7 +756,11 @@
+ 			(struct sockaddr *)from, fromlen);
+ 
+ 	/* recvfrom can also return 0 */
+-	if (wire_size == -1 || wire_size == 0) {
++	if (wire_size <= 0) {
++        ag_ldns_set_socket_error(0); // Might just be empty datagram
++	    if (wire_size < 0) {
++            ag_ldns_set_socket_error(ag_ldns_socket_geterror(sockfd));
++	    }
+ 		*size = 0;
+ 		LDNS_FREE(wire);
+ 		return NULL;

@@ -737,6 +737,12 @@ int gettimeofday(struct timeval *tp, void *tzp);
 unsigned int sleep(unsigned int);
 #endif
 
+#ifdef _WIN32
+#define LDNS_ETIMEDOUT WSAETIMEDOUT
+#else
+#define LDNS_ETIMEDOUT ETIMEDOUT
+#endif
+
 #ifdef __cplusplus
 }
 #endif

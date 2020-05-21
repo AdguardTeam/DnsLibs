@@ -1,5 +1,7 @@
 #include <ag_utils.h>
+#include <ag_net_utils.h>
 #include "upstream_plain.h"
+#include <ldns/ag_ext.h>
 
 using std::chrono::milliseconds;
 using std::chrono::duration_cast;
@@ -30,8 +32,6 @@ ag::err_string ag::plain_dns::init() {
 
 ag::plain_dns::exchange_result ag::plain_dns::exchange(ldns_pkt *request_pkt) {
     ldns_status status;
-
-    using ldns_buffer_ptr = std::unique_ptr<ldns_buffer, ag::ftor<&ldns_buffer_free>>;
     ldns_buffer_ptr buffer{ldns_buffer_new(REQUEST_BUFFER_INITIAL_CAPACITY)};
     status = ldns_pkt2buffer_wire(&*buffer, request_pkt);
     if (status != LDNS_STATUS_OK) {
@@ -46,7 +46,7 @@ ag::plain_dns::exchange_result ag::plain_dns::exchange(ldns_pkt *request_pkt) {
         status = ldns_udp_send(&reply_data, &*buffer, (const sockaddr_storage *) m_pool.address().c_sockaddr(),
                                m_pool.address().c_socklen(), tv, &reply_size);
         if (status != LDNS_STATUS_OK) {
-            return {nullptr, ldns_get_errorstr_by_id(status)};
+            return {nullptr, utils::ldns_status_to_str(status)};
         }
 
         ldns_pkt *reply_pkt = nullptr;

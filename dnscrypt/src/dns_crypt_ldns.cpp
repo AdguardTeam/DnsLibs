@@ -1,5 +1,6 @@
 #include <ldns/error.h>
 #include <ldns/net.h>
+#include <ldns/ag_ext.h>
 #include "dns_crypt_ldns.h"
 #include <ag_utils.h>
 #include <ag_net_utils.h>
@@ -56,11 +57,11 @@ ag::dnscrypt::dns_exchange_allocated_result ag::dnscrypt::dns_exchange_allocated
     ldns_status status = send_func(&reply_data, &buffer,
                                    reinterpret_cast<const sockaddr_storage *>(socket_address.c_sockaddr()),
                                    socket_address.c_socklen(), tv, &reply_size);
+    if (status != LDNS_STATUS_OK) {
+        return make_error(utils::ldns_status_to_str(status));
+    }
     auto reply_data_unique_ptr = utils::make_allocated_unique(reply_data);
     auto rtt = timer.elapsed<std::chrono::milliseconds>();
-    if (status != LDNS_STATUS_OK) {
-        return make_error(ldns_get_errorstr_by_id(status));
-    }
     return {std::move(reply_data_unique_ptr), reply_size, rtt, std::nullopt};
 }
 

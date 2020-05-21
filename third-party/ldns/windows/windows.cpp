@@ -2,7 +2,7 @@
 #include <chrono>
 #include <cctype>
 #include <cstdint>
-#include <intrin.h> // For _BitScan*
+#include <intrin.h>
 
 extern "C"
 int ffs(int i) {
