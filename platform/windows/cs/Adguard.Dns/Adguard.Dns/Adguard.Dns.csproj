@@ -2,6 +2,12 @@
 <Project ToolsVersion="4.0" DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <Import Project="$(MSBuildExtensionsPath)\$(MSBuildToolsVersion)\Microsoft.Common.props" Condition="Exists('$(MSBuildExtensionsPath)\$(MSBuildToolsVersion)\Microsoft.Common.props')" />
   <Import Project="..\common.props" />
+  <!-- Delay Signing -->
+  <PropertyGroup>
+    <SignAssembly>true</SignAssembly>
+    <DelaySign>true</DelaySign>
+    <AssemblyOriginatorKeyFile>../adguard.snk</AssemblyOriginatorKeyFile>
+  </PropertyGroup>
   <PropertyGroup>
     <Configuration Condition=" '$(Configuration)' == '' ">Debug</Configuration>
     <Platform Condition=" '$(Platform)' == '' ">AnyCPU</Platform>
@@ -82,5 +88,12 @@
     <None Include="AdguardDns.dll" CopyToOutputDirectory="Always" />
     <None Include="AdguardDns.pdb" CopyToOutputDirectory="Always" />
   </ItemGroup>
+  <!-- Post build script -->
+    <Target Name="PostBuild" AfterTargets="PostBuildEvent">
+      <GetAssemblyIdentity AssemblyFiles="$(TargetPath)">
+        <Output TaskParameter="Assemblies" ItemName="DNS" />
+      </GetAssemblyIdentity>
+      <Exec Command="python -u $(ProjectDir)/../BuildEvents\Post\adguardDns.py --solution_dir=$(ProjectDir)/../ --project_dir=$(ProjectDir) --target_dir=$(TargetDir) --configuration_name=$(ConfigurationName) " />
+    </Target>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
 </Project>

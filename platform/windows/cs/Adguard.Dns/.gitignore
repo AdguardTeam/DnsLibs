@@ -16,7 +16,7 @@ Adguard.Dns.Tests/TestResult.xml
 .vs/
 
 # Python caches
-.pyc
+*.pyc
 
 # signtool log
 Signing/signtool.log

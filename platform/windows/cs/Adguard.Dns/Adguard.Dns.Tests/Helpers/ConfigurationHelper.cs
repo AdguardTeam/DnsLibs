@@ -16,7 +16,7 @@ namespace Adguard.Dns.Tests.Helpers
                 ResolvedIpAddress = null,
                 Id = 42
             };
-            
+
             return upstreamOptions;
         }
 
@@ -49,7 +49,7 @@ namespace Adguard.Dns.Tests.Helpers
                 DnsCacheSize = 500,
                 EngineParams = new EngineParams
                 {
-                    FilterParams = new Dictionary<uint, string>
+                    FilterParams = new Dictionary<int, string>
                     {
                         {0, "blalala"}
                     }
@@ -65,7 +65,7 @@ namespace Adguard.Dns.Tests.Helpers
                 },
                 Ipv6Available = true
             };
-            
+
             return dnsProxySettings;
         }
     }

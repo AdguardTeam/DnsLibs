@@ -9,16 +9,15 @@ namespace Adguard.Dns.Api.DnsProxyServer.Configs
     /// </summary>
     public class EngineParams
     {
-        /// <summary> 
+        /// <summary>
         /// Filter parameters, represented as a hash-map, where
         /// "key" is the filter's identifier
         /// "value" is the filter's download path
-        /// 
         /// </summary>
-        public Dictionary<uint, string> FilterParams { get; set; }
-        
+        public Dictionary<int, string> FilterParams { get; set; }
+
         #region Equals members
-        
+
         public override bool Equals(object obj)
         {
             if (ReferenceEquals(null, obj))
@@ -52,7 +51,7 @@ namespace Adguard.Dns.Api.DnsProxyServer.Configs
                 return hashCode;
             }
         }
-        
+
         #endregion
     }
 }

@@ -4,6 +4,7 @@ cmake-build-win
 .idea
 .vscode
 build/
+dns-libs-private/
 
 # mac/ios test app
 platform/mac/testapp/framework/

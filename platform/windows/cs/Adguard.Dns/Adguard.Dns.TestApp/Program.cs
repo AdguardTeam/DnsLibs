@@ -14,19 +14,19 @@ namespace Adguard.Dns.TestApp
     {
         private static ILogProvider m_LogProvider;
         private static IDnsApi m_DnsApi;
-        
+
         public static void Main(string[] args)
         {
             m_LogProvider = new ColoredConsoleLogProvider();
             LogProvider.SetCurrentLogProvider(m_LogProvider);
-            
+
 #if LOG_TO_FILE
             ConsoleToFileRedirector.Start("Logs");
 #endif
             m_DnsApi = DnsApi.Instance;
             m_DnsApi.InitLogger(LogLevel.Trace);
             DnsProxySettings dnsProxySettings = CreateDnsProxySettings();
-            IDnsProxyServerCallbackConfiguration dnsProxyServerCallbackConfiguration = 
+            IDnsProxyServerCallbackConfiguration dnsProxyServerCallbackConfiguration =
                 new DnsProxyServerCallbackConfiguration();
             m_DnsApi.StartDnsFiltering(new DnsApiConfiguration
             {
@@ -49,7 +49,7 @@ namespace Adguard.Dns.TestApp
                 ResolvedIpAddress = null,
                 Id = 42
             };
-            
+
             return upstreamOptions;
         }
 
@@ -82,9 +82,9 @@ namespace Adguard.Dns.TestApp
                 DnsCacheSize = 500,
                 EngineParams = new EngineParams
                 {
-                    FilterParams = new Dictionary<uint, string>
+                    FilterParams = new Dictionary<int, string>
                     {
-                        {0, "blalala"}
+                        {0, @"c:\ProgramData\Adguard (Debug)\Temp\sdnsFilter.txt"}
                     }
                 },
                 Listeners = new List<ListenerSettings>
@@ -93,12 +93,13 @@ namespace Adguard.Dns.TestApp
                     {
                         EndPoint = new IPEndPoint(IPAddress.Parse("127.0.0.1"),45),
                         IsPersistent = true,
-                        IdleTimeoutMs = 500
+                        IdleTimeoutMs = 500,
+                        Protocol = AGDnsApi.ag_listener_protocol.TCP
                     }
                 },
                 Ipv6Available = true
             };
-            
+
             return dnsProxySettings;
         }
     }

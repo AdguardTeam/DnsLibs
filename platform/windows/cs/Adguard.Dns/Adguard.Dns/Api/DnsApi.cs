@@ -101,6 +101,7 @@ namespace Adguard.Dns.Api
                     }
 
                     m_DnsProxyServer.Stop();
+                    m_DnsProxyServer = null;
                     LOG.InfoFormat("Stopping the DNS filtering has been successfully completed");
                 }
                 catch (Exception ex)
@@ -140,7 +141,9 @@ namespace Adguard.Dns.Api
                         m_CurrentDnsProxySettings == null)
                     {
                         LOG.InfoFormat(
-                            "Cannot reload the DNS filtering, because the DNS server is not started and/or configurations are not set");
+                            "Start DNS filtering, because the DNS server is not started and/or configurations are not set");
+
+                        StartDnsFiltering(newDnsApiConfiguration);
                         return;
                     }
 
@@ -328,7 +331,6 @@ namespace Adguard.Dns.Api
         }
 
         #endregion
-
 
         #region Crash reporting
 

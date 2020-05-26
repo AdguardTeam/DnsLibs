@@ -39,7 +39,7 @@ namespace Adguard.Dns.Helpers
             {
                 allocatedPointers.Enqueue(pStructure);
             }
-            
+
             return pStructure;
         }
 
@@ -173,7 +173,7 @@ namespace Adguard.Dns.Helpers
                 data = pBuffer,
                 size = (uint) buffer.Length
             };
-            
+
             if (allocatedPointers != null)
             {
                 allocatedPointers.Enqueue(pBuffer);
@@ -456,7 +456,7 @@ namespace Adguard.Dns.Helpers
                 destinationPropertyInfo.SetValue(destinationClass, stringValue, null);
             }
         }
-        
+
         /// <summary>
         /// Copies all the fields of the <see cref="sourceStructure"/> to the properties of
         /// <see cref="destinationClass"/> with the same names and types.
@@ -604,7 +604,7 @@ namespace Adguard.Dns.Helpers
                 destinationStructure = (TStruct) destinationStructureObj;
             }
         }
-        
+
         /// <summary>
         /// Copies all the properties values from the <see cref="sourceClass"/> into
         /// the fields from the <see cref="destinationStructure"/> with the same names and types.
@@ -646,7 +646,8 @@ namespace Adguard.Dns.Helpers
                 if (destinationFieldInfo == null ||
                     destinationFieldInfo.FieldType != propertyInfo.PropertyType)
                 {
-                    LOG.WarnFormat("Structure {0} doesn't contain field {1} with the type {2}",
+                    // TODO: remove this logging, after totally testing
+                    LOG.DebugFormat("Structure {0} doesn't contain field {1} with the type {2}",
                         typeof(TStruct).Name,
                         propertyInfo.Name,
                         propertyInfo.PropertyType.Name);
@@ -657,7 +658,7 @@ namespace Adguard.Dns.Helpers
                 destinationStructure = (TStruct) destinationObj;
             }
         }
-        
+
         /// <summary>
         /// Converts the specified <see cref="sourceList"/> with elements
         /// with the type <see cref="TSourceClassElement"/> to the <see cref="AGDnsApi.ag_list"/> instance.
@@ -695,7 +696,7 @@ namespace Adguard.Dns.Helpers
             {
                 throw new ArgumentNullException("allocatedPointers");
             }
-            
+
             List<TDestinationStructElement> listC = new List<TDestinationStructElement>();
             foreach (TSourceClassElement element in sourceList)
             {
@@ -711,8 +712,8 @@ namespace Adguard.Dns.Helpers
             };
 
             return agListC;
-        } 
-        
+        }
+
         /// <summary>
         /// Converts the specified <see cref="sourceAgList"/> with the type <see cref="AGDnsApi.ag_list"/>
         /// and which points to the array of structures with the type <see cref="TSourceStructElement"/>.
@@ -730,9 +731,9 @@ namespace Adguard.Dns.Helpers
             AGDnsApi.ag_list sourceAgList,
             Func<TSourceStructElement, TDestinationClassElement> converterFunc) where TSourceStructElement : struct
         {
-            List<TSourceStructElement> listC = 
+            List<TSourceStructElement> listC =
                 PtrToStructureList<TSourceStructElement>(sourceAgList.entries, (int) sourceAgList.num_entries);
-            
+
             List<TDestinationClassElement> list = new List<TDestinationClassElement>();
             foreach (TSourceStructElement elementC in listC)
             {
@@ -745,6 +746,6 @@ namespace Adguard.Dns.Helpers
 
         #endregion
 
-        
+
     }
 }

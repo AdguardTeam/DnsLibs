@@ -172,17 +172,15 @@ namespace Adguard.Dns
         internal struct ag_listener_settings
         {
             /// <summary>
-            /// Address to listen on
-            /// (<seealso cref="ag_buffer"/>)
+            /// Pointer to a string, which contains address to listen on
             /// </summary>
-            [MarshalAs(UnmanagedType.Struct)]
-            internal ag_buffer address;
+            internal IntPtr address;
 
             /// <summary>
             /// Protocol to listen on
             /// </summary>
-            [MarshalAs(UnmanagedType.U4)]
-            internal UInt32 port;
+            [MarshalAs(UnmanagedType.U2)]
+            internal UInt16 port;
 
             /// <summary>
             /// The protocol to listen for
@@ -196,14 +194,14 @@ namespace Adguard.Dns
             /// </summary>
             [MarshalAs(UnmanagedType.I1)]
             [NativeName("persistent")]
-            internal bool Persistent;
+            internal bool IsPersistent;
 
             /// <summary>
             /// Close the TCP connection this long after the last request received
             /// </summary>
             [MarshalAs(UnmanagedType.U4)]
             [NativeName("idle_timeout_ms")]
-            internal UInt32 IdleTimeout;
+            internal UInt32 IdleTimeoutMs;
         }
 
         [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Ansi)]
@@ -237,7 +235,7 @@ namespace Adguard.Dns
             /// </summary>
             [MarshalAs(UnmanagedType.U4)]
             [NativeName("timeout_ms")]
-            internal UInt32 Timeout;
+            internal UInt32 TimeoutMs;
 
             /// <summary>
             /// Resolver's IP address.
@@ -262,8 +260,8 @@ namespace Adguard.Dns
             /// <summary>
             /// filter id
             /// </summary>
-            [MarshalAs(UnmanagedType.U4)]
-            internal UInt32 id;
+            [MarshalAs(UnmanagedType.I4)]
+            internal Int32 id;
 
             /// <summary>
             /// path to file with rules
@@ -477,14 +475,14 @@ namespace Adguard.Dns
             /// </summary>
             [MarshalAs(UnmanagedType.I8)]
             [NativeName("start_time")]
-            internal long StartTime;
+            internal Int64 StartTime;
 
             /// <summary>
             /// Time elapsed on processing (in milliseconds)
             /// </summary>
-            [MarshalAs(UnmanagedType.U4)]
+            [MarshalAs(UnmanagedType.I4)]
             [NativeName("elapsed")]
-            internal UInt32 Elapsed;
+            internal Int32 Elapsed;
 
             /// <summary>
             /// DNS answer's status
@@ -517,13 +515,15 @@ namespace Adguard.Dns
             /// Number of bytes sent to a server
             /// </summary>
             [NativeName("bytes_sent")]
-            internal int BytesSent;
+            [MarshalAs(UnmanagedType.I4)]
+            internal Int32 BytesSent;
 
             /// <summary>
             /// Number of bytes received from a server
             /// </summary>
             [NativeName("bytes_received")]
-            internal int BytesReceived;
+            [MarshalAs(UnmanagedType.I4)]
+            internal Int32 BytesReceived;
 
             /// <summary>
             /// Pointer Filtering rules texts

@@ -28,14 +28,12 @@ namespace Adguard.Dns.Helpers
                 {AddressFamily.InterNetworkV6, 16}
             };
 
-        private static int DEFAULT_NULLABLE_INT_SUBSTITUTION = -1;
-
         #endregion
 
         #region Dns server config
 
         #region ToNativeObject
-        
+
         /// <summary>
         /// Converts the managed <see cref="dnsProxySettings"/>
         /// (<seealso cref="DnsProxySettings"/>) to the native <see cref="AGDnsApi.ag_dnsproxy_settings"/> object
@@ -51,14 +49,14 @@ namespace Adguard.Dns.Helpers
         /// with <see cref="MarshalUtils.SafeFreeHGlobal(IntPtr)"/>>
         /// <returns>An instance of <see cref="AGDnsApi.ag_dnsproxy_settings"/></returns>
         internal static AGDnsApi.ag_dnsproxy_settings ToNativeObject(
-            DnsProxySettings dnsProxySettings, 
+            DnsProxySettings dnsProxySettings,
             Queue<IntPtr> allocatedPointers)
         {
             AGDnsApi.ag_list upstreamsC = MarshalUtils.ListToAgList(
                 dnsProxySettings.Upstreams,
                 ToNativeObject,
                 allocatedPointers);
-            
+
             AGDnsApi.ag_list fallbacksC = MarshalUtils.ListToAgList(
                 dnsProxySettings.Fallbacks,
                 ToNativeObject,
@@ -80,17 +78,17 @@ namespace Adguard.Dns.Helpers
                 FilterParams = filterEngineParamsC,
                 listeners = listenersC,
             };
-            
+
             MarshalUtils.CopyPropertiesToFields(dnsProxySettings, ref dnsProxySettingsC);
             MarshalUtils.AllStringsToPtrs(dnsProxySettings, ref dnsProxySettingsC, allocatedPointers);
             return dnsProxySettingsC;
         }
-                
+
         private static AGDnsApi.ag_filter_engine_params ToNativeObject(
-            EngineParams engineParams, 
+            EngineParams engineParams,
             Queue<IntPtr> allocatedPointers)
         {
-            List<KeyValuePair<uint, string>> filterParams = engineParams.FilterParams.ToList();
+            List<KeyValuePair<int, string>> filterParams = engineParams.FilterParams.ToList();
             AGDnsApi.ag_list filterParamsC = MarshalUtils.ListToAgList(
                 filterParams,
                 ToNativeObject,
@@ -99,12 +97,12 @@ namespace Adguard.Dns.Helpers
             {
                 filters = filterParamsC
             };
-            
+
             return filterEngineParamsC;
         }
 
         private static AGDnsApi.ag_dns64_settings ToNativeObject(
-            Dns64Settings dns64, 
+            Dns64Settings dns64,
             Queue<IntPtr> allocatedPointers)
         {
             AGDnsApi.ag_list dns64upstreamsC = MarshalUtils.ListToAgList(
@@ -116,7 +114,7 @@ namespace Adguard.Dns.Helpers
             {
                 upstreams = dns64upstreamsC
             };
-            
+
             MarshalUtils.CopyPropertiesToFields(dns64, ref dns64C);
             return dns64C;
         }
@@ -136,24 +134,25 @@ namespace Adguard.Dns.Helpers
         /// with <see cref="MarshalUtils.SafeFreeHGlobal(IntPtr)"/>>
         /// <returns>An instance of <see cref="AGDnsApi.ag_listener_settings"/></returns>
         private static AGDnsApi.ag_listener_settings ToNativeObject(
-            ListenerSettings listenerSettings, 
+            ListenerSettings listenerSettings,
             Queue<IntPtr> allocatedPointers)
         {
-            uint port = (uint) listenerSettings.EndPoint.Port;
-            byte[] addressBytes = listenerSettings.EndPoint.Address.GetAddressBytes();
-            AGDnsApi.ag_buffer addressC = MarshalUtils.BytesToAgBuffer(addressBytes, allocatedPointers);
+            ushort port = (ushort) listenerSettings.EndPoint.Port;
+            IntPtr address = MarshalUtils.StringToPtr(
+                listenerSettings.EndPoint.Address.ToString(),
+                allocatedPointers);
             AGDnsApi.ag_listener_settings listenerSettingsC = new AGDnsApi.ag_listener_settings
             {
-                address = addressC,
+                address = address,
                 port = port
             };
-            
+
             MarshalUtils.CopyPropertiesToFields(listenerSettings, ref listenerSettingsC);
             return listenerSettingsC;
         }
 
         private static AGDnsApi.ag_filter_params ToNativeObject(
-            KeyValuePair<uint, string> filterParams, 
+            KeyValuePair<int, string> filterParams,
             Queue<IntPtr> allocatedPointers)
         {
             AGDnsApi.ag_filter_params filterParamsC = new AGDnsApi.ag_filter_params
@@ -166,7 +165,7 @@ namespace Adguard.Dns.Helpers
         }
 
         internal static AGDnsApi.ag_upstream_options ToNativeObject(
-            UpstreamOptions upstreamOptions, 
+            UpstreamOptions upstreamOptions,
             Queue<IntPtr> allocatedPointers)
         {
             AGDnsApi.ag_list bootstrapC = MarshalUtils.ListToAgList(
@@ -179,50 +178,50 @@ namespace Adguard.Dns.Helpers
             {
                 addressBytes = upstreamOptions.ResolvedIpAddress.GetAddressBytes();
             }
-            
+
             AGDnsApi.ag_buffer addressC = MarshalUtils.BytesToAgBuffer(addressBytes, allocatedPointers);
             AGDnsApi.ag_upstream_options upstreamOptionsC = new AGDnsApi.ag_upstream_options
             {
                 bootstrap = bootstrapC,
                 resolved_ip_address = addressC
             };
-            
+
             MarshalUtils.CopyPropertiesToFields(upstreamOptions, ref upstreamOptionsC);
             MarshalUtils.AllStringsToPtrs(upstreamOptions, ref upstreamOptionsC, allocatedPointers);
             return upstreamOptionsC;
         }
 
         internal static AGDnsApi.AGDnsProxyServerCallbacks ToNativeObject(
-            IDnsProxyServerCallbackConfiguration dnsProxyServerCallbackConfiguration, 
+            IDnsProxyServerCallbackConfiguration dnsProxyServerCallbackConfiguration,
             IDnsProxyServer proxyServer)
         {
             CertificateVerificationCallback certificateVerificationCallback = new CertificateVerificationCallback();
             ProxyServerCallbacksAdapter proxyServerCallbacksAdapter =
                 new ProxyServerCallbacksAdapter(
-                    dnsProxyServerCallbackConfiguration, 
+                    dnsProxyServerCallbackConfiguration,
                     certificateVerificationCallback,
                     proxyServer);
             return proxyServerCallbacksAdapter.DnsProxyServerCallbacks;
         }
 
         #endregion
-        
+
         #region FromNativeObject
-        
+
         internal static DnsProxySettings FromNativeObject(
             AGDnsApi.ag_dnsproxy_settings dnsProxySettingsC)
         {
             List<UpstreamOptions> upstreams = MarshalUtils.AgListToList<AGDnsApi.ag_upstream_options, UpstreamOptions>(
                 dnsProxySettingsC.upstreams,
                 FromNativeObject);
-            
+
             List<UpstreamOptions> fallbacks = MarshalUtils.AgListToList<AGDnsApi.ag_upstream_options, UpstreamOptions>(
                 dnsProxySettingsC.fallbacks,
                 FromNativeObject);
 
             Dns64Settings dns64 = FromNativeObject(dnsProxySettingsC.pDns64);
             EngineParams engineParams = FromNativeObject(dnsProxySettingsC.FilterParams);
-            List<ListenerSettings> listeners = 
+            List<ListenerSettings> listeners =
                 MarshalUtils.AgListToList<AGDnsApi.ag_listener_settings, ListenerSettings>(
                     dnsProxySettingsC.listeners,
                     FromNativeObject);
@@ -234,7 +233,7 @@ namespace Adguard.Dns.Helpers
                 EngineParams = engineParams,
                 Listeners = listeners,
             };
-            
+
             MarshalUtils.CopyFieldsToProperties(dnsProxySettingsC, dnsProxySettings);
             MarshalUtils.AllPtrsToStrings(dnsProxySettingsC, dnsProxySettings);
             return dnsProxySettings;
@@ -260,26 +259,26 @@ namespace Adguard.Dns.Helpers
         private static ListenerSettings FromNativeObject(AGDnsApi.ag_listener_settings listenerSettingsC)
         {
             IPAddress address = CreateIpAddress(listenerSettingsC.address);
-            int port = (int) listenerSettingsC.port;
+            int port = listenerSettingsC.port;
             IPEndPoint endPoint = CreateEndPoint(address, port);
             ListenerSettings listenerSettings = new ListenerSettings
             {
                 EndPoint = endPoint
             };
-            
+
             MarshalUtils.CopyFieldsToProperties(listenerSettingsC, listenerSettings);
             return listenerSettings;
         }
 
         private static EngineParams FromNativeObject(AGDnsApi.ag_filter_engine_params filterEngineParamsC)
         {
-            List<KeyValuePair<uint, string>> filterParamsList = 
-                MarshalUtils.AgListToList<AGDnsApi.ag_filter_params, KeyValuePair<uint, string>>(
+            List<KeyValuePair<int, string>> filterParamsList =
+                MarshalUtils.AgListToList<AGDnsApi.ag_filter_params, KeyValuePair<int, string>>(
                 filterEngineParamsC.filters,
                 FromNativeObject);
-            
-            Dictionary<uint, string> filterParams = new Dictionary<uint, string>();
-            foreach (KeyValuePair<uint, string> filterParam in filterParamsList)
+
+            Dictionary<int, string> filterParams = new Dictionary<int, string>();
+            foreach (KeyValuePair<int, string> filterParam in filterParamsList)
             {
                 if (filterParams.ContainsKey(filterParam.Key))
                 {
@@ -297,14 +296,14 @@ namespace Adguard.Dns.Helpers
             {
                 FilterParams = filterParams
             };
-            
+
             return engineParams;
         }
 
-        private static KeyValuePair<uint, string> FromNativeObject(AGDnsApi.ag_filter_params filterParamsC)
+        private static KeyValuePair<int, string> FromNativeObject(AGDnsApi.ag_filter_params filterParamsC)
         {
             string path = MarshalUtils.PtrToString(filterParamsC.path);
-            KeyValuePair<uint, string> filterParams = new KeyValuePair<uint, string>(filterParamsC.id, path);
+            KeyValuePair<int, string> filterParams = new KeyValuePair<int, string>(filterParamsC.id, path);
             return filterParams;
         }
 
@@ -320,7 +319,7 @@ namespace Adguard.Dns.Helpers
                 Bootstrap = bootstrap,
                 ResolvedIpAddress = serverAddress
             };
-            
+
             MarshalUtils.CopyFieldsToProperties(upstreamOptionsC, upstreamOptions);
             MarshalUtils.AllPtrsToStrings(upstreamOptionsC, upstreamOptions);
             return upstreamOptions;
@@ -339,7 +338,7 @@ namespace Adguard.Dns.Helpers
         #endregion
 
         #region Server event arguments
-        
+
         internal static CertificateVerificationEventArgs FromNativeObject(
             AGDnsApi.ag_certificate_verification_event coreArgsС)
         {
@@ -362,11 +361,11 @@ namespace Adguard.Dns.Helpers
             List<string> rules = MarshalUtils.AgListToList<IntPtr, string>(
                 coreArgsС.rules,
                 MarshalUtils.PtrToString);
-            
+
             List<int> filterListIds = MarshalUtils.AgListToList<IntPtr, int>(
                 coreArgsС.filter_list_ids,
-                pFilterId => 
-                    MarshalUtils.PtrToNullableInt(pFilterId).GetValueOrDefault(DEFAULT_NULLABLE_INT_SUBSTITUTION));
+                filterId =>
+                    (int) filterId);
 
             int? upstreamId = MarshalUtils.PtrToNullableInt(coreArgsС.pUpstreamId);
             DnsRequestProcessedEventArgs eventArgs = new DnsRequestProcessedEventArgs
@@ -375,7 +374,7 @@ namespace Adguard.Dns.Helpers
                 Rules = rules,
                 FilterListIds = filterListIds
             };
-            
+
             MarshalUtils.AllPtrsToStrings(coreArgsС, eventArgs);
             MarshalUtils.CopyFieldsToProperties(coreArgsС, eventArgs);
             return eventArgs;
@@ -421,6 +420,26 @@ namespace Adguard.Dns.Helpers
             }
 
             IPAddress ipAddress = new IPAddress(address);
+            return ipAddress;
+        }
+
+        /// <summary>
+        /// Creates the <see cref="IPAddress"/> object from the specified pointer to address string
+        /// </summary>
+        /// <param name="pAddress">The pointer to the address string
+        /// (<seealso cref="IntPtr"/>)</param>
+        /// <exception cref="ArgumentException">Thrown,
+        /// if passed <see cref="AGDnsApi.ag_buffer.size"/> is not acceptable</exception>
+        /// <returns><see cref="IPAddress"/> object or null if the pointer is null or addressLength is zero</returns>
+        private static IPAddress CreateIpAddress(IntPtr pAddress)
+        {
+            if (pAddress == IntPtr.Zero)
+            {
+                return null;
+            }
+
+            string address = MarshalUtils.PtrToString(pAddress);
+            IPAddress ipAddress = IPAddress.Parse(address);
             return ipAddress;
         }
 
