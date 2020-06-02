@@ -10,6 +10,7 @@
 #include <ldns/buffer.h>
 #include <ldns/error.h>
 #include <ldns/packet.h>
+#include <ldns/ag_ext.h>
 #include <ag_defs.h>
 #include <dns_crypt_utils.h>
 #include <dns_stamp.h>

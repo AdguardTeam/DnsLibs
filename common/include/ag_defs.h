@@ -19,9 +19,6 @@ typedef intptr_t ssize_t;
 #include <unordered_set>
 #include <variant>
 #include <vector>
-#include <ldns/buffer.h>
-#include <ldns/packet.h>
-#include <ldns/rdata.h>
 
 namespace ag {
 
@@ -42,9 +39,6 @@ using hash_set = std::unordered_set<K>;
 template<size_t S>
 using uint8_array = std::array<uint8_t, S>;
 
-using ldns_buffer_ptr = std::unique_ptr<ldns_buffer, ftor<&ldns_buffer_free>>;
-using ldns_pkt_ptr = std::unique_ptr<ldns_pkt, ftor<&ldns_pkt_free>>;
-using ldns_rdf_ptr = std::unique_ptr<ldns_rdf, ftor<&ldns_rdf_free>>;
 template<typename T>
 using allocated_ptr = std::unique_ptr<T, ftor<&std::free>>;
 

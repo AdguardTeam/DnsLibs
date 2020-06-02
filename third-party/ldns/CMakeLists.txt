@@ -39,6 +39,11 @@ target_include_directories(ldns PUBLIC ext)
 
 target_compile_definitions(ldns PRIVATE HAVE_CONFIG_H=1)
 
+if(NOT TARGET dnslibs_common)
+    add_subdirectory(${DNSLIBS_DIR}/common ${CMAKE_BINARY_DIR}/common)
+endif(NOT TARGET dnslibs_common)
+target_link_libraries(ldns dnslibs_common)
+
 include(../../common/apply_patch.cmake)
 apply_patch(${CMAKE_CURRENT_SOURCE_DIR}/ag_ext.patch ${CMAKE_CURRENT_SOURCE_DIR}/ldns)
 

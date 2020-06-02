@@ -1,7 +1,6 @@
 #include <ag_utils.h>
 #include <ag_net_utils.h>
 #include <ag_socket_address.h>
-#include <ldns/ag_ext.h>
 
 // To build with mingw
 #ifndef INET6_ADDRSTRLEN
@@ -100,20 +99,4 @@ ag::socket_address ag::utils::str_to_socket_address(std::string_view address) {
     }
 
     return socket_address{host, (uint16_t) port};
-}
-
-// Had to fish this out of the ag:: namespace to avoid collision 
-// between `to_string_view` declared in ag:: and fmt:: 
-static std::string ldns_status_to_str_impl(ldns_status status) {
-    if (status == LDNS_STATUS_SOCKET_ERROR || status == LDNS_STATUS_NETWORK_ERR) {
-        if (int ag_error = ag_ldns_check_socket_error(); ag_error != 0) {
-            auto err_str = AG_FMT("LDNS network error: {} ({})", ag_error, evutil_socket_error_to_string(ag_error));
-            return err_str;
-        }
-    }
-    return ldns_get_errorstr_by_id(status);
-}
-
-std::string ag::utils::ldns_status_to_str(ldns_status status) {
-    return ldns_status_to_str_impl(status);
 }

@@ -4,7 +4,7 @@ Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
 <+>UTF-8
 ===================================================================
 --- net.c	(revision 53bc57512c19b11eebc403a4cb2bbf7295eb0db1)
-+++ net.c	(date 1589976255577)
++++ net.c	(date 1591101095288)
 @@ -15,6 +15,8 @@
  
  #include <ldns/ldns.h>
@@ -14,7 +14,16 @@ Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
  #ifdef HAVE_NETINET_IN_H
  #include <netinet/in.h>
  #endif
-@@ -178,12 +180,15 @@
+@@ -34,6 +36,8 @@
+ #include <poll.h>
+ #endif
+ 
++static void ag_log_sockname(int sockfd, const char *msg);
++
+ ldns_status
+ ldns_send(ldns_pkt **result_packet, ldns_resolver *r, const ldns_pkt *query_pkt)
+ {
+@@ -178,12 +182,15 @@
  	ret = poll(pfds, 1, (int)(timeout.tv_sec * 1000
  				+ timeout.tv_usec / 1000));
  #endif
@@ -36,7 +45,7 @@ Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
  	return 1;
  }
  
-@@ -198,10 +203,12 @@
+@@ -198,10 +205,12 @@
  #ifndef S_SPLINT_S
  	if ((sockfd = socket((int)((struct sockaddr*)to)->sa_family, SOCK_STREAM, 
  					IPPROTO_TCP)) == SOCK_INVALID) {
@@ -49,7 +58,7 @@ Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
  		close_socket(sockfd);
  		return -1;
  	}
-@@ -209,6 +216,7 @@
+@@ -209,6 +218,7 @@
  	/* perform nonblocking connect, to be able to wait with select() */
  	ldns_sock_nonblock(sockfd);
  	if (connect(sockfd, (struct sockaddr*)to, tolen) == SOCK_INVALID) {
@@ -57,7 +66,7 @@ Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
  #ifndef USE_WINSOCK
  #ifdef EINPROGRESS
  		if(errno != EINPROGRESS) {
-@@ -254,6 +262,7 @@
+@@ -254,6 +264,7 @@
  #endif
  		else if(error != 0) {
  			close_socket(sockfd);
@@ -65,7 +74,7 @@ Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
  			/* error in errno for our user */
  			errno = error;
  			return -1;
-@@ -265,6 +274,7 @@
+@@ -265,6 +276,7 @@
  			continue;
  		else if(error != 0) {
  			close_socket(sockfd);
@@ -73,15 +82,16 @@ Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
  			errno = error;
  			return -1;
  		}
-@@ -305,6 +315,7 @@
+@@ -304,6 +316,8 @@
+ 	
  	sockfd = ldns_tcp_connect_from(to, tolen, from, fromlen, timeout);
  	
++	ag_log_sockname(sockfd, "sending TCP");
++	
  	if (sockfd >= 0 && ldns_tcp_send_query(qbin, sockfd, to, tolen) == 0) {
-+        ag_ldns_set_socket_error(ag_ldns_socket_geterror(sockfd));
  		close_socket(sockfd);
  		return -1;
- 	}
-@@ -397,6 +408,15 @@
+@@ -397,6 +411,15 @@
  #endif
  	return sockfd;
  }
@@ -97,15 +107,7 @@ Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
  
  static int
  ldns_udp_bgsend_from(ldns_buffer *qbin,
-@@ -406,18 +426,20 @@
- {
- 	int sockfd;
- 
--	sockfd = ldns_udp_connect2(to, timeout);
-+	sockfd = ldns_udp_connect3(to, timeout);
- 
- 	if (sockfd == -1) {
- 		return -1;
+@@ -413,6 +436,7 @@
  	}
  
  	if (from && bind(sockfd, (const struct sockaddr*)from, fromlen) == -1){
@@ -113,13 +115,48 @@ Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
  		close_socket(sockfd);
  		return -1;
  	}
+@@ -695,8 +719,12 @@
  
- 	if (ldns_udp_send_query(qbin, sockfd, to, tolen) == 0) {
-+        ag_ldns_set_socket_error(ag_ldns_socket_geterror(sockfd));
- 		close_socket(sockfd);
- 		return -1;
+         LDNS_FREE(sendbuf);
+ 
+-	if (bytes == -1 || (size_t) bytes != ldns_buffer_position(qbin) + 2 ) {
++	if (bytes == -1) {
++	    ag_ldns_set_socket_error(ag_ldns_socket_geterror(sockfd));
+ 		return 0;
++	}
++	if ((size_t) bytes != ldns_buffer_position(qbin) + 2) {
++	    return 0;
  	}
-@@ -734,7 +756,11 @@
+ 	return bytes;
+ }
+@@ -708,12 +736,22 @@
+ {
+ 	ssize_t bytes;
+ 
+-	bytes = sendto(sockfd, (void*)ldns_buffer_begin(qbin),
+-			ldns_buffer_position(qbin), 0, (struct sockaddr *)to, tolen);
++    if (-1 == connect(sockfd, (struct sockaddr *) to, tolen)) {
++        ag_ldns_set_socket_error(ag_ldns_socket_geterror(sockfd));
++        return 0;
++    }
++
++    ag_log_sockname(sockfd, "sending UDP");
+ 
+-	if (bytes == -1 || (size_t)bytes != ldns_buffer_position(qbin)) {
+-		return 0;
++	bytes = send(sockfd, (void*)ldns_buffer_begin(qbin), ldns_buffer_position(qbin), 0);
++
++	if (bytes == -1) {
++		ag_ldns_set_socket_error(ag_ldns_socket_geterror(sockfd));
++	    return 0;
+ 	}
++	if ((size_t)bytes != ldns_buffer_position(qbin)) {
++	    return 0;
++	}
+ 	return bytes;
+ }
+ 
+@@ -734,7 +772,11 @@
  			(struct sockaddr *)from, fromlen);
  
  	/* recvfrom can also return 0 */
@@ -132,3 +169,47 @@ Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
  		*size = 0;
  		LDNS_FREE(wire);
  		return NULL;
+@@ -1034,3 +1076,43 @@
+         resolver->_axfr_soa_count = 0;
+         return LDNS_STATUS_OK;
+ }
++
++void ag_log_sockname(int sockfd, const char *msg) {
++    if (!ag_ldns_should_log()) {
++        return;
++    }
++    char buf[2 * INET6_ADDRSTRLEN];
++    struct sockaddr_storage ss_from = {0};
++    socklen_t len_from = sizeof(ss_from);
++    if (-1 == getsockname(sockfd, (struct sockaddr *) &ss_from, &len_from)) {
++        ag_ldns_log("getsockname: %n", ag_ldns_socket_geterror(sockfd));
++        return;
++    }
++    struct sockaddr_storage ss_to = {0};
++    socklen_t len_to = sizeof(ss_to);
++    if (-1 == getpeername(sockfd, (struct sockaddr *) &ss_to, &len_to)) {
++        ag_ldns_log("getpeername: %n", ag_ldns_socket_geterror(sockfd));
++        return;
++    }
++    void *from_addr;
++    int from_port;
++    void *to_addr;
++    int to_port;
++    if (ss_from.ss_family == AF_INET) {
++        from_port = ntohs(((struct sockaddr_in *) &ss_from)->sin_port);
++        from_addr = &((struct sockaddr_in *) &ss_from)->sin_addr;
++        to_port = ntohs(((struct sockaddr_in *) &ss_to)->sin_port);
++        to_addr = &((struct sockaddr_in *) &ss_to)->sin_addr;
++    } else if (ss_from.ss_family == AF_INET6) {
++        from_port = ntohs(((struct sockaddr_in6 *) &ss_from)->sin6_port);
++        from_addr = &((struct sockaddr_in6 *) &ss_from)->sin6_addr;
++        to_port = ntohs(((struct sockaddr_in6 *) &ss_to)->sin6_port);
++        to_addr = &((struct sockaddr_in6 *) &ss_to)->sin6_addr;
++    } else {
++        ag_ldns_log("unexpected address family: %d", ss_from.ss_family);
++        return;
++    }
++    evutil_inet_ntop(ss_from.ss_family, from_addr, buf, INET6_ADDRSTRLEN);
++    evutil_inet_ntop(ss_from.ss_family, to_addr, buf + INET6_ADDRSTRLEN, INET6_ADDRSTRLEN);
++    ag_ldns_log("%s: %s:%d -> %s:%d", msg, buf, from_port, buf + INET6_ADDRSTRLEN, to_port);
++}

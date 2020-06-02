@@ -10,6 +10,7 @@
 #include <openssl/ssl.h>
 
 #include <ldns/ldns.h>
+#include <ldns/ag_ext.h>
 
 
 #define errlog_id(q_, fmt_, ...) errlog(*((q_)->log), "[{}] " fmt_, (q_)->request_id, ##__VA_ARGS__)

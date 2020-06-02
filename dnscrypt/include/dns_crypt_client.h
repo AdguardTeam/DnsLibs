@@ -3,6 +3,7 @@
 #include <chrono>
 #include <string_view>
 #include <ldns/packet.h>
+#include <ldns/ag_ext.h>
 #include <ag_defs.h>
 #include <dns_crypt_server_info.h>
 #include <dns_crypt_utils.h>
