@@ -71,6 +71,7 @@ private:
     const dnsproxy_settings *settings = nullptr;
     const dnsproxy_events *events = nullptr;
     std::vector<upstream_ptr> upstreams;
+    std::vector<upstream_ptr> fallbacks;
     dnsfilter filter;
     dnsfilter::handle filter_handle = nullptr;
     dns64::prefixes dns64_prefixes;

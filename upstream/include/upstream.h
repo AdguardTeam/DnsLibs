@@ -67,6 +67,7 @@ public:
     };
 
     upstream(upstream_options opts, const upstream_factory_config &config) : m_options(std::move(opts)), m_config(config) {
+        m_rtt.val = std::chrono::milliseconds::zero();
         if (!this->m_options.timeout.count()) {
             this->m_options.timeout = DEFAULT_TIMEOUT;
         }
@@ -91,11 +92,27 @@ public:
 
     const upstream_factory_config &config() const { return m_config; }
 
+    const std::chrono::milliseconds rtt() {
+        std::lock_guard<std::mutex> lk(m_rtt.mtx);
+        return m_rtt.val;
+    }
+
+    /**
+     * Update RTT
+     * @param elapsed spent time in exchange()
+     */
+    void adjust_rtt(std::chrono::milliseconds elapsed) {
+        std::lock_guard<std::mutex> lk(m_rtt.mtx);
+        m_rtt.val = (m_rtt.val + elapsed) / 2;
+    }
+
 protected:
     /** Upstream options */
     upstream_options m_options;
     /** Upstream factory configuration */
     upstream_factory_config m_config;
+    /** RTT + mutex */
+    with_mtx<std::chrono::milliseconds> m_rtt;
 };
 
 /**

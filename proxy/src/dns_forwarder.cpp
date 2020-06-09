@@ -563,7 +563,8 @@ std::pair<bool, err_string> dns_forwarder::init(const dnsproxy_settings &setting
 
     infolog(log, "Initializing upstreams...");
     upstream_factory us_factory({ this->cert_verifier.get(), this->settings->ipv6_available });
-    this->upstreams.reserve(settings.upstreams.size() + settings.fallbacks.size());
+    this->upstreams.reserve(settings.upstreams.size());
+    this->fallbacks.reserve(settings.fallbacks.size());
     for (const upstream_options &options : settings.upstreams) {
         infolog(log, "Initializing upstream {}...", options.address);
         auto[upstream, err] = us_factory.create_upstream(options);
@@ -580,11 +581,11 @@ std::pair<bool, err_string> dns_forwarder::init(const dnsproxy_settings &setting
         if (err.has_value()) {
             errlog(log, "Failed to create fallback upstream: {}", err.value());
         } else {
-            this->upstreams.emplace_back(std::move(upstream));
+            this->fallbacks.emplace_back(std::move(upstream));
             infolog(log, "Fallback upstream created successfully");
         }
     }
-    if (this->upstreams.empty()) {
+    if (this->upstreams.empty() && this->fallbacks.empty()) {
         constexpr auto err = "Failed to initialize any upstream";
         errlog(log, "{}", err);
         this->deinit();
@@ -665,6 +666,7 @@ std::pair<bool, err_string> dns_forwarder::init(const dnsproxy_settings &setting
 void dns_forwarder::deinit() {
     this->settings = nullptr;
     this->upstreams.clear();
+    this->fallbacks.clear();
     this->filter.destroy(this->filter_handle);
     {
         std::scoped_lock l(this->response_cache.mtx);
@@ -896,30 +898,45 @@ std::vector<uint8_t> dns_forwarder::handle_message(uint8_view message) {
 
     ldns_pkt_ptr response = nullptr;
     upstream *successful_upstream = nullptr;
-    for (auto i = this->upstreams.begin(); i != this->upstreams.end(); ++i) {
-        upstream_ptr &upstream = *i;
-        upstream::exchange_result result = upstream->exchange(request);
-        if (!result.error.has_value()) {
-            successful_upstream = upstream.get();
-            response = std::move(result.packet);
-            break;
+    std::vector<uint8_t> raw_response;
+    upstream *cur_upstream;
+    std::string err_str;
+    for (auto *upstream_vector : { &this->upstreams, &this->fallbacks }) {
+
+        std::vector<upstream *> sorted_upstreams;
+        sorted_upstreams.reserve(upstream_vector->size());
+        for (auto i = upstream_vector->begin(); i != upstream_vector->end(); ++i) {
+            sorted_upstreams.push_back(i->get());
         }
-        std::string err_str = AG_FMT("Upstream failed to perform dns query: {}", result.error.value());
-        dbglog_fid(log, request, "{}", err_str);
-        if (bool last = (std::distance(i, this->upstreams.end()) == 1); !last) {
-#if 0 /* Seems that these events (with empty status) are just ignored by all library users.
-         However, they may be enabled if there will be statistics about connection failures. */
-            finalize_processed_event(event, request, nullptr, nullptr, upstream.get(), std::move(err_str));
-#endif
-        } else {
-            response = ldns_pkt_ptr(create_servfail_response(request));
-            log_packet(log, response.get(), "Server failure response");
-            std::vector<uint8_t> raw_response = transform_response_to_raw_data(response.get());
-            finalize_processed_event(event, request, response.get(), nullptr, upstream.get(), std::move(err_str));
-            return raw_response;
+        std::sort(sorted_upstreams.begin(), sorted_upstreams.end(), [](upstream *a, upstream *b) {
+            return (a->rtt() < b->rtt());
+        });
+
+        for (auto i = sorted_upstreams.begin(); i != sorted_upstreams.end(); ++i) {
+
+            cur_upstream = *i;
+
+            ag::utils::timer t;
+            upstream::exchange_result result = cur_upstream->exchange(request);
+            cur_upstream->adjust_rtt(t.elapsed<std::chrono::milliseconds>());
+
+            if (!result.error.has_value()) {
+                successful_upstream = cur_upstream;
+                response = std::move(result.packet);
+                goto have_answer;
+            }
+            err_str = AG_FMT("Upstream failed to perform dns query: {}", result.error.value());
+            dbglog_fid(log, request, "{}", err_str);
         }
     }
 
+    response = ldns_pkt_ptr(create_servfail_response(request));
+    log_packet(log, response.get(), "Server failure response");
+    raw_response = transform_response_to_raw_data(response.get());
+    finalize_processed_event(event, request, response.get(), nullptr, cur_upstream, std::move(err_str));
+    return raw_response;
+
+have_answer:
     log_packet(log, response.get(), "Upstream dns response");
     const auto ancount = ldns_pkt_ancount(response.get());
     const auto rcode = ldns_pkt_get_rcode(response.get());
@@ -959,7 +976,7 @@ std::vector<uint8_t> dns_forwarder::handle_message(uint8_view message) {
         }
     }
 
-    std::vector<uint8_t> raw_response = transform_response_to_raw_data(response.get());
+    raw_response = transform_response_to_raw_data(response.get());
     event.bytes_sent = message.size();
     event.bytes_received = raw_response.size();
     finalize_processed_event(event, request, response.get(), nullptr, successful_upstream, std::nullopt);
