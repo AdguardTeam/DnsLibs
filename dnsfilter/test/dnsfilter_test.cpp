@@ -145,6 +145,8 @@ TEST_F(dnsfilter_test, successful_host_syntax_rule_parsing) {
                 { { .props = {}, .ip = std::make_optional("::1:1") }, rule_utils::rule::MMID_SUBDOMAINS } },
             { "::FFFF:1.1.1.1 example.org",
                 { { .props = {}, .ip = std::make_optional("::FFFF:1.1.1.1") }, rule_utils::rule::MMID_SUBDOMAINS } },
+            { "0.0.0.0 example.org #comment",
+                    { { .props = {}, .ip = std::make_optional("0.0.0.0") }, rule_utils::rule::MMID_SUBDOMAINS } },
         };
 
     ag::logger log = ag::create_logger("dnsfilter_test");
@@ -411,6 +413,7 @@ TEST_F(dnsfilter_test, hosts_file_syntax) {
     struct test_data {
         std::string rule;
         std::vector<std::string> blocked_domains;
+        std::string expected_rule;
     };
 
     const std::vector<test_data> TEST_DATA =
@@ -425,6 +428,9 @@ TEST_F(dnsfilter_test, hosts_file_syntax) {
                 { "example41.org", "sub.example42.org", "example43.org", } },
             { "1:: example51.org example52.org example53.org",
                 { "example51.org", "sub.example52.org", "example53.org", } },
+            { "1.1.1.1 example61.org example62.org example63.org #comment",
+                { "example61.org", "example62.org", "sub.example63.org", },
+                { "1.1.1.1 example61.org example62.org example63.org" } },
         };
 
 
@@ -441,7 +447,11 @@ TEST_F(dnsfilter_test, hosts_file_syntax) {
             SPDLOG_INFO("testing {}", d);
             std::vector<ag::dnsfilter::rule> rules = filter.match(handle, d);
             ASSERT_EQ(rules.size(), 1);
-            ASSERT_EQ(rules[0].text, entry.rule);
+            if (entry.expected_rule.empty()) {
+                ASSERT_EQ(rules[0].text, entry.rule);
+            } else {
+                ASSERT_EQ(rules[0].text, entry.expected_rule);
+            }
             ASSERT_FALSE(rules[0].props.test(ag::dnsfilter::RP_EXCEPTION));
             ASSERT_FALSE(rules[0].props.test(ag::dnsfilter::RP_IMPORTANT));
         }

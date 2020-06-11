@@ -115,8 +115,7 @@ int ag::file::for_each_line(const handle f, line_action action, void *arg) {
                 line.push_back(c);
                 continue;
             }
-            std::string_view line_view{line};
-            ag::utils::trim(line_view);
+            std::string_view line_view = ag::utils::trim(line);
             if (!action(line_idx, line_view, arg)) {
                 return 0;
             }
@@ -127,8 +126,7 @@ int ag::file::for_each_line(const handle f, line_action action, void *arg) {
     }
 
     if ((size_t)(file_size - 1) > line_idx) {
-        std::string_view line_view{line};
-        ag::utils::trim(line_view);
+        std::string_view line_view = ag::utils::trim(line);
         action(line_idx, line_view, arg);
     }
 
@@ -164,6 +162,6 @@ std::optional<std::string> ag::file::read_line(const handle f, size_t pos) {
         }
     }
 
-    utils::trim(line);
+    line = utils::trim(line);
     return line;
 }

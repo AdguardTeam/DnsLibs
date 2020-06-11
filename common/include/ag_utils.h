@@ -96,25 +96,31 @@ static inline std::string to_lower(std::string_view str) {
 }
 
 /**
- * Trim whitespaces-only prefix and suffix
+ * Return string view without whitespaces at the beginning of string
+ * @param str String view
  */
-static inline void trim(std::string &s) {
-    s.erase(s.begin(), std::find_if(s.begin(), s.end(), std::not_fn((int(*)(int))std::isspace)));
-    s.erase(std::find_if(s.rbegin(), s.rend(), std::not_fn((int(*)(int))std::isspace)).base(), s.end());
+static inline std::string_view ltrim(std::string_view str) {
+    auto pos1 = std::find_if(str.begin(), str.end(), std::not_fn((int(*)(int))std::isspace));
+    str.remove_prefix(std::distance(str.begin(), pos1));
+    return str;
 }
 
 /**
- * Trim whitespaces-only prefix and suffix
+ * Return string view without whitespaces at the end of string
+ * @param str String view
  */
-static inline void trim(std::string_view &str) {
-    auto pos1 = std::find_if(str.begin(), str.end(), std::not_fn((int(*)(int))std::isspace));
-    if (pos1 != str.end()) {
-        str.remove_prefix(std::distance(str.begin(), pos1));
-    }
+static inline std::string_view rtrim(std::string_view str) {
     auto pos2 = std::find_if(str.rbegin(), str.rend(), std::not_fn((int(*)(int))std::isspace));
-    if (pos2 != str.rend()) {
-        str.remove_suffix(std::distance(str.rbegin(), pos2));
-    }
+    str.remove_suffix(std::distance(str.rbegin(), pos2));
+    return str;
+}
+
+/**
+ * Return string view without whitespaces at the beginning and at the end of string
+ * @param str
+ */
+static inline std::string_view trim(std::string_view str) {
+    return rtrim(ltrim(str));
 }
 
 /**

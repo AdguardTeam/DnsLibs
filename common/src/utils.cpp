@@ -36,8 +36,7 @@ std::vector<std::string_view> ag::utils::split_by(std::string_view str, std::str
         }
         size_t length = end - start;
         if (length != 0) {
-            std::string_view s = { &str[seek], length };
-            trim(s);
+            std::string_view s = trim(str.substr(seek, length));
             if (!s.empty()) {
                 out.push_back(s);
             }
@@ -71,8 +70,7 @@ std::vector<std::string_view> ag::utils::split_by_any_of(std::string_view str, s
         }
         size_t length = end - start;
         if (length != 0) {
-            std::string_view s = { &str[seek], length };
-            trim(s);
+            std::string_view s = trim(str.substr(seek, length));
             if (!s.empty()) {
                 out.push_back(s);
             }

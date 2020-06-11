@@ -125,6 +125,7 @@ static inline bool is_domain_name(std::string_view str) {
 
 // https://github.com/AdguardTeam/AdguardHome/wiki/Hosts-Blocklists#-etchosts-syntax
 static std::optional<rule_utils::rule> parse_host_file_rule(std::string_view str, ag::logger *log) {
+    str = ag::utils::rtrim(str.substr(0, str.find("#")));
     std::vector<std::string_view> parts = ag::utils::split_by_any_of(str, " \t");
     if (parts.size() < 2) {
         return std::nullopt;
@@ -300,7 +301,7 @@ std::optional<rule_utils::rule> rule_utils::parse(std::string_view str, ag::logg
         return std::nullopt;
     }
 
-    ag::utils::trim(str);
+    str = ag::utils::trim(str);
 
     if (str.empty()) {
         return std::nullopt;
