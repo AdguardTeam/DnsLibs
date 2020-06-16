@@ -140,7 +140,7 @@ function build_target() {
     echo "target_name=${target_name}"
     echo "target_os=${target_os}"
 
-    cmake_opt="-DCMAKE_BUILD_TYPE=${BUILD_TYPE}"
+    cmake_opt="-DCMAKE_BUILD_TYPE=${BUILD_TYPE} -GNinja"
     cmake_opt="${cmake_opt} -DCMAKE_XCODE_ATTRIBUTE_DEBUG_INFORMATION_FORMAT=\"dwarf-with-dsym\""
     cmake_opt="${cmake_opt} -DTARGET_OS:STRING=${target_os}"
 
@@ -150,12 +150,11 @@ function build_target() {
         exit 1
     fi
 
-    make -j 4 ${target_name}
+    ninja ${target_name}
     if [ $? != 0 ]; then
         echo "make error!"
         exit 1
     fi
-    dsymutil -o ../${target_name}.framework.${target_os}.dSYM ${target_name}.framework/${target_name}
 
     cd -
 
@@ -174,8 +173,16 @@ else
         build_target "${TARGET_NAME}" "${target}" "${BUILD_DIR}/framework-${target}"
     done
 
+    rm -rf "${BUILD_DIR}/${TARGET_NAME}.xcframework"
+    rm -rf "${BUILD_DIR}/${TARGET_NAME}.dSYMs"
     xcodebuild -create-xcframework -framework "${BUILD_DIR}/framework-macos/${TARGET_NAME}.framework" \
         -framework "${BUILD_DIR}/framework-ios/${TARGET_NAME}.framework" \
         -framework "${BUILD_DIR}/framework-iphonesimulator/${TARGET_NAME}.framework" \
         -output "${BUILD_DIR}/${TARGET_NAME}.xcframework"
+
+    mkdir -p ${BUILD_DIR}/${TARGET_NAME}.dSYMs
+    for fw in ${BUILD_DIR}/${TARGET_NAME}.xcframework/*/${TARGET_NAME}.framework; do
+        ARCH_AS_IN_XCF=`echo "${fw}" | sed -ne 's|.*/\([^/]*\)/[^/]*.framework$|\1|p'`
+        dsymutil -o "${BUILD_DIR}/${TARGET_NAME}.dSYMs/${TARGET_NAME}.framework.${ARCH_AS_IN_XCF}.dSYM" "${fw}/${TARGET_NAME}"
+    done
 fi
