@@ -495,10 +495,6 @@ namespace Adguard.Dns.Helpers
                 if (destinationPropertyInfo == null ||
                     destinationPropertyInfo.PropertyType != sourceFieldInfo.FieldType)
                 {
-                    LOG.WarnFormat("Class {0} doesn't contain property {1} with the type {2}",
-                        typeof(TClass).Name,
-                        sourceFieldInfo.Name,
-                        sourceFieldInfo.FieldType.Name);
                     continue;
                 }
 
