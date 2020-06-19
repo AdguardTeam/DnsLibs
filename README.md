@@ -64,39 +64,12 @@ where `<build_path>` is the build path one passed to script, `<target_name>` is 
 `<framework_type>` is either `framework` (if one specified the target platform) or
 `xcframework` (if one didn't specify any platform, or passed `all`).
 
-## Code rules
-
-- use already written third-party libraries (Google Test for tests, etc.)
-- use submodules
-- use CMake
-- for code style see CODE_STYLE.md
-
-## Project structure
-
-Every subproject consists of the following directories and files:
-- `include/` - public headers
-- `src/` - source code files and provate headers
-- `test/` - tests and its data
-- `CMakeLists.txt` - cmake build config. Should be self-configurable.
-
-Root project consists of the following directories and files:
-- `common/` - Set of useful general-purpose utilities
-- `dnscrypt/` - DNSCrypt client implementation
-- `dnsfilter/` - DNS filter implementation
-- `dnsstamp/` - DNSCrypt server stamps encoder/decoder
-- `platform/` - Platform-specific interfaces and adapters
-- `proxy/` - DNS proxy implementation
-- `third-party/` - third-party libraries (this is not a subproject, so subproject's rules are not enforced)
-- `tls/` - TLS communication-related things (e.g. certificate verifier)
-- `upstream/` - Working with DNS upstreams
-- `CMakeLists.txt` - main cmake build config. Should build common things and include
-  platform-specific things.
-
 ## Useful notes
 
 * Proxy configuration: [native](proxy/include/dnsproxy_settings.h), [mac](platform/mac/framework/AGDnsProxy.h),
 [android](platform/android/dnsproxy/lib/src/main/java/com/adguard/dnslibs/proxy/DnsProxySettings.java)
 * [Rules syntax](https://github.com/AdguardTeam/AdguardHome/wiki/Hosts-Blocklists)
+* [Developer documentation](documentation/DEV_DOCS.en.md)
 
 ## License
 
