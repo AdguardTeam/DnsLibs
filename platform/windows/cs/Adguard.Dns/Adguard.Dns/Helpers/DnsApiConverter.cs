@@ -62,8 +62,13 @@ namespace Adguard.Dns.Helpers
                 ToNativeObject,
                 allocatedPointers);
 
-            AGDnsApi.ag_dns64_settings dns64C = ToNativeObject(dnsProxySettings.Dns64, allocatedPointers);
-            IntPtr pDns64C = MarshalUtils.StructureToPtr(dns64C, allocatedPointers);
+            IntPtr pDns64C = IntPtr.Zero;
+            if (dnsProxySettings.Dns64 != null)
+            {
+                AGDnsApi.ag_dns64_settings dns64C = ToNativeObject(dnsProxySettings.Dns64, allocatedPointers);
+                pDns64C = MarshalUtils.StructureToPtr(dns64C, allocatedPointers);
+            }
+
             AGDnsApi.ag_filter_engine_params filterEngineParamsC = ToNativeObject(dnsProxySettings.EngineParams, allocatedPointers);
             AGDnsApi.ag_list listenersC = MarshalUtils.ListToAgList(
                 dnsProxySettings.Listeners,

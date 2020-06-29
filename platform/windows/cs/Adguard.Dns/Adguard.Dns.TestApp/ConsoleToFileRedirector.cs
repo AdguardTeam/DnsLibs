@@ -17,7 +17,7 @@ namespace Adguard.Dns.TestApp
         private static IntPtr m_StdOutputFileHandle;
         private static string m_StdLogFilePath;
         private const int MAX_STORING_LOG_DAYS = 5;
-        
+
         private enum StdHandle
         {
             Input = -10,
@@ -37,8 +37,8 @@ namespace Adguard.Dns.TestApp
             {
                 m_IsStarted = true;
                 DateTime now = DateTime.Now;
-                
-                string consoleLogFileName = string.Format("console_{0:dd-MM-yyyy-H_mm_ss}.log", now);
+
+                string consoleLogFileName = string.Format("dns_console_{0:dd-MM-yyyy-H_mm_ss}.log", now);
                 if (!Directory.Exists(consoleLogDirPath))
                 {
                     Directory.CreateDirectory(consoleLogDirPath);
@@ -47,13 +47,13 @@ namespace Adguard.Dns.TestApp
                 m_StdLogFilePath = Path.Combine(consoleLogDirPath, consoleLogFileName);
                 m_StdOutputWriter = Console.Out;
                 m_StdOutputHandle = GetStdHandle((int)StdHandle.Output);
-                
+
                 AllocConsole();
                 m_StdOutputFileHandle = CreateFile(
-                    m_StdLogFilePath, 
-                    EFileAccess.GenericWrite | EFileAccess.GenericRead, 
-                    EFileShare.Read|EFileShare.Write, 
-                    IntPtr.Zero, 
+                    m_StdLogFilePath,
+                    EFileAccess.GenericWrite | EFileAccess.GenericRead,
+                    EFileShare.Read|EFileShare.Write,
+                    IntPtr.Zero,
                     ECreationDisposition.CreateAlways,
                     EFileAttributes.Normal,
                     IntPtr.Zero);
@@ -69,10 +69,10 @@ namespace Adguard.Dns.TestApp
                 {
                     AutoFlush = true
                 };
-                
+
                 Console.SetOut(m_StdOutputFileWriter);
                 Console.SetError(m_StdOutputFileWriter);
-                
+
                 Console.WriteLine("Start redirecting console to the file {0}", m_StdLogFilePath);
             }
             catch (Exception ex)
@@ -95,7 +95,7 @@ namespace Adguard.Dns.TestApp
             {
                 return;
             }
-            
+
             m_StdOutputFileWriter.Flush();
             CloseHandle(m_StdOutputFileHandle);
             FreeConsole();
@@ -107,7 +107,7 @@ namespace Adguard.Dns.TestApp
             m_IsStarted = false;
             Console.WriteLine("Finish redirecting console and stdout to the file {0}", m_StdLogFilePath);
         }
-        
+
         public void Dispose()
         {
             Stop();
@@ -116,7 +116,7 @@ namespace Adguard.Dns.TestApp
         [DllImport("kernel32.dll")]
         [return: MarshalAs(UnmanagedType.Bool)]
         static extern bool AllocConsole();
-        
+
         [DllImport("kernel32.dll", SetLastError=true, ExactSpelling=true)]
         static extern bool FreeConsole();
 
@@ -125,14 +125,14 @@ namespace Adguard.Dns.TestApp
 
         [DllImport("Kernel32.dll", SetLastError = true) ]
         private static extern IntPtr GetStdHandle(int device);
-        
+
         [DllImport("kernel32.dll", SetLastError = true, CallingConvention = CallingConvention.StdCall)]
         [return: MarshalAs(UnmanagedType.Bool)]
         public static extern bool CloseHandle(IntPtr hObject);
-        
-        
+
+
         #region CreateFile method and helper enumerations
-    
+
         [DllImport("kernel32.dll", SetLastError = true, CallingConvention = CallingConvention.StdCall, CharSet = CharSet.Auto)]
         public static extern IntPtr CreateFile(
             string lpFileName,

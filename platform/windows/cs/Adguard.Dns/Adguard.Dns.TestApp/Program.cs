@@ -1,12 +1,15 @@
-﻿using System;
+﻿#define LOG_TO_FILE
+#define UNINSTALL_REDIRECT_DRIVER
+
+using System;
 using System.Collections.Generic;
+using System.Diagnostics;
+using System.IO;
 using System.Net;
 using Adguard.Dns.Api;
 using Adguard.Dns.Api.DnsProxyServer.Callbacks;
 using Adguard.Dns.Api.DnsProxyServer.Configs;
 using Adguard.Dns.Logging;
-
-//#define LOG_TO_FILE
 
 namespace Adguard.Dns.TestApp
 {
@@ -14,39 +17,87 @@ namespace Adguard.Dns.TestApp
     {
         private static ILogProvider m_LogProvider;
         private static IDnsApi m_DnsApi;
+        private const string REDIRECTOR_EXECUTABLE_RELATIVE_PATH = @"CoreLibs\Adguard.Core.SampleApp.exe";
+        private const string CORE_TOOLS_EXECUTABLE_RELATIVE_PATH = @"CoreLibs\Adguard.Core.Tools.exe";
+        private const string ARG_DRV_UNINSTALL = "/drv_uninstall";
+        private const string SDNS_FILTER_RELATIVE_PATH = @"Resources\sdnsFilter.txt";
+        private const int DNS_PROXY_PORT = 18090;
+        private static Process m_CoreProcess;
 
         public static void Main(string[] args)
         {
-            m_LogProvider = new ColoredConsoleLogProvider();
-            LogProvider.SetCurrentLogProvider(m_LogProvider);
+            string redirectorAppExecutablePath = Path.Combine(
+                AppDomain.CurrentDomain.BaseDirectory,
+                REDIRECTOR_EXECUTABLE_RELATIVE_PATH);
+            bool isRedirectorExist = File.Exists(redirectorAppExecutablePath);
+            try
+            {
+                m_LogProvider = new ColoredConsoleLogProvider();
+                LogProvider.SetCurrentLogProvider(m_LogProvider);
 
 #if LOG_TO_FILE
-            ConsoleToFileRedirector.Start("Logs");
+                ConsoleToFileRedirector.Start("Logs");
 #endif
-            m_DnsApi = DnsApi.Instance;
-            m_DnsApi.InitLogger(LogLevel.Trace);
-            DnsProxySettings dnsProxySettings = CreateDnsProxySettings();
-            IDnsProxyServerCallbackConfiguration dnsProxyServerCallbackConfiguration =
-                new DnsProxyServerCallbackConfiguration();
-            m_DnsApi.StartDnsFiltering(new DnsApiConfiguration
+                m_DnsApi = DnsApi.Instance;
+                m_DnsApi.InitLogger(LogLevel.Debug);
+                DnsProxySettings dnsProxySettings = CreateDnsProxySettings();
+                IDnsProxyServerCallbackConfiguration dnsProxyServerCallbackConfiguration =
+                    new DnsProxyServerCallbackConfiguration();
+
+                int dnsProxyProcessId = Process.GetCurrentProcess().Id;
+                if (isRedirectorExist)
+                {
+                    m_CoreProcess =
+                        WindowsTools.CreateProcess(
+                            redirectorAppExecutablePath,
+                            string.Format("{0} {1}", dnsProxyProcessId, DNS_PROXY_PORT),
+                            true);
+                    m_CoreProcess.Start();
+                }
+
+                m_DnsApi.StartDnsFiltering(new DnsApiConfiguration
+                {
+                    IsEnabled = true,
+                    DnsProxySettings = dnsProxySettings,
+                    DnsProxyServerCallbackConfiguration = dnsProxyServerCallbackConfiguration
+                });
+
+                Console.ReadLine();
+            }
+            finally
             {
-                IsEnabled = true,
-                DnsProxySettings = dnsProxySettings,
-                DnsProxyServerCallbackConfiguration = dnsProxyServerCallbackConfiguration
-            });
-            Console.ReadLine();
-            m_DnsApi.StopDnsFiltering();
-            ConsoleToFileRedirector.Stop();
+                m_DnsApi.StopDnsFiltering();
+                if (isRedirectorExist && m_CoreProcess != null)
+                {
+                    m_CoreProcess.StandardInput.WriteLine("Switching off the core sample app...");
+                    m_CoreProcess.Kill();
+#if UNINSTALL_REDIRECT_DRIVER
+                    UninstallRedirectDriver();
+#endif
+                }
+
+                ConsoleToFileRedirector.Stop();
+            }
+        }
+
+        private static void UninstallRedirectDriver()
+        {
+            string coreToolsExecutablePath = Path.Combine(
+                AppDomain.CurrentDomain.BaseDirectory,
+                CORE_TOOLS_EXECUTABLE_RELATIVE_PATH);
+            Process coreToolsProcess = WindowsTools.CreateProcess(
+                coreToolsExecutablePath,
+                ARG_DRV_UNINSTALL, true);
+            coreToolsProcess.Start();
         }
 
         private static UpstreamOptions CreateUpstreamOptions()
         {
             UpstreamOptions upstreamOptions = new UpstreamOptions
             {
-                Address = "8.8.8.8:53",
+                Address = "176.103.130.130",
                 Bootstrap = new List<string>(),
-                TimeoutMs = 500,
-                ResolvedIpAddress = null,
+                TimeoutMs = 5000,
                 Id = 42
             };
 
@@ -55,49 +106,54 @@ namespace Adguard.Dns.TestApp
 
         private static DnsProxySettings CreateDnsProxySettings()
         {
+            List<ListenerSettings> listeners = new List<ListenerSettings>();
+            foreach (AGDnsApi.ag_listener_protocol protocol in
+                (AGDnsApi.ag_listener_protocol[])Enum.GetValues(typeof(AGDnsApi.ag_listener_protocol)))
+            foreach (IPAddress listenerAddress in new []{ IPAddress.Loopback, IPAddress.IPv6Loopback })
+            {
+                ListenerSettings listener = new ListenerSettings
+                {
+                    EndPoint = new IPEndPoint(listenerAddress, DNS_PROXY_PORT),
+                    Protocol = protocol,
+                    IsPersistent = true,
+                    IdleTimeoutMs = 3000
+                };
+
+                listeners.Add(listener);
+            }
+
             DnsProxySettings dnsProxySettings = new DnsProxySettings
             {
                 Upstreams = new List<UpstreamOptions>
                 {
                     CreateUpstreamOptions()
                 },
-                Fallbacks = new List<UpstreamOptions>
-                {
-                    CreateUpstreamOptions()
-                },
+                Fallbacks = new List<UpstreamOptions>(),
                 Dns64 = new Dns64Settings
                 {
-                    Upstreams = new List<UpstreamOptions>
-                    {
-                        CreateUpstreamOptions()
-                    },
+                    Upstreams = new List<UpstreamOptions>(),
                     MaxTries = 5,
-                    WaitTimeMs = 1000
+                    WaitTimeMs = 2000
                 },
-                BlockedResponseTtlSec = 5,
+                BlockedResponseTtlSec = 0,
                 BlockingMode = AGDnsApi.ag_dnsproxy_blocking_mode.DEFAULT,
-                BlockIpv6 = false,
+                BlockIpv6 = true,
                 CustomBlockingIpv4 = null,
                 CustomBlockingIpv6 = null,
-                DnsCacheSize = 500,
+                DnsCacheSize = 128,
                 EngineParams = new EngineParams
                 {
                     FilterParams = new Dictionary<int, string>
                     {
-                        {0, @"c:\ProgramData\Adguard (Debug)\Temp\sdnsFilter.txt"}
+                        {
+                            0,
+                            Path.Combine(
+                            AppDomain.CurrentDomain.BaseDirectory,
+                            SDNS_FILTER_RELATIVE_PATH)}
                     }
                 },
-                Listeners = new List<ListenerSettings>
-                {
-                    new ListenerSettings
-                    {
-                        EndPoint = new IPEndPoint(IPAddress.Parse("127.0.0.1"),45),
-                        IsPersistent = true,
-                        IdleTimeoutMs = 500,
-                        Protocol = AGDnsApi.ag_listener_protocol.TCP
-                    }
-                },
-                Ipv6Available = true
+                Listeners = listeners,
+                Ipv6Available = false
             };
 
             return dnsProxySettings;
