@@ -20,6 +20,7 @@ static constexpr std::string_view SKIPPABLE_PREFIXES[] =
     { "https://", "http://", "http*://", "ws://", "wss://", "ws*://", "://", "//" };
 static constexpr std::string_view SPECIAL_SUFFIXES[] =
     { "|", "^", "/" };
+static constexpr std::string_view SPECIAL_REGEX_CHARACTERS = "\\^$*+?.()|[]{}";
 
 
 static const ag::regex SHORTCUT_REGEXES[] =
@@ -295,6 +296,49 @@ static inline rule_utils::rule make_exact_domain_name_rule(std::string_view name
     return r;
 }
 
+static std::string_view skip_special_chars(std::string_view str) {
+    if (str.empty()) {
+        return str;
+    }
+
+    // @todo: handle hex (like \xhh), unicode (like \uhh...), and octal number (like \nnn) sequences
+    static constexpr std::string_view SPEC_SEQS[] = {
+            // escape sequences
+            "\\n", "\\r", "\\t",
+            // metacharacters
+            "\\d", "\\D", "\\w", "\\W", "\\s", "\\S",
+            // position anchors
+            "\\b", "\\B", "\\<", "\\>", "\\A", "\\Z",
+        };
+
+    std::string_view seq;
+    for (std::string_view i : SPEC_SEQS) {
+        if (ag::utils::starts_with(str, i)) {
+            seq = i;
+            break;
+        }
+    }
+
+    str.remove_prefix(std::max(seq.length(), (size_t)1));
+    return str;
+
+}
+
+static std::vector<std::string_view> extract_regex_shortcuts(std::string_view text) {
+    std::vector<std::string_view> shortcuts;
+    while (!text.empty()) {
+        size_t seek = text.find_first_of(SPECIAL_REGEX_CHARACTERS);
+        if (seek > 0) {
+            shortcuts.emplace_back(text.substr(0, seek));
+        }
+
+        std::string_view tail = text.substr(std::min(text.length(), seek));
+        text = skip_special_chars(tail);
+    }
+
+    return shortcuts;
+}
+
 std::optional<rule_utils::rule> rule_utils::parse(std::string_view str, ag::logger *log) {
     std::string_view orig_str = str;
     if (is_comment(str)) {
@@ -376,11 +420,10 @@ std::optional<rule_utils::rule> rule_utils::parse(std::string_view str, ag::logg
                 }
             }
 
-            static constexpr std::string_view SPECIAL_CHARACTERS = "\\^$*+?.()|[]{}";
-            std::vector<std::string_view> shortcuts = ag::utils::split_by_any_of(text, SPECIAL_CHARACTERS);
+            std::vector<std::string_view> shortcuts = extract_regex_shortcuts(text);
             if (shortcuts.size() > 1
-                    || std::string_view::npos != SPECIAL_CHARACTERS.find(text.front())
-                    || std::string_view::npos != SPECIAL_CHARACTERS.find(text.back())) {
+                    || std::string_view::npos != SPECIAL_REGEX_CHARACTERS.find(text.front())
+                    || std::string_view::npos != SPECIAL_REGEX_CHARACTERS.find(text.back())) {
                 r.match_method = rule::MMID_SHORTCUTS_AND_REGEX;
                 r.matching_parts.reserve(shortcuts.size());
                 for (const std::string_view &sc : shortcuts) {

@@ -387,6 +387,7 @@ TEST_F(dnsfilter_test, regex) {
             { "/mple[56]?.org/", { "Mple5.org", "Mple6.org" }, },
             { "/example-1\\.org/", { "example-1.org", "ExAmPlE-1.OrG"}, },
             { "/^eXaMpLe-2\\.oRg$/", { "eXaMpLe-2.oRg", "example-2.org" }, },
+            { "/example\\d{4}.org/", { "example0000.org", "example1234.org" }, },
         };
 
     for (const test_data &entry : TEST_DATA) {
