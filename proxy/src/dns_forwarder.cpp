@@ -647,7 +647,7 @@ std::pair<bool, err_string> dns_forwarder::init(const dnsproxy_settings &setting
                     }
                 }
 
-                errlog(logger, "DNS64: failed to discover any prefixes");
+                dbglog(logger, "DNS64: failed to discover any prefixes");
             }
         );
 
