@@ -181,9 +181,11 @@ TEST_F(dnsproxy_cache_test, cache_works) {
     ag::ldns_pkt_ptr res;
     ASSERT_NO_FATAL_FAILURE(perform_request(proxy, pkt, res));
     ASSERT_FALSE(last_event.cache_hit);
+    auto first_upstream_id = last_event.upstream_id;
     ASSERT_NO_FATAL_FAILURE(perform_request(proxy, pkt, res));
     ASSERT_TRUE(last_event.cache_hit);
     ASSERT_TRUE(last_event.domain == "google.com.");
+    ASSERT_EQ(last_event.upstream_id, first_upstream_id);
 }
 
 TEST_F(dnsproxy_cache_test, cached_response_ttl_decreases) {

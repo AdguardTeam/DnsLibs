@@ -12,8 +12,8 @@ using namespace std::chrono;
 
 static const dnsproxy_settings DEFAULT_PROXY_SETTINGS = {
     .upstreams = {
-        { "8.8.8.8:53" },
-        { "8.8.4.4:53" },
+        { .address = "8.8.8.8:53", .id = 1 },
+        { .address = "8.8.4.4:53", .id = 2 },
     },
     .dns64 = std::nullopt,
     .blocked_response_ttl_secs = 3600,

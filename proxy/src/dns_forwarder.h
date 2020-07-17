@@ -18,7 +18,10 @@ namespace ag {
 struct cached_response {
     ldns_pkt_ptr response;
     ag::steady_clock::time_point expires_at;
+    std::optional<int32_t> upstream_id;
 };
+
+using cached_result = std::pair<ldns_pkt_ptr, std::optional<int32_t>>;
 
 namespace dns_forwarder_utils {
 /**
@@ -43,8 +46,8 @@ public:
     std::vector<uint8_t> handle_message(uint8_view message);
 
 private:
-    ldns_pkt_ptr create_response_from_cache(const std::string &key, const ldns_pkt *request);
-    void put_response_to_cache(std::string key, ldns_pkt_ptr response);
+    cached_result create_response_from_cache(const std::string &key, const ldns_pkt *request);
+    void put_response_to_cache(std::string key, ldns_pkt_ptr response, std::optional<int32_t> upstream_id);
 
     std::optional<uint8_vector> apply_filter(std::string_view hostname,
                                              const ldns_pkt *request,
@@ -65,7 +68,7 @@ private:
 
     void finalize_processed_event(dns_request_processed_event &event,
         const ldns_pkt *request, const ldns_pkt *response, const ldns_pkt *original_response,
-        const upstream *upstream, err_string error) const;
+        std::optional<int32_t> upstream_id, err_string error) const;
 
     logger log;
     const dnsproxy_settings *settings = nullptr;
