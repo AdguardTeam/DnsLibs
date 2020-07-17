@@ -371,7 +371,7 @@ std::string dns_forwarder_utils::rr_list_to_string(const ldns_rr_list *rr_list) 
 
 void dns_forwarder::finalize_processed_event(dns_request_processed_event &event, const ldns_pkt *request,
                                              const ldns_pkt *response, const ldns_pkt *original_response,
-                                             const upstream *upstream, err_string error) const {
+                                             std::optional<int32_t> upstream_id, err_string error) const {
     if (request != nullptr) {
         const ldns_rr *question = ldns_rr_list_rr(ldns_pkt_question(request), 0);
         char *type = ldns_rr_type2str(ldns_rr_get_type(question));
@@ -396,11 +396,7 @@ void dns_forwarder::finalize_processed_event(dns_request_processed_event &event,
         event.original_answer.clear();
     }
 
-    if (upstream != nullptr) {
-        event.upstream_id = upstream->options().id;
-    } else {
-        event.upstream_id = std::nullopt;
-    }
+    event.upstream_id = upstream_id;
 
     if (error.has_value()) {
         event.error = std::move(error.value());
@@ -681,17 +677,18 @@ static bool has_unsupported_extensions(const ldns_pkt *pkt) {
 }
 
 // Returns a response synthesized from the cached template, or nullptr if no cache entry satisfies the given key
-ldns_pkt_ptr dns_forwarder::create_response_from_cache(const std::string &key, const ldns_pkt *request) {
+cached_result dns_forwarder::create_response_from_cache(const std::string &key, const ldns_pkt *request) {
     if (!this->settings->dns_cache_size) { // Caching disabled
-        return nullptr;
+        return {nullptr, std::nullopt};
     }
 
     if (has_unsupported_extensions(request)) {
         dbglog(log, "{}: Request has unsupported extensions", __func__);
-        return nullptr;
+        return {nullptr, std::nullopt};
     }
 
     ldns_pkt_ptr response = nullptr;
+    std::optional<int32_t> upstream_id;
     uint32_t ttl = 0;
     {
         std::shared_lock l(this->response_cache.mtx);
@@ -700,14 +697,15 @@ ldns_pkt_ptr dns_forwarder::create_response_from_cache(const std::string &key, c
         auto cached_response_acc = cache.get(key);
         if (!cached_response_acc) {
             dbglog(log, "{}: Cache miss for key {}", __func__, key);
-            return nullptr;
+            return {nullptr, std::nullopt};
         }
 
+        upstream_id = cached_response_acc->upstream_id;
         auto cached_response_ttl = duration_cast<seconds>(cached_response_acc->expires_at - ag::steady_clock::now());
         if (cached_response_ttl.count() <= 0) {
             cache.make_lru(cached_response_acc);
             dbglog(log, "{}: Expired cache entry for key {}", __func__, key);
-            return nullptr;
+            return {nullptr, std::nullopt};
         }
 
         ttl = cached_response_ttl.count();
@@ -738,7 +736,7 @@ ldns_pkt_ptr dns_forwarder::create_response_from_cache(const std::string &key, c
         ldns_rr_set_ttl(ldns_rr_list_rr(ldns_pkt_additional(response.get()), i), ttl);
     }
 
-    return response;
+    return {std::move(response), upstream_id};
 }
 
 uint32_t compute_min_rr_ttl(const ldns_pkt *pkt) {
@@ -759,12 +757,11 @@ uint32_t compute_min_rr_ttl(const ldns_pkt *pkt) {
 }
 
 // Checks cacheability and puts an eligible response to the cache
-void dns_forwarder::put_response_to_cache(std::string key, ldns_pkt_ptr response) {
+void dns_forwarder::put_response_to_cache(std::string key, ldns_pkt_ptr response, std::optional<int32_t> upstream_id) {
     if (!this->settings->dns_cache_size) {
         // Caching disabled
         return;
     }
-
     if (ldns_pkt_tc(response.get()) // Truncated
         || ldns_pkt_qdcount(response.get()) != 1 // Invalid
         || ldns_pkt_get_rcode(response.get()) != LDNS_RCODE_NOERROR // Error
@@ -810,6 +807,7 @@ void dns_forwarder::put_response_to_cache(std::string key, ldns_pkt_ptr response
     cached_response cached_response{
         .response = std::move(response),
         .expires_at = ag::steady_clock::now() + seconds(min_rr_ttl),
+        .upstream_id = upstream_id,
     };
 
     std::unique_lock l(this->response_cache.mtx);
@@ -827,7 +825,7 @@ std::vector<uint8_t> dns_forwarder::handle_message(uint8_view message) {
         std::string err = AG_FMT("Failed to parse payload: {} ({})",
             ldns_get_errorstr_by_id(status), status);
         dbglog(log, "{} {}", __func__, err);
-        finalize_processed_event(event, nullptr, nullptr, nullptr, nullptr, std::move(err));
+        finalize_processed_event(event, nullptr, nullptr, nullptr, std::nullopt, std::move(err));
         // @todo: think out what to do in this case
         return {};
     }
@@ -840,7 +838,7 @@ std::vector<uint8_t> dns_forwarder::handle_message(uint8_view message) {
         dbglog_fid(log, request, "{}", err);
         ldns_pkt_ptr response(create_servfail_response(request));
         log_packet(log, response.get(), "Server failure response");
-        finalize_processed_event(event, nullptr, response.get(), nullptr, nullptr, std::move(err));
+        finalize_processed_event(event, nullptr, response.get(), nullptr, std::nullopt, std::move(err));
         std::vector<uint8_t> raw_response = transform_response_to_raw_data(response.get());
         return raw_response;
     }
@@ -850,12 +848,13 @@ std::vector<uint8_t> dns_forwarder::handle_message(uint8_view message) {
 
     std::string cache_key = get_cache_key(request);
 
-    if (auto cached_response = create_response_from_cache(cache_key, request)) {
+    auto [cached_response, upstream_id] = create_response_from_cache(cache_key, request);
+    if (cached_response) {
         dbglog_fid(log, request, "Cached response found");
         log_packet(log, cached_response.get(), "Cached response");
         event.cache_hit = true;
         std::vector<uint8_t> raw_response = transform_response_to_raw_data(cached_response.get());
-        finalize_processed_event(event, request, cached_response.get(), nullptr, nullptr, std::nullopt);
+        finalize_processed_event(event, request, cached_response.get(), nullptr, upstream_id, std::nullopt);
         return raw_response;
     }
 
@@ -867,7 +866,7 @@ std::vector<uint8_t> dns_forwarder::handle_message(uint8_view message) {
         ldns_pkt_ptr response(create_nxdomain_response(request, this->settings));
         log_packet(log, response.get(), "Mozilla DOH blocking response");
         std::vector<uint8_t> raw_response = transform_response_to_raw_data(response.get());
-        finalize_processed_event(event, request, response.get(), nullptr, nullptr, std::nullopt);
+        finalize_processed_event(event, request, response.get(), nullptr, std::nullopt, std::nullopt);
         return raw_response;
     }
 
@@ -933,7 +932,8 @@ std::vector<uint8_t> dns_forwarder::handle_message(uint8_view message) {
     response = ldns_pkt_ptr(create_servfail_response(request));
     log_packet(log, response.get(), "Server failure response");
     raw_response = transform_response_to_raw_data(response.get());
-    finalize_processed_event(event, request, response.get(), nullptr, cur_upstream, std::move(err_str));
+    finalize_processed_event(event, request, response.get(), nullptr,
+            (cur_upstream ? std::make_optional(cur_upstream->options().id) : std::nullopt), std::move(err_str));
     return raw_response;
 
 have_answer:
@@ -979,8 +979,10 @@ have_answer:
     raw_response = transform_response_to_raw_data(response.get());
     event.bytes_sent = message.size();
     event.bytes_received = raw_response.size();
-    finalize_processed_event(event, request, response.get(), nullptr, successful_upstream, std::nullopt);
-    put_response_to_cache(std::move(cache_key), std::move(response));
+    finalize_processed_event(event, request, response.get(), nullptr,
+            (successful_upstream ? std::make_optional(successful_upstream->options().id) : std::nullopt), std::nullopt);
+    put_response_to_cache(std::move(cache_key), std::move(response),
+            (successful_upstream ? std::make_optional(successful_upstream->options().id) : std::nullopt));
     return raw_response;
 }
 
@@ -1062,7 +1064,7 @@ std::optional<uint8_vector> dns_forwarder::apply_filter(std::string_view hostnam
     }
     std::vector<uint8_t> raw_response = transform_response_to_raw_data(response.get());
     if (fire_event) {
-        finalize_processed_event(event, request, response.get(), original_response, nullptr, std::nullopt);
+        finalize_processed_event(event, request, response.get(), original_response, std::nullopt, std::nullopt);
     }
 
     return raw_response;
