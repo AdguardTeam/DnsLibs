@@ -13,12 +13,12 @@ namespace Adguard.Dns.Api.DnsProxyServer.Configs
         /// The upstreams to use for discovery of DNS64 prefixes.
         /// </summary>
         public List<UpstreamOptions> Upstreams { get; set; }
-        
+
         /// <summary>
         /// How many times, at most, to try DNS64 prefixes discovery before giving up.
         /// </summary>
         public uint MaxTries { get; set; }
-        
+
         /// <summary>
         /// How long to wait, in milliseconds, before a pDns64 prefixes discovery attempt.
         /// </summary>
@@ -48,8 +48,8 @@ namespace Adguard.Dns.Api.DnsProxyServer.Configs
 
         private bool Equals(Dns64Settings other)
         {
-            return CollectionUtils.SequenceEqual(Upstreams, other.Upstreams) && 
-                   MaxTries == other.MaxTries && 
+            return CollectionUtils.SequenceEqual(Upstreams, other.Upstreams) &&
+                   MaxTries == other.MaxTries &&
                    WaitTimeMs == other.WaitTimeMs;
         }
 
@@ -57,13 +57,13 @@ namespace Adguard.Dns.Api.DnsProxyServer.Configs
         {
             unchecked
             {
-                int hashCode = (Upstreams != null ? Upstreams.GetHashCode() : 0);
+                int hashCode = (Upstreams != null ? Upstreams.Count : 0);
                 hashCode = (hashCode * 397) ^ MaxTries.GetHashCode();
                 hashCode = (hashCode * 397) ^ WaitTimeMs.GetHashCode();
                 return hashCode;
             }
         }
-        
+
         #endregion
     }
 }

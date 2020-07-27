@@ -21,23 +21,23 @@ namespace Adguard.Dns.Api.DnsProxyServer.Configs
         /// </summary>
         [ManualMarshalStringToPtr]
         public string Address { get; set; }
-        
+
         /// <summary>
         /// List of plain DNS servers to be used to resolve DOH/DOT hostnames (if any)
         /// </summary>
         public List<string> Bootstrap { get; set; }
-        
+
         /// <summary>
         /// Default upstream timeout in milliseconds. Also, it is used as a timeout for bootstrap DNS requests.
         /// <code>timeout = 0</code>"/> means infinite timeout.
         /// </summary>
         public uint TimeoutMs { get; set; }
-        
+
         /// <summary>
         /// Resolver's IP address. In the case if it's specified, bootstrap DNS servers won't be used at all.
         /// </summary>
         public IPAddress ResolvedIpAddress { get; set; }
-        
+
         /// <summary>
         /// User-provided ID for this upstream
         /// </summary>
@@ -67,9 +67,9 @@ namespace Adguard.Dns.Api.DnsProxyServer.Configs
 
         private bool Equals(UpstreamOptions other)
         {
-            return Equals(Address, other.Address) && 
-                   CollectionUtils.SequenceEqual(Bootstrap, other.Bootstrap) && 
-                   TimeoutMs == other.TimeoutMs && 
+            return Equals(Address, other.Address) &&
+                   CollectionUtils.SequenceEqual(Bootstrap, other.Bootstrap) &&
+                   TimeoutMs == other.TimeoutMs &&
                    Equals(ResolvedIpAddress, other.ResolvedIpAddress) &&
                    Id == other.Id;
         }
@@ -79,7 +79,7 @@ namespace Adguard.Dns.Api.DnsProxyServer.Configs
             unchecked
             {
                 int hashCode = (Address != null ? Address.GetHashCode() : 0);
-                hashCode = (hashCode * 397) ^ (Bootstrap != null ? Bootstrap.GetHashCode() : 0);
+                hashCode = (hashCode * 397) ^ (Bootstrap != null ? Bootstrap.Count : 0);
                 hashCode = (hashCode * 397) ^ TimeoutMs.GetHashCode();
                 hashCode = (hashCode * 397) ^ (ResolvedIpAddress != null ? ResolvedIpAddress.GetHashCode() : 0);
                 hashCode = (hashCode * 397) ^ Id.GetHashCode();

@@ -47,7 +47,7 @@ namespace Adguard.Dns.Api.DnsProxyServer.Configs
         {
             unchecked
             {
-                int hashCode = FilterParams != null ? FilterParams.GetHashCode() : 0;
+                int hashCode = FilterParams != null ? FilterParams.Count : 0;
                 return hashCode;
             }
         }
