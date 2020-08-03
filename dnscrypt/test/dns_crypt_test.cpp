@@ -16,13 +16,14 @@
 static const int ensure_sockets [[maybe_unused]] = WSAStartup(0x0202, std::array<WSADATA, 1>().data());
 #endif
 
-class dnscrypt_test : public ::testing::Test {
-    void SetUp() override {
-        if (sodium_init() == -1) {
-            FAIL();
-        }
+TEST(dnscrypt_sodium_test, sodium_initialized) {
+    // `1` means `already initialized`
+    if (sodium_init() != 1) {
+        FAIL();
     }
-};
+}
+
+class dnscrypt_test : public ::testing::Test {};
 
 template<typename... Ts>
 struct dnscrypt_test_with_param : dnscrypt_test, ::testing::WithParamInterface<Ts...> {};

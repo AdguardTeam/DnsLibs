@@ -7,6 +7,13 @@ static constexpr uint8_t ZEROS[16]{};
 
 namespace ag::dnscrypt {
 
+static const struct ensure_sodium_init {
+    ensure_sodium_init() noexcept {
+        int result = ::sodium_init();
+        assert(result == 0); // `0` means `initialized for the first time`
+    }
+} _ensure_sodium_init [[maybe_unused]];
+
 class x_salsa_20_poly_1305 : public cipher {
 public:
     shared_key_result shared_key(const key_array &secret_key, const key_array &public_key) const override;
