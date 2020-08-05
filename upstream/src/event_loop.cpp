@@ -2,6 +2,31 @@
 #include <event2/event.h>
 #include <event2/thread.h>
 #include <array>
+#include <ag_logger.h>
+
+static ag::logger event_logger = ag::create_logger("LIBEVENT");
+static const struct event_log_cb_setter {
+    event_log_cb_setter() noexcept {
+        event_set_log_callback([](int severity, const char *msg) {
+            switch (severity) {
+            case EVENT_LOG_DEBUG:
+                dbglog(event_logger, "{}", msg);
+                break;
+            case EVENT_LOG_MSG:
+                infolog(event_logger, "{}", msg);
+                break;
+            case EVENT_LOG_WARN:
+                warnlog(event_logger, "{}", msg);
+                break;
+            case EVENT_LOG_ERR:
+                errlog(event_logger, "{}", msg);
+                break;
+            default:
+                tracelog(event_logger, "???: {}", msg);
+            }
+        });
+    }
+} set_event_log_cb [[maybe_unused]];
 
 ag::event_loop::event_loop() : m_base() {
 #ifndef _WIN32
@@ -12,6 +37,7 @@ ag::event_loop::event_loop() : m_base() {
 #endif // else of _WIN32
 
     m_base = event_base_new();
+    assert(m_base);
     evthread_make_base_notifiable(m_base);
     m_base_thread = new std::thread([this] { run(); });
 }
