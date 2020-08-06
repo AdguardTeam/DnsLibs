@@ -36,11 +36,7 @@ set(CMAKE_DISABLE_SOURCE_CHANGES ON)
 set(CMAKE_DISABLE_IN_SOURCE_BUILD ON)
 
 option(BUILD_SHARED_LIBS "Build shared library" ${BUILD_SHARED_LIBS})
-if (NOT MINGW)
-    option(ENABLE_SSP "Compile with -fstack-protector" ON)
-else ()
-    set(ENABLE_SSP OFF CACHE BOOL "Compile with -fstack-protector" FORCE)
-endif()
+option(ENABLE_SSP "Compile with -fstack-protector" ON)
 option(ENABLE_PIE "Compile with -fPIE" ON)
 option(ENABLE_BLOCKING_RANDOM "Enable blocking random" OFF)
 option(ENABLE_MINIMAL "Only compile the minimum set of functions required for the high-level API" OFF)
@@ -108,7 +104,6 @@ macro (sodium_check_func func var)
 endmacro ()
 
 if (MSVC)
-    message(STATUS "MSVC path")
     target_compile_options(${PROJECT_NAME}
         PRIVATE
             /D_CONSOLE
@@ -122,9 +117,14 @@ if (MSVC)
     )
 
     if (CMAKE_C_COMPILER_ID MATCHES "Clang") #clang-cl
-        target_compile_options(${PROJECT_NAME}
-            PRIVATE
-                -mssse3 -maes -mpclmul -msse4.1)
+        file(GLOB_RECURSE ssse3_sources ${CMAKE_CURRENT_SOURCE_DIR}/libsodium/src/libsodium/*ssse3.c)
+        set_source_files_properties(${ssse3_sources} PROPERTIES COMPILE_FLAGS "-mssse3")
+
+        file(GLOB_RECURSE aesni_sources ${CMAKE_CURRENT_SOURCE_DIR}/libsodium/src/libsodium/*aesni.c)
+        set_source_files_properties(${aesni_sources} PROPERTIES COMPILE_FLAGS "-maes -mssse3 -mpclmul")
+
+        file(GLOB_RECURSE sse41_sources ${CMAKE_CURRENT_SOURCE_DIR}/libsodium/src/libsodium/*sse41.c)
+        set_source_files_properties(${sse41_sources} PROPERTIES COMPILE_FLAGS "-msse4.1")
     endif ()
 
     target_link_libraries(${PROJECT_NAME}
