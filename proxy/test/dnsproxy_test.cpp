@@ -202,7 +202,7 @@ TEST_F(dnsproxy_cache_test, cached_response_ttl_decreases) {
     ASSERT_NO_FATAL_FAILURE(perform_request(proxy, pkt, res));
     ASSERT_TRUE(last_event.cache_hit);
     const uint32_t cached_ttl = ldns_rr_ttl(ldns_rr_list_rr(ldns_pkt_answer(res.get()), 0));
-    ASSERT_LT(cached_ttl, ttl / 2);
+    ASSERT_LE(cached_ttl, ttl / 2);
 }
 
 TEST_F(dnsproxy_cache_test, cached_response_expires) {
