@@ -13,9 +13,9 @@ public:
     /**
      * Create DNSCrypt upstream
      * @param stamp Stamp
-     * @param timeout Timeout in milliseconds resolution
+     * @param opts Upstream settings
      */
-    upstream_dnscrypt(server_stamp &&stamp, std::chrono::milliseconds timeout);
+    upstream_dnscrypt(server_stamp &&stamp, const upstream_options &opts);
     upstream_dnscrypt(const upstream_dnscrypt &) = delete;
     upstream_dnscrypt &operator=(const upstream_dnscrypt &) = delete;
     ~upstream_dnscrypt() override;

@@ -19,8 +19,14 @@ struct ag::upstream_dnscrypt::impl {
     dnscrypt::server_info server_info;
 };
 
-ag::upstream_dnscrypt::upstream_dnscrypt(server_stamp &&stamp, std::chrono::milliseconds timeout)
-    : upstream({ stamp.server_addr_str, {}, timeout }, {})
+static ag::upstream_options make_dnscrypt_options(const ag::server_stamp &stamp, const ag::upstream_options &opts) {
+    ag::upstream_options converted = opts;
+    converted.address = stamp.server_addr_str;
+    return converted;
+}
+
+ag::upstream_dnscrypt::upstream_dnscrypt(server_stamp &&stamp, const upstream_options &opts)
+    : upstream(make_dnscrypt_options(stamp, opts), {})
     , m_stamp(std::move(stamp))
 {
     static const initializer ensure_initialized;
