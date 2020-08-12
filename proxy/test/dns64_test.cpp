@@ -3,7 +3,7 @@
 #include <upstream_utils.h>
 #include <ag_logger.h>
 
-static constexpr auto DNS64_SERVER_ADDR = "2001:67c:27e4::64";
+static constexpr auto DNS64_SERVER_ADDR = "2001:4860:4860::6464";
 
 TEST(dns64_test, test_dns64_discovery) {
     if (!ag::test_ipv6_connectivity()) {
