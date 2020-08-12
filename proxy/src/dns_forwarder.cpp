@@ -701,7 +701,7 @@ cached_result dns_forwarder::create_response_from_cache(const std::string &key, 
         }
 
         upstream_id = cached_response_acc->upstream_id;
-        auto cached_response_ttl = duration_cast<seconds>(cached_response_acc->expires_at - ag::steady_clock::now());
+        auto cached_response_ttl = ceil<seconds>(cached_response_acc->expires_at - ag::steady_clock::now());
         if (cached_response_ttl.count() <= 0) {
             cache.make_lru(cached_response_acc);
             dbglog(log, "{}: Expired cache entry for key {}", __func__, key);

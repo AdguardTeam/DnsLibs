@@ -77,7 +77,7 @@ static ag::upstream_factory::create_result create_upstream_plain(const ag::upstr
 
 static ag::upstream_factory::create_result create_upstream_dnscrypt(ag::server_stamp &&stamp,
         const ag::upstream_options &opts) {
-    return {std::make_unique<ag::upstream_dnscrypt>(std::move(stamp), opts.timeout), std::nullopt};
+    return {std::make_unique<ag::upstream_dnscrypt>(std::move(stamp), opts), std::nullopt};
 }
 
 static ag::upstream_factory::create_result create_upstream_sdns(const ag::upstream_options &local_opts,
