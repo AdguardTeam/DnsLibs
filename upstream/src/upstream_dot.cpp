@@ -128,28 +128,37 @@ static std::optional<std::string> get_resolved_ip(const ag::logger &log, const a
     }
 }
 
-static std::string_view get_host_name(std::string_view url) {
+static std::string_view strip_dot_url(std::string_view url) {
     assert(ag::utils::starts_with(url, ag::dns_over_tls::SCHEME));
     url.remove_prefix(ag::dns_over_tls::SCHEME.length());
     if (url.back() == '/') {
         url.remove_suffix(1);
     }
-    return ag::utils::split_host_port(url).first;
+    return url;
+}
+
+static std::string_view get_host_name(std::string_view url) {
+    return ag::utils::split_host_port(strip_dot_url(url)).first;
 }
 
 static ag::bootstrapper_ptr create_bootstrapper(const ag::logger &log, const ag::upstream_options &opts,
         const ag::upstream_factory_config &config) {
     std::string_view address;
+    int port = 0;
 
     std::optional<std::string> resolved = get_resolved_ip(log, opts.resolved_server_ip);
     if (resolved.has_value()) {
         address = resolved.value();
     } else {
-        address = get_host_name(opts.address);
+        auto[host, port_str] = ag::utils::split_host_port(strip_dot_url(opts.address));
+        address = host;
+        if (!port_str.empty()) {
+            port = std::strtol(std::string(port_str).c_str(), nullptr, 10);
+        }
     }
 
     return std::make_unique<ag::bootstrapper>(
-        ag::bootstrapper::params{ address, ag::dns_over_tls::DEFAULT_PORT,
+        ag::bootstrapper::params{ address, (port == 0) ? ag::dns_over_tls::DEFAULT_PORT : port,
                                   opts.bootstrap, opts.timeout, config });
 }
 

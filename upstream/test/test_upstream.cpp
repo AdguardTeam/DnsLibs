@@ -179,6 +179,7 @@ TEST_F(upstream_test, use_upstream_with_wrong_options) {
         // DoT
         { "tls://one.one.two.asdf.", { "8.8.8.8" } }, // invalid/valid
         { "tls://one.one.one.one", { "4.3.2.1" } }, // valid/invalid
+        { "tls://one.one.one.one:1234", { "8.8.8.8" } }, // invalid/valid
     };
 
     for (const ag::upstream_options &options : OPTIONS) {
