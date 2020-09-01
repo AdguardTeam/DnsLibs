@@ -15,7 +15,7 @@
 
 static constexpr size_t FILTER_PARAMS_MEM_LIMIT_BYTES = 8 * 1024 * 1024;
 
-static NSString *REPLACEMENT_STRING = [NSString stringWithUTF8String: "<out of memory>"];
+static constexpr NSString *REPLACEMENT_STRING = @"<out of memory>";
 
 /**
  * @param str an STL string
@@ -96,6 +96,23 @@ struct udphdr {
     uint16_t    uh_ulen;        /* udp length */
     uint16_t    uh_sum;         /* udp checksum */
 };
+
+// Home-made IPv6 header struct
+struct iphdr6 {
+#if BYTE_ORDER == LITTLE_ENDIAN
+    uint32_t ip6_unused:28;    /* traffic class and flow label */
+    uint32_t ip6_v:4;          /* version (constant 0x6) */
+#endif
+#if BYTE_ORDER == BIG_ENDIAN
+    uint32_t ip6_v:4;          /* version (constant 0x6) */
+    uint32_t ip6_unused:28;    /* traffic class and flow label */
+#endif
+    uint16_t ip6_pl;    /* payload length */
+    uint8_t ip6_nh;     /* next header (same as protocol) */
+    uint8_t ip6_hl;     /* hop limit */ 
+    in6_addr_t ip6_src; /* source address */
+    in6_addr_t ip6_dst; /* destination address */
+};
 #pragma pack(pop)
 
 static uint16_t ip_checksum(const void *ip_header, uint32_t header_length) {
@@ -113,9 +130,10 @@ static uint16_t ip_checksum(const void *ip_header, uint32_t header_length) {
     checksum = (checksum >> 16) + (checksum & 0xffff);
     checksum = (checksum >> 16) + (checksum & 0xffff);
 
-    return ~checksum & 0xffff;
+    return (uint16_t) (~checksum & 0xffff);
 }
 
+// Compute sum of buf as if it is a vector of uint16_t, padding with zeroes at the end if needed
 static uint16_t checksum(const void *buf, size_t len, uint32_t sum) {
     uint32_t i;
     for (i = 0; i < (len & ~1U); i += 2) {
@@ -132,16 +150,33 @@ static uint16_t checksum(const void *buf, size_t len, uint32_t sum) {
         }
     }
 
-    return sum;
+    return (uint16_t) sum;
 }
 
 static uint16_t udp_checksum(const struct iphdr *ip_header, const struct udphdr *udp_header,
         const void *buf, size_t len) {
-    uint32_t sum = ip_header->ip_p + (uint32_t)ntohs(udp_header->uh_ulen);
+    uint16_t sum = ip_header->ip_p + ntohs(udp_header->uh_ulen);
     sum = checksum(&ip_header->ip_src, 2 * sizeof(ip_header->ip_src), sum);
     sum = checksum(buf, len, sum);
     sum = checksum(udp_header, sizeof(*udp_header), sum);
-    sum = ~sum & 0xFFFF;
+    // 0xffff should be transmitted as is
+    if (sum != 0xffff) {
+        sum = ~sum;
+    }
+    return htons(sum);
+}
+
+static uint16_t udp_checksum_v6(const struct iphdr6 *ip6_header,
+                                const struct udphdr *udp_header,
+                                const void *buf, size_t len) {
+    uint16_t sum = ip6_header->ip6_nh + ntohs(udp_header->uh_ulen);
+    sum = checksum(&ip6_header->ip6_src, 2 * sizeof(ip6_header->ip6_src), sum);
+    sum = checksum(buf, len, sum);
+    sum = checksum(udp_header, sizeof(*udp_header), sum);
+    // 0xffff should be transmitted as is
+    if (sum != 0xffff) {
+        sum = ~sum;
+    }
     return htons(sum);
 }
 
@@ -175,6 +210,30 @@ static NSData *create_response_packet(const struct iphdr *ip_header, const struc
     return reverse_packet;
 }
 
+static NSData *create_response_packet_v6(const struct iphdr6 *ip6_header,
+                                         const struct udphdr *udp_header,
+                                         const std::vector<uint8_t> &payload) {
+    struct udphdr resp_udp_header = {};
+    resp_udp_header.uh_sport = udp_header->uh_dport;
+    resp_udp_header.uh_dport = udp_header->uh_sport;
+    resp_udp_header.uh_ulen = htons(sizeof(resp_udp_header) + payload.size());
+
+    struct iphdr6 resp_ip6_header = *ip6_header;
+    resp_ip6_header.ip6_src = ip6_header->ip6_dst;
+    resp_ip6_header.ip6_dst = ip6_header->ip6_src;
+    resp_ip6_header.ip6_pl = resp_udp_header.uh_ulen;
+
+    resp_udp_header.uh_sum = udp_checksum_v6(&resp_ip6_header, &resp_udp_header,
+                                             payload.data(), payload.size());
+
+    NSUInteger packet_length = sizeof(resp_ip6_header) + resp_ip6_header.ip6_pl;
+    NSMutableData *response_packet = [[NSMutableData alloc] initWithCapacity: packet_length];
+    [response_packet appendBytes: &resp_ip6_header length: sizeof(resp_ip6_header)];
+    [response_packet appendBytes: &resp_udp_header length: sizeof(resp_udp_header)];
+    [response_packet appendBytes: payload.data() length: payload.size()];
+
+    return response_packet;
+}
 
 @implementation AGDnsUpstream
 - (instancetype) initWithNative: (const ag::upstream_options *) settings
@@ -567,9 +626,9 @@ static std::vector<ag::upstream_options> convert_upstreams(NSArray<AGDnsUpstream
         } else {
             settings.dns64 = ag::dns64_settings{
                     .upstreams = convert_upstreams(dns64_upstreams),
-                    .wait_time = std::chrono::milliseconds(config.dns64Settings.waitTimeMs),
                     .max_tries = config.dns64Settings.maxTries > 0
                                  ? static_cast<uint32_t>(config.dns64Settings.maxTries) : 0,
+                    .wait_time = std::chrono::milliseconds(config.dns64Settings.waitTimeMs),
             };
         }
     }
@@ -625,25 +684,60 @@ static std::vector<ag::upstream_options> convert_upstreams(NSArray<AGDnsUpstream
     return self;
 }
 
-- (NSData *) handlePacket: (NSData *) packet
+- (NSData *)handleIPv4Packet:(NSData *)packet
 {
-    struct iphdr *ip_header = (struct iphdr *)packet.bytes;
+    auto *ip_header = (struct iphdr *) packet.bytes;
     // @todo: handle tcp packets also
     if (ip_header->ip_p != IPPROTO_UDP) {
         return nil;
     }
 
     NSInteger ip_header_length = ip_header->ip_hl * 4;
-    struct udphdr *udp_header = (struct udphdr *)((Byte *)packet.bytes + ip_header_length);
-    NSInteger udp_header_length = ip_header_length + sizeof(struct udphdr);
-    char srcv4_str[INET_ADDRSTRLEN], dstv4_str[INET_ADDRSTRLEN];
-    dbglog(self->log, "{}:{} -> {}:{}"
-        , inet_ntop(AF_INET, &ip_header->ip_src, srcv4_str, sizeof(srcv4_str)), ntohs(udp_header->uh_sport)
-        , inet_ntop(AF_INET, &ip_header->ip_dst, dstv4_str, sizeof(dstv4_str)), ntohs(udp_header->uh_dport));
+    auto *udp_header = (struct udphdr *) ((Byte *) packet.bytes + ip_header_length);
+    NSInteger header_length = ip_header_length + sizeof(*udp_header);
 
-    ag::uint8_view payload = { (uint8_t*)packet.bytes + udp_header_length, packet.length - udp_header_length };
+    char srcv4_str[INET_ADDRSTRLEN], dstv4_str[INET_ADDRSTRLEN];
+    dbglog(self->log, "{}:{} -> {}:{}",
+           inet_ntop(AF_INET, &ip_header->ip_src, srcv4_str, sizeof(srcv4_str)), ntohs(udp_header->uh_sport),
+           inet_ntop(AF_INET, &ip_header->ip_dst, dstv4_str, sizeof(dstv4_str)), ntohs(udp_header->uh_dport));
+
+    ag::uint8_view payload = {(uint8_t *) packet.bytes + header_length, packet.length - header_length};
     std::vector<uint8_t> response = self->proxy.handle_message(payload);
     return create_response_packet(ip_header, udp_header, response);
+}
+
+- (NSData *)handleIPv6Packet:(NSData *)packet
+{
+    auto *ip_header = (struct iphdr6 *) packet.bytes;
+    // @todo: handle tcp packets also
+    if (ip_header->ip6_nh != IPPROTO_UDP) {
+        return nil;
+    }
+
+    NSInteger ip_header_length = sizeof(*ip_header);
+    auto *udp_header = (struct udphdr *) ((Byte *) packet.bytes + ip_header_length);
+    NSInteger header_length = ip_header_length + sizeof(*udp_header);
+
+    char srcv6_str[INET6_ADDRSTRLEN], dstv6_str[INET6_ADDRSTRLEN];
+    dbglog(self->log, "[{}]:{} -> [{}]:{}",
+           inet_ntop(AF_INET6, &ip_header->ip6_src, srcv6_str, sizeof(srcv6_str)), ntohs(udp_header->uh_sport),
+           inet_ntop(AF_INET6, &ip_header->ip6_dst, dstv6_str, sizeof(dstv6_str)), ntohs(udp_header->uh_dport));
+
+    ag::uint8_view payload = {(uint8_t *) packet.bytes + header_length, packet.length - header_length};
+    std::vector<uint8_t> response = self->proxy.handle_message(payload);
+    return create_response_packet_v6(ip_header, udp_header, response);
+}
+
+- (NSData *)handlePacket:(NSData *)packet
+{
+    auto *ip_header = (struct iphdr *)packet.bytes;
+    if (ip_header->ip_v == 4) {
+        return [self handleIPv4Packet:packet];
+    } else if (ip_header->ip_v == 6) {
+        return [self handleIPv6Packet:packet];
+    }
+    dbglog(self->log, "Wrong IP version: %u", ip_header->ip_v);
+    return nil;
 }
 
 + (BOOL) isValidRule: (NSString *) str

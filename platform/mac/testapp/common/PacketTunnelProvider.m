@@ -53,7 +53,9 @@
     NEPacketTunnelNetworkSettings *settings =
         [[NEPacketTunnelNetworkSettings alloc] initWithTunnelRemoteAddress:@"127.1.1.1"];
 
-    NEDNSSettings *dns = [[NEDNSSettings alloc] initWithServers: @[@"198.18.0.1"]];
+    NEDNSSettings *dns = [[NEDNSSettings alloc] initWithServers: @[
+        @"198.18.0.1",
+        @"2001:ad00:ad00::ad00"]];
     dns.matchDomains = @[ @"" ];
     settings.DNSSettings = dns;
 
@@ -66,6 +68,17 @@
     ipv4.includedRoutes = @[dnsProxyIpv4Route];
 
     settings.IPv4Settings = ipv4;
+    
+    NEIPv6Settings *ipv6 =
+        [[NEIPv6Settings alloc] initWithAddresses:@[@"fd12:1:1:1::2"] networkPrefixLengths:@[@(64)]];
+    ipv6.excludedRoutes = @[[NEIPv6Route defaultRoute]];
+    
+    NEIPv6Route* dnsProxyIpv6Route =
+         [[NEIPv6Route alloc] initWithDestinationAddress:@"2001:ad00:ad00::ad00"
+                                     networkPrefixLength:@(128)];
+    ipv6.includedRoutes = @[dnsProxyIpv6Route];
+    
+    settings.IPv6Settings = ipv6;
 
     __unsafe_unretained AGTunnel *wself = self;
     [self setTunnelNetworkSettings: settings completionHandler: ^(NSError * _Nullable error)
@@ -126,7 +139,7 @@
         NSLog(@"onRequestProcessed domain: %@", event.domain);
         NSLog(@"onRequestProcessed answer: %@", event.answer);
         NSLog(@"onRequestProcessed error: %@", event.error);
-        NSLog(@"onRequestProcessed upstream: %ld", event.upstreamId);
+        NSLog(@"onRequestProcessed upstream: %@", event.upstreamId);
     };
 
     NSError *proxy_err = nil;
@@ -162,7 +175,7 @@
         [packets enumerateObjectsUsingBlock:^(NSData *_Nonnull obj, NSUInteger idx, BOOL *_Nonnull stop) {
             NSData *reply = [self->proxy handlePacket: obj];
             if (reply != nil) {
-                [self.packetFlow writePackets: @[reply] withProtocols: @[@AF_INET]];
+                [self.packetFlow writePackets: @[reply] withProtocols: @[protocols[idx]]];
             }
         }];
         [self startPacketHandling];
