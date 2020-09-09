@@ -4,7 +4,7 @@ Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
 <+>UTF-8
 ===================================================================
 --- net.c	(revision 53bc57512c19b11eebc403a4cb2bbf7295eb0db1)
-+++ net.c	(date 1591101095288)
++++ net.c	(date 1599491500720)
 @@ -15,6 +15,8 @@
  
  #include <ldns/ldns.h>
@@ -18,7 +18,7 @@ Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
  #include <poll.h>
  #endif
  
-+static void ag_log_sockname(int sockfd, const char *msg);
++static void ag_log_sockname(int sockfd, const char *msg, const struct sockaddr_storage *to);
 +
  ldns_status
  ldns_send(ldns_pkt **result_packet, ldns_resolver *r, const ldns_pkt *query_pkt)
@@ -82,12 +82,14 @@ Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
  			errno = error;
  			return -1;
  		}
-@@ -304,6 +316,8 @@
+@@ -303,7 +315,9 @@
+ 	int sockfd;
  	
  	sockfd = ldns_tcp_connect_from(to, tolen, from, fromlen, timeout);
- 	
-+	ag_log_sockname(sockfd, "sending TCP");
-+	
+-	
++
++	ag_log_sockname(sockfd, "Sending TCP", to);
++
  	if (sockfd >= 0 && ldns_tcp_send_query(qbin, sockfd, to, tolen) == 0) {
  		close_socket(sockfd);
  		return -1;
@@ -140,7 +142,7 @@ Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
 +        return 0;
 +    }
 +
-+    ag_log_sockname(sockfd, "sending UDP");
++    ag_log_sockname(sockfd, "Sending UDP", to);
  
 -	if (bytes == -1 || (size_t)bytes != ldns_buffer_position(qbin)) {
 -		return 0;
@@ -169,27 +171,19 @@ Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
  		*size = 0;
  		LDNS_FREE(wire);
  		return NULL;
-@@ -1034,3 +1076,43 @@
+@@ -1034,3 +1076,36 @@
          resolver->_axfr_soa_count = 0;
          return LDNS_STATUS_OK;
  }
 +
-+void ag_log_sockname(int sockfd, const char *msg) {
++void ag_log_sockname(int sockfd, const char *msg, const struct sockaddr_storage *to) {
 +    if (!ag_ldns_should_log()) {
 +        return;
 +    }
-+    char buf[2 * INET6_ADDRSTRLEN];
 +    struct sockaddr_storage ss_from = {0};
 +    socklen_t len_from = sizeof(ss_from);
 +    if (-1 == getsockname(sockfd, (struct sockaddr *) &ss_from, &len_from)) {
-+        ag_ldns_log("getsockname: %n", ag_ldns_socket_geterror(sockfd));
-+        return;
-+    }
-+    struct sockaddr_storage ss_to = {0};
-+    socklen_t len_to = sizeof(ss_to);
-+    if (-1 == getpeername(sockfd, (struct sockaddr *) &ss_to, &len_to)) {
-+        ag_ldns_log("getpeername: %n", ag_ldns_socket_geterror(sockfd));
-+        return;
++        ag_ldns_log("%s: getsockname: %n", __func__, ag_ldns_socket_geterror(sockfd));
 +    }
 +    void *from_addr;
 +    int from_port;
@@ -198,17 +192,18 @@ Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
 +    if (ss_from.ss_family == AF_INET) {
 +        from_port = ntohs(((struct sockaddr_in *) &ss_from)->sin_port);
 +        from_addr = &((struct sockaddr_in *) &ss_from)->sin_addr;
-+        to_port = ntohs(((struct sockaddr_in *) &ss_to)->sin_port);
-+        to_addr = &((struct sockaddr_in *) &ss_to)->sin_addr;
++        to_port = ntohs(((struct sockaddr_in *) to)->sin_port);
++        to_addr = &((struct sockaddr_in *) to)->sin_addr;
 +    } else if (ss_from.ss_family == AF_INET6) {
 +        from_port = ntohs(((struct sockaddr_in6 *) &ss_from)->sin6_port);
 +        from_addr = &((struct sockaddr_in6 *) &ss_from)->sin6_addr;
-+        to_port = ntohs(((struct sockaddr_in6 *) &ss_to)->sin6_port);
-+        to_addr = &((struct sockaddr_in6 *) &ss_to)->sin6_addr;
++        to_port = ntohs(((struct sockaddr_in6 *) to)->sin6_port);
++        to_addr = &((struct sockaddr_in6 *) to)->sin6_addr;
 +    } else {
 +        ag_ldns_log("unexpected address family: %d", ss_from.ss_family);
 +        return;
 +    }
++    char buf[2 * INET6_ADDRSTRLEN];
 +    evutil_inet_ntop(ss_from.ss_family, from_addr, buf, INET6_ADDRSTRLEN);
 +    evutil_inet_ntop(ss_from.ss_family, to_addr, buf + INET6_ADDRSTRLEN, INET6_ADDRSTRLEN);
 +    ag_ldns_log("%s: %s:%d -> %s:%d", msg, buf, from_port, buf + INET6_ADDRSTRLEN, to_port);

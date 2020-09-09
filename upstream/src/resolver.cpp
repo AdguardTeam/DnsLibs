@@ -22,19 +22,17 @@ static std::optional<std::string> get_address_from_stamp(const logger &log, std:
         return std::nullopt;
     }
 
-    if (stamp.server_addr_str.empty()) {
-        warnlog(log, "Got empty server address in stamp from url: {}", url);
-        return std::nullopt;
-    }
-
     switch (stamp.proto) {
     case stamp_proto_type::PLAIN:
     case stamp_proto_type::DNSCRYPT:
         return stamp.server_addr_str;
     case stamp_proto_type::DOH:
-        return AG_FMT("{}{}{}", dns_over_https::SCHEME, stamp.provider_name, stamp.path);
     case stamp_proto_type::TLS:
-        return stamp.provider_name;
+        if (!stamp.server_addr_str.empty()) {
+            return stamp.server_addr_str;
+        } else {
+            return stamp.provider_name;
+        }
     }
     warnlog(log, "Unknown stamp protocol type: {}", stamp.proto);
     assert(0);
@@ -79,13 +77,15 @@ static std::string get_server_address(const logger &log, std::string_view addres
         std::optional<std::string> decoded = get_address_from_stamp(log, result);
         if (decoded.has_value()) {
             dbglog(log, "Stamp '{}' decoded into '{}'", address, decoded.value());
-            result = std::move(decoded.value());
+            if (!check_ip_address(*decoded)) {
+                warnlog(log, "Resolver address must be a valid ip address");
+                return "";
+            }
         } else {
+            warnlog(log, "Failed to parse DNS stamp");
             return "";
         }
-    }
-
-    if (!check_ip_address(result)) {
+    } else if (!check_ip_address(result)) {
         warnlog(log, "Resolver address must be a valid ip address");
         return "";
     }

@@ -249,8 +249,6 @@ static constexpr std::string_view truncated_test_data[]{
     // See the details here: https://github.com/AdguardTeam/AdGuardHome/issues/524
     // AdGuard DNS (DNSCrypt)
     "sdns://AQIAAAAAAAAAFDE3Ni4xMDMuMTMwLjEzMDo1NDQzINErR_JS3PLCu_iZEIbq95zkSV2LFsigxDIuUso_OQhzIjIuZG5zY3J5cHQuZGVmYXVsdC5uczEuYWRndWFyZC5jb20",
-    // Cisco OpenDNS (DNSCrypt)
-    "sdns://AQAAAAAAAAAADjIwOC42Ny4yMjAuMjIwILc1EUAgbyJdPivYItf9aR6hwzzI1maNDL4Ev6vKQ_t5GzIuZG5zY3J5cHQtY2VydC5vcGVuZG5zLmNvbQ",
 };
 
 TEST_P(dns_truncated_test, test_dns_truncated) {
@@ -345,11 +343,6 @@ static const upstream_test_data test_upstreams_data[]{
         {"8.8.8.8"}
     },
     {
-        // Cisco OpenDNS (DNSCrypt)
-        "sdns://AQAAAAAAAAAADjIwOC42Ny4yMjAuMjIwILc1EUAgbyJdPivYItf9aR6hwzzI1maNDL4Ev6vKQ_t5GzIuZG5zY3J5cHQtY2VydC5vcGVuZG5zLmNvbQ",
-        {"8.8.8.8:53"}
-    },
-    {
         // Cloudflare DNS (DoH)
         "sdns://AgcAAAAAAAAABzEuMC4wLjGgENk8mGSlIfMGXMOlIlCcKvq7AVgcrZxtjon911-ep0cg63Ul-I8NlFj4GplQGb_TTLiczclX57DvMV8Q-JdjgRgSZG5zLmNsb3VkZmxhcmUuY29tCi9kbnMtcXVlcnk",
         {"8.8.8.8:53"}
@@ -362,6 +355,11 @@ static const upstream_test_data test_upstreams_data[]{
     {
         // AdGuard DNS (DNS-over-TLS)
         "sdns://AwAAAAAAAAAAAAAPZG5zLmFkZ3VhcmQuY29t",
+        {"8.8.8.8:53"}
+    },
+    {
+        // DoT 1.1.1.1
+        "sdns://AwAAAAAAAAAAAAAHMS4xLjEuMQ",
         {"8.8.8.8:53"}
     },
     {
@@ -386,8 +384,11 @@ static const upstream_test_data upstream_dot_bootstrap_test_data[]{
     },
     {
         "tls://one.one.one.one/",
-        // Cisco OpenDNS
-        {"sdns://AQAAAAAAAAAADjIwOC42Ny4yMjAuMjIwILc1EUAgbyJdPivYItf9aR6hwzzI1maNDL4Ev6vKQ_t5GzIuZG5zY3J5cHQtY2VydC5vcGVuZG5zLmNvbQ"},
+        {"sdns://AwAAAAAAAAAAAAAHMS4xLjEuMQ"}, // DoT 1.1.1.1
+    },
+    {
+        "tls://one.one.one.one/",
+        {"sdns://AQIAAAAAAAAAFDE3Ni4xMDMuMTMwLjEzMDo1NDQzINErR_JS3PLCu_iZEIbq95zkSV2LFsigxDIuUso_OQhzIjIuZG5zY3J5cHQuZGVmYXVsdC5uczEuYWRndWFyZC5jb20"}, // AdGuard DNS (DNSCrypt)
     },
 };
 

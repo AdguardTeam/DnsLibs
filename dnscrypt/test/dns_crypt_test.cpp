@@ -108,6 +108,11 @@ static constexpr parse_stamp_test_data_type parse_stamp_test_data[]{
         parse_stamp_test_data_log
     },
     {
+        // DoT 1.1.1.1
+        "sdns://AwAAAAAAAAAAAAAHMS4xLjEuMQ",
+        parse_stamp_test_data_log
+    },
+    {
         // AdGuard DNSCrypt
         "sdns://AQIAAAAAAAAAFDE3Ni4xMDMuMTMwLjEzMDo1NDQzINErR_JS3PLCu_iZEIbq95zkSV2LFsigxDIuUso_OQhzIjIuZG5zY3J5cHQuZGVmYXVsdC5uczEuYWRndWFyZC5jb20",
         [](const char *stamp_str, const ag::server_stamp &stamp) {
@@ -168,16 +173,6 @@ static constexpr std::string_view check_dns_crypt_server_test_stamps[]{
     "sdns://AQIAAAAAAAAAFDE3Ni4xMDMuMTMwLjEzMDo1NDQzINErR_JS3PLCu_iZEIbq95zkSV2LFsigxDIuUso_OQhzIjIuZG5zY3J5cHQuZGVmYXVsdC5uczEuYWRndWFyZC5jb20",
     // AdGuard DNS Family
     "sdns://AQIAAAAAAAAAFDE3Ni4xMDMuMTMwLjEzMjo1NDQzILgxXdexS27jIKRw3C7Wsao5jMnlhvhdRUXWuMm1AFq6ITIuZG5zY3J5cHQuZmFtaWx5Lm5zMS5hZGd1YXJkLmNvbQ",
-#if 0 // Disable third-party upstreams because they often unpredictably fail with network errors
-    // Cisco OpenDNS
-    "sdns://AQAAAAAAAAAADjIwOC42Ny4yMjAuMjIwILc1EUAgbyJdPivYItf9aR6hwzzI1maNDL4Ev6vKQ_t5GzIuZG5zY3J5cHQtY2VydC5vcGVuZG5zLmNvbQ",
-    // Cisco OpenDNS Family Shield
-    "sdns://AQAAAAAAAAAADjIwOC42Ny4yMjAuMTIzILc1EUAgbyJdPivYItf9aR6hwzzI1maNDL4Ev6vKQ_t5GzIuZG5zY3J5cHQtY2VydC5vcGVuZG5zLmNvbQ",
-    // Quad9 (anycast) dnssec/no-log/filter 9.9.9.9
-    "sdns://AQMAAAAAAAAADDkuOS45Ljk6ODQ0MyBnyEe4yHWM0SAkVUO-dWdG3zTfHYTAC4xHA2jfgh2GPhkyLmRuc2NyeXB0LWNlcnQucXVhZDkubmV0",
-    // Yandex DNS
-    "sdns://AQQAAAAAAAAAEDc3Ljg4LjguNzg6MTUzNTMg04TAccn3RmKvKszVe13MlxTUB7atNgHhrtwG1W1JYyciMi5kbnNjcnlwdC1jZXJ0LmJyb3dzZXIueWFuZGV4Lm5ldA",
-#endif
 };
 
 static constexpr ag::dnscrypt::protocol check_dns_crypt_server_test_protocols[]{

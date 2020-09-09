@@ -24,8 +24,8 @@ using read_stamp_part_function_t = std::function<err_string(server_stamp &, size
 
 static constexpr auto PLAIN_STAMP_MIN_SIZE = 17;
 static constexpr auto DNSCRYPT_STAMP_MIN_SIZE = 66;
-static constexpr auto DOH_STAMP_MIN_SIZE = 22;
-static constexpr auto DOT_STAMP_MIN_SIZE = 22;
+static constexpr auto DOH_STAMP_MIN_SIZE = 19;
+static constexpr auto DOT_STAMP_MIN_SIZE = 19;
 
 static std::string_view remove_suffix_if_exists(std::string_view value, std::string_view suffix) {
     auto suffix_size = (utils::ends_with(value, suffix)) ? suffix.size() : 0;
