@@ -11,9 +11,18 @@
 #include <default_verifier.h>
 #include <application_verifier.h>
 #include <upstream_utils.h>
+#include <csignal>
 
 static constexpr std::chrono::seconds DEFAULT_TIMEOUT(10);
 static constexpr std::chrono::milliseconds DELAY_BETWEEN_REQUESTS{500};
+
+static struct Init {
+    Init() {
+#ifdef SIGPIPE
+        std::signal(SIGPIPE, SIG_IGN);
+#endif
+    }
+} init_;
 
 static ag::upstream_factory::create_result create_upstream(const ag::upstream_options &opts) {
 #ifndef _WIN32
@@ -243,7 +252,7 @@ struct dns_truncated_test : upstream_param_test<std::string_view> {};
 
 static constexpr std::string_view truncated_test_data[]{
     // AdGuard DNS
-    "176.103.130.130:53",
+    "94.140.14.14:53",
     // Google DNS
     "8.8.8.8:53",
     // See the details here: https://github.com/AdguardTeam/AdGuardHome/issues/524
@@ -293,7 +302,7 @@ static const upstream_test_data test_upstreams_data[]{
         {}
     },
     {
-        "176.103.130.130:5353",
+        "94.140.14.14:5353",
         {}
     },
     {

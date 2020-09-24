@@ -34,7 +34,10 @@ int main() {
         return 1;
     }
 
-    ::signal(SIGINT, sigint_handler);
+    std::signal(SIGINT, sigint_handler);
+#ifdef SIGPIPE
+    std::signal(SIGPIPE, SIG_IGN);
+#endif
 
     while (keep_running) {
         std::this_thread::sleep_for(100ms);
