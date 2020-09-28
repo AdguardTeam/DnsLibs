@@ -1,0 +1,144 @@
+Index: event.c
+IDEA additional info:
+Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
+<+>UTF-8
+===================================================================
+--- event.c	(revision 4c908dde58ef780eeefcc9df4db3063ca62ea862)
++++ event.c	(date 1601300083386)
+@@ -977,8 +977,8 @@
+ };
+ 
+ /* reinitialize the event base after a fork */
+-int
+-event_reinit(struct event_base *base)
++static int
++event_reinit_real(struct event_base *base, int after_fork)
+ {
+ 	const struct eventop *evsel;
+ 	int res = 0;
+@@ -987,7 +987,7 @@
+ 
+ 	EVBASE_ACQUIRE_LOCK(base, th_base_lock);
+ 
+-	if (base->running_loop) {
++	if (after_fork && base->running_loop) {
+ 		event_warnx("%s: forked from the event_loop.", __func__);
+ 		res = -1;
+ 		goto done;
+@@ -1091,6 +1091,18 @@
+ 	return (res);
+ }
+ 
++int
++event_reinit(struct event_base *base)
++{
++    return event_reinit_real(base, 1);
++}
++
++int
++event_reinit_notifyfds(struct event_base *base)
++{
++    return event_reinit_real(base, 0);
++}
++
+ /* Get the monotonic time for this event_base' timer */
+ int
+ event_gettime_monotonic(struct event_base *base, struct timeval *tv)
+@@ -3604,14 +3616,34 @@
+ {
+ 	unsigned char buf[1024];
+ 	struct event_base *base = arg;
++	int n;
+ #ifdef _WIN32
+-	while (recv(fd, (char*)buf, sizeof(buf), 0) > 0)
++	while ((n = recv(fd, (char*)buf, sizeof(buf), 0)) > 0)
+ 		;
+ #else
+-	while (read(fd, (char*)buf, sizeof(buf)) > 0)
++	while ((n = read(fd, (char*)buf, sizeof(buf))) > 0)
+ 		;
+ #endif
+ 
++	if (n == 0 || !EVUTIL_ERR_RW_RETRIABLE(evutil_socket_geterror(fd))) {
++		event_warnx("%s: recv from notify fd failed, reinitializing event base", __func__);
++		int reinit_tries_count = 20;
++		struct timeval reinit_timeout_ms = { 0, 100 * 1000 };
++		// The purpose of the combination the loop and the sleep is NordVpn issue
++		// see more in https://github.com/AdguardTeam/CoreLibs/issues/1082
++		for (int i = 0; i < reinit_tries_count; i++) {
++			evutil_usleep_(&reinit_timeout_ms);
++			n = event_reinit_notifyfds(base);
++			if (n == 0) {
++                event_msgx("%s: event_reinit_notifyfds successful after %d attempts", __func__, i + 1);
++				break;
++			}
++		}
++		if (n != 0) {
++			event_sock_err(1, fd, "%s: event_reinit_notifyfds", __func__);
++		}
++	}
++
+ 	EVBASE_ACQUIRE_LOCK(base, th_base_lock);
+ 	base->is_notify_pending = 0;
+ 	EVBASE_RELEASE_LOCK(base, th_base_lock);
+Index: signal.c
+IDEA additional info:
+Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
+<+>UTF-8
+===================================================================
+--- signal.c	(revision 4c908dde58ef780eeefcc9df4db3063ca62ea862)
++++ signal.c	(date 1601300083390)
+@@ -148,13 +148,25 @@
+ #else
+ 		n = read(fd, signals, sizeof(signals));
+ #endif
+-		if (n == -1) {
+-			int err = evutil_socket_geterror(fd);
+-			if (! EVUTIL_ERR_RW_RETRIABLE(err))
+-				event_sock_err(1, fd, "%s: recv", __func__);
+-			break;
+-		} else if (n == 0) {
+-			/* XXX warn? */
++		if (n <= 0) {
++			if (n == 0 || !EVUTIL_ERR_RW_RETRIABLE(evutil_socket_geterror(fd))) {
++				event_warnx("%s: recv from signal fd failed, reinitializing event base", __func__);
++				int reinit_tries_count = 20;
++				struct timeval reinit_timeout_ms = { 0, 100 * 1000 };
++				// The purpose of the combination the loop and the sleep is NordVpn issue
++				// see more in https://github.com/AdguardTeam/CoreLibs/issues/1082
++				for (i = 0; i < reinit_tries_count; i++) {
++					evutil_usleep_(&reinit_timeout_ms);
++					n = event_reinit_notifyfds(base);
++					if (n == 0) {
++                        event_msgx("%s: event_reinit_notifyfds successful after %d attempts", __func__, i + 1);
++						break;
++					}
++				}
++				if (n != 0) {
++					event_sock_err(1, fd, "%s: event_reinit_notifyfds", __func__);
++				}
++			}
+ 			break;
+ 		}
+ 		for (i = 0; i < n; ++i) {
+Index: include/event2/event.h
+IDEA additional info:
+Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
+<+>UTF-8
+===================================================================
+--- include/event2/event.h	(revision 4c908dde58ef780eeefcc9df4db3063ca62ea862)
++++ include/event2/event.h	(date 1601300083387)
+@@ -343,6 +343,13 @@
+ EVENT2_EXPORT_SYMBOL
+ struct event_base *event_base_new(void);
+ 
++/**
++  Reinitialize fds used for signal/wakeup notification in case
++  they were forcibly closed by some inconsiderate third-party.
++*/
++EVENT2_EXPORT_SYMBOL
++int event_reinit_notifyfds(struct event_base *base);
++
+ /**
+   Reinitialize the event base after a fork
+ 
