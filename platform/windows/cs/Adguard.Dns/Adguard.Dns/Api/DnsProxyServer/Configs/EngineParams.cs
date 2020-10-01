@@ -14,7 +14,7 @@ namespace Adguard.Dns.Api.DnsProxyServer.Configs
         /// "key" is the filter's identifier
         /// "value" is the filter's download path
         /// </summary>
-        public Dictionary<int, string> FilterParams { get; set; }
+        public List<FilterParams> FilterParams { get; set; }
 
         #region Equals members
 

@@ -123,3 +123,45 @@ std::wstring ag::utils::to_wstring(std::string_view sv) {
 std::string ag::utils::from_wstring(std::wstring_view wsv) {
     return std::wstring_convert<std::codecvt_utf8<wchar_t>>().to_bytes(wsv.data(), wsv.data() + wsv.size());
 }
+
+int ag::utils::for_each_line(std::string_view str, line_action action, void *arg) {
+    using size_type = std::string_view::size_type;
+    size_type start = 0;
+    while (start != str.size()) {
+        size_type end = str.find_first_of("\r\n", start);
+
+        if (end == str.npos) {
+            str.remove_prefix(start);
+            str = ag::utils::trim(str);
+            action(start, str, arg);
+            return 0;
+        }
+
+        size_type len = end - start;
+        std::string_view line = ag::utils::trim({&str[start], len});
+
+        if (!action(start, line, arg)) {
+            return 0;
+        }
+
+        start += len + 1;
+    }
+    return 0;
+}
+
+std::optional<std::string_view> ag::utils::read_line(std::string_view str, size_t pos) {
+    using size_type = std::string_view::size_type;
+
+    if (pos >= str.size()) {
+        return std::nullopt;
+    }
+
+    size_type start = pos;
+    size_type end = str.find_first_of("\r\n", start);
+
+    if (end == str.npos) {
+        end = str.size();
+    }
+
+    return ag::utils::trim({&str[start], end - start});
+}

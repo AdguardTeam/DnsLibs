@@ -23,7 +23,7 @@ namespace Adguard.Dns
         /// <summary>
         /// The current API version hash with which the ProxyServer was tested
         /// </summary>
-        private const string API_VERSION_HASH = "4ae44862b590ee873fe45dee4591527aa7d677e85cce4ba5c4e73cc3cb2019a9";
+        private const string API_VERSION_HASH = "683ccdb2bc5eb9f7e52014b7fc8ce0bb47869e28ddf6d1d4800b868d532f84cd";
         #endregion
 
         #region API Functions
@@ -260,13 +260,23 @@ namespace Adguard.Dns
             /// <summary>
             /// filter id
             /// </summary>
+            [NativeName("id")]
             [MarshalAs(UnmanagedType.I4)]
-            internal Int32 id;
+            internal Int32 Id;
 
             /// <summary>
-            /// path to file with rules
+            /// Path to the filter list file or string with rules, depending on value of in_memory
             /// </summary>
-            internal IntPtr path;
+            [NativeName("data")]
+            [ManualMarshalPtrToString]
+            internal IntPtr Data;
+
+            /// <summary>
+            /// If true, data is rules, otherwise data is path to file with rules
+            /// </summary>
+            [NativeName("in_memory")]
+            [MarshalAs(UnmanagedType.I1)]
+            internal bool InMemory;
         };
 
         [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Ansi)]

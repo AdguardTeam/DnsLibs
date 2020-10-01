@@ -175,6 +175,8 @@ public class DnsProxyTest {
 //        settings.getFilterParams().put(Integer.MAX_VALUE, "/A/B/Я/З/Ъ");
 //        settings.getFilterParams().put(Integer.MIN_VALUE, "a/b\u0000c/d");
 
+        settings.getFilterParams().add(new FilterParams(42, "0.0.0.0 doubleclick.net", true));
+
         final ListenerSettings tcp = new ListenerSettings();
         tcp.setAddress("::");
         tcp.setPort(12345);

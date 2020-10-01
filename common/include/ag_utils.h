@@ -559,4 +559,31 @@ size_t hash_combine(const Ts&... objs) {
     return seed;
 }
 
+/**
+ * Function to be called from `for_each_line`
+ * @param pos  position in containing data at which the line starts
+ * @param line the line, trimmed of trailing and leading whitespace
+ * @param arg  user argument
+ * @return true line reading loop continues
+ *         false line reading loop stops
+ */
+using line_action = bool (*)(uint32_t pos, std::string_view line, void *arg);
+
+/**
+ * Apply user function to each line in string while user function returns true
+ * @param str    string
+ * @param action user function
+ * @param arg    user argument
+ * @return always zero
+ */
+int for_each_line(std::string_view str, line_action, void *arg);
+
+/**
+ * Read a line at the given offset from a string
+ * @param str string
+ * @param pos offset
+ * @return line, or nullopt in case of error
+ */
+std::optional<std::string_view> read_line(std::string_view str, size_t pos);
+
 } // namespace ag::utils

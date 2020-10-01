@@ -116,15 +116,16 @@
         return;
     }
 
-    __block NSMutableDictionary *filters = [[NSMutableDictionary<NSNumber *,NSString *> alloc] init];
+    __block NSMutableArray<AGDnsFilterParams *> *filters = [NSMutableArray arrayWithCapacity:filterFiles.count];
     [filterFiles enumerateObjectsUsingBlock:^(id object, NSUInteger idx, BOOL *stop) {
-        [filters setObject: filterFiles[idx] forKey: [[NSNumber alloc] initWithUnsignedLong: idx]];
+        [filters addObject: [[AGDnsFilterParams alloc] initWithId:idx data:object inMemory:NO]];
     }];
     AGDnsProxyConfig *cfg = [[AGDnsProxyConfig alloc] initWithUpstreams: nil
         // for DOH testing
         // initWithUpstreams: @[[[AGDnsUpstream alloc] initWithAddress: @"https://dns9.quad9.net/dns-query" bootstrap: @[@"8.8.8.8"] timeout: 10000 serverIp: nil]]
         fallbacks: nil
-        filters: filters blockedResponseTtlSecs: 0
+        filters: filters
+     blockedResponseTtlSecs: 0
         dns64Settings: nil
         listeners: nil
         ipv6Available: true

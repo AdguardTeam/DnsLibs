@@ -66,7 +66,7 @@ static void free_listeners(ag_listener_settings *listeners, size_t n) {
 
 static void free_filters(ag_filter_params *filter_params, size_t n) {
     for (size_t i = 0; i < n; ++i) {
-        std::free((void *) filter_params->path);
+        std::free((void *) filter_params->data);
     }
     std::free(filter_params);
 }
@@ -152,7 +152,8 @@ static void free_dns64(ag_dns64_settings *dns64) {
 
 static ag_filter_params marshal_filter_params(const ag::dnsfilter::filter_params &params) {
     ag_filter_params c_params{};
-    c_params.path = marshal_str(params.path);
+    c_params.data = marshal_str(params.data);
+    c_params.in_memory = params.in_memory;
     c_params.id = params.id;
     return c_params;
 }
@@ -286,9 +287,10 @@ static std::vector<ag::listener_settings> marshal_listeners(const ag_listener_se
 
 static ag::dnsfilter::filter_params marshal_filter_params(const ag_filter_params &c_params) {
     ag::dnsfilter::filter_params params{};
-    if (c_params.path) {
-        params.path.assign(c_params.path);
+    if (c_params.data) {
+        params.data.assign(c_params.data);
     }
+    params.in_memory = c_params.in_memory;
     params.id = c_params.id;
     return params;
 }

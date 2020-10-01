@@ -4,6 +4,7 @@
 #include "filter.h"
 #include "rule_utils.h"
 #include <ag_utils.h>
+#include <unordered_set>
 
 using namespace ag;
 
@@ -19,24 +20,29 @@ public:
     std::pair<bool, err_string> init(const dnsfilter::engine_params &p) {
         size_t mem_limit = p.mem_limit;
         std::string warnings;
+        std::unordered_set<uint32_t> ids;
 
         this->filters.reserve(p.filters.size());
-        for (size_t i = 0; i < p.filters.size(); ++i) {
+        for (const dnsfilter::filter_params &fp : p.filters) {
             filter f = {};
-            auto [res, f_mem] = f.load(p.filters[i], mem_limit);
+            auto [res, f_mem] = f.load(fp, mem_limit);
             if (res == filter::LR_OK) {
                 mem_limit -= f_mem;
                 this->filters.emplace_back(std::move(f));
-                infolog(log, "Filter added successfully: {}", p.filters[i].path);
+                infolog(log, "Filter {} added successfully", fp.id);
             } else if (res == filter::LR_ERROR) {
-                auto err = AG_FMT("Filter was not added because of an error: {}\n", p.filters[i].path);
+                auto err = AG_FMT("Filter {} was not added because of an error", fp.id);
                 errlog(log, "{}", err);
                 filters.clear();
                 return {false, std::move(err)};
             } else if (res == filter::LR_MEM_LIMIT_REACHED) {
-                warnings += AG_FMT("Memory limit has been reached, some rules were not loaded\n", p.filters[i].path);
+                warnings += AG_FMT("Filter {} added partially (reached memory limit)\n", fp.id);
                 break;
             }
+            if (ids.count(fp.id)) {
+                warnings += AG_FMT("Non unique filter id: {}, data: {}\n", fp.id, fp.data);
+            }
+            ids.insert(fp.id);
         }
         this->filters.shrink_to_fit();
         if (!warnings.empty()) {

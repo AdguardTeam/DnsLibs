@@ -1,0 +1,47 @@
+Index: bufferevent_sock.c
+IDEA additional info:
+Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
+<+>UTF-8
+===================================================================
+--- bufferevent_sock.c	(revision 4c908dde58ef780eeefcc9df4db3063ca62ea862)
++++ bufferevent_sock.c	(date 1600459404887)
+@@ -396,7 +396,7 @@
+ 		fd = evutil_socket_(sa->sa_family,
+ 		    SOCK_STREAM|EVUTIL_SOCK_NONBLOCK, 0);
+ 		if (fd < 0)
+-			goto freesock;
++			goto done;
+ 		ownfd = 1;
+ 	}
+ 	if (sa) {
+@@ -431,16 +431,11 @@
+ 			result = 0;
+ 			goto done;
+ 		}
+-	} else if (r == 1) {
++	} else {
+ 		/* The connect succeeded already. How very BSD of it. */
+ 		result = 0;
+ 		bufev_p->connecting = 1;
+ 		bufferevent_trigger_nolock_(bev, EV_WRITE, BEV_OPT_DEFER_CALLBACKS);
+-	} else {
+-		/* The connect failed already.  How very BSD of it. */
+-		result = 0;
+-		bufferevent_run_eventcb_(bev, BEV_EVENT_ERROR, BEV_OPT_DEFER_CALLBACKS);
+-		bufferevent_disable(bev, EV_WRITE|EV_READ);
+ 	}
+ 
+ 	goto done;
+@@ -448,6 +443,12 @@
+ freesock:
+ 	if (ownfd)
+ 		evutil_closesocket(fd);
++
++    /* The connect failed already.  How very BSD of it. */
++    result = 0;
++    bufferevent_run_eventcb_(bev, BEV_EVENT_ERROR, BEV_OPT_DEFER_CALLBACKS);
++    bufferevent_disable(bev, EV_WRITE|EV_READ);
++
+ done:
+ 	bufferevent_decref_and_unlock_(bev);
+ 	return result;

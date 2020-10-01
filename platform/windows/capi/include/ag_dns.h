@@ -106,8 +106,10 @@ typedef struct {
 typedef struct {
     /** Filter ID */
     int32_t id;
-    /** Path to the filter list file */
-    const char *path;
+    /** Path to the filter list file or string with rules, depending on value of in_memory */
+    const char *data;
+    /** If true, data is rules, otherwise data is path to file with rules */
+    bool in_memory;
 } ag_filter_params;
 
 typedef struct {

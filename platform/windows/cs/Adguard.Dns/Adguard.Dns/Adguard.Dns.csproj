@@ -57,6 +57,7 @@
     <Compile Include="Api\DnsProxyServer\Configs\DnsProxySettings.cs" />
     <Compile Include="Api\DnsProxyServer\Configs\DnsStamp.cs" />
     <Compile Include="Api\DnsProxyServer\Configs\EngineParams.cs" />
+    <Compile Include="Api\DnsProxyServer\Configs\FilterParams.cs" />
     <Compile Include="Api\DnsProxyServer\Configs\UpstreamOptions.cs" />
     <Compile Include="Api\DnsProxyServer\Configs\ListenerSettings.cs" />
     <Compile Include="Api\DnsProxyServer\EventArgs\CertificateVerificationEventArgs.cs" />
@@ -89,11 +90,11 @@
     <None Include="AdguardDns.pdb" CopyToOutputDirectory="Always" />
   </ItemGroup>
   <!-- Post build script -->
-    <Target Name="PostBuild" AfterTargets="PostBuildEvent">
-      <GetAssemblyIdentity AssemblyFiles="$(TargetPath)">
-        <Output TaskParameter="Assemblies" ItemName="DNS" />
-      </GetAssemblyIdentity>
-      <Exec Command="python -u $(ProjectDir)/../BuildEvents\Post\adguardDns.py --solution_dir=$(ProjectDir)/../ --project_dir=$(ProjectDir) --target_dir=$(TargetDir) --configuration_name=$(ConfigurationName) " />
-    </Target>
+  <Target Name="PostBuild" AfterTargets="PostBuildEvent">
+    <GetAssemblyIdentity AssemblyFiles="$(TargetPath)">
+      <Output TaskParameter="Assemblies" ItemName="DNS" />
+    </GetAssemblyIdentity>
+    <Exec Command="python -u $(ProjectDir)/../BuildEvents\Post\adguardDns.py --solution_dir=$(ProjectDir)/../ --project_dir=$(ProjectDir) --target_dir=$(TargetDir) --configuration_name=$(ConfigurationName) " />
+  </Target>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
 </Project>

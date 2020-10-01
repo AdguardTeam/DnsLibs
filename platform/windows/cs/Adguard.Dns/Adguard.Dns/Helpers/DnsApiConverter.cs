@@ -93,9 +93,8 @@ namespace Adguard.Dns.Helpers
             EngineParams engineParams,
             Queue<IntPtr> allocatedPointers)
         {
-            List<KeyValuePair<int, string>> filterParams = engineParams.FilterParams.ToList();
             AGDnsApi.ag_list filterParamsC = MarshalUtils.ListToAgList(
-                filterParams,
+                engineParams.FilterParams,
                 ToNativeObject,
                 allocatedPointers);
             AGDnsApi.ag_filter_engine_params filterEngineParamsC = new AGDnsApi.ag_filter_engine_params
@@ -157,15 +156,12 @@ namespace Adguard.Dns.Helpers
         }
 
         private static AGDnsApi.ag_filter_params ToNativeObject(
-            KeyValuePair<int, string> filterParams,
+            FilterParams filterParams,
             Queue<IntPtr> allocatedPointers)
         {
-            AGDnsApi.ag_filter_params filterParamsC = new AGDnsApi.ag_filter_params
-            {
-                id = filterParams.Key,
-                path = MarshalUtils.StringToPtr(filterParams.Value)
-            };
-
+            AGDnsApi.ag_filter_params filterParamsC = new AGDnsApi.ag_filter_params();
+            MarshalUtils.CopyPropertiesToFields(filterParams, ref filterParamsC);
+            MarshalUtils.AllStringsToPtrs(filterParams, ref filterParamsC, allocatedPointers);
             return filterParamsC;
         }
 
@@ -277,25 +273,10 @@ namespace Adguard.Dns.Helpers
 
         private static EngineParams FromNativeObject(AGDnsApi.ag_filter_engine_params filterEngineParamsC)
         {
-            List<KeyValuePair<int, string>> filterParamsList =
-                MarshalUtils.AgListToList<AGDnsApi.ag_filter_params, KeyValuePair<int, string>>(
+            List<FilterParams> filterParams =
+                MarshalUtils.AgListToList<AGDnsApi.ag_filter_params, FilterParams>(
                 filterEngineParamsC.filters,
                 FromNativeObject);
-
-            Dictionary<int, string> filterParams = new Dictionary<int, string>();
-            foreach (KeyValuePair<int, string> filterParam in filterParamsList)
-            {
-                if (filterParams.ContainsKey(filterParam.Key))
-                {
-                    string newValue = string.Format("{0}, {1}",
-                        filterParams[filterParam.Key],
-                        filterParam.Value);
-                    filterParams[filterParam.Key] = newValue;
-                    continue;
-                }
-
-                filterParams[filterParam.Key] = filterParam.Value;
-            }
 
             EngineParams engineParams = new EngineParams
             {
@@ -305,10 +286,11 @@ namespace Adguard.Dns.Helpers
             return engineParams;
         }
 
-        private static KeyValuePair<int, string> FromNativeObject(AGDnsApi.ag_filter_params filterParamsC)
+        private static FilterParams FromNativeObject(AGDnsApi.ag_filter_params filterParamsC)
         {
-            string path = MarshalUtils.PtrToString(filterParamsC.path);
-            KeyValuePair<int, string> filterParams = new KeyValuePair<int, string>(filterParamsC.id, path);
+            FilterParams filterParams = new FilterParams();
+            MarshalUtils.AllPtrsToStrings(filterParamsC, filterParams);
+            MarshalUtils.CopyFieldsToProperties(filterParamsC, filterParams);
             return filterParams;
         }
 

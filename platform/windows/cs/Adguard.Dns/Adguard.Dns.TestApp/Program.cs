@@ -143,13 +143,16 @@ namespace Adguard.Dns.TestApp
                 DnsCacheSize = 128,
                 EngineParams = new EngineParams
                 {
-                    FilterParams = new Dictionary<int, string>
+                    FilterParams = new List<FilterParams>
                     {
+                        new FilterParams
                         {
-                            0,
-                            Path.Combine(
-                            AppDomain.CurrentDomain.BaseDirectory,
-                            SDNS_FILTER_RELATIVE_PATH)}
+                            Id = 0,
+                            Data = Path.Combine(
+                                AppDomain.CurrentDomain.BaseDirectory,
+                                SDNS_FILTER_RELATIVE_PATH),
+                            InMemory = false
+                        }
                     }
                 },
                 Listeners = listeners,

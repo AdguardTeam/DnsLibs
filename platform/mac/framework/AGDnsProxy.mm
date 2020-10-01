@@ -321,6 +321,21 @@ static NSData *create_response_packet_v6(const struct iphdr6 *ip6_header,
 }
 @end
 
+@implementation AGDnsFilterParams
+- (instancetype) initWithId:(NSInteger)id
+                       data:(NSString *)data
+                   inMemory:(BOOL)inMemory
+{
+    self = [super init];
+    if (self) {
+        _id = id;
+        _data = data;
+        _inMemory = inMemory;
+    }
+    return self;
+}
+@end
+
 @implementation AGDnsProxyConfig
 
 - (instancetype) initWithNative: (const ag::dnsproxy_settings *) settings
@@ -360,7 +375,7 @@ static NSData *create_response_packet_v6(const struct iphdr6 *ip6_header,
 
 - (instancetype) initWithUpstreams: (NSArray<AGDnsUpstream *> *) upstreams
         fallbacks: (NSArray<AGDnsUpstream *> *) fallbacks
-        filters: (NSDictionary<NSNumber *,NSString *> *) filters
+        filters: (NSArray<AGDnsFilterParams *> *) filters
         blockedResponseTtlSecs: (NSInteger) blockedResponseTtlSecs
         dns64Settings: (AGDns64Settings *) dns64Settings
         listeners: (NSArray<AGListenerSettings *> *) listeners
@@ -501,7 +516,7 @@ static std::string getTrustCreationErrorStr(OSStatus status) {
         return err;
     }
 
-    SecTrustSetAnchorCertificates(trust, (CFArrayRef) trustArray );
+    SecTrustSetAnchorCertificates(trust, (__bridge CFArrayRef)trustArray);
     SecTrustSetAnchorCertificatesOnly(trust, YES);
     SecTrustResultType trustResult;
     SecTrustEvaluate(trust, &trustResult);
@@ -592,11 +607,11 @@ static std::vector<ag::upstream_options> convert_upstreams(NSArray<AGDnsUpstream
 
     if (config.filters != nil) {
         settings.filter_params.filters.reserve([config.filters count]);
-        for (NSNumber *key in config.filters) {
-            const char *filterPath = [[config.filters objectForKey: key] UTF8String];
-            dbglog(self->log, "Filter id={} path={}", [key intValue], filterPath);
+        for (AGDnsFilterParams *fp in config.filters) {
+            dbglog(self->log, "Filter id={} {}={}", fp.id, fp.inMemory ? "content" : "path", fp.data.UTF8String);
+
             settings.filter_params.filters.emplace_back(
-                ag::dnsfilter::filter_params{ (int32_t)[key intValue], filterPath });
+                ag::dnsfilter::filter_params{(int32_t) fp.id, fp.data.UTF8String, (bool) fp.inMemory});
         }
         settings.filter_params.mem_limit = FILTER_PARAMS_MEM_LIMIT_BYTES;
     }

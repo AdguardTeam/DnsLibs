@@ -10,6 +10,7 @@
 #include <dns_forwarder.h>
 #include <upstream_utils.h>
 #include <ag_logger.h>
+#include <ag_file.h>
 
 static constexpr auto DNS64_SERVER_ADDR = "2001:4860:4860::6464";
 static constexpr auto IPV4_ONLY_HOST = "ipv4only.arpa.";
@@ -627,6 +628,23 @@ TEST_F(dnsproxy_test, whitelisting) {
 TEST_F(dnsproxy_test, bad_filter_file_does_not_crash) {
     ag::dnsproxy_settings settings = ag::dnsproxy_settings::get_default();
     settings.filter_params = {{ {111, "bad_test_filter.txt"}, }};
+    auto [ret, err] = proxy.init(settings, {});
+    ASSERT_TRUE(ret) << *err;
+}
+
+TEST_F(dnsproxy_test, rules_load_from_memory) {
+    ag::dnsproxy_settings settings = ag::dnsproxy_settings::get_default();
+
+    std::string filter_data;
+    ag::file::handle file_handle = ag::file::open("bad_test_filter.txt", ag::file::RDONLY);
+    ag::file::for_each_line(file_handle, [](uint32_t, std::string_view line, void *arg) -> bool {
+        auto &s = *(std::string *) arg;
+        s += line;
+        s += "\r\n";
+        return true;
+    }, &filter_data);
+
+    settings.filter_params = {{ {42, filter_data, true}, }};
     auto [ret, err] = proxy.init(settings, {});
     ASSERT_TRUE(ret) << *err;
 }

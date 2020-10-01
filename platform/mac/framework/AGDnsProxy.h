@@ -161,6 +161,27 @@ typedef void (^logCallback)(const char *msg, int length);
 
 @end
 
+@interface AGDnsFilterParams : NSObject
+/**
+ * Filter identifier
+ */
+@property(nonatomic, readonly) NSInteger id;
+/**
+ * Filter data
+ * Either path to file with rules, or rules as a string
+ */
+@property(nonatomic, readonly) NSString *data;
+/**
+ * If YES, data is rules, otherwise data is path to file with rules
+ */
+@property(nonatomic, readonly) BOOL inMemory;
+
+- (instancetype) initWithId:(NSInteger)id
+                       data:(NSString *)data
+                   inMemory:(BOOL)inMemory;
+
+@end
+
 @interface AGDnsProxyConfig : NSObject
 /**
  * Upstreams settings
@@ -171,9 +192,9 @@ typedef void (^logCallback)(const char *msg, int length);
  */
 @property(nonatomic, readonly) NSArray<AGDnsUpstream *> *fallbacks;
 /**
- * Filter files with identifiers
+ * Filters
  */
-@property(nonatomic, readonly) NSDictionary<NSNumber *,NSString *> *filters;
+@property(nonatomic, readonly) NSArray<AGDnsFilterParams *> *filters;
 /**
  * TTL of the record for the blocked domains (in seconds)
  */
@@ -213,7 +234,7 @@ typedef void (^logCallback)(const char *msg, int length);
 
 - (instancetype) initWithUpstreams: (NSArray<AGDnsUpstream *> *) upstreams
         fallbacks: (NSArray<AGDnsUpstream *> *) fallbacks
-        filters: (NSDictionary<NSNumber *,NSString *> *) filters
+        filters: (NSArray<AGDnsFilterParams *> *) filters
         blockedResponseTtlSecs: (NSInteger) blockedResponseTtlSecs
         dns64Settings: (AGDns64Settings *) dns64Settings
         listeners: (NSArray<AGListenerSettings *> *) listeners

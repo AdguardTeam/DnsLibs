@@ -203,62 +203,61 @@ TEST_F(dnsfilter_test, wrong_rule_parsing) {
     }
 }
 
+struct basic_test_data {
+    std::vector<std::string> rules;
+    std::string domain;
+    bool expect_blocked;
+};
+
+const std::vector<basic_test_data> BASIC_TEST_DATA = {
+        { { "||*example-1*" }, "sub.baexample-1ab", true, },
+        { { "||*.example0.*" }, "sub.example0.com", true, },
+        { { "example1.org" }, "example1.org", true, },
+        { { "example2.org", "@@example2.org" }, "example2.org", false, },
+        { { "example3.org", "@@example3.org", "example3.org$important" }, "example3.org", true, },
+        { { "example4.org", "@@example4.org", "example4.org$important", "@@example4.org$important" }, "example4.org", false, },
+        { { "example5.org^" }, "example5.org", true, },
+        { { "||example6.org|" }, "example6.org", true, },
+        { { "*mple7.org" }, "example7.org", true, },
+        { { "ExAmPlE8.org" }, "example8.org", true, },
+        { { "example9.org" }, "EXAMPLE9.org", true, },
+        { { ".example10.org" }, "sub.example10.org", true },
+        { { "http://example11.org" }, "example11.org", true, },
+        { { "http://example111.org" }, "example111.org1", true, },
+        { { "http://example1111.org" }, "sub.example1111.org1", true, },
+        { { "://example12.org" }, "example12.org", true, },
+        { { "//example13.org" }, "sub.example13.org", true, },
+        { { "example15.org/" }, "example15.org", true, },
+        { { "example16.org/" }, "eexample16.org", true, },
+        { { "example17.org:8080" }, "example17.org", true, },
+        { { "example18.org|" }, "eexample18.org", true, },
+        { { "example19.org^" }, "eexample19.org", true, },
+        { { "|example20.org" }, "example20.orgg", true, },
+        { { "example21." }, "eexample21.org", true, },
+        { { "example22.org|" }, "sub.example22.org", true, },
+        { { "example23.org^" }, "sub.example23.org", true, },
+        { { "||example24.org" }, "sub.example24.org", true, },
+        { { "||example25.org|" }, "sub.example25.org", true, },
+        { { "|example27.org|" }, "example27.org", true, },
+        { { "|example29.org^" }, "example29.org", true, },
+        { { "|https://example31.org/" }, "example31.org", true, },
+        { { "|https://127.0.0.1/" }, "127.0.0.1", true, },
+        { { "|https://0::1/" }, "::1", true, },
+        { { "|https://1:*:1/" }, "1::1", true, },
+        { { "*.0.0.2" }, "10.0.0.2", true, },
+        { { "|192.168.*.1^" }, "192.168.35.1", true, },
+        { { "172.16.*.1:80" }, "172.16.35.1", true, },
+        { { "|172.165.*.1:80^" }, "172.165.35.1", true, },
+        { { "example55.org:8080" }, "eexample55.org", true, },
+        { { "example56.org/^" }, "eexample56.org", true, },
+        { { "example56.org^/" }, "eexample56.org", true, },
+        { { "0.1" }, "0.1", true, },
+        { { "confusing." }, "veryconfusing.indeed", true, },
+        { { "reconfusing." }, "even.moreconfusing.indeed", true, },
+};
+
 TEST_F(dnsfilter_test, basic_rules_match) {
-    struct test_data {
-        std::vector<std::string> rules;
-        std::string domain;
-        bool expect_blocked;
-    };
-
-    const std::vector<test_data> TEST_DATA =
-        {
-            { { "||*example-1*" }, "sub.baexample-1ab", true, },
-            { { "||*.example0.*" }, "sub.example0.com", true, },
-            { { "example1.org" }, "example1.org", true, },
-            { { "example2.org", "@@example2.org" }, "example2.org", false, },
-            { { "example3.org", "@@example3.org", "example3.org$important" }, "example3.org", true, },
-            { { "example4.org", "@@example4.org", "example4.org$important", "@@example4.org$important" }, "example4.org", false, },
-            { { "example5.org^" }, "example5.org", true, },
-            { { "||example6.org|" }, "example6.org", true, },
-            { { "*mple7.org" }, "example7.org", true, },
-            { { "ExAmPlE8.org" }, "example8.org", true, },
-            { { "example9.org" }, "EXAMPLE9.org", true, },
-            { { ".example10.org" }, "sub.example10.org", true },
-            { { "http://example11.org" }, "example11.org", true, },
-            { { "http://example111.org" }, "example111.org1", true, },
-            { { "http://example1111.org" }, "sub.example1111.org1", true, },
-            { { "://example12.org" }, "example12.org", true, },
-            { { "//example13.org" }, "sub.example13.org", true, },
-            { { "example15.org/" }, "example15.org", true, },
-            { { "example16.org/" }, "eexample16.org", true, },
-            { { "example17.org:8080" }, "example17.org", true, },
-            { { "example18.org|" }, "eexample18.org", true, },
-            { { "example19.org^" }, "eexample19.org", true, },
-            { { "|example20.org" }, "example20.orgg", true, },
-            { { "example21." }, "eexample21.org", true, },
-            { { "example22.org|" }, "sub.example22.org", true, },
-            { { "example23.org^" }, "sub.example23.org", true, },
-            { { "||example24.org" }, "sub.example24.org", true, },
-            { { "||example25.org|" }, "sub.example25.org", true, },
-            { { "|example27.org|" }, "example27.org", true, },
-            { { "|example29.org^" }, "example29.org", true, },
-            { { "|https://example31.org/" }, "example31.org", true, },
-            { { "|https://127.0.0.1/" }, "127.0.0.1", true, },
-            { { "|https://0::1/" }, "::1", true, },
-            { { "|https://1:*:1/" }, "1::1", true, },
-            { { "*.0.0.2" }, "10.0.0.2", true, },
-            { { "|192.168.*.1^" }, "192.168.35.1", true, },
-            { { "172.16.*.1:80" }, "172.16.35.1", true, },
-            { { "|172.165.*.1:80^" }, "172.165.35.1", true, },
-            { { "example55.org:8080" }, "eexample55.org", true, },
-            { { "example56.org/^" }, "eexample56.org", true, },
-            { { "example56.org^/" }, "eexample56.org", true, },
-            { { "0.1" }, "0.1", true, },
-            { { "confusing." }, "veryconfusing.indeed", true, },
-            { { "reconfusing." }, "even.moreconfusing.indeed", true, },
-        };
-
-    for (const test_data &entry : TEST_DATA) {
+    for (const auto &entry : BASIC_TEST_DATA) {
         for (const std::string &rule : entry.rules) {
             ASSERT_NO_FATAL_FAILURE(add_rule_in_filter(file_by_filter_name(TEST_FILTER_NAME), rule));
         }
@@ -268,7 +267,39 @@ TEST_F(dnsfilter_test, basic_rules_match) {
     auto [handle, err_or_warn] = filter.create(params);
     ASSERT_TRUE(handle) << *err_or_warn;
 
-    for (const test_data &entry : TEST_DATA) {
+    for (const auto &entry : BASIC_TEST_DATA) {
+        SPDLOG_INFO("testing {}", entry.domain);
+        std::vector<ag::dnsfilter::rule> rules = filter.match(handle, entry.domain);
+        ASSERT_GT(rules.size(), 0);
+        for (const ag::dnsfilter::rule &r : rules) {
+            ASSERT_EQ(r.filter_id, 10);
+        }
+        std::vector<const ag::dnsfilter::rule *> effective_rules = ag::dnsfilter::get_effective_rules(rules);
+        ASSERT_EQ(effective_rules.size(), 1);
+        if (entry.expect_blocked) {
+            ASSERT_FALSE(effective_rules[0]->props.test(ag::dnsfilter::RP_EXCEPTION));
+        } else {
+            ASSERT_TRUE(effective_rules[0]->props.test(ag::dnsfilter::RP_EXCEPTION));
+        }
+    }
+
+    filter.destroy(handle);
+}
+
+TEST_F(dnsfilter_test, basic_rules_match_in_memory) {
+    std::string filter_data;
+    for (const auto &entry : BASIC_TEST_DATA) {
+        for (const auto &rule : entry.rules) {
+            filter_data += rule;
+            filter_data += "\r\n";
+        }
+    }
+
+    ag::dnsfilter::engine_params params = { { { 10, filter_data, true } } };
+    auto [handle, err_or_warn] = filter.create(params);
+    ASSERT_TRUE(handle) << *err_or_warn;
+
+    for (const auto &entry : BASIC_TEST_DATA) {
         SPDLOG_INFO("testing {}", entry.domain);
         std::vector<ag::dnsfilter::rule> rules = filter.match(handle, entry.domain);
         ASSERT_GT(rules.size(), 0);

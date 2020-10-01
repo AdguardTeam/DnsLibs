@@ -103,7 +103,7 @@ private:
     /**
      * Marshal filter parameters from C++ to Java.
      */
-    local_ref<jobject> marshal_filter_params(JNIEnv *env, const dnsfilter::engine_params &params);
+    local_ref<jobject> marshal_filter_params(JNIEnv *env, const dnsfilter::filter_params &params);
 
     /**
      * Marshal DNS proxy settings from Java to C++.

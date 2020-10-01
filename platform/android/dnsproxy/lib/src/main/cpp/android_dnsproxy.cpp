@@ -331,39 +331,43 @@ ag::local_ref<jobject> ag::android_dnsproxy::marshal_listener(JNIEnv *env, const
 ag::dnsfilter::engine_params ag::android_dnsproxy::marshal_filter_params(JNIEnv *env,
                                                                          jobject java_filter_params) {
 
-    auto clazz = env->FindClass("android/util/SparseArray");
+    auto clazz = env->FindClass(FQN_FILTER_PARAMS);
     assert(env->IsInstanceOf(java_filter_params, clazz));
 
-    auto size_method = env->GetMethodID(clazz, "size", "()I");
-    auto key_at_method = env->GetMethodID(clazz, "keyAt", "(I)I");
-    auto val_at_method = env->GetMethodID(clazz, "valueAt", "(I)Ljava/lang/Object;");
+    auto id_field = env->GetFieldID(clazz, "id", "I");
+    auto data_field = env->GetFieldID(clazz, "data", "Ljava/lang/String;");
+    auto in_memory_field = env->GetFieldID(clazz, "inMemory", "Z");
 
-    ag::dnsfilter::engine_params params;
+    ag::dnsfilter::engine_params params{};
 
-    jint size = env->CallIntMethod(java_filter_params, size_method);
-    for (jint i = 0; i < size; ++i) {
-        jint key = env->CallIntMethod(java_filter_params, key_at_method, i);
-        local_ref val(env, env->CallObjectMethod(java_filter_params, val_at_method, i));
-        m_utils.visit_string(env, val.get(), [&](const char *str, jsize len) {
-            params.filters.push_back({.id = (int32_t) key, .path = std::string(str, len)});
-        });
-    }
+    m_utils.iterate(env, java_filter_params, [&](local_ref<jobject> jfp) {
+        ag::dnsfilter::filter_params fp{};
+        fp.id = env->GetIntField(jfp.get(), id_field);
+        if (jstring jdata = (jstring) env->GetObjectField(jfp.get(), data_field);
+                !env->IsSameObject(nullptr, jdata)) {
+            fp.data = m_utils.marshal_string(env, jdata);
+        }
+        fp.in_memory = env->GetBooleanField(jfp.get(), in_memory_field);
+        params.filters.emplace_back(std::move(fp));
+    });
 
     return params;
 }
 
 ag::local_ref<jobject> ag::android_dnsproxy::marshal_filter_params(JNIEnv *env,
-                                                                   const ag::dnsfilter::engine_params &params) {
+                                                                   const dnsfilter::filter_params &params) {
 
-    auto clazz = env->FindClass("android/util/SparseArray");
+    auto clazz = env->FindClass(FQN_FILTER_PARAMS);
     auto ctor = env->GetMethodID(clazz, "<init>", "()V");
-    auto put_method = env->GetMethodID(clazz, "put", "(ILjava/lang/Object;)V");
+    auto id_field = env->GetFieldID(clazz, "id", "I");
+    auto data_field = env->GetFieldID(clazz, "data", "Ljava/lang/String;");
+    auto in_memory_field = env->GetFieldID(clazz, "inMemory", "Z");
 
     auto java_params = env->NewObject(clazz, ctor);
 
-    for (auto &param : params.filters) {
-        env->CallVoidMethod(java_params, put_method, (jint) param.id, m_utils.marshal_string(env, param.path).get());
-    }
+    env->SetIntField(java_params, id_field, params.id);
+    env->SetObjectField(java_params, data_field, m_utils.marshal_string(env, params.data).get());
+    env->SetBooleanField(java_params, in_memory_field, params.in_memory);
 
     return local_ref(env, java_params);
 }
@@ -379,7 +383,7 @@ ag::dnsproxy_settings ag::android_dnsproxy::marshal_settings(JNIEnv *env,
     auto upstreams_field = env->GetFieldID(clazz, "upstreams", "Ljava/util/List;");
     auto fallbacks_field = env->GetFieldID(clazz, "fallbacks", "Ljava/util/List;");
     auto listeners_field = env->GetFieldID(clazz, "listeners", "Ljava/util/List;");
-    auto filter_params_field = env->GetFieldID(clazz, "filterParams", "Landroid/util/SparseArray;");
+    auto filter_params_field = env->GetFieldID(clazz, "filterParams", "Ljava/util/List;");
     auto ipv6_avail_field = env->GetFieldID(clazz, "ipv6Available", "Z");
     auto block_ipv6_field = env->GetFieldID(clazz, "blockIpv6", "Z");
     auto blocking_mode_field = env->GetFieldID(clazz, "blockingMode", "L" FQN_BLOCKING_MODE ";");
@@ -450,7 +454,7 @@ ag::local_ref<jobject> ag::android_dnsproxy::marshal_settings(JNIEnv *env, const
     auto upstreams_field = env->GetFieldID(clazz, "upstreams", "Ljava/util/List;");
     auto fallbacks_field = env->GetFieldID(clazz, "fallbacks", "Ljava/util/List;");
     auto listeners_field = env->GetFieldID(clazz, "listeners", "Ljava/util/List;");
-    auto filter_params_field = env->GetFieldID(clazz, "filterParams", "Landroid/util/SparseArray;");
+    auto filter_params_field = env->GetFieldID(clazz, "filterParams", "Ljava/util/List;");
     auto ipv6_avail_field = env->GetFieldID(clazz, "ipv6Available", "Z");
     auto block_ipv6_field = env->GetFieldID(clazz, "blockIpv6", "Z");
     auto blocking_mode_field = env->GetFieldID(clazz, "blockingMode", "L" FQN_BLOCKING_MODE ";");
@@ -484,7 +488,11 @@ ag::local_ref<jobject> ag::android_dnsproxy::marshal_settings(JNIEnv *env, const
         }
     }
 
-    env->SetObjectField(java_settings, filter_params_field, marshal_filter_params(env, settings.filter_params).get());
+    if (local_ref filter_params{env, env->GetObjectField(java_settings, filter_params_field)}) {
+        for (auto &filter_param : settings.filter_params.filters) {
+            m_utils.collection_add(env, filter_params.get(), marshal_filter_params(env, filter_param).get());
+        }
+    }
     env->SetBooleanField(java_settings, ipv6_avail_field, (jboolean) settings.ipv6_available);
     env->SetBooleanField(java_settings, block_ipv6_field, (jboolean) settings.block_ipv6);
     env->SetObjectField(java_settings, blocking_mode_field, m_blocking_mode_values.at((size_t) settings.blocking_mode).get());
@@ -492,7 +500,7 @@ ag::local_ref<jobject> ag::android_dnsproxy::marshal_settings(JNIEnv *env, const
     env->SetObjectField(java_settings, custom_blocking_ip4_field, m_utils.marshal_string(env, settings.custom_blocking_ipv4).get());
     env->SetObjectField(java_settings, custom_blocking_ip6_field, m_utils.marshal_string(env, settings.custom_blocking_ipv6).get());
 
-    env->SetLongField(java_settings, cache_size_field, settings.dns_cache_size);
+    env->SetLongField(java_settings, cache_size_field, (jlong) settings.dns_cache_size);
 
     return local_ref(env, java_settings);
 }

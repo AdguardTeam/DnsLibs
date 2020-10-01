@@ -361,19 +361,31 @@ next_line:
 #undef CHECK_MEM
 
 std::pair<filter::load_result, size_t> filter::load(const ag::dnsfilter::filter_params &p, size_t mem_limit) {
-    size_t last_slash = p.path.rfind('/');
-    std::string logger_name = AG_FMT("{}::{}"
-        , p.id, (last_slash != p.path.npos) ? &p.path[last_slash + 1] : p.path.c_str());
-    this->pimpl->log = ag::create_logger(logger_name);
+    ag::file::handle fd = ag::file::INVALID_HANDLE;
+    std::string logger_name = AG_FMT("{}::", p.id);
 
-    ag::file::handle fd = ag::file::open(p.path.data(), ag::file::RDONLY);
-    if (!ag::file::is_valid(fd)) {
-        errlog(pimpl->log, "Failed to read file: {} ({})", p.path, ag::sys::error_string(ag::sys::error_code()));
-        return {LR_ERROR, 0};
+    if (!p.in_memory) {
+        size_t last_slash = p.data.rfind('/');
+        logger_name += (last_slash != p.data.npos) ? &p.data[last_slash + 1] : p.data.c_str();
+
+        fd = ag::file::open(p.data.data(), ag::file::RDONLY);
+
+        if (!ag::file::is_valid(fd)) {
+            errlog(pimpl->log, "Failed to read file: {} ({})", p.data, ag::sys::error_string(ag::sys::error_code()));
+            return {LR_ERROR, 0};
+        }
+    } else {
+        logger_name += "::content";
     }
 
+    this->pimpl->log = ag::create_logger(logger_name);
+
     rules_stat stat = {};
-    ag::file::for_each_line(fd, &count_rules, &stat);
+    if (ag::file::is_valid(fd)) {
+        ag::file::for_each_line(fd, &count_rules, &stat);
+    } else {
+        ag::utils::for_each_line(p.data, &count_rules, &stat);
+    }
 
     impl *f = this->pimpl.get();
     kh_resize(hash_to_unique_index, f->unique_domains_table, stat.simple_domain_rules);
@@ -385,12 +397,19 @@ std::pair<filter::load_result, size_t> filter::load(const ag::dnsfilter::filter_
     load_line_arg.filter = f;
     load_line_arg.mem_limit = mem_limit;
 
-    ag::file::set_position(fd, 0);
-    int rc = ag::file::for_each_line(fd, &filter::impl::load_line, &load_line_arg);
+    int rc;
+
+    if (ag::file::is_valid(fd)) {
+        ag::file::set_position(fd, 0);
+        rc = ag::file::for_each_line(fd, &filter::impl::load_line, &load_line_arg);
+        ag::file::close(fd);
+    } else {
+        rc = ag::utils::for_each_line(p.data, &filter::impl::load_line, &load_line_arg);
+    }
+
     if (rc == 0) {
         this->params = p;
     }
-    ag::file::close(fd);
 
     kh_resize(hash_to_unique_index, f->unique_domains_table, kh_size(f->unique_domains_table));
     kh_resize(hash_to_indexes, f->domains_table, kh_size(f->domains_table));
@@ -493,24 +512,39 @@ static inline bool is_unique_rule(const std::vector<ag::dnsfilter::rule> &rules,
 }
 
 void filter::impl::match_by_file_position(match_arg &match, size_t idx) {
-    if (!ag::file::is_valid(match.file)) {
-        match.file = ag::file::open(match.f.params.path, ag::file::RDONLY);
+    std::optional<std::string> file_line;
+    std::string_view line;
+
+    if (!match.f.params.in_memory) {
         if (!ag::file::is_valid(match.file)) {
-            SPDLOG_ERROR("failed to open file to match a domain: {}", match.f.params.path);
+            match.file = ag::file::open(match.f.params.data, ag::file::RDONLY);
+            if (!ag::file::is_valid(match.file)) {
+                SPDLOG_ERROR("failed to open file to match a domain: {}", match.f.params.data);
+                return;
+            }
+        }
+
+        file_line = ag::file::read_line(match.file, idx);
+        if (!file_line.has_value()) {
             return;
         }
+
+        line = file_line.value();
+    } else {
+        std::optional<std::string_view> opt_line = ag::utils::read_line(match.f.params.data, idx);
+
+        if (!opt_line.has_value()) {
+            return;
+        }
+
+        line = opt_line.value();
     }
 
-    std::optional<std::string> line = ag::file::read_line(match.file, idx);
-    if (!line.has_value()) {
+    if (!is_unique_rule(match.ctx.matched_rules, line)) {
         return;
     }
 
-    if (!is_unique_rule(match.ctx.matched_rules, line.value())) {
-        return;
-    }
-
-    match_against_line(match, line.value());
+    match_against_line(match, line);
 }
 
 void filter::impl::search_by_domains(match_arg &match) const {

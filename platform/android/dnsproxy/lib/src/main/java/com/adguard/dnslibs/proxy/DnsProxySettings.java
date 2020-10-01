@@ -1,7 +1,5 @@
 package com.adguard.dnslibs.proxy;
 
-import android.util.SparseArray;
-
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -47,7 +45,7 @@ public class DnsProxySettings {
     private List<UpstreamSettings> fallbacks = new ArrayList<>();
     private Dns64Settings dns64;
     private long blockedResponseTtlSecs;
-    private SparseArray<String> filterParams = new SparseArray<>();
+    private List<FilterParams> filterParams = new ArrayList<>();
     private List<ListenerSettings> listeners = new ArrayList<>();
     private boolean ipv6Available;
     private boolean blockIpv6;
@@ -173,29 +171,27 @@ public class DnsProxySettings {
     }
 
     /**
-     * @return Filter engine parameters. Filter files with identifiers.
+     * @return Filter engine parameters.
      */
-    public SparseArray<String> getFilterParams() {
+    public List<FilterParams> getFilterParams() {
         return filterParams;
     }
 
     /**
-     * @param filterParams Filter engine parameters. Filter files with identifiers.
+     * @param filterParams Filter engine parameters.
      */
-    public void setFilterParams(SparseArray<String> filterParams) {
-        this.filterParams = new SparseArray<>(filterParams.size());
-        for (int i = 0; i < filterParams.size(); ++i) {
-            getFilterParams().put(filterParams.keyAt(i), filterParams.valueAt(i));
-        }
+    public void setFilterParams(List<FilterParams> filterParams) {
+        this.filterParams = new ArrayList<>(filterParams);
     }
 
     /**
-     * @param filterParams Filter engine parameters. Filter files with identifiers.
+     * @param filterParams Filter id -> filter data.
+     * @param inMemory     If true, data is rules, otherwise data is path to file with rules.
      */
-    public void setFilterParams(Map<Integer, String> filterParams) {
-        this.filterParams = new SparseArray<>(filterParams.size());
+    public void setFilterParams(Map<Integer, String> filterParams, boolean inMemory) {
+        this.filterParams = new ArrayList<>(filterParams.size());
         for (final Map.Entry<Integer, String> e : filterParams.entrySet()) {
-            getFilterParams().put(e.getKey(), e.getValue());
+            getFilterParams().add(new FilterParams(e.getKey(), e.getValue(), inMemory));
         }
     }
 
@@ -252,7 +248,7 @@ public class DnsProxySettings {
                 Objects.equals(upstreams, that.upstreams) &&
                 Objects.equals(fallbacks, that.fallbacks) &&
                 Objects.equals(dns64, that.dns64) &&
-                longSparseArraysEqual(filterParams, that.filterParams) &&
+                Objects.equals(filterParams, that.filterParams) &&
                 Objects.equals(listeners, that.listeners) &&
                 blockingMode == that.blockingMode &&
                 Objects.equals(customBlockingIpv4, that.customBlockingIpv4) &&
@@ -264,31 +260,6 @@ public class DnsProxySettings {
     public int hashCode() {
         return Objects.hash(upstreams, fallbacks, dns64, blockedResponseTtlSecs, filterParams, listeners,
                 ipv6Available, blockIpv6, blockingMode, customBlockingIpv4, customBlockingIpv6, dnsCacheSize);
-    }
-
-    // For testing settings marshalling
-    // LongSparseArray doesn't override equals() >:\
-    private static boolean longSparseArraysEqual(SparseArray<String> a, SparseArray<String> b) {
-        if (a == null || b == null) {
-            return a == b;
-        }
-
-        final int aSize = a.size();
-        final int bSize = b.size();
-        if (aSize != bSize) {
-            return false;
-        }
-
-        for (int i = 0; i < aSize; ++i) {
-            if (!Objects.equals(a.keyAt(i), b.keyAt(i))) {
-                return false;
-            }
-            if (!Objects.equals(a.valueAt(i), b.valueAt(i))) {
-                return false;
-            }
-        }
-
-        return true;
     }
 
     /**

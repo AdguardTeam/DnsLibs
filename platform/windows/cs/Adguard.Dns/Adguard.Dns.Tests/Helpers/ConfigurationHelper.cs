@@ -49,9 +49,14 @@ namespace Adguard.Dns.Tests.Helpers
                 DnsCacheSize = 500,
                 EngineParams = new EngineParams
                 {
-                    FilterParams = new Dictionary<int, string>
+                    FilterParams = new List<FilterParams>
                     {
-                        {0, "blalala"}
+                        new FilterParams
+                        {
+                            Id = 0,
+                            Data = "blablabla",
+                            InMemory = true
+                        }
                     }
                 },
                 Listeners = new List<ListenerSettings>
