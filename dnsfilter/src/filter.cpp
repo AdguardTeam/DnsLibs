@@ -367,18 +367,20 @@ std::pair<filter::load_result, size_t> filter::load(const ag::dnsfilter::filter_
     if (!p.in_memory) {
         size_t last_slash = p.data.rfind('/');
         logger_name += (last_slash != p.data.npos) ? &p.data[last_slash + 1] : p.data.c_str();
-
-        fd = ag::file::open(p.data.data(), ag::file::RDONLY);
-
-        if (!ag::file::is_valid(fd)) {
-            errlog(pimpl->log, "Failed to read file: {} ({})", p.data, ag::sys::error_string(ag::sys::error_code()));
-            return {LR_ERROR, 0};
-        }
     } else {
-        logger_name += "::content";
+        logger_name += "::in_memory";
     }
 
     this->pimpl->log = ag::create_logger(logger_name);
+
+    if (!p.in_memory) {
+        fd = ag::file::open(p.data.data(), ag::file::RDONLY);
+        if (!ag::file::is_valid(fd)) {
+            errlog(this->pimpl->log, "filter::load failed to read file: {} ({})",
+                   p.data, ag::sys::error_string(ag::sys::error_code()));
+            return {LR_ERROR, 0};
+        }
+    }
 
     rules_stat stat = {};
     if (ag::file::is_valid(fd)) {
