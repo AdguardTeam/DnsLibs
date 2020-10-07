@@ -12,8 +12,11 @@ public class DnsProxySettings {
     public enum BlockingMode {
         // MUST keep names and ordinals in sync with ag::blocking_mode
 
-        /** AdBlock-style filters -> NXDOMAIN, hosts-style filters -> unspecified address */
+        /** AdBlock-style filters -> REFUSED, hosts-style filters -> rule-specified or unspecified address */
         DEFAULT(0),
+
+        /** Always return REFUSED */
+        REFUSED(4),
 
         /** Always return NXDOMAIN */
         NXDOMAIN(1),

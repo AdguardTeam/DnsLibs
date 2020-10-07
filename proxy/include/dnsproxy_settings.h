@@ -25,7 +25,8 @@ enum class listener_protocol {
  * Specifies how to respond to filtered requests
  */
 enum class dnsproxy_blocking_mode {
-    DEFAULT, // AdBlock-style filters -> NXDOMAIN, hosts-style filters -> unspecified address
+    DEFAULT, // AdBlock-style filters -> REFUSED, hosts-style filters -> rule-specified or unspecified address
+    REFUSED, // Always return REFUSED
     NXDOMAIN, // Always return NXDOMAIN
     UNSPECIFIED_ADDRESS, // Always return unspecified address
     CUSTOM_ADDRESS, // Always return custom configured IP address (see dnsproxy_settings)

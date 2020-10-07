@@ -62,11 +62,11 @@ ag::err_string ag::test_upstream(const upstream_options &opts,
 bool ag::test_ipv6_connectivity() {
     ag::ldns_pkt_ptr query{
             ldns_pkt_query_new(
-                    ldns_dname_new_frm_str("dns.adguard.com"),
+                    ldns_dname_new_frm_str("google.com"),
                     LDNS_RR_TYPE_A, LDNS_RR_CLASS_IN, LDNS_RD)};
 
-    // dns.adguard.com AAAA
-    for (auto &addr : {"2a00:5a60::ad1:ff", "2a00:5a60::ad2:ff"}) {
+    // Google public DNS
+    for (auto &addr : {"2001:4860:4860::8888", "2001:4860:4860::8844"}) {
         ag::plain_dns upstream({addr, {}, std::chrono::seconds{1}, {}}, {nullptr});
         auto result = ((ag::upstream *) &upstream)->exchange(query.get());
         if (!result.error && LDNS_RCODE_NOERROR == ldns_pkt_get_rcode(result.packet.get())) {

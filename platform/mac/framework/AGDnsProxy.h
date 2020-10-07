@@ -40,7 +40,8 @@ typedef NS_ENUM(NSInteger, AGListenerProtocol) {
  * Blocking modes
  */
 typedef NS_ENUM(NSInteger, AGBlockingMode) {
-    AGBM_DEFAULT, // AdBlock-style filters -> NXDOMAIN, hosts-style filters -> unspecified address
+    AGBM_DEFAULT, // AdBlock-style filters -> REFUSED, hosts-style filters -> rule-specified or unspecified address
+    AGBM_REFUSED, // Always return REFUSED
     AGBM_NXDOMAIN, // Always return NXDOMAIN
     AGBM_UNSPECIFIED_ADDRESS, // Always return unspecified address
     AGBM_CUSTOM_ADDRESS, // Always return custom configured IP address (see AGDnsProxyConfig)

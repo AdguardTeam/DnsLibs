@@ -114,8 +114,7 @@ TEST_F(dnsproxy_test, test_ipv6_blocking) {
     ASSERT_NO_FATAL_FAILURE(perform_request(proxy, pkt, response));
 
     ASSERT_EQ(ldns_pkt_ancount(response.get()), 0);
-    ASSERT_EQ(ldns_pkt_get_rcode(response.get()), LDNS_RCODE_NXDOMAIN);
-    ASSERT_EQ(ldns_pkt_nscount(response.get()), 1);
+    ASSERT_EQ(ldns_pkt_get_rcode(response.get()), LDNS_RCODE_REFUSED);
 }
 
 TEST_F(dnsproxy_test, test_cname_blocking) {
@@ -135,7 +134,7 @@ TEST_F(dnsproxy_test, test_cname_blocking) {
     ag::ldns_pkt_ptr response;
     ASSERT_NO_FATAL_FAILURE(perform_request(proxy, create_request(CNAME_BLOCKING_HOST, LDNS_RR_TYPE_A, LDNS_RD), response));
     ASSERT_EQ(ldns_pkt_ancount(response.get()), 0);
-    ASSERT_EQ(ldns_pkt_get_rcode(response.get()), LDNS_RCODE_NXDOMAIN);
+    ASSERT_EQ(ldns_pkt_get_rcode(response.get()), LDNS_RCODE_REFUSED);
 }
 
 TEST(dnsproxy_test_static, cname_formatting) {
@@ -290,10 +289,17 @@ TEST_F(dnsproxy_test, blocking_mode_default) {
     ag::ldns_pkt_ptr res;
 
     ASSERT_NO_FATAL_FAILURE(perform_request(proxy, create_request("adb-style.com", LDNS_RR_TYPE_A, LDNS_RD), res));
-    ASSERT_EQ(LDNS_RCODE_NXDOMAIN, ldns_pkt_get_rcode(res.get()));
+    ASSERT_EQ(LDNS_RCODE_REFUSED, ldns_pkt_get_rcode(res.get()));
 
     ASSERT_NO_FATAL_FAILURE(perform_request(proxy, create_request("adb-style.com", LDNS_RR_TYPE_AAAA, LDNS_RD), res));
-    ASSERT_EQ(LDNS_RCODE_NXDOMAIN, ldns_pkt_get_rcode(res.get()));
+    ASSERT_EQ(LDNS_RCODE_REFUSED, ldns_pkt_get_rcode(res.get()));
+
+    // Check weird qtype
+    ASSERT_NO_FATAL_FAILURE(perform_request(proxy, create_request("privacy-policy.truste.com", (ldns_rr_type) 65, LDNS_RD), res));
+    ASSERT_EQ(LDNS_RCODE_REFUSED, ldns_pkt_get_rcode(res.get()));
+    ASSERT_NO_FATAL_FAILURE(perform_request(proxy, create_request("hosts-style.truste.com", (ldns_rr_type) 65, LDNS_RD), res));
+    ASSERT_EQ(LDNS_RCODE_NOERROR, ldns_pkt_get_rcode(res.get()));
+    ASSERT_EQ(1, ldns_pkt_nscount(res.get()));
 
     ASSERT_NO_FATAL_FAILURE(perform_request(proxy, create_request("hosts-style-unspec.com", LDNS_RR_TYPE_A, LDNS_RD), res));
     ASSERT_EQ(LDNS_RCODE_NOERROR, ldns_pkt_get_rcode(res.get()));
@@ -346,23 +352,89 @@ TEST_F(dnsproxy_test, blocking_mode_nxdomain) {
 
     ASSERT_NO_FATAL_FAILURE(perform_request(proxy, create_request("adb-style.com", LDNS_RR_TYPE_A, LDNS_RD), res));
     ASSERT_EQ(LDNS_RCODE_NXDOMAIN, ldns_pkt_get_rcode(res.get()));
+    ASSERT_EQ(ldns_pkt_nscount(res.get()), 1);
 
     ASSERT_NO_FATAL_FAILURE(perform_request(proxy, create_request("adb-style.com", LDNS_RR_TYPE_AAAA, LDNS_RD), res));
     ASSERT_EQ(LDNS_RCODE_NXDOMAIN, ldns_pkt_get_rcode(res.get()));
+    ASSERT_EQ(ldns_pkt_nscount(res.get()), 1);
 
     ASSERT_NO_FATAL_FAILURE(perform_request(proxy, create_request("hosts-style-unspec.com", LDNS_RR_TYPE_A, LDNS_RD), res));
     ASSERT_EQ(LDNS_RCODE_NXDOMAIN, ldns_pkt_get_rcode(res.get()));
+    ASSERT_EQ(ldns_pkt_nscount(res.get()), 1);
 
     ASSERT_NO_FATAL_FAILURE(perform_request(proxy, create_request("hosts-style-unspec-6.com", LDNS_RR_TYPE_AAAA, LDNS_RD), res));
     ASSERT_EQ(LDNS_RCODE_NXDOMAIN, ldns_pkt_get_rcode(res.get()));
+    ASSERT_EQ(ldns_pkt_nscount(res.get()), 1);
 
     // Check loopback is equivalent to unspec
     ASSERT_NO_FATAL_FAILURE(perform_request(proxy, create_request("hosts-style-loopback.com", LDNS_RR_TYPE_A, LDNS_RD), res));
     ASSERT_EQ(LDNS_RCODE_NXDOMAIN, ldns_pkt_get_rcode(res.get()));
+    ASSERT_EQ(ldns_pkt_nscount(res.get()), 1);
 
     // Check loopback is equivalent to unspec for IPv6
     ASSERT_NO_FATAL_FAILURE(perform_request(proxy, create_request("hosts-style-loopback-6.com", LDNS_RR_TYPE_AAAA, LDNS_RD), res));
     ASSERT_EQ(LDNS_RCODE_NXDOMAIN, ldns_pkt_get_rcode(res.get()));
+    ASSERT_EQ(ldns_pkt_nscount(res.get()), 1);
+
+    // Check weird qtype
+    ASSERT_NO_FATAL_FAILURE(perform_request(proxy, create_request("privacy-policy.truste.com", (ldns_rr_type) 65, LDNS_RD), res));
+    ASSERT_EQ(LDNS_RCODE_NXDOMAIN, ldns_pkt_get_rcode(res.get()));
+    ASSERT_EQ(ldns_pkt_nscount(res.get()), 1);
+
+    // Check custom IP works
+    ASSERT_NO_FATAL_FAILURE(perform_request(proxy, create_request("hosts-style-custom.com", LDNS_RR_TYPE_A, LDNS_RD), res));
+    ASSERT_EQ(LDNS_RCODE_NOERROR, ldns_pkt_get_rcode(res.get()));
+    ASSERT_EQ(0, std::strcmp("1.2.3.4", ldns_rdf2str(ldns_rr_rdf(ldns_rr_list_rr(ldns_pkt_answer(res.get()), 0), 0))));
+
+    // Check custom IP works for IPv6
+    ASSERT_NO_FATAL_FAILURE(perform_request(proxy, create_request("hosts-style-custom-6.com", LDNS_RR_TYPE_AAAA, LDNS_RD), res));
+    ASSERT_EQ(LDNS_RCODE_NOERROR, ldns_pkt_get_rcode(res.get()));
+    ASSERT_EQ(0, std::strcmp("12::34", ldns_rdf2str(ldns_rr_rdf(ldns_rr_list_rr(ldns_pkt_answer(res.get()), 0), 0))));
+
+    // Check custom (from rule!) IP works
+    ASSERT_NO_FATAL_FAILURE(perform_request(proxy, create_request("hosts-style-4-and-6.com", LDNS_RR_TYPE_A, LDNS_RD), res));
+    ASSERT_EQ(LDNS_RCODE_NOERROR, ldns_pkt_get_rcode(res.get()));
+    ASSERT_EQ(0, std::strcmp("4.5.6.7", ldns_rdf2str(ldns_rr_rdf(ldns_rr_list_rr(ldns_pkt_answer(res.get()), 0), 0))));
+
+    // Check custom (from rule!) IP works for IPv6
+    ASSERT_NO_FATAL_FAILURE(perform_request(proxy, create_request("hosts-style-4-and-6.com", LDNS_RR_TYPE_AAAA, LDNS_RD), res));
+    ASSERT_EQ(LDNS_RCODE_NOERROR, ldns_pkt_get_rcode(res.get()));
+    ASSERT_EQ(0, std::strcmp("45::67", ldns_rdf2str(ldns_rr_rdf(ldns_rr_list_rr(ldns_pkt_answer(res.get()), 0), 0))));
+}
+
+TEST_F(dnsproxy_test, blocking_mode_refused) {
+    ag::dnsproxy_settings settings = ag::dnsproxy_settings::get_default();
+    settings.filter_params = {{{1, "blocking_modes_test_filter.txt"}}};
+    settings.blocking_mode = ag::dnsproxy_blocking_mode::REFUSED;
+
+    auto [ret, err] = proxy.init(settings, {});
+    ASSERT_TRUE(ret) << *err;
+
+    ag::ldns_pkt_ptr res;
+
+    ASSERT_NO_FATAL_FAILURE(perform_request(proxy, create_request("adb-style.com", LDNS_RR_TYPE_A, LDNS_RD), res));
+    ASSERT_EQ(LDNS_RCODE_REFUSED, ldns_pkt_get_rcode(res.get()));
+
+    ASSERT_NO_FATAL_FAILURE(perform_request(proxy, create_request("adb-style.com", LDNS_RR_TYPE_AAAA, LDNS_RD), res));
+    ASSERT_EQ(LDNS_RCODE_REFUSED, ldns_pkt_get_rcode(res.get()));
+
+    ASSERT_NO_FATAL_FAILURE(perform_request(proxy, create_request("hosts-style-unspec.com", LDNS_RR_TYPE_A, LDNS_RD), res));
+    ASSERT_EQ(LDNS_RCODE_REFUSED, ldns_pkt_get_rcode(res.get()));
+
+    ASSERT_NO_FATAL_FAILURE(perform_request(proxy, create_request("hosts-style-unspec-6.com", LDNS_RR_TYPE_AAAA, LDNS_RD), res));
+    ASSERT_EQ(LDNS_RCODE_REFUSED, ldns_pkt_get_rcode(res.get()));
+
+    // Check loopback is equivalent to unspec
+    ASSERT_NO_FATAL_FAILURE(perform_request(proxy, create_request("hosts-style-loopback.com", LDNS_RR_TYPE_A, LDNS_RD), res));
+    ASSERT_EQ(LDNS_RCODE_REFUSED, ldns_pkt_get_rcode(res.get()));
+
+    // Check loopback is equivalent to unspec for IPv6
+    ASSERT_NO_FATAL_FAILURE(perform_request(proxy, create_request("hosts-style-loopback-6.com", LDNS_RR_TYPE_AAAA, LDNS_RD), res));
+    ASSERT_EQ(LDNS_RCODE_REFUSED, ldns_pkt_get_rcode(res.get()));
+
+    // Check weird qtype
+    ASSERT_NO_FATAL_FAILURE(perform_request(proxy, create_request("privacy-policy.truste.com", (ldns_rr_type) 65, LDNS_RD), res));
+    ASSERT_EQ(LDNS_RCODE_REFUSED, ldns_pkt_get_rcode(res.get()));
 
     // Check custom IP works
     ASSERT_NO_FATAL_FAILURE(perform_request(proxy, create_request("hosts-style-custom.com", LDNS_RR_TYPE_A, LDNS_RD), res));
@@ -394,6 +466,11 @@ TEST_F(dnsproxy_test, blocking_mode_unspecified_address) {
     ASSERT_TRUE(ret) << *err;
 
     ag::ldns_pkt_ptr res;
+
+    // Check weird qtype
+    ASSERT_NO_FATAL_FAILURE(perform_request(proxy, create_request("privacy-policy.truste.com", (ldns_rr_type) 65, LDNS_RD), res));
+    ASSERT_EQ(LDNS_RCODE_NOERROR, ldns_pkt_get_rcode(res.get()));
+    ASSERT_EQ(1, ldns_pkt_nscount(res.get()));
 
     ASSERT_NO_FATAL_FAILURE(perform_request(proxy, create_request("adb-style.com", LDNS_RR_TYPE_A, LDNS_RD), res));
     ASSERT_EQ(LDNS_RCODE_NOERROR, ldns_pkt_get_rcode(res.get()));
@@ -453,6 +530,11 @@ TEST_F(dnsproxy_test, blocking_mode_custom_address) {
     ASSERT_TRUE(ret) << *err;
 
     ag::ldns_pkt_ptr res;
+
+    // Check weird qtype
+    ASSERT_NO_FATAL_FAILURE(perform_request(proxy, create_request("privacy-policy.truste.com", (ldns_rr_type) 65, LDNS_RD), res));
+    ASSERT_EQ(LDNS_RCODE_NOERROR, ldns_pkt_get_rcode(res.get()));
+    ASSERT_EQ(1, ldns_pkt_nscount(res.get()));
 
     ASSERT_NO_FATAL_FAILURE(perform_request(proxy, create_request("adb-style.com", LDNS_RR_TYPE_A, LDNS_RD), res));
     ASSERT_EQ(LDNS_RCODE_NOERROR, ldns_pkt_get_rcode(res.get()));

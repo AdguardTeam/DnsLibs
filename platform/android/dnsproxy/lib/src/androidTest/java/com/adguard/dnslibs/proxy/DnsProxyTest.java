@@ -210,7 +210,7 @@ public class DnsProxyTest {
         settings.setFilterParams(settings.getFilterParams());
         settings.getUpstreams().get(0).setBootstrap(Collections.singletonList("1.1.1.1"));
 
-        settings.setBlockingMode(DnsProxySettings.BlockingMode.CUSTOM_ADDRESS);
+        settings.setBlockingMode(DnsProxySettings.BlockingMode.REFUSED);
         settings.setCustomBlockingIpv4("4.3.2.1");
         settings.setCustomBlockingIpv6("43::21");
 

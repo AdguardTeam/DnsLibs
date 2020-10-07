@@ -147,6 +147,12 @@ static ldns_pkt *create_nxdomain_response(const ldns_pkt *request, const dnsprox
     return response;
 }
 
+static ldns_pkt *create_refused_response(const ldns_pkt *request, const dnsproxy_settings *) {
+    ldns_pkt *response = create_response_by_request(request);
+    ldns_pkt_set_rcode(response, LDNS_RCODE_REFUSED);
+    return response;
+}
+
 static ldns_pkt *create_soa_response(const ldns_pkt *request, const dnsproxy_settings *settings, uint32_t retry_secs) {
     ldns_pkt *response = create_response_by_request(request);
     ldns_pkt_set_rcode(response, LDNS_RCODE_NOERROR);
@@ -285,23 +291,59 @@ static bool rules_contain_blocking_ip(const std::vector<const dnsfilter::rule *>
 
 static ldns_pkt *create_blocking_response(const ldns_pkt *request, const dnsproxy_settings *settings,
         const std::vector<const dnsfilter::rule *> &rules) {
+    const dnsfilter::rule *effective_rule = rules.front();
     const ldns_rr *question = ldns_rr_list_rr(ldns_pkt_question(request), 0);
     ldns_rr_type type = ldns_rr_get_type(question);
     ldns_pkt *response;
-    if (type != LDNS_RR_TYPE_A && type != LDNS_RR_TYPE_AAAA) { // Can only respond with NXDOMAIN or NOERROR+SOA
-        response = (settings->blocking_mode == dnsproxy_blocking_mode::NXDOMAIN)
-                   ? create_nxdomain_response(request, settings)
-                   : create_soa_response(request, settings, SOA_RETRY_IPV6_BLOCK);
-    } else if (!rules[0]->ip.has_value()) { // Adblock-style rule
-        response = (settings->blocking_mode == dnsproxy_blocking_mode::UNSPECIFIED_ADDRESS
-                    || settings->blocking_mode == dnsproxy_blocking_mode::CUSTOM_ADDRESS)
-                   ? create_unspec_or_custom_address_response(request, settings)
-                   : create_nxdomain_response(request, settings);
-    } else if (rules_contain_blocking_ip(rules)) { // hosts-style blocking rule
-        response = (settings->blocking_mode == dnsproxy_blocking_mode::NXDOMAIN)
-                   ? create_nxdomain_response(request, settings)
-                   : create_unspec_or_custom_address_response(request, settings);
-    } else { // hosts-style custom IP rule
+    if (type != LDNS_RR_TYPE_A && type != LDNS_RR_TYPE_AAAA) {
+        switch (settings->blocking_mode) {
+        case dnsproxy_blocking_mode::DEFAULT:
+            if (!effective_rule->ip) { // Adblock-style rule
+                response = create_refused_response(request, settings);
+            } else {
+                response = create_soa_response(request, settings, SOA_RETRY_DEFAULT);
+            }
+            break;
+        case dnsproxy_blocking_mode::REFUSED:
+            response = create_refused_response(request, settings);
+            break;
+        case dnsproxy_blocking_mode::NXDOMAIN:
+            response = create_nxdomain_response(request, settings);
+            break;
+        case dnsproxy_blocking_mode::UNSPECIFIED_ADDRESS:
+        case dnsproxy_blocking_mode::CUSTOM_ADDRESS:
+            response = create_soa_response(request, settings, SOA_RETRY_DEFAULT);
+            break;
+        }
+    } else if (!effective_rule->ip) { // Adblock-style rule
+        switch (settings->blocking_mode) {
+        case dnsproxy_blocking_mode::DEFAULT:
+        case dnsproxy_blocking_mode::REFUSED:
+            response = create_refused_response(request, settings);
+            break;
+        case dnsproxy_blocking_mode::NXDOMAIN:
+            response = create_nxdomain_response(request, settings);
+            break;
+        case dnsproxy_blocking_mode::UNSPECIFIED_ADDRESS:
+        case dnsproxy_blocking_mode::CUSTOM_ADDRESS:
+            response = create_unspec_or_custom_address_response(request, settings);
+            break;
+        }
+    } else if (rules_contain_blocking_ip(rules)) {
+        switch (settings->blocking_mode) {
+        case dnsproxy_blocking_mode::REFUSED:
+            response = create_refused_response(request, settings);
+            break;
+        case dnsproxy_blocking_mode::NXDOMAIN:
+            response = create_nxdomain_response(request, settings);
+            break;
+        case dnsproxy_blocking_mode::DEFAULT:
+        case dnsproxy_blocking_mode::UNSPECIFIED_ADDRESS:
+        case dnsproxy_blocking_mode::CUSTOM_ADDRESS:
+            response = create_unspec_or_custom_address_response(request, settings);
+            break;
+        }
+    } else { // hosts-style IP rule
         response = create_response_with_ips(request, settings, rules);
     }
     return response;
@@ -920,7 +962,7 @@ cached_response_expired:
     if (this->settings->block_ipv6 && LDNS_RR_TYPE_AAAA == type) {
         ldns_pkt_rcode rc = LDNS_RCODE_NOERROR;
         auto raw_blocking_response = apply_filter(pure_domain, request, nullptr, event, effective_rules, false, &rc);
-        if (!raw_blocking_response || rc != LDNS_RCODE_NXDOMAIN) {
+        if (!raw_blocking_response || rc == LDNS_RCODE_NOERROR) {
             dbglog_fid(log, request, "AAAA DNS query blocked because IPv6 blocking is enabled");
             ldns_pkt_ptr response(create_soa_response(request, this->settings, SOA_RETRY_IPV6_BLOCK));
             log_packet(log, response.get(), "IPv6 blocking response");

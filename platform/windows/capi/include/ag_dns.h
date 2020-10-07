@@ -73,8 +73,11 @@ typedef enum {
 } ag_listener_protocol;
 
 typedef enum {
-    /** AdBlock-style filters -> NXDOMAIN, hosts-style filters -> unspecified address */
+    /** AdBlock-style filters -> REFUSED, hosts-style filters -> rule-specified or unspecified address */
     AGBM_DEFAULT,
+
+    /** Always return NXDOMAIN */
+    AGBM_REFUSED,
 
     /** Always return NXDOMAIN */
     AGBM_NXDOMAIN,

@@ -108,8 +108,9 @@ ag::connection::write_result ag::dns_framed_connection::write(uint8_view buf) {
         std::scoped_lock l(m_mutex);
 
         if (m_closed) {
-            log_conn(m_log, trace, this, "Already closed");
-            return { -1, std::string(UNEXPECTED_EOF) };
+            std::string msg = AG_FMT("{}: connection already closed", __func__);
+            log_conn(m_log, trace, this, "{}", msg);
+            return { -1, msg };
         }
 
         using evbuffer_ptr = std::unique_ptr<evbuffer, ftor<&evbuffer_free>>;
@@ -242,8 +243,9 @@ ag::connection::read_result ag::dns_framed_connection::read(int request_id, mill
     std::unique_lock l(m_mutex);
 
     if (m_closed) {
-        log_conn(m_log, trace, this, "Already closed");
-        return { {}, std::string(UNEXPECTED_EOF) };
+        std::string msg = AG_FMT("{}: connection already closed", __func__);
+        log_conn(m_log, trace, this, "{}", msg);
+        return { {}, msg };
     }
 
     ++m_pending_reads_count;
