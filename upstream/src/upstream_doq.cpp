@@ -8,7 +8,6 @@ static constexpr uint8_t           DQ_ALPN[]            = {0x07, 'd', 'o', 'q', 
 static constexpr std::string_view  QUIC_PREF            = "quic://";
 static constexpr int               QUIC_PORT            = 784;
 static constexpr int               IDLE_TIMEOUT_SEC     = 30;
-static constexpr uint8_t           IPV4_MAPPED_PREFIX[] = {0,0,0,0, 0,0,0,0, 0,0, 0xff,0xff};
 
 #undef  NEVER
 #define NEVER (UINT64_MAX / 2)
@@ -150,16 +149,15 @@ void dns_over_quic::send_requests() {
                      ldns_buffer_remaining(req.second.request_buffer.get()));
 
         m_stream_send_queue.push_back(stream_id);
-
-        if (int ret = on_write(); ret != NETWORK_ERR_OK) {
-            warnlog(m_log, "An error happened while writing: {} line: {}", ret, __LINE__);
-            m_global.unlock();
-            disconnect(__LINE__);
-            return;
-        }
     }
 
     m_global.unlock();
+
+    if (int ret = on_write(); ret != NETWORK_ERR_OK) {
+        warnlog(m_log, "An error happened while writing: {} line: {}", ret, __LINE__);
+        disconnect(__LINE__);
+        return;
+    }
 
     struct timeval tv{0};
     auto passed_ms = (get_tstamp() - m_last_pkt) / 1000000; // convert from nano to milli
@@ -174,21 +172,28 @@ void dns_over_quic::send_requests() {
     evtimer_add(m_rtt_timer_event, &tv);
 }
 
-int dns_over_quic::create_sock() {
+evutil_socket_t dns_over_quic::create_ipv4_socket() {
+    evutil_socket_t fd = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
+    if (fd == -1) {
+        warnlog(m_log, "Error creating IPv4 socket: {}", evutil_socket_error_to_string(EVUTIL_SOCKET_ERROR()));
+        return -1;
+    }
+    return fd;
+}
+
+
+int dns_over_quic::create_dual_stack_socket() {
     evutil_socket_t fd = -1;
 
     fd = socket(AF_INET6, SOCK_DGRAM, IPPROTO_UDP);
-
-    unsigned int enable = 1;
-    if (setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, (char *)&enable, sizeof(enable)) == -1) {
-        warnlog(m_log, "Setsockopt: {}", evutil_socket_error_to_string(evutil_socket_geterror(fd)));
-        evutil_closesocket(fd);
+    if (fd == -1) {
+        warnlog(m_log, "Error creating IPv6 socket: {}", evutil_socket_error_to_string(EVUTIL_SOCKET_ERROR()));
         return -1;
     }
 
     unsigned int disable = 0;
     if (setsockopt(fd, IPPROTO_IPV6, IPV6_V6ONLY, (char *)&disable, sizeof(disable)) == -1) {
-        warnlog(m_log, "Setsockopt: {}", evutil_socket_error_to_string(evutil_socket_geterror(fd)));
+        warnlog(m_log, "Error making socket dual-stack: {}", evutil_socket_error_to_string(evutil_socket_geterror(fd)));
         evutil_closesocket(fd);
         return -1;
     };
@@ -220,15 +225,6 @@ err_string dns_over_quic::init() {
     m_bootstrapper = std::make_unique<bootstrapper>(bootstrapper_params);
     if (auto check = m_bootstrapper->init(); check.has_value()) {
         return "Bootstrapper init failed";
-    }
-
-    if (int res = getting_server_addresses(); res != 0) {
-        return "Can't create a server addresses container";
-    } else {
-        int i = 0;
-        for (auto &cur : m_server_addresses) {
-            tracelog(m_log, "Server address number {}: {}", ++i, cur.str().c_str());
-        }
     }
 
     m_callbacks = ngtcp2_conn_callbacks{
@@ -279,6 +275,17 @@ err_string dns_over_quic::init() {
 }
 
 dns_over_quic::exchange_result dns_over_quic::exchange(ldns_pkt *request) {
+
+    if (std::scoped_lock l(m_global); m_server_addresses.empty()) {
+        bootstrapper::resolve_result bootstrapper_res = m_bootstrapper->get();
+        if (bootstrapper_res.error.has_value()) {
+            warnlog(m_log, "Bootstrapper hasn't results");
+            return {nullptr, "Failed to resolve address of server"};
+        }
+
+        m_server_addresses.assign(bootstrapper_res.addresses.begin(), bootstrapper_res.addresses.end());
+    }
+
     ldns_buffer *buffer = ldns_buffer_new(REQUEST_BUFFER_INITIAL_CAPACITY);
     ldns_status status = ldns_pkt2buffer_wire(buffer, request);
     if (status != LDNS_STATUS_OK) {
@@ -310,27 +317,28 @@ dns_over_quic::exchange_result dns_over_quic::exchange(ldns_pkt *request) {
     std::unique_lock l(m_global);
     request_t &req = m_requests[request_id];
     auto timeout = req.cond.wait_for(l, m_options.timeout);
-    if (timeout != std::cv_status::timeout) {
-        assert(m_requests.count(request_id));
-        auto *res = req.reply_pkt.release();
-        if (res != nullptr) {
-            tracelog(m_log, "Result: good");
-            m_requests.erase(request_id);
-            return {ldns_pkt_ptr(res), std::nullopt};
-        }
-        tracelog(m_log, "Result: empty");
-    }
+
+    ldns_pkt *res = req.reply_pkt.release();
+    assert(m_requests.count(request_id));
     m_requests.erase(request_id);
 
-    return {nullptr, "Request timeout"};
+    if (timeout == std::cv_status::timeout) {
+        return {nullptr, "Request timeout"};
+    }
+
+    if (res != nullptr) {
+        return {ldns_pkt_ptr(res), std::nullopt};
+    }
+
+    return {nullptr, "Request failed"};
 }
 
-int dns_over_quic::bind_addr(int fd) {
+int dns_over_quic::bind_addr(int fd, int family) {
     std::unique_ptr<addrinfo, decltype(&freeaddrinfo)> safe_res(nullptr, &freeaddrinfo);
     addrinfo *res, *rp;
 
     addrinfo hints{};
-    hints.ai_family = AF_INET6;
+    hints.ai_family = family;
     hints.ai_socktype = SOCK_DGRAM;
     hints.ai_flags = AI_PASSIVE;
 
@@ -479,7 +487,7 @@ int dns_over_quic::send_packet_connected() {
 
     m_send_buf.reset();
 
-    return NETWORK_ERR_OK;
+    return nwrite >= 0 ? NETWORK_ERR_OK : NETWORK_ERR_DROP_CONN;
 }
 
 int dns_over_quic::send_packet_not_connected() {
@@ -494,26 +502,14 @@ int dns_over_quic::send_packet_not_connected() {
             int err = evutil_socket_geterror(m_sock_state.fd);
             tracelog(m_log, "Sending packet to {} error: {}", it->str().c_str(), evutil_socket_error_to_string(err));
 #ifndef _WIN32
-            if (err == EHOSTUNREACH) {
-#else
-            if (err == WSAEHOSTUNREACH) {
-#endif
-                for (auto it_serv = m_server_addresses.begin(); it_serv != m_server_addresses.end(); ++it_serv) {
-                    if (*it == *it_serv) {
-                        // Put current address to back of queue
-                        m_server_addresses.push_back(*it_serv);
-                        m_server_addresses.erase(it_serv);
-                    }
-                }
-                it = m_current_addresses.erase(it);
-            } else
-#ifndef _WIN32
             if (err == EAGAIN || err == EWOULDBLOCK) {
 #else
             if (err == WSAEWOULDBLOCK) {
 #endif
                 return NETWORK_ERR_SEND_BLOCKED;
             }
+            disqualify_server_address(*it);
+            it = m_current_addresses.erase(it);
         } else {
             tracelog(m_log, "Sending packet to {}", it->str().c_str());
             ++it;
@@ -630,9 +626,10 @@ int dns_over_quic::on_read_not_connected() {
     sockaddr_storage su{};
     ngtcp2_pkt_info pi;
 
-    for (;;) {
-        socklen_t namelen = sizeof(su);
+    while (!m_sock_state.connected) {
 
+        su = {};
+        socklen_t namelen = sizeof(su);
         auto nread = recvfrom(m_sock_state.fd, (char *)buf.data(), buf.size(), 0, (sockaddr *)&su, &namelen);
 
         if (nread == -1) {
@@ -642,14 +639,26 @@ int dns_over_quic::on_read_not_connected() {
 #else
             if (err != WSAEWOULDBLOCK) {
 #endif
-                errlog(m_log, "Read socket (not connected) failed: {}", evutil_socket_error_to_string(err));
+                ag::socket_address sa{(sockaddr *)&su};
+                errlog(m_log, "Received error for address {} failed: {}", sa.str(), evutil_socket_error_to_string(err));
+                disqualify_server_address(sa);
+                for (auto it = m_current_addresses.begin(); it != m_current_addresses.end(); it++) {
+                    if (sa == it->socket_family_cast(sa.c_sockaddr()->sa_family)) {
+                        m_current_addresses.erase(it);
+                        break;
+                    }
+                }
+                if (m_current_addresses.empty()) {
+                    dbglog(m_log, "Disconnecting because no addresses left");
+                    return NETWORK_ERR_FATAL;
+                }
             }
             break;
         }
 
+        ag::socket_address sa{(sockaddr *)&su};
         for (auto it = m_current_addresses.begin(); it != m_current_addresses.end(); ) {
-            if (0 != memcmp(&((sockaddr_in6 *)&su)->sin6_addr,
-                            &((sockaddr_in6 *)it->c_sockaddr())->sin6_addr, sizeof(sockaddr))) {
+            if (sa != it->socket_family_cast(sa.c_sockaddr()->sa_family)) {
                 it = m_current_addresses.erase(it);
             } else {
                 if (int res = connect(m_sock_state.fd, it->c_sockaddr(), it->c_socklen()); res != 0) {
@@ -850,9 +859,21 @@ int dns_over_quic::reinit() {
     m_stream_send_queue.clear();
     m_current_addresses.clear();
 
-    evutil_socket_t fd = create_sock();
-    if (fd == -1) {
-        errlog(m_log, "Failed creation socket");
+    int family = AF_INET6;
+    evutil_socket_t fd;
+    if (!m_config.ipv6_available ||
+            (fd = create_dual_stack_socket()) == -1) {
+        family = AF_INET;
+        fd = create_ipv4_socket();
+        if (fd == -1) {
+            errlog(m_log, "Failed to create socket");
+            return -1;
+        }
+    }
+    unsigned int enable = 1;
+    if (setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, (char *)&enable, sizeof(enable)) == -1) {
+        warnlog(m_log, "Failed to make socket reusable: {}", evutil_socket_error_to_string(evutil_socket_geterror(fd)));
+        evutil_closesocket(fd);
         return -1;
     }
     if (evutil_make_socket_nonblocking(fd) != 0) {
@@ -860,25 +881,30 @@ int dns_over_quic::reinit() {
         evutil_closesocket(fd);
         return -1;
     }
-    if (bind_addr(fd) != 0) {
+    if (bind_addr(fd, family) != 0) {
         errlog(m_log, "Failed binding socket");
         evutil_closesocket(fd);
         return -1;
     }
 
-    // Getting one ipv6 address
-    for (auto &cur : m_server_addresses) {
-        if (false == is_ipv4_mapped(cur.c_sockaddr())) {
-            m_current_addresses.emplace_back(cur);
-            break;
+    {
+        std::scoped_lock l(m_global);
+        // Getting one ipv6 address
+        if (family == AF_INET6) {
+            for (auto &cur : m_server_addresses) {
+                if (cur.is_ipv6()) {
+                    m_current_addresses.emplace_back(cur);
+                    break;
+                }
+            }
         }
-    }
 
-    // Getting one ipv4 address
-    for (auto &cur : m_server_addresses) {
-        if (is_ipv4_mapped(cur.c_sockaddr())) {
-            m_current_addresses.emplace_back(cur);
-            break;
+        // Getting one ipv4 address
+        for (auto &cur : m_server_addresses) {
+            if (cur.is_ipv4()) {
+                m_current_addresses.emplace_back(cur.socket_family_cast(family));
+                break;
+            }
         }
     }
 
@@ -1091,36 +1117,16 @@ int dns_over_quic::ssl_verify_callback(X509_STORE_CTX *ctx, void *arg) {
     return 1;
 }
 
-int dns_over_quic::getting_server_addresses() {
-    bootstrapper::resolve_result bootstrapper_res = m_bootstrapper->get();
-    if (bootstrapper_res.error.has_value()) {
-        warnlog(m_log, "Bootstrapper hasn't results");
-        return -1;
-    }
-
-    auto rp = bootstrapper_res.addresses.begin();
-    for ( ; rp != bootstrapper_res.addresses.end(); ++rp) {
-        if (rp->c_sockaddr()->sa_family == AF_INET) {
-            sockaddr_in6 cur{0};
-            // https://tools.ietf.org/html/rfc4291#section-2.5.5.2
-            memcpy((uint8_t *)&cur.sin6_addr, IPV4_MAPPED_PREFIX, 12);
-            memcpy(((uint8_t *)&cur.sin6_addr) + 12, rp->addr().data(), 4);
-            cur.sin6_family = AF_INET6;
-            cur.sin6_port = htons(m_port);
-            m_server_addresses.emplace_back(ag::socket_address((sockaddr *)&cur));
-        } else if (rp->c_sockaddr()->sa_family == AF_INET6) {
-            sockaddr_in6 cur{0};
-            memcpy(&cur, rp->c_sockaddr(), rp->c_socklen());
-            m_server_addresses.emplace_back(ag::socket_address((sockaddr *)&cur));
-        } else {
-            tracelog(m_log, "Unknown family address in bootstrapper");
+void dns_over_quic::disqualify_server_address(const socket_address &server_address) {
+    std::scoped_lock l(m_global);
+    for (auto it_serv = m_server_addresses.begin(); it_serv != m_server_addresses.end(); it_serv++) {
+        if (server_address == it_serv->socket_family_cast(server_address.c_sockaddr()->sa_family)) {
+            // Put current address to back of queue
+            m_server_addresses.push_back(*it_serv);
+            m_server_addresses.erase(it_serv);
+            break;
         }
     }
-    return m_server_addresses.empty();
-}
-
-bool dns_over_quic::is_ipv4_mapped(const sockaddr *addr) const {
-    return !memcmp(IPV4_MAPPED_PREFIX, (uint8_t *)&((sockaddr_in6 *)addr)->sin6_addr, 12);
 }
 
 ngtcp2_crypto_level dns_over_quic::from_ossl_level(enum ssl_encryption_level_t ossl_level) const {

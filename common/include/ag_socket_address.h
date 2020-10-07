@@ -35,6 +35,7 @@ public:
 
     bool operator<(const socket_address &other) const;
     bool operator==(const socket_address &other) const;
+    bool operator!=(const socket_address &other) const;
 
     /**
      * @return Pointer to sockaddr_storage structure
@@ -71,9 +72,36 @@ public:
      */
     bool valid() const;
 
+    /**
+     * @return True if address family is AF_INET or address is IPv4 mapped
+     */
+    bool is_ipv4() const;
+
+    /**
+     * @return True if address is IPv4 mapped
+     */
+    bool is_ipv4_mapped() const;
+
+    /**
+     * @return True if address family is AF_INET6
+     */
+    bool is_ipv6() const;
+
+    /**
+     * Cast address to target address family.
+     * IPv4 addresses are mapped/unmapped automatically.
+     * If address cannot be cast, return invalid address
+     * @param family Target address family
+     * @return Address of target address family
+     */
+    socket_address socket_family_cast(int family) const;
+
 private:
     /** sockaddr_storage structure. Internally this is just sockaddr_storage wrapper */
     sockaddr_storage m_ss;
+
+    ag::socket_address to_ipv4_unmapped() const;
+    ag::socket_address to_ipv4_mapped() const;
 };
 
 } // namespace ag

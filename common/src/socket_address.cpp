@@ -7,6 +7,8 @@
 #include <ws2tcpip.h>
 #endif
 
+static constexpr uint8_t IPV4_MAPPED_PREFIX[] = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0xff, 0xff};
+
 static size_t c_socklen(const sockaddr *addr) {
     return addr->sa_family == AF_INET6 ? sizeof(sockaddr_in6) :
            addr->sa_family == AF_INET ? sizeof(sockaddr_in) :
@@ -19,6 +21,10 @@ bool ag::socket_address::operator<(const ag::socket_address &other) const {
 
 bool ag::socket_address::operator==(const ag::socket_address &other) const {
     return std::memcmp(&m_ss, &other.m_ss, c_socklen()) == 0;
+}
+
+bool ag::socket_address::operator!=(const ag::socket_address &other) const {
+    return !operator==(other);
 }
 
 const sockaddr *ag::socket_address::c_sockaddr() const {
@@ -143,4 +149,53 @@ std::string ag::socket_address::str() const {
 
 bool ag::socket_address::valid() const {
     return m_ss.ss_family != AF_UNSPEC;
+}
+
+bool ag::socket_address::is_ipv6() const {
+    return m_ss.ss_family == AF_INET6;
+}
+
+bool ag::socket_address::is_ipv4() const {
+    return m_ss.ss_family == AF_INET || is_ipv4_mapped();
+}
+
+bool ag::socket_address::is_ipv4_mapped() const {
+    return m_ss.ss_family == AF_INET6
+           && !memcmp(&((sockaddr_in6 *) &m_ss)->sin6_addr, IPV4_MAPPED_PREFIX, sizeof(IPV4_MAPPED_PREFIX));
+}
+
+ag::socket_address ag::socket_address::to_ipv4_unmapped() const {
+    if (m_ss.ss_family == AF_INET) {
+        return *this;
+    }
+    if (!is_ipv4_mapped()) {
+        return {};
+    }
+    uint8_view v4 = addr();
+    v4.remove_prefix(sizeof(IPV4_MAPPED_PREFIX));
+    return {v4, port()};
+}
+
+ag::socket_address ag::socket_address::to_ipv4_mapped() const {
+    if (m_ss.ss_family == AF_INET6) {
+        return *this;
+    }
+    if (m_ss.ss_family != AF_INET) {
+        return {};
+    }
+    uint8_t mapped[sizeof(in6_addr)];
+    memcpy(mapped, IPV4_MAPPED_PREFIX, sizeof(IPV4_MAPPED_PREFIX));
+    uint8_view v4 = addr();
+    memcpy(mapped + sizeof(IPV4_MAPPED_PREFIX), v4.data(), v4.size());
+    return ag::socket_address({mapped, sizeof(mapped)}, port());
+}
+
+ag::socket_address ag::socket_address::socket_family_cast(int family) const {
+    if (family == AF_INET) {
+        return to_ipv4_unmapped();
+    } else if (family == AF_INET6) {
+        return to_ipv4_mapped();
+    } else {
+        return {};
+    }
 }

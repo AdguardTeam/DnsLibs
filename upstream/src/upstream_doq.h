@@ -143,8 +143,9 @@ private:
 
     int init_ssl_ctx();
     int init_ssl();
-    int create_sock();
-    int bind_addr(int fd);
+    int create_dual_stack_socket();
+    evutil_socket_t create_ipv4_socket();
+    int bind_addr(int fd, int family);
     int on_read();
     int on_read_connected();
     int on_read_not_connected();
@@ -163,10 +164,9 @@ private:
     void deinit();
     void disconnect(int line);
     void schedule_retransmit();
-    int getting_server_addresses();
-    bool is_ipv4_mapped(const sockaddr *addr) const;
     ngtcp2_tstamp get_tstamp() const;
     ngtcp2_crypto_level from_ossl_level(enum ssl_encryption_level_t ossl_level) const;
+    void disqualify_server_address(const ag::socket_address &server_address);
 
     void write_client_handshake(ngtcp2_crypto_level level, const uint8_t *data, size_t datalen);
     int on_key(ngtcp2_crypto_level level, const uint8_t *rx_secret,
