@@ -165,3 +165,4 @@ std::optional<std::string_view> ag::utils::read_line(std::string_view str, size_
 
     return ag::utils::trim({&str[start], end - start});
 }
+

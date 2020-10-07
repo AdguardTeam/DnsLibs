@@ -14,7 +14,7 @@
 ## Introduction
 
 AdGuard DNSLibs is an open-source proxy server that caches, filters, encrypts and redirects DNS requests.
-Supports all existing protocols including DNS-over-HTTPS, DNS-over-TLS and DNSCrypt.
+Supports all existing protocols including DNS-over-HTTPS, DNS-over-TLS, DNS-over-QUIC and DNSCrypt.
 In this documentation, you will find base information for the developing and support code of AdGuard DNSLibs project
 and filters. Also, you can ask your question [here](https://forum.adguard.com).
 
@@ -228,6 +228,7 @@ cached or filtered, then these servers will respond. `upstream_options` contains
         - `tcp://8.8.8.8:53` plain DNS over TCP.
         - `tls://1.1.1.1` DNS-over-TLS.
         - `https://dns.adguard.com/dns-query` DNS-over-HTTPS.
+        - `quic://dns.adguard.com:784` DNS-over-QUIC.
         - `sdns://...` DNS stamp (see [DNSCrypt](https://dnscrypt.info/stamps-specifications) specifications).
     - `std::vector<std::string> bootstrap` List of plain DNS servers to be used to resolve the hostname in upstreams' address.
 - `dnsfilter::engine_params filter_params` Filtering engine parameters. Contains a vector of file paths with filter rules.
@@ -300,6 +301,7 @@ Now let's see a few examples of rules:
 - RFCs of DNS [1034](https://tools.ietf.org/html/rfc1034), [1035](https://tools.ietf.org/html/rfc1035);
 - RFC of DNS-over-TLS [7858](https://tools.ietf.org/html/rfc7858);
 - RFC of DNS-over-HTTPS [8484](https://tools.ietf.org/html/rfc8484);
+- RFC(draft) of DNS-over-QUIC [here](https://datatracker.ietf.org/doc/draft-ietf-dprive-dnsoquic);
 - [DNSCrypt](https://dnscrypt.info/stamps-specifications/) specifications;
 - An Introduction to [libuv](https://nikhilm.github.io/uvbook/An%20Introduction%20to%20libuv.pdf);
 - [LDNS](https://www.nlnetlabs.nl/documentation/ldns/) docs;

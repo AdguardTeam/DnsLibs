@@ -376,6 +376,11 @@ static const upstream_test_data test_upstreams_data[]{
         "https://1.1.1.1/dns-query",
         {}
     },
+    {
+        // AdGuard DNS (DNS-over-TLS)
+        "quic://dns.adguard.com:784",
+        {"8.8.8.8:53"}
+    },
 };
 
 TEST_F(upstream_test, test_upstreams) {
@@ -491,17 +496,18 @@ TEST_F(upstream_test, test_upstreams_with_server_ip) {
     parallel_test(test_upstreams_with_server_ip_data);
 }
 
-TEST_F(upstream_test, DISABLED_doh_concurrent_requests) {
+TEST_F(upstream_test, DISABLED_concurrent_requests) {
     using namespace std::chrono_literals;
     using namespace concat_err_string;
     static constexpr size_t REQUESTS_NUM = 128;
     static constexpr size_t WORKERS_NUM = 16;
     static const ag::upstream_options opts{
         .address = "https://dns.cloudflare.com/dns-query",
+//        .address = "quic://dns.adguard.com:784", // Uncomment for test DOQ upstream
         .bootstrap = {"8.8.8.8", "1.1.1.1"},
         .timeout = 5s,
-//         .resolved_server_ip = ag::ipv4_address_size{104, 19, 199, 29}, // Uncomment for test this server IP
-//         .resolved_server_ip = ag::ipv6_address_size{0x26, 0x06, 0x47, 0x00, 0x30, 0x0a, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x68, 0x13, 0xc7, 0x1d},  // Uncomment for test this server IP
+//        .resolved_server_ip = ag::ipv4_address_size{104, 19, 199, 29}, // Uncomment for test this server IP
+//        .resolved_server_ip = ag::ipv6_address_size{0x26, 0x06, 0x47, 0x00, 0x30, 0x0a, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x68, 0x13, 0xc7, 0x1d},  // Uncomment for test this server IP
     };
     auto[upstream_ptr, upstream_err] = create_upstream(opts);
     ASSERT_FALSE(upstream_err) << *upstream_err;
@@ -511,15 +517,33 @@ TEST_F(upstream_test, DISABLED_doh_concurrent_requests) {
             ag::ldns_pkt_ptr pkt = create_test_message();
             auto[reply, reply_err] = upstream->exchange(pkt.get());
             if (reply_err) {
-                result_err += AG_FMT("DoH i = {} reply error: {}", i, *reply_err);
+                result_err += AG_FMT("Upstream i = {} reply error: {}", i, *reply_err);
                 continue;
             }
             if (!reply) {
-                result_err += "DoH reply is null";
+                result_err += "Upstream reply is null";
                 continue;
             }
             result_err += assert_response(*reply);
         }
         return result_err;
     });
+}
+
+TEST_F(upstream_test, DISABLED_doq_easy_test) {
+    using namespace std::chrono_literals;
+    using namespace concat_err_string;
+    static const ag::upstream_options opts{
+            .address = "quic://dns.adguard.com:784",
+            .bootstrap = { "8.8.8.8" },
+            .timeout = 5s
+    };
+    auto[upstream_ptr, upstream_err] = create_upstream(opts);
+    ASSERT_FALSE(upstream_err) << *upstream_err;
+
+    ag::ldns_pkt_ptr pkt = create_test_message();
+
+    auto[reply, reply_err] = upstream_ptr.get()->exchange(pkt.get());
+    ASSERT_FALSE(reply_err.has_value()) << *reply_err;
+    ASSERT_NE(reply, nullptr);
 }

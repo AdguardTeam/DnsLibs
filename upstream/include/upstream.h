@@ -18,6 +18,7 @@ class upstream;
 
 using upstream_ptr = std::unique_ptr<upstream>;
 using ldns_pkt_ptr = std::unique_ptr<ldns_pkt, ag::ftor<&ldns_pkt_free>>;
+using ldns_buffer_ptr = std::unique_ptr<ldns_buffer, ag::ftor<&ldns_buffer_free>>;
 
 /**
  * Upstream factory configuration
@@ -38,6 +39,7 @@ struct upstream_options {
      *     tls://1.1.1.1 -- DNS-over-TLS
      *     https://dns.adguard.com/dns-query -- DNS-over-HTTPS
      *     sdns://... -- DNS stamp (see https://dnscrypt.info/stamps-specifications)
+     *     quic://dns.adguard.com:784 -- DNS-over-QUIC
      */
     std::string address;
 

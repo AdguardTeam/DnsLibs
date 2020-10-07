@@ -10,6 +10,7 @@ add_library(upstream EXCLUDE_FROM_ALL
         src/upstream.cpp
         src/upstream_doh.h src/upstream_doh.cpp
         src/upstream_dot.h src/upstream_dot.cpp
+        src/upstream_doq.h src/upstream_doq.cpp
         src/upstream_plain.h src/upstream_plain.cpp
         src/event_loop.cpp
         src/connection.h src/connection.cpp
@@ -54,9 +55,14 @@ if (NOT TARGET libcurl)
     add_subdirectory(${THIRD_PARTY_DIR}/curl ${CMAKE_BINARY_DIR}/third-party/curl)
 endif ()
 
+if(NOT TARGET ngtcp2)
+    add_subdirectory(${THIRD_PARTY_DIR}/ngtcp2 ${CMAKE_BINARY_DIR}/third-party/ngtcp2)
+endif(NOT TARGET ngtcp2)
+
 target_include_directories(upstream PUBLIC include)
 target_include_directories(upstream PRIVATE ${OPENSSL_INCLUDE_DIR})
-target_link_libraries(upstream dnslibs_common dnsstamp dnscrypt agdns_tls)
+target_include_directories(upstream PRIVATE ../third-party/ngtcp2/ag_ngtcp2_crypto/includes)
+target_link_libraries(upstream dnslibs_common dnsstamp dnscrypt agdns_tls ngtcp2 ag_ngtcp2_crypto_openssl)
 target_link_libraries(upstream boringssl_static libevent ldns libcurl)
 
 enable_testing()

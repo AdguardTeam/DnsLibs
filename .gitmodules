@@ -38,3 +38,6 @@
 [submodule "third-party/detours/detours"]
 	path = third-party/detours/detours
 	url = https://github.com/microsoft/Detours.git
+[submodule "third-party/ngtcp2/ngtcp2"]
+	path = third-party/ngtcp2/ngtcp2
+	url = https://github.com/ngtcp2/ngtcp2.git

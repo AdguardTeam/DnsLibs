@@ -171,7 +171,8 @@ ag::err_string ag::dns_over_tls::init() {
     if (this->m_options.bootstrap.empty()
             && std::holds_alternative<std::monostate>(this->m_options.resolved_server_ip)
             && !socket_address(get_host_name(this->m_options.address), 0).valid()) {
-        std::string err = "At least one the following should be true: server address is specified, url contains valid server address as a host name, bootstrap server is specified";
+        std::string err = "At least one the following should be true: server address is specified, "
+                          "url contains valid server address as a host name, bootstrap server is specified";
         errlog(m_log, "{}", err);
         return err;
     }

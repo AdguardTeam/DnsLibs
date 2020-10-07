@@ -5,6 +5,7 @@
 #include "upstream_dnscrypt.h"
 #include "upstream_doh.h"
 #include "upstream_dot.h"
+#include "upstream_doq.h"
 #include "upstream_plain.h"
 #include <ag_utils.h>
 #include <ag_logger.h>
@@ -16,6 +17,7 @@ enum class scheme : size_t {
     TCP,
     TLS,
     HTTPS,
+    QUIC,
     UNDEFINED,
     COUNT,
 };
@@ -26,6 +28,7 @@ static constexpr std::string_view SCHEME_WITH_SUFFIX[]{
     "tcp://",
     "tls://",
     "https://",
+    "quic://"
 };
 
 static constexpr auto SCHEME_WITH_SUFFIX_BEGIN = std::begin(SCHEME_WITH_SUFFIX);
@@ -80,6 +83,11 @@ static ag::upstream_factory::create_result create_upstream_dnscrypt(ag::server_s
     return {std::make_unique<ag::upstream_dnscrypt>(std::move(stamp), opts), std::nullopt};
 }
 
+static ag::upstream_factory::create_result create_upstream_dnsquic(const ag::upstream_options &opts,
+        const ag::upstream_factory_config &config) {
+    return {std::make_unique<ag::dns_over_quic>(opts, config), std::nullopt};
+}
+
 static ag::upstream_factory::create_result create_upstream_sdns(const ag::upstream_options &local_opts,
         const ag::upstream_factory_config &config) {
     static constexpr ag::utils::make_error<ag::upstream_factory::create_result> make_error;
@@ -122,6 +130,7 @@ ag::upstream_factory::create_result ag::upstream_factory::impl::create_upstream(
         &create_upstream_plain,
         &create_upstream_tls,
         &create_upstream_https,
+        &create_upstream_dnsquic,
         &create_upstream_plain,
     };
     static_assert(std::size(create_functions) == static_cast<size_t>(scheme::COUNT),
