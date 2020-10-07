@@ -390,6 +390,7 @@ ag::dnsproxy_settings ag::android_dnsproxy::marshal_settings(JNIEnv *env,
     auto custom_blocking_ip4_field = env->GetFieldID(clazz, "customBlockingIpv4", "Ljava/lang/String;");
     auto custom_blocking_ip6_field = env->GetFieldID(clazz, "customBlockingIpv6", "Ljava/lang/String;");
     auto cache_size_field = env->GetFieldID(clazz, "dnsCacheSize", "J");
+    auto optimistic_cache_field = env->GetFieldID(clazz, "optimisticCache", "Z");
 
     ag::dnsproxy_settings settings{};
 
@@ -441,6 +442,7 @@ ag::dnsproxy_settings ag::android_dnsproxy::marshal_settings(JNIEnv *env,
     }
 
     settings.dns_cache_size = std::max((jlong) 0, env->GetLongField(java_dnsproxy_settings, cache_size_field));
+    settings.optimistic_cache = env->GetBooleanField(java_dnsproxy_settings, optimistic_cache_field);
 
     return settings;
 }
@@ -461,6 +463,7 @@ ag::local_ref<jobject> ag::android_dnsproxy::marshal_settings(JNIEnv *env, const
     auto custom_blocking_ip4_field = env->GetFieldID(clazz, "customBlockingIpv4", "Ljava/lang/String;");
     auto custom_blocking_ip6_field = env->GetFieldID(clazz, "customBlockingIpv6", "Ljava/lang/String;");
     auto cache_size_field = env->GetFieldID(clazz, "dnsCacheSize", "J");
+    auto optimistic_cache_field = env->GetFieldID(clazz, "optimisticCache", "Z");
 
     auto java_settings = env->NewObject(clazz, ctor);
 
@@ -501,6 +504,7 @@ ag::local_ref<jobject> ag::android_dnsproxy::marshal_settings(JNIEnv *env, const
     env->SetObjectField(java_settings, custom_blocking_ip6_field, m_utils.marshal_string(env, settings.custom_blocking_ipv6).get());
 
     env->SetLongField(java_settings, cache_size_field, (jlong) settings.dns_cache_size);
+    env->SetBooleanField(java_settings, optimistic_cache_field, (jboolean) settings.optimistic_cache);
 
     return local_ref(env, java_settings);
 }

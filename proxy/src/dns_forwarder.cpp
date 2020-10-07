@@ -660,6 +660,22 @@ std::pair<bool, err_string> dns_forwarder::init(const dnsproxy_settings &setting
 }
 
 void dns_forwarder::deinit() {
+    {
+        // Cancel unstarted async requests
+        std::unique_lock l(this->async_reqs_mtx);
+        for (auto it = this->async_reqs.begin(); it != this->async_reqs.end();) {
+            if (int r = uv_cancel((uv_req_t *) &it->second.work); r != 0) {
+                assert(r == UV_EBUSY);
+                ++it;
+            } else {
+                it = this->async_reqs.erase(it);
+            }
+        }
+        // Wait for started async requests to finish
+        this->async_reqs_cv.wait(l, [&]() {
+            return this->async_reqs.empty();
+        });
+    }
     this->settings = nullptr;
     this->upstreams.clear();
     this->fallbacks.clear();
@@ -676,20 +692,24 @@ static bool has_unsupported_extensions(const ldns_pkt *pkt) {
            || ldns_pkt_edns_unassigned(pkt);
 }
 
-// Returns a response synthesized from the cached template, or nullptr if no cache entry satisfies the given key
-cached_result dns_forwarder::create_response_from_cache(const std::string &key, const ldns_pkt *request) {
+// Returns null result if no cache entry satisfies the given key.
+// Otherwise, a response is synthesized from the cached template.
+// If the cache entry is expired, it becomes least recently used,
+// all response records' TTLs are set to 1 second,
+// and `expired` is set to `true`.
+cache_result dns_forwarder::create_response_from_cache(const std::string &key, const ldns_pkt *request) {
+    cache_result r{};
+
     if (!this->settings->dns_cache_size) { // Caching disabled
-        return {nullptr, std::nullopt};
+        return r;
     }
 
     if (has_unsupported_extensions(request)) {
         dbglog(log, "{}: Request has unsupported extensions", __func__);
-        return {nullptr, std::nullopt};
+        return r;
     }
 
-    ldns_pkt_ptr response = nullptr;
-    std::optional<int32_t> upstream_id;
-    uint32_t ttl = 0;
+    uint32_t ttl;
     {
         std::shared_lock l(this->response_cache.mtx);
         auto &cache = this->response_cache.val;
@@ -697,46 +717,48 @@ cached_result dns_forwarder::create_response_from_cache(const std::string &key, 
         auto cached_response_acc = cache.get(key);
         if (!cached_response_acc) {
             dbglog(log, "{}: Cache miss for key {}", __func__, key);
-            return {nullptr, std::nullopt};
+            return {nullptr};
         }
 
-        upstream_id = cached_response_acc->upstream_id;
+        r.upstream_id = cached_response_acc->upstream_id;
         auto cached_response_ttl = ceil<seconds>(cached_response_acc->expires_at - ag::steady_clock::now());
         if (cached_response_ttl.count() <= 0) {
             cache.make_lru(cached_response_acc);
             dbglog(log, "{}: Expired cache entry for key {}", __func__, key);
-            return {nullptr, std::nullopt};
+            ttl = 1;
+            r.expired = true;
+        } else {
+            ttl = cached_response_ttl.count();
         }
 
-        ttl = cached_response_ttl.count();
-        response.reset(ldns_pkt_clone(cached_response_acc->response.get()));
+        r.response.reset(ldns_pkt_clone(cached_response_acc->response.get()));
     }
 
     // Patch response id
-    ldns_pkt_set_id(response.get(), ldns_pkt_id(request));
+    ldns_pkt_set_id(r.response.get(), ldns_pkt_id(request));
 
     // Patch EDNS UDP SIZE
-    if (ldns_pkt_edns(response.get())) {
-        ldns_pkt_set_edns_udp_size(response.get(), ag::UDP_RECV_BUF_SIZE);
+    if (ldns_pkt_edns(r.response.get())) {
+        ldns_pkt_set_edns_udp_size(r.response.get(), ag::UDP_RECV_BUF_SIZE);
     }
 
     // Patch response question section
-    assert(!ldns_pkt_question(response.get()));
-    ldns_pkt_set_qdcount(response.get(), ldns_pkt_qdcount(request));
-    ldns_pkt_set_question(response.get(), ldns_pkt_get_section_clone(request, LDNS_SECTION_QUESTION));
+    assert(!ldns_pkt_question(r.response.get()));
+    ldns_pkt_set_qdcount(r.response.get(), ldns_pkt_qdcount(request));
+    ldns_pkt_set_question(r.response.get(), ldns_pkt_get_section_clone(request, LDNS_SECTION_QUESTION));
 
     // Patch response TTLs
-    for (int_fast32_t i = 0; i < ldns_pkt_ancount(response.get()); ++i) {
-        ldns_rr_set_ttl(ldns_rr_list_rr(ldns_pkt_answer(response.get()), i), ttl);
+    for (int_fast32_t i = 0; i < ldns_pkt_ancount(r.response.get()); ++i) {
+        ldns_rr_set_ttl(ldns_rr_list_rr(ldns_pkt_answer(r.response.get()), i), ttl);
     }
-    for (int_fast32_t i = 0; i < ldns_pkt_nscount(response.get()); ++i) {
-        ldns_rr_set_ttl(ldns_rr_list_rr(ldns_pkt_authority(response.get()), i), ttl);
+    for (int_fast32_t i = 0; i < ldns_pkt_nscount(r.response.get()); ++i) {
+        ldns_rr_set_ttl(ldns_rr_list_rr(ldns_pkt_authority(r.response.get()), i), ttl);
     }
-    for (int_fast32_t i = 0; i < ldns_pkt_arcount(response.get()); ++i) {
-        ldns_rr_set_ttl(ldns_rr_list_rr(ldns_pkt_additional(response.get()), i), ttl);
+    for (int_fast32_t i = 0; i < ldns_pkt_arcount(r.response.get()); ++i) {
+        ldns_rr_set_ttl(ldns_rr_list_rr(ldns_pkt_additional(r.response.get()), i), ttl);
     }
 
-    return {std::move(response), upstream_id};
+    return r;
 }
 
 uint32_t compute_min_rr_ttl(const ldns_pkt *pkt) {
@@ -757,7 +779,7 @@ uint32_t compute_min_rr_ttl(const ldns_pkt *pkt) {
 }
 
 // Checks cacheability and puts an eligible response to the cache
-void dns_forwarder::put_response_to_cache(std::string key, ldns_pkt_ptr response, std::optional<int32_t> upstream_id) {
+void dns_forwarder::put_response_into_cache(std::string key, ldns_pkt_ptr response, std::optional<int32_t> upstream_id) {
     if (!this->settings->dns_cache_size) {
         // Caching disabled
         return;
@@ -847,17 +869,33 @@ std::vector<uint8_t> dns_forwarder::handle_message(uint8_view message) {
     event.domain = domain.get();
 
     std::string cache_key = get_cache_key(request);
+    cache_result cached = create_response_from_cache(cache_key, request);
 
-    auto [cached_response, upstream_id] = create_response_from_cache(cache_key, request);
-    if (cached_response) {
-        dbglog_fid(log, request, "Cached response found");
-        log_packet(log, cached_response.get(), "Cached response");
+    if (cached.response) {
+        if (cached.expired) {
+            if (!settings->optimistic_cache) {
+                goto cached_response_expired;
+            }
+            std::unique_lock l(async_reqs_mtx);
+            auto [it, emplaced] = async_reqs.emplace(std::piecewise_construct,
+                                                     std::forward_as_tuple(cache_key),
+                                                     std::forward_as_tuple());
+            if (emplaced) {
+                async_request &task = it->second;
+                task.forwarder = this;
+                task.request = std::move(req_holder);
+                task.cache_key = std::move(cache_key);
+                uv_queue_work(nullptr, &task.work, async_request_worker, async_request_finalizer);
+            }
+        }
+        log_packet(log, cached.response.get(), "Cached response");
         event.cache_hit = true;
-        std::vector<uint8_t> raw_response = transform_response_to_raw_data(cached_response.get());
-        finalize_processed_event(event, request, cached_response.get(), nullptr, upstream_id, std::nullopt);
+        std::vector<uint8_t> raw_response = transform_response_to_raw_data(cached.response.get());
+        finalize_processed_event(event, request, cached.response.get(), nullptr, cached.upstream_id, std::nullopt);
         return raw_response;
     }
 
+cached_response_expired:
     const ldns_rr_type type = ldns_rr_get_type(question);
 
     // disable Mozilla DoH
@@ -895,48 +933,17 @@ std::vector<uint8_t> dns_forwarder::handle_message(uint8_view message) {
         return *raw_blocking_response;
     }
 
-    ldns_pkt_ptr response = nullptr;
-    upstream *successful_upstream = nullptr;
-    std::vector<uint8_t> raw_response;
-    upstream *cur_upstream;
-    std::string err_str;
-    for (auto *upstream_vector : { &this->upstreams, &this->fallbacks }) {
-
-        std::vector<upstream *> sorted_upstreams;
-        sorted_upstreams.reserve(upstream_vector->size());
-        for (auto i = upstream_vector->begin(); i != upstream_vector->end(); ++i) {
-            sorted_upstreams.push_back(i->get());
-        }
-        std::sort(sorted_upstreams.begin(), sorted_upstreams.end(), [](upstream *a, upstream *b) {
-            return (a->rtt() < b->rtt());
-        });
-
-        for (auto i = sorted_upstreams.begin(); i != sorted_upstreams.end(); ++i) {
-
-            cur_upstream = *i;
-
-            ag::utils::timer t;
-            upstream::exchange_result result = cur_upstream->exchange(request);
-            cur_upstream->adjust_rtt(t.elapsed<std::chrono::milliseconds>());
-
-            if (!result.error.has_value()) {
-                successful_upstream = cur_upstream;
-                response = std::move(result.packet);
-                goto have_answer;
-            }
-            err_str = AG_FMT("Upstream failed to perform dns query: {}", result.error.value());
-            dbglog_fid(log, request, "{}", err_str);
-        }
+    auto [response, err_str, selected_upstream] = do_upstream_exchange(request);
+    if (!response) {
+        response = ldns_pkt_ptr(create_servfail_response(request));
+        log_packet(log, response.get(), "Server failure response");
+        std::vector<uint8_t> raw_response = transform_response_to_raw_data(response.get());
+        finalize_processed_event(event, request, response.get(), nullptr,
+                                 std::make_optional(selected_upstream->options().id),
+                                 std::move(err_str));
+        return raw_response;
     }
 
-    response = ldns_pkt_ptr(create_servfail_response(request));
-    log_packet(log, response.get(), "Server failure response");
-    raw_response = transform_response_to_raw_data(response.get());
-    finalize_processed_event(event, request, response.get(), nullptr,
-            (cur_upstream ? std::make_optional(cur_upstream->options().id) : std::nullopt), std::move(err_str));
-    return raw_response;
-
-have_answer:
     log_packet(log, response.get(), "Upstream dns response");
     const auto ancount = ldns_pkt_ancount(response.get());
     const auto rcode = ldns_pkt_get_rcode(response.get());
@@ -968,7 +975,7 @@ have_answer:
                 }
             }
             if (!has_aaaa) {
-                if (auto synth_response = try_dns64_aaaa_synthesis(successful_upstream, req_holder)) {
+                if (auto synth_response = try_dns64_aaaa_synthesis(selected_upstream, req_holder)) {
                     response = std::move(synth_response);
                     log_packet(log, response.get(), "DNS64 synthesized response");
                 }
@@ -976,13 +983,12 @@ have_answer:
         }
     }
 
-    raw_response = transform_response_to_raw_data(response.get());
+    std::vector<uint8_t> raw_response = transform_response_to_raw_data(response.get());
     event.bytes_sent = message.size();
     event.bytes_received = raw_response.size();
     finalize_processed_event(event, request, response.get(), nullptr,
-            (successful_upstream ? std::make_optional(successful_upstream->options().id) : std::nullopt), std::nullopt);
-    put_response_to_cache(std::move(cache_key), std::move(response),
-            (successful_upstream ? std::make_optional(successful_upstream->options().id) : std::nullopt));
+                             selected_upstream->options().id, std::nullopt);
+    put_response_into_cache(std::move(cache_key), std::move(response), selected_upstream->options().id);
     return raw_response;
 }
 
@@ -1068,4 +1074,64 @@ std::optional<uint8_vector> dns_forwarder::apply_filter(std::string_view hostnam
     }
 
     return raw_response;
+}
+
+upstream_exchange_result dns_forwarder::do_upstream_exchange(ldns_pkt *request) {
+    assert(this->upstreams.size() + this->fallbacks.size());
+    upstream *cur_upstream;
+    std::string err_str;
+    for (auto *upstream_vector : { &this->upstreams, &this->fallbacks }) {
+        std::vector<upstream *> sorted_upstreams;
+        sorted_upstreams.reserve(upstream_vector->size());
+        for (auto &u : *upstream_vector) {
+            sorted_upstreams.push_back(u.get());
+        }
+        std::sort(sorted_upstreams.begin(), sorted_upstreams.end(), [](upstream *a, upstream *b) {
+            return (a->rtt() < b->rtt());
+        });
+
+        for (auto &sorted_upstream : sorted_upstreams) {
+            cur_upstream = sorted_upstream;
+
+            ag::utils::timer t;
+            upstream::exchange_result result = cur_upstream->exchange(request);
+            cur_upstream->adjust_rtt(t.elapsed<std::chrono::milliseconds>());
+
+            if (!result.error.has_value()) {
+                return {std::move(result.packet), std::nullopt, cur_upstream};
+            }
+            err_str = AG_FMT("Upstream failed to perform dns query: {}", result.error.value());
+            dbglog_fid(log, request, "{}", err_str);
+        }
+    }
+    return {nullptr, std::move(err_str), cur_upstream};
+}
+
+void dns_forwarder::async_request_worker(uv_work_t *work) {
+    auto *task = (async_request *) work->data;
+    auto *self = task->forwarder;
+    auto *req = task->request.get();
+    const std::string &key = task->cache_key;
+
+    dbglog_id(self->log, req, "Starting async upstream exchange for {}", key);
+
+    auto [res, err, upstream] = self->do_upstream_exchange(req);
+    if (!res) {
+        dbglog_id(self->log, req, "Async upstream exchange failed: {}, removing entry from cache", *err);
+        std::unique_lock l(self->response_cache.mtx);
+        self->response_cache.val.erase(key);
+    } else {
+        log_packet(self->log, res.get(), "Async upstream exchange result");
+        self->put_response_into_cache(key, std::move(res), upstream->options().id);
+    }
+}
+
+void dns_forwarder::async_request_finalizer(uv_work_t *work, int) {
+    auto *task = (async_request *) work->data;
+    auto *self = task->forwarder;
+    std::string key = std::move(task->cache_key);
+    self->async_reqs_mtx.lock();
+    self->async_reqs.erase(key);
+    self->async_reqs_mtx.unlock();
+    self->async_reqs_cv.notify_all();
 }

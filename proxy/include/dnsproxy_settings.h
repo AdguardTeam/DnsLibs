@@ -73,6 +73,13 @@ struct dnsproxy_settings {
     std::string custom_blocking_ipv6; // Custom IPv6 address to return for filtered requests
 
     size_t dns_cache_size; // Maximum number of cached responses
+
+    /**
+     * Enable optimistic cache mode.
+     * Expired cache entries will be returned with a TTL of 1 second
+     * while upstreams are queried in the background.
+     */
+    bool optimistic_cache;
 };
 
 }

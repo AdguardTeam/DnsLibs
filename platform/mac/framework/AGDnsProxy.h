@@ -231,6 +231,10 @@ typedef void (^logCallback)(const char *msg, int length);
  * Maximum number of cached responses
  */
 @property(nonatomic, readonly) NSUInteger dnsCacheSize;
+/**
+ * Enable optimistic DNS caching
+ */
+@property(nonatomic, readonly) BOOL optimisticCache;
 
 - (instancetype) initWithUpstreams: (NSArray<AGDnsUpstream *> *) upstreams
         fallbacks: (NSArray<AGDnsUpstream *> *) fallbacks
@@ -243,7 +247,8 @@ typedef void (^logCallback)(const char *msg, int length);
         blockingMode: (AGBlockingMode) blockingMode
         customBlockingIpv4: (NSString *) customBlockingIpv4
         customBlockingIpv6: (NSString *) customBlockingIpv6
-        dnsCacheSize: (NSUInteger) dnsCacheSize;
+        dnsCacheSize: (NSUInteger) dnsCacheSize
+        optimisticCache: (BOOL) optimisticCache;
 
 /**
  * @brief Get default DNS proxy settings

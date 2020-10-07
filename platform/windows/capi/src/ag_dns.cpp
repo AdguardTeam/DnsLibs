@@ -215,6 +215,7 @@ static ag_dnsproxy_settings *marshal_settings(const ag::dnsproxy_settings &setti
     c_settings->filter_params = marshal_engine_params(settings.filter_params);
     c_settings->listeners.size = settings.listeners.size();
     c_settings->listeners.data = marshal_listeners(settings.listeners);
+    c_settings->optimistic_cache = settings.optimistic_cache;
 
     return c_settings;
 }
@@ -331,6 +332,7 @@ static ag::dnsproxy_settings marshal_settings(const ag_dnsproxy_settings *c_sett
     settings.listeners = marshal_listeners(c_settings->listeners.data, c_settings->listeners.size);
     settings.filter_params.filters = marshal_filters(c_settings->filter_params.filters.data,
                                                      c_settings->filter_params.filters.size);
+    settings.optimistic_cache = c_settings->optimistic_cache;
 
     return settings;
 }

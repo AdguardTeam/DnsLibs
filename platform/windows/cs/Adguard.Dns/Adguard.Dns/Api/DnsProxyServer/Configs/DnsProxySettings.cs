@@ -81,6 +81,11 @@ namespace Adguard.Dns.Api.DnsProxyServer.Configs
         /// Maximum number of cached responses
         /// </summary>
         public uint DnsCacheSize { get; set; }
+
+        /// <summary>
+        /// Enable optimistic DNS caching
+        /// </summary>
+        public bool OptimisticCache;
         #region Equals members
 
         public override bool Equals(object obj)

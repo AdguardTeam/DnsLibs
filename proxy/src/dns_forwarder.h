@@ -12,6 +12,7 @@
 #include <upstream.h>
 #include <certificate_verifier.h>
 #include <shared_mutex>
+#include <uv.h>
 
 namespace ag {
 
@@ -21,7 +22,17 @@ struct cached_response {
     std::optional<int32_t> upstream_id;
 };
 
-using cached_result = std::pair<ldns_pkt_ptr, std::optional<int32_t>>;
+struct cache_result {
+    ldns_pkt_ptr response;
+    std::optional<int32_t> upstream_id;
+    bool expired;
+};
+
+struct upstream_exchange_result {
+    ldns_pkt_ptr response;
+    err_string error;
+    upstream *upstream;
+};
 
 namespace dns_forwarder_utils {
 /**
@@ -46,8 +57,14 @@ public:
     std::vector<uint8_t> handle_message(uint8_view message);
 
 private:
-    cached_result create_response_from_cache(const std::string &key, const ldns_pkt *request);
-    void put_response_to_cache(std::string key, ldns_pkt_ptr response, std::optional<int32_t> upstream_id);
+    static void async_request_worker(uv_work_t *);
+    static void async_request_finalizer(uv_work_t *, int);
+
+    upstream_exchange_result do_upstream_exchange(ldns_pkt *request);
+
+    cache_result create_response_from_cache(const std::string &key, const ldns_pkt *request);
+
+    void put_response_into_cache(std::string key, ldns_pkt_ptr response, std::optional<int32_t> upstream_id);
 
     std::optional<uint8_vector> apply_filter(std::string_view hostname,
                                              const ldns_pkt *request,
@@ -81,6 +98,22 @@ private:
     std::shared_ptr<certificate_verifier> cert_verifier;
 
     with_mtx<lru_cache<std::string, cached_response>, std::shared_mutex> response_cache;
+
+    struct async_request {
+        uv_work_t work{};
+        dns_forwarder *forwarder{};
+        ldns_pkt_ptr request;
+        std::string cache_key;
+
+        async_request() {
+            work.data = this;
+        }
+    };
+
+    // Map of async requests in flight (cache key -> uv work handle)
+    std::unordered_map<std::string, async_request> async_reqs;
+    std::mutex async_reqs_mtx;
+    std::condition_variable async_reqs_cv;
 };
 
 } // namespace ag

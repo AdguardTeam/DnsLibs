@@ -23,7 +23,7 @@ namespace Adguard.Dns
         /// <summary>
         /// The current API version hash with which the ProxyServer was tested
         /// </summary>
-        private const string API_VERSION_HASH = "683ccdb2bc5eb9f7e52014b7fc8ce0bb47869e28ddf6d1d4800b868d532f84cd";
+        private const string API_VERSION_HASH = "40430bc4e6e99fc5c58768fcc2df130eced935fef17272c8ebc0f3c2ab3f6dbe";
         #endregion
 
         #region API Functions
@@ -379,6 +379,13 @@ namespace Adguard.Dns
             [MarshalAs(UnmanagedType.U4)]
             [NativeName("dns_cache_size")]
             internal UInt32 DnsCacheSize;
+
+            /// <summary>
+            /// Enable optimistic DNS caching
+            /// </summary>
+            [MarshalAs(UnmanagedType.I1)]
+            [NativeName("optimistic_cache")]
+            internal bool OptimisticCache;
         }
 
         /// <summary>

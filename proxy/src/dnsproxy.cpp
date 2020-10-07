@@ -22,7 +22,8 @@ static const dnsproxy_settings DEFAULT_PROXY_SETTINGS = {
     .block_ipv6 = false,
     .ipv6_available = true,
     .blocking_mode = dnsproxy_blocking_mode::DEFAULT,
-    .dns_cache_size = 128,
+    .dns_cache_size = 1000,
+    .optimistic_cache = true,
 };
 
 const dnsproxy_settings &dnsproxy_settings::get_default() {

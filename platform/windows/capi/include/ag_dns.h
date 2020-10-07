@@ -141,6 +141,8 @@ typedef struct {
     const char *custom_blocking_ipv6;
     /** Maximum number of cached responses (may be 0) */
     uint32_t dns_cache_size;
+    /** Enable optimistic DNS caching */
+    bool optimistic_cache;
 } ag_dnsproxy_settings;
 
 typedef struct {

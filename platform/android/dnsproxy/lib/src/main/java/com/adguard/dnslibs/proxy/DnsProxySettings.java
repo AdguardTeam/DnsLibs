@@ -53,6 +53,7 @@ public class DnsProxySettings {
     private String customBlockingIpv4;
     private String customBlockingIpv6;
     private long dnsCacheSize;
+    private boolean optimisticCache;
 
     /**
      * @return Maximum number of cached responses
@@ -237,6 +238,20 @@ public class DnsProxySettings {
         this.blockIpv6 = blockIpv6;
     }
 
+    /**
+     * @return whether optimistic cache is enabled
+     */
+    public boolean isOptimisticCache() {
+        return optimisticCache;
+    }
+
+    /**
+     * @param optimisticCache enable optimistic cache
+     */
+    public void setOptimisticCache(boolean optimisticCache) {
+        this.optimisticCache = optimisticCache;
+    }
+
     @Override
     public boolean equals(Object o) {
         if (this == o) return true;
@@ -253,13 +268,15 @@ public class DnsProxySettings {
                 blockingMode == that.blockingMode &&
                 Objects.equals(customBlockingIpv4, that.customBlockingIpv4) &&
                 Objects.equals(customBlockingIpv6, that.customBlockingIpv6) &&
-                dnsCacheSize == that.dnsCacheSize;
+                dnsCacheSize == that.dnsCacheSize &&
+                optimisticCache == that.optimisticCache;
     }
 
     @Override
     public int hashCode() {
         return Objects.hash(upstreams, fallbacks, dns64, blockedResponseTtlSecs, filterParams, listeners,
-                ipv6Available, blockIpv6, blockingMode, customBlockingIpv4, customBlockingIpv6, dnsCacheSize);
+                ipv6Available, blockIpv6, blockingMode, customBlockingIpv4, customBlockingIpv6, dnsCacheSize,
+                optimisticCache);
     }
 
     /**

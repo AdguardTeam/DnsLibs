@@ -33,7 +33,7 @@
 	path = third-party/nghttp2/nghttp2
 	url = https://github.com/nghttp2/nghttp2
 [submodule "third-party/libuv"]
-	path = third-party/libuv
+	path = third-party/libuv/libuv
 	url = https://github.com/libuv/libuv.git
 [submodule "third-party/detours/detours"]
 	path = third-party/detours/detours

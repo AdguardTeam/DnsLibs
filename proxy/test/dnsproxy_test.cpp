@@ -165,6 +165,7 @@ protected:
         ag::set_default_log_level(ag::TRACE);
         ag::dnsproxy_settings settings = ag::dnsproxy_settings::get_default();
         settings.dns_cache_size = 1;
+        settings.optimistic_cache = false;
 
         ag::dnsproxy_events events{
             .on_request_processed = [this](ag::dns_request_processed_event event) {
@@ -207,7 +208,7 @@ TEST_F(dnsproxy_cache_test, cached_response_ttl_decreases) {
 }
 
 TEST_F(dnsproxy_cache_test, cached_response_expires) {
-    ag::ldns_pkt_ptr pkt = create_request("example.org.", LDNS_RR_TYPE_SOA, LDNS_RD);
+    ag::ldns_pkt_ptr pkt = create_request("example.org.", LDNS_RR_TYPE_A, LDNS_RD);
     ag::ldns_pkt_ptr res;
     ASSERT_NO_FATAL_FAILURE(perform_request(proxy, pkt, res));
     ASSERT_FALSE(last_event.cache_hit);
@@ -693,5 +694,42 @@ TEST_F(dnsproxy_test, warnings) {
         auto [ret, err_or_warn] = proxy.init(settings, {});
         ASSERT_TRUE(ret) << *err_or_warn;
         ASSERT_TRUE(err_or_warn); // Mem usage warning
+    }
+}
+
+TEST_F(dnsproxy_test, optimistic_cache) {
+    ag::dnsproxy_settings settings = ag::dnsproxy_settings::get_default();
+    settings.optimistic_cache = true;
+    settings.dns_cache_size = 100;
+
+    ag::dns_request_processed_event last_event{};
+    ag::dnsproxy_events events{
+            .on_request_processed = [&last_event](const ag::dns_request_processed_event &event) {
+                last_event = event;
+            }
+    };
+
+    auto [ret, err] = proxy.init(settings, events);
+    ASSERT_TRUE(ret) << *err;
+
+    ag::ldns_pkt_ptr res;
+    ASSERT_NO_FATAL_FAILURE(perform_request(proxy, create_request("example.org", LDNS_RR_TYPE_A, LDNS_RD), res));
+    ASSERT_FALSE(last_event.cache_hit);
+    ASSERT_EQ(LDNS_RCODE_NOERROR, ldns_pkt_get_rcode(res.get()));
+    ASSERT_GT(ldns_pkt_ancount(res.get()), 0);
+
+    uint32_t max_ttl = 0;
+    for (int i = 0; i < ldns_pkt_ancount(res.get()); ++i) {
+        max_ttl = std::max(max_ttl, ldns_rr_ttl(ldns_rr_list_rr(ldns_pkt_answer(res.get()), i)));
+    }
+
+    ag::steady_clock::add_time_shift(std::chrono::seconds(2 * max_ttl));
+
+    ASSERT_NO_FATAL_FAILURE(perform_request(proxy, create_request("example.org", LDNS_RR_TYPE_A, LDNS_RD), res));
+    ASSERT_TRUE(last_event.cache_hit);
+    ASSERT_EQ(LDNS_RCODE_NOERROR, ldns_pkt_get_rcode(res.get()));
+    ASSERT_GT(ldns_pkt_ancount(res.get()), 0);
+    for (int i = 0; i < ldns_pkt_ancount(res.get()); ++i) {
+        ASSERT_EQ(1, ldns_rr_ttl(ldns_rr_list_rr(ldns_pkt_answer(res.get()), i)));
     }
 }

@@ -215,6 +215,7 @@ public class DnsProxyTest {
         settings.setCustomBlockingIpv6("43::21");
 
         settings.setDnsCacheSize(42);
+        settings.setOptimisticCache(true);
 
         UpstreamSettings fallbackUpstream = new UpstreamSettings();
         fallbackUpstream.setAddress("https://fall.back/up/stream");

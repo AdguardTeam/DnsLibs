@@ -1,0 +1,84 @@
+diff --git a/src/threadpool.c b/src/threadpool.c
+index a8f433f0..c2f87cd2 100644
+--- src/threadpool.c
++++ src/threadpool.c
+@@ -121,12 +121,16 @@ static void worker(void* arg) {
+     w = QUEUE_DATA(q, struct uv__work, wq);
+     w->work(w);
+ 
+-    uv_mutex_lock(&w->loop->wq_mutex);
+-    w->work = NULL;  /* Signal uv_cancel() that the work req is done
+-                        executing. */
+-    QUEUE_INSERT_TAIL(&w->loop->wq, &w->wq);
+-    uv_async_send(&w->loop->wq_async);
+-    uv_mutex_unlock(&w->loop->wq_mutex);
++    if (w->loop != NULL) {
++      uv_mutex_lock(&w->loop->wq_mutex);
++      w->work = NULL;  /* Signal uv_cancel() that the work req is done
++                          executing. */
++      QUEUE_INSERT_TAIL(&w->loop->wq, &w->wq);
++      uv_async_send(&w->loop->wq_async);
++      uv_mutex_unlock(&w->loop->wq_mutex);
++    } else {
++        w->done(w, 0);
++    }
+ 
+     /* Lock `mutex` since that is expected at the start of the next
+      * iteration. */
+@@ -270,23 +274,27 @@ static int uv__work_cancel(uv_loop_t* loop, uv_req_t* req, struct uv__work* w) {
+   int cancelled;
+ 
+   uv_mutex_lock(&mutex);
+-  uv_mutex_lock(&w->loop->wq_mutex);
++  if (w->loop != NULL)
++    uv_mutex_lock(&w->loop->wq_mutex);
+ 
+   cancelled = !QUEUE_EMPTY(&w->wq) && w->work != NULL;
+   if (cancelled)
+     QUEUE_REMOVE(&w->wq);
+ 
+-  uv_mutex_unlock(&w->loop->wq_mutex);
++  if (w->loop != NULL)
++    uv_mutex_unlock(&w->loop->wq_mutex);
+   uv_mutex_unlock(&mutex);
+ 
+   if (!cancelled)
+     return UV_EBUSY;
+ 
+-  w->work = uv__cancelled;
+-  uv_mutex_lock(&loop->wq_mutex);
+-  QUEUE_INSERT_TAIL(&loop->wq, &w->wq);
+-  uv_async_send(&loop->wq_async);
+-  uv_mutex_unlock(&loop->wq_mutex);
++  if (loop != NULL) {
++    w->work = uv__cancelled;
++    uv_mutex_lock(&loop->wq_mutex);
++    QUEUE_INSERT_TAIL(&loop->wq, &w->wq);
++    uv_async_send(&loop->wq_async);
++    uv_mutex_unlock(&loop->wq_mutex);
++  }
+ 
+   return 0;
+ }
+@@ -326,7 +334,8 @@ static void uv__queue_done(struct uv__work* w, int err) {
+   uv_work_t* req;
+ 
+   req = container_of(w, uv_work_t, work_req);
+-  uv__req_unregister(req->loop, req);
++  if (req->loop)
++    uv__req_unregister(req->loop, req);
+ 
+   if (req->after_work_cb == NULL)
+     return;
+@@ -342,7 +351,10 @@ int uv_queue_work(uv_loop_t* loop,
+   if (work_cb == NULL)
+     return UV_EINVAL;
+ 
+-  uv__req_init(loop, req, UV_WORK);
++  if (loop != NULL)
++    uv__req_init(loop, req, UV_WORK);
++  else
++    UV_REQ_INIT(req, UV_WORK);
+   req->loop = loop;
+   req->work_cb = work_cb;
+   req->after_work_cb = after_work_cb;

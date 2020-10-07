@@ -370,6 +370,7 @@ static NSData *create_response_packet_v6(const struct iphdr6 *ip6_header,
     _customBlockingIpv4 = convert_string(settings->custom_blocking_ipv4);
     _customBlockingIpv6 = convert_string(settings->custom_blocking_ipv6);
     _dnsCacheSize = settings->dns_cache_size;
+    _optimisticCache = settings->optimistic_cache;
     return self;
 }
 
@@ -384,7 +385,8 @@ static NSData *create_response_packet_v6(const struct iphdr6 *ip6_header,
         blockingMode: (AGBlockingMode) blockingMode
         customBlockingIpv4: (NSString *) customBlockingIpv4
         customBlockingIpv6: (NSString *) customBlockingIpv6
-        dnsCacheSize: (NSUInteger) dnsCacheSize;
+        dnsCacheSize: (NSUInteger) dnsCacheSize
+        optimisticCache: (BOOL) optimisticCache;
 {
     const ag::dnsproxy_settings &defaultSettings = ag::dnsproxy_settings::get_default();
     self = [self initWithNative: &defaultSettings];
@@ -404,6 +406,7 @@ static NSData *create_response_packet_v6(const struct iphdr6 *ip6_header,
     _customBlockingIpv4 = customBlockingIpv4;
     _customBlockingIpv6 = customBlockingIpv6;
     _dnsCacheSize = dnsCacheSize;
+    _optimisticCache = optimisticCache;
     return self;
 }
 
@@ -675,6 +678,7 @@ static std::vector<ag::upstream_options> convert_upstreams(NSArray<AGDnsUpstream
     }
 
     settings.dns_cache_size = config.dnsCacheSize;
+    settings.optimistic_cache = config.optimisticCache;
 
     auto [ret, err_or_warn] = self->proxy.init(std::move(settings), std::move(native_events));
     if (!ret) {

@@ -133,7 +133,8 @@
         blockingMode: AGBM_DEFAULT
         customBlockingIpv4: nil
         customBlockingIpv6: nil
-        dnsCacheSize: 128];
+        dnsCacheSize: 128
+        optimisticCache: YES];
 
     AGDnsProxyEvents *events = [[AGDnsProxyEvents alloc] init];
     events.onRequestProcessed = ^(const AGDnsRequestProcessedEvent *event) {
