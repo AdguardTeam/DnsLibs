@@ -1,10 +1,17 @@
 #include <ag_utils.h>
 #include <ag_net_utils.h>
 #include <ag_socket_address.h>
+#include <event2/util.h>
 
-// To build with mingw
+#ifndef _WIN32
+#include <net/if.h> // For if_nametoindex/if_indextoname
+#else
+#include <Iphlpapi.h>
+#include <Winsock2.h>
+#include <Ws2tcpip.h>
 #ifndef INET6_ADDRSTRLEN
 #define INET6_ADDRSTRLEN 46
+#endif
 #endif
 
 std::tuple<std::string_view, std::string_view, ag::err_string_view> ag::utils::split_host_port_with_err(
@@ -99,4 +106,60 @@ ag::socket_address ag::utils::str_to_socket_address(std::string_view address) {
     }
 
     return socket_address{host, (uint16_t) port};
+}
+
+ag::err_string ag::utils::bind_socket_to_if(evutil_socket_t fd, int family, uint32_t if_index) {
+#if defined(__linux__)
+    char buf[IF_NAMESIZE];
+    const char *name = if_indextoname(if_index, buf);
+    if (!name) {
+        return AG_FMT("{}: {}", errno, strerror(errno));
+    }
+    return bind_socket_to_if(fd, family, name);
+#else
+#if defined(_WIN32)
+    constexpr int ipv4_opt = IP_UNICAST_IF;
+    constexpr int ipv6_opt = IPV6_UNICAST_IF;
+#else
+    constexpr int ipv4_opt = IP_BOUND_IF;
+    constexpr int ipv6_opt = IPV6_BOUND_IF;
+#endif
+    int option;
+    int level;
+    switch (family) {
+    case AF_INET:
+        level = IPPROTO_IP;
+        option = ipv4_opt;
+        break;
+    case AF_INET6:
+        level = IPPROTO_IPV6;
+        option = ipv6_opt;
+        break;
+    default:
+        return AG_FMT("Unsuppported socket family: {}", family);
+    }
+    int ret = setsockopt(fd, level, option, (char *) &if_index, sizeof(if_index)); // Cast to (char *) for Windows
+    if (ret != 0) {
+        int error = evutil_socket_geterror(fd);
+        return AG_FMT("{}: {}", error, evutil_socket_error_to_string(error));
+    }
+    return {};
+#endif
+}
+
+ag::err_string ag::utils::bind_socket_to_if(evutil_socket_t fd, int family, const char *if_name) {
+#if defined(__linux__)
+    (void)family;
+    int ret = setsockopt(fd, SOL_SOCKET, SO_BINDTODEVICE, if_name, strlen(if_name));
+    if (ret != 0) {
+        return AG_FMT("{}: {}", errno, strerror(errno));
+    }
+    return {};
+#else
+    uint32_t if_index = if_nametoindex(if_name);
+    if (if_index == 0) {
+        return AG_FMT("Invalid interface name: {}", if_name);
+    }
+    return bind_socket_to_if(fd, family, if_index);
+#endif
 }

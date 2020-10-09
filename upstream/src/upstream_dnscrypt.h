@@ -15,7 +15,7 @@ public:
      * @param stamp Stamp
      * @param opts Upstream settings
      */
-    upstream_dnscrypt(server_stamp &&stamp, const upstream_options &opts);
+    upstream_dnscrypt(server_stamp &&stamp, const upstream_options &opts, const upstream_factory_config &config);
     upstream_dnscrypt(const upstream_dnscrypt &) = delete;
     upstream_dnscrypt &operator=(const upstream_dnscrypt &) = delete;
     ~upstream_dnscrypt() override;
@@ -39,6 +39,8 @@ private:
     server_stamp m_stamp;
     impl_ptr m_impl;
     std::mutex m_guard;
+
+    bool prepare_fd(int fd, int family);
 };
 
 } // namespace ag

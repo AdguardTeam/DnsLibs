@@ -197,7 +197,10 @@ public class DnsProxyTest {
         dot.setServerIp(new byte[]{8, 8, 8, 8});
         dot.setTimeoutMs(10000);
         dot.setId(42);
+        dot.setOutboundInterfaceName("whtvr0");
         settings.getUpstreams().add(dot);
+
+        settings.getUpstreams().get(0).setOutboundInterfaceName("");
 
         final Dns64Settings dns64 = new Dns64Settings();
         dns64.setUpstreams(Collections.singletonList(dot));

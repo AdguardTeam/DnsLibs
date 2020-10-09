@@ -54,6 +54,9 @@ struct upstream_options {
 
     /** User-provided ID for this upstream */
     int32_t id;
+
+    /** (Optional) name or index of the network interface to route traffic through */
+    if_id_variant outbound_interface;
 };
 
 /**
@@ -115,6 +118,8 @@ protected:
     upstream_factory_config m_config;
     /** RTT + mutex */
     with_mtx<std::chrono::milliseconds> m_rtt;
+
+    err_string bind_socket_to_if(int fd, int family);
 };
 
 /**

@@ -282,7 +282,7 @@ auto data_from_begin(const T& value) {
 }
 
 template<typename T>
-static inline constexpr auto to_string_view_impl(const T& value) {
+static inline constexpr auto make_string_view_impl(const T& value) {
     using value_type = value_type_from_begin<T>;
     return std::basic_string_view<value_type>(detail::data_from_begin(value), std::size(value));
 }
@@ -295,8 +295,8 @@ static inline constexpr auto to_string_view_impl(const T& value) {
  * @return String view pointed to value's data and size
  */
 template<typename T>
-static inline constexpr auto to_string_view(const T& value) {
-    return detail::to_string_view_impl(value);
+static inline constexpr auto make_string_view(const T& value) {
+    return detail::make_string_view_impl(value);
 }
 
 /**
@@ -306,8 +306,8 @@ static inline constexpr auto to_string_view(const T& value) {
  * @return String view pointed to value's data and size
  */
 template<typename T>
-static inline constexpr auto to_string_view(std::initializer_list<T> value) {
-    return detail::to_string_view_impl(value);
+static inline constexpr auto make_string_view(std::initializer_list<T> value) {
+    return detail::make_string_view_impl(value);
 }
 
 /**

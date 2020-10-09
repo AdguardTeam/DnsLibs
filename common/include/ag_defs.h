@@ -48,6 +48,9 @@ using ipv4_address_array = uint8_array<ipv4_address_size>;
 using ipv6_address_array = uint8_array<ipv6_address_size>;
 using ip_address_variant = std::variant<std::monostate, ipv4_address_array, ipv6_address_array>;
 
+/** Network interface name or index */
+using if_id_variant = std::variant<std::monostate, uint32_t, std::string>;
+
 // Convenient struct to tie a value and its mutex together
 template<typename T, typename Mutex = std::mutex>
 struct with_mtx {

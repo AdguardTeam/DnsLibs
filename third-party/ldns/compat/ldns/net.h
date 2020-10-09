@@ -46,9 +46,11 @@ extern "C" {
  * \param[in] timeout the timeout value for the network
  * \param[out] answersize size of the packet
  * \param[out] result packet with the answer
+ * \param[in] prepare_cb fd preparation callback, return 1 for success, 0 for failure
+ * \param[in] prepare_arg fd preparation callback argument
  * \return status
  */
-ldns_status ldns_udp_send(uint8_t **result, ldns_buffer *qbin, const struct sockaddr_storage *to, socklen_t tolen, struct timeval timeout, size_t *answersize);
+ldns_status ldns_udp_send(uint8_t **result, ldns_buffer *qbin, const struct sockaddr_storage *to, socklen_t tolen, struct timeval timeout, size_t *answersize, int (*prepare_cb)(int fd, int family, void *ctx), void *prepare_arg);
 
 /**
  * Send an udp query and don't wait for an answer but return
@@ -107,9 +109,11 @@ int ldns_tcp_bgsend(ldns_buffer *qbin, const struct sockaddr_storage *to, sockle
  * \param[in] timeout the timeout value for the network
  * \param[out] answersize size of the packet
  * \param[out] result packet with the answer
+ * \param[in] prepare_cb fd preparation callback, return 1 for success, 0 for failure
+ * \param[in] prepare_arg fd preparation callback argument
  * \return status
  */
-ldns_status ldns_tcp_send(uint8_t **result, ldns_buffer *qbin, const struct sockaddr_storage *to, socklen_t tolen, struct timeval timeout, size_t *answersize);
+ldns_status ldns_tcp_send(uint8_t **result, ldns_buffer *qbin, const struct sockaddr_storage *to, socklen_t tolen, struct timeval timeout, size_t *answersize, int (*prepare_cb)(int fd, int family, void *ctx), void *prepare_arg);
 
 /**
  * Sends ptk to the nameserver at the resolver object. Returns the data

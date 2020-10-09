@@ -47,7 +47,8 @@ ag::dnscrypt::create_ldns_pkt_result ag::dnscrypt::create_ldns_pkt(uint8_t *data
 ag::dnscrypt::dns_exchange_allocated_result ag::dnscrypt::dns_exchange_allocated(std::chrono::milliseconds timeout,
                                                                                  const socket_address &socket_address,
                                                                                  ldns_buffer &buffer,
-                                                                                 protocol local_protocol) {
+                                                                                 protocol local_protocol,
+                                                                                 std::function<bool(int, int)> prepare_fd) {
     static constexpr utils::make_error<dns_exchange_allocated_result> make_error;
     uint8_t *reply_data = nullptr;
     size_t reply_size = 0;
@@ -56,7 +57,11 @@ ag::dnscrypt::dns_exchange_allocated_result ag::dnscrypt::dns_exchange_allocated
     utils::timer timer;
     ldns_status status = send_func(&reply_data, &buffer,
                                    reinterpret_cast<const sockaddr_storage *>(socket_address.c_sockaddr()),
-                                   socket_address.c_socklen(), tv, &reply_size);
+                                   socket_address.c_socklen(), tv, &reply_size,
+                                   [](int fd, int family, void *arg) -> int {
+                                       auto &f = *((std::function<bool(int, int)> *) arg);
+                                       return !f || f(fd, family);
+                                   }, &prepare_fd);
     if (status != LDNS_STATUS_OK) {
         return make_error(utils::ldns_status_to_str(status));
     }
@@ -67,9 +72,11 @@ ag::dnscrypt::dns_exchange_allocated_result ag::dnscrypt::dns_exchange_allocated
 
 ag::dnscrypt::dns_exchange_result ag::dnscrypt::dns_exchange_from_ldns_buffer(std::chrono::milliseconds timeout,
                                                                               const socket_address &socket_address,
-                                                                              ldns_buffer &buffer, protocol protocol) {
+                                                                              ldns_buffer &buffer, protocol protocol,
+                                                                              std::function<bool(int, int)> prepare_fd) {
     static constexpr utils::make_error<dns_exchange_result> make_error;
-    auto[reply, reply_size, rtt, allocated_err] = dns_exchange_allocated(timeout, socket_address, buffer, protocol);
+    auto[reply, reply_size, rtt, allocated_err] = dns_exchange_allocated(timeout, socket_address, buffer, protocol,
+                                                                         std::move(prepare_fd));
     if (allocated_err) {
         return make_error(std::move(allocated_err));
     }
@@ -86,11 +93,12 @@ ag::dnscrypt::dns_exchange_result ag::dnscrypt::dns_exchange_from_ldns_buffer(st
 ag::dnscrypt::dns_exchange_result ag::dnscrypt::dns_exchange_from_ldns_pkt(std::chrono::milliseconds timeout,
                                                                            const socket_address &socket_address,
                                                                            const ldns_pkt &request_pkt,
-                                                                           protocol protocol) {
+                                                                           protocol protocol,
+                                                                           std::function<bool(int, int)> prepare_fd) {
     static constexpr utils::make_error<dns_exchange_result> make_error;
     auto[buffer, err] = create_ldns_buffer(request_pkt);
     if (err) {
         return make_error(std::move(err));
     }
-    return dns_exchange_from_ldns_buffer(timeout, socket_address, *buffer, protocol);
+    return dns_exchange_from_ldns_buffer(timeout, socket_address, *buffer, protocol, std::move(prepare_fd));
 }

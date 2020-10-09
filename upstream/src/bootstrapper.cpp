@@ -127,8 +127,11 @@ static std::vector<ag::resolver_ptr> create_resolvers(const ag::logger &log, con
     std::vector<ag::resolver_ptr> resolvers;
     resolvers.reserve(p.bootstrap.size());
 
+    ag::upstream_options opts{};
+    opts.outbound_interface = p.outbound_interface;
     for (const std::string &server : p.bootstrap) {
-        ag::resolver_ptr resolver = std::make_unique<ag::resolver>(server, p.upstream_config);
+        opts.address = server;
+        ag::resolver_ptr resolver = std::make_unique<ag::resolver>(opts, p.upstream_config);
         if (ag::err_string err = resolver->init(); !err.has_value()) {
             resolvers.emplace_back(std::move(resolver));
         } else {

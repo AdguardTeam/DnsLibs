@@ -47,9 +47,11 @@ struct server_info {
      * Fetch DNSCrypt certificate using server info
      * @param proto Protocol
      * @param timeout Timeout for read/write operations (0 means infinite timeout)
+     * @param prepare_fd Socket preparation callback, return true if successful
      * @return Fetch result
      */
-    fetch_result fetch_current_dnscrypt_cert(protocol protocol, std::chrono::milliseconds timeout);
+    fetch_result fetch_current_dnscrypt_cert(protocol protocol, std::chrono::milliseconds timeout,
+                                             std::function<bool(int, int)> prepare_fd);
 
     /**
      * Encrypt packet using server info

@@ -57,6 +57,10 @@ if (NOT MSVC)
     target_compile_options(dnslibs_common PRIVATE -fno-exceptions)
 endif()
 
+if (MSVC)
+    target_link_libraries(dnslibs_common ws2_32.lib Iphlpapi.lib)
+endif ()
+
 enable_testing()
 if (NOT TARGET tests)
     add_subdirectory(${THIRD_PARTY_DIR}/googletest ${CMAKE_BINARY_DIR}/googletest)

@@ -21,6 +21,7 @@ public:
         const std::vector<std::string> &bootstrap; // list of the resolving servers
         std::chrono::milliseconds timeout; // resolve timeout
         const upstream_factory_config &upstream_config; // configuration of the upstream factory which creates resolving upstream
+        if_id_variant outbound_interface; // interface to bind sockets to
     };
 
     explicit bootstrapper(const params &p);

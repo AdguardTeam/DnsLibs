@@ -51,16 +51,18 @@ public:
      * Data received during this call is then used for DNS requests encryption/decryption
      * @param stamp_str Stamp string is an sdns:// address which is parsed using dnsstamps library
      * @param timeout Timeout for read/write operations (0 means infinite timeout)
+     * @param prepare_fd Socket preparation callback, return true if successful
      */
-    dial_result dial(std::string_view stamp_str, std::chrono::milliseconds timeout) const;
+    dial_result dial(std::string_view stamp_str, std::chrono::milliseconds timeout, std::function<bool(int, int)> prepare_fd = nullptr) const;
 
      /**
       * Dial fetches and validates DNSCrypt certificate from the given server
       * Data received during this call is then used for DNS requests encryption/decryption
       * @param stamp Stamp
       * @param timeout Timeout for read/write operations (0 means infinite timeout)
+      * @param prepare_fd Socket preparation callback, return true if successful
       */
-    dial_result dial(const server_stamp &stamp, std::chrono::milliseconds timeout) const;
+    dial_result dial(const server_stamp &stamp, std::chrono::milliseconds timeout, std::function<bool(int, int)> prepare_fd = nullptr) const;
 
     /**
      * Exchange performs a synchronous DNS query to the specified DNSCrypt server and returns a DNS response.
@@ -69,10 +71,11 @@ public:
      * @param message Message to send
      * @param server_info Server info
      * @param timeout Timeout for read/write operations (0 means infinite timeout)
+     * @param prepare_fd Socket preparation callback, return true if successful
      * @return Result of exchange
      */
     exchange_result exchange(ldns_pkt &message, const server_info &server_info,
-        std::chrono::milliseconds timeout) const;
+        std::chrono::milliseconds timeout, std::function<bool(int, int)> prepare_fd = nullptr) const;
 
 private:
     protocol m_protocol;

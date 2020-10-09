@@ -11,6 +11,7 @@ public class UpstreamSettings {
     private long timeoutMs;
     private byte[] serverIp;
     private int id;
+    private String outboundInterfaceName;
 
     public UpstreamSettings() {}
 
@@ -108,6 +109,21 @@ public class UpstreamSettings {
         this.id = id;
     }
 
+    /**
+     * @return name of the network interface that traffic is routed through, or {@code null}
+     */
+    public String getOutboundInterfaceName() {
+        return outboundInterfaceName;
+    }
+
+    /**
+     * @param outboundInterfaceName name of the network interface to route traffic through,
+     *                              or {@code null} or empty to use the default
+     */
+    public void setOutboundInterfaceName(String outboundInterfaceName) {
+        this.outboundInterfaceName = outboundInterfaceName;
+    }
+
     @Override
     public boolean equals(Object o) {
         if (this == o) return true;
@@ -117,11 +133,12 @@ public class UpstreamSettings {
                 id == that.id &&
                 Objects.equals(address, that.address) &&
                 bootstrap.equals(that.bootstrap) &&
-                Arrays.equals(serverIp, that.serverIp);
+                Arrays.equals(serverIp, that.serverIp) &&
+                Objects.equals(outboundInterfaceName, that.outboundInterfaceName);
     }
 
     @Override
     public int hashCode() {
-        return Objects.hash(timeoutMs, id, address, bootstrap, serverIp);
+        return Objects.hash(timeoutMs, id, address, bootstrap, serverIp, outboundInterfaceName);
     }
 }

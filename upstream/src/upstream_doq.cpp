@@ -1,4 +1,5 @@
 #include "upstream_doq.h"
+#include "upstream.h"
 
 
 using namespace ag;
@@ -175,12 +176,17 @@ evutil_socket_t dns_over_quic::create_ipv4_socket() {
         warnlog(m_log, "Error creating IPv4 socket: {}", evutil_socket_error_to_string(EVUTIL_SOCKET_ERROR()));
         return -1;
     }
+    if (auto error = bind_socket_to_if(fd, AF_INET)) {
+        warnlog(m_log, "Error binding socket to interface: {}", *error);
+        evutil_closesocket(fd);
+        return -1;
+    }
     return fd;
 }
 
 
-int dns_over_quic::create_dual_stack_socket() {
-    evutil_socket_t fd = -1;
+evutil_socket_t dns_over_quic::create_dual_stack_socket() {
+    evutil_socket_t fd;
 
     fd = socket(AF_INET6, SOCK_DGRAM, IPPROTO_UDP);
     if (fd == -1) {
@@ -193,7 +199,13 @@ int dns_over_quic::create_dual_stack_socket() {
         warnlog(m_log, "Error making socket dual-stack: {}", evutil_socket_error_to_string(evutil_socket_geterror(fd)));
         evutil_closesocket(fd);
         return -1;
-    };
+    }
+
+    if (auto error = bind_socket_to_if(fd, AF_INET6)) {
+        warnlog(m_log, "Error binding socket to interface: {}", *error);
+        evutil_closesocket(fd);
+        return -1;
+    }
 
     return fd;
 }
@@ -217,7 +229,8 @@ err_string dns_over_quic::init() {
             .default_port = m_port,
             .bootstrap = m_options.bootstrap,
             .timeout = m_options.timeout,
-            .upstream_config = m_config
+            .upstream_config = m_config,
+            .outbound_interface = m_options.outbound_interface,
     };
     m_bootstrapper = std::make_unique<bootstrapper>(bootstrapper_params);
     if (auto check = m_bootstrapper->init(); check.has_value()) {

@@ -248,6 +248,9 @@ static NSData *create_response_packet_v6(const struct iphdr6 *ip6_header,
     }
     _bootstrap = bootstrap;
     _timeoutMs = settings->timeout.count();
+    if (const std::string *name = std::get_if<std::string>(&settings->outbound_interface)) {
+        _outboundInterfaceName = convert_string(*name);
+    }
     return self;
 }
 
@@ -256,6 +259,7 @@ static NSData *create_response_packet_v6(const struct iphdr6 *ip6_header,
         timeoutMs: (NSInteger) timeoutMs
         serverIp: (NSData *) serverIp
         id: (NSInteger) id
+        outboundInterfaceName: (NSString *) outboundInterfaceName
 {
     self = [super init];
     _address = address;
@@ -263,6 +267,7 @@ static NSData *create_response_packet_v6(const struct iphdr6 *ip6_header,
     _timeoutMs = timeoutMs;
     _serverIp = serverIp;
     _id = id;
+    _outboundInterfaceName = outboundInterfaceName;
     return self;
 }
 @end
@@ -573,13 +578,17 @@ static ag::upstream_options convert_upstream(AGDnsUpstream *upstream) {
         addr.emplace<ag::uint8_array<16>>();
         std::memcpy(std::get<ag::uint8_array<16>>(addr).data(),
                     [upstream.serverIp bytes], [upstream.serverIp length]);
-    } else {
-        addr.emplace<std::monostate>();
+    }
+    ag::if_id_variant iface;
+    if (upstream.outboundInterfaceName != nil) {
+        iface.emplace<std::string>(upstream.outboundInterfaceName.UTF8String);
     }
     return ag::upstream_options{[upstream.address UTF8String],
-                                 std::move(bootstrap),
-                                 std::chrono::milliseconds(upstream.timeoutMs),
-                                 addr};
+                                std::move(bootstrap),
+                                std::chrono::milliseconds(upstream.timeoutMs),
+                                std::move(addr),
+                                (int32_t) upstream.id,
+                                std::move(iface)};
 }
 
 static std::vector<ag::upstream_options> convert_upstreams(NSArray<AGDnsUpstream *> *upstreams) {

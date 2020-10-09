@@ -57,4 +57,22 @@ std::string addr_to_str(uint8_view addr);
  */
 socket_address str_to_socket_address(std::string_view address);
 
+/**
+ * Make a socket bound to the specified interface
+ * @param fd       socket descriptor
+ * @param family   socket family
+ * @param if_index interface index
+ * @return error string or std::nullopt if successful
+ */
+err_string bind_socket_to_if(evutil_socket_t fd, int family, uint32_t if_index);
+
+/**
+ * Make a socket bound to the specified interface
+ * @param fd      socket descriptor
+ * @param family  socket family
+ * @param if_name interface name
+ * @return error string or std::nullopt if successful
+ */
+err_string bind_socket_to_if(evutil_socket_t fd, int family, const char *if_name);
+
 } // namespace ag::utils

@@ -27,10 +27,10 @@ public:
 
     /**
      * Creates resolver for plain DNS address
-     * @param resolver_address Plain DNS address
+     * @param options Plain DNS upstream options
      * @param upstream_config Upstream factory configuration for resolving upstreams creation
      */
-    resolver(std::string_view resolver_address, const upstream_factory_config &upstream_config);
+    resolver(upstream_options options, const upstream_factory_config &upstream_config);
 
     /**
      * Initialize resolver
@@ -49,10 +49,10 @@ public:
 private:
     /** Logger */
     logger log;
-    /** Resolving DNS server address */
-    std::string resolver_address;
     /** Upstream factory */
     ag::upstream_factory upstream_factory;
+    /** Upstream options */
+    ag::upstream_options upstream_options;
 };
 
 

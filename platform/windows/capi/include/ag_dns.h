@@ -54,6 +54,9 @@ typedef struct {
 
     /** User-provided ID for this upstream */
     int32_t id;
+
+    /** Index of the network interface to route traffic through, 0 is default */
+    uint32_t outbound_interface_index;
 } ag_upstream_options;
 
 typedef struct {

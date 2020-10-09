@@ -143,7 +143,7 @@ private:
 
     int init_ssl_ctx();
     int init_ssl();
-    int create_dual_stack_socket();
+    evutil_socket_t create_dual_stack_socket();
     evutil_socket_t create_ipv4_socket();
     int bind_addr(int fd, int family);
     int on_read();

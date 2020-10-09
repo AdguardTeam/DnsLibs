@@ -67,11 +67,12 @@ create_ldns_pkt_result create_ldns_pkt(uint8_t *data, size_t size);
  * @param socket_address Socket address
  * @param buffer Buffer to send
  * @param protocol Protocol
+ * @param prepare_fd Socket preparation callback, return true if successful
  * @return DNS exchange allocated result
  */
 dns_exchange_allocated_result dns_exchange_allocated(std::chrono::milliseconds timeout,
                                                      const socket_address &socket_address, ldns_buffer &buffer,
-                                                     protocol protocol);
+                                                     protocol protocol, std::function<bool(int, int)> prepare_fd);
 
 /**
  * Send data from buffer to socket address and returns ldns packet reply
@@ -79,11 +80,12 @@ dns_exchange_allocated_result dns_exchange_allocated(std::chrono::milliseconds t
  * @param socket_address Socket address
  * @param buffer Buffer to send
  * @param protocol Protocol
+ * @param prepare_fd Socket preparation callback, return true if successful
  * @return DNS exchange result
  */
 dns_exchange_result dns_exchange_from_ldns_buffer(std::chrono::milliseconds timeout,
                                                   const socket_address &socket_address, ldns_buffer &buffer,
-                                                  protocol protocol);
+                                                  protocol protocol, std::function<bool(int, int)> prepare_fd);
 
 /**
  * Send data from packet to socket address and returns ldns packet reply
@@ -91,9 +93,11 @@ dns_exchange_result dns_exchange_from_ldns_buffer(std::chrono::milliseconds time
  * @param socket_address Socket address
  * @param request_pkt Packet to send
  * @param protocol Protocol
+ * @param prepare_fd Socket preparation callback, return true if successful
  * @return DNS exchange result
  */
 dns_exchange_result dns_exchange_from_ldns_pkt(std::chrono::milliseconds timeout, const socket_address &socket_address,
-                                               const ldns_pkt &request_pkt, protocol protocol);
+                                               const ldns_pkt &request_pkt, protocol protocol,
+                                               std::function<bool(int, int)> prepare_fd);
 
 } // namespace ag::dnscrypt

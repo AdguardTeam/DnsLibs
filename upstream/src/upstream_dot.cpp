@@ -72,6 +72,14 @@ ag::connection_pool::get_result ag::dns_over_tls::tls_pool::create() {
     const socket_address &address = resolve_result.addresses[0];
     connection_ptr connection = create_connection(bev, address);
     add_pending_connection(connection);
+    bufferevent_setpreparecb(bev, [](int fd, const struct sockaddr *sa, int salen, void *ctx) {
+        auto *self = (tls_pool *) ctx;
+        if (auto error = self->m_upstream->bind_socket_to_if(fd, sa->sa_family)) {
+            warnlog(self->m_upstream->m_log, "Failed to bind socket to interface: {}", *error);
+            return 0;
+        }
+        return 1;
+    }, this);
     bufferevent_socket_connect(bev, address.c_sockaddr(), address.c_socklen());
     SSL_CTX_free(ctx);
     return { std::move(connection), resolve_result.time_elapsed, std::nullopt };
@@ -159,7 +167,8 @@ static ag::bootstrapper_ptr create_bootstrapper(const ag::logger &log, const ag:
 
     return std::make_unique<ag::bootstrapper>(
         ag::bootstrapper::params{ address, (port == 0) ? ag::dns_over_tls::DEFAULT_PORT : port,
-                                  opts.bootstrap, opts.timeout, config });
+                                  opts.bootstrap, opts.timeout, config,
+                                  opts.outbound_interface });
 }
 
 ag::dns_over_tls::dns_over_tls(const upstream_options &opts, const upstream_factory_config &config)

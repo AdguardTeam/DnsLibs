@@ -159,6 +159,7 @@ ag::upstream_options ag::android_dnsproxy::marshal_upstream(JNIEnv *env,
     auto timeout_field = env->GetFieldID(clazz, "timeoutMs", "J");
     auto server_ip_field = env->GetFieldID(clazz, "serverIp", "[B");
     auto id_field = env->GetFieldID(clazz, "id", "I");
+    auto if_field = env->GetFieldID(clazz, "outboundInterfaceName", "Ljava/lang/String;");
 
     ag::upstream_options upstream{};
     upstream.id = env->GetIntField(java_upstream_settings, id_field);
@@ -196,6 +197,10 @@ ag::upstream_options ag::android_dnsproxy::marshal_upstream(JNIEnv *env,
         }
     }
 
+    if (local_ref if_name{env, (jstring) env->GetObjectField(java_upstream_settings, if_field)}) {
+        upstream.outbound_interface = m_utils.marshal_string(env, if_name.get());
+    }
+
     return upstream;
 }
 
@@ -207,6 +212,7 @@ ag::local_ref<jobject> ag::android_dnsproxy::marshal_upstream(JNIEnv *env, const
     auto timeout_field = env->GetFieldID(clazz, "timeoutMs", "J");
     auto server_ip_field = env->GetFieldID(clazz, "serverIp", "[B");
     auto id_field = env->GetFieldID(clazz, "id", "I");
+    auto if_field = env->GetFieldID(clazz, "outboundInterfaceName", "Ljava/lang/String;");
 
     auto java_upstream = env->NewObject(clazz, ctor);
 
@@ -230,6 +236,10 @@ ag::local_ref<jobject> ag::android_dnsproxy::marshal_upstream(JNIEnv *env, const
         for (auto &bootstrap_address : settings.bootstrap) {
             m_utils.collection_add(env, bootstrap.get(), m_utils.marshal_string(env, bootstrap_address).get());
         }
+    }
+
+    if (const std::string *name = std::get_if<std::string>(&settings.outbound_interface)) {
+        env->SetObjectField(java_upstream, if_field, m_utils.marshal_string(env, *name).get());
     }
 
     return local_ref(env, java_upstream);

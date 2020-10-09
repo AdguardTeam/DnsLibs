@@ -43,6 +43,11 @@ namespace Adguard.Dns.Api.DnsProxyServer.Configs
         /// </summary>
         public int Id { get; set; }
 
+        /// <summary>
+        /// Index of the network interface to route traffic through, 0 is default
+        /// </summary>
+        public uint OutboundInterfaceIndex { get; set; }
+
         #region Equals members
 
         public override bool Equals(object obj)

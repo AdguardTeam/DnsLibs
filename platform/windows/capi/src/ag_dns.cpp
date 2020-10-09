@@ -117,6 +117,10 @@ static ag_upstream_options marshal_upstream(const ag::upstream_options &upstream
     c_upstream.bootstrap.size = upstream.bootstrap.size();
     c_upstream.bootstrap.data = (const char **) marshal_strs(upstream.bootstrap);
 
+    if (const uint32_t *idx = std::get_if<uint32_t>(&upstream.outbound_interface)) {
+        c_upstream.outbound_interface_index = *idx;
+    }
+
     return c_upstream;
 }
 
@@ -252,6 +256,9 @@ static ag::upstream_options marshal_upstream(const ag_upstream_options &c_upstre
     }
     for (size_t i = 0; i < c_upstream.bootstrap.size; ++i) {
         upstream.bootstrap.emplace_back(c_upstream.bootstrap.data[i]);
+    }
+    if (c_upstream.outbound_interface_index != 0) {
+        upstream.outbound_interface = c_upstream.outbound_interface_index;
     }
     return upstream;
 }

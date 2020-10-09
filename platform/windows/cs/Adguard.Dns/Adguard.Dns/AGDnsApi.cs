@@ -23,7 +23,7 @@ namespace Adguard.Dns
         /// <summary>
         /// The current API version hash with which the ProxyServer was tested
         /// </summary>
-        private const string API_VERSION_HASH = "f17340a032722da854ce2ba0314180ae5f4a39cb0e237d07e7a42b01355acbc5";
+        private const string API_VERSION_HASH = "34a416a7fd5c7f874a0731a9a0e06f4947173b4f019befc94c6e9d0a6182ce28";
         #endregion
 
         #region API Functions

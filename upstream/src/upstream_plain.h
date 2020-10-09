@@ -8,6 +8,8 @@
 
 namespace ag {
 
+class plain_dns;
+
 /**
  * Pool of TCP connections
  */
@@ -18,9 +20,12 @@ public:
      * @param loop Event loop
      * @param address Destination socket address
      */
-    tcp_pool(event_loop_ptr loop, const socket_address &address) : dns_framed_pool(std::move(loop)),
-                                                                   m_address(address) {
-    }
+    tcp_pool(event_loop_ptr loop,
+             const socket_address &address,
+             plain_dns *upstream)
+            : dns_framed_pool(std::move(loop)),
+              m_address(address),
+              m_upstream(upstream) {}
 
     get_result get() override;
 
@@ -29,6 +34,8 @@ public:
 private:
     /** Destination socket address */
     socket_address m_address;
+    /** Parent upstream */
+    plain_dns *m_upstream;
 
     get_result create();
 };
@@ -53,10 +60,16 @@ private:
     err_string init() override;
     exchange_result exchange(ldns_pkt *request_pkt) override;
 
+    ag::logger m_log;
+
+    friend class tcp_pool;
+
     /** Prefer TCP */
     bool m_prefer_tcp;
     /** TCP connection pool */
     tcp_pool m_pool;
+
+    static int prepare_fd(int fd, int family, void *arg);
 };
 
 } // namespace ag

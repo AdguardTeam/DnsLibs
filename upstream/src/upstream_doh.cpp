@@ -63,6 +63,19 @@ static size_t write_callback(void *contents, size_t size, size_t nmemb, void *ar
     return full_size;
 }
 
+int dns_over_https::sockopt_callback(void *clientp, curl_socket_t curlfd, curlsocktype purpose) {
+    auto *self = (ag::dns_over_https *) clientp;
+    // Since we can't determine the socket family on Apple platforms, try both
+    if (auto error = self->bind_socket_to_if(curlfd, AF_INET)) {
+        dbglog(self->log, "Failed to bind socket to interface: {}, trying AF_INET6", *error);
+        if ((error = self->bind_socket_to_if(curlfd, AF_INET6))) {
+            warnlog(self->log, "Failed to bind socket to interface: {}", *error);
+            return CURL_SOCKOPT_ERROR;
+        }
+    }
+    return CURL_SOCKOPT_OK;
+}
+
 CURL *dns_over_https::query_handle::create_curl_handle() {
     CURL *curl = curl_easy_init();
     if (curl == nullptr) {
@@ -94,6 +107,8 @@ CURL *dns_over_https::query_handle::create_curl_handle() {
             || CURLE_OK != (e = curl_easy_setopt(curl, CURLOPT_SSL_VERIFYPEER, false)) // We verify ourselves, see dns_over_https::ssl_callback
             || CURLE_OK != (e = curl_easy_setopt(curl, CURLOPT_SSL_VERIFYHOST, false)) // We verify ourselves, see dns_over_https::ssl_callback
             || CURLE_OK != (e = curl_easy_setopt(curl, CURLOPT_SSL_ENABLE_ALPN, true))
+            || CURLE_OK != (e = curl_easy_setopt(curl, CURLOPT_SOCKOPTFUNCTION, sockopt_callback))
+            || CURLE_OK != (e = curl_easy_setopt(curl, CURLOPT_SOCKOPTDATA, upstream))
             || (upstream->resolved != nullptr
                 && CURLE_OK != (e = curl_easy_setopt(curl, CURLOPT_RESOLVE, upstream->resolved.get())))) {
         this->error = AG_FMT("Failed to set options of curl handle: {} (id={})",
@@ -245,7 +260,8 @@ err_string dns_over_https::init() {
         if (!this->m_options.bootstrap.empty() || socket_address(get_host_name(this->m_options.address), 0).valid()) {
             bootstrapper_ptr bootstrapper = std::make_unique<ag::bootstrapper>(
                 bootstrapper::params{get_host_port(m_options.address), dns_over_https::DEFAULT_PORT,
-                                     m_options.bootstrap, m_options.timeout, m_config });
+                                     m_options.bootstrap, m_options.timeout, m_config,
+                                     m_options.outbound_interface});
             if (err_string err = bootstrapper->init(); !err.has_value()) {
                 this->bootstrapper = std::move(bootstrapper);
             } else {

@@ -120,12 +120,18 @@
     [filterFiles enumerateObjectsUsingBlock:^(id object, NSUInteger idx, BOOL *stop) {
         [filters addObject: [[AGDnsFilterParams alloc] initWithId:idx data:object inMemory:NO]];
     }];
-    AGDnsProxyConfig *cfg = [[AGDnsProxyConfig alloc] initWithUpstreams: nil
-        // for DOH testing
-        // initWithUpstreams: @[[[AGDnsUpstream alloc] initWithAddress: @"https://dns9.quad9.net/dns-query" bootstrap: @[@"8.8.8.8"] timeout: 10000 serverIp: nil]]
+    AGDnsProxyConfig *cfg = [[AGDnsProxyConfig alloc]
+        initWithUpstreams: nil
+// for DOH testing
+//        initWithUpstreams:@[[[AGDnsUpstream alloc] initWithAddress:@"https://dns9.quad9.net/dns-query"
+//                                                         bootstrap:@[@"8.8.8.8"]
+//                                                         timeoutMs:10000
+//                                                          serverIp:nil
+//                                                                id:42
+//                                             outboundInterfaceName:nil]]
         fallbacks: nil
         filters: filters
-     blockedResponseTtlSecs: 0
+        blockedResponseTtlSecs: 0
         dns64Settings: nil
         listeners: nil
         ipv6Available: true

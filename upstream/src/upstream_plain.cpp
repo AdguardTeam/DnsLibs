@@ -20,7 +20,8 @@ ag::plain_dns::plain_dns(const upstream_options &opts, const upstream_factory_co
         , m_pool(event_loop::create(),
                  prepare_address(m_prefer_tcp
                                  ? opts.address.substr(TCP_SCHEME.length())
-                                 : opts.address)) {}
+                                 : opts.address), this)
+        , m_log(ag::create_logger(AG_FMT("Plain upstream ({})", opts.address))) {}
 
 ag::err_string ag::plain_dns::init() {
     if (!m_pool.address().valid()) {
@@ -44,7 +45,8 @@ ag::plain_dns::exchange_result ag::plain_dns::exchange(ldns_pkt *request_pkt) {
         size_t reply_size;
         timeval tv = utils::duration_to_timeval(this->m_options.timeout);
         status = ldns_udp_send(&reply_data, &*buffer, (const sockaddr_storage *) m_pool.address().c_sockaddr(),
-                               m_pool.address().c_socklen(), tv, &reply_size);
+                               m_pool.address().c_socklen(), tv, &reply_size,
+                               prepare_fd, this);
         if (status != LDNS_STATUS_OK) {
             return {nullptr, utils::ldns_status_to_str(status)};
         }
@@ -78,6 +80,15 @@ ag::plain_dns::exchange_result ag::plain_dns::exchange(ldns_pkt *request_pkt) {
     return {ldns_pkt_ptr(reply_pkt), std::nullopt};
 }
 
+int ag::plain_dns::prepare_fd(int fd, int family, void *arg) {
+    auto *self = (plain_dns *) arg;
+    if (auto error = self->bind_socket_to_if(fd, family)) {
+        warnlog(self->m_log, "Failed to bind socket to interface: {}", *error);
+        return 0;
+    }
+    return 1;
+}
+
 ag::connection_pool::get_result ag::tcp_pool::get() {
     std::scoped_lock l(m_mutex);
     if (!m_connections.empty()) {
@@ -91,6 +102,10 @@ ag::connection_pool::get_result ag::tcp_pool::create() {
     bufferevent *bev = bufferevent_socket_new(m_loop->c_base(), -1, options);
     connection_ptr connection = create_connection(bev, m_address);
     add_pending_connection(connection);
+    bufferevent_setpreparecb(bev, [](int fd, const struct sockaddr *sa, int salen, void *ctx) {
+        auto *self = (tcp_pool *) ctx;
+        return plain_dns::prepare_fd(fd, sa->sa_family, self->m_upstream);
+    }, this);
     bufferevent_socket_connect(bev, m_address.c_sockaddr(), m_address.c_socklen());
     return { std::move(connection), std::chrono::seconds(0), std::nullopt };
 }

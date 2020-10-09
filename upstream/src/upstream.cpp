@@ -1,3 +1,4 @@
+#include <ag_net_utils.h>
 #include <cassert>
 #include <functional>
 #include <chrono>
@@ -79,8 +80,8 @@ static ag::upstream_factory::create_result create_upstream_plain(const ag::upstr
 }
 
 static ag::upstream_factory::create_result create_upstream_dnscrypt(ag::server_stamp &&stamp,
-        const ag::upstream_options &opts) {
-    return {std::make_unique<ag::upstream_dnscrypt>(std::move(stamp), opts), std::nullopt};
+        const ag::upstream_options &opts, const ag::upstream_factory_config &config) {
+    return {std::make_unique<ag::upstream_dnscrypt>(std::move(stamp), opts, config), std::nullopt};
 }
 
 static ag::upstream_factory::create_result create_upstream_dnsquic(const ag::upstream_options &opts,
@@ -110,7 +111,7 @@ static ag::upstream_factory::create_result create_upstream_sdns(const ag::upstre
     case ag::stamp_proto_type::PLAIN:
         return create_upstream_plain(opts, config);
     case ag::stamp_proto_type::DNSCRYPT:
-        return create_upstream_dnscrypt(std::move(stamp), opts);
+        return create_upstream_dnscrypt(std::move(stamp), opts, config);
     case ag::stamp_proto_type::DOH:
         opts.address = AG_FMT("{}{}{}", ag::dns_over_https::SCHEME, stamp.provider_name, stamp.path);
         return create_upstream_https(opts, config);
@@ -164,4 +165,13 @@ ag::upstream_factory::create_result ag::upstream_factory::create_upstream(const 
     }
 
     return result;
+}
+
+ag::err_string ag::upstream::bind_socket_to_if(evutil_socket_t fd, int family) {
+    if (uint32_t *if_index = std::get_if<uint32_t>(&m_options.outbound_interface)) {
+        return ag::utils::bind_socket_to_if(fd, family, *if_index);
+    } else if (std::string *if_name = std::get_if<std::string>(&m_options.outbound_interface)) {
+        return ag::utils::bind_socket_to_if(fd, family, if_name->c_str());
+    }
+    return {};
 }

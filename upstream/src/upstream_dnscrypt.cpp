@@ -1,4 +1,5 @@
 #include <chrono>
+#include <memory>
 #include <ag_utils.h>
 #include <sodium.h>
 #include "upstream_dnscrypt.h"
@@ -25,8 +26,10 @@ static ag::upstream_options make_dnscrypt_options(const ag::server_stamp &stamp,
     return converted;
 }
 
-ag::upstream_dnscrypt::upstream_dnscrypt(server_stamp &&stamp, const upstream_options &opts)
-    : upstream(make_dnscrypt_options(stamp, opts), {})
+ag::upstream_dnscrypt::upstream_dnscrypt(server_stamp &&stamp,
+                                         const upstream_options &opts,
+                                         const upstream_factory_config &config)
+    : upstream(make_dnscrypt_options(stamp, opts), config)
     , m_stamp(std::move(stamp))
 {
     static const initializer ensure_initialized;
@@ -66,12 +69,15 @@ ag::upstream_dnscrypt::setup_result ag::upstream_dnscrypt::setup_impl() {
     if (std::scoped_lock l(m_guard);
             !m_impl || m_impl->server_info.get_server_cert().not_after < now) {
         ag::dnscrypt::client client;
-        auto[dial_server_info, dial_rtt, dial_err] = client.dial(m_stamp, this->m_options.timeout);
+        auto[dial_server_info, dial_rtt, dial_err] = client.dial(m_stamp, this->m_options.timeout,
+                                                                 [this](int fd, int family) {
+                                                                     return prepare_fd(fd, family);
+                                                                 });
         if (dial_err) {
             return { rtt,
                 AG_FMT("Failed to fetch certificate info from {} with error: {}", this->m_options.address, *dial_err) };
         }
-        m_impl.reset(new impl{client, std::move(dial_server_info)});
+        m_impl = std::make_unique<impl>(impl{client, std::move(dial_server_info)});
         rtt = dial_rtt;
     }
     return { rtt };
@@ -97,4 +103,12 @@ ag::upstream_dnscrypt::exchange_result ag::upstream_dnscrypt::apply_exchange(ldn
         return {std::move(tcp_reply), std::move(tcp_reply_err)};
     }
     return {std::move(udp_reply), std::move(udp_reply_err)};
+}
+
+bool ag::upstream_dnscrypt::prepare_fd(int fd, int family) {
+    if (auto error = bind_socket_to_if(fd, family)) {
+        warnlog(m_log, "Failed to bind socket to interface: {}", *error);
+        return false;
+    }
+    return true;
 }

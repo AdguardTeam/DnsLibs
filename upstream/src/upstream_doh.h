@@ -68,6 +68,7 @@ private:
         dns_over_https *upstream, socket_handle *socket_data);
     static void on_event_timeout(int fd, short kind, void *arg);
     static void on_socket_event(int fd, short kind, void *arg);
+    static int sockopt_callback(void *clientp, curl_socket_t curlfd, curlsocktype purpose);
 
     static void submit_request(int, short, void *arg);
     static void defy_request(int, short, void *arg);

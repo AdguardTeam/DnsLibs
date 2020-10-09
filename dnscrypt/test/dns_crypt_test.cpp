@@ -69,19 +69,19 @@ static const auto cipher_src = [] {
 
 TEST_P(cipher_test, cipher) {
     const auto &[encryption_algorithm, valid_cipher_text, valid_shared_key] = GetParam();
-    auto[ciphertext, seal_err] = ag::dnscrypt::cipher_seal(encryption_algorithm, ag::utils::to_string_view(cipher_src),
+    auto[ciphertext, seal_err] = ag::dnscrypt::cipher_seal(encryption_algorithm, ag::utils::make_string_view(cipher_src),
                                                            cipher_nonce, cipher_key);
     ASSERT_FALSE(seal_err) << "Seal error: " << *seal_err;
     ASSERT_TRUE(std::equal(ciphertext.begin(), ciphertext.end(), std::begin(valid_cipher_text),
                            std::end(valid_cipher_text)));
-    auto[decrypted, open_err] = ag::dnscrypt::cipher_open(encryption_algorithm, ag::utils::to_string_view(ciphertext),
+    auto[decrypted, open_err] = ag::dnscrypt::cipher_open(encryption_algorithm, ag::utils::make_string_view(ciphertext),
                                                           cipher_nonce, cipher_key);
     ASSERT_FALSE(open_err) << "Open error: " << *open_err;
     ASSERT_TRUE(std::equal(cipher_src.begin(), cipher_src.end(), decrypted.begin(), decrypted.end()))
             << "Src and decrypted not equal";
     ++ciphertext.front();
     auto[bad_decrypted, bad_decrypted_err] = ag::dnscrypt::cipher_open(encryption_algorithm,
-                                                                       ag::utils::to_string_view(ciphertext),
+                                                                       ag::utils::make_string_view(ciphertext),
                                                                        cipher_nonce, cipher_key);
     ASSERT_TRUE(bad_decrypted_err) << "Tag validation failed";
     auto[shared_key, shared_key_err] = ag::dnscrypt::cipher_shared_key(encryption_algorithm, cipher_key, cipher_key);

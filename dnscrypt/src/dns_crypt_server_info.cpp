@@ -72,7 +72,8 @@ static const ag::logger &server_info_log() {
 }
 
 ag::dnscrypt::server_info::fetch_result ag::dnscrypt::server_info::fetch_current_dnscrypt_cert(protocol local_protocol,
-                                                                   std::chrono::milliseconds timeout) {
+                                                                   std::chrono::milliseconds timeout,
+                                                                   std::function<bool(int, int)> prepare_fd) {
     static constexpr utils::make_error<fetch_result> make_error;
     if (m_server_public_key.size() != crypto_sign_PUBLICKEYBYTES) {
         return make_error("Invalid public key length");
@@ -82,7 +83,7 @@ ag::dnscrypt::server_info::fetch_result ag::dnscrypt::server_info::fetch_current
                                                                  MAX_DNS_UDP_SAFE_PACKET_SIZE));
     ldns_pkt_set_random_id(query.get());
     auto[exchange_reply, exchange_rtt, exchange_err] = dns_exchange_from_ldns_pkt(
-            timeout, ag::utils::str_to_socket_address(m_server_address), *query, local_protocol);
+            timeout, ag::utils::str_to_socket_address(m_server_address), *query, local_protocol, std::move(prepare_fd));
     if (exchange_err) {
         return make_error(std::move(exchange_err));
     }
@@ -142,7 +143,7 @@ ag::dnscrypt::server_info::encrypt_result ag::dnscrypt::server_info::encrypt(pro
     if (pad_error) {
         return make_error(std::move(pad_error));
     }
-    if (auto[encrypted, seal_err] = cipher_seal(m_server_cert.encryption_algorithm, utils::to_string_view(packet), nonce,
+    if (auto[encrypted, seal_err] = cipher_seal(m_server_cert.encryption_algorithm, utils::make_string_view(packet), nonce,
                                                 m_server_cert.shared_key);
         !seal_err) {
         auto result = utils::join<uint8_vector>(m_server_cert.magic_query, m_public_key, client_nonce, encrypted);

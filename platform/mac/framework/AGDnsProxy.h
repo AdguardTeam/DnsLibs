@@ -96,12 +96,17 @@ typedef void (^logCallback)(const char *msg, int length);
  * User-provided ID for this upstream
  */
 @property(nonatomic, readonly) NSInteger id;
+/**
+ * Name of the network interface to route traffic through, nil is default
+ */
+@property(nonatomic, readonly) NSString *outboundInterfaceName;
 
 - (instancetype) initWithAddress: (NSString *) address
         bootstrap: (NSArray<NSString *> *) bootstrap
         timeoutMs: (NSInteger) timeoutMs
         serverIp: (NSData *) serverIp
-        id: (NSInteger) id;
+        id: (NSInteger) id
+        outboundInterfaceName: (NSString *) outboundInterfaceName;
 @end
 
 @interface AGDns64Settings : NSObject
