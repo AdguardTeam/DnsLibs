@@ -86,6 +86,8 @@ std::pair<bool, err_string> dnsproxy::init(dnsproxy_settings settings, dnsproxy_
 void dnsproxy::deinit() {
     std::unique_ptr<impl> &proxy = this->pimpl;
     infolog(proxy->log, "Deinitializing proxy module...");
+
+    infolog(proxy->log, "Shutting down listeners...");
     for (auto& listener : proxy->listeners) {
         listener->shutdown();
     }
@@ -94,9 +96,11 @@ void dnsproxy::deinit() {
     for (auto& listener : proxy->listeners) {
         listener->await_shutdown();
     }
+    infolog(proxy->log, "Done");
+
     proxy->forwarder.deinit();
     proxy->settings = {};
-    infolog(proxy->log, "Proxy module deinitialized...");
+    infolog(proxy->log, "Proxy module deinitialized");
 }
 
 const dnsproxy_settings &dnsproxy::get_settings() const {

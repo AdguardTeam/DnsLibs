@@ -702,8 +702,10 @@ std::pair<bool, err_string> dns_forwarder::init(const dnsproxy_settings &setting
 }
 
 void dns_forwarder::deinit() {
+    infolog(log, "Deinitializing...");
+
     {
-        // Cancel unstarted async requests
+        infolog(log, "Cancelling unstarted async requests...");
         std::unique_lock l(this->async_reqs_mtx);
         for (auto it = this->async_reqs.begin(); it != this->async_reqs.end();) {
             if (int r = uv_cancel((uv_req_t *) &it->second.work); r != 0) {
@@ -713,19 +715,37 @@ void dns_forwarder::deinit() {
                 it = this->async_reqs.erase(it);
             }
         }
-        // Wait for started async requests to finish
+
+        infolog(log, "Wait for started async requests to finish...");
         this->async_reqs_cv.wait(l, [&]() {
             return this->async_reqs.empty();
         });
+        infolog(log, "Done");
+
+        infolog(log, "All async requests are cancelled");
     }
     this->settings = nullptr;
+
+    infolog(log, "Destroying upstreams...");
     this->upstreams.clear();
+    infolog(log, "Done");
+
+    infolog(log, "Destroying fallback upstreams...");
     this->fallbacks.clear();
+    infolog(log, "Done");
+
+    infolog(log, "Destroying DNS filter...");
     this->filter.destroy(this->filter_handle);
+    infolog(log, "Done");
+
     {
+        infolog(log, "Clearing cache...");
         std::scoped_lock l(this->response_cache.mtx);
         this->response_cache.val.clear();
+        infolog(log, "Done");
     }
+
+    infolog(log, "Deinitialized");
 }
 
 static bool has_unsupported_extensions(const ldns_pkt *pkt) {

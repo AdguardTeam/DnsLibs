@@ -11,6 +11,7 @@
 
 #include <ldns/ldns.h>
 #include <ldns/ag_ext.h>
+#include <magic_enum.hpp>
 
 
 #define errlog_id(q_, fmt_, ...) errlog(*((q_)->log), "[{}] " fmt_, (q_)->request_id, ##__VA_ARGS__)
@@ -268,17 +269,25 @@ void dns_over_https::stop(int, short, void *arg) {
 }
 
 dns_over_https::~dns_over_https() {
+    infolog(this->log, "Destroying...");
+
+    infolog(this->log, "Stopping event loop...");
     event_base_once(this->worker.loop->c_base(), 0, EV_TIMEOUT, stop, this, nullptr);
     // Delete the event before deleting the loop
     this->pool.timer_event.reset();
     this->worker.loop->stop();
     this->worker.loop.reset();
+    infolog(this->log, "Done");
 
+    infolog(this->log, "Waiting all requests completed...");
     std::unique_lock lock(this->guard);
     this->worker.no_requests_condition.wait(lock,
         [this] () -> bool {
             return this->worker.requests_counter == 0;
         });
+    infolog(this->log, "Done");
+
+    infolog(this->log, "Destroyed");
 }
 
 struct dns_over_https::socket_handle {
@@ -527,7 +536,12 @@ dns_over_https::exchange_result dns_over_https::exchange(ldns_pkt *request) {
         err = "Request timed out";
         std::future<void> request_defied = handle->defy_barrier.get_future();
         event_base_once(this->worker.loop->c_base(), 0, EV_TIMEOUT, defy_request, handle.get(), nullptr);
-        request_defied.wait();
+        milliseconds defy_timeout = this->m_options.timeout;
+        if (std::future_status status = request_defied.wait_for(defy_timeout);
+                status != std::future_status::ready) {
+            err = "Failed to defy request";
+            errlog_id(handle, "{} in {}: status={}", err.value(), defy_timeout, magic_enum::enum_name(status));
+        }
     } else if (handle->error.has_value()) {
         err = std::move(handle->error);
     } else if (ldns_status status = ldns_wire2pkt(&response, handle->response.data(), handle->response.size());

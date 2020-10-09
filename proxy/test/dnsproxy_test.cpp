@@ -52,6 +52,10 @@ static void perform_request(ag::dnsproxy &proxy, const ag::ldns_pkt_ptr &request
     response = ag::ldns_pkt_ptr(resp);
 }
 
+static ag::allocated_ptr<char> make_rr_answer_string(ldns_pkt *pkt) {
+    return ag::allocated_ptr<char>{ ldns_rdf2str(ldns_rr_rdf(ldns_rr_list_rr(ldns_pkt_answer(pkt), 0), 0)) };
+}
+
 TEST_F(dnsproxy_test, test_dns64) {
     using namespace std::chrono_literals;
 
@@ -303,41 +307,41 @@ TEST_F(dnsproxy_test, blocking_mode_default) {
 
     ASSERT_NO_FATAL_FAILURE(perform_request(proxy, create_request("hosts-style-unspec.com", LDNS_RR_TYPE_A, LDNS_RD), res));
     ASSERT_EQ(LDNS_RCODE_NOERROR, ldns_pkt_get_rcode(res.get()));
-    ASSERT_EQ(0, std::strcmp("0.0.0.0", ldns_rdf2str(ldns_rr_rdf(ldns_rr_list_rr(ldns_pkt_answer(res.get()), 0), 0))));
+    ASSERT_STREQ("0.0.0.0", make_rr_answer_string(res.get()).get());
 
     ASSERT_NO_FATAL_FAILURE(perform_request(proxy, create_request("hosts-style-unspec-6.com", LDNS_RR_TYPE_AAAA, LDNS_RD), res));
     ASSERT_EQ(LDNS_RCODE_NOERROR, ldns_pkt_get_rcode(res.get()));
-    ASSERT_EQ(0, std::strcmp("::", ldns_rdf2str(ldns_rr_rdf(ldns_rr_list_rr(ldns_pkt_answer(res.get()), 0), 0))));
+    ASSERT_STREQ("::", make_rr_answer_string(res.get()).get());
 
     // Check loopback is equivalent to unspec
     ASSERT_NO_FATAL_FAILURE(perform_request(proxy, create_request("hosts-style-loopback.com", LDNS_RR_TYPE_A, LDNS_RD), res));
     ASSERT_EQ(LDNS_RCODE_NOERROR, ldns_pkt_get_rcode(res.get()));
-    ASSERT_EQ(0, std::strcmp("0.0.0.0", ldns_rdf2str(ldns_rr_rdf(ldns_rr_list_rr(ldns_pkt_answer(res.get()), 0), 0))));
+    ASSERT_STREQ("0.0.0.0", make_rr_answer_string(res.get()).get());
 
     // Check loopback is equivalent to unspec for IPv6
     ASSERT_NO_FATAL_FAILURE(perform_request(proxy, create_request("hosts-style-loopback-6.com", LDNS_RR_TYPE_AAAA, LDNS_RD), res));
     ASSERT_EQ(LDNS_RCODE_NOERROR, ldns_pkt_get_rcode(res.get()));
-    ASSERT_EQ(0, std::strcmp("::", ldns_rdf2str(ldns_rr_rdf(ldns_rr_list_rr(ldns_pkt_answer(res.get()), 0), 0))));
+    ASSERT_STREQ("::", make_rr_answer_string(res.get()).get());
 
     // Check custom IP works
     ASSERT_NO_FATAL_FAILURE(perform_request(proxy, create_request("hosts-style-custom.com", LDNS_RR_TYPE_A, LDNS_RD), res));
     ASSERT_EQ(LDNS_RCODE_NOERROR, ldns_pkt_get_rcode(res.get()));
-    ASSERT_EQ(0, std::strcmp("1.2.3.4", ldns_rdf2str(ldns_rr_rdf(ldns_rr_list_rr(ldns_pkt_answer(res.get()), 0), 0))));
+    ASSERT_STREQ("1.2.3.4", make_rr_answer_string(res.get()).get());
 
     // Check custom IP works for IPv6
     ASSERT_NO_FATAL_FAILURE(perform_request(proxy, create_request("hosts-style-custom-6.com", LDNS_RR_TYPE_AAAA, LDNS_RD), res));
     ASSERT_EQ(LDNS_RCODE_NOERROR, ldns_pkt_get_rcode(res.get()));
-    ASSERT_EQ(0, std::strcmp("12::34", ldns_rdf2str(ldns_rr_rdf(ldns_rr_list_rr(ldns_pkt_answer(res.get()), 0), 0))));
+    ASSERT_STREQ("12::34", make_rr_answer_string(res.get()).get());
 
     // Check custom (from rule!) IP works
     ASSERT_NO_FATAL_FAILURE(perform_request(proxy, create_request("hosts-style-4-and-6.com", LDNS_RR_TYPE_A, LDNS_RD), res));
     ASSERT_EQ(LDNS_RCODE_NOERROR, ldns_pkt_get_rcode(res.get()));
-    ASSERT_EQ(0, std::strcmp("4.5.6.7", ldns_rdf2str(ldns_rr_rdf(ldns_rr_list_rr(ldns_pkt_answer(res.get()), 0), 0))));
+    ASSERT_STREQ("4.5.6.7", make_rr_answer_string(res.get()).get());
 
     // Check custom (from rule!) IP works for IPv6
     ASSERT_NO_FATAL_FAILURE(perform_request(proxy, create_request("hosts-style-4-and-6.com", LDNS_RR_TYPE_AAAA, LDNS_RD), res));
     ASSERT_EQ(LDNS_RCODE_NOERROR, ldns_pkt_get_rcode(res.get()));
-    ASSERT_EQ(0, std::strcmp("45::67", ldns_rdf2str(ldns_rr_rdf(ldns_rr_list_rr(ldns_pkt_answer(res.get()), 0), 0))));
+    ASSERT_STREQ("45::67", make_rr_answer_string(res.get()).get());
 }
 
 TEST_F(dnsproxy_test, blocking_mode_nxdomain) {
@@ -384,22 +388,22 @@ TEST_F(dnsproxy_test, blocking_mode_nxdomain) {
     // Check custom IP works
     ASSERT_NO_FATAL_FAILURE(perform_request(proxy, create_request("hosts-style-custom.com", LDNS_RR_TYPE_A, LDNS_RD), res));
     ASSERT_EQ(LDNS_RCODE_NOERROR, ldns_pkt_get_rcode(res.get()));
-    ASSERT_EQ(0, std::strcmp("1.2.3.4", ldns_rdf2str(ldns_rr_rdf(ldns_rr_list_rr(ldns_pkt_answer(res.get()), 0), 0))));
+    ASSERT_STREQ("1.2.3.4", make_rr_answer_string(res.get()).get());
 
     // Check custom IP works for IPv6
     ASSERT_NO_FATAL_FAILURE(perform_request(proxy, create_request("hosts-style-custom-6.com", LDNS_RR_TYPE_AAAA, LDNS_RD), res));
     ASSERT_EQ(LDNS_RCODE_NOERROR, ldns_pkt_get_rcode(res.get()));
-    ASSERT_EQ(0, std::strcmp("12::34", ldns_rdf2str(ldns_rr_rdf(ldns_rr_list_rr(ldns_pkt_answer(res.get()), 0), 0))));
+    ASSERT_STREQ("12::34", make_rr_answer_string(res.get()).get());
 
     // Check custom (from rule!) IP works
     ASSERT_NO_FATAL_FAILURE(perform_request(proxy, create_request("hosts-style-4-and-6.com", LDNS_RR_TYPE_A, LDNS_RD), res));
     ASSERT_EQ(LDNS_RCODE_NOERROR, ldns_pkt_get_rcode(res.get()));
-    ASSERT_EQ(0, std::strcmp("4.5.6.7", ldns_rdf2str(ldns_rr_rdf(ldns_rr_list_rr(ldns_pkt_answer(res.get()), 0), 0))));
+    ASSERT_STREQ("4.5.6.7", make_rr_answer_string(res.get()).get());
 
     // Check custom (from rule!) IP works for IPv6
     ASSERT_NO_FATAL_FAILURE(perform_request(proxy, create_request("hosts-style-4-and-6.com", LDNS_RR_TYPE_AAAA, LDNS_RD), res));
     ASSERT_EQ(LDNS_RCODE_NOERROR, ldns_pkt_get_rcode(res.get()));
-    ASSERT_EQ(0, std::strcmp("45::67", ldns_rdf2str(ldns_rr_rdf(ldns_rr_list_rr(ldns_pkt_answer(res.get()), 0), 0))));
+    ASSERT_STREQ("45::67", make_rr_answer_string(res.get()).get());
 }
 
 TEST_F(dnsproxy_test, blocking_mode_refused) {
@@ -439,22 +443,22 @@ TEST_F(dnsproxy_test, blocking_mode_refused) {
     // Check custom IP works
     ASSERT_NO_FATAL_FAILURE(perform_request(proxy, create_request("hosts-style-custom.com", LDNS_RR_TYPE_A, LDNS_RD), res));
     ASSERT_EQ(LDNS_RCODE_NOERROR, ldns_pkt_get_rcode(res.get()));
-    ASSERT_EQ(0, std::strcmp("1.2.3.4", ldns_rdf2str(ldns_rr_rdf(ldns_rr_list_rr(ldns_pkt_answer(res.get()), 0), 0))));
+    ASSERT_STREQ("1.2.3.4", make_rr_answer_string(res.get()).get());
 
     // Check custom IP works for IPv6
     ASSERT_NO_FATAL_FAILURE(perform_request(proxy, create_request("hosts-style-custom-6.com", LDNS_RR_TYPE_AAAA, LDNS_RD), res));
     ASSERT_EQ(LDNS_RCODE_NOERROR, ldns_pkt_get_rcode(res.get()));
-    ASSERT_EQ(0, std::strcmp("12::34", ldns_rdf2str(ldns_rr_rdf(ldns_rr_list_rr(ldns_pkt_answer(res.get()), 0), 0))));
+    ASSERT_STREQ("12::34", make_rr_answer_string(res.get()).get());
 
     // Check custom (from rule!) IP works
     ASSERT_NO_FATAL_FAILURE(perform_request(proxy, create_request("hosts-style-4-and-6.com", LDNS_RR_TYPE_A, LDNS_RD), res));
     ASSERT_EQ(LDNS_RCODE_NOERROR, ldns_pkt_get_rcode(res.get()));
-    ASSERT_EQ(0, std::strcmp("4.5.6.7", ldns_rdf2str(ldns_rr_rdf(ldns_rr_list_rr(ldns_pkt_answer(res.get()), 0), 0))));
+    ASSERT_STREQ("4.5.6.7", make_rr_answer_string(res.get()).get());
 
     // Check custom (from rule!) IP works for IPv6
     ASSERT_NO_FATAL_FAILURE(perform_request(proxy, create_request("hosts-style-4-and-6.com", LDNS_RR_TYPE_AAAA, LDNS_RD), res));
     ASSERT_EQ(LDNS_RCODE_NOERROR, ldns_pkt_get_rcode(res.get()));
-    ASSERT_EQ(0, std::strcmp("45::67", ldns_rdf2str(ldns_rr_rdf(ldns_rr_list_rr(ldns_pkt_answer(res.get()), 0), 0))));
+    ASSERT_STREQ("45::67", make_rr_answer_string(res.get()).get());
 }
 
 TEST_F(dnsproxy_test, blocking_mode_unspecified_address) {
@@ -474,49 +478,49 @@ TEST_F(dnsproxy_test, blocking_mode_unspecified_address) {
 
     ASSERT_NO_FATAL_FAILURE(perform_request(proxy, create_request("adb-style.com", LDNS_RR_TYPE_A, LDNS_RD), res));
     ASSERT_EQ(LDNS_RCODE_NOERROR, ldns_pkt_get_rcode(res.get()));
-    ASSERT_EQ(0, std::strcmp("0.0.0.0", ldns_rdf2str(ldns_rr_rdf(ldns_rr_list_rr(ldns_pkt_answer(res.get()), 0), 0))));
+    ASSERT_STREQ("0.0.0.0", make_rr_answer_string(res.get()).get());
 
     ASSERT_NO_FATAL_FAILURE(perform_request(proxy, create_request("adb-style.com", LDNS_RR_TYPE_AAAA, LDNS_RD), res));
     ASSERT_EQ(LDNS_RCODE_NOERROR, ldns_pkt_get_rcode(res.get()));
-    ASSERT_EQ(0, std::strcmp("::", ldns_rdf2str(ldns_rr_rdf(ldns_rr_list_rr(ldns_pkt_answer(res.get()), 0), 0))));
+    ASSERT_STREQ("::", make_rr_answer_string(res.get()).get());
 
     ASSERT_NO_FATAL_FAILURE(perform_request(proxy, create_request("hosts-style-unspec.com", LDNS_RR_TYPE_A, LDNS_RD), res));
     ASSERT_EQ(LDNS_RCODE_NOERROR, ldns_pkt_get_rcode(res.get()));
-    ASSERT_EQ(0, std::strcmp("0.0.0.0", ldns_rdf2str(ldns_rr_rdf(ldns_rr_list_rr(ldns_pkt_answer(res.get()), 0), 0))));
+    ASSERT_STREQ("0.0.0.0", make_rr_answer_string(res.get()).get());
 
     ASSERT_NO_FATAL_FAILURE(perform_request(proxy, create_request("hosts-style-unspec-6.com", LDNS_RR_TYPE_AAAA, LDNS_RD), res));
     ASSERT_EQ(LDNS_RCODE_NOERROR, ldns_pkt_get_rcode(res.get()));
-    ASSERT_EQ(0, std::strcmp("::", ldns_rdf2str(ldns_rr_rdf(ldns_rr_list_rr(ldns_pkt_answer(res.get()), 0), 0))));
+    ASSERT_STREQ("::", make_rr_answer_string(res.get()).get());
 
     // Check loopback is equivalent to unspec
     ASSERT_NO_FATAL_FAILURE(perform_request(proxy, create_request("hosts-style-loopback.com", LDNS_RR_TYPE_A, LDNS_RD), res));
     ASSERT_EQ(LDNS_RCODE_NOERROR, ldns_pkt_get_rcode(res.get()));
-    ASSERT_EQ(0, std::strcmp("0.0.0.0", ldns_rdf2str(ldns_rr_rdf(ldns_rr_list_rr(ldns_pkt_answer(res.get()), 0), 0))));
+    ASSERT_STREQ("0.0.0.0", make_rr_answer_string(res.get()).get());
 
     // Check loopback is equivalent to unspec for IPv6
     ASSERT_NO_FATAL_FAILURE(perform_request(proxy, create_request("hosts-style-loopback-6.com", LDNS_RR_TYPE_AAAA, LDNS_RD), res));
     ASSERT_EQ(LDNS_RCODE_NOERROR, ldns_pkt_get_rcode(res.get()));
-    ASSERT_EQ(0, std::strcmp("::", ldns_rdf2str(ldns_rr_rdf(ldns_rr_list_rr(ldns_pkt_answer(res.get()), 0), 0))));
+    ASSERT_STREQ("::", make_rr_answer_string(res.get()).get());
 
     // Check custom IP works
     ASSERT_NO_FATAL_FAILURE(perform_request(proxy, create_request("hosts-style-custom.com", LDNS_RR_TYPE_A, LDNS_RD), res));
     ASSERT_EQ(LDNS_RCODE_NOERROR, ldns_pkt_get_rcode(res.get()));
-    ASSERT_EQ(0, std::strcmp("1.2.3.4", ldns_rdf2str(ldns_rr_rdf(ldns_rr_list_rr(ldns_pkt_answer(res.get()), 0), 0))));
+    ASSERT_STREQ("1.2.3.4", make_rr_answer_string(res.get()).get());
 
     // Check custom IP works for IPv6
     ASSERT_NO_FATAL_FAILURE(perform_request(proxy, create_request("hosts-style-custom-6.com", LDNS_RR_TYPE_AAAA, LDNS_RD), res));
     ASSERT_EQ(LDNS_RCODE_NOERROR, ldns_pkt_get_rcode(res.get()));
-    ASSERT_EQ(0, std::strcmp("12::34", ldns_rdf2str(ldns_rr_rdf(ldns_rr_list_rr(ldns_pkt_answer(res.get()), 0), 0))));
+    ASSERT_STREQ("12::34", make_rr_answer_string(res.get()).get());
 
     // Check custom (from rule!) IP works
     ASSERT_NO_FATAL_FAILURE(perform_request(proxy, create_request("hosts-style-4-and-6.com", LDNS_RR_TYPE_A, LDNS_RD), res));
     ASSERT_EQ(LDNS_RCODE_NOERROR, ldns_pkt_get_rcode(res.get()));
-    ASSERT_EQ(0, std::strcmp("4.5.6.7", ldns_rdf2str(ldns_rr_rdf(ldns_rr_list_rr(ldns_pkt_answer(res.get()), 0), 0))));
+    ASSERT_STREQ("4.5.6.7", make_rr_answer_string(res.get()).get());
 
     // Check custom (from rule!) IP works for IPv6
     ASSERT_NO_FATAL_FAILURE(perform_request(proxy, create_request("hosts-style-4-and-6.com", LDNS_RR_TYPE_AAAA, LDNS_RD), res));
     ASSERT_EQ(LDNS_RCODE_NOERROR, ldns_pkt_get_rcode(res.get()));
-    ASSERT_EQ(0, std::strcmp("45::67", ldns_rdf2str(ldns_rr_rdf(ldns_rr_list_rr(ldns_pkt_answer(res.get()), 0), 0))));
+    ASSERT_STREQ("45::67", make_rr_answer_string(res.get()).get());
 }
 
 TEST_F(dnsproxy_test, blocking_mode_custom_address) {
@@ -538,49 +542,49 @@ TEST_F(dnsproxy_test, blocking_mode_custom_address) {
 
     ASSERT_NO_FATAL_FAILURE(perform_request(proxy, create_request("adb-style.com", LDNS_RR_TYPE_A, LDNS_RD), res));
     ASSERT_EQ(LDNS_RCODE_NOERROR, ldns_pkt_get_rcode(res.get()));
-    ASSERT_EQ(0, std::strcmp("4.3.2.1", ldns_rdf2str(ldns_rr_rdf(ldns_rr_list_rr(ldns_pkt_answer(res.get()), 0), 0))));
+    ASSERT_STREQ("4.3.2.1", make_rr_answer_string(res.get()).get());
 
     ASSERT_NO_FATAL_FAILURE(perform_request(proxy, create_request("adb-style.com", LDNS_RR_TYPE_AAAA, LDNS_RD), res));
     ASSERT_EQ(LDNS_RCODE_NOERROR, ldns_pkt_get_rcode(res.get()));
-    ASSERT_EQ(0, std::strcmp("43::21", ldns_rdf2str(ldns_rr_rdf(ldns_rr_list_rr(ldns_pkt_answer(res.get()), 0), 0))));
+    ASSERT_STREQ("43::21", make_rr_answer_string(res.get()).get());
 
     ASSERT_NO_FATAL_FAILURE(perform_request(proxy, create_request("hosts-style-unspec.com", LDNS_RR_TYPE_A, LDNS_RD), res));
     ASSERT_EQ(LDNS_RCODE_NOERROR, ldns_pkt_get_rcode(res.get()));
-    ASSERT_EQ(0, std::strcmp("4.3.2.1", ldns_rdf2str(ldns_rr_rdf(ldns_rr_list_rr(ldns_pkt_answer(res.get()), 0), 0))));
+    ASSERT_STREQ("4.3.2.1", make_rr_answer_string(res.get()).get());
 
     ASSERT_NO_FATAL_FAILURE(perform_request(proxy, create_request("hosts-style-unspec-6.com", LDNS_RR_TYPE_AAAA, LDNS_RD), res));
     ASSERT_EQ(LDNS_RCODE_NOERROR, ldns_pkt_get_rcode(res.get()));
-    ASSERT_EQ(0, std::strcmp("43::21", ldns_rdf2str(ldns_rr_rdf(ldns_rr_list_rr(ldns_pkt_answer(res.get()), 0), 0))));
+    ASSERT_STREQ("43::21", make_rr_answer_string(res.get()).get());
 
     // Check loopback is equivalent to unspec
     ASSERT_NO_FATAL_FAILURE(perform_request(proxy, create_request("hosts-style-loopback.com", LDNS_RR_TYPE_A, LDNS_RD), res));
     ASSERT_EQ(LDNS_RCODE_NOERROR, ldns_pkt_get_rcode(res.get()));
-    ASSERT_EQ(0, std::strcmp("4.3.2.1", ldns_rdf2str(ldns_rr_rdf(ldns_rr_list_rr(ldns_pkt_answer(res.get()), 0), 0))));
+    ASSERT_STREQ("4.3.2.1", make_rr_answer_string(res.get()).get());
 
     // Check loopback is equivalent to unspec for IPv6
     ASSERT_NO_FATAL_FAILURE(perform_request(proxy, create_request("hosts-style-loopback-6.com", LDNS_RR_TYPE_AAAA, LDNS_RD), res));
     ASSERT_EQ(LDNS_RCODE_NOERROR, ldns_pkt_get_rcode(res.get()));
-    ASSERT_EQ(0, std::strcmp("43::21", ldns_rdf2str(ldns_rr_rdf(ldns_rr_list_rr(ldns_pkt_answer(res.get()), 0), 0))));
+    ASSERT_STREQ("43::21", make_rr_answer_string(res.get()).get());
 
     // Check custom (from rule!) IP works
     ASSERT_NO_FATAL_FAILURE(perform_request(proxy, create_request("hosts-style-custom.com", LDNS_RR_TYPE_A, LDNS_RD), res));
     ASSERT_EQ(LDNS_RCODE_NOERROR, ldns_pkt_get_rcode(res.get()));
-    ASSERT_EQ(0, std::strcmp("1.2.3.4", ldns_rdf2str(ldns_rr_rdf(ldns_rr_list_rr(ldns_pkt_answer(res.get()), 0), 0))));
+    ASSERT_STREQ("1.2.3.4", make_rr_answer_string(res.get()).get());
 
     // Check custom (from rule!) IP works for IPv6
     ASSERT_NO_FATAL_FAILURE(perform_request(proxy, create_request("hosts-style-custom-6.com", LDNS_RR_TYPE_AAAA, LDNS_RD), res));
     ASSERT_EQ(LDNS_RCODE_NOERROR, ldns_pkt_get_rcode(res.get()));
-    ASSERT_EQ(0, std::strcmp("12::34", ldns_rdf2str(ldns_rr_rdf(ldns_rr_list_rr(ldns_pkt_answer(res.get()), 0), 0))));
+    ASSERT_STREQ("12::34", make_rr_answer_string(res.get()).get());
 
     // Check custom (from rule!) IP works
     ASSERT_NO_FATAL_FAILURE(perform_request(proxy, create_request("hosts-style-4-and-6.com", LDNS_RR_TYPE_A, LDNS_RD), res));
     ASSERT_EQ(LDNS_RCODE_NOERROR, ldns_pkt_get_rcode(res.get()));
-    ASSERT_EQ(0, std::strcmp("4.5.6.7", ldns_rdf2str(ldns_rr_rdf(ldns_rr_list_rr(ldns_pkt_answer(res.get()), 0), 0))));
+    ASSERT_STREQ("4.5.6.7", make_rr_answer_string(res.get()).get());
 
     // Check custom (from rule!) IP works for IPv6
     ASSERT_NO_FATAL_FAILURE(perform_request(proxy, create_request("hosts-style-4-and-6.com", LDNS_RR_TYPE_AAAA, LDNS_RD), res));
     ASSERT_EQ(LDNS_RCODE_NOERROR, ldns_pkt_get_rcode(res.get()));
-    ASSERT_EQ(0, std::strcmp("45::67", ldns_rdf2str(ldns_rr_rdf(ldns_rr_list_rr(ldns_pkt_answer(res.get()), 0), 0))));
+    ASSERT_STREQ("45::67", make_rr_answer_string(res.get()).get());
 }
 
 TEST_F(dnsproxy_test, custom_blocking_address_validation_1) {
