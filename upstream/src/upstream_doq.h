@@ -138,7 +138,7 @@ private:
     static int ssl_verify_callback(X509_STORE_CTX *ctx, void *arg);
 
     static void read_cb(int, short, void *data);
-    static void rtt_timer_cb(int, short, void *data);
+    static void idle_timer_cb(int, short, void *data);
     static void retransmit_cb(int, short, void *data);
 
     int init_ssl_ctx();
@@ -162,7 +162,7 @@ private:
     void send_requests();
     void process_reply(int64_t request_id, const uint8_t *request_data, size_t request_data_len);
     void deinit();
-    void disconnect(int line);
+    void disconnect(std::string_view reason);
     void schedule_retransmit();
     ngtcp2_tstamp get_tstamp() const;
     ngtcp2_crypto_level from_ossl_level(enum ssl_encryption_level_t ossl_level) const;
@@ -197,7 +197,7 @@ private:
     std::atomic<ngtcp2_tstamp> m_last_pkt{0};
     event_loop_ptr m_loop = event_loop::create();
     struct event *m_read_event{nullptr};
-    struct event *m_rtt_timer_event{nullptr};
+    struct event *m_idle_timer_event{nullptr};
     struct event *m_retransmit_timer_event{nullptr};
     static std::atomic_int64_t m_next_request_id;
     static std::array<uint8_t, 32> m_static_secret;

@@ -30,7 +30,7 @@ dns_over_quic::dns_over_quic(const upstream_options &opts, const upstream_factor
 {}
 
 dns_over_quic::~dns_over_quic() {
-    disconnect(__LINE__);
+    disconnect("DOQ-destructor called");
     deinit();
 }
 
@@ -93,30 +93,28 @@ void dns_over_quic::retransmit_cb(int, short, void *data) {
     }
 
     if (int ret = doq->handle_expiry(); ret != 0) {
-        doq->disconnect(__LINE__);
+        doq->disconnect("Handling expiry error");
     }
 
     if (int ret = doq->on_write(); ret != 0) {
-        warnlog(doq->m_log, "An error happened while writing: {} line: {}", ret, __LINE__);
-        doq->disconnect(__LINE__);
+        doq->disconnect(AG_FMT("Retransmission error ({})", ret));
     }
 }
 
-void dns_over_quic::rtt_timer_cb(int, short, void *data) {
+void dns_over_quic::idle_timer_cb(int, short, void *data) {
     auto doq = static_cast<dns_over_quic *>(data);
-    doq->disconnect(__LINE__);
+    doq->disconnect("Idle timer expired");
 }
 
 void dns_over_quic::read_cb(int, short, void *data) {
     auto doq = static_cast<dns_over_quic *>(data);
     if (int ret = doq->on_read(); ret != NETWORK_ERR_OK) {
-        warnlog(doq->m_log, "An error happened while reading: {} line: {}", ret, __LINE__);
-        doq->disconnect(__LINE__);
+        doq->disconnect(AG_FMT("Reading error ({})", ret));
         return;
     }
     if (int ret = doq->on_write(); ret != NETWORK_ERR_OK) {
         warnlog(doq->m_log, "An error happened while writing: {} line: {}", ret, __LINE__);
-        doq->disconnect(__LINE__);
+        doq->disconnect(AG_FMT("Writing error ({})", ret));
     }
 }
 
@@ -135,7 +133,7 @@ void dns_over_quic::send_requests() {
 
         if (stream_id == -1) {
             m_global.unlock();
-            disconnect(__LINE__);
+            disconnect("Stream ID is wrong");
             return;
         }
 
@@ -154,8 +152,7 @@ void dns_over_quic::send_requests() {
     m_global.unlock();
 
     if (int ret = on_write(); ret != NETWORK_ERR_OK) {
-        warnlog(m_log, "An error happened while writing: {} line: {}", ret, __LINE__);
-        disconnect(__LINE__);
+        disconnect(AG_FMT("Sending requests error ({})", ret));
         return;
     }
 
@@ -168,8 +165,8 @@ void dns_over_quic::send_requests() {
         milliseconds default_timeout{(m_options.timeout.count() * 2)};
         tv = ag::utils::duration_to_timeval(default_timeout);
     }
-    evtimer_del(m_rtt_timer_event);
-    evtimer_add(m_rtt_timer_event, &tv);
+    evtimer_del(m_idle_timer_event);
+    evtimer_add(m_idle_timer_event, &tv);
 }
 
 evutil_socket_t dns_over_quic::create_ipv4_socket() {
@@ -264,7 +261,7 @@ err_string dns_over_quic::init() {
 
     m_remote_addr_empty = ag::socket_address("::", m_port);
 
-    m_rtt_timer_event = event_new(m_loop->c_base(), -1, EV_TIMEOUT, rtt_timer_cb, this);
+    m_idle_timer_event = event_new(m_loop->c_base(), -1, EV_TIMEOUT, idle_timer_cb, this);
     m_retransmit_timer_event = event_new(m_loop->c_base(), -1, EV_TIMEOUT, retransmit_cb, this);
 
     if (int ret = init_ssl_ctx(); ret != 0) {
@@ -306,8 +303,7 @@ dns_over_quic::exchange_result dns_over_quic::exchange(ldns_pkt *request) {
         if (m_state != RUN) {
             int res = this->reinit();
             if (res != NETWORK_ERR_HANDSHAKE_RUN && res != NETWORK_ERR_OK) {
-                disconnect(__LINE__);
-                warnlog(m_log, "Reinit failed");
+                disconnect("Reinit failed");
             }
         } else {
             this->send_requests();
@@ -374,7 +370,7 @@ int dns_over_quic::on_write() {
     if (m_send_buf.size() > 0) {
         if (auto rv = send_packet(); rv != NETWORK_ERR_OK) {
             if (rv != NETWORK_ERR_SEND_BLOCKED) {
-                disconnect(__LINE__);
+                disconnect("Resending packet failed");
             }
             return rv;
         }
@@ -586,12 +582,12 @@ int dns_over_quic::on_read() {
         }
     }
 
-    evtimer_del(m_rtt_timer_event);
+    evtimer_del(m_idle_timer_event);
     struct timeval tv{0};
     ngtcp2_conn_stat st{0};
     ngtcp2_conn_get_conn_stat(m_conn, &st);
     tv.tv_sec = st.bytes_in_flight ? m_options.timeout.count() * 2 / 1000 : IDLE_TIMEOUT_SEC;
-    evtimer_add(m_rtt_timer_event, &tv);
+    evtimer_add(m_idle_timer_event, &tv);
 
     return 0;
 }
@@ -943,10 +939,10 @@ int dns_over_quic::reinit() {
     }
     ngtcp2_conn_set_tls_native_handle(m_conn, m_ssl);
 
-    evtimer_del(m_rtt_timer_event);
+    evtimer_del(m_idle_timer_event);
     struct timeval tv{0};
     tv.tv_sec = m_options.timeout.count() * 2 / 1000;
-    evtimer_add(m_rtt_timer_event, &tv);
+    evtimer_add(m_idle_timer_event, &tv);
 
     m_read_event = event_new(m_loop->c_base(), fd, (EV_TIMEOUT | EV_READ | EV_PERSIST), this->read_cb, this);
     event_add(m_read_event, nullptr);
@@ -954,8 +950,7 @@ int dns_over_quic::reinit() {
 
     if (int ret = on_write(); ret != NETWORK_ERR_OK) {
         // error printing in `exchange` also
-        warnlog(m_log, "An error happened while writing: {} line: {}", ret, __LINE__);
-        disconnect(__LINE__);
+        disconnect(AG_FMT("Reinit failed ({})", ret));
         return ret;
     }
     return 0;
@@ -1015,10 +1010,10 @@ void dns_over_quic::process_reply(int64_t request_id, const uint8_t *request_dat
     }
 }
 
-void dns_over_quic::disconnect(int line) {
+void dns_over_quic::disconnect(std::string_view reason) {
     m_state = STOP;
 
-    tracelog(m_log, "Process of upstream's disconnect called from line {}", line);
+    dbglog(m_log, "Disconnect reason: {}", reason);
     if (m_conn) {
         ngtcp2_conn_del(m_conn);
         m_conn = nullptr;
@@ -1055,10 +1050,10 @@ void dns_over_quic::deinit() {
 
     m_loop->stop();
 
-    if (m_rtt_timer_event) {
-        evtimer_del(m_rtt_timer_event);
-        event_free(m_rtt_timer_event);
-        m_rtt_timer_event = nullptr;
+    if (m_idle_timer_event) {
+        evtimer_del(m_idle_timer_event);
+        event_free(m_idle_timer_event);
+        m_idle_timer_event = nullptr;
     }
 
     if (m_retransmit_timer_event) {
@@ -1071,8 +1066,7 @@ void dns_over_quic::deinit() {
 int dns_over_quic::handle_expiry() {
     auto now = get_tstamp();
     if (auto rv = ngtcp2_conn_handle_expiry(m_conn, now); rv != 0) {
-        errlog(m_log, "Ngtcp2_conn_handle_expiry: {}", ngtcp2_strerror(rv));
-        disconnect(__LINE__);
+        errlog(m_log, "Handling expiry error: {}", ngtcp2_strerror(rv));
         return -1;
     }
 

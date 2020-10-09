@@ -377,7 +377,7 @@ static const upstream_test_data test_upstreams_data[]{
         {}
     },
     {
-        // AdGuard DNS (DNS-over-TLS)
+        // AdGuard DNS (DNS-over-QUIC)
         "quic://dns.adguard.com:784",
         {"8.8.8.8:53"}
     },
