@@ -108,6 +108,14 @@ ag::socket_address ag::utils::str_to_socket_address(std::string_view address) {
     return socket_address{host, (uint16_t) port};
 }
 
+bool ag::utils::socket_error_is_eagain(int err) {
+#ifndef _WIN32
+    return err == EAGAIN || err == EWOULDBLOCK;
+#else
+    return err == WSAEWOULDBLOCK;
+#endif
+}
+
 ag::err_string ag::utils::bind_socket_to_if(evutil_socket_t fd, int family, uint32_t if_index) {
 #if defined(__linux__)
     char buf[IF_NAMESIZE];

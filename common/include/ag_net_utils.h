@@ -58,6 +58,12 @@ std::string addr_to_str(uint8_view addr);
 socket_address str_to_socket_address(std::string_view address);
 
 /**
+ * @param err Socket error
+ * @return True if socket error is EAGAIN/EWOULDBLOCK
+ */
+bool socket_error_is_eagain(int err);
+
+/**
  * Make a socket bound to the specified interface
  * @param fd       socket descriptor
  * @param family   socket family

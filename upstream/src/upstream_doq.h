@@ -167,6 +167,7 @@ private:
     ngtcp2_tstamp get_tstamp() const;
     ngtcp2_crypto_level from_ossl_level(enum ssl_encryption_level_t ossl_level) const;
     void disqualify_server_address(const ag::socket_address &server_address);
+    void update_idle_timer(bool reset);
 
     void write_client_handshake(ngtcp2_crypto_level level, const uint8_t *data, size_t datalen);
     int on_key(ngtcp2_crypto_level level, const uint8_t *rx_secret,
@@ -194,7 +195,6 @@ private:
     std::unordered_map<int64_t, stream> m_streams;
     std::unordered_map<int64_t, request_t> m_requests;
     std::mutex m_global;
-    std::atomic<ngtcp2_tstamp> m_last_pkt{0};
     event_loop_ptr m_loop = event_loop::create();
     struct event *m_read_event{nullptr};
     struct event *m_idle_timer_event{nullptr};

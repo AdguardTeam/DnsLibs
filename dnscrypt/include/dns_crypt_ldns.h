@@ -7,6 +7,7 @@
 #include <string>
 #include <string_view>
 #include <utility>
+#include <functional>
 #include <ldns/buffer.h>
 #include <ldns/error.h>
 #include <ldns/packet.h>

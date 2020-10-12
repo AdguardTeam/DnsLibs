@@ -5,10 +5,10 @@
 using namespace ag;
 using namespace std::chrono;
 
-static constexpr uint8_t           DQ_ALPN[]            = {0x07, 'd', 'o', 'q', '-', 'i', '0', '0'};
-static constexpr std::string_view  QUIC_PREF            = "quic://";
-static constexpr int               QUIC_PORT            = 784;
-static constexpr int               IDLE_TIMEOUT_SEC     = 30;
+static constexpr uint8_t DQ_ALPN[] = {0x07, 'd', 'o', 'q', '-', 'i', '0', '0'};
+static constexpr std::string_view QUIC_PREF = "quic://";
+static constexpr int QUIC_PORT = 784;
+static constexpr int LOCAL_IDLE_TIMEOUT_SEC = 180;
 
 #undef  NEVER
 #define NEVER (UINT64_MAX / 2)
@@ -157,17 +157,7 @@ void dns_over_quic::send_requests() {
         return;
     }
 
-    struct timeval tv{0};
-    auto passed_ms = (get_tstamp() - m_last_pkt) / 1000000; // convert from nano to milli
-    if (passed_ms && passed_ms < m_options.timeout.count() * 2) {
-        milliseconds left_ms{(m_options.timeout.count() * 2) - passed_ms};
-        tv = ag::utils::duration_to_timeval(left_ms);
-    } else {
-        milliseconds default_timeout{(m_options.timeout.count() * 2)};
-        tv = ag::utils::duration_to_timeval(default_timeout);
-    }
-    evtimer_del(m_idle_timer_event);
-    evtimer_add(m_idle_timer_event, &tv);
+    update_idle_timer(false);
 }
 
 evutil_socket_t dns_over_quic::create_ipv4_socket() {
@@ -485,11 +475,7 @@ int dns_over_quic::send_packet_connected() {
     if (nwrite < 0) {
         int err = evutil_socket_geterror(m_sock_state.fd);
         tracelog(m_log, "Sending packet error: {}", evutil_socket_error_to_string(err));
-#ifndef _WIN32
-        if (err == EAGAIN || err == EWOULDBLOCK) {
-#else
-        if (err == WSAEWOULDBLOCK) {
-#endif
+        if (ag::utils::socket_error_is_eagain(err)) {
             return NETWORK_ERR_SEND_BLOCKED;
         }
     }
@@ -510,11 +496,7 @@ int dns_over_quic::send_packet_not_connected() {
         if (nwrite < 0) {
             int err = evutil_socket_geterror(m_sock_state.fd);
             tracelog(m_log, "Sending packet to {} error: {}", it->str().c_str(), evutil_socket_error_to_string(err));
-#ifndef _WIN32
-            if (err == EAGAIN || err == EWOULDBLOCK) {
-#else
-            if (err == WSAEWOULDBLOCK) {
-#endif
+            if (ag::utils::socket_error_is_eagain(err)) {
                 return NETWORK_ERR_SEND_BLOCKED;
             }
             disqualify_server_address(*it);
@@ -595,12 +577,7 @@ int dns_over_quic::on_read() {
         }
     }
 
-    evtimer_del(m_idle_timer_event);
-    struct timeval tv{0};
-    ngtcp2_conn_stat st{0};
-    ngtcp2_conn_get_conn_stat(m_conn, &st);
-    tv.tv_sec = st.bytes_in_flight ? m_options.timeout.count() * 2 / 1000 : IDLE_TIMEOUT_SEC;
-    evtimer_add(m_idle_timer_event, &tv);
+    update_idle_timer(false);
 
     return 0;
 }
@@ -613,11 +590,7 @@ int dns_over_quic::on_read_connected() {
         auto nread = recv(m_sock_state.fd, (char *)buf.data(), buf.size(), 0);
         if (nread == -1) {
             int err = evutil_socket_geterror(m_sock_state.fd);
-#ifndef _WIN32
-            if (err != EAGAIN && err != EWOULDBLOCK) {
-#else
-            if (err != WSAEWOULDBLOCK) {
-#endif
+            if (!ag::utils::socket_error_is_eagain(err)) {
                 errlog(m_log, "Read socket (connected) failed: {}", evutil_socket_error_to_string(err));
             }
             break;
@@ -643,11 +616,7 @@ int dns_over_quic::on_read_not_connected() {
 
         if (nread == -1) {
             int err = evutil_socket_geterror(m_sock_state.fd);
-#ifndef _WIN32
-            if (err != EAGAIN && err != EWOULDBLOCK) {
-#else
-            if (err != WSAEWOULDBLOCK) {
-#endif
+            if (!ag::utils::socket_error_is_eagain(err)) {
                 ag::socket_address sa{(sockaddr *)&su};
                 errlog(m_log, "Received error for address {} failed: {}", sa.str(), evutil_socket_error_to_string(err));
                 disqualify_server_address(sa);
@@ -795,7 +764,7 @@ int dns_over_quic::recv_stream_data(ngtcp2_conn *conn, uint32_t flags, int64_t s
 
     auto doq = static_cast<dns_over_quic *>(user_data);
 
-    doq->m_last_pkt = doq->get_tstamp();
+    doq->update_idle_timer(true);
 
     auto st = doq->m_streams.find(stream_id);
     if (st == doq->m_streams.end()) {
@@ -854,7 +823,7 @@ void dns_over_quic::ag_ngtcp2_settings_default(ngtcp2_settings &settings) {
     params.initial_max_data = 1 * 1024 * 1024;
     params.initial_max_streams_bidi = 1 * 1024;
     params.initial_max_streams_uni = 0;
-    params.max_idle_timeout = 30 * NGTCP2_SECONDS;
+    params.max_idle_timeout = LOCAL_IDLE_TIMEOUT_SEC * NGTCP2_SECONDS;
     params.active_connection_id_limit = 7;
 }
 
@@ -952,10 +921,7 @@ int dns_over_quic::reinit() {
     }
     ngtcp2_conn_set_tls_native_handle(m_conn, m_ssl);
 
-    evtimer_del(m_idle_timer_event);
-    struct timeval tv{0};
-    tv.tv_sec = m_options.timeout.count() * 2 / 1000;
-    evtimer_add(m_idle_timer_event, &tv);
+    update_idle_timer(true);
 
     m_read_event = event_new(m_loop->c_base(), fd, (EV_TIMEOUT | EV_READ | EV_PERSIST), this->read_cb, this);
     event_add(m_read_event, nullptr);
@@ -1150,4 +1116,48 @@ ngtcp2_crypto_level dns_over_quic::from_ossl_level(enum ssl_encryption_level_t o
             warnlog(m_log, "Unknown encryption level");
             assert(0);
     }
+}
+
+static microseconds get_event_remaining_timeout(event *ev) {
+    timeval next{}, now{};
+    evtimer_pending(ev, &next);
+    event_base_gettimeofday_cached(event_get_base(ev), &now);
+    if (evutil_timercmp(&next, &now, >)) {
+        evutil_timersub(&next, &now, &next);
+        return microseconds{next.tv_sec * 1000000LL + next.tv_usec};
+    }
+    return microseconds{0};
+}
+
+void dns_over_quic::update_idle_timer(bool reset) {
+    bool has_inflight_requests = false;
+    {
+        std::scoped_lock l(m_global);
+        has_inflight_requests = !m_requests.empty();
+    }
+
+    milliseconds value{0};
+    if (!has_inflight_requests) {
+        intmax_t effective_idle_timeout = ngtcp2_conn_get_idle_expiry(m_conn) - get_tstamp();
+        if (effective_idle_timeout > 0) {
+            value = ceil<milliseconds>(nanoseconds{effective_idle_timeout});
+            tracelog(m_log, "Idle timer reset with long timeout, {} left", value);
+        }
+    } else {
+        value = m_options.timeout * 2;
+        if (!reset) {
+            milliseconds pending = ceil<milliseconds>(get_event_remaining_timeout(m_idle_timer_event));
+            if (pending <= value) {
+                tracelog(m_log, "Idle timer unchanged, {} left", pending);
+                return;
+            } else {
+                tracelog(m_log, "Idle timer reduced from {} to short timeout, {} left", pending, value);
+            }
+        } else {
+            tracelog(m_log, "Idle timer reset with short timeout, {} left", value);
+        }
+    }
+
+    timeval tv = ag::utils::duration_to_timeval(value);
+    evtimer_add(m_idle_timer_event, &tv);
 }
