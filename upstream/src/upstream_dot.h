@@ -37,8 +37,6 @@ private:
     logger m_log = create_logger("DOT upstream");
     /** TLS connection pool */
     std::unique_ptr<tls_pool> m_pool;
-    /** Certificate verifier */
-    const certificate_verifier *m_verifier = nullptr;
     /** DNS server name */
     std::string m_server_name;
 };

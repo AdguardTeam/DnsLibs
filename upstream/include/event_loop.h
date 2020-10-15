@@ -28,6 +28,11 @@ public:
     void stop();
 
     /**
+     * Join event loop thread
+     */
+    void join();
+
+    /**
      * @return Libevent base
      */
     event_base *c_base();

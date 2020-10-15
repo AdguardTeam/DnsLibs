@@ -21,7 +21,10 @@ public class DnsStamp {
         DOH,
 
         /** tls is DNS-over-TLS */
-        TLS
+        TLS,
+
+        /** doq is DNS-over-QUIC */
+        DOQ,
     };
 
     private ProtoType proto; /** Protocol */

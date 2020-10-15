@@ -381,6 +381,11 @@ static const upstream_test_data test_upstreams_data[]{
         "quic://dns.adguard.com:784",
         {"8.8.8.8:53"}
     },
+    {
+        // AdGuard DNS (DNS-over-QUIC) stamp with only the port specified in server address field
+        "sdns://BAAAAAAAAAAABDo3ODQAD2Rucy5hZGd1YXJkLmNvbQ",
+        {"8.8.8.8:53"}
+    },
 };
 
 TEST_F(upstream_test, test_upstreams) {

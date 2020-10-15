@@ -28,6 +28,7 @@ static std::optional<std::string> get_address_from_stamp(const logger &log, std:
         return stamp.server_addr_str;
     case stamp_proto_type::DOH:
     case stamp_proto_type::TLS:
+    case stamp_proto_type::DOQ:
         if (!stamp.server_addr_str.empty()) {
             return stamp.server_addr_str;
         } else {

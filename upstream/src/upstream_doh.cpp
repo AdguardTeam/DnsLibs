@@ -122,7 +122,7 @@ CURL *dns_over_https::query_handle::create_curl_handle() {
 
 void dns_over_https::query_handle::cleanup_request() {
     if (this->curl_handle) {
-        CURLMcode perr = curl_multi_remove_handle(this->upstream->pool.handle.get(), this->curl_handle);
+        CURLMcode perr [[maybe_unused]] = curl_multi_remove_handle(this->upstream->pool.handle.get(), this->curl_handle);
         assert(perr == CURLM_OK);
         curl_easy_cleanup(this->curl_handle);
         this->curl_handle = nullptr;

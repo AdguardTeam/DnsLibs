@@ -23,7 +23,7 @@ namespace Adguard.Dns
         /// <summary>
         /// The current API version hash with which the ProxyServer was tested
         /// </summary>
-        private const string API_VERSION_HASH = "34a416a7fd5c7f874a0731a9a0e06f4947173b4f019befc94c6e9d0a6182ce28";
+        private const string API_VERSION_HASH = "4bfad37ae91f7960bfd0a84184d990fd18a203159349d4bf97b34ade2670b294";
         #endregion
 
         #region API Functions
@@ -692,7 +692,12 @@ namespace Adguard.Dns
             /// <summary>
             /// DNS-over-TLS
             /// </summary>
-            TLS
+            TLS,
+
+            /// <summary>
+            /// DNS-over-QUIC
+            /// </summary>
+            DOQ
         }
 
         public enum ag_certificate_verification_result

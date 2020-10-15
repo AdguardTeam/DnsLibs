@@ -261,6 +261,13 @@ static std::string stamp_dot_string(const server_stamp &stamp) {
     });
 }
 
+static std::string stamp_doq_string(const server_stamp &stamp) {
+    return stamp_string(stamp, stamp_proto_type::DOQ, DEFAULT_DOQ_PORT, {
+            write_stamp_hashes,
+            write_stamp_provider_name,
+    });
+}
+
 static server_stamp::from_str_result new_plain_server_stamp(const std::vector<uint8_t> &bin) {
     return new_server_stamp(bin, stamp_proto_type::PLAIN, PLAIN_STAMP_MIN_SIZE, DEFAULT_PLAIN_PORT, {});
 }
@@ -287,6 +294,13 @@ static server_stamp::from_str_result new_dot_server_stamp(const std::vector<uint
     });
 }
 
+static server_stamp::from_str_result new_doq_server_stamp(const std::vector<uint8_t> &bin) {
+    return new_server_stamp(bin, stamp_proto_type::DOQ, DOT_STAMP_MIN_SIZE, DEFAULT_DOQ_PORT, {
+            read_stamp_hashes,
+            read_stamp_provider_name,
+    });
+}
+
 std::string server_stamp::str() const {
     switch (proto) {
     case stamp_proto_type::PLAIN:
@@ -297,6 +311,8 @@ std::string server_stamp::str() const {
         return stamp_doh_string(*this);
     case stamp_proto_type::TLS:
         return stamp_dot_string(*this);
+    case stamp_proto_type::DOQ:
+        return stamp_doq_string(*this);
     }
     assert(false);
     return {};
@@ -325,6 +341,8 @@ server_stamp::from_str_result server_stamp::from_string(std::string_view url) {
         return new_doh_server_stamp(decoded);
     case stamp_proto_type::TLS:
         return new_dot_server_stamp(decoded);
+    case stamp_proto_type::DOQ:
+        return new_doq_server_stamp(decoded);
     default:
         return {{}, "Unsupported stamp version or protocol"};
     }

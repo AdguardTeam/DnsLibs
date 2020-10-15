@@ -220,6 +220,7 @@ typedef enum {
     AGSPT_DNSCRYPT = 0x01,
     AGSPT_DOH = 0x02,
     AGSPT_TLS = 0x03,
+    AGSPT_DOQ = 0x04,
 } ag_stamp_proto_type;
 
 typedef struct {

@@ -69,6 +69,11 @@ static ag::upstream_factory::create_result create_upstream_tls(const ag::upstrea
     return {std::make_unique<ag::dns_over_tls>(opts, config), std::nullopt};
 }
 
+static ag::upstream_factory::create_result create_upstream_doq(const ag::upstream_options &opts,
+                                                               const ag::upstream_factory_config &config) {
+    return {std::make_unique<ag::dns_over_quic>(opts, config), std::nullopt};
+}
+
 static ag::upstream_factory::create_result create_upstream_https(const ag::upstream_options &opts,
         const ag::upstream_factory_config &config) {
     return {std::make_unique<ag::dns_over_https>(opts, config), std::nullopt};
@@ -97,27 +102,34 @@ static ag::upstream_factory::create_result create_upstream_sdns(const ag::upstre
         return make_error(std::move(stamp_err));
     }
     auto opts = local_opts;
+    std::string port; // With leading ':'
     if (!stamp.server_addr_str.empty()) {
-        auto host = ag::utils::split_host_port(stamp.server_addr_str).first;
-        auto ip_address_variant = ag::socket_address(host, 0).addr_variant();
-        if (std::holds_alternative<std::monostate>(ip_address_variant)) {
-            return make_error(AG_FMT("Invalid server address in the stamp: {}", stamp.server_addr_str));
+        if (stamp.server_addr_str.front() == ':') {
+            port = stamp.server_addr_str;
+        } else {
+            ag::socket_address address = ag::utils::str_to_socket_address(stamp.server_addr_str);
+            opts.resolved_server_ip = address.addr_variant();
+            if (address.port()) {
+                port = AG_FMT(":{}", address.port());
+            }
         }
-        opts.resolved_server_ip = ip_address_variant;
     }
-    opts.address = stamp.server_addr_str;
 
     switch (stamp.proto) {
-    case ag::stamp_proto_type::PLAIN:
-        return create_upstream_plain(opts, config);
     case ag::stamp_proto_type::DNSCRYPT:
         return create_upstream_dnscrypt(std::move(stamp), opts, config);
+    case ag::stamp_proto_type::PLAIN:
+        opts.address = stamp.server_addr_str;
+        return create_upstream_plain(opts, config);
     case ag::stamp_proto_type::DOH:
-        opts.address = AG_FMT("{}{}{}", ag::dns_over_https::SCHEME, stamp.provider_name, stamp.path);
+        opts.address = AG_FMT("{}{}{}{}", ag::dns_over_https::SCHEME, stamp.provider_name, port, stamp.path);
         return create_upstream_https(opts, config);
     case ag::stamp_proto_type::TLS:
-        opts.address = AG_FMT("{}{}", ag::dns_over_tls::SCHEME, stamp.provider_name);
+        opts.address = AG_FMT("{}{}{}", ag::dns_over_tls::SCHEME, stamp.provider_name, port);
         return create_upstream_tls(opts, config);
+    case ag::stamp_proto_type::DOQ:
+        opts.address = AG_FMT("{}{}{}", ag::dns_over_quic::SCHEME, stamp.provider_name, port);
+        return create_upstream_doq(opts, config);
     }
     assert(false);
     return make_error(AG_FMT("Unknown stamp protocol: {}", stamp.proto));
@@ -149,7 +161,6 @@ ag::upstream_factory::~upstream_factory() = default;
 ag::upstream_factory::create_result ag::upstream_factory::create_upstream(const upstream_options &opts) const {
     create_result result;
     if (opts.address.find("://") != std::string_view::npos) {
-        // TODO parse address error
         result = this->factory->create_upstream(opts);
     } else {
         // We don't have scheme in the url, so it's just a plain DNS host:port

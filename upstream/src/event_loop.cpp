@@ -44,13 +44,19 @@ ag::event_loop::event_loop() : m_base() {
 
 ag::event_loop::~event_loop() {
     stop();
-    m_base_thread->join();
+    join();
     event_base_free(m_base);
     delete m_base_thread;
 }
 
 void ag::event_loop::stop() {
     event_base_loopexit(m_base, nullptr);
+}
+
+void ag::event_loop::join() {
+    if (m_base_thread->joinable()) {
+        m_base_thread->join();
+    }
 }
 
 event_base *ag::event_loop::c_base() {

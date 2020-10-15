@@ -16,12 +16,12 @@ static ag::socket_address prepare_address(const std::string &address_string) {
 
 ag::plain_dns::plain_dns(const upstream_options &opts, const upstream_factory_config &config)
         : upstream(opts, config)
+        , m_log(ag::create_logger(AG_FMT("Plain upstream ({})", opts.address)))
         , m_prefer_tcp(utils::starts_with(opts.address, TCP_SCHEME))
         , m_pool(event_loop::create(),
                  prepare_address(m_prefer_tcp
                                  ? opts.address.substr(TCP_SCHEME.length())
-                                 : opts.address), this)
-        , m_log(ag::create_logger(AG_FMT("Plain upstream ({})", opts.address))) {}
+                                 : opts.address), this) {}
 
 ag::err_string ag::plain_dns::init() {
     if (!m_pool.address().valid()) {

@@ -91,10 +91,10 @@ std::string ag::utils::addr_to_str(uint8_view v) {
 }
 
 ag::socket_address ag::utils::str_to_socket_address(std::string_view address) {
-    auto [host, port_view] = ag::utils::split_host_port(address);
+    auto [host_view, port_view] = ag::utils::split_host_port(address);
 
     if (port_view.empty()) {
-        return socket_address{host, 0};
+        return socket_address{host_view, 0};
     }
 
     std::string port_str{port_view};
@@ -105,7 +105,7 @@ ag::socket_address ag::utils::str_to_socket_address(std::string_view address) {
         return {};
     }
 
-    return socket_address{host, (uint16_t) port};
+    return socket_address{host_view, (uint16_t) port};
 }
 
 bool ag::utils::socket_error_is_eagain(int err) {

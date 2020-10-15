@@ -200,6 +200,38 @@ TEST_F(dnsstamp_test, test_dot_short_stamp) {
     test_server_stamp_create(stamp, expected);
 }
 
+TEST_F(dnsstamp_with_pk1_test, test_doq_stamp) {
+    static constexpr auto expected = "sdns://BAcAAAAAAAAACTEyNy4wLjAuMSDDhGvyS56TymQnTA7GfB7MXgJP_KzS10AZNQ6B_lRq5AtleGFtcGxlLmNvbQ";
+    ag::server_stamp stamp{};
+    stamp.props = ag::server_informal_properties{
+            (uint64_t)ag::server_informal_properties::DNSSEC |
+            (uint64_t)ag::server_informal_properties::NO_LOG |
+            (uint64_t)ag::server_informal_properties::NO_FILTER
+    };
+    stamp.server_addr_str = "127.0.0.1";
+    stamp.proto = ag::stamp_proto_type::DOQ;
+    stamp.provider_name = "example.com";
+    stamp.hashes = {{pk1}};
+    test_server_stamp_create(stamp, expected);
+}
+
+TEST_F(dnsstamp_test, test_doq_short_stamp) {
+    static constexpr auto expected = "sdns://BAAAAAAAAAAAAAAPZG5zLmFkZ3VhcmQuY29t";
+    ag::server_stamp stamp{};
+    stamp.proto = ag::stamp_proto_type::DOQ;
+    stamp.provider_name = "dns.adguard.com";
+    test_server_stamp_create(stamp, expected);
+}
+
+TEST_F(dnsstamp_test, test_doq_only_port) {
+    static constexpr auto expected = "sdns://BAAAAAAAAAAABTo3ODQ0AA9kbnMuYWRndWFyZC5jb20";
+    ag::server_stamp stamp{};
+    stamp.proto = ag::stamp_proto_type::DOQ;
+    stamp.provider_name = "dns.adguard.com";
+    stamp.server_addr_str = ":7844";
+    test_server_stamp_create(stamp, expected);
+}
+
 TEST_F(dnsstamp_test, test_plain_stamp) {
     static constexpr auto expected = "sdns://AAcAAAAAAAAABzguOC44Ljg";
     ag::server_stamp stamp{};

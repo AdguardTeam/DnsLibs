@@ -53,13 +53,20 @@ static parse_dns_stamp_data parse_dns_stamp_test_data[]{
         ag::stamp_proto_type::PLAIN,
         "[fe80::6d6d:f72c:3ad:60b8]:53",
         "",
-    }
+    },
+    // DNS-over-QUIC
+    {
+        "sdns://BAAAAAAAAAAABToxMjM0AA9kbnMuYWRndWFyZC5jb20",
+        ag::stamp_proto_type::DOQ,
+        ":1234",
+        "dns.adguard.com",
+    },
 };
 
 TEST_P(parse_dns_stamp_test, parse_dns_stamp) {
     const auto &p = GetParam();
     auto[stamp, err] = ag::parse_dns_stamp(p.stamp_str);
-    ASSERT_FALSE(err) << "Cannot fail: " << *err;
+    ASSERT_FALSE(err) << *err;
     ASSERT_EQ(stamp.proto, p.proto) << "Wrong stamp proto: " << magic_enum::enum_name(stamp.proto);
     ASSERT_EQ(stamp.server_addr, p.server_addr) << "Wrong stamp server address: " << stamp.server_addr;
     ASSERT_EQ(stamp.provider_name, p.provider_name) << "Wrong stamp provider name: " << stamp.provider_name;

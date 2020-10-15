@@ -300,6 +300,8 @@ typedef NS_ENUM(NSInteger, AGStampProtoType) {
     AGSPT_DOH = 0x02,
     /** tls is DNS-over-TLS */
     AGSPT_TLS = 0x03,
+    /** doq is DNS-over-QUIC */
+    AGSPT_DOQ = 0x03,
 };
 
 @interface AGDnsStamp : NSObject

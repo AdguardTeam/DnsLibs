@@ -13,6 +13,7 @@ using stamp_port = uint16_t;
 
 constexpr stamp_port DEFAULT_DOH_PORT = 443;
 constexpr stamp_port DEFAULT_DOT_PORT = 853;
+constexpr stamp_port DEFAULT_DOQ_PORT = 784;
 constexpr stamp_port DEFAULT_PLAIN_PORT = 53;
 constexpr auto STAMP_URL_PREFIX_WITH_SCHEME = "sdns://";
 
@@ -40,6 +41,8 @@ enum class stamp_proto_type : uint8_t {
     DOH = 0x02,
     /** tls is DNS-over-TLS */
     TLS = 0x03,
+    /** doq is DNS-over-QUIC */
+    DOQ = 0x04,
 };
 
 /**

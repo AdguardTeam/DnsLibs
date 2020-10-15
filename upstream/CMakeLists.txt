@@ -22,6 +22,10 @@ add_library(upstream EXCLUDE_FROM_ALL
     )
 
 set_target_properties(upstream PROPERTIES POSITION_INDEPENDENT_CODE ON)
+target_compile_options(upstream PRIVATE
+        -Wall -Wextra -Werror
+        -Wno-unused-parameter
+        -Wno-missing-field-initializers)
 
 if (NOT TARGET boringssl_static)
     add_subdirectory(${THIRD_PARTY_DIR}/boringssl ${CMAKE_BINARY_DIR}/third-party/boringssl)

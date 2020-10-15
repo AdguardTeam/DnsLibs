@@ -156,7 +156,7 @@ TEST_F(dnscrypt_test, timeout_on_dial_exchange) {
     // AdGuard DNS
     static constexpr auto stamp_str = "sdns://AQIAAAAAAAAAFDE3Ni4xMDMuMTMwLjEzMDo1NDQzINErR_JS3PLCu_iZEIbq95zkSV2LFsigxDIuUso_OQhzIjIuZG5zY3J5cHQuZGVmYXVsdC5uczEuYWRndWFyZC5jb20";
     ag::dnscrypt::client client;
-    auto[server_info, _, dial_err] = client.dial(stamp_str, 300ms);
+    auto[server_info, _, dial_err] = client.dial(stamp_str, 1000ms);
     ASSERT_FALSE(dial_err) << "Could not establish connection with " << stamp_str << " cause: " << *dial_err;
     // Point it to an IP where there's no DNSCrypt server
     server_info.set_server_address("8.8.8.8:5443");
@@ -164,7 +164,7 @@ TEST_F(dnscrypt_test, timeout_on_dial_exchange) {
                                                      "google-public-dns-a.google.com.",
                                                      ag::dnscrypt::MAX_DNS_UDP_SAFE_PACKET_SIZE);
     ldns_pkt_set_random_id(req.get());
-    auto exchange_err = client.exchange(*req, server_info, 300ms).error;
+    auto exchange_err = client.exchange(*req, server_info, 1000ms).error;
     ASSERT_TRUE(exchange_err) << "Exchange must not have been possible";
 }
 

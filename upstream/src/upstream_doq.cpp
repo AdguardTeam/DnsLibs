@@ -6,8 +6,6 @@ using namespace ag;
 using namespace std::chrono;
 
 static constexpr uint8_t DQ_ALPN[] = {0x07, 'd', 'o', 'q', '-', 'i', '0', '0'};
-static constexpr std::string_view QUIC_PREF = "quic://";
-static constexpr int QUIC_PORT = 784;
 static constexpr int LOCAL_IDLE_TIMEOUT_SEC = 180;
 
 #undef  NEVER
@@ -26,13 +24,29 @@ dns_over_quic::buffer::buffer(size_t datalen) : buf(datalen), tail(buf.data())
 
 dns_over_quic::dns_over_quic(const upstream_options &opts, const upstream_factory_config &config)
         : upstream(opts, config)
-        , m_send_buf(NGTCP2_MAX_PKTLEN_IPV6)
         , m_max_pktlen{NGTCP2_MAX_PKTLEN_IPV6}
+        , m_send_buf(NGTCP2_MAX_PKTLEN_IPV6)
 {}
 
 dns_over_quic::~dns_over_quic() {
-    disconnect("DOQ-destructor called");
-    deinit();
+    submit([this] {
+        disconnect("Destructor");
+    });
+
+    m_loop->stop(); // Cleanup should still execute since this is event_loopexit
+    m_loop->join();
+
+    if (m_idle_timer_event) {
+        event_free(std::exchange(m_idle_timer_event, nullptr));
+    }
+
+    if (m_retransmit_timer_event) {
+        event_free(std::exchange(m_retransmit_timer_event, nullptr));
+    }
+
+    if (m_ssl_ctx) {
+        SSL_CTX_free(std::exchange(m_ssl_ctx, nullptr));
+    }
 }
 
 int dns_over_quic::set_encryption_secrets(SSL *ssl, enum ssl_encryption_level_t ossl_level,
@@ -204,15 +218,15 @@ err_string dns_over_quic::init() {
     std::string_view url = m_options.address;
     m_request_timer = m_options.timeout;
 
-    assert(ag::utils::starts_with(url, QUIC_PREF));
-    url.remove_prefix(QUIC_PREF.size());
+    assert(ag::utils::starts_with(url, SCHEME));
+    url.remove_prefix(SCHEME.size());
     if (url.back() == '/') {
         url.remove_suffix(1);
     }
 
     auto split_res = ag::utils::split_host_port(url);
     m_server_name = split_res.first.empty() ? "" : std::string(split_res.first);
-    m_port = split_res.second.empty() ? QUIC_PORT : atoi(std::string(split_res.second.data()).c_str());
+    m_port = split_res.second.empty() ? DEFAULT_PORT : atoi(std::string(split_res.second.data()).c_str());
 
     ag::bootstrapper::params bootstrapper_params = {
             .address_string = split_res.first,
@@ -1018,27 +1032,6 @@ void dns_over_quic::disconnect(std::string_view reason) {
         if (cur.second.is_onfly) {
             cur.second.cond.notify_all();
         }
-    }
-}
-
-void dns_over_quic::deinit() {
-    if (m_ssl_ctx) {
-        SSL_CTX_free(m_ssl_ctx);
-        m_ssl_ctx = nullptr;
-    }
-
-    m_loop->stop();
-
-    if (m_idle_timer_event) {
-        evtimer_del(m_idle_timer_event);
-        event_free(m_idle_timer_event);
-        m_idle_timer_event = nullptr;
-    }
-
-    if (m_retransmit_timer_event) {
-        evtimer_del(m_retransmit_timer_event);
-        event_free(m_retransmit_timer_event);
-        m_retransmit_timer_event = nullptr;
     }
 }
 

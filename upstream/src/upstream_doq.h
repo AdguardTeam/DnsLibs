@@ -34,6 +34,8 @@ namespace ag {
 
 class dns_over_quic : public upstream {
 public:
+    static constexpr auto DEFAULT_PORT = 784;
+    static constexpr std::string_view SCHEME = "quic://";
 
     /**
      * @param opts upstream settings
@@ -73,7 +75,7 @@ private:
 
         size_t size() const { return tail - buf.data(); }
         size_t left() const { return buf.data() + buf.size() - tail; }
-        uint8_t *const wpos() { return tail; }
+        uint8_t *wpos() { return tail; }
         const uint8_t *rpos() const { return buf.data(); }
         void push(size_t len) { tail += len; }
         void reset() { tail = buf.data(); }
@@ -161,7 +163,6 @@ private:
     void submit(std::function<void()> &&func) const;
     void send_requests();
     void process_reply(int64_t request_id, const uint8_t *request_data, size_t request_data_len);
-    void deinit();
     void disconnect(std::string_view reason);
     void schedule_retransmit();
     ngtcp2_tstamp get_tstamp() const;
@@ -179,13 +180,13 @@ private:
     int m_port{0};
     logger m_log = create_logger("DOQ upstream");
     bootstrapper_ptr m_bootstrapper;
-    milliseconds m_request_timer;
+    milliseconds m_request_timer{0};
     ag::socket_address m_remote_addr_empty, m_local_addr;
     std::deque<ag::socket_address> m_server_addresses;
     std::vector<ag::socket_address> m_current_addresses;
-    ngtcp2_conn_callbacks m_callbacks;
+    ngtcp2_conn_callbacks m_callbacks{};
     size_t m_max_pktlen;
-    uint32_t m_version;
+    uint32_t m_version{NGTCP2_PROTO_VER};
     buffer m_send_buf;
     SSL_CTX *m_ssl_ctx{nullptr};
     SSL *m_ssl{nullptr};
