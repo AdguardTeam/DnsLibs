@@ -252,6 +252,13 @@ namespace Adguard.Dns
             [MarshalAs(UnmanagedType.I4)]
             [NativeName("id")]
             internal Int32 Id;
+
+            /// <summary>
+            /// Index of the network interface to route traffic through, 0 is default
+            /// </summary>
+            [MarshalAs(UnmanagedType.U4)]
+            [NativeName("outbound_interface_index")]
+            internal UInt32 OutboundInterfaceIndex;
         }
 
         [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Ansi)]

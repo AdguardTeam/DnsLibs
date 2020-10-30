@@ -14,7 +14,8 @@ namespace Adguard.Dns.Tests.Helpers
                 Bootstrap = new List<string>(),
                 TimeoutMs = 500,
                 ResolvedIpAddress = null,
-                Id = 42
+                Id = 42,
+                OutboundInterfaceIndex = 0
             };
 
             return upstreamOptions;

@@ -76,7 +76,8 @@ namespace Adguard.Dns.Api.DnsProxyServer.Configs
                    CollectionUtils.SequenceEqual(Bootstrap, other.Bootstrap) &&
                    TimeoutMs == other.TimeoutMs &&
                    Equals(ResolvedIpAddress, other.ResolvedIpAddress) &&
-                   Id == other.Id;
+                   Id == other.Id &&
+                   OutboundInterfaceIndex == other.OutboundInterfaceIndex;
         }
 
         public override int GetHashCode()
@@ -88,6 +89,7 @@ namespace Adguard.Dns.Api.DnsProxyServer.Configs
                 hashCode = (hashCode * 397) ^ TimeoutMs.GetHashCode();
                 hashCode = (hashCode * 397) ^ (ResolvedIpAddress != null ? ResolvedIpAddress.GetHashCode() : 0);
                 hashCode = (hashCode * 397) ^ Id.GetHashCode();
+                hashCode = (hashCode * 397) ^ OutboundInterfaceIndex.GetHashCode();
                 return hashCode;
             }
         }
