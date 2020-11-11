@@ -103,7 +103,7 @@ static auto quic_method = SSL_QUIC_METHOD{
 
 void dns_over_quic::retransmit_cb(int, short, void *data) {
     auto doq = static_cast<dns_over_quic *>(data);
-    if (doq->m_state < RUN) {
+    if (doq->m_state == STOP) {
         return;
     }
 

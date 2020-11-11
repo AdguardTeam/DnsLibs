@@ -536,19 +536,21 @@ TEST_F(upstream_test, DISABLED_concurrent_requests) {
 }
 
 TEST_F(upstream_test, DISABLED_doq_easy_test) {
-    using namespace std::chrono_literals;
-    using namespace concat_err_string;
-    static const ag::upstream_options opts{
-            .address = "quic://dns.adguard.com:784",
-            .bootstrap = { "8.8.8.8" },
-            .timeout = 5s
-    };
-    auto[upstream_ptr, upstream_err] = create_upstream(opts);
-    ASSERT_FALSE(upstream_err) << *upstream_err;
+    for (int i = 0; i < 1000; ++i) {
+        using namespace std::chrono_literals;
+        using namespace concat_err_string;
+        static const ag::upstream_options opts{
+                .address = "quic://dns.adguard.com:784",
+                .bootstrap = { "8.8.8.8" },
+                .timeout = 5s
+        };
+        auto[upstream_ptr, upstream_err] = create_upstream(opts);
+        ASSERT_FALSE(upstream_err) << *upstream_err;
 
-    ag::ldns_pkt_ptr pkt = create_test_message();
+        ag::ldns_pkt_ptr pkt = create_test_message();
 
-    auto[reply, reply_err] = upstream_ptr.get()->exchange(pkt.get());
-    ASSERT_FALSE(reply_err.has_value()) << *reply_err;
-    ASSERT_NE(reply, nullptr);
+        auto[reply, reply_err] = upstream_ptr.get()->exchange(pkt.get());
+        ASSERT_FALSE(reply_err.has_value()) << *reply_err;
+        ASSERT_NE(reply, nullptr);
+    }
 }
