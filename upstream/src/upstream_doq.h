@@ -139,9 +139,9 @@ private:
     static int handshake_confirmed(ngtcp2_conn *, void *data);
     static int ssl_verify_callback(X509_STORE_CTX *ctx, void *arg);
 
-    static void read_cb(int, short, void *data);
-    static void idle_timer_cb(int, short, void *data);
-    static void retransmit_cb(int, short, void *data);
+    static void read_cb(evutil_socket_t, short, void *data);
+    static void idle_timer_cb(evutil_socket_t, short, void *data);
+    static void retransmit_cb(evutil_socket_t, short, void *data);
 
     int init_ssl_ctx();
     int init_ssl();

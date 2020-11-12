@@ -4,6 +4,7 @@
 #include <cstdint>
 #include <string>
 #include <utility>
+#include <functional>
 #include <ag_defs.h>
 #include <dns_crypt_utils.h>
 

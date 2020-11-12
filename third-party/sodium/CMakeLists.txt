@@ -125,6 +125,9 @@ if (MSVC)
 
         file(GLOB_RECURSE sse41_sources ${CMAKE_CURRENT_SOURCE_DIR}/libsodium/src/libsodium/*sse41.c)
         set_source_files_properties(${sse41_sources} PROPERTIES COMPILE_FLAGS "-msse4.1")
+
+        file(GLOB_RECURSE avx2_sources ${CMAKE_CURRENT_SOURCE_DIR}/libsodium/src/libsodium/*avx2.c)
+        set_source_files_properties(${avx2_sources} PROPERTIES COMPILE_FLAGS "-mavx2")
     endif ()
 
     target_link_libraries(${PROJECT_NAME}

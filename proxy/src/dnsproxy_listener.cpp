@@ -438,13 +438,15 @@ private:
         auto *w = (write *) w_req->data;
         auto *h = (uv_handle_t *) w_req->handle;
         auto *c = (tcp_dns_connection *) h->data;
-        log_id(c->m_log, trace, c->m_id, "{} {}", __func__, status);
-        delete w;
         // `c` might be nullptr at this point, e.g. the connection was closed,
         // but libuv still called the pending write callbacks.
-        if (c && (!c->m_persistent || status < 0)) {
-            c->do_close();
+        if (c) {
+            log_id(c->m_log, trace, c->m_id, "{} {}", __func__, status);
+            if (!c->m_persistent || status < 0) {
+                c->do_close();
+            }
         }
+        delete w;
     }
 
     static void idle_timeout_cb(uv_timer_t *h) {

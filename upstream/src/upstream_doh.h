@@ -66,14 +66,14 @@ private:
     static int on_pool_timer_event(CURLM *multi, long timeout_ms, dns_over_https *upstream);
     static int on_socket_update(CURL *handle, curl_socket_t socket, int what,
         dns_over_https *upstream, socket_handle *socket_data);
-    static void on_event_timeout(int fd, short kind, void *arg);
-    static void on_socket_event(int fd, short kind, void *arg);
+    static void on_event_timeout(evutil_socket_t fd, short kind, void *arg);
+    static void on_socket_event(evutil_socket_t fd, short kind, void *arg);
     static int sockopt_callback(void *clientp, curl_socket_t curlfd, curlsocktype purpose);
 
-    static void submit_request(int, short, void *arg);
-    static void defy_request(int, short, void *arg);
+    static void submit_request(evutil_socket_t, short, void *arg);
+    static void defy_request(evutil_socket_t, short, void *arg);
 
-    static void stop(int, short, void *arg);
+    static void stop(evutil_socket_t, short, void *arg);
 
     logger log = create_logger("DOH upstream");
     curl_slist_ptr resolved = nullptr;

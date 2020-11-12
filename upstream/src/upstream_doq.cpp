@@ -101,7 +101,7 @@ static auto quic_method = SSL_QUIC_METHOD{
         dns_over_quic::send_alert,
 };
 
-void dns_over_quic::retransmit_cb(int, short, void *data) {
+void dns_over_quic::retransmit_cb(evutil_socket_t, short, void *data) {
     auto doq = static_cast<dns_over_quic *>(data);
     if (doq->m_state == STOP) {
         return;
@@ -116,12 +116,12 @@ void dns_over_quic::retransmit_cb(int, short, void *data) {
     }
 }
 
-void dns_over_quic::idle_timer_cb(int, short, void *data) {
+void dns_over_quic::idle_timer_cb(evutil_socket_t, short, void *data) {
     auto doq = static_cast<dns_over_quic *>(data);
     doq->disconnect("Idle timer expired");
 }
 
-void dns_over_quic::read_cb(int, short, void *data) {
+void dns_over_quic::read_cb(evutil_socket_t, short, void *data) {
     auto doq = static_cast<dns_over_quic *>(data);
     if (int ret = doq->on_read(); ret != NETWORK_ERR_OK) {
         doq->disconnect(AG_FMT("Reading error ({})", ret));
@@ -982,7 +982,7 @@ int dns_over_quic::acked_stream_data_offset(ngtcp2_conn *conn, int64_t stream_id
 }
 
 void dns_over_quic::submit(std::function<void()> &&f) const {
-    event_base_once(m_loop->c_base(), -1, EV_TIMEOUT, [](int, short, void *arg){
+    event_base_once(m_loop->c_base(), -1, EV_TIMEOUT, [](evutil_socket_t, short, void *arg){
         auto *func = (std::function<void()> *) arg;
         (*func)();
         delete func;

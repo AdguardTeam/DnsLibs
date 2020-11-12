@@ -279,7 +279,7 @@ err_string dns_over_https::init() {
     return std::nullopt;
 }
 
-void dns_over_https::stop(int, short, void *arg) {
+void dns_over_https::stop(evutil_socket_t, short, void *arg) {
     dns_over_https *upstream = (dns_over_https *)arg;
     upstream->stop_all_with_error("Upstream has been stopped");
 }
@@ -378,7 +378,7 @@ void dns_over_https::read_messages() {
     }
 }
 
-void dns_over_https::on_socket_event(int fd, short kind, void *arg) {
+void dns_over_https::on_socket_event(evutil_socket_t fd, short kind, void *arg) {
     dns_over_https *upstream = (dns_over_https *)arg;
     pool_descriptor &pool = upstream->pool;
     int action = ((kind & EV_READ) ? CURL_CSELECT_IN : 0)
@@ -394,7 +394,7 @@ void dns_over_https::on_socket_event(int fd, short kind, void *arg) {
     upstream->read_messages();
 }
 
-void dns_over_https::on_event_timeout(int fd, short kind, void *arg) {
+void dns_over_https::on_event_timeout(evutil_socket_t fd, short kind, void *arg) {
     dns_over_https *upstream = (dns_over_https *)arg;
     pool_descriptor &pool = upstream->pool;
 
@@ -436,7 +436,7 @@ int dns_over_https::on_socket_update(CURL *handle, curl_socket_t socket, int wha
     return 0;
 }
 
-void dns_over_https::submit_request(int, short, void *arg) {
+void dns_over_https::submit_request(evutil_socket_t, short, void *arg) {
     query_handle *handle = (query_handle *)arg;
     tracelog_id(handle, "Submitting request");
 
@@ -460,7 +460,7 @@ void dns_over_https::submit_request(int, short, void *arg) {
     upstream->worker.running_queue.emplace_back(handle);
 }
 
-void dns_over_https::defy_request(int, short, void *arg) {
+void dns_over_https::defy_request(evutil_socket_t, short, void *arg) {
     query_handle *handle = (query_handle *)arg;
     tracelog_id(handle, "Defying request");
 

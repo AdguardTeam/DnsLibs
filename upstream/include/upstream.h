@@ -119,7 +119,7 @@ protected:
     /** RTT + mutex */
     with_mtx<std::chrono::milliseconds> m_rtt;
 
-    err_string bind_socket_to_if(int fd, int family);
+    err_string bind_socket_to_if(evutil_socket_t fd, int family);
 };
 
 /**
