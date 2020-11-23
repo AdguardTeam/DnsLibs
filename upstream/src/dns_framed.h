@@ -1,6 +1,7 @@
 #pragma once
 
 #include <ag_logger.h>
+#include <upstream.h>
 #include <mutex>
 #include <list>
 #include <condition_variable>

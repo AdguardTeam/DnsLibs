@@ -1161,9 +1161,18 @@ upstream_exchange_result dns_forwarder::do_upstream_exchange(ldns_pkt *request) 
 
             if (!result.error.has_value()) {
                 return {std::move(result.packet), std::nullopt, cur_upstream};
+            } else if (result.error.value() != TIMEOUT_STR) {
+                // https://github.com/AdguardTeam/DnsLibs/issues/86
+                upstream::exchange_result retry_result = cur_upstream->exchange(request);
+                if (!retry_result.error.has_value()) {
+                    return {std::move(result.packet), std::nullopt, cur_upstream};
+                }
+                err_str = AG_FMT("Upstream exchange failed: first reason is {}, second is: {}",
+                                 result.error.value(), retry_result.error.value());
+                dbglog_id(log, request, "{}", err_str);
+            } else {
+                dbglog_id(log, request, "Upstream exchange failed: {}", result.error.value());
             }
-            err_str = AG_FMT("Upstream failed to perform dns query: {}", result.error.value());
-            dbglog_fid(log, request, "{}", err_str);
         }
     }
     return {nullptr, std::move(err_str), cur_upstream};

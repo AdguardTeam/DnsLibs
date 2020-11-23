@@ -364,7 +364,7 @@ ag::connection::read_result ag::dns_framed_pool::perform_request(uint8_view buf,
     if (result.error.has_value() && result.error.value() == dns_framed_connection::UNEXPECTED_EOF) {
         timeout -= timer.elapsed<milliseconds>();
         if (timeout < milliseconds(0)) {
-            result.error.emplace("Timed out");
+            result.error.emplace(TIMEOUT_STR.data());
         } else {
             result = perform_request_inner(buf, timeout);
         }

@@ -336,14 +336,14 @@ dns_over_quic::exchange_result dns_over_quic::exchange(ldns_pkt *request) {
     m_requests.erase(request_id);
 
     if (timeout == std::cv_status::timeout) {
-        return {nullptr, "Request timeout"};
+        return {nullptr, TIMEOUT_STR.data()};
     }
 
     if (res != nullptr) {
         return {ldns_pkt_ptr(res), std::nullopt};
     }
 
-    return {nullptr, "Request failed"};
+    return {nullptr, "Request failed (empty packet)"};
 }
 
 int dns_over_quic::bind_addr(int fd, int family) {

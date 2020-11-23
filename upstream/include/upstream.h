@@ -20,6 +20,8 @@ using upstream_ptr = std::unique_ptr<upstream>;
 using ldns_pkt_ptr = std::unique_ptr<ldns_pkt, ag::ftor<&ldns_pkt_free>>;
 using ldns_buffer_ptr = std::unique_ptr<ldns_buffer, ag::ftor<&ldns_buffer_free>>;
 
+static constexpr std::string_view TIMEOUT_STR = "Request timed out";
+
 /**
  * Upstream factory configuration
  */

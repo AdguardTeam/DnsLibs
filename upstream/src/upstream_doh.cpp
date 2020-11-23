@@ -549,7 +549,7 @@ dns_over_https::exchange_result dns_over_https::exchange(ldns_pkt *request) {
     ldns_pkt *response = nullptr;
     if (std::future_status status = request_completed.wait_for(timeout);
             status != std::future_status::ready) {
-        err = "Request timed out";
+        err = TIMEOUT_STR;
         std::future<void> request_defied = handle->defy_barrier.get_future();
         event_base_once(this->worker.loop->c_base(), 0, EV_TIMEOUT, defy_request, handle.get(), nullptr);
         milliseconds defy_timeout = this->m_options.timeout;
