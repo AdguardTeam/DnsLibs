@@ -46,6 +46,7 @@ target_link_libraries(ldns dnslibs_common)
 
 include(../../common/apply_patch.cmake)
 apply_patch(${CMAKE_CURRENT_SOURCE_DIR}/ag_ext.patch ${CMAKE_CURRENT_SOURCE_DIR}/ldns)
+apply_patch(${CMAKE_CURRENT_SOURCE_DIR}/type65.patch ${CMAKE_CURRENT_SOURCE_DIR}/ldns)
 
 if (MSVC)
     apply_patch(${CMAKE_CURRENT_SOURCE_DIR}/windows.patch ${CMAKE_CURRENT_SOURCE_DIR}/ldns)
