@@ -3,6 +3,8 @@
 #include "upstream_plain.h"
 #include <ldns/ag_ext.h>
 
+#define tracelog_id(l_, pkt_, fmt_, ...) tracelog((l_), "[{}] " fmt_, ldns_pkt_id(pkt_), ##__VA_ARGS__)
+
 using std::chrono::milliseconds;
 using std::chrono::duration_cast;
 
@@ -39,11 +41,19 @@ ag::plain_dns::exchange_result ag::plain_dns::exchange(ldns_pkt *request_pkt) {
         return {nullptr, ldns_get_errorstr_by_id(status)};
     }
 
+    ldns_rr *question = ldns_rr_list_rr(ldns_pkt_question(request_pkt), 0);
+    allocated_ptr<char> domain;
+    if (question) {
+        domain = allocated_ptr<char>(ldns_rdf2str(ldns_rr_owner(question)));
+        tracelog_id(m_log, request_pkt, "Querying for a domain: {}", domain.get());
+    }
+
     if (!m_prefer_tcp) {
         // UDP request
         uint8_t *reply_data;
         size_t reply_size;
         timeval tv = utils::duration_to_timeval(this->m_options.timeout);
+        tracelog_id(m_log, request_pkt, "Sending UDP request for a domain: {}", domain ? domain.get() : "(unknown)");
         status = ldns_udp_send(&reply_data, &*buffer, (const sockaddr_storage *) m_pool.address().c_sockaddr(),
                                m_pool.address().c_socklen(), tv, &reply_size,
                                prepare_fd, this);
@@ -66,6 +76,7 @@ ag::plain_dns::exchange_result ag::plain_dns::exchange(ldns_pkt *request_pkt) {
 
     // TCP request
     ag::uint8_view buf{ ldns_buffer_begin(buffer.get()), ldns_buffer_position(buffer.get()) };
+    tracelog_id(m_log, request_pkt, "Sending TCP request for a domain: {}", domain ? domain.get() : "(unknown)");
     connection::read_result result = m_pool.perform_request(buf, this->m_options.timeout);
     if (result.error.has_value()) {
         return { nullptr, std::move(result.error) };

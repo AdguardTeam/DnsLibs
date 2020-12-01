@@ -1156,7 +1156,9 @@ upstream_exchange_result dns_forwarder::do_upstream_exchange(ldns_pkt *request) 
             cur_upstream = sorted_upstream;
 
             ag::utils::timer t;
+            tracelog_id(log, request, "Upstream ({}) is starting an exchange", cur_upstream->options().address);
             upstream::exchange_result result = cur_upstream->exchange(request);
+            tracelog_id(log, request, "Upstream's ({}) exchanging is done", cur_upstream->options().address);
             cur_upstream->adjust_rtt(t.elapsed<std::chrono::milliseconds>());
 
             if (!result.error.has_value()) {
@@ -1165,7 +1167,7 @@ upstream_exchange_result dns_forwarder::do_upstream_exchange(ldns_pkt *request) 
                 // https://github.com/AdguardTeam/DnsLibs/issues/86
                 upstream::exchange_result retry_result = cur_upstream->exchange(request);
                 if (!retry_result.error.has_value()) {
-                    return {std::move(result.packet), std::nullopt, cur_upstream};
+                    return {std::move(retry_result.packet), std::nullopt, cur_upstream};
                 }
                 err_str = AG_FMT("Upstream exchange failed: first reason is {}, second is: {}",
                                  result.error.value(), retry_result.error.value());

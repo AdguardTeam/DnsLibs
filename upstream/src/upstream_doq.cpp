@@ -11,6 +11,9 @@ static constexpr int LOCAL_IDLE_TIMEOUT_SEC = 180;
 #undef  NEVER
 #define NEVER (UINT64_MAX / 2)
 
+#define tracelog_id(l_, pkt_, fmt_, ...) tracelog((l_), "[{}] " fmt_, ldns_pkt_id(pkt_), ##__VA_ARGS__)
+
+
 std::atomic_int64_t dns_over_quic::m_next_request_id{1};
 std::array<uint8_t, 32> dns_over_quic::m_static_secret{0};
 
@@ -152,8 +155,6 @@ void dns_over_quic::send_requests() {
             return;
         }
 
-        req.second.is_onfly = true;
-
         stream &stream = m_streams[stream_id];
         stream.stream_id = stream_id;
         stream.request_id = req.second.request_id;
@@ -162,14 +163,22 @@ void dns_over_quic::send_requests() {
                      ldns_buffer_remaining(req.second.request_buffer.get()));
 
         m_stream_send_queue.push_back(stream_id);
+
+        tracelog(m_log, "Sending request, id {}", req.second.request_id);
+        if (int ret = on_write(); ret != NETWORK_ERR_OK) {
+            m_global.unlock();
+            if (ret == NETWORK_ERR_SEND_BLOCKED) {
+                req.second.is_onfly = true;
+            } else {
+                disconnect(AG_FMT("Sending request error: {}, id: {}", ret, req.first));
+            }
+            return;
+        }
+
+        req.second.is_onfly = true;
     }
 
     m_global.unlock();
-
-    if (int ret = on_write(); ret != NETWORK_ERR_OK) {
-        disconnect(AG_FMT("Sending requests error ({})", ret));
-        return;
-    }
 
     update_idle_timer(false);
 }
@@ -314,17 +323,18 @@ dns_over_quic::exchange_result dns_over_quic::exchange(ldns_pkt *request) {
         request_t &req = m_requests[request_id];
         req.request_id = request_id;
         req.request_buffer.reset(buffer);
+        tracelog_id(m_log, request, "Creation new request, id: {}", request_id);
     }
 
     submit([this]{
         if (m_state != RUN) {
             int res = this->reinit();
             if (res != NETWORK_ERR_HANDSHAKE_RUN && res != NETWORK_ERR_OK) {
-                disconnect("Reinit failed");
+                disconnect(AG_FMT("Reinit failed ({})", res));
             }
         } else {
             this->send_requests();
-        };
+        }
     });
 
     std::unique_lock l(m_global);
@@ -942,8 +952,6 @@ int dns_over_quic::reinit() {
     m_sock_state.fd = fd;
 
     if (int ret = on_write(); ret != NETWORK_ERR_OK) {
-        // error printing in `exchange` also
-        disconnect(AG_FMT("Reinit failed ({})", ret));
         return ret;
     }
     return 0;
@@ -1030,6 +1038,7 @@ void dns_over_quic::disconnect(std::string_view reason) {
     std::lock_guard l(m_global);
     for (auto &cur : m_requests) {
         if (cur.second.is_onfly) {
+            tracelog(m_log, "Call condvar for request, id: {}", cur.first);
             cur.second.cond.notify_all();
         }
     }
