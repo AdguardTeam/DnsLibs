@@ -1,6 +1,10 @@
 #include "upstream_doq.h"
 #include "upstream.h"
 
+#ifdef __MACH__
+#include <sys/types.h>
+#include <sys/sysctl.h>
+#endif
 
 using namespace ag;
 using namespace std::chrono;
@@ -774,6 +778,19 @@ int dns_over_quic::update_key(ngtcp2_conn *conn, uint8_t *rx_secret, uint8_t *tx
 }
 
 ngtcp2_tstamp dns_over_quic::get_tstamp() const {
+#ifdef __MACH__
+    int mib_name[] = {CTL_KERN, KERN_BOOTTIME};
+    timeval tv{};
+    size_t tv_size = sizeof(tv);
+    if (sysctl(mib_name, std::size(mib_name), &tv, &tv_size, NULL, 0) != -1) {
+        return tv.tv_sec + tv.tv_usec * 1000000LL;
+    }
+#elif defined __linux__
+    timespec ts{};
+    if (clock_gettime(CLOCK_BOOTTIME, &ts) != -1) {
+        return ts.tv_sec + ts.tv_nsec * 1000000000LL;
+    }
+#endif
     return std::chrono::duration_cast<std::chrono::nanoseconds>
            (std::chrono::steady_clock::now().time_since_epoch()).count();
 }
