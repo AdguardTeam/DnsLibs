@@ -19,7 +19,6 @@ static constexpr int LOCAL_IDLE_TIMEOUT_SEC = 180;
 
 
 std::atomic_int64_t dns_over_quic::m_next_request_id{1};
-std::array<uint8_t, 32> dns_over_quic::m_static_secret{0};
 
 
 dns_over_quic::buffer::buffer(const uint8_t *data, size_t datalen)
@@ -33,6 +32,7 @@ dns_over_quic::dns_over_quic(const upstream_options &opts, const upstream_factor
         : upstream(opts, config)
         , m_max_pktlen{NGTCP2_MAX_PKTLEN_IPV6}
         , m_send_buf(NGTCP2_MAX_PKTLEN_IPV6)
+        , m_static_secret{0}
 {}
 
 dns_over_quic::~dns_over_quic() {
@@ -83,7 +83,7 @@ int dns_over_quic::send_alert(SSL *ssl, enum ssl_encryption_level_t level, uint8
     (void)level;
     (void)alert;
 
-    auto *doq = (dns_over_quic *)SSL_get_app_data(ssl);
+    auto doq = (dns_over_quic *)SSL_get_app_data(ssl);
     errlog(doq->m_log, "SSL error ({}), sending alert", alert);
 
     auto res = SSL_alert_from_verify_result(alert);
@@ -147,10 +147,22 @@ void dns_over_quic::send_requests() {
         if (req.second.is_onfly) {
             continue;
         }
+
+        auto idle_expiry = ngtcp2_conn_get_idle_expiry(m_conn);
+        milliseconds diff = ceil<milliseconds>(nanoseconds{idle_expiry - req.second.starting_time});
+        if (diff < m_options.timeout * 2) {
+            m_global.unlock();
+            disconnect(AG_FMT("Too little time to process the request, id: {}", req.second.request_id));
+            reinit();
+            return;
+        }
+
         int64_t stream_id = -1;
         if (auto rv = ngtcp2_conn_open_bidi_stream(m_conn, &stream_id, nullptr); rv != 0) {
             warnlog(m_log, "Can't create new stream: {}", ngtcp2_strerror(rv));
-            assert(NGTCP2_ERR_STREAM_ID_BLOCKED == rv);
+            if (NGTCP2_ERR_STREAM_ID_BLOCKED == rv) {
+                break;
+            }
         }
 
         if (stream_id == -1) {
@@ -168,7 +180,7 @@ void dns_over_quic::send_requests() {
 
         m_stream_send_queue.push_back(stream_id);
 
-        tracelog(m_log, "Sending request, id {}", req.second.request_id);
+        tracelog(m_log, "Sending request, id: {}", req.second.request_id);
         if (int ret = on_write(); ret != NETWORK_ERR_OK) {
             m_global.unlock();
             if (ret == NETWORK_ERR_SEND_BLOCKED) {
@@ -229,7 +241,6 @@ evutil_socket_t dns_over_quic::create_dual_stack_socket() {
 
 err_string dns_over_quic::init() {
     std::string_view url = m_options.address;
-    m_request_timer = m_options.timeout;
 
     assert(ag::utils::starts_with(url, SCHEME));
     url.remove_prefix(SCHEME.size());
@@ -302,7 +313,6 @@ err_string dns_over_quic::init() {
 }
 
 dns_over_quic::exchange_result dns_over_quic::exchange(ldns_pkt *request) {
-
     if (std::scoped_lock l(m_global); m_server_addresses.empty()) {
         bootstrapper::resolve_result bootstrapper_res = m_bootstrapper->get();
         if (bootstrapper_res.error.has_value()) {
@@ -325,10 +335,11 @@ dns_over_quic::exchange_result dns_over_quic::exchange(ldns_pkt *request) {
     {
         std::scoped_lock l(m_global);
         request_t &req = m_requests[request_id];
+        req.starting_time = get_tstamp();
         req.request_id = request_id;
         req.request_buffer.reset(buffer);
-        tracelog_id(m_log, request, "Creation new request, id: {}", request_id);
     }
+    tracelog_id(m_log, request, "Creation new request, id: {}, connection state: {}", request_id, m_state);
 
     submit([this]{
         if (m_state != RUN) {
@@ -347,6 +358,7 @@ dns_over_quic::exchange_result dns_over_quic::exchange(ldns_pkt *request) {
 
     ldns_pkt *res = req.reply_pkt.release();
     assert(m_requests.count(request_id));
+    tracelog_id(m_log, request, "Erase request, id: {}, connection state: {}", request_id, m_state);
     m_requests.erase(request_id);
 
     if (timeout == std::cv_status::timeout) {
@@ -487,7 +499,6 @@ int dns_over_quic::write_streams() {
 }
 
 int dns_over_quic::send_packet() {
-
     if (m_sock_state.connected) {
         return send_packet_connected();
     } else {
@@ -514,7 +525,6 @@ int dns_over_quic::send_packet_connected() {
 }
 
 int dns_over_quic::send_packet_not_connected() {
-
     ssize_t nwrite = 0;
 
     for (auto it = m_current_addresses.begin(); it != m_current_addresses.end(); ) {
@@ -594,7 +604,6 @@ void dns_over_quic::write_client_handshake(ngtcp2_crypto_level level, const uint
 }
 
 int dns_over_quic::on_read() {
-
     if (m_sock_state.connected) {
         if (int ret = on_read_connected(); ret != NETWORK_ERR_OK) {
             return ret;
@@ -637,7 +646,6 @@ int dns_over_quic::on_read_not_connected() {
     ngtcp2_pkt_info pi;
 
     while (!m_sock_state.connected) {
-
         su = {};
         socklen_t namelen = sizeof(su);
         auto nread = recvfrom(m_sock_state.fd, (char *)buf.data(), buf.size(), 0, (sockaddr *)&su, &namelen);
@@ -778,14 +786,7 @@ int dns_over_quic::update_key(ngtcp2_conn *conn, uint8_t *rx_secret, uint8_t *tx
 }
 
 ngtcp2_tstamp dns_over_quic::get_tstamp() const {
-#ifdef __MACH__
-    int mib_name[] = {CTL_KERN, KERN_BOOTTIME};
-    timeval tv{};
-    size_t tv_size = sizeof(tv);
-    if (sysctl(mib_name, std::size(mib_name), &tv, &tv_size, NULL, 0) != -1) {
-        return tv.tv_sec + tv.tv_usec * 1000000LL;
-    }
-#elif defined __linux__
+#ifdef __linux__
     timespec ts{};
     if (clock_gettime(CLOCK_BOOTTIME, &ts) != -1) {
         return ts.tv_sec + ts.tv_nsec * 1000000000LL;
@@ -831,21 +832,24 @@ int dns_over_quic::recv_stream_data(ngtcp2_conn *conn, uint32_t flags, int64_t s
 int dns_over_quic::get_new_connection_id(ngtcp2_conn *conn, ngtcp2_cid *cid,
                                          uint8_t *token, size_t cidlen, void *user_data) {
     (void)conn;
-    (void)user_data;
+
+    auto doq = (dns_over_quic *)user_data;
 
     RAND_bytes(cid->data, cidlen);
     cid->datalen = cidlen;
     auto md = ngtcp2_crypto_md{const_cast<EVP_MD *>(EVP_sha256())};
     if (ngtcp2_crypto_generate_stateless_reset_token(
-            token, &md, m_static_secret.data(), m_static_secret.size(), cid) != 0) {
+            token, &md, doq->m_static_secret.data(), doq->m_static_secret.size(), cid) != 0) {
         return NGTCP2_ERR_CALLBACK_FAILURE;
     }
 
     return 0;
 }
 
-int dns_over_quic::handshake_confirmed(ngtcp2_conn *, void *data) {
-    auto *doq = (dns_over_quic *)data;
+int dns_over_quic::handshake_confirmed(ngtcp2_conn *conn, void *data) {
+    (void)conn;
+
+    auto doq = (dns_over_quic *)data;
     doq->m_state = RUN;
     doq->send_requests();
     return 0;
@@ -855,7 +859,7 @@ void dns_over_quic::ag_ngtcp2_settings_default(ngtcp2_settings &settings) {
     settings.max_udp_payload_size = m_max_pktlen;
     settings.cc_algo = NGTCP2_CC_ALGO_CUBIC;
     settings.initial_ts = get_tstamp();
-    settings.initial_rtt = NGTCP2_DEFAULT_INITIAL_RTT * 3;
+    settings.initial_rtt = NGTCP2_DEFAULT_INITIAL_RTT / 2;
 
     auto &params = settings.transport_params;
     params.initial_max_stream_data_bidi_local = 256 * 1024;
@@ -994,7 +998,7 @@ int dns_over_quic::acked_stream_data_offset(ngtcp2_conn *conn, int64_t stream_id
     (void)offset;
     (void)stream_user_data;
 
-    auto *doq = (dns_over_quic *)user_data;
+    auto doq = (dns_over_quic *)user_data;
     if (auto it = doq->m_streams.find(stream_id); it != doq->m_streams.end()) {
         auto &stream = it->second;
         evbuffer *buf = stream.send_info.buf.get();

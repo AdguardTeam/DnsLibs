@@ -21,8 +21,6 @@
 #include <event2/event.h>
 #include <event2/buffer.h>
 
-#include <random>
-#include <set>
 #include <deque>
 #include <unordered_map>
 #include <condition_variable>
@@ -97,6 +95,7 @@ private:
     };
     struct request_t {
         int64_t request_id = -1;
+        ngtcp2_tstamp starting_time{0};
         ag::ldns_pkt_ptr reply_pkt;
         ag::ldns_buffer_ptr request_buffer;
         std::condition_variable cond;
@@ -114,19 +113,19 @@ private:
                                 uint64_t offset, const uint8_t *data, size_t datalen,
                                 void *user_data);
 
-    static int update_key(ngtcp2_conn *conn, uint8_t *rx_secret, uint8_t *tx_secret,
-                          ngtcp2_crypto_aead_ctx *rx_aead_ctx, uint8_t *rx_iv,
-                          ngtcp2_crypto_aead_ctx *tx_aead_ctx, uint8_t *tx_iv,
-                          const uint8_t *current_rx_secret,
-                          const uint8_t *current_tx_secret, size_t secretlen,
-                          void *user_data);
-
     static int recv_stream_data(ngtcp2_conn *conn, uint32_t flags, int64_t stream_id,
                                 uint64_t offset, const uint8_t *data, size_t datalen,
                                 void *user_data, void *stream_user_data);
 
     static int get_new_connection_id(ngtcp2_conn *conn, ngtcp2_cid *cid,
                                      uint8_t *token, size_t cidlen, void *user_data);
+
+    static int update_key(ngtcp2_conn *conn, uint8_t *rx_secret, uint8_t *tx_secret,
+                          ngtcp2_crypto_aead_ctx *rx_aead_ctx, uint8_t *rx_iv,
+                          ngtcp2_crypto_aead_ctx *tx_aead_ctx, uint8_t *tx_iv,
+                          const uint8_t *current_rx_secret,
+                          const uint8_t *current_tx_secret, size_t secretlen,
+                          void *user_data);
 
     static int on_close_stream(ngtcp2_conn *conn, int64_t stream_id,
                                uint64_t app_error_code, void *user_data,
@@ -180,7 +179,6 @@ private:
     int m_port{0};
     logger m_log = create_logger("DOQ upstream");
     bootstrapper_ptr m_bootstrapper;
-    milliseconds m_request_timer{0};
     ag::socket_address m_remote_addr_empty, m_local_addr;
     std::deque<ag::socket_address> m_server_addresses;
     std::vector<ag::socket_address> m_current_addresses;
@@ -201,7 +199,7 @@ private:
     struct event *m_idle_timer_event{nullptr};
     struct event *m_retransmit_timer_event{nullptr};
     static std::atomic_int64_t m_next_request_id;
-    static std::array<uint8_t, 32> m_static_secret;
+    std::array<uint8_t, 32> m_static_secret;
 };
 
 } // ag
