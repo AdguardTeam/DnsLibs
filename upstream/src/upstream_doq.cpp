@@ -47,6 +47,10 @@ dns_over_quic::~dns_over_quic() {
         event_free(std::exchange(m_idle_timer_event, nullptr));
     }
 
+    if (m_handshake_timer_event) {
+        event_free(std::exchange(m_handshake_timer_event, nullptr));
+    }
+
     if (m_retransmit_timer_event) {
         event_free(std::exchange(m_retransmit_timer_event, nullptr));
     }
@@ -126,6 +130,12 @@ void dns_over_quic::retransmit_cb(evutil_socket_t, short, void *data) {
 void dns_over_quic::idle_timer_cb(evutil_socket_t, short, void *data) {
     auto doq = static_cast<dns_over_quic *>(data);
     doq->disconnect("Idle timer expired");
+}
+
+void dns_over_quic::handshake_timer_cb(evutil_socket_t, short, void *data) {
+    auto doq = static_cast<dns_over_quic *>(data);
+    evtimer_del(doq->m_idle_timer_event);
+    doq->disconnect("Handshake timer expired");
 }
 
 void dns_over_quic::read_cb(evutil_socket_t, short, void *data) {
@@ -303,6 +313,7 @@ err_string dns_over_quic::init() {
     m_remote_addr_empty = ag::socket_address("::", m_port);
 
     m_idle_timer_event = event_new(m_loop->c_base(), -1, EV_TIMEOUT, idle_timer_cb, this);
+    m_handshake_timer_event = event_new(m_loop->c_base(), -1, EV_TIMEOUT, handshake_timer_cb, this);
     m_retransmit_timer_event = event_new(m_loop->c_base(), -1, EV_TIMEOUT, retransmit_cb, this);
 
     if (int ret = init_ssl_ctx(); ret != 0) {
@@ -550,6 +561,13 @@ int dns_over_quic::send_packet_not_connected() {
     if (m_current_addresses.empty()) {
         return NETWORK_ERR_DROP_CONN;
     }
+
+    struct timeval tv{};
+    evtimer_pending(m_handshake_timer_event, &tv);
+    if (!evutil_timerisset(&tv)) {
+        tv = ag::utils::duration_to_timeval(m_options.timeout);
+        evtimer_add(m_handshake_timer_event, &tv);
+    }
     return NETWORK_ERR_OK;
 }
 
@@ -786,12 +804,6 @@ int dns_over_quic::update_key(ngtcp2_conn *conn, uint8_t *rx_secret, uint8_t *tx
 }
 
 ngtcp2_tstamp dns_over_quic::get_tstamp() const {
-#ifdef __linux__
-    timespec ts{};
-    if (clock_gettime(CLOCK_BOOTTIME, &ts) != -1) {
-        return ts.tv_sec + ts.tv_nsec * 1000000000LL;
-    }
-#endif
     return std::chrono::duration_cast<std::chrono::nanoseconds>
            (std::chrono::steady_clock::now().time_since_epoch()).count();
 }
@@ -850,7 +862,9 @@ int dns_over_quic::handshake_confirmed(ngtcp2_conn *conn, void *data) {
     (void)conn;
 
     auto doq = (dns_over_quic *)data;
+    evtimer_del(doq->m_handshake_timer_event);
     doq->m_state = RUN;
+    doq->update_idle_timer(true);
     doq->send_requests();
     return 0;
 }

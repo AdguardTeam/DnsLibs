@@ -58,6 +58,10 @@ ag::plain_dns::exchange_result ag::plain_dns::exchange(ldns_pkt *request_pkt) {
                                m_pool.address().c_socklen(), tv, &reply_size,
                                prepare_fd, this);
         if (status != LDNS_STATUS_OK) {
+            // To cancel second retry of exchange
+            if (LDNS_ETIMEDOUT == ag_ldns_check_socket_error()) {
+                return {nullptr, TIMEOUT_STR.data()};
+            }
             return {nullptr, utils::ldns_status_to_str(status)};
         }
 

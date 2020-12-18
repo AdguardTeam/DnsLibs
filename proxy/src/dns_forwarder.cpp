@@ -1006,7 +1006,7 @@ cached_response_expired:
         return raw_response;
     }
 
-    log_packet(log, response.get(), "Upstream dns response");
+    log_packet(log, response.get(), AG_FMT("Upstream ({}) dns response", selected_upstream->options().address).c_str());
     const auto ancount = ldns_pkt_ancount(response.get());
     const auto rcode = ldns_pkt_get_rcode(response.get());
 
@@ -1169,11 +1169,12 @@ upstream_exchange_result dns_forwarder::do_upstream_exchange(ldns_pkt *request) 
                 if (!retry_result.error.has_value()) {
                     return {std::move(retry_result.packet), std::nullopt, cur_upstream};
                 }
-                err_str = AG_FMT("Upstream exchange failed: first reason is {}, second is: {}",
-                                 result.error.value(), retry_result.error.value());
+                err_str = AG_FMT("Upstream ({}) exchange failed: first reason is {}, second is: {}",
+                                 cur_upstream->options().address, result.error.value(), retry_result.error.value());
                 dbglog_id(log, request, "{}", err_str);
             } else {
-                dbglog_id(log, request, "Upstream exchange failed: {}", result.error.value());
+                dbglog_id(log, request, "Upstream ({}) exchange failed: {}",
+                          cur_upstream->options().address, result.error.value());
             }
         }
     }

@@ -140,6 +140,7 @@ private:
 
     static void read_cb(evutil_socket_t, short, void *data);
     static void idle_timer_cb(evutil_socket_t, short, void *data);
+    static void handshake_timer_cb(evutil_socket_t, short, void *data);
     static void retransmit_cb(evutil_socket_t, short, void *data);
 
     int init_ssl_ctx();
@@ -197,6 +198,7 @@ private:
     event_loop_ptr m_loop = event_loop::create();
     struct event *m_read_event{nullptr};
     struct event *m_idle_timer_event{nullptr};
+    struct event *m_handshake_timer_event{nullptr};
     struct event *m_retransmit_timer_event{nullptr};
     static std::atomic_int64_t m_next_request_id;
     std::array<uint8_t, 32> m_static_secret;
