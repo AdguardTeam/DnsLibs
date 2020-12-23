@@ -22,6 +22,6 @@ namespace Adguard.Dns.Api.DnsProxyServer.Configs
         /// <summary>
         /// If true, data is rules, otherwise data is path to file with rules
         /// </summary>
-        public bool InMemory;
+        public bool InMemory { get; set; }
     }
 }
