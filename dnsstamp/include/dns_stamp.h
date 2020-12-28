@@ -34,15 +34,15 @@ enum server_informal_properties : uint64_t {
  */
 enum class stamp_proto_type : uint8_t {
     /** plain is plain DNS */
-    PLAIN = 0x00,
+    PLAIN,
     /** dnscrypt is DNSCrypt */
-    DNSCRYPT = 0x01,
+    DNSCRYPT,
     /** doh is DNS-over-HTTPS */
-    DOH = 0x02,
+    DOH,
     /** tls is DNS-over-TLS */
-    TLS = 0x03,
+    TLS,
     /** doq is DNS-over-QUIC */
-    DOQ = 0x04,
+    DOQ,
 };
 
 /**

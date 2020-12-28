@@ -216,11 +216,11 @@ typedef struct {
 } ag_dnsproxy_events;
 
 typedef enum {
-    AGSPT_PLAIN = 0x00,
-    AGSPT_DNSCRYPT = 0x01,
-    AGSPT_DOH = 0x02,
-    AGSPT_TLS = 0x03,
-    AGSPT_DOQ = 0x04,
+    AGSPT_PLAIN,
+    AGSPT_DNSCRYPT,
+    AGSPT_DOH,
+    AGSPT_TLS,
+    AGSPT_DOQ,
 } ag_stamp_proto_type;
 
 typedef struct {
