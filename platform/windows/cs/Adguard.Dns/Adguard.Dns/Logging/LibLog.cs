@@ -883,7 +883,7 @@ namespace Adguard.Dns.Logging.LogProviders
                     _levelDebug = levelFields.First(x => x.Name == "Debug").GetValue(null);
                     _levelInfo = levelFields.First(x => x.Name == "Info").GetValue(null);
                     _levelWarn = levelFields.First(x => x.Name == "Warn").GetValue(null);
-                    _levelError = levelFields.First(x => x.Name == "error").GetValue(null);
+                    _levelError = levelFields.First(x => x.Name == "Error").GetValue(null);
                     _levelFatal = levelFields.First(x => x.Name == "Fatal").GetValue(null);
 
                     var logEventInfoType = Type.GetType("NLog.LogEventInfo, NLog");
@@ -1256,7 +1256,7 @@ namespace Adguard.Dns.Logging.LogProviders
                 _levelDebug = levelFields.First(x => x.Name == "Debug").GetValue(null);
                 _levelInfo = levelFields.First(x => x.Name == "Info").GetValue(null);
                 _levelWarn = levelFields.First(x => x.Name == "Warn").GetValue(null);
-                _levelError = levelFields.First(x => x.Name == "error").GetValue(null);
+                _levelError = levelFields.First(x => x.Name == "Error").GetValue(null);
                 _levelFatal = levelFields.First(x => x.Name == "Fatal").GetValue(null);
 
                 // Func<object, object, bool> isEnabledFor = (logger, level) => { return ((log4net.Core.ILogger)logger).IsEnabled(level); }
@@ -1787,7 +1787,7 @@ namespace Adguard.Dns.Logging.LogProviders
                     throw new InvalidOperationException("Type Serilog.Events.LogEventLevel was not found.");
                 }
                 DebugLevel = Enum.Parse(logEventLevelType, "Debug", false);
-                ErrorLevel = Enum.Parse(logEventLevelType, "error", false);
+                ErrorLevel = Enum.Parse(logEventLevelType, "Error", false);
                 FatalLevel = Enum.Parse(logEventLevelType, "Fatal", false);
                 InformationLevel = Enum.Parse(logEventLevelType, "Information", false);
                 VerboseLevel = Enum.Parse(logEventLevelType, "Verbose", false);
@@ -2065,7 +2065,7 @@ namespace Adguard.Dns.Logging.LogProviders
             Verbose = (int)Enum.Parse(Type, "Verbose", false);
             Information = (int)Enum.Parse(Type, "Information", false);
             Warning = (int)Enum.Parse(Type, "Warning", false);
-            Error = (int)Enum.Parse(Type, "error", false);
+            Error = (int)Enum.Parse(Type, "Error", false);
             Critical = (int)Enum.Parse(Type, "Critical", false);
         }
     }
