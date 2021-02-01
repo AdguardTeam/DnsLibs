@@ -6,6 +6,7 @@
 #include <ldns/net.h>
 #include "dns_framed.h"
 #include "bootstrapper.h"
+#include "tls_session_cache.h"
 
 namespace ag {
 
@@ -25,7 +26,7 @@ public:
      */
     dns_over_tls(const upstream_options &opts, const upstream_factory_config &config);
 
-    ~dns_over_tls();
+    ~dns_over_tls() override;
 
 private:
     err_string init() override;
@@ -39,6 +40,8 @@ private:
     std::unique_ptr<tls_pool> m_pool;
     /** DNS server name */
     std::string m_server_name;
+    /** TLS sessions cache */
+    tls_session_cache m_tls_session_cache;
 };
 
 } // namespace ag

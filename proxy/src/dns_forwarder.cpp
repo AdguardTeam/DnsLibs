@@ -600,7 +600,9 @@ std::pair<bool, err_string> dns_forwarder::init(const dnsproxy_settings &setting
     }
 
     infolog(log, "Initializing upstreams...");
-    upstream_factory us_factory({ this->cert_verifier.get(), this->settings->ipv6_available });
+    upstream_factory us_factory({ this->cert_verifier.get(),
+                                  this->settings->ipv6_available,
+                                  this->settings->tls_session_cache });
     this->upstreams.reserve(settings.upstreams.size());
     this->fallbacks.reserve(settings.fallbacks.size());
     for (const upstream_options &options : settings.upstreams) {

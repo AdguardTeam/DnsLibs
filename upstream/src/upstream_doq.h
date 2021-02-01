@@ -25,6 +25,7 @@
 #include <unordered_map>
 #include <condition_variable>
 #include <list>
+#include "tls_session_cache.h"
 
 using namespace std::chrono;
 
@@ -202,6 +203,7 @@ private:
     struct event *m_retransmit_timer_event{nullptr};
     static std::atomic_int64_t m_next_request_id;
     std::array<uint8_t, 32> m_static_secret;
+    tls_session_cache m_tls_session_cache;
 };
 
 } // ag

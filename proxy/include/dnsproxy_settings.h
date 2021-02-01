@@ -81,6 +81,9 @@ struct dnsproxy_settings {
      * while upstreams are queried in the background.
      */
     bool optimistic_cache;
+
+    /** Enable the TLS session cache for DoT and DoQ */
+    bool tls_session_cache;
 };
 
 }

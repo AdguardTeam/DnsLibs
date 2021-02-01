@@ -19,6 +19,7 @@ add_library(upstream EXCLUDE_FROM_ALL
         src/upstream_dnscrypt.h src/upstream_dnscrypt.cpp
         src/resolver.h src/resolver.cpp
         src/upstream_utils.cpp
+        src/tls_session_cache.cpp
     )
 
 set_target_properties(upstream PROPERTIES POSITION_INDEPENDENT_CODE ON)

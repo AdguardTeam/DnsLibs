@@ -33,6 +33,7 @@ dns_over_quic::dns_over_quic(const upstream_options &opts, const upstream_factor
         , m_max_pktlen{NGTCP2_MAX_PKTLEN_IPV6}
         , m_send_buf(NGTCP2_MAX_PKTLEN_IPV6)
         , m_static_secret{0}
+        , m_tls_session_cache(opts.address)
 {}
 
 dns_over_quic::~dns_over_quic() {
@@ -582,7 +583,9 @@ int dns_over_quic::init_ssl_ctx() {
     // setup our verifier
     SSL_CTX_set_verify(m_ssl_ctx, SSL_VERIFY_PEER, nullptr);
     SSL_CTX_set_cert_verify_callback(m_ssl_ctx, dns_over_quic::ssl_verify_callback, nullptr);
-
+    if (config().tls_session_cache) {
+        tls_session_cache::prepare_ssl_ctx(m_ssl_ctx);
+    }
     return 0;
 }
 
@@ -610,7 +613,18 @@ int dns_over_quic::init_ssl() {
         SSL_set_alpn_protos(m_ssl, alpn, alpnlen);
     }
 
-    ngtcp2_conn_set_tls_native_handle(m_conn, m_ssl);
+    if (config().tls_session_cache) {
+        m_tls_session_cache.prepare_ssl(m_ssl);
+        if (ssl_session_ptr session = m_tls_session_cache.get_session()) {
+            dbglog(m_log, "Using a cached TLS session");
+            SSL_set_session(m_ssl, session.get()); // UpRefs the session
+        } else {
+            dbglog(m_log, "No cached TLS sessions available");
+        }
+    } else {
+        dbglog(m_log, "TLS session cache is disabled");
+    }
+
     return 0;
 }
 

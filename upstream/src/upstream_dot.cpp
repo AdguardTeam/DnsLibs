@@ -61,6 +61,11 @@ ag::connection_pool::get_result ag::dns_over_tls::tls_pool::create() {
     SSL_CTX *ctx = SSL_CTX_new(TLS_client_method());
     SSL_CTX_set_verify(ctx, SSL_VERIFY_PEER, nullptr);
     SSL_CTX_set_cert_verify_callback(ctx, dns_over_tls::ssl_verify_callback, nullptr);
+
+    if (m_upstream->config().tls_session_cache) {
+        tls_session_cache::prepare_ssl_ctx(ctx);
+    }
+
     SSL *ssl = SSL_new(ctx);
     int options = BEV_OPT_THREADSAFE | BEV_OPT_DEFER_CALLBACKS | BEV_OPT_UNLOCK_CALLBACKS | BEV_OPT_CLOSE_ON_FREE;
     bufferevent *bev = bufferevent_openssl_socket_new(m_loop->c_base(), -1, ssl,
@@ -68,6 +73,18 @@ ag::connection_pool::get_result ag::dns_over_tls::tls_pool::create() {
                                                       options);
     SSL_set_tlsext_host_name(ssl, m_upstream->m_server_name.c_str());
     SSL_set_app_data(ssl, m_upstream);
+
+    if (m_upstream->config().tls_session_cache) {
+        m_upstream->m_tls_session_cache.prepare_ssl(ssl);
+        if (ssl_session_ptr session = m_upstream->m_tls_session_cache.get_session()) {
+            dbglog(m_upstream->m_log, "Using a cached TLS session");
+            SSL_set_session(ssl, session.get()); // UpRefs the session
+        } else {
+            dbglog(m_upstream->m_log, "No cached TLS sessions available");
+        }
+    } else {
+        dbglog(m_upstream->m_log, "TLS session cache is disabled");
+    }
 
     const socket_address &address = resolve_result.addresses[0];
     connection_ptr connection = create_connection(bev, address);
@@ -174,6 +191,7 @@ static ag::bootstrapper_ptr create_bootstrapper(const ag::logger &log, const ag:
 ag::dns_over_tls::dns_over_tls(const upstream_options &opts, const upstream_factory_config &config)
         : upstream(opts, config)
         , m_server_name(get_host_name(opts.address))
+        , m_tls_session_cache(opts.address)
 {}
 
 ag::err_string ag::dns_over_tls::init() {
