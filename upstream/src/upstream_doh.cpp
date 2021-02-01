@@ -76,6 +76,32 @@ int dns_over_https::sockopt_callback(void *clientp, curl_socket_t curlfd, curlso
     return CURL_SOCKOPT_OK;
 }
 
+static void curl_share_lockfunc(CURL *, curl_lock_data data, curl_lock_access, void *userptr) {
+    auto *m = (std::mutex *) userptr;
+    m[data].lock();
+}
+
+static void curl_share_unlockfunc(CURL *, curl_lock_data data, void *userptr) {
+    auto *m = (std::mutex *) userptr;
+    m[data].unlock();
+}
+
+// Must be called only once!
+static CURLSH *init_curl_share() {
+    static std::mutex mtx[CURL_LOCK_DATA_LAST];
+    CURLSH *share = curl_share_init();
+    curl_share_setopt(share, CURLSHOPT_SHARE, CURL_LOCK_DATA_SSL_SESSION);
+    curl_share_setopt(share, CURLSHOPT_USERDATA, &mtx[0]);
+    curl_share_setopt(share, CURLSHOPT_LOCKFUNC, curl_share_lockfunc);
+    curl_share_setopt(share, CURLSHOPT_UNLOCKFUNC, curl_share_unlockfunc);
+    return share;
+}
+
+static CURLSH *get_curl_share() {
+    static std::unique_ptr<CURLSH, ag::ftor<&curl_share_cleanup>> curl_share(init_curl_share());
+    return curl_share.get();
+}
+
 CURL *dns_over_https::query_handle::create_curl_handle() {
     CURL *curl = curl_easy_init();
     if (curl == nullptr) {
@@ -109,6 +135,7 @@ CURL *dns_over_https::query_handle::create_curl_handle() {
             || CURLE_OK != (e = curl_easy_setopt(curl, CURLOPT_SSL_ENABLE_ALPN, true))
             || CURLE_OK != (e = curl_easy_setopt(curl, CURLOPT_SOCKOPTFUNCTION, sockopt_callback))
             || CURLE_OK != (e = curl_easy_setopt(curl, CURLOPT_SOCKOPTDATA, upstream))
+            || CURLE_OK != (e = curl_easy_setopt(curl, CURLOPT_SHARE, get_curl_share()))
             || (upstream->resolved != nullptr
                 && CURLE_OK != (e = curl_easy_setopt(curl, CURLOPT_RESOLVE, upstream->resolved.get())))) {
         this->error = AG_FMT("Failed to set options of curl handle: {} (id={})",
