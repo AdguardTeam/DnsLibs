@@ -1138,11 +1138,10 @@ int dns_over_quic::ssl_verify_callback(X509_STORE_CTX *ctx, void *arg) {
 
 void dns_over_quic::disqualify_server_address(const socket_address &server_address) {
     std::scoped_lock l(m_global);
-    for (auto it_serv = m_server_addresses.begin(); it_serv != m_server_addresses.end(); it_serv++) {
+    for (auto it_serv = m_server_addresses.begin(); it_serv != m_server_addresses.end(); ++it_serv) {
         if (server_address == it_serv->socket_family_cast(server_address.c_sockaddr()->sa_family)) {
             // Put current address to back of queue
-            m_server_addresses.push_back(*it_serv);
-            m_server_addresses.erase(it_serv);
+            m_server_addresses.splice(m_server_addresses.end(), m_server_addresses, it_serv);
             break;
         }
     }
