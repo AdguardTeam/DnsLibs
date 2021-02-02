@@ -143,7 +143,7 @@ typedef struct {
     ag_dnsproxy_blocking_mode blocking_mode;
     /** Custom IPv4 address to return for filtered requests */
     const char *custom_blocking_ipv4;
-    /** Custom IPv4 address to return for filtered requests */
+    /** Custom IPv6 address to return for filtered requests */
     const char *custom_blocking_ipv6;
     /** Maximum number of cached responses (may be 0) */
     uint32_t dns_cache_size;

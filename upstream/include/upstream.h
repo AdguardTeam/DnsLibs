@@ -28,7 +28,6 @@ static constexpr std::string_view TIMEOUT_STR = "Request timed out";
 struct upstream_factory_config {
     const certificate_verifier *cert_verifier = nullptr;
     bool ipv6_available = true;
-    bool tls_session_cache = true;
 };
 
 /**

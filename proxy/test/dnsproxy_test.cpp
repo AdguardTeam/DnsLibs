@@ -29,6 +29,12 @@ protected:
     }
 };
 
+static ag::dnsproxy_settings make_dnsproxy_settings() {
+    auto settings = ag::dnsproxy_settings::get_default();
+    settings.upstreams = {{ .address = "94.140.14.140" }};
+    return settings;
+}
+
 static ag::ldns_pkt_ptr create_request(const std::string &domain, ldns_rr_type type, uint16_t flags,
                                        ldns_rr_class cls = LDNS_RR_CLASS_IN) {
     return ag::ldns_pkt_ptr(
@@ -60,7 +66,7 @@ TEST_F(dnsproxy_test, test_dns64) {
     using namespace std::chrono_literals;
 
     // Assume default settings don't include a DNS64 upstream
-    ag::dnsproxy_settings settings = ag::dnsproxy_settings::get_default();
+    ag::dnsproxy_settings settings = make_dnsproxy_settings();
     settings.dns64 = ag::dns64_settings{
             .upstreams = {{
                     .address = DNS64_SERVER_ADDR,
@@ -89,7 +95,7 @@ TEST_F(dnsproxy_test, test_dns64) {
 }
 
 TEST_F(dnsproxy_test, test_ipv6_blocking) {
-    ag::dnsproxy_settings settings = ag::dnsproxy_settings::get_default();
+    ag::dnsproxy_settings settings = make_dnsproxy_settings();
     settings.block_ipv6 = true;
     settings.ipv6_available = false;
     settings.filter_params = {{{1, "cname_blocking_test_filter.txt"}}};
@@ -122,7 +128,7 @@ TEST_F(dnsproxy_test, test_ipv6_blocking) {
 }
 
 TEST_F(dnsproxy_test, test_cname_blocking) {
-    ag::dnsproxy_settings settings = ag::dnsproxy_settings::get_default();
+    ag::dnsproxy_settings settings = make_dnsproxy_settings();
     settings.filter_params = {{{1, "cname_blocking_test_filter.txt"}}};
 
     ag::dns_request_processed_event last_event{};
@@ -166,7 +172,7 @@ protected:
 
     void SetUp() override {
         ag::set_default_log_level(ag::TRACE);
-        ag::dnsproxy_settings settings = ag::dnsproxy_settings::get_default();
+        ag::dnsproxy_settings settings = make_dnsproxy_settings();
         settings.dns_cache_size = 1;
         settings.optimistic_cache = false;
 
@@ -284,7 +290,7 @@ TEST_F(dnsproxy_cache_test, cache_key_test) {
 }
 
 TEST_F(dnsproxy_test, blocking_mode_default) {
-    ag::dnsproxy_settings settings = ag::dnsproxy_settings::get_default();
+    ag::dnsproxy_settings settings = make_dnsproxy_settings();
     settings.filter_params = {{{1, "blocking_modes_test_filter.txt"}}};
 
     auto [ret, err] = proxy.init(settings, {});
@@ -345,7 +351,7 @@ TEST_F(dnsproxy_test, blocking_mode_default) {
 }
 
 TEST_F(dnsproxy_test, blocking_mode_nxdomain) {
-    ag::dnsproxy_settings settings = ag::dnsproxy_settings::get_default();
+    ag::dnsproxy_settings settings = make_dnsproxy_settings();
     settings.filter_params = {{{1, "blocking_modes_test_filter.txt"}}};
     settings.blocking_mode = ag::dnsproxy_blocking_mode::NXDOMAIN;
 
@@ -407,7 +413,7 @@ TEST_F(dnsproxy_test, blocking_mode_nxdomain) {
 }
 
 TEST_F(dnsproxy_test, blocking_mode_refused) {
-    ag::dnsproxy_settings settings = ag::dnsproxy_settings::get_default();
+    ag::dnsproxy_settings settings = make_dnsproxy_settings();
     settings.filter_params = {{{1, "blocking_modes_test_filter.txt"}}};
     settings.blocking_mode = ag::dnsproxy_blocking_mode::REFUSED;
 
@@ -462,7 +468,7 @@ TEST_F(dnsproxy_test, blocking_mode_refused) {
 }
 
 TEST_F(dnsproxy_test, blocking_mode_unspecified_address) {
-    ag::dnsproxy_settings settings = ag::dnsproxy_settings::get_default();
+    ag::dnsproxy_settings settings = make_dnsproxy_settings();
     settings.filter_params = {{{1, "blocking_modes_test_filter.txt"}}};
     settings.blocking_mode = ag::dnsproxy_blocking_mode::UNSPECIFIED_ADDRESS;
 
@@ -524,7 +530,7 @@ TEST_F(dnsproxy_test, blocking_mode_unspecified_address) {
 }
 
 TEST_F(dnsproxy_test, blocking_mode_custom_address) {
-    ag::dnsproxy_settings settings = ag::dnsproxy_settings::get_default();
+    ag::dnsproxy_settings settings = make_dnsproxy_settings();
     settings.filter_params = {{{1, "blocking_modes_test_filter.txt"}}};
     settings.blocking_mode = ag::dnsproxy_blocking_mode::CUSTOM_ADDRESS;
     settings.custom_blocking_ipv4 = "4.3.2.1";
@@ -588,14 +594,14 @@ TEST_F(dnsproxy_test, blocking_mode_custom_address) {
 }
 
 TEST_F(dnsproxy_test, custom_blocking_address_validation_1) {
-    ag::dnsproxy_settings settings = ag::dnsproxy_settings::get_default();
+    ag::dnsproxy_settings settings = make_dnsproxy_settings();
     settings.blocking_mode = ag::dnsproxy_blocking_mode::CUSTOM_ADDRESS;
     auto [ret, err] = proxy.init(settings, {});
     ASSERT_TRUE(ret) << *err;
 }
 
 TEST_F(dnsproxy_test, custom_blocking_address_validation_2) {
-    ag::dnsproxy_settings settings = ag::dnsproxy_settings::get_default();
+    ag::dnsproxy_settings settings = make_dnsproxy_settings();
     settings.blocking_mode = ag::dnsproxy_blocking_mode::CUSTOM_ADDRESS;
     settings.custom_blocking_ipv4 = "abracadabra";
     settings.custom_blocking_ipv6 = "::1";
@@ -604,7 +610,7 @@ TEST_F(dnsproxy_test, custom_blocking_address_validation_2) {
 }
 
 TEST_F(dnsproxy_test, custom_blocking_address_validation_3) {
-    ag::dnsproxy_settings settings = ag::dnsproxy_settings::get_default();
+    ag::dnsproxy_settings settings = make_dnsproxy_settings();
     settings.blocking_mode = ag::dnsproxy_blocking_mode::CUSTOM_ADDRESS;
     settings.custom_blocking_ipv4 = "127.0.0.1";
     settings.custom_blocking_ipv6 = "abracadabra";
@@ -613,7 +619,7 @@ TEST_F(dnsproxy_test, custom_blocking_address_validation_3) {
 }
 
 TEST_F(dnsproxy_test, custom_blocking_address_empty_ipv4) {
-    ag::dnsproxy_settings settings = ag::dnsproxy_settings::get_default();
+    ag::dnsproxy_settings settings = make_dnsproxy_settings();
     settings.filter_params = {{{1, "blocking_modes_test_filter.txt"}}};
     settings.blocking_mode = ag::dnsproxy_blocking_mode::CUSTOM_ADDRESS;
     settings.custom_blocking_ipv6 = "::1";
@@ -629,7 +635,7 @@ TEST_F(dnsproxy_test, custom_blocking_address_empty_ipv4) {
 }
 
 TEST_F(dnsproxy_test, custom_blocking_address_empty_ipv6) {
-    ag::dnsproxy_settings settings = ag::dnsproxy_settings::get_default();
+    ag::dnsproxy_settings settings = make_dnsproxy_settings();
     settings.filter_params = {{{1, "blocking_modes_test_filter.txt"}}};
     settings.blocking_mode = ag::dnsproxy_blocking_mode::CUSTOM_ADDRESS;
     settings.custom_blocking_ipv4 = "127.0.0.1";
@@ -645,7 +651,7 @@ TEST_F(dnsproxy_test, custom_blocking_address_empty_ipv6) {
 }
 
 TEST_F(dnsproxy_test, correct_filter_ids_in_event) {
-    ag::dnsproxy_settings settings = ag::dnsproxy_settings::get_default();
+    ag::dnsproxy_settings settings = make_dnsproxy_settings();
     settings.filter_params = {{
         {15, "cname_blocking_test_filter.txt"},
         {-3, "blocking_modes_test_filter.txt"},
@@ -673,7 +679,7 @@ TEST_F(dnsproxy_test, correct_filter_ids_in_event) {
 }
 
 TEST_F(dnsproxy_test, whitelisting) {
-    ag::dnsproxy_settings settings = ag::dnsproxy_settings::get_default();
+    ag::dnsproxy_settings settings = make_dnsproxy_settings();
     settings.filter_params = {{
         {15, "whitelist_test_filter.txt"},
     }};
@@ -713,14 +719,14 @@ TEST_F(dnsproxy_test, whitelisting) {
 }
 
 TEST_F(dnsproxy_test, bad_filter_file_does_not_crash) {
-    ag::dnsproxy_settings settings = ag::dnsproxy_settings::get_default();
+    ag::dnsproxy_settings settings = make_dnsproxy_settings();
     settings.filter_params = {{ {111, "bad_test_filter.txt"}, }};
     auto [ret, err] = proxy.init(settings, {});
     ASSERT_TRUE(ret) << *err;
 }
 
 TEST_F(dnsproxy_test, rules_load_from_memory) {
-    ag::dnsproxy_settings settings = ag::dnsproxy_settings::get_default();
+    ag::dnsproxy_settings settings = make_dnsproxy_settings();
 
     std::string filter_data;
     ag::file::handle file_handle = ag::file::open("bad_test_filter.txt", ag::file::RDONLY);
@@ -737,7 +743,7 @@ TEST_F(dnsproxy_test, rules_load_from_memory) {
 }
 
 TEST_F(dnsproxy_test, ip_blocking_regress) {
-    ag::dnsproxy_settings settings = ag::dnsproxy_settings::get_default();
+    ag::dnsproxy_settings settings = make_dnsproxy_settings();
     settings.filter_params = {{ {15, "crash_regress_test_filter.txt"}, }};
 
     ag::dns_request_processed_event last_event{};
@@ -765,7 +771,7 @@ TEST_F(dnsproxy_test, ip_blocking_regress) {
 }
 
 TEST_F(dnsproxy_test, warnings) {
-    ag::dnsproxy_settings settings = ag::dnsproxy_settings::get_default();
+    ag::dnsproxy_settings settings = make_dnsproxy_settings();
 
     settings.filter_params = {{ {15, "blocking_modes_test_filter.txt"}, }};
     {
@@ -784,7 +790,7 @@ TEST_F(dnsproxy_test, warnings) {
 }
 
 TEST_F(dnsproxy_test, optimistic_cache) {
-    ag::dnsproxy_settings settings = ag::dnsproxy_settings::get_default();
+    ag::dnsproxy_settings settings = make_dnsproxy_settings();
     settings.optimistic_cache = true;
     settings.dns_cache_size = 100;
 
