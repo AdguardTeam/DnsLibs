@@ -47,7 +47,6 @@ struct dns_over_https::query_handle {
     ldns_buffer_ptr request = nullptr;
     std::vector<uint8_t> response;
     std::promise<void> barrier;
-    std::promise<void> defy_barrier;
 
     CURL *create_curl_handle();
     void cleanup_request();
@@ -167,6 +166,7 @@ std::unique_ptr<dns_over_https::query_handle> dns_over_https::create_handle(ldns
     ldns_status status = ldns_pkt2buffer_wire(h->request.get(), request);
     if (status != LDNS_STATUS_OK) {
         errlog_id(h, "Failed to serialize packet: {}", ldns_get_errorstr_by_id(status));
+        h->restore_packet_id(request);
         return nullptr;
     }
 
@@ -318,17 +318,21 @@ dns_over_https::~dns_over_https() {
     event_base_once(this->worker.loop->c_base(), 0, EV_TIMEOUT, stop, this, nullptr);
     // Delete the event before deleting the loop
     this->pool.timer_event.reset();
-    this->worker.loop->stop();
     this->worker.loop.reset();
     infolog(this->log, "Done");
 
     infolog(this->log, "Waiting all requests completed...");
-    std::unique_lock lock(this->guard);
-    this->worker.no_requests_condition.wait(lock,
-        [this] () -> bool {
-            return this->worker.requests_counter == 0;
-        });
+    {
+        std::unique_lock lock(this->guard);
+        this->worker.no_requests_condition.wait(lock,
+            [this] () -> bool {
+                return this->worker.requests_counter == 0;
+            });
+    }
     infolog(this->log, "Done");
+
+    // Defy stray `query_handle`s not defied on the event loop
+    defy_requests(-1, EV_TIMEOUT, this);
 
     infolog(this->log, "Destroyed");
 }
@@ -487,17 +491,24 @@ void dns_over_https::submit_request(evutil_socket_t, short, void *arg) {
     upstream->worker.running_queue.emplace_back(handle);
 }
 
-void dns_over_https::defy_request(evutil_socket_t, short, void *arg) {
-    query_handle *handle = (query_handle *)arg;
-    tracelog_id(handle, "Defying request");
+void dns_over_https::defy_requests(evutil_socket_t, short, void *arg) {
+    auto *self = (dns_over_https *)arg;
+    std::list<std::unique_ptr<query_handle>> handle_ptrs;
 
-    dns_over_https *upstream = handle->upstream;
-    handle->cleanup_request();
+    self->guard.lock();
+    handle_ptrs.swap(self->defied_handles);
+    self->guard.unlock();
 
-    std::deque<query_handle *> &queue = upstream->worker.running_queue;
-    queue.erase(std::remove(queue.begin(), queue.end(), handle), queue.end());
+    for (auto &ptr : handle_ptrs) {
+        query_handle *handle = ptr.get();
+        tracelog_id(handle, "Defying request");
 
-    handle->defy_barrier.set_value();
+        dns_over_https *upstream = handle->upstream;
+        handle->cleanup_request();
+
+        std::deque<query_handle *> &queue = upstream->worker.running_queue;
+        queue.erase(std::remove(queue.begin(), queue.end(), handle), queue.end());
+    }
 }
 
 void dns_over_https::stop_all_with_error(err_string e) {
@@ -563,7 +574,6 @@ dns_over_https::exchange_result dns_over_https::exchange(ldns_pkt *request) {
 
     std::unique_ptr<query_handle> handle = create_handle(request, timeout);
     if (handle == nullptr) {
-        handle->restore_packet_id(request);
         return { nullptr, "Failed to create request handle" };
     }
 
@@ -574,17 +584,11 @@ dns_over_https::exchange_result dns_over_https::exchange(ldns_pkt *request) {
 
     err_string err;
     ldns_pkt *response = nullptr;
+    bool timed_out = false;
     if (std::future_status status = request_completed.wait_for(timeout);
             status != std::future_status::ready) {
         err = TIMEOUT_STR;
-        std::future<void> request_defied = handle->defy_barrier.get_future();
-        event_base_once(this->worker.loop->c_base(), 0, EV_TIMEOUT, defy_request, handle.get(), nullptr);
-        milliseconds defy_timeout = this->m_options.timeout;
-        if (std::future_status status = request_defied.wait_for(defy_timeout);
-                status != std::future_status::ready) {
-            err = "Failed to defy request";
-            errlog_id(handle, "{} in {}: status={}", err.value(), defy_timeout, magic_enum::enum_name(status));
-        }
+        timed_out = true;
     } else if (handle->error.has_value()) {
         err = std::move(handle->error);
     } else if (ldns_status status = ldns_wire2pkt(&response, handle->response.data(), handle->response.size());
@@ -596,7 +600,17 @@ dns_over_https::exchange_result dns_over_https::exchange(ldns_pkt *request) {
     if (response != nullptr) {
         handle->restore_packet_id(response);
     }
-    tracelog_id(handle, "Completed");
+
+    if (!timed_out) {
+        tracelog_id(handle, "Completed");
+    } else {
+        tracelog_id(handle, "Request timed out");
+        std::scoped_lock l(this->guard);
+        this->defied_handles.emplace_back(std::move(handle));
+        if (this->defied_handles.size() == 1) {
+            event_base_once(this->worker.loop->c_base(), 0, EV_TIMEOUT, defy_requests, this, nullptr);
+        }
+    }
 
     return { ldns_pkt_ptr(response), std::move(err) };
 }

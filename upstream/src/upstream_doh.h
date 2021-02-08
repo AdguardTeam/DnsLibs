@@ -71,7 +71,7 @@ private:
     static int sockopt_callback(void *clientp, curl_socket_t curlfd, curlsocktype purpose);
 
     static void submit_request(evutil_socket_t, short, void *arg);
-    static void defy_request(evutil_socket_t, short, void *arg);
+    static void defy_requests(evutil_socket_t, short, void *arg);
 
     static void stop(evutil_socket_t, short, void *arg);
 
@@ -88,6 +88,8 @@ private:
         std::condition_variable no_requests_condition;
     };
     worker_descriptor worker;
+
+    std::list<std::unique_ptr<query_handle>> defied_handles;
 
     struct pool_descriptor {
         curl_pool_ptr handle = nullptr;
