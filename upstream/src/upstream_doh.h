@@ -9,6 +9,7 @@
 #include <atomic>
 #include <future>
 #include <deque>
+#include <list>
 
 #include <ag_logger.h>
 #include <ag_defs.h>
