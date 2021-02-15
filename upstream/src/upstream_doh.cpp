@@ -47,6 +47,7 @@ struct dns_over_https::query_handle {
     ldns_buffer_ptr request = nullptr;
     std::vector<uint8_t> response;
     std::promise<void> barrier;
+    std::promise<void> submit_barrier;
 
     CURL *create_curl_handle();
     void cleanup_request();
@@ -318,6 +319,10 @@ dns_over_https::~dns_over_https() {
     event_base_once(this->worker.loop->c_base(), 0, EV_TIMEOUT, stop, this, nullptr);
     // Delete the event before deleting the loop
     this->pool.timer_event.reset();
+    // Stop and join before reset() are NOT redundant, because
+    // `loop->reset()` sets `loop` to nullptr before calling the destructor
+    this->worker.loop->stop();
+    this->worker.loop->join();
     this->worker.loop.reset();
     infolog(this->log, "Done");
 
@@ -468,8 +473,12 @@ int dns_over_https::on_socket_update(CURL *handle, curl_socket_t socket, int wha
 }
 
 void dns_over_https::submit_request(evutil_socket_t, short, void *arg) {
-    query_handle *handle = (query_handle *)arg;
+    auto *handle = (query_handle *)arg;
     tracelog_id(handle, "Submitting request");
+
+    ag::utils::scope_exit signal_submit_done([&] {
+        handle->submit_barrier.set_value();
+    });
 
     CURL *curl_handle = handle->create_curl_handle();
     if (curl_handle == nullptr) {
@@ -580,6 +589,7 @@ dns_over_https::exchange_result dns_over_https::exchange(ldns_pkt *request) {
     tracelog_id(handle, "Started");
 
     std::future<void> request_completed = handle->barrier.get_future();
+    std::future<void> request_submitted = handle->submit_barrier.get_future();
     event_base_once(this->worker.loop->c_base(), 0, EV_TIMEOUT, submit_request, handle.get(), nullptr);
 
     err_string err;
@@ -605,6 +615,17 @@ dns_over_https::exchange_result dns_over_https::exchange(ldns_pkt *request) {
         tracelog_id(handle, "Completed");
     } else {
         tracelog_id(handle, "Request timed out");
+
+        /* Wait until `submit_request` is done with the handle before scheduling it for deletion.
+         * Explanation:
+         *   `request_completed.wait_for()` could have timed out because the whole process
+         *   was suspended for a few seconds. In that case, `submit_request` might not yet
+         *   have been executed on the event loop thread, and if we immediately schedule
+         *   the handle to be cleaned up, `submit_request` will eventually execute and
+         *   access the deleted pointer.
+         */
+        request_submitted.wait();
+
         std::scoped_lock l(this->guard);
         this->defied_handles.emplace_back(std::move(handle));
         if (this->defied_handles.size() == 1) {
