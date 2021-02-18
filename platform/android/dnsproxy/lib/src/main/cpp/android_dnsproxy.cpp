@@ -1,6 +1,7 @@
 #include <jni.h>
 #include <string>
 #include <cassert>
+#include <cctype>
 #include <dnsproxy.h>
 #include <android_dnsproxy.h>
 #include <scoped_jni_env.h>
@@ -36,6 +37,9 @@ private:
         this->formatter_->format(msg, formatted);
 
         std::string s{formatted.data(), formatted.size()};
+        while (!s.empty() && std::isspace((unsigned char) s.back())) {
+            s.pop_back();
+        }
         env->CallStaticVoidMethod(m_logger_class.get(), m_log_method,
                                   (jint) msg.level, ag::jni_utils::marshal_string(env.get(), s).get());
 
