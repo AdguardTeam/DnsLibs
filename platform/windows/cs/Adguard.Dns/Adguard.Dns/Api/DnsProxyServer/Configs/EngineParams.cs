@@ -1,5 +1,5 @@
 ﻿using System.Collections.Generic;
-using Adguard.Dns.Utils;
+using AdGuard.Utils.Collections;
 
 namespace Adguard.Dns.Api.DnsProxyServer.Configs
 {
@@ -40,7 +40,7 @@ namespace Adguard.Dns.Api.DnsProxyServer.Configs
 
         private bool Equals(EngineParams other)
         {
-            return CollectionUtils.SequenceEqual(FilterParams, other.FilterParams);
+            return CollectionUtils.ListsEquals(FilterParams, other.FilterParams);
         }
 
         public override int GetHashCode()

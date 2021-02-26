@@ -1,7 +1,7 @@
 ﻿using System.Collections.Generic;
 using System.Net;
-using Adguard.Dns.Helpers;
-using Adguard.Dns.Utils;
+using AdGuard.Utils.Collections;
+using AdGuard.Utils.Interop;
 
 namespace Adguard.Dns.Api.DnsProxyServer.Configs
 {
@@ -73,7 +73,7 @@ namespace Adguard.Dns.Api.DnsProxyServer.Configs
         private bool Equals(UpstreamOptions other)
         {
             return Equals(Address, other.Address) &&
-                   CollectionUtils.SequenceEqual(Bootstrap, other.Bootstrap) &&
+                   CollectionUtils.ListsEquals(Bootstrap, other.Bootstrap) &&
                    TimeoutMs == other.TimeoutMs &&
                    Equals(ResolvedIpAddress, other.ResolvedIpAddress) &&
                    Id == other.Id &&

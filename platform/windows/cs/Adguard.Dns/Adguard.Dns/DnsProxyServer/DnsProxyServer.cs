@@ -4,6 +4,7 @@ using Adguard.Dns.Api.DnsProxyServer.Callbacks;
 using Adguard.Dns.Api.DnsProxyServer.Configs;
 using Adguard.Dns.Helpers;
 using Adguard.Dns.Logging;
+using AdGuard.Utils.Interop;
 
 namespace Adguard.Dns.DnsProxyServer
 {

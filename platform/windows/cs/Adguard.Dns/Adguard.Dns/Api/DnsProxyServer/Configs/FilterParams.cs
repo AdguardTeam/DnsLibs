@@ -1,4 +1,4 @@
-﻿using Adguard.Dns.Helpers;
+﻿using AdGuard.Utils.Interop;
 
 namespace Adguard.Dns.Api.DnsProxyServer.Configs
 {

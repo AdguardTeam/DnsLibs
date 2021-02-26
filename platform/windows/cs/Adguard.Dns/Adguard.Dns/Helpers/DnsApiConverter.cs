@@ -9,6 +9,7 @@ using Adguard.Dns.Api.DnsProxyServer.Configs;
 using Adguard.Dns.Api.DnsProxyServer.EventArgs;
 using Adguard.Dns.DnsProxyServer;
 using Adguard.Dns.Utils;
+using AdGuard.Utils.Interop;
 
 namespace Adguard.Dns.Helpers
 {
@@ -52,12 +53,12 @@ namespace Adguard.Dns.Helpers
             DnsProxySettings dnsProxySettings,
             Queue<IntPtr> allocatedPointers)
         {
-            AGDnsApi.ag_list upstreamsC = MarshalUtils.ListToAgList(
+            MarshalUtils.ag_list upstreamsC = MarshalUtils.ListToAgList(
                 dnsProxySettings.Upstreams,
                 ToNativeObject,
                 allocatedPointers);
 
-            AGDnsApi.ag_list fallbacksC = MarshalUtils.ListToAgList(
+            MarshalUtils.ag_list fallbacksC = MarshalUtils.ListToAgList(
                 dnsProxySettings.Fallbacks,
                 ToNativeObject,
                 allocatedPointers);
@@ -70,7 +71,7 @@ namespace Adguard.Dns.Helpers
             }
 
             AGDnsApi.ag_filter_engine_params filterEngineParamsC = ToNativeObject(dnsProxySettings.EngineParams, allocatedPointers);
-            AGDnsApi.ag_list listenersC = MarshalUtils.ListToAgList(
+            MarshalUtils.ag_list listenersC = MarshalUtils.ListToAgList(
                 dnsProxySettings.Listeners,
                 ToNativeObject,
                 allocatedPointers);
@@ -93,7 +94,7 @@ namespace Adguard.Dns.Helpers
             EngineParams engineParams,
             Queue<IntPtr> allocatedPointers)
         {
-            AGDnsApi.ag_list filterParamsC = MarshalUtils.ListToAgList(
+            MarshalUtils.ag_list filterParamsC = MarshalUtils.ListToAgList(
                 engineParams.FilterParams,
                 ToNativeObject,
                 allocatedPointers);
@@ -109,7 +110,7 @@ namespace Adguard.Dns.Helpers
             Dns64Settings dns64,
             Queue<IntPtr> allocatedPointers)
         {
-            AGDnsApi.ag_list dns64upstreamsC = MarshalUtils.ListToAgList(
+            MarshalUtils.ag_list dns64upstreamsC = MarshalUtils.ListToAgList(
                 dns64.Upstreams,
                 ToNativeObject,
                 allocatedPointers);
@@ -169,7 +170,7 @@ namespace Adguard.Dns.Helpers
             UpstreamOptions upstreamOptions,
             Queue<IntPtr> allocatedPointers)
         {
-            AGDnsApi.ag_list bootstrapC = MarshalUtils.ListToAgList(
+            MarshalUtils.ag_list bootstrapC = MarshalUtils.ListToAgList(
                 upstreamOptions.Bootstrap,
                 MarshalUtils.StringToPtr,
                 allocatedPointers);
@@ -180,7 +181,13 @@ namespace Adguard.Dns.Helpers
                 addressBytes = upstreamOptions.ResolvedIpAddress.GetAddressBytes();
             }
 
-            AGDnsApi.ag_buffer addressC = MarshalUtils.BytesToAgBuffer(addressBytes, allocatedPointers);
+            MarshalUtils.ag_buffer addressC = MarshalUtils.BytesToAgBuffer(addressBytes);
+
+            if (allocatedPointers != null)
+            {
+                allocatedPointers.Enqueue(addressC.data);
+            }
+
             AGDnsApi.ag_upstream_options upstreamOptionsC = new AGDnsApi.ag_upstream_options
             {
                 bootstrap = bootstrapC,
@@ -330,7 +337,7 @@ namespace Adguard.Dns.Helpers
             AGDnsApi.ag_certificate_verification_event coreArgsС)
         {
             byte[] certBytes = MarshalUtils.AgBufferToBytes(coreArgsС.pCertificate);
-            List<byte[]> chain = MarshalUtils.AgListToList<AGDnsApi.ag_buffer, byte[]>(
+            List<byte[]> chain = MarshalUtils.AgListToList<MarshalUtils.ag_buffer, byte[]>(
                 coreArgsС.chain,
                 MarshalUtils.AgBufferToBytes);
             CertificateVerificationEventArgs eventArgs = new CertificateVerificationEventArgs
@@ -383,11 +390,11 @@ namespace Adguard.Dns.Helpers
         /// Creates the <see cref="IPAddress"/> object from the specified pointer to address byte array,
         /// addressLength
         /// </summary>
-        /// <param name="agAddress">The <see cref="AGDnsApi.ag_buffer"/> instance</param>
+        /// <param name="agAddress">The <see cref="MarshalUtils.ag_buffer"/> instance</param>
         /// <exception cref="ArgumentException">Thrown,
-        /// if passed <see cref="AGDnsApi.ag_buffer.size"/> is not acceptable</exception>
+        /// if passed <see cref="MarshalUtils.ag_buffer.size"/> is not acceptable</exception>
         /// <returns><see cref="IPAddress"/> object or null if the pointer is null or addressLength is zero</returns>
-        private static IPAddress CreateIpAddress(AGDnsApi.ag_buffer agAddress)
+        private static IPAddress CreateIpAddress(MarshalUtils.ag_buffer agAddress)
         {
             if (agAddress.data == IntPtr.Zero ||
                 agAddress.size == 0)
@@ -416,7 +423,7 @@ namespace Adguard.Dns.Helpers
         /// <param name="pAddress">The pointer to the address string
         /// (<seealso cref="IntPtr"/>)</param>
         /// <exception cref="ArgumentException">Thrown,
-        /// if passed <see cref="AGDnsApi.ag_buffer.size"/> is not acceptable</exception>
+        /// if passed <see cref="MarshalUtils.ag_buffer.size"/> is not acceptable</exception>
         /// <returns><see cref="IPAddress"/> object or null if the pointer is null or addressLength is zero</returns>
         private static IPAddress CreateIpAddress(IntPtr pAddress)
         {

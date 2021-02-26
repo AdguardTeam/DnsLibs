@@ -1,7 +1,7 @@
 ﻿using System;
 using System.Runtime.InteropServices;
 using Adguard.Dns.Api.DnsProxyServer.Configs;
-using Adguard.Dns.Helpers;
+using AdGuard.Utils.Interop;
 
 // ReSharper disable InconsistentNaming
 // ReSharper disable UnusedMember.Global
@@ -76,11 +76,11 @@ namespace Adguard.Dns
         internal static extern void ag_dnsproxy_settings_free(IntPtr pDnsProxySettings);
 
         /// <summary>
-        /// Free a specified <see cref="ag_buffer"/> instance.
+        /// Free a specified <see cref="MarshalUtils.ag_buffer"/> instance.
         /// </summary>
-        /// <param name="buf"><see cref="ag_buffer"/> instance to free</param>
+        /// <param name="buf"><see cref="MarshalUtils.ag_buffer"/> instance to free</param>
         [DllImport(DnsLibName, CallingConvention = CallingConvention.Cdecl)]
-        internal static extern void ag_buffer_free(ag_buffer buf);
+        internal static extern void ag_buffer_free(MarshalUtils.ag_buffer buf);
 
         /// <summary>
         /// Checks if upstream is valid and available
@@ -147,11 +147,11 @@ namespace Adguard.Dns
         {
             /// <summary>
             /// The upstreams to use for discovery of DNS64 prefixes (usually the system DNS servers),
-            /// represented as a <see cref="ag_list"/> with entries with
+            /// represented as a <see cref="MarshalUtils.ag_list"/> with entries with
             /// the type <see cref="ag_upstream_options"/>
             /// </summary>
             [MarshalAs(UnmanagedType.Struct)]
-            internal ag_list upstreams;
+            internal MarshalUtils.ag_list upstreams;
 
             /// <summary>
             /// How many times, at most, to try DNS64 prefixes discovery before giving up
@@ -222,12 +222,12 @@ namespace Adguard.Dns
 
             /// <summary>
             /// List of plain DNS servers to be used to resolve the hostname in upstreams' address,
-            /// represented as a <see cref="ag_list"/> with entries with
+            /// represented as a <see cref="MarshalUtils.ag_list"/> with entries with
             /// the type <see cref="IntPtr"/>,
             /// which be further marshall with <see cref="ManualMarshalPtrToStringAttribute"/>
             /// </summary>
             [MarshalAs(UnmanagedType.Struct)]
-            internal ag_list bootstrap;
+            internal MarshalUtils.ag_list bootstrap;
 
             /// <summary>
             /// Default upstream timeout. Also, it is used as a timeout for bootstrap DNS requests.
@@ -240,14 +240,14 @@ namespace Adguard.Dns
             /// <summary>
             /// Resolver's IP address.
             /// In the case if it's specified, bootstrap DNS servers won't be used at all.
-            /// (<seealso cref="ag_buffer"/>)
+            /// (<seealso cref="MarshalUtils.ag_buffer"/>)
             /// </summary>
             [MarshalAs(UnmanagedType.Struct)]
-            internal ag_buffer resolved_ip_address;
+            internal MarshalUtils.ag_buffer resolved_ip_address;
 
             /// <summary>
             /// User-provided ID for this upstream
-            /// (<seealso cref="ag_buffer"/>)
+            /// (<seealso cref="MarshalUtils.ag_buffer"/>)
             /// </summary>
             [MarshalAs(UnmanagedType.I4)]
             [NativeName("id")]
@@ -292,7 +292,7 @@ namespace Adguard.Dns
             /// <summary>
             /// List of filters, represented as a <see cref="ag_filter_params"/> structures
             /// </summary>
-            internal ag_list filters;
+            internal MarshalUtils.ag_list filters;
         } ;
 
         [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Ansi)]
@@ -300,19 +300,19 @@ namespace Adguard.Dns
         {
             /// <summary>
             /// List of upstreams,
-            /// represented as a <see cref="ag_list"/> with entries with
+            /// represented as a <see cref="MarshalUtils.ag_list"/> with entries with
             /// the type <see cref="ag_upstream_options"/>
             /// </summary>
             [MarshalAs(UnmanagedType.Struct)]
-            internal ag_list upstreams;
+            internal MarshalUtils.ag_list upstreams;
 
             /// <summary>
             /// List of fallbacks,
-            /// represented as a <see cref="ag_list"/> with entries with
+            /// represented as a <see cref="MarshalUtils.ag_list"/> with entries with
             /// the type <see cref="ag_upstream_options"/>
             /// </summary>
             [MarshalAs(UnmanagedType.Struct)]
-            internal ag_list fallbacks;
+            internal MarshalUtils.ag_list fallbacks;
 
             /// <summary>
             /// Pointer to the DNS64 settings
@@ -337,11 +337,11 @@ namespace Adguard.Dns
 
             /// <summary>
             /// List of addresses/ports/protocols/etc... to listen on,
-            /// represented as a <see cref="ag_list"/> with entries with
+            /// represented as a <see cref="MarshalUtils.ag_list"/> with entries with
             /// the type <see cref="ag_listener_settings"/>
             /// </summary>
             [MarshalAs(UnmanagedType.Struct)]
-            internal ag_list listeners;
+            internal MarshalUtils.ag_list listeners;
 
             /// <summary>
             /// If true, all AAAA requests will be blocked
@@ -467,14 +467,14 @@ namespace Adguard.Dns
             /// Session identifier.
             /// Basically, it means a network connection identifier.
             /// </summary>
-            internal ag_buffer pCertificate;
+            internal MarshalUtils.ag_buffer pCertificate;
 
             /// <summary>
             /// Request identifier.
-            /// Represents as a list of <see cref="ag_buffer"/> elements
+            /// Represents as a list of <see cref="MarshalUtils.ag_buffer"/> elements
             /// There can be multiple requests processed inside a single connection
             /// </summary>
-            internal ag_list chain;
+            internal MarshalUtils.ag_list chain;
         };
 
         [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Ansi)]
@@ -551,15 +551,15 @@ namespace Adguard.Dns
 
             /// <summary>
             /// Pointer Filtering rules texts
-            /// (<seealso cref="ag_list"/>)
+            /// (<seealso cref="MarshalUtils.ag_list"/>)
             /// </summary>
-            internal ag_list rules;
+            internal MarshalUtils.ag_list rules;
 
             /// <summary>
             /// Pointer to the filter lists IDs of corresponding rules
-            /// (<seealso cref="ag_list"/>)
+            /// (<seealso cref="MarshalUtils.ag_list"/>)
             /// </summary>
-            internal ag_list filter_list_ids;
+            internal MarshalUtils.ag_list filter_list_ids;
 
             /// <summary>
             /// True if filtering rule is whitelist
@@ -775,41 +775,6 @@ namespace Adguard.Dns
         /// </summary>
         [DllImport(DnsLibName, CallingConvention = CallingConvention.Cdecl)]
         internal static extern void ag_enable_SetUnhandledExceptionFilter();
-
-        #endregion
-
-        #region Helpers
-
-        /// <summary>
-        /// Represents list of elements
-        /// </summary>
-        [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Ansi)]
-        internal struct ag_list
-        {
-            internal IntPtr entries;
-
-            [MarshalAs(UnmanagedType.U4)]
-            internal UInt32 num_entries;
-        }
-
-        /// <summary>
-        /// Helper structure-wrapper for storing the byte buffer (<see cref="data"/>)
-        /// with fixed <see cref="size"/>
-        /// </summary>
-        [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Ansi)]
-        internal struct ag_buffer
-        {
-            /// <summary>
-            /// Pointer to the byte array
-            /// </summary>
-            internal IntPtr data;
-
-            /// <summary>
-            /// Byte array size
-            /// </summary>
-            [MarshalAs(UnmanagedType.U4)]
-            internal UInt32 size;
-        };
 
         #endregion
     }

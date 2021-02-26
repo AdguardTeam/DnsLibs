@@ -2,7 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using Adguard.Dns.Exceptions;
-using Adguard.Dns.Helpers;
+using AdGuard.Utils.Interop;
 
 namespace Adguard.Dns.Logging
 {

@@ -1,6 +1,6 @@
 using System.Collections.Generic;
-using Adguard.Dns.Helpers;
-using Adguard.Dns.Utils;
+using AdGuard.Utils.Collections;
+using AdGuard.Utils.Interop;
 
 namespace Adguard.Dns.Api.DnsProxyServer.Configs
 {
@@ -110,12 +110,12 @@ namespace Adguard.Dns.Api.DnsProxyServer.Configs
 
         private bool Equals(DnsProxySettings other)
         {
-            return CollectionUtils.SequenceEqual(Upstreams, other.Upstreams) &&
-                   CollectionUtils.SequenceEqual(Fallbacks, other.Fallbacks) &&
+            return CollectionUtils.ListsEquals(Upstreams, other.Upstreams) &&
+                   CollectionUtils.ListsEquals(Fallbacks, other.Fallbacks) &&
                    Equals(Dns64, other.Dns64) &&
                    BlockedResponseTtlSec == other.BlockedResponseTtlSec &&
                    Equals(EngineParams, other.EngineParams) &&
-                   CollectionUtils.SequenceEqual(Listeners, other.Listeners) &&
+                   CollectionUtils.ListsEquals(Listeners, other.Listeners) &&
                    Ipv6Available == other.Ipv6Available &&
                    BlockIpv6 == other.BlockIpv6 &&
                    BlockingMode == other.BlockingMode &&
