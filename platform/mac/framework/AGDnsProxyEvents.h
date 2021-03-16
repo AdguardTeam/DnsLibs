@@ -3,7 +3,7 @@
 /**
  * DNS request processed event
  */
-@interface AGDnsRequestProcessedEvent : NSObject
+@interface AGDnsRequestProcessedEvent : NSObject<NSCoding>
 @property(nonatomic, readonly) NSString *domain; /**< Queried domain name */
 @property(nonatomic, readonly) NSString *type; /**< Query type */
 @property(nonatomic, readonly) NSInteger startTime; /**< Time when dnsproxy started processing request (epoch in milliseconds) */
@@ -19,6 +19,11 @@
 @property(nonatomic, readonly) BOOL whitelist; /**< True if filtering rule is whitelist */
 @property(nonatomic, readonly) NSString *error; /**< If not empty, contains the error text (occurred while processing the DNS query) */
 @property(nonatomic, readonly) BOOL cacheHit; /**<True if this response was served from the cache */
+
+- (instancetype)initWithCoder:(NSCoder *)coder;
+
+- (void)encodeWithCoder:(NSCoder *)coder;
+
 @end
 
 /**

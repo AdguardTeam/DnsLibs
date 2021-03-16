@@ -68,7 +68,7 @@ typedef void (^logCallback)(const char *msg, int length);
 @end
 
 
-@interface AGDnsUpstream : NSObject
+@interface AGDnsUpstream : NSObject<NSCoding>
 /**
  * A DNS server address:
  *      8.8.8.8:53 -- plain DNS
@@ -107,9 +107,14 @@ typedef void (^logCallback)(const char *msg, int length);
         serverIp: (NSData *) serverIp
         id: (NSInteger) id
         outboundInterfaceName: (NSString *) outboundInterfaceName;
+
+- (instancetype)initWithCoder:(NSCoder *)coder;
+
+- (void)encodeWithCoder:(NSCoder *)coder;
+
 @end
 
-@interface AGDns64Settings : NSObject
+@interface AGDns64Settings : NSObject<NSCoding>
 
 /**
  * The upstream to use for discovery of DNS64 prefixes
@@ -130,9 +135,13 @@ typedef void (^logCallback)(const char *msg, int length);
             maxTries: (NSInteger) maxTries
             waitTimeMs: (NSInteger) waitTimeMs;
 
+- (instancetype)initWithCoder:(NSCoder *)coder;
+
+- (void)encodeWithCoder:(NSCoder *)coder;
+
 @end
 
-@interface AGListenerSettings : NSObject
+@interface AGListenerSettings : NSObject<NSCoding>
 
 /**
  * The address to listen on
@@ -165,9 +174,13 @@ typedef void (^logCallback)(const char *msg, int length);
                       persistent: (BOOL) persistent
                    idleTimeoutMs: (NSInteger) idleTimeoutMs;
 
+- (instancetype)initWithCoder:(NSCoder *)coder;
+
+- (void)encodeWithCoder:(NSCoder *)coder;
+
 @end
 
-@interface AGDnsFilterParams : NSObject
+@interface AGDnsFilterParams : NSObject<NSCoding>
 /**
  * Filter identifier
  */
@@ -186,9 +199,13 @@ typedef void (^logCallback)(const char *msg, int length);
                        data:(NSString *)data
                    inMemory:(BOOL)inMemory;
 
+- (instancetype)initWithCoder:(NSCoder *)coder;
+
+- (void)encodeWithCoder:(NSCoder *)coder;
+
 @end
 
-@interface AGDnsProxyConfig : NSObject
+@interface AGDnsProxyConfig : NSObject<NSCoding>
 /**
  * Upstreams settings
  */
@@ -256,6 +273,10 @@ typedef void (^logCallback)(const char *msg, int length);
         dnsCacheSize: (NSUInteger) dnsCacheSize
         optimisticCache: (BOOL) optimisticCache;
 
+- (instancetype)initWithCoder:(NSCoder *)coder;
+
+- (void)encodeWithCoder:(NSCoder *)coder;
+
 /**
  * @brief Get default DNS proxy settings
  */
@@ -304,7 +325,7 @@ typedef NS_ENUM(NSInteger, AGStampProtoType) {
     AGSPT_DOQ,
 };
 
-@interface AGDnsStamp : NSObject
+@interface AGDnsStamp : NSObject<NSCoding>
 
 /**
  * Protocol
@@ -327,6 +348,11 @@ typedef NS_ENUM(NSInteger, AGStampProtoType) {
                     serverAddr: (NSString *) serverAddr
                   providerName: (NSString *) providerName
                           path: (NSString *) path;
+
+- (instancetype)initWithCoder:(NSCoder *)coder;
+
+- (void)encodeWithCoder:(NSCoder *)coder;
+
 @end
 
 @interface AGDnsUtils : NSObject

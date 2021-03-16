@@ -270,6 +270,30 @@ static NSData *create_response_packet_v6(const struct iphdr6 *ip6_header,
     _outboundInterfaceName = outboundInterfaceName;
     return self;
 }
+
+- (instancetype)initWithCoder:(NSCoder *)coder {
+    self = [super init];
+    if (self) {
+        _address = [coder decodeObjectForKey:@"_address"];
+        _bootstrap = [coder decodeObjectForKey:@"_bootstrap"];
+        _timeoutMs = [coder decodeInt64ForKey:@"_timeoutMs"];
+        _serverIp = [coder decodeObjectForKey:@"_serverIp"];
+        _id = [coder decodeInt64ForKey:@"_id"];
+        _outboundInterfaceName = [coder decodeObjectForKey:@"_outboundInterfaceName"];
+    }
+
+    return self;
+}
+
+- (void)encodeWithCoder:(NSCoder *)coder {
+    [coder encodeObject:self.address forKey:@"_address"];
+    [coder encodeObject:self.bootstrap forKey:@"_bootstrap"];
+    [coder encodeInt64:self.timeoutMs forKey:@"_timeoutMs"];
+    [coder encodeObject:self.serverIp forKey:@"_serverIp"];
+    [coder encodeInt64:self.id forKey:@"_id"];
+    [coder encodeObject:self.outboundInterfaceName forKey:@"_outboundInterfaceName"];
+}
+
 @end
 
 @implementation AGDns64Settings
@@ -295,6 +319,24 @@ static NSData *create_response_packet_v6(const struct iphdr6 *ip6_header,
     _waitTimeMs = waitTimeMs;
     return self;
 }
+
+- (instancetype)initWithCoder:(NSCoder *)coder {
+    self = [super init];
+    if (self) {
+        _upstreams = [coder decodeObjectForKey:@"_upstreams"];
+        _maxTries = [coder decodeInt64ForKey:@"_maxTries"];
+        _waitTimeMs = [coder decodeInt64ForKey:@"_waitTimeMs"];
+    }
+
+    return self;
+}
+
+- (void)encodeWithCoder:(NSCoder *)coder {
+    [coder encodeObject:self.upstreams forKey:@"_upstreams"];
+    [coder encodeInt64:self.maxTries forKey:@"_maxTries"];
+    [coder encodeInt64:self.waitTimeMs forKey:@"_waitTimeMs"];
+}
+
 
 @end
 
@@ -324,6 +366,28 @@ static NSData *create_response_packet_v6(const struct iphdr6 *ip6_header,
     _idleTimeoutMs = idleTimeoutMs;
     return self;
 }
+
+- (instancetype)initWithCoder:(NSCoder *)coder {
+    self = [super init];
+    if (self) {
+        _address = [coder decodeObjectForKey:@"_address"];
+        _port = [coder decodeInt64ForKey:@"_port"];
+        _proto = (AGListenerProtocol) [coder decodeIntForKey:@"_proto"];
+        _persistent = [coder decodeBoolForKey:@"_persistent"];
+        _idleTimeoutMs = [coder decodeInt64ForKey:@"_idleTimeoutMs"];
+    }
+
+    return self;
+}
+
+- (void)encodeWithCoder:(NSCoder *)coder {
+    [coder encodeObject:self.address forKey:@"_address"];
+    [coder encodeInt64:self.port forKey:@"_port"];
+    [coder encodeInt:self.proto forKey:@"_proto"];
+    [coder encodeBool:self.persistent forKey:@"_persistent"];
+    [coder encodeInt64:self.idleTimeoutMs forKey:@"_idleTimeoutMs"];
+}
+
 @end
 
 @implementation AGDnsFilterParams
@@ -339,6 +403,24 @@ static NSData *create_response_packet_v6(const struct iphdr6 *ip6_header,
     }
     return self;
 }
+
+- (instancetype)initWithCoder:(NSCoder *)coder {
+    self = [super init];
+    if (self) {
+        _id = [coder decodeInt64ForKey:@"_id"];
+        _data = [coder decodeObjectForKey:@"_data"];
+        _inMemory = [coder decodeBoolForKey:@"_inMemory"];
+    }
+
+    return self;
+}
+
+- (void)encodeWithCoder:(NSCoder *)coder {
+    [coder encodeInt64:self.id forKey:@"_id"];
+    [coder encodeObject:self.data forKey:@"_data"];
+    [coder encodeBool:self.inMemory forKey:@"_inMemory"];
+}
+
 @end
 
 @implementation AGDnsProxyConfig
@@ -415,6 +497,44 @@ static NSData *create_response_packet_v6(const struct iphdr6 *ip6_header,
     return self;
 }
 
+- (instancetype)initWithCoder:(NSCoder *)coder {
+    self = [super init];
+    if (self) {
+        _upstreams = [coder decodeObjectForKey:@"_upstreams"];
+        _fallbacks = [coder decodeObjectForKey:@"_fallbacks"];
+        _filters = [coder decodeObjectForKey:@"_filters"];
+        _blockedResponseTtlSecs = [coder decodeInt64ForKey:@"_blockedResponseTtlSecs"];
+        _dns64Settings = [coder decodeObjectForKey:@"_dns64Settings"];
+        _listeners = [coder decodeObjectForKey:@"_listeners"];
+        _ipv6Available = [coder decodeBoolForKey:@"_ipv6Available"];
+        _blockIpv6 = [coder decodeBoolForKey:@"_blockIpv6"];
+        _blockingMode = (AGBlockingMode) [coder decodeIntForKey:@"_blockingMode"];
+        _customBlockingIpv4 = [coder decodeObjectForKey:@"_customBlockingIpv4"];
+        _customBlockingIpv6 = [coder decodeObjectForKey:@"_customBlockingIpv6"];
+        _dnsCacheSize = [coder decodeInt64ForKey:@"_dnsCacheSize"];
+        _optimisticCache = [coder decodeBoolForKey:@"_optimisticCache"];
+    }
+
+    return self;
+}
+
+- (void)encodeWithCoder:(NSCoder *)coder {
+    [coder encodeObject:self.upstreams forKey:@"_upstreams"];
+    [coder encodeObject:self.fallbacks forKey:@"_fallbacks"];
+    [coder encodeObject:self.filters forKey:@"_filters"];
+    [coder encodeInt64:self.blockedResponseTtlSecs forKey:@"_blockedResponseTtlSecs"];
+    [coder encodeObject:self.dns64Settings forKey:@"_dns64Settings"];
+    [coder encodeObject:self.listeners forKey:@"_listeners"];
+    [coder encodeBool:self.ipv6Available forKey:@"_ipv6Available"];
+    [coder encodeBool:self.blockIpv6 forKey:@"_blockIpv6"];
+    [coder encodeInt:self.blockingMode forKey:@"_blockingMode"];
+    [coder encodeObject:self.customBlockingIpv4 forKey:@"_customBlockingIpv4"];
+    [coder encodeObject:self.customBlockingIpv6 forKey:@"_customBlockingIpv6"];
+    [coder encodeInt64:self.dnsCacheSize forKey:@"_dnsCacheSize"];
+    [coder encodeBool:self.optimisticCache forKey:@"_optimisticCache"];
+}
+
+
 + (instancetype) getDefault
 {
     const ag::dnsproxy_settings &defaultSettings = ag::dnsproxy_settings::get_default();
@@ -454,6 +574,48 @@ static NSData *create_response_packet_v6(const struct iphdr6 *ip6_header,
 
     return self;
 }
+
+- (instancetype)initWithCoder:(NSCoder *)coder {
+    self = [super init];
+    if (self) {
+        _domain = [coder decodeObjectForKey:@"_domain"];
+        _type = [coder decodeObjectForKey:@"_type"];
+        _startTime = [coder decodeInt64ForKey:@"_startTime"];
+        _elapsed = [coder decodeInt64ForKey:@"_elapsed"];
+        _status = [coder decodeObjectForKey:@"_status"];
+        _answer = [coder decodeObjectForKey:@"_answer"];
+        _originalAnswer = [coder decodeObjectForKey:@"_originalAnswer"];
+        _upstreamId = [coder decodeObjectForKey:@"_upstreamId"];
+        _bytesSent = [coder decodeInt64ForKey:@"_bytesSent"];
+        _bytesReceived = [coder decodeInt64ForKey:@"_bytesReceived"];
+        _rules = [coder decodeObjectForKey:@"_rules"];
+        _filterListIds = [coder decodeObjectForKey:@"_filterListIds"];
+        _whitelist = [coder decodeBoolForKey:@"_whitelist"];
+        _error = [coder decodeObjectForKey:@"_error"];
+        _cacheHit = [coder decodeBoolForKey:@"_cacheHit"];
+    }
+
+    return self;
+}
+
+- (void)encodeWithCoder:(NSCoder *)coder {
+    [coder encodeObject:self.domain forKey:@"_domain"];
+    [coder encodeObject:self.type forKey:@"_type"];
+    [coder encodeInt64:self.startTime forKey:@"_startTime"];
+    [coder encodeInt64:self.elapsed forKey:@"_elapsed"];
+    [coder encodeObject:self.status forKey:@"_status"];
+    [coder encodeObject:self.answer forKey:@"_answer"];
+    [coder encodeObject:self.originalAnswer forKey:@"_originalAnswer"];
+    [coder encodeObject:self.upstreamId forKey:@"_upstreamId"];
+    [coder encodeInt64:self.bytesSent forKey:@"_bytesSent"];
+    [coder encodeInt64:self.bytesReceived forKey:@"_bytesReceived"];
+    [coder encodeObject:self.rules forKey:@"_rules"];
+    [coder encodeObject:self.filterListIds forKey:@"_filterListIds"];
+    [coder encodeBool:self.whitelist forKey:@"_whitelist"];
+    [coder encodeObject:self.error forKey:@"_error"];
+    [coder encodeBool:self.cacheHit forKey:@"_cacheHit"];
+}
+
 @end
 
 @implementation AGDnsProxyEvents
@@ -789,6 +951,26 @@ static std::vector<ag::upstream_options> convert_upstreams(NSArray<AGDnsUpstream
     _path = path;
     return self;
 }
+
+- (instancetype)initWithCoder:(NSCoder *)coder {
+    self = [super init];
+    if (self) {
+        _proto = (AGStampProtoType) [coder decodeIntForKey:@"_proto"];
+        _serverAddr = [coder decodeObjectForKey:@"_serverAddr"];
+        _providerName = [coder decodeObjectForKey:@"_providerName"];
+        _path = [coder decodeObjectForKey:@"_path"];
+    }
+
+    return self;
+}
+
+- (void)encodeWithCoder:(NSCoder *)coder {
+    [coder encodeInt:self.proto forKey:@"_proto"];
+    [coder encodeObject:self.serverAddr forKey:@"_serverAddr"];
+    [coder encodeObject:self.providerName forKey:@"_providerName"];
+    [coder encodeObject:self.path forKey:@"_path"];
+}
+
 @end
 
 @implementation AGDnsUtils
