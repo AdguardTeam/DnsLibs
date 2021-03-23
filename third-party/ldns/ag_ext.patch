@@ -4,7 +4,7 @@ Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
 <+>UTF-8
 ===================================================================
 --- net.c	(revision 53bc57512c19b11eebc403a4cb2bbf7295eb0db1)
-+++ net.c	(date 1602192602793)
++++ net.c	(date 1616428481687)
 @@ -15,6 +15,8 @@
  
  #include <ldns/ldns.h>
@@ -198,7 +198,8 @@ Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
  {
  	int sockfd;
  
- 	sockfd = ldns_udp_connect2(to, timeout);
+-	sockfd = ldns_udp_connect2(to, timeout);
++	sockfd = ldns_udp_connect3(to, timeout);
  
  	if (sockfd == -1) {
 +        ag_ldns_set_socket_error(ag_ldns_socket_geterror(sockfd));
