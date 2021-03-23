@@ -87,7 +87,7 @@ static void test_proxy() {
     ASSERT(ldns_pkt_ancount(response) > 0);
 
     ag_dnsproxy_deinit(proxy);
-    
+
     ldns_pkt_free(query);
     ldns_pkt_free(response);
     ag_buffer_free(res);
@@ -104,6 +104,9 @@ static void test_utils() {
     ASSERT(0 == strcmp("example.com", result->stamp.provider_name));
     ASSERT(0 == strcmp("/dns-query", result->stamp.path));
     ASSERT(AGSPT_DOH == result->stamp.proto);
+    ASSERT(0 == result->stamp.server_public_key.size);
+    ASSERT(1 == result->stamp.hashes.size);
+    ASSERT((int)result->stamp.properties == (AGSIP_DNSSEC | AGSIP_NO_LOG | AGSIP_NO_FILTER));
     ag_parse_dns_stamp_result_free(result);
 
     result = ag_parse_dns_stamp("sdns://abcdefgh");

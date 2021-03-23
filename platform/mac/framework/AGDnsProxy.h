@@ -343,11 +343,26 @@ typedef NS_ENUM(NSInteger, AGStampProtoType) {
  * Path (for DOH)
  */
 @property(nonatomic, readonly) NSString *path;
+/**
+ * The DNSCrypt provider’s Ed25519 public key, as 32 raw bytes. Empty for other types.
+ */
+@property(nonatomic, readonly) NSData *serverPublicKey;
+/**
+ * Hash is the SHA256 digest of one of the TBS certificate found in the validation chain, typically
+ * the certificate used to sign the resolver’s certificate. Multiple hashes can be provided for seamless
+ * rotations.
+ */
+@property(nonatomic, readonly) NSArray<NSData *> *hashes;
 
-- (instancetype) initWithProto: (AGStampProtoType) proto
-                    serverAddr: (NSString *) serverAddr
-                  providerName: (NSString *) providerName
-                          path: (NSString *) path;
+/** Server properties */
+/** Resolver does DNSSEC validation */
+@property(nonatomic, readonly) BOOL dnssec;
+/** Resolver does not record logs */
+@property(nonatomic, readonly) BOOL noLog;
+/** Resolver doesn't intentionally block domains */
+@property(nonatomic, readonly) BOOL noFilter;
+
+- (instancetype) init NS_UNAVAILABLE;
 
 - (instancetype)initWithCoder:(NSCoder *)coder;
 

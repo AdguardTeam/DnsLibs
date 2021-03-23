@@ -223,6 +223,15 @@ typedef enum {
     AGSPT_DOQ,
 } ag_stamp_proto_type;
 
+typedef enum {
+    /** Resolver does DNSSEC validation */
+    AGSIP_DNSSEC = 1 << 0,
+    /** Resolver does not record logs */
+    AGSIP_NO_LOG = 1 << 1,
+    /** Resolver doesn't intentionally block domains */
+    AGSIP_NO_FILTER = 1 << 2,
+} ag_server_informal_properties;
+
 typedef struct {
     /** Protocol */
     ag_stamp_proto_type proto;
@@ -237,6 +246,16 @@ typedef struct {
     const char *provider_name;
     /** (For DoH) absolute URI path, such as /dns-query */
     const char *path;
+    /** The DNSCrypt provider’s Ed25519 public key, as 32 raw bytes. Empty for other types. */
+    ag_buffer server_public_key;
+    /**
+     * Hash is the SHA256 digest of one of the TBS certificate found in the validation chain, typically
+     * the certificate used to sign the resolver’s certificate. Multiple hashes can be provided for seamless
+     * rotations.
+     */
+    ARRAY_OF(ag_buffer) hashes;
+    /** Server properties */
+    ag_server_informal_properties properties;
 } ag_dns_stamp;
 
 typedef struct {

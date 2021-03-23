@@ -13,3 +13,4 @@
 #define FQN_CERT_VERIFY_EVENT "com/adguard/dnslibs/proxy/CertificateVerificationEvent"
 #define FQN_DNSSTAMP "com/adguard/dnslibs/proxy/DnsStamp"
 #define FQN_DNSSTAMP_PROTOTYPE FQN_DNSSTAMP "$ProtoType"
+#define FQN_DNSSTAMP_INFORMAL_PROPERTIES FQN_DNSSTAMP "$InformalProperties"

@@ -226,14 +226,10 @@ ag::local_ref<jobject> ag::android_dnsproxy::marshal_upstream(JNIEnv *env, const
 
     if (std::holds_alternative<ag::ipv4_address_array>(settings.resolved_server_ip)) {
         auto ipv4 = std::get<ag::ipv4_address_array>(settings.resolved_server_ip);
-        auto arr = env->NewByteArray(ag::ipv4_address_size);
-        env->SetByteArrayRegion(arr, 0, ag::ipv4_address_size, (jbyte *) ipv4.data());
-        env->SetObjectField(java_upstream, server_ip_field, arr);
+        env->SetObjectField(java_upstream, server_ip_field, m_utils.marshal_uint8_view(env, { ipv4.data(), ag::ipv4_address_size }).get());
     } else if (std::holds_alternative<ag::ipv6_address_array>(settings.resolved_server_ip)) {
         auto ipv6 = std::get<ag::ipv6_address_array>(settings.resolved_server_ip);
-        auto arr = env->NewByteArray(ag::ipv6_address_size);
-        env->SetByteArrayRegion(arr, 0, ag::ipv6_address_size, (jbyte *) ipv6.data());
-        env->SetObjectField(java_upstream, server_ip_field, arr);
+        env->SetObjectField(java_upstream, server_ip_field, m_utils.marshal_uint8_view(env, { ipv6.data(), ag::ipv6_address_size }).get());
     }
 
     if (local_ref bootstrap{env, env->GetObjectField(java_upstream, bootstrap_field)}) {
@@ -676,7 +672,7 @@ jobject ag::android_dnsproxy::get_settings(JNIEnv *env) {
 }
 
 jobject ag::android_dnsproxy::parse_dnsstamp(JNIEnv *env, jstring stamp_str) {
-    auto[stamp, err] = parse_dns_stamp(m_utils.marshal_string(env, stamp_str));
+    auto [stamp, err] = server_stamp::from_string(m_utils.marshal_string(env, stamp_str));
 
     if (err) {
         return env->NewLocalRef(m_utils.marshal_string(env, *err).get());
@@ -689,13 +685,38 @@ jobject ag::android_dnsproxy::parse_dnsstamp(JNIEnv *env, jstring stamp_str) {
     auto server_addr_field = env->GetFieldID(clazz, "serverAddr", "Ljava/lang/String;");
     auto provider_name_field = env->GetFieldID(clazz, "providerName", "Ljava/lang/String;");
     auto path_field = env->GetFieldID(clazz, "path", "Ljava/lang/String;");
+    auto server_pk_field = env->GetFieldID(clazz, "serverPublicKey", "[B");
+    auto props_field = env->GetFieldID(clazz, "properties", "Ljava/util/EnumSet;");
+    auto hashes_field = env->GetFieldID(clazz, "hashes", "Ljava/util/ArrayList;");
 
     auto dns_stamp = env->NewObject(clazz, ctor);
 
     env->SetObjectField(dns_stamp, proto_field, m_dnsstamp_prototype_values.at((size_t) stamp.proto).get());
-    env->SetObjectField(dns_stamp, server_addr_field, m_utils.marshal_string(env, stamp.server_addr).get());
+    env->SetObjectField(dns_stamp, server_addr_field, m_utils.marshal_string(env, stamp.server_addr_str).get());
     env->SetObjectField(dns_stamp, provider_name_field, m_utils.marshal_string(env, stamp.provider_name).get());
     env->SetObjectField(dns_stamp, path_field, m_utils.marshal_string(env, stamp.path).get());
+
+    if (!stamp.server_pk.empty()) {
+        env->SetObjectField(dns_stamp, server_pk_field,
+                m_utils.marshal_uint8_view(env, { stamp.server_pk.data(), stamp.server_pk.size() }).get());
+    }
+
+    clazz = env->FindClass(FQN_DNSSTAMP_INFORMAL_PROPERTIES);
+    auto to_enum_set_method = env->GetStaticMethodID(clazz, "toEnumSet", "(I)Ljava/util/EnumSet;");
+    if (local_ref props{ env, env->CallStaticObjectMethod(clazz, to_enum_set_method, (jint)stamp.props) }) {
+        env->SetObjectField(dns_stamp, props_field, props.get());
+    }
+
+    if (!stamp.hashes.empty()) {
+        clazz = env->FindClass("java/util/ArrayList");
+        ctor = env->GetMethodID(clazz, "<init>", "()V");
+        local_ref<jobject> hashes{env, env->NewObject(clazz, ctor)};
+        auto add_method = env->GetMethodID(clazz, "add", "(Ljava/lang/Object;)Z");
+        for (const std::vector<uint8_t> &h : stamp.hashes) {
+            env->CallBooleanMethod(hashes.get(), add_method, m_utils.marshal_uint8_view(env, {h.data(), h.size()}).get());
+        }
+        env->SetObjectField(dns_stamp, hashes_field, hashes.get());
+    }
 
     return dns_stamp;
 }

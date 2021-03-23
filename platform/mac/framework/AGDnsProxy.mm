@@ -109,7 +109,7 @@ struct iphdr6 {
 #endif
     uint16_t ip6_pl;    /* payload length */
     uint8_t ip6_nh;     /* next header (same as protocol) */
-    uint8_t ip6_hl;     /* hop limit */ 
+    uint8_t ip6_hl;     /* hop limit */
     in6_addr_t ip6_src; /* source address */
     in6_addr_t ip6_dst; /* destination address */
 };
@@ -939,16 +939,34 @@ static std::vector<ag::upstream_options> convert_upstreams(NSArray<AGDnsUpstream
 
 @implementation AGDnsStamp
 
-- (instancetype) initWithProto: (AGStampProtoType) proto
-                    serverAddr: (NSString *) serverAddr
-                  providerName: (NSString *) providerName
-                          path: (NSString *) path
+- (instancetype) initWithNative: (const ag::server_stamp *) stamp
 {
     self = [super init];
-    _proto = proto;
-    _serverAddr = serverAddr;
-    _providerName = providerName;
-    _path = path;
+    if (self) {
+        _proto = (AGStampProtoType) stamp->proto;
+        _serverAddr = convert_string(stamp->server_addr_str);
+        _providerName = convert_string(stamp->provider_name);
+        _path = convert_string(stamp->path);
+        if (!stamp->server_pk.empty()) {
+            _serverPublicKey = [NSData dataWithBytes: stamp->server_pk.data() length: stamp->server_pk.size()];
+        }
+        if (!stamp->hashes.empty()) {
+            NSMutableArray *hs = [NSMutableArray arrayWithCapacity: stamp->hashes.size()];
+            for (const std::vector<uint8_t> &h : stamp->hashes) {
+                [hs addObject: [NSData dataWithBytes: h.data() length: h.size()]];
+            }
+            _hashes = hs;
+        }
+        if (stamp->props & ag::DNSSEC) {
+            _dnssec = YES;
+        }
+        if (stamp->props & ag::NO_LOG) {
+            _noLog = YES;
+        }
+        if (stamp->props & ag::NO_FILTER) {
+            _noFilter = YES;
+        }
+    }
     return self;
 }
 
@@ -959,6 +977,11 @@ static std::vector<ag::upstream_options> convert_upstreams(NSArray<AGDnsUpstream
         _serverAddr = [coder decodeObjectForKey:@"_serverAddr"];
         _providerName = [coder decodeObjectForKey:@"_providerName"];
         _path = [coder decodeObjectForKey:@"_path"];
+        _serverPublicKey = [coder decodeObjectForKey:@"_serverPublicKey"];
+        _hashes = [coder decodeObjectForKey:@"_hashes"];
+        _dnssec = [coder decodeBoolForKey:@"_dnssec"];
+        _noLog = [coder decodeBoolForKey:@"_noLog"];
+        _noFilter = [coder decodeBoolForKey:@"_noFilter"];
     }
 
     return self;
@@ -969,6 +992,11 @@ static std::vector<ag::upstream_options> convert_upstreams(NSArray<AGDnsUpstream
     [coder encodeObject:self.serverAddr forKey:@"_serverAddr"];
     [coder encodeObject:self.providerName forKey:@"_providerName"];
     [coder encodeObject:self.path forKey:@"_path"];
+    [coder encodeObject:self.serverPublicKey forKey:@"_serverPublicKey"];
+    [coder encodeObject:self.hashes forKey:@"_hashes"];
+    [coder encodeBool:self.dnssec forKey:@"_dnssec"];
+    [coder encodeBool:self.noLog forKey:@"_noLog"];
+    [coder encodeBool:self.noFilter forKey:@"_noFilter"];
 }
 
 @end
@@ -977,7 +1005,7 @@ static std::vector<ag::upstream_options> convert_upstreams(NSArray<AGDnsUpstream
 
 + (AGDnsStamp *) parseDnsStampWithStampStr: (NSString *) stampStr error: (NSError **) error
 {
-    auto[stamp, stamp_error] = ag::parse_dns_stamp([stampStr UTF8String]);
+    auto[stamp, stamp_error] = ag::server_stamp::from_string({ [stampStr UTF8String], [stampStr length] });
     if (stamp_error) {
         if (error) {
             *error = [NSError errorWithDomain: AGDnsProxyErrorDomain
@@ -988,10 +1016,7 @@ static std::vector<ag::upstream_options> convert_upstreams(NSArray<AGDnsUpstream
         }
         return nil;
     }
-    return [[AGDnsStamp alloc] initWithProto: (AGStampProtoType) stamp.proto
-                                  serverAddr: convert_string(stamp.server_addr)
-                                providerName: convert_string(stamp.provider_name)
-                                        path: convert_string(stamp.path)];
+    return [[AGDnsStamp alloc] initWithNative: &stamp];
 }
 
 static auto dnsUtilsLogger = ag::create_logger("AGDnsUtils");
@@ -1012,4 +1037,3 @@ static std::optional<std::string> verifyCertificate(ag::certificate_verification
 }
 
 @end
-

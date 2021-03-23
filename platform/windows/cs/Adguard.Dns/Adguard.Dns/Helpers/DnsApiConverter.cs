@@ -321,7 +321,15 @@ namespace Adguard.Dns.Helpers
 
         internal static DnsStamp FromNativeObject(AGDnsApi.ag_dns_stamp agDnsStampC)
         {
-            DnsStamp dnsStamp = new DnsStamp();
+            byte[] publicKey = MarshalUtils.AgBufferToBytes(agDnsStampC.server_public_key);
+            List<byte[]> hashes = MarshalUtils.AgListToList<MarshalUtils.ag_buffer, byte[]>(
+                agDnsStampC.hashes,
+                MarshalUtils.AgBufferToBytes);
+            DnsStamp dnsStamp = new DnsStamp
+            {
+                PublicKey = publicKey,
+                Hashes = hashes
+            };
             MarshalUtils.AllPtrsToStrings(agDnsStampC, dnsStamp);
             MarshalUtils.CopyFieldsToProperties(agDnsStampC, dnsStamp);
             return dnsStamp;

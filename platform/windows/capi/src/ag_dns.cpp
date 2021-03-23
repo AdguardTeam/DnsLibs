@@ -462,13 +462,24 @@ void ag_set_default_log_level(ag_log_level level) {
 }
 
 ag_parse_dns_stamp_result *ag_parse_dns_stamp(const char *stamp_str) {
-    auto result = ag::parse_dns_stamp(stamp_str);
-    auto *c_result = (ag_parse_dns_stamp_result *) std::malloc(sizeof(ag_parse_dns_stamp_result));
-    c_result->stamp.proto = (ag_stamp_proto_type) result.stamp.proto;
-    c_result->stamp.path = marshal_str(result.stamp.path);
-    c_result->stamp.server_addr = marshal_str(result.stamp.server_addr);
-    c_result->stamp.provider_name = marshal_str(result.stamp.provider_name);
-    c_result->error = marshal_str(result.error.value_or(""));
+    auto [stamp, error] = ag::server_stamp::from_string(stamp_str);
+    auto *c_result = (ag_parse_dns_stamp_result *) std::calloc(1, sizeof(ag_parse_dns_stamp_result));
+    c_result->stamp.proto = (ag_stamp_proto_type) stamp.proto;
+    c_result->stamp.path = marshal_str(stamp.path);
+    c_result->stamp.server_addr = marshal_str(stamp.server_addr_str);
+    c_result->stamp.provider_name = marshal_str(stamp.provider_name);
+    if (const auto &key = stamp.server_pk; !key.empty()) {
+        c_result->stamp.server_public_key = marshal_buffer({ key.data(), key.size() });
+    }
+    if (const auto &hashes = stamp.hashes; !hashes.empty()) {
+        c_result->stamp.hashes = { (ag_buffer *)std::malloc(hashes.size() * sizeof(ag_buffer)), hashes.size() };
+        for (size_t i = 0; i < hashes.size(); ++i) {
+            const auto &h = hashes[i];
+            c_result->stamp.hashes.data[i] = marshal_buffer({ h.data(), h.size() });
+        }
+    }
+    c_result->stamp.properties = (ag_server_informal_properties)stamp.props;
+    c_result->error = marshal_str(error.value_or(""));
     return c_result;
 }
 
@@ -479,6 +490,11 @@ void ag_parse_dns_stamp_result_free(ag_parse_dns_stamp_result *result) {
     std::free((void *) result->stamp.path);
     std::free((void *) result->stamp.server_addr);
     std::free((void *) result->stamp.provider_name);
+    ag_buffer_free(result->stamp.server_public_key);
+    for (uint32_t i = 0; i < result->stamp.hashes.size; ++i) {
+        ag_buffer_free(result->stamp.hashes.data[i]);
+    }
+    std::free((void *) result->stamp.hashes.data);
     std::free((void *) result->error);
     std::free(result);
 }

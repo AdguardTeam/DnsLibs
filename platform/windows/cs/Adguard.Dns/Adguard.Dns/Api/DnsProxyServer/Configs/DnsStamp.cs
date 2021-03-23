@@ -1,4 +1,7 @@
-﻿namespace Adguard.Dns.Api.DnsProxyServer.Configs
+﻿using System.Collections.Generic;
+using AdGuard.Utils.Collections;
+
+namespace Adguard.Dns.Api.DnsProxyServer.Configs
 {
     /// <summary>
     /// DNS Stamp
@@ -8,22 +11,39 @@
         /// <summary>
         /// Protocol
         /// </summary>
-        public AGDnsApi.ag_proto_type ProtoType { get; set; }
-        
+        public AGDnsApi.ag_stamp_proto_type ProtoType { get; set; }
+
         /// <summary>
         /// Server address
         /// </summary>
         public string ServerAddress { get; set; }
-        
+
         /// <summary>
         /// Provider name
         /// </summary>
         public string ProviderName { get; set; }
-        
+
         /// <summary>
         /// Path (for DOH)
         /// </summary>
         public string DoHPath { get; set; }
+
+        /// <summary>
+        /// The DNSCrypt provider’s Ed25519 public key, as 32 raw bytes. Empty for other types.
+        /// </summary>
+        public byte[] PublicKey { get; set; }
+
+        /// <summary>
+        /// Hash is the SHA256 digest of one of the TBS certificate found in the validation chain, typically
+        /// the certificate used to sign the resolver’s certificate. Multiple hashes can be provided for seamless
+        /// rotations.
+        /// </summary>
+        public List<byte[]> Hashes { get; set; }
+
+        /// <summary>
+        /// Server properties
+        /// </summary>
+        public AGDnsApi.ag_server_informal_properties Properties { get; set; }
 
         #region Equals members
 
@@ -49,10 +69,13 @@
 
         private bool Equals(DnsStamp other)
         {
-            return ProtoType == other.ProtoType && 
-                   Equals(ServerAddress, other.ServerAddress) && 
-                   ProviderName == other.ProviderName && 
-                   DoHPath == other.DoHPath;
+            return ProtoType == other.ProtoType &&
+                   Equals(ServerAddress, other.ServerAddress) &&
+                   ProviderName == other.ProviderName &&
+                   DoHPath == other.DoHPath &&
+                   CollectionUtils.ListsEquals(new List<byte>(PublicKey), new List<byte>(other.PublicKey)) &&
+                   Hashes.Count == other.Hashes.Count &&
+                   Properties == other.Properties;
         }
 
         public override int GetHashCode()
@@ -63,10 +86,13 @@
                 hashCode = (hashCode * 397) ^ (ServerAddress != null ? ServerAddress.GetHashCode() : 0);
                 hashCode = (hashCode * 397) ^ (ProviderName != null ? ProviderName.GetHashCode() : 0);
                 hashCode = (hashCode * 397) ^ (DoHPath != null ? DoHPath.GetHashCode() : 0);
+                hashCode = (hashCode * 397) ^ (DoHPath != null ? PublicKey.Length : 0);
+                hashCode = (hashCode * 397) ^ (DoHPath != null ? Hashes.Count : 0);
+                hashCode = (hashCode * 397) ^ Properties.GetHashCode();
                 return hashCode;
             }
         }
-        
+
         #endregion
     }
 }

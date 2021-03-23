@@ -23,7 +23,7 @@ namespace Adguard.Dns
         /// <summary>
         /// The current API version hash with which the ProxyServer was tested
         /// </summary>
-        private const string API_VERSION_HASH = "58bc3ca042ad539c372aeed69f496b0eeaea96a3e6b5fece6b1a6f3bef3bfd9b";
+        private const string API_VERSION_HASH = "2b7930861ac51d08a037bc1fdef388602d428a37da04dcc60df593075ac11c66";
         #endregion
 
         #region API Functions
@@ -80,7 +80,7 @@ namespace Adguard.Dns
         /// </summary>
         /// <param name="buf"><see cref="MarshalUtils.ag_buffer"/> instance to free</param>
         [DllImport(DnsLibName, CallingConvention = CallingConvention.Cdecl)]
-        internal static extern void ag_buffer_free(MarshalUtils.ag_buffer buf);
+        internal static extern void ag_buffer_free([MarshalAs(UnmanagedType.Struct)] MarshalUtils.ag_buffer buf);
 
         /// <summary>
         /// Checks if upstream is valid and available
@@ -406,7 +406,7 @@ namespace Adguard.Dns
             /// </summary>
             [MarshalAs(UnmanagedType.I4)]
             [NativeName("proto")]
-            internal ag_proto_type ProtoType;
+            internal ag_stamp_proto_type ProtoType;
 
             /// <summary>
             /// Server address
@@ -431,6 +431,27 @@ namespace Adguard.Dns
             [ManualMarshalPtrToString]
             [NativeName("path")]
             internal IntPtr DoHPath;
+
+            /// <summary>
+            /// The DNSCrypt provider’s Ed25519 public key, as 32 raw bytes. Empty for other types.
+            /// </summary>
+            [MarshalAs(UnmanagedType.Struct)]
+            internal MarshalUtils.ag_buffer server_public_key;
+
+            /// <summary>
+            /// Hash is the SHA256 digest of one of the TBS certificate found in the validation chain, typically
+            /// the certificate used to sign the resolver’s certificate. Multiple hashes can be provided for seamless
+            /// rotations.
+            /// </summary>
+            [MarshalAs(UnmanagedType.Struct)]
+            internal MarshalUtils.ag_list hashes;
+
+            /// <summary>
+            /// Server properties
+            /// </summary>
+            [NativeName("properties")]
+            [MarshalAs(UnmanagedType.I4)]
+            internal ag_server_informal_properties Properties;
         };
 
         /// <summary>
@@ -467,6 +488,7 @@ namespace Adguard.Dns
             /// Session identifier.
             /// Basically, it means a network connection identifier.
             /// </summary>
+            [MarshalAs(UnmanagedType.Struct)]
             internal MarshalUtils.ag_buffer pCertificate;
 
             /// <summary>
@@ -474,6 +496,7 @@ namespace Adguard.Dns
             /// Represents as a list of <see cref="MarshalUtils.ag_buffer"/> elements
             /// There can be multiple requests processed inside a single connection
             /// </summary>
+            [MarshalAs(UnmanagedType.Struct)]
             internal MarshalUtils.ag_list chain;
         };
 
@@ -677,9 +700,9 @@ namespace Adguard.Dns
         }
 
         /// <summary>
-        /// ag_proto_type is a stamp protocol type
+        /// ag_stamp_proto_type is a stamp protocol type
         /// </summary>
-        public enum ag_proto_type
+        public enum ag_stamp_proto_type
         {
             /// <summary>
             /// Plain DNS
@@ -705,6 +728,25 @@ namespace Adguard.Dns
             /// DNS-over-QUIC
             /// </summary>
             DOQ
+        }
+
+        [Flags]
+        public enum ag_server_informal_properties
+        {
+            /// <summary>
+            /// Resolver does DNSSEC validation
+            /// </summary>
+            AGSIP_DNSSEC = 1 << 0,
+
+            /// <summary>
+            /// Resolver does not record logs
+            /// </summary>
+            AGSIP_NO_LOG = 1 << 1,
+
+            /// <summary>
+            /// Resolver doesn't intentionally block domains
+            /// </summary>
+            AGSIP_NO_FILTER = 1 << 2
         }
 
         public enum ag_certificate_verification_result

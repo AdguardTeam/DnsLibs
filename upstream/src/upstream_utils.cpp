@@ -17,23 +17,6 @@ static ag::ldns_pkt_ptr create_message() {
     return ag::ldns_pkt_ptr(pkt);
 }
 
-ag::parse_dns_stamp_result ag::parse_dns_stamp(const std::string &stamp_str) {
-    static constexpr utils::make_error<parse_dns_stamp_result> make_error;
-    auto[server_stamp, err] = server_stamp::from_string(stamp_str);
-    if (err) {
-        return make_error(std::move(err));
-    }
-    return {
-        {
-            server_stamp.proto,
-            std::move(server_stamp.server_addr_str),
-            std::move(server_stamp.provider_name),
-            std::move(server_stamp.path)
-        },
-        std::nullopt
-    };
-}
-
 ag::err_string ag::test_upstream(const upstream_options &opts,
                                  const on_certificate_verification_function &on_certificate_verification) {
     std::unique_ptr<ag::certificate_verifier> cert_verifier;
