@@ -735,7 +735,7 @@ void dns_forwarder::deinit() {
     infolog(log, "Done");
 
     infolog(log, "Destroying DNS filter...");
-    this->filter.destroy(this->filter_handle);
+    this->filter.destroy(std::exchange(this->filter_handle, nullptr));
     infolog(log, "Done");
 
     {

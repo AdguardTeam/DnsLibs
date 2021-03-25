@@ -84,3 +84,20 @@ target_link_libraries(AGDnsProxy dnsproxy)
 if (APPLE)
     target_link_libraries(AGDnsProxy "-framework Foundation" "-framework CoreFoundation" "-framework NetworkExtension")
 endif ()
+
+enable_testing()
+if (NOT TARGET tests)
+    add_custom_target(tests)
+endif ()
+
+if("${TARGET_OS}" STREQUAL "macos")
+    add_executable(test_AGDnsProxy EXCLUDE_FROM_ALL test_AGDnsProxy.mm)
+    target_compile_options(test_AGDnsProxy PRIVATE "-fobjc-arc")
+    target_compile_options(test_AGDnsProxy PRIVATE -F${CMAKE_CURRENT_BINARY_DIR})
+    target_link_libraries(test_AGDnsProxy
+            "-F${CMAKE_CURRENT_BINARY_DIR}"
+            "-Wl,-rpath,${CMAKE_CURRENT_BINARY_DIR}"
+            "-framework AGDnsProxy -framework Foundation")
+    add_dependencies(test_AGDnsProxy AGDnsProxy)
+    add_dependencies(tests test_AGDnsProxy)
+endif()

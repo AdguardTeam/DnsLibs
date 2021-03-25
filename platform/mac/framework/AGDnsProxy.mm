@@ -768,6 +768,11 @@ static std::vector<ag::upstream_options> convert_upstreams(NSArray<AGDnsUpstream
                         handler: (AGDnsProxyEvents *) handler
                           error: (NSError **) error
 {
+    self = [super init];
+    if (!self) {
+        return nil;
+    }
+
     ag::set_logger_factory_callback(nslog_sink::create);
     self->log = ag::create_logger("AGDnsProxy");
 
