@@ -8,6 +8,7 @@
 #include <magic_enum.hpp>
 #include <algorithm>
 #include <cassert>
+#include <csignal>
 
 
 #define log_id(l_, lvl_, id_, fmt_, ...) lvl_##log(l_, "[{}] " fmt_, id_, ##__VA_ARGS__)
@@ -59,6 +60,27 @@ private:
         uv_close((uv_handle_t *) &self->m_escape_hatch, nullptr);
     }
 
+    static int run_loop(uv_loop_t *loop, uv_run_mode mode) {
+#ifdef __MACH__
+        static auto ensure_sigpipe_ignored [[maybe_unused]] = signal(SIGPIPE, SIG_IGN);
+
+#elif defined EVTHREAD_USE_PTHREADS_IMPLEMENTED
+        // Block SIGPIPE
+        sigset_t sigset, oldset;
+        sigemptyset(&sigset);
+        sigaddset(&sigset, SIGPIPE);
+        pthread_sigmask(SIG_BLOCK, &sigset, &oldset);
+#endif // EVTHREAD_USE_PTHREADS_IMPLEMENTED
+
+        auto err = uv_run(loop, mode);
+
+#if defined(EVTHREAD_USE_PTHREADS_IMPLEMENTED) && !defined(__MACH__)
+        // Restore SIGPIPE state
+        pthread_sigmask(SIG_SETMASK, &oldset, nullptr);
+#endif
+        return err;
+    }
+
 public:
     /**
      * @return std::nullopt if ok, error string otherwise
@@ -97,7 +119,7 @@ public:
             uv_close((uv_handle_t *) &m_escape_hatch, nullptr);
 
             // Run the loop once to let libuv close the handles cleanly
-            err = uv_run(m_loop.get(), UV_RUN_DEFAULT);
+            err = run_loop(m_loop.get(), UV_RUN_DEFAULT);
             assert(0 == err);
 
             return err_str;
@@ -105,7 +127,7 @@ public:
 
         m_loop_thread = std::thread([this]() {
             infolog(m_log, "Listening on {} ({})", m_address.str(), magic_enum::enum_name(m_settings.protocol));
-            uv_run(m_loop.get(), UV_RUN_DEFAULT);
+            run_loop(m_loop.get(), UV_RUN_DEFAULT);
             infolog(m_log, "Finished listening");
         });
 
