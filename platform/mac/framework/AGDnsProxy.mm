@@ -13,6 +13,8 @@
 #include <string>
 #include <ag_cesu8.h>
 
+#include <poll.h>
+
 static constexpr size_t FILTER_PARAMS_MEM_LIMIT_BYTES = 8 * 1024 * 1024;
 
 static constexpr NSString *REPLACEMENT_STRING = @"<out of memory>";
@@ -473,7 +475,8 @@ static NSData *create_response_packet_v6(const struct iphdr6 *ip6_header,
         customBlockingIpv4: (NSString *) customBlockingIpv4
         customBlockingIpv6: (NSString *) customBlockingIpv6
         dnsCacheSize: (NSUInteger) dnsCacheSize
-        optimisticCache: (BOOL) optimisticCache;
+        optimisticCache: (BOOL) optimisticCache
+        helperPath: (NSString *) helperPath;
 {
     const ag::dnsproxy_settings &defaultSettings = ag::dnsproxy_settings::get_default();
     self = [self initWithNative: &defaultSettings];
@@ -494,6 +497,7 @@ static NSData *create_response_packet_v6(const struct iphdr6 *ip6_header,
     _customBlockingIpv6 = customBlockingIpv6;
     _dnsCacheSize = dnsCacheSize;
     _optimisticCache = optimisticCache;
+    _helperPath = helperPath;
     return self;
 }
 
@@ -513,6 +517,7 @@ static NSData *create_response_packet_v6(const struct iphdr6 *ip6_header,
         _customBlockingIpv6 = [coder decodeObjectForKey:@"_customBlockingIpv6"];
         _dnsCacheSize = [coder decodeInt64ForKey:@"_dnsCacheSize"];
         _optimisticCache = [coder decodeBoolForKey:@"_optimisticCache"];
+        _helperPath = [coder decodeObjectForKey:@"_helperPath"];
     }
 
     return self;
@@ -532,6 +537,7 @@ static NSData *create_response_packet_v6(const struct iphdr6 *ip6_header,
     [coder encodeObject:self.customBlockingIpv6 forKey:@"_customBlockingIpv6"];
     [coder encodeInt64:self.dnsCacheSize forKey:@"_dnsCacheSize"];
     [coder encodeBool:self.optimisticCache forKey:@"_optimisticCache"];
+    [coder encodeObject:self.helperPath forKey:@"_helperPath"];
 }
 
 
@@ -625,11 +631,14 @@ static NSData *create_response_packet_v6(const struct iphdr6 *ip6_header,
     ag::dnsproxy proxy;
     ag::logger log;
     AGDnsProxyEvents *events;
+    BOOL initialized;
 }
 
 - (void) dealloc
 {
-    self->proxy.deinit();
+    if (initialized) {
+        self->proxy.deinit();
+    }
 }
 
 static SecCertificateRef convertCertificate(const std::vector<uint8_t> &cert) {
@@ -764,6 +773,127 @@ static std::vector<ag::upstream_options> convert_upstreams(NSArray<AGDnsUpstream
     return converted;
 }
 
+#if !TARGET_OS_IPHONE
+
+typedef struct {
+    int ourFd;
+    int theirFd;
+} fd_pair_t;
+
+static fd_pair_t makeFdPairForTask() {
+    int pair[2] = {-1, -1};
+    int r = socketpair(AF_UNIX, SOCK_STREAM, 0, pair);
+    if (r == -1) {
+        goto error;
+    }
+    r = evutil_make_socket_closeonexec(pair[0]);
+    if (r == -1) {
+        goto error;
+    }
+    r = evutil_make_socket_closeonexec(pair[1]);
+    if (r == -1) {
+        goto error;
+    }
+    return (fd_pair_t) {pair[0], pair[1]};
+    error:
+    close(pair[0]);
+    close(pair[1]);
+    return (fd_pair_t) {-1, -1};
+}
+
+// Bind an fd using adguard-tun-helper
+static int bindFd(NSString *helperPath, NSString *address, NSNumber *port, AGListenerProtocol proto, NSError **error) {
+    NSString *protoString = nil;
+    switch (proto) {
+    case AGLP_UDP:
+        protoString = @"udp";
+        break;
+    case AGLP_TCP:
+        protoString = @"tcp";
+        break;
+    }
+    if (protoString == nil) {
+        *error = [NSError errorWithDomain:AGDnsProxyErrorDomain
+                                     code:AGDPE_PROXY_INIT_ERROR
+                                 userInfo:@{NSLocalizedDescriptionKey: @"Bad listener protocol"}];
+        return -1;
+    }
+
+    fd_pair_t fdPair = makeFdPairForTask();
+    if (fdPair.ourFd == -1 || fdPair.theirFd == -1) {
+        *error = [NSError errorWithDomain:AGDnsProxyErrorDomain
+                                     code:AGDPE_PROXY_INIT_ERROR
+                                 userInfo:@{NSLocalizedDescriptionKey: @"Failed to make an fd pair"}];
+        return -1;
+    }
+
+    auto *task = [[NSTask alloc] init];
+    task.launchPath = helperPath;
+    task.arguments = @[@"--bind", address, port.stringValue, protoString];
+    task.standardOutput = [[NSFileHandle alloc] initWithFileDescriptor:fdPair.theirFd closeOnDealloc:NO];
+    [task launch];
+    close(fdPair.theirFd);
+
+    evutil_make_socket_nonblocking(fdPair.ourFd);
+
+    pollfd pfd[] = {{.fd = fdPair.ourFd, .events = POLLIN}};
+    ssize_t r = poll(pfd, 1, 30 * 1000);
+    if (r != 1) {
+        if (r == 0) {
+            *error = [NSError errorWithDomain:AGDnsProxyErrorDomain
+                                         code:AGDPE_PROXY_INIT_ERROR
+                                     userInfo:@{NSLocalizedDescriptionKey: @"Poll timed out"}];
+        } else {
+            *error = [NSError errorWithDomain:AGDnsProxyErrorDomain
+                                         code:AGDPE_PROXY_INIT_ERROR
+                                     userInfo:@{NSLocalizedDescriptionKey:
+                                                [NSString stringWithFormat:
+                                                        @"Poll failed: %d (%s)", errno, strerror(errno)]}];
+        }
+        close(fdPair.ourFd);
+        [task interrupt];
+        return -1;
+    }
+
+    char buf[1] = "";
+    char cmsgspace[CMSG_SPACE(sizeof(int))] = "";
+    iovec vec{
+            .iov_base = buf,
+            .iov_len = sizeof(buf)};
+    msghdr msg{
+            .msg_iov = &vec,
+            .msg_iovlen = 1,
+            .msg_control = &cmsgspace,
+            .msg_controllen = CMSG_LEN(sizeof(int))};
+
+    r = recvmsg(fdPair.ourFd, &msg, 0);
+    if (r != 0) {
+        *error = [NSError errorWithDomain:AGDnsProxyErrorDomain
+                                     code:AGDPE_PROXY_INIT_ERROR
+                                 userInfo:@{NSLocalizedDescriptionKey:
+                                            [NSString stringWithFormat:@"Failed to receive fd: %s", strerror(errno)]}];
+        close(fdPair.ourFd);
+        [task interrupt];
+        return -1;
+    }
+    close(fdPair.ourFd);
+    [task waitUntilExit];
+
+    for (cmsghdr *cmsg = CMSG_FIRSTHDR(&msg); cmsg; cmsg = CMSG_NXTHDR(&msg, cmsg)) {
+        if (cmsg->cmsg_level == SOL_SOCKET && cmsg->cmsg_type == SCM_RIGHTS) {
+            int receivedFd = *(int *) CMSG_DATA(cmsg);
+            return receivedFd;
+        }
+    }
+
+    *error = [NSError errorWithDomain:AGDnsProxyErrorDomain
+                                 code:AGDPE_PROXY_INIT_ERROR
+                             userInfo:@{NSLocalizedDescriptionKey: @"Failed to receive fd: control message not found"}];
+    return -1;
+}
+
+#endif // !TARGET_OS_IPHONE
+
 - (instancetype) initWithConfig: (AGDnsProxyConfig *) config
                         handler: (AGDnsProxyEvents *) handler
                           error: (NSError **) error
@@ -772,6 +902,7 @@ static std::vector<ag::upstream_options> convert_upstreams(NSArray<AGDnsUpstream
     if (!self) {
         return nil;
     }
+    self->initialized = NO;
 
     ag::set_logger_factory_callback(nslog_sink::create);
     self->log = ag::create_logger("AGDnsProxy");
@@ -827,17 +958,31 @@ static std::vector<ag::upstream_options> convert_upstreams(NSArray<AGDnsUpstream
         }
     }
 
+    std::vector<std::shared_ptr<void>> closefds; // Close fds on return
     if (config.listeners != nil) {
+        closefds.reserve(config.listeners.count);
         settings.listeners.clear();
-        settings.listeners.reserve([config.listeners count]);
-
+        settings.listeners.reserve(config.listeners.count);
         for (AGListenerSettings *listener in config.listeners) {
-            settings.listeners.push_back({
-                [listener.address UTF8String],
-                (uint16_t) listener.port,
-                (ag::listener_protocol) listener.proto,
-                (bool) listener.persistent,
-                std::chrono::milliseconds(listener.idleTimeoutMs),
+            int listenerFd = -1;
+#if !TARGET_OS_IPHONE
+            if (config.helperPath) {
+                listenerFd = bindFd(config.helperPath, listener.address, @(listener.port), listener.proto, error);
+                if (listenerFd == -1) {
+                    return nil;
+                }
+                closefds.emplace_back(nullptr, [listenerFd](void *p) {
+                    close(listenerFd);
+                }); // Close on return (listener does dup())
+            }
+#endif
+            settings.listeners.emplace_back((ag::listener_settings) {
+                .address = listener.address.UTF8String,
+                .port = (uint16_t) listener.port,
+                .protocol = (ag::listener_protocol) listener.proto,
+                .persistent = (bool) listener.persistent,
+                .idle_timeout = std::chrono::milliseconds(listener.idleTimeoutMs),
+                .fd = listenerFd,
             });
         }
     }
@@ -873,6 +1018,7 @@ static std::vector<ag::upstream_options> convert_upstreams(NSArray<AGDnsUpstream
                                      code: AGDPE_PROXY_INIT_WARNING
                                  userInfo: @{ NSLocalizedDescriptionKey: convert_string(str) }];
     }
+    self->initialized = YES;
 
     infolog(self->log, "Dns proxy initialized");
 

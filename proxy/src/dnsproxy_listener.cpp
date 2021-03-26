@@ -86,21 +86,28 @@ public:
      * @return std::nullopt if ok, error string otherwise
      */
     ag::err_string init(const ag::listener_settings &settings, ag::dnsproxy *proxy) {
+        m_settings = settings;
+#ifdef _WIN32
+        m_settings.fd = -1; // Unsupported on Windows
+#else
+        m_settings.fd = dup(m_settings.fd); // Take ownership
+#endif
+
         m_proxy = proxy;
         if (!m_proxy) {
             return "Proxy is not set";
         }
 
-        m_address = ag::socket_address{settings.address, settings.port};
-        if (!m_address.valid()) {
-            return fmt::format("Invalid address: {}", settings.address);
+        if (m_settings.fd == -1) {
+            m_address = ag::socket_address{m_settings.address, m_settings.port};
+            if (!m_address.valid()) {
+                return fmt::format("Invalid address: {}", settings.address);
+            }
         }
 
         m_log = ag::create_logger(fmt::format("listener({} {})",
                                               magic_enum::enum_name(settings.protocol),
                                               m_address.str()));
-
-        m_settings = settings;
 
         int err = 0;
         // Init the loop
@@ -126,7 +133,6 @@ public:
         }
 
         m_loop_thread = std::thread([this]() {
-            infolog(m_log, "Listening on {} ({})", m_address.str(), magic_enum::enum_name(m_settings.protocol));
             run_loop(m_loop.get(), UV_RUN_DEFAULT);
             infolog(m_log, "Finished listening");
         });
@@ -136,6 +142,7 @@ public:
 
     ~listener_base() override {
         await_shutdown();
+        evutil_closesocket(m_settings.fd);
     }
 
     void shutdown() final {
@@ -248,15 +255,28 @@ protected:
         }
         m_udp_handle.data = this;
 
-        if ((err = uv_udp_bind(&m_udp_handle, m_address.c_sockaddr(), UV_UDP_REUSEADDR)) < 0) {
-            uv_close((uv_handle_t *) &m_udp_handle, nullptr);
-            return fmt::format("uv_udp_bind failed: {}", uv_strerror(err));
+        if (m_settings.fd == -1) {
+            if ((err = uv_udp_bind(&m_udp_handle, m_address.c_sockaddr(), UV_UDP_REUSEADDR)) < 0) {
+                uv_close((uv_handle_t *) &m_udp_handle, nullptr);
+                return fmt::format("uv_udp_bind failed: {}", uv_strerror(err));
+            }
+        } else {
+            if ((err = uv_udp_open(&m_udp_handle, m_settings.fd)) < 0) {
+                uv_close((uv_handle_t *) &m_udp_handle, nullptr);
+                return fmt::format("uv_udp_open failed: {}", uv_strerror(err));
+            }
+            m_settings.fd = -1; // uv_udp_open took ownership
         }
 
         if ((err = uv_udp_recv_start(&m_udp_handle, udp_alloc_cb, recv_cb)) < 0) {
             uv_close((uv_handle_t *) &m_udp_handle, nullptr);
             return fmt::format("uv_udp_recv_start failed: {}", uv_strerror(err));
         }
+
+        sockaddr_storage name{};
+        int namelen = sizeof(name);
+        uv_udp_getsockname(&m_udp_handle, (sockaddr *) &name, &namelen);
+        infolog(m_log, "Listening on {} (UDP)", ag::socket_address((sockaddr *) &name).str(), m_address.str());
 
         return std::nullopt;
     }
@@ -571,15 +591,28 @@ protected:
         }
         m_tcp_handle.data = this;
 
-        if ((err = uv_tcp_bind(&m_tcp_handle, m_address.c_sockaddr(), 0)) < 0) {
-            uv_close((uv_handle_t *) &m_tcp_handle, nullptr);
-            return fmt::format("uv_tcp_bind failed: {}", uv_strerror(err));
+        if (m_settings.fd == -1) {
+            if ((err = uv_tcp_bind(&m_tcp_handle, m_address.c_sockaddr(), 0)) < 0) {
+                uv_close((uv_handle_t *) &m_tcp_handle, nullptr);
+                return fmt::format("uv_tcp_bind failed: {}", uv_strerror(err));
+            }
+        } else {
+            if ((err = uv_tcp_open(&m_tcp_handle, m_settings.fd)) < 0) {
+                uv_close((uv_handle_t *) &m_tcp_handle, nullptr);
+                return fmt::format("uv_tcp_open failed: {}", uv_strerror(err));
+            }
+            m_settings.fd = -1; // uv_tcp_open took ownership
         }
 
         if ((err = uv_listen((uv_stream_t *) &m_tcp_handle, BACKLOG, conn_cb)) < 0) {
             uv_close((uv_handle_t *) &m_tcp_handle, nullptr);
             return fmt::format("uv_listen failed: {}", uv_strerror(err));
         }
+
+        sockaddr_storage name{};
+        int namelen = sizeof(name);
+        uv_tcp_getsockname(&m_tcp_handle, (sockaddr *) &name, &namelen);
+        infolog(m_log, "Listening on {} (TCP)", ag::socket_address((sockaddr *) &name).str(), m_address.str());
 
         return std::nullopt;
     }

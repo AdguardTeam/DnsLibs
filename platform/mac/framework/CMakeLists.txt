@@ -100,4 +100,14 @@ if("${TARGET_OS}" STREQUAL "macos")
             "-framework AGDnsProxy -framework Foundation")
     add_dependencies(test_AGDnsProxy AGDnsProxy)
     add_dependencies(tests test_AGDnsProxy)
+    add_test(AGDnsProxyTest test_AGDnsProxy)
+
+    add_executable(test_BindHelper EXCLUDE_FROM_ALL test_BindHelper.mm)
+    target_compile_options(test_BindHelper PRIVATE "-fobjc-arc")
+    target_compile_options(test_BindHelper PRIVATE -F${CMAKE_CURRENT_BINARY_DIR})
+    add_dependencies(test_BindHelper AGDnsProxy)
+    target_link_libraries(test_BindHelper
+            "-F${CMAKE_CURRENT_BINARY_DIR}"
+            "-Wl,-rpath,${CMAKE_CURRENT_BINARY_DIR}"
+            "-framework AGDnsProxy -framework Foundation")
 endif()

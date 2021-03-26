@@ -258,6 +258,10 @@ typedef void (^logCallback)(const char *msg, int length);
  * Enable optimistic DNS caching
  */
 @property(nonatomic, readonly) BOOL optimisticCache;
+/**
+ * Path to adguard-tun-helper (macOS only)
+ */
+@property(nonatomic, readonly) NSString *helperPath;
 
 - (instancetype) initWithUpstreams: (NSArray<AGDnsUpstream *> *) upstreams
         fallbacks: (NSArray<AGDnsUpstream *> *) fallbacks
@@ -271,7 +275,8 @@ typedef void (^logCallback)(const char *msg, int length);
         customBlockingIpv4: (NSString *) customBlockingIpv4
         customBlockingIpv6: (NSString *) customBlockingIpv6
         dnsCacheSize: (NSUInteger) dnsCacheSize
-        optimisticCache: (BOOL) optimisticCache;
+        optimisticCache: (BOOL) optimisticCache
+        helperPath: (NSString *)helperPath;
 
 - (instancetype)initWithCoder:(NSCoder *)coder;
 
