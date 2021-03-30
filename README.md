@@ -9,10 +9,10 @@ A DNS proxy library that supports all existing DNS protocols including `DNS-over
 git submodule init
 git submodule update
 ```
-In order to reset submodules you can use 
+In order to reset submodules you can use
 ```
 git submodule update --force
-``` 
+```
 ## Build instructions
 
 ### Native library
