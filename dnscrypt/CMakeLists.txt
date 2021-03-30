@@ -41,13 +41,8 @@ target_include_directories(dnscrypt PUBLIC ${CMAKE_BINARY_DIR}) # sodium/version
 target_link_libraries(dnscrypt dnsstamp ldns sodium)
 
 enable_testing()
-if (NOT TARGET tests)
-    add_subdirectory(${THIRD_PARTY_DIR}/googletest ${CMAKE_BINARY_DIR}/googletest)
-    add_custom_target(tests)
-endif ()
+include(${CMAKE_CURRENT_SOURCE_DIR}/../cmake/add_unit_test.cmake)
+link_libraries(dnscrypt)
+set(TEST_DIR ${CMAKE_CURRENT_SOURCE_DIR}/test)
 
-link_libraries(gtest gtest_main dnscrypt)
-
-add_executable(dns_crypt_test EXCLUDE_FROM_ALL test/dns_crypt_test.cpp)
-add_test(dns_crypt_test dns_crypt_test)
-add_dependencies(tests dns_crypt_test)
+add_unit_test(dns_crypt_test ${TEST_DIR} "" TRUE FALSE)

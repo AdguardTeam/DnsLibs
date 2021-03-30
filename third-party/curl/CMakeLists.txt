@@ -32,7 +32,7 @@ function(install)
 # install is disabled
 endfunction()
 
-include(../../common/apply_patch.cmake)
+include(../../cmake/apply_patch.cmake)
 
 apply_patch("${CMAKE_CURRENT_SOURCE_DIR}/find_openssl.patch" "${CMAKE_CURRENT_SOURCE_DIR}/curl")
 apply_patch("${CMAKE_CURRENT_SOURCE_DIR}/other_tests.patch" "${CMAKE_CURRENT_SOURCE_DIR}/curl")

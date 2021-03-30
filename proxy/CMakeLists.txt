@@ -60,30 +60,20 @@ endif()
 
 
 enable_testing()
-if (NOT TARGET tests)
-    add_subdirectory(${THIRD_PARTY_DIR}/googletest ${CMAKE_BINARY_DIR}/googletest)
-    add_custom_target(tests)
-endif ()
+include(${CMAKE_CURRENT_SOURCE_DIR}/../cmake/add_unit_test.cmake)
+link_libraries(dnsproxy)
+set(TEST_DIR ${CMAKE_CURRENT_SOURCE_DIR}/test)
 
-link_libraries(gtest gtest_main dnsproxy)
-include_directories(./src)
+add_unit_test(dns64_test ${TEST_DIR} ${SRC_DIR} TRUE TRUE)
 
-add_executable(dns64_test EXCLUDE_FROM_ALL test/dns64_test.cpp)
-add_test(dns64_test dns64_test)
-add_dependencies(tests dns64_test)
-
-add_executable(dnsproxy_test EXCLUDE_FROM_ALL test/dnsproxy_test.cpp)
-add_test(dnsproxy_test dnsproxy_test)
-add_dependencies(tests dnsproxy_test)
+add_unit_test(dnsproxy_test ${TEST_DIR} ${SRC_DIR} TRUE TRUE)
 configure_file(test/cname_blocking_test_filter.txt cname_blocking_test_filter.txt COPYONLY)
 configure_file(test/blocking_modes_test_filter.txt blocking_modes_test_filter.txt COPYONLY)
 configure_file(test/whitelist_test_filter.txt whitelist_test_filter.txt COPYONLY)
 configure_file(test/bad_test_filter.txt bad_test_filter.txt COPYONLY)
 configure_file(test/crash_regress_test_filter.txt crash_regress_test_filter.txt COPYONLY)
 
-add_executable(listener_test EXCLUDE_FROM_ALL test/listener_test.cpp)
-add_test(listener_test listener_test)
-add_dependencies(tests listener_test)
+add_unit_test(listener_test ${TEST_DIR} ${SRC_DIR} TRUE FALSE)
 
 add_executable(listener_standalone EXCLUDE_FROM_ALL test/listener_standalone.cpp)
 add_executable(cache_benchmark EXCLUDE_FROM_ALL test/cache_benchmark.cpp)

@@ -25,7 +25,7 @@ if (NOT MSVC)
 else ()
     target_compile_options(dnslibs_common PUBLIC -Wno-c++98-compat -Wno-c++98-compat-pedantic
         -Wno-documentation-unknown-command -Wno-newline-eof -Wno-return-std-move-in-c++11)
-    target_compile_definitions(dnslibs_common PUBLIC 
+    target_compile_definitions(dnslibs_common PUBLIC
             FMT_EXCEPTIONS=0
             WIN32_LEAN_AND_MEAN
             NOMINMAX)
@@ -62,17 +62,9 @@ if (MSVC)
 endif ()
 
 enable_testing()
-if (NOT TARGET tests)
-    add_subdirectory(${THIRD_PARTY_DIR}/googletest ${CMAKE_BINARY_DIR}/googletest)
-    add_custom_target(tests)
-endif ()
+include(${CMAKE_CURRENT_SOURCE_DIR}/../cmake/add_unit_test.cmake)
+link_libraries(dnslibs_common)
+set(TEST_DIR ${CMAKE_CURRENT_SOURCE_DIR}/test)
 
-link_libraries(gtest gtest_main dnslibs_common)
-
-add_executable(cache_test EXCLUDE_FROM_ALL test/cache_test.cpp)
-add_test(cache_test cache_test)
-add_dependencies(tests cache_test)
-
-add_executable(utils_test EXCLUDE_FROM_ALL test/utils_test.cpp)
-add_test(utils_test utils_test)
-add_dependencies(tests utils_test)
+add_unit_test(cache_test ${TEST_DIR} "" TRUE TRUE)
+add_unit_test(utils_test ${TEST_DIR} "" TRUE TRUE)

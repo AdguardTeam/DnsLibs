@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.6)
 project(libevent)
 
-include(../../common/apply_patch.cmake)
+include(../../cmake/apply_patch.cmake)
 apply_patch("${CMAKE_CURRENT_SOURCE_DIR}/find_openssl.patch" "${CMAKE_CURRENT_SOURCE_DIR}/libevent")
 apply_patch("${CMAKE_CURRENT_SOURCE_DIR}/evutil_socket_error_to_string_lang.patch" "${CMAKE_CURRENT_SOURCE_DIR}/libevent")
 apply_patch("${CMAKE_CURRENT_SOURCE_DIR}/reinit_notifyfds.patch" "${CMAKE_CURRENT_SOURCE_DIR}/libevent")

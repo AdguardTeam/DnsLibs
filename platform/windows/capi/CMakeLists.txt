@@ -82,12 +82,9 @@ if (WIN32)
     target_link_libraries(AdguardDns detours)
 endif()
 
-# (Re)generate ag_dns_h_hash.inc
-file(STRINGS ${CMAKE_CURRENT_SOURCE_DIR}/include/ag_dns.h AG_DNSLIBS_H)
-file(WRITE ${CMAKE_CURRENT_BINARY_DIR}/include/ag_dnslibs.h.strings "${AG_DNSLIBS_H}")
-file(SHA256 ${CMAKE_CURRENT_BINARY_DIR}/include/ag_dnslibs.h.strings AG_DNSLIBS_H_HASH)
-file(REMOVE ${CMAKE_CURRENT_BINARY_DIR}/include/ag_dnslibs.h.strings)
-file(WRITE ${CMAKE_CURRENT_SOURCE_DIR}/src/ag_dns_h_hash.inc "#define AG_DNSLIBS_H_HASH \"${AG_DNSLIBS_H_HASH}\"\n")
+add_custom_target(generate_api_hash)
+add_custom_command(TARGET generate_api_hash COMMAND ${CMAKE_CURRENT_SOURCE_DIR}/generate_api_hash.py)
+add_dependencies(AdguardDns generate_api_hash)
 
 set(OUTPUT_LIB_DIR ${CMAKE_CURRENT_SOURCE_DIR}/../cs/Adguard.Dns/Adguard.Dns)
 if (TARGET AdguardDns)
@@ -116,3 +113,6 @@ link_libraries(AdguardDns)
 add_executable(capi_test EXCLUDE_FROM_ALL test/capi_test.c)
 add_test(capi_test capi_test)
 add_dependencies(tests capi_test)
+
+add_dependencies(tests AdguardDns)
+add_test(uncommitted_api_hash git diff --quiet ${CMAKE_CURRENT_SOURCE_DIR}/src/ag_dns_h_hash.inc)

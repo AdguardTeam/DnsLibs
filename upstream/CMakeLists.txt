@@ -71,17 +71,9 @@ target_link_libraries(upstream dnslibs_common dnsstamp dnscrypt agdns_tls ngtcp2
 target_link_libraries(upstream boringssl_static libevent ldns libcurl)
 
 enable_testing()
-if (NOT TARGET tests)
-    add_subdirectory(${THIRD_PARTY_DIR}/googletest ${CMAKE_BINARY_DIR}/googletest)
-    add_custom_target(tests)
-endif ()
+include(${CMAKE_CURRENT_SOURCE_DIR}/../cmake/add_unit_test.cmake)
+link_libraries(upstream)
+set(TEST_DIR ${CMAKE_CURRENT_SOURCE_DIR}/test)
 
-link_libraries(gtest gtest_main upstream)
-
-add_executable(upstream_test EXCLUDE_FROM_ALL test/test_upstream.cpp)
-add_test(upstream_test upstream_test)
-add_dependencies(tests upstream_test)
-
-add_executable(upstream_test_utils EXCLUDE_FROM_ALL test/test_upstream_utils.cpp)
-add_test(upstream_test_utils upstream_test_utils)
-add_dependencies(tests upstream_test_utils)
+add_unit_test(test_upstream ${TEST_DIR} "" TRUE FALSE)
+add_unit_test(test_upstream_utils ${TEST_DIR} "" TRUE TRUE)

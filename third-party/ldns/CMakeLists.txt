@@ -44,7 +44,7 @@ if(NOT TARGET dnslibs_common)
 endif(NOT TARGET dnslibs_common)
 target_link_libraries(ldns dnslibs_common)
 
-include(../../common/apply_patch.cmake)
+include(../../cmake/apply_patch.cmake)
 apply_patch(${CMAKE_CURRENT_SOURCE_DIR}/ag_ext.patch ${CMAKE_CURRENT_SOURCE_DIR}/ldns)
 apply_patch(${CMAKE_CURRENT_SOURCE_DIR}/type65.patch ${CMAKE_CURRENT_SOURCE_DIR}/ldns)
 

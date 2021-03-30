@@ -39,8 +39,6 @@ endif()
 
 enable_testing()
 
-include_directories(./src)
-
 add_custom_target(dnsfilter_run_benchmark)
 add_executable(dnsfilter_benchmark EXCLUDE_FROM_ALL test/benchmark.cpp)
 target_link_libraries(dnsfilter_benchmark dnsfilter)
@@ -51,13 +49,8 @@ add_custom_command(TARGET dnsfilter_run_benchmark COMMAND ${CMAKE_COMMAND} -E co
 add_custom_command(TARGET dnsfilter_run_benchmark COMMAND ${CMAKE_CURRENT_BINARY_DIR}/dnsfilter_benchmark_runner.py)
 
 
-if (NOT TARGET tests)
-    add_subdirectory(${THIRD_PARTY_DIR}/googletest googletest)
-    add_custom_target(tests)
-endif ()
+include(${CMAKE_CURRENT_SOURCE_DIR}/../cmake/add_unit_test.cmake)
+link_libraries(dnsfilter)
+set(TEST_DIR ${CMAKE_CURRENT_SOURCE_DIR}/test)
 
-link_libraries(gtest gtest_main dnsfilter)
-
-add_executable(dnsfilter_test EXCLUDE_FROM_ALL ${TEST_DIR}/dnsfilter_test.cpp)
-add_test(dnsfilter_test dnsfilter_test)
-add_dependencies(tests dnsfilter_test)
+add_unit_test(dnsfilter_test ${TEST_DIR} ${SRC_DIR} TRUE TRUE)

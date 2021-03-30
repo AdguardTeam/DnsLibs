@@ -25,13 +25,8 @@ target_include_directories(dnsstamp PUBLIC include)
 target_link_libraries(dnsstamp libevent dnslibs_common)
 
 enable_testing()
-if (NOT TARGET tests)
-    add_subdirectory(${THIRD_PARTY_DIR}/googletest ${CMAKE_BINARY_DIR}/googletest)
-    add_custom_target(tests)
-endif ()
+include(${CMAKE_CURRENT_SOURCE_DIR}/../cmake/add_unit_test.cmake)
+link_libraries(dnsstamp)
+set(TEST_DIR ${CMAKE_CURRENT_SOURCE_DIR}/test)
 
-link_libraries(gtest gtest_main dnsstamp)
-
-add_executable(dns_stamp_test EXCLUDE_FROM_ALL test/dns_stamp_test.cpp)
-add_test(dns_stamp_test dns_stamp_test)
-add_dependencies(tests dns_stamp_test)
+add_unit_test(dns_stamp_test ${TEST_DIR} "" TRUE FALSE)
