@@ -5,6 +5,7 @@
 #include <ag_logger.h>
 #include <default_verifier.h>
 #include <algorithm>
+#include <ag_version.h>
 
 
 using namespace ag;
@@ -113,4 +114,8 @@ std::vector<uint8_t> dnsproxy::handle_message(ag::uint8_view message) {
     std::vector<uint8_t> response = proxy->forwarder.handle_message(message);
 
     return response;
+}
+
+const char *ag::dnsproxy::version() {
+    return AG_DNSLIBS_VERSION;
 }

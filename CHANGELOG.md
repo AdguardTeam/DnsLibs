@@ -1,6 +1,11 @@
 # Changelog
 
 ## V1.5
+* [Feature] Allow retrieving the library version
+    * see `ag::dnsproxy::version()`
+    * see `AGDnsProxy.libraryVersion` (Apple)
+    * see `com.adguard.dnsproxy.DnsProxy.version()` (Android)
+    * see `ag_dnsproxy_version()` (C API)
 * [Feature] Add a "pretty URL" function for DNS stamps
     * see `ag::server_stamp::pretty_url()`
     * see `AGDnsStamp.prettyUrl`, `AGDnsStamp.prettierUrl` (Apple)

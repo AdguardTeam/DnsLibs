@@ -14,7 +14,18 @@ namespace Adguard.Dns.Utils
     internal static class DnsUtils
     {
         private static readonly ILog LOG = LogProvider.For<DnsApi>();
-        
+
+        /// <summary>
+        /// Gets current DNS proxy version
+        /// </summary>
+        /// <returns></returns>
+        internal static string GetDnsProxyVersion()
+        {
+            IntPtr pDnsProxyVersion = AGDnsApi.ag_dnsproxy_version();
+            string dnsProxyVersion = MarshalUtils.PtrToString(pDnsProxyVersion);
+            return dnsProxyVersion;
+        }
+
         /// <summary>
         /// Parses a specified DNS stamp string (<seealso cref="dnsStampStr"/>)
         /// </summary>
@@ -32,7 +43,7 @@ namespace Adguard.Dns.Utils
                 if (dnsStampResult.error != IntPtr.Zero)
                 {
                     string error = MarshalUtils.PtrToString(dnsStampResult.error);
-                    LOG.InfoFormat("Parsing DNS stamp {0} failed with an error {1}", 
+                    LOG.InfoFormat("Parsing DNS stamp {0} failed with an error {1}",
                         dnsStampStr,
                         error);
                     return null;
@@ -52,7 +63,7 @@ namespace Adguard.Dns.Utils
                 AGDnsApi.ag_parse_dns_stamp_result_free(pDnsStampResult);
             }
         }
-        
+
         /// <summary>
         /// Checks if upstream is valid and available
         /// </summary>
@@ -67,9 +78,9 @@ namespace Adguard.Dns.Utils
             {
                 LOG.InfoFormat("Start testing upstream {0}", upstreamOptions);
                 CertificateVerificationCallback certificateVerificationCallback = new CertificateVerificationCallback();
-                AGDnsApi.ag_upstream_options upstreamOptionsC = 
+                AGDnsApi.ag_upstream_options upstreamOptionsC =
                     DnsApiConverter.ToNativeObject(upstreamOptions, allocatedPointers);
-                AGDnsApi.cbd_onCertificateVerification testUpstreamCallbackC = 
+                AGDnsApi.cbd_onCertificateVerification testUpstreamCallbackC =
                     DnsApiConverter.ToNativeObject(certificateVerificationCallback);
                 pUpstreamOptionsC = MarshalUtils.StructureToPtr(upstreamOptionsC);
                 pError = AGDnsApi.ag_test_upstream(pUpstreamOptionsC, testUpstreamCallbackC);

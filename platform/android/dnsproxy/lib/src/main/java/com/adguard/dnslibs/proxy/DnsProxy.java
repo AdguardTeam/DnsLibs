@@ -197,6 +197,9 @@ public class DnsProxy implements Closeable {
      */
     public static native boolean isValidRule(String str);
 
+    /** Return the DNS proxy library version. */
+    public static native String version();
+
     /**
      * Parses a DNS stamp string and returns a instance of DNS stamp or throws on error
      * @param stampStr DNS stamp string

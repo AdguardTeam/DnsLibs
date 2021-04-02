@@ -774,3 +774,10 @@ ag::android_dnsproxy::android_dnsproxy(JavaVM *vm) : m_utils(vm) {
 
     m_jni_initialized.store(true);
 }
+
+extern "C"
+JNIEXPORT jstring JNICALL
+Java_com_adguard_dnslibs_proxy_DnsProxy_version(JNIEnv *env, jclass clazz) {
+    (void) clazz;
+    return env->NewStringUTF(ag::dnsproxy::version()); // Assume version is already valid UTF-8/CESU-8
+}

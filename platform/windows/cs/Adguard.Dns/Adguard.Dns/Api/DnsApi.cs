@@ -313,6 +313,16 @@ namespace Adguard.Dns.Api
             }
         }
 
+        /// <summary>
+        /// Gets current DNS proxy version
+        /// </summary>
+        /// <returns></returns>
+        public string GetDnsProxyVersion()
+        {
+            string dnsProxyVersion = DnsUtils.GetDnsProxyVersion();
+            return dnsProxyVersion;
+        }
+
         #endregion
 
         #region Logging

@@ -315,6 +315,11 @@ typedef void (^logCallback)(const char *msg, int length);
 * @return true if string is a valid rule, false otherwise
 */
 + (BOOL) isValidRule: (NSString *) str;
+
+/**
+ * Return the DNS proxy library version.
+ */
++ (NSString *) libraryVersion;
 @end
 
 typedef NS_ENUM(NSInteger, AGStampProtoType) {

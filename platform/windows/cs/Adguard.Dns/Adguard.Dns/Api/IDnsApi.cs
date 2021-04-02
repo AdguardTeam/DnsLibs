@@ -21,7 +21,7 @@ namespace Adguard.Dns.Api
         /// <exception cref="InvalidOperationException">Thrown, if cannot starting the proxy server
         /// for any reason</exception>
         void StartDnsFiltering(DnsApiConfiguration dnsApiConfiguration);
-        
+
         /// <summary>
         /// Stops DNS filtering
         /// If it is not started yet, does nothing.
@@ -89,8 +89,14 @@ namespace Adguard.Dns.Api
         /// otherwise false</returns>
         bool TestUpstream(UpstreamOptions upstreamOptions);
 
+        /// <summary>
+        /// Gets current DNS proxy version
+        /// </summary>
+        /// <returns></returns>
+        string GetDnsProxyVersion();
+
         #endregion
-        
+
         #region Logging
 
         /// <summary>
@@ -102,7 +108,7 @@ namespace Adguard.Dns.Api
         #endregion
 
         #region Crash reporting
-        
+
         /// <summary>
         /// Sets an unhandled exception configuration
         /// (<seealso cref="IUnhandledExceptionConfiguration"/>)

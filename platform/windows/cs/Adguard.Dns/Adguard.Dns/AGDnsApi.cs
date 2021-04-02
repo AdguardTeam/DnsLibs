@@ -23,7 +23,7 @@ namespace Adguard.Dns
         /// <summary>
         /// The current API version hash with which the ProxyServer was tested
         /// </summary>
-        private const string API_VERSION_HASH = "ac0c0087d4600446ba7325b26d24ff957cc7a347e004d4e24793325494d91896";
+        private const string API_VERSION_HASH = "a4331962238501fbce977acbd8ce5797ea145228329dd9e583739a25c239399c";
         #endregion
 
         #region API Functions
@@ -788,6 +788,14 @@ namespace Adguard.Dns
         /// <returns>Pointer to the API version hash</returns>
         [DllImport(DnsLibName, CallingConvention = CallingConvention.Cdecl)]
         private static extern IntPtr ag_get_capi_version();
+
+        /// <summary>
+        /// Return the DNS proxy library version.
+        /// Do NOT free the returned string.
+        /// </summary>
+        /// <returns>Pointer to the API version hash</returns>
+        [DllImport(DnsLibName, CallingConvention = CallingConvention.Cdecl)]
+        internal static extern IntPtr ag_dnsproxy_version();
 
         /// <summary>
         /// Free a string, specified by a passed <see cref="pStr"/>

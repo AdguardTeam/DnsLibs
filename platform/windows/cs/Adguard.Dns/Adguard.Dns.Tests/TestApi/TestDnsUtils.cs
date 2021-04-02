@@ -13,6 +13,13 @@ namespace Adguard.Dns.Tests.TestApi
         private const string INVALID_DNS_STAMP_STR = "sdns://abcdefgh";
 
         [Test]
+        public void TestGetDnsProxyVersion()
+        {
+            string dnsProxyVersion = DnsApi.Instance.GetDnsProxyVersion();
+            Assert.NotNull(dnsProxyVersion);
+        }
+
+        [Test]
         public void TestParseValidDnsStamp()
         {
             DnsStamp dnsStamp = DnsApi.Instance.ParseDnsStamp(VALID_DNS_STAMP_STR);

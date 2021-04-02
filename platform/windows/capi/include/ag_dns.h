@@ -359,6 +359,12 @@ AG_EXPORT const char *ag_test_upstream(const ag_upstream_options *upstream,
 AG_EXPORT const char *ag_get_capi_version();
 
 /**
+ * Return the DNS proxy library version.
+ * Do NOT free the returned string.
+ */
+AG_EXPORT const char *ag_dnsproxy_version();
+
+/**
  * Free a string.
  */
 AG_EXPORT void ag_str_free(const char *str);

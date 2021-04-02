@@ -51,6 +51,13 @@ public:
      */
     std::vector<uint8_t> handle_message(ag::uint8_view message);
 
+    /**
+     * @brief Return the DNS proxy library version
+     *
+     * The caller does not take ownership of the returned string.
+     */
+    static const char *version();
+
 private:
     struct impl;
     std::unique_ptr<impl> pimpl;

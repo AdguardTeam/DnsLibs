@@ -552,3 +552,7 @@ void ag_logger_set_default_callback(ag_log_cb callback, void *attachment) {
         return callback_sink_mt::create(name, callback, attachment);
     });
 }
+
+const char *ag_dnsproxy_version() {
+    return ag::dnsproxy::version();
+}

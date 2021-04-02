@@ -1086,6 +1086,10 @@ static int bindFd(NSString *helperPath, NSString *address, NSNumber *port, AGLis
     return ag::dnsfilter::is_valid_rule([str UTF8String]);
 }
 
++ (NSString *)libraryVersion {
+    return convert_string(ag::dnsproxy::version());
+}
+
 @end
 
 @implementation AGDnsStamp
