@@ -1117,6 +1117,8 @@ static int bindFd(NSString *helperPath, NSString *address, NSNumber *port, AGLis
         if (stamp->props & ag::NO_FILTER) {
             _noFilter = YES;
         }
+        _prettyUrl = convert_string(stamp->pretty_url(false));
+        _prettierUrl = convert_string(stamp->pretty_url(true));
     }
     return self;
 }
@@ -1133,6 +1135,8 @@ static int bindFd(NSString *helperPath, NSString *address, NSNumber *port, AGLis
         _dnssec = [coder decodeBoolForKey:@"_dnssec"];
         _noLog = [coder decodeBoolForKey:@"_noLog"];
         _noFilter = [coder decodeBoolForKey:@"_noFilter"];
+        _prettyUrl = [coder decodeObjectForKey:@"_prettyUrl"];
+        _prettierUrl = [coder decodeObjectForKey:@"_prettierUrl"];
     }
 
     return self;
@@ -1148,6 +1152,8 @@ static int bindFd(NSString *helperPath, NSString *address, NSNumber *port, AGLis
     [coder encodeBool:self.dnssec forKey:@"_dnssec"];
     [coder encodeBool:self.noLog forKey:@"_noLog"];
     [coder encodeBool:self.noFilter forKey:@"_noFilter"];
+    [coder encodeObject:self.prettyUrl forKey:@"_prettyUrl"];
+    [coder encodeObject:self.prettierUrl forKey:@"_prettierUrl"];
 }
 
 @end

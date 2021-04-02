@@ -472,13 +472,15 @@ ag_parse_dns_stamp_result *ag_parse_dns_stamp(const char *stamp_str) {
         c_result->stamp.server_public_key = marshal_buffer({ key.data(), key.size() });
     }
     if (const auto &hashes = stamp.hashes; !hashes.empty()) {
-        c_result->stamp.hashes = { (ag_buffer *)std::malloc(hashes.size() * sizeof(ag_buffer)), hashes.size() };
+        c_result->stamp.hashes = { (ag_buffer *)std::malloc(hashes.size() * sizeof(ag_buffer)), (uint32_t) hashes.size() };
         for (size_t i = 0; i < hashes.size(); ++i) {
             const auto &h = hashes[i];
             c_result->stamp.hashes.data[i] = marshal_buffer({ h.data(), h.size() });
         }
     }
     c_result->stamp.properties = (ag_server_informal_properties)stamp.props;
+    c_result->stamp.pretty_url = marshal_str(stamp.pretty_url(false));
+    c_result->stamp.prettier_url = marshal_str(stamp.pretty_url(true));
     c_result->error = marshal_str(error.value_or(""));
     return c_result;
 }
@@ -495,6 +497,8 @@ void ag_parse_dns_stamp_result_free(ag_parse_dns_stamp_result *result) {
         ag_buffer_free(result->stamp.hashes.data[i]);
     }
     std::free((void *) result->stamp.hashes.data);
+    std::free((void *) result->stamp.pretty_url);
+    std::free((void *) result->stamp.prettier_url);
     std::free((void *) result->error);
     std::free(result);
 }

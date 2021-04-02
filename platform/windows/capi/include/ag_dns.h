@@ -256,6 +256,10 @@ typedef struct {
     ARRAY_OF(ag_buffer) hashes;
     /** Server properties */
     ag_server_informal_properties properties;
+    /** A URL representation of this stamp which can be used as a valid ag_upstream_options address */
+    const char *pretty_url;
+    /** A URL representation of this stamp which is prettier, but can NOT be a valid ag_upstream_options address */
+    const char *prettier_url;
 } ag_dns_stamp;
 
 typedef struct {

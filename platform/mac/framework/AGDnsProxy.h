@@ -367,6 +367,11 @@ typedef NS_ENUM(NSInteger, AGStampProtoType) {
 /** Resolver doesn't intentionally block domains */
 @property(nonatomic, readonly) BOOL noFilter;
 
+/** A URL representation of this stamp which can be used as a valid AGDnsUpstream address */
+@property(nonatomic, readonly) NSString *prettyUrl;
+/** A URL representation of this stamp which is prettier, but can NOT be used as a valid AGDnsUpstream address */
+@property(nonatomic, readonly) NSString *prettierUrl;
+
 - (instancetype) init NS_UNAVAILABLE;
 
 - (instancetype)initWithCoder:(NSCoder *)coder;

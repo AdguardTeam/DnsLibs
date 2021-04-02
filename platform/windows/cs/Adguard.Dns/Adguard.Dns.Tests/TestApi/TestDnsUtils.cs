@@ -29,6 +29,8 @@ namespace Adguard.Dns.Tests.TestApi
             Assert.AreEqual("127.0.0.1:443", dnsStamp.ServerAddress);
             Assert.AreEqual(AGDnsApi.ag_stamp_proto_type.DOH, dnsStamp.ProtoType);
             Assert.AreEqual("127.0.0.1:443", dnsStamp.ServerAddress);
+            Assert.AreEqual("https://example.com/dns-query", dnsStamp.PrettyUrl);
+            Assert.AreEqual("https://example.com/dns-query", dnsStamp.PrettierUrl);
 
             dnsStamp = DnsApi.Instance.ParseDnsStamp(VALID_DNS_STAMP_STR_1);
             Assert.IsNotNull(dnsStamp);

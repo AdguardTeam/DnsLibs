@@ -348,4 +348,56 @@ server_stamp::from_str_result server_stamp::from_string(std::string_view url) {
     }
 }
 
+std::string server_stamp::pretty_url(bool pretty_dnscrypt) const {
+    if (proto == stamp_proto_type::DNSCRYPT) {
+        if (!pretty_dnscrypt) {
+            return str();
+        }
+        return AG_FMT("dnscrypt://{}", provider_name);
+    }
+
+    if (proto == stamp_proto_type::PLAIN) {
+        ag::socket_address address = ag::utils::str_to_socket_address(server_addr_str);
+        if (address.port() == DEFAULT_PLAIN_PORT) {
+            return ag::utils::addr_to_str(address.addr());
+        }
+        return address.str();
+    }
+
+    std::string scheme;
+    std::string default_port;
+
+    switch (proto) {
+    case stamp_proto_type::DOH:
+        scheme = "https://";
+        default_port = AG_FMT(":{}", DEFAULT_DOH_PORT);
+        break;
+    case stamp_proto_type::TLS:
+        scheme = "tls://";
+        default_port = AG_FMT(":{}", DEFAULT_DOT_PORT);
+        break;
+    case stamp_proto_type::DOQ:
+        scheme = "quic://";
+        default_port = AG_FMT(":{}", DEFAULT_DOQ_PORT);
+        break;
+    default:
+        assert(0);
+    }
+
+    std::string port;
+    if (!server_addr_str.empty()) {
+        if (server_addr_str.front() == ':') {
+            port = server_addr_str;
+        } else {
+            ag::socket_address address = ag::utils::str_to_socket_address(server_addr_str);
+            port = AG_FMT(":{}", address.port());
+        }
+    }
+    if (port == default_port) {
+        port = "";
+    }
+
+    return AG_FMT("{}{}{}{}", scheme, provider_name, port, path);
+}
+
 } // namespace ag

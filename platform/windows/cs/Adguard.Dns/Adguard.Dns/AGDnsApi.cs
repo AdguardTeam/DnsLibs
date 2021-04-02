@@ -23,7 +23,7 @@ namespace Adguard.Dns
         /// <summary>
         /// The current API version hash with which the ProxyServer was tested
         /// </summary>
-        private const string API_VERSION_HASH = "0eaca830446b24253ac5cac80bb1fcd1b7c638dc699731fe9256785653a8dbd1";
+        private const string API_VERSION_HASH = "ac0c0087d4600446ba7325b26d24ff957cc7a347e004d4e24793325494d91896";
         #endregion
 
         #region API Functions
@@ -452,6 +452,22 @@ namespace Adguard.Dns
             [NativeName("properties")]
             [MarshalAs(UnmanagedType.I4)]
             internal ag_server_informal_properties Properties;
+
+            /// <summary>
+            /// A URL representation of this stamp which can be used
+            /// as a valid ag_upstream_options address
+            /// </summary>
+            [NativeName("pretty_url")]
+            [ManualMarshalPtrToString]
+            internal IntPtr PrettyUrl;
+
+            /// <summary>
+            /// A URL representation of this stamp which is prettier,
+            /// but can NOT be a valid ag_upstream_options address
+            /// </summary>
+            [NativeName("prettier_url")]
+            [ManualMarshalPtrToString]
+            internal IntPtr PrettierUrl;
         };
 
         /// <summary>

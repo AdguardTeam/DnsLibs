@@ -58,6 +58,13 @@ struct server_stamp {
     std::string str() const;
 
     /**
+     * Create a URL representing this stamp that can be used as an upstream URL.
+     * @param pretty_dnscrypt if `true`, return a human-readable "URL" for DNSCrypt stamps,
+     *                        although such URL can't be used as an upstream URL.
+     */
+    std::string pretty_url(bool pretty_dnscrypt) const;
+
+    /**
      * Creates stamp struct from URL
      * @param url URL string
      * @return stamp struct or error

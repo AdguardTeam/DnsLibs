@@ -688,6 +688,8 @@ jobject ag::android_dnsproxy::parse_dnsstamp(JNIEnv *env, jstring stamp_str) {
     auto server_pk_field = env->GetFieldID(clazz, "serverPublicKey", "[B");
     auto props_field = env->GetFieldID(clazz, "properties", "Ljava/util/EnumSet;");
     auto hashes_field = env->GetFieldID(clazz, "hashes", "Ljava/util/ArrayList;");
+    auto pretty_url_field = env->GetFieldID(clazz, "prettyUrl", "Ljava/lang/String;");
+    auto prettier_url_field = env->GetFieldID(clazz, "prettierUrl", "Ljava/lang/String;");
 
     auto dns_stamp = env->NewObject(clazz, ctor);
 
@@ -717,6 +719,9 @@ jobject ag::android_dnsproxy::parse_dnsstamp(JNIEnv *env, jstring stamp_str) {
         }
         env->SetObjectField(dns_stamp, hashes_field, hashes.get());
     }
+
+    env->SetObjectField(dns_stamp, pretty_url_field, m_utils.marshal_string(env, stamp.pretty_url(false)).get());
+    env->SetObjectField(dns_stamp, prettier_url_field, m_utils.marshal_string(env, stamp.pretty_url(true)).get());
 
     return dns_stamp;
 }

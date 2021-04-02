@@ -314,30 +314,34 @@ public class DnsProxyTest {
             put("sdns://AAcAAAAAAAAABzguOC44Ljg",
                 new DnsStamp(DnsStamp.ProtoType.PLAIN, "8.8.8.8:53", "", "", null,
                         EnumSet.of(DnsStamp.InformalProperties.DNSSEC, DnsStamp.InformalProperties.NO_LOG, DnsStamp.InformalProperties.NO_FILTER),
-                        null));
+                        null, "8.8.8.8", "8.8.8.8"));
             // AdGuard DNS (DNSCrypt)
             put("sdns://AQIAAAAAAAAAFDE3Ni4xMDMuMTMwLjEzMDo1NDQzINErR_JS3PLCu_iZEIbq95zkSV2LFsigxDIuUso_OQhzIjIuZG5zY3J5cHQuZGVmYXVsdC5uczEuYWRndWFyZC5jb20",
                 new DnsStamp(DnsStamp.ProtoType.DNSCRYPT, "176.103.130.130:5443", "2.dnscrypt.default.ns1.adguard.com", "",
                         toByteArray("d12b47f252dcf2c2bbf8991086eaf79ce4495d8b16c8a0c4322e52ca3f390873"),
                         EnumSet.of(DnsStamp.InformalProperties.NO_LOG),
-                        null));
+                        null,
+                         "sdns://AQIAAAAAAAAAFDE3Ni4xMDMuMTMwLjEzMDo1NDQzINErR_JS3PLCu_iZEIbq95zkSV2LFsigxDIuUso_OQhzIjIuZG5zY3J5cHQuZGVmYXVsdC5uczEuYWRndWFyZC5jb20",
+                         "dnscrypt://2.dnscrypt.default.ns1.adguard.com"));
             // DoH
             put("sdns://AgcAAAAAAAAACTEyNy4wLjAuMSDDhGvyS56TymQnTA7GfB7MXgJP_KzS10AZNQ6B_lRq5AtleGFtcGxlLmNvbQovZG5zLXF1ZXJ5",
                 new DnsStamp(DnsStamp.ProtoType.DOH, "127.0.0.1:443", "example.com", "/dns-query",
                         null,
                         EnumSet.of(DnsStamp.InformalProperties.DNSSEC, DnsStamp.InformalProperties.NO_LOG, DnsStamp.InformalProperties.NO_FILTER),
-                        Lists.newArrayList(toByteArray("c3846bf24b9e93ca64274c0ec67c1ecc5e024ffcacd2d74019350e81fe546ae4"))));
+                        Lists.newArrayList(toByteArray("c3846bf24b9e93ca64274c0ec67c1ecc5e024ffcacd2d74019350e81fe546ae4")),
+                        "https://example.com/dns-query", "https://example.com/dns-query"));
             // DoT
             put("sdns://AwcAAAAAAAAACTEyNy4wLjAuMSDDhGvyS56TymQnTA7GfB7MXgJP_KzS10AZNQ6B_lRq5AtleGFtcGxlLmNvbQ",
                 new DnsStamp(DnsStamp.ProtoType.TLS, "127.0.0.1:853", "example.com", "",
                         null,
                         EnumSet.of(DnsStamp.InformalProperties.DNSSEC, DnsStamp.InformalProperties.NO_LOG, DnsStamp.InformalProperties.NO_FILTER),
-                        Lists.newArrayList(toByteArray("c3846bf24b9e93ca64274c0ec67c1ecc5e024ffcacd2d74019350e81fe546ae4"))));
+                        Lists.newArrayList(toByteArray("c3846bf24b9e93ca64274c0ec67c1ecc5e024ffcacd2d74019350e81fe546ae4")),
+                        "tls://example.com", "tls://example.com"));
             // Plain (IPv6)
             put("sdns://AAcAAAAAAAAAGltmZTgwOjo2ZDZkOmY3MmM6M2FkOjYwYjhd",
                 new DnsStamp(DnsStamp.ProtoType.PLAIN, "[fe80::6d6d:f72c:3ad:60b8]:53", "", "", null,
                         EnumSet.of(DnsStamp.InformalProperties.DNSSEC, DnsStamp.InformalProperties.NO_LOG, DnsStamp.InformalProperties.NO_FILTER),
-                        null));
+                        null, "fe80::6d6d:f72c:3ad:60b8", "fe80::6d6d:f72c:3ad:60b8"));
         }};
 
         for (Map.Entry<String, DnsStamp> entry : testParams.entrySet()) {

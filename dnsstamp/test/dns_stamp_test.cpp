@@ -240,8 +240,67 @@ TEST_F(dnsstamp_test, test_plain_stamp) {
         (uint64_t)ag::server_informal_properties::NO_LOG |
         (uint64_t)ag::server_informal_properties::NO_FILTER
     };
-    stamp.server_addr_str = "127.0.0.1";
     stamp.proto = ag::stamp_proto_type::PLAIN;
     stamp.server_addr_str = "8.8.8.8";
     test_server_stamp_create(stamp, expected);
+}
+
+TEST_F(dnsstamp_test, test_pretty_url) {
+    struct test_data {
+        std::string_view ugly;
+        std::string_view pretty;
+        bool pretty_dnscrypt = true;
+    };
+    static constexpr test_data data[] = {
+            {
+                    .ugly = "sdns://AAcAAAAAAAAABzguOC44Ljg",
+                    .pretty = "8.8.8.8",
+            },
+            {
+                    .ugly = "sdns://AAcAAAAAAAAAGltmZTgwOjo2ZDZkOmY3MmM6M2FkOjYwYjhd",
+                    .pretty = "fe80::6d6d:f72c:3ad:60b8",
+            },
+            {
+                    .ugly = "sdns://BAAAAAAAAAAABTo3ODQ0AA9kbnMuYWRndWFyZC5jb20",
+                    .pretty = "quic://dns.adguard.com:7844",
+            },
+            {
+                    .ugly = "sdns://BAcAAAAAAAAACTEyNy4wLjAuMSDDhGvyS56TymQnTA7GfB7MXgJP_KzS10AZNQ6B_lRq5AtleGFtcGxlLmNvbQ",
+                    .pretty = "quic://example.com",
+            },
+            {
+                    .ugly = "sdns://AwAAAAAAAAAAAAAPZG5zLmFkZ3VhcmQuY29t",
+                    .pretty = "tls://dns.adguard.com",
+            },
+            {
+                    .ugly = "sdns://AwcAAAAAAAAACTEyNy4wLjAuMSDDhGvyS56TymQnTA7GfB7MXgJP_KzS10AZNQ6B_lRq5AtleGFtcGxlLmNvbQ",
+                    .pretty = "tls://example.com",
+            },
+            {
+                    .ugly = "sdns://AgAAAAAAAAAAAAALZXhhbXBsZS5jb20KL2Rucy1xdWVyeQ",
+                    .pretty = "https://example.com/dns-query",
+            },
+            {
+                    .ugly = "sdns://AgcAAAAAAAAACTEyNy4wLjAuMSDDhGvyS56TymQnTA7GfB7MXgJP_KzS10AZNQ6B_lRq5AtleGFtcGxlLmNvbQovZG5zLXF1ZXJ5",
+                    .pretty = "https://example.com/dns-query",
+            },
+            {
+                    .ugly = "sdns://AgUAAAAAAAAAACAe9iTP_15r07rd8_3b_epWVGfjdymdx-5mdRZvMAzBuQ5kbnMuZ29vZ2xlLmNvbQ0vZXhwZXJpbWVudGFs",
+                    .pretty = "https://dns.google.com/experimental",
+            },
+            {
+                    .ugly = "sdns://AQIAAAAAAAAADzE3Ni4xMDMuMTMwLjEzMCDRK0fyUtzywrv4mRCG6vec5EldixbIoMQyLlLKPzkIcyIyLmRuc2NyeXB0LmRlZmF1bHQubnMxLmFkZ3VhcmQuY29t",
+                    .pretty = "dnscrypt://2.dnscrypt.default.ns1.adguard.com"
+            },
+            {
+                    .ugly = "sdns://AQIAAAAAAAAADzE3Ni4xMDMuMTMwLjEzMCDRK0fyUtzywrv4mRCG6vec5EldixbIoMQyLlLKPzkIcyIyLmRuc2NyeXB0LmRlZmF1bHQubnMxLmFkZ3VhcmQuY29t",
+                    .pretty = "sdns://AQIAAAAAAAAADzE3Ni4xMDMuMTMwLjEzMCDRK0fyUtzywrv4mRCG6vec5EldixbIoMQyLlLKPzkIcyIyLmRuc2NyeXB0LmRlZmF1bHQubnMxLmFkZ3VhcmQuY29t",
+                    .pretty_dnscrypt = false,
+            },
+    };
+    for (auto &d : data) {
+        auto [stamp, error] = ag::server_stamp::from_string(d.ugly);
+        ASSERT_FALSE(error) << *error << " (" << d.ugly << ")";
+        ASSERT_EQ(d.pretty, stamp.pretty_url(d.pretty_dnscrypt));
+    }
 }

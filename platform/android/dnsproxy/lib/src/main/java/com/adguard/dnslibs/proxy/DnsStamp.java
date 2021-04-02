@@ -57,23 +57,40 @@ public class DnsStamp {
         }
     }
 
-    private ProtoType proto; /** Protocol */
-    private String serverAddr; /** Server address */
-    private String providerName; /** Provider name */
-    private String path; /** Path (for DOH) */
-    private byte[] serverPublicKey; /** DNSCrypt provider’s Ed25519 public key */
-    private EnumSet<InformalProperties> properties; /** Server properties */
+    /** Protocol */
+    private ProtoType proto;
+    /** Server address */
+    private String serverAddr;
+    /** Provider name */
+    private String providerName;
+    /** Path (for DOH) */
+    private String path;
+    /** DNSCrypt provider’s Ed25519 public key */
+    private byte[] serverPublicKey;
+    /** Server properties */
+    private EnumSet<InformalProperties> properties;
     /**
      * Hash is the SHA256 digest of one of the TBS certificate found in the validation chain,
      * typically the certificate used to sign the resolver’s certificate. Multiple hashes can
      * be provided for seamless rotations.
      */
     private ArrayList<byte[]> hashes;
+    /**
+     * A URL representation of this stamp which can be used
+     * as a valid {@link com.adguard.dnslibs.proxy.UpstreamSettings} address.
+     */
+    private String prettyUrl;
+    /**
+     * A URL representation of this stamp which is prettier, but can NOT be used
+     * as a valid {@link com.adguard.dnslibs.proxy.UpstreamSettings} address.
+     */
+    private String prettierUrl;
 
     public DnsStamp() {}
 
     public DnsStamp(ProtoType proto, String serverAddr, String providerName, String path,
-                    byte[] serverPublicKey, EnumSet<InformalProperties> properties, ArrayList<byte[]> hashes) {
+                    byte[] serverPublicKey, EnumSet<InformalProperties> properties, ArrayList<byte[]> hashes,
+                    String prettyUrl, String prettierUrl) {
         setProto(proto);
         setServerAddr(serverAddr);
         setProviderName(providerName);
@@ -81,6 +98,8 @@ public class DnsStamp {
         setServerPublicKey(serverPublicKey);
         setProperties(properties);
         setHashes(hashes);
+        setPrettyUrl(prettyUrl);
+        setPrettierUrl(prettierUrl);
     }
 
     public ProtoType getProto() {
@@ -139,6 +158,22 @@ public class DnsStamp {
         this.hashes = hashes;
     }
 
+    public String getPrettyUrl() {
+        return prettyUrl;
+    }
+
+    public void setPrettyUrl(String prettyUrl) {
+        this.prettyUrl = prettyUrl;
+    }
+
+    public String getPrettierUrl() {
+        return prettierUrl;
+    }
+
+    public void setPrettierUrl(String prettierUrl) {
+        this.prettierUrl = prettierUrl;
+    }
+
     @Override
     public boolean equals(Object o) {
         if (this == o) return true;
@@ -150,6 +185,8 @@ public class DnsStamp {
                 Objects.equals(getPath(), dnsStamp.getPath()) &&
                 Arrays.equals(getServerPublicKey(), dnsStamp.getServerPublicKey()) &&
                 Objects.equals(getProperties(), dnsStamp.getProperties()) &&
+                Objects.equals(prettyUrl, dnsStamp.prettyUrl) &&
+                Objects.equals(prettierUrl, dnsStamp.prettierUrl) &&
                 this.hashesEqual(dnsStamp);
     }
 
