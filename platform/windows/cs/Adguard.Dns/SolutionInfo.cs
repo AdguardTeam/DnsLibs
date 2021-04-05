@@ -14,5 +14,5 @@ using System.Runtime.InteropServices;
 [assembly: AssemblyCopyright("Copyright © Adguard Software Ltd 2009-2021")]
 [assembly: AssemblyTrademark("Copyright © Adguard Software Ltd 2021")]
 [assembly: AssemblyCulture("")]
-[assembly: AssemblyVersion("1.5.4")]
-[assembly: AssemblyFileVersion("1.5.4")]
+[assembly: AssemblyVersion("1.5.5")]
+[assembly: AssemblyFileVersion("1.5.5")]
