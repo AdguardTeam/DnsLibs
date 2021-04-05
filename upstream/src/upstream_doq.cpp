@@ -62,6 +62,7 @@ dns_over_quic::~dns_over_quic() {
     }
 }
 
+#if BORINGSSL_API_VERSION < 10
 int dns_over_quic::set_encryption_secrets(SSL *ssl, enum ssl_encryption_level_t ossl_level,
                                           const uint8_t *read_secret,
                                           const uint8_t *write_secret, size_t secret_len) {
@@ -71,6 +72,28 @@ int dns_over_quic::set_encryption_secrets(SSL *ssl, enum ssl_encryption_level_t 
     }
     return 1;
 }
+#else
+int dns_over_quic::set_rx_secret(SSL *ssl, enum ssl_encryption_level_t ossl_level,
+                                      const SSL_CIPHER *cipher,
+                                      const uint8_t *read_secret, size_t secret_len) {
+    auto doq = static_cast<dns_over_quic *>(SSL_get_app_data(ssl));
+    if (doq->on_key(doq->from_ossl_level(ossl_level), read_secret, nullptr, secret_len) != 0) {
+        return 0;
+    }
+    return 1;
+}
+int dns_over_quic::set_tx_secret(SSL *ssl, enum ssl_encryption_level_t ossl_level,
+                                      const SSL_CIPHER *cipher,
+                                      const uint8_t *write_secret, size_t secret_len) {
+    auto doq = static_cast<dns_over_quic *>(SSL_get_app_data(ssl));
+    if (doq->on_key(doq->from_ossl_level(ossl_level), nullptr, write_secret, secret_len) != 0) {
+        return 0;
+    }
+    return 1;
+}
+#endif /** else of BORINGSSL_API_VERSION < 10 */
+
+
 
 int dns_over_quic::add_handshake_data(SSL *ssl, enum ssl_encryption_level_t ossl_level,
                                       const uint8_t *data, size_t len) {
@@ -108,7 +131,12 @@ int dns_over_quic::send_alert(SSL *ssl, enum ssl_encryption_level_t level, uint8
 }
 
 static auto quic_method = SSL_QUIC_METHOD{
+#if BORINGSSL_API_VERSION < 10
         dns_over_quic::set_encryption_secrets,
+#else
+        dns_over_quic::set_rx_secret,
+        dns_over_quic::set_tx_secret,
+#endif
         dns_over_quic::add_handshake_data,
         dns_over_quic::flush_flight,
         dns_over_quic::send_alert,
@@ -766,29 +794,37 @@ int dns_over_quic::on_key(ngtcp2_crypto_level level, const uint8_t *rx_secret,
                           const uint8_t *tx_secret, size_t secretlen) {
     std::array<uint8_t, 64> rx_key{}, rx_iv{}, rx_hp_key{}, tx_key{}, tx_iv{}, tx_hp_key{};
 
-    if (ngtcp2_crypto_derive_and_install_rx_key(
-            m_conn, rx_key.data(), rx_iv.data(), rx_hp_key.data(), level,
-            rx_secret, secretlen) != 0) {
-        return -1;
+    std::string direction;
+    if (rx_secret) {
+        direction += "RX";
+        if (ngtcp2_crypto_derive_and_install_rx_key(
+                m_conn, rx_key.data(), rx_iv.data(), rx_hp_key.data(), level,
+                rx_secret, secretlen) != 0) {
+            return -1;
+        }
     }
-    if (ngtcp2_crypto_derive_and_install_tx_key(
-            m_conn, tx_key.data(), tx_iv.data(), tx_hp_key.data(), level,
-            tx_secret, secretlen) != 0) {
-        return -1;
+
+    if (tx_secret) {
+        direction += "TX";
+        if (ngtcp2_crypto_derive_and_install_tx_key(
+                m_conn, tx_key.data(), tx_iv.data(), tx_hp_key.data(), level,
+                tx_secret, secretlen) != 0) {
+            return -1;
+        }
     }
 
     switch (level) {
     case NGTCP2_CRYPTO_LEVEL_EARLY:
-        dbglog(m_log, "Crypto level: EARLY");
+        dbglog(m_log, "Crypto {} level: EARLY", direction);
         break;
     case NGTCP2_CRYPTO_LEVEL_HANDSHAKE:
-        dbglog(m_log, "Crypto level: HANDSHAKE");
+        dbglog(m_log, "Crypto {} level: HANDSHAKE", direction);
         break;
     case NGTCP2_CRYPTO_LEVEL_APP:
-        dbglog(m_log, "Crypto level: APP");
+        dbglog(m_log, "Crypto {} level: APP", direction);
         break;
     default:
-        dbglog(m_log, "Crypto level: UNKNOWN");
+        dbglog(m_log, "Crypto {} level: UNKNOWN", direction);
         assert(0);
     }
 
