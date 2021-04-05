@@ -36,7 +36,7 @@ ag::dnscrypt::client::client(protocol protocol, bool adjust_payload_size) :
 {}
 
 ag::dnscrypt::client::dial_result ag::dnscrypt::client::dial(std::string_view stamp_str,
-        std::chrono::milliseconds timeout, std::function<bool(int, int)> prepare_fd) const {
+        std::chrono::milliseconds timeout, preparefd_cb prepare_fd) const {
     static constexpr utils::make_error<dial_result> make_error;
     auto[stamp, stamp_err] = ag::server_stamp::from_string(stamp_str);
     if (stamp_err) {
@@ -49,7 +49,7 @@ ag::dnscrypt::client::dial_result ag::dnscrypt::client::dial(std::string_view st
 }
 
 ag::dnscrypt::client::dial_result ag::dnscrypt::client::dial(const server_stamp &stamp,
-        std::chrono::milliseconds timeout, std::function<bool(int, int)> prepare_fd) const {
+        std::chrono::milliseconds timeout, preparefd_cb prepare_fd) const {
     static constexpr utils::make_error<dial_result> make_error;
     server_info local_server_info{};
     if (crypto_box_keypair(local_server_info.m_public_key.data(), local_server_info.m_secret_key.data()) != 0) {
@@ -77,7 +77,7 @@ ag::dnscrypt::client::dial_result ag::dnscrypt::client::dial(const server_stamp 
 
 ag::dnscrypt::client::exchange_result ag::dnscrypt::client::exchange(ldns_pkt &message,
         const server_info &local_server_info, std::chrono::milliseconds timeout,
-        std::function<bool(int, int)> prepare_fd) const {
+        preparefd_cb prepare_fd) const {
     static constexpr utils::make_error<exchange_result> make_error;
     utils::timer timer;
     if (m_adjust_payload_size) {

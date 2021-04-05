@@ -245,11 +245,6 @@ evutil_socket_t dns_over_quic::create_ipv4_socket() {
         warnlog(m_log, "Error creating IPv4 socket: {}", evutil_socket_error_to_string(EVUTIL_SOCKET_ERROR()));
         return -1;
     }
-    if (auto error = bind_socket_to_if(fd, AF_INET)) {
-        warnlog(m_log, "Error binding socket to interface: {}", *error);
-        evutil_closesocket(fd);
-        return -1;
-    }
     return fd;
 }
 
@@ -266,12 +261,6 @@ evutil_socket_t dns_over_quic::create_dual_stack_socket() {
     unsigned int disable = 0;
     if (setsockopt(fd, IPPROTO_IPV6, IPV6_V6ONLY, (char *)&disable, sizeof(disable)) == -1) {
         warnlog(m_log, "Error making socket dual-stack: {}", evutil_socket_error_to_string(evutil_socket_geterror(fd)));
-        evutil_closesocket(fd);
-        return -1;
-    }
-
-    if (auto error = bind_socket_to_if(fd, AF_INET6)) {
-        warnlog(m_log, "Error binding socket to interface: {}", *error);
         evutil_closesocket(fd);
         return -1;
     }
@@ -569,6 +558,10 @@ int dns_over_quic::send_packet_not_connected() {
     ssize_t nwrite = 0;
 
     for (auto it = m_current_addresses.begin(); it != m_current_addresses.end(); ) {
+        if (auto error = bind_socket_to_if(m_sock_state.fd, *it)) {
+            warnlog(m_log, "Failed to bind socket to interface: {}", *error);
+            return NETWORK_ERR_FATAL;
+        }
         nwrite = sendto(m_sock_state.fd, (const char *)m_send_buf.rpos(), (int)m_send_buf.size(),
                             0, it->c_sockaddr(), it->c_socklen());
 
@@ -733,12 +726,17 @@ int dns_over_quic::on_read_not_connected() {
             if (sa != it->socket_family_cast(sa.c_sockaddr()->sa_family)) {
                 it = m_current_addresses.erase(it);
             } else {
+                if (auto error = bind_socket_to_if(m_sock_state.fd, *it)) {
+                    warnlog(m_log, "Failed to bind socket to interface: {}", *error);
+                    return NETWORK_ERR_FATAL;
+                }
                 if (int res = connect(m_sock_state.fd, it->c_sockaddr(), it->c_socklen()); res != 0) {
                     warnlog(m_log, "Can't connect to {}",
                             ag::socket_address((sockaddr *)&su).str().c_str());
                 } else {
                     infolog(m_log, "Connected to {}", ag::socket_address((sockaddr *)&su).str().c_str());
                     m_sock_state.connected = true;
+                    break;
                 }
                 ++it;
             }

@@ -15,6 +15,7 @@ set(SRCS
         ${SRC_DIR}/net_utils.cpp
         ${SRC_DIR}/clock.cpp
         ${SRC_DIR}/cesu8.cpp
+        ${SRC_DIR}/route_resolver.cpp
     )
 
 add_library(dnslibs_common STATIC EXCLUDE_FROM_ALL ${SRCS})

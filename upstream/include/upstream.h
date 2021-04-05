@@ -10,6 +10,7 @@
 #include <ag_defs.h>
 #include <ag_net_consts.h>
 #include <ag_net_utils.h>
+#include <ag_route_resolver.h>
 #include <certificate_verifier.h>
 
 namespace ag {
@@ -27,6 +28,7 @@ static constexpr std::string_view TIMEOUT_STR = "Request timed out";
  */
 struct upstream_factory_config {
     const certificate_verifier *cert_verifier = nullptr;
+    const route_resolver *router = nullptr;
     bool ipv6_available = true;
 };
 
@@ -99,7 +101,7 @@ public:
 
     const upstream_factory_config &config() const { return m_config; }
 
-    const std::chrono::milliseconds rtt() {
+    std::chrono::milliseconds rtt() {
         std::lock_guard<std::mutex> lk(m_rtt.mtx);
         return m_rtt.val;
     }
@@ -121,7 +123,11 @@ protected:
     /** RTT + mutex */
     with_mtx<std::chrono::milliseconds> m_rtt;
 
-    err_string bind_socket_to_if(evutil_socket_t fd, int family);
+    /**
+     * Bind a socket to either the configured interface,
+     * or an interface resolved for `peer`.
+     */
+    err_string bind_socket_to_if(evutil_socket_t fd, const socket_address &peer);
 };
 
 /**

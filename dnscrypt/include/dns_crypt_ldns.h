@@ -62,6 +62,8 @@ create_ldns_buffer_result create_ldns_buffer(const ldns_pkt &request_pkt);
  */
 create_ldns_pkt_result create_ldns_pkt(uint8_t *data, size_t size);
 
+using preparefd_cb = std::function<bool(evutil_socket_t, const ag::socket_address &)>;
+
 /**
  * Send data from buffer to socket address and returns allocated with std::malloc reply data
  * @param timeout Timeout for read/write operations (0 means infinite timeout)
@@ -73,7 +75,7 @@ create_ldns_pkt_result create_ldns_pkt(uint8_t *data, size_t size);
  */
 dns_exchange_allocated_result dns_exchange_allocated(std::chrono::milliseconds timeout,
                                                      const socket_address &socket_address, ldns_buffer &buffer,
-                                                     protocol protocol, std::function<bool(int, int)> prepare_fd);
+                                                     protocol protocol, preparefd_cb prepare_fd);
 
 /**
  * Send data from buffer to socket address and returns ldns packet reply
@@ -86,7 +88,7 @@ dns_exchange_allocated_result dns_exchange_allocated(std::chrono::milliseconds t
  */
 dns_exchange_result dns_exchange_from_ldns_buffer(std::chrono::milliseconds timeout,
                                                   const socket_address &socket_address, ldns_buffer &buffer,
-                                                  protocol protocol, std::function<bool(int, int)> prepare_fd);
+                                                  protocol protocol, preparefd_cb prepare_fd);
 
 /**
  * Send data from packet to socket address and returns ldns packet reply
@@ -99,6 +101,6 @@ dns_exchange_result dns_exchange_from_ldns_buffer(std::chrono::milliseconds time
  */
 dns_exchange_result dns_exchange_from_ldns_pkt(std::chrono::milliseconds timeout, const socket_address &socket_address,
                                                const ldns_pkt &request_pkt, protocol protocol,
-                                               std::function<bool(int, int)> prepare_fd);
+                                               preparefd_cb prepare_fd);
 
 } // namespace ag::dnscrypt

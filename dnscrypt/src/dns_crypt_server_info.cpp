@@ -73,7 +73,7 @@ static const ag::logger &server_info_log() {
 
 ag::dnscrypt::server_info::fetch_result ag::dnscrypt::server_info::fetch_current_dnscrypt_cert(protocol local_protocol,
                                                                    std::chrono::milliseconds timeout,
-                                                                   std::function<bool(int, int)> prepare_fd) {
+                                                                   preparefd_cb prepare_fd) {
     static constexpr utils::make_error<fetch_result> make_error;
     if (m_server_public_key.size() != crypto_sign_PUBLICKEYBYTES) {
         return make_error("Invalid public key length");

@@ -63,17 +63,19 @@ static size_t write_callback(void *contents, size_t size, size_t nmemb, void *ar
     return full_size;
 }
 
-int dns_over_https::sockopt_callback(void *clientp, curl_socket_t curlfd, curlsocktype purpose) {
+curl_socket_t dns_over_https::curl_opensocket(void *clientp, curlsocktype, struct curl_sockaddr *address) {
     auto *self = (ag::dns_over_https *) clientp;
-    // Since we can't determine the socket family on Apple platforms, try both
-    if (auto error = self->bind_socket_to_if(curlfd, AF_INET)) {
-        dbglog(self->log, "Failed to bind socket to interface: {}, trying AF_INET6", *error);
-        if ((error = self->bind_socket_to_if(curlfd, AF_INET6))) {
-            warnlog(self->log, "Failed to bind socket to interface: {}", *error);
-            return CURL_SOCKOPT_ERROR;
-        }
+    curl_socket_t curlfd = socket(address->family, address->socktype, address->protocol);
+    if (curlfd == CURL_SOCKET_BAD) {
+        return CURL_SOCKET_BAD;
     }
-    return CURL_SOCKOPT_OK;
+    ag::socket_address addr{&address->addr};
+    if (auto error = self->bind_socket_to_if(curlfd, addr)) {
+        warnlog(self->log, "Failed to bind socket to interface: {}", *error);
+        evutil_closesocket(curlfd);
+        return CURL_SOCKET_BAD;
+    }
+    return curlfd;
 }
 
 static void curl_share_lockfunc(CURL *, curl_lock_data data, curl_lock_access, void *userptr) {
@@ -133,8 +135,8 @@ CURL *dns_over_https::query_handle::create_curl_handle() {
             || CURLE_OK != (e = curl_easy_setopt(curl, CURLOPT_SSL_VERIFYPEER, false)) // We verify ourselves, see dns_over_https::ssl_callback
             || CURLE_OK != (e = curl_easy_setopt(curl, CURLOPT_SSL_VERIFYHOST, false)) // We verify ourselves, see dns_over_https::ssl_callback
             || CURLE_OK != (e = curl_easy_setopt(curl, CURLOPT_SSL_ENABLE_ALPN, true))
-            || CURLE_OK != (e = curl_easy_setopt(curl, CURLOPT_SOCKOPTFUNCTION, sockopt_callback))
-            || CURLE_OK != (e = curl_easy_setopt(curl, CURLOPT_SOCKOPTDATA, upstream))
+            || CURLE_OK != (e = curl_easy_setopt(curl, CURLOPT_OPENSOCKETFUNCTION, curl_opensocket))
+            || CURLE_OK != (e = curl_easy_setopt(curl, CURLOPT_OPENSOCKETDATA, upstream))
             || CURLE_OK != (e = curl_easy_setopt(curl, CURLOPT_SHARE, get_curl_share()))
             || (upstream->resolved != nullptr
                 && CURLE_OK != (e = curl_easy_setopt(curl, CURLOPT_RESOLVE, upstream->resolved.get())))) {

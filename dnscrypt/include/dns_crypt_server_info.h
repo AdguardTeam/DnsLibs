@@ -7,6 +7,7 @@
 #include <functional>
 #include <ag_defs.h>
 #include <dns_crypt_utils.h>
+#include <dns_crypt_ldns.h>
 
 namespace ag::dnscrypt {
 
@@ -52,7 +53,7 @@ struct server_info {
      * @return Fetch result
      */
     fetch_result fetch_current_dnscrypt_cert(protocol protocol, std::chrono::milliseconds timeout,
-                                             std::function<bool(int, int)> prepare_fd);
+                                             preparefd_cb prepare_fd);
 
     /**
      * Encrypt packet using server info

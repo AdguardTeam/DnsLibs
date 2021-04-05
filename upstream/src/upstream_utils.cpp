@@ -26,7 +26,8 @@ ag::err_string ag::test_upstream(const upstream_options &opts,
         cert_verifier = std::make_unique<ag::default_verifier>();
     }
     bool bootstrap_ipv6 = test_ipv6_connectivity();
-    ag::upstream_factory upstream_factory({cert_verifier.get(), bootstrap_ipv6});
+    auto router = ag::route_resolver::create();
+    ag::upstream_factory upstream_factory({cert_verifier.get(), router.get(), bootstrap_ipv6});
     auto[upstream_ptr, upstream_err] = upstream_factory.create_upstream(opts);
     if (upstream_err) {
         return upstream_err;

@@ -599,8 +599,10 @@ std::pair<bool, err_string> dns_forwarder::init(const dnsproxy_settings &setting
         this->cert_verifier = std::make_shared<default_verifier>();
     }
 
+    this->router = ag::route_resolver::create();
+
     infolog(log, "Initializing upstreams...");
-    upstream_factory us_factory({ this->cert_verifier.get(), this->settings->ipv6_available});
+    upstream_factory us_factory({ this->cert_verifier.get(), this->router.get(), this->settings->ipv6_available});
     this->upstreams.reserve(settings.upstreams.size());
     this->fallbacks.reserve(settings.fallbacks.size());
     for (const upstream_options &options : settings.upstreams) {
@@ -651,11 +653,12 @@ std::pair<bool, err_string> dns_forwarder::init(const dnsproxy_settings &setting
 
         std::thread prefixes_discovery_thread([uss = settings.dns64->upstreams,
                                                verifier = this->cert_verifier,
+                                               router = this->router,
                                                prefixes = this->dns64_prefixes,
                                                logger = this->log,
                                                max_tries = settings.dns64->max_tries,
                                                wait_time = settings.dns64->wait_time]() {
-                upstream_factory us_factory({ verifier.get() });
+                upstream_factory us_factory({ .cert_verifier = verifier.get(), .router = router.get() });
                 auto i = max_tries;
                 while (i--) {
                     std::this_thread::sleep_for(wait_time);

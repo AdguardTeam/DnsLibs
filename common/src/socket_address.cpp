@@ -110,6 +110,14 @@ ag::uint8_view ag::socket_address::addr() const {
     }
 }
 
+ag::uint8_view ag::socket_address::addr_unmapped() const {
+    if (!is_ipv4_mapped()) {
+        return addr();
+    }
+    auto *addr = (uint8_t *) &((const sockaddr_in6 *) &m_ss)->sin6_addr;
+    return {addr + std::size(IPV4_MAPPED_PREFIX), ipv4_address_size};
+}
+
 ag::ip_address_variant ag::socket_address::addr_variant() const {
     switch (m_ss.ss_family) {
     case AF_INET: {

@@ -8,6 +8,7 @@
 #include "upstream_dot.h"
 #include "upstream_doq.h"
 #include "upstream_plain.h"
+#include <ag_route_resolver.h>
 #include <ag_utils.h>
 #include <ag_logger.h>
 #include <dns_stamp.h>
@@ -178,11 +179,16 @@ ag::upstream_factory::create_result ag::upstream_factory::create_upstream(const 
     return result;
 }
 
-ag::err_string ag::upstream::bind_socket_to_if(evutil_socket_t fd, int family) {
+ag::err_string ag::upstream::bind_socket_to_if(evutil_socket_t fd, const socket_address &peer) {
     if (uint32_t *if_index = std::get_if<uint32_t>(&m_options.outbound_interface)) {
-        return ag::utils::bind_socket_to_if(fd, family, *if_index);
+        return ag::utils::bind_socket_to_if(fd, peer.c_sockaddr()->sa_family, *if_index);
     } else if (std::string *if_name = std::get_if<std::string>(&m_options.outbound_interface)) {
-        return ag::utils::bind_socket_to_if(fd, family, if_name->c_str());
+        return ag::utils::bind_socket_to_if(fd, peer.c_sockaddr()->sa_family, if_name->c_str());
     }
-    return {};
+    if (m_config.router) {
+        if (auto index = m_config.router->resolve(peer)) {
+            return ag::utils::bind_socket_to_if(fd, peer.c_sockaddr()->sa_family, *index);
+        }
+    }
+    return std::nullopt;
 }

@@ -69,7 +69,7 @@ private:
     /** TCP connection pool */
     tcp_pool m_pool;
 
-    static int prepare_fd(int fd, int family, void *arg);
+    static int prepare_fd(int fd, const sockaddr *peer, void *arg);
 };
 
 } // namespace ag

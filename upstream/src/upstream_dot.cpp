@@ -86,7 +86,8 @@ ag::connection_pool::get_result ag::dns_over_tls::tls_pool::create() {
     add_pending_connection(connection);
     bufferevent_setpreparecb(bev, [](int fd, const struct sockaddr *sa, int salen, void *ctx) {
         auto *self = (tls_pool *) ctx;
-        if (auto error = self->m_upstream->bind_socket_to_if(fd, sa->sa_family)) {
+        ag::socket_address addr{sa};
+        if (auto error = self->m_upstream->bind_socket_to_if(fd, addr)) {
             warnlog(self->m_upstream->m_log, "Failed to bind socket to interface: {}", *error);
             return 0;
         }

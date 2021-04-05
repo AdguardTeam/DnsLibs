@@ -33,7 +33,8 @@ static ag::upstream_factory::create_result create_upstream(const ag::upstream_op
     }};
 #endif
     static bool ipv6_available = ag::test_ipv6_connectivity();
-    static ag::upstream_factory upstream_factory({&cert_verifier, ipv6_available});
+    static auto router = ag::route_resolver::create();
+    static ag::upstream_factory upstream_factory({&cert_verifier, router.get(), ipv6_available});
     return upstream_factory.create_upstream(opts);
 }
 

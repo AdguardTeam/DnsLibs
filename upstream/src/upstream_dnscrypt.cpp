@@ -69,10 +69,9 @@ ag::upstream_dnscrypt::setup_result ag::upstream_dnscrypt::setup_impl() {
     if (std::scoped_lock l(m_guard);
             !m_impl || m_impl->server_info.get_server_cert().not_after < now) {
         ag::dnscrypt::client client;
-        auto[dial_server_info, dial_rtt, dial_err] = client.dial(m_stamp, this->m_options.timeout,
-                                                                 [this](int fd, int family) {
-                                                                     return prepare_fd(fd, family);
-                                                                 });
+        auto[dial_server_info, dial_rtt, dial_err] = client.dial(
+                m_stamp, this->m_options.timeout,
+                [this](int fd, const ag::socket_address &peer) { return prepare_fd(fd, peer); });
         if (dial_err) {
             return { rtt,
                 AG_FMT("Failed to fetch certificate info from {} with error: {}", this->m_options.address, *dial_err) };
@@ -105,8 +104,8 @@ ag::upstream_dnscrypt::exchange_result ag::upstream_dnscrypt::apply_exchange(ldn
     return {std::move(udp_reply), std::move(udp_reply_err)};
 }
 
-bool ag::upstream_dnscrypt::prepare_fd(int fd, int family) {
-    if (auto error = bind_socket_to_if(fd, family)) {
+bool ag::upstream_dnscrypt::prepare_fd(int fd, const socket_address &peer) {
+    if (auto error = bind_socket_to_if(fd, peer)) {
         warnlog(m_log, "Failed to bind socket to interface: {}", *error);
         return false;
     }

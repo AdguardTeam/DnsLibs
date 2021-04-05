@@ -95,9 +95,10 @@ ag::plain_dns::exchange_result ag::plain_dns::exchange(ldns_pkt *request_pkt) {
     return {ldns_pkt_ptr(reply_pkt), std::nullopt};
 }
 
-int ag::plain_dns::prepare_fd(int fd, int family, void *arg) {
+int ag::plain_dns::prepare_fd(int fd, const sockaddr *peer, void *arg) {
     auto *self = (plain_dns *) arg;
-    if (auto error = self->bind_socket_to_if(fd, family)) {
+    ag::socket_address addr{peer};
+    if (auto error = self->bind_socket_to_if(fd, addr)) {
         warnlog(self->m_log, "Failed to bind socket to interface: {}", *error);
         return 0;
     }
@@ -119,7 +120,7 @@ ag::connection_pool::get_result ag::tcp_pool::create() {
     add_pending_connection(connection);
     bufferevent_setpreparecb(bev, [](int fd, const struct sockaddr *sa, int salen, void *ctx) {
         auto *self = (tcp_pool *) ctx;
-        return plain_dns::prepare_fd(fd, sa->sa_family, self->m_upstream);
+        return plain_dns::prepare_fd(fd, sa, self->m_upstream);
     }, this);
     bufferevent_socket_connect(bev, m_address.c_sockaddr(), m_address.c_socklen());
     return { std::move(connection), std::chrono::seconds(0), std::nullopt };

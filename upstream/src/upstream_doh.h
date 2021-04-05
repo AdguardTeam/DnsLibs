@@ -69,7 +69,7 @@ private:
         dns_over_https *upstream, socket_handle *socket_data);
     static void on_event_timeout(evutil_socket_t fd, short kind, void *arg);
     static void on_socket_event(evutil_socket_t fd, short kind, void *arg);
-    static int sockopt_callback(void *clientp, curl_socket_t curlfd, curlsocktype purpose);
+    static curl_socket_t curl_opensocket(void *clientp, curlsocktype purpose, struct curl_sockaddr *address);
 
     static void submit_request(evutil_socket_t, short, void *arg);
     static void defy_requests(evutil_socket_t, short, void *arg);

@@ -53,6 +53,11 @@ public:
     uint8_view addr() const;
 
     /**
+     * @return If this is an IPv4-mapped address, return the IPv4 address bytes, otherwise, same as `addr()`
+     */
+    uint8_view addr_unmapped() const;
+
+    /**
      * @return IP address variant
      */
     ip_address_variant addr_variant() const;
