@@ -9,7 +9,8 @@
 using namespace ag;
 using namespace std::chrono;
 
-static constexpr uint8_t DQ_ALPN[] = {0x07, 'd', 'o', 'q', '-', 'i', '0', '0'};
+static constexpr uint8_t DQ_ALPN_I00[] = {0x07, 'd', 'o', 'q', '-', 'i', '0', '0'};
+static constexpr uint8_t DQ_ALPN_I02[] = {0x07, 'd', 'o', 'q', '-', 'i', '0', '2'};
 static constexpr int LOCAL_IDLE_TIMEOUT_SEC = 180;
 
 #undef  NEVER
@@ -599,16 +600,18 @@ int dns_over_quic::init_ssl() {
     SSL_set_tlsext_host_name(m_ssl, m_server_name.c_str());
     SSL_set_connect_state(m_ssl);
 
-    const uint8_t *alpn = nullptr;
-    size_t alpnlen;
-    switch (m_version) {
-    case NGTCP2_PROTO_VER:
-        alpn = DQ_ALPN;
-        alpnlen = sizeof(DQ_ALPN);
-        break;
+    uint8_view alpn;
+    if (m_version == AGNGTCP2_PROTO_VER_I00) {
+        alpn = uint8_view(DQ_ALPN_I00, sizeof(DQ_ALPN_I00));
+    } else if (m_version == AGNGTCP2_PROTO_VER_I02) {
+        alpn = uint8_view(DQ_ALPN_I02, sizeof(DQ_ALPN_I02));
     }
-    if (alpn) {
-        SSL_set_alpn_protos(m_ssl, alpn, alpnlen);
+    if (!alpn.empty()) {
+        std::string tmp((char *)alpn.data() + 1, alpn.size() - 1);
+        dbglog(m_log, "Selected ALPN: {}", tmp.c_str());
+        SSL_set_alpn_protos(m_ssl, alpn.data(), alpn.size());
+    } else {
+        dbglog(m_log, "Selected ALPN: unknown");
     }
 
     m_tls_session_cache.prepare_ssl(m_ssl);
@@ -965,7 +968,12 @@ int dns_over_quic::reinit() {
     ngtcp2_settings settings;
     ngtcp2_settings_default(&settings);
     ag_ngtcp2_settings_default(settings);
-    m_version = NGTCP2_PROTO_VER;
+    if (m_port == 784) {
+        // https://tools.ietf.org/html/draft-ietf-dprive-dnsoquic-02#section-10.2.1
+        m_version = AGNGTCP2_PROTO_VER_I00;
+    } else {
+        m_version = AGNGTCP2_PROTO_VER_I02;
+    }
 
     RAND_bytes(m_static_secret.data(), m_static_secret.size());
     auto generate_cid = [](ngtcp2_cid &cid, size_t len) {

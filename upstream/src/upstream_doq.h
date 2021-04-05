@@ -33,8 +33,12 @@ namespace ag {
 
 class dns_over_quic : public upstream {
 public:
-    static constexpr auto DEFAULT_PORT = 784;
+    static constexpr auto DEFAULT_PORT = 8853;
     static constexpr std::string_view SCHEME = "quic://";
+    enum proto_version {
+        AGNGTCP2_PROTO_VER_I00 = 0xff00001du,
+        AGNGTCP2_PROTO_VER_I02 = 0xff000020u,
+    };
 
     /**
      * @param opts upstream settings
@@ -186,7 +190,7 @@ private:
     std::vector<ag::socket_address> m_current_addresses;
     ngtcp2_conn_callbacks m_callbacks{};
     size_t m_max_pktlen;
-    uint32_t m_version{NGTCP2_PROTO_VER};
+    proto_version m_version;
     buffer m_send_buf;
     SSL_CTX *m_ssl_ctx{nullptr};
     SSL *m_ssl{nullptr};

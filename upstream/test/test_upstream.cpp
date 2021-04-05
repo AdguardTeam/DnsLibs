@@ -378,7 +378,7 @@ static const upstream_test_data test_upstreams_data[]{
     },
     {
         // AdGuard DNS (DNS-over-QUIC)
-        "quic://dns.adguard.com:784",
+        "quic://dns.adguard.com:8853",
         {"8.8.8.8:53"}
     },
     {
@@ -540,7 +540,7 @@ TEST_F(upstream_test, DISABLED_doq_easy_test) {
         using namespace std::chrono_literals;
         using namespace concat_err_string;
         static const ag::upstream_options opts{
-                .address = "quic://dns.adguard.com:784",
+                .address = "quic://dns.adguard.com:8853",
                 .bootstrap = { "8.8.8.8" },
                 .timeout = 5s
         };

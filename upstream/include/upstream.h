@@ -41,7 +41,7 @@ struct upstream_options {
      *     tls://1.1.1.1 -- DNS-over-TLS
      *     https://dns.adguard.com/dns-query -- DNS-over-HTTPS
      *     sdns://... -- DNS stamp (see https://dnscrypt.info/stamps-specifications)
-     *     quic://dns.adguard.com:784 -- DNS-over-QUIC
+     *     quic://dns.adguard.com:8853 -- DNS-over-QUIC
      */
     std::string address;
 

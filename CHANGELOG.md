@@ -1,6 +1,9 @@
 # Changelog
 
 ## V1.5
+* [Feature] DNS-over-QUIC default port changed. New port is 8853.
+    Now an address like `quic://dns.adguard.com` is transformed into `quic://dns.adguard.com:8853`
+    So to force the use of the old port `784` specify it strictly - `quic://dns.adguard.com:784`.
 * [Feature] Allow retrieving the library version
     * see `ag::dnsproxy::version()`
     * see `AGDnsProxy.libraryVersion` (Apple)
