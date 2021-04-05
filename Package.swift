@@ -2,7 +2,7 @@
 import PackageDescription
 
 let package = Package(
-  name: "Setapp",
+  name: "AGDnsProxy",
   platforms: [
     .iOS("10.0"), .macOS("10.12")
   ],
