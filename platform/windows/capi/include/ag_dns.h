@@ -40,6 +40,7 @@ typedef struct {
      *     tls://dns.adguard.com -- DNS-over-TLS
      *     https://dns.adguard.com/dns-query -- DNS-over-HTTPS
      *     sdns://... -- DNS stamp (see https://dnscrypt.info/stamps-specifications)
+     *     quic://dns.adguard.com:8853 -- DNS-over-QUIC
      */
     const char *address;
 
@@ -127,6 +128,10 @@ typedef struct {
     ARRAY_OF(ag_upstream_options) upstreams;
     /** List of fallback upstreams, which will be used if none of the usual upstreams respond */
     ARRAY_OF(ag_upstream_options) fallbacks;
+    /** Redirect requests with dns suffixes only to fallbacks or not */
+    bool handle_dns_suffixes;
+    /** DNS suffixes list */
+    ARRAY_OF(const char *) dns_suffixes;
     /** (Optional) DNS64 prefix discovery settings */
     ag_dns64_settings *dns64;
     /** TTL of a blocking response */

@@ -130,6 +130,8 @@
 //                                                                id:42
 //                                             outboundInterfaceName:nil]]
         fallbacks: nil
+        handleDNSSuffixes: YES
+        userDNSSuffixes: nil
         filters: filters
         blockedResponseTtlSecs: 0
         dns64Settings: nil
@@ -140,7 +142,8 @@
         customBlockingIpv4: nil
         customBlockingIpv6: nil
         dnsCacheSize: 128
-        optimisticCache: YES];
+        optimisticCache: YES
+        helperPath: nil];
 
     AGDnsProxyEvents *events = [[AGDnsProxyEvents alloc] init];
     events.onRequestProcessed = ^(const AGDnsRequestProcessedEvent *event) {

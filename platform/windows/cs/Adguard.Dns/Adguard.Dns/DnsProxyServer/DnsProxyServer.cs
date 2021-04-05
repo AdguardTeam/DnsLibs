@@ -1,16 +1,22 @@
 using System;
 using System.Collections.Generic;
+using System.Net.NetworkInformation;
 using Adguard.Dns.Api.DnsProxyServer.Callbacks;
 using Adguard.Dns.Api.DnsProxyServer.Configs;
 using Adguard.Dns.Helpers;
 using Adguard.Dns.Logging;
 using AdGuard.Utils.Interop;
+using Microsoft.Win32;
 
 namespace Adguard.Dns.DnsProxyServer
 {
     // ReSharper disable InconsistentNaming
     internal class DnsProxyServer : IDnsProxyServer, IDisposable
     {
+
+        private const string TCP_SETTINGS_SUB_KEY = @"System\CurrentControlSet\Services\Tcpip\Parameters";
+        private const string SEARCHLIST = "SearchList";
+
         private static readonly ILog LOG = LogProvider.For<DnsProxyServer>();
         private IntPtr m_pCallbackConfigurationC;
         private IntPtr m_pProxyServer;
@@ -32,7 +38,7 @@ namespace Adguard.Dns.DnsProxyServer
         /// (<seealso cref="IDnsProxyServerCallbackConfiguration"/>)</param>
         /// <exception cref="NotSupportedException">Thrown if current API version is not supported</exception>
         internal DnsProxyServer(
-            DnsProxySettings dnsProxySettings, 
+            DnsProxySettings dnsProxySettings,
             IDnsProxyServerCallbackConfiguration callbackConfiguration)
         {
             lock (m_SyncRoot)
@@ -61,11 +67,17 @@ namespace Adguard.Dns.DnsProxyServer
                     LOG.Info("DnsProxyServer is already started, doing nothing");
                     return;
                 }
-                
+
                 Queue<IntPtr> allocatedPointers = new Queue<IntPtr>();
                 try
                 {
-                    AGDnsApi.ag_dnsproxy_settings dnsProxySettingsC = 
+                    if (m_DnsProxySettings.HandleDNSSuffixes)
+                    {
+                        List<string> systemSuffixes = GetSystemDNSSuffixes();
+                        m_DnsProxySettings.UserDNSSuffixes.AddRange(systemSuffixes);
+                    }
+
+                    AGDnsApi.ag_dnsproxy_settings dnsProxySettingsC =
                         DnsApiConverter.ToNativeObject(m_DnsProxySettings, allocatedPointers);
                     m_callbackConfigurationC = DnsApiConverter.ToNativeObject(m_CallbackConfiguration, this);
 
@@ -128,7 +140,7 @@ namespace Adguard.Dns.DnsProxyServer
                 }
             }
         }
-        
+
         /// <summary>
         /// Gets the current DNS proxy settings as a <see cref="DnsProxySettings"/> object
         /// </summary>
@@ -146,13 +158,14 @@ namespace Adguard.Dns.DnsProxyServer
                     LOG.Info("DnsProxyServer is not started, doing nothing");
                     return null;
                 }
-            
-                DnsProxySettings currentDnsProxySettings = 
-                    GetDnsProxySettings(() => AGDnsApi.ag_dnsproxy_get_settings(m_pProxyServer));
+
+                IntPtr pSettings = AGDnsApi.ag_dnsproxy_get_settings(m_pProxyServer);
+                DnsProxySettings currentDnsProxySettings =
+                    GetDnsProxySettings(pSettings);
                 return currentDnsProxySettings;
             }
         }
-        
+
         /// <summary>
         /// Gets the default DNS proxy settings as a <see cref="DnsProxySettings"/> object
         /// </summary>
@@ -163,30 +176,29 @@ namespace Adguard.Dns.DnsProxyServer
         public static DnsProxySettings GetDefaultDnsProxySettings()
         {
             LOG.Info("Get default DnsProxyServer settings");
-            DnsProxySettings defaultDnsProxySettings = 
-                GetDnsProxySettings(AGDnsApi.ag_dnsproxy_settings_get_default);
+            IntPtr pSettings = AGDnsApi.ag_dnsproxy_settings_get_default();
+            DnsProxySettings defaultDnsProxySettings =
+                GetDnsProxySettings(pSettings);
             return defaultDnsProxySettings;
         }
-        
+
         /// <summary>
         /// Gets the DNS proxy settings,
-        /// according to the specified <see cref="getDnsProxySettingsFunction"/> -
-        /// native method for getting DNS proxy settings
+        /// according to the specified <see cref="pCurrentDnsProxySettings"/>
         /// </summary>
-        /// <param name="getDnsProxySettingsFunction">Delegate for getting DNs proxy settings
+        /// <param name="pCurrentDnsProxySettings">DNS proxy settings
         /// (<seealso cref="Func{TResult}"/>)</param>
         /// <exception cref="InvalidOperationException">Thrown,
         /// if cannot get the DNS proxy settings via native method</exception>
         /// <returns>The <see cref="DnsProxySettings"/> object</returns>
-        private static DnsProxySettings GetDnsProxySettings(Func<IntPtr> getDnsProxySettingsFunction)
+        private static DnsProxySettings GetDnsProxySettings(IntPtr pCurrentDnsProxySettings)
         {
             LOG.Info("Get DNS proxy settings settings");
-            IntPtr pCurrentDnsProxySettings = getDnsProxySettingsFunction();
             if (pCurrentDnsProxySettings == IntPtr.Zero)
             {
                 throw new InvalidOperationException("Cannot get the DNS proxy settings");
             }
-                
+
             AGDnsApi.ag_dnsproxy_settings currentDnsProxySettingsC =
                 MarshalUtils.PtrToStructure<AGDnsApi.ag_dnsproxy_settings>(pCurrentDnsProxySettings);
             DnsProxySettings currentDnsProxySettings = DnsApiConverter.FromNativeObject(currentDnsProxySettingsC);
@@ -219,10 +231,68 @@ namespace Adguard.Dns.DnsProxyServer
                 {
                     return;
                 }
-            
+
                 MarshalUtils.SafeFreeHGlobal(m_pCallbackConfigurationC);
                 m_pCallbackConfigurationC = IntPtr.Zero;
             }
+        }
+
+        private List<string> GetSystemDNSSuffixes()
+        {
+            LOG.Info("Start getting the DNS suffixes");
+            List<string> ret = new List<string>();
+
+            // Getting DHCP suffixes
+            NetworkInterface[] adapters = NetworkInterface.GetAllNetworkInterfaces();
+            foreach (NetworkInterface adapter in adapters)
+            {
+                IPInterfaceProperties properties = adapter.GetIPProperties();
+                string suffix = properties.DnsSuffix;
+                if (suffix.Length < 2)
+                {
+                    continue;
+                }
+
+                ret.Add(suffix);
+            }
+
+            // Getting suffixes from System Settings
+            try
+            {
+                using (RegistryKey reg = Registry.LocalMachine.OpenSubKey(TCP_SETTINGS_SUB_KEY))
+                {
+                    if (reg == null)
+                    {
+                        LOG.InfoFormat("Cannot open {0}", TCP_SETTINGS_SUB_KEY);
+                        return ret;
+                    }
+
+                    string searchList = reg.GetValue(SEARCHLIST) as string;
+                    if (searchList == null)
+                    {
+                        LOG.InfoFormat("Cannot get {0} value", SEARCHLIST);
+                        return ret;
+                    }
+
+                    string[] searchListArr = searchList.Split(',');
+                    foreach (string suffix in searchListArr)
+                    {
+                        if (suffix.Length < 2)
+                        {
+                            continue;
+                        }
+
+                        ret.Add(suffix);
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                throw new InvalidOperationException("error while getting the DNS suffixes", ex);
+            }
+
+            LOG.Info("Finished getting the DNS suffixes");
+            return ret;
         }
     }
 }

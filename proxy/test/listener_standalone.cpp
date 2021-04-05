@@ -5,8 +5,27 @@
 #include <thread>
 #include <atomic>
 
+#ifdef __MACH__
+#include <resolv.h>
+#endif
+
 static_assert(std::atomic_bool::is_always_lock_free, "Atomic bools are not always lock-free");
 static std::atomic_bool keep_running{true};
+
+std::vector<std::string> get_system_dns_suffixes() {
+    std::vector<std::string> ret;
+#ifdef __MACH__
+    struct __res_state resState = {0};
+    res_ninit(&resState);
+    for (int i = 0; i < MAXDNSRCH; ++i) {
+        if (resState.dnsrch[i]) {
+            ret.emplace_back(resState.dnsrch[i]);
+        }
+    }
+    res_nclose(&resState);
+#endif
+    return ret;
+}
 
 static void sigint_handler(int signal) {
     assert(signal == SIGINT);
@@ -27,6 +46,10 @@ int main() {
             {address, port, ag::listener_protocol::UDP, persistent, idle_timeout},
             {address, port, ag::listener_protocol::TCP, persistent, idle_timeout},
     };
+
+    settings.handle_dns_suffixes = true;
+    settings.fallbacks = {{ .address = "1.1.1.1:53", .id = 1 }};
+    settings.dns_suffixes = get_system_dns_suffixes();
 
     ag::dnsproxy proxy;
     auto [ret, err] = proxy.init(settings, {});

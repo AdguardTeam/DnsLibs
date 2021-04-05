@@ -23,7 +23,7 @@ namespace Adguard.Dns
         /// <summary>
         /// The current API version hash with which the ProxyServer was tested
         /// </summary>
-        private const string API_VERSION_HASH = "a4331962238501fbce977acbd8ce5797ea145228329dd9e583739a25c239399c";
+        private const string API_VERSION_HASH = "e33015cacfd2f234268bc1319546590412a97a5361f94ad85f6d7e27cb0a3081";
         #endregion
 
         #region API Functions
@@ -214,6 +214,7 @@ namespace Adguard.Dns
             /// tls://1.1.1.1 -- DNS-over-TLS
             /// https://dns.adguard.com/dns-query -- DNS-over-HTTPS
             /// sdns://... -- DNS stamp (see https://dnscrypt.info/stamps-specifications)
+            /// quic://dns.adguard.com:8853 -- DNS-over-QUIC
             /// (<seealso cref="ManualMarshalPtrToStringAttribute"/>)
             /// </summary>
             [ManualMarshalPtrToString]
@@ -313,6 +314,21 @@ namespace Adguard.Dns
             /// </summary>
             [MarshalAs(UnmanagedType.Struct)]
             internal MarshalUtils.ag_list fallbacks;
+
+            /// <summary>
+            /// Redirect requests with dns suffixes only to fallbacks or not
+            /// If `true` dnslibs will collect system DNS suffixes
+            /// </summary>
+            [MarshalAs(UnmanagedType.I1)]
+            [NativeName("handle_dns_suffixes")]
+            internal bool HandleDNSSuffixes;
+
+            /// <summary>
+            /// DNS suffixes list
+            /// </summary>
+            [MarshalAs(UnmanagedType.Struct)]
+            [NativeName("dns_suffixes")]
+            internal MarshalUtils.ag_list UserDNSSuffixes;
 
             /// <summary>
             /// Pointer to the DNS64 settings

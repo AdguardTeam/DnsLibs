@@ -13,7 +13,7 @@ namespace Adguard.Dns.Tests.TestApi
         {
             Assert.DoesNotThrow(AGDnsApi.ValidateApi);
         }
-        
+
         [Test]
         public void TestGetDefaultSettings()
         {
@@ -25,7 +25,7 @@ namespace Adguard.Dns.Tests.TestApi
             Assert.IsNotNull(defaultDnsProxySettings.EngineParams);
             Assert.IsNotNull(defaultDnsProxySettings.Dns64);
         }
-        
+
         [Test]
         public void TestGetCurrentDnsProxySettings()
         {
@@ -40,6 +40,7 @@ namespace Adguard.Dns.Tests.TestApi
             Assert.IsNotNull(currentDnsProxySettings);
             Assert.IsNotNull(currentDnsProxySettings.Upstreams);
             Assert.IsNotNull(currentDnsProxySettings.Fallbacks);
+            Assert.IsNotNull(currentDnsProxySettings.UserDNSSuffixes);
             Assert.IsNotNull(currentDnsProxySettings.Listeners);
             Assert.IsNotNull(currentDnsProxySettings.EngineParams);
             Assert.IsNotNull(currentDnsProxySettings.Dns64);

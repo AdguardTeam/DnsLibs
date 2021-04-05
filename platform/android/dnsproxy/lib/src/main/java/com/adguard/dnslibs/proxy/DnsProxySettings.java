@@ -46,6 +46,8 @@ public class DnsProxySettings {
 
     private List<UpstreamSettings> upstreams = new ArrayList<>();
     private List<UpstreamSettings> fallbacks = new ArrayList<>();
+    private boolean handleDNSSuffixes;
+    private List<String> userDNSSuffixes = new ArrayList<>();
     private Dns64Settings dns64;
     private long blockedResponseTtlSecs;
     private List<FilterParams> filterParams = new ArrayList<>();
@@ -144,6 +146,35 @@ public class DnsProxySettings {
      */
     public void setFallbacks(List<UpstreamSettings> fallbacks) {
         this.fallbacks = new ArrayList<>(fallbacks);
+    }
+
+    /**
+     * @return Redirect requests with dns suffixes only to fallbacks or not.
+     */
+    public boolean isHandleDNSSuffixes() {
+        return handleDNSSuffixes;
+    }
+
+    /**
+     * @param handle Setup handleDNSSuffixes mode.
+     *               If `true` dnslibs will collect system DNS suffixes
+     */
+    public void setHandleDNSSuffixes(boolean handle) {
+        this.handleDNSSuffixes = handle;
+    }
+
+    /**
+     * @return User DNS suffixes list.
+     */
+    public List<String> getUserDNSSuffixes() {
+        return userDNSSuffixes;
+    }
+
+    /**
+     * @param dnsSuffixes DNS suffixes list.
+     */
+    public void setUserDNSSuffixes(List<String> dnsSuffixes) {
+        this.userDNSSuffixes = new ArrayList<>(dnsSuffixes);
     }
 
     /**
@@ -265,6 +296,8 @@ public class DnsProxySettings {
                 blockIpv6 == that.blockIpv6 &&
                 Objects.equals(upstreams, that.upstreams) &&
                 Objects.equals(fallbacks, that.fallbacks) &&
+                handleDNSSuffixes == that.handleDNSSuffixes &&
+                userDNSSuffixes.equals(that.userDNSSuffixes) &&
                 Objects.equals(dns64, that.dns64) &&
                 Objects.equals(filterParams, that.filterParams) &&
                 Objects.equals(listeners, that.listeners) &&
@@ -277,9 +310,9 @@ public class DnsProxySettings {
 
     @Override
     public int hashCode() {
-        return Objects.hash(upstreams, fallbacks, dns64, blockedResponseTtlSecs, filterParams, listeners,
-                ipv6Available, blockIpv6, blockingMode, customBlockingIpv4, customBlockingIpv6, dnsCacheSize,
-                optimisticCache);
+        return Objects.hash(upstreams, fallbacks, handleDNSSuffixes, userDNSSuffixes, dns64, blockedResponseTtlSecs,
+                filterParams, listeners, ipv6Available, blockIpv6, blockingMode, customBlockingIpv4, customBlockingIpv6,
+                dnsCacheSize, optimisticCache);
     }
 
     /**

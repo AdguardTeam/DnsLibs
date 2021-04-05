@@ -80,7 +80,7 @@ if (NOT TARGET dnsproxy)
     add_subdirectory(${DNS_LIBS_DIR}/proxy ${CMAKE_BINARY_DIR}/proxy)
 endif ()
 
-target_link_libraries(AGDnsProxy dnsproxy)
+target_link_libraries(AGDnsProxy dnsproxy resolv)
 
 if (APPLE)
     target_link_libraries(AGDnsProxy "-framework Foundation" "-framework CoreFoundation" "-framework NetworkExtension")

@@ -1,5 +1,7 @@
 package com.adguard.dnslibs.proxy;
 
+import android.content.Context;
+
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -42,27 +44,37 @@ public class DnsProxy implements Closeable {
 
     /**
      * Initializes the DNS proxy.
-     * @param settings The settings. Not {@code null}.
+     * @param context app context.
+     * @param settings the settings. Not {@code null}.
      * @throws NullPointerException if {@code settings == null}.
      * @throws RuntimeException     if the proxy could not initialize.
      */
-    public DnsProxy(DnsProxySettings settings) {
-        this(settings, null);
+    public DnsProxy(Context context, DnsProxySettings settings) {
+        this(context, settings, null);
     }
 
     /**
      * Initializes the DNS proxy.
+     * @param context  app context.
      * @param settings the settings. Not {@code null}.
      * @param events   the event callback. May be {@code null}.
      * @throws NullPointerException if {@code settings == null}.
      * @throws RuntimeException     if the proxy could not initialize.
      */
-    public DnsProxy(DnsProxySettings settings, DnsProxyEvents events) throws RuntimeException {
+    public DnsProxy(Context context, DnsProxySettings settings, DnsProxyEvents events) throws RuntimeException {
         this();
         try {
             if (settings == null) {
                 throw new NullPointerException("settings");
             }
+
+            if (settings.isHandleDNSSuffixes()) {
+                List<String> systemDnsSuffixes = DnsNetworkUtils.getSystemDnsSuffixes(context);
+                if (systemDnsSuffixes != null) {
+                    settings.getUserDNSSuffixes().addAll(systemDnsSuffixes);
+                }
+            }
+
             if (!init(nativePtr, settings, new EventsAdapter(events))) {
                 throw new RuntimeException("Failed to initialize the native proxy, see log for details.");
             }

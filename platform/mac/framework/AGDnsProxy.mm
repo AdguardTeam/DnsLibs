@@ -1,6 +1,7 @@
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
+#include <resolv.h>
 #include <cassert>
 
 #import "AGDnsProxy.h"
@@ -442,6 +443,13 @@ static NSData *create_response_packet_v6(const struct iphdr6 *ip6_header,
         [fallbacks addObject: [[AGDnsUpstream alloc] initWithNative: &us]];
     }
     _fallbacks = fallbacks;
+    _handleDNSSuffixes = settings->handle_dns_suffixes;
+    NSMutableArray<NSString *> *userDNSSuffixes =
+            [[NSMutableArray alloc] initWithCapacity: settings->dns_suffixes.size()];
+    for (const std::string &cur : settings->dns_suffixes) {
+        [userDNSSuffixes addObject: convert_string(cur)];
+    }
+    _userDNSSuffixes = userDNSSuffixes;
     _filters = nil;
     _blockedResponseTtlSecs = settings->blocked_response_ttl_secs;
     if (settings->dns64.has_value()) {
@@ -465,6 +473,8 @@ static NSData *create_response_packet_v6(const struct iphdr6 *ip6_header,
 
 - (instancetype) initWithUpstreams: (NSArray<AGDnsUpstream *> *) upstreams
         fallbacks: (NSArray<AGDnsUpstream *> *) fallbacks
+        handleDNSSuffixes: (BOOL) handleDNSSuffixes
+        userDNSSuffixes: (NSArray<NSString *> *) userDNSSuffixes
         filters: (NSArray<AGDnsFilterParams *> *) filters
         blockedResponseTtlSecs: (NSInteger) blockedResponseTtlSecs
         dns64Settings: (AGDns64Settings *) dns64Settings
@@ -484,6 +494,8 @@ static NSData *create_response_packet_v6(const struct iphdr6 *ip6_header,
         _upstreams = upstreams;
     }
     _fallbacks = fallbacks;
+    _handleDNSSuffixes = handleDNSSuffixes;
+    _userDNSSuffixes = userDNSSuffixes;
     _filters = filters;
     if (blockedResponseTtlSecs != 0) {
         _blockedResponseTtlSecs = blockedResponseTtlSecs;
@@ -506,6 +518,8 @@ static NSData *create_response_packet_v6(const struct iphdr6 *ip6_header,
     if (self) {
         _upstreams = [coder decodeObjectForKey:@"_upstreams"];
         _fallbacks = [coder decodeObjectForKey:@"_fallbacks"];
+        _handleDNSSuffixes = [coder decodeBoolForKey:@"_handleDNSSuffixes"];
+        _userDNSSuffixes = [coder decodeObjectForKey:@"_userDNSSuffixes"];
         _filters = [coder decodeObjectForKey:@"_filters"];
         _blockedResponseTtlSecs = [coder decodeInt64ForKey:@"_blockedResponseTtlSecs"];
         _dns64Settings = [coder decodeObjectForKey:@"_dns64Settings"];
@@ -526,6 +540,8 @@ static NSData *create_response_packet_v6(const struct iphdr6 *ip6_header,
 - (void)encodeWithCoder:(NSCoder *)coder {
     [coder encodeObject:self.upstreams forKey:@"_upstreams"];
     [coder encodeObject:self.fallbacks forKey:@"_fallbacks"];
+    [coder encodeBool:self.handleDNSSuffixes forKey:@"_handleDNSSuffixes"];
+    [coder encodeObject:self.userDNSSuffixes forKey:@"_userDNSSuffixes"];
     [coder encodeObject:self.filters forKey:@"_filters"];
     [coder encodeInt64:self.blockedResponseTtlSecs forKey:@"_blockedResponseTtlSecs"];
     [coder encodeObject:self.dns64Settings forKey:@"_dns64Settings"];
@@ -773,6 +789,23 @@ static std::vector<ag::upstream_options> convert_upstreams(NSArray<AGDnsUpstream
     return converted;
 }
 
+static std::vector<std::string> get_system_dns_suffixes() {
+    std::vector<std::string> ret;
+
+    struct __res_state resState = {0};
+    res_ninit(&resState);
+
+    for (int i = 0; i < MAXDNSRCH; ++i) {
+        if (resState.dnsrch[i] && strlen(resState.dnsrch[i]) > 1) {
+            ret.emplace_back(resState.dnsrch[i]);
+        }
+    }
+
+    res_nclose(&resState);
+
+    return ret;
+}
+
 #if !TARGET_OS_IPHONE
 
 typedef struct {
@@ -912,6 +945,18 @@ static int bindFd(NSString *helperPath, NSString *address, NSNumber *port, AGLis
     ag::dnsproxy_settings settings = ag::dnsproxy_settings::get_default();
     settings.upstreams = convert_upstreams(config.upstreams);
     settings.fallbacks = convert_upstreams(config.fallbacks);
+
+    settings.handle_dns_suffixes = config.handleDNSSuffixes;
+    if (config.handleDNSSuffixes) {
+        // Getting system DNS suffixes
+        settings.dns_suffixes = get_system_dns_suffixes();
+        // Adding user's suffixes
+        if (config.userDNSSuffixes) {
+            for (NSString *suffix in config.userDNSSuffixes) {
+                settings.dns_suffixes.emplace_back([suffix UTF8String]);
+            }
+        }
+    }
 
     settings.blocked_response_ttl_secs = config.blockedResponseTtlSecs;
 

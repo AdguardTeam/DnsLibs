@@ -392,6 +392,8 @@ ag::dnsproxy_settings ag::android_dnsproxy::marshal_settings(JNIEnv *env,
     auto dns64_field = env->GetFieldID(clazz, "dns64", "L" FQN_DNS64_SETTINGS ";");
     auto upstreams_field = env->GetFieldID(clazz, "upstreams", "Ljava/util/List;");
     auto fallbacks_field = env->GetFieldID(clazz, "fallbacks", "Ljava/util/List;");
+    auto handle_dns_suffixes_field = env->GetFieldID(clazz, "handleDNSSuffixes", "Z");
+    auto dns_suffixes_field = env->GetFieldID(clazz, "userDNSSuffixes", "Ljava/util/List;");
     auto listeners_field = env->GetFieldID(clazz, "listeners", "Ljava/util/List;");
     auto filter_params_field = env->GetFieldID(clazz, "filterParams", "Ljava/util/List;");
     auto ipv6_avail_field = env->GetFieldID(clazz, "ipv6Available", "Z");
@@ -415,6 +417,15 @@ ag::dnsproxy_settings ag::android_dnsproxy::marshal_settings(JNIEnv *env,
     if (local_ref fallbacks{env, env->GetObjectField(java_dnsproxy_settings, fallbacks_field)}) {
         m_utils.iterate(env, fallbacks.get(), [&](local_ref<jobject> &&java_upstream_settings) {
             settings.fallbacks.push_back(marshal_upstream(env, java_upstream_settings.get()));
+        });
+    }
+
+    settings.handle_dns_suffixes = env->GetBooleanField(java_dnsproxy_settings, handle_dns_suffixes_field);
+    if (local_ref dns_suffixes{env, env->GetObjectField(java_dnsproxy_settings, dns_suffixes_field)}) {
+        m_utils.iterate(env, dns_suffixes.get(), [&](local_ref<jobject> &&java_str) {
+            m_utils.visit_string(env, java_str.get(), [&](const char *str, jsize len) {
+                settings.dns_suffixes.emplace_back(str, len); // Copy
+            });
         });
     }
 
@@ -465,6 +476,8 @@ ag::local_ref<jobject> ag::android_dnsproxy::marshal_settings(JNIEnv *env, const
     auto dns64_field = env->GetFieldID(clazz, "dns64", "L" FQN_DNS64_SETTINGS ";");
     auto upstreams_field = env->GetFieldID(clazz, "upstreams", "Ljava/util/List;");
     auto fallbacks_field = env->GetFieldID(clazz, "fallbacks", "Ljava/util/List;");
+    auto handle_dns_suffixes_field = env->GetFieldID(clazz, "handleDNSSuffixes", "Z");
+    auto dns_suffixes_field = env->GetFieldID(clazz, "userDNSSuffixes", "Ljava/util/List;");
     auto listeners_field = env->GetFieldID(clazz, "listeners", "Ljava/util/List;");
     auto filter_params_field = env->GetFieldID(clazz, "filterParams", "Ljava/util/List;");
     auto ipv6_avail_field = env->GetFieldID(clazz, "ipv6Available", "Z");
@@ -492,6 +505,13 @@ ag::local_ref<jobject> ag::android_dnsproxy::marshal_settings(JNIEnv *env, const
     if (local_ref fallbacks{env, env->GetObjectField(java_settings, fallbacks_field)}) {
         for (auto &upstream : settings.fallbacks) {
             m_utils.collection_add(env, fallbacks.get(), marshal_upstream(env, upstream).get());
+        }
+    }
+
+    env->SetBooleanField(java_settings, handle_dns_suffixes_field, (jboolean) settings.handle_dns_suffixes);
+    if (local_ref dns_suffixes{env, env->GetObjectField(java_settings, dns_suffixes_field)}) {
+        for (auto &cur : settings.dns_suffixes) {
+            m_utils.collection_add(env, dns_suffixes.get(), m_utils.marshal_string(env, cur).get());
         }
     }
 

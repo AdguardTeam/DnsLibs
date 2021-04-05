@@ -63,6 +63,11 @@ namespace Adguard.Dns.Helpers
                 ToNativeObject,
                 allocatedPointers);
 
+            MarshalUtils.ag_list dnsSuffixesC = MarshalUtils.ListToAgList(
+                dnsProxySettings.UserDNSSuffixes,
+                MarshalUtils.StringToPtr,
+                allocatedPointers);
+
             IntPtr pDns64C = IntPtr.Zero;
             if (dnsProxySettings.Dns64 != null)
             {
@@ -83,6 +88,7 @@ namespace Adguard.Dns.Helpers
                 pDns64 = pDns64C,
                 FilterParams = filterEngineParamsC,
                 listeners = listenersC,
+                UserDNSSuffixes = dnsSuffixesC,
             };
 
             MarshalUtils.CopyPropertiesToFields(dnsProxySettings, ref dnsProxySettingsC);
@@ -227,6 +233,10 @@ namespace Adguard.Dns.Helpers
                 dnsProxySettingsC.fallbacks,
                 FromNativeObject);
 
+            List<string> dnsSuffixes = MarshalUtils.AgListToList<IntPtr, string>(
+                dnsProxySettingsC.UserDNSSuffixes,
+                MarshalUtils.PtrToString);
+
             Dns64Settings dns64 = FromNativeObject(dnsProxySettingsC.pDns64);
             EngineParams engineParams = FromNativeObject(dnsProxySettingsC.FilterParams);
             List<ListenerSettings> listeners =
@@ -237,6 +247,7 @@ namespace Adguard.Dns.Helpers
             {
                 Upstreams = upstreams,
                 Fallbacks = fallbacks,
+                UserDNSSuffixes = dnsSuffixes,
                 Dns64 = dns64,
                 EngineParams = engineParams,
                 Listeners = listeners,

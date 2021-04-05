@@ -76,6 +76,7 @@ typedef void (^logCallback)(const char *msg, int length);
  *      tls://1.1.1.1 -- DNS-over-TLS
  *      https://dns.adguard.com/dns-query -- DNS-over-HTTPS
  *      sdns://... -- DNS stamp (see https://dnscrypt.info/stamps-specifications)
+ *      quic://dns.adguard.com:8853 -- DNS-over-QUIC
  */
 @property(nonatomic, readonly) NSString *address;
 /**
@@ -215,6 +216,15 @@ typedef void (^logCallback)(const char *msg, int length);
  */
 @property(nonatomic, readonly) NSArray<AGDnsUpstream *> *fallbacks;
 /**
+ * Redirect requests with dns suffixes only to fallbacks or not
+ * If `true` dnslibs will collect system DNS suffixes
+ */
+@property(nonatomic, readonly) BOOL handleDNSSuffixes;
+/**
+ * Just user's DNS suffixes list
+ */
+@property(nonatomic, readonly) NSArray<NSString *> *userDNSSuffixes;
+/**
  * Filters
  */
 @property(nonatomic, readonly) NSArray<AGDnsFilterParams *> *filters;
@@ -265,6 +275,8 @@ typedef void (^logCallback)(const char *msg, int length);
 
 - (instancetype) initWithUpstreams: (NSArray<AGDnsUpstream *> *) upstreams
         fallbacks: (NSArray<AGDnsUpstream *> *) fallbacks
+        handleDNSSuffixes: (BOOL) handleDNSSuffixes
+        userDNSSuffixes: (NSArray<NSString *> *) userDNSSuffixes
         filters: (NSArray<AGDnsFilterParams *> *) filters
         blockedResponseTtlSecs: (NSInteger) blockedResponseTtlSecs
         dns64Settings: (AGDns64Settings *) dns64Settings

@@ -216,6 +216,9 @@ static ag_dnsproxy_settings *marshal_settings(const ag::dnsproxy_settings &setti
     c_settings->upstreams.data = marshal_upstreams(settings.upstreams);
     c_settings->fallbacks.size = settings.fallbacks.size();
     c_settings->fallbacks.data = marshal_upstreams(settings.fallbacks);
+    c_settings->handle_dns_suffixes = settings.handle_dns_suffixes;
+    c_settings->dns_suffixes.size = settings.dns_suffixes.size();
+    c_settings->dns_suffixes.data = (const char **) marshal_strs(settings.dns_suffixes);
     c_settings->filter_params = marshal_engine_params(settings.filter_params);
     c_settings->listeners.size = settings.listeners.size();
     c_settings->listeners.data = marshal_listeners(settings.listeners);
@@ -232,6 +235,10 @@ void ag_dnsproxy_settings_free(ag_dnsproxy_settings *settings) {
     std::free((void *) settings->custom_blocking_ipv4);
     free_upstreams(settings->upstreams.data, settings->upstreams.size);
     free_upstreams(settings->fallbacks.data, settings->fallbacks.size);
+    for (size_t i = 0; i < settings->dns_suffixes.size; ++i) {
+        ag_str_free(settings->dns_suffixes.data[i]);
+    }
+    std::free(settings->dns_suffixes.data);
     free_dns64(settings->dns64);
     free_listeners(settings->listeners.data, settings->listeners.size);
     free_filters(settings->filter_params.filters.data, settings->filter_params.filters.size);
@@ -336,6 +343,11 @@ static ag::dnsproxy_settings marshal_settings(const ag_dnsproxy_settings *c_sett
     }
     settings.upstreams = marshal_upstreams(c_settings->upstreams.data, c_settings->upstreams.size);
     settings.fallbacks = marshal_upstreams(c_settings->fallbacks.data, c_settings->fallbacks.size);
+    settings.handle_dns_suffixes = c_settings->handle_dns_suffixes;
+    settings.dns_suffixes.reserve(c_settings->dns_suffixes.size);
+    for (size_t i = 0; i < c_settings->dns_suffixes.size; ++i) {
+        settings.dns_suffixes.emplace_back(c_settings->dns_suffixes.data[i]);
+    }
     settings.listeners = marshal_listeners(c_settings->listeners.data, c_settings->listeners.size);
     settings.filter_params.filters = marshal_filters(c_settings->filter_params.filters.data,
                                                      c_settings->filter_params.filters.size);
@@ -472,7 +484,7 @@ ag_parse_dns_stamp_result *ag_parse_dns_stamp(const char *stamp_str) {
         c_result->stamp.server_public_key = marshal_buffer({ key.data(), key.size() });
     }
     if (const auto &hashes = stamp.hashes; !hashes.empty()) {
-        c_result->stamp.hashes = { (ag_buffer *)std::malloc(hashes.size() * sizeof(ag_buffer)), (uint32_t) hashes.size() };
+        c_result->stamp.hashes = { (ag_buffer *)std::malloc(hashes.size() * sizeof(ag_buffer)), (uint32_t)hashes.size() };
         for (size_t i = 0; i < hashes.size(); ++i) {
             const auto &h = hashes[i];
             c_result->stamp.hashes.data[i] = marshal_buffer({ h.data(), h.size() });

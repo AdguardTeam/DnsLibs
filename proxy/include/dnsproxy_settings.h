@@ -61,6 +61,14 @@ struct dnsproxy_settings {
     std::vector<upstream_options> upstreams; // DNS upstreams settings list
     std::vector<upstream_options> fallbacks; // Fallback DNS upstreams settings list
 
+    /**
+     * Enable handling dns suffixes.
+     * If `true` then dnslibs will redirect requests with system dns suffixes
+     * and user's dns suffixes only to fallbacks
+     */
+    bool handle_dns_suffixes = false;
+    std::vector<std::string> dns_suffixes;
+
     std::optional<dns64_settings> dns64; // DNS64 settings
 
     uint32_t blocked_response_ttl_secs; // TTL of the record for the blocked domains (in seconds)

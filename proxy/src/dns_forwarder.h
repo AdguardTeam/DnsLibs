@@ -60,7 +60,7 @@ private:
     static void async_request_worker(uv_work_t *);
     static void async_request_finalizer(uv_work_t *, int);
 
-    upstream_exchange_result do_upstream_exchange(ldns_pkt *request);
+    upstream_exchange_result do_upstream_exchange(std::string_view normalized_domain, ldns_pkt *request);
 
     cache_result create_response_from_cache(const std::string &key, const ldns_pkt *request);
 
@@ -92,6 +92,7 @@ private:
     const dnsproxy_events *events = nullptr;
     std::vector<upstream_ptr> upstreams;
     std::vector<upstream_ptr> fallbacks;
+    std::vector<std::string> dns_suffixes;
     dnsfilter filter;
     dnsfilter::handle filter_handle = nullptr;
     dns64::prefixes dns64_prefixes;
@@ -105,6 +106,7 @@ private:
         dns_forwarder *forwarder{};
         ldns_pkt_ptr request;
         std::string cache_key;
+        std::string normalized_domain; // domain name without dot in the end
 
         async_request() {
             work.data = this;

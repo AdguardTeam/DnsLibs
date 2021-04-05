@@ -23,6 +23,17 @@ namespace Adguard.Dns.Api.DnsProxyServer.Configs
         public List<UpstreamOptions> Fallbacks { get; set; }
 
         /// <summary>
+        /// Redirect requests with dns suffixes only to fallbacks or not
+        /// If `true` dnslibs will collect system DNS suffixes
+        /// </summary>
+        public bool HandleDNSSuffixes { get; set; }
+
+        /// <summary>
+        /// DNS suffixes list
+        /// </summary>
+        public List<string> UserDNSSuffixes { get; set; }
+
+        /// <summary>
         /// DNS64 settings.
         /// If <code>null</code>, DNS64 is disabled
         /// (<seealso cref="Dns64Settings"/>)
@@ -85,7 +96,8 @@ namespace Adguard.Dns.Api.DnsProxyServer.Configs
         /// <summary>
         /// Enable optimistic DNS caching
         /// </summary>
-        public bool OptimisticCache;
+        public bool OptimisticCache { get; set; }
+
         #region Equals members
 
         public override bool Equals(object obj)
@@ -112,6 +124,8 @@ namespace Adguard.Dns.Api.DnsProxyServer.Configs
         {
             return CollectionUtils.ListsEquals(Upstreams, other.Upstreams) &&
                    CollectionUtils.ListsEquals(Fallbacks, other.Fallbacks) &&
+                   HandleDNSSuffixes == other.HandleDNSSuffixes &&
+                   CollectionUtils.ListsEquals(UserDNSSuffixes, other.UserDNSSuffixes) &&
                    Equals(Dns64, other.Dns64) &&
                    BlockedResponseTtlSec == other.BlockedResponseTtlSec &&
                    Equals(EngineParams, other.EngineParams) &&
@@ -121,7 +135,8 @@ namespace Adguard.Dns.Api.DnsProxyServer.Configs
                    BlockingMode == other.BlockingMode &&
                    CustomBlockingIpv4 == other.CustomBlockingIpv4 &&
                    CustomBlockingIpv6 == other.CustomBlockingIpv6 &&
-                   DnsCacheSize == other.DnsCacheSize;
+                   DnsCacheSize == other.DnsCacheSize &&
+                   OptimisticCache == other.OptimisticCache;
         }
 
         public override int GetHashCode()
@@ -130,6 +145,8 @@ namespace Adguard.Dns.Api.DnsProxyServer.Configs
             {
                 int hashCode = (Upstreams != null ? Upstreams.Count : 0);
                 hashCode = (hashCode * 397) ^ (Fallbacks != null ? Fallbacks.Count : 0);
+                hashCode = (hashCode * 397) ^ HandleDNSSuffixes.GetHashCode();
+                hashCode = (hashCode * 397) ^ (UserDNSSuffixes != null ? UserDNSSuffixes.Count : 0);
                 hashCode = (hashCode * 397) ^ (Dns64 != null ? Dns64.GetHashCode() : 0);
                 hashCode = (hashCode * 397) ^ BlockedResponseTtlSec.GetHashCode();
                 hashCode = (hashCode * 397) ^ (EngineParams != null ? EngineParams.GetHashCode() : 0);
@@ -140,6 +157,7 @@ namespace Adguard.Dns.Api.DnsProxyServer.Configs
                 hashCode = (hashCode * 397) ^ (CustomBlockingIpv4 != null ? CustomBlockingIpv4.GetHashCode() : 0);
                 hashCode = (hashCode * 397) ^ (CustomBlockingIpv6 != null ? CustomBlockingIpv6.GetHashCode() : 0);
                 hashCode = (hashCode * 397) ^ DnsCacheSize.GetHashCode();
+                hashCode = (hashCode * 397) ^ OptimisticCache.GetHashCode();
                 return hashCode;
             }
         }

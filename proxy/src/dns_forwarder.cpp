@@ -10,7 +10,6 @@
 
 #include <ldns/ldns.h>
 
-
 #define errlog_id(l_, pkt_, fmt_, ...) errlog((l_), "[{}] " fmt_, ldns_pkt_id(pkt_), ##__VA_ARGS__)
 #define errlog_fid(l_, pkt_, fmt_, ...) errlog((l_), "[{}] {} " fmt_, ldns_pkt_id(pkt_), __func__, ##__VA_ARGS__)
 #define warnlog_id(l_, pkt_, fmt_, ...) warnlog((l_), "[{}] " fmt_, ldns_pkt_id(pkt_), ##__VA_ARGS__)
@@ -633,6 +632,23 @@ std::pair<bool, err_string> dns_forwarder::init(const dnsproxy_settings &setting
     }
     infolog(log, "Upstreams initialized");
 
+    if (settings.handle_dns_suffixes) {
+        infolog(log, "Initializing handling dns suffixes...");
+        dns_suffixes.reserve(settings.dns_suffixes.size());
+        for (auto cur : settings.dns_suffixes) {
+            if (cur.length() < 2) {
+                dbglog(log, "Too short suffix, skip");
+                continue;
+            }
+            if (cur[0] != '.') {
+                cur.insert(0, ".");
+            }
+            dns_suffixes.emplace_back(cur);
+            infolog(log, "Added suffix: {}", cur);
+        }
+        infolog(log, "Handling dns suffixes initialized, size of container: {}", dns_suffixes.size());
+    }
+
     infolog(log, "Initializing the filtering module...");
     auto [handle, err_or_warn] = filter.create(settings.filter_params);
     if (!handle) {
@@ -933,6 +949,11 @@ std::vector<uint8_t> dns_forwarder::handle_message(uint8_view message) {
     auto domain = allocated_ptr<char>(ldns_rdf2str(ldns_rr_owner(question)));
     event.domain = domain.get();
 
+    std::string_view normalized_domain = domain.get();
+    if (ldns_dname_str_absolute(domain.get())) {
+        normalized_domain.remove_suffix(1); // drop trailing dot
+    }
+
     std::string cache_key = get_cache_key(request);
     cache_result cached = create_response_from_cache(cache_key, request);
 
@@ -950,6 +971,7 @@ std::vector<uint8_t> dns_forwarder::handle_message(uint8_view message) {
                 task.forwarder = this;
                 task.request = std::move(req_holder);
                 task.cache_key = std::move(cache_key);
+                task.normalized_domain = normalized_domain;
                 uv_queue_work(nullptr, &task.work, async_request_worker, async_request_finalizer);
             }
         }
@@ -973,18 +995,14 @@ cached_response_expired:
         return raw_response;
     }
 
-    std::string_view pure_domain = domain.get();
-    if (ldns_dname_str_absolute(domain.get())) {
-        pure_domain.remove_suffix(1); // drop trailing dot
-    }
-    tracelog_fid(log, request, "Query domain: {}", pure_domain);
+    tracelog_fid(log, request, "Query domain: {}", normalized_domain);
 
     std::vector<dnsfilter::rule> effective_rules;
 
     // IPv6 blocking
     if (this->settings->block_ipv6 && LDNS_RR_TYPE_AAAA == type) {
         ldns_pkt_rcode rc = LDNS_RCODE_NOERROR;
-        auto raw_blocking_response = apply_filter(pure_domain, request, nullptr, event, effective_rules, false, &rc);
+        auto raw_blocking_response = apply_filter(normalized_domain, request, nullptr, event, effective_rules, false, &rc);
         if (!raw_blocking_response || rc == LDNS_RCODE_NOERROR) {
             dbglog_fid(log, request, "AAAA DNS query blocked because IPv6 blocking is enabled");
             ldns_pkt_ptr response(create_soa_response(request, this->settings, SOA_RETRY_IPV6_BLOCK));
@@ -994,11 +1012,11 @@ cached_response_expired:
         return *raw_blocking_response;
     }
 
-    if (auto raw_blocking_response = apply_filter(pure_domain, request, nullptr, event, effective_rules)) {
+    if (auto raw_blocking_response = apply_filter(normalized_domain, request, nullptr, event, effective_rules)) {
         return *raw_blocking_response;
     }
 
-    auto [response, err_str, selected_upstream] = do_upstream_exchange(request);
+    auto [response, err_str, selected_upstream] = do_upstream_exchange(normalized_domain, request);
     if (!response) {
         response = ldns_pkt_ptr(create_servfail_response(request));
         log_packet(log, response.get(), "Server failure response");
@@ -1141,11 +1159,27 @@ std::optional<uint8_vector> dns_forwarder::apply_filter(std::string_view hostnam
     return raw_response;
 }
 
-upstream_exchange_result dns_forwarder::do_upstream_exchange(ldns_pkt *request) {
-    assert(this->upstreams.size() + this->fallbacks.size());
+upstream_exchange_result dns_forwarder::do_upstream_exchange(std::string_view normalized_domain, ldns_pkt *request) {
+    bool use_only_fallbacks = false;
+    for (auto &cur : dns_suffixes) {
+        assert(cur[0] == '.');
+        if (ag::utils::ends_with(normalized_domain, cur)) {
+            tracelog(log, "Request matched with dns suffix {}, using only fallbacks", cur);
+            use_only_fallbacks = true;
+            break;
+        }
+    }
+
+    std::vector<std::vector<upstream_ptr> *> v;
+    if (!use_only_fallbacks) {
+        v.emplace_back(&upstreams);
+    }
+    v.emplace_back(&fallbacks);
+
+    assert(upstreams.size() + fallbacks.size());
     upstream *cur_upstream;
     std::string err_str;
-    for (auto *upstream_vector : { &this->upstreams, &this->fallbacks }) {
+    for (auto upstream_vector : v) {
         std::vector<upstream *> sorted_upstreams;
         sorted_upstreams.reserve(upstream_vector->size());
         for (auto &u : *upstream_vector) {
@@ -1189,10 +1223,11 @@ void dns_forwarder::async_request_worker(uv_work_t *work) {
     auto *self = task->forwarder;
     auto *req = task->request.get();
     const std::string &key = task->cache_key;
+    const std::string &normalized_domain = task->normalized_domain;
 
     dbglog_id(self->log, req, "Starting async upstream exchange for {}", key);
 
-    auto [res, err, upstream] = self->do_upstream_exchange(req);
+    auto [res, err, upstream] = self->do_upstream_exchange(normalized_domain, req);
     if (!res) {
         dbglog_id(self->log, req, "Async upstream exchange failed: {}, removing entry from cache", *err);
         std::unique_lock l(self->response_cache.mtx);
