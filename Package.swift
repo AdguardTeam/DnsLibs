@@ -12,7 +12,7 @@ let package = Package(
   targets: [
     .binaryTarget(
       name: "AGDnsProxy",
-      url: "https://github.com/sfionov/DnsLibs/releases/download/1.5.5/AGDnsProxy-1.5.5.zip",
+      url: "https://github.com/sfionov/DnsLibs/releases/download/v1.5.5/AGDnsProxy-apple-1.5.5.zip",
       checksum: "57ad4fa555df6ffd30e29849fd4c230962e39751e885ac573d24902b5c4a113c"
     ),
   ]
