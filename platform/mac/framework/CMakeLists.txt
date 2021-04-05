@@ -9,11 +9,12 @@ set(EFFECTIVE_PLATFORM $ENV{EFFECTIVE_PLATFORM_NAME})
 
 if (EFFECTIVE_PLATFORM STREQUAL "-iphonesimulator")
     set(CMAKE_OSX_SYSROOT iphonesimulator)
+    set(CMAKE_ASM_FLAGS "-arch ${CMAKE_SYSTEM_PROCESSOR}")
 
     set(INFOPLIST_FILE "${CMAKE_CURRENT_SOURCE_DIR}/Info.plist.ios")
 elseif ("${TARGET_OS}" STREQUAL "macos")
     set(CMAKE_OSX_DEPLOYMENT_TARGET "10.12" CACHE STRING "Minimum macOS deployment version")
-    set(CMAKE_ASM_FLAGS "-mmacosx-version-min=10.12")
+    set(CMAKE_ASM_FLAGS "-mmacosx-version-min=10.12 -arch ${CMAKE_SYSTEM_PROCESSOR}")
 
     set(INFOPLIST_FILE "${CMAKE_CURRENT_SOURCE_DIR}/Info.plist.macos")
 elseif ("${TARGET_OS}" STREQUAL "ios")

@@ -110,10 +110,11 @@ done
 
 
 function build_target() {
-    local 'target_name' 'target_os' 'build_dir' 'cmake_opt'
+    local 'target_name' 'target_os' 'build_dir' 'cmake_opt' 'target_arch'
 
     target_name=$1
-    target_os=$2
+    target_os=${2%-*}
+    target_arch=${2#*-}
     build_dir=$3
 
     echo "Building ${target_name}..."
@@ -123,7 +124,7 @@ function build_target() {
     pwd
 
     if [ ! -f "${build_dir}/CMakeCache.txt" ]; then
-        cp "${FRAMEWORK_DIR}/cmake-cache-${target_os}.txt" "${build_dir}/CMakeCache.txt"
+        cp "${FRAMEWORK_DIR}/cmake-cache-${target_os}-${target_arch}.txt" "${build_dir}/CMakeCache.txt"
     fi
 
     if [ "${target_os}" == "ios" ] && [ -z ${IPHONEOS_DEPLOYMENT_TARGET+x} ]; then
@@ -142,7 +143,7 @@ function build_target() {
 
     cmake_opt="-DCMAKE_BUILD_TYPE=${BUILD_TYPE} -GNinja"
     cmake_opt="${cmake_opt} -DCMAKE_XCODE_ATTRIBUTE_DEBUG_INFORMATION_FORMAT=\"dwarf-with-dsym\""
-    cmake_opt="${cmake_opt} -DTARGET_OS:STRING=${target_os}"
+    cmake_opt="${cmake_opt} -DTARGET_OS:STRING=${target_os} -DCMAKE_OSX_ARCHITECTURES=${target_arch} -DCMAKE_SYSTEM_PROCESSOR=${target_arch}"
 
     cmake ${cmake_opt} ${FRAMEWORK_DIR}
     if [ $? != 0 ]; then
@@ -166,7 +167,7 @@ if [ ! -z ${TARGET_OS+x} ] && [ "${TARGET_OS}" != "all" ]
 then
     build_target "${TARGET_NAME}" "${TARGET_OS}" "${BUILD_DIR}"
 else
-    targets=( macos ios iphonesimulator )
+    targets=( macos-x86_64 macos-arm64 ios-arm64 iphonesimulator-x86_64 iphonesimulator-arm64 )
     for i in "${!targets[@]}"
     do
         target=${targets[$i]}
@@ -175,8 +176,20 @@ else
 
     rm -rf "${BUILD_DIR}/${TARGET_NAME}.xcframework"
     rm -rf "${BUILD_DIR}/${TARGET_NAME}.dSYMs"
+    rm -rf "${BUILD_DIR}/framework-macos"
+    rm -rf "${BUILD_DIR}/framework-iphonesimulator"
+
+    mkdir -p "${BUILD_DIR}/framework-macos"
+    cp -Rf "${BUILD_DIR}/framework-macos-x86_64/AGDnsProxy.framework" "${BUILD_DIR}/framework-macos/"
+    rm "${BUILD_DIR}"/framework-macos/AGDnsProxy.framework/Versions/A/AGDnsProxy
+    lipo -create -output "${BUILD_DIR}"/framework-macos{,-x86_64,-arm64}/AGDnsProxy.framework/Versions/A/AGDnsProxy
+    mkdir -p "${BUILD_DIR}/framework-iphonesimulator"
+    cp -Rf "${BUILD_DIR}/framework-iphonesimulator-x86_64/AGDnsProxy.framework" "${BUILD_DIR}/framework-iphonesimulator/"
+    rm "${BUILD_DIR}"/framework-iphonesimulator/AGDnsProxy.framework/AGDnsProxy
+    lipo -create -output "${BUILD_DIR}"/framework-iphonesimulator{,-x86_64,-arm64}/AGDnsProxy.framework/AGDnsProxy
+
     xcodebuild -create-xcframework -framework "${BUILD_DIR}/framework-macos/${TARGET_NAME}.framework" \
-        -framework "${BUILD_DIR}/framework-ios/${TARGET_NAME}.framework" \
+        -framework "${BUILD_DIR}/framework-ios-arm64/${TARGET_NAME}.framework" \
         -framework "${BUILD_DIR}/framework-iphonesimulator/${TARGET_NAME}.framework" \
         -output "${BUILD_DIR}/${TARGET_NAME}.xcframework"
 
