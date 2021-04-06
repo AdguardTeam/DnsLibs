@@ -363,7 +363,7 @@
 		};
 		C4B58FDC237188E50044CE54 /* AGDnsProxy-macos */ = {
 			isa = PBXLegacyTarget;
-			buildArgumentsString = "$(SRCROOT)/../framework/build_dnsproxy_framework.sh $(ACTION) --os macos";
+			buildArgumentsString = "$(SRCROOT)/../framework/build_dnsproxy_framework.sh $(ACTION) --os macos-x86_64";
 			buildConfigurationList = C4B58FDD237188E50044CE54 /* Build configuration list for PBXLegacyTarget "AGDnsProxy-macos" */;
 			buildPhases = (
 			);

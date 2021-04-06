@@ -2,7 +2,7 @@
 
 HELP_MSG="
 Usage: build_dnsproxy_framework.sh [options...|clean]
-    --os       Target os (valid values: mac, ios, iphonesimulator, all)
+    --os       Target os (valid values: macos-{x86_64,arm64}, ios, iphonesimulator-{x86_64,arm64}, all)
                'all' - by default
     --tn       Target framework name
     --iosv     iOS SDK version (devided by dot: e.g., 13.0)
@@ -143,7 +143,7 @@ function build_target() {
 
     cmake_opt="-DCMAKE_BUILD_TYPE=${BUILD_TYPE} -GNinja"
     cmake_opt="${cmake_opt} -DCMAKE_XCODE_ATTRIBUTE_DEBUG_INFORMATION_FORMAT=\"dwarf-with-dsym\""
-    cmake_opt="${cmake_opt} -DTARGET_OS:STRING=${target_os} -DCMAKE_OSX_ARCHITECTURES=${target_arch} -DCMAKE_SYSTEM_PROCESSOR=${target_arch}"
+    cmake_opt="${cmake_opt} -DTARGET_OS:STRING=${target_os} -DCMAKE_OSX_ARCHITECTURES=${target_arch}"
 
     cmake ${cmake_opt} ${FRAMEWORK_DIR}
     if [ $? != 0 ]; then
