@@ -67,7 +67,7 @@ endif(NOT TARGET ngtcp2)
 target_include_directories(upstream PUBLIC include)
 target_include_directories(upstream PRIVATE ${OPENSSL_INCLUDE_DIR})
 target_include_directories(upstream PRIVATE ../third-party/ngtcp2/ag_ngtcp2_crypto/includes)
-target_link_libraries(upstream dnslibs_common dnsstamp dnscrypt agdns_tls ngtcp2 ag_ngtcp2_crypto_openssl)
+target_link_libraries(upstream dnslibs_common dnsstamp dnscrypt agdns_tls ngtcp2 ngtcp2_crypto_boringssl)
 target_link_libraries(upstream boringssl_static libevent ldns libcurl)
 
 enable_testing()

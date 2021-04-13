@@ -294,7 +294,7 @@ err_string dns_over_quic::init() {
         return "Bootstrapper init failed";
     }
 
-    m_callbacks = ngtcp2_conn_callbacks{
+    m_callbacks = ngtcp2_callbacks{
             ngtcp2_crypto_client_initial_cb,
             nullptr, // recv_client_initial
             recv_crypto_data,
@@ -818,7 +818,7 @@ int dns_over_quic::on_key(ngtcp2_crypto_level level, const uint8_t *rx_secret,
     case NGTCP2_CRYPTO_LEVEL_HANDSHAKE:
         dbglog(m_log, "Crypto {} level: HANDSHAKE", direction);
         break;
-    case NGTCP2_CRYPTO_LEVEL_APP:
+    case NGTCP2_CRYPTO_LEVEL_APPLICATION:
         dbglog(m_log, "Crypto {} level: APP", direction);
         break;
     default:
@@ -1198,7 +1198,7 @@ ngtcp2_crypto_level dns_over_quic::from_ossl_level(enum ssl_encryption_level_t o
         case ssl_encryption_handshake:
             return NGTCP2_CRYPTO_LEVEL_HANDSHAKE;
         case ssl_encryption_application:
-            return NGTCP2_CRYPTO_LEVEL_APP;
+            return NGTCP2_CRYPTO_LEVEL_APPLICATION;
         default:
             warnlog(m_log, "Unknown encryption level");
             assert(0);

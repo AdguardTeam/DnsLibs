@@ -15,7 +15,7 @@
 
 #include <ngtcp2/ngtcp2.h>
 #include <ngtcp2/ngtcp2_crypto.h>
-#include <ngtcp2/ngtcp2_crypto_openssl.h>
+#include <ngtcp2/ngtcp2_crypto_boringssl.h>
 
 #include <ldns/ldns.h>
 #include <event2/event.h>
@@ -197,7 +197,7 @@ private:
     ag::socket_address m_remote_addr_empty, m_local_addr;
     std::list<ag::socket_address> m_server_addresses;
     std::vector<ag::socket_address> m_current_addresses;
-    ngtcp2_conn_callbacks m_callbacks{};
+    ngtcp2_callbacks m_callbacks{};
     size_t m_max_pktlen;
     proto_version m_version;
     buffer m_send_buf;
