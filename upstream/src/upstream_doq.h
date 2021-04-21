@@ -7,7 +7,7 @@
 #include <ag_socket_address.h>
 #include <upstream.h>
 #include "bootstrapper.h"
-#include "event_loop.h"
+#include <ag_event_loop.h>
 
 #include <openssl/ssl.h>
 #include <openssl/crypto.h>

@@ -12,7 +12,6 @@ add_library(upstream EXCLUDE_FROM_ALL
         src/upstream_dot.h src/upstream_dot.cpp
         src/upstream_doq.h src/upstream_doq.cpp
         src/upstream_plain.h src/upstream_plain.cpp
-        src/event_loop.cpp
         src/connection.h src/connection.cpp
         src/dns_framed.h src/dns_framed.cpp
         src/bootstrapper.h src/bootstrapper.cpp

@@ -2,8 +2,12 @@
 
 #include <memory>
 #include <thread>
+#include <functional>
+#include <list>
+#include <mutex>
+#include <event2/event.h>
+#include <ag_defs.h>
 
-struct event_base;
 
 namespace ag {
 
@@ -21,6 +25,11 @@ public:
     static event_loop_ptr create();
 
     ~event_loop();
+
+    /**
+     * Submit a task to be executed on the event loop
+     */
+    void submit(std::function<void()> task);
 
     /**
      * Stop event loop
@@ -45,9 +54,16 @@ public:
 
 private:
     /** Libevent base */
-    event_base *m_base;
+    std::unique_ptr<event_base, ftor<&event_base_free>> m_base;
     /** Thread where base loop is running */
-    std::thread *m_base_thread;
+    std::thread m_base_thread;
+
+    struct tasks {
+        bool scheduled = false;
+        std::list<std::function<void()>> queue;
+    };
+    /** Submitted tasks */
+    with_mtx<tasks> m_tasks;
 
     event_loop();
 

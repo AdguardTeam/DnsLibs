@@ -7,7 +7,7 @@
 #include <condition_variable>
 #include <event2/event.h>
 #include <event2/bufferevent.h>
-#include <event_loop.h>
+#include <ag_event_loop.h>
 #include "connection.h"
 
 namespace ag {

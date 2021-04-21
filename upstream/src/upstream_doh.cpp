@@ -309,16 +309,11 @@ err_string dns_over_https::init() {
     return std::nullopt;
 }
 
-void dns_over_https::stop(evutil_socket_t, short, void *arg) {
-    dns_over_https *upstream = (dns_over_https *)arg;
-    upstream->stop_all_with_error("Upstream has been stopped");
-}
-
 dns_over_https::~dns_over_https() {
     infolog(this->log, "Destroying...");
 
     infolog(this->log, "Stopping event loop...");
-    event_base_once(this->worker.loop->c_base(), 0, EV_TIMEOUT, stop, this, nullptr);
+    this->worker.loop->submit([this] () { this->stop_all_with_error("Upstream has been stopped"); });
     // Delete the event before deleting the loop
     this->pool.timer_event.reset();
     // Stop and join before reset() are NOT redundant, because
@@ -339,7 +334,7 @@ dns_over_https::~dns_over_https() {
     infolog(this->log, "Done");
 
     // Defy stray `query_handle`s not defied on the event loop
-    defy_requests(-1, EV_TIMEOUT, this);
+    this->defy_requests();
 
     infolog(this->log, "Destroyed");
 }
@@ -474,8 +469,7 @@ int dns_over_https::on_socket_update(CURL *handle, curl_socket_t socket, int wha
     return 0;
 }
 
-void dns_over_https::submit_request(evutil_socket_t, short, void *arg) {
-    auto *handle = (query_handle *)arg;
+void dns_over_https::submit_request(query_handle *handle) {
     tracelog_id(handle, "Submitting request");
 
     ag::utils::scope_exit signal_submit_done([&] {
@@ -489,8 +483,7 @@ void dns_over_https::submit_request(evutil_socket_t, short, void *arg) {
         return;
     }
 
-    dns_over_https *upstream = handle->upstream;
-    if (CURLMcode e = curl_multi_add_handle(upstream->pool.handle.get(), curl_handle);
+    if (CURLMcode e = curl_multi_add_handle(this->pool.handle.get(), curl_handle);
             e != CURLM_OK) {
         handle->error = AG_FMT("Failed to add request in pool: {}", curl_multi_strerror(e));
         curl_easy_cleanup(curl_handle);
@@ -499,25 +492,23 @@ void dns_over_https::submit_request(evutil_socket_t, short, void *arg) {
     }
 
     handle->curl_handle = curl_handle;
-    upstream->worker.running_queue.emplace_back(handle);
+    this->worker.running_queue.emplace_back(handle);
 }
 
-void dns_over_https::defy_requests(evutil_socket_t, short, void *arg) {
-    auto *self = (dns_over_https *)arg;
+void dns_over_https::defy_requests() {
     std::list<std::unique_ptr<query_handle>> handle_ptrs;
 
-    self->guard.lock();
-    handle_ptrs.swap(self->defied_handles);
-    self->guard.unlock();
+    this->guard.lock();
+    handle_ptrs.swap(this->defied_handles);
+    this->guard.unlock();
 
     for (auto &ptr : handle_ptrs) {
         query_handle *handle = ptr.get();
         tracelog_id(handle, "Defying request");
 
-        dns_over_https *upstream = handle->upstream;
         handle->cleanup_request();
 
-        std::deque<query_handle *> &queue = upstream->worker.running_queue;
+        std::deque<query_handle *> &queue = this->worker.running_queue;
         queue.erase(std::remove(queue.begin(), queue.end(), handle), queue.end());
     }
 }
@@ -592,7 +583,10 @@ dns_over_https::exchange_result dns_over_https::exchange(ldns_pkt *request) {
 
     std::future<void> request_completed = handle->barrier.get_future();
     std::future<void> request_submitted = handle->submit_barrier.get_future();
-    event_base_once(this->worker.loop->c_base(), 0, EV_TIMEOUT, submit_request, handle.get(), nullptr);
+    this->worker.loop->submit(
+            [h = handle.get()] () {
+                h->upstream->submit_request(h);
+            });
 
     err_string err;
     ldns_pkt *response = nullptr;
@@ -631,7 +625,7 @@ dns_over_https::exchange_result dns_over_https::exchange(ldns_pkt *request) {
         std::scoped_lock l(this->guard);
         this->defied_handles.emplace_back(std::move(handle));
         if (this->defied_handles.size() == 1) {
-            event_base_once(this->worker.loop->c_base(), 0, EV_TIMEOUT, defy_requests, this, nullptr);
+            this->worker.loop->submit([this] () { this->defy_requests(); });
         }
     }
 

@@ -315,10 +315,8 @@ void ag::dns_framed_pool::close_connection(const connection_ptr &conn) {
     bufferevent_setcb(framed_conn->m_bev.get(), nullptr, nullptr, nullptr, nullptr);
     bufferevent_disable(framed_conn->m_bev.get(), EV_READ | EV_WRITE);
 
-    event_base_once(bufferevent_get_base(framed_conn->m_bev.get()), -1, EV_TIMEOUT,
-        [] (evutil_socket_t, short, void *ptr) {
-            delete (connection_ptr *)ptr;
-        }, new connection_ptr(conn), nullptr);
+    // just delete the connection on the event loop
+    framed_conn->m_pool->m_loop->submit([c = conn] () {});
 }
 
 ag::dns_framed_pool::~dns_framed_pool() {

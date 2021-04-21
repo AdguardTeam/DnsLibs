@@ -23,7 +23,7 @@
 #include <event2/event.h>
 #include <event2/event_struct.h>
 
-#include "event_loop.h"
+#include <ag_event_loop.h>
 
 
 namespace ag {
@@ -71,10 +71,8 @@ private:
     static void on_socket_event(evutil_socket_t fd, short kind, void *arg);
     static curl_socket_t curl_opensocket(void *clientp, curlsocktype purpose, struct curl_sockaddr *address);
 
-    static void submit_request(evutil_socket_t, short, void *arg);
-    static void defy_requests(evutil_socket_t, short, void *arg);
-
-    static void stop(evutil_socket_t, short, void *arg);
+    void submit_request(query_handle *handle);
+    void defy_requests();
 
     logger log = create_logger("DOH upstream");
     curl_slist_ptr resolved = nullptr;

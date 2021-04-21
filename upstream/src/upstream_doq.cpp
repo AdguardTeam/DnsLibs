@@ -1076,11 +1076,7 @@ int dns_over_quic::acked_stream_data_offset(ngtcp2_conn *conn, int64_t stream_id
 }
 
 void dns_over_quic::submit(std::function<void()> &&f) const {
-    event_base_once(m_loop->c_base(), -1, EV_TIMEOUT, [](evutil_socket_t, short, void *arg){
-        auto *func = (std::function<void()> *) arg;
-        (*func)();
-        delete func;
-    }, new std::function(std::move(f)), nullptr);
+    m_loop->submit(std::move(f));
 }
 
 void dns_over_quic::process_reply(int64_t request_id, const uint8_t *request_data, size_t request_data_len) {
