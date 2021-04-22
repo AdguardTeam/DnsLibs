@@ -27,10 +27,14 @@ if(NOT TARGET dnslibs_common)
     add_subdirectory(${DNSLIBS_DIR}/common ${CMAKE_BINARY_DIR}/common)
 endif(NOT TARGET dnslibs_common)
 
+if (NOT TARGET ldns)
+    add_subdirectory(${THIRD_PARTY_DIR}/ldns ${CMAKE_BINARY_DIR}/ldns)
+endif ()
+
 set_target_properties(dnsfilter PROPERTIES POSITION_INDEPENDENT_CODE ON)
 target_include_directories(dnsfilter PUBLIC ./include)
 target_include_directories(dnsfilter PRIVATE ${THIRD_PARTY_DIR}/klib)
-target_link_libraries(dnsfilter dnslibs_common)
+target_link_libraries(dnsfilter dnslibs_common ldns)
 target_compile_options(dnsfilter PRIVATE -Wall -Wextra -Wformat=2 -Wno-unused-parameter)
 if (NOT MSVC)
     target_compile_options(dnsfilter PRIVATE -fno-exceptions)
@@ -39,9 +43,11 @@ endif()
 
 enable_testing()
 
-add_custom_target(dnsfilter_run_benchmark)
 add_executable(dnsfilter_benchmark EXCLUDE_FROM_ALL test/benchmark.cpp)
 target_link_libraries(dnsfilter_benchmark dnsfilter)
+add_dependencies(tests dnsfilter_benchmark)
+
+add_custom_target(dnsfilter_run_benchmark)
 add_dependencies(dnsfilter_run_benchmark dnsfilter_benchmark)
 add_custom_command(TARGET dnsfilter_run_benchmark COMMAND ${CMAKE_COMMAND} -E copy
                    ../test/dnsfilter_benchmark_runner.py

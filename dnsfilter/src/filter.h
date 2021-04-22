@@ -14,9 +14,10 @@ public:
         std::string host; // matching domain name
         std::vector<std::string_view> subdomains; // list of subdomains
         std::vector<ag::dnsfilter::rule> matched_rules; // list of matched rules
+        ldns_rr_type rr_type; // query RR type
     };
 
-    static match_context create_match_context(std::string_view host);
+    static match_context create_match_context(ag::dnsfilter::match_param param);
 
     filter();
     ~filter();

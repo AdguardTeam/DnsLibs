@@ -100,14 +100,15 @@ static int apply_filter_to_base(test_result_t *tr, ag::dnsfilter *filter, ag::dn
 
     for (size_t i = 0; i < domains_num; ++i) {
         TICK(before);
-        std::vector<ag::dnsfilter::rule> rules = filter->match(handle, domains[i]);
+        std::vector<ag::dnsfilter::rule> rules = filter->match(handle, { domains[i], LDNS_RR_TYPE_A });
         std::vector<const ag::dnsfilter::rule *> effective_rules = ag::dnsfilter::get_effective_rules(rules);
         TICK(after);
 
         tr->match_domains.total_matches += rules.size();
 
         if (!effective_rules.empty()) {
-            if (!effective_rules[0]->props.test(ag::dnsfilter::RP_EXCEPTION)) {
+            if (const auto *adblock_info = std::get_if<ag::dnsfilter::adblock_rule_info>(&effective_rules[0]->content);
+                    adblock_info != nullptr && adblock_info->props.test(ag::dnsfilter::DARP_EXCEPTION)) {
                 ++tr->match_domains.effective_blocking_matches;
             } else {
                 ++tr->match_domains.effective_exception_matches;

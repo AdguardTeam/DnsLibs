@@ -2,6 +2,9 @@
 
 
 #include <string_view>
+#include <string>
+#include <optional>
+#include <vector>
 #include <ag_logger.h>
 #include <dnsfilter.h>
 
@@ -12,6 +15,17 @@
  *   - https://github.com/AdguardTeam/AdguardHome/wiki/Hosts-Blocklists
  */
 namespace rule_utils {
+
+    struct dnstype_info {
+        enum match_mode {
+            DTMM_ENABLE, // `types` is the list of the affected ones
+            DTMM_EXCLUDE, // `types` is the list of the non-affected ones
+        };
+
+        /** List of the query types affected by the rule. Empty means any. */
+        std::vector<ldns_rr_type> types;
+        match_mode mode = DTMM_ENABLE;
+    };
 
     struct rule {
         enum match_method_id {
@@ -36,6 +50,8 @@ namespace rule_utils {
         match_method_id match_method;
         // list of matching parts accordingly to `match_method` value
         std::vector<std::string> matching_parts;
+        // non-nullopt if the rule has `$dnstype` modifier
+        std::optional<dnstype_info> dnstype;
     };
 
 

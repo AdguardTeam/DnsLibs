@@ -10,6 +10,8 @@ if (NOT TARGET gtest_main)
     set_property(TARGET gtest_main PROPERTY EXCLUDE_FROM_ALL ON)
 endif (NOT TARGET gtest_main)
 
+# `EXPAND_GTEST` is useful if the test has a parametrized gtest case, it often makes the report
+# unreadable
 function(add_unit_test TEST_NAME TEST_DIR EXTRA_INCLUDES IS_GTEST EXPAND_GTEST)
     set(FILE_NO_EXT ${TEST_DIR}/${TEST_NAME})
     if (EXISTS "${FILE_NO_EXT}.cpp")

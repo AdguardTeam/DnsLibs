@@ -3,10 +3,12 @@
 
 #include <string>
 #include <vector>
-#include <optional>
+#include <variant>
 #include <bitset>
 #include <tuple>
 #include <ag_defs.h>
+#include <magic_enum.hpp>
+#include <ldns/ldns.h>
 
 
 namespace ag {
@@ -30,18 +32,39 @@ public:
         size_t mem_limit{0}; // the upper limit, in bytes, on the filtering engine memory usage, 0 means no limit
     };
 
-    enum rule_props {
-        RP_EXCEPTION, // is exceptional (starts with `@@`)
-        RP_IMPORTANT, // has `$important` modifier
-        RP_BADFILTER, // has `$badfilter` modifier
-        RP_NUM
+    enum adblock_rule_props {
+        DARP_EXCEPTION, // is exceptional (starts with `@@`)
+        DARP_IMPORTANT, // has `$important` modifier
+        DARP_BADFILTER, // has `$badfilter` modifier
+        DARP_DNSTYPE, // has `$dnstype` modifier
+    };
+
+    // Both https://github.com/AdguardTeam/AdguardHome/wiki/Hosts-Blocklists#adblock-style
+    // and https://github.com/AdguardTeam/AdguardHome/wiki/Hosts-Blocklists#domains-only
+    struct adblock_rule_info {
+        using props_set = std::bitset<magic_enum::enum_count<adblock_rule_props>()>;
+
+        props_set props; // properties (see `adblock_rule_props`)
+    };
+
+    // https://github.com/AdguardTeam/AdguardHome/wiki/Hosts-Blocklists#etc-hosts
+    struct etc_hosts_rule_info {
+        std::string ip;
     };
 
     struct rule {
+        using content_type = std::variant<adblock_rule_info, etc_hosts_rule_info>;
+
         int32_t filter_id; // id of a filter which contains the matched rule
         std::string text; // rule text
-        std::bitset<RP_NUM> props; // properties (see `rule_props`)
-        std::optional<std::string> ip; // non-nullopt if the rule has hosts syntax
+        content_type content; // rule type specific info
+    };
+
+    struct match_param {
+        /** A domain to check */
+        std::string_view domain;
+        /** A query RR type */
+        ldns_rr_type rr_type;
     };
 
     dnsfilter();
@@ -70,12 +93,12 @@ public:
     /**
      * Match domain against added rules
      * @param[in]  obj     filtering engine handle
-     * @param[in]  domain  domain to be matched
+     * @param[in]  param   see `match_param`
      * @return     List of matched rules (please note, that it contains all matched rules
      *             in undefined order, so the one should use `get_effective_rule` to get
      *             the rule, which should be considered in request blocking logic)
      */
-    std::vector<rule> match(handle obj, std::string_view domain);
+    std::vector<rule> match(handle obj, match_param param);
 
     /**
      * Select the rules which should be applied to the request

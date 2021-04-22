@@ -23,5 +23,8 @@ for file in sorted(API_FILES):
 digest = file_hash.hexdigest()
 print('Generated hash: {0}'.format(digest))
 
-with open(API_HASH_FILE, 'w') as file_handle:
-    file_handle.write('#define AG_DNSLIBS_H_HASH "{0}"\n'.format(digest))
+with open(API_HASH_FILE, 'r+') as file_handle:
+    api_hash_line = '#define AG_DNSLIBS_H_HASH "{0}"\n'.format(digest)
+    if api_hash_line not in file_handle.read():
+        file_handle.seek(0)
+        file_handle.write(api_hash_line)

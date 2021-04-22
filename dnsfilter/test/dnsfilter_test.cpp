@@ -4,6 +4,7 @@
 #include <ag_file.h>
 #include <ag_sys.h>
 #include <ag_logger.h>
+#include <ag_utils.h>
 #include <dnsfilter.h>
 #include <spdlog/spdlog.h>
 #include <rule_utils.h>
@@ -55,9 +56,9 @@ TEST_F(dnsfilter_test, successful_rule_parsing) {
             { "||*.example.*", { {}, rule_utils::rule::MMID_SHORTCUTS_AND_REGEX } },
             { "||*example*", { {}, rule_utils::rule::MMID_SHORTCUTS_AND_REGEX } },
             { "example.org", { {}, rule_utils::rule::MMID_EXACT } },
-            { "@@example.org", { { .props = { 1 << ag::dnsfilter::RP_EXCEPTION } }, rule_utils::rule::MMID_SHORTCUTS } },
-            { "example.org$important", { { .props = { 1 << ag::dnsfilter::RP_IMPORTANT } }, rule_utils::rule::MMID_SHORTCUTS } },
-            { "@@example.org$important", { { .props = { (1 << ag::dnsfilter::RP_EXCEPTION) | (1 << ag::dnsfilter::RP_IMPORTANT) } }, rule_utils::rule::MMID_SHORTCUTS } },
+            { "@@example.org", { { .content = ag::dnsfilter::adblock_rule_info{ 1 << ag::dnsfilter::DARP_EXCEPTION } }, rule_utils::rule::MMID_SHORTCUTS } },
+            { "example.org$important", { { .content = ag::dnsfilter::adblock_rule_info{ 1 << ag::dnsfilter::DARP_IMPORTANT } }, rule_utils::rule::MMID_SHORTCUTS } },
+            { "@@example.org$important", { { .content = ag::dnsfilter::adblock_rule_info{ (1 << ag::dnsfilter::DARP_EXCEPTION) | (1 << ag::dnsfilter::DARP_IMPORTANT) } }, rule_utils::rule::MMID_SHORTCUTS } },
             { "|example.org", { {}, rule_utils::rule::MMID_SHORTCUTS_AND_REGEX } },
             { "example.org|", { {}, rule_utils::rule::MMID_SHORTCUTS_AND_REGEX } },
             { "|example.org|", { {}, rule_utils::rule::MMID_EXACT } },
@@ -69,10 +70,10 @@ TEST_F(dnsfilter_test, successful_rule_parsing) {
             { "||example.org^", { {}, rule_utils::rule::MMID_SUBDOMAINS } },
             { "||example.org", { {}, rule_utils::rule::MMID_SHORTCUTS_AND_REGEX } },
             { "/example.org/", { {}, rule_utils::rule::MMID_SHORTCUTS_AND_REGEX } },
-            { "/example.org/$badfilter", { { .props = { 1 << ag::dnsfilter::RP_BADFILTER } } } },
+            { "/example.org/$badfilter", { { .content = ag::dnsfilter::adblock_rule_info{ 1 << ag::dnsfilter::DARP_BADFILTER } } } },
             { "/ex[a]?mple.org/", { {}, rule_utils::rule::MMID_REGEX } },
             { "/ex[ab]mple.org/", { {}, rule_utils::rule::MMID_SHORTCUTS_AND_REGEX } },
-            { "example.org$badfilter", { { .props = { 1 << ag::dnsfilter::RP_BADFILTER } } } },
+            { "example.org$badfilter", { { .content = ag::dnsfilter::adblock_rule_info{ 1 << ag::dnsfilter::DARP_BADFILTER } } } },
             { "-ad-banner.", { {} , rule_utils::rule::MMID_SHORTCUTS } },
             { "-ad-unit/", { {} , rule_utils::rule::MMID_REGEX } },
             { "-ad-unit^", { {} , rule_utils::rule::MMID_REGEX } },
@@ -95,10 +96,10 @@ TEST_F(dnsfilter_test, successful_rule_parsing) {
             { "/12:34:56:78::90/", { {}, rule_utils::rule::MMID_REGEX } },
             { "123.123.123.123", { {}, rule_utils::rule::MMID_SHORTCUTS } },
             { "12:34:56:78::90", { {}, rule_utils::rule::MMID_SHORTCUTS } },
-            { "123.123.123.123$badfilter", { { .props = { 1 << ag::dnsfilter::RP_BADFILTER } }, rule_utils::rule::MMID_EXACT } },
-            { "12:34:56:78::90$badfilter", { { .props = { 1 << ag::dnsfilter::RP_BADFILTER } }, rule_utils::rule::MMID_EXACT } },
-            { "@@123.123.123.123", { { .props = { 1 << ag::dnsfilter::RP_EXCEPTION } }, rule_utils::rule::MMID_SHORTCUTS } },
-            { "@@12:34:56:78::90", { { .props = { 1 << ag::dnsfilter::RP_EXCEPTION } }, rule_utils::rule::MMID_SHORTCUTS } },
+            { "123.123.123.123$badfilter", { { .content = ag::dnsfilter::adblock_rule_info{ 1 << ag::dnsfilter::DARP_BADFILTER } }, rule_utils::rule::MMID_EXACT } },
+            { "12:34:56:78::90$badfilter", { { .content = ag::dnsfilter::adblock_rule_info{ 1 << ag::dnsfilter::DARP_BADFILTER } }, rule_utils::rule::MMID_EXACT } },
+            { "@@123.123.123.123", { { .content = ag::dnsfilter::adblock_rule_info{ 1 << ag::dnsfilter::DARP_EXCEPTION } }, rule_utils::rule::MMID_SHORTCUTS } },
+            { "@@12:34:56:78::90", { { .content = ag::dnsfilter::adblock_rule_info{ 1 << ag::dnsfilter::DARP_EXCEPTION } }, rule_utils::rule::MMID_SHORTCUTS } },
             { "0.0.0.0", { {}, rule_utils::rule::MMID_SHORTCUTS } },
             { "::", { {}, rule_utils::rule::MMID_SHORTCUTS } },
             { "::1", { {}, rule_utils::rule::MMID_SHORTCUTS } },
@@ -113,6 +114,14 @@ TEST_F(dnsfilter_test, successful_rule_parsing) {
             { "172.16.*.1", { {}, rule_utils::rule::MMID_SHORTCUTS } },
             { "172.16.*.1:80", { {}, rule_utils::rule::MMID_SHORTCUTS_AND_REGEX } },
             { "|172.16.*.1:80^", { {}, rule_utils::rule::MMID_SHORTCUTS_AND_REGEX } },
+            { "example.org$dnstype=A", { { .content = ag::dnsfilter::adblock_rule_info{ 1 << ag::dnsfilter::DARP_DNSTYPE } }, rule_utils::rule::MMID_SHORTCUTS } },
+            { "example.org$dnstype=AAAA", { { .content = ag::dnsfilter::adblock_rule_info{ 1 << ag::dnsfilter::DARP_DNSTYPE } }, rule_utils::rule::MMID_SHORTCUTS } },
+            { "example.org$dnstype=~A", { { .content = ag::dnsfilter::adblock_rule_info{ 1 << ag::dnsfilter::DARP_DNSTYPE } }, rule_utils::rule::MMID_SHORTCUTS } },
+            { "example.org$dnstype=A|AAAA", { { .content = ag::dnsfilter::adblock_rule_info{ 1 << ag::dnsfilter::DARP_DNSTYPE } }, rule_utils::rule::MMID_SHORTCUTS } },
+            { "example.org$dnstype=A|~AAAA", { { .content = ag::dnsfilter::adblock_rule_info{ 1 << ag::dnsfilter::DARP_DNSTYPE } }, rule_utils::rule::MMID_SHORTCUTS } },
+            { "@@example.org$dnstype=A", { { .content = ag::dnsfilter::adblock_rule_info{ (1 << ag::dnsfilter::DARP_EXCEPTION) | (1 << ag::dnsfilter::DARP_DNSTYPE) } }, rule_utils::rule::MMID_SHORTCUTS } },
+            { "@@example.org$dnstype", { { .content = ag::dnsfilter::adblock_rule_info{ (1 << ag::dnsfilter::DARP_EXCEPTION) | (1 << ag::dnsfilter::DARP_DNSTYPE) } }, rule_utils::rule::MMID_SHORTCUTS } },
+            { "@@example.org$dnstype=a", { { .content = ag::dnsfilter::adblock_rule_info{ (1 << ag::dnsfilter::DARP_EXCEPTION) | (1 << ag::dnsfilter::DARP_DNSTYPE) } }, rule_utils::rule::MMID_SHORTCUTS } },
         };
 
     ag::logger log = ag::create_logger("dnsfilter_test");
@@ -121,8 +130,9 @@ TEST_F(dnsfilter_test, successful_rule_parsing) {
         SPDLOG_INFO("testing {}", entry.text);
         std::optional<rule_utils::rule> rule = rule_utils::parse(entry.text, &log);
         ASSERT_TRUE(rule.has_value());
-        ASSERT_EQ(rule->public_part.props, entry.expected_rule.public_part.props);
-        ASSERT_FALSE(rule->public_part.ip.has_value());
+        const auto *content = std::get_if<ag::dnsfilter::adblock_rule_info>(&rule->public_part.content);
+        ASSERT_NE(content, nullptr);
+        ASSERT_EQ(content->props, std::get<ag::dnsfilter::adblock_rule_info>(entry.expected_rule.public_part.content).props);
         ASSERT_EQ(rule->match_method, entry.expected_rule.match_method);
     }
 }
@@ -136,17 +146,17 @@ TEST_F(dnsfilter_test, successful_host_syntax_rule_parsing) {
     const test_data TEST_DATA[] =
         {
             { "0.0.0.0 example.org",
-                { { .props = {}, .ip = std::make_optional("0.0.0.0") }, rule_utils::rule::MMID_SUBDOMAINS } },
+                { { .content = ag::dnsfilter::etc_hosts_rule_info{ "0.0.0.0" } }, rule_utils::rule::MMID_SUBDOMAINS } },
             { "1:1:: example.org",
-                { { .props = {}, .ip = std::make_optional("1:1::") }, rule_utils::rule::MMID_SUBDOMAINS } },
+                { { .content = ag::dnsfilter::etc_hosts_rule_info{ "1:1::" } }, rule_utils::rule::MMID_SUBDOMAINS } },
             { "1:1:1:1:1:1:1:1 example.org",
-                { { .props = {}, .ip = std::make_optional("1:1:1:1:1:1:1:1") }, rule_utils::rule::MMID_SUBDOMAINS } },
+                { { .content = ag::dnsfilter::etc_hosts_rule_info{ "1:1:1:1:1:1:1:1" } }, rule_utils::rule::MMID_SUBDOMAINS } },
             { "::1:1 example.org",
-                { { .props = {}, .ip = std::make_optional("::1:1") }, rule_utils::rule::MMID_SUBDOMAINS } },
+                { { .content = ag::dnsfilter::etc_hosts_rule_info{ "::1:1" } }, rule_utils::rule::MMID_SUBDOMAINS } },
             { "::FFFF:1.1.1.1 example.org",
-                { { .props = {}, .ip = std::make_optional("::FFFF:1.1.1.1") }, rule_utils::rule::MMID_SUBDOMAINS } },
+                { { .content = ag::dnsfilter::etc_hosts_rule_info{ "::FFFF:1.1.1.1" } }, rule_utils::rule::MMID_SUBDOMAINS } },
             { "0.0.0.0 example.org #comment",
-                    { { .props = {}, .ip = std::make_optional("0.0.0.0") }, rule_utils::rule::MMID_SUBDOMAINS } },
+                    { { .content = ag::dnsfilter::etc_hosts_rule_info{ "0.0.0.0" } }, rule_utils::rule::MMID_SUBDOMAINS } },
         };
 
     ag::logger log = ag::create_logger("dnsfilter_test");
@@ -155,8 +165,9 @@ TEST_F(dnsfilter_test, successful_host_syntax_rule_parsing) {
         SPDLOG_INFO("testing {}", entry.text);
         std::optional<rule_utils::rule> rule = rule_utils::parse(entry.text, &log);
         ASSERT_TRUE(rule.has_value());
-        ASSERT_EQ(rule->public_part.props, entry.expected_rule.public_part.props);
-        ASSERT_EQ(rule->public_part.ip, entry.expected_rule.public_part.ip);
+        const auto *content = std::get_if<ag::dnsfilter::etc_hosts_rule_info>(&rule->public_part.content);
+        ASSERT_NE(content, nullptr);
+        ASSERT_EQ(content->ip, std::get<ag::dnsfilter::etc_hosts_rule_info>(entry.expected_rule.public_part.content).ip);
         ASSERT_EQ(rule->match_method, entry.expected_rule.match_method);
     }
 }
@@ -192,6 +203,13 @@ TEST_F(dnsfilter_test, wrong_rule_parsing) {
             "///example.com",
             "333.333.333.333 example.org",
             "45:67 example.org",
+            "example.org$dnstype",
+            "example.org$dnstypee",
+            "example.org$dnstype=",
+            "example.org$dnstype=~",
+            "example.org$dnstype=OOPS",
+            "example.org$dnstype=A|A",
+            "example.org$dnstype=A|~A",
         };
 
     ag::logger log = ag::create_logger("dnsfilter_test");
@@ -269,17 +287,19 @@ TEST_F(dnsfilter_test, basic_rules_match) {
 
     for (const auto &entry : BASIC_TEST_DATA) {
         SPDLOG_INFO("testing {}", entry.domain);
-        std::vector<ag::dnsfilter::rule> rules = filter.match(handle, entry.domain);
+        std::vector<ag::dnsfilter::rule> rules = filter.match(handle, { entry.domain });
         ASSERT_GT(rules.size(), 0);
         for (const ag::dnsfilter::rule &r : rules) {
             ASSERT_EQ(r.filter_id, 10);
         }
         std::vector<const ag::dnsfilter::rule *> effective_rules = ag::dnsfilter::get_effective_rules(rules);
         ASSERT_EQ(effective_rules.size(), 1);
+        const auto *content = std::get_if<ag::dnsfilter::adblock_rule_info>(&effective_rules[0]->content);
+        ASSERT_NE(content, nullptr);
         if (entry.expect_blocked) {
-            ASSERT_FALSE(effective_rules[0]->props.test(ag::dnsfilter::RP_EXCEPTION));
+            ASSERT_FALSE(content->props.test(ag::dnsfilter::DARP_EXCEPTION));
         } else {
-            ASSERT_TRUE(effective_rules[0]->props.test(ag::dnsfilter::RP_EXCEPTION));
+            ASSERT_TRUE(content->props.test(ag::dnsfilter::DARP_EXCEPTION));
         }
     }
 
@@ -301,17 +321,19 @@ TEST_F(dnsfilter_test, basic_rules_match_in_memory) {
 
     for (const auto &entry : BASIC_TEST_DATA) {
         SPDLOG_INFO("testing {}", entry.domain);
-        std::vector<ag::dnsfilter::rule> rules = filter.match(handle, entry.domain);
+        std::vector<ag::dnsfilter::rule> rules = filter.match(handle, { entry.domain });
         ASSERT_GT(rules.size(), 0);
         for (const ag::dnsfilter::rule &r : rules) {
             ASSERT_EQ(r.filter_id, 10);
         }
         std::vector<const ag::dnsfilter::rule *> effective_rules = ag::dnsfilter::get_effective_rules(rules);
         ASSERT_EQ(effective_rules.size(), 1);
+        const auto *content = std::get_if<ag::dnsfilter::adblock_rule_info>(&effective_rules[0]->content);
+        ASSERT_NE(content, nullptr);
         if (entry.expect_blocked) {
-            ASSERT_FALSE(effective_rules[0]->props.test(ag::dnsfilter::RP_EXCEPTION));
+            ASSERT_FALSE(content->props.test(ag::dnsfilter::DARP_EXCEPTION));
         } else {
-            ASSERT_TRUE(effective_rules[0]->props.test(ag::dnsfilter::RP_EXCEPTION));
+            ASSERT_TRUE(content->props.test(ag::dnsfilter::DARP_EXCEPTION));
         }
     }
 
@@ -363,7 +385,7 @@ TEST_F(dnsfilter_test, basic_rules_no_match) {
 
     for (const test_data &entry : TEST_DATA) {
         SPDLOG_INFO("testing {}", entry.domain);
-        std::vector<ag::dnsfilter::rule> rules = filter.match(handle, entry.domain);
+        std::vector<ag::dnsfilter::rule> rules = filter.match(handle, { entry.domain });
         ASSERT_EQ(rules.size(), 0);
     }
 
@@ -394,9 +416,11 @@ TEST_F(dnsfilter_test, wildcard) {
     for (const test_data &entry : TEST_DATA) {
         for (const std::string &d : entry.domains) {
             SPDLOG_INFO("testing {}", d);
-            std::vector<ag::dnsfilter::rule> rules = filter.match(handle, d);
+            std::vector<ag::dnsfilter::rule> rules = filter.match(handle, { d });
             ASSERT_EQ(rules.size(), 1);
-            ASSERT_FALSE(rules[0].props.test(ag::dnsfilter::RP_EXCEPTION));
+            const auto *content = std::get_if<ag::dnsfilter::adblock_rule_info>(&rules[0].content);
+            ASSERT_NE(content, nullptr);
+            ASSERT_FALSE(content->props.test(ag::dnsfilter::DARP_EXCEPTION));
             ASSERT_EQ(rules[0].text, entry.rule);
         }
     }
@@ -431,9 +455,11 @@ TEST_F(dnsfilter_test, regex) {
     for (const test_data &entry : TEST_DATA) {
         for (const std::string &d : entry.domains) {
             SPDLOG_INFO("testing {}", d);
-            std::vector<ag::dnsfilter::rule> rules = filter.match(handle, d);
+            std::vector<ag::dnsfilter::rule> rules = filter.match(handle, { d });
             ASSERT_EQ(rules.size(), 1);
-            ASSERT_FALSE(rules[0].props.test(ag::dnsfilter::RP_EXCEPTION));
+            const auto *content = std::get_if<ag::dnsfilter::adblock_rule_info>(&rules[0].content);
+            ASSERT_NE(content, nullptr);
+            ASSERT_FALSE(content->props.test(ag::dnsfilter::DARP_EXCEPTION));
             ASSERT_EQ(rules[0].text, entry.rule);
         }
     }
@@ -477,15 +503,14 @@ TEST_F(dnsfilter_test, hosts_file_syntax) {
     for (const test_data &entry : TEST_DATA) {
         for (const std::string &d : entry.blocked_domains) {
             SPDLOG_INFO("testing {}", d);
-            std::vector<ag::dnsfilter::rule> rules = filter.match(handle, d);
+            std::vector<ag::dnsfilter::rule> rules = filter.match(handle, { d });
             ASSERT_EQ(rules.size(), 1);
             if (entry.expected_rule.empty()) {
                 ASSERT_EQ(rules[0].text, entry.rule);
             } else {
                 ASSERT_EQ(rules[0].text, entry.expected_rule);
             }
-            ASSERT_FALSE(rules[0].props.test(ag::dnsfilter::RP_EXCEPTION));
-            ASSERT_FALSE(rules[0].props.test(ag::dnsfilter::RP_IMPORTANT));
+            ASSERT_NE(std::get_if<ag::dnsfilter::etc_hosts_rule_info>(&rules[0].content), nullptr);
         }
     }
 
@@ -503,6 +528,8 @@ TEST_F(dnsfilter_test, badfilter) {
             { { "example1.org", "example1.org$badfilter" }, "example1.org", },
             { { "example2.org$important", "example2.org$important,badfilter" }, "example2.org", },
             { { "example3.org$important", "example3.org$badfilter,important" }, "example3.org", },
+            { { "example4.org$dnstype=a", "example4.org$badfilter,dnstype=a" }, "example4.org", },
+            { { "example5.org$dnstype=A", "example5.org$dnstype=A,badfilter" }, "example5.org", },
         };
 
     for (const test_data &entry : TEST_DATA) {
@@ -517,7 +544,7 @@ TEST_F(dnsfilter_test, badfilter) {
 
     for (const test_data &entry : TEST_DATA) {
         SPDLOG_INFO("testing {}", entry.domain);
-        std::vector<ag::dnsfilter::rule> rules = filter.match(handle, entry.domain);
+        std::vector<ag::dnsfilter::rule> rules = filter.match(handle, { entry.domain, LDNS_RR_TYPE_A });
         ASSERT_EQ(rules.size(), 2);
         std::vector<const ag::dnsfilter::rule *> effective_rules = ag::dnsfilter::get_effective_rules(rules);
         ASSERT_EQ(effective_rules.size(), 0);
@@ -559,7 +586,7 @@ TEST_F(dnsfilter_test, multifilters) {
 
     for (const test_data &entry : TEST_DATA) {
         SPDLOG_INFO("testing {}", entry.domain);
-        std::vector<ag::dnsfilter::rule> rules = filter.match(handle, entry.domain);
+        std::vector<ag::dnsfilter::rule> rules = filter.match(handle, { entry.domain });
         ASSERT_GT(rules.size(), 0);
         std::vector<const ag::dnsfilter::rule *> effective_rules = ag::dnsfilter::get_effective_rules(rules);
         ASSERT_EQ(effective_rules.size(), 1);
@@ -591,6 +618,10 @@ TEST_F(dnsfilter_test, rule_selection) {
             { { "0.0.0.0 example.org", "example.org", "1::1 example.org" }, { 0, 2 } },
             { { "0.0.0.0 example.org", "@@example.org" }, { 1 } },
             { { "0.0.0.0 example.org", "example.org$important" }, { 1 } },
+            { { "||example.com$dnstype=A", "@@||example.com$dnstype=A" }, { 1 } },
+            { { "||example.com$dnstype=A", "@@||example.com$" }, { 1 } },
+            { { "||example.com$dnstype=A,important", "@@||example.com" }, { 0 } },
+            { { "||example.com$dnstype=A", "@@||example.com$dnstype=a,badfilter" }, { 0 } },
         };
 
     for (const test_data &entry : TEST_DATA) {
@@ -614,4 +645,52 @@ TEST_F(dnsfilter_test, rule_selection) {
         }
         ASSERT_EQ(effective_rules.size(), 0);
     }
+}
+
+TEST_F(dnsfilter_test, dnstype_modifier) {
+    struct test_data {
+        std::string_view rule;
+        ag::dnsfilter::match_param param;
+        bool expect_blocked;
+    };
+
+    const test_data TEST_DATA[] = {
+            { "||example1.com$dnstype=A", { "example1.com", LDNS_RR_TYPE_A }, true },
+            { "||example2.com$dnstype=A|TXT", { "example2.com", LDNS_RR_TYPE_TXT }, true },
+            { "@@||example3.com$dnstype=CNAME", { "example3.com", LDNS_RR_TYPE_CNAME }, false },
+            { "||example4.com$dnstype=~MF", { "example4.com", LDNS_RR_TYPE_MF }, false },
+            { "||example5.com$dnstype=A|~WKS", { "example5.com", LDNS_RR_TYPE_WKS }, false },
+            { "||example6.com$dnstype=NULL|~HINFO", { "example6.com", LDNS_RR_TYPE_NULL }, true },
+            { "||example7.com$dnstype=~ISDN|~NSAP", { "example7.com", LDNS_RR_TYPE_NSAP }, false },
+            { "||example8.com$dnstype=~ISDN|~NSAP", { "example8.com", LDNS_RR_TYPE_NXT }, true },
+            { "||example9.com$dnstype=CERT|NAPTR", { "example9.com", LDNS_RR_TYPE_NIMLOC }, false },
+    };
+
+    std::string filter_data;
+    for (const test_data &entry : TEST_DATA) {
+        filter_data += AG_FMT("{}\r\n", entry.rule);
+    }
+
+    ag::dnsfilter::engine_params params = { { { 10, filter_data, true } } };
+    auto [handle, err_or_warn] = filter.create(params);
+    ASSERT_TRUE(handle) << *err_or_warn;
+
+    for (const test_data &entry : TEST_DATA) {
+        SPDLOG_INFO("testing {}", entry.rule);
+        std::vector<ag::dnsfilter::rule> rules = filter.match(handle, { entry.param });
+        if (entry.expect_blocked) {
+            ASSERT_EQ(rules.size(), 1);
+            ASSERT_EQ(rules[0].text, entry.rule);
+        } else {
+            if (!rules.empty()) {
+                const auto *info = std::get_if<ag::dnsfilter::adblock_rule_info>(&rules[0].content);
+                ASSERT_NE(info, nullptr);
+                ASSERT_TRUE(info->props.test(ag::dnsfilter::DARP_EXCEPTION));
+            } else {
+                ASSERT_EQ(rules.size(), 0);
+            }
+        }
+    }
+
+    filter.destroy(handle);
 }

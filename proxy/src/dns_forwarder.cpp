@@ -170,7 +170,7 @@ static ldns_pkt *create_arecord_response(const ldns_pkt *request, const dnsproxy
     ldns_rr_set_type(answer, LDNS_RR_TYPE_A);
     ldns_rr_set_class(answer, LDNS_RR_CLASS_IN);
     for (size_t i = 0; rules[i] != nullptr; ++i) {
-        const std::string &ip = rules[i]->ip.value();
+        const std::string &ip = std::get<ag::dnsfilter::etc_hosts_rule_info>(rules[i]->content).ip;
         ldns_rdf *rdf = ldns_rdf_new_frm_str(LDNS_RDF_TYPE_A, ip.c_str());
         assert(rdf);
         ldns_rr_push_rdf(answer, rdf);
@@ -192,7 +192,7 @@ static ldns_pkt *create_aaaarecord_response(const ldns_pkt *request, const dnspr
     ldns_rr_set_type(answer, LDNS_RR_TYPE_AAAA);
     ldns_rr_set_class(answer, LDNS_RR_CLASS_IN);
     for (size_t i = 0; rules[i] != nullptr; ++i) {
-        const std::string &ip = rules[i]->ip.value();
+        const std::string &ip = std::get<ag::dnsfilter::etc_hosts_rule_info>(rules[i]->content).ip;
         ldns_rdf *rdf = ldns_rdf_new_frm_str(LDNS_RDF_TYPE_AAAA, ip.c_str());
         assert(rdf);
         ldns_rr_push_rdf(answer, rdf);
@@ -212,7 +212,8 @@ static ldns_pkt *create_response_with_ips(const ldns_pkt *request, const dnsprox
         std::fill(ipv4_rules, ipv4_rules + rules.size() + 1, nullptr);
         size_t num = 0;
         for (const dnsfilter::rule *r : rules) {
-            if (utils::is_valid_ip4(r->ip.value())) {
+            const auto *content = std::get_if<ag::dnsfilter::etc_hosts_rule_info>(&r->content);
+            if (content != nullptr && utils::is_valid_ip4(content->ip)) {
                 ipv4_rules[num++] = r;
             }
         }
@@ -224,7 +225,8 @@ static ldns_pkt *create_response_with_ips(const ldns_pkt *request, const dnsprox
         std::fill(ipv6_rules, ipv6_rules + rules.size() + 1, nullptr);
         size_t num = 0;
         for (const dnsfilter::rule *r : rules) {
-            if (!utils::is_valid_ip4(r->ip.value())) {
+            const auto *content = std::get_if<ag::dnsfilter::etc_hosts_rule_info>(&r->content);
+            if (content != nullptr && !utils::is_valid_ip4(content->ip)) {
                 ipv6_rules[num++] = r;
             }
         }
@@ -280,12 +282,11 @@ static ldns_pkt *create_unspec_or_custom_address_response(const ldns_pkt *reques
 // i.e. the proxy must respond with a blocking response according to the blocking_mode
 static bool rules_contain_blocking_ip(const std::vector<const dnsfilter::rule *> &rules) {
     static const ag::hash_set<std::string> BLOCKING_IPS = {"0.0.0.0", "127.0.0.1", "::", "::1", "[::]", "[::1]"};
-    for (const auto &rule : rules) {
-        if (rule->ip && BLOCKING_IPS.count(*rule->ip)) {
-            return true;
-        }
-    }
-    return false;
+    return std::any_of(rules.begin(), rules.end(),
+            [] (const dnsfilter::rule *rule) -> bool {
+                const auto *content = std::get_if<ag::dnsfilter::etc_hosts_rule_info>(&rule->content);
+                return content != nullptr && BLOCKING_IPS.count(content->ip);
+            });
 }
 
 static ldns_pkt *create_blocking_response(const ldns_pkt *request, const dnsproxy_settings *settings,
@@ -297,7 +298,7 @@ static ldns_pkt *create_blocking_response(const ldns_pkt *request, const dnsprox
     if (type != LDNS_RR_TYPE_A && type != LDNS_RR_TYPE_AAAA) {
         switch (settings->blocking_mode) {
         case dnsproxy_blocking_mode::DEFAULT:
-            if (!effective_rule->ip) { // Adblock-style rule
+            if (nullptr != std::get_if<ag::dnsfilter::adblock_rule_info>(&effective_rule->content)) {
                 response = create_refused_response(request, settings);
             } else {
                 response = create_soa_response(request, settings, SOA_RETRY_DEFAULT);
@@ -314,7 +315,7 @@ static ldns_pkt *create_blocking_response(const ldns_pkt *request, const dnsprox
             response = create_soa_response(request, settings, SOA_RETRY_DEFAULT);
             break;
         }
-    } else if (!effective_rule->ip) { // Adblock-style rule
+    } else if (nullptr != std::get_if<ag::dnsfilter::adblock_rule_info>(&effective_rule->content)) {
         switch (settings->blocking_mode) {
         case dnsproxy_blocking_mode::DEFAULT:
         case dnsproxy_blocking_mode::REFUSED:
@@ -376,7 +377,8 @@ static void event_append_rules(dns_request_processed_event &event,
         event.filter_list_ids.insert(event.filter_list_ids.begin(), rule->filter_id);
     }
 
-    event.whitelist = additional_rules[0]->props.test(dnsfilter::RP_EXCEPTION);
+    const auto *content = std::get_if<ag::dnsfilter::adblock_rule_info>(&additional_rules[0]->content);
+    event.whitelist = content != nullptr && content->props.test(dnsfilter::DARP_EXCEPTION);
 }
 
 std::string dns_forwarder_utils::rr_list_to_string(const ldns_rr_list *rr_list) {
@@ -1127,11 +1129,14 @@ std::optional<uint8_vector> dns_forwarder::apply_filter(std::string_view hostnam
                                                         dns_request_processed_event &event,
                                                         std::vector<dnsfilter::rule> &last_effective_rules,
                                                         bool fire_event, ldns_pkt_rcode *out_rcode) {
-    auto rules = this->filter.match(this->filter_handle, hostname);
+    auto rules = this->filter.match(this->filter_handle,
+            { hostname, ldns_rr_get_type(ldns_rr_list_rr(ldns_pkt_question(request), 0)) });
     for (const dnsfilter::rule &rule : rules) {
         tracelog_fid(log, request, "Matched rule: {}", rule.text);
     }
-    rules.insert(rules.cend(), last_effective_rules.cbegin(), last_effective_rules.cend());
+    rules.insert(rules.end(),
+            std::make_move_iterator(last_effective_rules.begin()),
+            std::make_move_iterator(last_effective_rules.end()));
     auto effective_rules = dnsfilter::get_effective_rules(rules);
 
     event_append_rules(event, effective_rules);
@@ -1141,7 +1146,10 @@ std::optional<uint8_vector> dns_forwarder::apply_filter(std::string_view hostnam
         last_effective_rules.push_back(*effective_rule);
     }
 
-    if (effective_rules.empty() || effective_rules[0]->props.test(dnsfilter::RP_EXCEPTION)) {
+    if (const ag::dnsfilter::adblock_rule_info *content;
+            effective_rules.empty()
+            || ((content = std::get_if<ag::dnsfilter::adblock_rule_info>(&effective_rules[0]->content))
+                    && content->props.test(dnsfilter::DARP_EXCEPTION))) {
         return std::nullopt;
     }
 

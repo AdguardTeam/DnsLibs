@@ -208,14 +208,15 @@ struct rules_stat {
     size_t badfilter_rules;
 };
 
-static bool count_rules(uint32_t idx, std::string_view line, void *arg) {
+static bool count_rules(uint32_t, std::string_view line, void *arg) {
     std::optional<rule_utils::rule> rule = rule_utils::parse(line);
     if (!rule.has_value()) {
         return true;
     }
 
     auto *stat = (rules_stat *)arg;
-    if (rule->public_part.props.test(ag::dnsfilter::RP_BADFILTER)) {
+    if (const auto *content = std::get_if<ag::dnsfilter::adblock_rule_info>(&rule->public_part.content);
+            content != nullptr && content->props.test(ag::dnsfilter::DARP_BADFILTER)) {
         ++stat->badfilter_rules;
         return true;
     }
@@ -258,7 +259,8 @@ bool filter::impl::load_line(uint32_t file_idx, std::string_view line, void *arg
     size_t approx_rule_mem = 0; // bytes
     const std::string &str = rule->public_part.text;
 
-    if (rule->public_part.props.test(ag::dnsfilter::RP_BADFILTER)) {
+    if (const auto *content = std::get_if<ag::dnsfilter::adblock_rule_info>(&rule->public_part.content);
+            content != nullptr && content->props.test(ag::dnsfilter::DARP_BADFILTER)) {
         std::string text = rule_utils::get_text_without_badfilter(rule->public_part);
         uint32_t hash = ag::utils::hash(text);
 
@@ -429,6 +431,48 @@ std::pair<filter::load_result, size_t> filter::load(const ag::dnsfilter::filter_
     return {load_line_arg.result, load_line_arg.approx_mem};
 }
 
+enum adblock_modifiers_match_status {
+    /** A rule is not matched because of its modifiers */
+    AMMS_NOT_MATCHED,
+    /** A domain is matched by rule's modifiers, but it should be checked against rule's pattern as well */
+    AMMS_MATCH_CANDIDATE,
+    /** A domain is definitely matched by rule's modifiers, no need to check rule's pattern */
+    AMMS_MATCHED_SURELY,
+};
+
+static adblock_modifiers_match_status match_adblock_modifiers(
+        const rule_utils::rule &rule, const filter::match_context &ctx) {
+    const auto &info = std::get<ag::dnsfilter::adblock_rule_info>(rule.public_part.content);
+
+    if (info.props.test(ag::dnsfilter::DARP_BADFILTER)) {
+        // no need for further checks of $badfilter rules
+        return AMMS_MATCHED_SURELY;
+    }
+
+    if (info.props.test(ag::dnsfilter::DARP_DNSTYPE)) {
+        // match the request by its type against the $dnstype rule
+        adblock_modifiers_match_status status;
+
+        switch (const rule_utils::dnstype_info &dnstype = rule.dnstype.value();
+                    dnstype.mode) {
+        case rule_utils::dnstype_info::DTMM_ENABLE:
+            // check if type is enabled by the rule
+            status = dnstype.types.end() != std::find(dnstype.types.begin(), dnstype.types.end(), ctx.rr_type)
+                    ? AMMS_MATCH_CANDIDATE : AMMS_NOT_MATCHED;
+            break;
+        case rule_utils::dnstype_info::DTMM_EXCLUDE:
+            // check if type is excluded by the rule
+            status = dnstype.types.end() == std::find(dnstype.types.begin(), dnstype.types.end(), ctx.rr_type)
+                    ? AMMS_MATCH_CANDIDATE : AMMS_NOT_MATCHED;
+            break;
+        }
+
+        return status;
+    }
+
+    return AMMS_MATCH_CANDIDATE;
+}
+
 static inline bool match_shortcuts(const std::vector<std::string> &shortcuts, std::string_view domain) {
     size_t seek = 0;
     bool found = false;
@@ -451,9 +495,17 @@ bool filter::impl::match_against_line(match_arg &match, std::string_view line) {
         goto exit;
     }
 
-    if (rule->public_part.props.test(ag::dnsfilter::RP_BADFILTER)) {
-        matched = true;
-        goto exit;
+    if (nullptr != std::get_if<ag::dnsfilter::adblock_rule_info>(&rule->public_part.content)) {
+        switch (match_adblock_modifiers(rule.value(), match.ctx)) {
+        case AMMS_NOT_MATCHED:
+            matched = false;
+            goto exit;
+        case AMMS_MATCH_CANDIDATE:
+            break;
+        case AMMS_MATCHED_SURELY:
+            matched = true;
+            goto exit;
+        }
     }
 
     switch (rule->match_method) {
@@ -626,8 +678,8 @@ void filter::match(match_context &ctx) {
     ag::file::close(m.file);
 }
 
-filter::match_context filter::create_match_context(std::string_view host) {
-    match_context ctx = { ag::utils::to_lower(host), {}, {} };
+filter::match_context filter::create_match_context(ag::dnsfilter::match_param param) {
+    match_context ctx = { ag::utils::to_lower(param.domain), {}, {}, param.rr_type };
 
     size_t n = std::count(ctx.host.begin(), ctx.host.end(), '.');
     if (n > 0) {

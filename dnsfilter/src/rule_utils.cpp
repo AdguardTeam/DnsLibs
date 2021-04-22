@@ -35,11 +35,24 @@ static const ag::regex SHORTCUT_REGEXES[] =
 
 struct supported_modifier_descriptor {
     std::string_view name;
-    ag::dnsfilter::rule_props id;
+    ag::dnsfilter::adblock_rule_props id;
+    /**
+     * If non-null, the modifier may have some parameters to parse.
+     * E.g., `$dnstype` does it may be `$dnstype=A`,
+     * but `$important` does not as it may not be `$important=some`.
+     * @param rule the rule
+     * @param params_str the parameters string (a slice of `rule`'s text)
+     * @return true if successful
+     */
+    bool (* parse_modifier_params)(rule_utils::rule &rule, std::string_view params_str, ag::logger *log) = nullptr;
 };
+
+static bool parse_dnstype_modifier(rule_utils::rule &rule, std::string_view params_str, ag::logger *log);
+
 static constexpr supported_modifier_descriptor SUPPORTED_MODIFIERS[] = {
-    { "important", ag::dnsfilter::RP_IMPORTANT },
-    { "badfilter", ag::dnsfilter::RP_BADFILTER },
+    { "important", ag::dnsfilter::DARP_IMPORTANT },
+    { "badfilter", ag::dnsfilter::DARP_BADFILTER },
+    { "dnstype", ag::dnsfilter::DARP_DNSTYPE, &parse_dnstype_modifier },
 };
 
 // RFC1035 $2.3.4 Size limits (https://tools.ietf.org/html/rfc1035#section-2.3.4)
@@ -126,7 +139,7 @@ static inline bool is_domain_name(std::string_view str) {
 
 // https://github.com/AdguardTeam/AdguardHome/wiki/Hosts-Blocklists#-etchosts-syntax
 static std::optional<rule_utils::rule> parse_host_file_rule(std::string_view str, ag::logger *log) {
-    str = ag::utils::rtrim(str.substr(0, str.find("#")));
+    str = ag::utils::rtrim(str.substr(0, str.find('#')));
     std::vector<std::string_view> parts = ag::utils::split_by_any_of(str, " \t");
     if (parts.size() < 2) {
         return std::nullopt;
@@ -152,38 +165,122 @@ static std::optional<rule_utils::rule> parse_host_file_rule(std::string_view str
         return std::nullopt;
     }
 
-    r.public_part = { 0, std::string(str), {}, std::make_optional(std::string(parts[0])) };
+    r.public_part =
+            { 0, std::string(str), ag::dnsfilter::etc_hosts_rule_info{ std::string(parts[0]) } };
     return std::make_optional(std::move(r));
 }
 
+// https://github.com/AdguardTeam/AdguardHome/wiki/Hosts-Blocklists#dnstype
+static bool parse_dnstype_modifier(rule_utils::rule &rule, std::string_view params_str, ag::logger *log) {
+    if (params_str.empty()
+            && !std::get<ag::dnsfilter::adblock_rule_info>(rule.public_part.content)
+                    .props.test(ag::dnsfilter::DARP_EXCEPTION)) {
+        ru_dbglog(log, "Blocking rule must have some types specified");
+        return false;
+    }
+
+    std::vector types = ag::utils::split_by(params_str, '|');
+    if (types.empty() && !params_str.empty()) {
+        ru_dbglog(log, "Malformed modifier parameters: {}", params_str);
+        return false;
+    }
+
+    using types_list = std::vector<ldns_rr_type>;
+    types_list enabled_types;
+    enabled_types.reserve(types.size());
+    types_list excluded_types;
+    excluded_types.reserve(types.size());
+
+    for (std::string_view t : types) {
+        bool enabled = t.front() != '~';
+        if (!enabled) {
+            t.remove_prefix(1);
+        }
+
+        ldns_rr_type type = ldns_get_rr_type_by_name(std::string(t).c_str());
+        if (type == 0) {
+            ru_dbglog(log, "Unexpected DNS type: {}", t);
+            return false;
+        }
+
+        types_list &list_to_check = enabled ? excluded_types : enabled_types;
+        types_list &list_to_insert = enabled ? enabled_types : excluded_types;
+
+        if (list_to_check.end() != std::find(list_to_check.begin(), list_to_check.end(), type)) {
+            ru_dbglog(log, "DNS type can't be both enabled and excluded: {}", t);
+            return false;
+        }
+
+        list_to_insert.emplace_back(type);
+        if (list_to_insert.end() != std::unique(list_to_insert.begin(), list_to_insert.end())) {
+            ru_dbglog(log, "Duplicated DNS type: {}", t);
+            return false;
+        }
+    }
+
+    rule.dnstype = !enabled_types.empty()
+            ? rule_utils::dnstype_info{ std::move(enabled_types),rule_utils::dnstype_info::DTMM_ENABLE }
+            : rule_utils::dnstype_info{ std::move(excluded_types), rule_utils::dnstype_info::DTMM_EXCLUDE };
+
+    return true;
+}
+
 // https://github.com/AdguardTeam/AdguardHome/wiki/Hosts-Blocklists#rule-modifiers
-static inline bool extract_modifiers(std::string_view modifiers_str,
-        std::bitset<ag::dnsfilter::RP_NUM> *props, ag::logger *log) {
+static inline bool extract_modifiers(rule_utils::rule &rule, std::string_view modifiers_str, ag::logger *log) {
     if (modifiers_str.empty()) {
         return true;
     }
 
+    auto &info = std::get<ag::dnsfilter::adblock_rule_info>(rule.public_part.content);
     std::vector<std::string_view> modifiers = ag::utils::split_by(modifiers_str, MODIFIERS_DELIMITER);
     for (const std::string_view &modifier : modifiers) {
         const supported_modifier_descriptor *found = nullptr;
         for (const supported_modifier_descriptor &descr : SUPPORTED_MODIFIERS) {
-            if (modifier == descr.name) {
-                found = &descr;
-                break;
+            if (!ag::utils::starts_with(modifier, descr.name)) {
+                continue;
             }
-        }
-        if (found != nullptr) {
-            if (!props->test(found->id)) {
-                props->set(found->id);
-            } else {
-                ru_dbglog(log, "Duplicated modifier: {}", found->name);
+            if (modifier.length() > descr.name.length()) {
+                if (modifier[descr.name.length()] != '=') {
+                    continue;
+                }
+                if (descr.parse_modifier_params == nullptr) {
+                    ru_dbglog(log, "Modifier can't have parameters: {}", modifier);
+                    return false;
+                }
+            }
+
+            if (descr.parse_modifier_params == nullptr) {
+                goto modifier_found;
+            }
+
+            if (modifier.length() == descr.name.length() + 1) {
+                ru_dbglog(log, "Modifier has empty parameters section: {}", modifier);
                 return false;
             }
-        } else {
+
+            if (size_t start_pos = (modifier.length() > descr.name.length()) ? descr.name.length() + 1 : descr.name.length();
+                    descr.parse_modifier_params != nullptr
+                    && !descr.parse_modifier_params(rule, modifier.substr(start_pos), log)) {
+                return false;
+            }
+
+            modifier_found:
+            found = &descr;
+            break;
+        }
+
+        if (found == nullptr) {
             ru_dbglog(log, "Unknown modifier: {}", modifier);
             return false;
         }
+        if (info.props.test(found->id)) {
+            ru_dbglog(log, "Duplicated modifier: {}", found->name);
+            return false;
+        }
+
+        info.props.set(found->id);
     }
+
     return true;
 }
 
@@ -288,6 +385,7 @@ static inline bool is_host_rule(std::string_view str) {
             && (ag::utils::is_valid_ip4(parts[0]) || ag::utils::is_valid_ip6(parts[0]));
 }
 
+// https://github.com/AdguardTeam/AdguardHome/wiki/Hosts-Blocklists#domains-only
 static inline rule_utils::rule make_exact_domain_name_rule(std::string_view name) {
     rule_utils::rule r{};
     r.public_part.text = std::string{name};
@@ -339,30 +437,13 @@ static std::vector<std::string_view> extract_regex_shortcuts(std::string_view te
     return shortcuts;
 }
 
-std::optional<rule_utils::rule> rule_utils::parse(std::string_view str, ag::logger *log) {
+static std::optional<rule_utils::rule> parse_adblock_rule(std::string_view str, ag::logger *log) {
+    using rule = rule_utils::rule;
+
     std::string_view orig_str = str;
-    if (is_comment(str)) {
-        return std::nullopt;
-    }
-
-    str = ag::utils::trim(str);
-
-    if (str.empty()) {
-        return std::nullopt;
-    }
-
-    if (is_domain_name(str)) {
-        return make_exact_domain_name_rule(str);
-    }
-
-    if (is_host_rule(str)) {
-        return parse_host_file_rule(str, log);
-    }
-
-    std::bitset<ag::dnsfilter::RP_NUM> props;
-    if (ag::utils::starts_with(str, EXCEPTION_MARKER)) {
+    bool is_exception = ag::utils::starts_with(str, EXCEPTION_MARKER);
+    if (is_exception) {
         str.remove_prefix(EXCEPTION_MARKER.length());
-        props.set(ag::dnsfilter::RP_EXCEPTION);
     }
 
     std::array<std::string_view, 2> parts = { str, {} };
@@ -383,12 +464,16 @@ std::optional<rule_utils::rule> rule_utils::parse(std::string_view str, ag::logg
         return std::nullopt;
     }
 
-    if (!extract_modifiers(parts[1], &props, log)) {
+    rule r = {};
+    auto &rule_info = r.public_part.content.emplace<ag::dnsfilter::adblock_rule_info>();
+    rule_info.props.set(ag::dnsfilter::DARP_EXCEPTION, is_exception);
+    if (!extract_modifiers(r, parts[1], log)) {
         return std::nullopt;
     }
 
-    rule r = { { 0, std::string(orig_str), props, std::nullopt }, {}, {} };
-    if (props.test(ag::dnsfilter::RP_BADFILTER)) {
+    r.public_part.text = std::string(orig_str);
+
+    if (rule_info.props.test(ag::dnsfilter::DARP_BADFILTER)) {
         return std::make_optional(std::move(r));
     }
 
@@ -443,6 +528,28 @@ std::optional<rule_utils::rule> rule_utils::parse(std::string_view str, ag::logg
     }
 
     return std::make_optional(std::move(r));
+}
+
+std::optional<rule_utils::rule> rule_utils::parse(std::string_view str, ag::logger *log) {
+    if (is_comment(str)) {
+        return std::nullopt;
+    }
+
+    str = ag::utils::trim(str);
+
+    if (str.empty()) {
+        return std::nullopt;
+    }
+
+    if (is_domain_name(str)) {
+        return make_exact_domain_name_rule(str);
+    }
+
+    if (is_host_rule(str)) {
+        return parse_host_file_rule(str, log);
+    }
+
+    return parse_adblock_rule(str, log);
 }
 
 std::string rule_utils::get_regex(const rule &r) {

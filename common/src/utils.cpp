@@ -54,7 +54,7 @@ std::vector<std::string_view> ag::utils::split_by(std::string_view str, int deli
 
 std::vector<std::string_view> ag::utils::split_by_any_of(std::string_view str, std::string_view delim) {
     if (str.empty()) {
-        return { str };
+        return {};
     }
 
     size_t num = 1 + std::count_if(str.begin(), str.end(),
@@ -165,4 +165,3 @@ std::optional<std::string_view> ag::utils::read_line(std::string_view str, size_
 
     return ag::utils::trim({&str[start], end - start});
 }
-
