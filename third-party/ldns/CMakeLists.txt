@@ -37,7 +37,7 @@ target_include_directories(ldns PUBLIC ldns)
 target_include_directories(ldns PUBLIC compat)
 target_include_directories(ldns PUBLIC ext)
 
-target_compile_definitions(ldns PRIVATE HAVE_CONFIG_H=1)
+target_compile_definitions(ldns PRIVATE HAVE_CONFIG_H=1 RRTYPE_SVCB_HTTPS)
 
 if(NOT TARGET dnslibs_common)
     add_subdirectory(${DNSLIBS_DIR}/common ${CMAKE_BINARY_DIR}/common)
@@ -46,7 +46,6 @@ target_link_libraries(ldns dnslibs_common)
 
 include(../../cmake/apply_patch.cmake)
 apply_patch(${CMAKE_CURRENT_SOURCE_DIR}/ag_ext.patch ${CMAKE_CURRENT_SOURCE_DIR}/ldns)
-apply_patch(${CMAKE_CURRENT_SOURCE_DIR}/type65.patch ${CMAKE_CURRENT_SOURCE_DIR}/ldns)
 
 if (MSVC)
     apply_patch(${CMAKE_CURRENT_SOURCE_DIR}/windows.patch ${CMAKE_CURRENT_SOURCE_DIR}/ldns)

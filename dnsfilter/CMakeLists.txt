@@ -12,6 +12,7 @@ set(SRCS
         ${SRC_DIR}/engine.cpp
         ${SRC_DIR}/filter.cpp
         ${SRC_DIR}/rule_utils.cpp
+        ${SRC_DIR}/dnsrewrite.cpp
     )
 
 add_library(dnsfilter STATIC EXCLUDE_FROM_ALL ${SRCS})
@@ -60,3 +61,4 @@ link_libraries(dnsfilter)
 set(TEST_DIR ${CMAKE_CURRENT_SOURCE_DIR}/test)
 
 add_unit_test(dnsfilter_test ${TEST_DIR} ${SRC_DIR} TRUE TRUE)
+add_unit_test(dnsrewrite_test ${TEST_DIR} ${SRC_DIR} TRUE TRUE)

@@ -158,13 +158,77 @@ TEST_F(dnsproxy_test, test_dnstype_blocking_rule) {
             }
     };
 
-    auto [ret, err] = proxy.init(settings, {});
+    auto [ret, err] = proxy.init(settings, events);
     ASSERT_TRUE(ret) << *err;
 
     ag::ldns_pkt_ptr response;
     ASSERT_NO_FATAL_FAILURE(perform_request(proxy, create_request("example.com", LDNS_RR_TYPE_A, LDNS_RD), response));
     ASSERT_EQ(ldns_pkt_ancount(response.get()), 0);
     ASSERT_EQ(ldns_pkt_get_rcode(response.get()), LDNS_RCODE_REFUSED);
+    ASSERT_EQ(last_event.rules.size(), 1);
+}
+
+TEST_F(dnsproxy_test, test_dnsrewrite_rule) {
+    ag::dnsproxy_settings settings = make_dnsproxy_settings();
+    settings.filter_params =
+            {{{
+                1,
+                "@@example.com$important\n"
+                "example.com$dnsrewrite=1.2.3.4\n"
+                "example.com$dnsrewrite=NOERROR;A;100.200.200.100\n"
+                "example.com$dnsrewrite=NOERROR;MX;42 example.mail\n"
+                "@@example.com$dnsrewrite=1.2.3.4\n",
+                true
+            }}};
+
+    ag::dns_request_processed_event last_event{};
+    ag::dnsproxy_events events{
+            .on_request_processed = [&last_event](const ag::dns_request_processed_event &event) {
+                last_event = event;
+            }
+    };
+
+    auto [ret, err] = proxy.init(settings, events);
+    ASSERT_TRUE(ret) << *err;
+
+    ag::ldns_pkt_ptr response;
+    ASSERT_NO_FATAL_FAILURE(perform_request(proxy, create_request("example.com", LDNS_RR_TYPE_A, LDNS_RD), response));
+    ASSERT_EQ(last_event.rules.size(), 3);
+    ASSERT_EQ(ldns_pkt_ancount(response.get()), 2);
+    ASSERT_EQ(ldns_pkt_get_rcode(response.get()), LDNS_RCODE_NOERROR);
+}
+
+TEST_F(dnsproxy_test, test_dnsrewrite_cname) {
+    ag::dnsproxy_settings settings = make_dnsproxy_settings();
+    settings.filter_params = {{{ 1, "example.com$dnsrewrite=ietf.org", true }}};
+
+    ag::dns_request_processed_event last_event{};
+    ag::dnsproxy_events events{
+            .on_request_processed = [&last_event](const ag::dns_request_processed_event &event) {
+                last_event = event;
+            }
+    };
+
+    auto [ret, err] = proxy.init(settings, events);
+    ASSERT_TRUE(ret) << *err;
+
+    ag::ldns_pkt_ptr response;
+    ASSERT_NO_FATAL_FAILURE(perform_request(proxy, create_request("example.com", LDNS_RR_TYPE_A, LDNS_RD), response));
+    ASSERT_EQ(last_event.rules.size(), 1);
+
+    ag::ldns_pkt_ptr cname_response;
+    ASSERT_NO_FATAL_FAILURE(perform_request(proxy, create_request("ietf.org", LDNS_RR_TYPE_A, LDNS_RD), cname_response));
+
+    size_t num = 0;
+    for (size_t i = 0; i < ldns_pkt_ancount(cname_response.get()); ++i) {
+        const ldns_rr *rr = ldns_rr_list_rr(ldns_pkt_answer(cname_response.get()), i);
+        if (ldns_rr_get_type(rr) == LDNS_RR_TYPE_A) {
+            ++num;
+        }
+    }
+
+    ASSERT_EQ(ldns_pkt_ancount(response.get()), num + 1);
+    ASSERT_EQ(ldns_pkt_get_rcode(response.get()), LDNS_RCODE_NOERROR);
 }
 
 TEST(dnsproxy_test_static, cname_formatting) {

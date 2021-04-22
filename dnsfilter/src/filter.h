@@ -4,6 +4,7 @@
 #include <string_view>
 #include <memory>
 #include <vector>
+#include <string>
 #include <dnsfilter.h>
 #include "rule_utils.h"
 
@@ -15,6 +16,7 @@ public:
         std::vector<std::string_view> subdomains; // list of subdomains
         std::vector<ag::dnsfilter::rule> matched_rules; // list of matched rules
         ldns_rr_type rr_type; // query RR type
+        std::string reverse_lookup_fqdn; // non-empty if the request is a reverse DNS lookup
     };
 
     static match_context create_match_context(ag::dnsfilter::match_param param);

@@ -142,13 +142,13 @@ static inline constexpr bool ends_with(std::string_view str, std::string_view su
 /**
  * Splits string by delimiter
  */
-std::vector<std::string_view> split_by(std::string_view str, int delim);
-std::vector<std::string_view> split_by(std::string_view str, std::string_view delim);
+std::vector<std::string_view> split_by(std::string_view str, int delim, bool include_empty = false);
+std::vector<std::string_view> split_by(std::string_view str, std::string_view delim, bool include_empty = false);
 
 /**
  * Splits string by any character in delimiters
  */
-std::vector<std::string_view> split_by_any_of(std::string_view str, std::string_view delim);
+std::vector<std::string_view> split_by_any_of(std::string_view str, std::string_view delim, bool include_empty = false);
 
 /**
  * Split string by first found delimiter for 2 parts

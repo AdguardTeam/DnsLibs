@@ -9,10 +9,6 @@
 #include "rule_utils.h"
 
 
-#define ru_warnlog(l_, ...) do { if ((l_) != nullptr) warnlog(*(l_), __VA_ARGS__); } while (0)
-#define ru_dbglog(l_, ...) do { if ((l_) != nullptr) dbglog(*(l_), __VA_ARGS__); } while (0)
-
-
 static constexpr int MODIFIERS_MARKER = '$';
 static constexpr int MODIFIERS_DELIMITER = ',';
 static constexpr std::string_view EXCEPTION_MARKER = "@@";
@@ -42,17 +38,21 @@ struct supported_modifier_descriptor {
      * but `$important` does not as it may not be `$important=some`.
      * @param rule the rule
      * @param params_str the parameters string (a slice of `rule`'s text)
+     * @param match_info the parsed match info of the rule
      * @return true if successful
      */
-    bool (* parse_modifier_params)(rule_utils::rule &rule, std::string_view params_str, ag::logger *log) = nullptr;
+    bool (* parse_modifier_params)(rule_utils::rule &rule, std::string_view params_str,
+            const rule_utils::match_info &match_info, ag::logger *log) = nullptr;
 };
 
-static bool parse_dnstype_modifier(rule_utils::rule &rule, std::string_view params_str, ag::logger *log);
+static bool parse_dnstype_modifier(rule_utils::rule &rule, std::string_view params_str,
+        const rule_utils::match_info &match_info, ag::logger *log);
 
 static constexpr supported_modifier_descriptor SUPPORTED_MODIFIERS[] = {
     { "important", ag::dnsfilter::DARP_IMPORTANT },
     { "badfilter", ag::dnsfilter::DARP_BADFILTER },
     { "dnstype", ag::dnsfilter::DARP_DNSTYPE, &parse_dnstype_modifier },
+    { "dnsrewrite", ag::dnsfilter::DARP_DNSREWRITE, &rule_utils::parse_dnsrewrite_modifier },
 };
 
 // RFC1035 $2.3.4 Size limits (https://tools.ietf.org/html/rfc1035#section-2.3.4)
@@ -63,27 +63,41 @@ static constexpr size_t MAX_LABEL_LENGTH = 63;
 static constexpr size_t MAX_IPADDR_LENTH = 45;
 
 
-enum match_pattern_mode {
-    MPM_NONE = 0,
-    MPM_LINE_START_ASSERTED = 1 << 0, // `ample.org` should not match `example.org` (e.g. `|ample.org`)
-    MPM_LINE_END_ASSERTED = 1 << 1, // `exampl` should not match `example.org` (e.g. `exampl|`)
-    MPM_DOMAIN_START_ASSERTED = 1 << 2, // `example.org` should not match `eeexample.org`,
-                                        // but should match `sub.example.org` (e.g. `||example.org`)
-};
+ag::dnsfilter::adblock_rule_info::adblock_rule_info(props_set props)
+        : props(props)
+{}
 
-struct match_info {
-    std::string_view text; // matching text without all prefixes
-    bool is_regex_rule; // whether the original rule is a regex rule
-    bool has_wildcard;
-    int pattern_mode; // see `match_pattern_mode`
-};
+ag::dnsfilter::adblock_rule_info::~adblock_rule_info() {
+    delete this->params;
+}
+
+ag::dnsfilter::adblock_rule_info::adblock_rule_info(adblock_rule_info &&other) {
+    *this = std::move(other);
+}
+
+ag::dnsfilter::adblock_rule_info &ag::dnsfilter::adblock_rule_info::operator=(adblock_rule_info &&other) {
+    this->props = other.props;
+    std::swap(this->params, other.params);
+    return *this;
+}
+
+ag::dnsfilter::adblock_rule_info::adblock_rule_info(const adblock_rule_info &other) {
+    *this = other;
+}
+
+ag::dnsfilter::adblock_rule_info &ag::dnsfilter::adblock_rule_info::operator=(const adblock_rule_info &other) {
+    this->props = other.props;
+    this->params = other.params == nullptr ? nullptr : new parameters{ *other.params };
+    return *this;
+}
+
 
 static inline bool pattern_exact(int pattern_mode) {
-    return pattern_mode == (MPM_LINE_START_ASSERTED | MPM_LINE_END_ASSERTED);
+    return pattern_mode == (rule_utils::MPM_LINE_START_ASSERTED | rule_utils::MPM_LINE_END_ASSERTED);
 }
 
 static inline bool pattern_subdomains(int pattern_mode) {
-    return pattern_mode == (MPM_DOMAIN_START_ASSERTED | MPM_LINE_END_ASSERTED);
+    return pattern_mode == (rule_utils::MPM_DOMAIN_START_ASSERTED | rule_utils::MPM_LINE_END_ASSERTED);
 }
 
 static inline bool check_domain_pattern_labels(std::string_view domain) {
@@ -127,14 +141,14 @@ static inline bool is_ip(std::string_view str) {
     return ag::utils::str_to_socket_address(str).valid();
 }
 
-static inline bool is_domain_name(std::string_view str) {
+bool rule_utils::is_domain_name(std::string_view str) {
     return !str.empty() // Duh
            && !is_ip(str)
            && str.npos != str.find('.') // Single label is probably not a real domain name
            && str.back() != '.' // We consider a domain name ending with '.' a pattern
            && str.front() != '.' // Valid pattern, but not a valid domain
            && is_valid_domain_pattern(str) // This is a bit more general than Go dnsproxy's regex, but yolo
-           && str.npos == str.find("*"); // '*' is our special char for pattern matching
+           && str.npos == str.find('*'); // '*' is our special char for pattern matching
 }
 
 // https://github.com/AdguardTeam/AdguardHome/wiki/Hosts-Blocklists#-etchosts-syntax
@@ -147,7 +161,7 @@ static std::optional<rule_utils::rule> parse_host_file_rule(std::string_view str
     if (!ag::utils::is_valid_ip4(parts[0]) && !ag::utils::is_valid_ip6(parts[0])) {
         return std::nullopt;
     }
-    rule_utils::rule r = {};
+    rule_utils::rule r = { .public_part = { .content = ag::dnsfilter::etc_hosts_rule_info{} } };
     r.match_method = rule_utils::rule::MMID_SUBDOMAINS;
     r.matching_parts.reserve(parts.size() - 1);
     for (size_t i = 1; i < parts.size(); ++i) {
@@ -171,7 +185,8 @@ static std::optional<rule_utils::rule> parse_host_file_rule(std::string_view str
 }
 
 // https://github.com/AdguardTeam/AdguardHome/wiki/Hosts-Blocklists#dnstype
-static bool parse_dnstype_modifier(rule_utils::rule &rule, std::string_view params_str, ag::logger *log) {
+static bool parse_dnstype_modifier(rule_utils::rule &rule, std::string_view params_str,
+        const rule_utils::match_info &, ag::logger *log) {
     if (params_str.empty()
             && !std::get<ag::dnsfilter::adblock_rule_info>(rule.public_part.content)
                     .props.test(ag::dnsfilter::DARP_EXCEPTION)) {
@@ -226,7 +241,8 @@ static bool parse_dnstype_modifier(rule_utils::rule &rule, std::string_view para
 }
 
 // https://github.com/AdguardTeam/AdguardHome/wiki/Hosts-Blocklists#rule-modifiers
-static inline bool extract_modifiers(rule_utils::rule &rule, std::string_view modifiers_str, ag::logger *log) {
+static inline bool extract_modifiers(rule_utils::rule &rule, std::string_view modifiers_str,
+        const rule_utils::match_info &match_info, ag::logger *log) {
     if (modifiers_str.empty()) {
         return true;
     }
@@ -260,7 +276,7 @@ static inline bool extract_modifiers(rule_utils::rule &rule, std::string_view mo
 
             if (size_t start_pos = (modifier.length() > descr.name.length()) ? descr.name.length() + 1 : descr.name.length();
                     descr.parse_modifier_params != nullptr
-                    && !descr.parse_modifier_params(rule, modifier.substr(start_pos), log)) {
+                    && !descr.parse_modifier_params(rule, modifier.substr(start_pos), match_info, log)) {
                 return false;
             }
 
@@ -292,7 +308,7 @@ static int remove_skippable_prefixes(std::string_view &rule) {
     for (std::string_view prefix : SKIPPABLE_PREFIXES) {
         if (ag::utils::starts_with(rule, prefix)) {
             rule.remove_prefix(prefix.length());
-            return MPM_DOMAIN_START_ASSERTED;
+            return rule_utils::MPM_DOMAIN_START_ASSERTED;
         }
     }
     return 0;
@@ -301,19 +317,19 @@ static int remove_skippable_prefixes(std::string_view &rule) {
 static inline int remove_special_prefixes(std::string_view &rule) {
     if (ag::utils::starts_with(rule, "||")) {
         rule.remove_prefix(2);
-        return MPM_DOMAIN_START_ASSERTED;
+        return rule_utils::MPM_DOMAIN_START_ASSERTED;
     }
 
     if (rule.front() == '|') {
         rule.remove_prefix(1);
-        return MPM_LINE_START_ASSERTED;
+        return rule_utils::MPM_LINE_START_ASSERTED;
     }
 
-    return MPM_NONE;
+    return 0;
 }
 
 static inline int remove_special_suffixes(std::string_view &rule) {
-    int r = MPM_NONE;
+    int r = 0;
 
     std::vector<std::string_view> suffixes_to_remove(SPECIAL_SUFFIXES, SPECIAL_SUFFIXES + std::size(SPECIAL_SUFFIXES));
     std::vector<std::string_view>::iterator iter;
@@ -322,7 +338,7 @@ static inline int remove_special_suffixes(std::string_view &rule) {
                 return ag::utils::ends_with(rule, suffix);
             }))) {
         rule.remove_suffix(iter->length());
-        r = MPM_LINE_END_ASSERTED;
+        r = rule_utils::MPM_LINE_END_ASSERTED;
         suffixes_to_remove.erase(iter);
     }
 
@@ -342,17 +358,17 @@ static inline int remove_port(std::string_view &rule) {
     size_t fpos = rule.find(':');
     if (fpos == rpos && (fpos != rule.length() - 1) && is_valid_port(rule.substr(fpos + 1))) {
         rule = rule.substr(0, fpos);
-        return MPM_LINE_END_ASSERTED;
+        return rule_utils::MPM_LINE_END_ASSERTED;
     } else if (fpos > 0 && rule[fpos - 1] == ']' && rule[0] == '[') { // IPv6
         rule = rule.substr(1, rpos - 2);
-        return MPM_LINE_START_ASSERTED | MPM_LINE_END_ASSERTED;
+        return rule_utils::MPM_LINE_START_ASSERTED | rule_utils::MPM_LINE_END_ASSERTED;
     }
     return 0;
 }
 
 // https://github.com/AdguardTeam/AdguardHome/wiki/Hosts-Blocklists#adblock-style
-static match_info extract_match_info(std::string_view rule) {
-    match_info info = {.text = rule, .is_regex_rule = check_regex(rule), .has_wildcard = false, .pattern_mode = 0};
+static rule_utils::match_info extract_match_info(std::string_view rule) {
+    rule_utils::match_info info = {.text = rule, .is_regex_rule = check_regex(rule), .has_wildcard = false, .pattern_mode = 0};
 
     if (info.is_regex_rule) {
         info.text.remove_prefix(1); // begin slash
@@ -367,8 +383,9 @@ static match_info extract_match_info(std::string_view rule) {
     // so for the first we should check special ones
     info.pattern_mode |= remove_special_prefixes(info.text);
     info.pattern_mode |= remove_skippable_prefixes(info.text);
-    if ((info.pattern_mode & MPM_DOMAIN_START_ASSERTED) && (info.pattern_mode & MPM_LINE_START_ASSERTED)) {
-        info.pattern_mode ^= MPM_DOMAIN_START_ASSERTED;
+    if ((info.pattern_mode & rule_utils::MPM_DOMAIN_START_ASSERTED)
+            && (info.pattern_mode & rule_utils::MPM_LINE_START_ASSERTED)) {
+        info.pattern_mode ^= rule_utils::MPM_DOMAIN_START_ASSERTED;
     }
 
     info.pattern_mode |= remove_special_suffixes(info.text);
@@ -387,7 +404,7 @@ static inline bool is_host_rule(std::string_view str) {
 
 // https://github.com/AdguardTeam/AdguardHome/wiki/Hosts-Blocklists#domains-only
 static inline rule_utils::rule make_exact_domain_name_rule(std::string_view name) {
-    rule_utils::rule r{};
+    rule_utils::rule r = { .public_part = { .content = ag::dnsfilter::adblock_rule_info{} } };
     r.public_part.text = std::string{name};
     r.match_method = rule_utils::rule::MMID_EXACT;
     r.matching_parts = {ag::utils::to_lower(name)};
@@ -452,7 +469,7 @@ static std::optional<rule_utils::rule> parse_adblock_rule(std::string_view str, 
         str = parts[0];
     }
 
-    match_info info = extract_match_info(str);
+    rule_utils::match_info info = extract_match_info(str);
     str = info.text;
     if (str.empty() || str.find_first_not_of(".*") == str.npos) {
         ru_dbglog(log, "Too wide rule: {}", str);
@@ -464,10 +481,11 @@ static std::optional<rule_utils::rule> parse_adblock_rule(std::string_view str, 
         return std::nullopt;
     }
 
-    rule r = {};
-    auto &rule_info = r.public_part.content.emplace<ag::dnsfilter::adblock_rule_info>();
+    rule r = { .public_part = { .content = ag::dnsfilter::adblock_rule_info{} } };
+    auto &rule_info = std::get<ag::dnsfilter::adblock_rule_info>(r.public_part.content);
     rule_info.props.set(ag::dnsfilter::DARP_EXCEPTION, is_exception);
-    if (!extract_modifiers(r, parts[1], log)) {
+    rule_info.params = new ag::dnsfilter::adblock_rule_info::parameters{};
+    if (!extract_modifiers(r, parts[1], info, log)) {
         return std::nullopt;
     }
 

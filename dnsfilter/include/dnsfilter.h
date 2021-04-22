@@ -6,6 +6,7 @@
 #include <variant>
 #include <bitset>
 #include <tuple>
+#include <memory>
 #include <ag_defs.h>
 #include <magic_enum.hpp>
 #include <ldns/ldns.h>
@@ -37,14 +38,26 @@ public:
         DARP_IMPORTANT, // has `$important` modifier
         DARP_BADFILTER, // has `$badfilter` modifier
         DARP_DNSTYPE, // has `$dnstype` modifier
+        DARP_DNSREWRITE, // has `$dnsrewrite` modifier
     };
 
     // Both https://github.com/AdguardTeam/AdguardHome/wiki/Hosts-Blocklists#adblock-style
     // and https://github.com/AdguardTeam/AdguardHome/wiki/Hosts-Blocklists#domains-only
     struct adblock_rule_info {
         using props_set = std::bitset<magic_enum::enum_count<adblock_rule_props>()>;
+        struct parameters;
 
         props_set props; // properties (see `adblock_rule_props`)
+        parameters *params = nullptr; // parsed parameters
+
+        adblock_rule_info() = default;
+        explicit adblock_rule_info(props_set props);
+        ~adblock_rule_info();
+
+        adblock_rule_info(adblock_rule_info &&);
+        adblock_rule_info &operator=(adblock_rule_info &&);
+        adblock_rule_info(const adblock_rule_info &other);
+        adblock_rule_info &operator=(const adblock_rule_info &other);
     };
 
     // https://github.com/AdguardTeam/AdguardHome/wiki/Hosts-Blocklists#etc-hosts
@@ -100,6 +113,18 @@ public:
      */
     std::vector<rule> match(handle obj, match_param param);
 
+    struct effective_rules {
+        /** `$dnsrewrite` rules are special */
+        std::vector<const rule *> dnsrewrite;
+        /**
+         * All other rules. Contains the rules which have equal priority and the same kind.
+         * For example, if the following rules were matched:
+         *    `example.com`, `@@example.com` and `@@example.com$dnstype=a`,
+         * the leftovers list will contain: `@@example.com` and `@@example.com$dnstype=a`.
+         */
+        std::vector<const rule *> leftovers;
+    };
+
     /**
      * Select the rules which should be applied to the request
      * @detail     In the case of several rules which have hosts file syntax were matched this
@@ -107,7 +132,7 @@ public:
      * @param[in]  rules  matched rules
      * @return     Selected rules
      */
-    static std::vector<const rule *> get_effective_rules(const std::vector<rule> &rules);
+    static effective_rules get_effective_rules(const std::vector<rule> &rules);
 
     /**
      * Check if string is a valid rule
@@ -115,6 +140,35 @@ public:
      * @return true if string is a valid rule, false otherwise
      */
     static bool is_valid_rule(std::string_view str);
+
+    struct apply_dnsrewrite_result {
+        struct rewrite_info {
+            using ldns_rr_ptr = std::unique_ptr<ldns_rr, ag::ftor<&ldns_rr_free>>;
+
+            /** The rcode which should be set to the answer */
+            ldns_pkt_rcode rcode = LDNS_RCODE_NOERROR;
+            /** The RR list which should be added to the answer section if non-empty */
+            std::vector<ldns_rr_ptr> rrs;
+            /**
+             * The domain name to be resolved instead of the original one.
+             * In case it is non-nullopt, the proxy should resolve it and add the `rr_list`
+             * to the answer instead of blocking it immediately.
+             */
+            std::optional<std::string> cname;
+        };
+
+        /** The list of applied rules */
+        std::vector<const rule *> rules;
+        /** The rules applying result. nullopt if nothing to rewrite. */
+        std::optional<rewrite_info> rewritten_info;
+    };
+
+    /**
+     * Forge a result basing on the list of matched `$dnsrewrite` rules
+     * @param rules the rules to apply
+     * @return see `apply_dnsrewrite_result`
+     */
+    static apply_dnsrewrite_result apply_dnsrewrite_rules(const std::vector<const rule *> &rules);
 };
 
 } // namespace ag

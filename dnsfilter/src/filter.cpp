@@ -98,6 +98,7 @@ public:
     static void match_by_file_position(match_arg &match, size_t idx);
 
     void search_by_domains(match_arg &match) const;
+    void search_by_domains(match_arg &match, std::string_view domain) const;
     void search_by_shortcuts(match_arg &match) const;
     void search_in_leftovers(match_arg &match) const;
     void search_badfilter_rules(match_arg &match) const;
@@ -468,6 +469,18 @@ static adblock_modifiers_match_status match_adblock_modifiers(
         }
 
         return status;
+    } else if (info.props.test(ag::dnsfilter::DARP_DNSREWRITE)) {
+        // check if the request's type corresponds to the $dnsrewrite rule's type
+        std::optional<rule_utils::dnsrewrite_info> &dnsrewrite = info.params->dnsrewrite;
+        if (dnsrewrite.has_value()) {
+            if ((dnsrewrite->rrtype == LDNS_RR_TYPE_A && ctx.rr_type != LDNS_RR_TYPE_A)
+                    || (dnsrewrite->rrtype == LDNS_RR_TYPE_AAAA && ctx.rr_type != LDNS_RR_TYPE_AAAA)
+                    || (dnsrewrite->rrtype == LDNS_RR_TYPE_PTR && ctx.rr_type != LDNS_RR_TYPE_PTR)
+                    || (dnsrewrite->rrtype == LDNS_RR_TYPE_CNAME
+                            && ctx.rr_type != LDNS_RR_TYPE_A && ctx.rr_type != LDNS_RR_TYPE_AAAA)) {
+                return AMMS_NOT_MATCHED;
+            }
+        }
     }
 
     return AMMS_MATCH_CANDIDATE;
@@ -484,6 +497,46 @@ static inline bool match_shortcuts(const std::vector<std::string> &shortcuts, st
         seek += sc.length();
     }
     return found;
+}
+
+static bool match_pattern(const rule_utils::rule &rule,
+        std::string_view host, const std::vector<std::string_view> &subdomains) {
+    bool matched = false;
+
+    switch (rule.match_method) {
+    case rule_utils::rule::MMID_EXACT:
+        matched = rule.matching_parts.end() != std::find(rule.matching_parts.begin(), rule.matching_parts.end(), host);
+        break;
+    case rule_utils::rule::MMID_SUBDOMAINS: {
+        for (auto &part : rule.matching_parts) {
+            for (auto &subdomain : subdomains) { // assert `subdomains` also contains the full host
+                if ((matched = (subdomain == part))) {
+                    goto loopexit;
+                }
+            }
+        }
+        loopexit:
+        break;
+    }
+    case rule_utils::rule::MMID_SHORTCUTS:
+        matched = match_shortcuts(rule.matching_parts, host);
+        break;
+    case rule_utils::rule::MMID_SHORTCUTS_AND_REGEX:
+        assert(!rule.matching_parts.empty());
+        if (match_shortcuts(rule.matching_parts, host)) {
+            ag::regex re(rule_utils::get_regex(rule));
+            matched = re.match(host);
+        }
+        break;
+    case rule_utils::rule::MMID_REGEX: {
+        ag::regex re = ag::regex(rule_utils::get_regex(rule));
+        matched = subdomains.end() != std::find_if(subdomains.begin(), subdomains.end(),
+                [&re] (std::string_view subdomain) { return re.match(subdomain); });
+        break;
+    }
+    }
+
+    return matched;
 }
 
 bool filter::impl::match_against_line(match_arg &match, std::string_view line) {
@@ -508,49 +561,7 @@ bool filter::impl::match_against_line(match_arg &match, std::string_view line) {
         }
     }
 
-    switch (rule->match_method) {
-    case rule_utils::rule::MMID_EXACT:
-        for (auto &part : rule->matching_parts) {
-            if ((matched = (match.ctx.host == part))) {
-                break;
-            }
-        }
-        break;
-    case rule_utils::rule::MMID_SUBDOMAINS: {
-        for (auto &part : rule->matching_parts) {
-            for (auto &subdomain : match.ctx.subdomains) { // assert `subdomains` also contains the full host
-                if ((matched = (subdomain == part))) {
-                    goto loopexit;
-                }
-            }
-        }
-    loopexit:
-        break;
-    }
-    case rule_utils::rule::MMID_SHORTCUTS:
-        matched = match_shortcuts(rule->matching_parts, match.ctx.host);
-        break;
-    case rule_utils::rule::MMID_SHORTCUTS_AND_REGEX:
-        assert(rule->matching_parts.size() > 0);
-        if (match_shortcuts(rule->matching_parts, match.ctx.host)) {
-            ag::regex re(rule_utils::get_regex(rule.value()));
-            matched = re.match(match.ctx.host);
-        }
-        break;
-    case rule_utils::rule::MMID_REGEX: {
-        ag::regex re = ag::regex(rule_utils::get_regex(rule.value()));
-        for (const std::string_view &subdomain : match.ctx.subdomains) {
-            if (re.match(subdomain)) {
-                matched = true;
-                break;
-            }
-        }
-        break;
-    }
-    default:
-        matched = true;
-        break;
-    }
+    matched = match_pattern(rule.value(), match.ctx.host, match.ctx.subdomains);
 
 exit:
     if (matched) {
@@ -679,7 +690,7 @@ void filter::match(match_context &ctx) {
 }
 
 filter::match_context filter::create_match_context(ag::dnsfilter::match_param param) {
-    match_context ctx = { ag::utils::to_lower(param.domain), {}, {}, param.rr_type };
+    match_context ctx = { ag::utils::to_lower(param.domain), {}, {}, param.rr_type, {} };
 
     size_t n = std::count(ctx.host.begin(), ctx.host.end(), '.');
     if (n > 0) {
@@ -692,6 +703,19 @@ filter::match_context filter::create_match_context(ag::dnsfilter::match_param pa
     for (size_t i = 0; i < n; ++i) {
         std::array<std::string_view, 2> parts = ag::utils::split2_by(ctx.subdomains[i], '.');
         ctx.subdomains.emplace_back(parts[1]);
+    }
+
+    static constexpr std::string_view REVERSE_DNS_DOMAIN_SUFFIX =
+            rule_utils::REVERSE_DNS_DOMAIN_SUFFIX
+            .substr(0, rule_utils::REVERSE_DNS_DOMAIN_SUFFIX.length() - 1);
+    static constexpr std::string_view REVERSE_IPV6_DNS_DOMAIN_SUFFIX =
+            rule_utils::REVERSE_IPV6_DNS_DOMAIN_SUFFIX
+                    .substr(0, rule_utils::REVERSE_IPV6_DNS_DOMAIN_SUFFIX.length() - 1);
+    if (ctx.rr_type == LDNS_RR_TYPE_PTR
+            && ctx.host.back() != '.'
+            && (ag::utils::ends_with(ctx.host, REVERSE_DNS_DOMAIN_SUFFIX)
+                    || ag::utils::ends_with(ctx.host, REVERSE_IPV6_DNS_DOMAIN_SUFFIX))) {
+        ctx.reverse_lookup_fqdn = AG_FMT("{}.", ctx.host);
     }
 
     return ctx;

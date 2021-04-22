@@ -5,6 +5,7 @@
 #include "rule_utils.h"
 #include <ag_utils.h>
 #include <unordered_set>
+#include <algorithm>
 
 using namespace ag;
 
@@ -90,13 +91,22 @@ std::vector<dnsfilter::rule> dnsfilter::match(handle obj, match_param param) {
         f.match(context);
     }
 
+    if (!context.reverse_lookup_fqdn.empty()) {
+        context.host = std::move(context.reverse_lookup_fqdn);
+        context.subdomains = { context.host };
+
+        for (filter &f : e->filters) {
+            f.match(context);
+        }
+    }
+
     tracelog(e->log, "Matched {} rules", context.matched_rules.size());
 
-    return context.matched_rules;
+    return std::move(context.matched_rules);
 }
 
 // Return true if the left rule prevails over the right one
-static bool has_higher_priority(const dnsfilter::rule &l, const dnsfilter::rule &r) {
+static bool has_higher_priority(const dnsfilter::rule *l, const dnsfilter::rule *r) {
     using props_set = dnsfilter::adblock_rule_info::props_set;
 
     // in ascending order (the higher index, the higher priority)
@@ -108,8 +118,8 @@ static bool has_higher_priority(const dnsfilter::rule &l, const dnsfilter::rule 
     };
 
     auto get_rule_props =
-            [] (const dnsfilter::rule &rule) -> props_set {
-                if (const auto *c = std::get_if<dnsfilter::adblock_rule_info>(&rule.content); c != nullptr) {
+            [] (const dnsfilter::rule *rule) -> props_set {
+                if (const auto *c = std::get_if<dnsfilter::adblock_rule_info>(&rule->content); c != nullptr) {
                     return c->props;
                 }
                 return {};
@@ -121,7 +131,7 @@ static bool has_higher_priority(const dnsfilter::rule &l, const dnsfilter::rule 
     if (lprops != rprops) {
         size_t lpriority = 0;
         size_t rpriority = 0;
-        for (size_t i = 0; i < std::size(PRIORITY_TABLE); ++i) {
+        for (size_t i = 1; i < std::size(PRIORITY_TABLE); ++i) {
             const props_set &props = PRIORITY_TABLE[i];
             if ((lprops & props) == props) {
                 lpriority = i;
@@ -136,70 +146,79 @@ static bool has_higher_priority(const dnsfilter::rule &l, const dnsfilter::rule 
     }
 
     // a rule with hosts file syntax has higher priority
-    return std::get_if<dnsfilter::etc_hosts_rule_info>(&l.content) != nullptr
-            && std::get_if<dnsfilter::etc_hosts_rule_info>(&r.content) == nullptr;
+    return std::get_if<dnsfilter::etc_hosts_rule_info>(&l->content) != nullptr
+            && std::get_if<dnsfilter::etc_hosts_rule_info>(&r->content) == nullptr;
 }
 
-std::vector<const dnsfilter::rule *> dnsfilter::get_effective_rules(const std::vector<rule> &rules) {
-    const rule *effective_rules[rules.size()];
-    size_t effective_rules_num = 0;
-    const rule *badfilter_rules[rules.size()];
-    size_t badfilter_rules_num = 0;
+static std::vector<const dnsfilter::rule *> filter_out_by_badfilter(const std::vector<dnsfilter::rule> &rules) {
+    const dnsfilter::rule *rule_ptrs[rules.size()];
+    std::transform(rules.begin(), rules.end(), rule_ptrs,
+            [] (const dnsfilter::rule &r) { return &r; });
 
-    for (const rule &r : rules) {
-        if (const auto *c = std::get_if<dnsfilter::adblock_rule_info>(&r.content);
-                c == nullptr || !c->props.test(DARP_BADFILTER)) {
-            effective_rules[effective_rules_num++] = &r;
+    auto badfilter_rules_start = std::partition(rule_ptrs, rule_ptrs + rules.size(),
+            [] (const dnsfilter::rule *r) {
+                const auto *info = std::get_if<dnsfilter::adblock_rule_info>(&r->content);
+                return info == nullptr || !info->props.test(dnsfilter::DARP_BADFILTER);
+            });
+
+    std::string badfilter_texts[std::distance(badfilter_rules_start, rule_ptrs + rules.size())];
+    std::string *badfilter_texts_end =
+            badfilter_texts + std::distance(badfilter_rules_start, rule_ptrs + rules.size());
+    std::transform(badfilter_rules_start, rule_ptrs + rules.size(), badfilter_texts,
+            [] (const dnsfilter::rule *r) { return rule_utils::get_text_without_badfilter(*r); });
+
+    std::vector<const dnsfilter::rule *> result;
+    result.reserve(std::distance(rule_ptrs, badfilter_rules_start));
+    for (size_t i = 0; i < (size_t)std::distance(rule_ptrs, badfilter_rules_start); ++i) {
+        const dnsfilter::rule *r = rule_ptrs[i];
+
+        const std::string *found = std::find(badfilter_texts, badfilter_texts_end, r->text);
+        if (found == badfilter_texts_end) {
+            result.push_back(r);
+        }
+    }
+
+    return result;
+}
+
+static dnsfilter::effective_rules categorize_rules(const std::vector<const dnsfilter::rule *> &rules) {
+    dnsfilter::effective_rules result;
+    for (const dnsfilter::rule *r : rules) {
+        if (const auto *info = std::get_if<dnsfilter::adblock_rule_info>(&r->content);
+                info != nullptr && info->props.test(dnsfilter::DARP_DNSREWRITE)) {
+            result.dnsrewrite.push_back(r);
         } else {
-            badfilter_rules[badfilter_rules_num++] = &r;
+            result.leftovers.push_back(r);
         }
-    }
-
-    std::stable_sort(effective_rules, effective_rules + effective_rules_num,
-            [] (const rule *l, const rule *r) { return has_higher_priority(*l, *r); });
-
-    std::string badfilter_rule_texts[badfilter_rules_num];
-    for (size_t i = 0; i < badfilter_rules_num; ++i) {
-        const rule *r = badfilter_rules[i];
-        badfilter_rule_texts[i] = rule_utils::get_text_without_badfilter(*r);
-    }
-
-    std::string *badfilter_rules_end = badfilter_rule_texts + badfilter_rules_num;
-    size_t i;
-    for (i = 0; i < effective_rules_num; ++i) {
-        const rule *r = effective_rules[i];
-        const std::string *found = std::find(badfilter_rule_texts, badfilter_rules_end, r->text);
-        if (found != badfilter_rules_end) {
-            continue;
-        }
-        if (nullptr == std::get_if<dnsfilter::etc_hosts_rule_info>(&r->content)) {
-            // faced with some more important rule than the one with hosts file syntax
-            // or there are no such rules in the list
-            return { r };
-        }
-        break;
-    }
-
-    // there are no suitable rules at all
-    if (i >= effective_rules_num) {
-        return {};
-    }
-
-    // if we got here, there should be some number of the rules with hosts file syntax, which are
-    // needed to be extracted
-    size_t seek = i;
-    while (seek < effective_rules_num
-            && nullptr != std::get_if<dnsfilter::etc_hosts_rule_info>(&effective_rules[seek]->content)) {
-        ++seek;
-    }
-    assert(seek > i);
-
-    std::vector<const rule *> result;
-    result.reserve(seek - i);
-    for (; i < seek; ++i) {
-        result.emplace_back(effective_rules[i]);
     }
     return result;
+}
+
+dnsfilter::effective_rules dnsfilter::get_effective_rules(const std::vector<rule> &rules) {
+    std::vector<const rule *> good_rules = filter_out_by_badfilter(rules);
+    effective_rules effective_rules = categorize_rules(good_rules);
+    if (effective_rules.leftovers.empty()) {
+        return effective_rules;
+    }
+
+    // no need to sort $dnsrewrite's as they handled specially
+    std::sort(effective_rules.leftovers.begin(), effective_rules.leftovers.end(), has_higher_priority);
+
+    if (const auto *info = std::get_if<adblock_rule_info>(&effective_rules.leftovers[0]->content);
+            info != nullptr && !info->props.test(DARP_EXCEPTION)) {
+        // return only the first blocking adblock-style rule
+        effective_rules.leftovers.resize(1);
+    } else {
+        // return all exceptions or hosts-file-syntax rules
+        auto last = std::adjacent_find(effective_rules.leftovers.begin(), effective_rules.leftovers.end(),
+                has_higher_priority);
+        if (last != effective_rules.leftovers.end()) {
+            last = std::next(last);
+        }
+        effective_rules.leftovers.resize(std::distance(effective_rules.leftovers.begin(), last));
+    }
+
+    return effective_rules;
 }
 
 bool dnsfilter::is_valid_rule(std::string_view str) {

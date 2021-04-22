@@ -290,12 +290,21 @@ static bool rules_contain_blocking_ip(const std::vector<const dnsfilter::rule *>
 }
 
 static ldns_pkt *create_blocking_response(const ldns_pkt *request, const dnsproxy_settings *settings,
-        const std::vector<const dnsfilter::rule *> &rules) {
-    const dnsfilter::rule *effective_rule = rules.front();
+        const std::vector<const dnsfilter::rule *> &rules,
+        std::optional<dnsfilter::apply_dnsrewrite_result::rewrite_info> rewritten_info) {
     const ldns_rr *question = ldns_rr_list_rr(ldns_pkt_question(request), 0);
     ldns_rr_type type = ldns_rr_get_type(question);
     ldns_pkt *response;
-    if (type != LDNS_RR_TYPE_A && type != LDNS_RR_TYPE_AAAA) {
+    if (rewritten_info.has_value()) {
+        response = create_response_by_request(request);
+        ldns_pkt_set_rcode(response, rewritten_info->rcode);
+        for (auto &rr : rewritten_info->rrs) {
+            ldns_rr_set_owner(rr.get(), ldns_rdf_clone(ldns_rr_owner(question)));
+            ldns_rr_set_ttl(rr.get(), settings->blocked_response_ttl_secs);
+            ldns_pkt_push_rr(response, LDNS_SECTION_ANSWER, rr.release());
+        }
+    } else if (const dnsfilter::rule *effective_rule = rules.front();
+            type != LDNS_RR_TYPE_A && type != LDNS_RR_TYPE_AAAA) {
         switch (settings->blocking_mode) {
         case dnsproxy_blocking_mode::DEFAULT:
             if (nullptr != std::get_if<ag::dnsfilter::adblock_rule_info>(&effective_rule->content)) {
@@ -1137,24 +1146,73 @@ std::optional<uint8_vector> dns_forwarder::apply_filter(std::string_view hostnam
     rules.insert(rules.end(),
             std::make_move_iterator(last_effective_rules.begin()),
             std::make_move_iterator(last_effective_rules.end()));
+    last_effective_rules.clear();
+
     auto effective_rules = dnsfilter::get_effective_rules(rules);
 
-    event_append_rules(event, effective_rules);
+    std::optional<dnsfilter::apply_dnsrewrite_result::rewrite_info> rewrite_info;
+    if (!effective_rules.dnsrewrite.empty()) {
+        auto rewrite_result = dnsfilter::apply_dnsrewrite_rules(effective_rules.dnsrewrite);
+        for (const dnsfilter::rule *rule : rewrite_result.rules) {
+            tracelog_fid(log, request, "Applied $dnsrewrite: {}", rule->text);
+        }
+        effective_rules.dnsrewrite = std::move(rewrite_result.rules);
+        rewrite_info = std::move(rewrite_result.rewritten_info);
+    }
 
-    last_effective_rules.clear();
-    for (auto effective_rule : effective_rules) {
-        last_effective_rules.push_back(*effective_rule);
+    last_effective_rules.reserve(effective_rules.dnsrewrite.size() + effective_rules.leftovers.size());
+    std::transform(effective_rules.dnsrewrite.begin(), effective_rules.dnsrewrite.end(),
+            std::back_inserter(last_effective_rules), [] (const dnsfilter::rule *r) { return *r; });
+    std::transform(effective_rules.leftovers.begin(), effective_rules.leftovers.end(),
+            std::back_inserter(last_effective_rules), [] (const dnsfilter::rule *r) { return *r; });
+
+    event_append_rules(event, effective_rules.dnsrewrite);
+    if (!rewrite_info.has_value()) {
+        event_append_rules(event, effective_rules.leftovers);
     }
 
     if (const ag::dnsfilter::adblock_rule_info *content;
-            effective_rules.empty()
-            || ((content = std::get_if<ag::dnsfilter::adblock_rule_info>(&effective_rules[0]->content))
-                    && content->props.test(dnsfilter::DARP_EXCEPTION))) {
+            !rewrite_info.has_value()
+            && (effective_rules.leftovers.empty()
+                    || (nullptr != (content = std::get_if<ag::dnsfilter::adblock_rule_info>(&effective_rules.leftovers[0]->content))
+                            && content->props.test(dnsfilter::DARP_EXCEPTION)))) {
         return std::nullopt;
     }
 
-    dbglog_fid(log, request, "DNS query blocked by rule: {}", effective_rules[0]->text);
-    ldns_pkt_ptr response(create_blocking_response(request, this->settings, effective_rules));
+    if (effective_rules.dnsrewrite.empty()) {
+        dbglog_fid(log, request, "DNS query blocked by rule: {}", effective_rules.leftovers[0]->text);
+    } else {
+        dbglog_fid(log, request, "DNS query blocked by $dnsrewrite rule(s): num={}",
+                effective_rules.dnsrewrite.size());
+    }
+
+    if (rewrite_info.has_value() && rewrite_info->cname.has_value()) {
+        ldns_pkt_ptr rewritten_request{ ldns_pkt_clone(request) };
+        ldns_rr *question = ldns_rr_list_rr(ldns_pkt_question(rewritten_request.get()), 0);
+        ldns_rdf_deep_free(ldns_rr_owner(question));
+        ldns_rr_set_owner(question, ldns_dname_new_frm_str(rewrite_info->cname->c_str()));
+
+        log_packet(log, rewritten_request.get(), "Rewritten cname request");
+
+        auto [response, err, _] = this->do_upstream_exchange(hostname, rewritten_request.get());
+        if (!response) {
+            dbglog_id(this->log, rewritten_request.get(), "Failed to resolve rewritten cname: {}", *err);
+            return std::nullopt;
+        }
+
+        log_packet(this->log, rewritten_request.get(), "Rewritten cname response");
+        for (size_t i = 0; i < ldns_pkt_ancount(response.get()); ++i) {
+            ldns_rr *rr = ldns_rr_list_rr(ldns_pkt_answer(response.get()), i);
+            if (ldns_rr_get_type(rr) == ldns_rr_get_type(question)) {
+                ldns_rdf_deep_free(ldns_rr_owner(rr));
+                ldns_rr_set_owner(rr, nullptr);
+                rewrite_info->rrs.emplace_back(ldns_rr_clone(rr));
+            }
+        }
+    }
+
+    ldns_pkt_ptr response(create_blocking_response(request, this->settings,
+            effective_rules.leftovers, std::move(rewrite_info)));
     log_packet(log, response.get(), "Rule blocked response");
     if (out_rcode) {
         *out_rcode = ldns_pkt_get_rcode(response.get());
@@ -1172,7 +1230,7 @@ upstream_exchange_result dns_forwarder::do_upstream_exchange(std::string_view no
     for (auto &cur : dns_suffixes) {
         assert(cur[0] == '.');
         if (ag::utils::ends_with(normalized_domain, cur)) {
-            tracelog(log, "Request matched with dns suffix {}, using only fallbacks", cur);
+            tracelog_id(log, request, "Request matched with dns suffix {}, using only fallbacks", cur);
             use_only_fallbacks = true;
             break;
         }
