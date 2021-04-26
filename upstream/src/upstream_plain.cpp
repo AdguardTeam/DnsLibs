@@ -38,7 +38,7 @@ ag::plain_dns::exchange_result ag::plain_dns::exchange(ldns_pkt *request_pkt) {
     ldns_buffer_ptr buffer{ldns_buffer_new(REQUEST_BUFFER_INITIAL_CAPACITY)};
     status = ldns_pkt2buffer_wire(&*buffer, request_pkt);
     if (status != LDNS_STATUS_OK) {
-        return {nullptr, ldns_get_errorstr_by_id(status)};
+        return {nullptr, ag::utils::ldns_status_to_str(status)};
     }
 
     ldns_rr *question = ldns_rr_list_rr(ldns_pkt_question(request_pkt), 0);
