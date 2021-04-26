@@ -1,6 +1,6 @@
 1 VERSIONINFO
-    FILEVERSION 1,5,15,0
-    PRODUCTVERSION 1,5,15,0
+    FILEVERSION 1,5,16,0
+    PRODUCTVERSION 1,5,16,0
     FILEFLAGSMASK 0x17L
 #ifdef _DEBUG
  FILEFLAGS 0x1L
@@ -19,7 +19,7 @@ BEGIN
                         VALUE "LegalCopyright", "(C) 2009-2020 Adguard Software Ltd"
                         VALUE "CompanyName", "Adguard Software Ltd"
                         VALUE "ProductName", "Adguard DNS for Windows"
-                        VALUE "ProductVersion", "1.5.15"
+                        VALUE "ProductVersion", "1.5.16"
                         VALUE "OriginalFilename", "AdguardDns.dll"
                         VALUE "InternalName", "AdguardDns"
                 END
