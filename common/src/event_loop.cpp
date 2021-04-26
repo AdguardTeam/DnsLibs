@@ -57,12 +57,20 @@ void ag::event_loop::submit(std::function<void()> func) {
         event_base_once(m_base.get(), -1, EV_TIMEOUT,
                 [] (evutil_socket_t, short, void *arg) {
                     auto *self = (event_loop *)arg;
-                    std::scoped_lock l(self->m_tasks.mtx);
-                    self->m_tasks.val.scheduled = false;
-                    while (!self->m_tasks.val.queue.empty()) {
-                        self->m_tasks.val.queue.front()();
-                        self->m_tasks.val.queue.pop_front();
-                    }
+
+                    do {
+                        std::function<void()> task;
+                        {
+                            std::scoped_lock l(self->m_tasks.mtx);
+                            if (self->m_tasks.val.queue.empty()) {
+                                self->m_tasks.val.scheduled = false;
+                                break;
+                            }
+                            task = std::move(self->m_tasks.val.queue.front());
+                            self->m_tasks.val.queue.pop_front();
+                        }
+                        task();
+                    } while (true);
                 },
                 this, nullptr);
     }
