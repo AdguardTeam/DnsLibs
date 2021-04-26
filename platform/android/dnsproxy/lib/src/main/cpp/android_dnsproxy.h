@@ -3,6 +3,7 @@
 #include <jni.h>
 #include <ag_defs.h>
 #include <jni_utils.h>
+#include <dns_stamp.h>
 
 namespace ag {
 
@@ -63,7 +64,6 @@ private:
 
     std::vector<global_ref<jobject>> m_protocol_enum_values;
     std::vector<global_ref<jobject>> m_blocking_mode_values;
-    std::vector<global_ref<jobject>> m_dnsstamp_prototype_values;
 
     /**
      * Marshal upstream settings from Java to C++.
@@ -167,12 +167,6 @@ public:
      * @return The current proxy settings, marshalled to Java.
      */
     jobject get_settings(JNIEnv *env);
-
-    /**
-     * Parses a DNS stamp string and returns a instance or an error
-     * @return stamp instance or an error string
-     */
-    jobject parse_dnsstamp(JNIEnv *env, jstring stamp_str);
 
     /**
      * Checks if upstream is valid and available.

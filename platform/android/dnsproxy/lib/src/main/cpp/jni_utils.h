@@ -186,7 +186,7 @@ public:
     /**
      * Marshal a C++ string to Java.
      */
-    static local_ref<jobject> marshal_string(JNIEnv *env, const std::string &str);
+    static local_ref<jstring> marshal_string(JNIEnv *env, const std::string &str);
 
     /**
      * Marshal a Java string to C++.

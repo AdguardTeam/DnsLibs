@@ -75,22 +75,11 @@ public class DnsStamp {
      * be provided for seamless rotations.
      */
     private ArrayList<byte[]> hashes;
-    /**
-     * A URL representation of this stamp which can be used
-     * as a valid {@link com.adguard.dnslibs.proxy.UpstreamSettings} address.
-     */
-    private String prettyUrl;
-    /**
-     * A URL representation of this stamp which is prettier, but can NOT be used
-     * as a valid {@link com.adguard.dnslibs.proxy.UpstreamSettings} address.
-     */
-    private String prettierUrl;
 
     public DnsStamp() {}
 
     public DnsStamp(ProtoType proto, String serverAddr, String providerName, String path,
-                    byte[] serverPublicKey, EnumSet<InformalProperties> properties, ArrayList<byte[]> hashes,
-                    String prettyUrl, String prettierUrl) {
+                    byte[] serverPublicKey, EnumSet<InformalProperties> properties, ArrayList<byte[]> hashes) {
         setProto(proto);
         setServerAddr(serverAddr);
         setProviderName(providerName);
@@ -98,8 +87,17 @@ public class DnsStamp {
         setServerPublicKey(serverPublicKey);
         setProperties(properties);
         setHashes(hashes);
-        setPrettyUrl(prettyUrl);
-        setPrettierUrl(prettierUrl);
+    }
+
+    /**
+     * Parses a DNS stamp string and returns a instance of DNS stamp or throws on error
+     * @param stampStr DNS stamp string
+     * @throws IllegalArgumentException with explanation
+     * @return stamp instance
+     */
+    public static DnsStamp parse(String stampStr) throws IllegalArgumentException {
+        Objects.requireNonNull(stampStr, "stampStr");
+        return parse0(stampStr);
     }
 
     public ProtoType getProto() {
@@ -158,21 +156,19 @@ public class DnsStamp {
         this.hashes = hashes;
     }
 
-    public String getPrettyUrl() {
-        return prettyUrl;
-    }
+    /**
+     * A URL representation of this stamp which can be used
+     * as a valid {@link com.adguard.dnslibs.proxy.UpstreamSettings} address.
+     */
+    public native String getPrettyUrl();
+    /**
+     * A URL representation of this stamp which is prettier, but can NOT be used
+     * as a valid {@link com.adguard.dnslibs.proxy.UpstreamSettings} address.
+     */
+    public native String getPrettierUrl();
 
-    public void setPrettyUrl(String prettyUrl) {
-        this.prettyUrl = prettyUrl;
-    }
-
-    public String getPrettierUrl() {
-        return prettierUrl;
-    }
-
-    public void setPrettierUrl(String prettierUrl) {
-        this.prettierUrl = prettierUrl;
-    }
+    @Override
+    public native String toString();
 
     @Override
     public boolean equals(Object o) {
@@ -185,8 +181,6 @@ public class DnsStamp {
                 Objects.equals(getPath(), dnsStamp.getPath()) &&
                 Arrays.equals(getServerPublicKey(), dnsStamp.getServerPublicKey()) &&
                 Objects.equals(getProperties(), dnsStamp.getProperties()) &&
-                Objects.equals(prettyUrl, dnsStamp.prettyUrl) &&
-                Objects.equals(prettierUrl, dnsStamp.prettierUrl) &&
                 this.hashesEqual(dnsStamp);
     }
 
@@ -209,4 +203,6 @@ public class DnsStamp {
 
         return true;
     }
+
+    private static native DnsStamp parse0(String string) throws IllegalArgumentException;
 }

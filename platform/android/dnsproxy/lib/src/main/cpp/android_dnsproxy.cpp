@@ -95,14 +95,6 @@ Java_com_adguard_dnslibs_proxy_DnsProxy_isValidRule(JNIEnv *env, jclass clazz, j
 }
 
 extern "C"
-JNIEXPORT jobject JNICALL
-Java_com_adguard_dnslibs_proxy_DnsProxy_parseDnsStampNative(JNIEnv *env, jclass clazz, jlong native_ptr,
-                                                            jstring stamp_str) {
-    auto *proxy = (ag::android_dnsproxy *) native_ptr;
-    return proxy->parse_dnsstamp(env, stamp_str);
-}
-
-extern "C"
 JNIEXPORT jstring JNICALL
 Java_com_adguard_dnslibs_proxy_DnsProxy_testUpstreamNative(JNIEnv *env, jclass clazz, jlong native_ptr,
                                                            jobject upstream_settings, jobject events_adapter) {
@@ -691,61 +683,6 @@ jobject ag::android_dnsproxy::get_settings(JNIEnv *env) {
     return env->NewLocalRef(marshal_settings(env, m_actual_proxy.get_settings()).get());
 }
 
-jobject ag::android_dnsproxy::parse_dnsstamp(JNIEnv *env, jstring stamp_str) {
-    auto [stamp, err] = server_stamp::from_string(m_utils.marshal_string(env, stamp_str));
-
-    if (err) {
-        return env->NewLocalRef(m_utils.marshal_string(env, *err).get());
-    }
-
-    auto clazz = env->FindClass(FQN_DNSSTAMP);
-    auto ctor = env->GetMethodID(clazz, "<init>", "()V");
-
-    auto proto_field = env->GetFieldID(clazz, "proto", "L" FQN_DNSSTAMP_PROTOTYPE ";");
-    auto server_addr_field = env->GetFieldID(clazz, "serverAddr", "Ljava/lang/String;");
-    auto provider_name_field = env->GetFieldID(clazz, "providerName", "Ljava/lang/String;");
-    auto path_field = env->GetFieldID(clazz, "path", "Ljava/lang/String;");
-    auto server_pk_field = env->GetFieldID(clazz, "serverPublicKey", "[B");
-    auto props_field = env->GetFieldID(clazz, "properties", "Ljava/util/EnumSet;");
-    auto hashes_field = env->GetFieldID(clazz, "hashes", "Ljava/util/ArrayList;");
-    auto pretty_url_field = env->GetFieldID(clazz, "prettyUrl", "Ljava/lang/String;");
-    auto prettier_url_field = env->GetFieldID(clazz, "prettierUrl", "Ljava/lang/String;");
-
-    auto dns_stamp = env->NewObject(clazz, ctor);
-
-    env->SetObjectField(dns_stamp, proto_field, m_dnsstamp_prototype_values.at((size_t) stamp.proto).get());
-    env->SetObjectField(dns_stamp, server_addr_field, m_utils.marshal_string(env, stamp.server_addr_str).get());
-    env->SetObjectField(dns_stamp, provider_name_field, m_utils.marshal_string(env, stamp.provider_name).get());
-    env->SetObjectField(dns_stamp, path_field, m_utils.marshal_string(env, stamp.path).get());
-
-    if (!stamp.server_pk.empty()) {
-        env->SetObjectField(dns_stamp, server_pk_field,
-                m_utils.marshal_uint8_view(env, { stamp.server_pk.data(), stamp.server_pk.size() }).get());
-    }
-
-    clazz = env->FindClass(FQN_DNSSTAMP_INFORMAL_PROPERTIES);
-    auto to_enum_set_method = env->GetStaticMethodID(clazz, "toEnumSet", "(I)Ljava/util/EnumSet;");
-    if (local_ref props{ env, env->CallStaticObjectMethod(clazz, to_enum_set_method, (jint)stamp.props) }) {
-        env->SetObjectField(dns_stamp, props_field, props.get());
-    }
-
-    if (!stamp.hashes.empty()) {
-        clazz = env->FindClass("java/util/ArrayList");
-        ctor = env->GetMethodID(clazz, "<init>", "()V");
-        local_ref<jobject> hashes{env, env->NewObject(clazz, ctor)};
-        auto add_method = env->GetMethodID(clazz, "add", "(Ljava/lang/Object;)Z");
-        for (const std::vector<uint8_t> &h : stamp.hashes) {
-            env->CallBooleanMethod(hashes.get(), add_method, m_utils.marshal_uint8_view(env, {h.data(), h.size()}).get());
-        }
-        env->SetObjectField(dns_stamp, hashes_field, hashes.get());
-    }
-
-    env->SetObjectField(dns_stamp, pretty_url_field, m_utils.marshal_string(env, stamp.pretty_url(false)).get());
-    env->SetObjectField(dns_stamp, prettier_url_field, m_utils.marshal_string(env, stamp.pretty_url(true)).get());
-
-    return dns_stamp;
-}
-
 jstring ag::android_dnsproxy::test_upstream(JNIEnv *env, jobject upstream_settings, jobject events_adapter) {
     m_events = global_ref(get_vm(env), events_adapter);
     auto err = ag::test_upstream(marshal_upstream(env, upstream_settings),
@@ -790,7 +727,6 @@ ag::android_dnsproxy::android_dnsproxy(JavaVM *vm) : m_utils(vm) {
 
     m_protocol_enum_values = m_utils.get_enum_values(env.get(), FQN_LISTENER_PROTOCOL);
     m_blocking_mode_values = m_utils.get_enum_values(env.get(), FQN_BLOCKING_MODE);
-    m_dnsstamp_prototype_values = m_utils.get_enum_values(env.get(), FQN_DNSSTAMP_PROTOTYPE);
 
     m_jni_initialized.store(true);
 }

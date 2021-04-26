@@ -1,7 +1,9 @@
 package com.adguard.dnslibs.proxy;
 
 import android.Manifest;
+import android.content.Context;
 
+import androidx.test.core.app.ApplicationProvider;
 import androidx.test.espresso.core.internal.deps.guava.collect.Lists;
 import androidx.test.ext.junit.runners.AndroidJUnit4;
 import androidx.test.rule.GrantPermissionRule;
@@ -16,20 +18,16 @@ import org.xbill.DNS.Message;
 import org.xbill.DNS.Name;
 import org.xbill.DNS.Rcode;
 import org.xbill.DNS.Record;
-import org.xbill.DNS.TextParseException;
 import org.xbill.DNS.Type;
 
 import java.io.IOException;
 import java.io.UncheckedIOException;
-import java.lang.reflect.Array;
 import java.math.BigInteger;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.EnumSet;
-import java.util.LinkedHashMap;
 import java.util.List;
-import java.util.Map;
 import java.util.concurrent.ThreadLocalRandom;
 
 import static org.junit.Assert.assertEquals;
@@ -49,6 +47,7 @@ public class DnsProxyTest {
     }
 
     private static final Logger log = LoggerFactory.getLogger(DnsProxyTest.class);
+    private Context context = ApplicationProvider.getApplicationContext();
 
     // In case of "permission denied", try uninstalling the test application from the device.
     @Rule
@@ -61,11 +60,11 @@ public class DnsProxyTest {
     @Test
     public void testProxyInit() {
         final DnsProxySettings defaultSettings = DnsProxySettings.getDefault();
-        try (final DnsProxy proxy = new DnsProxy(defaultSettings)) {
+        try (final DnsProxy proxy = new DnsProxy(context, defaultSettings)) {
             assertEquals(proxy.getSettings(), defaultSettings);
         }
 
-        final DnsProxy proxy = new DnsProxy(defaultSettings);
+        final DnsProxy proxy = new DnsProxy(context, defaultSettings);
         proxy.close();
         proxy.close();
         proxy.close();
@@ -74,7 +73,7 @@ public class DnsProxyTest {
 
     @Test
     public void testHandleMessage() {
-        try (final DnsProxy proxy = new DnsProxy(DnsProxySettings.getDefault())) {
+        try (final DnsProxy proxy = new DnsProxy(context, DnsProxySettings.getDefault())) {
             final byte[] request = new byte[64];
             ThreadLocalRandom.current().nextBytes(request);
             final byte[] response = proxy.handleMessage(request); // returns empty array on error
@@ -101,7 +100,7 @@ public class DnsProxyTest {
             }
         };
 
-        try (final DnsProxy proxy = new DnsProxy(settings, events)) {
+        try (final DnsProxy proxy = new DnsProxy(context, settings, events)) {
             final List<Thread> threads = new ArrayList<>();
             for (int i = 0; i < 10; ++i) {
                 final Thread t = new Thread(new Runnable() {
@@ -160,7 +159,7 @@ public class DnsProxyTest {
         udp.setProtocol(ListenerSettings.Protocol.UDP);
         settings.getListeners().add(udp);
 
-        try (final DnsProxy proxy = new DnsProxy(settings)) {
+        try (final DnsProxy proxy = new DnsProxy(context, settings)) {
             assertEquals(proxy.getSettings(), settings);
         }
     }
@@ -232,7 +231,7 @@ public class DnsProxyTest {
         fallbackUpstream.setTimeoutMs(4200);
         settings.getFallbacks().add(fallbackUpstream);
 
-        try (final DnsProxy proxy = new DnsProxy(settings)) {
+        try (final DnsProxy proxy = new DnsProxy(context, settings)) {
             assertEquals(settings, proxy.getSettings());
             assertFalse(proxy.getSettings().getListeners().isEmpty());
             assertFalse(proxy.getSettings().getUpstreams().isEmpty());
@@ -242,7 +241,7 @@ public class DnsProxyTest {
         settings.setCustomBlockingIpv4(null);
         settings.setCustomBlockingIpv6(null);
 
-        try (final DnsProxy proxy = new DnsProxy(settings)) {
+        try (final DnsProxy proxy = new DnsProxy(context, settings)) {
             assertTrue(proxy.getSettings().getCustomBlockingIpv4().isEmpty());
             assertTrue(proxy.getSettings().getCustomBlockingIpv6().isEmpty());
             settings.setCustomBlockingIpv4("");
@@ -268,7 +267,7 @@ public class DnsProxyTest {
             }
         };
 
-        try (final DnsProxy proxy = new DnsProxy(settings, events)) {
+        try (final DnsProxy proxy = new DnsProxy(context, settings, events)) {
             assertEquals(settings, proxy.getSettings());
 
             final Message req = Message.newQuery(Record.newRecord(Name.fromString("google.com."), Type.A, DClass.IN));
@@ -307,54 +306,75 @@ public class DnsProxyTest {
         return key;
     }
 
+    static class TestParam {
+        public final String stampStr;
+        public final DnsStamp dnsStamp;
+        public final String prettyUrl;
+        public final String prettierUrl;
+
+        TestParam(String stampStr, DnsStamp dnsStamp, String prettyUrl, String prettierUrl) {
+            this.stampStr = stampStr;
+            this.dnsStamp = dnsStamp;
+            this.prettyUrl = prettyUrl;
+            this.prettierUrl = prettierUrl;
+        }
+    }
+
     @Test
     public void testParseDNSStamp() {
-        Map<String, DnsStamp> testParams = new LinkedHashMap<String, DnsStamp>() {{
+
+        List<TestParam> testParams = new ArrayList<TestParam>() {
+            void put(String stampStr, DnsStamp dnsStamp, String prettyUrl, String prettierUrl) {
+                add(new TestParam(stampStr, dnsStamp, prettyUrl, prettierUrl));
+            }
+            {
             // Plain
             put("sdns://AAcAAAAAAAAABzguOC44Ljg",
                 new DnsStamp(DnsStamp.ProtoType.PLAIN, "8.8.8.8:53", "", "", null,
                         EnumSet.of(DnsStamp.InformalProperties.DNSSEC, DnsStamp.InformalProperties.NO_LOG, DnsStamp.InformalProperties.NO_FILTER),
-                        null, "8.8.8.8", "8.8.8.8"));
+                        null), "8.8.8.8", "8.8.8.8");
             // AdGuard DNS (DNSCrypt)
             put("sdns://AQIAAAAAAAAAFDE3Ni4xMDMuMTMwLjEzMDo1NDQzINErR_JS3PLCu_iZEIbq95zkSV2LFsigxDIuUso_OQhzIjIuZG5zY3J5cHQuZGVmYXVsdC5uczEuYWRndWFyZC5jb20",
                 new DnsStamp(DnsStamp.ProtoType.DNSCRYPT, "176.103.130.130:5443", "2.dnscrypt.default.ns1.adguard.com", "",
                         toByteArray("d12b47f252dcf2c2bbf8991086eaf79ce4495d8b16c8a0c4322e52ca3f390873"),
                         EnumSet.of(DnsStamp.InformalProperties.NO_LOG),
-                        null,
+                        null),
                          "sdns://AQIAAAAAAAAAFDE3Ni4xMDMuMTMwLjEzMDo1NDQzINErR_JS3PLCu_iZEIbq95zkSV2LFsigxDIuUso_OQhzIjIuZG5zY3J5cHQuZGVmYXVsdC5uczEuYWRndWFyZC5jb20",
-                         "dnscrypt://2.dnscrypt.default.ns1.adguard.com"));
+                         "dnscrypt://2.dnscrypt.default.ns1.adguard.com");
             // DoH
             put("sdns://AgcAAAAAAAAACTEyNy4wLjAuMSDDhGvyS56TymQnTA7GfB7MXgJP_KzS10AZNQ6B_lRq5AtleGFtcGxlLmNvbQovZG5zLXF1ZXJ5",
                 new DnsStamp(DnsStamp.ProtoType.DOH, "127.0.0.1:443", "example.com", "/dns-query",
                         null,
                         EnumSet.of(DnsStamp.InformalProperties.DNSSEC, DnsStamp.InformalProperties.NO_LOG, DnsStamp.InformalProperties.NO_FILTER),
-                        Lists.newArrayList(toByteArray("c3846bf24b9e93ca64274c0ec67c1ecc5e024ffcacd2d74019350e81fe546ae4")),
-                        "https://example.com/dns-query", "https://example.com/dns-query"));
+                        Lists.newArrayList(toByteArray("c3846bf24b9e93ca64274c0ec67c1ecc5e024ffcacd2d74019350e81fe546ae4"))),
+                        "https://example.com/dns-query", "https://example.com/dns-query");
             // DoT
             put("sdns://AwcAAAAAAAAACTEyNy4wLjAuMSDDhGvyS56TymQnTA7GfB7MXgJP_KzS10AZNQ6B_lRq5AtleGFtcGxlLmNvbQ",
                 new DnsStamp(DnsStamp.ProtoType.TLS, "127.0.0.1:853", "example.com", "",
                         null,
                         EnumSet.of(DnsStamp.InformalProperties.DNSSEC, DnsStamp.InformalProperties.NO_LOG, DnsStamp.InformalProperties.NO_FILTER),
-                        Lists.newArrayList(toByteArray("c3846bf24b9e93ca64274c0ec67c1ecc5e024ffcacd2d74019350e81fe546ae4")),
-                        "tls://example.com", "tls://example.com"));
+                        Lists.newArrayList(toByteArray("c3846bf24b9e93ca64274c0ec67c1ecc5e024ffcacd2d74019350e81fe546ae4"))),
+                        "tls://example.com", "tls://example.com");
             // Plain (IPv6)
             put("sdns://AAcAAAAAAAAAGltmZTgwOjo2ZDZkOmY3MmM6M2FkOjYwYjhd",
                 new DnsStamp(DnsStamp.ProtoType.PLAIN, "[fe80::6d6d:f72c:3ad:60b8]:53", "", "", null,
                         EnumSet.of(DnsStamp.InformalProperties.DNSSEC, DnsStamp.InformalProperties.NO_LOG, DnsStamp.InformalProperties.NO_FILTER),
-                        null, "fe80::6d6d:f72c:3ad:60b8", "fe80::6d6d:f72c:3ad:60b8"));
+                        null), "fe80::6d6d:f72c:3ad:60b8", "fe80::6d6d:f72c:3ad:60b8");
         }};
 
-        for (Map.Entry<String, DnsStamp> entry : testParams.entrySet()) {
-            DnsStamp validStamp = entry.getValue();
+        for (TestParam param : testParams) {
             try {
-                DnsStamp dnsStamp = DnsProxy.parseDnsStamp(entry.getKey());
-                assertEquals(dnsStamp, validStamp);
+                DnsStamp dnsStamp = DnsStamp.parse(param.stampStr);
+                assertEquals(dnsStamp, param.dnsStamp);
+                assertEquals(dnsStamp.toString(), param.stampStr);
+                assertEquals(dnsStamp.getPrettyUrl(), param.prettyUrl);
+                assertEquals(dnsStamp.getPrettierUrl(), param.prettierUrl);
             } catch (Exception e) {
                 fail(e.toString());
             }
         }
         try {
-            DnsStamp dnsStamp = DnsProxy.parseDnsStamp("");
+            DnsStamp dnsStamp = DnsStamp.parse("");
         } catch (Exception e) {
             assertFalse(e.toString().isEmpty());
         }

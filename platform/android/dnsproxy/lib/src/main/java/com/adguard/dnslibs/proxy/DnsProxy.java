@@ -213,26 +213,6 @@ public class DnsProxy implements Closeable {
     public static native String version();
 
     /**
-     * Parses a DNS stamp string and returns a instance of DNS stamp or throws on error
-     * @param stampStr DNS stamp string
-     * @throws IllegalArgumentException with explanation
-     * @return stamp instance
-     */
-    public static DnsStamp parseDnsStamp(String stampStr) throws IllegalArgumentException {
-        Objects.requireNonNull(stampStr, "stampStr");
-        Object object;
-        try (final DnsProxy proxy = new DnsProxy()) {
-            object = parseDnsStampNative(proxy.nativePtr, stampStr);
-        }
-        if (object instanceof String) {
-            throw new IllegalArgumentException((String) object);
-        }
-        return (DnsStamp) object;
-    }
-
-    private static native Object parseDnsStampNative(long nativePtr, String stampStr);
-
-    /**
      * Checks if upstream is valid and available
      * @param upstreamSettings Upstream settings
      * @throws IllegalArgumentException with an explanation if check failed

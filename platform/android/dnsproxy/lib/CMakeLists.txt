@@ -18,6 +18,7 @@ set(DNS_LIBS_DIR ../../../..)
 add_library(adguard-dns SHARED
         src/main/cpp/android_dnsproxy.cpp
         src/main/cpp/jni_utils.cpp
+        src/main/cpp/android_dnsstamp.cpp
         )
 
 target_include_directories(adguard-dns PRIVATE src/main/cpp)

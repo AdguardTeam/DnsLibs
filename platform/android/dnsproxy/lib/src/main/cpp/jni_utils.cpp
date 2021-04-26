@@ -1,3 +1,4 @@
+#include <assert.h>
 #include <jni_utils.h>
 #include <ag_utils.h>
 #include <ag_cesu8.h>
@@ -33,11 +34,11 @@ void ag::jni_utils::visit_string(JNIEnv *env,
     env->ReleaseStringUTFChars((jstring) string, str);
 }
 
-ag::local_ref<jobject> ag::jni_utils::marshal_string(JNIEnv *env, const std::string &str) {
+ag::local_ref<jstring> ag::jni_utils::marshal_string(JNIEnv *env, const std::string &str) {
     if (str.empty()) {
-        return local_ref<jobject>(env, env->NewStringUTF(""));
+        return local_ref<jstring>(env, env->NewStringUTF(""));
     }
-    return local_ref<jobject>(env, env->NewStringUTF(ag::allocated_ptr<char>{ag::utf8_to_cesu8(str.c_str())}.get()));
+    return local_ref<jstring>(env, env->NewStringUTF(ag::allocated_ptr<char>{ag::utf8_to_cesu8(str.c_str())}.get()));
 }
 
 std::string ag::jni_utils::marshal_string(JNIEnv *env, jstring str) {
