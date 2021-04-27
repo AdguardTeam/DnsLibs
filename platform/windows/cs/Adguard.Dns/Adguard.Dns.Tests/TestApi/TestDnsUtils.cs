@@ -1,4 +1,4 @@
-﻿using Adguard.Dns.Api;
+using Adguard.Dns.Api;
 using Adguard.Dns.Api.DnsProxyServer.Configs;
 using Adguard.Dns.Tests.Helpers;
 using NUnit.Framework;
@@ -24,7 +24,7 @@ namespace Adguard.Dns.Tests.TestApi
         {
             DnsStamp dnsStamp = DnsApi.Instance.ParseDnsStamp(VALID_DNS_STAMP_STR);
             Assert.IsNotNull(dnsStamp);
-            Assert.AreEqual("127.0.0.1:443", dnsStamp.ServerAddress);
+            Assert.AreEqual("127.0.0.1", dnsStamp.ServerAddress);
             Assert.AreEqual("example.com", dnsStamp.ProviderName);
             Assert.IsNull(dnsStamp.PublicKey);
             Assert.AreEqual(1, dnsStamp.Hashes.Count);
@@ -33,9 +33,9 @@ namespace Adguard.Dns.Tests.TestApi
                 AGDnsApi.ag_server_informal_properties.AGSIP_NO_LOG |
                 AGDnsApi.ag_server_informal_properties.AGSIP_NO_FILTER, dnsStamp.Properties);
             Assert.AreEqual("/dns-query", dnsStamp.DoHPath);
-            Assert.AreEqual("127.0.0.1:443", dnsStamp.ServerAddress);
+            Assert.AreEqual("127.0.0.1", dnsStamp.ServerAddress);
             Assert.AreEqual(AGDnsApi.ag_stamp_proto_type.DOH, dnsStamp.ProtoType);
-            Assert.AreEqual("127.0.0.1:443", dnsStamp.ServerAddress);
+            Assert.AreEqual("127.0.0.1", dnsStamp.ServerAddress);
             Assert.AreEqual("https://example.com/dns-query", dnsStamp.PrettyUrl);
             Assert.AreEqual("https://example.com/dns-query", dnsStamp.PrettierUrl);
 

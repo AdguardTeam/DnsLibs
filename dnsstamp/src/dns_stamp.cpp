@@ -27,13 +27,6 @@ static constexpr auto DNSCRYPT_STAMP_MIN_SIZE = 66;
 static constexpr auto DOH_STAMP_MIN_SIZE = 19;
 static constexpr auto DOT_STAMP_MIN_SIZE = 19;
 
-static std::string_view remove_suffix_if_exists(std::string_view value, std::string_view suffix) {
-    auto suffix_size = (utils::ends_with(value, suffix)) ? suffix.size() : 0;
-    std::string_view result(value);
-    result.remove_suffix(suffix_size);
-    return result;
-}
-
 static void write_bytes(std::vector<uint8_t> &result, const void *data, size_t size) {
     auto begin = static_cast<const uint8_t *>(data);
     auto end = begin + size;
@@ -100,11 +93,10 @@ static void read_bytes(T &result, size_t &pos, const std::vector<uint8_t> &value
 }
 
 static void write_stamp_proto_props_server_addr_str(std::vector<uint8_t> &bin, const server_stamp &stamp,
-                                                    stamp_proto_type stamp_proto_type, stamp_port port) {
+                                                    stamp_proto_type stamp_proto_type) {
     bin = {static_cast<uint8_t>(stamp_proto_type)};
     write_bytes(bin, stamp.props);
-    auto port_suffix = AG_FMT(":{}", port);
-    write_bytes_with_size(bin, remove_suffix_if_exists(stamp.server_addr_str, port_suffix));
+    write_bytes_with_size(bin, stamp.server_addr_str);
 }
 
 static void write_stamp_server_pk(std::vector<uint8_t> &bin, const server_stamp &stamp) {
@@ -133,14 +125,36 @@ static void write_stamp_path(std::vector<uint8_t> &bin, const server_stamp &stam
     write_bytes_with_size(bin, stamp.path);
 }
 
-static std::string stamp_string(const server_stamp &stamp, stamp_proto_type stamp_proto_type, stamp_port port,
+static std::string stamp_string(const server_stamp &stamp, stamp_proto_type stamp_proto_type,
                                 std::initializer_list<write_stamp_part_function_t> fs) {
     std::vector<uint8_t> bin;
-    write_stamp_proto_props_server_addr_str(bin, stamp, stamp_proto_type, port);
+    write_stamp_proto_props_server_addr_str(bin, stamp, stamp_proto_type);
     for (const auto &f : fs) {
         f(bin, stamp);
     }
     return STAMP_URL_PREFIX_WITH_SCHEME + encode_to_base64(uint8_view(bin.data(), bin.size()), true);
+}
+
+static err_string validate_server_addr_str(std::string_view addr_str) {
+    auto[host, port, err] = utils::split_host_port_with_err(addr_str, true, true);
+    if (err) {
+        return err_string(err);
+    }
+    if (!host.empty()) {
+        socket_address addr(host, 0);
+        if (!addr.valid()) {
+            return err_string("Invalid server address");
+        }
+    }
+    if (!port.empty()) {
+        std::string portStr{port};
+        const char *ptr = portStr.data(), *end = portStr.data() + portStr.size();
+        long portNumber = strtol(portStr.c_str(), (char **)&ptr, 10);
+        if (ptr != end || portNumber <= 0 || portNumber > 65535) {
+            return err_string("Invalid server port");
+        }
+    }
+    return std::nullopt;
 }
 
 static err_string read_stamp_proto_props_server_addr_str(server_stamp &stamp, size_t &pos,
@@ -155,16 +169,7 @@ static err_string read_stamp_proto_props_server_addr_str(server_stamp &stamp, si
     if (!read_bytes_with_size(stamp.server_addr_str, pos, value)) {
         return "Invalid stamp";
     }
-    auto[host, port, err] = utils::split_host_port_with_err(stamp.server_addr_str, true, true);
-    if (err) {
-        return err_string(err);
-    }
-    socket_address addr(host, 0);
-    auto family = addr.c_sockaddr()->sa_family;
-    if (port.empty() && addr.valid() && (family == AF_INET || family == AF_INET6)) {
-        stamp.server_addr_str += AG_FMT(":{}", default_port);
-    }
-    return std::nullopt;
+    return validate_server_addr_str(stamp.server_addr_str);
 }
 
 static err_string read_stamp_server_pk(server_stamp &stamp, size_t &pos, const std::vector<uint8_t> &value) {
@@ -236,33 +241,33 @@ static server_stamp::from_str_result new_server_stamp(const std::vector<uint8_t>
 }
 
 static std::string stamp_plain_string(const server_stamp &stamp) {
-    return stamp_string(stamp, stamp_proto_type::PLAIN, DEFAULT_PLAIN_PORT, {});
+    return stamp_string(stamp, stamp_proto_type::PLAIN, {});
 }
 
 static std::string stamp_dnscrypt_string(const server_stamp &stamp) {
-    return stamp_string(stamp, stamp_proto_type::DNSCRYPT, DEFAULT_DOH_PORT, {
-        write_stamp_server_pk,
-        write_stamp_provider_name,
+    return stamp_string(stamp, stamp_proto_type::DNSCRYPT, {
+            write_stamp_server_pk,
+            write_stamp_provider_name,
     });
 }
 
 static std::string stamp_doh_string(const server_stamp &stamp) {
-    return stamp_string(stamp, stamp_proto_type::DOH, DEFAULT_DOH_PORT, {
-        write_stamp_hashes,
-        write_stamp_provider_name,
-        write_stamp_path,
+    return stamp_string(stamp, stamp_proto_type::DOH, {
+            write_stamp_hashes,
+            write_stamp_provider_name,
+            write_stamp_path,
     });
 }
 
 static std::string stamp_dot_string(const server_stamp &stamp) {
-    return stamp_string(stamp, stamp_proto_type::TLS, DEFAULT_DOT_PORT, {
-        write_stamp_hashes,
-        write_stamp_provider_name,
+    return stamp_string(stamp, stamp_proto_type::TLS, {
+            write_stamp_hashes,
+            write_stamp_provider_name,
     });
 }
 
 static std::string stamp_doq_string(const server_stamp &stamp) {
-    return stamp_string(stamp, stamp_proto_type::DOQ, DEFAULT_DOQ_PORT, {
+    return stamp_string(stamp, stamp_proto_type::DOQ, {
             write_stamp_hashes,
             write_stamp_provider_name,
     });
@@ -357,11 +362,8 @@ std::string server_stamp::pretty_url(bool pretty_dnscrypt) const {
     }
 
     if (proto == stamp_proto_type::PLAIN) {
-        ag::socket_address address = ag::utils::str_to_socket_address(server_addr_str);
-        if (address.port() == DEFAULT_PLAIN_PORT) {
-            return ag::utils::addr_to_str(address.addr());
-        }
-        return address.str();
+        auto[host, port] = ag::utils::split_host_port(server_addr_str);
+        return port.empty() ? std::string{host} : server_addr_str;
     }
 
     std::string scheme;
@@ -389,12 +391,11 @@ std::string server_stamp::pretty_url(bool pretty_dnscrypt) const {
         if (server_addr_str.front() == ':') {
             port = server_addr_str;
         } else {
-            ag::socket_address address = ag::utils::str_to_socket_address(server_addr_str);
-            port = AG_FMT(":{}", address.port());
+            auto[host, port_view] = ag::utils::split_host_port(server_addr_str);
+            if (!port_view.empty()) {
+                port = AG_FMT(":{}", port_view);
+            }
         }
-    }
-    if (port == default_port) {
-        port = "";
     }
 
     return AG_FMT("{}{}{}{}", scheme, provider_name, port, path);

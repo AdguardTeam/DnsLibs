@@ -100,7 +100,7 @@ static void test_utils() {
     // DNS Stamp
     ag_parse_dns_stamp_result *result = ag_parse_dns_stamp(TEST_DNS_STAMP);
     ASSERT(NULL == result->error);
-    ASSERT(0 == strcmp("127.0.0.1:443", result->stamp.server_addr));
+    ASSERT(0 == strcmp("127.0.0.1", result->stamp.server_addr));
     ASSERT(0 == strcmp("example.com", result->stamp.provider_name));
     ASSERT(0 == strcmp("/dns-query", result->stamp.path));
     ASSERT(AGSPT_DOH == result->stamp.proto);

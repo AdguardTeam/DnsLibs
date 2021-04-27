@@ -330,7 +330,7 @@ public class DnsProxyTest {
             {
             // Plain
             put("sdns://AAcAAAAAAAAABzguOC44Ljg",
-                new DnsStamp(DnsStamp.ProtoType.PLAIN, "8.8.8.8:53", "", "", null,
+                new DnsStamp(DnsStamp.ProtoType.PLAIN, "8.8.8.8", "", "", null,
                         EnumSet.of(DnsStamp.InformalProperties.DNSSEC, DnsStamp.InformalProperties.NO_LOG, DnsStamp.InformalProperties.NO_FILTER),
                         null), "8.8.8.8", "8.8.8.8");
             // AdGuard DNS (DNSCrypt)
@@ -343,21 +343,21 @@ public class DnsProxyTest {
                          "dnscrypt://2.dnscrypt.default.ns1.adguard.com");
             // DoH
             put("sdns://AgcAAAAAAAAACTEyNy4wLjAuMSDDhGvyS56TymQnTA7GfB7MXgJP_KzS10AZNQ6B_lRq5AtleGFtcGxlLmNvbQovZG5zLXF1ZXJ5",
-                new DnsStamp(DnsStamp.ProtoType.DOH, "127.0.0.1:443", "example.com", "/dns-query",
+                new DnsStamp(DnsStamp.ProtoType.DOH, "127.0.0.1", "example.com", "/dns-query",
                         null,
                         EnumSet.of(DnsStamp.InformalProperties.DNSSEC, DnsStamp.InformalProperties.NO_LOG, DnsStamp.InformalProperties.NO_FILTER),
                         Lists.newArrayList(toByteArray("c3846bf24b9e93ca64274c0ec67c1ecc5e024ffcacd2d74019350e81fe546ae4"))),
                         "https://example.com/dns-query", "https://example.com/dns-query");
             // DoT
             put("sdns://AwcAAAAAAAAACTEyNy4wLjAuMSDDhGvyS56TymQnTA7GfB7MXgJP_KzS10AZNQ6B_lRq5AtleGFtcGxlLmNvbQ",
-                new DnsStamp(DnsStamp.ProtoType.TLS, "127.0.0.1:853", "example.com", "",
+                new DnsStamp(DnsStamp.ProtoType.TLS, "127.0.0.1", "example.com", "",
                         null,
                         EnumSet.of(DnsStamp.InformalProperties.DNSSEC, DnsStamp.InformalProperties.NO_LOG, DnsStamp.InformalProperties.NO_FILTER),
                         Lists.newArrayList(toByteArray("c3846bf24b9e93ca64274c0ec67c1ecc5e024ffcacd2d74019350e81fe546ae4"))),
                         "tls://example.com", "tls://example.com");
             // Plain (IPv6)
             put("sdns://AAcAAAAAAAAAGltmZTgwOjo2ZDZkOmY3MmM6M2FkOjYwYjhd",
-                new DnsStamp(DnsStamp.ProtoType.PLAIN, "[fe80::6d6d:f72c:3ad:60b8]:53", "", "", null,
+                new DnsStamp(DnsStamp.ProtoType.PLAIN, "[fe80::6d6d:f72c:3ad:60b8]", "", "", null,
                         EnumSet.of(DnsStamp.InformalProperties.DNSSEC, DnsStamp.InformalProperties.NO_LOG, DnsStamp.InformalProperties.NO_FILTER),
                         null), "fe80::6d6d:f72c:3ad:60b8", "fe80::6d6d:f72c:3ad:60b8");
         }};

@@ -88,12 +88,12 @@ static const dnscrypt_stamp_parse test_dnscrypt_stamp_parse_data[]{
     // Good AdGuard DNSCrypt IPv4 (176.103.130.130)
     {
         "sdns://AQIAAAAAAAAADzE3Ni4xMDMuMTMwLjEzMCDRK0fyUtzywrv4mRCG6vec5EldixbIoMQyLlLKPzkIcyIyLmRuc2NyeXB0LmRlZmF1bHQubnMxLmFkZ3VhcmQuY29t",
-        "176.103.130.130:443"
+        "176.103.130.130"
     },
     // Good AdGuard DNSCrypt [IPv6] ([2a00:5a60::ad2:0ff])
     {
         "sdns://AQIAAAAAAAAAFFsyYTAwOjVhNjA6OmFkMjowZmZdIIHQAtNqTKUMRzt0eWUP4S4CsyHLYThWKiCOQD39xV6UIjIuZG5zY3J5cHQuZGVmYXVsdC5uczEuYWRndWFyZC5jb20",
-        "[2a00:5a60::ad2:0ff]:443"
+        "[2a00:5a60::ad2:0ff]"
     },
     // Good AdGuard DNSCrypt IPv4:port (176.103.130.130:5443)
     {
@@ -245,7 +245,7 @@ TEST_F(dnsstamp_test, test_plain_stamp) {
     test_server_stamp_create(stamp, expected);
 }
 
-TEST_F(dnsstamp_test, test_pretty_url) {
+TEST_F(dnsstamp_test, test_pretty_url_and_str) {
     struct test_data {
         std::string_view ugly;
         std::string_view pretty;
@@ -263,6 +263,18 @@ TEST_F(dnsstamp_test, test_pretty_url) {
             {
                     .ugly = "sdns://BAAAAAAAAAAABTo3ODQ0AA9kbnMuYWRndWFyZC5jb20",
                     .pretty = "quic://dns.adguard.com:7844",
+            },
+            {
+                    .ugly = "sdns://BAcAAAAAAAAADDk0LjE0MC4xNC4xNAAPZG5zLmFkZ3VhcmQuY29t",
+                    .pretty = "quic://dns.adguard.com",
+            },
+            {
+                    .ugly = "sdns://BAcAAAAAAAAAETk0LjE0MC4xNC4xNDo4ODUzAA9kbnMuYWRndWFyZC5jb20",
+                    .pretty = "quic://dns.adguard.com:8853",
+            },
+            {
+                    .ugly = "sdns://BAcAAAAAAAAAEDk0LjE0MC4xNC4xNDo3ODQAD2Rucy5hZGd1YXJkLmNvbQ",
+                    .pretty = "quic://dns.adguard.com:784",
             },
             {
                     .ugly = "sdns://BAcAAAAAAAAACTEyNy4wLjAuMSDDhGvyS56TymQnTA7GfB7MXgJP_KzS10AZNQ6B_lRq5AtleGFtcGxlLmNvbQ",
@@ -302,5 +314,6 @@ TEST_F(dnsstamp_test, test_pretty_url) {
         auto [stamp, error] = ag::server_stamp::from_string(d.ugly);
         ASSERT_FALSE(error) << *error << " (" << d.ugly << ")";
         ASSERT_EQ(d.pretty, stamp.pretty_url(d.pretty_dnscrypt));
+        ASSERT_EQ(d.ugly, stamp.str());
     }
 }
