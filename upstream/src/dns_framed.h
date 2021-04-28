@@ -50,6 +50,10 @@ protected:
     std::list<connection_ptr> m_connections;
     /** Pending connections. They may not receive requests yet */
     hash_set<connection_ptr> m_pending_connections;
+    /** Number of currently open (or not completely closed) connections */
+    size_t m_active_connections_count = 0;
+    /** Signals when all connections are closed */
+    std::condition_variable_any m_no_conns_cond;
 
     void add_pending_connection(const connection_ptr &ptr);
 

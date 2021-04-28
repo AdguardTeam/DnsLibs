@@ -57,20 +57,7 @@ void ag::event_loop::submit(std::function<void()> func) {
         event_base_once(m_base.get(), -1, EV_TIMEOUT,
                 [] (evutil_socket_t, short, void *arg) {
                     auto *self = (event_loop *)arg;
-
-                    do {
-                        std::function<void()> task;
-                        {
-                            std::scoped_lock l(self->m_tasks.mtx);
-                            if (self->m_tasks.val.queue.empty()) {
-                                self->m_tasks.val.scheduled = false;
-                                break;
-                            }
-                            task = std::move(self->m_tasks.val.queue.front());
-                            self->m_tasks.val.queue.pop_front();
-                        }
-                        task();
-                    } while (true);
+                    self->execute_tasks();
                 },
                 this, nullptr);
     }
@@ -83,12 +70,6 @@ void ag::event_loop::stop() {
 void ag::event_loop::join() {
     if (m_base_thread.joinable()) {
         m_base_thread.join();
-    }
-
-    std::scoped_lock l(m_tasks.mtx);
-    while (!m_tasks.val.queue.empty()) {
-        m_tasks.val.queue.front()();
-        m_tasks.val.queue.pop_front();
     }
 }
 
@@ -114,6 +95,24 @@ void ag::event_loop::run() {
     // Restore SIGPIPE state
     pthread_sigmask(SIG_SETMASK, &oldset, nullptr);
 #endif
+
+    execute_tasks();
+}
+
+void ag::event_loop::execute_tasks() {
+    do {
+        std::function<void()> task;
+        {
+            std::scoped_lock l(m_tasks.mtx);
+            if (m_tasks.val.queue.empty()) {
+                m_tasks.val.scheduled = false;
+                break;
+            }
+            task = std::move(m_tasks.val.queue.front());
+            m_tasks.val.queue.pop_front();
+        }
+        task();
+    } while (true);
 }
 
 ag::event_loop_ptr ag::event_loop::create() {

@@ -69,6 +69,8 @@ private:
 
     /** Code for running base loop in thread */
     void run();
+
+    void execute_tasks();
 };
 
 } // namespace ag

@@ -290,7 +290,9 @@ void ag::dns_framed_pool::remove_from_all(const connection_ptr &ptr) {
     m_pending_connections.erase(ptr);
     m_connections.remove(ptr);
 
-    close_connection(ptr);
+    if (!conn->m_closed) {
+        close_connection(ptr);
+    }
 }
 
 void ag::dns_framed_pool::add_pending_connection(const connection_ptr &ptr) {
@@ -302,6 +304,7 @@ void ag::dns_framed_pool::add_pending_connection(const connection_ptr &ptr) {
 
 ag::connection_ptr ag::dns_framed_pool::create_connection(bufferevent *bev, const socket_address &address) {
     static std::atomic_uint32_t conn_id{0};
+    ++m_active_connections_count;
     return std::make_shared<dns_framed_connection>(this, conn_id++, bev, address);
 }
 
@@ -315,23 +318,27 @@ void ag::dns_framed_pool::close_connection(const connection_ptr &conn) {
     bufferevent_setcb(framed_conn->m_bev.get(), nullptr, nullptr, nullptr, nullptr);
     bufferevent_disable(framed_conn->m_bev.get(), EV_READ | EV_WRITE);
 
-    // just delete the connection on the event loop
-    framed_conn->m_pool->m_loop->submit([c = conn] () {});
+    m_loop->submit([this, c = conn] () {
+        if (std::scoped_lock l(m_mutex); 0 == --m_active_connections_count) {
+            m_no_conns_cond.notify_one();
+        }
+    });
 }
 
 ag::dns_framed_pool::~dns_framed_pool() {
-    {
-        std::scoped_lock l(m_mutex);
-        for (const connection_ptr & conn : m_connections) {
-            close_connection(conn);
-        }
-        m_connections.clear();
-        for (const connection_ptr & conn : m_pending_connections) {
-            close_connection(conn);
-        }
-        m_pending_connections.clear();
+    std::unique_lock l(m_mutex);
+
+    for (const connection_ptr & conn : m_connections) {
+        close_connection(conn);
     }
-    m_loop->stop();
+    m_connections.clear();
+    for (const connection_ptr & conn : m_pending_connections) {
+        close_connection(conn);
+    }
+    m_pending_connections.clear();
+
+    m_no_conns_cond.wait_for(l, seconds(60),
+            [this] () -> bool { return m_active_connections_count == 0; });
     m_loop.reset();
 }
 
