@@ -26,7 +26,12 @@ public:
      * Thread-safe.
      * On non-Apple always return std::nullopt.
      */
-    virtual std::optional<uint32_t> resolve(const ag::socket_address &address) const = 0;
+    virtual std::optional<uint32_t> resolve(const ag::socket_address &address) = 0;
+
+    /**
+     * Flush the routing table cache.
+     */
+    virtual void flush_cache() = 0;
 
     virtual ~route_resolver() = default;
 

@@ -5,11 +5,13 @@
 #include <array>
 #include <vector>
 #include <algorithm>
+#include <mutex>
 
 #include <ag_defs.h>
 #include <ag_utils.h>
 #include <ag_logger.h>
 #include <ag_net_utils.h>
+#include <ag_clock.h>
 
 #include <sys/sysctl.h>
 #include <sys/socket.h>
@@ -64,11 +66,11 @@ struct rt_msghdr2 {
 // Routing socket alignment requirements
 #define ROUNDUP(a) ((a) > 0 ? (1 + (((a) - 1) | (sizeof(uint32_t) - 1))) : sizeof(uint32_t))
 
-static ag::err_string dump_routing_table(std::vector<uint8_t> &rt) {
+static ag::err_string dump_routing_table(std::vector<uint8_t> &rt, int family) {
     static constexpr int MAX_TRIES = 10;
     int n_try;
     for (n_try = 0; n_try < MAX_TRIES; ++n_try) {
-        int name[] = {CTL_NET, PF_ROUTE, 0, 0, NET_RT_DUMP2, 0};
+        int name[] = {CTL_NET, PF_ROUTE, 0, family, NET_RT_DUMP2, 0};
         size_t out_size;
         if (sysctl(name, 6, nullptr, &out_size, nullptr, 0) < 0) {
             return AG_FMT("sysctl (estimate): {}, {}", errno, strerror(errno));
@@ -88,17 +90,112 @@ static ag::err_string dump_routing_table(std::vector<uint8_t> &rt) {
     return AG_FMT("failed to allocate enough memory after {} tries", n_try);
 }
 
+static std::string if_name(unsigned int if_index) {
+    char ifnamebuf[IF_NAMESIZE];
+    if (if_indextoname(if_index, ifnamebuf)) {
+        return ifnamebuf;
+    }
+    return AG_FMT("(idx: {}, error: ({}) {})", if_index, errno, strerror(errno));
+}
+
 class apple_route_resolver : public ag::route_resolver {
 public:
-    apple_route_resolver() {
-        std::vector<uint8_t> rt;
-        ag::err_string error = dump_routing_table(rt);
-        if (error) {
-            warnlog(log, "Failed to dump routing table: {}", *error);
-            return; // Tables stay empty, so we won't route anything
+    std::optional<uint32_t> resolve(const ag::socket_address &address) override {
+        std::scoped_lock l(cache_mutex);
+
+        bool ipv4 = address.is_ipv4();
+        bool cached = true;
+        std::vector<ip_route> *table_ptr = ipv4 ? &ipv4_cache : &ipv6_cache;
+        std::vector<ip_route> table_storage;
+
+        if (auto now = ag::steady_clock::now(); now - created_at < std::chrono::seconds{NO_CACHE_SECONDS}) {
+            // Don't read/write the cache during "no cache" period
+            table_ptr = &table_storage;
+        }
+        if (table_ptr->empty()) {
+            *table_ptr = read_routing_table(ipv4 ? AF_INET : AF_INET6);
+            cached = false;
         }
 
-        for (uint8_t *next = rt.data(); next < (&rt.back() + 1);) {
+        if (log->should_log(spdlog::level::debug)) {
+            dbglog(log, "Using {} table ({} entries, {}):",
+                   ipv4 ? "IPv4" : "IPv6", table_ptr->size(), cached ? "cached" : "just read");
+            for (auto &route : *table_ptr) {
+                auto addr = ag::utils::addr_to_str({route.address.data(), (size_t) (ipv4 ? 4 : 16)});
+                uint32_t prefix_len = 0;
+                for (uint8_t b : route.netmask) {
+                    prefix_len += __builtin_popcount(b);
+                }
+                dbglog(log, "{}/{} -> {}", addr, prefix_len, if_name(route.if_index));
+            }
+            dbglog(log, "End of table");
+        }
+
+        for (auto &route : *table_ptr) {
+            if (route.matches(address.addr_unmapped())) {
+                dbglog(log, "Match {} -> {}", address.str(), if_name(route.if_index));
+                return route.if_index;
+            }
+        }
+
+        dbglog(log, "No match for {}", address.str());
+        return std::nullopt;
+    }
+
+    void flush_cache() override {
+        dbglog(log, "Flushing routing cache");
+        std::scoped_lock l(cache_mutex);
+        ipv4_cache = {};
+        ipv6_cache = {};
+    }
+
+private:
+    // Amount of time since creation of resolver during which the cache is not used
+    static constexpr int NO_CACHE_SECONDS = 10;
+
+    struct ip_route {
+        std::array<uint8_t, 16> address{};
+        std::array<uint8_t, 16> netmask{};
+        uint32_t if_index{0};
+
+        bool matches(ag::uint8_view dest) const {
+            for (size_t i = 0; i < dest.size() && i < netmask.size() && netmask[i] != 0; ++i) {
+                if ((dest[i] & netmask[i]) != address[i]) {
+                    return false;
+                }
+            }
+            return true;
+        }
+
+        // More specific is less
+        bool operator<(const ip_route &o) const {
+            // Masks are contiguous, lexicographically larger mask is more specific
+            return netmask > o.netmask;
+        }
+    };
+
+    ag::logger log{ag::create_logger("route_resolver")};
+
+    std::mutex cache_mutex;
+    std::vector<ip_route> ipv4_cache;
+    std::vector<ip_route> ipv6_cache;
+    ag::steady_clock::time_point created_at{ag::steady_clock::now()};
+
+    std::vector<ip_route> read_routing_table(int family) {
+        std::vector<uint8_t> rt;
+        ag::err_string error = dump_routing_table(rt, family);
+        if (error) {
+            warnlog(log, "Failed to dump routing table: {}", *error);
+            return {};
+        }
+
+        std::vector<ip_route> table;
+        size_t count = 0;
+        for (uint8_t *next = rt.data(); next < rt.data() + rt.size(); ++count) {
+            next += ((rt_msghdr2 *) next)->rtm_msglen;
+        }
+        table.reserve(count);
+        for (uint8_t *next = rt.data(); next < rt.data() + rt.size();) {
             auto *rtm = (rt_msghdr2 *) next;
             next += rtm->rtm_msglen;
 
@@ -117,7 +214,7 @@ public:
             }
 
             auto *sa_iter = (sockaddr *) (rtm + 1);
-            if (sa_iter->sa_family != AF_INET && sa_iter->sa_family != AF_INET6) {
+            if (sa_iter->sa_family != family) {
                 continue;
             }
 
@@ -136,7 +233,7 @@ public:
                 continue;
             }
 
-            ip_route &route = (dst->sa_family == AF_INET ? &ipv4_table : &ipv6_table)->emplace_back();
+            ip_route &route = table.emplace_back();
             route.if_index = rtm->rtm_index;
 
             // NOTE: netmask is in internal kernel format, not a usual sockaddr
@@ -176,63 +273,10 @@ public:
             }
         }
 
-        std::sort(ipv4_table.begin(), ipv4_table.end());
-        std::sort(ipv6_table.begin(), ipv6_table.end());
+        std::sort(table.begin(), table.end());
 
-        if (log->should_log(spdlog::level::debug)) {
-            for (auto *table : {&ipv4_table, &ipv6_table}) {
-                bool ipv4 = table == &ipv4_table;
-                dbglog(log, "{}", ipv4 ? "IPv4 table:" : "IPv6 table:");
-                for (auto &route : *table) {
-                    auto addr = ag::utils::addr_to_str({route.address.data(), (size_t) (ipv4 ? 4 : 16)});
-                    uint32_t prefix_len = 0;
-                    for (uint8_t b : route.netmask) {
-                        prefix_len += __builtin_popcount(b);
-                    }
-                    char buf[IF_NAMESIZE];
-                    dbglog(log, "{}/{} -> {}", addr, prefix_len, if_indextoname(route.if_index, buf));
-                }
-            }
-        }
+        return table;
     }
-
-    std::optional<uint32_t> resolve(const ag::socket_address &address) const override {
-        auto *table = address.is_ipv4() ? &ipv4_table : &ipv6_table;
-        for (auto &route : *table) {
-            if (route.matches(address.addr_unmapped())) {
-                return route.if_index;
-            }
-        }
-        return std::nullopt;
-    }
-
-private:
-    static constexpr size_t MAX_ADDR_LEN = 16;
-    struct ip_route {
-        std::array<uint8_t, MAX_ADDR_LEN> address{};
-        std::array<uint8_t, MAX_ADDR_LEN> netmask{};
-        uint32_t if_index{0};
-
-        bool matches(ag::uint8_view dest) const {
-            for (size_t i = 0; i < dest.size() && i < MAX_ADDR_LEN && netmask[i] != 0; ++i) {
-                if ((dest[i] & netmask[i]) != address[i]) {
-                    return false;
-                }
-            }
-            return true;
-        }
-
-        // More specific is less
-        bool operator<(const ip_route &o) const {
-            // Masks are contiguous, lexicographically larger mask is more specific
-            return netmask > o.netmask;
-        }
-    };
-
-    ag::logger log{ag::create_logger("route_resolver")};
-
-    std::vector<ip_route> ipv4_table;
-    std::vector<ip_route> ipv6_table;
 };
 
 std::shared_ptr<ag::route_resolver> ag::route_resolver::create() {
@@ -243,8 +287,12 @@ std::shared_ptr<ag::route_resolver> ag::route_resolver::create() {
 
 class noop_route_resolver : public ag::route_resolver {
 public:
-    std::optional<uint32_t> resolve(const ag::socket_address &) const override {
+    std::optional<uint32_t> resolve(const ag::socket_address &) override {
         return std::nullopt;
+    }
+
+    void flush_cache() override {
+        // do nothing
     }
 };
 

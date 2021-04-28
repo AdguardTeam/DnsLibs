@@ -186,8 +186,16 @@ ag::err_string ag::upstream::bind_socket_to_if(evutil_socket_t fd, const socket_
         return ag::utils::bind_socket_to_if(fd, peer.c_sockaddr()->sa_family, if_name->c_str());
     }
     if (m_config.router) {
-        if (auto index = m_config.router->resolve(peer)) {
-            return ag::utils::bind_socket_to_if(fd, peer.c_sockaddr()->sa_family, *index);
+        if (auto idx = m_config.router->resolve(peer)) {
+            auto err = ag::utils::bind_socket_to_if(fd, peer.c_sockaddr()->sa_family, *idx);
+            if (err) {
+                err = std::nullopt;
+                m_config.router->flush_cache();
+                if ((idx = m_config.router->resolve(peer))) {
+                    err = ag::utils::bind_socket_to_if(fd, peer.c_sockaddr()->sa_family, *idx);
+                }
+            }
+            return err;
         }
     }
     return std::nullopt;
