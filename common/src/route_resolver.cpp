@@ -179,10 +179,10 @@ public:
         std::sort(ipv4_table.begin(), ipv4_table.end());
         std::sort(ipv6_table.begin(), ipv6_table.end());
 
-        if (log->should_log(spdlog::level::trace)) {
+        if (log->should_log(spdlog::level::debug)) {
             for (auto *table : {&ipv4_table, &ipv6_table}) {
                 bool ipv4 = table == &ipv4_table;
-                tracelog(log, "{}", ipv4 ? "IPv4 table:" : "IPv6 table:");
+                dbglog(log, "{}", ipv4 ? "IPv4 table:" : "IPv6 table:");
                 for (auto &route : *table) {
                     auto addr = ag::utils::addr_to_str({route.address.data(), (size_t) (ipv4 ? 4 : 16)});
                     uint32_t prefix_len = 0;
@@ -190,7 +190,7 @@ public:
                         prefix_len += __builtin_popcount(b);
                     }
                     char buf[IF_NAMESIZE];
-                    tracelog(log, "{}/{} -> {}", addr, prefix_len, if_indextoname(route.if_index, buf));
+                    dbglog(log, "{}/{} -> {}", addr, prefix_len, if_indextoname(route.if_index, buf));
                 }
             }
         }

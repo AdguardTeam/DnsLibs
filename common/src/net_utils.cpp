@@ -12,6 +12,8 @@
 #ifndef INET6_ADDRSTRLEN
 #define INET6_ADDRSTRLEN 46
 #endif
+#undef IF_NAMESIZE
+#define IF_NAMESIZE 256
 #endif
 
 std::tuple<std::string_view, std::string_view, ag::err_string_view> ag::utils::split_host_port_with_err(
@@ -121,7 +123,7 @@ ag::err_string ag::utils::bind_socket_to_if(evutil_socket_t fd, int family, uint
     char buf[IF_NAMESIZE];
     const char *name = if_indextoname(if_index, buf);
     if (!name) {
-        return AG_FMT("{}: {}", errno, strerror(errno));
+        return AG_FMT("if_indextoname: ({}) {}", errno, strerror(errno));
     }
     return bind_socket_to_if(fd, family, name);
 #else
@@ -134,10 +136,14 @@ ag::err_string ag::utils::bind_socket_to_if(evutil_socket_t fd, int family, uint
 #endif
     int option;
     int level;
+    uint32_t value = if_index;
     switch (family) {
     case AF_INET:
         level = IPPROTO_IP;
         option = ipv4_opt;
+#if defined(_WIN32)
+        value = htonl(if_index);
+#endif
         break;
     case AF_INET6:
         level = IPPROTO_IPV6;
@@ -146,10 +152,15 @@ ag::err_string ag::utils::bind_socket_to_if(evutil_socket_t fd, int family, uint
     default:
         return AG_FMT("Unsuppported socket family: {}", family);
     }
-    int ret = setsockopt(fd, level, option, (char *) &if_index, sizeof(if_index)); // Cast to (char *) for Windows
+    int ret = setsockopt(fd, level, option, (char *) &value, sizeof(value)); // Cast to (char *) for Windows
     if (ret != 0) {
         int error = evutil_socket_geterror(fd);
-        return AG_FMT("{}: {}", error, evutil_socket_error_to_string(error));
+        const char *error_str = evutil_socket_error_to_string(error);
+        if (char buf[IF_NAMESIZE]; if_indextoname(if_index, buf)) {
+            return AG_FMT("Failed to bind fd {} to interface {}: ({}) {}", fd, buf, error, error_str);
+        } else {
+            return AG_FMT("Failed to bind fd {} to interface {}: {}: {}", fd, if_index, error, error_str);
+        }
     }
     return {};
 #endif
@@ -160,7 +171,7 @@ ag::err_string ag::utils::bind_socket_to_if(evutil_socket_t fd, int family, cons
     (void)family;
     int ret = setsockopt(fd, SOL_SOCKET, SO_BINDTODEVICE, if_name, strlen(if_name));
     if (ret != 0) {
-        return AG_FMT("{}: {}", errno, strerror(errno));
+        return AG_FMT("Failed to bind fd {} to interface {}: ({}) {}", fd, if_name, errno, strerror(errno));
     }
     return {};
 #else
