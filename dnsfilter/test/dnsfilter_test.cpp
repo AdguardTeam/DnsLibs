@@ -87,10 +87,10 @@ TEST_F(dnsfilter_test, successful_rule_parsing) {
             { "/ex[ab]mple.org/", { make_rule(), rule_utils::rule::MMID_SHORTCUTS_AND_REGEX } },
             { "example.org$badfilter", { make_rule(1 << ag::dnsfilter::DARP_BADFILTER) } },
             { "-ad-banner.", { make_rule(), rule_utils::rule::MMID_SHORTCUTS } },
-            { "-ad-unit/", { make_rule(), rule_utils::rule::MMID_REGEX } },
-            { "-ad-unit^", { make_rule(), rule_utils::rule::MMID_REGEX } },
-            { "-ad-unit/^", { make_rule(), rule_utils::rule::MMID_REGEX } },
-            { "-ad-unit^/", { make_rule(), rule_utils::rule::MMID_REGEX } },
+            { "-ad-unit/", { make_rule(), rule_utils::rule::MMID_SHORTCUTS_AND_REGEX } },
+            { "-ad-unit^", { make_rule(), rule_utils::rule::MMID_SHORTCUTS_AND_REGEX } },
+            { "-ad-unit/^", { make_rule(), rule_utils::rule::MMID_SHORTCUTS_AND_REGEX } },
+            { "-ad-unit^/", { make_rule(), rule_utils::rule::MMID_SHORTCUTS_AND_REGEX } },
             { "||adminpromotion.com^", { make_rule(), rule_utils::rule::MMID_SUBDOMAINS } },
             { "||travelstool.com^", { make_rule(), rule_utils::rule::MMID_SUBDOMAINS } },
             { "example.org:8080", { make_rule(), rule_utils::rule::MMID_SHORTCUTS_AND_REGEX } },
@@ -105,7 +105,7 @@ TEST_F(dnsfilter_test, successful_rule_parsing) {
             { "|example.org^", { make_rule(), rule_utils::rule::MMID_EXACT } },
             { "|https://example31.org/", { make_rule(), rule_utils::rule::MMID_EXACT } },
             { "/127.0.0.1/", { make_rule(), rule_utils::rule::MMID_SHORTCUTS_AND_REGEX } },
-            { "/12:34:56:78::90/", { make_rule(), rule_utils::rule::MMID_REGEX } },
+            { "/12:34:56:78::90/", { make_rule(), rule_utils::rule::MMID_SHORTCUTS_AND_REGEX } },
             { "123.123.123.123", { make_rule(), rule_utils::rule::MMID_SHORTCUTS } },
             { "12:34:56:78::90", { make_rule(), rule_utils::rule::MMID_SHORTCUTS } },
             { "123.123.123.123$badfilter", { make_rule(1 << ag::dnsfilter::DARP_BADFILTER), rule_utils::rule::MMID_EXACT } },
@@ -148,6 +148,13 @@ TEST_F(dnsfilter_test, successful_rule_parsing) {
             { "@@example.org$dnsrewrite=example.net", { make_rule((1 << ag::dnsfilter::DARP_DNSREWRITE) | (1 << ag::dnsfilter::DARP_EXCEPTION)), rule_utils::rule::MMID_SHORTCUTS } },
             { "@@example.org$dnsrewrite=NOTIMPL", { make_rule((1 << ag::dnsfilter::DARP_DNSREWRITE) | (1 << ag::dnsfilter::DARP_EXCEPTION)), rule_utils::rule::MMID_SHORTCUTS } },
             { "@@example.org$dnsrewrite", { make_rule((1 << ag::dnsfilter::DARP_DNSREWRITE) | (1 << ag::dnsfilter::DARP_EXCEPTION)), rule_utils::rule::MMID_SHORTCUTS } },
+            { "*$dnstype=HTTPS", { make_rule(1 << ag::dnsfilter::DARP_DNSTYPE), rule_utils::rule::MMID_SHORTCUTS } },
+            { "$dnstype=HTTPS", { make_rule(1 << ag::dnsfilter::DARP_DNSTYPE), rule_utils::rule::MMID_SHORTCUTS } },
+            { "/.*/$dnstype=HTTPS", { make_rule(1 << ag::dnsfilter::DARP_DNSTYPE), rule_utils::rule::MMID_REGEX } },
+            { "/.*$/$dnstype=HTTPS", { make_rule(1 << ag::dnsfilter::DARP_DNSTYPE), rule_utils::rule::MMID_REGEX } },
+            { "*$dnsrewrite", { make_rule((1 << ag::dnsfilter::DARP_DNSREWRITE)), rule_utils::rule::MMID_SHORTCUTS } },
+            { "$dnsrewrite", { make_rule((1 << ag::dnsfilter::DARP_DNSREWRITE)), rule_utils::rule::MMID_SHORTCUTS } },
+            { "/.*/$dnsrewrite", { make_rule((1 << ag::dnsfilter::DARP_DNSREWRITE)), rule_utils::rule::MMID_REGEX } },
         };
 
     for (const test_data &entry : TEST_DATA) {
@@ -310,25 +317,26 @@ const std::vector<basic_test_data> BASIC_TEST_DATA = {
         { { "|172.165.*.1:80^" }, "172.165.35.1", true, },
         { { "example55.org:8080" }, "eexample55.org", true, },
         { { "example56.org/^" }, "eexample56.org", true, },
-        { { "example56.org^/" }, "eexample56.org", true, },
+        { { "example57.org^/" }, "eexample57.org", true, },
         { { "0.1" }, "0.1", true, },
         { { "confusing." }, "veryconfusing.indeed", true, },
         { { "reconfusing." }, "even.moreconfusing.indeed", true, },
+        { { "/.*$/" }, "example58.com", true, },
+        { { "/^/" }, "example59.com", true, },
+        { { "/$/" }, "example60.com", true, },
 };
 
 TEST_F(dnsfilter_test, basic_rules_match) {
     for (const auto &entry : BASIC_TEST_DATA) {
+        SPDLOG_INFO("testing {}", entry.domain);
+
         for (const std::string &rule : entry.rules) {
             ASSERT_NO_FATAL_FAILURE(add_rule_in_filter(file_by_filter_name(TEST_FILTER_NAME), rule));
         }
-    }
 
-    ag::dnsfilter::engine_params params = { { { 10, file_by_filter_name(TEST_FILTER_NAME) } } };
-    auto [handle, err_or_warn] = filter.create(params);
-    ASSERT_TRUE(handle) << *err_or_warn;
-
-    for (const auto &entry : BASIC_TEST_DATA) {
-        SPDLOG_INFO("testing {}", entry.domain);
+        ag::dnsfilter::engine_params params = { { { 10, file_by_filter_name(TEST_FILTER_NAME) } } };
+        auto [handle, err_or_warn] = filter.create(params);
+        ASSERT_TRUE(handle) << *err_or_warn;
         std::vector<ag::dnsfilter::rule> rules = filter.match(handle, { entry.domain });
         ASSERT_GT(rules.size(), 0);
         for (const ag::dnsfilter::rule &r : rules) {
@@ -343,26 +351,25 @@ TEST_F(dnsfilter_test, basic_rules_match) {
         } else {
             ASSERT_TRUE(content->props.test(ag::dnsfilter::DARP_EXCEPTION));
         }
-    }
 
-    filter.destroy(handle);
+        filter.destroy(handle);
+    }
 }
 
 TEST_F(dnsfilter_test, basic_rules_match_in_memory) {
     std::string filter_data;
     for (const auto &entry : BASIC_TEST_DATA) {
+        SPDLOG_INFO("testing {}", entry.domain);
+
         for (const auto &rule : entry.rules) {
             filter_data += rule;
             filter_data += "\r\n";
         }
-    }
 
-    ag::dnsfilter::engine_params params = { { { 10, filter_data, true } } };
-    auto [handle, err_or_warn] = filter.create(params);
-    ASSERT_TRUE(handle) << *err_or_warn;
+        ag::dnsfilter::engine_params params = { { { 10, filter_data, true } } };
+        auto [handle, err_or_warn] = filter.create(params);
+        ASSERT_TRUE(handle) << *err_or_warn;
 
-    for (const auto &entry : BASIC_TEST_DATA) {
-        SPDLOG_INFO("testing {}", entry.domain);
         std::vector<ag::dnsfilter::rule> rules = filter.match(handle, { entry.domain });
         ASSERT_GT(rules.size(), 0);
         for (const ag::dnsfilter::rule &r : rules) {
@@ -377,9 +384,9 @@ TEST_F(dnsfilter_test, basic_rules_match_in_memory) {
         } else {
             ASSERT_TRUE(content->props.test(ag::dnsfilter::DARP_EXCEPTION));
         }
-    }
 
-    filter.destroy(handle);
+        filter.destroy(handle);
+    }
 }
 
 TEST_F(dnsfilter_test, basic_rules_no_match) {
@@ -707,19 +714,16 @@ TEST_F(dnsfilter_test, dnstype_modifier) {
             { "||example8.com$dnstype=~ISDN|~NSAP", { "example8.com", LDNS_RR_TYPE_NXT }, true },
             { "||example9.com$dnstype=CERT|NAPTR", { "example9.com", LDNS_RR_TYPE_NIMLOC }, false },
             { "||example10.com$dnstype=https", { "example10.com", LDNS_RR_TYPE_HTTPS }, true },
+            { "/.*$/$dnstype=https", { "example10.com", LDNS_RR_TYPE_HTTPS }, true },
     };
-
-    std::string filter_data;
-    for (const test_data &entry : TEST_DATA) {
-        filter_data += AG_FMT("{}\r\n", entry.rule);
-    }
-
-    ag::dnsfilter::engine_params params = { { { 10, filter_data, true } } };
-    auto[handle, err_or_warn] = filter.create(params);
-    ASSERT_TRUE(handle) << *err_or_warn;
 
     for (const test_data &entry : TEST_DATA) {
         SPDLOG_INFO("testing {}", entry.rule);
+
+        ag::dnsfilter::engine_params params = { { { 10, std::string(entry.rule), true } } };
+        auto[handle, err_or_warn] = filter.create(params);
+        ASSERT_TRUE(handle) << *err_or_warn;
+
         std::vector<ag::dnsfilter::rule> rules = filter.match(handle, { entry.param });
         if (entry.expect_blocked) {
             ASSERT_EQ(rules.size(), 1);
@@ -733,7 +737,7 @@ TEST_F(dnsfilter_test, dnstype_modifier) {
                 ASSERT_EQ(rules.size(), 0);
             }
         }
-    }
 
-    filter.destroy(handle);
+        filter.destroy(handle);
+    }
 }

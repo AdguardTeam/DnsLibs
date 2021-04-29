@@ -454,6 +454,14 @@ static std::vector<std::string_view> extract_regex_shortcuts(std::string_view te
     return shortcuts;
 }
 
+static bool is_too_wide_rule(const ag::dnsfilter::adblock_rule_info &rule_info,
+        const rule_utils::match_info &match_info) {
+    return !rule_info.props.test(ag::dnsfilter::DARP_DNSTYPE)
+            && !rule_info.props.test(ag::dnsfilter::DARP_DNSREWRITE)
+            && (match_info.text.empty()
+                    || match_info.text.find_first_not_of(".*") == match_info.text.npos);
+}
+
 static std::optional<rule_utils::rule> parse_adblock_rule(std::string_view str, ag::logger *log) {
     using rule = rule_utils::rule;
 
@@ -469,14 +477,10 @@ static std::optional<rule_utils::rule> parse_adblock_rule(std::string_view str, 
         str = parts[0];
     }
 
-    rule_utils::match_info info = extract_match_info(str);
-    str = info.text;
-    if (str.empty() || str.find_first_not_of(".*") == str.npos) {
-        ru_dbglog(log, "Too wide rule: {}", str);
-        return std::nullopt;
-    }
+    rule_utils::match_info match_info = extract_match_info(str);
+    str = match_info.text;
 
-    if (!info.is_regex_rule && !is_valid_domain_pattern(str) && !is_valid_ip_pattern(str)) {
+    if (!match_info.is_regex_rule && !is_valid_domain_pattern(str) && !is_valid_ip_pattern(str)) {
         ru_dbglog(log, "Invalid domain name: {}", str);
         return std::nullopt;
     }
@@ -485,7 +489,12 @@ static std::optional<rule_utils::rule> parse_adblock_rule(std::string_view str, 
     auto &rule_info = std::get<ag::dnsfilter::adblock_rule_info>(r.public_part.content);
     rule_info.props.set(ag::dnsfilter::DARP_EXCEPTION, is_exception);
     rule_info.params = new ag::dnsfilter::adblock_rule_info::parameters{};
-    if (!extract_modifiers(r, parts[1], info, log)) {
+    if (!extract_modifiers(r, parts[1], match_info, log)) {
+        return std::nullopt;
+    }
+
+    if (is_too_wide_rule(rule_info, match_info)) {
+        ru_dbglog(log, "Too wide rule: {}", str);
         return std::nullopt;
     }
 
@@ -495,16 +504,16 @@ static std::optional<rule_utils::rule> parse_adblock_rule(std::string_view str, 
         return std::make_optional(std::move(r));
     }
 
-    bool exact_pattern = pattern_exact(info.pattern_mode);
-    bool subdomains_pattern = pattern_subdomains(info.pattern_mode);
-    ag::socket_address addr{info.text, 0};
-    if (!info.is_regex_rule && exact_pattern && addr.valid()) { // info.text is a valid IP address
+    bool exact_pattern = pattern_exact(match_info.pattern_mode);
+    bool subdomains_pattern = pattern_subdomains(match_info.pattern_mode);
+    ag::socket_address addr{match_info.text, 0};
+    if (!match_info.is_regex_rule && exact_pattern && addr.valid()) { // match_info.text is a valid IP address
         r.match_method = rule::MMID_EXACT;
         r.matching_parts.emplace_back(ag::utils::addr_to_str(addr.addr())); // strip port, compress
-    } else if (!info.is_regex_rule && !info.has_wildcard && (exact_pattern || subdomains_pattern)) {
+    } else if (!match_info.is_regex_rule && !match_info.has_wildcard && (exact_pattern || subdomains_pattern)) {
         r.match_method = exact_pattern ? rule::MMID_EXACT : rule::MMID_SUBDOMAINS;
         r.matching_parts.emplace_back(ag::utils::to_lower(str));
-    } else if (!info.is_regex_rule && info.pattern_mode == 0) {
+    } else if (!match_info.is_regex_rule && match_info.pattern_mode == 0) {
         r.match_method = rule::MMID_SHORTCUTS;
         std::vector<std::string_view> shortcuts = ag::utils::split_by(str, '*');
         r.matching_parts.reserve(shortcuts.size());
@@ -524,9 +533,7 @@ static std::optional<rule_utils::rule> parse_adblock_rule(std::string_view str, 
             }
 
             std::vector<std::string_view> shortcuts = extract_regex_shortcuts(text);
-            if (shortcuts.size() > 1
-                    || std::string_view::npos != SPECIAL_REGEX_CHARACTERS.find(text.front())
-                    || std::string_view::npos != SPECIAL_REGEX_CHARACTERS.find(text.back())) {
+            if (!shortcuts.empty()) {
                 r.match_method = rule::MMID_SHORTCUTS_AND_REGEX;
                 r.matching_parts.reserve(shortcuts.size());
                 for (const std::string_view &sc : shortcuts) {
@@ -534,7 +541,6 @@ static std::optional<rule_utils::rule> parse_adblock_rule(std::string_view str, 
                 }
             } else {
                 r.match_method = rule::MMID_REGEX;
-                r.matching_parts.emplace_back(ag::utils::to_lower(str));
             }
         }
 
