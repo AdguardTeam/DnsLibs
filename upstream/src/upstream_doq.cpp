@@ -1241,20 +1241,20 @@ void dns_over_quic::update_idle_timer(bool reset) {
         intmax_t effective_idle_timeout = ngtcp2_conn_get_idle_expiry(m_conn) - get_tstamp();
         if (effective_idle_timeout > 0) {
             value = ceil<milliseconds>(nanoseconds{effective_idle_timeout});
-            tracelog(m_log, "Idle timer reset with long timeout, {} left", value);
+            dbglog(m_log, "Idle timer reset with long timeout, {} left", value);
         }
     } else {
         value = m_options.timeout * 2;
         if (!reset) {
             milliseconds pending = ceil<milliseconds>(get_event_remaining_timeout(m_idle_timer_event));
             if (pending <= value) {
-                tracelog(m_log, "Idle timer unchanged, {} left", pending);
+                dbglog(m_log, "Idle timer unchanged, {} left", pending);
                 return;
             } else {
-                tracelog(m_log, "Idle timer reduced from {} to short timeout, {} left", pending, value);
+                dbglog(m_log, "Idle timer reduced from {} to short timeout, {} left", pending, value);
             }
         } else {
-            tracelog(m_log, "Idle timer reset with short timeout, {} left", value);
+            dbglog(m_log, "Idle timer reset with short timeout, {} left", value);
         }
     }
 

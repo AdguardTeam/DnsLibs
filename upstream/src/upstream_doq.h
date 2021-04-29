@@ -35,10 +35,8 @@ class dns_over_quic : public upstream {
 public:
     static constexpr auto DEFAULT_PORT = 8853;
     static constexpr std::string_view SCHEME = "quic://";
-    enum quic_version {
-        QUIC_VER_DRAFT29 = 0xff00001du,
-        QUIC_VER_DRAFT32 = 0xff000020u,
-    };
+    static constexpr uint32_t QUIC_VER_DRAFT29 = 0xff00001du;
+    static constexpr uint32_t QUIC_VER_DRAFT32 = 0xff000020u;
 
     /**
      * @param opts upstream settings
