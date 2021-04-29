@@ -9,8 +9,7 @@
 using namespace ag;
 using namespace std::chrono;
 
-static constexpr uint8_t DQ_ALPN_I00[] = {0x07, 'd', 'o', 'q', '-', 'i', '0', '0'};
-static constexpr uint8_t DQ_ALPN_I02[] = {0x07, 'd', 'o', 'q', '-', 'i', '0', '2'};
+static constexpr std::string_view DQ_ALPNS[] = {"doq-i02", "doq-i00", "doq", "dq"};
 static constexpr int LOCAL_IDLE_TIMEOUT_SEC = 180;
 
 #undef  NEVER
@@ -32,6 +31,7 @@ dns_over_quic::buffer::buffer(size_t datalen) : buf(datalen), tail(buf.data())
 dns_over_quic::dns_over_quic(const upstream_options &opts, const upstream_factory_config &config)
         : upstream(opts, config)
         , m_max_pktlen{NGTCP2_MAX_PKTLEN_IPV6}
+        , m_quic_version{QUIC_VER_DRAFT32}
         , m_send_buf(NGTCP2_MAX_PKTLEN_IPV6)
         , m_static_secret{0}
         , m_tls_session_cache(opts.address)
@@ -172,6 +172,9 @@ void dns_over_quic::read_cb(evutil_socket_t, short, void *data) {
     auto doq = static_cast<dns_over_quic *>(data);
     if (int ret = doq->on_read(); ret != NETWORK_ERR_OK) {
         doq->disconnect(AG_FMT("Reading error ({})", ret));
+        if (ret == NGTCP2_ERR_RECV_VERSION_NEGOTIATION) {
+            doq->reinit();
+        }
         return;
     }
     if (int ret = doq->on_write(); ret != NETWORK_ERR_OK) {
@@ -299,7 +302,7 @@ err_string dns_over_quic::init() {
             nullptr, // recv_client_initial
             recv_crypto_data,
             nullptr, // handshake_completed,
-            nullptr, // recv_version_negotiation
+            version_negotiation, // recv_version_negotiation
             ngtcp2_crypto_encrypt_cb,
             ngtcp2_crypto_decrypt_cb,
             ngtcp2_crypto_hp_mask,
@@ -621,19 +624,15 @@ int dns_over_quic::init_ssl() {
     SSL_set_tlsext_host_name(m_ssl, m_server_name.c_str());
     SSL_set_connect_state(m_ssl);
 
-    uint8_view alpn;
-    if (m_version == AGNGTCP2_PROTO_VER_I00) {
-        alpn = uint8_view(DQ_ALPN_I00, sizeof(DQ_ALPN_I00));
-    } else if (m_version == AGNGTCP2_PROTO_VER_I02) {
-        alpn = uint8_view(DQ_ALPN_I02, sizeof(DQ_ALPN_I02));
+    std::string alpn, printable;
+    for (auto &dq_alpn : DQ_ALPNS) {
+        alpn.push_back(dq_alpn.size());
+        alpn.append(dq_alpn);
+        printable.push_back(' ');
+        printable.append(dq_alpn);
     }
-    if (!alpn.empty()) {
-        std::string tmp((char *)alpn.data() + 1, alpn.size() - 1);
-        dbglog(m_log, "Selected ALPN: {}", tmp.c_str());
-        SSL_set_alpn_protos(m_ssl, alpn.data(), alpn.size());
-    } else {
-        dbglog(m_log, "Selected ALPN: unknown");
-    }
+    dbglog(m_log, "Advertised ALPNs:{}", printable);
+    SSL_set_alpn_protos(m_ssl, (uint8_t *)alpn.data(), alpn.size());
 
     m_tls_session_cache.prepare_ssl(m_ssl);
 
@@ -773,6 +772,26 @@ int dns_over_quic::feed_data(const ngtcp2_pkt_info *pi, uint8_t *data, size_t da
     return 0;
 }
 
+int dns_over_quic::version_negotiation(ngtcp2_conn *conn, const ngtcp2_pkt_hd *hd,
+                                       const uint32_t *sv, size_t nsv, void *user_data) {
+    auto doq = static_cast<dns_over_quic *>(user_data);
+    uint32_t version = 0;
+    bool selected = false;
+    for (size_t i = 0; i < nsv; i++) {
+        if (sv[i] >= NGTCP2_PROTO_VER_MIN && sv[i] <= NGTCP2_PROTO_VER_MAX) {
+            selected = true;
+            version = std::max(version, sv[i]);
+        }
+    }
+
+    if (selected) {
+        doq->m_quic_version = version;
+        return 0;
+    }
+
+    return -1;
+}
+
 int dns_over_quic::recv_crypto_data(ngtcp2_conn *conn, ngtcp2_crypto_level crypto_level,
                                     uint64_t offset, const uint8_t *data, size_t datalen,
                                     void *user_data) {
@@ -909,6 +928,10 @@ int dns_over_quic::handshake_confirmed(ngtcp2_conn *conn, void *data) {
 
     auto doq = (dns_over_quic *)data;
     evtimer_del(doq->m_handshake_timer_event);
+    const uint8_t *buf = nullptr;
+    uint32_t len = 0;
+    SSL_get0_alpn_selected(doq->m_ssl, &buf, &len);
+    dbglog(doq->m_log, "Selected ALPN: {}", std::string_view{(char *)buf, len});
     doq->m_state = RUN;
     doq->update_idle_timer(true);
     doq->send_requests();
@@ -1002,12 +1025,6 @@ int dns_over_quic::reinit() {
     ngtcp2_settings settings;
     ngtcp2_settings_default(&settings);
     ag_ngtcp2_settings_default(settings);
-    if (m_port == 784) {
-        // https://tools.ietf.org/html/draft-ietf-dprive-dnsoquic-02#section-10.2.1
-        m_version = AGNGTCP2_PROTO_VER_I00;
-    } else {
-        m_version = AGNGTCP2_PROTO_VER_I02;
-    }
 
     RAND_bytes(m_static_secret.data(), m_static_secret.size());
     auto generate_cid = [](ngtcp2_cid &cid, size_t len) {
@@ -1019,7 +1036,7 @@ int dns_over_quic::reinit() {
     generate_cid(dcid, 18);
 
     auto rv = ngtcp2_conn_client_new(&m_conn, &dcid, &scid, &path,
-                                     m_version, &m_callbacks, &settings, nullptr, this);
+                                     m_quic_version, &m_callbacks, &settings, nullptr, this);
     if (rv != 0) {
         errlog(m_log, "Failed creation ngtcp2_conn: {}", ngtcp2_strerror(rv));
         return -1;

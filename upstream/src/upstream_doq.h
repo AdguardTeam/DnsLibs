@@ -35,9 +35,9 @@ class dns_over_quic : public upstream {
 public:
     static constexpr auto DEFAULT_PORT = 8853;
     static constexpr std::string_view SCHEME = "quic://";
-    enum proto_version {
-        AGNGTCP2_PROTO_VER_I00 = 0xff00001du,
-        AGNGTCP2_PROTO_VER_I02 = 0xff000020u,
+    enum quic_version {
+        QUIC_VER_DRAFT29 = 0xff00001du,
+        QUIC_VER_DRAFT32 = 0xff000020u,
     };
 
     /**
@@ -123,6 +123,9 @@ private:
     err_string init() override;
     exchange_result exchange(ldns_pkt *) override;
 
+    static int version_negotiation(ngtcp2_conn *conn, const ngtcp2_pkt_hd *hd,
+        const uint32_t *sv, size_t nsv, void *user_data);
+
     static int recv_crypto_data(ngtcp2_conn *conn, ngtcp2_crypto_level crypto_level,
                                 uint64_t offset, const uint8_t *data, size_t datalen,
                                 void *user_data);
@@ -199,7 +202,7 @@ private:
     std::vector<ag::socket_address> m_current_addresses;
     ngtcp2_callbacks m_callbacks{};
     size_t m_max_pktlen;
-    proto_version m_version;
+    uint32_t m_quic_version;
     buffer m_send_buf;
     SSL_CTX *m_ssl_ctx{nullptr};
     SSL *m_ssl{nullptr};
