@@ -98,6 +98,14 @@ namespace Adguard.Dns.Api.DnsProxyServer.Configs
         /// </summary>
         public bool OptimisticCache { get; set; }
 
+        /// <summary>
+        /// Enable DNSSEC OK extension.
+        /// This options tells server that we want to receive DNSSEC records along with normal queries.
+        /// If they exist, request processed event will have DNSSEC flag on.
+        /// WARNING: may increase data usage and probability of TCP fallbacks.
+        /// </summary>
+        public bool EnableDNSSECOK { get; set; }
+
         #region Equals members
 
         public override bool Equals(object obj)
@@ -136,7 +144,8 @@ namespace Adguard.Dns.Api.DnsProxyServer.Configs
                    CustomBlockingIpv4 == other.CustomBlockingIpv4 &&
                    CustomBlockingIpv6 == other.CustomBlockingIpv6 &&
                    DnsCacheSize == other.DnsCacheSize &&
-                   OptimisticCache == other.OptimisticCache;
+                   OptimisticCache == other.OptimisticCache &&
+                   EnableDNSSECOK == other.EnableDNSSECOK;
         }
 
         public override int GetHashCode()
@@ -158,6 +167,7 @@ namespace Adguard.Dns.Api.DnsProxyServer.Configs
                 hashCode = (hashCode * 397) ^ (CustomBlockingIpv6 != null ? CustomBlockingIpv6.GetHashCode() : 0);
                 hashCode = (hashCode * 397) ^ DnsCacheSize.GetHashCode();
                 hashCode = (hashCode * 397) ^ OptimisticCache.GetHashCode();
+                hashCode = (hashCode * 397) ^ EnableDNSSECOK.GetHashCode();
                 return hashCode;
             }
         }

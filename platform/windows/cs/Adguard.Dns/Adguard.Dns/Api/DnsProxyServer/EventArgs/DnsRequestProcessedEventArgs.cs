@@ -82,5 +82,10 @@ namespace Adguard.Dns.Api.DnsProxyServer.EventArgs
         /// True if this response was served from the cache
         /// </summary>
         public bool CacheHit { get; set; }
+
+        /// <summary>
+        /// True if this response has DNSSEC rrsig
+        /// </summary>
+        public bool DNSSEC { get; set; }
     }
 }

@@ -46,16 +46,13 @@ public:
     ~dns_over_quic() override;
 
 #if BORINGSSL_API_VERSION < 10
-    static int set_encryption_secrets(SSL *ssl, enum ssl_encryption_level_t ossl_level,
-                                      const uint8_t *read_secret,
+    static int set_encryption_secrets(SSL *ssl, enum ssl_encryption_level_t ossl_level, const uint8_t *read_secret,
                                       const uint8_t *write_secret, size_t secret_len);
 #else
-    static int set_rx_secret(SSL *ssl, enum ssl_encryption_level_t ossl_level,
-                                      const SSL_CIPHER *cipher,
-                                      const uint8_t *read_secret, size_t secret_len);
-    static int set_tx_secret(SSL *ssl, enum ssl_encryption_level_t ossl_level,
-                                      const SSL_CIPHER *cipher,
-                                      const uint8_t *write_secret, size_t secret_len);
+    static int set_rx_secret(SSL *ssl, enum ssl_encryption_level_t ossl_level, const SSL_CIPHER *cipher,
+                             const uint8_t *read_secret, size_t secret_len);
+    static int set_tx_secret(SSL *ssl, enum ssl_encryption_level_t ossl_level, const SSL_CIPHER *cipher,
+                             const uint8_t *write_secret, size_t secret_len);
 #endif
 
     static int add_handshake_data(SSL *ssl, enum ssl_encryption_level_t ossl_level,

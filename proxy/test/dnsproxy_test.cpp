@@ -909,3 +909,175 @@ TEST_F(dnsproxy_test, optimistic_cache) {
         ASSERT_EQ(1, ldns_rr_ttl(ldns_rr_list_rr(ldns_pkt_answer(res.get()), i)));
     }
 }
+
+TEST_F(dnsproxy_test, dnssec_simple_test) {
+    ag::dnsproxy_settings settings = make_dnsproxy_settings();
+    settings.enable_dnssec_ok = true;
+
+    std::vector<std::string> dnssecSupport = { "cloudflare.com", "example.org" };
+    std::vector<std::string> dnssecNotSupport = { "adguard.com", "google.com" };
+    ldns_enum_rr_type arrOfTypes[] = { LDNS_RR_TYPE_AAAA, LDNS_RR_TYPE_A, LDNS_RR_TYPE_TXT };
+
+    ag::dns_request_processed_event last_event{};
+    ag::dnsproxy_events events{
+            .on_request_processed = [&last_event](const ag::dns_request_processed_event &event) {
+                last_event = event;
+            }
+    };
+
+    auto [ret, err] = proxy.init(settings, events);
+    ASSERT_TRUE(ret) << *err;
+
+    for (auto &curAddress : dnssecSupport) {
+        for (auto curType : arrOfTypes) {
+            ag::ldns_pkt_ptr res;
+            ASSERT_NO_FATAL_FAILURE(perform_request(proxy, create_request(curAddress, curType, LDNS_RD), res));
+            ASSERT_TRUE(last_event.dnssec);
+            ASSERT_EQ(LDNS_RCODE_NOERROR, ldns_pkt_get_rcode(res.get()));
+            ASSERT_GT(ldns_pkt_ancount(res.get()), 0);
+            // check that RRSIG section does not exist cuz the request haven't DO bit
+            ASSERT_TRUE(last_event.answer.find("RRSIG") == std::string::npos);
+            auto ptr = ldns_pkt_rr_list_by_type(res.get(), LDNS_RR_TYPE_RRSIG, LDNS_SECTION_ANSWER);
+            ASSERT_EQ(nullptr, ptr);
+            ldns_rr_list_deep_free(ptr);
+        }
+    }
+
+    for (auto &curAddress : dnssecNotSupport) {
+        for (auto curType : arrOfTypes) {
+            ag::ldns_pkt_ptr res;
+            ASSERT_NO_FATAL_FAILURE(perform_request(proxy, create_request(curAddress, curType, LDNS_RD), res));
+            ASSERT_FALSE(last_event.dnssec);
+            ASSERT_EQ(LDNS_RCODE_NOERROR, ldns_pkt_get_rcode(res.get()));
+            ASSERT_GT(ldns_pkt_ancount(res.get()), 0);
+            // check that RRSIG section does not exist cuz the request haven't DO bit
+            ASSERT_TRUE(last_event.answer.find("RRSIG") == std::string::npos);
+            auto ptr = ldns_pkt_rr_list_by_type(res.get(), LDNS_RR_TYPE_RRSIG, LDNS_SECTION_ANSWER);
+            ASSERT_EQ(nullptr, ptr);
+            ldns_rr_list_deep_free(ptr);
+        }
+    }
+}
+
+TEST_F(dnsproxy_test, dnssec_request_with_do_bit) {
+    ag::dnsproxy_settings settings = make_dnsproxy_settings();
+    settings.enable_dnssec_ok = true;
+
+    ag::dns_request_processed_event last_event{};
+    ag::dnsproxy_events events{
+            .on_request_processed = [&last_event](const ag::dns_request_processed_event &event) {
+                last_event = event;
+            }
+    };
+
+    auto [ret, err] = proxy.init(settings, events);
+    ASSERT_TRUE(ret) << *err;
+
+    ag::ldns_pkt_ptr res;
+    auto req = create_request("cloudflare.com", LDNS_RR_TYPE_A, LDNS_RD);
+    ldns_pkt_set_edns_do(req.get(), true);
+    ldns_pkt_set_edns_udp_size(req.get(), 4096);
+    ASSERT_NO_FATAL_FAILURE(perform_request(proxy, req, res));
+    ASSERT_TRUE(last_event.dnssec);
+    ASSERT_EQ(LDNS_RCODE_NOERROR, ldns_pkt_get_rcode(res.get()));
+    ASSERT_GT(ldns_pkt_ancount(res.get()), 0);
+    // check that response not modified
+    ASSERT_FALSE(last_event.answer.find("RRSIG") == std::string::npos);
+    auto ptr = ldns_pkt_rr_list_by_type(res.get(), LDNS_RR_TYPE_RRSIG, LDNS_SECTION_ANSWER);
+    ASSERT_NE(nullptr, ptr);
+    ldns_rr_list_deep_free(ptr);
+}
+
+TEST_F(dnsproxy_test, dnssec_ds_request) {
+    ag::dnsproxy_settings settings = make_dnsproxy_settings();
+    settings.enable_dnssec_ok = true;
+
+    ag::dns_request_processed_event last_event{};
+    ag::dnsproxy_events events{
+            .on_request_processed = [&last_event](const ag::dns_request_processed_event &event) {
+                last_event = event;
+            }
+    };
+
+    auto [ret, err] = proxy.init(settings, events);
+    ASSERT_TRUE(ret) << *err;
+
+    ag::ldns_pkt_ptr res;
+    ASSERT_NO_FATAL_FAILURE(perform_request(proxy, create_request("cloudflare.com", LDNS_RR_TYPE_DS, LDNS_RD), res));
+    ASSERT_TRUE(last_event.dnssec);
+    ASSERT_EQ(LDNS_RCODE_NOERROR, ldns_pkt_get_rcode(res.get()));
+    ASSERT_GT(ldns_pkt_ancount(res.get()), 0);
+    // check that response was modified cuz DO bit we added
+    ASSERT_TRUE(last_event.answer.find("RRSIG") == std::string::npos);
+    auto ptr = ldns_pkt_rr_list_by_type(res.get(), LDNS_RR_TYPE_RRSIG, LDNS_SECTION_ANSWER);
+    ASSERT_EQ(nullptr, ptr);
+    ldns_rr_list_deep_free(ptr);
+    // but type of request here is in response
+    ptr = ldns_pkt_rr_list_by_type(res.get(), LDNS_RR_TYPE_DS, LDNS_SECTION_ANSWER);
+    ASSERT_NE(nullptr, ptr);
+    ldns_rr_list_deep_free(ptr);
+}
+
+TEST_F(dnsproxy_test, dnssec_the_same_qtype_request) {
+    ag::dnsproxy_settings settings = make_dnsproxy_settings();
+    // dns.adguard.com answers SERVFAIL
+    settings.upstreams = {{ .address = "1.1.1.1" }};
+    settings.enable_dnssec_ok = true;
+
+    ag::dns_request_processed_event last_event{};
+    ag::dnsproxy_events events{
+            .on_request_processed = [&last_event](const ag::dns_request_processed_event &event) {
+                last_event = event;
+            }
+    };
+
+    auto [ret, err] = proxy.init(settings, events);
+    ASSERT_TRUE(ret) << *err;
+
+    ag::ldns_pkt_ptr res;
+    ASSERT_NO_FATAL_FAILURE(perform_request(proxy, create_request("example.org", LDNS_RR_TYPE_RRSIG, LDNS_RD), res));
+    ASSERT_EQ(LDNS_RCODE_NOERROR, ldns_pkt_get_rcode(res.get()));
+    ASSERT_GT(ldns_pkt_ancount(res.get()), 0);
+    // check that response not modified
+    ASSERT_FALSE(last_event.answer.find("RRSIG") == std::string::npos);
+    auto ptr = ldns_pkt_rr_list_by_type(res.get(), LDNS_RR_TYPE_RRSIG, LDNS_SECTION_ANSWER);
+    ASSERT_NE(nullptr, ptr);
+    ldns_rr_list_deep_free(ptr);
+}
+
+TEST_F(dnsproxy_test, dnssec_autority_section) {
+    ag::dnsproxy_settings settings = make_dnsproxy_settings();
+    settings.enable_dnssec_ok = true;
+
+    ag::dns_request_processed_event last_event{};
+    ag::dnsproxy_events events{
+            .on_request_processed = [&last_event](const ag::dns_request_processed_event &event) {
+                last_event = event;
+            }
+    };
+
+    static const ldns_enum_rr_type SPECIAL_TYPES_DNSSEC_LOG_LOGIC[] = {
+            LDNS_RR_TYPE_DS,
+            LDNS_RR_TYPE_DNSKEY,
+            LDNS_RR_TYPE_NSEC,
+            LDNS_RR_TYPE_NSEC3,
+            LDNS_RR_TYPE_RRSIG
+    };
+
+    auto [ret, err] = proxy.init(settings, events);
+    ASSERT_TRUE(ret) << *err;
+
+    for (auto cur : SPECIAL_TYPES_DNSSEC_LOG_LOGIC) {
+        ag::ldns_pkt_ptr res;
+        ASSERT_NO_FATAL_FAILURE(perform_request(proxy, create_request("actuallythissitedoesnotexist.fuu", cur, LDNS_RD), res));
+        ASSERT_EQ(LDNS_RCODE_NXDOMAIN, ldns_pkt_get_rcode(res.get()));
+        auto ptr = ldns_pkt_rr_list_by_type(res.get(), LDNS_RR_TYPE_SIG, LDNS_SECTION_ANSWER);
+        ASSERT_EQ(nullptr, ptr);
+        ldns_rr_list_deep_free(ptr);
+        for (auto cur : SPECIAL_TYPES_DNSSEC_LOG_LOGIC) {
+            auto ptr = ldns_pkt_rr_list_by_type(res.get(), cur, LDNS_SECTION_AUTHORITY);
+            ASSERT_EQ(nullptr, ptr);
+            ldns_rr_list_deep_free(ptr);
+        }
+    }
+}

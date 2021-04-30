@@ -77,9 +77,9 @@ struct dnsproxy_settings {
 
     std::vector<listener_settings> listeners; // List of addresses/ports/protocols/etc... to listen on
 
-    bool block_ipv6; // Block AAAA requests.
+    bool block_ipv6; // Block AAAA requests
 
-    bool ipv6_available; // If false, bootstrappers will fetch only A records.
+    bool ipv6_available; // If false, bootstrappers will fetch only A records
 
     dnsproxy_blocking_mode blocking_mode; // How to respond to filtered requests
 
@@ -94,6 +94,14 @@ struct dnsproxy_settings {
      * while upstreams are queried in the background.
      */
     bool optimistic_cache;
+
+    /**
+     * Enable DNSSEC OK extension.
+     * This options tells server that we want to receive DNSSEC records along with normal queries.
+     * If they exist, request processed event will have DNSSEC flag on.
+     * WARNING: may increase data usage and probability of TCP fallbacks.
+     */
+    bool enable_dnssec_ok;
 };
 
 }

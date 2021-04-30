@@ -143,6 +143,7 @@
         customBlockingIpv6: nil
         dnsCacheSize: 128
         optimisticCache: YES
+        enableDNSSECOK:NO
         helperPath: nil];
 
     AGDnsProxyEvents *events = [[AGDnsProxyEvents alloc] init];

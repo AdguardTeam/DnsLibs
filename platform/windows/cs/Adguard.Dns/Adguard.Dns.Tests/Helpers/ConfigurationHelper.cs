@@ -70,7 +70,9 @@ namespace Adguard.Dns.Tests.Helpers
                         IdleTimeoutMs = 500
                     }
                 },
-                Ipv6Available = true
+                Ipv6Available = true,
+                OptimisticCache = false,
+                EnableDNSSECOK = false
             };
 
             return dnsProxySettings;

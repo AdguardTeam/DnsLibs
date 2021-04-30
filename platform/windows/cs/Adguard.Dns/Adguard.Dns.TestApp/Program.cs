@@ -57,6 +57,7 @@ namespace Adguard.Dns.TestApp
 
                 dnsProxySettings.HandleDNSSuffixes = true;
                 dnsProxySettings.OptimisticCache = true;
+                dnsProxySettings.EnableDNSSECOK = true;
 
                 m_DnsApi.StartDnsFiltering(new DnsApiConfiguration
                 {
@@ -161,7 +162,9 @@ namespace Adguard.Dns.TestApp
                     }
                 },
                 Listeners = listeners,
-                Ipv6Available = false
+                Ipv6Available = false,
+                OptimisticCache = false,
+                EnableDNSSECOK = false
             };
 
             return dnsProxySettings;

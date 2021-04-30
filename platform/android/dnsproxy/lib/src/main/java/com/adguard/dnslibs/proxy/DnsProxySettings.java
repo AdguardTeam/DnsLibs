@@ -59,6 +59,7 @@ public class DnsProxySettings {
     private String customBlockingIpv6;
     private long dnsCacheSize;
     private boolean optimisticCache;
+    private boolean enableDNSSECOK;
 
     /**
      * @return Maximum number of cached responses
@@ -286,6 +287,23 @@ public class DnsProxySettings {
         this.optimisticCache = optimisticCache;
     }
 
+    /**
+     * @return Enabled log extending for responses which processed with DNSSEC or not
+     */
+    public boolean isEnabledDNSSECOK() {
+        return enableDNSSECOK;
+    }
+
+    /**
+     * @param enableDNSSECOK Enable DNSSEC OK extension.
+     *                       This options tells server that we want to receive DNSSEC records along with normal queries.
+     *                       If they exist, request processed event will have DNSSEC flag on.
+     *                       WARNING: may increase data usage and probability of TCP fallbacks.
+     */
+    public void enableDNSSECOK(boolean enableDNSSECOK) {
+        this.enableDNSSECOK = enableDNSSECOK;
+    }
+
     @Override
     public boolean equals(Object o) {
         if (this == o) return true;
@@ -305,14 +323,15 @@ public class DnsProxySettings {
                 Objects.equals(customBlockingIpv4, that.customBlockingIpv4) &&
                 Objects.equals(customBlockingIpv6, that.customBlockingIpv6) &&
                 dnsCacheSize == that.dnsCacheSize &&
-                optimisticCache == that.optimisticCache;
+                optimisticCache == that.optimisticCache &&
+                enableDNSSECOK == that.enableDNSSECOK;
     }
 
     @Override
     public int hashCode() {
         return Objects.hash(upstreams, fallbacks, handleDNSSuffixes, userDNSSuffixes, dns64, blockedResponseTtlSecs,
                 filterParams, listeners, ipv6Available, blockIpv6, blockingMode, customBlockingIpv4, customBlockingIpv6,
-                dnsCacheSize, optimisticCache);
+                dnsCacheSize, optimisticCache, enableDNSSECOK);
     }
 
     /**

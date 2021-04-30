@@ -50,6 +50,7 @@ int main() {
     settings.handle_dns_suffixes = true;
     settings.fallbacks = {{ .address = "1.1.1.1:53", .id = 1 }};
     settings.dns_suffixes = get_system_dns_suffixes();
+    settings.enable_dnssec_ok = true;
 
     ag::dnsproxy proxy;
     auto [ret, err] = proxy.init(settings, {});

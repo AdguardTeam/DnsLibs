@@ -35,9 +35,15 @@ public class DnsRequestProcessedEvent {
     private String error;
     /** True if this response was served from the cache */
     private boolean cacheHit;
+    /** True if this response has DNSSEC rrsig */
+    private boolean dnssec;
 
     public boolean isCacheHit() {
         return cacheHit;
+    }
+
+    public boolean isDNSSEC() {
+        return dnssec;
     }
 
     public String getDomain() {
@@ -156,6 +162,10 @@ public class DnsRequestProcessedEvent {
         this.cacheHit = cacheHit;
     }
 
+    public void setDNSSEC(boolean dnssec) {
+        this.dnssec = dnssec;
+    }
+
     @Override
     public String toString() {
         return "DnsRequestProcessedEvent{" +
@@ -174,6 +184,7 @@ public class DnsRequestProcessedEvent {
                 ", whitelist=" + whitelist +
                 ", error='" + error + '\'' +
                 ", cacheHit=" + cacheHit +
+                ", dnssec=" + dnssec +
                 '}';
     }
 }

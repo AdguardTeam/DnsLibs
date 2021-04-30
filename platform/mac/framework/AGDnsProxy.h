@@ -269,6 +269,13 @@ typedef void (^logCallback)(const char *msg, int length);
  */
 @property(nonatomic, readonly) BOOL optimisticCache;
 /**
+ * Enable DNSSEC OK extension.
+ * This options tells server that we want to receive DNSSEC records along with normal queries.
+ * If they exist, request processed event will have DNSSEC flag on.
+ * WARNING: may increase data usage and probability of TCP fallbacks.
+ */
+@property(nonatomic, readonly) BOOL enableDNSSECOK;
+/**
  * Path to adguard-tun-helper (macOS only)
  */
 @property(nonatomic, readonly) NSString *helperPath;
@@ -288,6 +295,7 @@ typedef void (^logCallback)(const char *msg, int length);
         customBlockingIpv6: (NSString *) customBlockingIpv6
         dnsCacheSize: (NSUInteger) dnsCacheSize
         optimisticCache: (BOOL) optimisticCache
+        enableDNSSECOK: (BOOL) enableDNSSECOK
         helperPath: (NSString *)helperPath;
 
 - (instancetype)initWithCoder:(NSCoder *)coder;

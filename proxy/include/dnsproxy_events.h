@@ -29,7 +29,8 @@ struct dns_request_processed_event {
     std::vector<int32_t> filter_list_ids; /**< Filter lists IDs of corresponding rules */
     bool whitelist; /**< True if filtering rule is whitelist */
     std::string error; /**< If not empty, contains the error text (occurred while processing the DNS query) */
-    bool cache_hit; /**<True if this response was served from the cache */
+    bool cache_hit; /**< True if this response was served from the cache */
+    bool dnssec; /**< True if this response has DNSSEC rrsig */
 };
 
 /**

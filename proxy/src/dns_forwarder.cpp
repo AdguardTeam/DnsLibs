@@ -943,6 +943,7 @@ std::vector<uint8_t> dns_forwarder::handle_message(uint8_view message) {
         // @todo: think out what to do in this case
         return {};
     }
+
     ldns_pkt_ptr req_holder = ldns_pkt_ptr(request);
     log_packet(log, request, "Client dns request");
 
@@ -1027,6 +1028,8 @@ cached_response_expired:
         return *raw_blocking_response;
     }
 
+    bool is_our_do_bit = do_dnssec_log_logic(request);
+
     auto [response, err_str, selected_upstream] = do_upstream_exchange(normalized_domain, request);
     if (!response) {
         response = ldns_pkt_ptr(create_servfail_response(request));
@@ -1037,8 +1040,10 @@ cached_response_expired:
                                  std::move(err_str));
         return raw_response;
     }
-
     log_packet(log, response.get(), AG_FMT("Upstream ({}) dns response", selected_upstream->options().address).c_str());
+
+    event.dnssec = finalize_dnssec_log_logic(response.get(), is_our_do_bit);
+
     const auto ancount = ldns_pkt_ancount(response.get());
     const auto rcode = ldns_pkt_get_rcode(response.get());
 
@@ -1312,4 +1317,90 @@ void dns_forwarder::async_request_finalizer(uv_work_t *work, int) {
     self->async_reqs.erase(key);
     self->async_reqs_mtx.unlock();
     self->async_reqs_cv.notify_all();
+}
+
+bool dns_forwarder::do_dnssec_log_logic(ldns_pkt *request) {
+    bool is_our_do_bit = false;
+    bool request_has_do_bit = ldns_pkt_edns_do(request);
+
+    // if request has DO bit then we don't change it
+    if (settings->enable_dnssec_ok && !request_has_do_bit) {
+        // https://tools.ietf.org/html/rfc3225#section-3
+        ldns_pkt_set_edns_do(request, true);
+        // @todo truncate reply to size expected by client
+        ldns_pkt_set_edns_udp_size(request, ag::UDP_RECV_BUF_SIZE);
+        is_our_do_bit = true;
+    }
+
+    return is_our_do_bit;
+}
+
+static int remove_rr_types_from_section(ldns_pkt *response, ldns_enum_pkt_section section,
+                                        const std::vector<ldns_enum_rr_type> &types, bool except) {
+    ldns_rr_list *cur_section = nullptr;
+
+    if (section == LDNS_SECTION_ANSWER) {
+        cur_section = ldns_pkt_answer(response);
+    } else if (section == LDNS_SECTION_AUTHORITY) {
+        cur_section = ldns_pkt_authority(response);
+    }
+
+    if (!cur_section) {
+        return -1;
+    }
+
+    auto cur_section_size = ldns_rr_list_rr_count(cur_section);
+    if (cur_section_size == 0) {
+        return 0;
+    }
+
+    auto new_section = ldns_rr_list_new();
+    size_t counter = 0;
+    for (size_t i = 0 ; i < cur_section_size; ++i) {
+        auto iter = ldns_rr_list_rr(cur_section, i);
+        bool need_push = except == std::any_of(types.begin(), types.end(),
+                                               [iter](ldns_enum_rr_type type) { return (ldns_rr_get_type(iter) == type); });
+        if (need_push) {
+            ldns_rr_list_push_rr(new_section, ldns_rr_clone(iter));
+            ++counter;
+        }
+    }
+    ldns_rr_list_deep_free(cur_section);
+    if (section == LDNS_SECTION_ANSWER) {
+        ldns_pkt_set_answer(response, new_section);
+    } else if (section == LDNS_SECTION_AUTHORITY) {
+        ldns_pkt_set_authority(response, new_section);
+    }
+    ldns_pkt_set_section_count(response, section, counter);
+
+    return 0;
+}
+
+bool dns_forwarder::finalize_dnssec_log_logic(ldns_pkt *response, bool is_our_do_bit) {
+    bool server_uses_dnssec = false;
+
+    if (settings->enable_dnssec_ok) {
+        static const std::vector<ldns_enum_rr_type> SPECIAL_TYPES_DNSSEC_LOG_LOGIC = {
+                LDNS_RR_TYPE_DS,
+                LDNS_RR_TYPE_DNSKEY,
+                LDNS_RR_TYPE_NSEC,
+                LDNS_RR_TYPE_NSEC3,
+                LDNS_RR_TYPE_RRSIG
+        };
+
+        server_uses_dnssec = ldns_dnssec_pkt_has_rrsigs(response);
+        tracelog(log, "Server uses DNSSEC: {}", server_uses_dnssec ? "YES" : "NO");
+
+        if (is_our_do_bit) {
+            std::vector<ldns_enum_rr_type> exceptions = { ldns_rr_get_type(ldns_rr_list_rr(ldns_pkt_question(response), 0)) };
+            auto res = remove_rr_types_from_section(response, LDNS_SECTION_ANSWER, exceptions, true);
+            assert(res == 0);
+            res = remove_rr_types_from_section(response, LDNS_SECTION_AUTHORITY, SPECIAL_TYPES_DNSSEC_LOG_LOGIC, false);
+            assert(res == 0);
+        }
+
+        log_packet(log, response, "DNS response was modified");
+    }
+
+    return server_uses_dnssec;
 }

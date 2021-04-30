@@ -154,6 +154,13 @@ typedef struct {
     uint32_t dns_cache_size;
     /** Enable optimistic DNS caching */
     bool optimistic_cache;
+    /**
+     * Enable DNSSEC OK extension.
+     * This options tells server that we want to receive DNSSEC records along with normal queries.
+     * If they exist, request processed event will have DNSSEC flag on.
+     * WARNING: may increase data usage and probability of TCP fallbacks.
+     */
+    bool enable_dnssec_ok;
 } ag_dnsproxy_settings;
 
 typedef struct {
@@ -187,6 +194,8 @@ typedef struct {
     const char *error;
     /** True if this response was served from the cache */
     bool cache_hit;
+    /** True if this response has DNSSEC rrsig */
+    bool dnssec;
 } ag_dns_request_processed_event;
 
 typedef struct {

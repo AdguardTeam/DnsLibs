@@ -74,8 +74,8 @@ int dns_over_quic::set_encryption_secrets(SSL *ssl, enum ssl_encryption_level_t 
 }
 #else
 int dns_over_quic::set_rx_secret(SSL *ssl, enum ssl_encryption_level_t ossl_level,
-                                      const SSL_CIPHER *cipher,
-                                      const uint8_t *read_secret, size_t secret_len) {
+                                 const SSL_CIPHER *cipher,
+                                 const uint8_t *read_secret, size_t secret_len) {
     auto doq = static_cast<dns_over_quic *>(SSL_get_app_data(ssl));
     if (doq->on_key(doq->from_ossl_level(ossl_level), read_secret, nullptr, secret_len) != 0) {
         return 0;
@@ -92,8 +92,6 @@ int dns_over_quic::set_tx_secret(SSL *ssl, enum ssl_encryption_level_t ossl_leve
     return 1;
 }
 #endif /** else of BORINGSSL_API_VERSION < 10 */
-
-
 
 int dns_over_quic::add_handshake_data(SSL *ssl, enum ssl_encryption_level_t ossl_level,
                                       const uint8_t *data, size_t len) {

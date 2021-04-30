@@ -87,6 +87,9 @@ private:
         const ldns_pkt *request, const ldns_pkt *response, const ldns_pkt *original_response,
         std::optional<int32_t> upstream_id, err_string error) const;
 
+    bool do_dnssec_log_logic(ldns_pkt *request);
+    bool finalize_dnssec_log_logic(ldns_pkt *response, bool is_our_do_bit);
+
     logger log;
     const dnsproxy_settings *settings = nullptr;
     const dnsproxy_events *events = nullptr;

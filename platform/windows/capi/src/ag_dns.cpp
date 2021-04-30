@@ -223,6 +223,7 @@ static ag_dnsproxy_settings *marshal_settings(const ag::dnsproxy_settings &setti
     c_settings->listeners.size = settings.listeners.size();
     c_settings->listeners.data = marshal_listeners(settings.listeners);
     c_settings->optimistic_cache = settings.optimistic_cache;
+    c_settings->enable_dnssec_ok = settings.enable_dnssec_ok;
 
     return c_settings;
 }
@@ -352,6 +353,7 @@ static ag::dnsproxy_settings marshal_settings(const ag_dnsproxy_settings *c_sett
     settings.filter_params.filters = marshal_filters(c_settings->filter_params.filters.data,
                                                      c_settings->filter_params.filters.size);
     settings.optimistic_cache = c_settings->optimistic_cache;
+    settings.enable_dnssec_ok = c_settings->enable_dnssec_ok;
 
     return settings;
 }
@@ -372,6 +374,7 @@ static ag::dnsproxy_events marshal_events(const ag_dnsproxy_events *c_events) {
 
             e.whitelist = event.whitelist;
             e.cache_hit = event.cache_hit;
+            e.dnssec = event.dnssec;
             e.filter_list_ids.data = event.filter_list_ids.data();
             e.filter_list_ids.size = event.filter_list_ids.size();
             e.type = c_str_if_not_empty(event.type);

@@ -13,7 +13,6 @@ namespace Adguard.Dns.DnsProxyServer
     // ReSharper disable InconsistentNaming
     internal class DnsProxyServer : IDnsProxyServer, IDisposable
     {
-
         private const string TCP_SETTINGS_SUB_KEY = @"System\CurrentControlSet\Services\Tcpip\Parameters";
         private const string SEARCHLIST = "SearchList";
 

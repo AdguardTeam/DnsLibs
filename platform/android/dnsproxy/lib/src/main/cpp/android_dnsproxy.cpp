@@ -395,6 +395,7 @@ ag::dnsproxy_settings ag::android_dnsproxy::marshal_settings(JNIEnv *env,
     auto custom_blocking_ip6_field = env->GetFieldID(clazz, "customBlockingIpv6", "Ljava/lang/String;");
     auto cache_size_field = env->GetFieldID(clazz, "dnsCacheSize", "J");
     auto optimistic_cache_field = env->GetFieldID(clazz, "optimisticCache", "Z");
+    auto enable_dnssec_ok_field = env->GetFieldID(clazz, "enableDNSSECOK", "Z");
 
     ag::dnsproxy_settings settings{};
 
@@ -456,6 +457,7 @@ ag::dnsproxy_settings ag::android_dnsproxy::marshal_settings(JNIEnv *env,
 
     settings.dns_cache_size = std::max((jlong) 0, env->GetLongField(java_dnsproxy_settings, cache_size_field));
     settings.optimistic_cache = env->GetBooleanField(java_dnsproxy_settings, optimistic_cache_field);
+    settings.enable_dnssec_ok = env->GetBooleanField(java_dnsproxy_settings, enable_dnssec_ok_field);
 
     return settings;
 }
@@ -479,6 +481,7 @@ ag::local_ref<jobject> ag::android_dnsproxy::marshal_settings(JNIEnv *env, const
     auto custom_blocking_ip6_field = env->GetFieldID(clazz, "customBlockingIpv6", "Ljava/lang/String;");
     auto cache_size_field = env->GetFieldID(clazz, "dnsCacheSize", "J");
     auto optimistic_cache_field = env->GetFieldID(clazz, "optimisticCache", "Z");
+    auto enable_dnssec_ok_field = env->GetFieldID(clazz, "enableDNSSECOK", "Z");
 
     auto java_settings = env->NewObject(clazz, ctor);
 
@@ -527,6 +530,7 @@ ag::local_ref<jobject> ag::android_dnsproxy::marshal_settings(JNIEnv *env, const
 
     env->SetLongField(java_settings, cache_size_field, (jlong) settings.dns_cache_size);
     env->SetBooleanField(java_settings, optimistic_cache_field, (jboolean) settings.optimistic_cache);
+    env->SetBooleanField(java_settings, enable_dnssec_ok_field, (jboolean) settings.enable_dnssec_ok);
 
     return local_ref(env, java_settings);
 }
@@ -552,6 +556,7 @@ ag::local_ref<jobject> ag::android_dnsproxy::marshal_processed_event(JNIEnv *env
     env->SetIntField(java_event, m_processed_event_fields.bytes_received, event.bytes_received);
     env->SetBooleanField(java_event, m_processed_event_fields.whitelist, event.whitelist);
     env->SetBooleanField(java_event, m_processed_event_fields.cache_hit, event.cache_hit);
+    env->SetBooleanField(java_event, m_processed_event_fields.dnssec, event.dnssec);
 
     {
         const jsize ids_len = event.filter_list_ids.size();
@@ -713,6 +718,7 @@ ag::android_dnsproxy::android_dnsproxy(JavaVM *vm) : m_utils(vm) {
     m_processed_event_fields.rules = env->GetFieldID(c, "rules", "Ljava/util/List;");
     m_processed_event_fields.filter_list_ids = env->GetFieldID(c, "filterListIds", "[I");
     m_processed_event_fields.cache_hit = env->GetFieldID(c, "cacheHit", "Z");
+    m_processed_event_fields.dnssec = env->GetFieldID(c, "dnssec", "Z");
 
     c = (m_jclasses.cert_verify_event = global_ref(vm, env->FindClass(FQN_CERT_VERIFY_EVENT))).get();
     m_cert_verify_event_methods.ctor = env->GetMethodID(c, "<init>", "()V");

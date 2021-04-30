@@ -28,6 +28,7 @@ static const dnsproxy_settings DEFAULT_PROXY_SETTINGS = {
     .blocking_mode = dnsproxy_blocking_mode::DEFAULT,
     .dns_cache_size = 1000,
     .optimistic_cache = true,
+    .enable_dnssec_ok = false
 };
 
 const dnsproxy_settings &dnsproxy_settings::get_default() {

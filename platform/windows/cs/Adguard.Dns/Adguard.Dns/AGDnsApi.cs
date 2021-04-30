@@ -23,7 +23,7 @@ namespace Adguard.Dns
         /// <summary>
         /// The current API version hash with which the ProxyServer was tested
         /// </summary>
-        private const string API_VERSION_HASH = "e33015cacfd2f234268bc1319546590412a97a5361f94ad85f6d7e27cb0a3081";
+        private const string API_VERSION_HASH = "849f42ab0a795928913ffd63f163a9483316f889705002c894de9d447a91e98a";
         #endregion
 
         #region API Functions
@@ -409,6 +409,16 @@ namespace Adguard.Dns
             [MarshalAs(UnmanagedType.I1)]
             [NativeName("optimistic_cache")]
             internal bool OptimisticCache;
+
+            /// <summary>
+            /// Enable DNSSEC OK extension.
+            /// This options tells server that we want to receive DNSSEC records along with normal queries.
+            /// If they exist, request processed event will have DNSSEC flag on.
+            /// WARNING: may increase data usage and probability of TCP fallbacks.
+            /// </summary>
+            [MarshalAs(UnmanagedType.I1)]
+            [NativeName("enable_dnssec_ok")]
+            internal bool EnableDNSSECOK;
         }
 
         /// <summary>
@@ -636,6 +646,13 @@ namespace Adguard.Dns
             [MarshalAs(UnmanagedType.I1)]
             [NativeName("cache_hit")]
             internal bool CacheHit;
+
+            /// <summary>
+            /// True if this response has DNSSEC rrsig
+            /// </summary>
+            [MarshalAs(UnmanagedType.I1)]
+            [NativeName("dnssec")]
+            internal bool DNSSEC;
         };
 
         #endregion

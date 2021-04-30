@@ -47,6 +47,7 @@ private:
         jfieldID whitelist;
         jfieldID error;
         jfieldID cache_hit;
+        jfieldID dnssec;
     } m_processed_event_fields{};
 
     struct {

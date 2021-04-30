@@ -468,6 +468,7 @@ static NSData *create_response_packet_v6(const struct iphdr6 *ip6_header,
     _customBlockingIpv6 = convert_string(settings->custom_blocking_ipv6);
     _dnsCacheSize = settings->dns_cache_size;
     _optimisticCache = settings->optimistic_cache;
+    _enableDNSSECOK = settings->enable_dnssec_ok;
     return self;
 }
 
@@ -486,6 +487,7 @@ static NSData *create_response_packet_v6(const struct iphdr6 *ip6_header,
         customBlockingIpv6: (NSString *) customBlockingIpv6
         dnsCacheSize: (NSUInteger) dnsCacheSize
         optimisticCache: (BOOL) optimisticCache
+        enableDNSSECOK: (BOOL) enableDNSSECOK
         helperPath: (NSString *) helperPath;
 {
     const ag::dnsproxy_settings &defaultSettings = ag::dnsproxy_settings::get_default();
@@ -509,6 +511,7 @@ static NSData *create_response_packet_v6(const struct iphdr6 *ip6_header,
     _customBlockingIpv6 = customBlockingIpv6;
     _dnsCacheSize = dnsCacheSize;
     _optimisticCache = optimisticCache;
+    _enableDNSSECOK = enableDNSSECOK;
     _helperPath = helperPath;
     return self;
 }
@@ -531,6 +534,7 @@ static NSData *create_response_packet_v6(const struct iphdr6 *ip6_header,
         _customBlockingIpv6 = [coder decodeObjectForKey:@"_customBlockingIpv6"];
         _dnsCacheSize = [coder decodeInt64ForKey:@"_dnsCacheSize"];
         _optimisticCache = [coder decodeBoolForKey:@"_optimisticCache"];
+        _enableDNSSECOK = [coder decodeBoolForKey:@"_enableDNSSECOK"];
         _helperPath = [coder decodeObjectForKey:@"_helperPath"];
     }
 
@@ -553,6 +557,7 @@ static NSData *create_response_packet_v6(const struct iphdr6 *ip6_header,
     [coder encodeObject:self.customBlockingIpv6 forKey:@"_customBlockingIpv6"];
     [coder encodeInt64:self.dnsCacheSize forKey:@"_dnsCacheSize"];
     [coder encodeBool:self.optimisticCache forKey:@"_optimisticCache"];
+    [coder encodeBool:self.enableDNSSECOK forKey:@"_enableDNSSECOK"];
     [coder encodeObject:self.helperPath forKey:@"_helperPath"];
 }
 
@@ -594,6 +599,8 @@ static NSData *create_response_packet_v6(const struct iphdr6 *ip6_header,
 
     _cacheHit = event.cache_hit;
 
+    _dnssec = event.dnssec;
+
     return self;
 }
 
@@ -615,6 +622,7 @@ static NSData *create_response_packet_v6(const struct iphdr6 *ip6_header,
         _whitelist = [coder decodeBoolForKey:@"_whitelist"];
         _error = [coder decodeObjectForKey:@"_error"];
         _cacheHit = [coder decodeBoolForKey:@"_cacheHit"];
+        _dnssec = [coder decodeBoolForKey:@"_dnssec"];
     }
 
     return self;
@@ -636,6 +644,7 @@ static NSData *create_response_packet_v6(const struct iphdr6 *ip6_header,
     [coder encodeBool:self.whitelist forKey:@"_whitelist"];
     [coder encodeObject:self.error forKey:@"_error"];
     [coder encodeBool:self.cacheHit forKey:@"_cacheHit"];
+    [coder encodeBool:self.dnssec forKey:@"_dnssec"];
 }
 
 @end
@@ -1045,6 +1054,7 @@ static int bindFd(NSString *helperPath, NSString *address, NSNumber *port, AGLis
 
     settings.dns_cache_size = config.dnsCacheSize;
     settings.optimistic_cache = config.optimisticCache;
+    settings.enable_dnssec_ok = config.enableDNSSECOK;
 
     auto [ret, err_or_warn] = self->proxy.init(std::move(settings), std::move(native_events));
     if (!ret) {
