@@ -304,7 +304,6 @@ void ag::dns_framed_pool::add_pending_connection(const connection_ptr &ptr) {
 
 ag::connection_ptr ag::dns_framed_pool::create_connection(bufferevent *bev, const socket_address &address) {
     static std::atomic_uint32_t conn_id{0};
-    ++m_active_connections_count;
     return std::make_shared<dns_framed_connection>(this, conn_id++, bev, address);
 }
 
@@ -314,18 +313,23 @@ ag::connection_ptr ag::dns_framed_pool::create_connection(bufferevent *bev, cons
 void ag::dns_framed_pool::close_connection(const connection_ptr &conn) {
     dns_framed_connection *framed_conn = (dns_framed_connection *)conn.get();
     framed_conn->m_closed = true;
+    m_closing_connections.emplace(conn);
 
     bufferevent_setcb(framed_conn->m_bev.get(), nullptr, nullptr, nullptr, nullptr);
     bufferevent_disable(framed_conn->m_bev.get(), EV_READ | EV_WRITE);
 
     m_loop->submit([this, c = conn] () {
-        if (std::scoped_lock l(m_mutex); 0 == --m_active_connections_count) {
+        std::scoped_lock l(m_mutex);
+        m_closing_connections.erase(c);
+        if (m_closing_connections.empty()) {
             m_no_conns_cond.notify_one();
         }
     });
 }
 
 ag::dns_framed_pool::~dns_framed_pool() {
+    dbglog(m_log, "Destroying...");
+
     std::unique_lock l(m_mutex);
 
     for (const connection_ptr & conn : m_connections) {
@@ -337,9 +341,14 @@ ag::dns_framed_pool::~dns_framed_pool() {
     }
     m_pending_connections.clear();
 
-    m_no_conns_cond.wait_for(l, seconds(60),
-            [this] () -> bool { return m_active_connections_count == 0; });
+    dbglog(m_log, "Waiting until all connections are closed...");
+    m_no_conns_cond.wait(l,
+            [this] () -> bool {
+                return m_connections.empty() && m_pending_connections.empty() && m_closing_connections.empty();
+            });
     m_loop.reset();
+
+    dbglog(m_log, "Destroyed");
 }
 
 ag::connection::read_result ag::dns_framed_pool::perform_request_inner(uint8_view buf, milliseconds timeout) {
