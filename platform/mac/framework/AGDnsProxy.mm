@@ -720,12 +720,14 @@ static std::string getTrustCreationErrorStr(OSStatus status) {
         return err;
     }
 
-    SecTrustSetAnchorCertificates(trust, (__bridge CFArrayRef)trustArray);
-    SecTrustSetAnchorCertificatesOnly(trust, YES);
+    SecTrustSetAnchorCertificates(trust, NULL);
+    SecTrustSetAnchorCertificatesOnly(trust, NO);
     SecTrustResultType trustResult;
     SecTrustEvaluate(trust, &trustResult);
 
-    // Unspecified also stands for valid: https://developer.apple.com/library/archive/qa/qa1360/_index.html
+    // https://developer.apple.com/documentation/security/sectrustresulttype/ksectrustresultunspecified?language=objc
+    // This value indicates that evaluation reached an (implicitly trusted) anchor certificate without
+    // any evaluation failures, but never encountered any explicitly stated user-trust preference.
     if (trustResult == kSecTrustResultUnspecified || trustResult == kSecTrustResultProceed) {
         dbglog(log, "[Verification] Succeeded");
         return std::nullopt;
