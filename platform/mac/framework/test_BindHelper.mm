@@ -19,6 +19,8 @@ int main() {
                                       outboundInterfaceName:nil];
     auto *config = [[AGDnsProxyConfig alloc] initWithUpstreams:@[upstream]
                                                      fallbacks:@[]
+                                             handleDNSSuffixes:NO
+                                               userDNSSuffixes:@[]
                                                        filters:@[]
                                         blockedResponseTtlSecs:0
                                                  dns64Settings:nil
@@ -30,6 +32,7 @@ int main() {
                                             customBlockingIpv6:nil
                                                   dnsCacheSize:0
                                                optimisticCache:YES
+                                                enableDNSSECOK:NO
                                                     helperPath:@"/Users/ngorskikh/src/adguard-tools/cmake-build-debug/adguard-tun-helper/adguard-tun-helper"];
 
     auto *handler = [AGDnsProxyEvents new];

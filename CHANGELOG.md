@@ -1,6 +1,8 @@
 # Changelog
 
 ## V1.5
+* [Feature] DNS stamp API has been reworked in adapters: DNS stamps can now be
+            dynamically edited and converted to various string representations.
 * [Feature] DNSLibs indicate that upstream uses DNSSEC. Turn on `ag::dnsproxy_settings::enable_dnssec_ok`
     and check `ag::dns_request_processed_event::dnssec` in callback.
 * [Feature] Add ability to redirect all requests with DNS suffix to the fallbacks<p>

@@ -1,4 +1,5 @@
 ﻿using System.Collections.Generic;
+using Adguard.Dns.Utils;
 using AdGuard.Utils.Collections;
 
 namespace Adguard.Dns.Api.DnsProxyServer.Configs
@@ -50,13 +51,37 @@ namespace Adguard.Dns.Api.DnsProxyServer.Configs
         /// A URL representation of this stamp which can be used
         /// as a valid ag_upstream_options address
         /// </summary>
-        public string PrettyUrl { get; set; }
+        public string PrettyUrl
+        {
+            get
+            {
+                string prettyUrl = DnsUtils.GetDnsStampPrettyUrl(this);
+                return prettyUrl;
+            }
+        }
 
         /// <summary>
         /// A URL representation of this stamp which is prettier,
         /// but can NOT be a valid ag_upstream_options address
         /// </summary>
-        public string PrettierUrl { get; set; }
+        public string PrettierUrl
+        {
+            get
+            {
+                string prettierUrl = DnsUtils.GetDnsStampPrettierUrl(this);
+                return prettierUrl;
+            }
+        }
+
+        /// <summary>
+        /// Gets the SDNS-based string representation
+        /// </summary>
+        /// <returns></returns>
+        public override string ToString()
+        {
+            string dnsStampString = DnsUtils.GetDnsStampString(this);
+            return dnsStampString;
+        }
 
         #region Equals members
 

@@ -218,6 +218,28 @@ namespace Adguard.Dns.Helpers
             return proxyServerCallbacksAdapter.DnsProxyServerCallbacks;
         }
 
+        public static AGDnsApi.ag_dns_stamp ToNativeObject(
+            DnsStamp dnsStamp,
+            Queue<IntPtr> allocatedPointers)
+        {
+            MarshalUtils.ag_buffer publicKeyC = MarshalUtils.BytesToAgBuffer(dnsStamp.PublicKey);
+            MarshalUtils.ag_list hashesC = MarshalUtils.ListToAgList(
+                dnsStamp.Hashes,
+                (x, y) => MarshalUtils.BytesToAgBuffer(x),
+                allocatedPointers);
+            AGDnsApi.ag_dns_stamp dnsStampС = new AGDnsApi.ag_dns_stamp
+            {
+                ProtoType = dnsStamp.ProtoType,
+                ServerAddress = MarshalUtils.StringToPtr(dnsStamp.ServerAddress),
+                ProviderName = MarshalUtils.StringToPtr(dnsStamp.ProviderName),
+                DoHPath = MarshalUtils.StringToPtr(dnsStamp.DoHPath),
+                server_public_key = publicKeyC,
+                hashes = hashesC,
+                Properties = dnsStamp.Properties
+            };
+            return dnsStampС;
+        }
+
         #endregion
 
         #region FromNativeObject
@@ -475,5 +497,6 @@ namespace Adguard.Dns.Helpers
         }
 
         #endregion
+
     }
 }

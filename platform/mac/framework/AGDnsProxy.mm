@@ -238,6 +238,40 @@ static NSData *create_response_packet_v6(const struct iphdr6 *ip6_header,
     return response_packet;
 }
 
+static ag::server_stamp convert_stamp(AGDnsStamp *stamp) {
+    ag::server_stamp native{};
+    native.proto = (ag::stamp_proto_type) stamp.proto;
+    if (stamp.serverAddr) {
+        native.server_addr_str = stamp.serverAddr.UTF8String;
+    }
+    if (stamp.providerName) {
+        native.provider_name = stamp.providerName.UTF8String;
+    }
+    if (stamp.path) {
+        native.path = stamp.path.UTF8String;
+    }
+    if (auto *pubkey = stamp.serverPublicKey; pubkey) {
+        native.server_pk.assign((uint8_t *) pubkey.bytes, (uint8_t *) pubkey.bytes + pubkey.length);
+    }
+    if (stamp.hashes) {
+        for (NSData *hash in stamp.hashes) {
+            native.hashes.emplace_back((uint8_t *) hash.bytes, (uint8_t *) hash.bytes + hash.length);
+        }
+    }
+    uint64_t props = 0;
+    if (stamp.dnssec) {
+        props |= ag::DNSSEC;
+    }
+    if (stamp.noFilter) {
+        props |= ag::NO_FILTER;
+    }
+    if (stamp.noLog) {
+        props |= ag::NO_LOG;
+    }
+    native.props = (ag::server_informal_properties) props;
+    return native;
+}
+
 @implementation AGDnsUpstream
 - (instancetype) initWithNative: (const ag::upstream_options *) settings
 {
@@ -1178,8 +1212,6 @@ static int bindFd(NSString *helperPath, NSString *address, NSNumber *port, AGLis
         if (stamp->props & ag::NO_FILTER) {
             _noFilter = YES;
         }
-        _prettyUrl = convert_string(stamp->pretty_url(false));
-        _prettierUrl = convert_string(stamp->pretty_url(true));
     }
     return self;
 }
@@ -1196,8 +1228,6 @@ static int bindFd(NSString *helperPath, NSString *address, NSNumber *port, AGLis
         _dnssec = [coder decodeBoolForKey:@"_dnssec"];
         _noLog = [coder decodeBoolForKey:@"_noLog"];
         _noFilter = [coder decodeBoolForKey:@"_noFilter"];
-        _prettyUrl = [coder decodeObjectForKey:@"_prettyUrl"];
-        _prettierUrl = [coder decodeObjectForKey:@"_prettierUrl"];
     }
 
     return self;
@@ -1213,29 +1243,43 @@ static int bindFd(NSString *helperPath, NSString *address, NSNumber *port, AGLis
     [coder encodeBool:self.dnssec forKey:@"_dnssec"];
     [coder encodeBool:self.noLog forKey:@"_noLog"];
     [coder encodeBool:self.noFilter forKey:@"_noFilter"];
-    [coder encodeObject:self.prettyUrl forKey:@"_prettyUrl"];
-    [coder encodeObject:self.prettierUrl forKey:@"_prettierUrl"];
+}
+
+- (instancetype)initWithString:(NSString *)stampStr
+                         error:(NSError **)error {
+    auto[stamp, stamp_error] = ag::server_stamp::from_string(stampStr.UTF8String);
+    if (!stamp_error) {
+        return [self initWithNative:&stamp];
+    }
+    *error = [NSError errorWithDomain:AGDnsProxyErrorDomain
+                                 code:AGDPE_PARSE_DNS_STAMP_ERROR
+                             userInfo:@{NSLocalizedDescriptionKey: convert_string(*stamp_error)}];
+    return nil;
+}
+
++ (instancetype)stampWithString:(NSString *)stampStr
+                          error:(NSError **)error {
+    return [[self alloc] initWithString:stampStr error:error];
+}
+
+- (NSString *)prettyUrl {
+    ag::server_stamp stamp = convert_stamp(self);
+    return convert_string(stamp.pretty_url(false));
+}
+
+- (NSString *)prettierUrl {
+    ag::server_stamp stamp = convert_stamp(self);
+    return convert_string(stamp.pretty_url(true));
+}
+
+- (NSString *)stringValue {
+    ag::server_stamp stamp = convert_stamp(self);
+    return convert_string(stamp.str());
 }
 
 @end
 
 @implementation AGDnsUtils
-
-+ (AGDnsStamp *) parseDnsStampWithStampStr: (NSString *) stampStr error: (NSError **) error
-{
-    auto[stamp, stamp_error] = ag::server_stamp::from_string({ [stampStr UTF8String], [stampStr length] });
-    if (stamp_error) {
-        if (error) {
-            *error = [NSError errorWithDomain: AGDnsProxyErrorDomain
-                                         code: AGDPE_PARSE_DNS_STAMP_ERROR
-                                     userInfo: @{
-                                         NSLocalizedDescriptionKey: convert_string(*stamp_error)
-                                     }];
-        }
-        return nil;
-    }
-    return [[AGDnsStamp alloc] initWithNative: &stamp];
-}
 
 static auto dnsUtilsLogger = ag::create_logger("AGDnsUtils");
 

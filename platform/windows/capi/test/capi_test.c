@@ -96,24 +96,51 @@ static void test_proxy() {
 
 #define TEST_DNS_STAMP "sdns://AgcAAAAAAAAACTEyNy4wLjAuMSDDhGvyS56TymQnTA7GfB7MXgJP_KzS10AZNQ6B_lRq5AtleGFtcGxlLmNvbQovZG5zLXF1ZXJ5"
 
+static void test_dnsstamp() {
+    const char *error = NULL;
+    ag_dns_stamp *stamp = ag_dns_stamp_from_str("asdfasdfasdfsdf", &error);
+    ASSERT(!stamp);
+    ASSERT(error);
+
+    error = NULL;
+    const char *doh_str = "sdns://AgMAAAAAAAAADDk0LjE0MC4xNC4xNITK_rq-BN6tvu8PZG5zLmFkZ3VhcmQuY29tCi9kbnMtcXVlcnk";
+    stamp = ag_dns_stamp_from_str(doh_str, &error);
+    ASSERT(stamp);
+    ASSERT(!error);
+    ASSERT(0 == strcmp(stamp->provider_name, "dns.adguard.com"));
+    ASSERT(0 == strcmp(stamp->path, "/dns-query"));
+    ASSERT(stamp->properties & AGSIP_DNSSEC);
+    ASSERT(stamp->properties & AGSIP_NO_LOG);
+    ASSERT(!(stamp->properties & AGSIP_NO_FILTER));
+    ASSERT(stamp->hashes.size == 2);
+    ASSERT(0 == strcmp(ag_dns_stamp_pretty_url(stamp), "https://dns.adguard.com/dns-query"));
+    ASSERT(0 == strcmp(ag_dns_stamp_prettier_url(stamp), "https://dns.adguard.com/dns-query"));
+    ASSERT(0 == strcmp(ag_dns_stamp_to_str(stamp), doh_str));
+
+    static uint8_t BYTES[] = "\xca\xfe\xba\xbe\xde\xad\xbe\xef";
+    ag_buffer hash = {.data = BYTES, .size = 4};
+    stamp->proto = AGSPT_DOQ;
+    stamp->hashes.data = &hash;
+    stamp->hashes.size = 1;
+    stamp->properties = AGSIP_NO_FILTER;
+    stamp->path = NULL;
+
+    ASSERT(0 == strcmp(ag_dns_stamp_pretty_url(stamp), "quic://dns.adguard.com"));
+    ASSERT(0 == strcmp(ag_dns_stamp_prettier_url(stamp), "quic://dns.adguard.com"));
+    ASSERT(0 == strcmp(ag_dns_stamp_to_str(stamp), "sdns://BAQAAAAAAAAADDk0LjE0MC4xNC4xNATK_rq-D2Rucy5hZGd1YXJkLmNvbQ"));
+
+    stamp->proto = AGSPT_DNSCRYPT;
+    stamp->hashes.size = 0;
+    stamp->provider_name = "2.dnscrypt-cert.adguard";
+    stamp->server_public_key.data = BYTES;
+    stamp->server_public_key.size = 8;
+
+    ASSERT(0 == strcmp(ag_dns_stamp_pretty_url(stamp), "sdns://AQQAAAAAAAAADDk0LjE0MC4xNC4xNAjK_rq-3q2-7xcyLmRuc2NyeXB0LWNlcnQuYWRndWFyZA"));
+    ASSERT(0 == strcmp(ag_dns_stamp_prettier_url(stamp), "dnscrypt://2.dnscrypt-cert.adguard"));
+    ASSERT(0 == strcmp(ag_dns_stamp_to_str(stamp), "sdns://AQQAAAAAAAAADDk0LjE0MC4xNC4xNAjK_rq-3q2-7xcyLmRuc2NyeXB0LWNlcnQuYWRndWFyZA"));
+}
+
 static void test_utils() {
-    // DNS Stamp
-    ag_parse_dns_stamp_result *result = ag_parse_dns_stamp(TEST_DNS_STAMP);
-    ASSERT(NULL == result->error);
-    ASSERT(0 == strcmp("127.0.0.1", result->stamp.server_addr));
-    ASSERT(0 == strcmp("example.com", result->stamp.provider_name));
-    ASSERT(0 == strcmp("/dns-query", result->stamp.path));
-    ASSERT(AGSPT_DOH == result->stamp.proto);
-    ASSERT(0 == result->stamp.server_public_key.size);
-    ASSERT(1 == result->stamp.hashes.size);
-    ASSERT((int)result->stamp.properties == (AGSIP_DNSSEC | AGSIP_NO_LOG | AGSIP_NO_FILTER));
-    ag_parse_dns_stamp_result_free(result);
-
-    result = ag_parse_dns_stamp("sdns://abcdefgh");
-    ASSERT(NULL != result->error);
-    ag_parse_dns_stamp_result_free(result);
-
-
     // test_upstream
     ag_upstream_options upstream = {};
     upstream.address = "https://dns.adguard.com/dns-query";
@@ -138,6 +165,7 @@ int main() {
 
     test_proxy();
     test_utils();
+    test_dnsstamp();
 
 #ifdef _WIN32
     // At least check that we don't crash or something

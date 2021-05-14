@@ -30,6 +30,7 @@ static int regressTestListenerFailsInit() {
                                             customBlockingIpv6:nil
                                                   dnsCacheSize:0
                                                optimisticCache:YES
+                                                enableDNSSECOK:NO
                                                     helperPath:nil];
 
     auto *handler = [AGDnsProxyEvents new];

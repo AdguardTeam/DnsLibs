@@ -23,7 +23,7 @@ namespace Adguard.Dns
         /// <summary>
         /// The current API version hash with which the ProxyServer was tested
         /// </summary>
-        private const string API_VERSION_HASH = "849f42ab0a795928913ffd63f163a9483316f889705002c894de9d447a91e98a";
+        private const string API_VERSION_HASH = "ef2239d427abfd633d804c1d50b97fd5fdf52d3c35cd7fe3644db29545468bc4";
         #endregion
 
         #region API Functions
@@ -100,23 +100,56 @@ namespace Adguard.Dns
         /// <summary>
         /// Parses a DNS stamp string and returns a instance or an error
         /// The caller is responsible for freeing
-        /// the result with <see cref="ag_parse_dns_stamp_result_free"/>
+        /// the result with <see cref="ag_dns_stamp_free"/>
         /// </summary>
-        /// <param name="stampStr">DNS stamp string</param>
-        /// <returns>Pointer to the stamp instance or an error
-        /// (<seealso cref="ag_parse_dns_stamp_result"/>)</returns>
+        /// <param name="stampStr">DNS stamp string ("sdns://..." string)</param>
+        /// <param name="ppEerror">error on output, if an error occurred, contains the error description
+        /// (free with <see cref="ag_str_free"/>)</param>
+        /// <returns>Pointer to the stamp instance or NULL if an error occurred
+        /// (<seealso cref="ag_dns_stamp"/>)</returns>
         [DllImport(DnsLibName, CallingConvention = CallingConvention.Cdecl)]
-        internal static extern IntPtr ag_parse_dns_stamp(
+        internal static extern IntPtr ag_dns_stamp_from_str(
             [MarshalAs(
                 UnmanagedType.CustomMarshaler,
                 MarshalTypeRef = typeof(ManualStringToPtrMarshaler))]
-            string stampStr);
+            string stampStr,
+            IntPtr ppEerror);
 
         /// <summary>
-        /// Free a pointer to the <see cref="ag_parse_dns_stamp_result"/> instance.
+        /// Free a pointer to the <see cref="ag_dns_stamp"/> instance.
         /// </summary>
         [DllImport(DnsLibName, CallingConvention = CallingConvention.Cdecl)]
-        internal static extern void ag_parse_dns_stamp_result_free(IntPtr pStampResult);
+        internal static extern void ag_dns_stamp_free(IntPtr pStamp);
+
+        /// <summary>
+        /// Convert a DNS stamp to "sdns://..." string.
+        /// Free the string with <see cref="ag_str_free"/>
+        /// </summary>
+        /// <param name="pStamp">Pointer to the stamp instance
+        /// (<seealso cref="ag_dns_stamp"/>)</param>
+        /// <returns>Pointer to "sdns://..." string.</returns>
+        [DllImport(DnsLibName, CallingConvention = CallingConvention.Cdecl)]
+        internal static extern IntPtr ag_dns_stamp_to_str(IntPtr pStamp);
+
+        /// <summary>
+        /// Convert a DNS stamp to string that can be used as an upstream URL.
+        /// Free the string with <see cref="ag_str_free"/>
+        /// </summary>
+        /// <param name="pStamp">Pointer to the stamp instance
+        /// (<seealso cref="ag_dns_stamp"/>)</param>
+        /// <returns>Pointer to "sdns://..." string.</returns>
+        [DllImport(DnsLibName, CallingConvention = CallingConvention.Cdecl)]
+        internal static extern IntPtr ag_dns_stamp_pretty_url(IntPtr pStamp);
+
+        /// <summary>
+        ///  Convert a DNS stamp to string that can NOT be used as an upstream URL, but may be prettier.
+        /// Free the string with <see cref="ag_str_free"/>
+        /// </summary>
+        /// <param name="pStamp">Pointer to the stamp instance
+        /// (<seealso cref="ag_dns_stamp"/>)</param>
+        /// <returns>Pointer to "sdns://..." string.</returns>
+        [DllImport(DnsLibName, CallingConvention = CallingConvention.Cdecl)]
+        internal static extern IntPtr ag_dns_stamp_prettier_url(IntPtr pStamp);
 
         /// <summary>
         /// Sets the log verbosity level.
@@ -478,42 +511,6 @@ namespace Adguard.Dns
             [NativeName("properties")]
             [MarshalAs(UnmanagedType.I4)]
             internal ag_server_informal_properties Properties;
-
-            /// <summary>
-            /// A URL representation of this stamp which can be used
-            /// as a valid ag_upstream_options address
-            /// </summary>
-            [NativeName("pretty_url")]
-            [ManualMarshalPtrToString]
-            internal IntPtr PrettyUrl;
-
-            /// <summary>
-            /// A URL representation of this stamp which is prettier,
-            /// but can NOT be a valid ag_upstream_options address
-            /// </summary>
-            [NativeName("prettier_url")]
-            [ManualMarshalPtrToString]
-            internal IntPtr PrettierUrl;
-        };
-
-        /// <summary>
-        /// Parsed dns stamp result,
-        /// consisted of two parts - the stamp itself (<seealso cref="ag_dns_stamp"/>)
-        /// and the pointer to the error if smth went wrong
-        /// </summary>
-        [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Ansi)]
-        internal struct ag_parse_dns_stamp_result
-        {
-            /// <summary>
-            /// DNS stamp
-            /// </summary>
-            [MarshalAs(UnmanagedType.Struct)]
-            internal ag_dns_stamp stamp;
-
-            /// <summary>
-            /// error
-            /// </summary>
-            internal IntPtr error;
         };
 
         #endregion

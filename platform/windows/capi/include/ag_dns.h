@@ -270,18 +270,7 @@ typedef struct {
     ARRAY_OF(ag_buffer) hashes;
     /** Server properties */
     ag_server_informal_properties properties;
-    /** A URL representation of this stamp which can be used as a valid ag_upstream_options address */
-    const char *pretty_url;
-    /** A URL representation of this stamp which is prettier, but can NOT be a valid ag_upstream_options address */
-    const char *prettier_url;
 } ag_dns_stamp;
-
-typedef struct {
-    /** Parsed stamp */
-    ag_dns_stamp stamp;
-    /** If not NULL, contains the error description */
-    const char *error;
-} ag_parse_dns_stamp_result;
 
 
 //
@@ -349,14 +338,34 @@ AG_EXPORT void ag_logger_set_default_callback(ag_log_cb callback, void *attachme
 /**
  * Parse a DNS stamp string. The caller is responsible for freeing
  * the result with `ag_parse_dns_stamp_result_free()`.
- * @return a parsed stamp with an optional error message.
+ * @param stamp_str "sdns://..." string
+ * @param error on output, if an error occurred, contains the error description (free with `ag_str_free()`)
+ * @return a parsed stamp, or NULL if an error occurred.
  */
-AG_EXPORT ag_parse_dns_stamp_result *ag_parse_dns_stamp(const char *stamp_str);
+AG_EXPORT ag_dns_stamp *ag_dns_stamp_from_str(const char *stamp_str, const char **error);
 
 /**
  * Free a ag_parse_dns_stamp_result pointer.
  */
-AG_EXPORT void ag_parse_dns_stamp_result_free(ag_parse_dns_stamp_result *result);
+AG_EXPORT void ag_dns_stamp_free(ag_dns_stamp *stamp);
+
+/**
+ * Convert a DNS stamp to "sdns://..." string.
+ * Free the string with `ag_str_free()`
+ */
+AG_EXPORT const char *ag_dns_stamp_to_str(ag_dns_stamp *stamp);
+
+/**
+ * Convert a DNS stamp to string that can be used as an upstream URL.
+ * Free the string with `ag_str_free()`
+ */
+AG_EXPORT const char *ag_dns_stamp_pretty_url(ag_dns_stamp *stamp);
+
+/**
+ * Convert a DNS stamp to string that can NOT be used as an upstream URL, but may be prettier.
+ * Free the string with `ag_str_free()`
+ */
+AG_EXPORT const char *ag_dns_stamp_prettier_url(ag_dns_stamp *stamp);
 
 /**
  * Check if an upstream is valid and working.

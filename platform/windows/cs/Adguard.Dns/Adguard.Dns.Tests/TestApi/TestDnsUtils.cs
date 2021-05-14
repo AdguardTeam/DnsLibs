@@ -46,6 +46,15 @@ namespace Adguard.Dns.Tests.TestApi
         }
 
         [Test]
+        public void TestGetDnsStampString()
+        {
+            DnsStamp dnsStamp = DnsApi.Instance.ParseDnsStamp(VALID_DNS_STAMP_STR);
+            Assert.IsNotNull(dnsStamp);
+            string dnsStampString = dnsStamp.ToString();
+            Assert.AreEqual(dnsStampString, VALID_DNS_STAMP_STR);
+        }
+
+        [Test]
         public void TestParseInvalidDnsStamp()
         {
             DnsStamp dnsStamp = DnsApi.Instance.ParseDnsStamp(INVALID_DNS_STAMP_STR);

@@ -356,46 +356,40 @@ typedef NS_ENUM(NSInteger, AGStampProtoType) {
 };
 
 @interface AGDnsStamp : NSObject<NSCoding>
-
 /**
  * Protocol
  */
-@property(nonatomic, readonly) AGStampProtoType proto;
+@property(nonatomic) AGStampProtoType proto;
 /**
  * Server address
  */
-@property(nonatomic, readonly) NSString *serverAddr;
+@property(nonatomic) NSString *serverAddr;
 /**
  * Provider name
  */
-@property(nonatomic, readonly) NSString *providerName;
+@property(nonatomic) NSString *providerName;
 /**
  * Path (for DOH)
  */
-@property(nonatomic, readonly) NSString *path;
+@property(nonatomic) NSString *path;
 /**
  * The DNSCrypt provider’s Ed25519 public key, as 32 raw bytes. Empty for other types.
  */
-@property(nonatomic, readonly) NSData *serverPublicKey;
+@property(nonatomic) NSData *serverPublicKey;
 /**
  * Hash is the SHA256 digest of one of the TBS certificate found in the validation chain, typically
  * the certificate used to sign the resolver’s certificate. Multiple hashes can be provided for seamless
  * rotations.
  */
-@property(nonatomic, readonly) NSArray<NSData *> *hashes;
+@property(nonatomic) NSArray<NSData *> *hashes;
 
 /** Server properties */
 /** Resolver does DNSSEC validation */
-@property(nonatomic, readonly) BOOL dnssec;
+@property(nonatomic) BOOL dnssec;
 /** Resolver does not record logs */
-@property(nonatomic, readonly) BOOL noLog;
+@property(nonatomic) BOOL noLog;
 /** Resolver doesn't intentionally block domains */
-@property(nonatomic, readonly) BOOL noFilter;
-
-/** A URL representation of this stamp which can be used as a valid AGDnsUpstream address */
-@property(nonatomic, readonly) NSString *prettyUrl;
-/** A URL representation of this stamp which is prettier, but can NOT be used as a valid AGDnsUpstream address */
-@property(nonatomic, readonly) NSString *prettierUrl;
+@property(nonatomic) BOOL noFilter;
 
 - (instancetype) init NS_UNAVAILABLE;
 
@@ -403,18 +397,24 @@ typedef NS_ENUM(NSInteger, AGStampProtoType) {
 
 - (void)encodeWithCoder:(NSCoder *)coder;
 
+/** Init a stamp from "sdns://" string */
+- (instancetype) initWithString:(NSString *)stampStr error:(NSError **)error NS_SWIFT_NOTHROW;
+
+/** Create a stamp from "sdns://" string */
++ (instancetype) stampWithString:(NSString *)stampStr error:(NSError **)error NS_SWIFT_NOTHROW;
+
+/** A URL representation of this stamp which can be used as a valid AGDnsUpstream address */
+@property(nonatomic, readonly) NSString *prettyUrl;
+
+/** A URL representation of this stamp which is prettier, but can NOT be used as a valid AGDnsUpstream address */
+@property(nonatomic, readonly) NSString *prettierUrl;
+
+/** An "sdns://" string representation */
+@property(nonatomic, readonly) NSString *stringValue;
+
 @end
 
 @interface AGDnsUtils : NSObject
-
-/**
- * Parses a DNS stamp string and returns a instance
- * @param stampStr DNS stamp string
- * @error error error
- * @return stamp instance or nil if error
- */
-+ (AGDnsStamp *) parseDnsStampWithStampStr: (NSString *) stampStr
-                                     error: (NSError **) error NS_SWIFT_NOTHROW;
 
 /**
  * Checks if upstream is valid and available

@@ -269,20 +269,17 @@ namespace Adguard.Dns.Api
         /// <returns>DNS stamp as a <see cref="DnsStamp"/> instance</returns>
         public DnsStamp ParseDnsStamp(string dnsStampStr)
         {
-            lock (SYNC_ROOT)
+            try
             {
-                try
-                {
-                    LOG.InfoFormat("Parsing DNS stamp");
-                    DnsStamp dnsStamp = DnsUtils.ParseDnsStamp(dnsStampStr);
-                    LOG.InfoFormat("Parsing DNS stamp has been successfully completed");
-                    return dnsStamp;
-                }
-                catch (Exception ex)
-                {
-                    LOG.ErrorFormat("Parsing DNS stamp failed with an error", ex);
-                    return null;
-                }
+                LOG.InfoFormat("Parsing DNS stamp");
+                DnsStamp dnsStamp = DnsUtils.ParseDnsStamp(dnsStampStr);
+                LOG.InfoFormat("Parsing DNS stamp has been successfully completed");
+                return dnsStamp;
+            }
+            catch (Exception ex)
+            {
+                LOG.ErrorFormat("Parsing DNS stamp failed with an error", ex);
+                return null;
             }
         }
 
@@ -296,20 +293,17 @@ namespace Adguard.Dns.Api
         /// otherwise false</returns>
         public bool TestUpstream(UpstreamOptions upstreamOptions)
         {
-            lock (SYNC_ROOT)
+            try
             {
-                try
-                {
-                    LOG.InfoFormat("Testing upstream");
-                    bool result = DnsUtils.TestUpstream(upstreamOptions);
-                    LOG.InfoFormat("Testing upstream has been successfully completed");
-                    return result;
-                }
-                catch (Exception ex)
-                {
-                    LOG.ErrorFormat("Testing upstream failed with an error", ex);
-                    return false;
-                }
+                LOG.InfoFormat("Testing upstream");
+                bool result = DnsUtils.TestUpstream(upstreamOptions);
+                LOG.InfoFormat("Testing upstream has been successfully completed");
+                return result;
+            }
+            catch (Exception ex)
+            {
+                LOG.ErrorFormat("Testing upstream failed with an error", ex);
+                return false;
             }
         }
 
