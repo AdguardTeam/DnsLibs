@@ -10,7 +10,6 @@
 #include <openssl/ssl.h>
 
 #include <ldns/ldns.h>
-#include <ldns/ag_ext.h>
 #include <magic_enum.hpp>
 
 
@@ -65,12 +64,12 @@ static size_t write_callback(void *contents, size_t size, size_t nmemb, void *ar
 
 curl_socket_t dns_over_https::curl_opensocket(void *clientp, curlsocktype, struct curl_sockaddr *address) {
     auto *self = (ag::dns_over_https *) clientp;
-    curl_socket_t curlfd = socket(address->family, address->socktype, address->protocol);
+    curl_socket_t curlfd = ::socket(address->family, address->socktype, address->protocol);
     if (curlfd == CURL_SOCKET_BAD) {
         return CURL_SOCKET_BAD;
     }
     ag::socket_address addr{&address->addr};
-    if (auto error = self->bind_socket_to_if(curlfd, addr)) {
+    if (auto error = self->m_config.socket_factory->prepare_fd(curlfd, addr, self->m_options.outbound_interface)) {
         warnlog(self->log, "Failed to bind socket to interface: {}", *error);
         evutil_closesocket(curlfd);
         return CURL_SOCKET_BAD;
@@ -360,7 +359,6 @@ struct dns_over_https::socket_handle {
         event_add(this->event_handle.get(), nullptr);
     }
 };
-using socket_handle = dns_over_https::socket_handle;
 
 int dns_over_https::on_pool_timer_event(CURLM *multi, long timeout_ms, dns_over_https *upstream) {
     tracelog(upstream->log, "{}: Setting timeout to {}ms", __func__, timeout_ms);

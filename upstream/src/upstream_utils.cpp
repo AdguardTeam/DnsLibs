@@ -19,6 +19,7 @@ static ag::ldns_pkt_ptr create_message() {
 
 ag::err_string ag::test_upstream(const upstream_options &opts,
                                  const on_certificate_verification_function &on_certificate_verification) {
+    socket_factory socket_factory({});
     std::unique_ptr<ag::certificate_verifier> cert_verifier;
     if (on_certificate_verification != nullptr) {
         cert_verifier = std::make_unique<ag::application_verifier>(on_certificate_verification);
@@ -26,8 +27,7 @@ ag::err_string ag::test_upstream(const upstream_options &opts,
         cert_verifier = std::make_unique<ag::default_verifier>();
     }
     bool bootstrap_ipv6 = test_ipv6_connectivity();
-    auto router = ag::route_resolver::create();
-    ag::upstream_factory upstream_factory({cert_verifier.get(), router.get(), bootstrap_ipv6});
+    ag::upstream_factory upstream_factory({ &socket_factory, cert_verifier.get(), bootstrap_ipv6 });
     auto[upstream_ptr, upstream_err] = upstream_factory.create_upstream(opts);
     if (upstream_err) {
         return upstream_err;
@@ -49,10 +49,16 @@ bool ag::test_ipv6_connectivity() {
                     ldns_dname_new_frm_str("google.com"),
                     LDNS_RR_TYPE_A, LDNS_RR_CLASS_IN, LDNS_RD)};
 
+    socket_factory socket_factory({});
+    ag::upstream_factory upstream_factory({ &socket_factory });
+
     // Google public DNS
     for (auto &addr : {"2001:4860:4860::8888", "2001:4860:4860::8844"}) {
-        ag::plain_dns upstream({addr, {}, std::chrono::seconds{1}, {}}, {nullptr});
-        auto result = ((ag::upstream *) &upstream)->exchange(query.get());
+        auto r = upstream_factory.create_upstream({ addr, {}, std::chrono::seconds{1}, {} });
+        if (r.error.has_value()) {
+            return false;
+        }
+        auto result = r.upstream->exchange(query.get());
         if (!result.error && LDNS_RCODE_NOERROR == ldns_pkt_get_rcode(result.packet.get())) {
             return true;
         }

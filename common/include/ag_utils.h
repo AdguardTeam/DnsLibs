@@ -369,6 +369,11 @@ public:
     T elapsed() const {
         return std::chrono::duration_cast<T>(std::chrono::steady_clock::now() - start);
     }
+
+    void reset() {
+        start = std::chrono::steady_clock::now();
+    }
+
 private:
     std::chrono::steady_clock::time_point start = std::chrono::steady_clock::now();
 };

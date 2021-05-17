@@ -8,23 +8,23 @@
 #include <string_view>
 #include <utility>
 #include <functional>
+#include <vector>
 #include <ldns/buffer.h>
 #include <ldns/error.h>
 #include <ldns/packet.h>
-#include <ldns/ag_ext.h>
 #include <ag_defs.h>
 #include <dns_crypt_utils.h>
 #include <dns_stamp.h>
 #include <ag_socket_address.h>
+#include <ag_socket.h>
 
 namespace ag::dnscrypt {
 
 using create_ldns_buffer_result = std::pair<ldns_buffer_ptr, err_string>;
 using create_ldns_pkt_result = std::pair<ldns_pkt_ptr, err_string>;
 
-struct dns_exchange_allocated_result {
-    allocated_ptr<uint8_t> reply;
-    size_t reply_size;
+struct dns_exchange_unparsed_result {
+    std::vector<uint8_t> reply;
     std::chrono::milliseconds round_trip_time;
     err_string error;
 };
@@ -62,20 +62,19 @@ create_ldns_buffer_result create_ldns_buffer(const ldns_pkt &request_pkt);
  */
 create_ldns_pkt_result create_ldns_pkt(uint8_t *data, size_t size);
 
-using preparefd_cb = std::function<bool(evutil_socket_t, const ag::socket_address &)>;
-
 /**
- * Send data from buffer to socket address and returns allocated with std::malloc reply data
+ * Send data from buffer to the peer and return reply data
  * @param timeout Timeout for read/write operations (0 means infinite timeout)
  * @param socket_address Socket address
  * @param buffer Buffer to send
  * @param protocol Protocol
- * @param prepare_fd Socket preparation callback, return true if successful
+ * @param socket_factory Socket factory which creates sockets for data exchange
+ * @param outbound_interface Outbound interface info for communicating socket
  * @return DNS exchange allocated result
  */
-dns_exchange_allocated_result dns_exchange_allocated(std::chrono::milliseconds timeout,
-                                                     const socket_address &socket_address, ldns_buffer &buffer,
-                                                     protocol protocol, preparefd_cb prepare_fd);
+dns_exchange_unparsed_result dns_exchange(std::chrono::milliseconds timeout,
+        const socket_address &socket_address, ldns_buffer &buffer,
+        utils::transport_protocol protocol, const socket_factory *socket_factory, const if_id_variant &outbound_interface);
 
 /**
  * Send data from buffer to socket address and returns ldns packet reply
@@ -83,12 +82,13 @@ dns_exchange_allocated_result dns_exchange_allocated(std::chrono::milliseconds t
  * @param socket_address Socket address
  * @param buffer Buffer to send
  * @param protocol Protocol
- * @param prepare_fd Socket preparation callback, return true if successful
+ * @param socket_factory Socket factory which creates sockets for data exchange
+ * @param outbound_interface Outbound interface info for communicating socket
  * @return DNS exchange result
  */
 dns_exchange_result dns_exchange_from_ldns_buffer(std::chrono::milliseconds timeout,
-                                                  const socket_address &socket_address, ldns_buffer &buffer,
-                                                  protocol protocol, preparefd_cb prepare_fd);
+        const socket_address &socket_address, ldns_buffer &buffer,
+        utils::transport_protocol protocol, const socket_factory *socket_factory, const if_id_variant &outbound_interface);
 
 /**
  * Send data from packet to socket address and returns ldns packet reply
@@ -96,11 +96,12 @@ dns_exchange_result dns_exchange_from_ldns_buffer(std::chrono::milliseconds time
  * @param socket_address Socket address
  * @param request_pkt Packet to send
  * @param protocol Protocol
- * @param prepare_fd Socket preparation callback, return true if successful
+ * @param socket_factory Socket factory which creates sockets for data exchange
+ * @param outbound_interface Outbound interface info for communicating socket
  * @return DNS exchange result
  */
-dns_exchange_result dns_exchange_from_ldns_pkt(std::chrono::milliseconds timeout, const socket_address &socket_address,
-                                               const ldns_pkt &request_pkt, protocol protocol,
-                                               preparefd_cb prepare_fd);
+dns_exchange_result dns_exchange_from_ldns_pkt(std::chrono::milliseconds timeout,
+        const socket_address &socket_address, const ldns_pkt &request_pkt,
+        utils::transport_protocol protocol, const socket_factory *socket_factory, const if_id_variant &outbound_interface);
 
 } // namespace ag::dnscrypt

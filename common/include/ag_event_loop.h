@@ -20,11 +20,17 @@ using event_loop_ptr = std::unique_ptr<event_loop>;
 class event_loop {
 public:
     /**
+     * @param run_immediately if true the loop will be `start`ed immediately
      * @return New event loop
      */
-    static event_loop_ptr create();
+    static event_loop_ptr create(bool run_immediately = true);
 
     ~event_loop();
+
+    /**
+     * Run event loop
+     */
+    void start();
 
     /**
      * Submit a task to be executed on the event loop
@@ -65,7 +71,7 @@ private:
     /** Submitted tasks */
     with_mtx<tasks> m_tasks;
 
-    event_loop();
+    explicit event_loop(bool run_immediately);
 
     /** Code for running base loop in thread */
     void run();

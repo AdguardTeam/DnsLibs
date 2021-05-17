@@ -9,6 +9,7 @@
 #include <dns_crypt_cipher.h>
 #include <dns_crypt_ldns.h>
 #include <dns_stamp.h>
+#include <magic_enum.hpp>
 
 #ifdef _WIN32
 #include <winsock2.h>
@@ -23,7 +24,17 @@ TEST(dnscrypt_sodium_test, sodium_initialized) {
     }
 }
 
-class dnscrypt_test : public ::testing::Test {};
+using ldns_rdf_ptr = std::unique_ptr<ldns_rdf, ag::ftor<&ldns_rdf_free>>;
+
+class dnscrypt_test : public ::testing::Test {
+public:
+    dnscrypt_test() {
+        ag::set_default_log_level(ag::TRACE);
+    }
+
+protected:
+    ag::socket_factory socket_factory = ag::socket_factory({});
+};
 
 template<typename... Ts>
 struct dnscrypt_test_with_param : dnscrypt_test, ::testing::WithParamInterface<Ts...> {};
@@ -123,7 +134,10 @@ static constexpr parse_stamp_test_data_type parse_stamp_test_data[]{
     },
 };
 
-struct parse_stamp_test : dnscrypt_test_with_param<parse_stamp_test_data_type> {};
+struct parse_stamp_test : dnscrypt_test_with_param<parse_stamp_test_data_type> {
+protected:
+    ag::socket_factory socket_factory = ag::socket_factory({});
+};
 
 TEST_P(parse_stamp_test, parse_stamp) {
     const auto &stamp_str = std::get<0>(GetParam());
@@ -138,7 +152,7 @@ INSTANTIATE_TEST_CASE_P(parse_stamp_test_instantiation, parse_stamp_test, ::test
 
 TEST_F(dnscrypt_test, invalid_stamp) {
     ag::dnscrypt::client client;
-    auto err = client.dial("sdns://AQIAAAAAAAAAFDE", ag::dnscrypt::client::DEFAULT_TIMEOUT).error;
+    auto err = client.dial("sdns://AQIAAAAAAAAAFDE", ag::dnscrypt::client::DEFAULT_TIMEOUT, &this->socket_factory, {}).error;
     ASSERT_TRUE(err) << "Dial must not have been possible";
 }
 
@@ -147,7 +161,7 @@ TEST_F(dnscrypt_test, timeout_on_dial_error) {
     // AdGuard DNS pointing to a wrong IP
     static constexpr auto stamp_str = "sdns://AQIAAAAAAAAADDguOC44Ljg6NTQ0MyDRK0fyUtzywrv4mRCG6vec5EldixbIoMQyLlLKPzkIcyIyLmRuc2NyeXB0LmRlZmF1bHQubnMxLmFkZ3VhcmQuY29t";
     ag::dnscrypt::client client;
-    auto err = client.dial(stamp_str, 300ms).error;
+    auto err = client.dial(stamp_str, 300ms, &this->socket_factory, {}).error;
     ASSERT_TRUE(err) << "Dial must not have been possible";
 }
 
@@ -156,7 +170,7 @@ TEST_F(dnscrypt_test, timeout_on_dial_exchange) {
     // AdGuard DNS
     static constexpr auto stamp_str = "sdns://AQIAAAAAAAAAFDE3Ni4xMDMuMTMwLjEzMDo1NDQzINErR_JS3PLCu_iZEIbq95zkSV2LFsigxDIuUso_OQhzIjIuZG5zY3J5cHQuZGVmYXVsdC5uczEuYWRndWFyZC5jb20";
     ag::dnscrypt::client client;
-    auto[server_info, _, dial_err] = client.dial(stamp_str, 1000ms);
+    auto[server_info, _, dial_err] = client.dial(stamp_str, 1000ms, &this->socket_factory, {});
     ASSERT_FALSE(dial_err) << "Could not establish connection with " << stamp_str << " cause: " << *dial_err;
     // Point it to an IP where there's no DNSCrypt server
     server_info.set_server_address("8.8.8.8:5443");
@@ -164,7 +178,7 @@ TEST_F(dnscrypt_test, timeout_on_dial_exchange) {
                                                      "google-public-dns-a.google.com.",
                                                      ag::dnscrypt::MAX_DNS_UDP_SAFE_PACKET_SIZE);
     ldns_pkt_set_random_id(req.get());
-    auto exchange_err = client.exchange(*req, server_info, 1000ms).error;
+    auto exchange_err = client.exchange(*req, server_info, 1000ms, &this->socket_factory, {}).error;
     ASSERT_TRUE(exchange_err) << "Exchange must not have been possible";
 }
 
@@ -175,31 +189,38 @@ static constexpr std::string_view check_dns_crypt_server_test_stamps[]{
     "sdns://AQIAAAAAAAAAFDE3Ni4xMDMuMTMwLjEzMjo1NDQzILgxXdexS27jIKRw3C7Wsao5jMnlhvhdRUXWuMm1AFq6ITIuZG5zY3J5cHQuZmFtaWx5Lm5zMS5hZGd1YXJkLmNvbQ",
 };
 
-static constexpr ag::dnscrypt::protocol check_dns_crypt_server_test_protocols[]{
-    ag::dnscrypt::protocol::UDP,
-    ag::dnscrypt::protocol::TCP,
+static constexpr ag::utils::transport_protocol check_dns_crypt_server_test_protocols[]{
+    ag::utils::transport_protocol::TP_UDP,
+    ag::utils::transport_protocol::TP_TCP,
 };
 
 struct check_dns_crypt_server_test : dnscrypt_test_with_param<::testing::tuple<std::string_view,
-                                                                               ag::dnscrypt::protocol>> {};
+                                                                               ag::utils::transport_protocol>> {
+public:
+    check_dns_crypt_server_test() {
+        ag::set_default_log_level(ag::TRACE);
+    }
+protected:
+    ag::socket_factory socket_factory = ag::socket_factory({});
+};
 
 TEST_P(check_dns_crypt_server_test, check_dns_crypt_server) {
     using namespace std::literals::chrono_literals;
     const auto &stamp_str = std::get<0>(GetParam());
     const auto &protocol = std::get<1>(GetParam());
     ag::dnscrypt::client client(protocol);
-    auto[server_info, dial_rtt, dial_err] = client.dial(stamp_str, 10s);
+    auto[server_info, dial_rtt, dial_err] = client.dial(stamp_str, 10s, &this->socket_factory, {});
     ASSERT_FALSE(dial_err) << "Could not establish connection with " << stamp_str << " cause: " << *dial_err;
     SPDLOG_INFO("Established a connection with {}, ttl={}, rtt={}ms, protocol={}", server_info.get_provider_name(),
                 ag::utils::time_to_str(server_info.get_server_cert().not_after), dial_rtt.count(),
-                ag::dnscrypt::protocol_str(protocol));
+                magic_enum::enum_name(protocol));
     auto req = ag::dnscrypt::create_request_ldns_pkt(LDNS_RR_TYPE_A, LDNS_RR_CLASS_IN, LDNS_RD,
                                                      "google-public-dns-a.google.com.",
                                                       ag::utils::make_optional_if(
-                                                              protocol == ag::dnscrypt::protocol::UDP,
+                                                              protocol == ag::utils::transport_protocol::TP_UDP,
                                                               ag::dnscrypt::MAX_DNS_UDP_SAFE_PACKET_SIZE));
     ldns_pkt_set_random_id(req.get());
-    auto[reply, exchange_rtt, exchange_err] = client.exchange(*req, server_info, 10s);
+    auto[reply, exchange_rtt, exchange_err] = client.exchange(*req, server_info, 10s, &this->socket_factory, {});
     ASSERT_FALSE(exchange_err) << "Couldn't talk to upstream " << server_info.get_provider_name() << ": "
                                << *exchange_err;
     ldns_rr_list *reply_answer = ldns_pkt_answer(reply.get());
@@ -213,13 +234,13 @@ TEST_P(check_dns_crypt_server_test, check_dns_crypt_server) {
     ldns_rdf_type rdf_type = ldns_rdf_get_type(rdf);
     ASSERT_EQ(rdf_type, LDNS_RDF_TYPE_A) << "DNS upstream " << server_info.get_provider_name()
                                          << " returned wrong answer type instead of A: " << rdf_type;
-    auto rdf0 = ag::ldns_rdf_ptr(ldns_rdf_new_frm_str(LDNS_RDF_TYPE_A, "8.8.8.8"));
+    auto rdf0 = ldns_rdf_ptr(ldns_rdf_new_frm_str(LDNS_RDF_TYPE_A, "8.8.8.8"));
     ASSERT_EQ(sizeof(in_addr), ldns_rdf_size(rdf));
     ASSERT_EQ(ldns_rdf_compare(rdf, rdf0.get()), 0) << "DNS upstream " << server_info.get_provider_name()
                                                     << " returned wrong answer instead of 8.8.8.8: "
                                                     << ag::utils::addr_to_str({ldns_rdf_data(rdf), ldns_rdf_size(rdf)});
     SPDLOG_INFO("Got proper response from {}, rtt={}ms, protocol={}", server_info.get_provider_name(),
-                exchange_rtt.count(), ag::dnscrypt::protocol_str(protocol));
+                exchange_rtt.count(), magic_enum::enum_name(protocol));
     free(ldns_rdf_data(rdf0.get()));
 }
 

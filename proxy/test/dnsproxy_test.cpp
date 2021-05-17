@@ -1064,10 +1064,16 @@ TEST_F(dnsproxy_test, dnssec_regress_does_not_scrub_cname) {
     ASSERT_NO_FATAL_FAILURE(perform_request(proxy, create_request(CNAME_BLOCKING_HOST, LDNS_RR_TYPE_A, LDNS_RD), response));
     ASSERT_GT(ldns_pkt_ancount(response.get()), 0);
     ASSERT_EQ(ldns_pkt_get_rcode(response.get()), LDNS_RCODE_NOERROR);
-    ASSERT_TRUE(ldns_pkt_rr_list_by_type(response.get(), LDNS_RR_TYPE_CNAME, LDNS_SECTION_ANSWER));
-    ASSERT_GT(ldns_rr_list_rr_count(ldns_pkt_rr_list_by_type(response.get(), LDNS_RR_TYPE_CNAME, LDNS_SECTION_ANSWER)), 0);
-    ASSERT_TRUE(ldns_pkt_rr_list_by_type(response.get(), LDNS_RR_TYPE_A, LDNS_SECTION_ANSWER));
-    ASSERT_GT(ldns_rr_list_rr_count(ldns_pkt_rr_list_by_type(response.get(), LDNS_RR_TYPE_A, LDNS_SECTION_ANSWER)), 0);
+
+    ldns_rr_list *rrs = ldns_pkt_rr_list_by_type(response.get(), LDNS_RR_TYPE_CNAME, LDNS_SECTION_ANSWER);
+    ASSERT_NE(rrs, nullptr);
+    ASSERT_GT(ldns_rr_list_rr_count(rrs), 0);
+    ldns_rr_list_deep_free(rrs);
+
+    rrs = ldns_pkt_rr_list_by_type(response.get(), LDNS_RR_TYPE_A, LDNS_SECTION_ANSWER);
+    ASSERT_NE(rrs, nullptr);
+    ASSERT_GT(ldns_rr_list_rr_count(rrs), 0);
+    ldns_rr_list_deep_free(rrs);
 }
 
 TEST_F(dnsproxy_test, dnssec_autority_section) {

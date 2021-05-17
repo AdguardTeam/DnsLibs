@@ -10,6 +10,10 @@ if (NOT TARGET dnsstamp)
     add_subdirectory(${DNSLIBS_DIR}/dnsstamp ${CMAKE_BINARY_DIR}/dnsstamp)
 endif ()
 
+if(NOT TARGET dnslibs_net)
+    add_subdirectory(${DNSLIBS_DIR}/net ${CMAKE_BINARY_DIR}/net)
+endif(NOT TARGET dnslibs_net)
+
 if (NOT TARGET ldns)
     add_subdirectory(${THIRD_PARTY_DIR}/ldns ${CMAKE_BINARY_DIR}/ldns)
 endif ()
@@ -22,11 +26,11 @@ add_library(dnscrypt EXCLUDE_FROM_ALL
         include/dns_crypt_cipher.h
         include/dns_crypt_client.h
         include/dns_crypt_consts.h
-        include/dns_crypt_ldns.h
         include/dns_crypt_server_info.h
         include/dns_crypt_utils.h
         src/dns_crypt_cipher.cpp
         src/dns_crypt_client.cpp
+        src/dns_crypt_ldns.h
         src/dns_crypt_ldns.cpp
         src/dns_crypt_padding.cpp
         src/dns_crypt_padding.h
@@ -38,11 +42,11 @@ target_include_directories(dnscrypt PUBLIC include)
 target_include_directories(dnscrypt PUBLIC ${THIRD_PARTY_DIR}/sodium/libsodium/src/libsodium/include)
 target_include_directories(dnscrypt PUBLIC ${THIRD_PARTY_DIR}/sodium/libsodium/src/libsodium/include/sodium)
 target_include_directories(dnscrypt PUBLIC ${CMAKE_BINARY_DIR}) # sodium/version.h
-target_link_libraries(dnscrypt dnsstamp ldns sodium)
+target_link_libraries(dnscrypt dnsstamp dnslibs_net ldns sodium)
 
 enable_testing()
 include(${CMAKE_CURRENT_SOURCE_DIR}/../cmake/add_unit_test.cmake)
 link_libraries(dnscrypt)
 set(TEST_DIR ${CMAKE_CURRENT_SOURCE_DIR}/test)
 
-add_unit_test(dns_crypt_test ${TEST_DIR} "" TRUE FALSE)
+add_unit_test(dns_crypt_test "${TEST_DIR}" "${CMAKE_CURRENT_SOURCE_DIR}/src" TRUE FALSE)

@@ -1,5 +1,6 @@
 #include "upstream_doq.h"
 #include "upstream.h"
+#include <magic_enum.hpp>
 
 #ifdef __MACH__
 #include <sys/types.h>
@@ -22,11 +23,32 @@ std::atomic_int64_t dns_over_quic::m_next_request_id{1};
 
 
 dns_over_quic::buffer::buffer(const uint8_t *data, size_t datalen)
-        : buf{data, data + datalen}, tail(buf.data() + datalen)
+        : buf{data, data + datalen}, tail(datalen)
 {}
 
-dns_over_quic::buffer::buffer(size_t datalen) : buf(datalen), tail(buf.data())
+dns_over_quic::buffer::buffer(size_t datalen) : buf(datalen), tail(0)
 {}
+
+bool dns_over_quic::connection_state::is_peer_selected() const {
+    return std::holds_alternative<std::unique_ptr<socket_context>>(this->info);
+}
+
+std::unique_ptr<dns_over_quic::socket_context> dns_over_quic::connection_state::extract_socket(socket_context *ctx) {
+    auto *initial_info = std::get_if<connection_handshake_initial_info>(&this->info);
+    if (initial_info == nullptr) {
+        return nullptr;
+    }
+
+    auto it = std::find_if(initial_info->sockets.begin(), initial_info->sockets.end(),
+            [ctx] (const auto &i) { return i.get() == ctx; });
+    if (it == initial_info->sockets.end()) {
+        return nullptr;
+    }
+
+    auto out = std::move(*it);
+    initial_info->sockets.erase(it);
+    return out;
+}
 
 dns_over_quic::dns_over_quic(const upstream_options &opts, const upstream_factory_config &config)
         : upstream(opts, config)
@@ -44,22 +66,6 @@ dns_over_quic::~dns_over_quic() {
 
     m_loop->stop(); // Cleanup should still execute since this is event_loopexit
     m_loop->join();
-
-    if (m_idle_timer_event) {
-        event_free(std::exchange(m_idle_timer_event, nullptr));
-    }
-
-    if (m_handshake_timer_event) {
-        event_free(std::exchange(m_handshake_timer_event, nullptr));
-    }
-
-    if (m_retransmit_timer_event) {
-        event_free(std::exchange(m_retransmit_timer_event, nullptr));
-    }
-
-    if (m_ssl_ctx) {
-        SSL_CTX_free(std::exchange(m_ssl_ctx, nullptr));
-    }
 }
 
 #if BORINGSSL_API_VERSION < 10
@@ -142,15 +148,33 @@ static auto quic_method = SSL_QUIC_METHOD{
 
 void dns_over_quic::retransmit_cb(evutil_socket_t, short, void *data) {
     auto doq = static_cast<dns_over_quic *>(data);
+    tracelog(doq->m_log, "{}(): ...", __func__);
     if (doq->m_state == STOP) {
         return;
     }
 
     if (int ret = doq->handle_expiry(); ret != 0) {
         doq->disconnect("Handling expiry error");
+        return;
     }
 
-    if (int ret = doq->on_write(); ret != 0) {
+    if (auto *info = std::get_if<connection_handshake_initial_info>(&doq->m_conn_state.info);
+            info != nullptr) {
+        // if there is still no selected peer, retransmit to all endpoints
+        assert(info->handshake_initial_buf != nullptr);
+        info->handshake_initial_buf.reset();
+        for (auto it = info->sockets.begin(); it != info->sockets.end();) {
+            if (int ret = doq->on_write((*it)->socket.get()); ret == NETWORK_ERR_OK) {
+                ++it;
+            } else {
+                it = info->sockets.erase(it);
+            }
+        }
+        if (info->sockets.empty()) {
+            doq->disconnect("Failed to retransmit initial handshake message to any peer");
+        }
+    } else if (int ret = doq->on_write(std::get<std::unique_ptr<socket_context>>(doq->m_conn_state.info)->socket.get());
+            ret != NETWORK_ERR_OK) {
         doq->disconnect(AG_FMT("Retransmission error ({})", ret));
     }
 }
@@ -162,23 +186,8 @@ void dns_over_quic::idle_timer_cb(evutil_socket_t, short, void *data) {
 
 void dns_over_quic::handshake_timer_cb(evutil_socket_t, short, void *data) {
     auto doq = static_cast<dns_over_quic *>(data);
-    evtimer_del(doq->m_idle_timer_event);
+    evtimer_del(doq->m_idle_timer_event.get());
     doq->disconnect("Handshake timer expired");
-}
-
-void dns_over_quic::read_cb(evutil_socket_t, short, void *data) {
-    auto doq = static_cast<dns_over_quic *>(data);
-    if (int ret = doq->on_read(); ret != NETWORK_ERR_OK) {
-        doq->disconnect(AG_FMT("Reading error ({})", ret));
-        if (ret == NGTCP2_ERR_RECV_VERSION_NEGOTIATION) {
-            doq->reinit();
-        }
-        return;
-    }
-    if (int ret = doq->on_write(); ret != NETWORK_ERR_OK) {
-        warnlog(doq->m_log, "An error happened while writing: {} line: {}", ret, __LINE__);
-        doq->disconnect(AG_FMT("Writing error ({})", ret));
-    }
 }
 
 void dns_over_quic::send_requests() {
@@ -222,7 +231,8 @@ void dns_over_quic::send_requests() {
         m_stream_send_queue.push_back(stream_id);
 
         tracelog(m_log, "Sending request, id: {}", req.second.request_id);
-        if (int ret = on_write(); ret != NETWORK_ERR_OK) {
+        if (int ret = on_write(std::get<std::unique_ptr<socket_context>>(m_conn_state.info)->socket.get());
+                ret != NETWORK_ERR_OK) {
             m_global.unlock();
             if (ret == NETWORK_ERR_SEND_BLOCKED) {
                 req.second.is_onfly = true;
@@ -238,35 +248,6 @@ void dns_over_quic::send_requests() {
     m_global.unlock();
 
     update_idle_timer(false);
-}
-
-evutil_socket_t dns_over_quic::create_ipv4_socket() {
-    evutil_socket_t fd = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
-    if (fd == -1) {
-        warnlog(m_log, "Error creating IPv4 socket: {}", evutil_socket_error_to_string(EVUTIL_SOCKET_ERROR()));
-        return -1;
-    }
-    return fd;
-}
-
-
-evutil_socket_t dns_over_quic::create_dual_stack_socket() {
-    evutil_socket_t fd;
-
-    fd = socket(AF_INET6, SOCK_DGRAM, IPPROTO_UDP);
-    if (fd == -1) {
-        warnlog(m_log, "Error creating IPv6 socket: {}", evutil_socket_error_to_string(EVUTIL_SOCKET_ERROR()));
-        return -1;
-    }
-
-    unsigned int disable = 0;
-    if (setsockopt(fd, IPPROTO_IPV6, IPV6_V6ONLY, (char *)&disable, sizeof(disable)) == -1) {
-        warnlog(m_log, "Error making socket dual-stack: {}", evutil_socket_error_to_string(evutil_socket_geterror(fd)));
-        evutil_closesocket(fd);
-        return -1;
-    }
-
-    return fd;
 }
 
 err_string dns_over_quic::init() {
@@ -332,9 +313,9 @@ err_string dns_over_quic::init() {
 
     m_remote_addr_empty = ag::socket_address("::", m_port);
 
-    m_idle_timer_event = event_new(m_loop->c_base(), -1, EV_TIMEOUT, idle_timer_cb, this);
-    m_handshake_timer_event = event_new(m_loop->c_base(), -1, EV_TIMEOUT, handshake_timer_cb, this);
-    m_retransmit_timer_event = event_new(m_loop->c_base(), -1, EV_TIMEOUT, retransmit_cb, this);
+    m_idle_timer_event.reset(event_new(m_loop->c_base(), -1, EV_TIMEOUT, idle_timer_cb, this));
+    m_handshake_timer_event.reset(event_new(m_loop->c_base(), -1, EV_TIMEOUT, handshake_timer_cb, this));
+    m_retransmit_timer_event.reset(event_new(m_loop->c_base(), -1, EV_TIMEOUT, retransmit_cb, this));
 
     if (int ret = init_ssl_ctx(); ret != 0) {
         return "Creation SSL context failed";
@@ -370,7 +351,8 @@ dns_over_quic::exchange_result dns_over_quic::exchange(ldns_pkt *request) {
         req.request_id = request_id;
         req.request_buffer.reset(buffer);
     }
-    tracelog_id(m_log, request, "Creation new request, id: {}, connection state: {}", request_id, m_state);
+    tracelog_id(m_log, request, "Creation new request, id: {}, connection state: {}",
+            request_id, magic_enum::enum_name(m_state.load()));
 
     submit([this]{
         if (m_state != RUN) {
@@ -389,7 +371,8 @@ dns_over_quic::exchange_result dns_over_quic::exchange(ldns_pkt *request) {
 
     ldns_pkt *res = req.reply_pkt.release();
     assert(m_requests.count(request_id));
-    tracelog_id(m_log, request, "Erase request, id: {}, connection state: {}", request_id, m_state);
+    tracelog_id(m_log, request, "Erase request, id: {}, connection state: {}",
+            request_id, magic_enum::enum_name(m_state.load()));
     m_requests.erase(request_id);
 
     if (timeout == std::cv_status::timeout) {
@@ -403,46 +386,131 @@ dns_over_quic::exchange_result dns_over_quic::exchange(ldns_pkt *request) {
     return {nullptr, "Request failed (empty packet)"};
 }
 
-int dns_over_quic::bind_addr(int fd, int family) {
-    std::unique_ptr<addrinfo, decltype(&freeaddrinfo)> safe_res(nullptr, &freeaddrinfo);
-    addrinfo *res, *rp;
+void dns_over_quic::on_socket_connected(void *arg) {
+    auto *ctx = (socket_context *)arg;
+    dns_over_quic *self = ctx->upstream;
 
-    addrinfo hints{};
-    hints.ai_family = family;
-    hints.ai_socktype = SOCK_DGRAM;
-    hints.ai_flags = AI_PASSIVE;
+    const socket_address &peer = ctx->socket->get_peer();
+    tracelog(self->m_log, "{}(): {}", __func__, peer.str());
 
-    if (auto rv = getaddrinfo(nullptr, "0", &hints, &res); rv != 0) {
-        errlog(m_log, "Getaddrinfo error: {}", gai_strerror(rv));
-        return -1;
-    }
-    safe_res.reset(res);
-
-    for (rp = res; rp; rp = rp->ai_next) {
-        if (bind(fd, rp->ai_addr, rp->ai_addrlen) != -1) {
-            break;
-        }
+    auto *info = std::get_if<connection_handshake_initial_info>(&self->m_conn_state.info);
+    if (info == nullptr) {
+        dbglog(self->m_log, "Invalid server connection state (peer selected={}) on socket connected ({}) event",
+                self->m_conn_state.is_peer_selected(), peer.str());
+        assert(0);
+        self->disconnect("Internal error");
+        return;
     }
 
-    if (!rp) {
-        errlog(m_log, "Could not bind");
-        return -1;
+    std::unique_ptr<buffer> &handshake_initial_buf = info->handshake_initial_buf;
+    if (int r;
+            self->m_conn == nullptr
+            && NETWORK_ERR_OK != (r = self->init_quic_conn(ctx->socket.get()))) {
+        self->disconnect("Internal error");
+        return;
     }
 
-    sockaddr_in6 addr{0};
-    socklen_t len = sizeof(sockaddr_storage);
-    if (getsockname(fd, (sockaddr *)&addr, &len) == -1) {
-        errlog(m_log, "Getsockname error: {}", evutil_socket_error_to_string(evutil_socket_geterror(fd)));
-        return -1;
+    if (int r = self->on_write(ctx->socket.get()); r != NETWORK_ERR_OK) {
+        dbglog(self->m_log, "Failed to send packet to {}: {}", peer.str(), r);
+        goto fail;
     }
-    m_local_addr = ag::socket_address((sockaddr *)&addr);
 
-    return 0;
+    tracelog(self->m_log, "Sending packet to {}: {} bytes", peer.str(), handshake_initial_buf->size());
+    return;
+
+    fail:
+    self->disqualify_server_address(peer);
+    auto drop = self->m_conn_state.extract_socket(ctx);
+    // if the peer is not yet selected and we have some pending endpoints,
+    // do not disconnect immediately - wait for other ones
+    if (info->sockets.empty()) {
+        self->disconnect("Failed to handshake with any peer");
+    }
 }
 
-int dns_over_quic::on_write() {
+void dns_over_quic::on_socket_read(void *arg, uint8_view data) {
+    auto *ctx = (socket_context *)arg;
+    dns_over_quic *self = ctx->upstream;
+    tracelog(self->m_log, "{}(): Read {} bytes from {}", __func__, data.size(), ctx->socket->get_peer().str());
+
+    std::string disconnect_reason;
+    if (int ret = self->feed_data(data); ret != NETWORK_ERR_OK) {
+        if (ret == NGTCP2_ERR_RECV_VERSION_NEGOTIATION) {
+            self->disconnect("Switching QUIC version");
+            self->reinit();
+            return;
+        }
+
+        if (!self->m_conn_state.is_peer_selected()) {
+            auto drop = self->m_conn_state.extract_socket(ctx);
+        }
+
+        disconnect_reason = AG_FMT("Reading error ({})", ret);
+        goto fail;
+    }
+
+    if (!self->m_conn_state.is_peer_selected()) {
+        auto ctx_ = self->m_conn_state.extract_socket(ctx);
+        if (ctx_ == nullptr) {
+            errlog(self->m_log, "Socket context is not found in the list");
+            self->disconnect("Internal error");
+            assert(0);
+            return;
+        }
+
+        // we got a candidate for the further communication
+        self->m_conn_state.info = std::move(ctx_);
+    }
+
+    if (int ret = self->on_write(ctx->socket.get()); ret != NETWORK_ERR_OK) {
+        dbglog(self->m_log, "Failed to write data: {}", ret);
+        disconnect_reason = AG_FMT("Write failed ({})", ret);
+        goto fail;
+    }
+
+    self->update_idle_timer(false);
+
+    return;
+
+    fail:
+    // if the peer is not yet selected and we have some pending endpoints,
+    // do not disconnect immediately - wait for other ones
+    if (const connection_handshake_initial_info *info;
+            self->m_conn_state.is_peer_selected()
+            || nullptr == (info = std::get_if<connection_handshake_initial_info>(&self->m_conn_state.info))
+            || info->sockets.empty()) {
+        self->disconnect(disconnect_reason);
+    }
+}
+
+void dns_over_quic::on_socket_close(void *arg, std::optional<socket::error> error) {
+    auto *ctx = (socket_context *) arg;
+    dns_over_quic *self = ctx->upstream;
+
+    const socket_address &peer = ctx->socket->get_peer();
+    if (error.has_value()) {
+        dbglog(self->m_log, "Failed to connect to {}: {} ({})", peer.str(), error->description, error->code);
+        if (!self->m_conn_state.is_peer_selected()) {
+            self->disqualify_server_address(peer);
+        }
+    } else {
+        dbglog(self->m_log, "Connection to {} closed", peer.str());
+    }
+
+    auto drop = self->m_conn_state.extract_socket(ctx);
+    // if the peer is not yet selected and we have some pending endpoints,
+    // do not disconnect immediately - wait for other ones
+    if (const connection_handshake_initial_info *info;
+            self->m_conn_state.is_peer_selected()
+            || nullptr == (info = std::get_if<connection_handshake_initial_info>(&self->m_conn_state.info))
+            || info->sockets.empty()) {
+        self->disconnect("Connection is closed");
+    }
+}
+
+int dns_over_quic::on_write(socket *active_socket) {
     if (m_send_buf.size() > 0) {
-        if (auto rv = send_packet(); rv != NETWORK_ERR_OK) {
+        if (auto rv = send_packet(active_socket); rv != NETWORK_ERR_OK) {
             if (rv != NETWORK_ERR_SEND_BLOCKED) {
                 disconnect("Resending packet failed");
             }
@@ -452,7 +520,7 @@ int dns_over_quic::on_write() {
 
     assert(m_send_buf.left() >= m_max_pktlen);
 
-    if (auto rv = write_streams(); rv != NETWORK_ERR_OK) {
+    if (auto rv = write_streams(active_socket); rv != NETWORK_ERR_OK) {
         if (rv == NETWORK_ERR_SEND_BLOCKED) {
             schedule_retransmit();
         }
@@ -463,7 +531,7 @@ int dns_over_quic::on_write() {
     return 0;
 }
 
-int dns_over_quic::write_streams() {
+int dns_over_quic::write_streams(socket *active_socket) {
     ngtcp2_vec vec[2];
 
     for (;;) {
@@ -495,6 +563,9 @@ int dns_over_quic::write_streams() {
         ngtcp2_pkt_info pi;
 
         auto initial_ts = get_tstamp();
+        tracelog(m_log, "{}(): data={}, wpos={}, buf_size={}, size={}, left={}, max_pktlen={}",
+                __func__, (void *)m_send_buf.buf.data(), (void *)m_send_buf.wpos(),
+                m_send_buf.buf.size(), m_send_buf.size(), m_send_buf.left(), m_max_pktlen);
         auto nwrite = ngtcp2_conn_writev_stream(
                 m_conn, nullptr, &pi, m_send_buf.wpos(), m_max_pktlen, &ndatalen, flags,
                 stream_id, vec, vcnt, initial_ts);
@@ -523,104 +594,150 @@ int dns_over_quic::write_streams() {
 
         m_send_buf.push(nwrite);
 
-        if (auto rv = send_packet(); rv != NETWORK_ERR_OK) {
+        if (auto rv = send_packet(active_socket); rv != NETWORK_ERR_OK) {
             return rv;
         }
+
+        if (m_send_buf.left() == 0) {
+            return 0;
+        }
     }
+
+    return 0;
 }
 
-int dns_over_quic::send_packet() {
-    if (m_sock_state.connected) {
-        return send_packet_connected();
-    } else {
-        return send_packet_not_connected();
+int dns_over_quic::send_packet(socket *active_socket) {
+    uint8_view data = { m_send_buf.rpos(), m_send_buf.size() };
+    if (auto *info = std::get_if<connection_handshake_initial_info>(&m_conn_state.info);
+            info != nullptr && info->handshake_initial_buf == nullptr) {
+        info->handshake_initial_buf = std::make_unique<buffer>(m_send_buf);
+        assert(info->handshake_initial_buf->size() > 0);
+        data = { info->handshake_initial_buf->rpos(), info->handshake_initial_buf->size() };
+        m_send_buf.reset();
     }
-}
 
-int dns_over_quic::send_packet_connected() {
-    ssize_t nwrite = 0;
-
-    nwrite = send(m_sock_state.fd, (const char *)m_send_buf.rpos(), m_send_buf.size(), 0);
-
-    if (nwrite < 0) {
-        int err = evutil_socket_geterror(m_sock_state.fd);
-        tracelog(m_log, "Sending packet error: {}", evutil_socket_error_to_string(err));
-        if (ag::utils::socket_error_is_eagain(err)) {
+    auto e = active_socket->send(data);
+    if (e.has_value()) {
+        if (ag::utils::socket_error_is_eagain(e->code)) {
             return NETWORK_ERR_SEND_BLOCKED;
+        } else {
+            dbglog(m_log, "Failed to send packet: {} ({})", e->description, e->code);
         }
     }
 
     m_send_buf.reset();
 
-    return nwrite >= 0 ? NETWORK_ERR_OK : NETWORK_ERR_DROP_CONN;
+    return !e.has_value() ? NETWORK_ERR_OK : NETWORK_ERR_DROP_CONN;
 }
 
-int dns_over_quic::send_packet_not_connected() {
-    ssize_t nwrite = 0;
+int dns_over_quic::connect_to_peers() {
+    std::vector<std::unique_ptr<socket_context>> sockets;
+    sockets.reserve(m_current_addresses.size());
 
     for (auto it = m_current_addresses.begin(); it != m_current_addresses.end(); ) {
-        if (auto error = bind_socket_to_if(m_sock_state.fd, *it)) {
-            warnlog(m_log, "Failed to bind socket to interface: {}", *error);
-            return NETWORK_ERR_FATAL;
-        }
-        nwrite = sendto(m_sock_state.fd, (const char *)m_send_buf.rpos(), (int)m_send_buf.size(),
-                            0, it->c_sockaddr(), it->c_socklen());
-
-        if (nwrite < 0) {
-            int err = evutil_socket_geterror(m_sock_state.fd);
-            tracelog(m_log, "Sending packet to {} error: {}", it->str().c_str(), evutil_socket_error_to_string(err));
-            if (ag::utils::socket_error_is_eagain(err)) {
-                return NETWORK_ERR_SEND_BLOCKED;
-            }
+        auto &ctx = sockets.emplace_back(new socket_context{});
+        ctx->upstream = this;
+        ctx->socket = this->make_socket(utils::TP_UDP);
+        if (auto e = ctx->socket->connect({ m_loop.get(), *it,
+                    { on_socket_connected, on_socket_read, on_socket_close, ctx.get() },
+                    m_options.timeout });
+                e.has_value()) {
+            dbglog(m_log, "Failed to start connection to {}: {} ({})", it->str(), e->description, e->code);
             disqualify_server_address(*it);
             it = m_current_addresses.erase(it);
-        } else {
-            tracelog(m_log, "Sending packet to {}", it->str().c_str());
-            ++it;
+            sockets.erase(std::next(sockets.end(), -1));
+            continue;
         }
+
+        ++it;
     }
 
-    m_send_buf.reset();
-
     if (m_current_addresses.empty()) {
+        dbglog(m_log, "None of the current peers are available");
         return NETWORK_ERR_DROP_CONN;
     }
 
+    m_conn_state.info = connection_handshake_initial_info{ std::move(sockets) };
+
     struct timeval tv{};
-    evtimer_pending(m_handshake_timer_event, &tv);
+    evtimer_pending(m_handshake_timer_event.get(), &tv);
     if (!evutil_timerisset(&tv)) {
         tv = ag::utils::duration_to_timeval(m_options.timeout);
-        evtimer_add(m_handshake_timer_event, &tv);
+        evtimer_add(m_handshake_timer_event.get(), &tv);
     }
     return NETWORK_ERR_OK;
 }
 
+int dns_over_quic::init_quic_conn(const socket *connected_socket) {
+    // as for now we don't support the QUIC connection migration it does not matter
+    // which address we are using in the path, so just pick the first connected one as the local address
+    if (auto fd = connected_socket->get_fd(); !fd.has_value()) {
+        dbglog(m_log, "Failed to get underlying descriptor of socket: {}", connected_socket->get_peer().str());
+        return -1;
+    } else if (auto bound_addr = utils::get_local_address(fd.value()); !bound_addr.has_value()) {
+        dbglog(m_log, "Failed to get bound address of socket: {}", connected_socket->get_peer().str());
+        return -1;
+    } else {
+        m_local_addr = bound_addr.value();
+    }
+
+    ngtcp2_path path = {
+            {(size_t)m_local_addr.c_socklen(), (sockaddr *)m_local_addr.c_sockaddr()},
+            {(size_t)m_remote_addr_empty.c_socklen(), (sockaddr *)m_remote_addr_empty.c_sockaddr()}};
+
+    ngtcp2_settings settings;
+    ngtcp2_settings_default(&settings);
+    ag_ngtcp2_settings_default(settings);
+
+    RAND_bytes(m_static_secret.data(), m_static_secret.size());
+    auto generate_cid = [](ngtcp2_cid &cid, size_t len) {
+        cid.datalen = len;
+        RAND_bytes(cid.data, cid.datalen);
+    };
+    ngtcp2_cid scid, dcid;
+    generate_cid(scid, 17);
+    generate_cid(dcid, 18);
+
+    auto rv = ngtcp2_conn_client_new(&m_conn, &dcid, &scid, &path,
+            m_quic_version, &m_callbacks, &settings, nullptr, this);
+    if (rv != 0) {
+        errlog(m_log, "Failed to create ngtcp2_conn: {}", ngtcp2_strerror(rv));
+        return -1;
+    }
+
+    if (init_ssl() != 0) {
+        errlog(m_log, "Failed to create SSL");
+        return -1;
+    }
+    ngtcp2_conn_set_tls_native_handle(m_conn, m_ssl.get());
+
+    update_idle_timer(true);
+    return NETWORK_ERR_OK;
+}
+
 int dns_over_quic::init_ssl_ctx() {
-    m_ssl_ctx = SSL_CTX_new(TLS_client_method());
+    m_ssl_ctx.reset(SSL_CTX_new(TLS_client_method()));
     if (m_ssl_ctx == nullptr) {
         return 1;
     }
-    SSL_CTX_set_min_proto_version(m_ssl_ctx, TLS1_3_VERSION);
-    SSL_CTX_set_max_proto_version(m_ssl_ctx, TLS1_3_VERSION);
-    SSL_CTX_set_quic_method(m_ssl_ctx, &quic_method);
+    SSL_CTX_set_min_proto_version(m_ssl_ctx.get(), TLS1_3_VERSION);
+    SSL_CTX_set_max_proto_version(m_ssl_ctx.get(), TLS1_3_VERSION);
+    SSL_CTX_set_quic_method(m_ssl_ctx.get(), &quic_method);
     // setup our verifier
-    SSL_CTX_set_verify(m_ssl_ctx, SSL_VERIFY_PEER, nullptr);
-    SSL_CTX_set_cert_verify_callback(m_ssl_ctx, dns_over_quic::ssl_verify_callback, nullptr);
-    tls_session_cache::prepare_ssl_ctx(m_ssl_ctx);
+    SSL_CTX_set_verify(m_ssl_ctx.get(), SSL_VERIFY_PEER, nullptr);
+    SSL_CTX_set_cert_verify_callback(m_ssl_ctx.get(), dns_over_quic::ssl_verify_callback, nullptr);
+    tls_session_cache::prepare_ssl_ctx(m_ssl_ctx.get());
     return 0;
 }
 
 int dns_over_quic::init_ssl() {
-    if (m_ssl) {
-        SSL_free(m_ssl);
-    }
-    m_ssl = SSL_new(m_ssl_ctx);
+    m_ssl.reset(SSL_new(m_ssl_ctx.get()));
     if (m_ssl == nullptr) {
         return 1;
     }
-    SSL_set_app_data(m_ssl, this);
-    SSL_set_tlsext_host_name(m_ssl, m_server_name.c_str());
-    SSL_set_connect_state(m_ssl);
+    SSL_set_app_data(m_ssl.get(), this);
+    SSL_set_tlsext_host_name(m_ssl.get(), m_server_name.c_str());
+    SSL_set_connect_state(m_ssl.get());
 
     std::string alpn, printable;
     for (auto &dq_alpn : DQ_ALPNS) {
@@ -630,13 +747,13 @@ int dns_over_quic::init_ssl() {
         printable.append(dq_alpn);
     }
     dbglog(m_log, "Advertised ALPNs:{}", printable);
-    SSL_set_alpn_protos(m_ssl, (uint8_t *)alpn.data(), alpn.size());
+    SSL_set_alpn_protos(m_ssl.get(), (uint8_t *)alpn.data(), alpn.size());
 
-    m_tls_session_cache.prepare_ssl(m_ssl);
+    m_tls_session_cache.prepare_ssl(m_ssl.get());
 
     if (ssl_session_ptr session = m_tls_session_cache.get_session()) {
         dbglog(m_log, "Using a cached TLS session");
-        SSL_set_session(m_ssl, session.get()); // UpRefs the session
+        SSL_set_session(m_ssl.get(), session.get()); // UpRefs the session
     } else {
         dbglog(m_log, "No cached TLS sessions available");
     }
@@ -651,123 +768,20 @@ void dns_over_quic::write_client_handshake(ngtcp2_crypto_level level, const uint
     ngtcp2_conn_submit_crypto_data(m_conn, level, buf.rpos(), buf.size());
 }
 
-int dns_over_quic::on_read() {
-    if (m_sock_state.connected) {
-        if (int ret = on_read_connected(); ret != NETWORK_ERR_OK) {
-            return ret;
-        }
-    } else {
-        if (int ret = on_read_not_connected(); ret != NETWORK_ERR_OK) {
-            return ret;
-        }
-    }
-
-    update_idle_timer(false);
-
-    return 0;
-}
-
-int dns_over_quic::on_read_connected() {
-    std::array<uint8_t, 65536> buf{};
-    ngtcp2_pkt_info pi;
-
-    for (;;) {
-        auto nread = recv(m_sock_state.fd, (char *)buf.data(), buf.size(), 0);
-        if (nread == -1) {
-            int err = evutil_socket_geterror(m_sock_state.fd);
-            if (!ag::utils::socket_error_is_eagain(err)) {
-                errlog(m_log, "Read socket (connected) failed: {}", evutil_socket_error_to_string(err));
-            }
-            break;
-        }
-        if (int ret = feed_data(&pi, buf.data(), nread); ret != NETWORK_ERR_OK) {
-            return ret;
-        }
-    }
-
-    return 0;
-}
-
-int dns_over_quic::on_read_not_connected() {
-    std::array<uint8_t, 65536> buf{};
-    sockaddr_storage su{};
-    ngtcp2_pkt_info pi;
-
-    while (!m_sock_state.connected) {
-        su = {};
-        socklen_t namelen = sizeof(su);
-        auto nread = recvfrom(m_sock_state.fd, (char *)buf.data(), buf.size(), 0, (sockaddr *)&su, &namelen);
-
-        if (nread == -1) {
-            int err = evutil_socket_geterror(m_sock_state.fd);
-            if (!ag::utils::socket_error_is_eagain(err)) {
-                ag::socket_address sa{(sockaddr *)&su};
-                errlog(m_log, "Received error for address {} failed: {}", sa.str(), evutil_socket_error_to_string(err));
-                disqualify_server_address(sa);
-                for (auto it = m_current_addresses.begin(); it != m_current_addresses.end(); it++) {
-                    if (sa == it->socket_family_cast(sa.c_sockaddr()->sa_family)) {
-                        m_current_addresses.erase(it);
-                        break;
-                    }
-                }
-                if (m_current_addresses.empty()) {
-                    dbglog(m_log, "Disconnecting because no addresses left");
-                    return NETWORK_ERR_FATAL;
-                }
-            }
-            break;
-        }
-
-        ag::socket_address sa{(sockaddr *)&su};
-        for (auto it = m_current_addresses.begin(); it != m_current_addresses.end(); ) {
-            if (sa != it->socket_family_cast(sa.c_sockaddr()->sa_family)) {
-                it = m_current_addresses.erase(it);
-            } else {
-                if (auto error = bind_socket_to_if(m_sock_state.fd, *it)) {
-                    warnlog(m_log, "Failed to bind socket to interface: {}", *error);
-                    return NETWORK_ERR_FATAL;
-                }
-                if (int res = connect(m_sock_state.fd, it->c_sockaddr(), it->c_socklen()); res != 0) {
-                    warnlog(m_log, "Can't connect to {}",
-                            ag::socket_address((sockaddr *)&su).str().c_str());
-                } else {
-                    infolog(m_log, "Connected to {}", ag::socket_address((sockaddr *)&su).str().c_str());
-                    m_sock_state.connected = true;
-                    break;
-                }
-                ++it;
-            }
-        }
-
-        if (m_current_addresses.empty()) {
-            warnlog(m_log, "Get packet from unknown address {}",
-                    ag::socket_address((sockaddr *)&su).str().c_str());
-            assert(0);
-            return NETWORK_ERR_FATAL;
-        }
-
-        if (int ret = feed_data(&pi, buf.data(), nread); ret != NETWORK_ERR_OK) {
-            return ret;
-        }
-    }
-
-    return 0;
-}
-
-int dns_over_quic::feed_data(const ngtcp2_pkt_info *pi, uint8_t *data, size_t datalen) {
+int dns_over_quic::feed_data(uint8_view data) {
     auto path = ngtcp2_path{ {(size_t)m_local_addr.c_socklen(), (sockaddr *)m_local_addr.c_sockaddr()},
                              {(size_t)m_remote_addr_empty.c_socklen(), (sockaddr *)m_remote_addr_empty.c_sockaddr()} };
 
     auto initial_ts = get_tstamp();
 
-    auto rv = ngtcp2_conn_read_pkt(m_conn, &path, pi, data, datalen, initial_ts);
+    ngtcp2_pkt_info pi;
+    auto rv = ngtcp2_conn_read_pkt(m_conn, &path, &pi, data.data(), data.size(), initial_ts);
 
     if (rv != 0) {
         errlog(m_log, "Ngtcp2_conn_read_pkt: {}", ngtcp2_strerror(rv));
-        return rv;
     }
 
-    return 0;
+    return rv;
 }
 
 int dns_over_quic::version_negotiation(ngtcp2_conn *conn, const ngtcp2_pkt_hd *hd,
@@ -866,7 +880,7 @@ int dns_over_quic::update_key(ngtcp2_conn *conn, uint8_t *rx_secret, uint8_t *tx
     return 0;
 }
 
-ngtcp2_tstamp dns_over_quic::get_tstamp() const {
+ngtcp2_tstamp dns_over_quic::get_tstamp() {
     return std::chrono::duration_cast<std::chrono::nanoseconds>
            (std::chrono::steady_clock::now().time_since_epoch()).count();
 }
@@ -925,18 +939,21 @@ int dns_over_quic::handshake_confirmed(ngtcp2_conn *conn, void *data) {
     (void)conn;
 
     auto doq = (dns_over_quic *)data;
-    evtimer_del(doq->m_handshake_timer_event);
+    tracelog(doq->m_log, "{}", __func__);
+    evtimer_del(doq->m_handshake_timer_event.get());
+
     const uint8_t *buf = nullptr;
     uint32_t len = 0;
-    SSL_get0_alpn_selected(doq->m_ssl, &buf, &len);
+    SSL_get0_alpn_selected(doq->m_ssl.get(), &buf, &len);
     dbglog(doq->m_log, "Selected ALPN: {}", std::string_view{(char *)buf, len});
+
     doq->m_state = RUN;
     doq->update_idle_timer(true);
     doq->send_requests();
     return 0;
 }
 
-void dns_over_quic::ag_ngtcp2_settings_default(ngtcp2_settings &settings) {
+void dns_over_quic::ag_ngtcp2_settings_default(ngtcp2_settings &settings) const {
     settings.max_udp_payload_size = m_max_pktlen;
     settings.cc_algo = NGTCP2_CC_ALGO_CUBIC;
     settings.initial_ts = get_tstamp();
@@ -963,38 +980,10 @@ int dns_over_quic::reinit() {
     m_stream_send_queue.clear();
     m_current_addresses.clear();
 
-    int family = AF_INET6;
-    evutil_socket_t fd;
-    if (!m_config.ipv6_available ||
-            (fd = create_dual_stack_socket()) == -1) {
-        family = AF_INET;
-        fd = create_ipv4_socket();
-        if (fd == -1) {
-            errlog(m_log, "Failed to create socket");
-            return -1;
-        }
-    }
-    unsigned int enable = 1;
-    if (setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, (char *)&enable, sizeof(enable)) == -1) {
-        warnlog(m_log, "Failed to make socket reusable: {}", evutil_socket_error_to_string(evutil_socket_geterror(fd)));
-        evutil_closesocket(fd);
-        return -1;
-    }
-    if (evutil_make_socket_nonblocking(fd) != 0) {
-        errlog(m_log, "Failed to make socket non-blocking");
-        evutil_closesocket(fd);
-        return -1;
-    }
-    if (bind_addr(fd, family) != 0) {
-        errlog(m_log, "Failed binding socket");
-        evutil_closesocket(fd);
-        return -1;
-    }
-
     {
         std::scoped_lock l(m_global);
         // Getting one ipv6 address
-        if (family == AF_INET6) {
+        if (m_config.ipv6_available) {
             for (auto &cur : m_server_addresses) {
                 if (cur.is_ipv6()) {
                     m_current_addresses.emplace_back(cur);
@@ -1006,55 +995,21 @@ int dns_over_quic::reinit() {
         // Getting one ipv4 address
         for (auto &cur : m_server_addresses) {
             if (cur.is_ipv4()) {
-                m_current_addresses.emplace_back(cur.socket_family_cast(family));
+                m_current_addresses.emplace_back(cur);
                 break;
             }
         }
     }
 
     for (auto &cur : m_current_addresses) {
-        tracelog(m_log, "In this session will use the address: {}", cur.str().c_str());
+        tracelog(m_log, "In this session will use the address: {}", cur.str());
     }
 
-    auto path = ngtcp2_path{
-            {(size_t)m_local_addr.c_socklen(), (sockaddr *)m_local_addr.c_sockaddr()},
-            {(size_t)m_remote_addr_empty.c_socklen(), (sockaddr *)m_remote_addr_empty.c_sockaddr()}};
-
-    ngtcp2_settings settings;
-    ngtcp2_settings_default(&settings);
-    ag_ngtcp2_settings_default(settings);
-
-    RAND_bytes(m_static_secret.data(), m_static_secret.size());
-    auto generate_cid = [](ngtcp2_cid &cid, size_t len) {
-        cid.datalen = len;
-        RAND_bytes(cid.data, cid.datalen);
-    };
-    ngtcp2_cid scid, dcid;
-    generate_cid(scid, 17);
-    generate_cid(dcid, 18);
-
-    auto rv = ngtcp2_conn_client_new(&m_conn, &dcid, &scid, &path,
-                                     m_quic_version, &m_callbacks, &settings, nullptr, this);
-    if (rv != 0) {
-        errlog(m_log, "Failed creation ngtcp2_conn: {}", ngtcp2_strerror(rv));
+    if (int r = connect_to_peers(); r != NETWORK_ERR_OK) {
+        assert(0);
         return -1;
     }
 
-    if (init_ssl() != 0) {
-        errlog(m_log, "Failed creation SSL");
-        return -1;
-    }
-    ngtcp2_conn_set_tls_native_handle(m_conn, m_ssl);
-
-    update_idle_timer(true);
-
-    m_read_event = event_new(m_loop->c_base(), fd, (EV_TIMEOUT | EV_READ | EV_PERSIST), this->read_cb, this);
-    event_add(m_read_event, nullptr);
-    m_sock_state.fd = fd;
-
-    if (int ret = on_write(); ret != NETWORK_ERR_OK) {
-        return ret;
-    }
     return 0;
 }
 
@@ -1112,25 +1067,12 @@ void dns_over_quic::disconnect(std::string_view reason) {
     m_state = STOP;
 
     dbglog(m_log, "Disconnect reason: {}", reason);
-    if (m_conn) {
-        ngtcp2_conn_del(m_conn);
-        m_conn = nullptr;
-    }
+    ngtcp2_conn_del(std::exchange(m_conn, nullptr));
+    m_read_event.reset();
 
-    if (m_read_event) {
-        event_del(m_read_event);
-        event_free(m_read_event);
-        m_read_event = nullptr;
-    }
+    m_conn_state.info.emplace<std::monostate>();
 
-    evutil_closesocket(m_sock_state.fd);
-    m_sock_state.fd = -1;
-    m_sock_state.connected = false;
-
-    if (m_ssl) {
-        SSL_free(m_ssl);
-        m_ssl = nullptr;
-    }
+    m_ssl.reset();
 
     std::lock_guard l(m_global);
     for (auto &cur : m_requests) {
@@ -1163,8 +1105,9 @@ void dns_over_quic::schedule_retransmit() {
         nanoseconds timeout_ns{expiry_ns - now_ns};
         tv = ag::utils::duration_to_timeval(ceil<microseconds>(timeout_ns));
     }
-    evtimer_del(m_retransmit_timer_event);
-    evtimer_add(m_retransmit_timer_event, &tv);
+    evtimer_del(m_retransmit_timer_event.get());
+    tracelog(m_log, "Next retransmit in {}", microseconds(1000000 * tv.tv_sec + tv.tv_usec));
+    evtimer_add(m_retransmit_timer_event.get(), &tv);
 }
 
 int dns_over_quic::ssl_verify_callback(X509_STORE_CTX *ctx, void *arg) {
@@ -1244,7 +1187,7 @@ void dns_over_quic::update_idle_timer(bool reset) {
     } else {
         value = m_options.timeout * 2;
         if (!reset) {
-            milliseconds pending = ceil<milliseconds>(get_event_remaining_timeout(m_idle_timer_event));
+            milliseconds pending = ceil<milliseconds>(get_event_remaining_timeout(m_idle_timer_event.get()));
             if (pending <= value) {
                 dbglog(m_log, "Idle timer unchanged, {} left", pending);
                 return;
@@ -1257,5 +1200,5 @@ void dns_over_quic::update_idle_timer(bool reset) {
     }
 
     timeval tv = ag::utils::duration_to_timeval(value);
-    evtimer_add(m_idle_timer_event, &tv);
+    evtimer_add(m_idle_timer_event.get(), &tv);
 }

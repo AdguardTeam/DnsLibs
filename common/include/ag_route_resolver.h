@@ -6,6 +6,9 @@
 
 namespace ag {
 
+class route_resolver;
+using route_resolver_ptr = std::unique_ptr<route_resolver>;
+
 /**
  * When we are working as a network extension on an Apple platform,
  * and we want to communicate with a destination host for which a route
@@ -36,7 +39,7 @@ public:
     virtual ~route_resolver() = default;
 
     /** Create a new route resolver */
-    static std::shared_ptr<route_resolver> create();
+    static route_resolver_ptr create();
 };
 
 } // namespace ag

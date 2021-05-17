@@ -74,7 +74,8 @@ TEST_P(listener_test, listens_and_responds) {
     std::vector<std::thread> workers;
     workers.reserve(params.n_threads);
 
-    ag::upstream_factory upstream_factory({});
+    ag::socket_factory socket_factory({});
+    ag::upstream_factory upstream_factory({ &socket_factory });
 
     const auto address = fmt::format(
             "{}[{}]:{}",

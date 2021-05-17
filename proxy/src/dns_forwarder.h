@@ -99,8 +99,8 @@ private:
     dnsfilter filter;
     dnsfilter::handle filter_handle = nullptr;
     dns64::prefixes dns64_prefixes;
+    std::shared_ptr<socket_factory> socket_factory;
     std::shared_ptr<certificate_verifier> cert_verifier;
-    std::shared_ptr<route_resolver> router;
 
     with_mtx<lru_cache<std::string, cached_response>, std::shared_mutex> response_cache;
 

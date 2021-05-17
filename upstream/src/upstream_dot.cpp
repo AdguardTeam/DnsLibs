@@ -1,7 +1,3 @@
-#include <event2/event.h>
-#include <event2/bufferevent.h>
-#include <event2/thread.h>
-#include <event2/bufferevent_ssl.h>
 #include <openssl/x509v3.h>
 #include <openssl/ssl.h>
 #include "upstream_dot.h"
@@ -24,8 +20,10 @@ public:
      * @param bootstrapper Bootstrapper (used to resolve original address)
      */
     tls_pool(event_loop_ptr loop, dns_over_tls *upstream, bootstrapper_ptr &&bootstrapper)
-            : dns_framed_pool(std::move(loop)), m_upstream(upstream), m_bootstrapper(std::move(bootstrapper)) {
-    }
+        : dns_framed_pool(std::move(loop), upstream)
+        , m_upstream(upstream)
+        , m_bootstrapper(std::move(bootstrapper))
+    {}
 
 private:
     get_result get() override;
@@ -60,40 +58,25 @@ ag::connection_pool::get_result ag::dns_over_tls::tls_pool::create() {
 
     SSL_CTX *ctx = SSL_CTX_new(TLS_client_method());
     SSL_CTX_set_verify(ctx, SSL_VERIFY_PEER, nullptr);
-    SSL_CTX_set_cert_verify_callback(ctx, dns_over_tls::ssl_verify_callback, nullptr);
+    SSL_CTX_set_cert_verify_callback(ctx, dns_over_tls::ssl_verify_callback, m_upstream);
 
     tls_session_cache::prepare_ssl_ctx(ctx);
 
-    SSL *ssl = SSL_new(ctx);
-    int options = BEV_OPT_THREADSAFE | BEV_OPT_DEFER_CALLBACKS | BEV_OPT_UNLOCK_CALLBACKS | BEV_OPT_CLOSE_ON_FREE;
-    bufferevent *bev = bufferevent_openssl_socket_new(m_loop->c_base(), -1, ssl,
-                                                      BUFFEREVENT_SSL_CONNECTING,
-                                                      options);
-    SSL_set_tlsext_host_name(ssl, m_upstream->m_server_name.c_str());
-    SSL_set_app_data(ssl, m_upstream);
+    std::unique_ptr<SSL, ftor<&SSL_free>> ssl{ SSL_new(ctx) };
+    SSL_set_tlsext_host_name(ssl.get(), m_upstream->m_server_name.c_str());
 
-    m_upstream->m_tls_session_cache.prepare_ssl(ssl);
+    m_upstream->m_tls_session_cache.prepare_ssl(ssl.get());
 
     if (ssl_session_ptr session = m_upstream->m_tls_session_cache.get_session()) {
         dbglog(m_upstream->m_log, "Using a cached TLS session");
-        SSL_set_session(ssl, session.get()); // UpRefs the session
+        SSL_set_session(ssl.get(), session.get()); // UpRefs the session
     } else {
         dbglog(m_upstream->m_log, "No cached TLS sessions available");
     }
 
     const socket_address &address = resolve_result.addresses[0];
-    connection_ptr connection = create_connection(bev, address);
+    connection_ptr connection = create_connection(std::move(ssl), address);
     add_pending_connection(connection);
-    bufferevent_setpreparecb(bev, [](int fd, const struct sockaddr *sa, int salen, void *ctx) {
-        auto *self = (tls_pool *) ctx;
-        ag::socket_address addr{sa};
-        if (auto error = self->m_upstream->bind_socket_to_if(fd, addr)) {
-            warnlog(self->m_upstream->m_log, "Failed to bind socket to interface: {}", *error);
-            return 0;
-        }
-        return 1;
-    }, this);
-    bufferevent_socket_connect(bev, address.c_sockaddr(), address.c_socklen());
     SSL_CTX_free(ctx);
     return { std::move(connection), resolve_result.time_elapsed, std::nullopt };
 }
@@ -104,18 +87,25 @@ ag::connection::read_result ag::dns_over_tls::tls_pool::perform_request_inner(ui
         return { {}, std::move(err) };
     }
 
+    if (buf.size() < 2) {
+        return { {}, "Too short request" };
+    }
+
     timeout -= duration_cast<milliseconds>(elapsed);
     if (timeout < milliseconds(0)) {
         return { {}, AG_FMT("DNS server name resolving took too much time: {}", elapsed) };
     }
 
-    connection::write_result write_result = conn->write(buf);
-    if (write_result.error.has_value()) {
-        m_bootstrapper->remove_resolved(conn->address);
-        return { {}, std::move(write_result.error) };
+    uint16_t id = ntohs(*(uint16_t *)buf.data());
+    if (err_string e = conn->wait_connect_result(id, timeout); e.has_value()) {
+        return { {}, std::move(e) };
     }
 
-    connection::read_result read_result = conn->read(write_result.id, timeout);
+    if (err_string e = conn->write(id, buf); e.has_value()) {
+        return { {}, std::move(e) };
+    }
+
+    connection::read_result read_result = conn->read(id, timeout);
     if (read_result.error.has_value()) {
         m_bootstrapper->remove_resolved(conn->address);
     }
@@ -136,8 +126,8 @@ static std::optional<std::string> get_resolved_ip(const ag::logger &log, const a
             ipv6 != nullptr) {
         parsed = ag::socket_address({ ipv6->data(), ipv6->size() }, ag::dns_over_tls::DEFAULT_PORT);
     } else {
-        assert(0);
         errlog(log, "Wrong resolved server ip address");
+        assert(0);
         return std::nullopt;
     }
 
@@ -216,7 +206,7 @@ ag::dns_over_tls::~dns_over_tls() = default;
 
 int ag::dns_over_tls::ssl_verify_callback(X509_STORE_CTX *ctx, void *arg) {
     SSL *ssl = (SSL *)X509_STORE_CTX_get_ex_data(ctx, SSL_get_ex_data_X509_STORE_CTX_idx());
-    ag::dns_over_tls *upstream = (ag::dns_over_tls *)SSL_get_app_data(ssl);
+    auto *upstream = (ag::dns_over_tls *)arg;
 
     if (upstream->m_config.cert_verifier == nullptr) {
         dbglog(upstream->m_log, "Cannot verify certificate due to verifier is not set");
@@ -235,12 +225,8 @@ int ag::dns_over_tls::ssl_verify_callback(X509_STORE_CTX *ctx, void *arg) {
 }
 
 ag::dns_over_tls::exchange_result ag::dns_over_tls::exchange(ldns_pkt *request_pkt) {
-    ldns_pkt *reply_pkt = nullptr;
-    ldns_status status;
-
-    using ldns_buffer_ptr = std::unique_ptr<ldns_buffer, ag::ftor<&ldns_buffer_free>>;
     ldns_buffer_ptr buffer{ldns_buffer_new(REQUEST_BUFFER_INITIAL_CAPACITY)};
-    status = ldns_pkt2buffer_wire(&*buffer, request_pkt);
+    ldns_status status = ldns_pkt2buffer_wire(&*buffer, request_pkt);
     if (status != LDNS_STATUS_OK) {
         return {nullptr, ldns_get_errorstr_by_id(status)};
     }
@@ -251,6 +237,7 @@ ag::dns_over_tls::exchange_result ag::dns_over_tls::exchange(ldns_pkt *request_p
         return { nullptr, std::move(result.error) };
     }
 
+    ldns_pkt *reply_pkt = nullptr;
     const std::vector<uint8_t> &reply = result.reply;
     status = ldns_wire2pkt(&reply_pkt, reply.data(), reply.size());
     if (status != LDNS_STATUS_OK) {

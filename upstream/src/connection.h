@@ -17,11 +17,6 @@ using connection_ptr = std::shared_ptr<connection>;
  */
 class connection {
 public:
-    struct write_result {
-        int id; // Request id
-        err_string error; // Some string in case of error
-    };
-
     struct read_result {
         std::vector<uint8_t> reply; // Reply data
         err_string error; // Some string in case of error
@@ -32,11 +27,19 @@ public:
     virtual ~connection() = default;
 
     /**
+     * Wait for connect result
+     * @param id connection id
+     * @param timeout time out value
+     * @return none if successful
+     */
+    virtual err_string wait_connect_result(int request_id, std::chrono::milliseconds timeout) = 0;
+
+    /**
      * Writes given DNS packet to framed connection
      * @param v DNS packet
-     * @return see `write_result`
+     * @return none if successful
      */
-    virtual write_result write(uint8_view buf) = 0;
+    virtual err_string write(int request_id, uint8_view buf) = 0;
 
     /**
      * Reads given DNS packet for given request id from framed connection

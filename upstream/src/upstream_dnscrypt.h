@@ -39,8 +39,6 @@ private:
     server_stamp m_stamp;
     impl_ptr m_impl;
     std::mutex m_guard;
-
-    bool prepare_fd(int fd, const socket_address &peer);
 };
 
 } // namespace ag

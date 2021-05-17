@@ -70,8 +70,7 @@ ag::upstream_dnscrypt::setup_result ag::upstream_dnscrypt::setup_impl() {
             !m_impl || m_impl->server_info.get_server_cert().not_after < now) {
         ag::dnscrypt::client client;
         auto[dial_server_info, dial_rtt, dial_err] = client.dial(
-                m_stamp, this->m_options.timeout,
-                [this](int fd, const ag::socket_address &peer) { return prepare_fd(fd, peer); });
+                m_stamp, m_options.timeout, m_config.socket_factory, m_options.outbound_interface);
         if (dial_err) {
             return { rtt,
                 AG_FMT("Failed to fetch certificate info from {} with error: {}", this->m_options.address, *dial_err) };
@@ -90,24 +89,23 @@ ag::upstream_dnscrypt::exchange_result ag::upstream_dnscrypt::apply_exchange(ldn
         local_upstream = *m_impl;
     }
 
+    utils::timer timer;
+
     auto[udp_reply, udp_reply_rtt, udp_reply_err] = local_upstream.udp_client.exchange(request_pkt,
-        local_upstream.server_info, timeout);
+            local_upstream.server_info, timeout, m_config.socket_factory, m_options.outbound_interface);
 
     if (udp_reply && ldns_pkt_tc(udp_reply.get())) {
         tracelog_id(m_log, &request_pkt, "Truncated message was received, retrying over TCP");
-        dnscrypt::client tcp_client(dnscrypt::protocol::TCP);
-        // @todo: do we need to substract `udp_reply_rtt` from `timeout` for tcp transaction?
+        dnscrypt::client tcp_client(utils::TP_TCP);
+
+        timeout -= timer.elapsed<decltype(timeout)>();
+        if (timeout <= decltype(timeout)(0)) {
+            return { nullptr, evutil_socket_error_to_string(utils::AG_ETIMEDOUT) };
+        }
+
         auto[tcp_reply, tcp_reply_rtt, tcp_reply_err] = tcp_client.exchange(request_pkt,
-            local_upstream.server_info, timeout);
+                local_upstream.server_info, timeout, m_config.socket_factory, m_options.outbound_interface);
         return {std::move(tcp_reply), std::move(tcp_reply_err)};
     }
     return {std::move(udp_reply), std::move(udp_reply_err)};
-}
-
-bool ag::upstream_dnscrypt::prepare_fd(int fd, const socket_address &peer) {
-    if (auto error = bind_socket_to_if(fd, peer)) {
-        warnlog(m_log, "Failed to bind socket to interface: {}", *error);
-        return false;
-    }
-    return true;
 }

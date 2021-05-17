@@ -178,25 +178,3 @@ ag::upstream_factory::create_result ag::upstream_factory::create_upstream(const 
 
     return result;
 }
-
-ag::err_string ag::upstream::bind_socket_to_if(evutil_socket_t fd, const socket_address &peer) {
-    if (uint32_t *if_index = std::get_if<uint32_t>(&m_options.outbound_interface)) {
-        return ag::utils::bind_socket_to_if(fd, peer.c_sockaddr()->sa_family, *if_index);
-    } else if (std::string *if_name = std::get_if<std::string>(&m_options.outbound_interface)) {
-        return ag::utils::bind_socket_to_if(fd, peer.c_sockaddr()->sa_family, if_name->c_str());
-    }
-    if (m_config.router) {
-        if (auto idx = m_config.router->resolve(peer)) {
-            auto err = ag::utils::bind_socket_to_if(fd, peer.c_sockaddr()->sa_family, *idx);
-            if (err) {
-                err = std::nullopt;
-                m_config.router->flush_cache();
-                if ((idx = m_config.router->resolve(peer))) {
-                    err = ag::utils::bind_socket_to_if(fd, peer.c_sockaddr()->sa_family, *idx);
-                }
-            }
-            return err;
-        }
-    }
-    return std::nullopt;
-}

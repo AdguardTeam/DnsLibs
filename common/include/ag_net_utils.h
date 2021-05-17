@@ -8,8 +8,21 @@
 #include <utility>
 #include <ag_defs.h>
 #include <ag_socket_address.h>
+#include <event2/event.h>
 
 namespace ag::utils {
+
+
+#ifndef _WIN32
+static constexpr auto AG_ETIMEDOUT = ETIMEDOUT;
+#else
+static constexpr auto AG_ETIMEDOUT = WSAETIMEDOUT;
+#endif
+
+enum transport_protocol {
+    TP_UDP,
+    TP_TCP,
+};
 
 
 /**
@@ -80,5 +93,17 @@ err_string bind_socket_to_if(evutil_socket_t fd, int family, uint32_t if_index);
  * @return error string or std::nullopt if successful
  */
 err_string bind_socket_to_if(evutil_socket_t fd, int family, const char *if_name);
+
+/**
+ * Get the address of the peer connected to the socket
+ * @return some address if successful
+ */
+std::optional<socket_address> get_peer_address(evutil_socket_t fd);
+
+/**
+ * Get the current address to which the socket is bound
+ * @return some address if successful
+ */
+std::optional<socket_address> get_local_address(evutil_socket_t fd);
 
 } // namespace ag::utils

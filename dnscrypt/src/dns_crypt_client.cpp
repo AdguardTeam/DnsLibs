@@ -30,13 +30,14 @@ ag::dnscrypt::client::client(bool adjust_payload_size) :
         client(DEFAULT_PROTOCOL, adjust_payload_size)
 {}
 
-ag::dnscrypt::client::client(protocol protocol, bool adjust_payload_size) :
+ag::dnscrypt::client::client(utils::transport_protocol protocol, bool adjust_payload_size) :
         m_protocol(protocol),
         m_adjust_payload_size(adjust_payload_size)
 {}
 
 ag::dnscrypt::client::dial_result ag::dnscrypt::client::dial(std::string_view stamp_str,
-        std::chrono::milliseconds timeout, preparefd_cb prepare_fd) const {
+        std::chrono::milliseconds timeout, const socket_factory *socket_factory,
+        const if_id_variant &outbound_interface) const {
     static constexpr utils::make_error<dial_result> make_error;
     auto[stamp, stamp_err] = ag::server_stamp::from_string(stamp_str);
     if (stamp_err) {
@@ -45,11 +46,12 @@ ag::dnscrypt::client::dial_result ag::dnscrypt::client::dial(std::string_view st
     if (stamp.proto != stamp_proto_type::DNSCRYPT) {
         return make_error("Stamp is not for a DNSCrypt server");
     }
-    return dial(stamp, timeout, std::move(prepare_fd));
+    return dial(stamp, timeout, socket_factory, outbound_interface);
 }
 
 ag::dnscrypt::client::dial_result ag::dnscrypt::client::dial(const server_stamp &stamp,
-        std::chrono::milliseconds timeout, preparefd_cb prepare_fd) const {
+        std::chrono::milliseconds timeout, const socket_factory *socket_factory,
+        const if_id_variant &outbound_interface) const {
     static constexpr utils::make_error<dial_result> make_error;
     server_info local_server_info{};
     if (crypto_box_keypair(local_server_info.m_public_key.data(), local_server_info.m_secret_key.data()) != 0) {
@@ -67,7 +69,7 @@ ag::dnscrypt::client::dial_result ag::dnscrypt::client::dial(const server_stamp 
     }
     // Fetch the certificate and validate it
     auto[cert_info, rtt, err] = local_server_info.fetch_current_dnscrypt_cert(
-            m_protocol, timeout, std::move(prepare_fd));
+            m_protocol, timeout, socket_factory, outbound_interface);
     if (err) {
         return make_error(std::move(err));
     }
@@ -77,7 +79,7 @@ ag::dnscrypt::client::dial_result ag::dnscrypt::client::dial(const server_stamp 
 
 ag::dnscrypt::client::exchange_result ag::dnscrypt::client::exchange(ldns_pkt &message,
         const server_info &local_server_info, std::chrono::milliseconds timeout,
-        preparefd_cb prepare_fd) const {
+        const socket_factory *socket_factory, const if_id_variant &outbound_interface) const {
     static constexpr utils::make_error<exchange_result> make_error;
     utils::timer timer;
     if (m_adjust_payload_size) {
@@ -95,11 +97,9 @@ ag::dnscrypt::client::exchange_result ag::dnscrypt::client::exchange(ldns_pkt &m
     ldns_buffer encrypted_query_buffer = {};
     ldns_buffer_new_frm_data(&encrypted_query_buffer, encrypted_query.data(), encrypted_query.size());
     ldns_buffer_set_position(&encrypted_query_buffer, encrypted_query.size());
-    auto[encrypted_response, encrypted_response_size, exchange_rtt, exchange_err] =
-            dns_exchange_allocated(timeout,
-                                   ag::utils::str_to_socket_address(local_server_info.m_server_address),
-                                   encrypted_query_buffer,
-                                   m_protocol, std::move(prepare_fd));
+    auto[encrypted_response, exchange_rtt, exchange_err] =
+            dns_exchange(timeout, utils::str_to_socket_address(local_server_info.m_server_address),
+                    encrypted_query_buffer, m_protocol, socket_factory, outbound_interface);
     free(ldns_buffer_export(&encrypted_query_buffer));
     if (exchange_err) {
         return make_error(std::move(exchange_err));
@@ -109,7 +109,7 @@ ag::dnscrypt::client::exchange_result ag::dnscrypt::client::exchange(ldns_pkt &m
     // the read operation will most likely time out.
     // This might be a signal to re-dial for the server certificate.
     auto[decrypted, decrypt_err] = local_server_info.decrypt(
-            uint8_view(encrypted_response.get(), encrypted_response_size),
+            uint8_view(encrypted_response.data(), encrypted_response.size()),
             uint8_view(client_nonce.data(), client_nonce.size()));
     if (decrypt_err) {
         return make_error(std::move(decrypt_err));

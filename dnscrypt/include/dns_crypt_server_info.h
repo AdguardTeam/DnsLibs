@@ -7,7 +7,7 @@
 #include <functional>
 #include <ag_defs.h>
 #include <dns_crypt_utils.h>
-#include <dns_crypt_ldns.h>
+#include <ag_socket.h>
 
 namespace ag::dnscrypt {
 
@@ -49,11 +49,12 @@ struct server_info {
      * Fetch DNSCrypt certificate using server info
      * @param proto Protocol
      * @param timeout Timeout for read/write operations (0 means infinite timeout)
-     * @param prepare_fd Socket preparation callback, return true if successful
+     * @param socket_factory Socket factory which creates sockets for data exchange
+     * @param outbound_interface Outbound interface info for communicating socket
      * @return Fetch result
      */
-    fetch_result fetch_current_dnscrypt_cert(protocol protocol, std::chrono::milliseconds timeout,
-                                             preparefd_cb prepare_fd);
+    fetch_result fetch_current_dnscrypt_cert(utils::transport_protocol protocol, std::chrono::milliseconds timeout,
+            const socket_factory *socket_factory, const if_id_variant &outbound_interface);
 
     /**
      * Encrypt packet using server info
@@ -61,7 +62,7 @@ struct server_info {
      * @param packet Packet to encrypt
      * @return Encryption result
      */
-    encrypt_result encrypt(protocol protocol, uint8_view packet) const;
+    encrypt_result encrypt(utils::transport_protocol protocol, uint8_view packet) const;
 
     /**
      * @brief Decrypt packet using server info

@@ -1,12 +1,17 @@
 #include <ag_utils.h>
 #include <ag_net_utils.h>
 #include "upstream_plain.h"
-#include <ldns/ag_ext.h>
+#include <ag_blocking_socket.h>
 
 #define tracelog_id(l_, pkt_, fmt_, ...) tracelog((l_), "[{}] " fmt_, ldns_pkt_id(pkt_), ##__VA_ARGS__)
 
 using std::chrono::milliseconds;
 using std::chrono::duration_cast;
+
+ag::tcp_pool::tcp_pool(event_loop_ptr loop, const socket_address &address, plain_dns *upstream)
+    : dns_framed_pool(std::move(loop), upstream)
+    , m_address(address)
+{}
 
 static ag::socket_address prepare_address(const std::string &address_string) {
     auto address = ag::utils::str_to_socket_address(address_string);
@@ -34,11 +39,10 @@ ag::err_string ag::plain_dns::init() {
 }
 
 ag::plain_dns::exchange_result ag::plain_dns::exchange(ldns_pkt *request_pkt) {
-    ldns_status status;
     ldns_buffer_ptr buffer{ldns_buffer_new(REQUEST_BUFFER_INITIAL_CAPACITY)};
-    status = ldns_pkt2buffer_wire(&*buffer, request_pkt);
+    ldns_status status = ldns_pkt2buffer_wire(&*buffer, request_pkt);
     if (status != LDNS_STATUS_OK) {
-        return {nullptr, ag::utils::ldns_status_to_str(status)};
+        return {nullptr, ldns_get_errorstr_by_id(status)};
     }
 
     ldns_rr *question = ldns_rr_list_rr(ldns_pkt_question(request_pkt), 0);
@@ -48,28 +52,39 @@ ag::plain_dns::exchange_result ag::plain_dns::exchange(ldns_pkt *request_pkt) {
         tracelog_id(m_log, request_pkt, "Querying for a domain: {}", domain.get());
     }
 
+    utils::timer timer;
+    milliseconds timeout = m_options.timeout;
+
     if (!m_prefer_tcp) {
-        // UDP request
-        uint8_t *reply_data;
-        size_t reply_size;
-        timeval tv = utils::duration_to_timeval(this->m_options.timeout);
-        tracelog_id(m_log, request_pkt, "Sending UDP request for a domain: {}", domain ? domain.get() : "(unknown)");
-        status = ldns_udp_send(&reply_data, &*buffer, (const sockaddr_storage *) m_pool.address().c_sockaddr(),
-                               m_pool.address().c_socklen(), tv, &reply_size,
-                               prepare_fd, this);
-        if (status != LDNS_STATUS_OK) {
-            int ag_error = ag_ldns_check_socket_error();
-            if (ag_error == LDNS_ETIMEDOUT) {
-                // To cancel second retry of exchange
-                return {nullptr, TIMEOUT_STR.data()};
-            }
-            ag_ldns_set_socket_error(ag_error); // ag_ldns_check_socket_error() resets the error
-            return {nullptr, utils::ldns_status_to_str(status)};
+        blocking_socket socket(this->make_socket(utils::TP_UDP));
+
+        if (auto e = socket.connect({ m_pool.address(), timeout }); e.has_value()) {
+            return { nullptr,
+                    (e->code == utils::AG_ETIMEDOUT) // To cancel second retry of exchange
+                            ? std::string(TIMEOUT_STR) : std::move(e->description) };
         }
 
+        timeout -= timer.elapsed<decltype(timeout)>();
+        if (timeout.count() <= 0) {
+            return { nullptr, std::string(TIMEOUT_STR) };
+        }
+        timer.reset();
+
+        if (auto e = socket.send_dns_packet({ (uint8_t *)ldns_buffer_begin(buffer.get()), ldns_buffer_position(buffer.get()) });
+                e.has_value()) {
+            return { nullptr, std::move(e->description) };
+        }
+
+        auto r = socket.receive_dns_packet(timeout);
+        if (auto *e = std::get_if<socket::error>(&r); e != nullptr) {
+            return { nullptr,
+                    (e->code == utils::AG_ETIMEDOUT) // To cancel second retry of exchange
+                    ? std::string(TIMEOUT_STR) : std::move(e->description) };
+        }
+
+        auto &reply = std::get<std::vector<uint8_t>>(r);
         ldns_pkt *reply_pkt = nullptr;
-        status = ldns_wire2pkt(&reply_pkt, reply_data, reply_size);
-        std::free(reply_data);
+        status = ldns_wire2pkt(&reply_pkt, reply.data(), reply.size());
         if (status != LDNS_STATUS_OK) {
             return {nullptr, ldns_get_errorstr_by_id(status)};
         }
@@ -80,10 +95,15 @@ ag::plain_dns::exchange_result ag::plain_dns::exchange(ldns_pkt *request_pkt) {
         ldns_pkt_free(reply_pkt);
     }
 
+    timeout -= timer.elapsed<decltype(timeout)>();
+    if (timeout.count() <= 0) {
+        return { nullptr, std::string(TIMEOUT_STR) };
+    }
+
     // TCP request
     ag::uint8_view buf{ ldns_buffer_begin(buffer.get()), ldns_buffer_position(buffer.get()) };
     tracelog_id(m_log, request_pkt, "Sending TCP request for a domain: {}", domain ? domain.get() : "(unknown)");
-    connection::read_result result = m_pool.perform_request(buf, this->m_options.timeout);
+    connection::read_result result = m_pool.perform_request(buf, timeout);
     if (result.error.has_value()) {
         return { nullptr, std::move(result.error) };
     }
@@ -97,16 +117,6 @@ ag::plain_dns::exchange_result ag::plain_dns::exchange(ldns_pkt *request_pkt) {
     return {ldns_pkt_ptr(reply_pkt), std::nullopt};
 }
 
-int ag::plain_dns::prepare_fd(int fd, const sockaddr *peer, void *arg) {
-    auto *self = (plain_dns *) arg;
-    ag::socket_address addr{peer};
-    if (auto error = self->bind_socket_to_if(fd, addr)) {
-        warnlog(self->m_log, "Failed to bind socket to interface: {}", *error);
-        return 0;
-    }
-    return 1;
-}
-
 ag::connection_pool::get_result ag::tcp_pool::get() {
     std::scoped_lock l(m_mutex);
     if (!m_connections.empty()) {
@@ -116,15 +126,8 @@ ag::connection_pool::get_result ag::tcp_pool::get() {
 }
 
 ag::connection_pool::get_result ag::tcp_pool::create() {
-    int options = BEV_OPT_THREADSAFE | BEV_OPT_DEFER_CALLBACKS | BEV_OPT_UNLOCK_CALLBACKS | BEV_OPT_CLOSE_ON_FREE;
-    bufferevent *bev = bufferevent_socket_new(m_loop->c_base(), -1, options);
-    connection_ptr connection = create_connection(bev, m_address);
+    connection_ptr connection = create_connection(nullptr, m_address);
     add_pending_connection(connection);
-    bufferevent_setpreparecb(bev, [](int fd, const struct sockaddr *sa, int salen, void *ctx) {
-        auto *self = (tcp_pool *) ctx;
-        return plain_dns::prepare_fd(fd, sa, self->m_upstream);
-    }, this);
-    bufferevent_socket_connect(bev, m_address.c_sockaddr(), m_address.c_socklen());
     return { std::move(connection), std::chrono::seconds(0), std::nullopt };
 }
 

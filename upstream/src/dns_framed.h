@@ -1,6 +1,7 @@
 #pragma once
 
 #include <ag_logger.h>
+#include <ag_event_loop.h>
 #include <upstream.h>
 #include <mutex>
 #include <list>
@@ -19,15 +20,8 @@ class dns_framed_connection;
  */
 class dns_framed_pool : public connection_pool {
 public:
-    /**
-     * @param loop Event loop
-     */
-    explicit dns_framed_pool(event_loop_ptr loop)
-        : m_loop(std::move(loop))
-        , m_log(create_logger(__func__))
-    {}
-
-    ~dns_framed_pool();
+    dns_framed_pool(event_loop_ptr loop, upstream *upstream);
+    ~dns_framed_pool() override;
 
     // Copy is prohibited
     dns_framed_pool(const dns_framed_pool &) = delete;
@@ -52,6 +46,8 @@ protected:
     std::list<connection_ptr> m_connections;
     /** Pending connections. They may not receive requests yet */
     hash_set<connection_ptr> m_pending_connections;
+    /** Parent upstream */
+    upstream *m_upstream = nullptr;
     /** The connections about to close. They may not receive requests and responses */
     hash_set<connection_ptr> m_closing_connections;
     /** Signals when all connections are closed */
@@ -69,11 +65,11 @@ protected:
 
     /**
      * Creates DNS framed connection from bufferevent.
-     * @param bev Bufferevent
+     * @param ssl SSL object for communication
      * @param address Destination address
      * @return Newly created DNS framed connection
      */
-    connection_ptr create_connection(bufferevent *bev, const socket_address &address);
+    connection_ptr create_connection(std::unique_ptr<SSL, ftor<&SSL_free>> ssl, const socket_address &address);
 
     void close_connection(const connection_ptr &conn);
 };

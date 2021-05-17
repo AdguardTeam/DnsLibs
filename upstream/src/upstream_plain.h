@@ -19,13 +19,9 @@ public:
      * Create pool of TCP connections
      * @param loop Event loop
      * @param address Destination socket address
+     * @upstream Parent upstream
      */
-    tcp_pool(event_loop_ptr loop,
-             const socket_address &address,
-             plain_dns *upstream)
-            : dns_framed_pool(std::move(loop)),
-              m_address(address),
-              m_upstream(upstream) {}
+    tcp_pool(event_loop_ptr loop, const socket_address &address, plain_dns *upstream);
 
     get_result get() override;
 
@@ -34,8 +30,6 @@ public:
 private:
     /** Destination socket address */
     socket_address m_address;
-    /** Parent upstream */
-    plain_dns *m_upstream;
 
     get_result create();
 };
@@ -68,8 +62,6 @@ private:
     bool m_prefer_tcp;
     /** TCP connection pool */
     tcp_pool m_pool;
-
-    static int prepare_fd(int fd, const sockaddr *peer, void *arg);
 };
 
 } // namespace ag

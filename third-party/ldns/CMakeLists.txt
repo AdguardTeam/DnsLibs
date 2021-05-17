@@ -30,12 +30,10 @@ add_library(ldns EXCLUDE_FROM_ALL
         ldns/net.c
         ldns/sha1.c
         ldns/sha2.c
-        ldns/zone.c
-        ext/ag_ext.cpp)
+        ldns/zone.c)
 
 target_include_directories(ldns PUBLIC ldns)
 target_include_directories(ldns PUBLIC compat)
-target_include_directories(ldns PUBLIC ext)
 
 target_compile_definitions(ldns PRIVATE HAVE_CONFIG_H=1 RRTYPE_SVCB_HTTPS)
 
@@ -45,7 +43,6 @@ endif(NOT TARGET dnslibs_common)
 target_link_libraries(ldns dnslibs_common)
 
 include(../../cmake/apply_patch.cmake)
-apply_patch(${CMAKE_CURRENT_SOURCE_DIR}/ag_ext.patch ${CMAKE_CURRENT_SOURCE_DIR}/ldns)
 
 if (MSVC)
     apply_patch(${CMAKE_CURRENT_SOURCE_DIR}/windows.patch ${CMAKE_CURRENT_SOURCE_DIR}/ldns)

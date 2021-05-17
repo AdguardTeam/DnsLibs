@@ -1,5 +1,4 @@
 #include <algorithm>
-#include <cstdlib>
 #include <iterator>
 #include <utility>
 #ifndef _WIN32
@@ -16,7 +15,6 @@
 #include <ag_net_utils.h>
 #include <dns_crypt_server_info.h>
 #include <dns_crypt_utils.h>
-#include <ag_socket_address.h>
 
 static constexpr uint8_t CERT_MAGIC[]{0x44, 0x4e, 0x53, 0x43};
 static constexpr uint8_t SERVER_MAGIC[]{0x72, 0x36, 0x66, 0x6e, 0x76, 0x57, 0x6a, 0x38};
@@ -71,19 +69,19 @@ static const ag::logger &server_info_log() {
     return result;
 }
 
-ag::dnscrypt::server_info::fetch_result ag::dnscrypt::server_info::fetch_current_dnscrypt_cert(protocol local_protocol,
-                                                                   std::chrono::milliseconds timeout,
-                                                                   preparefd_cb prepare_fd) {
+ag::dnscrypt::server_info::fetch_result ag::dnscrypt::server_info::fetch_current_dnscrypt_cert(
+        utils::transport_protocol local_protocol, std::chrono::milliseconds timeout,
+        const socket_factory *socket_factory, const if_id_variant &outbound_interface) {
     static constexpr utils::make_error<fetch_result> make_error;
     if (m_server_public_key.size() != crypto_sign_PUBLICKEYBYTES) {
         return make_error("Invalid public key length");
     }
     auto query = create_request_ldns_pkt(LDNS_RR_TYPE_TXT, LDNS_RR_CLASS_IN, LDNS_RD, m_provider_name,
-                                         utils::make_optional_if(local_protocol == protocol::UDP,
-                                                                 MAX_DNS_UDP_SAFE_PACKET_SIZE));
+            utils::make_optional_if(local_protocol == utils::TP_UDP, MAX_DNS_UDP_SAFE_PACKET_SIZE));
     ldns_pkt_set_random_id(query.get());
     auto[exchange_reply, exchange_rtt, exchange_err] = dns_exchange_from_ldns_pkt(
-            timeout, ag::utils::str_to_socket_address(m_server_address), *query, local_protocol, std::move(prepare_fd));
+            timeout, ag::utils::str_to_socket_address(m_server_address),
+            *query, local_protocol, socket_factory, outbound_interface);
     if (exchange_err) {
         return make_error(std::move(exchange_err));
     }
@@ -118,7 +116,7 @@ ag::dnscrypt::server_info::fetch_result ag::dnscrypt::server_info::fetch_current
     return {local_cert_info, exchange_rtt, std::nullopt};
 }
 
-ag::dnscrypt::server_info::encrypt_result ag::dnscrypt::server_info::encrypt(protocol local_protocol,
+ag::dnscrypt::server_info::encrypt_result ag::dnscrypt::server_info::encrypt(utils::transport_protocol local_protocol,
                                                                              uint8_view packet_initial) const {
     static constexpr utils::make_error<encrypt_result> make_error;
     uint8_vector packet(packet_initial.begin(), packet_initial.end());
@@ -127,7 +125,7 @@ ag::dnscrypt::server_info::encrypt_result ag::dnscrypt::server_info::encrypt(pro
     nonce_array nonce{};
     std::copy(client_nonce.begin(), client_nonce.end(), nonce.begin());
     auto min_question_size = QUERY_OVERHEAD + packet.size();
-    if (local_protocol == protocol::TCP) {
+    if (local_protocol == utils::TP_TCP) {
         uint8_t xpad = 0;
         randombytes_buf(&xpad, sizeof xpad);
         min_question_size += xpad;

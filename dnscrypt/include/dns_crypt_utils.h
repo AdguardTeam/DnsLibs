@@ -4,6 +4,8 @@
 #include <cstdint>
 #include <string_view>
 #include <ag_defs.h>
+#include <ag_net_utils.h>
+#include <ldns/ldns.h>
 
 namespace ag::dnscrypt {
 
@@ -13,6 +15,9 @@ constexpr size_t KEY_SIZE = 32;
 
 using key_array = uint8_array<KEY_SIZE>;
 using client_magic_array = uint8_array<CLIENT_MAGIC_LEN>;
+
+using ldns_pkt_ptr = std::unique_ptr<ldns_pkt, ag::ftor<&ldns_pkt_free>>;
+using ldns_buffer_ptr = std::unique_ptr<ldns_buffer, ag::ftor<&ldns_buffer_free>>;
 
 /**
  * Crypto construction represents the encryption algorithm
@@ -29,20 +34,5 @@ enum class crypto_construction : uint16_t {
  * @return String representation if value holds valid crypto construction, string view with empty string otherwise
  */
 std::string_view crypto_construction_str(crypto_construction value);
-
-/**
- * Client protocol
- */
-enum class protocol {
-    UDP,
-    TCP,
-};
-
-/**
- * Convert client protocol to string view
- * @param value Client protocol to convert
- * @return String representation if value holds valid client protocol, string view with empty string otherwise
- */
-std::string_view protocol_str(protocol value);
 
 } // namespace ag::dnscrypt

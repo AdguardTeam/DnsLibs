@@ -2,6 +2,8 @@
 #include <ag_net_utils.h>
 #include <ag_socket_address.h>
 #include <event2/util.h>
+#include <event2/thread.h>
+#include <csignal>
 
 #ifndef _WIN32
 #include <net/if.h> // For if_nametoindex/if_indextoname
@@ -181,4 +183,22 @@ ag::err_string ag::utils::bind_socket_to_if(evutil_socket_t fd, int family, cons
     }
     return bind_socket_to_if(fd, family, if_index);
 #endif
+}
+
+std::optional<ag::socket_address> ag::utils::get_peer_address(evutil_socket_t fd) {
+    sockaddr_storage addr = {};
+    socklen_t addrlen = sizeof(addr);
+    if (::getpeername(fd, (sockaddr *)&addr, &addrlen) != 0) {
+        return std::nullopt;
+    }
+    return socket_address((sockaddr *)&addr);
+}
+
+std::optional<ag::socket_address> ag::utils::get_local_address(evutil_socket_t fd) {
+    sockaddr_storage addr = {};
+    socklen_t addrlen = sizeof(addr);
+    if (::getsockname(fd, (sockaddr *)&addr, &addrlen) != 0) {
+        return std::nullopt;
+    }
+    return socket_address((sockaddr *)&addr);
 }

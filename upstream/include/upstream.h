@@ -10,8 +10,8 @@
 #include <ag_defs.h>
 #include <ag_net_consts.h>
 #include <ag_net_utils.h>
-#include <ag_route_resolver.h>
 #include <certificate_verifier.h>
+#include <ag_socket.h>
 
 namespace ag {
 
@@ -27,8 +27,8 @@ static constexpr std::string_view TIMEOUT_STR = "Request timed out";
  * Upstream factory configuration
  */
 struct upstream_factory_config {
+    const socket_factory *socket_factory = nullptr;
     const certificate_verifier *cert_verifier = nullptr;
-    route_resolver *router = nullptr;
     bool ipv6_available = true;
 };
 
@@ -75,7 +75,10 @@ public:
         err_string error;
     };
 
-    upstream(upstream_options opts, const upstream_factory_config &config) : m_options(std::move(opts)), m_config(config) {
+    upstream(upstream_options opts, const upstream_factory_config &config)
+        : m_options(std::move(opts))
+        , m_config(config)
+    {
         m_rtt.val = std::chrono::milliseconds::zero();
         if (!this->m_options.timeout.count()) {
             this->m_options.timeout = DEFAULT_TIMEOUT;
@@ -97,9 +100,16 @@ public:
      */
     virtual exchange_result exchange(ldns_pkt *request) = 0;
 
-    const upstream_options &options() const { return m_options; }
+    [[nodiscard]] const upstream_options &options() const { return m_options; }
 
-    const upstream_factory_config &config() const { return m_config; }
+    [[nodiscard]] const upstream_factory_config &config() const { return m_config; }
+
+    /**
+     * Helper function for easier socket creation
+     */
+    [[nodiscard]] socket_factory::socket_ptr make_socket(utils::transport_protocol proto) const {
+        return m_config.socket_factory->make_socket({ proto, m_options.outbound_interface });
+    }
 
     std::chrono::milliseconds rtt() {
         std::lock_guard<std::mutex> lk(m_rtt.mtx);
@@ -122,12 +132,6 @@ protected:
     upstream_factory_config m_config;
     /** RTT + mutex */
     with_mtx<std::chrono::milliseconds> m_rtt;
-
-    /**
-     * Bind a socket to either the configured interface,
-     * or an interface resolved for `peer`.
-     */
-    err_string bind_socket_to_if(evutil_socket_t fd, const socket_address &peer);
 };
 
 /**

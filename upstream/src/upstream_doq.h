@@ -5,9 +5,10 @@
 #include <ag_defs.h>
 #include <ag_utils.h>
 #include <ag_socket_address.h>
+#include <ag_event_loop.h>
+#include <ag_socket.h>
 #include <upstream.h>
 #include "bootstrapper.h"
-#include <ag_event_loop.h>
 
 #include <openssl/ssl.h>
 #include <openssl/crypto.h>
@@ -25,6 +26,7 @@
 #include <unordered_map>
 #include <condition_variable>
 #include <list>
+#include <variant>
 #include "tls_session_cache.h"
 
 using namespace std::chrono;
@@ -80,15 +82,15 @@ private:
         buffer(const uint8_t *data, size_t datalen);
         explicit buffer(size_t datalen);
 
-        size_t size() const { return tail - buf.data(); }
-        size_t left() const { return buf.data() + buf.size() - tail; }
-        uint8_t *wpos() { return tail; }
+        size_t size() const { return tail; }
+        size_t left() const { return buf.size() - tail; }
+        uint8_t *wpos() { return buf.data() + tail; }
         const uint8_t *rpos() const { return buf.data(); }
         void push(size_t len) { tail += len; }
-        void reset() { tail = buf.data(); }
+        void reset() { tail = 0; }
 
         std::vector<uint8_t> buf;
-        uint8_t *tail;
+        size_t tail;
     };
     struct stream {
         int64_t stream_id = -1; // actually not used
@@ -110,9 +112,27 @@ private:
         std::condition_variable cond;
         bool is_onfly{false};
     };
-    struct socket_state {
-        evutil_socket_t fd{-1};
-        bool connected{false};
+    struct socket_context {
+        dns_over_quic *upstream = nullptr;
+        socket_factory::socket_ptr socket;
+    };
+    struct connection_handshake_initial_info {
+        std::vector<std::unique_ptr<socket_context>> sockets;
+        std::unique_ptr<buffer> handshake_initial_buf;
+    };
+    struct connection_state {
+        using state_info_variant = std::variant<
+                /** Idle */
+                std::monostate,
+                /** Before a peer is selected */
+                connection_handshake_initial_info,
+                /** A peer has been selected */
+                std::unique_ptr<socket_context>>;
+
+        state_info_variant info;
+
+        [[nodiscard]] bool is_peer_selected() const;
+        std::unique_ptr<socket_context> extract_socket(socket_context *ctx);
     };
 
     err_string init() override;
@@ -150,34 +170,30 @@ private:
     static int handshake_confirmed(ngtcp2_conn *, void *data);
     static int ssl_verify_callback(X509_STORE_CTX *ctx, void *arg);
 
-    static void read_cb(evutil_socket_t, short, void *data);
     static void idle_timer_cb(evutil_socket_t, short, void *data);
     static void handshake_timer_cb(evutil_socket_t, short, void *data);
     static void retransmit_cb(evutil_socket_t, short, void *data);
 
+    static void on_socket_connected(void *arg);
+    static void on_socket_read(void *arg, uint8_view data);
+    static void on_socket_close(void *arg, std::optional<socket::error> error);
+
+    int init_quic_conn(const socket *connected_socket);
     int init_ssl_ctx();
     int init_ssl();
-    evutil_socket_t create_dual_stack_socket();
-    evutil_socket_t create_ipv4_socket();
-    int bind_addr(int fd, int family);
-    int on_read();
-    int on_read_connected();
-    int on_read_not_connected();
-    int on_write();
-    int write_streams();
-    int send_packet();
-    int send_packet_connected();
-    int send_packet_not_connected();
+    int on_write(socket *active_socket);
+    int write_streams(socket *active_socket);
+    int send_packet(socket *active_socket);
     int reinit();
     int handle_expiry();
-    void ag_ngtcp2_settings_default(ngtcp2_settings &settings);
-    int feed_data(const ngtcp2_pkt_info *pi, uint8_t *data, size_t datalen);
+    void ag_ngtcp2_settings_default(ngtcp2_settings &settings) const;
+    int feed_data(uint8_view data);
     void submit(std::function<void()> &&func) const;
     void send_requests();
     void process_reply(int64_t request_id, const uint8_t *request_data, size_t request_data_len);
     void disconnect(std::string_view reason);
     void schedule_retransmit();
-    ngtcp2_tstamp get_tstamp() const;
+    static ngtcp2_tstamp get_tstamp();
     ngtcp2_crypto_level from_ossl_level(enum ssl_encryption_level_t ossl_level) const;
     void disqualify_server_address(const ag::socket_address &server_address);
     void update_idle_timer(bool reset);
@@ -186,7 +202,9 @@ private:
     int on_key(ngtcp2_crypto_level level, const uint8_t *rx_secret,
                const uint8_t *tx_secret, size_t secretlen);
 
-    socket_state m_sock_state;
+    int connect_to_peers();
+
+    connection_state m_conn_state;
     std::atomic<state> m_state{STOP};
     std::string m_server_name;
     int m_port{0};
@@ -199,8 +217,8 @@ private:
     size_t m_max_pktlen;
     uint32_t m_quic_version;
     buffer m_send_buf;
-    SSL_CTX *m_ssl_ctx{nullptr};
-    SSL *m_ssl{nullptr};
+    std::unique_ptr<SSL_CTX, ftor<&SSL_CTX_free>> m_ssl_ctx;
+    std::unique_ptr<SSL, ftor<&SSL_free>> m_ssl;
     ngtcp2_conn *m_conn{nullptr};
     crypto m_crypto[3];
     std::list<int64_t> m_stream_send_queue;
@@ -208,10 +226,10 @@ private:
     std::unordered_map<int64_t, request_t> m_requests;
     std::mutex m_global;
     event_loop_ptr m_loop = event_loop::create();
-    struct event *m_read_event{nullptr};
-    struct event *m_idle_timer_event{nullptr};
-    struct event *m_handshake_timer_event{nullptr};
-    struct event *m_retransmit_timer_event{nullptr};
+    std::unique_ptr<event, ftor<&event_free>> m_read_event;
+    std::unique_ptr<event, ftor<&event_free>> m_idle_timer_event;
+    std::unique_ptr<event, ftor<&event_free>> m_handshake_timer_event;
+    std::unique_ptr<event, ftor<&event_free>> m_retransmit_timer_event;
     static std::atomic_int64_t m_next_request_id;
     std::array<uint8_t, 32> m_static_secret;
     tls_session_cache m_tls_session_cache;

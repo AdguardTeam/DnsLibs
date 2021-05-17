@@ -1,13 +1,14 @@
 #include <ldns/error.h>
 #include <ldns/net.h>
-#include <ldns/ag_ext.h>
 #include "dns_crypt_ldns.h"
 #include <ag_utils.h>
 #include <ag_net_utils.h>
 #include <ag_net_consts.h>
+#include <ag_blocking_socket.h>
 
-ag::ldns_pkt_ptr ag::dnscrypt::create_request_ldns_pkt(ldns_rr_type rr_type, ldns_rr_class rr_class, uint16_t flags,
-                                                       std::string_view dname_str, std::optional<size_t> size_opt) {
+
+ag::dnscrypt::ldns_pkt_ptr ag::dnscrypt::create_request_ldns_pkt(ldns_rr_type rr_type,
+        ldns_rr_class rr_class, uint16_t flags, std::string_view dname_str, std::optional<size_t> size_opt) {
     ldns_rdf *dname = ldns_dname_new_frm_str(std::string(dname_str).c_str());
     if (!dname) {
         return nullptr;
@@ -44,44 +45,47 @@ ag::dnscrypt::create_ldns_pkt_result ag::dnscrypt::create_ldns_pkt(uint8_t *data
     return {std::move(result), std::nullopt};
 }
 
-ag::dnscrypt::dns_exchange_allocated_result ag::dnscrypt::dns_exchange_allocated(std::chrono::milliseconds timeout,
-                                                                                 const socket_address &socket_address,
-                                                                                 ldns_buffer &buffer,
-                                                                                 protocol local_protocol,
-                                                                                 preparefd_cb prepare_fd) {
-    static constexpr utils::make_error<dns_exchange_allocated_result> make_error;
-    uint8_t *reply_data = nullptr;
-    size_t reply_size = 0;
-    auto tv = utils::duration_to_timeval(timeout);
-    auto send_func = local_protocol == protocol::TCP ? ldns_tcp_send : ldns_udp_send;
+ag::dnscrypt::dns_exchange_unparsed_result ag::dnscrypt::dns_exchange(std::chrono::milliseconds timeout,
+        const socket_address &socket_address, ldns_buffer &buffer,
+        utils::transport_protocol protocol, const socket_factory *socket_factory, const if_id_variant &outbound_interface) {
+    static constexpr utils::make_error<dns_exchange_unparsed_result> make_error;
+
     utils::timer timer;
-    ldns_status status = send_func(&reply_data, &buffer,
-                                   reinterpret_cast<const sockaddr_storage *>(socket_address.c_sockaddr()),
-                                   socket_address.c_socklen(), tv, &reply_size,
-                                   [](int fd, const sockaddr *peer, void *arg) -> int {
-                                       auto &f = *((preparefd_cb *) arg);
-                                       ag::socket_address addr{peer};
-                                       return !f || f(fd, addr);
-                                   }, &prepare_fd);
-    if (status != LDNS_STATUS_OK) {
-        return make_error(utils::ldns_status_to_str(status));
+
+    blocking_socket socket(socket_factory->make_socket({ protocol, outbound_interface }));
+    if (auto e = socket.connect({ socket_address, timeout }); e.has_value()) {
+        return make_error(std::move(e->description));
     }
-    auto reply_data_unique_ptr = utils::make_allocated_unique(reply_data);
-    auto rtt = timer.elapsed<std::chrono::milliseconds>();
-    return {std::move(reply_data_unique_ptr), reply_size, rtt, std::nullopt};
+
+    timeout -= timer.elapsed<decltype(timeout)>();
+    if (timeout <= decltype(timeout)(0)) {
+        return make_error(evutil_socket_error_to_string(utils::AG_ETIMEDOUT));
+    }
+
+    if (auto e = socket.send_dns_packet({ (uint8_t *)ldns_buffer_begin(&buffer), ldns_buffer_position(&buffer) });
+            e.has_value()) {
+        return make_error(std::move(e->description));
+    }
+
+    auto r = socket.receive_dns_packet(timeout);
+    if (auto *e = std::get_if<socket::error>(&r); e != nullptr) {
+        return make_error(std::move(e->description));
+    }
+
+    auto &reply = std::get<std::vector<uint8_t>>(r);
+    return { std::move(reply), timer.elapsed<std::chrono::milliseconds>() };
 }
 
 ag::dnscrypt::dns_exchange_result ag::dnscrypt::dns_exchange_from_ldns_buffer(std::chrono::milliseconds timeout,
-                                                                              const socket_address &socket_address,
-                                                                              ldns_buffer &buffer, protocol protocol,
-                                                                              preparefd_cb prepare_fd) {
+        const socket_address &socket_address, ldns_buffer &buffer,
+        utils::transport_protocol protocol, const socket_factory *socket_factory, const if_id_variant &outbound_interface) {
     static constexpr utils::make_error<dns_exchange_result> make_error;
-    auto[reply, reply_size, rtt, allocated_err] = dns_exchange_allocated(timeout, socket_address, buffer, protocol,
-                                                                         std::move(prepare_fd));
+    auto[reply, rtt, allocated_err] =
+            dns_exchange(timeout, socket_address, buffer, protocol, socket_factory, outbound_interface);
     if (allocated_err) {
         return make_error(std::move(allocated_err));
     }
-    auto[reply_pkt_unique_ptr, reply_err] = create_ldns_pkt(reply.get(), reply_size);
+    auto[reply_pkt_unique_ptr, reply_err] = create_ldns_pkt(reply.data(), reply.size());
     if (reply_err) {
         return make_error(std::move(reply_err));
     }
@@ -92,14 +96,13 @@ ag::dnscrypt::dns_exchange_result ag::dnscrypt::dns_exchange_from_ldns_buffer(st
 }
 
 ag::dnscrypt::dns_exchange_result ag::dnscrypt::dns_exchange_from_ldns_pkt(std::chrono::milliseconds timeout,
-                                                                           const socket_address &socket_address,
-                                                                           const ldns_pkt &request_pkt,
-                                                                           protocol protocol,
-                                                                           preparefd_cb prepare_fd) {
+        const socket_address &socket_address, const ldns_pkt &request_pkt,
+        utils::transport_protocol protocol, const socket_factory *socket_factory, const if_id_variant &outbound_interface) {
     static constexpr utils::make_error<dns_exchange_result> make_error;
     auto[buffer, err] = create_ldns_buffer(request_pkt);
     if (err) {
         return make_error(std::move(err));
     }
-    return dns_exchange_from_ldns_buffer(timeout, socket_address, *buffer, protocol, std::move(prepare_fd));
+    return dns_exchange_from_ldns_buffer(timeout, socket_address, *buffer,
+            protocol, socket_factory, outbound_interface);
 }

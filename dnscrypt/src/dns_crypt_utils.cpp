@@ -12,14 +12,3 @@ std::string_view ag::dnscrypt::crypto_construction_str(crypto_construction value
         return "";
     }
 }
-
-std::string_view ag::dnscrypt::protocol_str(protocol value) {
-    switch (value) {
-    case protocol::UDP:
-        return "udp";
-    case protocol::TCP:
-        return "tcp";
-    default:
-        return "";
-    }
-}

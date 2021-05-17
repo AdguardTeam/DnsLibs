@@ -25,6 +25,7 @@ static struct Init {
 } init_;
 
 static ag::upstream_factory::create_result create_upstream(const ag::upstream_options &opts) {
+    static ag::socket_factory socket_factory({});
 #ifndef _WIN32
     static ag::default_verifier cert_verifier;
 #else
@@ -33,8 +34,7 @@ static ag::upstream_factory::create_result create_upstream(const ag::upstream_op
     }};
 #endif
     static bool ipv6_available = ag::test_ipv6_connectivity();
-    static auto router = ag::route_resolver::create();
-    static ag::upstream_factory upstream_factory({&cert_verifier, router.get(), ipv6_available});
+    static ag::upstream_factory upstream_factory({ &socket_factory, &cert_verifier, ipv6_available });
     return upstream_factory.create_upstream(opts);
 }
 
@@ -509,7 +509,7 @@ TEST_F(upstream_test, DISABLED_concurrent_requests) {
     static constexpr size_t WORKERS_NUM = 16;
     static const ag::upstream_options opts{
         .address = "https://dns.cloudflare.com/dns-query",
-//        .address = "quic://dns.adguard.com:784", // Uncomment for test DOQ upstream
+//        .address = "quic://dns.adguard.com:8853", // Uncomment for test DOQ upstream
         .bootstrap = {"8.8.8.8", "1.1.1.1"},
         .timeout = 5s,
 //        .resolved_server_ip = ag::ipv4_address_size{104, 19, 199, 29}, // Uncomment for test this server IP

@@ -29,7 +29,7 @@ static const struct event_log_cb_setter {
     }
 } set_event_log_cb [[maybe_unused]];
 
-ag::event_loop::event_loop() : m_base() {
+ag::event_loop::event_loop(bool run_immediately) {
 #ifndef _WIN32
     static const int ensure_threads [[maybe_unused]] = evthread_use_pthreads();
 #else // _WIN32
@@ -40,13 +40,23 @@ ag::event_loop::event_loop() : m_base() {
     m_base.reset(event_base_new());
     assert(m_base);
     evthread_make_base_notifiable(m_base.get());
-    m_base_thread = std::thread([this] { run(); });
+
+    if (run_immediately) {
+        start();
+    }
 }
 
 ag::event_loop::~event_loop() {
     stop();
     join();
     m_base.reset();
+}
+
+void ag::event_loop::start() {
+    assert(!m_base_thread.joinable());
+    this->join();
+
+    m_base_thread = std::thread([this] { run(); });
 }
 
 void ag::event_loop::submit(std::function<void()> func) {
@@ -115,6 +125,6 @@ void ag::event_loop::execute_tasks() {
     } while (true);
 }
 
-ag::event_loop_ptr ag::event_loop::create() {
-    return event_loop_ptr(new event_loop);
+ag::event_loop_ptr ag::event_loop::create(bool run_immediately) {
+    return event_loop_ptr(new event_loop(run_immediately));
 }

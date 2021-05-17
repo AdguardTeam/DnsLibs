@@ -279,8 +279,8 @@ private:
     }
 };
 
-std::shared_ptr<ag::route_resolver> ag::route_resolver::create() {
-    return std::make_shared<apple_route_resolver>();
+ag::route_resolver_ptr ag::route_resolver::create() {
+    return std::make_unique<apple_route_resolver>();
 }
 
 #else // defined(__APPLE__) && defined(__MACH__)
@@ -296,8 +296,8 @@ public:
     }
 };
 
-std::shared_ptr<ag::route_resolver> ag::route_resolver::create() {
-    return std::make_shared<noop_route_resolver>();
+ag::route_resolver_ptr ag::route_resolver::create() {
+    return std::make_unique<noop_route_resolver>();
 }
 
 #endif // defined(__APPLE__) && defined(__MACH__)

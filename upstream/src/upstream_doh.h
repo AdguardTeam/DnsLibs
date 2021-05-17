@@ -15,6 +15,7 @@
 #include <ag_defs.h>
 #include <upstream.h>
 #include <ag_socket_address.h>
+#include <ag_event_loop.h>
 #include "bootstrapper.h"
 
 #include <ldns/packet.h>
@@ -22,8 +23,6 @@
 #include <curl/multi.h>
 #include <event2/event.h>
 #include <event2/event_struct.h>
-
-#include <ag_event_loop.h>
 
 
 namespace ag {

@@ -12,7 +12,8 @@ TEST(dns64_test, test_dns64_discovery) {
     }
 
     using namespace std::chrono_literals;
-    ag::upstream_factory upstream_factory({});
+    ag::socket_factory socket_factory({});
+    ag::upstream_factory upstream_factory({ &socket_factory });
     const auto[upstream, err_upstream] = upstream_factory.create_upstream({
             .address = DNS64_SERVER_ADDR,
             .timeout = 5000ms

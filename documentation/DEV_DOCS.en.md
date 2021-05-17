@@ -202,10 +202,10 @@ Root project consists of the following directories and files:
 - `dnscrypt/` - DNSCrypt client implementation
 - `dnsfilter/` - DNS filter implementation
 - `dnsstamp/` - DNSCrypt server stamps encoder/decoder
+- `net/` - Set of entities which encapsulate network communication
 - `platform/` - Platform-specific interfaces and adapters
 - `proxy/` - DNS proxy implementation
 - `third-party/` - third-party libraries (this is not a subproject, so subproject's rules are not enforced)
-- `tls/` - TLS communication-related things (e.g. certificate verifier)
 - `upstream/` - Working with DNS upstreams
 - `CMakeLists.txt` - main cmake build config. Should build common things and include
   platform-specific things.
