@@ -1335,71 +1335,89 @@ bool dns_forwarder::do_dnssec_log_logic(ldns_pkt *request) {
     return is_our_do_bit;
 }
 
-static int remove_rr_types_from_section(ldns_pkt *response, ldns_enum_pkt_section section,
-                                        const std::vector<ldns_enum_rr_type> &types, bool except) {
-    ldns_rr_list *cur_section = nullptr;
-
-    if (section == LDNS_SECTION_ANSWER) {
-        cur_section = ldns_pkt_answer(response);
-    } else if (section == LDNS_SECTION_AUTHORITY) {
-        cur_section = ldns_pkt_authority(response);
+static ldns_rr_list *get_pkt_section(ldns_pkt *pkt, ldns_pkt_section section) {
+    switch (section) {
+    case LDNS_SECTION_QUESTION:
+        return ldns_pkt_question(pkt);
+    case LDNS_SECTION_ANSWER:
+        return ldns_pkt_answer(pkt);
+    case LDNS_SECTION_AUTHORITY:
+        return ldns_pkt_authority(pkt);
+    case LDNS_SECTION_ADDITIONAL:
+        return ldns_pkt_additional(pkt);
+    case LDNS_SECTION_ANY:
+    case LDNS_SECTION_ANY_NOQUESTION:
+        assert(0);
+        break;
     }
+    return nullptr;
+}
 
-    if (!cur_section) {
-        return -1;
+static void set_pkt_section(ldns_pkt *pkt, ldns_pkt_section section, ldns_rr_list *new_value) {
+    switch (section) {
+    case LDNS_SECTION_QUESTION:
+        return ldns_pkt_set_question(pkt, new_value);
+    case LDNS_SECTION_ANSWER:
+        return ldns_pkt_set_answer(pkt, new_value);
+    case LDNS_SECTION_AUTHORITY:
+        return ldns_pkt_set_authority(pkt, new_value);
+    case LDNS_SECTION_ADDITIONAL:
+        return ldns_pkt_set_additional(pkt, new_value);
+    case LDNS_SECTION_ANY:
+    case LDNS_SECTION_ANY_NOQUESTION:
+        assert(0);
     }
+}
 
-    auto cur_section_size = ldns_rr_list_rr_count(cur_section);
-    if (cur_section_size == 0) {
-        return 0;
-    }
+// Scrub all DNSSEC RRs from the answer and authority sections,
+// except those which are requested
+// Return true if pkt was modified
+static bool scrub_dnssec_rrs(ldns_pkt *pkt) {
+    static constexpr ldns_rr_type DNSSEC_RRTYPES[] = {
+            LDNS_RR_TYPE_DS,
+            LDNS_RR_TYPE_DNSKEY,
+            LDNS_RR_TYPE_NSEC,
+            LDNS_RR_TYPE_NSEC3,
+            LDNS_RR_TYPE_RRSIG
+    };
 
-    auto new_section = ldns_rr_list_new();
-    size_t counter = 0;
-    for (size_t i = 0 ; i < cur_section_size; ++i) {
-        auto iter = ldns_rr_list_rr(cur_section, i);
-        bool need_push = except == std::any_of(types.begin(), types.end(),
-                                               [iter](ldns_enum_rr_type type) { return (ldns_rr_get_type(iter) == type); });
-        if (need_push) {
-            ldns_rr_list_push_rr(new_section, ldns_rr_clone(iter));
-            ++counter;
+    ldns_rr_type qtype = ldns_rr_get_type(ldns_rr_list_rr(ldns_pkt_question(pkt), 0));
+    bool modified = false;
+
+    for (ldns_pkt_section section : {LDNS_SECTION_ANSWER, LDNS_SECTION_AUTHORITY}) {
+        size_t old_count = ldns_pkt_section_count(pkt, section);
+        if (old_count == 0) {
+            continue;
         }
+        auto *old_section = get_pkt_section(pkt, section);
+        auto *new_section = ldns_rr_list_new();
+        for (size_t i = 0 ; i < old_count; ++i) {
+            auto *rr = ldns_rr_list_rr(old_section, i);
+            ldns_rr_type type = ldns_rr_get_type(rr);
+            if ((section == LDNS_SECTION_ANSWER && type == qtype)
+                    || std::none_of(std::begin(DNSSEC_RRTYPES), std::end(DNSSEC_RRTYPES),
+                                    [type](ldns_enum_rr_type extype) { return extype == type; })) {
+                ldns_rr_list_push_rr(new_section, ldns_rr_clone(rr));
+            }
+        }
+        modified = modified || ldns_rr_list_rr_count(new_section) != old_count;
+        ldns_rr_list_deep_free(old_section);
+        set_pkt_section(pkt, section, new_section);
+        ldns_pkt_set_section_count(pkt, section, ldns_rr_list_rr_count(new_section));
     }
-    ldns_rr_list_deep_free(cur_section);
-    if (section == LDNS_SECTION_ANSWER) {
-        ldns_pkt_set_answer(response, new_section);
-    } else if (section == LDNS_SECTION_AUTHORITY) {
-        ldns_pkt_set_authority(response, new_section);
-    }
-    ldns_pkt_set_section_count(response, section, counter);
 
-    return 0;
+    return modified;
 }
 
 bool dns_forwarder::finalize_dnssec_log_logic(ldns_pkt *response, bool is_our_do_bit) {
     bool server_uses_dnssec = false;
 
     if (settings->enable_dnssec_ok) {
-        static const std::vector<ldns_enum_rr_type> SPECIAL_TYPES_DNSSEC_LOG_LOGIC = {
-                LDNS_RR_TYPE_DS,
-                LDNS_RR_TYPE_DNSKEY,
-                LDNS_RR_TYPE_NSEC,
-                LDNS_RR_TYPE_NSEC3,
-                LDNS_RR_TYPE_RRSIG
-        };
-
         server_uses_dnssec = ldns_dnssec_pkt_has_rrsigs(response);
         tracelog(log, "Server uses DNSSEC: {}", server_uses_dnssec ? "YES" : "NO");
-
-        if (is_our_do_bit) {
-            std::vector<ldns_enum_rr_type> exceptions = { ldns_rr_get_type(ldns_rr_list_rr(ldns_pkt_question(response), 0)) };
-            auto res = remove_rr_types_from_section(response, LDNS_SECTION_ANSWER, exceptions, true);
-            assert(res == 0);
-            res = remove_rr_types_from_section(response, LDNS_SECTION_AUTHORITY, SPECIAL_TYPES_DNSSEC_LOG_LOGIC, false);
-            assert(res == 0);
+        if (is_our_do_bit && scrub_dnssec_rrs(response)) {
+            log_packet(log, response, "DNSSEC-scrubbed response");
         }
-
-        log_packet(log, response, "DNS response was modified");
     }
 
     return server_uses_dnssec;

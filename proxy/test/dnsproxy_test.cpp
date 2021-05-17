@@ -1045,6 +1045,31 @@ TEST_F(dnsproxy_test, dnssec_the_same_qtype_request) {
     ldns_rr_list_deep_free(ptr);
 }
 
+TEST_F(dnsproxy_test, dnssec_regress_does_not_scrub_cname) {
+    ag::dnsproxy_settings settings = make_dnsproxy_settings();
+    settings.upstreams = {{ .address = "1.1.1.1" }};
+    settings.enable_dnssec_ok = true;
+
+    ag::dns_request_processed_event last_event{};
+    ag::dnsproxy_events events{
+            .on_request_processed = [&last_event](const ag::dns_request_processed_event &event) {
+                last_event = event;
+            }
+    };
+
+    auto [ret, err] = proxy.init(settings, {});
+    ASSERT_TRUE(ret) << *err;
+
+    ag::ldns_pkt_ptr response;
+    ASSERT_NO_FATAL_FAILURE(perform_request(proxy, create_request(CNAME_BLOCKING_HOST, LDNS_RR_TYPE_A, LDNS_RD), response));
+    ASSERT_GT(ldns_pkt_ancount(response.get()), 0);
+    ASSERT_EQ(ldns_pkt_get_rcode(response.get()), LDNS_RCODE_NOERROR);
+    ASSERT_TRUE(ldns_pkt_rr_list_by_type(response.get(), LDNS_RR_TYPE_CNAME, LDNS_SECTION_ANSWER));
+    ASSERT_GT(ldns_rr_list_rr_count(ldns_pkt_rr_list_by_type(response.get(), LDNS_RR_TYPE_CNAME, LDNS_SECTION_ANSWER)), 0);
+    ASSERT_TRUE(ldns_pkt_rr_list_by_type(response.get(), LDNS_RR_TYPE_A, LDNS_SECTION_ANSWER));
+    ASSERT_GT(ldns_rr_list_rr_count(ldns_pkt_rr_list_by_type(response.get(), LDNS_RR_TYPE_A, LDNS_SECTION_ANSWER)), 0);
+}
+
 TEST_F(dnsproxy_test, dnssec_autority_section) {
     ag::dnsproxy_settings settings = make_dnsproxy_settings();
     settings.enable_dnssec_ok = true;
