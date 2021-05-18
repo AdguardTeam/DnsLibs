@@ -18,7 +18,6 @@ add_library(upstream EXCLUDE_FROM_ALL
         src/upstream_dnscrypt.h src/upstream_dnscrypt.cpp
         src/resolver.h src/resolver.cpp
         src/upstream_utils.cpp
-        src/tls_session_cache.cpp
     )
 
 set_target_properties(upstream PROPERTIES POSITION_INDEPENDENT_CODE ON)
@@ -26,6 +25,16 @@ target_compile_options(upstream PRIVATE
         -Wall -Wextra -Werror
         -Wno-unused-parameter
         -Wno-missing-field-initializers)
+
+include(CheckCXXCompilerFlag)
+check_cxx_compiler_flag("-Wgnu-designator" COMPILER_SUPPORTS_GNU_DESIGNATOR)
+if (COMPILER_SUPPORTS_GNU_DESIGNATOR)
+    target_compile_options(upstream PRIVATE -Wno-gnu-designator)
+endif ()
+check_cxx_compiler_flag("-Wc99-designator" COMPILER_SUPPORTS_C99_DESIGNATOR)
+if (COMPILER_SUPPORTS_C99_DESIGNATOR)
+    target_compile_options(upstream PRIVATE -Wno-c99-designator)
+endif ()
 
 if (NOT TARGET boringssl_static)
     add_subdirectory(${THIRD_PARTY_DIR}/boringssl ${CMAKE_BINARY_DIR}/third-party/boringssl)

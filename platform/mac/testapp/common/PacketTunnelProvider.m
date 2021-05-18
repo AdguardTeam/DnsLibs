@@ -68,16 +68,16 @@
     ipv4.includedRoutes = @[dnsProxyIpv4Route];
 
     settings.IPv4Settings = ipv4;
-    
+
     NEIPv6Settings *ipv6 =
         [[NEIPv6Settings alloc] initWithAddresses:@[@"fd12:1:1:1::2"] networkPrefixLengths:@[@(64)]];
     ipv6.excludedRoutes = @[[NEIPv6Route defaultRoute]];
-    
+
     NEIPv6Route* dnsProxyIpv6Route =
          [[NEIPv6Route alloc] initWithDestinationAddress:@"2001:ad00:ad00::ad00"
                                      networkPrefixLength:@(128)];
     ipv6.includedRoutes = @[dnsProxyIpv6Route];
-    
+
     settings.IPv6Settings = ipv6;
 
     __unsafe_unretained AGTunnel *wself = self;
@@ -136,6 +136,7 @@
         blockedResponseTtlSecs: 0
         dns64Settings: nil
         listeners: nil
+        outboundProxy: nil
         ipv6Available: true
         blockIpv6: false
         blockingMode: AGBM_DEFAULT

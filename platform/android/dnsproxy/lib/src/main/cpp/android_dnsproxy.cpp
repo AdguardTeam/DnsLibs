@@ -323,11 +323,78 @@ ag::local_ref<jobject> ag::android_dnsproxy::marshal_listener(JNIEnv *env, const
 
     env->SetObjectField(java_listener, address_field, m_utils.marshal_string(env, settings.address).get());
     env->SetIntField(java_listener, port_field, settings.port);
-    env->SetObjectField(java_listener, protocol_field, m_protocol_enum_values.at((size_t) settings.protocol).get());
+    env->SetObjectField(java_listener, protocol_field, m_listener_protocol_enum_values.at((size_t) settings.protocol).get());
     env->SetBooleanField(java_listener, persistent_field, settings.persistent);
     env->SetLongField(java_listener, idle_timeout_field, settings.idle_timeout.count());
 
     return local_ref(env, java_listener);
+}
+
+ag::outbound_proxy_settings ag::android_dnsproxy::marshal_outbound_proxy(JNIEnv *env, jobject jsettings) {
+    jclass clazz = env->FindClass(FQN_OUTBOUND_PROXY_SETTINGS);
+    assert(env->IsInstanceOf(jsettings, clazz));
+
+    auto protocol_field = env->GetFieldID(clazz, "protocol", "L" FQN_OUTBOUND_PROXY_PROTOCOL ";");
+    auto address_field = env->GetFieldID(clazz, "address", "Ljava/net/InetSocketAddress;");
+    auto auth_info_field = env->GetFieldID(clazz, "authInfo", "L" FQN_OUTBOUND_PROXY_AUTH_INFO ";");
+    auto trust_any_certificate_field = env->GetFieldID(clazz, "trustAnyCertificate", "Z");
+
+    ag::outbound_proxy_settings csettings = {};
+    auto protocol = env->GetObjectField(jsettings, protocol_field);
+    csettings.protocol = (ag::outbound_proxy_protocol)m_utils.get_enum_ordinal(env, protocol);
+
+    local_ref<jobject> address = { env, env->GetObjectField(jsettings, address_field) };
+    jclass sock_addr_clazz = env->FindClass("java/net/InetSocketAddress");
+
+    local_ref<jobject> ip_addr = { env, env->CallObjectMethod(address.get(),
+            env->GetMethodID(sock_addr_clazz, "getAddress", "()Ljava/net/InetAddress;")) };
+    local_ref<jobject> ip_str = { env, env->CallObjectMethod(ip_addr.get(),
+            env->GetMethodID(env->FindClass("java/net/InetAddress"), "getHostAddress", "()Ljava/lang/String;")) };
+    m_utils.visit_string(env, ip_str.get(),
+            [&csettings] (const char *str, jsize len) { csettings.address.assign(str, len); });
+
+    if (local_ref<jobject> jinfo = { env, env->GetObjectField(jsettings, auth_info_field) }) {
+        jclass auth_info_clazz = env->FindClass(FQN_OUTBOUND_PROXY_AUTH_INFO);
+        local_ref<jobject> username = { env, env->GetObjectField(jinfo.get(),
+                env->GetFieldID(auth_info_clazz, "username", "Ljava/lang/String;")) };
+        local_ref<jobject> password = { env, env->GetObjectField(jinfo.get(),
+                env->GetFieldID(auth_info_clazz, "password", "Ljava/lang/String;")) };
+
+        outbound_proxy_auth_info &cinfo = csettings.auth_info.emplace();
+        m_utils.visit_string(env, username.get(),
+                [&cinfo] (const char *str, jsize len) { cinfo.username.assign(str, len); });
+        m_utils.visit_string(env, password.get(),
+                [&cinfo] (const char *str, jsize len) { cinfo.password.assign(str, len); });
+    }
+
+    csettings.port = env->CallIntMethod(address.get(), env->GetMethodID(sock_addr_clazz, "getPort", "()I"));
+    csettings.trust_any_certificate = env->GetBooleanField(jsettings, trust_any_certificate_field);
+
+    return csettings;
+}
+
+ag::local_ref<jobject> ag::android_dnsproxy::marshal_outbound_proxy(JNIEnv *env,
+        const ag::outbound_proxy_settings &csettings) {
+    jclass sock_addr_clazz = env->FindClass("java/net/InetSocketAddress");
+    jmethodID sock_addr_ctor = env->GetMethodID(sock_addr_clazz, "<init>", "(Ljava/lang/String;I)V");
+    local_ref<jobject> address = { env, env->NewObject(sock_addr_clazz, sock_addr_ctor,
+            m_utils.marshal_string(env, csettings.address).get(), (int)csettings.port) };
+
+    local_ref<jobject> auth_info;
+    if (csettings.auth_info.has_value()) {
+        jclass auth_info_clazz = env->FindClass(FQN_OUTBOUND_PROXY_AUTH_INFO);
+        jmethodID ctor = env->GetMethodID(auth_info_clazz, "<init>", "(Ljava/lang/String;Ljava/lang/String;)V");
+        auth_info = { env, env->NewObject(auth_info_clazz, ctor,
+                m_utils.marshal_string(env, csettings.auth_info->username).get(),
+                m_utils.marshal_string(env, csettings.auth_info->password).get()) };
+    }
+
+    auto clazz = env->FindClass(FQN_OUTBOUND_PROXY_SETTINGS);
+    auto ctor = env->GetMethodID(clazz, "<init>",
+            "(L" FQN_OUTBOUND_PROXY_PROTOCOL ";Ljava/net/InetSocketAddress;L" FQN_OUTBOUND_PROXY_AUTH_INFO ";Z)V");
+    return { env, env->NewObject(clazz, ctor,
+            m_proxy_protocol_enum_values.at((size_t)csettings.protocol).get(),
+            address.get(), auth_info.get(), csettings.trust_any_certificate) };
 }
 
 ag::dnsfilter::engine_params ag::android_dnsproxy::marshal_filter_params(JNIEnv *env,
@@ -387,6 +454,7 @@ ag::dnsproxy_settings ag::android_dnsproxy::marshal_settings(JNIEnv *env,
     auto handle_dns_suffixes_field = env->GetFieldID(clazz, "handleDNSSuffixes", "Z");
     auto dns_suffixes_field = env->GetFieldID(clazz, "userDNSSuffixes", "Ljava/util/List;");
     auto listeners_field = env->GetFieldID(clazz, "listeners", "Ljava/util/List;");
+    auto outbound_proxy_field = env->GetFieldID(clazz, "outboundProxy", "L" FQN_OUTBOUND_PROXY_SETTINGS ";");
     auto filter_params_field = env->GetFieldID(clazz, "filterParams", "Ljava/util/List;");
     auto ipv6_avail_field = env->GetFieldID(clazz, "ipv6Available", "Z");
     auto block_ipv6_field = env->GetFieldID(clazz, "blockIpv6", "Z");
@@ -428,8 +496,12 @@ ag::dnsproxy_settings ag::android_dnsproxy::marshal_settings(JNIEnv *env,
         });
     }
 
-    if (auto dns64_settings = env->GetObjectField(java_dnsproxy_settings, dns64_field)) {
-        settings.dns64 = marshal_dns64(env, dns64_settings);
+    if (local_ref dns64_settings{ env, env->GetObjectField(java_dnsproxy_settings, dns64_field) }) {
+        settings.dns64 = marshal_dns64(env, dns64_settings.get());
+    }
+
+    if (local_ref outbound_proxy_settings{ env, env->GetObjectField(java_dnsproxy_settings, outbound_proxy_field) }) {
+        settings.outbound_proxy = marshal_outbound_proxy(env, outbound_proxy_settings.get());
     }
 
     if (auto filter_params = env->GetObjectField(java_dnsproxy_settings, filter_params_field)) {
@@ -473,6 +545,7 @@ ag::local_ref<jobject> ag::android_dnsproxy::marshal_settings(JNIEnv *env, const
     auto handle_dns_suffixes_field = env->GetFieldID(clazz, "handleDNSSuffixes", "Z");
     auto dns_suffixes_field = env->GetFieldID(clazz, "userDNSSuffixes", "Ljava/util/List;");
     auto listeners_field = env->GetFieldID(clazz, "listeners", "Ljava/util/List;");
+    auto outbound_proxy_field = env->GetFieldID(clazz, "outboundProxy", "L" FQN_OUTBOUND_PROXY_SETTINGS ";");
     auto filter_params_field = env->GetFieldID(clazz, "filterParams", "Ljava/util/List;");
     auto ipv6_avail_field = env->GetFieldID(clazz, "ipv6Available", "Z");
     auto block_ipv6_field = env->GetFieldID(clazz, "blockIpv6", "Z");
@@ -514,6 +587,10 @@ ag::local_ref<jobject> ag::android_dnsproxy::marshal_settings(JNIEnv *env, const
         for (auto &listener : settings.listeners) {
             m_utils.collection_add(env, listeners.get(), marshal_listener(env, listener).get());
         }
+    }
+
+    if (settings.outbound_proxy.has_value()) {
+        env->SetObjectField(java_settings, outbound_proxy_field, marshal_outbound_proxy(env, settings.outbound_proxy.value()).get());
     }
 
     if (local_ref filter_params{env, env->GetObjectField(java_settings, filter_params_field)}) {
@@ -731,7 +808,8 @@ ag::android_dnsproxy::android_dnsproxy(JavaVM *vm) : m_utils(vm) {
     m_events_interface_methods.on_certificate_verification = env->GetMethodID(
             c, "onCertificateVerification", "(L" FQN_CERT_VERIFY_EVENT ";)Ljava/lang/String;");
 
-    m_protocol_enum_values = m_utils.get_enum_values(env.get(), FQN_LISTENER_PROTOCOL);
+    m_listener_protocol_enum_values = m_utils.get_enum_values(env.get(), FQN_LISTENER_PROTOCOL);
+    m_proxy_protocol_enum_values = m_utils.get_enum_values(env.get(), FQN_OUTBOUND_PROXY_PROTOCOL);
     m_blocking_mode_values = m_utils.get_enum_values(env.get(), FQN_BLOCKING_MODE);
 
     m_jni_initialized.store(true);

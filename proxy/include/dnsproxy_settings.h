@@ -7,6 +7,7 @@
 #include <upstream.h>
 #include <dnsproxy_events.h>
 #include <magic_enum.hpp>
+#include <ag_outbound_proxy_settings.h>
 
 namespace ag {
 
@@ -76,6 +77,8 @@ struct dnsproxy_settings {
     dnsfilter::engine_params filter_params; // Filtering engine parameters (see `dnsfilter::engine_params`)
 
     std::vector<listener_settings> listeners; // List of addresses/ports/protocols/etc... to listen on
+
+    std::optional<outbound_proxy_settings> outbound_proxy; // Outbound proxy settings
 
     bool block_ipv6; // Block AAAA requests
 

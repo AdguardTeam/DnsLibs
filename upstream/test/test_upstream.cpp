@@ -25,7 +25,6 @@ static struct Init {
 } init_;
 
 static ag::upstream_factory::create_result create_upstream(const ag::upstream_options &opts) {
-    static ag::socket_factory socket_factory({});
 #ifndef _WIN32
     static ag::default_verifier cert_verifier;
 #else
@@ -33,6 +32,16 @@ static ag::upstream_factory::create_result create_upstream(const ag::upstream_op
         return std::nullopt;
     }};
 #endif
+
+    struct ag::socket_factory::parameters sf_parameters = {};
+#if 0
+    static ag::outbound_proxy_settings proxy_settings =
+            { ag::outbound_proxy_protocol::SOCKS5_UDP, "127.0.0.1", 8888, { { "1", "1" } } };
+    sf_parameters.oproxy_settings = &proxy_settings;
+#endif
+    sf_parameters.verifier = &cert_verifier;
+    static ag::socket_factory socket_factory(sf_parameters);
+
     static bool ipv6_available = ag::test_ipv6_connectivity();
     static ag::upstream_factory upstream_factory({ &socket_factory, &cert_verifier, ipv6_available });
     return upstream_factory.create_upstream(opts);

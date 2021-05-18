@@ -110,6 +110,45 @@ typedef struct {
     uint32_t idle_timeout_ms;
 } ag_listener_settings;
 
+typedef enum {
+    /** Plain HTTP proxy */
+    AGOPP_HTTP_CONNECT,
+
+    /** HTTPs proxy */
+    AGOPP_HTTPS_CONNECT,
+
+    /** Socks4 proxy */
+    AGOPP_SOCKS4,
+
+    /** Socks5 proxy without UDP support */
+    AGOPP_SOCKS5,
+
+    /** Socks5 proxy with UDP support */
+    AGOPP_SOCKS5_UDP,
+} ag_outbound_proxy_protocol;
+
+typedef struct {
+    const char *username;
+    const char *password;
+} ag_outbound_proxy_auth_info;
+
+typedef struct {
+    /** The proxy protocol */
+    ag_outbound_proxy_protocol protocol;
+
+    /** The proxy server address (must be a valid IP address) */
+    const char *address;
+
+    /** The proxy server port */
+    uint16_t port;
+
+    /** The authentication information */
+    ag_outbound_proxy_auth_info *auth_info;
+
+    /** If true and the proxy connection is secure, the certificate won't be verified */
+    bool trust_any_certificate;
+} ag_outbound_proxy_settings;
+
 typedef struct {
     /** Filter ID */
     int32_t id;
@@ -140,6 +179,8 @@ typedef struct {
     ag_filter_engine_params filter_params;
     /** List of listener parameters */
     ARRAY_OF(ag_listener_settings) listeners;
+    /** Outbound proxy settings */
+    ag_outbound_proxy_settings *outbound_proxy;
     /** If true, all AAAA requests will be blocked */
     bool block_ipv6;
     /** If true, the bootstrappers are allowed to fetch AAAA records */

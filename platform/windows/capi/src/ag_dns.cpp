@@ -201,6 +201,41 @@ static ag_listener_settings *marshal_listeners(const std::vector<ag::listener_se
     return c_listeners;
 }
 
+static ag_outbound_proxy_settings *marshal_outbound_proxy(const std::optional<ag::outbound_proxy_settings> &outbound_proxy) {
+    if (!outbound_proxy.has_value()) {
+        return nullptr;
+    }
+    auto *c_outbound_proxy = (ag_outbound_proxy_settings *)std::malloc(sizeof(ag_outbound_proxy_settings));
+    c_outbound_proxy->protocol = (ag_outbound_proxy_protocol)outbound_proxy->protocol;
+    c_outbound_proxy->address = marshal_str(outbound_proxy->address);
+    c_outbound_proxy->port = outbound_proxy->port;
+    if (outbound_proxy->auth_info.has_value()) {
+        c_outbound_proxy->auth_info = (ag_outbound_proxy_auth_info *)std::malloc(sizeof(ag_outbound_proxy_auth_info));
+        c_outbound_proxy->auth_info->username = marshal_str(outbound_proxy->auth_info->username);
+        c_outbound_proxy->auth_info->password = marshal_str(outbound_proxy->auth_info->password);
+    } else {
+        c_outbound_proxy->auth_info = nullptr;
+    }
+    c_outbound_proxy->trust_any_certificate = outbound_proxy->trust_any_certificate;
+    return c_outbound_proxy;
+}
+
+static void free_outbound_proxy(ag_outbound_proxy_settings *outbound_proxy) {
+    if (outbound_proxy == nullptr) {
+        return;
+    }
+
+    std::free((void *)outbound_proxy->address);
+
+    if (outbound_proxy->auth_info != nullptr) {
+        std::free((void *)outbound_proxy->auth_info->username);
+        std::free((void *)outbound_proxy->auth_info->password);
+        std::free(outbound_proxy->auth_info);
+    }
+
+    std::free(outbound_proxy);
+}
+
 static ag_dnsproxy_settings *marshal_settings(const ag::dnsproxy_settings &settings) {
     auto *c_settings = (ag_dnsproxy_settings *) std::malloc(sizeof(ag_dnsproxy_settings));
 
@@ -222,6 +257,7 @@ static ag_dnsproxy_settings *marshal_settings(const ag::dnsproxy_settings &setti
     c_settings->filter_params = marshal_engine_params(settings.filter_params);
     c_settings->listeners.size = settings.listeners.size();
     c_settings->listeners.data = marshal_listeners(settings.listeners);
+    c_settings->outbound_proxy = marshal_outbound_proxy(settings.outbound_proxy);
     c_settings->optimistic_cache = settings.optimistic_cache;
     c_settings->enable_dnssec_ok = settings.enable_dnssec_ok;
 
@@ -265,6 +301,7 @@ void ag_dnsproxy_settings_free(ag_dnsproxy_settings *settings) {
     free_dns64(settings->dns64);
     free_listeners(settings->listeners.data, settings->listeners.size);
     free_filters(settings->filter_params.filters.data, settings->filter_params.filters.size);
+    free_outbound_proxy(settings->outbound_proxy);
     std::free(settings);
 }
 

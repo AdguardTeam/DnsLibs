@@ -50,7 +50,7 @@ namespace Adguard.Dns.TestApp
                     m_CoreProcess =
                         WindowsTools.CreateProcess(
                             redirectorAppExecutablePath,
-                            string.Format("{0} {1}", dnsProxyProcessId, DNS_PROXY_PORT),
+                            $"{dnsProxyProcessId} {DNS_PROXY_PORT}",
                             true);
                     m_CoreProcess.Start();
                 }
@@ -162,6 +162,18 @@ namespace Adguard.Dns.TestApp
                     }
                 },
                 Listeners = listeners,
+                OutboundProxySettings = new OutboundProxySettings
+                {
+                    Protocol = AGDnsApi.ag_outbound_proxy_protocol.AGOPP_SOCKS5,
+                    Address = "127.0.0.1",
+                    AuthInfo = new OutboundProxyAuthInfo
+                    {
+                        Password = "123",
+                        Username = "username"
+                    },
+                    Port = 6754,
+                    TrustAnyCertificate = false
+                },
                 Ipv6Available = false,
                 OptimisticCache = false,
                 EnableDNSSECOK = false

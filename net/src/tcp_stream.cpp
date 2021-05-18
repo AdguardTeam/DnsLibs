@@ -2,6 +2,7 @@
 #include "tcp_stream.h"
 #include <event2/buffer.h>
 #include <event2/bufferevent_ssl.h>
+#include <openssl/err.h>
 
 
 #define log_stream(s_, lvl_, fmt_, ...) lvl_##log((s_)->log, "[id={}] {}(): " fmt_, (s_)->id, __func__, ##__VA_ARGS__)
@@ -144,8 +145,9 @@ int tcp_stream::on_prepare_fd(int fd, const struct sockaddr *sa, int, void *arg)
 static err_string get_ssl_errors(bufferevent *bev) {
     std::vector<std::string> error_strings;
     ev_uint32_t err;
+    char buffer[256];
     while (0 != (err = bufferevent_get_openssl_error(bev))) {
-        error_strings.push_back(AG_FMT("{}, ", err));
+        error_strings.push_back(AG_FMT("{}, ", ERR_error_string_n(err, buffer, sizeof(buffer))));
     }
 
     if (error_strings.empty()) {

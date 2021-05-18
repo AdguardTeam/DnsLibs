@@ -305,3 +305,4 @@ Now let's see a few examples of rules:
 - [DNSCrypt](https://dnscrypt.info/stamps-specifications/) specifications;
 - An Introduction to [libuv](https://nikhilm.github.io/uvbook/An%20Introduction%20to%20libuv.pdf);
 - [LDNS](https://www.nlnetlabs.nl/documentation/ldns/) docs;
+- [Filtering rules syntax](https://github.com/AdguardTeam/AdguardHome/wiki/Hosts-Blocklists);

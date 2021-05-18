@@ -23,6 +23,7 @@ static const dnsproxy_settings DEFAULT_PROXY_SETTINGS = {
     .blocked_response_ttl_secs = 3600,
     .filter_params = {},
     .listeners = {},
+    .outbound_proxy = std::nullopt,
     .block_ipv6 = false,
     .ipv6_available = true,
     .blocking_mode = dnsproxy_blocking_mode::DEFAULT,

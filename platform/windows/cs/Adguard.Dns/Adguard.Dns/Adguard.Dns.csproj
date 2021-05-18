@@ -76,6 +76,8 @@
     <Compile Include="Api\DnsProxyServer\Configs\DnsStamp.cs" />
     <Compile Include="Api\DnsProxyServer\Configs\EngineParams.cs" />
     <Compile Include="Api\DnsProxyServer\Configs\FilterParams.cs" />
+    <Compile Include="Api\DnsProxyServer\Configs\OutboundProxyAuthInfo.cs" />
+    <Compile Include="Api\DnsProxyServer\Configs\OutboundProxySettings.cs" />
     <Compile Include="Api\DnsProxyServer\Configs\UpstreamOptions.cs" />
     <Compile Include="Api\DnsProxyServer\Configs\ListenerSettings.cs" />
     <Compile Include="Api\DnsProxyServer\EventArgs\CertificateVerificationEventArgs.cs" />

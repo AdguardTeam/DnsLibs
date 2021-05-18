@@ -63,7 +63,8 @@ private:
         jmethodID ctor;
     } m_cert_verify_event_methods{};
 
-    std::vector<global_ref<jobject>> m_protocol_enum_values;
+    std::vector<global_ref<jobject>> m_listener_protocol_enum_values;
+    std::vector<global_ref<jobject>> m_proxy_protocol_enum_values;
     std::vector<global_ref<jobject>> m_blocking_mode_values;
 
     /**
@@ -95,6 +96,16 @@ private:
      * Marshal listener settings from C++ to Java.
      */
     local_ref<jobject> marshal_listener(JNIEnv *env, const listener_settings &settings);
+
+    /**
+     * Marshal DNS64 settings from Java to C++;
+     */
+    outbound_proxy_settings marshal_outbound_proxy(JNIEnv *env, jobject jsettings);
+
+    /**
+     * Marshal DNS64 settings from C++ to Java.
+     */
+    local_ref<jobject> marshal_outbound_proxy(JNIEnv *env, const outbound_proxy_settings &csettings);
 
     /**
      * Marshal filter parameters from Java to C++.

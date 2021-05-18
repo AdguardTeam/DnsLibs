@@ -15,9 +15,7 @@ if(NOT TARGET dnslibs_common)
 endif(NOT TARGET dnslibs_common)
 
 add_library(dnsstamp EXCLUDE_FROM_ALL
-        include/base64.h
         include/dns_stamp.h
-        src/base64.cpp
         src/dns_stamp.cpp)
 
 set_target_properties(dnsstamp PROPERTIES POSITION_INDEPENDENT_CODE ON)

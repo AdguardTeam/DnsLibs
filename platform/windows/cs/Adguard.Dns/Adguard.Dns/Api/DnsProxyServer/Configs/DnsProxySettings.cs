@@ -57,6 +57,11 @@ namespace Adguard.Dns.Api.DnsProxyServer.Configs
         public List<ListenerSettings> Listeners { get; set; }
 
         /// <summary>
+        /// Outbound proxy settings
+        /// </summary>
+        public OutboundProxySettings OutboundProxySettings { get; set; }
+
+        /// <summary>
         /// Determines, whether bootstrappers will fetch AAAA records.
         /// </summary>
         public bool Ipv6Available { get; set; }
@@ -138,6 +143,7 @@ namespace Adguard.Dns.Api.DnsProxyServer.Configs
                    BlockedResponseTtlSec == other.BlockedResponseTtlSec &&
                    Equals(EngineParams, other.EngineParams) &&
                    CollectionUtils.ListsEquals(Listeners, other.Listeners) &&
+                   Equals(OutboundProxySettings, other.OutboundProxySettings) &&
                    Ipv6Available == other.Ipv6Available &&
                    BlockIpv6 == other.BlockIpv6 &&
                    BlockingMode == other.BlockingMode &&
@@ -160,6 +166,7 @@ namespace Adguard.Dns.Api.DnsProxyServer.Configs
                 hashCode = (hashCode * 397) ^ BlockedResponseTtlSec.GetHashCode();
                 hashCode = (hashCode * 397) ^ (EngineParams != null ? EngineParams.GetHashCode() : 0);
                 hashCode = (hashCode * 397) ^ (Listeners != null ? Listeners.Count : 0);
+                hashCode = (hashCode * 397) ^ (OutboundProxySettings != null ? OutboundProxySettings.GetHashCode() : 0);
                 hashCode = (hashCode * 397) ^ Ipv6Available.GetHashCode();
                 hashCode = (hashCode * 397) ^ BlockIpv6.GetHashCode();
                 hashCode = (hashCode * 397) ^ BlockingMode.GetHashCode();

@@ -38,17 +38,20 @@ static constexpr std::string_view USER_AGENT = "ag-dns";
 
 
 struct dns_over_https::query_handle {
+    using CURL_ptr = std::unique_ptr<CURL, ftor<&curl_easy_cleanup>>;
+
     const logger *log = nullptr;
     dns_over_https *upstream = nullptr;
     size_t request_id = 0;
-    CURL *curl_handle = nullptr;
+    CURL_ptr curl_handle;
     err_string error;
     ldns_buffer_ptr request = nullptr;
     std::vector<uint8_t> response;
     std::promise<void> barrier;
     std::promise<void> submit_barrier;
 
-    CURL *create_curl_handle();
+    CURL_ptr create_curl_handle();
+    bool set_up_proxy(const outbound_proxy_settings *settings);
     void cleanup_request();
     void restore_packet_id(ldns_pkt *packet) const {
         ldns_pkt_set_id(packet, this->request_id);
@@ -103,9 +106,9 @@ static CURLSH *get_curl_share() {
     return curl_share.get();
 }
 
-CURL *dns_over_https::query_handle::create_curl_handle() {
-    CURL *curl = curl_easy_init();
-    if (curl == nullptr) {
+dns_over_https::query_handle::CURL_ptr dns_over_https::query_handle::create_curl_handle() {
+    CURL_ptr curl_ptr{ curl_easy_init() };
+    if (curl_ptr == nullptr) {
         this->error = "Failed to init curl handle";
         return nullptr;
     }
@@ -113,6 +116,7 @@ CURL *dns_over_https::query_handle::create_curl_handle() {
     dns_over_https *upstream = this->upstream;
     ldns_buffer *raw_request = this->request.get();
     uint64_t timeout = upstream->m_options.timeout.count();
+    CURL *curl = curl_ptr.get();
     if (CURLcode e;
             CURLE_OK != (e = curl_easy_setopt(curl, CURLOPT_URL, upstream->m_options.address.data()))
             || CURLE_OK != (e = curl_easy_setopt(curl, CURLOPT_NOPROGRESS, true))
@@ -139,21 +143,58 @@ CURL *dns_over_https::query_handle::create_curl_handle() {
             || CURLE_OK != (e = curl_easy_setopt(curl, CURLOPT_SHARE, get_curl_share()))
             || (upstream->resolved != nullptr
                 && CURLE_OK != (e = curl_easy_setopt(curl, CURLOPT_RESOLVE, upstream->resolved.get())))) {
-        this->error = AG_FMT("Failed to set options of curl handle: {} (id={})",
+        this->error = AG_FMT("Failed to set options on curl handle: {} (id={})",
             curl_easy_strerror(e), e);
-        curl_easy_cleanup(curl);
         return nullptr;
     }
 
-    return curl;
+    return curl_ptr;
+}
+
+bool dns_over_https::query_handle::set_up_proxy(const outbound_proxy_settings *settings) {
+    static constexpr curl_proxytype AG_TO_CURL_PROXY_PROTOCOL[] = {
+            [(int)outbound_proxy_protocol::HTTP_CONNECT] = CURLPROXY_HTTP,
+            [(int)outbound_proxy_protocol::HTTPS_CONNECT] = CURLPROXY_HTTPS,
+            [(int)outbound_proxy_protocol::SOCKS4] = CURLPROXY_SOCKS4,
+            [(int)outbound_proxy_protocol::SOCKS5] = CURLPROXY_SOCKS5,
+            [(int)outbound_proxy_protocol::SOCKS5_UDP] = CURLPROXY_SOCKS5,
+    };
+
+    CURL *curl = this->curl_handle.get();
+
+#define SETOPT_S(curl_, opt_, val_) \
+    do { \
+        if (CURLcode e = curl_easy_setopt((curl_), (opt_), (val_)); \
+                e != CURLE_OK) { \
+            this->error = AG_FMT("Failed to set option {} on curl handle: {} ({})", \
+                    magic_enum::enum_name(opt_), curl_easy_strerror(e), e); \
+            return false; \
+        } \
+    } while (0)
+
+    SETOPT_S(curl, CURLOPT_PROXYTYPE, AG_TO_CURL_PROXY_PROTOCOL[(int)settings->protocol]);
+    SETOPT_S(curl, CURLOPT_PROXY, settings->address.c_str());
+    SETOPT_S(curl, CURLOPT_PROXYPORT, settings->port);
+
+    if (const auto &auth_info = settings->auth_info; auth_info.has_value()) {
+        SETOPT_S(curl, CURLOPT_PROXYUSERNAME, auth_info->username.c_str());
+        SETOPT_S(curl, CURLOPT_PROXYPASSWORD, auth_info->password.c_str());
+    }
+
+    SETOPT_S(curl, CURLOPT_PROXY_SSL_VERIFYPEER, false); // We verify ourselves, see dns_over_https::ssl_callback
+    SETOPT_S(curl, CURLOPT_PROXY_SSL_VERIFYHOST, false); // We verify ourselves, see dns_over_https::ssl_callback
+
+#undef SETOPT_S
+
+    return true;
 }
 
 void dns_over_https::query_handle::cleanup_request() {
     if (this->curl_handle) {
-        CURLMcode perr [[maybe_unused]] = curl_multi_remove_handle(this->upstream->pool.handle.get(), this->curl_handle);
+        CURLMcode perr [[maybe_unused]] =
+                curl_multi_remove_handle(this->upstream->pool.handle.get(), this->curl_handle.get());
         assert(perr == CURLM_OK);
-        curl_easy_cleanup(this->curl_handle);
-        this->curl_handle = nullptr;
+        this->curl_handle.reset();
     }
 }
 
@@ -189,6 +230,19 @@ static std::string_view get_host_name(std::string_view url) {
 int dns_over_https::verify_callback(X509_STORE_CTX *ctx, void *arg) {
     dns_over_https::query_handle *handle = (dns_over_https::query_handle *)arg;
     dns_over_https *upstream = handle->upstream;
+
+    SSL *ssl = (SSL *)X509_STORE_CTX_get_ex_data(ctx, SSL_get_ex_data_X509_STORE_CTX_idx());
+    const char *sni = SSL_get_servername(ssl, TLSEXT_NAMETYPE_host_name);
+    tracelog_id(handle, "{}(): SNI={}", __func__, (sni == nullptr) ? "null" : sni);
+
+    if (const outbound_proxy_settings *proxy_settings = upstream->m_config.socket_factory->get_outbound_proxy_settings();
+            proxy_settings != nullptr
+            && proxy_settings->protocol == outbound_proxy_protocol::HTTPS_CONNECT
+            && proxy_settings->trust_any_certificate
+            && (sni == nullptr || sni != get_host_name(upstream->m_options.address))) {
+        tracelog_id(handle, "Trusting any proxy certificate as specified in settings");
+        return 1;
+    }
 
     if (upstream->m_config.cert_verifier == nullptr) {
         std::string err = "Cannot verify certificate due to verifier is not set";
@@ -228,11 +282,11 @@ static curl_slist_ptr create_resolved_hosts_list(std::string_view url, const ip_
     }
 
     std::string entry;
-    if (std::holds_alternative<uint8_array<4>>(addr)) {
-        const uint8_array<4> &ip = std::get<uint8_array<4>>(addr);
+    if (const auto *ipv4 = std::get_if<uint8_array<4>>(&addr); ipv4 != nullptr) {
+        const auto &ip = *ipv4;
         entry = AG_FMT("{}:{}:{}.{}.{}.{}", host, port, ip[0], ip[1], ip[2], ip[3]);
-    } else if (std::holds_alternative<uint8_array<16>>(addr)) {
-        const uint8_array<16> &ip = std::get<uint8_array<16>>(addr);
+    } else {
+        const auto &ip = std::get<uint8_array<16>>(addr);
         entry = AG_FMT("{}:{}:[{:02x}{:02x}:{:02x}{:02x}:{:02x}{:02x}:{:02x}{:02x}:{:02x}{:02x}:{:02x}{:02x}:{:02x}{:02x}:{:02x}{:02x}]",
             host, port,
             ip[0], ip[1], ip[2], ip[3], ip[4], ip[5], ip[6], ip[7],
@@ -386,7 +440,7 @@ void dns_over_https::read_messages() {
 
         query_handle *handle;
         curl_easy_getinfo(message->easy_handle, CURLINFO_PRIVATE, &handle);
-        assert(message->easy_handle == handle->curl_handle);
+        assert(message->easy_handle == handle->curl_handle.get());
 
         if (message->data.result != CURLE_OK) {
             handle->error = AG_FMT("Failed to perform request: {}", curl_easy_strerror(message->data.result));
@@ -474,22 +528,27 @@ void dns_over_https::submit_request(query_handle *handle) {
         handle->submit_barrier.set_value();
     });
 
-    CURL *curl_handle = handle->create_curl_handle();
-    if (curl_handle == nullptr) {
-        // error set already in `create_curl_handle`
+    handle->curl_handle = handle->create_curl_handle();
+    if (handle->curl_handle == nullptr) {
+        // error is already set in `create_curl_handle`
         handle->barrier.set_value();
         return;
     }
 
-    if (CURLMcode e = curl_multi_add_handle(this->pool.handle.get(), curl_handle);
+    if (const outbound_proxy_settings *proxy_settings = this->m_config.socket_factory->get_outbound_proxy_settings();
+            proxy_settings != nullptr && !handle->set_up_proxy(proxy_settings)) {
+        // error is already set in `set_up_proxy`
+        handle->barrier.set_value();
+        return;
+    }
+
+    if (CURLMcode e = curl_multi_add_handle(this->pool.handle.get(), handle->curl_handle.get());
             e != CURLM_OK) {
         handle->error = AG_FMT("Failed to add request in pool: {}", curl_multi_strerror(e));
-        curl_easy_cleanup(curl_handle);
         handle->barrier.set_value();
         return;
     }
 
-    handle->curl_handle = curl_handle;
     this->worker.running_queue.emplace_back(handle);
 }
 
@@ -511,7 +570,7 @@ void dns_over_https::defy_requests() {
     }
 }
 
-void dns_over_https::stop_all_with_error(err_string e) {
+void dns_over_https::stop_all_with_error(const err_string &e) {
     std::deque<query_handle *> &queue = this->worker.running_queue;
     for (auto i = queue.begin(); i != queue.end();) {
         query_handle *handle = *i;

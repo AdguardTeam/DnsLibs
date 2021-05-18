@@ -181,6 +181,52 @@ typedef void (^logCallback)(const char *msg, int length);
 
 @end
 
+/**
+ * Outbound proxy protocols
+ */
+typedef NS_ENUM(NSInteger, AGOutboundProxyProtocol) {
+    AGOPP_HTTP_CONNECT, // Plain HTTP proxy
+    AGOPP_HTTPS_CONNECT, // HTTPs proxy
+    AGOPP_SOCKS4, // Socks4 proxy
+    AGOPP_SOCKS5, // Socks5 proxy without UDP support
+    AGOPP_SOCKS5_UDP, // Socks5 proxy with UDP support
+};
+
+@interface AGOutboundProxyAuthInfo : NSObject<NSCoding>
+/** User name for authentication */
+@property(nonatomic, readonly) NSString *username;
+/** Password for authentication */
+@property(nonatomic, readonly) NSString *password;
+
+- (instancetype) initWithUsername: (NSString *)username
+                         password: (NSString *)password;
+
+- (instancetype) init NS_UNAVAILABLE;
+
+@end
+
+@interface AGOutboundProxySettings : NSObject<NSCoding>
+/** The proxy protocol */
+@property(nonatomic, readonly) AGOutboundProxyProtocol protocol;
+/** The proxy server address (must be a valid IP address) */
+@property(nonatomic, readonly) NSString *address;
+/** The proxy server port */
+@property(nonatomic, readonly) NSInteger port;
+/** The authentication information (if nil, authentication is not performed) */
+@property(nonatomic, readonly) AGOutboundProxyAuthInfo *authInfo;
+/** If true and the proxy connection is secure, the certificate won't be verified */
+@property(nonatomic, readonly) BOOL trustAnyCertificate;
+
+- (instancetype) initWithProtocol: (AGOutboundProxyProtocol)protocol
+                          address: (NSString *)address
+                             port: (NSInteger)port
+                         authInfo: (AGOutboundProxyAuthInfo *)authInfo
+              trustAnyCertificate: (BOOL)trustAnyCertificate;
+
+- (instancetype) init NS_UNAVAILABLE;
+
+@end
+
 @interface AGDnsFilterParams : NSObject<NSCoding>
 /**
  * Filter identifier
@@ -241,6 +287,10 @@ typedef void (^logCallback)(const char *msg, int length);
  */
 @property(nonatomic, readonly) NSArray<AGListenerSettings *> *listeners;
 /**
+ * Outbound proxy settings
+ */
+@property(nonatomic, readonly) AGOutboundProxySettings *outboundProxy;
+/**
  * If false, bootstrappers will fetch only A records.
  */
 @property(nonatomic, readonly) BOOL ipv6Available;
@@ -288,6 +338,7 @@ typedef void (^logCallback)(const char *msg, int length);
         blockedResponseTtlSecs: (NSInteger) blockedResponseTtlSecs
         dns64Settings: (AGDns64Settings *) dns64Settings
         listeners: (NSArray<AGListenerSettings *> *) listeners
+        outboundProxy: (AGOutboundProxySettings *) outboundProxy
         ipv6Available: (BOOL) ipv6Available
         blockIpv6: (BOOL) blockIpv6
         blockingMode: (AGBlockingMode) blockingMode

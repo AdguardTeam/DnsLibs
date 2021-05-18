@@ -11,12 +11,17 @@ set(SRCS
         ${SRC_DIR}/certificate_verifier.cpp
         ${SRC_DIR}/application_verifier.cpp
         ${SRC_DIR}/default_verifier.cpp
+        ${SRC_DIR}/tls_session_cache.cpp
         ${SRC_DIR}/socket.cpp
         ${SRC_DIR}/socket_factory.cpp
         ${SRC_DIR}/blocking_socket.cpp
         ${SRC_DIR}/tcp_stream.cpp
         ${SRC_DIR}/udp_socket.cpp
         ${SRC_DIR}/tcp_dns_buffer.cpp
+        ${SRC_DIR}/proxied_socket.cpp
+        ${SRC_DIR}/outbound_proxy.cpp
+        ${SRC_DIR}/outbound_http_proxy.cpp
+        ${SRC_DIR}/outbound_socks_proxy.cpp
         )
 
 add_library(dnslibs_net STATIC EXCLUDE_FROM_ALL ${SRCS})

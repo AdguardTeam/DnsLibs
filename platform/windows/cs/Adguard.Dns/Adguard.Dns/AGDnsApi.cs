@@ -23,7 +23,7 @@ namespace Adguard.Dns
         /// <summary>
         /// The current API version hash with which the ProxyServer was tested
         /// </summary>
-        private const string API_VERSION_HASH = "ef2239d427abfd633d804c1d50b97fd5fdf52d3c35cd7fe3644db29545468bc4";
+        private const string API_VERSION_HASH = "2a7131582a4adcaab5fe477abc1dda306232d3e12206042630c8b426f96ff186";
         #endregion
 
         #region API Functions
@@ -237,6 +237,63 @@ namespace Adguard.Dns
             internal UInt32 IdleTimeoutMs;
         }
 
+        public enum ag_outbound_proxy_protocol
+        {
+            /** Plain HTTP proxy */
+            AGOPP_HTTP_CONNECT,
+
+            /** HTTPs proxy */
+            AGOPP_HTTPS_CONNECT,
+
+            /** Socks4 proxy */
+            AGOPP_SOCKS4,
+
+            /** Socks5 proxy without UDP support */
+            AGOPP_SOCKS5,
+
+            /** Socks5 proxy with UDP support */
+            AGOPP_SOCKS5_UDP,
+        };
+
+        [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Ansi)]
+        internal struct ag_outbound_proxy_auth_info
+        {
+            [ManualMarshalPtrToString]
+            [NativeName("username")]
+            internal IntPtr Username;
+
+            [ManualMarshalPtrToString]
+            [NativeName("password")]
+            internal IntPtr Password;
+        };
+
+        [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Ansi)]
+        internal struct ag_outbound_proxy_settings
+        {
+            /** The proxy protocol */
+            [MarshalAs(UnmanagedType.I4)]
+            [NativeName("protocol")]
+            ag_outbound_proxy_protocol Protocol;
+
+            /** The proxy server address (must be a valid IP address) */
+            [ManualMarshalPtrToString]
+            [NativeName("address")]
+            internal IntPtr Address;
+
+            /** The proxy server port */
+            [MarshalAs(UnmanagedType.U2)]
+            [NativeName("port")]
+            internal UInt16 Port;
+
+            /** The authentication information (pointer to <see cref="ag_outbound_proxy_auth_info"/>)*/
+            internal IntPtr auth_info;
+
+            /** If true and the proxy connection is secure, the certificate won't be verified */
+            [MarshalAs(UnmanagedType.I1)]
+            [NativeName("trust_any_certificate")]
+            internal bool TrustAnyCertificate;
+        };
+
         [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Ansi)]
         internal struct ag_upstream_options
         {
@@ -391,6 +448,9 @@ namespace Adguard.Dns
             /// </summary>
             [MarshalAs(UnmanagedType.Struct)]
             internal MarshalUtils.ag_list listeners;
+
+            /** Outbound proxy settings (pointer to <see cref="ag_outbound_proxy_settings"/>)*/
+            internal IntPtr outbound_proxy;
 
             /// <summary>
             /// If true, all AAAA requests will be blocked

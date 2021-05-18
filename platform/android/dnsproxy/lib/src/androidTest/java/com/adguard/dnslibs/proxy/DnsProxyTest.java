@@ -23,6 +23,7 @@ import org.xbill.DNS.Type;
 import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.math.BigInteger;
+import java.net.InetSocketAddress;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
@@ -230,6 +231,10 @@ public class DnsProxyTest {
         fallbackUpstream.setServerIp(new byte[]{8, 8, 8, 8});
         fallbackUpstream.setTimeoutMs(4200);
         settings.getFallbacks().add(fallbackUpstream);
+
+        settings.setOutboundProxy(
+                new OutboundProxySettings(OutboundProxySettings.Protocol.SOCKS5_UDP, new InetSocketAddress("::", 1234),
+                        new OutboundProxySettings.AuthInfo("1", "2"), true));
 
         try (final DnsProxy proxy = new DnsProxy(context, settings)) {
             assertEquals(settings, proxy.getSettings());

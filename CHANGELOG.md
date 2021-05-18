@@ -1,6 +1,10 @@
 # Changelog
 
 ## V1.5
+* [Feature] Add an ability to set up outbound proxy
+    * [Android] see `OutboundProxySettings`
+    * [Apple] see `AGOutboundProxySettings`
+    * [C API] see `ag_outbound_proxy_settings`
 * [Feature] DNS stamp API has been reworked in adapters: DNS stamps can now be
             dynamically edited and converted to various string representations.
 * [Feature] DNSLibs indicate that upstream uses DNSSEC. Turn on `ag::dnsproxy_settings::enable_dnssec_ok`

@@ -5,6 +5,7 @@
 #include <chrono>
 #include <string>
 #include <variant>
+#include <memory>
 #include <event2/event.h>
 #include <event2/util.h>
 #include <openssl/ssl.h>
@@ -12,18 +13,23 @@
 #include <ag_net_utils.h>
 #include <ag_logger.h>
 #include <ag_route_resolver.h>
+#include <ag_outbound_proxy_settings.h>
 #include <ag_event_loop.h>
+#include <certificate_verifier.h>
 
 
 namespace ag {
 
 class socket;
+class outbound_proxy;
 
 class socket_factory {
 public:
     using socket_ptr = std::unique_ptr<socket>;
 
     struct parameters {
+        const outbound_proxy_settings *oproxy_settings = nullptr;
+        const certificate_verifier *verifier = nullptr;
     };
 
     struct socket_parameters {
@@ -34,7 +40,7 @@ public:
     };
 
     explicit socket_factory(parameters parameters);
-    ~socket_factory() = default;
+    ~socket_factory();
 
     socket_factory(socket_factory &&) = default;
     socket_factory &operator=(socket_factory &&) = default;
@@ -59,12 +65,22 @@ public:
     [[nodiscard]] err_string prepare_fd(evutil_socket_t fd,
             const socket_address &peer, const if_id_variant &outbound_interface) const;
 
+    /**
+     * Get outbound proxy settings
+     * @return null if the proxy is not configured, non-null otherwise
+     */
+    [[nodiscard]] const outbound_proxy_settings *get_outbound_proxy_settings() const;
+
 private:
     parameters parameters = {};
     route_resolver_ptr router;
+    outbound_proxy *proxy = nullptr;
 
+    [[nodiscard]] socket_ptr make_direct_socket(socket_parameters parameters) const;
     static err_string on_prepare_fd(void *arg, evutil_socket_t fd,
             const socket_address &peer, const if_id_variant &outbound_interface);
+    [[nodiscard]] outbound_proxy *make_proxy() const;
+    static socket_factory::socket_ptr on_make_proxy_socket(void *arg, utils::transport_protocol proto);
 };
 
 class socket {

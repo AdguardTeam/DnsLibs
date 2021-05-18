@@ -52,6 +52,7 @@ public class DnsProxySettings {
     private long blockedResponseTtlSecs;
     private List<FilterParams> filterParams = new ArrayList<>();
     private List<ListenerSettings> listeners = new ArrayList<>();
+    private OutboundProxySettings outboundProxy;
     private boolean ipv6Available;
     private boolean blockIpv6;
     private BlockingMode blockingMode;
@@ -246,6 +247,20 @@ public class DnsProxySettings {
     }
 
     /**
+     * @return Outbound proxy settings.
+     */
+    public OutboundProxySettings getOutboundProxy() {
+        return outboundProxy;
+    }
+
+    /**
+     * @param outboundProxy Outbound proxy settings.
+     */
+    public void setOutboundProxy(OutboundProxySettings outboundProxy) {
+        this.outboundProxy = outboundProxy;
+    }
+
+    /**
      * @return whether bootstrappers will fetch AAAA records.
      */
     public boolean isIpv6Available() {
@@ -319,6 +334,7 @@ public class DnsProxySettings {
                 Objects.equals(dns64, that.dns64) &&
                 Objects.equals(filterParams, that.filterParams) &&
                 Objects.equals(listeners, that.listeners) &&
+                Objects.equals(outboundProxy, that.outboundProxy) &&
                 blockingMode == that.blockingMode &&
                 Objects.equals(customBlockingIpv4, that.customBlockingIpv4) &&
                 Objects.equals(customBlockingIpv6, that.customBlockingIpv6) &&
@@ -330,7 +346,7 @@ public class DnsProxySettings {
     @Override
     public int hashCode() {
         return Objects.hash(upstreams, fallbacks, handleDNSSuffixes, userDNSSuffixes, dns64, blockedResponseTtlSecs,
-                filterParams, listeners, ipv6Available, blockIpv6, blockingMode, customBlockingIpv4, customBlockingIpv6,
+                filterParams, listeners, outboundProxy, ipv6Available, blockIpv6, blockingMode, customBlockingIpv4, customBlockingIpv6,
                 dnsCacheSize, optimisticCache, enableDNSSECOK);
     }
 

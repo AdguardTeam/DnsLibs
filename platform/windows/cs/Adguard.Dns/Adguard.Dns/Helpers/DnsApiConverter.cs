@@ -71,15 +71,25 @@ namespace Adguard.Dns.Helpers
             IntPtr pDns64C = IntPtr.Zero;
             if (dnsProxySettings.Dns64 != null)
             {
-                AGDnsApi.ag_dns64_settings dns64C = ToNativeObject(dnsProxySettings.Dns64, allocatedPointers);
+                AGDnsApi.ag_dns64_settings dns64C =
+                    ToNativeObject(dnsProxySettings.Dns64, allocatedPointers);
                 pDns64C = MarshalUtils.StructureToPtr(dns64C, allocatedPointers);
             }
 
-            AGDnsApi.ag_filter_engine_params filterEngineParamsC = ToNativeObject(dnsProxySettings.EngineParams, allocatedPointers);
+            AGDnsApi.ag_filter_engine_params filterEngineParamsC =
+                ToNativeObject(dnsProxySettings.EngineParams, allocatedPointers);
             MarshalUtils.ag_list listenersC = MarshalUtils.ListToAgList(
                 dnsProxySettings.Listeners,
                 ToNativeObject,
                 allocatedPointers);
+
+            IntPtr pOutboundProxySessionC = IntPtr.Zero;
+            if (dnsProxySettings.OutboundProxySettings != null)
+            {
+                AGDnsApi.ag_outbound_proxy_settings outboundProxySettingsC =
+                    ToNativeObject(dnsProxySettings.OutboundProxySettings, allocatedPointers);
+                pOutboundProxySessionC = MarshalUtils.StructureToPtr(outboundProxySettingsC, allocatedPointers);
+            }
 
             AGDnsApi.ag_dnsproxy_settings dnsProxySettingsC = new AGDnsApi.ag_dnsproxy_settings
             {
@@ -88,6 +98,7 @@ namespace Adguard.Dns.Helpers
                 pDns64 = pDns64C,
                 FilterParams = filterEngineParamsC,
                 listeners = listenersC,
+                outbound_proxy = pOutboundProxySessionC,
                 UserDNSSuffixes = dnsSuffixesC,
             };
 
@@ -110,6 +121,50 @@ namespace Adguard.Dns.Helpers
             };
 
             return filterEngineParamsC;
+        }
+
+        private static AGDnsApi.ag_outbound_proxy_settings ToNativeObject(
+            OutboundProxySettings outboundProxySettings,
+            Queue<IntPtr> allocatedPointers)
+        {
+            IntPtr pOutboundProxyAuthInfoC = IntPtr.Zero;
+            if (outboundProxySettings.AuthInfo != null)
+            {
+                AGDnsApi.ag_outbound_proxy_auth_info outboundProxyAuthInfoC = ToNativeObject(
+                    outboundProxySettings.AuthInfo,
+                    allocatedPointers);
+                pOutboundProxyAuthInfoC = MarshalUtils.StructureToPtr(
+                    outboundProxyAuthInfoC,
+                    allocatedPointers);
+            }
+
+            AGDnsApi.ag_outbound_proxy_settings outboundProxySettingsC =
+                new AGDnsApi.ag_outbound_proxy_settings
+            {
+                auth_info = pOutboundProxyAuthInfoC
+            };
+
+            MarshalUtils.CopyPropertiesToFields(outboundProxySettings, ref outboundProxySettingsC);
+            MarshalUtils.AllStringsToPtrs(
+                outboundProxySettings,
+                ref outboundProxySettingsC,
+                allocatedPointers);
+
+            return outboundProxySettingsC;
+        }
+
+        private static AGDnsApi.ag_outbound_proxy_auth_info ToNativeObject(
+            OutboundProxyAuthInfo outboundProxyAuthInfo,
+            Queue<IntPtr> allocatedPointers)
+        {
+            AGDnsApi.ag_outbound_proxy_auth_info outboundProxyAuthInfoC =
+                new AGDnsApi.ag_outbound_proxy_auth_info();
+            MarshalUtils.CopyPropertiesToFields(outboundProxyAuthInfo, ref outboundProxyAuthInfoC);
+            MarshalUtils.AllStringsToPtrs(
+                outboundProxyAuthInfo,
+                ref outboundProxyAuthInfoC,
+                allocatedPointers);
+            return outboundProxyAuthInfoC;
         }
 
         private static AGDnsApi.ag_dns64_settings ToNativeObject(
@@ -259,12 +314,19 @@ namespace Adguard.Dns.Helpers
                 dnsProxySettingsC.UserDNSSuffixes,
                 MarshalUtils.PtrToString);
 
-            Dns64Settings dns64 = FromNativeObject(dnsProxySettingsC.pDns64);
+            AGDnsApi.ag_dns64_settings dns64C =
+                MarshalUtils.PtrToStructure<AGDnsApi.ag_dns64_settings>(dnsProxySettingsC.pDns64);
+            Dns64Settings dns64 = FromNativeObject(dns64C);
             EngineParams engineParams = FromNativeObject(dnsProxySettingsC.FilterParams);
             List<ListenerSettings> listeners =
                 MarshalUtils.AgListToList<AGDnsApi.ag_listener_settings, ListenerSettings>(
                     dnsProxySettingsC.listeners,
                     FromNativeObject);
+
+            AGDnsApi.ag_outbound_proxy_settings outboundProxySettingsC =
+                MarshalUtils.PtrToStructure<AGDnsApi.ag_outbound_proxy_settings>(dnsProxySettingsC.outbound_proxy);
+            OutboundProxySettings outboundProxySettings =
+                FromNativeObject(outboundProxySettingsC);
             DnsProxySettings dnsProxySettings = new DnsProxySettings
             {
                 Upstreams = upstreams,
@@ -273,6 +335,7 @@ namespace Adguard.Dns.Helpers
                 Dns64 = dns64,
                 EngineParams = engineParams,
                 Listeners = listeners,
+                OutboundProxySettings = outboundProxySettings
             };
 
             MarshalUtils.CopyFieldsToProperties(dnsProxySettingsC, dnsProxySettings);
@@ -280,9 +343,8 @@ namespace Adguard.Dns.Helpers
             return dnsProxySettings;
         }
 
-        private static Dns64Settings FromNativeObject(IntPtr pDns64C)
+        private static Dns64Settings FromNativeObject(AGDnsApi.ag_dns64_settings dns64C)
         {
-            AGDnsApi.ag_dns64_settings dns64C = MarshalUtils.PtrToStructure<AGDnsApi.ag_dns64_settings>(pDns64C);
             List<UpstreamOptions> dns64Upstreams =
                 MarshalUtils.AgListToList<AGDnsApi.ag_upstream_options, UpstreamOptions>(
                     dns64C.upstreams,
@@ -295,6 +357,34 @@ namespace Adguard.Dns.Helpers
 
             MarshalUtils.CopyFieldsToProperties(dns64C, dns64);
             return dns64;
+        }
+
+        private static OutboundProxySettings FromNativeObject(
+            AGDnsApi.ag_outbound_proxy_settings outboundProxySettingsC)
+        {
+
+            AGDnsApi.ag_outbound_proxy_auth_info outboundProxyAuthInfoC =
+                MarshalUtils.PtrToStructure<AGDnsApi.ag_outbound_proxy_auth_info>(
+                    outboundProxySettingsC.auth_info);
+
+            OutboundProxyAuthInfo authInfo = FromNativeObject(outboundProxyAuthInfoC);
+            OutboundProxySettings outboundProxySettings = new OutboundProxySettings
+            {
+                AuthInfo = authInfo
+            };
+
+            MarshalUtils.CopyFieldsToProperties(outboundProxySettingsC, outboundProxySettings);
+            MarshalUtils.AllPtrsToStrings(outboundProxySettingsC, outboundProxySettings);
+            return outboundProxySettings;
+        }
+
+        private static OutboundProxyAuthInfo FromNativeObject(
+            AGDnsApi.ag_outbound_proxy_auth_info outboundProxyAuthInfoC)
+        {
+            OutboundProxyAuthInfo outboundProxyAuthInfo = new OutboundProxyAuthInfo();
+            MarshalUtils.CopyFieldsToProperties(outboundProxyAuthInfoC, outboundProxyAuthInfo);
+            MarshalUtils.AllPtrsToStrings(outboundProxyAuthInfoC, outboundProxyAuthInfo);
+            return outboundProxyAuthInfo;
         }
 
         private static ListenerSettings FromNativeObject(AGDnsApi.ag_listener_settings listenerSettingsC)

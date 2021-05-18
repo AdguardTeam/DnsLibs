@@ -58,7 +58,7 @@ private:
     /**
      * Must be called in worker thread
      */
-    void stop_all_with_error(err_string e);
+    void stop_all_with_error(const err_string &e);
 
     static CURLcode ssl_callback(CURL *curl, void *sslctx, void *arg);
     static int verify_callback(X509_STORE_CTX *ctx, void *arg);

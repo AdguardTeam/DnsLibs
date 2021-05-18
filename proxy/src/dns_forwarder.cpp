@@ -610,6 +610,19 @@ std::pair<bool, err_string> dns_forwarder::init(const dnsproxy_settings &setting
     }
 
     struct socket_factory::parameters sf_parameters = {};
+    if (settings.outbound_proxy.has_value()) {
+        if (socket_address addr(settings.outbound_proxy->address, settings.outbound_proxy->port);
+                !addr.valid()) {
+            auto err = AG_FMT("Invalid outbound proxy address: {}:{}",
+                    settings.outbound_proxy->address, settings.outbound_proxy->port);
+            errlog(this->log, "{}", err);
+            this->deinit();
+            return {false, std::move(err)};
+        }
+        sf_parameters.oproxy_settings = &this->settings->outbound_proxy.value();
+    }
+    sf_parameters.verifier = this->cert_verifier.get();
+
     this->socket_factory = std::make_shared<ag::socket_factory>(sf_parameters);
 
     infolog(log, "Initializing upstreams...");

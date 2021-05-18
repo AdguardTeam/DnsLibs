@@ -68,6 +68,11 @@ public:
     uint16_t port() const;
 
     /**
+     * @return String containing IP address
+     */
+    std::string host_str() const;
+
+    /**
      * @return String containing IP address and port
      */
     std::string str() const;

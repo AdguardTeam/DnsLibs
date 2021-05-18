@@ -427,6 +427,101 @@ static ag::server_stamp convert_stamp(AGDnsStamp *stamp) {
 
 @end
 
+@implementation AGOutboundProxyAuthInfo
+- (instancetype) initWithUsername: (NSString *)username
+                         password: (NSString *)password
+{
+    self = [super init];
+    if (self) {
+        _username = username;
+        _password = password;
+    }
+    return self;
+}
+
+- (instancetype) initWithNative: (const ag::outbound_proxy_auth_info *)info
+{
+    self = [super init];
+    if (self) {
+        _username = convert_string(info->username);
+        _password = convert_string(info->password);
+    }
+    return self;
+}
+
+- (instancetype) initWithCoder: (NSCoder *)coder
+{
+    self = [super init];
+    if (self) {
+        _username = [coder decodeObjectForKey:@"_username"];
+        _password = [coder decodeObjectForKey:@"_password"];
+    }
+    return self;
+}
+
+- (void)encodeWithCoder:(NSCoder *)coder
+{
+    [coder encodeObject:self.username forKey:@"_username"];
+    [coder encodeObject:self.password forKey:@"_password"];
+}
+@end
+
+@implementation AGOutboundProxySettings
+- (instancetype) initWithProtocol: (AGOutboundProxyProtocol)protocol
+                          address: (NSString *)address
+                             port: (NSInteger)port
+                         authInfo: (AGOutboundProxyAuthInfo *)authInfo
+              trustAnyCertificate: (BOOL)trustAnyCertificate
+{
+    self = [super init];
+    if (self) {
+        _protocol = protocol;
+        _address = address;
+        _port = port;
+        _authInfo = authInfo;
+        _trustAnyCertificate = trustAnyCertificate;
+    }
+    return self;
+}
+
+- (instancetype) initWithNative: (const ag::outbound_proxy_settings *)settings
+{
+    self = [super init];
+    if (self) {
+        _protocol = (AGOutboundProxyProtocol)settings->protocol;
+        _address = convert_string(settings->address);
+        _port = settings->port;
+        if (settings->auth_info.has_value()) {
+            _authInfo = [[AGOutboundProxyAuthInfo alloc] initWithNative: &settings->auth_info.value()];
+        }
+        _trustAnyCertificate = settings->trust_any_certificate;
+    }
+    return self;
+}
+
+- (instancetype) initWithCoder: (NSCoder *)coder
+{
+    self = [super init];
+    if (self) {
+        _protocol = (AGOutboundProxyProtocol)[coder decodeIntForKey:@"_protocol"];
+        _address = [coder decodeObjectForKey:@"_address"];
+        _port = [coder decodeInt64ForKey:@"_port"];
+        _authInfo = [coder decodeObjectForKey:@"_authInfo"];
+        _trustAnyCertificate = [coder decodeBoolForKey:@"_trustAnyCertificate"];
+    }
+    return self;
+}
+
+- (void) encodeWithCoder: (NSCoder *)coder
+{
+    [coder encodeInt:self.protocol forKey:@"_protocol"];
+    [coder encodeObject:self.address forKey:@"_address"];
+    [coder encodeInt64:self.port forKey:@"_port"];
+    [coder encodeObject:self.authInfo forKey:@"_authInfo"];
+    [coder encodeBool:self.trustAnyCertificate forKey:@"_trustAnyCertificate"];
+}
+@end
+
 @implementation AGDnsFilterParams
 - (instancetype) initWithId:(NSInteger)id
                        data:(NSString *)data
@@ -495,6 +590,9 @@ static ag::server_stamp convert_stamp(AGDnsStamp *stamp) {
         [listeners addObject: [[AGListenerSettings alloc] initWithNative: &ls]];
     }
     _listeners = listeners;
+    if (settings->outbound_proxy.has_value()) {
+        _outboundProxy = [[AGOutboundProxySettings alloc] initWithNative: &settings->outbound_proxy.value()];
+    }
     _ipv6Available = settings->ipv6_available;
     _blockIpv6 = settings->block_ipv6;
     _blockingMode = (AGBlockingMode) settings->blocking_mode;
@@ -514,6 +612,7 @@ static ag::server_stamp convert_stamp(AGDnsStamp *stamp) {
         blockedResponseTtlSecs: (NSInteger) blockedResponseTtlSecs
         dns64Settings: (AGDns64Settings *) dns64Settings
         listeners: (NSArray<AGListenerSettings *> *) listeners
+        outboundProxy: (AGOutboundProxySettings *) outboundProxy
         ipv6Available: (BOOL) ipv6Available
         blockIpv6: (BOOL) blockIpv6
         blockingMode: (AGBlockingMode) blockingMode
@@ -538,6 +637,7 @@ static ag::server_stamp convert_stamp(AGDnsStamp *stamp) {
     }
     _dns64Settings = dns64Settings;
     _listeners = listeners;
+    _outboundProxy = outboundProxy;
     _ipv6Available = ipv6Available;
     _blockIpv6 = blockIpv6;
     _blockingMode = blockingMode;
@@ -561,6 +661,7 @@ static ag::server_stamp convert_stamp(AGDnsStamp *stamp) {
         _blockedResponseTtlSecs = [coder decodeInt64ForKey:@"_blockedResponseTtlSecs"];
         _dns64Settings = [coder decodeObjectForKey:@"_dns64Settings"];
         _listeners = [coder decodeObjectForKey:@"_listeners"];
+        _outboundProxy = [coder decodeObjectForKey:@"_outboundProxy"];
         _ipv6Available = [coder decodeBoolForKey:@"_ipv6Available"];
         _blockIpv6 = [coder decodeBoolForKey:@"_blockIpv6"];
         _blockingMode = (AGBlockingMode) [coder decodeIntForKey:@"_blockingMode"];
@@ -584,6 +685,7 @@ static ag::server_stamp convert_stamp(AGDnsStamp *stamp) {
     [coder encodeInt64:self.blockedResponseTtlSecs forKey:@"_blockedResponseTtlSecs"];
     [coder encodeObject:self.dns64Settings forKey:@"_dns64Settings"];
     [coder encodeObject:self.listeners forKey:@"_listeners"];
+    [coder encodeObject:self.outboundProxy forKey:@"_outboundProxy"];
     [coder encodeBool:self.ipv6Available forKey:@"_ipv6Available"];
     [coder encodeBool:self.blockIpv6 forKey:@"_blockIpv6"];
     [coder encodeInt:self.blockingMode forKey:@"_blockingMode"];
