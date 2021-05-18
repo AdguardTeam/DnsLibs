@@ -326,6 +326,12 @@ typedef NS_ENUM(NSInteger, AGOutboundProxyProtocol) {
  */
 @property(nonatomic, readonly) BOOL enableDNSSECOK;
 /**
+ * If enabled, detect retransmitted requests and handle them using fallback upstreams only.
+ * If a retransmitted request is detected, the original request, as well as any more
+ * retransmitted requests after the first one detected, will NOT be answered.
+ */
+@property(nonatomic, readonly) BOOL enableRetransmissionHandling;
+/**
  * Path to adguard-tun-helper (macOS only)
  */
 @property(nonatomic, readonly) NSString *helperPath;
@@ -347,10 +353,9 @@ typedef NS_ENUM(NSInteger, AGOutboundProxyProtocol) {
         dnsCacheSize: (NSUInteger) dnsCacheSize
         optimisticCache: (BOOL) optimisticCache
         enableDNSSECOK: (BOOL) enableDNSSECOK
+        enableRetransmissionHandling: (BOOL) enableRetransmissionHandling
         helperPath: (NSString *)helperPath;
-
 - (instancetype)initWithCoder:(NSCoder *)coder;
-
 - (void)encodeWithCoder:(NSCoder *)coder;
 
 /**
@@ -376,7 +381,8 @@ typedef NS_ENUM(NSInteger, AGOutboundProxyProtocol) {
  * @brief Process UDP/TCP packet payload
  *
  * @param packet data to process
- * @return Response packet payload
+ * @return Response packet payload, or
+ *         nil if nothing shoud be sent in response
  */
 - (NSData *) handlePacket: (NSData *) packet;
 

@@ -111,6 +111,12 @@ namespace Adguard.Dns.Api.DnsProxyServer.Configs
         /// </summary>
         public bool EnableDNSSECOK { get; set; }
 
+        /// <summary>
+        /// If enabled, retransmitted requests will be answered using the fallback upstreams only.
+        /// If a retransmitted request is detected, the original request will NOT be answered at all.
+        /// </summary>
+        public bool EnableRetransmissionHandling { get; set; }
+
         #region Equals members
 
         public override bool Equals(object obj)
@@ -151,7 +157,8 @@ namespace Adguard.Dns.Api.DnsProxyServer.Configs
                    CustomBlockingIpv6 == other.CustomBlockingIpv6 &&
                    DnsCacheSize == other.DnsCacheSize &&
                    OptimisticCache == other.OptimisticCache &&
-                   EnableDNSSECOK == other.EnableDNSSECOK;
+                   EnableDNSSECOK == other.EnableDNSSECOK &&
+                   EnableRetransmissionHandling == other.EnableRetransmissionHandling;
         }
 
         public override int GetHashCode()
@@ -175,6 +182,7 @@ namespace Adguard.Dns.Api.DnsProxyServer.Configs
                 hashCode = (hashCode * 397) ^ DnsCacheSize.GetHashCode();
                 hashCode = (hashCode * 397) ^ OptimisticCache.GetHashCode();
                 hashCode = (hashCode * 397) ^ EnableDNSSECOK.GetHashCode();
+                hashCode = (hashCode * 397) ^ EnableRetransmissionHandling.GetHashCode();
                 return hashCode;
             }
         }

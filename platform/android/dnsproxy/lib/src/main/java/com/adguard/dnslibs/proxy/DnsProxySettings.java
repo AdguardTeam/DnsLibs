@@ -61,6 +61,7 @@ public class DnsProxySettings {
     private long dnsCacheSize;
     private boolean optimisticCache;
     private boolean enableDNSSECOK;
+    private boolean enableRetransmissionHandling;
 
     /**
      * @return Maximum number of cached responses
@@ -319,6 +320,22 @@ public class DnsProxySettings {
         this.enableDNSSECOK = enableDNSSECOK;
     }
 
+    /**
+     * @return whether retransmission handling is enabled.
+     */
+    public boolean isEnableRetransmissionHandling() {
+        return enableRetransmissionHandling;
+    }
+
+    /**
+     * @param enableRetransmissionHandling if true, retransmitted requests will be handled
+     *                                     using the fallback upstreams only, the
+     *                                     original request will not be answered.
+     */
+    public void setEnableRetransmissionHandling(boolean enableRetransmissionHandling) {
+        this.enableRetransmissionHandling = enableRetransmissionHandling;
+    }
+
     @Override
     public boolean equals(Object o) {
         if (this == o) return true;
@@ -340,14 +357,15 @@ public class DnsProxySettings {
                 Objects.equals(customBlockingIpv6, that.customBlockingIpv6) &&
                 dnsCacheSize == that.dnsCacheSize &&
                 optimisticCache == that.optimisticCache &&
-                enableDNSSECOK == that.enableDNSSECOK;
+                enableDNSSECOK == that.enableDNSSECOK &&
+                enableRetransmissionHandling == that.enableRetransmissionHandling;
     }
 
     @Override
     public int hashCode() {
         return Objects.hash(upstreams, fallbacks, handleDNSSuffixes, userDNSSuffixes, dns64, blockedResponseTtlSecs,
                 filterParams, listeners, outboundProxy, ipv6Available, blockIpv6, blockingMode, customBlockingIpv4, customBlockingIpv6,
-                dnsCacheSize, optimisticCache, enableDNSSECOK);
+                dnsCacheSize, optimisticCache, enableDNSSECOK, enableRetransmissionHandling);
     }
 
     /**

@@ -105,6 +105,13 @@ struct dnsproxy_settings {
      * WARNING: may increase data usage and probability of TCP fallbacks.
      */
     bool enable_dnssec_ok;
+
+    /**
+     * If enabled, detect retransmitted requests and handle them using fallback upstreams only.
+     * If a retransmitted request is detected, the original request, as well as any more
+     * retransmitted requests after the first one detected, will NOT be answered.
+     */
+    bool enable_retransmission_handling;
 };
 
 }

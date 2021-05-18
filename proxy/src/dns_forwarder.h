@@ -13,6 +13,8 @@
 #include <certificate_verifier.h>
 #include <shared_mutex>
 #include <uv.h>
+#include <dnsproxy.h>
+#include "retransmission_detector.h"
 
 namespace ag {
 
@@ -54,13 +56,16 @@ public:
     std::pair<bool, err_string> init(const dnsproxy_settings &settings, const dnsproxy_events &events);
     void deinit();
 
-    std::vector<uint8_t> handle_message(uint8_view message);
+    std::vector<uint8_t> handle_message(uint8_view message, const dnsproxy::message_info *info);
 
 private:
     static void async_request_worker(uv_work_t *);
     static void async_request_finalizer(uv_work_t *, int);
 
-    upstream_exchange_result do_upstream_exchange(std::string_view normalized_domain, ldns_pkt *request);
+    std::vector<uint8_t> handle_message_internal(uint8_view message, bool fallback_only, uint16_t pkt_id);
+
+    upstream_exchange_result do_upstream_exchange(std::string_view normalized_domain, ldns_pkt *request,
+                                                  bool fallback_only);
 
     cache_result create_response_from_cache(const std::string &key, const ldns_pkt *request);
 
@@ -71,15 +76,18 @@ private:
                                              const ldns_pkt *original_response,
                                              dns_request_processed_event &event,
                                              std::vector<dnsfilter::rule> &last_effective_rules,
+                                             bool fallback_only,
                                              bool fire_event = true, ldns_pkt_rcode *out_rcode = nullptr);
 
     std::optional<uint8_vector> apply_cname_filter(const ldns_rr *cname_rr, const ldns_pkt *request,
                                                    const ldns_pkt *response, dns_request_processed_event &event,
-                                                   std::vector<dnsfilter::rule> &last_effective_rules);
+                                                   std::vector<dnsfilter::rule> &last_effective_rules,
+                                                   bool fallback_only);
 
     std::optional<uint8_vector> apply_ip_filter(const ldns_rr *rr, const ldns_pkt *request,
                                                 const ldns_pkt *response, dns_request_processed_event &event,
-                                                std::vector<dnsfilter::rule> &last_effective_rules);
+                                                std::vector<dnsfilter::rule> &last_effective_rules,
+                                                bool fallback_only);
 
     ldns_pkt_ptr try_dns64_aaaa_synthesis(upstream *upstream, const ldns_pkt_ptr &request) const;
 
@@ -103,6 +111,8 @@ private:
     std::shared_ptr<certificate_verifier> cert_verifier;
 
     with_mtx<lru_cache<std::string, cached_response>, std::shared_mutex> response_cache;
+
+    retransmission_detector retransmission_detector;
 
     struct async_request {
         uv_work_t work{};

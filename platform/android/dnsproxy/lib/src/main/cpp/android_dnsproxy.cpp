@@ -464,6 +464,7 @@ ag::dnsproxy_settings ag::android_dnsproxy::marshal_settings(JNIEnv *env,
     auto cache_size_field = env->GetFieldID(clazz, "dnsCacheSize", "J");
     auto optimistic_cache_field = env->GetFieldID(clazz, "optimisticCache", "Z");
     auto enable_dnssec_ok_field = env->GetFieldID(clazz, "enableDNSSECOK", "Z");
+    auto enable_retr_field = env->GetFieldID(clazz, "enableRetransmissionHandling", "Z");
 
     ag::dnsproxy_settings settings{};
 
@@ -530,6 +531,7 @@ ag::dnsproxy_settings ag::android_dnsproxy::marshal_settings(JNIEnv *env,
     settings.dns_cache_size = std::max((jlong) 0, env->GetLongField(java_dnsproxy_settings, cache_size_field));
     settings.optimistic_cache = env->GetBooleanField(java_dnsproxy_settings, optimistic_cache_field);
     settings.enable_dnssec_ok = env->GetBooleanField(java_dnsproxy_settings, enable_dnssec_ok_field);
+    settings.enable_retransmission_handling = env->GetBooleanField(java_dnsproxy_settings, enable_retr_field);
 
     return settings;
 }
@@ -555,10 +557,11 @@ ag::local_ref<jobject> ag::android_dnsproxy::marshal_settings(JNIEnv *env, const
     auto cache_size_field = env->GetFieldID(clazz, "dnsCacheSize", "J");
     auto optimistic_cache_field = env->GetFieldID(clazz, "optimisticCache", "Z");
     auto enable_dnssec_ok_field = env->GetFieldID(clazz, "enableDNSSECOK", "Z");
+    auto enable_retr_field = env->GetFieldID(clazz, "enableRetransmissionHandling", "Z");
 
     auto java_settings = env->NewObject(clazz, ctor);
 
-    env->SetLongField(java_settings, blocked_response_ttl_field, settings.blocked_response_ttl_secs);
+    env->SetLongField(java_settings, blocked_response_ttl_field, (jlong) settings.blocked_response_ttl_secs);
 
     if (settings.dns64.has_value()) {
         env->SetObjectField(java_settings, dns64_field, marshal_dns64(env, settings.dns64.value()).get());
@@ -608,6 +611,7 @@ ag::local_ref<jobject> ag::android_dnsproxy::marshal_settings(JNIEnv *env, const
     env->SetLongField(java_settings, cache_size_field, (jlong) settings.dns_cache_size);
     env->SetBooleanField(java_settings, optimistic_cache_field, (jboolean) settings.optimistic_cache);
     env->SetBooleanField(java_settings, enable_dnssec_ok_field, (jboolean) settings.enable_dnssec_ok);
+    env->SetBooleanField(java_settings, enable_retr_field, (jboolean) settings.enable_retransmission_handling);
 
     return local_ref(env, java_settings);
 }
@@ -742,7 +746,7 @@ jbyteArray ag::android_dnsproxy::handle_message(JNIEnv *env, jbyteArray message)
     auto elements = env->GetByteArrayElements(message, nullptr); // May copy, must call ReleaseByteArrayElements
     auto size = env->GetArrayLength(message);
 
-    auto result = m_actual_proxy.handle_message({(uint8_t *) elements, (size_t) size});
+    auto result = m_actual_proxy.handle_message({(uint8_t *) elements, (size_t) size}, nullptr);
 
     // Free the buffer without copying back the possible changes
     env->ReleaseByteArrayElements(message, elements, JNI_ABORT);

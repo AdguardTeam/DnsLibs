@@ -185,7 +185,10 @@ private:
 
     static void work_cb(uv_work_t *req) {
         auto *m = (task *) req->data;
-        m->response = m->self->m_proxy->handle_message({(uint8_t *) m->request.base, m->request.len});
+        ag::dnsproxy::message_info info{
+                .proto = ag::listener_protocol::UDP,
+                .peername = m->peer};
+        m->response = m->self->m_proxy->handle_message({(uint8_t *) m->request.base, m->request.len}, &info);
     }
 
     static void send_cb(uv_udp_send_t *req, int status) {
@@ -202,7 +205,7 @@ private:
 
         m->self->m_pending.erase(m);
 
-        if (status == UV_ECANCELED) {
+        if (status == UV_ECANCELED || m->response.empty()) {
             delete m;
             return;
         }
@@ -378,15 +381,14 @@ public:
 private:
     struct work {
         uv_work_t req{};
-        tcp_dns_connection *c;
+        tcp_dns_connection *connection;
         ag::uint8_vector payload;
-        bool canceled;
-        std::mutex mtx;
+        std::atomic_bool cancelled;
 
         work(tcp_dns_connection *c, ag::uint8_vector &&payload)
-                : c{c},
+                : connection{c},
                   payload{std::move(payload)},
-                  canceled{false} {
+                  cancelled{false} {
             this->req.data = this;
         }
     };
@@ -395,12 +397,11 @@ private:
         uv_write_t req{};
         ag::uint8_vector payload;
         uint16_t size_be; // Big-endian size
-        uv_buf_t bufs[2];
+        uv_buf_t bufs[2]{};
 
         explicit write(ag::uint8_vector &&payload) : payload(std::move(payload)) {
             this->req.data = this;
-            this->size_be = this->payload.size();
-            this->size_be = htons(this->size_be);
+            this->size_be = htons(this->payload.size());
             bufs[0] = uv_buf_init((char *) &this->size_be, sizeof(this->size_be));
             bufs[1] = uv_buf_init((char *) this->payload.data(), this->payload.size());
         }
@@ -427,7 +428,7 @@ private:
 
     static void read_cb(uv_stream_t *stream, ssize_t nread, const uv_buf_t *buf) {
         auto *c = (tcp_dns_connection *) stream->data;
-        log_id(c->m_log, trace, c->m_id, "{} {}", __func__, nread);
+        log_id(c->m_log, trace, c->m_id, "{}: {}", __func__, nread);
 
         if (nread < 0) {
             c->do_close();
@@ -455,24 +456,36 @@ private:
 
     static void work_cb(uv_work_t *w_req) {
         auto *w = (work *) w_req->data;
-        std::scoped_lock l{w->mtx};
-        if (w->canceled) {
+        if (w->cancelled) {
             return;
         }
-        auto *c = w->c;
-        w->payload = c->m_proxy->handle_message({w->payload.data(), w->payload.size()});
+        auto *conn = w->connection;
+        sockaddr_storage ss{};
+        int namelen = sizeof(ss);
+        uv_tcp_getpeername(conn->m_tcp, (sockaddr *) &ss, &namelen);
+
+        ag::dnsproxy::message_info info{
+                .proto = ag::listener_protocol::TCP,
+                .peername = ag::socket_address{(sockaddr *) &ss}};
+        w->payload = conn->m_proxy->handle_message({w->payload.data(), w->payload.size()}, &info);
     }
 
     static void after_work_cb(uv_work_t *w_req, int status) {
         auto *w = (work *) w_req->data;
-        {
-            std::scoped_lock l{w->mtx};
-            if (status == 0 && !w->canceled) {
-                auto *c = w->c;
-                c->m_pending_works.erase(w);
-                c->do_write(std::move(w->payload));
-            }
+        if (w->cancelled) { // Connection already closed
+            delete w;
+            return;
         }
+        auto *conn = w->connection;
+        conn->m_pending_works.erase(w);
+        if (w->payload.empty()) {
+            if (!conn->m_persistent) {
+                conn->do_close();
+            }
+            delete w;
+            return;
+        }
+        conn->do_write(std::move(w->payload));
         delete w;
     }
 
@@ -529,9 +542,8 @@ private:
         uv_close((uv_handle_t *) m_idle_timer, close_cb);
 
         std::for_each(m_pending_works.begin(), m_pending_works.end(), [](work *w) {
-            std::scoped_lock l{w->mtx};
+            w->cancelled = true;
             uv_cancel((uv_req_t *) &w->req);
-            w->canceled = true;
         });
 
         m_tcp->data = nullptr;

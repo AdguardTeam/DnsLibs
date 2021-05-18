@@ -260,6 +260,7 @@ static ag_dnsproxy_settings *marshal_settings(const ag::dnsproxy_settings &setti
     c_settings->outbound_proxy = marshal_outbound_proxy(settings.outbound_proxy);
     c_settings->optimistic_cache = settings.optimistic_cache;
     c_settings->enable_dnssec_ok = settings.enable_dnssec_ok;
+    c_settings->enable_retransmission_handling = settings.enable_retransmission_handling;
 
     return c_settings;
 }
@@ -413,6 +414,7 @@ static ag::dnsproxy_settings marshal_settings(const ag_dnsproxy_settings *c_sett
                                                      c_settings->filter_params.filters.size);
     settings.optimistic_cache = c_settings->optimistic_cache;
     settings.enable_dnssec_ok = c_settings->enable_dnssec_ok;
+    settings.enable_retransmission_handling = c_settings->enable_retransmission_handling;
 
     return settings;
 }
@@ -520,7 +522,7 @@ void ag_dnsproxy_deinit(ag_dnsproxy *handle) {
 
 ag_buffer ag_dnsproxy_handle_message(ag_dnsproxy *handle, ag_buffer message) {
     auto proxy = (ag::dnsproxy *) handle;
-    ag::uint8_vector res = proxy->handle_message({message.data, message.size});
+    ag::uint8_vector res = proxy->handle_message({message.data, message.size}, nullptr);
     ag_buffer res_buf = marshal_buffer({res.data(), res.size()});
     return res_buf;
 }

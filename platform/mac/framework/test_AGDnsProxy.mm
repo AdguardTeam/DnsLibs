@@ -31,6 +31,7 @@ static int regressTestListenerFailsInit() {
                                                   dnsCacheSize:0
                                                optimisticCache:YES
                                                 enableDNSSECOK:NO
+                                  enableRetransmissionHandling:NO
                                                     helperPath:nil];
 
     auto *handler = [AGDnsProxyEvents new];

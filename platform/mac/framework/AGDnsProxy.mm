@@ -621,6 +621,7 @@ static ag::server_stamp convert_stamp(AGDnsStamp *stamp) {
         dnsCacheSize: (NSUInteger) dnsCacheSize
         optimisticCache: (BOOL) optimisticCache
         enableDNSSECOK: (BOOL) enableDNSSECOK
+        enableRetransmissionHandling: (BOOL) enableRetransmissionHandling
         helperPath: (NSString *) helperPath;
 {
     const ag::dnsproxy_settings &defaultSettings = ag::dnsproxy_settings::get_default();
@@ -647,6 +648,7 @@ static ag::server_stamp convert_stamp(AGDnsStamp *stamp) {
     _optimisticCache = optimisticCache;
     _enableDNSSECOK = enableDNSSECOK;
     _helperPath = helperPath;
+    _enableRetransmissionHandling = enableRetransmissionHandling;
     return self;
 }
 
@@ -665,17 +667,14 @@ static ag::server_stamp convert_stamp(AGDnsStamp *stamp) {
         _ipv6Available = [coder decodeBoolForKey:@"_ipv6Available"];
         _blockIpv6 = [coder decodeBoolForKey:@"_blockIpv6"];
         _blockingMode = (AGBlockingMode) [coder decodeIntForKey:@"_blockingMode"];
-        _customBlockingIpv4 = [coder decodeObjectForKey:@"_customBlockingIpv4"];
-        _customBlockingIpv6 = [coder decodeObjectForKey:@"_customBlockingIpv6"];
         _dnsCacheSize = [coder decodeInt64ForKey:@"_dnsCacheSize"];
         _optimisticCache = [coder decodeBoolForKey:@"_optimisticCache"];
         _enableDNSSECOK = [coder decodeBoolForKey:@"_enableDNSSECOK"];
-        _helperPath = [coder decodeObjectForKey:@"_helperPath"];
+        _enableRetransmissionHandling = [coder decodeBoolForKey:@"_enableRetransmissionHandling"];
     }
 
     return self;
 }
-
 - (void)encodeWithCoder:(NSCoder *)coder {
     [coder encodeObject:self.upstreams forKey:@"_upstreams"];
     [coder encodeObject:self.fallbacks forKey:@"_fallbacks"];
@@ -689,12 +688,10 @@ static ag::server_stamp convert_stamp(AGDnsStamp *stamp) {
     [coder encodeBool:self.ipv6Available forKey:@"_ipv6Available"];
     [coder encodeBool:self.blockIpv6 forKey:@"_blockIpv6"];
     [coder encodeInt:self.blockingMode forKey:@"_blockingMode"];
-    [coder encodeObject:self.customBlockingIpv4 forKey:@"_customBlockingIpv4"];
-    [coder encodeObject:self.customBlockingIpv6 forKey:@"_customBlockingIpv6"];
     [coder encodeInt64:self.dnsCacheSize forKey:@"_dnsCacheSize"];
     [coder encodeBool:self.optimisticCache forKey:@"_optimisticCache"];
     [coder encodeBool:self.enableDNSSECOK forKey:@"_enableDNSSECOK"];
-    [coder encodeObject:self.helperPath forKey:@"_helperPath"];
+    [coder encodeBool:self.enableRetransmissionHandling forKey:@"_enableRetransmissionHandling"];
 }
 
 
@@ -1193,6 +1190,7 @@ static int bindFd(NSString *helperPath, NSString *address, NSNumber *port, AGLis
     settings.dns_cache_size = config.dnsCacheSize;
     settings.optimistic_cache = config.optimisticCache;
     settings.enable_dnssec_ok = config.enableDNSSECOK;
+    settings.enable_retransmission_handling = config.enableRetransmissionHandling;
 
     auto [ret, err_or_warn] = self->proxy.init(std::move(settings), std::move(native_events));
     if (!ret) {
@@ -1236,7 +1234,15 @@ static int bindFd(NSString *helperPath, NSString *address, NSNumber *port, AGLis
            inet_ntop(AF_INET, &ip_header->ip_dst, dstv4_str, sizeof(dstv4_str)), ntohs(udp_header->uh_dport));
 
     ag::uint8_view payload = {(uint8_t *) packet.bytes + header_length, packet.length - header_length};
-    std::vector<uint8_t> response = self->proxy.handle_message(payload);
+    ag::dnsproxy::message_info info{
+            .proto = ag::listener_protocol::UDP,
+            .peername = ag::socket_address{{(uint8_t *) &ip_header->ip_src, sizeof(ip_header->ip_src)},
+                                           ntohs(udp_header->uh_sport)},
+    };
+    std::vector<uint8_t> response = self->proxy.handle_message(payload, &info);
+    if (response.empty()) {
+        return nil;
+    }
     return create_response_packet(ip_header, udp_header, response);
 }
 
@@ -1258,7 +1264,15 @@ static int bindFd(NSString *helperPath, NSString *address, NSNumber *port, AGLis
            inet_ntop(AF_INET6, &ip_header->ip6_dst, dstv6_str, sizeof(dstv6_str)), ntohs(udp_header->uh_dport));
 
     ag::uint8_view payload = {(uint8_t *) packet.bytes + header_length, packet.length - header_length};
-    std::vector<uint8_t> response = self->proxy.handle_message(payload);
+    ag::dnsproxy::message_info info{
+            .proto = ag::listener_protocol::UDP,
+            .peername = ag::socket_address{{(uint8_t *) &ip_header->ip6_src, sizeof(ip_header->ip6_src)},
+                                           ntohs(udp_header->uh_sport)},
+    };
+    std::vector<uint8_t> response = self->proxy.handle_message(payload, &info);
+    if (response.empty()) {
+        return nil;
+    }
     return create_response_packet_v6(ip_header, udp_header, response);
 }
 

@@ -13,6 +13,14 @@ namespace ag {
  */
 class dnsproxy {
 public:
+    /** Additional info about the DNS message */
+    struct message_info {
+        /** Transport protocol over which the message was received */
+        listener_protocol proto;
+        /** Socket address of the peer from which the message was received */
+        socket_address peername;
+    };
+
     dnsproxy();
     ~dnsproxy();
 
@@ -45,11 +53,13 @@ public:
      * @brief Handle a DNS message
      *
      * @param message message from client
-     * @return a blocked DNS message in case of the message was blocked,
-     *         a DNS resolver response in case of the message was passed,
-     *         an empty buffer in case of error
+     * @param info (optional) additional information about the message
+     * @return A blocked DNS message in case of the message was blocked.
+     *         A DNS resolver response in case of the message was passed.
+     *         An empty buffer in case of error. This implies that no response
+     *         should be sent to the requestor over the network.
      */
-    std::vector<uint8_t> handle_message(ag::uint8_view message);
+    std::vector<uint8_t> handle_message(ag::uint8_view message, const message_info *info);
 
     /**
      * @brief Return the DNS proxy library version

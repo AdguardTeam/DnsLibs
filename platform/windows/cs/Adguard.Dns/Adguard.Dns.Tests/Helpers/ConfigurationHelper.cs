@@ -72,7 +72,8 @@ namespace Adguard.Dns.Tests.Helpers
                 },
                 Ipv6Available = true,
                 OptimisticCache = false,
-                EnableDNSSECOK = false
+                EnableDNSSECOK = false,
+                EnableRetransmissionHandling = false
             };
 
             return dnsProxySettings;

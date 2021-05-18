@@ -50,7 +50,7 @@ static void perform_request(ag::dnsproxy &proxy, const ag::ldns_pkt_ptr &request
     ASSERT_EQ(status, LDNS_STATUS_OK) << ldns_get_errorstr_by_id(status);
 
     const auto resp_data = proxy.handle_message({ldns_buffer_at(buffer.get(), 0),
-                                                 ldns_buffer_position(buffer.get())});
+                                                 ldns_buffer_position(buffer.get())}, nullptr);
 
     ldns_pkt *resp;
     status = ldns_wire2pkt(&resp, resp_data.data(), resp_data.size());

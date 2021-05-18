@@ -118,17 +118,17 @@ public:
         }
 
         if (log->should_log(spdlog::level::debug)) {
-            dbglog(log, "Using {} table ({} entries, {}):",
-                   ipv4 ? "IPv4" : "IPv6", table_ptr->size(), cached ? "cached" : "just read");
+            tracelog(log, "Using {} table ({} entries, {}):",
+                     ipv4 ? "IPv4" : "IPv6", table_ptr->size(), cached ? "cached" : "just read");
             for (auto &route : *table_ptr) {
                 auto addr = ag::utils::addr_to_str({route.address.data(), (size_t) (ipv4 ? 4 : 16)});
                 uint32_t prefix_len = 0;
                 for (uint8_t b : route.netmask) {
                     prefix_len += __builtin_popcount(b);
                 }
-                dbglog(log, "{}/{} -> {}", addr, prefix_len, if_name(route.if_index));
+                tracelog(log, "{}/{} -> {}", addr, prefix_len, if_name(route.if_index));
             }
-            dbglog(log, "End of table");
+            tracelog(log, "End of table");
         }
 
         for (auto &route : *table_ptr) {

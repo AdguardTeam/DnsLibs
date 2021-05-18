@@ -23,7 +23,7 @@ namespace Adguard.Dns
         /// <summary>
         /// The current API version hash with which the ProxyServer was tested
         /// </summary>
-        private const string API_VERSION_HASH = "2a7131582a4adcaab5fe477abc1dda306232d3e12206042630c8b426f96ff186";
+        private const string API_VERSION_HASH = "17010a246a4c88ee4968da85d2a600716513761c5b40e79acbb3d5e449d135a9";
         #endregion
 
         #region API Functions
@@ -512,6 +512,14 @@ namespace Adguard.Dns
             [MarshalAs(UnmanagedType.I1)]
             [NativeName("enable_dnssec_ok")]
             internal bool EnableDNSSECOK;
+
+            /// <summary>
+            /// If enabled, retransmitted requests will be answered using the fallback upstreams only.
+            /// If a retransmitted request is detected, the original request will NOT be answered at all.
+            /// </summary>
+            [MarshalAs(UnmanagedType.I1)]
+            [NativeName("enable_dnssec_ok")]
+            internal bool EnableRetransmissionHandling;
         }
 
         /// <summary>

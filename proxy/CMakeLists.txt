@@ -13,6 +13,7 @@ set(SRCS
         ${SRC_DIR}/dns64.cpp
         ${SRC_DIR}/dns_forwarder.cpp
         ${SRC_DIR}/dnsproxy_listener.cpp
+        ${SRC_DIR}/retransmission_detector.cpp
     )
 
 add_library(dnsproxy EXCLUDE_FROM_ALL ${SRCS})

@@ -33,6 +33,7 @@ int main() {
                                                   dnsCacheSize:0
                                                optimisticCache:YES
                                                 enableDNSSECOK:NO
+                                  enableRetransmissionHandling:NO
                                                     helperPath:@"/Users/ngorskikh/src/adguard-tools/cmake-build-debug/adguard-tun-helper/adguard-tun-helper"];
 
     auto *handler = [AGDnsProxyEvents new];

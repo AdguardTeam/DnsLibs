@@ -29,7 +29,8 @@ static const dnsproxy_settings DEFAULT_PROXY_SETTINGS = {
     .blocking_mode = dnsproxy_blocking_mode::DEFAULT,
     .dns_cache_size = 1000,
     .optimistic_cache = true,
-    .enable_dnssec_ok = false
+    .enable_dnssec_ok = false,
+    .enable_retransmission_handling = false,
 };
 
 const dnsproxy_settings &dnsproxy_settings::get_default() {
@@ -113,10 +114,10 @@ const dnsproxy_settings &dnsproxy::get_settings() const {
     return this->pimpl->settings;
 }
 
-std::vector<uint8_t> dnsproxy::handle_message(ag::uint8_view message) {
+std::vector<uint8_t> dnsproxy::handle_message(ag::uint8_view message, const ag::dnsproxy::message_info *info) {
     std::unique_ptr<impl> &proxy = this->pimpl;
 
-    std::vector<uint8_t> response = proxy->forwarder.handle_message(message);
+    std::vector<uint8_t> response = proxy->forwarder.handle_message(message, info);
 
     return response;
 }

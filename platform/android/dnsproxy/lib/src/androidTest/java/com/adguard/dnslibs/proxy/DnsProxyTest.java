@@ -77,7 +77,15 @@ public class DnsProxyTest {
         try (final DnsProxy proxy = new DnsProxy(context, DnsProxySettings.getDefault())) {
             final byte[] request = new byte[64];
             ThreadLocalRandom.current().nextBytes(request);
-            final byte[] response = proxy.handleMessage(request); // returns empty array on error
+
+            byte[] response = proxy.handleMessage(request);
+            assertNotNull(response);
+            assertEquals(12, response.length);
+            assertEquals(request[0], response[0]);
+            assertEquals(request[1], response[1]);
+            assertEquals(1, response[3] & 0xf); // FORMERR
+
+            response = proxy.handleMessage(new byte[0]);
             assertNotNull(response);
             assertEquals(0, response.length);
         }
@@ -224,6 +232,9 @@ public class DnsProxyTest {
 
         settings.setDnsCacheSize(42);
         settings.setOptimisticCache(true);
+        settings.enableDNSSECOK(true);
+        settings.setOptimisticCache(true);
+        settings.setEnableRetransmissionHandling(true);
 
         UpstreamSettings fallbackUpstream = new UpstreamSettings();
         fallbackUpstream.setAddress("https://fall.back/up/stream");
