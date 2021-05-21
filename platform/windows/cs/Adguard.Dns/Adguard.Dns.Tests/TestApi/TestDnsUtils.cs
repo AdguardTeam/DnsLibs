@@ -62,6 +62,13 @@ namespace Adguard.Dns.Tests.TestApi
         }
 
         [Test]
+        public void TestParseNullDnsStamp()
+        {
+            DnsStamp dnsStamp = DnsApi.Instance.ParseDnsStamp(null);
+            Assert.IsNull(dnsStamp);
+        }
+
+        [Test]
         public void TestValidUpstream()
         {
             UpstreamOptions upstreamOptions = ConfigurationHelper.CreateUpstreamOptions();
@@ -74,6 +81,14 @@ namespace Adguard.Dns.Tests.TestApi
         {
             UpstreamOptions upstreamOptions = ConfigurationHelper.CreateUpstreamOptions();
             upstreamOptions.Address = "huemoe";
+            bool result = DnsApi.Instance.TestUpstream(upstreamOptions);
+            Assert.IsFalse(result);
+        }
+
+        [Test]
+        public void TestNullInputUpstream()
+        {
+            UpstreamOptions upstreamOptions = null;
             bool result = DnsApi.Instance.TestUpstream(upstreamOptions);
             Assert.IsFalse(result);
         }
