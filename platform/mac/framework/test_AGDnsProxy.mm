@@ -17,8 +17,8 @@ static int regressTestListenerFailsInit() {
                                       outboundInterfaceName:nil];
     auto *config = [[AGDnsProxyConfig alloc] initWithUpstreams:@[upstream]
                                                      fallbacks:@[]
-                                             handleDNSSuffixes:NO
-                                               userDNSSuffixes:@[]
+                                               fallbackDomains:@[]
+                                           detectSearchDomains:YES
                                                        filters:@[]
                                         blockedResponseTtlSecs:0
                                                  dns64Settings:nil

@@ -43,6 +43,9 @@ static ag::ldns_pkt_ptr create_request(const std::string &domain, ldns_rr_type t
 }
 
 static void perform_request(ag::dnsproxy &proxy, const ag::ldns_pkt_ptr &request, ag::ldns_pkt_ptr &response) {
+    // Avoid rate limit
+    std::this_thread::sleep_for(std::chrono::milliseconds(100));
+
     const std::unique_ptr<ldns_buffer, ag::ftor<ldns_buffer_free>> buffer(
             ldns_buffer_new(ag::REQUEST_BUFFER_INITIAL_CAPACITY));
 
@@ -1110,5 +1113,86 @@ TEST_F(dnsproxy_test, dnssec_autority_section) {
             ASSERT_EQ(nullptr, ptr);
             ldns_rr_list_deep_free(ptr);
         }
+    }
+}
+
+TEST_F(dnsproxy_test, fallback_filter_works_and_defaults_are_correct) {
+    static constexpr int32_t UPSTREAM_ID = 42;
+    static constexpr int32_t FALLBACK_ID = 4242;
+    ag::dnsproxy_settings settings = make_dnsproxy_settings();
+    settings.upstreams = {{.address = "94.140.14.140", .id = UPSTREAM_ID}};
+    settings.fallbacks = {{.address = "94.140.14.141", .id = FALLBACK_ID}};
+    ag::dns_request_processed_event last_event{};
+    ag::dnsproxy_events events{
+            .on_request_processed = [&last_event](const ag::dns_request_processed_event &event) {
+                last_event = event;
+            }
+    };
+    auto [ret, err] = proxy.init(settings, events);
+    ASSERT_TRUE(ret) << *err;
+    for (const std::string &host : {"epdg.epc.aptg.com.tw",
+                                    "epdg.epc.att.net",
+                                    "epdg.mobileone.net.sg",
+                                    "primgw.vowifina.spcsdns.net",
+                                    "swu-loopback-epdg.qualcomm.com",
+                                    "vowifi.jio.com",
+                                    "weconnect.globe.com.ph",
+                                    "wlan.three.com.hk",
+                                    "wo.vzwwo.com",
+                                    "epdg.epc.mncXXX.mccYYY.pub.3gppnetwork.org",
+                                    "ss.epdg.epc.mncXXX.mccYYY.pub.3gppnetwork.org",
+                                    }) {
+        ag::ldns_pkt_ptr res;
+        ASSERT_NO_FATAL_FAILURE(perform_request(proxy, create_request(host, LDNS_RR_TYPE_A, LDNS_RD), res));
+        ASSERT_TRUE(last_event.upstream_id.has_value()) << last_event.error;
+        ASSERT_EQ(FALLBACK_ID, *last_event.upstream_id) << last_event.domain;
+    }
+    for (const std::string &host : {"a.epdg.epc.aptg.com.tw",
+                                    "b.epdg.epc.att.net",
+                                    "c.epdg.mobileone.net.sg",
+                                    "d.primgw.vowifina.spcsdns.net",
+                                    "e.swu-loopback-epdg.qualcomm.com",
+                                    "f.vowifi.jio.com",
+                                    "g.weconnect.globe.com.ph",
+                                    "h.wlan.three.com.hk",
+                                    "i.wo.vzwwo.com",
+                                    "pub.3gppnetwork.org",
+                                    "xyz.pub.3gppnetwork.org",
+                                    }) {
+        ag::ldns_pkt_ptr res;
+        ASSERT_NO_FATAL_FAILURE(perform_request(proxy, create_request(host, LDNS_RR_TYPE_A, LDNS_RD), res));
+        ASSERT_TRUE(last_event.upstream_id.has_value()) << last_event.error;
+        ASSERT_EQ(UPSTREAM_ID, *last_event.upstream_id) << last_event.domain;
+    }
+}
+
+TEST_F(dnsproxy_test, fallback_domains_bad) {
+    ag::dnsproxy_settings settings = make_dnsproxy_settings();
+    for (const std::string &pattern : {"...",
+                                       "*",
+                                       "***",
+                                       "@@||example.org$important",
+                                       }) {
+        settings.fallback_domains = {pattern};
+        auto [ret, err] = proxy.init(settings, {});
+        ASSERT_FALSE(ret) << pattern;
+        ASSERT_TRUE(err) << pattern;
+        ASSERT_TRUE(strstr(err->c_str(), pattern.c_str())) << *err;
+    }
+}
+
+TEST_F(dnsproxy_test, fallback_domains_good) {
+    ag::dnsproxy_settings settings = make_dnsproxy_settings();
+    for (const std::string &pattern : {"*.example.org",
+                                       "*exampl",
+                                       "exa*mp*l.com",
+                                       "mygateway",
+                                       "*.local",
+                                       "*.company.local",
+                                       }) {
+        settings.fallback_domains = {pattern};
+        auto [ret, err] = proxy.init(settings, {});
+        ASSERT_TRUE(ret) << pattern;
+        ASSERT_FALSE(err) << pattern;
     }
 }

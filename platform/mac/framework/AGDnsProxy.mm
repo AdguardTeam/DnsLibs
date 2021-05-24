@@ -572,13 +572,12 @@ static ag::server_stamp convert_stamp(AGDnsStamp *stamp) {
         [fallbacks addObject: [[AGDnsUpstream alloc] initWithNative: &us]];
     }
     _fallbacks = fallbacks;
-    _handleDNSSuffixes = settings->handle_dns_suffixes;
-    NSMutableArray<NSString *> *userDNSSuffixes =
-            [[NSMutableArray alloc] initWithCapacity: settings->dns_suffixes.size()];
-    for (const std::string &cur : settings->dns_suffixes) {
-        [userDNSSuffixes addObject: convert_string(cur)];
+    NSMutableArray<NSString *> *fallbackDomains =
+            [[NSMutableArray alloc] initWithCapacity: settings->fallback_domains.size()];
+    for (auto &domain : settings->fallback_domains) {
+        [fallbackDomains addObject: convert_string(domain)];
     }
-    _userDNSSuffixes = userDNSSuffixes;
+    _fallbackDomains = fallbackDomains;
     _filters = nil;
     _blockedResponseTtlSecs = settings->blocked_response_ttl_secs;
     if (settings->dns64.has_value()) {
@@ -606,8 +605,8 @@ static ag::server_stamp convert_stamp(AGDnsStamp *stamp) {
 
 - (instancetype) initWithUpstreams: (NSArray<AGDnsUpstream *> *) upstreams
         fallbacks: (NSArray<AGDnsUpstream *> *) fallbacks
-        handleDNSSuffixes: (BOOL) handleDNSSuffixes
-        userDNSSuffixes: (NSArray<NSString *> *) userDNSSuffixes
+        fallbackDomains: (NSArray<NSString *> *) fallbackDomains
+        detectSearchDomains: (BOOL) detectSearchDomains
         filters: (NSArray<AGDnsFilterParams *> *) filters
         blockedResponseTtlSecs: (NSInteger) blockedResponseTtlSecs
         dns64Settings: (AGDns64Settings *) dns64Settings
@@ -630,8 +629,8 @@ static ag::server_stamp convert_stamp(AGDnsStamp *stamp) {
         _upstreams = upstreams;
     }
     _fallbacks = fallbacks;
-    _handleDNSSuffixes = handleDNSSuffixes;
-    _userDNSSuffixes = userDNSSuffixes;
+    _fallbackDomains = fallbackDomains;
+    _detectSearchDomains = detectSearchDomains;
     _filters = filters;
     if (blockedResponseTtlSecs != 0) {
         _blockedResponseTtlSecs = blockedResponseTtlSecs;
@@ -657,8 +656,8 @@ static ag::server_stamp convert_stamp(AGDnsStamp *stamp) {
     if (self) {
         _upstreams = [coder decodeObjectForKey:@"_upstreams"];
         _fallbacks = [coder decodeObjectForKey:@"_fallbacks"];
-        _handleDNSSuffixes = [coder decodeBoolForKey:@"_handleDNSSuffixes"];
-        _userDNSSuffixes = [coder decodeObjectForKey:@"_userDNSSuffixes"];
+        _fallbackDomains = [coder decodeObjectForKey:@"_fallbackDomains"];
+        _detectSearchDomains = [coder decodeBoolForKey:@"_detectSearchDomains"];
         _filters = [coder decodeObjectForKey:@"_filters"];
         _blockedResponseTtlSecs = [coder decodeInt64ForKey:@"_blockedResponseTtlSecs"];
         _dns64Settings = [coder decodeObjectForKey:@"_dns64Settings"];
@@ -678,8 +677,8 @@ static ag::server_stamp convert_stamp(AGDnsStamp *stamp) {
 - (void)encodeWithCoder:(NSCoder *)coder {
     [coder encodeObject:self.upstreams forKey:@"_upstreams"];
     [coder encodeObject:self.fallbacks forKey:@"_fallbacks"];
-    [coder encodeBool:self.handleDNSSuffixes forKey:@"_handleDNSSuffixes"];
-    [coder encodeObject:self.userDNSSuffixes forKey:@"_userDNSSuffixes"];
+    [coder encodeObject:self.fallbackDomains forKey:@"_fallbackDomains"];
+    [coder encodeBool:self.detectSearchDomains forKey:@"_detectSearchDomains"];
     [coder encodeObject:self.filters forKey:@"_filters"];
     [coder encodeInt64:self.blockedResponseTtlSecs forKey:@"_blockedResponseTtlSecs"];
     [coder encodeObject:self.dns64Settings forKey:@"_dns64Settings"];
@@ -933,21 +932,24 @@ static std::vector<ag::upstream_options> convert_upstreams(NSArray<AGDnsUpstream
     return converted;
 }
 
-static std::vector<std::string> get_system_dns_suffixes() {
-    std::vector<std::string> ret;
-
+static void append_search_domains(std::vector<std::string> &fallback_domains) {
     struct __res_state resState = {0};
     res_ninit(&resState);
-
     for (int i = 0; i < MAXDNSRCH; ++i) {
-        if (resState.dnsrch[i] && strlen(resState.dnsrch[i]) > 1) {
-            ret.emplace_back(resState.dnsrch[i]);
+        if (resState.dnsrch[i]) {
+            std::string_view search_domain = resState.dnsrch[i];
+            if (!search_domain.empty() && search_domain.back() == '.') {
+                search_domain.remove_suffix(1);
+            }
+            if (!search_domain.empty() && search_domain.front() == '.') {
+                search_domain.remove_prefix(1);
+            }
+            if (!search_domain.empty()) {
+                fallback_domains.emplace_back(AG_FMT("*.{}", search_domain));
+            }
         }
     }
-
     res_nclose(&resState);
-
-    return ret;
 }
 
 #if !TARGET_OS_IPHONE
@@ -1090,19 +1092,16 @@ static int bindFd(NSString *helperPath, NSString *address, NSNumber *port, AGLis
     settings.upstreams = convert_upstreams(config.upstreams);
     settings.fallbacks = convert_upstreams(config.fallbacks);
 
-    settings.handle_dns_suffixes = config.handleDNSSuffixes;
-    if (config.handleDNSSuffixes) {
-        // Getting system DNS suffixes
-        settings.dns_suffixes = get_system_dns_suffixes();
-        // Adding user's suffixes
-        if (config.userDNSSuffixes) {
-            for (NSString *suffix in config.userDNSSuffixes) {
-                settings.dns_suffixes.emplace_back([suffix UTF8String]);
-            }
+    if (config.fallbackDomains) {
+        for (NSString *domain in config.fallbackDomains) {
+            settings.fallback_domains.emplace_back(domain.UTF8String);
         }
     }
+    if (config.detectSearchDomains) {
+        append_search_domains(settings.fallback_domains);
+    }
 
-    settings.blocked_response_ttl_secs = config.blockedResponseTtlSecs;
+    settings.blocked_response_ttl_secs = (uint32_t) config.blockedResponseTtlSecs;
 
     if (config.filters != nil) {
         settings.filter_params.filters.reserve([config.filters count]);

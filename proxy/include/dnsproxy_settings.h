@@ -63,12 +63,12 @@ struct dnsproxy_settings {
     std::vector<upstream_options> fallbacks; // Fallback DNS upstreams settings list
 
     /**
-     * Enable handling dns suffixes.
-     * If `true` then dnslibs will redirect requests with system dns suffixes
-     * and user's dns suffixes only to fallbacks
+     * Requests for these domains will be forwarded directly to the fallback upstreams, if there are any.
+     * A wildcard character, `*`, which stands for any number of characters, is allowed to appear multiple
+     * times anywhere except at the end of the domain (which implies that a domain consisting only of
+     * wildcard characters is invalid).
      */
-    bool handle_dns_suffixes = false;
-    std::vector<std::string> dns_suffixes;
+    std::vector<std::string> fallback_domains;
 
     std::optional<dns64_settings> dns64; // DNS64 settings
 

@@ -167,10 +167,13 @@ typedef struct {
     ARRAY_OF(ag_upstream_options) upstreams;
     /** List of fallback upstreams, which will be used if none of the usual upstreams respond */
     ARRAY_OF(ag_upstream_options) fallbacks;
-    /** Redirect requests with dns suffixes only to fallbacks or not */
-    bool handle_dns_suffixes;
-    /** DNS suffixes list */
-    ARRAY_OF(const char *) dns_suffixes;
+    /**
+     * Requests for these domains will be forwarded directly to the fallback upstreams, if there are any.
+     * A wildcard character, `*`, which stands for any number of characters, is allowed to appear multiple
+     * times anywhere except at the end of the domain (which implies that a domain consisting only of
+     * wildcard characters is invalid).
+     */
+    ARRAY_OF(const char *) fallback_domains;
     /** (Optional) DNS64 prefix discovery settings */
     ag_dns64_settings *dns64;
     /** TTL of a blocking response */

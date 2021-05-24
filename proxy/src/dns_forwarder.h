@@ -71,6 +71,8 @@ private:
 
     void put_response_into_cache(std::string key, ldns_pkt_ptr response, std::optional<int32_t> upstream_id);
 
+    bool apply_fallback_filter(std::string_view hostname, const ldns_pkt *request);
+
     std::optional<uint8_vector> apply_filter(std::string_view hostname,
                                              const ldns_pkt *request,
                                              const ldns_pkt *original_response,
@@ -103,9 +105,9 @@ private:
     const dnsproxy_events *events = nullptr;
     std::vector<upstream_ptr> upstreams;
     std::vector<upstream_ptr> fallbacks;
-    std::vector<std::string> dns_suffixes;
     dnsfilter filter;
     dnsfilter::handle filter_handle = nullptr;
+    dnsfilter::handle fallback_filter_handle = nullptr;
     dns64::prefixes dns64_prefixes;
     std::shared_ptr<socket_factory> socket_factory;
     std::shared_ptr<certificate_verifier> cert_verifier;

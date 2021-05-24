@@ -69,6 +69,49 @@ static std::string get_cache_key(const ldns_pkt *request) {
     return key;
 }
 
+// Return filter engine params or the offending pattern
+static std::tuple<ag::dnsfilter::engine_params, ag::err_string>
+make_fallback_filter_params(const std::vector<std::string> &fallback_domains, ag::logger &log) {
+    static constexpr std::string_view CHARSET = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_-.*";
+    std::string flt_data;
+    std::string rule;
+    for (auto &pattern : fallback_domains) {
+        rule.clear();
+        std::string_view p = ag::utils::trim(pattern);
+
+        if (p.empty()) {
+            continue;
+        }
+
+        if (auto pos = p.find_first_not_of(CHARSET); pos != p.npos) {
+            dbglog(log, "Bad character '{}' in pattern '{}'", p[pos], p);
+            return {{}, pattern};
+        }
+
+        auto wldpos = p.rfind('*');
+        if (wldpos == p.size() - 1) {
+            dbglog(log, "Wildcard at the end of pattern '{}'", p);
+            return {{}, pattern};
+        }
+        if (wldpos != 0) {
+            // If wildcard is the first char, don't append a pipe
+            rule += '|';
+        }
+
+        rule += p;
+        rule += '^';
+
+        if (!ag::dnsfilter::is_valid_rule(rule)) {
+            dbglog(log, "Pattern '{}' results in an invalid rule", p);
+            return {{}, pattern};
+        }
+
+        flt_data += rule;
+        flt_data += "\n";
+    }
+    return {(dnsfilter::engine_params){.filters = {{.data = std::move(flt_data), .in_memory = true}}}, std::nullopt};
+}
+
 static void log_packet(const logger &log, const ldns_pkt *packet, const char *pkt_name) {
     if (!log->should_log((spdlog::level::level_enum)DEBUG)) {
         return;
@@ -671,23 +714,6 @@ std::pair<bool, err_string> dns_forwarder::init(const dnsproxy_settings &setting
     }
     infolog(log, "Upstreams initialized");
 
-    if (settings.handle_dns_suffixes) {
-        infolog(log, "Initializing handling dns suffixes...");
-        dns_suffixes.reserve(settings.dns_suffixes.size());
-        for (auto cur : settings.dns_suffixes) {
-            if (cur.length() < 2) {
-                dbglog(log, "Too short suffix, skip");
-                continue;
-            }
-            if (cur[0] != '.') {
-                cur.insert(0, ".");
-            }
-            dns_suffixes.emplace_back(cur);
-            infolog(log, "Added suffix: {}", cur);
-        }
-        infolog(log, "Handling dns suffixes initialized, size of container: {}", dns_suffixes.size());
-    }
-
     infolog(log, "Initializing the filtering module...");
     auto [handle, err_or_warn] = filter.create(settings.filter_params);
     if (!handle) {
@@ -700,6 +726,23 @@ std::pair<bool, err_string> dns_forwarder::init(const dnsproxy_settings &setting
         warnlog(log, "Filtering module initialized with warnings:\n{}", *err_or_warn);
     } else {
         infolog(log, "Filtering module initialized");
+    }
+
+    if (!settings.fallback_domains.empty()) {
+        infolog(log, "Initializing the fallback filter...");
+        auto [params, bad_pattern] = make_fallback_filter_params(settings.fallback_domains, this->log);
+        if (bad_pattern) {
+            errlog(log, "Failed to initialize the fallback filter, bad fallback domain: {}", *bad_pattern);
+            this->deinit();
+            return {false, std::move(bad_pattern)};
+        }
+        auto [handle, err_or_warn] = filter.create(params);
+        if (err_or_warn) { // Fallback filter must initialize cleanly, warnings are errors
+            errlog(log, "Failed to initialize the fallback filter: {}", *err_or_warn);
+            this->deinit();
+            return {false, std::move(err_or_warn)};
+        }
+        this->fallback_filter_handle = handle;
     }
 
     this->dns64_prefixes = std::make_shared<with_mtx<std::vector<uint8_vector>>>();
@@ -794,6 +837,10 @@ void dns_forwarder::deinit() {
 
     infolog(log, "Destroying DNS filter...");
     this->filter.destroy(std::exchange(this->filter_handle, nullptr));
+    infolog(log, "Done");
+
+    infolog(log, "Destroying fallback filter...");
+    this->filter.destroy(std::exchange(this->fallback_filter_handle, nullptr));
     infolog(log, "Done");
 
     {
@@ -1272,21 +1319,12 @@ std::optional<uint8_vector> dns_forwarder::apply_filter(std::string_view hostnam
     return raw_response;
 }
 
-upstream_exchange_result dns_forwarder::do_upstream_exchange(std::string_view normalized_domain,
-                                                             ldns_pkt *request, bool fallback_only) {
-    if (!fallback_only) {
-        for (auto &cur : dns_suffixes) {
-            assert(cur[0] == '.');
-            if (ag::utils::ends_with(normalized_domain, cur)) {
-                tracelog_id(log, request, "Request matched with dns suffix {}, using only fallbacks", cur);
-                fallback_only = true;
-                break;
-            }
-        }
-    }
-
+upstream_exchange_result dns_forwarder::do_upstream_exchange(std::string_view normalized_domain, ldns_pkt *request,
+                                                             bool fallback_only) {
+    bool use_only_fallbacks = !fallbacks.empty()
+            && (fallback_only || apply_fallback_filter(normalized_domain, request));
     std::vector<std::vector<upstream_ptr> *> v;
-    if (!fallback_only) {
+    if (!use_only_fallbacks) {
         v.emplace_back(&upstreams);
     }
     v.emplace_back(&fallbacks);
@@ -1465,6 +1503,20 @@ bool dns_forwarder::finalize_dnssec_log_logic(ldns_pkt *response, bool is_our_do
     }
 
     return server_uses_dnssec;
+}
+
+// Return true if request matches any rule in the fallback filter
+bool dns_forwarder::apply_fallback_filter(std::string_view hostname, const ldns_pkt *request) {
+    if (!this->fallback_filter_handle) {
+        return false;
+    }
+    auto rules = this->filter.match(this->fallback_filter_handle,
+                                    { hostname, ldns_rr_get_type(ldns_rr_list_rr(ldns_pkt_question(request), 0)) });
+    if (!rules.empty()) {
+        dbglog_fid(log, request, "{} matches fallback filter rule: {}", hostname, rules[0].text);
+        return true;
+    }
+    return false;
 }
 
 std::vector<uint8_t> dns_forwarder::handle_message(uint8_view message, const dnsproxy::message_info *info) {

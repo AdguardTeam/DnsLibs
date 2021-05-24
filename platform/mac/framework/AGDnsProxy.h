@@ -262,14 +262,17 @@ typedef NS_ENUM(NSInteger, AGOutboundProxyProtocol) {
  */
 @property(nonatomic, readonly) NSArray<AGDnsUpstream *> *fallbacks;
 /**
- * Redirect requests with dns suffixes only to fallbacks or not
- * If `true` dnslibs will collect system DNS suffixes
+ * Requests for these domains will be forwarded directly to the fallback upstreams, if there are any.
+ * A wildcard character, `*`, which stands for any number of characters, is allowed to appear multiple
+ * times anywhere except at the end of the domain (which implies that a domain consisting only of
+ * wildcard characters is invalid).
  */
-@property(nonatomic, readonly) BOOL handleDNSSuffixes;
+@property(nonatomic, readonly) NSArray<NSString *> *fallbackDomains;
 /**
- * Just user's DNS suffixes list
+ * If enabled, DNS search domains will be automatically appended to the fallback domains,
+ * allowing to forward requests for, e.g., *.local, directly to the fallback upstreams.
  */
-@property(nonatomic, readonly) NSArray<NSString *> *userDNSSuffixes;
+@property(nonatomic, readonly) BOOL detectSearchDomains;
 /**
  * Filters
  */
@@ -338,8 +341,8 @@ typedef NS_ENUM(NSInteger, AGOutboundProxyProtocol) {
 
 - (instancetype) initWithUpstreams: (NSArray<AGDnsUpstream *> *) upstreams
         fallbacks: (NSArray<AGDnsUpstream *> *) fallbacks
-        handleDNSSuffixes: (BOOL) handleDNSSuffixes
-        userDNSSuffixes: (NSArray<NSString *> *) userDNSSuffixes
+        fallbackDomains: (NSArray<NSString *> *) fallbackDomains
+        detectSearchDomains: (BOOL) detectSearchDomains
         filters: (NSArray<AGDnsFilterParams *> *) filters
         blockedResponseTtlSecs: (NSInteger) blockedResponseTtlSecs
         dns64Settings: (AGDns64Settings *) dns64Settings

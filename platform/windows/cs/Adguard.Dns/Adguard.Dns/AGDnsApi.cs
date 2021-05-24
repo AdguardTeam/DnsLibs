@@ -23,7 +23,7 @@ namespace Adguard.Dns
         /// <summary>
         /// The current API version hash with which the ProxyServer was tested
         /// </summary>
-        private const string API_VERSION_HASH = "17010a246a4c88ee4968da85d2a600716513761c5b40e79acbb3d5e449d135a9";
+        private const string API_VERSION_HASH = "91675e7dfb47b208fae61880f1fdca5a6c18ded6f536c246f9da174dab45dd1c";
         #endregion
 
         #region API Functions
@@ -406,19 +406,14 @@ namespace Adguard.Dns
             internal MarshalUtils.ag_list fallbacks;
 
             /// <summary>
-            /// Redirect requests with dns suffixes only to fallbacks or not
-            /// If `true` dnslibs will collect system DNS suffixes
-            /// </summary>
-            [MarshalAs(UnmanagedType.I1)]
-            [NativeName("handle_dns_suffixes")]
-            internal bool HandleDNSSuffixes;
-
-            /// <summary>
-            /// DNS suffixes list
+            /// Requests for these domains will be forwarded directly to the fallback upstreams, if there are any.
+            /// A wildcard character, `*`, which stands for any number of characters, is allowed to appear multiple
+            /// times anywhere except at the end of the domain (which implies that a domain consisting only of
+            /// wildcard characters is invalid).
             /// </summary>
             [MarshalAs(UnmanagedType.Struct)]
-            [NativeName("dns_suffixes")]
-            internal MarshalUtils.ag_list UserDNSSuffixes;
+            [NativeName("fallback_domains")]
+            internal MarshalUtils.ag_list fallbackDomains;
 
             /// <summary>
             /// Pointer to the DNS64 settings

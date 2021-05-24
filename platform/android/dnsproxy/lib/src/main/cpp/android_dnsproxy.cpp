@@ -451,8 +451,7 @@ ag::dnsproxy_settings ag::android_dnsproxy::marshal_settings(JNIEnv *env,
     auto dns64_field = env->GetFieldID(clazz, "dns64", "L" FQN_DNS64_SETTINGS ";");
     auto upstreams_field = env->GetFieldID(clazz, "upstreams", "Ljava/util/List;");
     auto fallbacks_field = env->GetFieldID(clazz, "fallbacks", "Ljava/util/List;");
-    auto handle_dns_suffixes_field = env->GetFieldID(clazz, "handleDNSSuffixes", "Z");
-    auto dns_suffixes_field = env->GetFieldID(clazz, "userDNSSuffixes", "Ljava/util/List;");
+    auto fallback_domains_field = env->GetFieldID(clazz, "fallbackDomains", "Ljava/util/List;");
     auto listeners_field = env->GetFieldID(clazz, "listeners", "Ljava/util/List;");
     auto outbound_proxy_field = env->GetFieldID(clazz, "outboundProxy", "L" FQN_OUTBOUND_PROXY_SETTINGS ";");
     auto filter_params_field = env->GetFieldID(clazz, "filterParams", "Ljava/util/List;");
@@ -472,28 +471,25 @@ ag::dnsproxy_settings ag::android_dnsproxy::marshal_settings(JNIEnv *env,
 
     if (local_ref upstreams{env, env->GetObjectField(java_dnsproxy_settings, upstreams_field)}) {
         m_utils.iterate(env, upstreams.get(), [&](local_ref<jobject> &&java_upstream_settings) {
-            settings.upstreams.push_back(marshal_upstream(env, java_upstream_settings.get()));
+            settings.upstreams.emplace_back(marshal_upstream(env, java_upstream_settings.get()));
         });
     }
 
     if (local_ref fallbacks{env, env->GetObjectField(java_dnsproxy_settings, fallbacks_field)}) {
         m_utils.iterate(env, fallbacks.get(), [&](local_ref<jobject> &&java_upstream_settings) {
-            settings.fallbacks.push_back(marshal_upstream(env, java_upstream_settings.get()));
+            settings.fallbacks.emplace_back(marshal_upstream(env, java_upstream_settings.get()));
         });
     }
 
-    settings.handle_dns_suffixes = env->GetBooleanField(java_dnsproxy_settings, handle_dns_suffixes_field);
-    if (local_ref dns_suffixes{env, env->GetObjectField(java_dnsproxy_settings, dns_suffixes_field)}) {
-        m_utils.iterate(env, dns_suffixes.get(), [&](local_ref<jobject> &&java_str) {
-            m_utils.visit_string(env, java_str.get(), [&](const char *str, jsize len) {
-                settings.dns_suffixes.emplace_back(str, len); // Copy
-            });
+    if (local_ref fallback_domains{env, env->GetObjectField(java_dnsproxy_settings, fallback_domains_field)}) {
+        m_utils.iterate(env, fallback_domains.get(), [&](local_ref<jobject> &&fallback_domain) {
+            settings.fallback_domains.emplace_back(m_utils.marshal_string(env, (jstring) fallback_domain.get()));
         });
     }
 
     if (local_ref listeners{env, env->GetObjectField(java_dnsproxy_settings, listeners_field)}) {
         m_utils.iterate(env, listeners.get(), [&](local_ref<jobject> &&java_listener_settings) {
-            settings.listeners.push_back(marshal_listener(env, java_listener_settings.get()));
+            settings.listeners.emplace_back(marshal_listener(env, java_listener_settings.get()));
         });
     }
 
@@ -544,8 +540,7 @@ ag::local_ref<jobject> ag::android_dnsproxy::marshal_settings(JNIEnv *env, const
     auto dns64_field = env->GetFieldID(clazz, "dns64", "L" FQN_DNS64_SETTINGS ";");
     auto upstreams_field = env->GetFieldID(clazz, "upstreams", "Ljava/util/List;");
     auto fallbacks_field = env->GetFieldID(clazz, "fallbacks", "Ljava/util/List;");
-    auto handle_dns_suffixes_field = env->GetFieldID(clazz, "handleDNSSuffixes", "Z");
-    auto dns_suffixes_field = env->GetFieldID(clazz, "userDNSSuffixes", "Ljava/util/List;");
+    auto fallback_domains_field = env->GetFieldID(clazz, "fallbackDomains", "Ljava/util/List;");
     auto listeners_field = env->GetFieldID(clazz, "listeners", "Ljava/util/List;");
     auto outbound_proxy_field = env->GetFieldID(clazz, "outboundProxy", "L" FQN_OUTBOUND_PROXY_SETTINGS ";");
     auto filter_params_field = env->GetFieldID(clazz, "filterParams", "Ljava/util/List;");
@@ -579,10 +574,9 @@ ag::local_ref<jobject> ag::android_dnsproxy::marshal_settings(JNIEnv *env, const
         }
     }
 
-    env->SetBooleanField(java_settings, handle_dns_suffixes_field, (jboolean) settings.handle_dns_suffixes);
-    if (local_ref dns_suffixes{env, env->GetObjectField(java_settings, dns_suffixes_field)}) {
-        for (auto &cur : settings.dns_suffixes) {
-            m_utils.collection_add(env, dns_suffixes.get(), m_utils.marshal_string(env, cur).get());
+    if (local_ref fallback_domains{env, env->GetObjectField(java_settings, fallback_domains_field)}) {
+        for (auto &domain : settings.fallback_domains) {
+            m_utils.collection_add(env, fallback_domains.get(), m_utils.marshal_string(env, domain).get());
         }
     }
 

@@ -23,15 +23,12 @@ namespace Adguard.Dns.Api.DnsProxyServer.Configs
         public List<UpstreamOptions> Fallbacks { get; set; }
 
         /// <summary>
-        /// Redirect requests with dns suffixes only to fallbacks or not
-        /// If `true` dnslibs will collect system DNS suffixes
+        /// Requests for these domains will be forwarded directly to the fallback upstreams, if there are any.
+        /// A wildcard character, `*`, which stands for any number of characters, is allowed to appear multiple
+        /// times anywhere except at the end of the domain (which implies that a domain consisting only of
+        /// wildcard characters is invalid).
         /// </summary>
-        public bool HandleDNSSuffixes { get; set; }
-
-        /// <summary>
-        /// DNS suffixes list
-        /// </summary>
-        public List<string> UserDNSSuffixes { get; set; }
+        public List<string> FallbackDomains { get; set; }
 
         /// <summary>
         /// DNS64 settings.
@@ -143,8 +140,7 @@ namespace Adguard.Dns.Api.DnsProxyServer.Configs
         {
             return CollectionUtils.ListsEquals(Upstreams, other.Upstreams) &&
                    CollectionUtils.ListsEquals(Fallbacks, other.Fallbacks) &&
-                   HandleDNSSuffixes == other.HandleDNSSuffixes &&
-                   CollectionUtils.ListsEquals(UserDNSSuffixes, other.UserDNSSuffixes) &&
+                   CollectionUtils.ListsEquals(FallbackDomains, other.FallbackDomains) &&
                    Equals(Dns64, other.Dns64) &&
                    BlockedResponseTtlSec == other.BlockedResponseTtlSec &&
                    Equals(EngineParams, other.EngineParams) &&
@@ -167,8 +163,7 @@ namespace Adguard.Dns.Api.DnsProxyServer.Configs
             {
                 int hashCode = (Upstreams != null ? Upstreams.Count : 0);
                 hashCode = (hashCode * 397) ^ (Fallbacks != null ? Fallbacks.Count : 0);
-                hashCode = (hashCode * 397) ^ HandleDNSSuffixes.GetHashCode();
-                hashCode = (hashCode * 397) ^ (UserDNSSuffixes != null ? UserDNSSuffixes.Count : 0);
+                hashCode = (hashCode * 397) ^ (FallbackDomains != null ? FallbackDomains.Count : 0);
                 hashCode = (hashCode * 397) ^ (Dns64 != null ? Dns64.GetHashCode() : 0);
                 hashCode = (hashCode * 397) ^ BlockedResponseTtlSec.GetHashCode();
                 hashCode = (hashCode * 397) ^ (EngineParams != null ? EngineParams.GetHashCode() : 0);

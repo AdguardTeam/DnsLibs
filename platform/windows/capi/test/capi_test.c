@@ -51,6 +51,9 @@ static void test_proxy() {
 
     ag_dnsproxy_settings *settings = ag_dnsproxy_settings_get_default();
 
+    ASSERT(settings->fallback_domains.size > 0);
+    ASSERT(settings->fallback_domains.data);
+
     const char *ugly_hack = settings->upstreams.data[0].address;
     settings->upstreams.data[0].address = "tls://1.1.1.1";
     settings->upstreams.data[0].id = 42;

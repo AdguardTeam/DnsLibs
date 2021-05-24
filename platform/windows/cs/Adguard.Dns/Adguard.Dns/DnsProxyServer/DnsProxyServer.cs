@@ -1,12 +1,10 @@
 using System;
 using System.Collections.Generic;
-using System.Net.NetworkInformation;
 using Adguard.Dns.Api.DnsProxyServer.Callbacks;
 using Adguard.Dns.Api.DnsProxyServer.Configs;
 using Adguard.Dns.Helpers;
 using Adguard.Dns.Logging;
 using AdGuard.Utils.Interop;
-using Microsoft.Win32;
 
 namespace Adguard.Dns.DnsProxyServer
 {
@@ -70,12 +68,6 @@ namespace Adguard.Dns.DnsProxyServer
                 Queue<IntPtr> allocatedPointers = new Queue<IntPtr>();
                 try
                 {
-                    if (m_DnsProxySettings.HandleDNSSuffixes)
-                    {
-                        List<string> systemSuffixes = GetSystemDNSSuffixes();
-                        m_DnsProxySettings.UserDNSSuffixes.AddRange(systemSuffixes);
-                    }
-
                     AGDnsApi.ag_dnsproxy_settings dnsProxySettingsC =
                         DnsApiConverter.ToNativeObject(m_DnsProxySettings, allocatedPointers);
                     m_callbackConfigurationC = DnsApiConverter.ToNativeObject(m_CallbackConfiguration, this);
@@ -234,64 +226,6 @@ namespace Adguard.Dns.DnsProxyServer
                 MarshalUtils.SafeFreeHGlobal(m_pCallbackConfigurationC);
                 m_pCallbackConfigurationC = IntPtr.Zero;
             }
-        }
-
-        private List<string> GetSystemDNSSuffixes()
-        {
-            LOG.Info("Start getting the DNS suffixes");
-            List<string> ret = new List<string>();
-
-            // Getting DHCP suffixes
-            NetworkInterface[] adapters = NetworkInterface.GetAllNetworkInterfaces();
-            foreach (NetworkInterface adapter in adapters)
-            {
-                IPInterfaceProperties properties = adapter.GetIPProperties();
-                string suffix = properties.DnsSuffix;
-                if (suffix.Length < 2)
-                {
-                    continue;
-                }
-
-                ret.Add(suffix);
-            }
-
-            // Getting suffixes from System Settings
-            try
-            {
-                using (RegistryKey reg = Registry.LocalMachine.OpenSubKey(TCP_SETTINGS_SUB_KEY))
-                {
-                    if (reg == null)
-                    {
-                        LOG.InfoFormat("Cannot open {0}", TCP_SETTINGS_SUB_KEY);
-                        return ret;
-                    }
-
-                    string searchList = reg.GetValue(SEARCHLIST) as string;
-                    if (searchList == null)
-                    {
-                        LOG.InfoFormat("Cannot get {0} value", SEARCHLIST);
-                        return ret;
-                    }
-
-                    string[] searchListArr = searchList.Split(',');
-                    foreach (string suffix in searchListArr)
-                    {
-                        if (suffix.Length < 2)
-                        {
-                            continue;
-                        }
-
-                        ret.Add(suffix);
-                    }
-                }
-            }
-            catch (Exception ex)
-            {
-                throw new InvalidOperationException("error while getting the DNS suffixes", ex);
-            }
-
-            LOG.Info("Finished getting the DNS suffixes");
-            return ret;
         }
     }
 }

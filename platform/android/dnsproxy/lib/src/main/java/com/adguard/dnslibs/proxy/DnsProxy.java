@@ -67,10 +67,20 @@ public class DnsProxy implements Closeable {
                 throw new NullPointerException("settings");
             }
 
-            if (settings.isHandleDNSSuffixes()) {
-                List<String> systemDnsSuffixes = DnsNetworkUtils.getSystemDnsSuffixes(context);
-                if (systemDnsSuffixes != null) {
-                    settings.getUserDNSSuffixes().addAll(systemDnsSuffixes);
+            if (settings.isDetectSearchDomains()) {
+                List<String> searchDomains = DnsNetworkUtils.getDNSSearchDomains(context);
+                if (searchDomains != null) {
+                    for (String domain : searchDomains) {
+                        if (!domain.isEmpty() && domain.startsWith(".")) {
+                            domain = domain.substring(1);
+                        }
+                        if (!domain.isEmpty() && domain.endsWith(".")) {
+                            domain = domain.substring(0, domain.length() - 1);
+                        }
+                        if (!domain.isEmpty()) {
+                            settings.getFallbackDomains().add(String.format("*.%s", domain));
+                        }
+                    }
                 }
             }
 

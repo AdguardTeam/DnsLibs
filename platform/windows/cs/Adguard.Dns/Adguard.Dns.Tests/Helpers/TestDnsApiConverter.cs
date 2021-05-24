@@ -51,7 +51,6 @@ namespace Adguard.Dns.Tests.Helpers
                         Bootstrap = new List<string>()
                     }
                 },
-                HandleDNSSuffixes = true,
                 BlockedResponseTtlSec = 64,
                 Dns64 = new Dns64Settings
                 {
@@ -68,9 +67,9 @@ namespace Adguard.Dns.Tests.Helpers
                         EndPoint = new IPEndPoint(1234567, 9898)
                     }
                 },
-                UserDNSSuffixes = new List<string>
+                FallbackDomains = new List<string>
                 {
-                    "Test"
+                    "Test.com"
                 },
                 Ipv6Available = true,
                 BlockIpv6 = true,
@@ -82,13 +81,16 @@ namespace Adguard.Dns.Tests.Helpers
             };
             Queue<IntPtr> allocatedPointers = new Queue<IntPtr>();
 
-            AGDnsApi.ag_dnsproxy_settings nativeDnsSettings = 
+            AGDnsApi.ag_dnsproxy_settings nativeDnsSettings =
                 DnsApiConverter.ToNativeObject(dnsSettings, allocatedPointers);
-            Assert.AreEqual(nativeDnsSettings.HandleDNSSuffixes, dnsSettings.HandleDNSSuffixes);
+            Assert.AreNotEqual(IntPtr.Zero, nativeDnsSettings.fallbacks.entries);
+            Assert.AreNotEqual(IntPtr.Zero, nativeDnsSettings.fallbackDomains.entries);
+            Assert.AreNotEqual(IntPtr.Zero, nativeDnsSettings.listeners.entries);
+            Assert.AreNotEqual(IntPtr.Zero, nativeDnsSettings.upstreams.entries);
             Assert.AreEqual(nativeDnsSettings.BlockedResponseTtlSec, dnsSettings.BlockedResponseTtlSec);
 
             DnsProxySettings dnsSettingsConverted =  DnsApiConverter.FromNativeObject(nativeDnsSettings);
-            Assert.AreEqual(dnsSettingsConverted.HandleDNSSuffixes, dnsSettings.HandleDNSSuffixes);
+            Assert.AreEqual(dnsSettingsConverted.FallbackDomains, dnsSettings.FallbackDomains);
             Assert.AreEqual(dnsSettingsConverted.BlockedResponseTtlSec, dnsSettings.BlockedResponseTtlSec);
             bool isUpstreamsEqual = CollectionUtils.ListsEquals(dnsSettingsConverted.Upstreams, dnsSettings.Upstreams);
             Assert.IsTrue(isUpstreamsEqual);

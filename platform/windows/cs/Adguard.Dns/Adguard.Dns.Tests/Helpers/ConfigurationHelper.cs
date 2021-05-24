@@ -33,7 +33,7 @@ namespace Adguard.Dns.Tests.Helpers
                 {
                     CreateUpstreamOptions()
                 },
-                UserDNSSuffixes = new List<string>(),
+                FallbackDomains = new List<string>(),
                 Dns64 = new Dns64Settings
                 {
                     Upstreams = new List<UpstreamOptions>

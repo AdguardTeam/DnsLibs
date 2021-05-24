@@ -19,7 +19,7 @@ public class DnsNetworkUtils {
      * @param context app context.
      * @return List of strings with system dns suffixes.
      */
-    static List<String> getSystemDnsSuffixes(Context context) {
+    static List<String> getDNSSearchDomains(Context context) {
         ConnectivityManager connectivityManager = (ConnectivityManager) context.getSystemService(CONNECTIVITY_SERVICE);
         if (connectivityManager == null) {
             return null;

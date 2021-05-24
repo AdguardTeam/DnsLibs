@@ -55,7 +55,6 @@ namespace Adguard.Dns.TestApp
                     m_CoreProcess.Start();
                 }
 
-                dnsProxySettings.HandleDNSSuffixes = true;
                 dnsProxySettings.OptimisticCache = true;
                 dnsProxySettings.EnableDNSSECOK = true;
 
@@ -134,7 +133,7 @@ namespace Adguard.Dns.TestApp
                     CreateUpstreamOptions()
                 },
                 Fallbacks = new List<UpstreamOptions>(),
-                UserDNSSuffixes = new List<string>(),
+                FallbackDomains = new List<string>(),
                 Dns64 = new Dns64Settings
                 {
                     Upstreams = new List<UpstreamOptions>(),

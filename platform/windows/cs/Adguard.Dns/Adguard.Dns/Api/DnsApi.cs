@@ -1,9 +1,13 @@
 ﻿using System;
+using System.Collections.Generic;
+using System.Linq;
+using System.Net.NetworkInformation;
 using Adguard.Dns.Api.DnsProxyServer.Configs;
 using Adguard.Dns.DnsProxyServer;
 using Adguard.Dns.Exceptions;
 using Adguard.Dns.Logging;
 using Adguard.Dns.Utils;
+using Microsoft.Win32;
 
 namespace Adguard.Dns.Api
 {
@@ -18,6 +22,9 @@ namespace Adguard.Dns.Api
         private IDnsProxyServer m_DnsProxyServer;
         private static readonly Lazy<IDnsApi> LAZY = new Lazy<IDnsApi> (() => new DnsApi());
         private DnsProxySettings m_CurrentDnsProxySettings;
+
+        private const string TCP_SETTINGS_SUB_KEY = @"System\CurrentControlSet\Services\Tcpip\Parameters";
+        private const string SEARCHLIST = "SearchList";
 
         #region Singleton
 
@@ -67,6 +74,7 @@ namespace Adguard.Dns.Api
                     }
 
                     LOG.InfoFormat("Starting the DNS filtering");
+                    AddDnsSuffixesAndDefaultFallbacks(dnsApiConfiguration.DnsProxySettings);
                     m_DnsProxyServer = new Dns.DnsProxyServer.DnsProxyServer(
                         dnsApiConfiguration.DnsProxySettings,
                         dnsApiConfiguration.DnsProxyServerCallbackConfiguration);
@@ -80,6 +88,21 @@ namespace Adguard.Dns.Api
                     throw;
                 }
             }
+        }
+
+        private void AddDnsSuffixesAndDefaultFallbacks(DnsProxySettings dnsProxySettings)
+        {
+            List<string> dnsSuffixes = GetSystemDNSSuffixes();
+            if (dnsProxySettings.FallbackDomains == null)
+            {
+                dnsProxySettings.FallbackDomains = new List<string>();
+            }
+
+            List<string> fallbackDomains = dnsProxySettings.FallbackDomains;
+
+            List<string> preparedDnsSuffixes = dnsSuffixes.Select(x => $"*.{x}").ToList();
+            fallbackDomains.AddRange(preparedDnsSuffixes);
+            dnsProxySettings.FallbackDomains = fallbackDomains.Distinct().ToList();
         }
 
         /// <summary>
@@ -169,6 +192,7 @@ namespace Adguard.Dns.Api
                         return;
                     }
 
+                    AddDnsSuffixesAndDefaultFallbacks(newDnsApiConfiguration.DnsProxySettings);
                     newDnsProxyServer = new Dns.DnsProxyServer.DnsProxyServer(
                         newDnsApiConfiguration.DnsProxySettings,
                         newDnsApiConfiguration.DnsProxyServerCallbackConfiguration);
@@ -256,6 +280,64 @@ namespace Adguard.Dns.Api
                     throw;
                 }
             }
+        }
+
+        private List<string> GetSystemDNSSuffixes()
+        {
+            LOG.Info("Start getting the DNS suffixes");
+            List<string> ret = new List<string>();
+
+            // Getting DHCP suffixes
+            NetworkInterface[] adapters = NetworkInterface.GetAllNetworkInterfaces();
+            foreach (NetworkInterface adapter in adapters)
+            {
+                IPInterfaceProperties properties = adapter.GetIPProperties();
+                string suffix = properties.DnsSuffix;
+                if (suffix.Length < 2)
+                {
+                    continue;
+                }
+
+                ret.Add(suffix);
+            }
+
+            // Getting suffixes from the System Settings
+            try
+            {
+                using (RegistryKey reg = Registry.LocalMachine.OpenSubKey(TCP_SETTINGS_SUB_KEY))
+                {
+                    if (reg == null)
+                    {
+                        LOG.InfoFormat("Cannot open {0}", TCP_SETTINGS_SUB_KEY);
+                        return ret;
+                    }
+
+                    string searchList = reg.GetValue(SEARCHLIST) as string;
+                    if (searchList == null)
+                    {
+                        LOG.InfoFormat("Cannot get {0} value", SEARCHLIST);
+                        return ret;
+                    }
+
+                    string[] searchListArr = searchList.Split(',');
+                    foreach (string suffix in searchListArr)
+                    {
+                        if (suffix.Length < 2)
+                        {
+                            continue;
+                        }
+
+                        ret.Add(suffix);
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                throw new InvalidOperationException("error while getting the DNS suffixes", ex);
+            }
+
+            LOG.Info("Finished getting the DNS suffixes");
+            return ret.Distinct().ToList();
         }
 
         #endregion

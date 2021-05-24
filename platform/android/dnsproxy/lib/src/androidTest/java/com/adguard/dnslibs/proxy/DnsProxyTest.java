@@ -48,7 +48,7 @@ public class DnsProxyTest {
     }
 
     private static final Logger log = LoggerFactory.getLogger(DnsProxyTest.class);
-    private Context context = ApplicationProvider.getApplicationContext();
+    private final Context context = ApplicationProvider.getApplicationContext();
 
     // In case of "permission denied", try uninstalling the test application from the device.
     @Rule
@@ -256,6 +256,12 @@ public class DnsProxyTest {
 
         settings.setCustomBlockingIpv4(null);
         settings.setCustomBlockingIpv6(null);
+
+        settings.setFallbackDomains(Arrays.asList("abcd", "*asdf.*.com", "*.localdomain"));
+
+        // Important: this field does not survive the round-trip between java and native,
+        // since it doesn't exist in the native settings struct. Set to false to win.
+        settings.setDetectSearchDomains(false);
 
         try (final DnsProxy proxy = new DnsProxy(context, settings)) {
             assertTrue(proxy.getSettings().getCustomBlockingIpv4().isEmpty());

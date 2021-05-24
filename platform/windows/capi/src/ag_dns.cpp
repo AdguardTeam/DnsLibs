@@ -90,11 +90,11 @@ void ag_buffer_free(ag_buffer buf) {
     std::free((void *) buf.data);
 }
 
-static char **marshal_strs(const std::vector<std::string> &strs) {
+static const char **marshal_strs(const std::vector<std::string> &strs) {
     if (strs.empty()) {
         return nullptr;
     }
-    char **c_strs = (char **) std::malloc(strs.size() * sizeof(char *));
+    const char **c_strs = (const char **) std::malloc(strs.size() * sizeof(char *));
     for (size_t i = 0; i < strs.size(); ++i) {
         c_strs[i] = marshal_str(strs[i]);
     }
@@ -115,7 +115,7 @@ static ag_upstream_options marshal_upstream(const ag::upstream_options &upstream
     }
 
     c_upstream.bootstrap.size = upstream.bootstrap.size();
-    c_upstream.bootstrap.data = (const char **) marshal_strs(upstream.bootstrap);
+    c_upstream.bootstrap.data = marshal_strs(upstream.bootstrap);
 
     if (const uint32_t *idx = std::get_if<uint32_t>(&upstream.outbound_interface)) {
         c_upstream.outbound_interface_index = *idx;
@@ -251,9 +251,8 @@ static ag_dnsproxy_settings *marshal_settings(const ag::dnsproxy_settings &setti
     c_settings->upstreams.data = marshal_upstreams(settings.upstreams);
     c_settings->fallbacks.size = settings.fallbacks.size();
     c_settings->fallbacks.data = marshal_upstreams(settings.fallbacks);
-    c_settings->handle_dns_suffixes = settings.handle_dns_suffixes;
-    c_settings->dns_suffixes.size = settings.dns_suffixes.size();
-    c_settings->dns_suffixes.data = (const char **) marshal_strs(settings.dns_suffixes);
+    c_settings->fallback_domains.size = settings.fallback_domains.size();
+    c_settings->fallback_domains.data = marshal_strs(settings.fallback_domains);
     c_settings->filter_params = marshal_engine_params(settings.filter_params);
     c_settings->listeners.size = settings.listeners.size();
     c_settings->listeners.data = marshal_listeners(settings.listeners);
@@ -293,12 +292,12 @@ void ag_dnsproxy_settings_free(ag_dnsproxy_settings *settings) {
     }
     std::free((void *) settings->custom_blocking_ipv6);
     std::free((void *) settings->custom_blocking_ipv4);
+    for (size_t j = 0; j < settings->fallback_domains.size; ++j) {
+        ag_str_free(settings->fallback_domains.data[j]);
+    }
+    std::free(settings->fallback_domains.data);
     free_upstreams(settings->upstreams.data, settings->upstreams.size);
     free_upstreams(settings->fallbacks.data, settings->fallbacks.size);
-    for (size_t i = 0; i < settings->dns_suffixes.size; ++i) {
-        ag_str_free(settings->dns_suffixes.data[i]);
-    }
-    std::free(settings->dns_suffixes.data);
     free_dns64(settings->dns64);
     free_listeners(settings->listeners.data, settings->listeners.size);
     free_filters(settings->filter_params.filters.data, settings->filter_params.filters.size);
@@ -404,11 +403,11 @@ static ag::dnsproxy_settings marshal_settings(const ag_dnsproxy_settings *c_sett
     }
     settings.upstreams = marshal_upstreams(c_settings->upstreams.data, c_settings->upstreams.size);
     settings.fallbacks = marshal_upstreams(c_settings->fallbacks.data, c_settings->fallbacks.size);
-    settings.handle_dns_suffixes = c_settings->handle_dns_suffixes;
-    settings.dns_suffixes.reserve(c_settings->dns_suffixes.size);
-    for (size_t i = 0; i < c_settings->dns_suffixes.size; ++i) {
-        settings.dns_suffixes.emplace_back(c_settings->dns_suffixes.data[i]);
+
+    for (size_t i = 0; i < c_settings->fallback_domains.size; ++i) {
+        settings.fallback_domains.emplace_back(c_settings->fallback_domains.data[i]);
     }
+
     settings.listeners = marshal_listeners(c_settings->listeners.data, c_settings->listeners.size);
     settings.filter_params.filters = marshal_filters(c_settings->filter_params.filters.data,
                                                      c_settings->filter_params.filters.size);

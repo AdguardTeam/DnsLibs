@@ -46,8 +46,8 @@ public class DnsProxySettings {
 
     private List<UpstreamSettings> upstreams = new ArrayList<>();
     private List<UpstreamSettings> fallbacks = new ArrayList<>();
-    private boolean handleDNSSuffixes;
-    private List<String> userDNSSuffixes = new ArrayList<>();
+    private List<String> fallbackDomains = new ArrayList<>();
+    private boolean detectSearchDomains;
     private Dns64Settings dns64;
     private long blockedResponseTtlSecs;
     private List<FilterParams> filterParams = new ArrayList<>();
@@ -152,32 +152,35 @@ public class DnsProxySettings {
     }
 
     /**
-     * @return Redirect requests with dns suffixes only to fallbacks or not.
+     * @return the fallback domains
      */
-    public boolean isHandleDNSSuffixes() {
-        return handleDNSSuffixes;
+    public List<String> getFallbackDomains() {
+        return fallbackDomains;
     }
 
     /**
-     * @param handle Setup handleDNSSuffixes mode.
-     *               If `true` dnslibs will collect system DNS suffixes
+     * @param fallbackDomains Requests for these domains will be forwarded directly to the
+     *                        fallback upstreams, if there are any. A wildcard character, `*`,
+     *                        which stands for any number of characters, is allowed to appear
+     *                        multiple times anywhere except at the end of the domain.
      */
-    public void setHandleDNSSuffixes(boolean handle) {
-        this.handleDNSSuffixes = handle;
+    public void setFallbackDomains(List<String> fallbackDomains) {
+        this.fallbackDomains = new ArrayList<>(fallbackDomains);
     }
 
     /**
-     * @return User DNS suffixes list.
+     * @return whether search domains detection is enabled
      */
-    public List<String> getUserDNSSuffixes() {
-        return userDNSSuffixes;
+    public boolean isDetectSearchDomains() {
+        return detectSearchDomains;
     }
 
     /**
-     * @param dnsSuffixes DNS suffixes list.
+     * @param detectSearchDomains if true, DNS search domains will be detected
+     *                            and appended to the fallback filter automatically
      */
-    public void setUserDNSSuffixes(List<String> dnsSuffixes) {
-        this.userDNSSuffixes = new ArrayList<>(dnsSuffixes);
+    public void setDetectSearchDomains(boolean detectSearchDomains) {
+        this.detectSearchDomains = detectSearchDomains;
     }
 
     /**
@@ -346,8 +349,8 @@ public class DnsProxySettings {
                 blockIpv6 == that.blockIpv6 &&
                 Objects.equals(upstreams, that.upstreams) &&
                 Objects.equals(fallbacks, that.fallbacks) &&
-                handleDNSSuffixes == that.handleDNSSuffixes &&
-                userDNSSuffixes.equals(that.userDNSSuffixes) &&
+                Objects.equals(fallbackDomains, that.fallbackDomains) &&
+                detectSearchDomains == that.detectSearchDomains &&
                 Objects.equals(dns64, that.dns64) &&
                 Objects.equals(filterParams, that.filterParams) &&
                 Objects.equals(listeners, that.listeners) &&
@@ -363,7 +366,7 @@ public class DnsProxySettings {
 
     @Override
     public int hashCode() {
-        return Objects.hash(upstreams, fallbacks, handleDNSSuffixes, userDNSSuffixes, dns64, blockedResponseTtlSecs,
+        return Objects.hash(upstreams, fallbacks, fallbackDomains, detectSearchDomains, dns64, blockedResponseTtlSecs,
                 filterParams, listeners, outboundProxy, ipv6Available, blockIpv6, blockingMode, customBlockingIpv4, customBlockingIpv6,
                 dnsCacheSize, optimisticCache, enableDNSSECOK, enableRetransmissionHandling);
     }
