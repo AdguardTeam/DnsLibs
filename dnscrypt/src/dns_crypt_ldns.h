@@ -67,41 +67,38 @@ create_ldns_pkt_result create_ldns_pkt(uint8_t *data, size_t size);
  * @param timeout Timeout for read/write operations (0 means infinite timeout)
  * @param socket_address Socket address
  * @param buffer Buffer to send
- * @param protocol Protocol
  * @param socket_factory Socket factory which creates sockets for data exchange
- * @param outbound_interface Outbound interface info for communicating socket
+ * @param socket_parameters Connection socket parameters
  * @return DNS exchange allocated result
  */
 dns_exchange_unparsed_result dns_exchange(std::chrono::milliseconds timeout,
         const socket_address &socket_address, ldns_buffer &buffer,
-        utils::transport_protocol protocol, const socket_factory *socket_factory, const if_id_variant &outbound_interface);
+        const socket_factory *socket_factory, socket_factory::socket_parameters socket_parameters);
 
 /**
  * Send data from buffer to socket address and returns ldns packet reply
  * @param timeout Timeout for read/write operations (0 means infinite timeout)
  * @param socket_address Socket address
  * @param buffer Buffer to send
- * @param protocol Protocol
  * @param socket_factory Socket factory which creates sockets for data exchange
- * @param outbound_interface Outbound interface info for communicating socket
+ * @param socket_parameters Connection socket parameters
  * @return DNS exchange result
  */
 dns_exchange_result dns_exchange_from_ldns_buffer(std::chrono::milliseconds timeout,
         const socket_address &socket_address, ldns_buffer &buffer,
-        utils::transport_protocol protocol, const socket_factory *socket_factory, const if_id_variant &outbound_interface);
+        const socket_factory *socket_factory, socket_factory::socket_parameters socket_parameters);
 
 /**
  * Send data from packet to socket address and returns ldns packet reply
  * @param timeout  Timeout for read/write operations (0 means infinite timeout)
  * @param socket_address Socket address
  * @param request_pkt Packet to send
- * @param protocol Protocol
  * @param socket_factory Socket factory which creates sockets for data exchange
- * @param outbound_interface Outbound interface info for communicating socket
+ * @param socket_parameters Connection socket parameters
  * @return DNS exchange result
  */
 dns_exchange_result dns_exchange_from_ldns_pkt(std::chrono::milliseconds timeout,
         const socket_address &socket_address, const ldns_pkt &request_pkt,
-        utils::transport_protocol protocol, const socket_factory *socket_factory, const if_id_variant &outbound_interface);
+        const socket_factory *socket_factory, socket_factory::socket_parameters socket_parameters);
 
 } // namespace ag::dnscrypt

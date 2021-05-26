@@ -52,10 +52,10 @@ public:
      * @param stamp_str Stamp string is an sdns:// address which is parsed using dnsstamps library
      * @param timeout Timeout for read/write operations (0 means infinite timeout)
      * @param socket_factory Socket factory which creates sockets for data exchange
-     * @param outbound_interface Outbound interface info for communicating socket
+     * @param socket_parameters Connection socket parameters (the `proto` field is ignored)
      */
     dial_result dial(std::string_view stamp_str, std::chrono::milliseconds timeout,
-            const socket_factory *socket_factory, const if_id_variant &outbound_interface) const;
+            const socket_factory *socket_factory, socket_factory::socket_parameters socket_parameters) const;
 
      /**
       * Dial fetches and validates DNSCrypt certificate from the given server
@@ -63,10 +63,10 @@ public:
       * @param stamp Stamp
       * @param timeout Timeout for read/write operations (0 means infinite timeout)
       * @param socket_factory Socket factory which creates sockets for data exchange
-      * @param outbound_interface Outbound interface info for communicating socket
+      * @param socket_parameters Connection socket parameters (the `proto` field is ignored)
       */
     dial_result dial(const server_stamp &stamp, std::chrono::milliseconds timeout,
-            const socket_factory *socket_factory, const if_id_variant &outbound_interface) const;
+             const socket_factory *socket_factory, socket_factory::socket_parameters socket_parameters) const;
 
     /**
      * Exchange performs a synchronous DNS query to the specified DNSCrypt server and returns a DNS response.
@@ -76,12 +76,12 @@ public:
      * @param server_info Server info
      * @param timeout Timeout for read/write operations (0 means infinite timeout)
      * @param socket_factory Socket factory which creates sockets for data exchange
-     * @param outbound_interface Outbound interface info for communicating socket
+     * @param socket_parameters Connection socket parameters (the `proto` field is ignored)
      * @return Result of exchange
      */
     exchange_result exchange(ldns_pkt &message, const server_info &server_info,
-            std::chrono::milliseconds timeout, const socket_factory *socket_factory,
-            const if_id_variant &outbound_interface) const;
+            std::chrono::milliseconds timeout,
+            const socket_factory *socket_factory, socket_factory::socket_parameters socket_parameters) const;
 
 private:
     utils::transport_protocol m_protocol;

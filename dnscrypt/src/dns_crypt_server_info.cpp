@@ -70,18 +70,18 @@ static const ag::logger &server_info_log() {
 }
 
 ag::dnscrypt::server_info::fetch_result ag::dnscrypt::server_info::fetch_current_dnscrypt_cert(
-        utils::transport_protocol local_protocol, std::chrono::milliseconds timeout,
-        const socket_factory *socket_factory, const if_id_variant &outbound_interface) {
+        std::chrono::milliseconds timeout,
+        const socket_factory *socket_factory, socket_factory::socket_parameters socket_parameters) {
     static constexpr utils::make_error<fetch_result> make_error;
     if (m_server_public_key.size() != crypto_sign_PUBLICKEYBYTES) {
         return make_error("Invalid public key length");
     }
     auto query = create_request_ldns_pkt(LDNS_RR_TYPE_TXT, LDNS_RR_CLASS_IN, LDNS_RD, m_provider_name,
-            utils::make_optional_if(local_protocol == utils::TP_UDP, MAX_DNS_UDP_SAFE_PACKET_SIZE));
+            utils::make_optional_if(socket_parameters.proto == utils::TP_UDP, MAX_DNS_UDP_SAFE_PACKET_SIZE));
     ldns_pkt_set_random_id(query.get());
     auto[exchange_reply, exchange_rtt, exchange_err] = dns_exchange_from_ldns_pkt(
             timeout, ag::utils::str_to_socket_address(m_server_address),
-            *query, local_protocol, socket_factory, outbound_interface);
+            *query, socket_factory, std::move(socket_parameters));
     if (exchange_err) {
         return make_error(std::move(exchange_err));
     }

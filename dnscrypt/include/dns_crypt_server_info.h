@@ -47,14 +47,13 @@ struct server_info {
 
     /**
      * Fetch DNSCrypt certificate using server info
-     * @param proto Protocol
      * @param timeout Timeout for read/write operations (0 means infinite timeout)
      * @param socket_factory Socket factory which creates sockets for data exchange
-     * @param outbound_interface Outbound interface info for communicating socket
+     * @param socket_parameters Connection socket parameters
      * @return Fetch result
      */
-    fetch_result fetch_current_dnscrypt_cert(utils::transport_protocol protocol, std::chrono::milliseconds timeout,
-            const socket_factory *socket_factory, const if_id_variant &outbound_interface);
+    fetch_result fetch_current_dnscrypt_cert(std::chrono::milliseconds timeout,
+            const socket_factory *socket_factory, socket_factory::socket_parameters socket_parameters);
 
     /**
      * Encrypt packet using server info

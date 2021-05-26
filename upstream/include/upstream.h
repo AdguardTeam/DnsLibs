@@ -61,6 +61,9 @@ struct upstream_options {
 
     /** (Optional) name or index of the network interface to route traffic through */
     if_id_variant outbound_interface;
+
+    /** If set to true, an outbound proxy won't be used for the upstream's network connections */
+    bool ignore_proxy_settings; // @todo: expose this flag in the public API if it's needed
 };
 
 /**
@@ -108,7 +111,8 @@ public:
      * Helper function for easier socket creation
      */
     [[nodiscard]] socket_factory::socket_ptr make_socket(utils::transport_protocol proto) const {
-        return m_config.socket_factory->make_socket({ proto, m_options.outbound_interface });
+        return m_config.socket_factory->make_socket(
+                { proto, m_options.outbound_interface, m_options.ignore_proxy_settings });
     }
 
     std::chrono::milliseconds rtt() {

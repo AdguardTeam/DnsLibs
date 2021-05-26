@@ -36,8 +36,8 @@ ag::dnscrypt::client::client(utils::transport_protocol protocol, bool adjust_pay
 {}
 
 ag::dnscrypt::client::dial_result ag::dnscrypt::client::dial(std::string_view stamp_str,
-        std::chrono::milliseconds timeout, const socket_factory *socket_factory,
-        const if_id_variant &outbound_interface) const {
+        std::chrono::milliseconds timeout,
+        const socket_factory *socket_factory, socket_factory::socket_parameters socket_parameters) const {
     static constexpr utils::make_error<dial_result> make_error;
     auto[stamp, stamp_err] = ag::server_stamp::from_string(stamp_str);
     if (stamp_err) {
@@ -46,12 +46,12 @@ ag::dnscrypt::client::dial_result ag::dnscrypt::client::dial(std::string_view st
     if (stamp.proto != stamp_proto_type::DNSCRYPT) {
         return make_error("Stamp is not for a DNSCrypt server");
     }
-    return dial(stamp, timeout, socket_factory, outbound_interface);
+    return dial(stamp, timeout, socket_factory, std::move(socket_parameters));
 }
 
 ag::dnscrypt::client::dial_result ag::dnscrypt::client::dial(const server_stamp &stamp,
-        std::chrono::milliseconds timeout, const socket_factory *socket_factory,
-        const if_id_variant &outbound_interface) const {
+        std::chrono::milliseconds timeout,
+        const socket_factory *socket_factory, socket_factory::socket_parameters socket_parameters) const {
     static constexpr utils::make_error<dial_result> make_error;
     server_info local_server_info{};
     if (crypto_box_keypair(local_server_info.m_public_key.data(), local_server_info.m_secret_key.data()) != 0) {
@@ -67,9 +67,10 @@ ag::dnscrypt::client::dial_result ag::dnscrypt::client::dial(const server_stamp 
     if (local_server_info.m_provider_name.back() != '.') {
         local_server_info.m_provider_name.push_back('.');
     }
+    socket_parameters.proto = m_protocol;
     // Fetch the certificate and validate it
     auto[cert_info, rtt, err] = local_server_info.fetch_current_dnscrypt_cert(
-            m_protocol, timeout, socket_factory, outbound_interface);
+            timeout, socket_factory, std::move(socket_parameters));
     if (err) {
         return make_error(std::move(err));
     }
@@ -79,7 +80,7 @@ ag::dnscrypt::client::dial_result ag::dnscrypt::client::dial(const server_stamp 
 
 ag::dnscrypt::client::exchange_result ag::dnscrypt::client::exchange(ldns_pkt &message,
         const server_info &local_server_info, std::chrono::milliseconds timeout,
-        const socket_factory *socket_factory, const if_id_variant &outbound_interface) const {
+        const socket_factory *socket_factory, socket_factory::socket_parameters socket_parameters) const {
     static constexpr utils::make_error<exchange_result> make_error;
     utils::timer timer;
     if (m_adjust_payload_size) {
@@ -97,9 +98,10 @@ ag::dnscrypt::client::exchange_result ag::dnscrypt::client::exchange(ldns_pkt &m
     ldns_buffer encrypted_query_buffer = {};
     ldns_buffer_new_frm_data(&encrypted_query_buffer, encrypted_query.data(), encrypted_query.size());
     ldns_buffer_set_position(&encrypted_query_buffer, encrypted_query.size());
+    socket_parameters.proto = m_protocol;
     auto[encrypted_response, exchange_rtt, exchange_err] =
             dns_exchange(timeout, utils::str_to_socket_address(local_server_info.m_server_address),
-                    encrypted_query_buffer, m_protocol, socket_factory, outbound_interface);
+                    encrypted_query_buffer, socket_factory, std::move(socket_parameters));
     free(ldns_buffer_export(&encrypted_query_buffer));
     if (exchange_err) {
         return make_error(std::move(exchange_err));

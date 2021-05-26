@@ -37,6 +37,8 @@ public:
         utils::transport_protocol proto;
         /** (Optional) name or index of the network interface to route traffic through */
         if_id_variant outbound_interface;
+        /** If set to true, the socket will be connected directly to the peer */
+        bool ignore_proxy_settings;
     };
 
     explicit socket_factory(parameters parameters);

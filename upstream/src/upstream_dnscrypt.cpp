@@ -70,7 +70,7 @@ ag::upstream_dnscrypt::setup_result ag::upstream_dnscrypt::setup_impl() {
             !m_impl || m_impl->server_info.get_server_cert().not_after < now) {
         ag::dnscrypt::client client;
         auto[dial_server_info, dial_rtt, dial_err] = client.dial(
-                m_stamp, m_options.timeout, m_config.socket_factory, m_options.outbound_interface);
+                m_stamp, m_options.timeout, m_config.socket_factory, this->make_socket_parameters());
         if (dial_err) {
             return { rtt,
                 AG_FMT("Failed to fetch certificate info from {} with error: {}", this->m_options.address, *dial_err) };
@@ -92,7 +92,7 @@ ag::upstream_dnscrypt::exchange_result ag::upstream_dnscrypt::apply_exchange(ldn
     utils::timer timer;
 
     auto[udp_reply, udp_reply_rtt, udp_reply_err] = local_upstream.udp_client.exchange(request_pkt,
-            local_upstream.server_info, timeout, m_config.socket_factory, m_options.outbound_interface);
+            local_upstream.server_info, timeout, m_config.socket_factory, this->make_socket_parameters());
 
     if (udp_reply && ldns_pkt_tc(udp_reply.get())) {
         tracelog_id(m_log, &request_pkt, "Truncated message was received, retrying over TCP");
@@ -104,8 +104,15 @@ ag::upstream_dnscrypt::exchange_result ag::upstream_dnscrypt::apply_exchange(ldn
         }
 
         auto[tcp_reply, tcp_reply_rtt, tcp_reply_err] = tcp_client.exchange(request_pkt,
-                local_upstream.server_info, timeout, m_config.socket_factory, m_options.outbound_interface);
+                local_upstream.server_info, timeout, m_config.socket_factory, this->make_socket_parameters());
         return {std::move(tcp_reply), std::move(tcp_reply_err)};
     }
     return {std::move(udp_reply), std::move(udp_reply_err)};
+}
+
+ag::socket_factory::socket_parameters ag::upstream_dnscrypt::make_socket_parameters() const {
+    socket_factory::socket_parameters socket_parameters = {};
+    socket_parameters.outbound_interface = m_options.outbound_interface;
+    socket_parameters.ignore_proxy_settings = m_options.ignore_proxy_settings;
+    return socket_parameters;
 }

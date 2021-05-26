@@ -23,7 +23,7 @@ socket_factory::~socket_factory() {
 socket_factory::socket_ptr socket_factory::make_socket(socket_parameters p) const {
     socket_ptr socket;
 
-    if (this->proxy == nullptr || !this->proxy->get_supported_protocols().test(p.proto)) {
+    if (p.ignore_proxy_settings || this->proxy == nullptr || !this->proxy->get_supported_protocols().test(p.proto)) {
         socket = this->make_direct_socket(std::move(p));
     } else {
         socket = std::make_unique<proxied_socket>(*this->proxy,

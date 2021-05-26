@@ -47,12 +47,12 @@ ag::dnscrypt::create_ldns_pkt_result ag::dnscrypt::create_ldns_pkt(uint8_t *data
 
 ag::dnscrypt::dns_exchange_unparsed_result ag::dnscrypt::dns_exchange(std::chrono::milliseconds timeout,
         const socket_address &socket_address, ldns_buffer &buffer,
-        utils::transport_protocol protocol, const socket_factory *socket_factory, const if_id_variant &outbound_interface) {
+        const socket_factory *socket_factory, socket_factory::socket_parameters socket_parameters) {
     static constexpr utils::make_error<dns_exchange_unparsed_result> make_error;
 
     utils::timer timer;
 
-    blocking_socket socket(socket_factory->make_socket({ protocol, outbound_interface }));
+    blocking_socket socket(socket_factory->make_socket(std::move(socket_parameters)));
     if (auto e = socket.connect({ socket_address, timeout }); e.has_value()) {
         return make_error(std::move(e->description));
     }
@@ -78,10 +78,10 @@ ag::dnscrypt::dns_exchange_unparsed_result ag::dnscrypt::dns_exchange(std::chron
 
 ag::dnscrypt::dns_exchange_result ag::dnscrypt::dns_exchange_from_ldns_buffer(std::chrono::milliseconds timeout,
         const socket_address &socket_address, ldns_buffer &buffer,
-        utils::transport_protocol protocol, const socket_factory *socket_factory, const if_id_variant &outbound_interface) {
+        const socket_factory *socket_factory, socket_factory::socket_parameters socket_parameters) {
     static constexpr utils::make_error<dns_exchange_result> make_error;
     auto[reply, rtt, allocated_err] =
-            dns_exchange(timeout, socket_address, buffer, protocol, socket_factory, outbound_interface);
+            dns_exchange(timeout, socket_address, buffer, socket_factory, std::move(socket_parameters));
     if (allocated_err) {
         return make_error(std::move(allocated_err));
     }
@@ -97,12 +97,12 @@ ag::dnscrypt::dns_exchange_result ag::dnscrypt::dns_exchange_from_ldns_buffer(st
 
 ag::dnscrypt::dns_exchange_result ag::dnscrypt::dns_exchange_from_ldns_pkt(std::chrono::milliseconds timeout,
         const socket_address &socket_address, const ldns_pkt &request_pkt,
-        utils::transport_protocol protocol, const socket_factory *socket_factory, const if_id_variant &outbound_interface) {
+        const socket_factory *socket_factory, socket_factory::socket_parameters socket_parameters) {
     static constexpr utils::make_error<dns_exchange_result> make_error;
     auto[buffer, err] = create_ldns_buffer(request_pkt);
     if (err) {
         return make_error(std::move(err));
     }
     return dns_exchange_from_ldns_buffer(timeout, socket_address, *buffer,
-            protocol, socket_factory, outbound_interface);
+            socket_factory, std::move(socket_parameters));
 }

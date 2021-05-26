@@ -34,6 +34,7 @@ private:
 
     setup_result setup_impl();
     exchange_result apply_exchange(ldns_pkt &request_pkt, std::chrono::milliseconds timeout);
+    [[nodiscard]] socket_factory::socket_parameters make_socket_parameters() const;
 
     logger m_log = create_logger("DNScrypt upstream");
     server_stamp m_stamp;

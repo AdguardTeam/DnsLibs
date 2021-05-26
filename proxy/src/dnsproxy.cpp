@@ -71,6 +71,10 @@ std::pair<bool, err_string> dnsproxy::init(dnsproxy_settings settings, dnsproxy_
     proxy->settings = std::move(settings);
     proxy->events = std::move(events);
 
+    for (upstream_options &opts : proxy->settings.fallbacks) {
+        opts.ignore_proxy_settings = true;
+    }
+
     auto [result, err_or_warn] = proxy->forwarder.init(proxy->settings, proxy->events);
     if (!result) {
         this->deinit();
