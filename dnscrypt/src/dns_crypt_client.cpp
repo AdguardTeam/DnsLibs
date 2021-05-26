@@ -60,6 +60,10 @@ ag::dnscrypt::client::dial_result ag::dnscrypt::client::dial(const server_stamp 
     // Set the provider properties
     local_server_info.m_server_public_key = stamp.server_pk;
     local_server_info.m_server_address = stamp.server_addr_str;
+    if (socket_address addr = utils::str_to_socket_address(local_server_info.m_server_address);
+            addr.port() == 0) {
+        local_server_info.m_server_address = AG_FMT("{}:{}", addr.host_str(), DEFAULT_PORT);
+    }
     local_server_info.m_provider_name = stamp.provider_name;
     if (local_server_info.m_provider_name.empty()) {
         return make_error("Provider name is empty");
