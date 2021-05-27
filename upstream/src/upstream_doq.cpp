@@ -2,6 +2,10 @@
 #include "upstream.h"
 #include <magic_enum.hpp>
 
+#ifdef __linux__
+#include <time.h>
+#endif
+
 #ifdef __MACH__
 #include <sys/types.h>
 #include <sys/sysctl.h>
@@ -880,7 +884,15 @@ int dns_over_quic::update_key(ngtcp2_conn *conn, uint8_t *rx_secret, uint8_t *tx
     return 0;
 }
 
+// NOTE: Use a monotonic clock that is not user-adjustable and doesn't stop when system goes to sleep
 ngtcp2_tstamp dns_over_quic::get_tstamp() {
+#ifdef __linux__
+    static constexpr int64_t NANOS_PER_SEC = 1'000'000'000;
+    timespec ts{};
+    if (clock_gettime(CLOCK_BOOTTIME, &ts) != -1) {
+        return (ts.tv_sec * NANOS_PER_SEC) + ts.tv_nsec;
+    }
+#endif
     return std::chrono::duration_cast<std::chrono::nanoseconds>
            (std::chrono::steady_clock::now().time_since_epoch()).count();
 }
