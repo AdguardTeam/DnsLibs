@@ -92,7 +92,7 @@ namespace Adguard.Dns.Tests.Helpers
             DnsProxySettings dnsSettingsConverted =  DnsApiConverter.FromNativeObject(nativeDnsSettings);
             Assert.AreEqual(dnsSettingsConverted.FallbackDomains, dnsSettings.FallbackDomains);
             Assert.AreEqual(dnsSettingsConverted.BlockedResponseTtlSec, dnsSettings.BlockedResponseTtlSec);
-            bool isUpstreamsEqual = CollectionUtils.ListsEquals(dnsSettingsConverted.Upstreams, dnsSettings.Upstreams);
+            bool isUpstreamsEqual = CollectionUtils.CollectionsEquals(dnsSettingsConverted.Upstreams, dnsSettings.Upstreams);
             Assert.IsTrue(isUpstreamsEqual);
         }
 
@@ -131,8 +131,11 @@ namespace Adguard.Dns.Tests.Helpers
 
             DnsStamp dnsStampConverted = DnsApiConverter.FromNativeObject(stampNative);
             Assert.AreEqual(dnsStamp.ServerAddress, dnsStampConverted.ServerAddress);
-            Assert.AreEqual(dnsStamp.Hashes, dnsStampConverted.Hashes);
-            // use CollectionsEquals after updated Utils to compare dnsStamp.Hashes. ListsEquals doesn't work
+            Assert.AreEqual(dnsStamp.Hashes.Count, dnsStampConverted.Hashes.Count);
+            for (int i = 0; i < dnsStamp.Hashes.Count; i++)
+            {
+                Assert.IsTrue(CollectionUtils.CollectionsEquals(dnsStamp.Hashes[i], dnsStampConverted.Hashes[i]));
+            }
             Assert.AreEqual(dnsStamp.Hashes.Capacity, dnsStampConverted.Hashes.Capacity);
         }
 

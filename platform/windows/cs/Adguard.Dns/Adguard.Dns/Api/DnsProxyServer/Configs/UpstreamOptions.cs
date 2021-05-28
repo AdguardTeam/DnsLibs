@@ -74,7 +74,7 @@ namespace Adguard.Dns.Api.DnsProxyServer.Configs
         private bool Equals(UpstreamOptions other)
         {
             return Equals(Address, other.Address) &&
-                   CollectionUtils.ListsEquals(Bootstrap, other.Bootstrap) &&
+                   CollectionUtils.CollectionsEquals(Bootstrap, other.Bootstrap) &&
                    TimeoutMs == other.TimeoutMs &&
                    Equals(ResolvedIpAddress, other.ResolvedIpAddress) &&
                    Id == other.Id &&

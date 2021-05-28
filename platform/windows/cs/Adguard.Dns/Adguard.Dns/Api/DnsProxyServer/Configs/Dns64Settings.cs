@@ -48,7 +48,7 @@ namespace Adguard.Dns.Api.DnsProxyServer.Configs
 
         private bool Equals(Dns64Settings other)
         {
-            return CollectionUtils.ListsEquals(Upstreams, other.Upstreams) &&
+            return CollectionUtils.CollectionsEquals(Upstreams, other.Upstreams) &&
                                                MaxTries == other.MaxTries &&
                                                WaitTimeMs == other.WaitTimeMs;
         }

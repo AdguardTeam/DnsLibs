@@ -40,7 +40,7 @@ namespace Adguard.Dns.Api.DnsProxyServer.Configs
 
         private bool Equals(EngineParams other)
         {
-            return CollectionUtils.ListsEquals(FilterParams, other.FilterParams);
+            return CollectionUtils.CollectionsEquals(FilterParams, other.FilterParams);
         }
 
         public override int GetHashCode()

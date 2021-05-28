@@ -111,7 +111,7 @@ namespace Adguard.Dns.Api.DnsProxyServer.Configs
                    Equals(ServerAddress, other.ServerAddress) &&
                    ProviderName == other.ProviderName &&
                    DoHPath == other.DoHPath &&
-                   CollectionUtils.ListsEquals(new List<byte>(PublicKey), new List<byte>(other.PublicKey)) &&
+                   CollectionUtils.CollectionsEquals(new List<byte>(PublicKey), new List<byte>(other.PublicKey)) &&
                    Hashes.Count == other.Hashes.Count &&
                    Properties == other.Properties &&
                    PrettyUrl == other.PrettyUrl &&

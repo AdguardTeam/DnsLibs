@@ -138,13 +138,13 @@ namespace Adguard.Dns.Api.DnsProxyServer.Configs
 
         private bool Equals(DnsProxySettings other)
         {
-            return CollectionUtils.ListsEquals(Upstreams, other.Upstreams) &&
-                   CollectionUtils.ListsEquals(Fallbacks, other.Fallbacks) &&
-                   CollectionUtils.ListsEquals(FallbackDomains, other.FallbackDomains) &&
+            return CollectionUtils.CollectionsEquals(Upstreams, other.Upstreams) &&
+                   CollectionUtils.CollectionsEquals(Fallbacks, other.Fallbacks) &&
+                   CollectionUtils.CollectionsEquals(FallbackDomains, other.FallbackDomains) &&
                    Equals(Dns64, other.Dns64) &&
                    BlockedResponseTtlSec == other.BlockedResponseTtlSec &&
                    Equals(EngineParams, other.EngineParams) &&
-                   CollectionUtils.ListsEquals(Listeners, other.Listeners) &&
+                   CollectionUtils.CollectionsEquals(Listeners, other.Listeners) &&
                    Equals(OutboundProxySettings, other.OutboundProxySettings) &&
                    Ipv6Available == other.Ipv6Available &&
                    BlockIpv6 == other.BlockIpv6 &&
