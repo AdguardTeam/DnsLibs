@@ -1,6 +1,6 @@
 apply plugin: 'com.android.library'
 
-version = [name: '1.5.38', code: 178]
+version = [name: '1.5.39', code: 179]
 
 android {
     compileSdkVersion 29
