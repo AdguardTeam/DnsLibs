@@ -23,6 +23,7 @@ static int regressTestListenerFailsInit() {
                                         blockedResponseTtlSecs:0
                                                  dns64Settings:nil
                                                      listeners:@[listener]
+                                                 outboundProxy:nil
                                                  ipv6Available:NO
                                                      blockIpv6:NO
                                                   blockingMode:AGBM_DEFAULT

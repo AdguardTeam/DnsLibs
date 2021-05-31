@@ -643,8 +643,7 @@ int dns_over_quic::connect_to_peers() {
         ctx->upstream = this;
         ctx->socket = this->make_socket(utils::TP_UDP);
         if (auto e = ctx->socket->connect({ m_loop.get(), *it,
-                    { on_socket_connected, on_socket_read, on_socket_close, ctx.get() },
-                    m_options.timeout });
+                    { on_socket_connected, on_socket_read, on_socket_close, ctx.get() } });
                 e.has_value()) {
             dbglog(m_log, "Failed to start connection to {}: {} ({})", it->str(), e->description, e->code);
             disqualify_server_address(*it);
