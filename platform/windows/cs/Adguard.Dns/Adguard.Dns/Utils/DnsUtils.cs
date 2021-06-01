@@ -29,10 +29,10 @@ namespace Adguard.Dns.Utils
 
         /// <summary>
         /// Parses a specified DNS stamp string (<seealso cref="dnsStampStr"/>)
-        /// to <see cref="DnsStamp"/> object
+        /// into the <see cref="DnsStamp"/> object.
         /// </summary>
         /// <param name="dnsStampStr">DNS stamp string</param>
-        /// <returns>DNS stamp as a <see cref="DnsStamp"/> instance</returns>
+        /// <returns>DNS stamp as a <see cref="DnsStamp"/> instance or null if smth went wrong</returns>
         internal static DnsStamp ParseDnsStamp(string dnsStampStr)
         {
             LOG.InfoFormat("Start parsing DNS stamp {0}", dnsStampStr);
@@ -142,7 +142,9 @@ namespace Adguard.Dns.Utils
         /// <returns>DNS stamp as a string</returns>
         internal static string GetDnsStampString(DnsStamp dnsStamp)
         {
-            LOG.DebugFormat("Start getting DNS stamp string from {0}", dnsStamp);
+            // Don't invoke "dnsStamp.ToString()" within this method to prevent infinite recursion
+            LOG.DebugFormat("Start getting DNS stamp string from {0}",
+                dnsStamp.ServerAddress);
             IntPtr pDnsStampString = IntPtr.Zero;
             Queue<IntPtr> allocatedPointers = new Queue<IntPtr>();
             try

@@ -346,9 +346,11 @@ namespace Adguard.Dns.Api
 
         /// <summary>
         /// Parses a specified DNS stamp string (<seealso cref="dnsStampStr"/>)
+        /// into the <see cref="DnsStamp"/> object.
         /// </summary>
         /// <param name="dnsStampStr">DNS stamp string</param>
-        /// <returns>DNS stamp as a <see cref="DnsStamp"/> instance</returns>
+        /// <returns>DNS stamp as a <see cref="DnsStamp"/>
+        /// instance or null if smth went wrong</returns>
         public DnsStamp ParseDnsStamp(string dnsStampStr)
         {
             try

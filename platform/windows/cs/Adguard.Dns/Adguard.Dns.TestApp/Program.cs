@@ -44,6 +44,8 @@ namespace Adguard.Dns.TestApp
                 IDnsProxyServerCallbackConfiguration dnsProxyServerCallbackConfiguration =
                     new DnsProxyServerCallbackConfiguration();
 
+                DnsStamp dnsStamp = DnsApi.Instance.ParseDnsStamp("sdns://AQIAAAAAAA_iZEIbq95zkSV2LFsigxDIuUso_OQhzIjIuZG5zY3J5cHQuZGVmYXVsdC5uczEuYWRndWFyZC5jb20");
+
                 int dnsProxyProcessId = Process.GetCurrentProcess().Id;
                 if (isRedirectorExist)
                 {
