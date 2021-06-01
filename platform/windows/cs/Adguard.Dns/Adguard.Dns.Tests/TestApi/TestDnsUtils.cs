@@ -10,7 +10,8 @@ namespace Adguard.Dns.Tests.TestApi
     {
         private const string VALID_DNS_STAMP_STR = "sdns://AgcAAAAAAAAACTEyNy4wLjAuMSDDhGvyS56TymQnTA7GfB7MXgJP_KzS10AZNQ6B_lRq5AtleGFtcGxlLmNvbQovZG5zLXF1ZXJ5";
         private const string VALID_DNS_STAMP_STR_1 = "sdns://AQIAAAAAAAAAFDE3Ni4xMDMuMTMwLjEzMDo1NDQzINErR_JS3PLCu_iZEIbq95zkSV2LFsigxDIuUso_OQhzIjIuZG5zY3J5cHQuZGVmYXVsdC5uczEuYWRndWFyZC5jb20";
-        private const string INVALID_DNS_STAMP_STR = "sdns://abcdefgh";
+        private const string INVALID_DNS_STAMP_STR = "sdns://AQcAAAAAAAAAGDIuZG5zY3J5cHQtY2VydC5pYmtzdHVybQAA";
+        private const string INVALID_DNS_STAMP_STR_1 = "sdns://abcdefgh";
 
         [Test]
         public void TestGetDnsProxyVersion()
@@ -58,6 +59,9 @@ namespace Adguard.Dns.Tests.TestApi
         public void TestParseInvalidDnsStamp()
         {
             DnsStamp dnsStamp = DnsApi.Instance.ParseDnsStamp(INVALID_DNS_STAMP_STR);
+            Assert.IsNull(dnsStamp);
+
+            dnsStamp = DnsApi.Instance.ParseDnsStamp(INVALID_DNS_STAMP_STR_1);
             Assert.IsNull(dnsStamp);
         }
 

@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Runtime.InteropServices;
 using Adguard.Dns.Api;
 using Adguard.Dns.Api.DnsProxyServer.Configs;
 using Adguard.Dns.Helpers;
@@ -40,8 +41,9 @@ namespace Adguard.Dns.Utils
             IntPtr pDnsStampResult = IntPtr.Zero;
             try
             {
+                ppError = Marshal.AllocHGlobal(Marshal.SizeOf(typeof(IntPtr)));
                 pDnsStampResult = AGDnsApi.ag_dns_stamp_from_str(dnsStampStr, ppError);
-                if (ppError != IntPtr.Zero)
+                if (pDnsStampResult == IntPtr.Zero)
                 {
                     pError = MarshalUtils.SafeReadIntPtr(ppError);
                     string error = MarshalUtils.PtrToString(pError);
@@ -66,6 +68,7 @@ namespace Adguard.Dns.Utils
             {
                 AGDnsApi.ag_dns_stamp_free(pDnsStampResult);
                 AGDnsApi.ag_str_free(pError);
+                MarshalUtils.SafeFreeHGlobal(ppError);
             }
         }
 
