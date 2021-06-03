@@ -1111,7 +1111,9 @@ static int bindFd(NSString *helperPath, NSString *address, NSNumber *port, AGLis
             settings.filter_params.filters.emplace_back(
                 ag::dnsfilter::filter_params{(int32_t) fp.id, fp.data.UTF8String, (bool) fp.inMemory});
         }
+#if TARGET_OS_IPHONE
         settings.filter_params.mem_limit = FILTER_PARAMS_MEM_LIMIT_BYTES;
+#endif
     }
 
     void *obj = (__bridge void *)self;
