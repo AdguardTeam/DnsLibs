@@ -87,7 +87,9 @@ ag::err_string ag::dns_framed_connection::wait_connect_result(int request_id, st
 
     if (decltype(m_requests)::node_type result_node;
             m_closed && !(result_node = m_requests.extract(request_id)).empty()) {
-        return result_node.mapped().value().error;
+        std::optional<read_result> &result = result_node.mapped();
+        assert(result.has_value());
+        return result.has_value() ? result->error : err_string(UNEXPECTED_EOF);
     }
 
     if (!have_result || m_closed) {
@@ -299,6 +301,12 @@ ag::connection_ptr ag::dns_framed_pool::create_connection(std::unique_ptr<SSL, f
 void ag::dns_framed_pool::close_connection(const connection_ptr &conn) {
     dns_framed_connection *framed_conn = (dns_framed_connection *)conn.get();
     framed_conn->m_closed = true;
+    for (auto &[_, result] : framed_conn->m_requests) {
+        // do not assign error, if we already got response
+        if (!result.has_value()) {
+            result = { {}, { "Connection has been forcibly closed" } };
+        }
+    }
     m_closing_connections.emplace(conn);
 
     [[maybe_unused]] auto err = framed_conn->m_stream->set_callbacks({});
