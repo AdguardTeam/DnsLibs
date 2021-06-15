@@ -1529,17 +1529,10 @@ std::vector<uint8_t> dns_forwarder::handle_message(uint8_view message, const dns
 
     // If there's enough info, register this request
     bool retransmitted = false;
-    bool handle_retransmissions = this->settings->enable_retransmission_handling
+    bool retransmission_handling = this->settings->enable_retransmission_handling
             && info && info->proto == listener_protocol::UDP;
-    if (handle_retransmissions) {
-        int count = retransmission_detector.register_packet(pkt_id, info->peername);
-        if (count > 2) {
-            // We are already handling a retransmitted request and will respond to that
-            dbglog_f(log, "Not responding to request [{}] retransmitted {} times from {}",
-                     pkt_id, count - 1, info->peername.str());
-            return {};
-        }
-        if (count > 1) {
+    if (retransmission_handling) {
+        if (retransmission_detector.register_packet(pkt_id, info->peername) > 1) {
             dbglog_f(log, "Detected retransmitted request [{}] from {}", pkt_id, info->peername.str());
             retransmitted = true;
         }
@@ -1547,16 +1540,8 @@ std::vector<uint8_t> dns_forwarder::handle_message(uint8_view message, const dns
 
     std::vector<uint8_t> result = this->handle_message_internal(message, retransmitted, pkt_id);
 
-    // If needed, de-register request and maybe don't respond if it was retransmitted
-    if (handle_retransmissions) {
-        int count = retransmission_detector.deregister_packet(pkt_id, info->peername);
-        if (!retransmitted && count != 1) {
-            // count == 0 means retransmitted request was responded already
-            // count >  1 means retransmitted request is still being handled
-            dbglog_f(log, "Not responding to request [{}] from {}: already responded or"
-                          " will respond to retransmission instead", pkt_id, info->peername.str());
-            return {};
-        }
+    if (retransmission_handling) {
+        retransmission_detector.deregister_packet(pkt_id, info->peername);
     }
 
     return result;

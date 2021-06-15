@@ -330,8 +330,6 @@ typedef NS_ENUM(NSInteger, AGOutboundProxyProtocol) {
 @property(nonatomic, readonly) BOOL enableDNSSECOK;
 /**
  * If enabled, detect retransmitted requests and handle them using fallback upstreams only.
- * If a retransmitted request is detected, the original request, as well as any more
- * retransmitted requests after the first one detected, will NOT be answered.
  */
 @property(nonatomic, readonly) BOOL enableRetransmissionHandling;
 /**

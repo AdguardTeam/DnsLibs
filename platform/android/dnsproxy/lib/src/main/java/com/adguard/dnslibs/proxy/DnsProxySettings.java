@@ -332,8 +332,7 @@ public class DnsProxySettings {
 
     /**
      * @param enableRetransmissionHandling if true, retransmitted requests will be handled
-     *                                     using the fallback upstreams only, the
-     *                                     original request will not be answered.
+     *                                     using the fallback upstreams only.
      */
     public void setEnableRetransmissionHandling(boolean enableRetransmissionHandling) {
         this.enableRetransmissionHandling = enableRetransmissionHandling;
