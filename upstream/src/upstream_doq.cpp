@@ -57,7 +57,7 @@ std::unique_ptr<dns_over_quic::socket_context> dns_over_quic::connection_state::
 dns_over_quic::dns_over_quic(const upstream_options &opts, const upstream_factory_config &config)
         : upstream(opts, config)
         , m_max_pktlen{NGTCP2_MAX_PKTLEN_IPV6}
-        , m_quic_version{QUIC_VER_DRAFT32}
+        , m_quic_version{NGTCP2_PROTO_VER_V1}
         , m_send_buf(NGTCP2_MAX_PKTLEN_IPV6)
         , m_static_secret{0}
         , m_tls_session_cache(opts.address)
@@ -588,7 +588,7 @@ int dns_over_quic::write_streams(socket *active_socket) {
                 m_stream_send_queue.pop_front();
                 continue;
             }
-            errlog(m_log, "Ngtcp2_conn_write_stream: {}", ngtcp2_strerror(nwrite));
+            errlog(m_log, "ngtcp2_conn_write_stream: {}", ngtcp2_strerror(nwrite));
             return NETWORK_ERR_FATAL;
         }
 
@@ -690,7 +690,11 @@ int dns_over_quic::init_quic_conn(const socket *connected_socket) {
 
     ngtcp2_settings settings;
     ngtcp2_settings_default(&settings);
-    ag_ngtcp2_settings_default(settings);
+
+    ngtcp2_transport_params txparams;
+    ngtcp2_transport_params_default(&txparams);
+
+    ag_ngtcp2_settings_default(settings, txparams);
 
     RAND_bytes(m_static_secret.data(), m_static_secret.size());
     auto generate_cid = [](ngtcp2_cid &cid, size_t len) {
@@ -702,7 +706,7 @@ int dns_over_quic::init_quic_conn(const socket *connected_socket) {
     generate_cid(dcid, 18);
 
     auto rv = ngtcp2_conn_client_new(&m_conn, &dcid, &scid, &path,
-            m_quic_version, &m_callbacks, &settings, nullptr, this);
+            m_quic_version, &m_callbacks, &settings, &txparams, nullptr, this);
     if (rv != 0) {
         errlog(m_log, "Failed to create ngtcp2_conn: {}", ngtcp2_strerror(rv));
         return -1;
@@ -777,11 +781,11 @@ int dns_over_quic::feed_data(uint8_view data) {
 
     auto initial_ts = get_tstamp();
 
-    ngtcp2_pkt_info pi;
+    ngtcp2_pkt_info pi{};
     auto rv = ngtcp2_conn_read_pkt(m_conn, &path, &pi, data.data(), data.size(), initial_ts);
 
     if (rv != 0) {
-        errlog(m_log, "Ngtcp2_conn_read_pkt: {}", ngtcp2_strerror(rv));
+        errlog(m_log, "ngtcp2_conn_read_pkt: {}", ngtcp2_strerror(rv));
     }
 
     return rv;
@@ -793,7 +797,8 @@ int dns_over_quic::version_negotiation(ngtcp2_conn *conn, const ngtcp2_pkt_hd *h
     uint32_t version = 0;
     bool selected = false;
     for (size_t i = 0; i < nsv; i++) {
-        if (sv[i] >= NGTCP2_PROTO_VER_MIN && sv[i] <= NGTCP2_PROTO_VER_MAX) {
+        if (sv[i] == NGTCP2_PROTO_VER_V1
+                || (sv[i] >= NGTCP2_PROTO_VER_DRAFT_MIN && sv[i] <= NGTCP2_PROTO_VER_DRAFT_MAX)) {
             selected = true;
             version = std::max(version, sv[i]);
         }
@@ -964,13 +969,12 @@ int dns_over_quic::handshake_confirmed(ngtcp2_conn *conn, void *data) {
     return 0;
 }
 
-void dns_over_quic::ag_ngtcp2_settings_default(ngtcp2_settings &settings) const {
+void dns_over_quic::ag_ngtcp2_settings_default(ngtcp2_settings &settings, ngtcp2_transport_params &params) const {
     settings.max_udp_payload_size = m_max_pktlen;
     settings.cc_algo = NGTCP2_CC_ALGO_CUBIC;
     settings.initial_ts = get_tstamp();
     settings.initial_rtt = NGTCP2_DEFAULT_INITIAL_RTT / 2;
 
-    auto &params = settings.transport_params;
     params.initial_max_stream_data_bidi_local = 256 * 1024;
     params.initial_max_stream_data_bidi_remote = 256 * 1024;
     params.initial_max_stream_data_uni = 256 * 1024;

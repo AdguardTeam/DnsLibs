@@ -37,8 +37,6 @@ class dns_over_quic : public upstream {
 public:
     static constexpr auto DEFAULT_PORT = 8853;
     static constexpr std::string_view SCHEME = "quic://";
-    static constexpr uint32_t QUIC_VER_DRAFT29 = 0xff00001du;
-    static constexpr uint32_t QUIC_VER_DRAFT32 = 0xff000020u;
 
     /**
      * @param opts upstream settings
@@ -186,7 +184,7 @@ private:
     int send_packet(socket *active_socket);
     int reinit();
     int handle_expiry();
-    void ag_ngtcp2_settings_default(ngtcp2_settings &settings) const;
+    void ag_ngtcp2_settings_default(ngtcp2_settings &settings, ngtcp2_transport_params &params) const;
     int feed_data(uint8_view data);
     void submit(std::function<void()> &&func) const;
     void send_requests();

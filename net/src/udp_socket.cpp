@@ -151,22 +151,18 @@ void udp_socket::on_event(evutil_socket_t fd, short what, void *arg) {
 
     if (what & EV_READ) {
         uint8_t read_buffer[65 * 1024];
-
-        while (true) {
-            ssize_t r = ::recv(fd, (char *)read_buffer, sizeof(read_buffer), 0);
-            log_sock(self, trace, "{}", r);
-            if (r > 0) {
-                if (struct callbacks cbx = self->get_callbacks(); cbx.on_read != nullptr) {
-                    cbx.on_read(cbx.arg, { read_buffer, (size_t) r });
+        ssize_t r = ::recv(fd, (char *)read_buffer, sizeof(read_buffer), 0);
+        log_sock(self, trace, "{}", r);
+        if (r > 0) {
+            if (struct callbacks cbx = self->get_callbacks(); cbx.on_read != nullptr) {
+                cbx.on_read(cbx.arg, { read_buffer, (size_t) r });
+            }
+        } else {
+            int err = evutil_socket_geterror(fd);
+            if (!utils::socket_error_is_eagain(err)) {
+                if (struct callbacks cbx = self->get_callbacks(); cbx.on_close != nullptr) {
+                    cbx.on_close(cbx.arg, { { err, evutil_socket_error_to_string(err) } });
                 }
-            } else {
-                int err = evutil_socket_geterror(fd);
-                if (!utils::socket_error_is_eagain(err)) {
-                    if (struct callbacks cbx = self->get_callbacks(); cbx.on_close != nullptr) {
-                        cbx.on_close(cbx.arg, { { err, evutil_socket_error_to_string(err) } });
-                    }
-                }
-                break;
             }
         }
     } else if (what & EV_TIMEOUT) {
