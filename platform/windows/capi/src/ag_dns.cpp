@@ -243,7 +243,8 @@ static ag_dnsproxy_settings *marshal_settings(const ag::dnsproxy_settings &setti
     c_settings->ipv6_available = settings.ipv6_available;
     c_settings->dns_cache_size = settings.dns_cache_size;
     c_settings->blocked_response_ttl_secs = settings.blocked_response_ttl_secs;
-    c_settings->blocking_mode = (ag_dnsproxy_blocking_mode) settings.blocking_mode;
+    c_settings->adblock_rules_blocking_mode = (ag_dnsproxy_blocking_mode) settings.adblock_rules_blocking_mode;
+    c_settings->hosts_rules_blocking_mode = (ag_dnsproxy_blocking_mode) settings.hosts_rules_blocking_mode;
     c_settings->custom_blocking_ipv4 = marshal_str(settings.custom_blocking_ipv4);
     c_settings->custom_blocking_ipv6 = marshal_str(settings.custom_blocking_ipv6);
     c_settings->dns64 = marshal_dns64(settings.dns64);
@@ -386,7 +387,8 @@ static ag::dnsproxy_settings marshal_settings(const ag_dnsproxy_settings *c_sett
     settings.ipv6_available = c_settings->ipv6_available;
     settings.dns_cache_size = c_settings->dns_cache_size;
     settings.blocked_response_ttl_secs = c_settings->blocked_response_ttl_secs;
-    settings.blocking_mode = (ag::dnsproxy_blocking_mode) c_settings->blocking_mode;
+    settings.adblock_rules_blocking_mode = (ag::dnsproxy_blocking_mode) c_settings->adblock_rules_blocking_mode;
+    settings.hosts_rules_blocking_mode = (ag::dnsproxy_blocking_mode) c_settings->hosts_rules_blocking_mode;
     if (c_settings->custom_blocking_ipv4) {
         settings.custom_blocking_ipv4.assign(c_settings->custom_blocking_ipv4);
     }

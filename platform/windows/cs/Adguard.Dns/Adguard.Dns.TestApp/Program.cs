@@ -143,7 +143,8 @@ namespace Adguard.Dns.TestApp
                     WaitTimeMs = 2000
                 },
                 BlockedResponseTtlSec = 0,
-                BlockingMode = AGDnsApi.ag_dnsproxy_blocking_mode.DEFAULT,
+                AdblockRulesBlockingMode = AGDnsApi.ag_dnsproxy_blocking_mode.AGBM_REFUSED,
+                HostsRulesBlockingMode = AGDnsApi.ag_dnsproxy_blocking_mode.AGBM_REFUSED,
                 BlockIpv6 = true,
                 CustomBlockingIpv4 = null,
                 CustomBlockingIpv6 = null,

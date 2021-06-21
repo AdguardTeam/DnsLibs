@@ -457,7 +457,8 @@ ag::dnsproxy_settings ag::android_dnsproxy::marshal_settings(JNIEnv *env,
     auto filter_params_field = env->GetFieldID(clazz, "filterParams", "Ljava/util/List;");
     auto ipv6_avail_field = env->GetFieldID(clazz, "ipv6Available", "Z");
     auto block_ipv6_field = env->GetFieldID(clazz, "blockIpv6", "Z");
-    auto blocking_mode_field = env->GetFieldID(clazz, "blockingMode", "L" FQN_BLOCKING_MODE ";");
+    auto adb_blocking_mode_field = env->GetFieldID(clazz, "adblockRulesBlockingMode", "L" FQN_BLOCKING_MODE ";");
+    auto hosts_blocking_mode_field = env->GetFieldID(clazz, "hostsRulesBlockingMode", "L" FQN_BLOCKING_MODE ";");
     auto custom_blocking_ip4_field = env->GetFieldID(clazz, "customBlockingIpv4", "Ljava/lang/String;");
     auto custom_blocking_ip6_field = env->GetFieldID(clazz, "customBlockingIpv6", "Ljava/lang/String;");
     auto cache_size_field = env->GetFieldID(clazz, "dnsCacheSize", "J");
@@ -508,8 +509,11 @@ ag::dnsproxy_settings ag::android_dnsproxy::marshal_settings(JNIEnv *env,
     settings.ipv6_available = env->GetBooleanField(java_dnsproxy_settings, ipv6_avail_field);
     settings.block_ipv6 = env->GetBooleanField(java_dnsproxy_settings, block_ipv6_field);
 
-    if (auto blocking_mode = env->GetObjectField(java_dnsproxy_settings, blocking_mode_field)) {
-        settings.blocking_mode = (ag::dnsproxy_blocking_mode) m_utils.get_enum_ordinal(env, blocking_mode);
+    if (auto mode = env->GetObjectField(java_dnsproxy_settings, adb_blocking_mode_field)) {
+        settings.adblock_rules_blocking_mode = (ag::dnsproxy_blocking_mode) m_utils.get_enum_ordinal(env, mode);
+    }
+    if (auto mode = env->GetObjectField(java_dnsproxy_settings, hosts_blocking_mode_field)) {
+        settings.hosts_rules_blocking_mode = (ag::dnsproxy_blocking_mode) m_utils.get_enum_ordinal(env, mode);
     }
 
     if (auto custom_ip4 = env->GetObjectField(java_dnsproxy_settings, custom_blocking_ip4_field)) {
@@ -546,7 +550,8 @@ ag::local_ref<jobject> ag::android_dnsproxy::marshal_settings(JNIEnv *env, const
     auto filter_params_field = env->GetFieldID(clazz, "filterParams", "Ljava/util/List;");
     auto ipv6_avail_field = env->GetFieldID(clazz, "ipv6Available", "Z");
     auto block_ipv6_field = env->GetFieldID(clazz, "blockIpv6", "Z");
-    auto blocking_mode_field = env->GetFieldID(clazz, "blockingMode", "L" FQN_BLOCKING_MODE ";");
+    auto adb_blocking_mode_field = env->GetFieldID(clazz, "adbBlockingMode", "L" FQN_BLOCKING_MODE ";");
+    auto hosts_blocking_mode_field = env->GetFieldID(clazz, "hostsBlockingMode", "L" FQN_BLOCKING_MODE ";");
     auto custom_blocking_ip4_field = env->GetFieldID(clazz, "customBlockingIpv4", "Ljava/lang/String;");
     auto custom_blocking_ip6_field = env->GetFieldID(clazz, "customBlockingIpv6", "Ljava/lang/String;");
     auto cache_size_field = env->GetFieldID(clazz, "dnsCacheSize", "J");
@@ -597,7 +602,8 @@ ag::local_ref<jobject> ag::android_dnsproxy::marshal_settings(JNIEnv *env, const
     }
     env->SetBooleanField(java_settings, ipv6_avail_field, (jboolean) settings.ipv6_available);
     env->SetBooleanField(java_settings, block_ipv6_field, (jboolean) settings.block_ipv6);
-    env->SetObjectField(java_settings, blocking_mode_field, m_blocking_mode_values.at((size_t) settings.blocking_mode).get());
+    env->SetObjectField(java_settings, adb_blocking_mode_field, m_blocking_mode_values.at((size_t) settings.adblock_rules_blocking_mode).get());
+    env->SetObjectField(java_settings, hosts_blocking_mode_field, m_blocking_mode_values.at((size_t) settings.hosts_rules_blocking_mode).get());
 
     env->SetObjectField(java_settings, custom_blocking_ip4_field, m_utils.marshal_string(env, settings.custom_blocking_ipv4).get());
     env->SetObjectField(java_settings, custom_blocking_ip6_field, m_utils.marshal_string(env, settings.custom_blocking_ipv6).get());

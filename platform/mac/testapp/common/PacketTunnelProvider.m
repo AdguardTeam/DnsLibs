@@ -130,8 +130,8 @@
 //                                                                id:42
 //                                             outboundInterfaceName:nil]]
         fallbacks: nil
-        handleDNSSuffixes: YES
-        userDNSSuffixes: nil
+        fallbackDomains:@[]
+        detectSearchDomains: NO
         filters: filters
         blockedResponseTtlSecs: 0
         dns64Settings: nil
@@ -139,12 +139,14 @@
         outboundProxy: nil
         ipv6Available: true
         blockIpv6: false
-        blockingMode: AGBM_DEFAULT
+        adblockRulesBlockingMode: AGBM_ADDRESS
+        hostsRulesBlockingMode: AGBM_ADDRESS
         customBlockingIpv4: nil
         customBlockingIpv6: nil
         dnsCacheSize: 128
         optimisticCache: YES
-        enableDNSSECOK:NO
+        enableDNSSECOK: NO
+        enableRetransmissionHandling: NO
         helperPath: nil];
 
     AGDnsProxyEvents *events = [[AGDnsProxyEvents alloc] init];

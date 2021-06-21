@@ -69,15 +69,21 @@ namespace Adguard.Dns.Api.DnsProxyServer.Configs
         public bool BlockIpv6 { get; set; }
 
         /// <summary>
-        /// The blocking mode
-        /// (<see cref="BlockingMode"/>)
+        /// How to respond to requests blocked by AdBlock-style rules
+        /// (<see cref="AGDnsApi.ag_dnsproxy_blocking_mode"/>)
         /// </summary>
-        public AGDnsApi.ag_dnsproxy_blocking_mode BlockingMode { get; set; }
+        public AGDnsApi.ag_dnsproxy_blocking_mode AdblockRulesBlockingMode { get; set; }
+
+        /// <summary>
+        /// How to respond to requests blocked by hosts-style rules
+        /// (<see cref="AGDnsApi.ag_dnsproxy_blocking_mode"/>)
+        /// </summary>
+        public AGDnsApi.ag_dnsproxy_blocking_mode HostsRulesBlockingMode { get; set; }
 
         /// <summary>
         /// Custom IPv4 address to return for filtered requests,
         /// must be either empty/<code>null</code>, or a valid IPv4 address;
-        /// ignored if <see cref="BlockingMode"/> != <see cref="AGDnsApi.ag_dnsproxy_blocking_mode.CUSTOM_ADDRESS"/>
+        /// ignored if <see cref="AdblockRulesBlockingMode"/> != <see cref="AGDnsApi.ag_dnsproxy_blocking_mode.AGBM_ADDRESS"/>
         /// </summary>
         [ManualMarshalStringToPtr]
         public string CustomBlockingIpv4 { get; set; }
@@ -85,7 +91,7 @@ namespace Adguard.Dns.Api.DnsProxyServer.Configs
         /// <summary>
         /// Custom IPv4 address to return for filtered requests,
         /// must be either empty/<code>null</code>, or a valid IPv6 address;
-        /// ignored if <see cref="BlockingMode"/> != <see cref="AGDnsApi.ag_dnsproxy_blocking_mode.CUSTOM_ADDRESS"/>
+        /// ignored if <see cref="AdblockRulesBlockingMode"/> != <see cref="AGDnsApi.ag_dnsproxy_blocking_mode.AGBM_ADDRESS"/>
         /// </summary>
         [ManualMarshalStringToPtr]
         public string CustomBlockingIpv6 { get; set; }
@@ -148,7 +154,8 @@ namespace Adguard.Dns.Api.DnsProxyServer.Configs
                    Equals(OutboundProxySettings, other.OutboundProxySettings) &&
                    Ipv6Available == other.Ipv6Available &&
                    BlockIpv6 == other.BlockIpv6 &&
-                   BlockingMode == other.BlockingMode &&
+                   AdblockRulesBlockingMode == other.AdblockRulesBlockingMode &&
+                   HostsRulesBlockingMode == other.HostsRulesBlockingMode &&
                    CustomBlockingIpv4 == other.CustomBlockingIpv4 &&
                    CustomBlockingIpv6 == other.CustomBlockingIpv6 &&
                    DnsCacheSize == other.DnsCacheSize &&
@@ -171,7 +178,8 @@ namespace Adguard.Dns.Api.DnsProxyServer.Configs
                 hashCode = (hashCode * 397) ^ (OutboundProxySettings != null ? OutboundProxySettings.GetHashCode() : 0);
                 hashCode = (hashCode * 397) ^ Ipv6Available.GetHashCode();
                 hashCode = (hashCode * 397) ^ BlockIpv6.GetHashCode();
-                hashCode = (hashCode * 397) ^ BlockingMode.GetHashCode();
+                hashCode = (hashCode * 397) ^ AdblockRulesBlockingMode.GetHashCode();
+                hashCode = (hashCode * 397) ^ HostsRulesBlockingMode.GetHashCode();
                 hashCode = (hashCode * 397) ^ (CustomBlockingIpv4 != null ? CustomBlockingIpv4.GetHashCode() : 0);
                 hashCode = (hashCode * 397) ^ (CustomBlockingIpv6 != null ? CustomBlockingIpv6.GetHashCode() : 0);
                 hashCode = (hashCode * 397) ^ DnsCacheSize.GetHashCode();

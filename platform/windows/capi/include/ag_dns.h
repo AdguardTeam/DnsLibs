@@ -76,21 +76,28 @@ typedef enum {
     AGLP_TCP
 } ag_listener_protocol;
 
+/**
+ * Specifies how to respond to blocked requests.
+ *
+ * A request is blocked if it matches a blocking AdBlock-style rule,
+ * or a blocking hosts-style rule. A blocking hosts-style rule is
+ * a hosts-style rule with a loopback or all-zeroes address.
+ *
+ * Requests matching a hosts-style rule with an address that is
+ * neither loopback nor all-zeroes are always responded
+ * with the address specified by the rule.
+ */
 typedef enum {
-    /** AdBlock-style filters -> REFUSED, hosts-style filters -> rule-specified or unspecified address */
-    AGBM_DEFAULT,
-
-    /** Always return NXDOMAIN */
+    /** Respond with REFUSED response code */
     AGBM_REFUSED,
-
-    /** Always return NXDOMAIN */
+    /** Respond with NXDOMAIN response code */
     AGBM_NXDOMAIN,
-
-    /** Always return unspecified address */
-    AGBM_UNSPECIFIED_ADDRESS,
-
-    /** Always return custom configured IP address */
-    AGBM_CUSTOM_ADDRESS,
+    /**
+     * Respond with an address that is all-zeroes, or
+     * a custom blocking address, if it is specified, or
+     * an empty SOA response if request type is not A/AAAA.
+     */
+    AGBM_ADDRESS,
 } ag_dnsproxy_blocking_mode;
 
 typedef struct {
@@ -188,8 +195,10 @@ typedef struct {
     bool block_ipv6;
     /** If true, the bootstrappers are allowed to fetch AAAA records */
     bool ipv6_available;
-    /** How to respond to filtered requests */
-    ag_dnsproxy_blocking_mode blocking_mode;
+    /** How to respond to requests blocked by AdBlock-style rules */
+    ag_dnsproxy_blocking_mode adblock_rules_blocking_mode;
+    /** How to respond to requests blocked by hosts-style rules */
+    ag_dnsproxy_blocking_mode hosts_rules_blocking_mode;
     /** Custom IPv4 address to return for filtered requests */
     const char *custom_blocking_ipv4;
     /** Custom IPv6 address to return for filtered requests */

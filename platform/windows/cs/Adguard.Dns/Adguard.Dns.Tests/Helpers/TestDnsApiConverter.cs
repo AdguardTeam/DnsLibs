@@ -73,7 +73,8 @@ namespace Adguard.Dns.Tests.Helpers
                 },
                 Ipv6Available = true,
                 BlockIpv6 = true,
-                BlockingMode = new AGDnsApi.ag_dnsproxy_blocking_mode(),
+                AdblockRulesBlockingMode = AGDnsApi.ag_dnsproxy_blocking_mode.AGBM_REFUSED,
+                HostsRulesBlockingMode = AGDnsApi.ag_dnsproxy_blocking_mode.AGBM_REFUSED,
                 CustomBlockingIpv4 = "CustomBlockingIpv4Test",
                 CustomBlockingIpv6 = "CustomBlockingIpv6Test",
                 DnsCacheSize = 23,
@@ -88,6 +89,14 @@ namespace Adguard.Dns.Tests.Helpers
             Assert.AreNotEqual(IntPtr.Zero, nativeDnsSettings.listeners.entries);
             Assert.AreNotEqual(IntPtr.Zero, nativeDnsSettings.upstreams.entries);
             Assert.AreEqual(nativeDnsSettings.BlockedResponseTtlSec, dnsSettings.BlockedResponseTtlSec);
+            Assert.AreEqual(nativeDnsSettings.Ipv6Available, dnsSettings.Ipv6Available);
+            Assert.AreEqual(nativeDnsSettings.BlockIpv6, dnsSettings.BlockIpv6);
+            Assert.AreEqual(nativeDnsSettings.AdblockRulesBlockingMode, dnsSettings.AdblockRulesBlockingMode);
+            Assert.AreEqual(nativeDnsSettings.HostsRulesBlockingMode, dnsSettings.HostsRulesBlockingMode);
+            Assert.AreEqual(MarshalUtils.PtrToString(nativeDnsSettings.CustomBlockingIpv4), dnsSettings.CustomBlockingIpv4);
+            Assert.AreEqual(MarshalUtils.PtrToString(nativeDnsSettings.CustomBlockingIpv6), dnsSettings.CustomBlockingIpv6);
+            Assert.AreEqual(nativeDnsSettings.DnsCacheSize, dnsSettings.DnsCacheSize);
+            Assert.AreEqual(nativeDnsSettings.OptimisticCache, dnsSettings.OptimisticCache);
 
             DnsProxySettings dnsSettingsConverted =  DnsApiConverter.FromNativeObject(nativeDnsSettings);
             Assert.AreEqual(dnsSettingsConverted.FallbackDomains, dnsSettings.FallbackDomains);

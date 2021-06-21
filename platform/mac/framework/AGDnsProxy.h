@@ -37,14 +37,27 @@ typedef NS_ENUM(NSInteger, AGListenerProtocol) {
 };
 
 /**
- * Blocking modes
+ * Specifies how to respond to blocked requests.
+ *
+ * A request is blocked if it matches a blocking AdBlock-style rule,
+ * or a blocking hosts-style rule. A blocking hosts-style rule is
+ * a hosts-style rule with a loopback or all-zeroes address.
+ *
+ * Requests matching a hosts-style rule with an address that is
+ * neither loopback nor all-zeroes are always responded
+ * with the address specified by the rule.
  */
 typedef NS_ENUM(NSInteger, AGBlockingMode) {
-    AGBM_DEFAULT, // AdBlock-style filters -> REFUSED, hosts-style filters -> rule-specified or unspecified address
-    AGBM_REFUSED, // Always return REFUSED
-    AGBM_NXDOMAIN, // Always return NXDOMAIN
-    AGBM_UNSPECIFIED_ADDRESS, // Always return unspecified address
-    AGBM_CUSTOM_ADDRESS, // Always return custom configured IP address (see AGDnsProxyConfig)
+    /** Respond with REFUSED response code */
+    AGBM_REFUSED,
+    /** Respond with NXDOMAIN response code */
+    AGBM_NXDOMAIN,
+    /**
+     * Respond with an address that is all-zeroes, or
+     * a custom blocking address, if it is specified, or
+     * an empty SOA response if request type is not A/AAAA.
+     */
+    AGBM_ADDRESS,
 };
 
 @interface AGLogger : NSObject
@@ -302,9 +315,13 @@ typedef NS_ENUM(NSInteger, AGOutboundProxyProtocol) {
  */
 @property(nonatomic, readonly) BOOL blockIpv6;
 /**
- * Blocking mode.
+ * How to respond to requests blocked by AdBlock-style rules
  */
-@property(nonatomic, readonly) AGBlockingMode blockingMode;
+@property(nonatomic, readonly) AGBlockingMode adblockRulesBlockingMode;
+/**
+ * How to respond to requests blocked by hosts-style rules
+ */
+@property(nonatomic, readonly) AGBlockingMode hostsRulesBlockingMode;
 /**
  * Custom IPv4 address to return for filtered requests
  */
@@ -348,7 +365,8 @@ typedef NS_ENUM(NSInteger, AGOutboundProxyProtocol) {
         outboundProxy: (AGOutboundProxySettings *) outboundProxy
         ipv6Available: (BOOL) ipv6Available
         blockIpv6: (BOOL) blockIpv6
-        blockingMode: (AGBlockingMode) blockingMode
+        adblockRulesBlockingMode: (AGBlockingMode) adblockRulesBlockingMode
+        hostsRulesBlockingMode: (AGBlockingMode) hostsRulesBlockingMode
         customBlockingIpv4: (NSString *) customBlockingIpv4
         customBlockingIpv6: (NSString *) customBlockingIpv6
         dnsCacheSize: (NSUInteger) dnsCacheSize

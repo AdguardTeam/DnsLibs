@@ -23,14 +23,27 @@ enum class listener_protocol {
 };
 
 /**
- * Specifies how to respond to filtered requests
+ * Specifies how to respond to blocked requests.
+ *
+ * A request is blocked if it matches a blocking AdBlock-style rule,
+ * or a blocking hosts-style rule. A blocking hosts-style rule is
+ * a hosts-style rule with a loopback or all-zeroes address.
+ *
+ * Requests matching a hosts-style rule with an address that is
+ * neither loopback nor all-zeroes are always responded
+ * with the address specified by the rule.
  */
 enum class dnsproxy_blocking_mode {
-    DEFAULT, // AdBlock-style filters -> REFUSED, hosts-style filters -> rule-specified or unspecified address
-    REFUSED, // Always return REFUSED
-    NXDOMAIN, // Always return NXDOMAIN
-    UNSPECIFIED_ADDRESS, // Always return unspecified address
-    CUSTOM_ADDRESS, // Always return custom configured IP address (see dnsproxy_settings)
+    /** Respond with REFUSED response code */
+    REFUSED,
+    /** Respond with NXDOMAIN response code */
+    NXDOMAIN,
+    /**
+     * Respond with an address that is all-zeroes, or
+     * a custom blocking address, if it is specified, or
+     * an empty SOA response if request type is not A/AAAA.
+     */
+    ADDRESS,
 };
 
 struct listener_settings {
@@ -84,7 +97,8 @@ struct dnsproxy_settings {
 
     bool ipv6_available; // If false, bootstrappers will fetch only A records
 
-    dnsproxy_blocking_mode blocking_mode; // How to respond to filtered requests
+    dnsproxy_blocking_mode adblock_rules_blocking_mode; // How to respond to requests blocked by AdBlock-style rules
+    dnsproxy_blocking_mode hosts_rules_blocking_mode; // How to respond to requests blocked by hosts-style rules
 
     std::string custom_blocking_ipv4; // Custom IPv4 address to return for filtered requests
     std::string custom_blocking_ipv6; // Custom IPv6 address to return for filtered requests

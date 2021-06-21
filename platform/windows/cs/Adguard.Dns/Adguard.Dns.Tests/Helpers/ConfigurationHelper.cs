@@ -44,7 +44,8 @@ namespace Adguard.Dns.Tests.Helpers
                     WaitTimeMs = 1000
                 },
                 BlockedResponseTtlSec = 5,
-                BlockingMode = AGDnsApi.ag_dnsproxy_blocking_mode.DEFAULT,
+                AdblockRulesBlockingMode = AGDnsApi.ag_dnsproxy_blocking_mode.AGBM_REFUSED,
+                HostsRulesBlockingMode = AGDnsApi.ag_dnsproxy_blocking_mode.AGBM_REFUSED,
                 BlockIpv6 = false,
                 CustomBlockingIpv4 = null,
                 CustomBlockingIpv6 = null,

@@ -1,5 +1,12 @@
 # Changelog
 
+## V1.6
+* [Feature] Split the blocking mode setting into separate settings for AdBlock-style and hosts-style rules.
+    * Also remove the redundant `CUSTOM_ADDRESS` blocking mode: now if a custom blocking address is specified,
+    it will simply be used where an all-zeroes address would have been used otherwise.
+    * WARNING: the `DEFAULT` blocking mode has been removed. The default blocking mode for both rule types
+    is now obtained with `ag::dnsproxy_settings::get_default()`/`DnsProxySettings.getDefault()`
+      /`AGDnsProxyConfig.getDefault()`/`ag_dnsproxy_settings_get_default()`
 ## V1.5
 * [Feature] Fallback-only domains. See `fallbackDomains` or `fallback_domains` in respective adapters.
     * This is a list of domains (limited wildcards allowed) that will be forwarded directly to the fallback upstreams (if they exist).

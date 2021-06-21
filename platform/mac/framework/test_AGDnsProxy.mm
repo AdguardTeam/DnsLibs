@@ -26,7 +26,8 @@ static int regressTestListenerFailsInit() {
                                                  outboundProxy:nil
                                                  ipv6Available:NO
                                                      blockIpv6:NO
-                                                  blockingMode:AGBM_DEFAULT
+                                      adblockRulesBlockingMode:AGBM_REFUSED
+                                        hostsRulesBlockingMode:AGBM_ADDRESS
                                             customBlockingIpv4:nil
                                             customBlockingIpv6:nil
                                                   dnsCacheSize:0

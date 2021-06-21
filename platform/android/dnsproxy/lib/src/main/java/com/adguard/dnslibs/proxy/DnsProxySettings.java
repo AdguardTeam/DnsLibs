@@ -7,27 +7,31 @@ import java.util.Objects;
 
 public class DnsProxySettings {
     /**
-     * Specifies how to respond to filtered requests
+     * Specifies how to respond to blocked requests.
+     *
+     * A request is blocked if it matches a blocking AdBlock-style rule,
+     * or a blocking hosts-style rule. A blocking hosts-style rule is
+     * a hosts-style rule with a loopback or all-zeroes address.
+     *
+     * Requests matching a hosts-style rule with an address that is
+     * neither loopback nor all-zeroes are always responded
+     * with the address specified by the rule.
      */
     public enum BlockingMode {
-        // MUST keep names and ordinals in sync with ag::blocking_mode
+        // MUST keep names and ordinals in sync with ag::dnsproxy_blocking_mode
 
-        /** AdBlock-style filters -> REFUSED, hosts-style filters -> rule-specified or unspecified address */
-        DEFAULT(0),
-
-        /** Always return REFUSED */
+        /** Respond with REFUSED response code */
         REFUSED(4),
 
-        /** Always return NXDOMAIN */
+        /** Respond with NXDOMAIN response code */
         NXDOMAIN(1),
 
-        /** Always return unspecified address */
-        UNSPECIFIED_ADDRESS(2),
-
-        /** Always return custom configured IP address (See {@link DnsProxySettings}) */
-        CUSTOM_ADDRESS(3)
-
-        ;
+        /**
+         * Respond with an address that is all-zeroes, or
+         * a custom blocking address, if it is specified, or
+         * an empty SOA response if request type is not A/AAAA.
+         */
+        ADDRESS(2);
 
         private final int code;
         BlockingMode(int code) { this.code = code; }
@@ -40,7 +44,7 @@ public class DnsProxySettings {
                     return m;
                 }
             }
-            return DEFAULT;
+            throw new IllegalArgumentException("code is out of range");
         }
     }
 
@@ -55,7 +59,8 @@ public class DnsProxySettings {
     private OutboundProxySettings outboundProxy;
     private boolean ipv6Available;
     private boolean blockIpv6;
-    private BlockingMode blockingMode;
+    private BlockingMode adblockRulesBlockingMode;
+    private BlockingMode hostsRulesBlockingMode;
     private String customBlockingIpv4;
     private String customBlockingIpv6;
     private long dnsCacheSize;
@@ -85,9 +90,8 @@ public class DnsProxySettings {
     }
 
     /**
-     * @param customBlockingIpv4 Custom IPv4 address to return for filtered requests,
-     *                           must be either empty/{@code null}, or a valid IPv4 address;
-     *                           ignored if {@link #getBlockingMode()} != {@link BlockingMode#CUSTOM_ADDRESS}
+     * @param customBlockingIpv4 Custom IPv4 address to return for blocked requests instead of all-zeroes,
+     *                           must be either empty/{@code null}, or a valid IPv4 address
      */
     public void setCustomBlockingIpv4(String customBlockingIpv4) {
         this.customBlockingIpv4 = customBlockingIpv4;
@@ -101,26 +105,39 @@ public class DnsProxySettings {
     }
 
     /**
-     * @param customBlockingIpv6 Custom IPv6 address to return for filtered requests,
-     *                           must be either empty/{@code null}, or a valid IPv6 address;
-     *                           ignored if {@link #getBlockingMode()} != {@link BlockingMode#CUSTOM_ADDRESS}
+     * @param customBlockingIpv6 Custom IPv6 address to return for blcoked requests instead of all-zeroes,
+     *                           must be either empty/{@code null}, or a valid IPv6 address
      */
     public void setCustomBlockingIpv6(String customBlockingIpv6) {
         this.customBlockingIpv6 = customBlockingIpv6;
     }
 
     /**
-     * @return The blocking mode
+     * @return How to respond to requests blocked by AdBlock-style rules.
      */
-    public BlockingMode getBlockingMode() {
-        return blockingMode;
+    public BlockingMode getAdblockRulesBlockingMode() {
+        return adblockRulesBlockingMode;
     }
 
     /**
-     * @param blockingMode The blocking mode
+     * @param adblockRulesBlockingMode How to respond to requests blocked by AdBlock-style rules.
      */
-    public void setBlockingMode(BlockingMode blockingMode) {
-        this.blockingMode = blockingMode;
+    public void setAdblockRulesBlockingMode(BlockingMode adblockRulesBlockingMode) {
+        this.adblockRulesBlockingMode = adblockRulesBlockingMode;
+    }
+
+    /**
+     * @return How to respond to requests blocked by hosts-style rules.
+     */
+    public BlockingMode getHostsRulesBlockingMode() {
+        return hostsRulesBlockingMode;
+    }
+
+    /**
+     * @param hostsRulesBlockingMode How to respond to requests blocked by hosts-style rules.
+     */
+    public void setHostsRulesBlockingMode(BlockingMode hostsRulesBlockingMode) {
+        this.hostsRulesBlockingMode = hostsRulesBlockingMode;
     }
 
     /**
@@ -354,7 +371,8 @@ public class DnsProxySettings {
                 Objects.equals(filterParams, that.filterParams) &&
                 Objects.equals(listeners, that.listeners) &&
                 Objects.equals(outboundProxy, that.outboundProxy) &&
-                blockingMode == that.blockingMode &&
+                adblockRulesBlockingMode == that.adblockRulesBlockingMode &&
+                hostsRulesBlockingMode == that.hostsRulesBlockingMode &&
                 Objects.equals(customBlockingIpv4, that.customBlockingIpv4) &&
                 Objects.equals(customBlockingIpv6, that.customBlockingIpv6) &&
                 dnsCacheSize == that.dnsCacheSize &&
@@ -366,7 +384,8 @@ public class DnsProxySettings {
     @Override
     public int hashCode() {
         return Objects.hash(upstreams, fallbacks, fallbackDomains, detectSearchDomains, dns64, blockedResponseTtlSecs,
-                filterParams, listeners, outboundProxy, ipv6Available, blockIpv6, blockingMode, customBlockingIpv4, customBlockingIpv6,
+                filterParams, listeners, outboundProxy, ipv6Available, blockIpv6, adblockRulesBlockingMode, hostsRulesBlockingMode,
+                customBlockingIpv4, customBlockingIpv6,
                 dnsCacheSize, optimisticCache, enableDNSSECOK, enableRetransmissionHandling);
     }
 

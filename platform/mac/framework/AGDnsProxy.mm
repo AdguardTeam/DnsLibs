@@ -594,7 +594,8 @@ static ag::server_stamp convert_stamp(AGDnsStamp *stamp) {
     }
     _ipv6Available = settings->ipv6_available;
     _blockIpv6 = settings->block_ipv6;
-    _blockingMode = (AGBlockingMode) settings->blocking_mode;
+    _adblockRulesBlockingMode = (AGBlockingMode) settings->adblock_rules_blocking_mode;
+    _hostsRulesBlockingMode = (AGBlockingMode) settings->hosts_rules_blocking_mode;
     _customBlockingIpv4 = convert_string(settings->custom_blocking_ipv4);
     _customBlockingIpv6 = convert_string(settings->custom_blocking_ipv6);
     _dnsCacheSize = settings->dns_cache_size;
@@ -614,7 +615,8 @@ static ag::server_stamp convert_stamp(AGDnsStamp *stamp) {
         outboundProxy: (AGOutboundProxySettings *) outboundProxy
         ipv6Available: (BOOL) ipv6Available
         blockIpv6: (BOOL) blockIpv6
-        blockingMode: (AGBlockingMode) blockingMode
+        adblockRulesBlockingMode: (AGBlockingMode) adblockRulesBlockingMode
+        hostsRulesBlockingMode: (AGBlockingMode) hostsRulesBlockingMode
         customBlockingIpv4: (NSString *) customBlockingIpv4
         customBlockingIpv6: (NSString *) customBlockingIpv6
         dnsCacheSize: (NSUInteger) dnsCacheSize
@@ -640,7 +642,8 @@ static ag::server_stamp convert_stamp(AGDnsStamp *stamp) {
     _outboundProxy = outboundProxy;
     _ipv6Available = ipv6Available;
     _blockIpv6 = blockIpv6;
-    _blockingMode = blockingMode;
+    _adblockRulesBlockingMode = adblockRulesBlockingMode;
+    _hostsRulesBlockingMode = hostsRulesBlockingMode;
     _customBlockingIpv4 = customBlockingIpv4;
     _customBlockingIpv6 = customBlockingIpv6;
     _dnsCacheSize = dnsCacheSize;
@@ -665,7 +668,8 @@ static ag::server_stamp convert_stamp(AGDnsStamp *stamp) {
         _outboundProxy = [coder decodeObjectForKey:@"_outboundProxy"];
         _ipv6Available = [coder decodeBoolForKey:@"_ipv6Available"];
         _blockIpv6 = [coder decodeBoolForKey:@"_blockIpv6"];
-        _blockingMode = (AGBlockingMode) [coder decodeIntForKey:@"_blockingMode"];
+        _adblockRulesBlockingMode = (AGBlockingMode) [coder decodeIntForKey:@"_adblockRulesBlockingMode"];
+        _hostsRulesBlockingMode = (AGBlockingMode) [coder decodeIntForKey:@"_hostsRulesBlockingMode"];
         _dnsCacheSize = [coder decodeInt64ForKey:@"_dnsCacheSize"];
         _optimisticCache = [coder decodeBoolForKey:@"_optimisticCache"];
         _enableDNSSECOK = [coder decodeBoolForKey:@"_enableDNSSECOK"];
@@ -686,7 +690,8 @@ static ag::server_stamp convert_stamp(AGDnsStamp *stamp) {
     [coder encodeObject:self.outboundProxy forKey:@"_outboundProxy"];
     [coder encodeBool:self.ipv6Available forKey:@"_ipv6Available"];
     [coder encodeBool:self.blockIpv6 forKey:@"_blockIpv6"];
-    [coder encodeInt:self.blockingMode forKey:@"_blockingMode"];
+    [coder encodeInt:self.adblockRulesBlockingMode forKey:@"_adblockRulesBlockingMode"];
+    [coder encodeInt:self.hostsRulesBlockingMode forKey:@"_hostsRulesBlockingMode"];
     [coder encodeInt64:self.dnsCacheSize forKey:@"_dnsCacheSize"];
     [coder encodeBool:self.optimisticCache forKey:@"_optimisticCache"];
     [coder encodeBool:self.enableDNSSECOK forKey:@"_enableDNSSECOK"];
@@ -1180,7 +1185,8 @@ static int bindFd(NSString *helperPath, NSString *address, NSNumber *port, AGLis
     settings.ipv6_available = config.ipv6Available;
     settings.block_ipv6 = config.blockIpv6;
 
-    settings.blocking_mode = (ag::dnsproxy_blocking_mode) config.blockingMode;
+    settings.adblock_rules_blocking_mode = (ag::dnsproxy_blocking_mode) config.adblockRulesBlockingMode;
+    settings.hosts_rules_blocking_mode = (ag::dnsproxy_blocking_mode) config.hostsRulesBlockingMode;
     if (config.customBlockingIpv4 != nil) {
         settings.custom_blocking_ipv4 = [config.customBlockingIpv4 UTF8String];
     }

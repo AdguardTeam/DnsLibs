@@ -226,7 +226,8 @@ public class DnsProxyTest {
         settings.setFilterParams(settings.getFilterParams());
         settings.getUpstreams().get(0).setBootstrap(Collections.singletonList("1.1.1.1"));
 
-        settings.setBlockingMode(DnsProxySettings.BlockingMode.REFUSED);
+        settings.setAdblockRulesBlockingMode(DnsProxySettings.BlockingMode.REFUSED);
+        settings.setHostsRulesBlockingMode(DnsProxySettings.BlockingMode.ADDRESS);
         settings.setCustomBlockingIpv4("4.3.2.1");
         settings.setCustomBlockingIpv6("43::21");
 
@@ -433,7 +434,5 @@ public class DnsProxyTest {
             final DnsProxySettings.BlockingMode bmFromCode = DnsProxySettings.BlockingMode.fromCode(bm.getCode());
             assertEquals(bm, bmFromCode);
         }
-        assertEquals(DnsProxySettings.BlockingMode.DEFAULT, DnsProxySettings.BlockingMode.fromCode(-1));
-        assertEquals(DnsProxySettings.BlockingMode.DEFAULT, DnsProxySettings.BlockingMode.fromCode(42));
     }
 }

@@ -380,6 +380,9 @@ TEST_F(dnsproxy_test, blocking_mode_default) {
     ag::dnsproxy_settings settings = make_dnsproxy_settings();
     settings.filter_params = {{{1, "blocking_modes_test_filter.txt"}}};
 
+    ASSERT_EQ(ag::dnsproxy_blocking_mode::REFUSED, settings.adblock_rules_blocking_mode);
+    ASSERT_EQ(ag::dnsproxy_blocking_mode::ADDRESS, settings.hosts_rules_blocking_mode);
+
     auto [ret, err] = proxy.init(settings, {});
     ASSERT_TRUE(ret) << *err;
 
@@ -440,7 +443,8 @@ TEST_F(dnsproxy_test, blocking_mode_default) {
 TEST_F(dnsproxy_test, blocking_mode_nxdomain) {
     ag::dnsproxy_settings settings = make_dnsproxy_settings();
     settings.filter_params = {{{1, "blocking_modes_test_filter.txt"}}};
-    settings.blocking_mode = ag::dnsproxy_blocking_mode::NXDOMAIN;
+    settings.adblock_rules_blocking_mode = ag::dnsproxy_blocking_mode::NXDOMAIN;
+    settings.hosts_rules_blocking_mode = ag::dnsproxy_blocking_mode::NXDOMAIN;
 
     auto [ret, err] = proxy.init(settings, {});
     ASSERT_TRUE(ret) << *err;
@@ -502,7 +506,8 @@ TEST_F(dnsproxy_test, blocking_mode_nxdomain) {
 TEST_F(dnsproxy_test, blocking_mode_refused) {
     ag::dnsproxy_settings settings = make_dnsproxy_settings();
     settings.filter_params = {{{1, "blocking_modes_test_filter.txt"}}};
-    settings.blocking_mode = ag::dnsproxy_blocking_mode::REFUSED;
+    settings.adblock_rules_blocking_mode = ag::dnsproxy_blocking_mode::REFUSED;
+    settings.hosts_rules_blocking_mode = ag::dnsproxy_blocking_mode::REFUSED;
 
     auto [ret, err] = proxy.init(settings, {});
     ASSERT_TRUE(ret) << *err;
@@ -533,22 +538,28 @@ TEST_F(dnsproxy_test, blocking_mode_refused) {
     ASSERT_NO_FATAL_FAILURE(perform_request(proxy, create_request("privacy-policy.truste.com", (ldns_rr_type) 65, LDNS_RD), res));
     ASSERT_EQ(LDNS_RCODE_REFUSED, ldns_pkt_get_rcode(res.get()));
 
-    // Check custom IP works
+    // Check weird qtype (hosts-style rule)
+    ASSERT_NO_FATAL_FAILURE(perform_request(proxy, create_request("hosts-style-custom.com", (ldns_rr_type) 65, LDNS_RD), res));
+    ASSERT_EQ(LDNS_RCODE_NOERROR, ldns_pkt_get_rcode(res.get()));
+    ASSERT_EQ(0, ldns_pkt_ancount(res.get()));
+    ASSERT_EQ(1, ldns_pkt_nscount(res.get()));
+
+    // Check rule IP works
     ASSERT_NO_FATAL_FAILURE(perform_request(proxy, create_request("hosts-style-custom.com", LDNS_RR_TYPE_A, LDNS_RD), res));
     ASSERT_EQ(LDNS_RCODE_NOERROR, ldns_pkt_get_rcode(res.get()));
     ASSERT_STREQ("1.2.3.4", make_rr_answer_string(res.get()).get());
 
-    // Check custom IP works for IPv6
+    // Check rule IP works
     ASSERT_NO_FATAL_FAILURE(perform_request(proxy, create_request("hosts-style-custom-6.com", LDNS_RR_TYPE_AAAA, LDNS_RD), res));
     ASSERT_EQ(LDNS_RCODE_NOERROR, ldns_pkt_get_rcode(res.get()));
     ASSERT_STREQ("12::34", make_rr_answer_string(res.get()).get());
 
-    // Check custom (from rule!) IP works
+    // Check rule IP works
     ASSERT_NO_FATAL_FAILURE(perform_request(proxy, create_request("hosts-style-4-and-6.com", LDNS_RR_TYPE_A, LDNS_RD), res));
     ASSERT_EQ(LDNS_RCODE_NOERROR, ldns_pkt_get_rcode(res.get()));
     ASSERT_STREQ("4.5.6.7", make_rr_answer_string(res.get()).get());
 
-    // Check custom (from rule!) IP works for IPv6
+    // Check rule IP works
     ASSERT_NO_FATAL_FAILURE(perform_request(proxy, create_request("hosts-style-4-and-6.com", LDNS_RR_TYPE_AAAA, LDNS_RD), res));
     ASSERT_EQ(LDNS_RCODE_NOERROR, ldns_pkt_get_rcode(res.get()));
     ASSERT_STREQ("45::67", make_rr_answer_string(res.get()).get());
@@ -557,7 +568,8 @@ TEST_F(dnsproxy_test, blocking_mode_refused) {
 TEST_F(dnsproxy_test, blocking_mode_unspecified_address) {
     ag::dnsproxy_settings settings = make_dnsproxy_settings();
     settings.filter_params = {{{1, "blocking_modes_test_filter.txt"}}};
-    settings.blocking_mode = ag::dnsproxy_blocking_mode::UNSPECIFIED_ADDRESS;
+    settings.adblock_rules_blocking_mode = ag::dnsproxy_blocking_mode::ADDRESS;
+    settings.hosts_rules_blocking_mode = ag::dnsproxy_blocking_mode::ADDRESS;
 
     auto [ret, err] = proxy.init(settings, {});
     ASSERT_TRUE(ret) << *err;
@@ -619,7 +631,8 @@ TEST_F(dnsproxy_test, blocking_mode_unspecified_address) {
 TEST_F(dnsproxy_test, blocking_mode_custom_address) {
     ag::dnsproxy_settings settings = make_dnsproxy_settings();
     settings.filter_params = {{{1, "blocking_modes_test_filter.txt"}}};
-    settings.blocking_mode = ag::dnsproxy_blocking_mode::CUSTOM_ADDRESS;
+    settings.adblock_rules_blocking_mode = ag::dnsproxy_blocking_mode::ADDRESS;
+    settings.hosts_rules_blocking_mode = ag::dnsproxy_blocking_mode::ADDRESS;
     settings.custom_blocking_ipv4 = "4.3.2.1";
     settings.custom_blocking_ipv6 = "43::21";
 
@@ -682,14 +695,12 @@ TEST_F(dnsproxy_test, blocking_mode_custom_address) {
 
 TEST_F(dnsproxy_test, custom_blocking_address_validation_1) {
     ag::dnsproxy_settings settings = make_dnsproxy_settings();
-    settings.blocking_mode = ag::dnsproxy_blocking_mode::CUSTOM_ADDRESS;
     auto [ret, err] = proxy.init(settings, {});
     ASSERT_TRUE(ret) << *err;
 }
 
 TEST_F(dnsproxy_test, custom_blocking_address_validation_2) {
     ag::dnsproxy_settings settings = make_dnsproxy_settings();
-    settings.blocking_mode = ag::dnsproxy_blocking_mode::CUSTOM_ADDRESS;
     settings.custom_blocking_ipv4 = "abracadabra";
     settings.custom_blocking_ipv6 = "::1";
     auto [ret, _] = proxy.init(settings, {});
@@ -698,43 +709,10 @@ TEST_F(dnsproxy_test, custom_blocking_address_validation_2) {
 
 TEST_F(dnsproxy_test, custom_blocking_address_validation_3) {
     ag::dnsproxy_settings settings = make_dnsproxy_settings();
-    settings.blocking_mode = ag::dnsproxy_blocking_mode::CUSTOM_ADDRESS;
     settings.custom_blocking_ipv4 = "127.0.0.1";
     settings.custom_blocking_ipv6 = "abracadabra";
     auto [ret, _] = proxy.init(settings, {});
     ASSERT_FALSE(ret);
-}
-
-TEST_F(dnsproxy_test, custom_blocking_address_empty_ipv4) {
-    ag::dnsproxy_settings settings = make_dnsproxy_settings();
-    settings.filter_params = {{{1, "blocking_modes_test_filter.txt"}}};
-    settings.blocking_mode = ag::dnsproxy_blocking_mode::CUSTOM_ADDRESS;
-    settings.custom_blocking_ipv6 = "::1";
-    auto [ret, err] = proxy.init(settings, {});
-    ASSERT_TRUE(ret) << *err;
-
-    // Check A response is empty
-    ag::ldns_pkt_ptr res;
-    ASSERT_NO_FATAL_FAILURE(perform_request(proxy, create_request("hosts-style-unspec.com", LDNS_RR_TYPE_A, LDNS_RD), res));
-    ASSERT_EQ(LDNS_RCODE_NOERROR, ldns_pkt_get_rcode(res.get()));
-    ASSERT_EQ(0, ldns_pkt_ancount(res.get()));
-    ASSERT_EQ(1, ldns_pkt_nscount(res.get()));
-}
-
-TEST_F(dnsproxy_test, custom_blocking_address_empty_ipv6) {
-    ag::dnsproxy_settings settings = make_dnsproxy_settings();
-    settings.filter_params = {{{1, "blocking_modes_test_filter.txt"}}};
-    settings.blocking_mode = ag::dnsproxy_blocking_mode::CUSTOM_ADDRESS;
-    settings.custom_blocking_ipv4 = "127.0.0.1";
-    auto [ret, err] = proxy.init(settings, {});
-    ASSERT_TRUE(ret) << *err;
-
-    // Check AAAA response is empty
-    ag::ldns_pkt_ptr res;
-    ASSERT_NO_FATAL_FAILURE(perform_request(proxy, create_request("hosts-style-unspec-6.com", LDNS_RR_TYPE_AAAA, LDNS_RD), res));
-    ASSERT_EQ(LDNS_RCODE_NOERROR, ldns_pkt_get_rcode(res.get()));
-    ASSERT_EQ(0, ldns_pkt_ancount(res.get()));
-    ASSERT_EQ(1, ldns_pkt_nscount(res.get()));
 }
 
 TEST_F(dnsproxy_test, correct_filter_ids_in_event) {

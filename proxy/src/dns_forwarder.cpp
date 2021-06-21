@@ -288,17 +288,13 @@ static ldns_pkt *create_response_with_ips(const ldns_pkt *request, const dnsprox
     return create_soa_response(request, settings, SOA_RETRY_DEFAULT);
 }
 
-static ldns_pkt *create_unspec_or_custom_address_response(const ldns_pkt *request, const dnsproxy_settings *settings) {
+// Return empty SOA response if question type is not A or AAAA
+static ldns_pkt *create_address_or_soa_response(const ldns_pkt *request, const dnsproxy_settings *settings) {
     ldns_rr *question = ldns_rr_list_rr(ldns_pkt_question(request), 0);
     ldns_rr_type type = ldns_rr_get_type(question);
-    assert(type == LDNS_RR_TYPE_A || type == LDNS_RR_TYPE_AAAA);
 
-    if (settings->blocking_mode == dnsproxy_blocking_mode::CUSTOM_ADDRESS) {
-        if (type == LDNS_RR_TYPE_A && settings->custom_blocking_ipv4.empty()) {
-            return create_soa_response(request, settings, SOA_RETRY_DEFAULT);
-        } else if (type == LDNS_RR_TYPE_AAAA && settings->custom_blocking_ipv6.empty()) {
-            return create_soa_response(request, settings, SOA_RETRY_DEFAULT);
-        }
+    if (type != LDNS_RR_TYPE_A && type != LDNS_RR_TYPE_AAAA) {
+        return create_soa_response(request, settings, SOA_RETRY_DEFAULT);
     }
 
     ldns_rr *rr = ldns_rr_new();
@@ -308,14 +304,14 @@ static ldns_pkt *create_unspec_or_custom_address_response(const ldns_pkt *reques
     ldns_rr_set_class(rr, ldns_rr_get_class(question));
 
     if (type == LDNS_RR_TYPE_A) {
-        if (settings->blocking_mode == dnsproxy_blocking_mode::CUSTOM_ADDRESS) {
+        if (!settings->custom_blocking_ipv4.empty()) {
             assert(utils::is_valid_ip4(settings->custom_blocking_ipv4));
             ldns_rr_push_rdf(rr, ldns_rdf_new_frm_str(LDNS_RDF_TYPE_A, settings->custom_blocking_ipv4.c_str()));
         } else {
             ldns_rr_push_rdf(rr, ldns_rdf_new_frm_str(LDNS_RDF_TYPE_A, "0.0.0.0"));
         }
     } else {
-        if (settings->blocking_mode == dnsproxy_blocking_mode::CUSTOM_ADDRESS) {
+        if (!settings->custom_blocking_ipv6.empty()) {
             assert(utils::is_valid_ip6(settings->custom_blocking_ipv6));
             ldns_rr_push_rdf(rr, ldns_rdf_new_frm_str(LDNS_RDF_TYPE_AAAA, settings->custom_blocking_ipv6.c_str()));
         } else {
@@ -343,67 +339,37 @@ static ldns_pkt *create_blocking_response(const ldns_pkt *request, const dnsprox
         const std::vector<const dnsfilter::rule *> &rules,
         std::optional<dnsfilter::apply_dnsrewrite_result::rewrite_info> rewritten_info) {
     const ldns_rr *question = ldns_rr_list_rr(ldns_pkt_question(request), 0);
-    ldns_rr_type type = ldns_rr_get_type(question);
-    ldns_pkt *response;
+    ldns_rr_type type = ldns_rr_get_type(question);;
     if (rewritten_info.has_value()) {
-        response = create_response_by_request(request);
+        ldns_pkt *response = create_response_by_request(request);
         ldns_pkt_set_rcode(response, rewritten_info->rcode);
         for (auto &rr : rewritten_info->rrs) {
             ldns_rr_set_owner(rr.get(), ldns_rdf_clone(ldns_rr_owner(question)));
             ldns_rr_set_ttl(rr.get(), settings->blocked_response_ttl_secs);
             ldns_pkt_push_rr(response, LDNS_SECTION_ANSWER, rr.release());
         }
-    } else if (const dnsfilter::rule *effective_rule = rules.front();
-            type != LDNS_RR_TYPE_A && type != LDNS_RR_TYPE_AAAA) {
-        switch (settings->blocking_mode) {
-        case dnsproxy_blocking_mode::DEFAULT:
-            if (nullptr != std::get_if<ag::dnsfilter::adblock_rule_info>(&effective_rule->content)) {
-                response = create_refused_response(request, settings);
-            } else {
-                response = create_soa_response(request, settings, SOA_RETRY_DEFAULT);
-            }
-            break;
-        case dnsproxy_blocking_mode::REFUSED:
-            response = create_refused_response(request, settings);
-            break;
-        case dnsproxy_blocking_mode::NXDOMAIN:
-            response = create_nxdomain_response(request, settings);
-            break;
-        case dnsproxy_blocking_mode::UNSPECIFIED_ADDRESS:
-        case dnsproxy_blocking_mode::CUSTOM_ADDRESS:
-            response = create_soa_response(request, settings, SOA_RETRY_DEFAULT);
-            break;
-        }
-    } else if (nullptr != std::get_if<ag::dnsfilter::adblock_rule_info>(&effective_rule->content)) {
-        switch (settings->blocking_mode) {
-        case dnsproxy_blocking_mode::DEFAULT:
-        case dnsproxy_blocking_mode::REFUSED:
-            response = create_refused_response(request, settings);
-            break;
-        case dnsproxy_blocking_mode::NXDOMAIN:
-            response = create_nxdomain_response(request, settings);
-            break;
-        case dnsproxy_blocking_mode::UNSPECIFIED_ADDRESS:
-        case dnsproxy_blocking_mode::CUSTOM_ADDRESS:
-            response = create_unspec_or_custom_address_response(request, settings);
-            break;
-        }
+        return response;
+    }
+    dnsproxy_blocking_mode mode;
+    const dnsfilter::rule *effective_rule = rules.front();
+    if (nullptr != std::get_if<ag::dnsfilter::adblock_rule_info>(&effective_rule->content)) {
+        mode = settings->adblock_rules_blocking_mode;
     } else if (rules_contain_blocking_ip(rules)) {
-        switch (settings->blocking_mode) {
-        case dnsproxy_blocking_mode::REFUSED:
-            response = create_refused_response(request, settings);
-            break;
-        case dnsproxy_blocking_mode::NXDOMAIN:
-            response = create_nxdomain_response(request, settings);
-            break;
-        case dnsproxy_blocking_mode::DEFAULT:
-        case dnsproxy_blocking_mode::UNSPECIFIED_ADDRESS:
-        case dnsproxy_blocking_mode::CUSTOM_ADDRESS:
-            response = create_unspec_or_custom_address_response(request, settings);
-            break;
-        }
+        mode = settings->hosts_rules_blocking_mode;
     } else { // hosts-style IP rule
-        response = create_response_with_ips(request, settings, rules);
+        return create_response_with_ips(request, settings, rules);
+    }
+    ldns_pkt *response;
+    switch (mode) {
+    case dnsproxy_blocking_mode::REFUSED:
+        response = create_refused_response(request, settings);
+        break;
+    case dnsproxy_blocking_mode::NXDOMAIN:
+        response = create_nxdomain_response(request, settings);
+        break;
+    case dnsproxy_blocking_mode::ADDRESS:
+        response = create_address_or_soa_response(request, settings);
+        break;
     }
     return response;
 }
@@ -637,25 +603,17 @@ std::pair<bool, err_string> dns_forwarder::init(const dnsproxy_settings &setting
     this->settings = &settings;
     this->events = &events;
 
-    if (settings.blocking_mode == dnsproxy_blocking_mode::CUSTOM_ADDRESS) {
-        // Check custom IPv4
-        if (settings.custom_blocking_ipv4.empty()) {
-            warnlog(this->log, "Custom blocking IPv4 not set: blocking responses to A queries will be empty");
-        } else if (!utils::is_valid_ip4(settings.custom_blocking_ipv4)) {
-            auto err = AG_FMT("Invalid custom blocking IPv4 address: {}", settings.custom_blocking_ipv4);
-            errlog(this->log, "{}", err);
-            this->deinit();
-            return {false, std::move(err)};
-        }
-        // Check custom IPv6
-        if (settings.custom_blocking_ipv6.empty()) {
-            warnlog(this->log, "Custom blocking IPv6 not set: blocking responses to AAAA queries will be empty");
-        } else if (!utils::is_valid_ip6(settings.custom_blocking_ipv6)) {
-            auto err = AG_FMT("Invalid custom blocking IPv6 address: {}", settings.custom_blocking_ipv6);
-            errlog(this->log, "{}", err);
-            this->deinit();
-            return {false, std::move(err)};
-        }
+    if (!settings.custom_blocking_ipv4.empty() && !utils::is_valid_ip4(settings.custom_blocking_ipv4)) {
+        auto err = AG_FMT("Invalid custom blocking IPv4 address: {}", settings.custom_blocking_ipv4);
+        errlog(this->log, "{}", err);
+        this->deinit();
+        return {false, std::move(err)};
+    }
+    if (!settings.custom_blocking_ipv6.empty() && !utils::is_valid_ip6(settings.custom_blocking_ipv6)) {
+        auto err = AG_FMT("Invalid custom blocking IPv6 address: {}", settings.custom_blocking_ipv6);
+        errlog(this->log, "{}", err);
+        this->deinit();
+        return {false, std::move(err)};
     }
 
     if (events.on_certificate_verification != nullptr) {

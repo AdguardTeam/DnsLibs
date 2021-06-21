@@ -23,7 +23,7 @@ namespace Adguard.Dns
         /// <summary>
         /// The current API version hash with which the ProxyServer was tested
         /// </summary>
-        private const string API_VERSION_HASH = "8e0c45143c2ed271a1b9f64d2300076d87530e132aea6bc9066c0f415f424b73";
+        private const string API_VERSION_HASH = "e854bbc0e90e38b061ed12d5b1749e02d0f13f5cb67b4353f48a9d068476724c";
         #endregion
 
         #region API Functions
@@ -462,11 +462,18 @@ namespace Adguard.Dns
             internal bool Ipv6Available;
 
             /// <summary>
-            /// How to respond to filtered requests
+            /// How to respond to requests blocked by AdBlock-style rules
             /// </summary>
             [MarshalAs(UnmanagedType.I4)]
-            [NativeName("blocking_mode")]
-            internal ag_dnsproxy_blocking_mode BlockingMode;
+            [NativeName("adblock_rules_blocking_mode")]
+            internal ag_dnsproxy_blocking_mode AdblockRulesBlockingMode;
+
+            /// <summary>
+            /// How to respond to requests blocked by hosts-style rules
+            /// </summary>
+            [MarshalAs(UnmanagedType.I4)]
+            [NativeName("hosts_rules_blocking_mode")]
+            internal ag_dnsproxy_blocking_mode HostsRulesBlockingMode;
 
             /// <summary>
             /// Custom IPv4 address to return for filtered requests
@@ -775,36 +782,40 @@ namespace Adguard.Dns
         }
 
         /// <summary>
-        /// Specifies how to respond to filtered requests
+        /// Specifies how to respond to blocked requests.
+        ///
+        /// A request is blocked if it matches a blocking AdBlock-style rule,
+        ///   * or a blocking hosts-style rule. A blocking hosts-style rule is
+        /// a hosts-style rule with a loopback or all-zeroes address.
+        ///
+        /// Requests matching a hosts-style rule with an address that is
+        /// neither loopback nor all-zeroes are always responded
+        /// with the address specified by the rule.
         /// </summary>
         public enum ag_dnsproxy_blocking_mode
         {
             /// <summary>
-            /// AdBlock-style filters -> NXDOMAIN, hosts-style filters -> unspecified address
+            /// Respond with REFUSED response code
             /// </summary>
-            DEFAULT,
+            AGBM_REFUSED,
 
             /// <summary>
-            /// Always return NXDOMAIN
+            /// Respond with NXDOMAIN response code
             /// </summary>
-            NXDOMAIN,
+            AGBM_NXDOMAIN,
 
             /// <summary>
-            /// Always return unspecified address
+            /// Respond with an address that is all-zeroes, or
+            /// a custom blocking address, if it is specified, or
+            /// an empty SOA response if request type is not A/AAAA.
             /// </summary>
-            UNSPECIFIED_ADDRESS,
-
-            /// <summary>
-            /// Always return custom configured IP address
-            /// (<seealso cref="DnsProxySettings"/>)
-            /// </summary>
-            CUSTOM_ADDRESS
+            AGBM_ADDRESS
         }
 
         public enum ag_listener_protocol
         {
-            UDP,
-            TCP
+            AGLP_UDP,
+            AGLP_TCP
         }
 
         /// <summary>

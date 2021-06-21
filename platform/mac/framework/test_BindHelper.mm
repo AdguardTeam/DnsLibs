@@ -19,15 +19,17 @@ int main() {
                                       outboundInterfaceName:nil];
     auto *config = [[AGDnsProxyConfig alloc] initWithUpstreams:@[upstream]
                                                      fallbacks:@[]
-                                             handleDNSSuffixes:NO
-                                               userDNSSuffixes:@[]
+                                               fallbackDomains:@[]
+                                           detectSearchDomains:NO
                                                        filters:@[]
                                         blockedResponseTtlSecs:0
                                                  dns64Settings:nil
                                                      listeners:listeners
+                                                 outboundProxy:nil
                                                  ipv6Available:NO
                                                      blockIpv6:NO
-                                                  blockingMode:AGBM_DEFAULT
+                                      adblockRulesBlockingMode:AGBM_REFUSED
+                                        hostsRulesBlockingMode:AGBM_ADDRESS
                                             customBlockingIpv4:nil
                                             customBlockingIpv6:nil
                                                   dnsCacheSize:0
