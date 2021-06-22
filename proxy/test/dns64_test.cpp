@@ -1,12 +1,14 @@
 #include <gtest/gtest.h>
 #include <dns64.h>
-#include <upstream_utils.h>
 #include <ag_logger.h>
+#include <ldns/ldns.h>
+
+#include "../../upstream/test/test_utils.h"
 
 static constexpr auto DNS64_SERVER_ADDR = "2001:4860:4860::6464";
 
 TEST(dns64_test, test_dns64_discovery) {
-    if (!ag::test_ipv6_connectivity()) {
+    if (!test_ipv6_connectivity()) {
         SPDLOG_WARN("IPv6 is NOT available, skipping this test");
         return;
     }

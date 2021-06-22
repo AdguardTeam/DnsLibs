@@ -224,19 +224,20 @@ public class DnsProxy implements Closeable {
     /**
      * Checks if upstream is valid and available
      * @param upstreamSettings Upstream settings
+     * @param ipv6Available Whether IPv6 is available (bootstrapper is allowed to make AAAA queries)
      * @throws IllegalArgumentException with an explanation if check failed
      */
-    public static void testUpstream(UpstreamSettings upstreamSettings) throws IllegalArgumentException {
+    public static void testUpstream(UpstreamSettings upstreamSettings, boolean ipv6Available) throws IllegalArgumentException {
         String error;
         try (final DnsProxy proxy = new DnsProxy()) {
-            error = testUpstreamNative(proxy.nativePtr, upstreamSettings, new EventsAdapter(null));
+            error = testUpstreamNative(proxy.nativePtr, upstreamSettings, ipv6Available, new EventsAdapter(null));
         }
         if (error != null) {
             throw new IllegalArgumentException(error);
         }
     }
 
-    private static native String testUpstreamNative(long nativePtr, Object upstreamSettings, Object eventsAdapter);
+    private static native String testUpstreamNative(long nativePtr, Object upstreamSettings, boolean ipv6, Object eventsAdapter);
 
     /**
      * Events adapter implementatoin.

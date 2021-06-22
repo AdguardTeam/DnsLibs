@@ -1,6 +1,8 @@
 # Changelog
 
 ## V1.6
+* [Fix] Accept IPv6 availability parameter in upstream testing methods.
+    * Note that the API has changed, see `com.adguard.dnslibs.proxy.DnsProxy#testUpstream`, `+[AGDnsUtils testUpstream:ipv6Available:]`, `ag_test_upstream`.
 * [Feature] Split the blocking mode setting into separate settings for AdBlock-style and hosts-style rules.
     * Also remove the redundant `CUSTOM_ADDRESS` blocking mode: now if a custom blocking address is specified,
     it will simply be used where an all-zeroes address would have been used otherwise.

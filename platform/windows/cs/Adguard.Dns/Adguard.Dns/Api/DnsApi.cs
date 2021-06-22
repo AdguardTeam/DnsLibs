@@ -372,15 +372,16 @@ namespace Adguard.Dns.Api
         /// </summary>
         /// <param name="upstreamOptions">Upstream options
         /// (<seealso cref="UpstreamOptions"/>)</param>
+        /// <param name=ipv6Available">Whether IPv6 is available (i.e., bootstrapper is allowed to make AAAA queries)</param>
         /// <exception cref="InvalidOperationException"></exception>
         /// <returns>True, if test has completed successfully,
         /// otherwise false</returns>
-        public bool TestUpstream(UpstreamOptions upstreamOptions)
+        public bool TestUpstream(UpstreamOptions upstreamOptions, bool ipv6Available)
         {
             try
             {
                 LOG.InfoFormat("Testing upstream");
-                bool result = DnsUtils.TestUpstream(upstreamOptions);
+                bool result = DnsUtils.TestUpstream(upstreamOptions, ipv6Available);
                 LOG.InfoFormat("Testing upstream has been successfully completed");
                 return result;
             }

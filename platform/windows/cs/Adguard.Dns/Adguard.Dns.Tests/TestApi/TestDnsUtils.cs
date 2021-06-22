@@ -76,7 +76,7 @@ namespace Adguard.Dns.Tests.TestApi
         public void TestValidUpstream()
         {
             UpstreamOptions upstreamOptions = ConfigurationHelper.CreateUpstreamOptions();
-            bool result = DnsApi.Instance.TestUpstream(upstreamOptions);
+            bool result = DnsApi.Instance.TestUpstream(upstreamOptions, false);
             Assert.IsTrue(result);
         }
 
@@ -85,7 +85,7 @@ namespace Adguard.Dns.Tests.TestApi
         {
             UpstreamOptions upstreamOptions = ConfigurationHelper.CreateUpstreamOptions();
             upstreamOptions.Address = "huemoe";
-            bool result = DnsApi.Instance.TestUpstream(upstreamOptions);
+            bool result = DnsApi.Instance.TestUpstream(upstreamOptions, false);
             Assert.IsFalse(result);
         }
 
@@ -93,7 +93,7 @@ namespace Adguard.Dns.Tests.TestApi
         public void TestNullInputUpstream()
         {
             UpstreamOptions upstreamOptions = null;
-            bool result = DnsApi.Instance.TestUpstream(upstreamOptions);
+            bool result = DnsApi.Instance.TestUpstream(upstreamOptions, false);
             Assert.IsFalse(result);
         }
     }

@@ -85,9 +85,10 @@ namespace Adguard.Dns.Api
         /// </summary>
         /// <param name="upstreamOptions">Upstream options
         /// (<seealso cref="UpstreamOptions"/>)</param>
+        /// <param name=ipv6Available">Whether IPv6 is available (i.e., bootstrapper is allowed to make AAAA queries)</param>
         /// <returns>True, if test has completed successfully,
         /// otherwise false</returns>
-        bool TestUpstream(UpstreamOptions upstreamOptions);
+        bool TestUpstream(UpstreamOptions upstreamOptions, bool ipv6Available);
 
         /// <summary>
         /// Gets current DNS proxy version

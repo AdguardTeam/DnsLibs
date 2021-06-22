@@ -13,6 +13,8 @@
 #include <upstream_utils.h>
 #include <csignal>
 
+#include "test_utils.h"
+
 static constexpr std::chrono::seconds DEFAULT_TIMEOUT(10);
 static constexpr std::chrono::milliseconds DELAY_BETWEEN_REQUESTS{500};
 
@@ -42,7 +44,7 @@ static ag::upstream_factory::create_result create_upstream(const ag::upstream_op
     sf_parameters.verifier = &cert_verifier;
     static ag::socket_factory socket_factory(sf_parameters);
 
-    static bool ipv6_available = ag::test_ipv6_connectivity();
+    static bool ipv6_available = test_ipv6_connectivity();
     static ag::upstream_factory upstream_factory({ &socket_factory, &cert_verifier, ipv6_available });
     return upstream_factory.create_upstream(opts);
 }

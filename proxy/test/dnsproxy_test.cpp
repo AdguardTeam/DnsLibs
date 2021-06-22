@@ -12,6 +12,8 @@
 #include <ag_logger.h>
 #include <ag_file.h>
 
+#include "../../upstream/test/test_utils.h"
+
 static constexpr auto DNS64_SERVER_ADDR = "2001:4860:4860::6464";
 static constexpr auto IPV4_ONLY_HOST = "ipv4only.arpa.";
 static constexpr auto CNAME_BLOCKING_HOST = "test2.meshkov.info";
@@ -83,7 +85,7 @@ TEST_F(dnsproxy_test, test_dns64) {
     ASSERT_TRUE(ret) << *err;
 
     // This is after proxy.init() to not crash in proxy.deinit()
-    if (!ag::test_ipv6_connectivity()) {
+    if (!test_ipv6_connectivity()) {
         SPDLOG_WARN("IPv6 is NOT available, skipping this test");
         return;
     }
