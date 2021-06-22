@@ -185,9 +185,7 @@ private:
 
     static void work_cb(uv_work_t *req) {
         auto *m = (task *) req->data;
-        ag::dnsproxy::message_info info{
-                .proto = ag::listener_protocol::UDP,
-                .peername = m->peer};
+        ag::dns_message_info info{.proto = ag::utils::TP_UDP, .peername = m->peer};
         m->response = m->self->m_proxy->handle_message({(uint8_t *) m->request.base, m->request.len}, &info);
     }
 
@@ -464,9 +462,7 @@ private:
         int namelen = sizeof(ss);
         uv_tcp_getpeername(conn->m_tcp, (sockaddr *) &ss, &namelen);
 
-        ag::dnsproxy::message_info info{
-                .proto = ag::listener_protocol::TCP,
-                .peername = ag::socket_address{(sockaddr *) &ss}};
+        ag::dns_message_info info{.proto = ag::utils::TP_TCP, .peername = ag::socket_address{(sockaddr *) &ss}};
         w->payload = conn->m_proxy->handle_message({w->payload.data(), w->payload.size()}, &info);
     }
 
@@ -649,10 +645,10 @@ ag::dnsproxy_listener::create_result ag::dnsproxy_listener::create_and_listen(co
 
     std::unique_ptr<listener_base> ptr;
     switch (settings.protocol) {
-    case ag::listener_protocol::UDP:
+    case ag::utils::TP_UDP:
         ptr = std::make_unique<listener_udp>();
         break;
-    case ag::listener_protocol::TCP:
+    case ag::utils::TP_TCP:
         ptr = std::make_unique<listener_tcp>();
         break;
     default:

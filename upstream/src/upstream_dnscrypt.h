@@ -22,7 +22,7 @@ public:
 
 private:
     err_string init() override;
-    exchange_result exchange(ldns_pkt *request_pkt) override;
+    exchange_result exchange(ldns_pkt *request_pkt, const dns_message_info *info) override;
 
     struct impl;
     using impl_ptr = std::unique_ptr<impl>;

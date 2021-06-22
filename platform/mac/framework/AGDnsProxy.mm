@@ -1174,7 +1174,7 @@ static int bindFd(NSString *helperPath, NSString *address, NSNumber *port, AGLis
             settings.listeners.emplace_back((ag::listener_settings) {
                 .address = listener.address.UTF8String,
                 .port = (uint16_t) listener.port,
-                .protocol = (ag::listener_protocol) listener.proto,
+                .protocol = (ag::utils::transport_protocol) listener.proto,
                 .persistent = (bool) listener.persistent,
                 .idle_timeout = std::chrono::milliseconds(listener.idleTimeoutMs),
                 .fd = listenerFd,
@@ -1241,11 +1241,10 @@ static int bindFd(NSString *helperPath, NSString *address, NSNumber *port, AGLis
            inet_ntop(AF_INET, &ip_header->ip_dst, dstv4_str, sizeof(dstv4_str)), ntohs(udp_header->uh_dport));
 
     ag::uint8_view payload = {(uint8_t *) packet.bytes + header_length, packet.length - header_length};
-    ag::dnsproxy::message_info info{
-            .proto = ag::listener_protocol::UDP,
+    ag::dns_message_info info{
+            .proto = ag::utils::TP_UDP,
             .peername = ag::socket_address{{(uint8_t *) &ip_header->ip_src, sizeof(ip_header->ip_src)},
-                                           ntohs(udp_header->uh_sport)},
-    };
+                                           ntohs(udp_header->uh_sport)}};
     std::vector<uint8_t> response = self->proxy.handle_message(payload, &info);
     if (response.empty()) {
         return nil;
@@ -1271,11 +1270,10 @@ static int bindFd(NSString *helperPath, NSString *address, NSNumber *port, AGLis
            inet_ntop(AF_INET6, &ip_header->ip6_dst, dstv6_str, sizeof(dstv6_str)), ntohs(udp_header->uh_dport));
 
     ag::uint8_view payload = {(uint8_t *) packet.bytes + header_length, packet.length - header_length};
-    ag::dnsproxy::message_info info{
-            .proto = ag::listener_protocol::UDP,
+    ag::dns_message_info info{
+            .proto = ag::utils::TP_UDP,
             .peername = ag::socket_address{{(uint8_t *) &ip_header->ip6_src, sizeof(ip_header->ip6_src)},
-                                           ntohs(udp_header->uh_sport)},
-    };
+                                           ntohs(udp_header->uh_sport)}};
     std::vector<uint8_t> response = self->proxy.handle_message(payload, &info);
     if (response.empty()) {
         return nil;

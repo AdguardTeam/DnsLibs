@@ -48,7 +48,7 @@ public:
 
 private:
     err_string init() override;
-    exchange_result exchange(ldns_pkt *) override;
+    exchange_result exchange(ldns_pkt *, const dns_message_info *info) override;
 
     std::unique_ptr<query_handle> create_handle(ldns_pkt *request, std::chrono::milliseconds timeout) const;
     curl_pool_ptr create_pool() const;

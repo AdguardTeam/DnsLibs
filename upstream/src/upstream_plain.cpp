@@ -38,7 +38,7 @@ ag::err_string ag::plain_dns::init() {
     return std::nullopt;
 }
 
-ag::plain_dns::exchange_result ag::plain_dns::exchange(ldns_pkt *request_pkt) {
+ag::plain_dns::exchange_result ag::plain_dns::exchange(ldns_pkt *request_pkt, const dns_message_info *info) {
     ldns_buffer_ptr buffer{ldns_buffer_new(REQUEST_BUFFER_INITIAL_CAPACITY)};
     ldns_status status = ldns_pkt2buffer_wire(&*buffer, request_pkt);
     if (status != LDNS_STATUS_OK) {
@@ -55,7 +55,7 @@ ag::plain_dns::exchange_result ag::plain_dns::exchange(ldns_pkt *request_pkt) {
     utils::timer timer;
     milliseconds timeout = m_options.timeout;
 
-    if (!m_prefer_tcp) {
+    if (!m_prefer_tcp && !(info && info->proto == utils::TP_TCP)) {
         blocking_socket socket(this->make_socket(utils::TP_UDP));
 
         if (auto e = socket.connect({ m_pool.address(), timeout }); e.has_value()) {

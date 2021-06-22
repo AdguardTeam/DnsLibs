@@ -4,7 +4,7 @@ import java.util.Objects;
 
 public class ListenerSettings {
     public enum Protocol {
-        // MUST keep names and ordinals in sync with ag::listener_protocol
+        // MUST keep ordinals in sync with ag::utils::transport_protocol
         UDP,
         TCP,
     }

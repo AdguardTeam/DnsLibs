@@ -41,7 +41,8 @@ ag::err_string ag::upstream_dnscrypt::init() {
 
 ag::upstream_dnscrypt::~upstream_dnscrypt() = default;
 
-ag::upstream_dnscrypt::exchange_result ag::upstream_dnscrypt::exchange(ldns_pkt *request_pkt) {
+ag::upstream_dnscrypt::exchange_result
+ag::upstream_dnscrypt::exchange(ldns_pkt *request_pkt, const dns_message_info *) {
     tracelog_id(m_log, request_pkt, "Started");
     static constexpr utils::make_error<exchange_result> make_error;
     setup_result result = setup_impl();

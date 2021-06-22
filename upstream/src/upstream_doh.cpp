@@ -581,7 +581,7 @@ void dns_over_https::stop_all_with_error(const err_string &e) {
     }
 }
 
-dns_over_https::exchange_result dns_over_https::exchange(ldns_pkt *request) {
+dns_over_https::exchange_result dns_over_https::exchange(ldns_pkt *request, const dns_message_info *) {
     // register request
     this->guard.lock();
     ++this->worker.requests_counter;

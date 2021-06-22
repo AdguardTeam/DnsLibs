@@ -3,6 +3,7 @@
 #include <string>
 #include <vector>
 #include <ag_logger.h>
+#include <ag_net_utils.h>
 #include <dnsfilter.h>
 #include <upstream.h>
 #include <dnsproxy_events.h>
@@ -15,11 +16,6 @@ struct dns64_settings {
     std::vector<upstream_options> upstreams; // The upstreams to use for discovery of DNS64 prefixes
     uint32_t max_tries; // How many times, at most, to try DNS64 prefixes discovery before giving up
     std::chrono::milliseconds wait_time; // How long to wait before a dns64 prefixes discovery attempt
-};
-
-enum class listener_protocol {
-    UDP,
-    TCP,
 };
 
 /**
@@ -49,7 +45,7 @@ enum class dnsproxy_blocking_mode {
 struct listener_settings {
     std::string address{"::"}; // The address to listen on
     uint16_t port{53}; // The port to listen on
-    listener_protocol protocol{listener_protocol::UDP}; // The protocol to listen for
+    utils::transport_protocol protocol{utils::TP_UDP}; // The protocol to listen for
     bool persistent{false}; // If true, don't close the TCP connection after sending the first response
     std::chrono::milliseconds idle_timeout{3000}; // Close the TCP connection this long after the last request received
 

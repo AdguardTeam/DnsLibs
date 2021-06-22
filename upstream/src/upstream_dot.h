@@ -30,7 +30,7 @@ public:
 
 private:
     err_string init() override;
-    exchange_result exchange(ldns_pkt *request_pkt) override;
+    exchange_result exchange(ldns_pkt *request_pkt, const dns_message_info *info) override;
 
     static int ssl_verify_callback(X509_STORE_CTX *store_ctx, void *arg);
     class tls_pool;

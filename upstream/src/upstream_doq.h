@@ -134,7 +134,7 @@ private:
     };
 
     err_string init() override;
-    exchange_result exchange(ldns_pkt *) override;
+    exchange_result exchange(ldns_pkt *, const dns_message_info *info) override;
 
     static int version_negotiation(ngtcp2_conn *conn, const ngtcp2_pkt_hd *hd,
         const uint32_t *sv, size_t nsv, void *user_data);

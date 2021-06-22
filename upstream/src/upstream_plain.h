@@ -52,7 +52,7 @@ public:
 
 private:
     err_string init() override;
-    exchange_result exchange(ldns_pkt *request_pkt) override;
+    exchange_result exchange(ldns_pkt *request_pkt, const dns_message_info *info) override;
 
     ag::logger m_log;
 

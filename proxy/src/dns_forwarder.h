@@ -56,16 +56,19 @@ public:
     std::pair<bool, err_string> init(const dnsproxy_settings &settings, const dnsproxy_events &events);
     void deinit();
 
-    std::vector<uint8_t> handle_message(uint8_view message, const dnsproxy::message_info *info);
+    std::vector<uint8_t> handle_message(uint8_view message, const dns_message_info *info);
 
 private:
     static void async_request_worker(uv_work_t *);
     static void async_request_finalizer(uv_work_t *, int);
 
-    std::vector<uint8_t> handle_message_internal(uint8_view message, bool fallback_only, uint16_t pkt_id);
+    void truncate_response(ldns_pkt *response, const ldns_pkt *request, const dns_message_info *info);
+
+    std::vector<uint8_t> handle_message_internal(uint8_view message, const dns_message_info *info,
+                                                 bool fallback_only, uint16_t pkt_id);
 
     upstream_exchange_result do_upstream_exchange(std::string_view normalized_domain, ldns_pkt *request,
-                                                  bool fallback_only);
+                                                  bool fallback_only, const dns_message_info *info = nullptr);
 
     cache_result create_response_from_cache(const std::string &key, const ldns_pkt *request);
 

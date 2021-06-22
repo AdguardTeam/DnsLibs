@@ -11,6 +11,10 @@
 #include <ldns/ldns.h>
 #include <dnsproxy.h>
 
+#include "dns64.h"
+#include "retransmission_detector.h"
+#include "dns_truncate.h"
+
 #define errlog_id(l_, pkt_, fmt_, ...) errlog((l_), "[{}] " fmt_, ldns_pkt_id(pkt_), ##__VA_ARGS__)
 #define errlog_fid(l_, pkt_, fmt_, ...) errlog((l_), "[{}] {} " fmt_, ldns_pkt_id(pkt_), __func__, ##__VA_ARGS__)
 #define warnlog_id(l_, pkt_, fmt_, ...) warnlog((l_), "[{}] " fmt_, ldns_pkt_id(pkt_), ##__VA_ARGS__)
@@ -27,10 +31,6 @@ using namespace std::chrono;
 
 
 static constexpr std::string_view MOZILLA_DOH_HOST = "use-application-dns.net.";
-
-// An ldns_buffer grows automatically.
-// We set the initial capacity so that most responses will fit without reallocations.
-static constexpr size_t RESPONSE_BUFFER_INITIAL_CAPACITY = 512;
 
 static constexpr uint32_t SOA_RETRY_DEFAULT = 900;
 static constexpr uint32_t SOA_RETRY_IPV6_BLOCK = 60;
@@ -112,18 +112,24 @@ make_fallback_filter_params(const std::vector<std::string> &fallback_domains, ag
     return {(dnsfilter::engine_params){.filters = {{.data = std::move(flt_data), .in_memory = true}}}, std::nullopt};
 }
 
-static void log_packet(const logger &log, const ldns_pkt *packet, const char *pkt_name) {
+// info not nullptr when logging incoming packet, nullptr for outgoing packets
+static void log_packet(const logger &log, const ldns_pkt *packet, const char *pkt_name,
+                       const dns_message_info *info = nullptr) {
     if (!log->should_log((spdlog::level::level_enum)DEBUG)) {
         return;
     }
 
-    ldns_buffer *str_dns = ldns_buffer_new(RESPONSE_BUFFER_INITIAL_CAPACITY);
+    ldns_buffer *str_dns = ldns_buffer_new(LDNS_MAX_PACKETLEN);
     ldns_status status = ldns_pkt2buffer_str(str_dns, packet);
     if (status != LDNS_STATUS_OK) {
         dbglog_id(log, packet, "Failed to print {}: {} ({})"
             , pkt_name, ldns_get_errorstr_by_id(status), status);
+    } else if (info) {
+        dbglog_id(log, packet, "{} from {} over {}:\n{}", pkt_name, info->peername.str(),
+                  magic_enum::enum_name<utils::transport_protocol>(info->proto),
+                  (char *) ldns_buffer_begin(str_dns));
     } else {
-        dbglog_id(log, packet, "{}:\n{}", pkt_name, (char*)ldns_buffer_begin(str_dns));
+        dbglog_id(log, packet, "{}:\n{}", pkt_name, (char *) ldns_buffer_begin(str_dns));
     }
     ldns_buffer_free(str_dns);
 }
@@ -580,9 +586,9 @@ ldns_pkt_ptr dns_forwarder::try_dns64_aaaa_synthesis(upstream *upstream, const l
     return ldns_pkt_ptr(aaaa_resp);
 }
 
-static std::vector<uint8_t> transform_response_to_raw_data(const ldns_pkt *message) {
-    ldns_buffer *buffer = ldns_buffer_new(RESPONSE_BUFFER_INITIAL_CAPACITY);
-    ldns_status status = ldns_pkt2buffer_wire(buffer, message);
+static std::vector<uint8_t> transform_response_to_raw_data(const ldns_pkt *response) {
+    ldns_buffer *buffer = ldns_buffer_new(LDNS_MAX_PACKETLEN);
+    ldns_status status = ldns_pkt2buffer_wire(buffer, response);
     assert(status == LDNS_STATUS_OK);
     // @todo: custom allocator will allow to avoid data copy
     std::vector<uint8_t> data =
@@ -962,7 +968,8 @@ void dns_forwarder::put_response_into_cache(std::string key, ldns_pkt_ptr respon
     cache.insert(std::move(key), std::move(cached_response));
 }
 
-std::vector<uint8_t> dns_forwarder::handle_message_internal(uint8_view message, bool fallback_only, uint16_t pkt_id) {
+std::vector<uint8_t> dns_forwarder::handle_message_internal(uint8_view message, const dns_message_info *info,
+                                                            bool fallback_only, uint16_t pkt_id) {
     dns_request_processed_event event = {};
     event.start_time = duration_cast<milliseconds>(system_clock::now().time_since_epoch()).count();
 
@@ -978,7 +985,7 @@ std::vector<uint8_t> dns_forwarder::handle_message_internal(uint8_view message, 
     }
 
     ldns_pkt_ptr req_holder = ldns_pkt_ptr(request);
-    log_packet(log, request, "Client dns request");
+    log_packet(log, request, "Client dns request", info);
 
     const ldns_rr *question = ldns_rr_list_rr(ldns_pkt_question(request), 0);
     if (question == nullptr) {
@@ -1023,6 +1030,7 @@ std::vector<uint8_t> dns_forwarder::handle_message_internal(uint8_view message, 
         log_packet(log, cached.response.get(), "Cached response");
         event.cache_hit = true;
         std::vector<uint8_t> raw_response = transform_response_to_raw_data(cached.response.get());
+        truncate_response(cached.response.get(), request, info);
         finalize_processed_event(event, request, cached.response.get(), nullptr, cached.upstream_id, std::nullopt);
         return raw_response;
     }
@@ -1066,7 +1074,7 @@ cached_response_expired:
     bool is_our_do_bit = do_dnssec_log_logic(request);
 
     // If this is a retransmitted request, use fallback upstreams only
-    auto [response, err_str, selected_upstream] = do_upstream_exchange(normalized_domain, request, fallback_only);
+    auto [response, err_str, selected_upstream] = do_upstream_exchange(normalized_domain, request, fallback_only, info);
 
     if (!response) {
         response = ldns_pkt_ptr(create_servfail_response(request));
@@ -1122,6 +1130,7 @@ cached_response_expired:
         }
     }
 
+    truncate_response(response.get(), request, info);
     std::vector<uint8_t> raw_response = transform_response_to_raw_data(response.get());
     event.bytes_sent = message.size();
     event.bytes_received = raw_response.size();
@@ -1278,7 +1287,7 @@ std::optional<uint8_vector> dns_forwarder::apply_filter(std::string_view hostnam
 }
 
 upstream_exchange_result dns_forwarder::do_upstream_exchange(std::string_view normalized_domain, ldns_pkt *request,
-                                                             bool fallback_only) {
+                                                             bool fallback_only, const dns_message_info *info) {
     bool use_only_fallbacks = !fallbacks.empty()
             && (fallback_only || apply_fallback_filter(normalized_domain, request));
     std::vector<std::vector<upstream_ptr> *> v;
@@ -1305,7 +1314,7 @@ upstream_exchange_result dns_forwarder::do_upstream_exchange(std::string_view no
 
             ag::utils::timer t;
             tracelog_id(log, request, "Upstream ({}) is starting an exchange", cur_upstream->options().address);
-            upstream::exchange_result result = cur_upstream->exchange(request);
+            upstream::exchange_result result = cur_upstream->exchange(request, info);
             tracelog_id(log, request, "Upstream's ({}) exchanging is done", cur_upstream->options().address);
             cur_upstream->adjust_rtt(t.elapsed<std::chrono::milliseconds>());
 
@@ -1313,7 +1322,7 @@ upstream_exchange_result dns_forwarder::do_upstream_exchange(std::string_view no
                 return {std::move(result.packet), std::nullopt, cur_upstream};
             } else if (result.error.value() != TIMEOUT_STR) {
                 // https://github.com/AdguardTeam/DnsLibs/issues/86
-                upstream::exchange_result retry_result = cur_upstream->exchange(request);
+                upstream::exchange_result retry_result = cur_upstream->exchange(request, info);
                 if (!retry_result.error.has_value()) {
                     return {std::move(retry_result.packet), std::nullopt, cur_upstream};
                 }
@@ -1477,7 +1486,7 @@ bool dns_forwarder::apply_fallback_filter(std::string_view hostname, const ldns_
     return false;
 }
 
-std::vector<uint8_t> dns_forwarder::handle_message(uint8_view message, const dnsproxy::message_info *info) {
+std::vector<uint8_t> dns_forwarder::handle_message(uint8_view message, const dns_message_info *info) {
     if (message.size() < LDNS_HEADER_SIZE) {
         dbglog_f(log, "Not responding to malformed message");
         return {};
@@ -1488,7 +1497,7 @@ std::vector<uint8_t> dns_forwarder::handle_message(uint8_view message, const dns
     // If there's enough info, register this request
     bool retransmitted = false;
     bool retransmission_handling = this->settings->enable_retransmission_handling
-            && info && info->proto == listener_protocol::UDP;
+            && info && info->proto == utils::TP_UDP;
     if (retransmission_handling) {
         if (retransmission_detector.register_packet(pkt_id, info->peername) > 1) {
             dbglog_f(log, "Detected retransmitted request [{}] from {}", pkt_id, info->peername.str());
@@ -1496,11 +1505,24 @@ std::vector<uint8_t> dns_forwarder::handle_message(uint8_view message, const dns
         }
     }
 
-    std::vector<uint8_t> result = this->handle_message_internal(message, retransmitted, pkt_id);
+    std::vector<uint8_t> result = this->handle_message_internal(message, info, retransmitted, pkt_id);
 
     if (retransmission_handling) {
         retransmission_detector.deregister_packet(pkt_id, info->peername);
     }
 
     return result;
+}
+
+// Truncate response, if needed
+void dns_forwarder::truncate_response(ldns_pkt *response, const ldns_pkt *request, const dns_message_info *info) {
+    if (!info || info->proto != utils::TP_UDP) {
+        dbglog_f(log, "Truncation is not needed: incoming protocol is not UDP");
+        return;
+    }
+    size_t max_size = ldns_pkt_edns(request) ? ldns_pkt_edns_udp_size(request) : 512;
+    dbglog_f(log, "Truncating to not more than {} octets (edns: {})", max_size, ldns_pkt_edns(request));
+    if (ag::ldns_pkt_truncate(response, max_size)) {
+        log_packet(log, response, "DNS response after truncation");
+    }
 }

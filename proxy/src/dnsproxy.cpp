@@ -129,7 +129,7 @@ const dnsproxy_settings &dnsproxy::get_settings() const {
     return this->pimpl->settings;
 }
 
-std::vector<uint8_t> dnsproxy::handle_message(ag::uint8_view message, const ag::dnsproxy::message_info *info) {
+std::vector<uint8_t> dnsproxy::handle_message(ag::uint8_view message, const ag::dns_message_info *info) {
     std::unique_ptr<impl> &proxy = this->pimpl;
 
     std::vector<uint8_t> response = proxy->forwarder.handle_message(message, info);

@@ -79,7 +79,7 @@ TEST_P(listener_test, listens_and_responds) {
 
     const auto address = fmt::format(
             "{}[{}]:{}",
-            listener_settings.protocol == ag::listener_protocol::TCP ? "tcp://" : "",
+            listener_settings.protocol == ag::utils::TP_TCP ? "tcp://" : "",
             params.request_addr,
             listener_settings.port);
 
@@ -121,7 +121,7 @@ TEST_P(listener_test, listens_and_responds) {
                 const auto rcode = ldns_pkt_get_rcode(resp.get());
                 if (LDNS_RCODE_NOERROR == rcode
                         && (!ldns_pkt_tc(resp.get())
-                                || listener_settings.protocol == ag::listener_protocol::UDP)) {
+                                || listener_settings.protocol == ag::utils::TP_UDP)) {
                     ++successful_requests;
                 } else {
                     char *str = ldns_pkt2str(resp.get());
@@ -148,8 +148,8 @@ TEST(listener_test, shuts_down_if_could_not_initialize) {
     ag::dnsproxy proxy;
     auto proxy_settings = ag::dnsproxy_settings::get_default();
     proxy_settings.listeners = {
-            {addr, port, ag::listener_protocol::UDP},
-            {addr, port, ag::listener_protocol::TCP},
+            {addr, port, ag::utils::TP_UDP},
+            {addr, port, ag::utils::TP_TCP},
     };
     auto [ret, err] = proxy.init(proxy_settings, {});
     ASSERT_FALSE(ret);
@@ -163,27 +163,27 @@ INSTANTIATE_TEST_CASE_P(
                         ag::listener_settings{
                                 .address = "::1",
                                 .port = 1234,
-                                .protocol = ag::listener_protocol::UDP}
+                                .protocol = ag::utils::TP_UDP}
                 },
                 test_params{
                         ag::listener_settings{
                                 .address = "::1",
                                 .port = 1234,
-                                .protocol = ag::listener_protocol::TCP,
+                                .protocol = ag::utils::TP_TCP,
                                 .persistent = false}
                 },
                 test_params{
                         ag::listener_settings{
                                 .address = "::1",
                                 .port = 1234,
-                                .protocol = ag::listener_protocol::TCP,
+                                .protocol = ag::utils::TP_TCP,
                                 .persistent = true,
                                 .idle_timeout = 1000ms}
                 }),
         [](const testing::TestParamInfo<test_params> &info) {
             return fmt::format("{}{}",
                                magic_enum::enum_name(info.param.settings.protocol),
-                               info.param.settings.protocol == ag::listener_protocol::TCP
+                               info.param.settings.protocol == ag::utils::TP_TCP
                                ? info.param.settings.persistent
                                  ? "_persistent"
                                  : "_not_persistent"

@@ -346,7 +346,7 @@ static ag::listener_settings marshal_listener(const ag_listener_settings &c_list
         listener.address.assign(c_listener.address);
     }
     listener.port = c_listener.port;
-    listener.protocol = (ag::listener_protocol) c_listener.protocol;
+    listener.protocol = (ag::utils::transport_protocol) c_listener.protocol;
     listener.persistent = c_listener.persistent;
     listener.idle_timeout = std::chrono::milliseconds{c_listener.idle_timeout_ms};
     return listener;
@@ -541,7 +541,7 @@ void ag_set_default_log_level(ag_log_level level) {
 ag_dns_stamp *ag_dns_stamp_from_str(const char *stamp_str, const char **error) {
     auto [stamp, stamp_err] = ag::server_stamp::from_string(stamp_str);
     if (stamp_err) {
-        *error = marshal_str(stamp_err->c_str());
+        *error = marshal_str(*stamp_err);
         return nullptr;
     }
     auto *c_result = (ag_dns_stamp *) std::calloc(1, sizeof(ag_dns_stamp));

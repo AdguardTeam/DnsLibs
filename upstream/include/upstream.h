@@ -10,6 +10,7 @@
 #include <ag_defs.h>
 #include <ag_net_consts.h>
 #include <ag_net_utils.h>
+#include <ag_dns_utils.h>
 #include <certificate_verifier.h>
 #include <ag_socket.h>
 
@@ -97,11 +98,12 @@ public:
     virtual err_string init() = 0;
 
     /**
-     * Do DNS request
-     * @param request DNS request packet
-     * @return DNS response packet or an error
+     * Do DNS exchange, considering that `request` may be a forwarded request.
+     * @param request DNS request message
+     * @param info (optional) out of band info about the forwarded DNS request message
+     * @return DNS response message or an error
      */
-    virtual exchange_result exchange(ldns_pkt *request) = 0;
+    virtual exchange_result exchange(ldns_pkt *request, const ag::dns_message_info *info = nullptr) = 0;
 
     [[nodiscard]] const upstream_options &options() const { return m_options; }
 

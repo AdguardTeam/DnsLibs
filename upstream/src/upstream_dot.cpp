@@ -224,7 +224,7 @@ int ag::dns_over_tls::ssl_verify_callback(X509_STORE_CTX *ctx, void *arg) {
     return 1;
 }
 
-ag::dns_over_tls::exchange_result ag::dns_over_tls::exchange(ldns_pkt *request_pkt) {
+ag::dns_over_tls::exchange_result ag::dns_over_tls::exchange(ldns_pkt *request_pkt, const dns_message_info *) {
     ldns_buffer_ptr buffer{ldns_buffer_new(REQUEST_BUFFER_INITIAL_CAPACITY)};
     ldns_status status = ldns_pkt2buffer_wire(&*buffer, request_pkt);
     if (status != LDNS_STATUS_OK) {

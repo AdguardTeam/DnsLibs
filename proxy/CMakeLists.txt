@@ -14,6 +14,7 @@ set(SRCS
         ${SRC_DIR}/dns_forwarder.cpp
         ${SRC_DIR}/dnsproxy_listener.cpp
         ${SRC_DIR}/retransmission_detector.cpp
+        ${SRC_DIR}/dns_truncate.cpp
     )
 
 add_library(dnsproxy EXCLUDE_FROM_ALL ${SRCS})
@@ -65,16 +66,16 @@ include(${CMAKE_CURRENT_SOURCE_DIR}/../cmake/add_unit_test.cmake)
 link_libraries(dnsproxy)
 set(TEST_DIR ${CMAKE_CURRENT_SOURCE_DIR}/test)
 
-add_unit_test(dns64_test ${TEST_DIR} ${SRC_DIR} TRUE TRUE)
-
-add_unit_test(dnsproxy_test ${TEST_DIR} ${SRC_DIR} TRUE TRUE)
 configure_file(test/cname_blocking_test_filter.txt cname_blocking_test_filter.txt COPYONLY)
 configure_file(test/blocking_modes_test_filter.txt blocking_modes_test_filter.txt COPYONLY)
 configure_file(test/whitelist_test_filter.txt whitelist_test_filter.txt COPYONLY)
 configure_file(test/bad_test_filter.txt bad_test_filter.txt COPYONLY)
 configure_file(test/crash_regress_test_filter.txt crash_regress_test_filter.txt COPYONLY)
 
+add_unit_test(dns64_test ${TEST_DIR} ${SRC_DIR} TRUE TRUE)
+add_unit_test(dnsproxy_test ${TEST_DIR} ${SRC_DIR} TRUE TRUE)
 add_unit_test(listener_test ${TEST_DIR} ${SRC_DIR} TRUE FALSE)
+add_unit_test(truncate_test ${TEST_DIR} ${SRC_DIR} TRUE TRUE)
 
 add_executable(listener_standalone EXCLUDE_FROM_ALL test/listener_standalone.cpp)
 add_executable(cache_benchmark EXCLUDE_FROM_ALL test/cache_benchmark.cpp)

@@ -14,17 +14,24 @@ static void sigint_handler(int signal) {
 }
 
 int main() {
-    ag::set_default_log_level(ag::log_level::DEBUG);
+    ag::set_default_log_level(ag::log_level::TRACE);
     using namespace std::chrono_literals;
 
     constexpr auto address = "::";
-    constexpr auto port = 1234;
+    constexpr auto port = 5321;
     constexpr auto persistent = false;
     constexpr auto idle_timeout = 3000ms;
 
     ag::dnsproxy_settings settings = ag::dnsproxy_settings::get_default();
-    settings.listeners = {{address, port, ag::listener_protocol::UDP, persistent, idle_timeout},
-                          {address, port, ag::listener_protocol::TCP, persistent, idle_timeout}};
+    settings.listeners = {{address, port, ag::utils::TP_UDP, persistent, idle_timeout},
+                          {address, port, ag::utils::TP_TCP, persistent, idle_timeout}};
+//    settings.upstreams = {{.address = "https://cloudflare-dns.com/dns-query", .bootstrap = {"1.1.1.1"}, .timeout = 2s}};
+//    settings.upstreams = {{.address = "quic://dns.adguard.com", .bootstrap = {"1.1.1.1"}, .timeout = 2s}};
+    settings.upstreams = {{.address = "94.140.14.14", .bootstrap = {}, .timeout = 2s}};
+    settings.filter_params = {{{.data = "0.0.0.0 evil.com\n"
+                                        "||evil.org^\n", .in_memory = true}}};
+    settings.dns_cache_size = 0;
+    settings.optimistic_cache = false;
 
     ag::dnsproxy proxy;
     auto [ret, err] = proxy.init(settings, {});

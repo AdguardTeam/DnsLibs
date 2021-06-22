@@ -328,7 +328,7 @@ err_string dns_over_quic::init() {
     return std::nullopt;
 }
 
-dns_over_quic::exchange_result dns_over_quic::exchange(ldns_pkt *request) {
+dns_over_quic::exchange_result dns_over_quic::exchange(ldns_pkt *request, const dns_message_info *) {
     if (std::scoped_lock l(m_global); m_server_addresses.empty()) {
         bootstrapper::resolve_result bootstrapper_res = m_bootstrapper->get();
         if (bootstrapper_res.error.has_value()) {
