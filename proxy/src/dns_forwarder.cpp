@@ -294,12 +294,53 @@ static ldns_pkt *create_response_with_ips(const ldns_pkt *request, const dnsprox
     return create_soa_response(request, settings, SOA_RETRY_DEFAULT);
 }
 
+// Whether the given IP is considered "blocking"
+static bool is_blocking_ip(std::string_view ip) {
+    static constexpr std::string_view BLOCKING_IPS[] = {"0.0.0.0", "127.0.0.1", "::", "::1", "[::]", "[::1]"};
+    return !ip.empty() && std::any_of(std::begin(BLOCKING_IPS), std::end(BLOCKING_IPS),
+                                      [ip](std::string_view blocking_ip) { return blocking_ip == ip; });
+}
+
+// Whether the given set of rules contains IPs considered "blocking",
+// i.e. the proxy must respond with a blocking response according to the blocking_mode
+static bool rules_contain_blocking_ip(const std::vector<const dnsfilter::rule *> &rules) {
+    return std::any_of(rules.begin(), rules.end(),
+                       [] (const dnsfilter::rule *rule) -> bool {
+                           const auto *content = std::get_if<ag::dnsfilter::etc_hosts_rule_info>(&rule->content);
+                           return content != nullptr && is_blocking_ip(content->ip);
+                       });
+}
+
 // Return empty SOA response if question type is not A or AAAA
 static ldns_pkt *create_address_or_soa_response(const ldns_pkt *request, const dnsproxy_settings *settings) {
     ldns_rr *question = ldns_rr_list_rr(ldns_pkt_question(request), 0);
     ldns_rr_type type = ldns_rr_get_type(question);
 
-    if (type != LDNS_RR_TYPE_A && type != LDNS_RR_TYPE_AAAA) {
+    ldns_rdf *rdf;
+    switch (type) {
+    case LDNS_RR_TYPE_A: {
+        if (!settings->custom_blocking_ipv4.empty()) {
+            assert(utils::is_valid_ip4(settings->custom_blocking_ipv4));
+            rdf = ldns_rdf_new_frm_str(LDNS_RDF_TYPE_A, settings->custom_blocking_ipv4.c_str());
+        } else if (settings->custom_blocking_ipv6.empty() || is_blocking_ip(settings->custom_blocking_ipv6)) {
+            rdf = ldns_rdf_new_frm_str(LDNS_RDF_TYPE_A, "0.0.0.0");
+        } else {
+            return create_soa_response(request, settings, SOA_RETRY_DEFAULT);
+        }
+        break;
+    }
+    case LDNS_RR_TYPE_AAAA: {
+        if (!settings->custom_blocking_ipv6.empty()) {
+            assert(utils::is_valid_ip6(settings->custom_blocking_ipv6));
+            rdf = ldns_rdf_new_frm_str(LDNS_RDF_TYPE_AAAA, settings->custom_blocking_ipv6.c_str());
+        } else if (settings->custom_blocking_ipv4.empty() || is_blocking_ip(settings->custom_blocking_ipv6)) {
+            rdf = ldns_rdf_new_frm_str(LDNS_RDF_TYPE_AAAA, "::");
+        } else {
+            return create_soa_response(request, settings, SOA_RETRY_DEFAULT);
+        }
+        break;
+    }
+    default:
         return create_soa_response(request, settings, SOA_RETRY_DEFAULT);
     }
 
@@ -308,37 +349,11 @@ static ldns_pkt *create_address_or_soa_response(const ldns_pkt *request, const d
     ldns_rr_set_ttl(rr, settings->blocked_response_ttl_secs);
     ldns_rr_set_type(rr, type);
     ldns_rr_set_class(rr, ldns_rr_get_class(question));
-
-    if (type == LDNS_RR_TYPE_A) {
-        if (!settings->custom_blocking_ipv4.empty()) {
-            assert(utils::is_valid_ip4(settings->custom_blocking_ipv4));
-            ldns_rr_push_rdf(rr, ldns_rdf_new_frm_str(LDNS_RDF_TYPE_A, settings->custom_blocking_ipv4.c_str()));
-        } else {
-            ldns_rr_push_rdf(rr, ldns_rdf_new_frm_str(LDNS_RDF_TYPE_A, "0.0.0.0"));
-        }
-    } else {
-        if (!settings->custom_blocking_ipv6.empty()) {
-            assert(utils::is_valid_ip6(settings->custom_blocking_ipv6));
-            ldns_rr_push_rdf(rr, ldns_rdf_new_frm_str(LDNS_RDF_TYPE_AAAA, settings->custom_blocking_ipv6.c_str()));
-        } else {
-            ldns_rr_push_rdf(rr, ldns_rdf_new_frm_str(LDNS_RDF_TYPE_AAAA, "::"));
-        }
-    }
+    ldns_rr_push_rdf(rr, rdf);
 
     ldns_pkt *response = create_response_by_request(request);
     ldns_pkt_push_rr(response, LDNS_SECTION_ANSWER, rr);
     return response;
-}
-
-// Whether the given set of rules contains IPs considered "blocking",
-// i.e. the proxy must respond with a blocking response according to the blocking_mode
-static bool rules_contain_blocking_ip(const std::vector<const dnsfilter::rule *> &rules) {
-    static const ag::hash_set<std::string> BLOCKING_IPS = {"0.0.0.0", "127.0.0.1", "::", "::1", "[::]", "[::1]"};
-    return std::any_of(rules.begin(), rules.end(),
-            [] (const dnsfilter::rule *rule) -> bool {
-                const auto *content = std::get_if<ag::dnsfilter::etc_hosts_rule_info>(&rule->content);
-                return content != nullptr && BLOCKING_IPS.count(content->ip);
-            });
 }
 
 static ldns_pkt *create_blocking_response(const ldns_pkt *request, const dnsproxy_settings *settings,
