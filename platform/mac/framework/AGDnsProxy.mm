@@ -670,14 +670,18 @@ static ag::server_stamp convert_stamp(AGDnsStamp *stamp) {
         _blockIpv6 = [coder decodeBoolForKey:@"_blockIpv6"];
         _adblockRulesBlockingMode = (AGBlockingMode) [coder decodeIntForKey:@"_adblockRulesBlockingMode"];
         _hostsRulesBlockingMode = (AGBlockingMode) [coder decodeIntForKey:@"_hostsRulesBlockingMode"];
+        _customBlockingIpv4 = [coder decodeObjectForKey:@"_customBlockingIpv4"];
+        _customBlockingIpv6 = [coder decodeObjectForKey:@"_customBlockingIpv6"];
         _dnsCacheSize = [coder decodeInt64ForKey:@"_dnsCacheSize"];
         _optimisticCache = [coder decodeBoolForKey:@"_optimisticCache"];
         _enableDNSSECOK = [coder decodeBoolForKey:@"_enableDNSSECOK"];
         _enableRetransmissionHandling = [coder decodeBoolForKey:@"_enableRetransmissionHandling"];
+        _helperPath = [coder decodeObjectForKey:@"_helperPath"];
     }
 
     return self;
 }
+
 - (void)encodeWithCoder:(NSCoder *)coder {
     [coder encodeObject:self.upstreams forKey:@"_upstreams"];
     [coder encodeObject:self.fallbacks forKey:@"_fallbacks"];
@@ -692,12 +696,14 @@ static ag::server_stamp convert_stamp(AGDnsStamp *stamp) {
     [coder encodeBool:self.blockIpv6 forKey:@"_blockIpv6"];
     [coder encodeInt:self.adblockRulesBlockingMode forKey:@"_adblockRulesBlockingMode"];
     [coder encodeInt:self.hostsRulesBlockingMode forKey:@"_hostsRulesBlockingMode"];
+    [coder encodeObject:self.customBlockingIpv4 forKey:@"_customBlockingIpv4"];
+    [coder encodeObject:self.customBlockingIpv6 forKey:@"_customBlockingIpv6"];
     [coder encodeInt64:self.dnsCacheSize forKey:@"_dnsCacheSize"];
     [coder encodeBool:self.optimisticCache forKey:@"_optimisticCache"];
     [coder encodeBool:self.enableDNSSECOK forKey:@"_enableDNSSECOK"];
     [coder encodeBool:self.enableRetransmissionHandling forKey:@"_enableRetransmissionHandling"];
+    [coder encodeObject:self.helperPath forKey:@"_helperPath"];
 }
-
 
 + (instancetype) getDefault
 {

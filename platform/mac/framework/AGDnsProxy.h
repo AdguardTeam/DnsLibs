@@ -216,6 +216,10 @@ typedef NS_ENUM(NSInteger, AGOutboundProxyProtocol) {
 
 - (instancetype) init NS_UNAVAILABLE;
 
+- (instancetype)initWithCoder:(NSCoder *)coder;
+
+- (void)encodeWithCoder:(NSCoder *)coder;
+
 @end
 
 @interface AGOutboundProxySettings : NSObject<NSCoding>
@@ -237,6 +241,10 @@ typedef NS_ENUM(NSInteger, AGOutboundProxyProtocol) {
               trustAnyCertificate: (BOOL)trustAnyCertificate;
 
 - (instancetype) init NS_UNAVAILABLE;
+
+- (instancetype)initWithCoder:(NSCoder *)coder;
+
+- (void)encodeWithCoder:(NSCoder *)coder;
 
 @end
 
@@ -374,7 +382,9 @@ typedef NS_ENUM(NSInteger, AGOutboundProxyProtocol) {
         enableDNSSECOK: (BOOL) enableDNSSECOK
         enableRetransmissionHandling: (BOOL) enableRetransmissionHandling
         helperPath: (NSString *)helperPath;
+
 - (instancetype)initWithCoder:(NSCoder *)coder;
+
 - (void)encodeWithCoder:(NSCoder *)coder;
 
 /**
