@@ -73,10 +73,10 @@ namespace Adguard.Dns.Tests.Helpers
                 },
                 Ipv6Available = true,
                 BlockIpv6 = true,
-                AdblockRulesBlockingMode = AGDnsApi.ag_dnsproxy_blocking_mode.AGBM_REFUSED,
-                HostsRulesBlockingMode = AGDnsApi.ag_dnsproxy_blocking_mode.AGBM_REFUSED,
-                CustomBlockingIpv4 = "CustomBlockingIpv4Test",
-                CustomBlockingIpv6 = "CustomBlockingIpv6Test",
+                AdblockRulesBlockingMode = AGDnsApi.ag_dnsproxy_blocking_mode.AGBM_ADDRESS,
+                HostsRulesBlockingMode = AGDnsApi.ag_dnsproxy_blocking_mode.AGBM_ADDRESS,
+                CustomBlockingIpv4 = "1.2.3.4",
+                CustomBlockingIpv6 = "::AA",
                 DnsCacheSize = 23,
                 OptimisticCache = true
             };
@@ -99,8 +99,12 @@ namespace Adguard.Dns.Tests.Helpers
             Assert.AreEqual(nativeDnsSettings.OptimisticCache, dnsSettings.OptimisticCache);
 
             DnsProxySettings dnsSettingsConverted =  DnsApiConverter.FromNativeObject(nativeDnsSettings);
-            Assert.AreEqual(dnsSettingsConverted.FallbackDomains, dnsSettings.FallbackDomains);
-            Assert.AreEqual(dnsSettingsConverted.BlockedResponseTtlSec, dnsSettings.BlockedResponseTtlSec);
+            Assert.AreEqual(dnsSettings.FallbackDomains, dnsSettingsConverted.FallbackDomains);
+            Assert.AreEqual( dnsSettings.BlockedResponseTtlSec, dnsSettingsConverted.BlockedResponseTtlSec);
+            Assert.AreEqual( dnsSettings.CustomBlockingIpv4, dnsSettingsConverted.CustomBlockingIpv4);
+            Assert.AreEqual( dnsSettings.CustomBlockingIpv6, dnsSettingsConverted.CustomBlockingIpv6);
+            Assert.AreEqual( dnsSettings.AdblockRulesBlockingMode, dnsSettingsConverted.AdblockRulesBlockingMode);
+            Assert.AreEqual(dnsSettings.HostsRulesBlockingMode, dnsSettingsConverted.HostsRulesBlockingMode);
             bool isUpstreamsEqual = CollectionUtils.CollectionsEquals(dnsSettingsConverted.Upstreams, dnsSettings.Upstreams);
             Assert.IsTrue(isUpstreamsEqual);
         }
