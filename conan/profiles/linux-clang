@@ -1,0 +1,12 @@
+include(default)
+[settings]
+cppstd=17
+compiler=clang
+compiler.version=11
+compiler.libcxx=libc++
+build_type=RelWithDebInfo
+[options]
+[build_requires]
+[env]
+CC=clang
+CXX=clang++

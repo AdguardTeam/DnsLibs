@@ -16,8 +16,8 @@
 #include <utility>
 #include <vector>
 #include <ag_defs.h>
-#include <spdlog/fmt/bundled/format.h>
-#include <spdlog/fmt/bundled/chrono.h>
+#include <fmt/format.h>
+#include <fmt/chrono.h>
 #include <cctype>
 
 /**

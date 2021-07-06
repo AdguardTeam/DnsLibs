@@ -4,7 +4,7 @@
 #include <future>
 #include <thread>
 #include <ldns/ldns.h>
-#include <spdlog/fmt/bundled/chrono.h>
+#include <fmt/chrono.h>
 #include <ag_logger.h>
 #include <ag_utils.h>
 #include <dns_crypt_ldns.h>

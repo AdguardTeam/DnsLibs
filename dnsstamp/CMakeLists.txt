@@ -1,14 +1,11 @@
 cmake_minimum_required(VERSION 3.6)
 project(agdns_dnsstamp C CXX)
+include(../cmake/conan_bootstrap.cmake)
+conan_bootstrap(SRCROOT ".." CONANFILE "../conanfile.txt" SCOPE_NAME agdns)
 
 set(CMAKE_CXX_STANDARD 17)
 
-set(THIRD_PARTY_DIR ${CMAKE_CURRENT_SOURCE_DIR}/../third-party)
 set(DNSLIBS_DIR ${CMAKE_CURRENT_SOURCE_DIR}/..)
-
-if (NOT TARGET libevent)
-    add_subdirectory(${THIRD_PARTY_DIR}/libevent ${CMAKE_BINARY_DIR}/libevent)
-endif ()
 
 if(NOT TARGET dnslibs_common)
     add_subdirectory(${DNSLIBS_DIR}/common ${CMAKE_BINARY_DIR}/common)
@@ -20,7 +17,7 @@ add_library(dnsstamp EXCLUDE_FROM_ALL
 
 set_target_properties(dnsstamp PROPERTIES POSITION_INDEPENDENT_CODE ON)
 target_include_directories(dnsstamp PUBLIC include)
-target_link_libraries(dnsstamp libevent dnslibs_common)
+target_link_libraries(dnsstamp CONAN_PKG::libevent dnslibs_common)
 
 enable_testing()
 include(${CMAKE_CURRENT_SOURCE_DIR}/../cmake/add_unit_test.cmake)

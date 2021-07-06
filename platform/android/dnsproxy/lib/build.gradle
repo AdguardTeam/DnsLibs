@@ -15,7 +15,7 @@ android {
         externalNativeBuild {
             cmake {
                 targets "adguard-dns"
-                arguments "-DANDROID_STL=c++_static", "-DCMAKE_BUILD_TYPE=RelWithDebInfo", "-C${projectDir}/../../../../cmake/booster.cmake"
+                arguments "-DANDROID_STL=c++_static", "-DCMAKE_BUILD_TYPE=RelWithDebInfo"
             }
         }
     }

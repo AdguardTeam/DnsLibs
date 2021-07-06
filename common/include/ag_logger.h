@@ -2,8 +2,8 @@
 
 #include <spdlog/spdlog.h>
 #include <spdlog/sinks/sink.h>
-#include <spdlog/fmt/bundled/format.h>
-#include <spdlog/fmt/bundled/chrono.h>
+#include <fmt/format.h>
+#include <fmt/chrono.h>
 
 namespace ag {
 

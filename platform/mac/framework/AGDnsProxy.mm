@@ -1289,7 +1289,7 @@ static int bindFd(NSString *helperPath, NSString *address, NSNumber *port, AGLis
 
 - (NSData *)handlePacket:(NSData *)packet
 {
-    auto *ip_header = (struct iphdr *)packet.bytes;
+    auto *ip_header = (const struct iphdr *)packet.bytes;
     if (ip_header->ip_v == 4) {
         return [self handleIPv4Packet:packet];
     } else if (ip_header->ip_v == 6) {

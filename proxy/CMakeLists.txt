@@ -1,12 +1,13 @@
 cmake_minimum_required(VERSION 3.1)
 project(dnsproxy)
+include(../cmake/conan_bootstrap.cmake)
+conan_bootstrap(SRCROOT ".." CONANFILE "../conanfile.txt" SCOPE_NAME agdns)
 
 set(CMAKE_CXX_STANDARD 17)
 
 set(DNSLIBS_DIR ..)
 set(SRC_DIR src)
 set(TEST_DIR test)
-set(THIRD_PARTY_DIR ${DNSLIBS_DIR}/third-party)
 
 set(SRCS
         ${SRC_DIR}/dnsproxy.cpp
@@ -42,18 +43,10 @@ if(NOT TARGET dnslibs_net)
     add_subdirectory(${DNSLIBS_DIR}/net ${CMAKE_BINARY_DIR}/net)
 endif(NOT TARGET dnslibs_net)
 
-if (NOT TARGET ldns)
-    add_subdirectory(${THIRD_PARTY_DIR}/ldns ${CMAKE_BINARY_DIR}/ldns)
-endif ()
-
-if(NOT TARGET uv)
-    add_subdirectory(${THIRD_PARTY_DIR}/libuv ${CMAKE_BINARY_DIR}/third-party/libuv)
-endif(NOT TARGET uv)
-
 set_target_properties(dnsproxy PROPERTIES POSITION_INDEPENDENT_CODE ON)
 target_include_directories(dnsproxy PUBLIC ./include)
 target_include_directories(dnsproxy PRIVATE ./src)
-target_link_libraries(dnsproxy dnslibs_common dnsfilter upstream dnslibs_net ldns uv_a)
+target_link_libraries(dnsproxy dnslibs_common dnsfilter upstream dnslibs_net CONAN_PKG::ldns CONAN_PKG::libuv)
 
 target_compile_options(dnsproxy PRIVATE -Wall -Wextra -Wformat=2 -Wno-unused-parameter -Wno-unused-variable -Wno-ignored-qualifiers -Wno-missing-field-initializers)
 if (NOT MSVC)

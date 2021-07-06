@@ -1,9 +1,10 @@
 cmake_minimum_required(VERSION 3.6)
 project(agdns_upstream C CXX)
+include(../cmake/conan_bootstrap.cmake)
+conan_bootstrap(SRCROOT ".." CONANFILE "../conanfile.txt" SCOPE_NAME agdns)
 
 set(CMAKE_CXX_STANDARD 17)
 
-set(THIRD_PARTY_DIR ${CMAKE_CURRENT_SOURCE_DIR}/../third-party)
 set(DNSLIBS_DIR ${CMAKE_CURRENT_SOURCE_DIR}/..)
 
 add_library(upstream EXCLUDE_FROM_ALL
@@ -36,10 +37,6 @@ if (COMPILER_SUPPORTS_C99_DESIGNATOR)
     target_compile_options(upstream PRIVATE -Wno-c99-designator)
 endif ()
 
-if (NOT TARGET boringssl_static)
-    add_subdirectory(${THIRD_PARTY_DIR}/boringssl ${CMAKE_BINARY_DIR}/third-party/boringssl)
-endif ()
-
 if (NOT TARGET agdns_dnsstamp)
     add_subdirectory(${DNSLIBS_DIR}/dnsstamp ${CMAKE_BINARY_DIR}/dnsstamp)
 endif ()
@@ -56,27 +53,10 @@ if(NOT TARGET dnslibs_net)
     add_subdirectory(${DNSLIBS_DIR}/net ${CMAKE_BINARY_DIR}/net)
 endif(NOT TARGET dnslibs_net)
 
-if (NOT TARGET libevent)
-    add_subdirectory(${THIRD_PARTY_DIR}/libevent ${CMAKE_BINARY_DIR}/third-party/libevent)
-endif ()
-
-if (NOT TARGET ldns)
-    add_subdirectory(${THIRD_PARTY_DIR}/ldns ${CMAKE_BINARY_DIR}/third-party/ldns)
-endif ()
-
-if (NOT TARGET libcurl)
-    add_subdirectory(${THIRD_PARTY_DIR}/curl ${CMAKE_BINARY_DIR}/third-party/curl)
-endif ()
-
-if(NOT TARGET ngtcp2)
-    add_subdirectory(${THIRD_PARTY_DIR}/ngtcp2 ${CMAKE_BINARY_DIR}/third-party/ngtcp2)
-endif(NOT TARGET ngtcp2)
-
 target_include_directories(upstream PUBLIC include)
 target_include_directories(upstream PRIVATE ${OPENSSL_INCLUDE_DIR})
-target_include_directories(upstream PRIVATE ../third-party/ngtcp2/ag_ngtcp2_crypto/includes)
 target_link_libraries(upstream dnslibs_common dnsstamp dnscrypt dnslibs_net)
-target_link_libraries(upstream boringssl_static libevent ldns libcurl ngtcp2 ngtcp2_crypto_boringssl)
+target_link_libraries(upstream CONAN_PKG::magic_enum CONAN_PKG::libevent CONAN_PKG::ldns CONAN_PKG::libcurl CONAN_PKG::ngtcp2)
 
 enable_testing()
 include(${CMAKE_CURRENT_SOURCE_DIR}/../cmake/add_unit_test.cmake)

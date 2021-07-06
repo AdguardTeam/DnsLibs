@@ -1,9 +1,10 @@
 cmake_minimum_required(VERSION 3.6)
 project(agdns_dnscrypt C CXX)
+include(../cmake/conan_bootstrap.cmake)
+conan_bootstrap(SRCROOT ".." CONANFILE "../conanfile.txt" SCOPE_NAME agdns)
 
 set(CMAKE_CXX_STANDARD 17)
 
-set(THIRD_PARTY_DIR ${CMAKE_CURRENT_SOURCE_DIR}/../third-party)
 set(DNSLIBS_DIR ${CMAKE_CURRENT_SOURCE_DIR}/..)
 
 if (NOT TARGET dnsstamp)
@@ -13,14 +14,6 @@ endif ()
 if(NOT TARGET dnslibs_net)
     add_subdirectory(${DNSLIBS_DIR}/net ${CMAKE_BINARY_DIR}/net)
 endif(NOT TARGET dnslibs_net)
-
-if (NOT TARGET ldns)
-    add_subdirectory(${THIRD_PARTY_DIR}/ldns ${CMAKE_BINARY_DIR}/ldns)
-endif ()
-
-if (NOT TARGET sodium)
-    add_subdirectory(${THIRD_PARTY_DIR}/sodium ${CMAKE_BINARY_DIR}/sodium)
-endif ()
 
 add_library(dnscrypt EXCLUDE_FROM_ALL
         include/dns_crypt_cipher.h
@@ -39,10 +32,7 @@ add_library(dnscrypt EXCLUDE_FROM_ALL
 
 set_target_properties(dnscrypt PROPERTIES POSITION_INDEPENDENT_CODE ON)
 target_include_directories(dnscrypt PUBLIC include)
-target_include_directories(dnscrypt PUBLIC ${THIRD_PARTY_DIR}/sodium/libsodium/src/libsodium/include)
-target_include_directories(dnscrypt PUBLIC ${THIRD_PARTY_DIR}/sodium/libsodium/src/libsodium/include/sodium)
-target_include_directories(dnscrypt PUBLIC ${CMAKE_BINARY_DIR}) # sodium/version.h
-target_link_libraries(dnscrypt dnsstamp dnslibs_net ldns sodium)
+target_link_libraries(dnscrypt dnsstamp dnslibs_net CONAN_PKG::ldns CONAN_PKG::libsodium)
 
 enable_testing()
 include(${CMAKE_CURRENT_SOURCE_DIR}/../cmake/add_unit_test.cmake)

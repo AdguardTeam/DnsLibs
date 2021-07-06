@@ -1,5 +1,7 @@
 cmake_minimum_required(VERSION 3.1)
 project(AdguardDns C CXX)
+include(../../../cmake/conan_bootstrap.cmake)
+conan_bootstrap(SRCROOT "../../.." CONANFILE "conanfile.txt" SCOPE_NAME capi)
 
 set(CMAKE_POLICY_DEFAULT_CMP0063 NEW) # allows visibility=hidden for static targets for subprojects
 cmake_policy(SET CMP0063 NEW) # allows visibility=hidden for static targets for this project
@@ -11,18 +13,27 @@ set(CMAKE_C_STANDARD 11)
 set(CMAKE_CXX_STANDARD 17)
 
 if (MSVC)
-    set(CMAKE_SHARED_LINKER_FLAGS_DEBUG "${CMAKE_SHARED_LINKER_FLAGS_DEBUG} /DEBUG /OPT:REF")
-    set(CMAKE_SHARED_LINKER_FLAGS_RELEASE "${CMAKE_SHARED_LINKER_FLAGS_RELEASE} /DEBUG /OPT:REF")
-    set(CMAKE_EXE_LINKER_FLAGS_DEBUG "${CMAKE_EXE_LINKER_FLAGS_DEBUG} /DEBUG /OPT:REF")
-    set(CMAKE_EXE_LINKER_FLAGS_RELEASE "${CMAKE_EXE_LINKER_FLAGS_RELEASE} /DEBUG /OPT:REF")
+    set(LinkerFlags
+            CMAKE_SHARED_LINKER_FLAGS_DEBUG
+            CMAKE_SHARED_LINKER_FLAGS_RELEASE
+            CMAKE_SHARED_LINKER_FLAGS_RELWITHDEBINFO
+            CMAKE_EXE_LINKER_FLAGS_DEBUG
+            CMAKE_EXE_LINKER_FLAGS_RELEASE
+            CMAKE_EXE_LINKER_FLAGS_RELWITHDEBINFO
+            )
+    foreach (LinkerFlag ${LinkerFlags})
+        string(APPEND ${LinkerFlag} " /DEBUG /OPT:REF")
+    endforeach()
 
     set(CompilerFlags
             CMAKE_CXX_FLAGS
             CMAKE_CXX_FLAGS_DEBUG
             CMAKE_CXX_FLAGS_RELEASE
+            CMAKE_CXX_FLAGS_RELWITHDEBINFO
             CMAKE_C_FLAGS
             CMAKE_C_FLAGS_DEBUG
             CMAKE_C_FLAGS_RELEASE
+            CMAKE_CXX_FLAGS_RELWITHDEBINFO
             )
     foreach (CompilerFlag ${CompilerFlags})
         string(REPLACE "/MDd" "/MT" ${CompilerFlag} "${${CompilerFlag}}")
@@ -76,10 +87,7 @@ set_target_properties(AdguardDns PROPERTIES POSITION_INDEPENDENT_CODE ON)
 target_link_libraries(AdguardDns dnsproxy)
 
 if (WIN32)
-    if (NOT TARGET detours)
-        add_subdirectory(${THIRD_PARTY_DIR}/detours ${CMAKE_BINARY_DIR}/detours)
-    endif()
-    target_link_libraries(AdguardDns detours)
+    target_link_libraries(AdguardDns CONAN_PKG::detours)
 endif()
 
 add_custom_target(generate_api_hash)

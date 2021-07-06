@@ -4,12 +4,6 @@ if(NOT TARGET tests)
     add_custom_target(tests)
 endif(NOT TARGET tests)
 
-if (NOT TARGET gtest_main)
-    add_subdirectory(${THIRD_PARTY_DIR}/googletest ${CMAKE_BINARY_DIR}/third-party/googletest)
-    set_property(TARGET gtest PROPERTY EXCLUDE_FROM_ALL ON)
-    set_property(TARGET gtest_main PROPERTY EXCLUDE_FROM_ALL ON)
-endif (NOT TARGET gtest_main)
-
 # `EXPAND_GTEST` is useful if the test has a parametrized gtest case, it often makes the report
 # unreadable
 function(add_unit_test TEST_NAME TEST_DIR EXTRA_INCLUDES IS_GTEST EXPAND_GTEST)
@@ -30,7 +24,7 @@ function(add_unit_test TEST_NAME TEST_DIR EXTRA_INCLUDES IS_GTEST EXPAND_GTEST)
     add_dependencies(tests ${TEST_NAME})
 
     if (${IS_GTEST})
-        target_link_libraries(${TEST_NAME} PRIVATE gtest gtest_main)
+        target_link_libraries(${TEST_NAME} PRIVATE CONAN_PKG::gtest)
     endif()
 
     if (${EXPAND_GTEST})

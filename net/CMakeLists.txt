@@ -1,5 +1,7 @@
 cmake_minimum_required(VERSION 3.1)
 project(dnslibs_net)
+include(../cmake/conan_bootstrap.cmake)
+conan_bootstrap(SRCROOT ".." CONANFILE "../conanfile.txt" SCOPE_NAME agdns)
 
 set(CMAKE_CXX_STANDARD 17)
 
@@ -32,22 +34,13 @@ target_compile_options(dnslibs_net PRIVATE
         -Wno-unused-parameter
         -Wno-missing-field-initializers)
 
-
-if (NOT TARGET libevent)
-    add_subdirectory(${THIRD_PARTY_DIR}/libevent ${CMAKE_BINARY_DIR}/libevent)
-endif ()
-
 if (NOT TARGET dnslibs_common)
     add_subdirectory(${DNSLIBS_DIR}/common ${CMAKE_BINARY_DIR}/common)
 endif ()
 
-if (NOT TARGET boringssl_static)
-    add_subdirectory(${THIRD_PARTY_DIR}/boringssl ${CMAKE_BINARY_DIR}/third-party/boringssl)
-endif ()
-
 target_include_directories(dnslibs_net PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/include")
 target_include_directories(dnslibs_net PRIVATE ${OPENSSL_INCLUDE_DIR})
-target_link_libraries(dnslibs_net dnslibs_common libevent boringssl_static)
+target_link_libraries(dnslibs_net dnslibs_common CONAN_PKG::libevent CONAN_PKG::openssl CONAN_PKG::magic_enum)
 
 if (APPLE)
     target_link_libraries(dnslibs_net "-framework CoreFoundation" "-framework Security")

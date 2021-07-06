@@ -123,10 +123,6 @@ function build_target() {
     cd "${build_dir}"
     pwd
 
-    if [ ! -f "${build_dir}/CMakeCache.txt" ]; then
-        cp "${FRAMEWORK_DIR}/cmake-cache-${target_os}-${target_arch}.txt" "${build_dir}/CMakeCache.txt"
-    fi
-
     if [ "${target_os}" == "ios" ] && [ -z ${IPHONEOS_DEPLOYMENT_TARGET+x} ]; then
         if [ -z ${IOS_SDK_VERSION+x} ]; then
             echo "iOS SDK version should be set"

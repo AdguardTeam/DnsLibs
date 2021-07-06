@@ -1,0 +1,13 @@
+sources:
+  "1.41.0":
+    url: "https://github.com/libuv/libuv/archive/v1.41.0.zip"
+    sha256: "cb89a8b9f686c5ccf7ed09a9e0ece151a73ebebc17af3813159c335b02181794"
+patches:
+  "1.41.0":
+    - base_path: "source_subfolder"
+      patch_file: "patches/1.41.0/fix-cmake.patch"
+    - base_path: "source_subfolder"
+      patch_file: "patches/1.41.0/uv_queue_work_sans_loop.patch"
+    - base_path: "source_subfolder"
+      patch_file: "patches/1.41.0/darwin-fix-iOS-compilation-and-functionality.patch"
+

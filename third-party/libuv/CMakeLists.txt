@@ -1,5 +1,0 @@
-cmake_minimum_required(VERSION 3.10)
-project(libuv)
-include(../../cmake/apply_patch.cmake)
-apply_patch("${CMAKE_CURRENT_SOURCE_DIR}/uv_queue_work_sans_loop.patch" "${CMAKE_CURRENT_SOURCE_DIR}/libuv")
-add_subdirectory(libuv)
