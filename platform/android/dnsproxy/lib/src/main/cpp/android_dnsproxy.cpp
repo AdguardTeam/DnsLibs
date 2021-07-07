@@ -551,8 +551,8 @@ ag::local_ref<jobject> ag::android_dnsproxy::marshal_settings(JNIEnv *env, const
     auto filter_params_field = env->GetFieldID(clazz, "filterParams", "Ljava/util/List;");
     auto ipv6_avail_field = env->GetFieldID(clazz, "ipv6Available", "Z");
     auto block_ipv6_field = env->GetFieldID(clazz, "blockIpv6", "Z");
-    auto adb_blocking_mode_field = env->GetFieldID(clazz, "adbBlockingMode", "L" FQN_BLOCKING_MODE ";");
-    auto hosts_blocking_mode_field = env->GetFieldID(clazz, "hostsBlockingMode", "L" FQN_BLOCKING_MODE ";");
+    auto adb_blocking_mode_field = env->GetFieldID(clazz, "adblockRulesBlockingMode", "L" FQN_BLOCKING_MODE ";");
+    auto hosts_blocking_mode_field = env->GetFieldID(clazz, "hostsRulesBlockingMode", "L" FQN_BLOCKING_MODE ";");
     auto custom_blocking_ip4_field = env->GetFieldID(clazz, "customBlockingIpv4", "Ljava/lang/String;");
     auto custom_blocking_ip6_field = env->GetFieldID(clazz, "customBlockingIpv6", "Ljava/lang/String;");
     auto cache_size_field = env->GetFieldID(clazz, "dnsCacheSize", "J");
