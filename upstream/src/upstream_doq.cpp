@@ -745,6 +745,7 @@ int dns_over_quic::init_ssl() {
     SSL_set_app_data(m_ssl.get(), this);
     SSL_set_tlsext_host_name(m_ssl.get(), m_server_name.c_str());
     SSL_set_connect_state(m_ssl.get());
+    SSL_set_quic_use_legacy_codepoint(m_ssl.get(), m_quic_version != NGTCP2_PROTO_VER_V1);
 
     std::string alpn, printable;
     for (auto &dq_alpn : DQ_ALPNS) {
