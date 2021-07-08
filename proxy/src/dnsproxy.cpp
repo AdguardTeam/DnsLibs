@@ -11,6 +11,8 @@
 using namespace ag;
 using namespace std::chrono;
 
+const err_string dnsproxy::LISTENER_ERROR = "Listener failure";
+
 static const dnsproxy_settings DEFAULT_PROXY_SETTINGS = {
     .upstreams = {
         { .address = "8.8.8.8:53", .id = 1 },
@@ -88,16 +90,13 @@ std::pair<bool, err_string> dnsproxy::init(dnsproxy_settings settings, dnsproxy_
         for (const auto &listener_settings : proxy->settings.listeners) {
             auto[listener, error] = dnsproxy_listener::create_and_listen(listener_settings, this);
             if (error.has_value()) {
-                errlog(proxy->log, "Failed to create a listener {}: {}", listener_settings.str(), error.value());
+                errlog(proxy->log, "Failed to initialize a listener ({}): {}",
+                       listener_settings.str(), error.value());
+                this->deinit();
+                return {false, LISTENER_ERROR};
             } else {
                 proxy->listeners.push_back(std::move(listener));
             }
-        }
-        if (proxy->listeners.empty()) {
-            auto err = "Failed to initialize any listeners";
-            errlog(proxy->log, "{}", err);
-            this->deinit();
-            return {false, err};
         }
     }
 

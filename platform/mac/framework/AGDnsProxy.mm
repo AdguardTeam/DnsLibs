@@ -1210,9 +1210,15 @@ static int bindFd(NSString *helperPath, NSString *address, NSNumber *port, AGLis
         auto str = AG_FMT("Failed to initialize the DNS proxy: {}", *err_or_warn);
         errlog(self->log, "{}", str);
         if (error) {
-            *error = [NSError errorWithDomain: AGDnsProxyErrorDomain
-                                         code: AGDPE_PROXY_INIT_ERROR
-                                     userInfo: @{ NSLocalizedDescriptionKey: convert_string(str) }];
+            if (err_or_warn == ag::dnsproxy::LISTENER_ERROR) {
+                *error = [NSError errorWithDomain: AGDnsProxyErrorDomain
+                                             code: AGDPE_PROXY_INIT_LISTENER_ERROR
+                                         userInfo: @{ NSLocalizedDescriptionKey: convert_string(str) }];
+            } else {
+                *error = [NSError errorWithDomain: AGDnsProxyErrorDomain
+                                             code: AGDPE_PROXY_INIT_ERROR
+                                         userInfo: @{ NSLocalizedDescriptionKey: convert_string(str) }];
+            }
         }
         return nil;
     }

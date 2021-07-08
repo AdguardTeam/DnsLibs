@@ -127,4 +127,13 @@ if("${TARGET_OS}" STREQUAL "macos")
             "-F${CMAKE_CURRENT_BINARY_DIR}"
             "-Wl,-rpath,${CMAKE_CURRENT_BINARY_DIR}"
             "-framework AGDnsProxy -framework Foundation")
+
+    add_executable(test_ListenerInitError EXCLUDE_FROM_ALL test_ListenerInitError.mm)
+    target_compile_options(test_ListenerInitError PRIVATE "-fobjc-arc")
+    target_compile_options(test_ListenerInitError PRIVATE -F${CMAKE_CURRENT_BINARY_DIR})
+    add_dependencies(test_ListenerInitError AGDnsProxy)
+    target_link_libraries(test_ListenerInitError
+            "-F${CMAKE_CURRENT_BINARY_DIR}"
+            "-Wl,-rpath,${CMAKE_CURRENT_BINARY_DIR}"
+            "-framework AGDnsProxy -framework Foundation")
 endif()

@@ -13,6 +13,8 @@ namespace ag {
  */
 class dnsproxy {
 public:
+    static const err_string LISTENER_ERROR;
+
     dnsproxy();
     ~dnsproxy();
 
