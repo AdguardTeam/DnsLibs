@@ -1085,6 +1085,9 @@ void dns_over_quic::disconnect(std::string_view reason) {
     dbglog(m_log, "Disconnect reason: {}", reason);
     ngtcp2_conn_del(std::exchange(m_conn, nullptr));
     m_read_event.reset();
+    evtimer_del(m_handshake_timer_event.get());
+    evtimer_del(m_idle_timer_event.get());
+    evtimer_del(m_retransmit_timer_event.get());
 
     m_conn_state.info.emplace<std::monostate>();
 
