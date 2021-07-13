@@ -127,9 +127,22 @@ TEST_F(dnsproxy_test, test_ipv6_blocking) {
     pkt = create_request("example.org", LDNS_RR_TYPE_AAAA, LDNS_RD);
     response.reset();
     ASSERT_NO_FATAL_FAILURE(perform_request(proxy, pkt, response));
-
     ASSERT_EQ(ldns_pkt_ancount(response.get()), 0);
     ASSERT_EQ(ldns_pkt_get_rcode(response.get()), LDNS_RCODE_REFUSED);
+
+    // Long domain name. With "hostmaster." in SOA record it is longer than 253 characters.
+    // https://jira.adguard.com/browse/AG-9026
+    pkt = create_request("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.", LDNS_RR_TYPE_AAAA, LDNS_RD);
+    response.reset();
+    ASSERT_NO_FATAL_FAILURE(perform_request(proxy, pkt, response));
+    ASSERT_EQ(ldns_pkt_ancount(response.get()), 0);
+    ASSERT_EQ(ldns_pkt_nscount(response.get()), 1);
+    ASSERT_EQ(ldns_pkt_get_rcode(response.get()), LDNS_RCODE_NOERROR);
+    // Check that message is correctly serialized
+    using ldns_buffer_ptr = std::unique_ptr<ldns_buffer, ag::ftor<&ldns_buffer_free>>;
+    ldns_buffer_ptr result(ldns_buffer_new(LDNS_MAX_PACKETLEN));
+    ldns_status status = ldns_pkt2buffer_wire(result.get(), response.get());
+    ASSERT_EQ(status, LDNS_STATUS_OK);
 }
 
 TEST_F(dnsproxy_test, test_cname_blocking) {

@@ -157,15 +157,21 @@ static ldns_pkt *create_response_by_request(const ldns_pkt *request) {
     return response;
 }
 
-static std::string get_mbox(const ldns_pkt *request) {
+static ldns_rdf *get_mbox(const ldns_pkt *request) {
+    using ldns_rdf_ptr = std::unique_ptr<ldns_rdf, ag::ftor<&ldns_rdf_free>>;
     const ldns_rr *question = ldns_rr_list_rr(ldns_pkt_question(request), 0);
 
-    char *zone = ldns_rdf2str(ldns_rr_owner(question));
-    std::string mbox = AG_FMT("hostmaster.{}",
-        (zone != nullptr && strlen(zone) > 0 && zone[0] != '.') ? zone : "");
-    free(zone);
+    ldns_rdf *owner = ldns_rr_owner(question);
 
-    return mbox;
+    ldns_rdf_ptr hostmaster{ldns_dname_new_frm_str("hostmaster.")};
+    ldns_rdf_ptr mbox{ldns_dname_cat_clone(hostmaster.get(), owner)};
+    if (mbox) {
+        if (auto valid = allocated_ptr<char>{ldns_rdf2str(mbox.get())}) {
+            return mbox.release();
+        }
+    }
+
+    return hostmaster.release();
 }
 
 static uint16_t read_uint16_be(uint8_view pkt) {
@@ -176,7 +182,6 @@ static uint16_t read_uint16_be(uint8_view pkt) {
 // Taken from AdGuardHome/dnsforward.go/genSOA
 static ldns_rr *create_soa(const ldns_pkt *request, const dnsproxy_settings *settings, uint32_t retry_secs) {
     const ldns_rr *question = ldns_rr_list_rr(ldns_pkt_question(request), 0);
-    std::string mbox = get_mbox(request);
 
     ldns_rr *soa = ldns_rr_new();
     assert(soa != nullptr);
@@ -186,7 +191,7 @@ static ldns_rr *create_soa(const ldns_pkt *request, const dnsproxy_settings *set
     ldns_rr_set_class(soa, LDNS_RR_CLASS_IN);
     // fill soa rdata
     ldns_rr_push_rdf(soa, ldns_dname_new_frm_str("fake-for-negative-caching.adguard.com.")); // MNAME
-    ldns_rr_push_rdf(soa, ldns_dname_new_frm_str(mbox.c_str())); // RNAME
+    ldns_rr_push_rdf(soa, get_mbox(request)); // RNAME
     ldns_rr_push_rdf(soa, ldns_native2rdf_int32(LDNS_RDF_TYPE_TIME, time(nullptr) + 100500)); // SERIAL
     ldns_rr_push_rdf(soa, ldns_native2rdf_int32(LDNS_RDF_TYPE_PERIOD, 1800)); // REFRESH
     ldns_rr_push_rdf(soa, ldns_native2rdf_int32(LDNS_RDF_TYPE_PERIOD, retry_secs)); // RETRY
