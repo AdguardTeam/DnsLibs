@@ -7,6 +7,7 @@
 TEST(TcpStream, DISABLED_Blocking) {
     ag::socket_factory factory({});
     ag::blocking_socket socket(factory.make_socket({ ag::utils::TP_TCP }));
+    ASSERT_TRUE(socket);
 
     auto e = socket.connect(
             { ag::socket_address("1.1.1.1", 80), std::chrono::seconds(1) });
@@ -36,6 +37,7 @@ TEST(TcpStream, DISABLED_HttpProxy) {
     ag::outbound_proxy_settings proxy_settings = { ag::outbound_proxy_protocol::HTTP_CONNECT, "127.0.0.1", 3129 };
     ag::socket_factory factory({ &proxy_settings });
     ag::blocking_socket socket(factory.make_socket({ ag::utils::TP_TCP }));
+    ASSERT_TRUE(socket);
 
     auto e = socket.connect(
             { ag::socket_address("1.1.1.1", 80), std::chrono::seconds(1) });
@@ -65,6 +67,7 @@ TEST(TcpStream, DISABLED_SocksProxy) {
     ag::outbound_proxy_settings proxy_settings = { ag::outbound_proxy_protocol::SOCKS5, "127.0.0.1", 8888 };
     ag::socket_factory factory({ &proxy_settings });
     ag::blocking_socket socket(factory.make_socket({ ag::utils::TP_TCP }));
+    ASSERT_TRUE(socket);
 
     auto e = socket.connect(
             { ag::socket_address("1.1.1.1", 80), std::chrono::seconds(1) });

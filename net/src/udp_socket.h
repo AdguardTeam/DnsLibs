@@ -17,7 +17,7 @@ namespace ag {
 class udp_socket : public socket {
 public:
     udp_socket(socket_factory::socket_parameters p, prepare_fd_callback prepare_fd);
-    ~udp_socket() override = default;
+    ~udp_socket() override;
 
     udp_socket(udp_socket &&) = delete;
     udp_socket &operator=(udp_socket &&) = delete;

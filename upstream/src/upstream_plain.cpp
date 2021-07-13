@@ -57,6 +57,9 @@ ag::plain_dns::exchange_result ag::plain_dns::exchange(ldns_pkt *request_pkt, co
 
     if (!m_prefer_tcp && !(info && info->proto == utils::TP_TCP)) {
         blocking_socket socket(this->make_socket(utils::TP_UDP));
+        if (!socket) {
+            return { nullptr, "Can't initialize blocking socket wrapper"};
+        }
 
         if (auto e = socket.connect({ m_pool.address(), timeout }); e.has_value()) {
             return { nullptr,

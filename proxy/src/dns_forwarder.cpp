@@ -1541,8 +1541,8 @@ void dns_forwarder::truncate_response(ldns_pkt *response, const ldns_pkt *reques
         return;
     }
     size_t max_size = ldns_pkt_edns(request) ? ldns_pkt_edns_udp_size(request) : 512;
-    dbglog_f(log, "Truncating to not more than {} octets (edns: {})", max_size, ldns_pkt_edns(request));
+    tracelog(log, "Truncating to not more than {} octets (edns: {})", max_size, ldns_pkt_edns(request));
     if (ag::ldns_pkt_truncate(response, max_size)) {
-        log_packet(log, response, "DNS response after truncation");
+        log_packet(log, response, "DNS response is truncated");
     }
 }

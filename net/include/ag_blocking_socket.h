@@ -78,6 +78,10 @@ public:
      */
     [[nodiscard]] receive_dns_packet_result receive_dns_packet(std::optional<std::chrono::microseconds> timeout);
 
+    operator bool() const noexcept {
+        return event_loop->c_base();
+    }
+
 private:
     logger log;
     size_t id = 0;

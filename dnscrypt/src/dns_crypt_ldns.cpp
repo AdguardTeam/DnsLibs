@@ -53,6 +53,9 @@ ag::dnscrypt::dns_exchange_unparsed_result ag::dnscrypt::dns_exchange(std::chron
     utils::timer timer;
 
     blocking_socket socket(socket_factory->make_socket(std::move(socket_parameters)));
+    if (!socket) {
+        return make_error("Can't initialize blocking socket wrapper");
+    }
     if (auto e = socket.connect({ socket_address, timeout }); e.has_value()) {
         return make_error(std::move(e->description));
     }

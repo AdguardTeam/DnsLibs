@@ -176,3 +176,12 @@ void udp_socket::on_event(evutil_socket_t fd, short what, void *arg) {
         assert(0);
     }
 }
+
+udp_socket::~udp_socket() {
+    if (socket_event) {
+        evutil_socket_t fd = event_get_fd(socket_event.get());
+        // epoll is not happy when deleting events after close
+        event_del(socket_event.get());
+        evutil_closesocket(fd);
+    }
+}

@@ -400,8 +400,37 @@ static const upstream_test_data test_upstreams_data[]{
     },
 };
 
+#ifdef __linux__
+#include <dirent.h>
+#include <cstddef>
+
+int count_open_fds() {
+    DIR *dir = opendir("/proc/self/fd");
+    if (dir == nullptr) {
+        return -1;
+    }
+
+    int count = -3; // '.', '..', dir
+    while (readdir(dir)) {
+        count++;
+    }
+
+    (void)closedir(dir);
+
+    return count;
+}
+#endif /* __linux__ */
+
 TEST_F(upstream_test, test_upstreams) {
+#ifdef __linux__
+    int fd_count_before = count_open_fds();
+#endif
     parallel_test(test_upstreams_data);
+#ifdef __linux__
+    // If there was fd leak, new fd number will be different.
+    int fd_count_after = count_open_fds();
+    ASSERT_EQ(fd_count_before, fd_count_after);
+#endif
 }
 
 static const upstream_test_data upstream_dot_bootstrap_test_data[]{
