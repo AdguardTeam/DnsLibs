@@ -59,17 +59,17 @@ void ag::event_loop::start() {
     m_base_thread = std::thread([this] { run(); });
 }
 
+void ag::event_loop::run_tasks_queue(evutil_socket_t, short, void *arg) {
+    auto *self = (ag::event_loop *)arg;
+    self->execute_tasks();
+}
+
 void ag::event_loop::submit(std::function<void()> func) {
     std::scoped_lock l(m_tasks.mtx);
     m_tasks.val.queue.emplace_back(std::move(func));
 
     if (!m_tasks.val.scheduled) {
-        event_base_once(m_base.get(), -1, EV_TIMEOUT,
-                [] (evutil_socket_t, short, void *arg) {
-                    auto *self = (event_loop *)arg;
-                    self->execute_tasks();
-                },
-                this, nullptr);
+        event_base_once(m_base.get(), -1, EV_TIMEOUT, run_tasks_queue, this, nullptr);
     }
 }
 
@@ -110,6 +110,12 @@ void ag::event_loop::run() {
 }
 
 void ag::event_loop::execute_tasks() {
+    size_t left;
+    {
+        std::scoped_lock l(m_tasks.mtx);
+        // This should be reworked to ids if there will be cancellable tasks.
+        left = m_tasks.val.queue.size();
+    }
     do {
         std::function<void()> task;
         {
@@ -117,9 +123,13 @@ void ag::event_loop::execute_tasks() {
             if (m_tasks.val.queue.empty()) {
                 m_tasks.val.scheduled = false;
                 break;
+            } else if (left == 0) {
+                event_base_once(m_base.get(), -1, EV_TIMEOUT, run_tasks_queue, this, nullptr);
+                break;
             }
             task = std::move(m_tasks.val.queue.front());
             m_tasks.val.queue.pop_front();
+            left--;
         }
         task();
     } while (true);

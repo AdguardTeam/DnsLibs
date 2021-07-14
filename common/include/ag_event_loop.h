@@ -77,6 +77,8 @@ private:
     void run();
 
     void execute_tasks();
+
+    static void run_tasks_queue(int, short, void *);
 };
 
 } // namespace ag
