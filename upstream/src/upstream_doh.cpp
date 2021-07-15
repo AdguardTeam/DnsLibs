@@ -452,6 +452,11 @@ void dns_over_https::read_messages() {
             if (response_code < 200 || response_code >= 300) {
                 handle->error = AG_FMT("Got bad response status: {}", response_code);
             }
+            char *content_type = nullptr;
+            curl_easy_getinfo(message->easy_handle, CURLINFO_CONTENT_TYPE, &content_type);
+            if (content_type == nullptr || 0 != strcmp(content_type, "application/dns-message")) {
+                handle->error = AG_FMT("Got bad response content_type: {}", content_type ? content_type : "(null)");
+            }
         }
 
         handle->cleanup_request();
