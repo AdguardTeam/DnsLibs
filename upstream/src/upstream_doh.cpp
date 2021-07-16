@@ -106,6 +106,18 @@ static CURLSH *get_curl_share() {
     return curl_share.get();
 }
 
+static int verbose_callback(CURL *, curl_infotype type, char *data, size_t size, void *arg) {
+    dns_over_https::query_handle *h = (dns_over_https::query_handle *)arg;
+    if (type == CURLINFO_TEXT) {
+        dbglog(*h->log, "CURL id=0x{:04x}: {}", h->request_id, std::string_view{data, size > 0 ? size - 1 : 0});
+    } else if (type == CURLINFO_HEADER_IN) {
+        dbglog(*h->log, "CURL id=0x{:04x}: < {}", h->request_id, std::string_view{data, size > 0 ? size - 1 : 0});
+    } else if (type == CURLINFO_HEADER_OUT) {
+        dbglog(*h->log, "CURL id=0x{:04x}: > {}", h->request_id, std::string_view{data, size > 0 ? size - 1 : 0});
+    }
+    return 0;
+}
+
 dns_over_https::query_handle::CURL_ptr dns_over_https::query_handle::create_curl_handle() {
     CURL_ptr curl_ptr{ curl_easy_init() };
     if (curl_ptr == nullptr) {
@@ -140,6 +152,9 @@ dns_over_https::query_handle::CURL_ptr dns_over_https::query_handle::create_curl
             || CURLE_OK != (e = curl_easy_setopt(curl, CURLOPT_SSL_ENABLE_ALPN, true))
             || CURLE_OK != (e = curl_easy_setopt(curl, CURLOPT_OPENSOCKETFUNCTION, curl_opensocket))
             || CURLE_OK != (e = curl_easy_setopt(curl, CURLOPT_OPENSOCKETDATA, upstream))
+            || CURLE_OK != (e = curl_easy_setopt(curl, CURLOPT_DEBUGFUNCTION, verbose_callback))
+            || CURLE_OK != (e = curl_easy_setopt(curl, CURLOPT_DEBUGDATA, this))
+            || CURLE_OK != (e = curl_easy_setopt(curl, CURLOPT_VERBOSE, (long)((*log)->level() <= SPDLOG_LEVEL_DEBUG)))
             || CURLE_OK != (e = curl_easy_setopt(curl, CURLOPT_SHARE, get_curl_share()))
             || (upstream->resolved != nullptr
                 && CURLE_OK != (e = curl_easy_setopt(curl, CURLOPT_RESOLVE, upstream->resolved.get())))) {
@@ -456,6 +471,9 @@ void dns_over_https::read_messages() {
             curl_easy_getinfo(message->easy_handle, CURLINFO_CONTENT_TYPE, &content_type);
             if (content_type == nullptr || 0 != strcmp(content_type, "application/dns-message")) {
                 handle->error = AG_FMT("Got bad response content_type: {}", content_type ? content_type : "(null)");
+            }
+            if (handle->response.empty()) {
+                handle->error = "Got empty response";
             }
         }
 
