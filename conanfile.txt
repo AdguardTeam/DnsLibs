@@ -4,7 +4,7 @@ gtest/1.10.0
 magic_enum/0.7.2
 pcre2/10.37@AdguardTeam/DnsLibs
 libsodium/1.0.18@AdguardTeam/DnsLibs
-libcurl/7.76.1@AdguardTeam/DnsLibs
+libcurl/7.78.0@AdguardTeam/DnsLibs
 libevent/2.1.11@AdguardTeam/DnsLibs
 libuv/1.41.0@AdguardTeam/DnsLibs
 klib/2021-04-06@AdguardTeam/DnsLibs

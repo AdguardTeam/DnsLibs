@@ -15,7 +15,7 @@ diff --git a/CMakeLists.txt b/CMakeLists.txt
 index 3a20028ba..8753229e8 100644
 --- a/CMakeLists.txt
 +++ b/CMakeLists.txt
-@@ -451,6 +451,9 @@ if(USE_NGHTTP2)
+@@ -467,6 +467,9 @@ if(USE_NGHTTP2)
    find_package(NGHTTP2 REQUIRED)
    include_directories(${NGHTTP2_INCLUDE_DIRS})
    list(APPEND CURL_LIBS ${NGHTTP2_LIBRARIES})

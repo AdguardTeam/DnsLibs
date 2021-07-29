@@ -88,7 +88,7 @@ endif ()
 target_link_libraries(AGDnsProxy dnsproxy resolv)
 
 if (APPLE)
-    target_link_libraries(AGDnsProxy "-framework Foundation" "-framework CoreFoundation" "-framework NetworkExtension")
+    target_link_libraries(AGDnsProxy "-framework Foundation" "-framework CoreFoundation" "-framework NetworkExtension" "-framework SystemConfiguration")
 endif ()
 
 enable_testing()
@@ -103,7 +103,7 @@ if("${TARGET_OS}" STREQUAL "macos")
     target_link_libraries(test_AGDnsProxy
             "-F${CMAKE_CURRENT_BINARY_DIR}"
             "-Wl,-rpath,${CMAKE_CURRENT_BINARY_DIR}"
-            "-framework AGDnsProxy -framework Foundation")
+            "-framework AGDnsProxy -framework Foundation -framework SystemConfiguration")
     add_dependencies(test_AGDnsProxy AGDnsProxy)
     add_dependencies(tests test_AGDnsProxy)
     add_test(AGDnsProxyTest test_AGDnsProxy)
@@ -114,7 +114,7 @@ if("${TARGET_OS}" STREQUAL "macos")
     target_link_libraries(test_AGDnsStamp
             "-F${CMAKE_CURRENT_BINARY_DIR}"
             "-Wl,-rpath,${CMAKE_CURRENT_BINARY_DIR}"
-            "-framework AGDnsProxy -framework Foundation")
+            "-framework AGDnsProxy -framework Foundation -framework SystemConfiguration")
     add_dependencies(test_AGDnsStamp AGDnsProxy)
     add_dependencies(tests test_AGDnsStamp)
     add_test(AGDnsStampTest test_AGDnsStamp)
@@ -126,7 +126,7 @@ if("${TARGET_OS}" STREQUAL "macos")
     target_link_libraries(test_BindHelper
             "-F${CMAKE_CURRENT_BINARY_DIR}"
             "-Wl,-rpath,${CMAKE_CURRENT_BINARY_DIR}"
-            "-framework AGDnsProxy -framework Foundation")
+            "-framework AGDnsProxy -framework Foundation -framework SystemConfiguration")
 
     add_executable(test_ListenerInitError EXCLUDE_FROM_ALL test_ListenerInitError.mm)
     target_compile_options(test_ListenerInitError PRIVATE "-fobjc-arc")
@@ -135,5 +135,5 @@ if("${TARGET_OS}" STREQUAL "macos")
     target_link_libraries(test_ListenerInitError
             "-F${CMAKE_CURRENT_BINARY_DIR}"
             "-Wl,-rpath,${CMAKE_CURRENT_BINARY_DIR}"
-            "-framework AGDnsProxy -framework Foundation")
+            "-framework AGDnsProxy -framework Foundation -framework SystemConfiguration")
 endif()
