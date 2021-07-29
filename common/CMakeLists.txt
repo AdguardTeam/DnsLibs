@@ -19,6 +19,7 @@ set(SRCS
         ${SRC_DIR}/route_resolver.cpp
         ${SRC_DIR}/event_loop.cpp
         ${SRC_DIR}/base64.cpp
+        ${SRC_DIR}/deferred_arg.cpp
     )
 
 add_library(dnslibs_common STATIC EXCLUDE_FROM_ALL ${SRCS})

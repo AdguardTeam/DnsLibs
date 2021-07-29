@@ -102,7 +102,7 @@ std::optional<socket::error> tcp_stream::set_callbacks(struct callbacks cbx) {
             (cbx.on_read != nullptr) ? on_read : nullptr,
             nullptr,
             (cbx.on_close != nullptr) ? on_event : nullptr,
-            this);
+            deferred_arg());
 
     return std::nullopt;
 }
@@ -160,7 +160,10 @@ static err_string get_ssl_errors(bufferevent *bev) {
 }
 
 void tcp_stream::on_event(bufferevent *bev, short what, void *arg) {
-    auto *self = (tcp_stream *)arg;
+    auto *self = (tcp_stream *)deferred_arg_to_ptr(arg);
+    if (!self) {
+        return;
+    }
 
     if (what & BEV_EVENT_CONNECTED) {
         log_stream(self, trace, "Connected");
@@ -198,7 +201,10 @@ void tcp_stream::on_event(bufferevent *bev, short what, void *arg) {
 }
 
 void tcp_stream::on_read(bufferevent *bev, void *arg) {
-    auto *self = (tcp_stream *) arg;
+    auto *self = (tcp_stream *)deferred_arg_to_ptr(arg);
+    if (!self) {
+        return;
+    }
 
     evbuffer *buffer = bufferevent_get_input(bev);
     auto available_to_read = (ssize_t)evbuffer_get_length(buffer);

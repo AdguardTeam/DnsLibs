@@ -5,6 +5,7 @@
 #include <ag_net_utils.h>
 #include <ag_logger.h>
 #include <ag_socket.h>
+#include <ag_deferred_arg.h>
 #include <event2/event.h>
 #include <optional>
 #include <memory>
@@ -14,7 +15,7 @@
 namespace ag {
 
 
-class udp_socket : public socket {
+class udp_socket : public socket, public enable_deferred_arg<udp_socket> {
 public:
     udp_socket(socket_factory::socket_parameters p, prepare_fd_callback prepare_fd);
     ~udp_socket() override;

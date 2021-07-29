@@ -5,12 +5,13 @@
 #include <ag_defs.h>
 #include <ag_net_utils.h>
 #include <ag_socket.h>
+#include <ag_deferred_arg.h>
 #include <event2/bufferevent.h>
 
 
 namespace ag {
 
-class tcp_stream : public socket {
+class tcp_stream : public socket, public enable_deferred_arg<tcp_stream> {
 public:
     tcp_stream(socket_factory::socket_parameters p, prepare_fd_callback prepare_fd);
     ~tcp_stream() override = default;

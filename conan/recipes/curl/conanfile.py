@@ -63,6 +63,9 @@ class CurlConan(ConanFile):
         if self.settings.os == "Windows":
             self.cpp_info.system_libs = ["crypt32"]
             self.cpp_info.libs = ["libcurl"]
+        elif self.settings.os == "Macos":
+            self.cpp_info.system_libs = ["-Wl,-framework,SystemConfiguration"]
+            self.cpp_info.libs = ["curl"]
         else:
             self.cpp_info.libs = ["curl"]
 

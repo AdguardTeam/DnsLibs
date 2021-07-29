@@ -54,7 +54,7 @@ std::optional<socket::error> udp_socket::connect(connect_parameters params) {
     }
 
     this->socket_event.reset(
-            event_new(params.loop->c_base(), fd, EV_READ | EV_PERSIST, on_event, this));
+            event_new(params.loop->c_base(), fd, EV_READ | EV_PERSIST, on_event, deferred_arg()));
     if (this->socket_event == nullptr) {
         result = { -1, "Failed to create event" };
         goto error;
@@ -147,7 +147,10 @@ struct udp_socket::callbacks udp_socket::get_callbacks() const {
 }
 
 void udp_socket::on_event(evutil_socket_t fd, short what, void *arg) {
-    auto *self = (udp_socket *)arg;
+    auto *self = (udp_socket *)deferred_arg_to_ptr(arg);
+    if (!self) {
+        return;
+    }
 
     if (what & EV_READ) {
         uint8_t read_buffer[65 * 1024];
