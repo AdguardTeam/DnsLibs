@@ -28,8 +28,8 @@ class ag::dns_framed_connection : public connection,
 public:
     static constexpr std::string_view UNEXPECTED_EOF = "Unexpected EOF";
 
-    dns_framed_connection(dns_framed_pool *pool, uint32_t id, const upstream *upstream,
-            std::unique_ptr<SSL, ftor<&SSL_free>> ssl, const socket_address &address);
+    dns_framed_connection(dns_framed_pool *pool, uint32_t id, const upstream *upstream, const socket_address &address);
+    void start(std::unique_ptr<SSL, ftor<&SSL_free>> ssl, milliseconds timeout);
 
     ~dns_framed_connection() override;
 
@@ -80,7 +80,10 @@ ag::err_string ag::dns_framed_connection::wait_connect_result(int request_id, st
                     m_no_requests_cond.notify_one();
                 }
             });
-    m_requests[request_id] = std::nullopt;
+    auto &new_request = m_requests[request_id];
+    if (m_closed) {
+        new_request = read_result{.error = "Already closed"};
+    }
 
     bool have_result = m_cond.wait_until(l, steady_clock::now() + timeout,
             [this] () { return m_closed || m_connected; });
@@ -126,20 +129,25 @@ ag::err_string ag::dns_framed_connection::write(int request_id, uint8_view buf) 
 }
 
 ag::dns_framed_connection::dns_framed_connection(dns_framed_pool *pool, uint32_t id,
-        const upstream *upstream, std::unique_ptr<SSL, ftor<&SSL_free>> ssl, const socket_address &address)
+        const upstream *upstream, const socket_address &address)
     : connection(address)
     , m_log(create_logger(__func__))
     , m_id(id)
     , m_pool(pool)
     , m_stream(upstream->make_socket(utils::TP_TCP))
 {
-    auto err = m_stream->connect({ m_pool->m_loop.get(), address,
-            { on_connected, on_read, on_close, this },
-            upstream->options().timeout, std::move(ssl) });
-    if (err.has_value()) {
-        log_conn(m_log, err, this, "Failed to start connect: {}", err->description);
-        m_pool->m_loop->submit([this] () { on_close(this, { { -1, "Failed to start connect" } }); });
-    }
+}
+
+void ag::dns_framed_connection::start(std::unique_ptr<SSL, ftor<&SSL_free>> ssl, std::chrono::milliseconds timeout) {
+    m_pool->m_loop->submit([this, ssl = ssl.release(), timeout] () mutable {
+        auto err = m_stream->connect({ m_pool->m_loop.get(), this->address,
+                                       { on_connected, on_read, on_close, this },
+                                       timeout, std::unique_ptr<SSL, ftor<&SSL_free>>(ssl) });
+        if (err.has_value()) {
+            log_conn(m_log, err, this, "Failed to start connect: {}", err->description);
+            on_close(this, { { -1, "Failed to start connect" } });
+        }
+    });
 }
 
 ag::dns_framed_connection::~dns_framed_connection() {
@@ -292,7 +300,9 @@ void ag::dns_framed_pool::add_pending_connection(const connection_ptr &ptr) {
 
 ag::connection_ptr ag::dns_framed_pool::create_connection(std::unique_ptr<SSL, ftor<&SSL_free>> ssl, const socket_address &address) {
     static std::atomic_uint32_t conn_id{0};
-    return std::make_shared<dns_framed_connection>(this, conn_id++, m_upstream, std::move(ssl), address);
+    auto ptr = std::make_shared<dns_framed_connection>(this, conn_id++, m_upstream, address);
+    ptr->start(std::move(ssl), m_upstream->options().timeout);
+    return ptr;
 }
 
 // A connection should be deleted on the event loop, but some events may raise on already
@@ -300,12 +310,16 @@ ag::connection_ptr ag::dns_framed_pool::create_connection(std::unique_ptr<SSL, f
 // delete event is called.
 void ag::dns_framed_pool::close_connection(const connection_ptr &conn) {
     dns_framed_connection *framed_conn = (dns_framed_connection *)conn.get();
-    framed_conn->m_closed = true;
-    for (auto &[_, result] : framed_conn->m_requests) {
-        // do not assign error, if we already got response
-        if (!result.has_value()) {
-            result = { {}, { "Connection has been forcibly closed" } };
+    {
+        std::scoped_lock l(framed_conn->m_mutex);
+        framed_conn->m_closed = true;
+        for (auto &[_, result] : framed_conn->m_requests) {
+            // do not assign error, if we already got response
+            if (!result.has_value()) {
+                result = { {}, { "Connection has been forcibly closed" } };
+            }
         }
+        framed_conn->m_cond.notify_all();
     }
     m_closing_connections.emplace(conn);
 
