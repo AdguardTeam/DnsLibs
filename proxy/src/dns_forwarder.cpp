@@ -113,7 +113,7 @@ make_fallback_filter_params(const std::vector<std::string> &fallback_domains, ag
 }
 
 // info not nullptr when logging incoming packet, nullptr for outgoing packets
-static void log_packet(const logger &log, const ldns_pkt *packet, const char *pkt_name,
+static void log_packet(const logger &log, const ldns_pkt *packet, std::string_view pkt_name,
                        const dns_message_info *info = nullptr) {
     if (!log->should_log((spdlog::level::level_enum)DEBUG)) {
         return;
@@ -1005,7 +1005,7 @@ std::vector<uint8_t> dns_forwarder::handle_message_internal(uint8_view message, 
     }
 
     ldns_pkt_ptr req_holder = ldns_pkt_ptr(request);
-    log_packet(log, request, "Client dns request", info);
+    log_packet(log, request, "Client request", info);
 
     const ldns_rr *question = ldns_rr_list_rr(ldns_pkt_question(request), 0);
     if (question == nullptr) {
@@ -1049,9 +1049,9 @@ std::vector<uint8_t> dns_forwarder::handle_message_internal(uint8_view message, 
         }
         log_packet(log, cached.response.get(), "Cached response");
         event.cache_hit = true;
-        std::vector<uint8_t> raw_response = transform_response_to_raw_data(cached.response.get());
         truncate_response(cached.response.get(), request, info);
         finalize_processed_event(event, request, cached.response.get(), nullptr, cached.upstream_id, std::nullopt);
+        std::vector<uint8_t> raw_response = transform_response_to_raw_data(cached.response.get());
         return raw_response;
     }
 
@@ -1106,7 +1106,7 @@ cached_response_expired:
         return raw_response;
     }
 
-    log_packet(log, response.get(), AG_FMT("Upstream ({}) dns response", selected_upstream->options().address).c_str());
+    log_packet(log, response.get(), AG_FMT("Upstream ({}) response", selected_upstream->options().address).c_str());
 
     event.dnssec = finalize_dnssec_log_logic(response.get(), is_our_do_bit);
 
@@ -1536,13 +1536,11 @@ std::vector<uint8_t> dns_forwarder::handle_message(uint8_view message, const dns
 
 // Truncate response, if needed
 void dns_forwarder::truncate_response(ldns_pkt *response, const ldns_pkt *request, const dns_message_info *info) {
-    if (!info || info->proto != utils::TP_UDP) {
-        dbglog_f(log, "Truncation is not needed: incoming protocol is not UDP");
-        return;
-    }
-    size_t max_size = ldns_pkt_edns(request) ? ldns_pkt_edns_udp_size(request) : 512;
-    tracelog(log, "Truncating to not more than {} octets (edns: {})", max_size, ldns_pkt_edns(request));
-    if (ag::ldns_pkt_truncate(response, max_size)) {
-        log_packet(log, response, "DNS response is truncated");
+    if (info && info->proto == utils::TP_UDP) {
+        size_t max_size = ldns_pkt_edns(request) ? ldns_pkt_edns_udp_size(request) : 512;
+        bool truncated = ag::ldns_pkt_truncate(response, max_size);
+        if (truncated && log->should_log((spdlog::level::level_enum) DEBUG)) {
+            log_packet(log, response, AG_FMT("Truncated response (edns: {}, max size: {})", ldns_pkt_edns(request), max_size));
+        }
     }
 }
