@@ -184,14 +184,12 @@ else
     rm "${BUILD_DIR}"/framework-iphonesimulator/AGDnsProxy.framework/AGDnsProxy
     lipo -create -output "${BUILD_DIR}"/framework-iphonesimulator{,-x86_64,-arm64}/AGDnsProxy.framework/AGDnsProxy
 
-    xcodebuild -create-xcframework -framework "${BUILD_DIR}/framework-macos/${TARGET_NAME}.framework" \
-        -framework "${BUILD_DIR}/framework-ios-arm64/${TARGET_NAME}.framework" \
-        -framework "${BUILD_DIR}/framework-iphonesimulator/${TARGET_NAME}.framework" \
-        -output "${BUILD_DIR}/${TARGET_NAME}.xcframework"
-
-    mkdir -p ${BUILD_DIR}/${TARGET_NAME}.dSYMs
-    for fw in ${BUILD_DIR}/${TARGET_NAME}.xcframework/*/${TARGET_NAME}.framework; do
-        ARCH_AS_IN_XCF=`echo "${fw}" | sed -ne 's|.*/\([^/]*\)/[^/]*.framework$|\1|p'`
-        dsymutil -o "${BUILD_DIR}/${TARGET_NAME}.dSYMs/${TARGET_NAME}.framework.${ARCH_AS_IN_XCF}.dSYM" "${fw}/${TARGET_NAME}"
+    args=()
+    for final_arch in macos ios-arm64 iphonesimulator; do
+        dsymutil -o "${BUILD_DIR}/framework-${final_arch}/${TARGET_NAME}.framework.dSYM" "${BUILD_DIR}/framework-${final_arch}/${TARGET_NAME}.framework/${TARGET_NAME}"
+        args=(${args[@]} -framework "${BUILD_DIR}/framework-${final_arch}/${TARGET_NAME}.framework")
+        args=(${args[@]} -debug-symbols "${BUILD_DIR}/framework-${final_arch}/${TARGET_NAME}.framework.dSYM")
     done
+
+    xcodebuild -create-xcframework ${args[@]} -output "${BUILD_DIR}/${TARGET_NAME}.xcframework"
 fi
