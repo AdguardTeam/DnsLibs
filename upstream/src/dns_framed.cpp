@@ -140,6 +140,7 @@ ag::dns_framed_connection::dns_framed_connection(dns_framed_pool *pool, uint32_t
 
 void ag::dns_framed_connection::start(std::unique_ptr<SSL, ftor<&SSL_free>> ssl, std::chrono::milliseconds timeout) {
     m_pool->m_loop->submit([this, ssl = ssl.release(), timeout] () mutable {
+        std::scoped_lock l(m_mutex);
         auto err = m_stream->connect({ m_pool->m_loop.get(), this->address,
                                        { on_connected, on_read, on_close, this },
                                        timeout, std::unique_ptr<SSL, ftor<&SSL_free>>(ssl) });
@@ -309,9 +310,11 @@ ag::connection_ptr ag::dns_framed_pool::create_connection(std::unique_ptr<SSL, f
 // scheduled to delete one. That means that we should increment the reference counter until
 // delete event is called.
 void ag::dns_framed_pool::close_connection(const connection_ptr &conn) {
-    dns_framed_connection *framed_conn = (dns_framed_connection *)conn.get();
+    auto *framed_conn = (dns_framed_connection *)conn.get();
+
     {
         std::scoped_lock l(framed_conn->m_mutex);
+
         framed_conn->m_closed = true;
         for (auto &[_, result] : framed_conn->m_requests) {
             // do not assign error, if we already got response
@@ -319,12 +322,13 @@ void ag::dns_framed_pool::close_connection(const connection_ptr &conn) {
                 result = { {}, { "Connection has been forcibly closed" } };
             }
         }
-        framed_conn->m_cond.notify_all();
+
+        [[maybe_unused]] auto err = framed_conn->m_stream->set_callbacks({});
     }
+    framed_conn->m_cond.notify_all();
+
+    assert(!m_mutex.try_lock());
     m_closing_connections.emplace(conn);
-
-    [[maybe_unused]] auto err = framed_conn->m_stream->set_callbacks({});
-
     m_loop->submit([this, c = conn] () {
         std::scoped_lock l(m_mutex);
         m_closing_connections.erase(c);
