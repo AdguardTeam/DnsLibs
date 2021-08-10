@@ -54,7 +54,7 @@ namespace ag::file {
      * @param[in]  flags  file mode flags
      * @return     Handle of file
      */
-    handle open(std::string_view path, int flags);
+    handle open(const std::string &path, int flags);
 
     /**
      * @brief      Close file
@@ -120,6 +120,20 @@ namespace ag::file {
      * @return     File size (<0 in case of error)
      */
     int get_size(handle f);
+
+    /**
+     * @brief     Get time of last file modification
+     * @param[in] path    Path to file
+     * @return    Time of last modification. Measured in seconds since 1.01.1970 (0 in case error)
+     */
+    time_t get_modification_time(const std::string &path);
+
+    /**
+     * @brief     Get time of last file modification
+     * @param[in] f     file handler
+     * @return    Time of last modification. Measured in seconds since 1.01.1970 (0 in case error)
+     */
+    time_t get_modification_time(handle f);
 
     /**
      * Function to be called from `for_each_line`

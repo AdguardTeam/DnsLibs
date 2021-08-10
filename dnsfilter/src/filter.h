@@ -5,6 +5,7 @@
 #include <memory>
 #include <vector>
 #include <string>
+#include <shared_mutex>
 #include <dnsfilter.h>
 #include "rule_utils.h"
 
@@ -45,8 +46,15 @@ public:
     /**
      * Match domain against rules
      * @param      ctx   match context
+     * @return     true if match success, false if filter is outdated
      */
-    void match(match_context &ctx);
+    bool match(match_context &ctx);
+
+    /**
+     * Update filter
+     * @param   mem_limit    engine memory limit
+     */
+    void update(std::atomic_size_t &mem_limit);
 
     // Filter parameters
     ag::dnsfilter::filter_params params;

@@ -30,7 +30,7 @@ protected:
     }
 
     static void add_rule_in_filter(std::string_view filter, std::string_view rule) {
-        ag::file::handle file = ag::file::open(filter, ag::file::WRONLY);
+        ag::file::handle file = ag::file::open(std::string(filter), ag::file::WRONLY);
         ASSERT_TRUE(ag::file::is_valid(file)) << ag::sys::error_string(ag::sys::error_code());
         ASSERT_TRUE(ag::file::get_size(file) >= 0) << ag::sys::error_string(ag::sys::error_code());
         ag::file::set_position(file, ag::file::get_size(file));
@@ -740,4 +740,44 @@ TEST_F(dnsfilter_test, dnstype_modifier) {
 
         filter.destroy(handle);
     }
+}
+
+TEST_F(dnsfilter_test, file_based_filter_auto_update) {
+    const std::string rule1 = "||example.com^\n";
+    const std::string rule2 = "||yandex.ru^\n";
+    const std::string file_name = "file_based_filter_auto_update.txt";
+
+    std::remove(file_name.c_str());
+    ag::file::handle fd = ag::file::open(file_name, ag::file::CREAT | ag::file::WRONLY);
+    ag::file::write(fd, rule1.c_str(), rule1.size());
+    ag::file::close(fd);
+
+    ag::dnsfilter::engine_params params = {{{5, file_name, false}}};
+    auto[handle, err_or_warn] = filter.create(params);
+    ASSERT_TRUE(handle) << *err_or_warn;
+
+    std::vector<ag::dnsfilter::rule> rules = filter.match(handle, {"example.com", LDNS_RR_TYPE_A});
+    ASSERT_EQ(rules.size(), 1U);
+
+    fd = ag::file::open(file_name, ag::file::RDWR);
+
+    //need wait at least 1 second after file create
+    std::this_thread::sleep_for(std::chrono::seconds(1));
+
+    ag::file::set_position(fd, 0);
+    ag::file::write(fd, rule2.c_str(), rule2.size());
+    ag::file::write(fd, rule1.c_str(), rule1.size());
+    ag::file::close(fd);
+
+    rules.clear();
+    rules = filter.match(handle, {"example.com", LDNS_RR_TYPE_A});
+    ASSERT_EQ(rules.size(), 1U);
+    ASSERT_EQ(rules[0].text + "\n", rule1);
+
+    rules.clear();
+    rules = filter.match(handle, {"yandex.ru", LDNS_RR_TYPE_A});
+    ASSERT_EQ(rules.size(), 1U);
+    ASSERT_EQ(rules[0].text + "\n", rule2);
+
+    std::remove(file_name.c_str());
 }

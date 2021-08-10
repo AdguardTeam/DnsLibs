@@ -1,12 +1,12 @@
 #include <algorithm>
 #include <dnsfilter.h>
 #include <ag_logger.h>
+#include <ag_file.h>
 #include "filter.h"
 #include "rule_utils.h"
 #include <ag_utils.h>
 #include <unordered_set>
-#include <algorithm>
-
+#include <atomic>
 using namespace ag;
 
 class engine {
@@ -19,7 +19,7 @@ public:
      * @return {true, optional warning} or {false, error description}
      */
     std::pair<bool, err_string> init(const dnsfilter::engine_params &p) {
-        size_t mem_limit = p.mem_limit;
+        mem_limit = p.mem_limit;
         std::string warnings;
         std::unordered_set<uint32_t> ids;
 
@@ -27,8 +27,8 @@ public:
         for (const dnsfilter::filter_params &fp : p.filters) {
             filter f = {};
             auto [res, f_mem] = f.load(fp, mem_limit);
+            mem_limit -= f_mem;
             if (res == filter::LR_OK) {
-                mem_limit -= f_mem;
                 this->filters.emplace_back(std::move(f));
                 infolog(log, "Filter {} added successfully", fp.id);
             } else if (res == filter::LR_ERROR) {
@@ -53,10 +53,61 @@ public:
         return {true, std::nullopt};
     }
 
+    /**
+     * Update file filters
+     */
+    void update_filters(std::vector<filter *> &f) {
+        std::unique_lock write_lock(filters_mtx);
+        for (auto *filter : f) {
+            filter->update(mem_limit);
+        }
+    }
+
+    std::atomic_size_t mem_limit;
     ag::logger log;
     std::vector<filter> filters;
+    std::shared_mutex filters_mtx;
 };
 
+/**
+* Match domain against added rules. Return vector of outdated filters.
+* @param obj    filtering engine handle
+* @param param  see `match_param`
+* @return       vector of pointer to the outdated filters
+*/
+static std::vector<filter *> inner_match(dnsfilter::handle obj, dnsfilter::match_param param, filter::match_context &context) {
+    engine *e = (engine *)obj;
+
+    std::shared_lock read_lock(e->filters_mtx);
+    std::vector<filter *> outdated_filters;
+
+    for (filter &f : e->filters) {
+        if (!f.match(context)) {
+            outdated_filters.push_back(&f);
+        }
+    }
+    return outdated_filters;
+}
+
+/**
+ * Match domain against with vector of filters
+ * @param obj              filtering engine handle
+ * @param param            see `match_param`
+ * @param context          context of domain match
+ * @param outdated_filters vector of pointer to the outdated filters
+ */
+static void inner_match_outdated(dnsfilter::handle obj, dnsfilter::match_param param,
+                          filter::match_context &context, std::vector<filter *> &outdated_filters) {
+    engine *e = (engine *)obj;
+    std::shared_lock read_lock(e->filters_mtx);
+
+    for (filter *f : outdated_filters) {
+        if (!f->match(context)) {
+            warnlog(e->log, "Filter {} outdated immediately after update", f->params.id);
+        }
+    }
+    outdated_filters.clear();
+}
 
 dnsfilter::dnsfilter() = default;
 
@@ -87,16 +138,22 @@ std::vector<dnsfilter::rule> dnsfilter::match(handle obj, match_param param) {
 
     filter::match_context context = filter::create_match_context(param);
 
-    for (filter &f : e->filters) {
-        f.match(context);
+    auto outdated_filters = inner_match(obj, param, context);
+
+    if (!outdated_filters.empty()) {
+        e->update_filters(outdated_filters);
+        inner_match_outdated(obj, param, context, outdated_filters);
     }
 
     if (!context.reverse_lookup_fqdn.empty()) {
         context.host = std::move(context.reverse_lookup_fqdn);
         context.subdomains = { context.host };
 
-        for (filter &f : e->filters) {
-            f.match(context);
+        outdated_filters = inner_match(obj, param, context);
+
+        if (!outdated_filters.empty()) {
+            e->update_filters(outdated_filters);
+            inner_match_outdated(obj, param, context, outdated_filters);
         }
     }
 

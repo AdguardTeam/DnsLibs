@@ -75,7 +75,7 @@ static bool add_domain(uint32_t idx, std::string_view line, void *arg) {
 
 
 static int parse_domains_base(std::string_view path) {
-    ag::file::handle file = ag::file::open(path, ag::file::RDONLY);
+    ag::file::handle file = ag::file::open(std::string(path), ag::file::RDONLY);
     if (!ag::file::is_valid(file)) {
         SPDLOG_ERROR("failed to read file: {} ({})",
             path, ag::sys::error_string(ag::sys::error_code()));

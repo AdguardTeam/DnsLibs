@@ -33,6 +33,7 @@ struct match_arg {
     filter::match_context &ctx;
     filter &f;
     ag::file::handle file;
+    bool outdated;
 };
 
 
@@ -73,6 +74,7 @@ public:
         , domains_table(kh_init(hash_to_indexes))
         , shortcuts_table(kh_init(hash_to_indexes))
         , badfilter_table(kh_init(hash_to_unique_index))
+        , approx_mem(0)
     {}
 
     ~impl() {
@@ -93,6 +95,7 @@ public:
         load_result result; // last rule load result
     };
 
+    static bool check_filter_outdated(const filter &filter);
     static bool load_line(uint32_t file_idx, std::string_view line, void *arg);
     static bool match_against_line(match_arg &match, std::string_view line);
     static void match_by_file_position(match_arg &match, size_t idx);
@@ -135,6 +138,8 @@ public:
     // Contains indexes of the badfilter rules that could be found by rule text without
     // `badfilter` modifier
     kh_hash_to_unique_index_t *badfilter_table;
+
+    size_t approx_mem;
 };
 
 filter::filter()
@@ -237,6 +242,17 @@ static bool count_rules(uint32_t, std::string_view line, void *arg) {
     }
 
     return true;
+}
+
+bool filter::impl::check_filter_outdated(const filter &filter) {
+    if (filter.params.in_memory) {
+        return false;
+    }
+    time_t file_mtime = ag::file::get_modification_time(filter.params.data.data());
+    if (!file_mtime || file_mtime != filter.params.mtime) {
+        return true;
+    }
+    return false;
 }
 
 #define CHECK_MEM() do {                                                  \
@@ -377,7 +393,7 @@ std::pair<filter::load_result, size_t> filter::load(const ag::dnsfilter::filter_
     this->pimpl->log = ag::create_logger(logger_name);
 
     if (!p.in_memory) {
-        fd = ag::file::open(p.data.data(), ag::file::RDONLY);
+        fd = ag::file::open(p.data, ag::file::RDONLY);
         if (!ag::file::is_valid(fd)) {
             errlog(this->pimpl->log, "filter::load failed to read file: {} ({})",
                    p.data, ag::sys::error_string(ag::sys::error_code()));
@@ -415,6 +431,10 @@ std::pair<filter::load_result, size_t> filter::load(const ag::dnsfilter::filter_
     if (rc == 0) {
         this->params = p;
     }
+    params.mtime = ag::file::get_modification_time(p.data.data());
+    pimpl->approx_mem = load_line_arg.approx_mem;
+
+    tracelog(pimpl->log, "Last modification time: {}", params.mtime);
 
     kh_resize(hash_to_unique_index, f->unique_domains_table, kh_size(f->unique_domains_table));
     kh_resize(hash_to_indexes, f->domains_table, kh_size(f->domains_table));
@@ -581,6 +601,11 @@ void filter::impl::match_by_file_position(match_arg &match, size_t idx) {
     std::string_view line;
 
     if (!match.f.params.in_memory) {
+        if (match.outdated || check_filter_outdated(match.f)) {
+            match.outdated = true;
+            return;
+        }
+
         if (!ag::file::is_valid(match.file)) {
             match.file = ag::file::open(match.f.params.data, ag::file::RDONLY);
             if (!ag::file::is_valid(match.file)) {
@@ -613,6 +638,9 @@ void filter::impl::match_by_file_position(match_arg &match, size_t idx) {
 }
 
 void filter::impl::search_by_domains(match_arg &match) const {
+    if (match.outdated) {
+        return;
+    }
     for (const std::string_view &domain : match.ctx.subdomains) {
         uint32_t hash = ag::utils::hash(domain);
         khiter_t iter = kh_get(hash_to_unique_index, this->unique_domains_table, hash);
@@ -633,7 +661,7 @@ void filter::impl::search_by_domains(match_arg &match) const {
 }
 
 void filter::impl::search_by_shortcuts(match_arg &match) const {
-    if (match.ctx.host.length() < SHORTCUT_LENGTH) {
+    if ((match.ctx.host.length() < SHORTCUT_LENGTH) || match.outdated) {
         return;
     }
 
@@ -650,6 +678,9 @@ void filter::impl::search_by_shortcuts(match_arg &match) const {
 }
 
 void filter::impl::search_in_leftovers(match_arg &match) const {
+    if (match.outdated) {
+        return;
+    }
     for (const leftover_entry &entry : this->leftovers_table) {
         const std::vector<std::string> &shortcuts = entry.shortcuts;
         if (!shortcuts.empty() && !match_shortcuts(shortcuts, match.ctx.host)) {
@@ -664,6 +695,9 @@ void filter::impl::search_in_leftovers(match_arg &match) const {
 }
 
 void filter::impl::search_badfilter_rules(match_arg &match) const {
+    if (match.outdated) {
+        return;
+    }
     for (const ag::dnsfilter::rule &rule : match.ctx.matched_rules) {
         khiter_t iter = kh_get(hash_to_unique_index, this->badfilter_table, ag::utils::hash(rule.text));
         if (iter != kh_end(this->badfilter_table)) {
@@ -672,8 +706,8 @@ void filter::impl::search_badfilter_rules(match_arg &match) const {
     }
 }
 
-void filter::match(match_context &ctx) {
-    match_arg m = { ctx, *this, ag::file::INVALID_HANDLE };
+bool filter::match(match_context &ctx) {
+    match_arg m = { ctx, *this, ag::file::INVALID_HANDLE, false };
 
     size_t matched_rule_pos = m.ctx.matched_rules.size();
 
@@ -687,6 +721,24 @@ void filter::match(match_context &ctx) {
     }
 
     ag::file::close(m.file);
+
+    return !m.outdated;
+}
+
+void filter::update(std::atomic_size_t &mem_limit) {
+    infolog(pimpl->log, "Updating {}...", params.data);
+    size_t freed_mem = pimpl->approx_mem;
+    pimpl.reset();
+    mem_limit += freed_mem;
+    pimpl = std::make_unique<impl>();
+    auto [res, mem] = load(params, mem_limit);
+    mem_limit -= mem;
+    if (res == LR_ERROR) {
+        errlog(pimpl->log, "Filter {} was not updated because of an error", params.id);
+    } else if (res == LR_MEM_LIMIT_REACHED) {
+        warnlog(pimpl->log, "Filter {} updated partially (reached memory limit)", params.id);
+    }
+    infolog(pimpl->log, "Update {} successful", params.id);
 }
 
 filter::match_context filter::create_match_context(ag::dnsfilter::match_param param) {
@@ -707,7 +759,7 @@ filter::match_context filter::create_match_context(ag::dnsfilter::match_param pa
 
     static constexpr std::string_view REVERSE_DNS_DOMAIN_SUFFIX =
             rule_utils::REVERSE_DNS_DOMAIN_SUFFIX
-            .substr(0, rule_utils::REVERSE_DNS_DOMAIN_SUFFIX.length() - 1);
+                    .substr(0, rule_utils::REVERSE_DNS_DOMAIN_SUFFIX.length() - 1);
     static constexpr std::string_view REVERSE_IPV6_DNS_DOMAIN_SUFFIX =
             rule_utils::REVERSE_IPV6_DNS_DOMAIN_SUFFIX
                     .substr(0, rule_utils::REVERSE_IPV6_DNS_DOMAIN_SUFFIX.length() - 1);

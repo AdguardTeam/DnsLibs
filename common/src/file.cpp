@@ -9,7 +9,7 @@ bool ag::file::is_valid(const handle f) {
     return f >= 0;
 }
 
-ag::file::handle ag::file::open(std::string_view path, int flags) {
+ag::file::handle ag::file::open(const std::string &path, int flags) {
     return ::open(path.data(), flags, 0666);
 }
 
@@ -44,13 +44,39 @@ int ag::file::get_size(const handle f) {
     return (0 == fstat(f, &stat)) ? stat.st_size : -1;
 }
 
+#if defined(__MACH__)
+
+time_t ag::file::get_modification_time(const std::string &path) {
+    struct stat st;
+    return (0 == stat(path.data(), &st)) ? st.st_mtimespec.tv_sec : 0;
+}
+
+time_t ag::file::get_modification_time(handle f) {
+    struct stat st;
+    return (0 == fstat(f, &st)) ? st.st_mtimespec.tv_sec : 0;
+}
+
+#else
+
+time_t ag::file::get_modification_time(const std::string &path) {
+    struct stat st;
+    return (0 == stat(path.data(), &st)) ? st.st_mtime : 0;
+}
+
+time_t ag::file::get_modification_time(handle f) {
+    struct stat st;
+    return (0 == fstat(f, &st)) ? st.st_mtime : 0;
+}
+
+#endif
+
 #elif defined(_WIN32)
 
 bool ag::file::is_valid(const handle f) {
     return f >= 0;
 }
 
-ag::file::handle ag::file::open(std::string_view path, int flags) {
+ag::file::handle ag::file::open(const std::string &path, int flags) {
     return ::_wopen(ag::utils::to_wstring(path).c_str(), flags | _O_BINARY, _S_IWRITE);
 }
 
@@ -87,6 +113,16 @@ int ag::file::set_position(handle f, size_t pos) {
 int ag::file::get_size(const handle f) {
     struct _stat stat;
     return (0 == _fstat(f, &stat)) ? stat.st_size : -1;
+}
+
+time_t ag::file::get_modification_time(const std::string &path) {
+    struct _stat st;
+    return (0 == _wstat(ag::utils::to_wstring(path).c_str(), &st)) ? st.st_mtime : 0;
+}
+
+time_t ag::file::get_modification_time(handle f) {
+    struct _stat st;
+    return (0 == _fstat(f, &st)) ? st.st_mtime : 0;
 }
 
 #else
