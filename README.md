@@ -3,16 +3,6 @@
 A DNS proxy library that supports all existing DNS protocols including `DNS-over-TLS`,
 `DNS-over-HTTPS`, `DNSCrypt` and `DNS-over-QUIC` (experimental).
 
-## After checkout
-
-```
-git submodule init
-git submodule update
-```
-In order to reset submodules you can use
-```
-git submodule update --force
-```
 ## Build instructions
 
 ### Native library

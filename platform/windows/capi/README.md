@@ -1,13 +1,8 @@
-# After checkout
-
-Initialize submodules: (Warning: `-f` will destroy your local changes in submodules)
-```
-git submodule init && git submodule update -f
-```
-
 # Building on Windows
 
-Prerequisites: LLVM, Visual Studio 2017/Build Tools, cmake, ninja, Go, perl, nasm, git.
+Prerequisites: Conan, LLVM, Visual Studio 2017/Build Tools, cmake, ninja, git.
+
+Please see how to use conan in the main README.
 
 * `rm -rf cmake-build-win && mkdir cmake-build-win && cd cmake-build-win`
 * `vcvars32` (important, run from Visual Studio developer console)
