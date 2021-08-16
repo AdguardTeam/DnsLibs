@@ -179,9 +179,10 @@ private:
     int init_quic_conn(const socket *connected_socket);
     int init_ssl_ctx();
     int init_ssl();
-    int on_write(socket *active_socket);
-    int write_streams(socket *active_socket);
-    int send_packet(socket *active_socket);
+    int on_write();
+    int write_streams();
+    int send_packet();
+    int send_packet(socket *active_socket, uint8_view data);
     int reinit();
     int handle_expiry();
     void ag_ngtcp2_settings_default(ngtcp2_settings &settings, ngtcp2_transport_params &params) const;
@@ -200,7 +201,7 @@ private:
     int on_key(ngtcp2_crypto_level level, const uint8_t *rx_secret,
                const uint8_t *tx_secret, size_t secretlen);
 
-    int connect_to_peers();
+    int connect_to_peers(const std::vector<ag::socket_address> &current_addresses);
 
     connection_state m_conn_state;
     std::atomic<state> m_state{STOP};
@@ -210,7 +211,6 @@ private:
     bootstrapper_ptr m_bootstrapper;
     ag::socket_address m_remote_addr_empty, m_local_addr;
     std::list<ag::socket_address> m_server_addresses;
-    std::vector<ag::socket_address> m_current_addresses;
     ngtcp2_callbacks m_callbacks{};
     size_t m_max_pktlen;
     uint32_t m_quic_version;

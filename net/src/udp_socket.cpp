@@ -181,6 +181,7 @@ void udp_socket::on_event(evutil_socket_t fd, short what, void *arg) {
 }
 
 udp_socket::~udp_socket() {
+    log_sock(this, trace, "Destroyed");
     if (socket_event) {
         evutil_socket_t fd = event_get_fd(socket_event.get());
         // epoll is not happy when deleting events after close
