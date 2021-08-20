@@ -1029,11 +1029,14 @@ std::vector<uint8_t> dns_forwarder::handle_message_internal(uint8_view message, 
     std::string cache_key = get_cache_key(request);
     cache_result cached = create_response_from_cache(cache_key, request);
 
-    if (cached.response) {
+    if (cached.response && (!cached.expired || settings->optimistic_cache)) {
+        log_packet(log, cached.response.get(), "Cached response");
+        event.cache_hit = true;
+        truncate_response(cached.response.get(), request, info);
+        finalize_processed_event(event, request, cached.response.get(), nullptr, cached.upstream_id, std::nullopt);
+        std::vector<uint8_t> raw_response = transform_response_to_raw_data(cached.response.get());
         if (cached.expired) {
-            if (!settings->optimistic_cache) {
-                goto cached_response_expired;
-            }
+            assert(settings->optimistic_cache);
             std::unique_lock l(async_reqs_mtx);
             auto [it, emplaced] = async_reqs.emplace(std::piecewise_construct,
                                                      std::forward_as_tuple(cache_key),
@@ -1047,15 +1050,9 @@ std::vector<uint8_t> dns_forwarder::handle_message_internal(uint8_view message, 
                 uv_queue_work(nullptr, &task.work, async_request_worker, async_request_finalizer);
             }
         }
-        log_packet(log, cached.response.get(), "Cached response");
-        event.cache_hit = true;
-        truncate_response(cached.response.get(), request, info);
-        finalize_processed_event(event, request, cached.response.get(), nullptr, cached.upstream_id, std::nullopt);
-        std::vector<uint8_t> raw_response = transform_response_to_raw_data(cached.response.get());
         return raw_response;
     }
 
-cached_response_expired:
     const ldns_rr_type type = ldns_rr_get_type(question);
 
     // disable Mozilla DoH
