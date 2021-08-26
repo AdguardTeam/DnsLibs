@@ -56,6 +56,7 @@ protected:
 private:
     static void escape_hatch_cb(uv_async_t *handle) {
         auto *self = (listener_base *) handle->data;
+        dbglog(self->m_log, "Received signal to stop");
         self->before_stop();
         uv_close((uv_handle_t *) &self->m_escape_hatch, nullptr);
     }
@@ -121,7 +122,7 @@ public:
         }
         m_escape_hatch.data = this;
 
-        const auto err_str = before_run();
+        auto err_str = before_run();
         if (err_str.has_value()) {
             uv_close((uv_handle_t *) &m_escape_hatch, nullptr);
 
@@ -133,8 +134,12 @@ public:
         }
 
         m_loop_thread = std::thread([this]() {
-            run_loop(m_loop.get(), UV_RUN_DEFAULT);
-            infolog(m_log, "Finished listening");
+            int ret = run_loop(m_loop.get(), UV_RUN_DEFAULT);
+            if (ret != 0) {
+                errlog(m_log, "uv_run: (%d) %s", ret, uv_strerror(ret));
+            } else {
+                infolog(m_log, "Finished listening");
+            }
         });
 
         return std::nullopt;
@@ -148,7 +153,10 @@ public:
     void shutdown() final {
         // The next invocation of escape_hatch_cb will close all handles, allowing the loop to exit
         if (this == m_escape_hatch.data) { // Check async initialized
-            uv_async_send(&m_escape_hatch);
+            int ret = uv_async_send(&m_escape_hatch);
+            if (ret != 0) {
+                errlog(m_log, "uv_async_send: (%d) %s", ret, uv_strerror(ret));
+            }
         }
     }
 
@@ -204,6 +212,7 @@ private:
         m->self->m_pending.erase(m);
 
         if (status == UV_ECANCELED || m->response.empty()) {
+            dbglog(m->self->m_log, "{}: {}", __func__, status == UV_ECANCELED ? "Task cancelled" : "Response is empty");
             delete m;
             return;
         }
@@ -284,7 +293,7 @@ protected:
 
     void before_stop() override {
         uv_close((uv_handle_t *) &m_udp_handle, nullptr);
-
+        dbglog(m_log, "Stopping with %zu pending tasks", m_pending.size());
         for (auto *m : m_pending) {
             uv_cancel((uv_req_t *) &m->work_req);
         }
