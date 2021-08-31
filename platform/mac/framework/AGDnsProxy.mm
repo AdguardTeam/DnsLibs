@@ -40,19 +40,6 @@ static logCallback logFunc;
 
 NSErrorDomain const AGDnsProxyErrorDomain = @"com.adguard.dnsproxy";
 
-@implementation AGLogger
-+ (void) setLevel: (AGLogLevel) level
-{
-    ag::set_default_log_level((ag::log_level)level);
-}
-
-+ (void) setCallback: (logCallback) func
-{
-    logFunc = func;
-}
-@end
-
-
 class nslog_sink : public spdlog::sinks::base_sink<std::mutex> {
 public:
     static ag::logger create(const std::string &logger_name) {
@@ -70,6 +57,19 @@ private:
 
     void flush_() override {}
 };
+
+@implementation AGLogger
++ (void) setLevel: (AGLogLevel) level
+{
+    ag::set_default_log_level((ag::log_level)level);
+}
+
++ (void) setCallback: (logCallback) func
+{
+    ag::set_logger_factory_callback(nslog_sink::create);
+    logFunc = func;
+}
+@end
 
 
 #pragma pack(push,1)
@@ -1094,7 +1094,6 @@ static int bindFd(NSString *helperPath, NSString *address, NSNumber *port, AGLis
     }
     self->initialized = NO;
 
-    ag::set_logger_factory_callback(nslog_sink::create);
     self->log = ag::create_logger("AGDnsProxy");
 
     infolog(self->log, "Initializing dns proxy...");
