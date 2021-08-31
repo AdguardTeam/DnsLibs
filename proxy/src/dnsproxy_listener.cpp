@@ -293,7 +293,7 @@ protected:
 
     void before_stop() override {
         uv_close((uv_handle_t *) &m_udp_handle, nullptr);
-        dbglog(m_log, "Stopping with %zu pending tasks", m_pending.size());
+        dbglog(m_log, "Stopping with {} pending tasks", m_pending.size());
         for (auto *m : m_pending) {
             uv_cancel((uv_req_t *) &m->work_req);
         }
