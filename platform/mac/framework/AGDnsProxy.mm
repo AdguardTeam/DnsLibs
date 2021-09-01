@@ -331,6 +331,12 @@ static ag::server_stamp convert_stamp(AGDnsStamp *stamp) {
     [coder encodeObject:self.outboundInterfaceName forKey:@"_outboundInterfaceName"];
 }
 
+- (NSString*)description {
+    return [NSString stringWithFormat:
+            @"[(%p)AGDnsUpstream: address=%@, bootstrap=(%@), timeoutMs=%ld, serverIp=%@, id=%ld]",
+            self, _address, [_bootstrap componentsJoinedByString:@", "], _timeoutMs, [[NSString alloc] initWithData:_serverIp encoding:NSUTF8StringEncoding], _id];
+}
+
 @end
 
 @implementation AGDns64Settings
@@ -374,6 +380,11 @@ static ag::server_stamp convert_stamp(AGDnsStamp *stamp) {
     [coder encodeInt64:self.waitTimeMs forKey:@"_waitTimeMs"];
 }
 
+- (NSString*)description {
+    return [NSString stringWithFormat:
+            @"[(%p)AGDns64Settings: waitTimeMs=%ld, upstreams=%@]",
+            self, _waitTimeMs, _upstreams];
+}
 
 @end
 
@@ -425,6 +436,12 @@ static ag::server_stamp convert_stamp(AGDnsStamp *stamp) {
     [coder encodeInt64:self.idleTimeoutMs forKey:@"_idleTimeoutMs"];
 }
 
+- (NSString*)description {
+    return [NSString stringWithFormat:
+            @"[(%p)AGListenerSettings: address=%@, port=%ld, proto=%ld]",
+            self, _address, _port, _proto];
+}
+
 @end
 
 @implementation AGOutboundProxyAuthInfo
@@ -464,6 +481,11 @@ static ag::server_stamp convert_stamp(AGDnsStamp *stamp) {
     [coder encodeObject:self.username forKey:@"_username"];
     [coder encodeObject:self.password forKey:@"_password"];
 }
+
+- (NSString*)description {
+    return [NSString stringWithFormat:@"[(%p)AGOutboundProxyAuthInfo: username=%@]", self, _username];
+}
+
 @end
 
 @implementation AGOutboundProxySettings
@@ -520,6 +542,13 @@ static ag::server_stamp convert_stamp(AGDnsStamp *stamp) {
     [coder encodeObject:self.authInfo forKey:@"_authInfo"];
     [coder encodeBool:self.trustAnyCertificate forKey:@"_trustAnyCertificate"];
 }
+
+- (NSString*)description {
+    return [NSString stringWithFormat:
+            @"[(%p)AGOutboundProxySettings: protocol=%ld, address=%@, port=%ld, authInfo=%@, trustAnyCertificate=%@]",
+            self, _protocol, _address, _port, _authInfo, _trustAnyCertificate ? @"YES" : @"NO"];
+}
+
 @end
 
 @implementation AGDnsFilterParams
@@ -551,6 +580,10 @@ static ag::server_stamp convert_stamp(AGDnsStamp *stamp) {
     [coder encodeInt64:self.id forKey:@"_id"];
     [coder encodeObject:self.data forKey:@"_data"];
     [coder encodeBool:self.inMemory forKey:@"_inMemory"];
+}
+
+- (NSString*)description {
+    return [NSString stringWithFormat:@"[(%p)AGDnsFilterParams: id=%ld]", self, _id];
 }
 
 @end
@@ -705,6 +738,29 @@ static ag::server_stamp convert_stamp(AGDnsStamp *stamp) {
     [coder encodeObject:self.helperPath forKey:@"_helperPath"];
 }
 
+- (NSString*)description {
+    return [NSString stringWithFormat:@"[(%p)AGDnsProxyConfig:\n"
+            "ipv6Available=%@,\n"
+            "blockIpv6=%@,\n"
+            "adblockRulesBlockingMode=%ld,\n"
+            "hostsRulesBlockingMode=%ld,\n"
+            "customBlockingIpv4=%@,\n"
+            "customBlockingIpv6=%@,\n"
+            "enableDNSSECOK=%@,\n"
+            "enableRetransmissionHandling=%@,\n"
+            "detectSearchDomains=%@,\n"
+            "outboundProxy=%@,\n"
+            "upstreams=%@,\n"
+            "fallbacks=%@,\n"
+            "fallbackDomains=%@,\n"
+            "filters=%@,\n"
+            "dns64Settings=%@,\n"
+            "listeners=%@]",
+            self, _ipv6Available ? @"YES" : @"NO", _blockIpv6 ? @"YES" : @"NO", _adblockRulesBlockingMode, _hostsRulesBlockingMode, _customBlockingIpv4,
+            _customBlockingIpv6, _enableDNSSECOK ? @"YES" : @"NO", _enableRetransmissionHandling ? @"YES" : @"NO", _detectSearchDomains ? @"YES" : @"NO",
+            _outboundProxy, _upstreams, _fallbacks, _fallbackDomains, _filters, _dns64Settings, _listeners];
+}
+
 + (instancetype) getDefault
 {
     const ag::dnsproxy_settings &defaultSettings = ag::dnsproxy_settings::get_default();
@@ -788,6 +844,23 @@ static ag::server_stamp convert_stamp(AGDnsStamp *stamp) {
     [coder encodeObject:self.error forKey:@"_error"];
     [coder encodeBool:self.cacheHit forKey:@"_cacheHit"];
     [coder encodeBool:self.dnssec forKey:@"_dnssec"];
+}
+
+- (NSString*)description {
+    return [NSString stringWithFormat:
+            @"[(%p)AGDnsRequestProcessedEvent: domain=%@, "
+            "type=%@, "
+            "status=%@, "
+            "answer=%@, "
+            "originalAnswer=%@, "
+            "upstreamId=%@, "
+            "filterListIds=%@, "
+            "whitelist=%@, "
+            "error=%@, "
+            "cacheHit=%@, "
+            "dnssec=%@]",
+            self, _domain, _type, _status, _answer, _originalAnswer, _upstreamId, _filterListIds,
+            _whitelist ? @"YES" : @"NO", _error, _cacheHit ? @"YES" : @"NO", _dnssec ? @"YES" : @"NO"];
 }
 
 @end

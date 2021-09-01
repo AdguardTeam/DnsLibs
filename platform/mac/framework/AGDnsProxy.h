@@ -127,6 +127,8 @@ typedef void (^logCallback)(const char *msg, int length);
 
 - (void)encodeWithCoder:(NSCoder *)coder;
 
+- (NSString*)description;
+
 @end
 
 @interface AGDns64Settings : NSObject<NSCoding>
@@ -153,6 +155,8 @@ typedef void (^logCallback)(const char *msg, int length);
 - (instancetype)initWithCoder:(NSCoder *)coder;
 
 - (void)encodeWithCoder:(NSCoder *)coder;
+
+- (NSString*)description;
 
 @end
 
@@ -193,6 +197,8 @@ typedef void (^logCallback)(const char *msg, int length);
 
 - (void)encodeWithCoder:(NSCoder *)coder;
 
+- (NSString*)description;
+
 @end
 
 /**
@@ -221,6 +227,8 @@ typedef NS_ENUM(NSInteger, AGOutboundProxyProtocol) {
 
 - (void)encodeWithCoder:(NSCoder *)coder;
 
+- (NSString*)description;
+
 @end
 
 @interface AGOutboundProxySettings : NSObject<NSCoding>
@@ -247,6 +255,8 @@ typedef NS_ENUM(NSInteger, AGOutboundProxyProtocol) {
 
 - (void)encodeWithCoder:(NSCoder *)coder;
 
+- (NSString*)description;
+
 @end
 
 @interface AGDnsFilterParams : NSObject<NSCoding>
@@ -271,6 +281,8 @@ typedef NS_ENUM(NSInteger, AGOutboundProxyProtocol) {
 - (instancetype)initWithCoder:(NSCoder *)coder;
 
 - (void)encodeWithCoder:(NSCoder *)coder;
+
+- (NSString*)description;
 
 @end
 
@@ -387,6 +399,8 @@ typedef NS_ENUM(NSInteger, AGOutboundProxyProtocol) {
 - (instancetype)initWithCoder:(NSCoder *)coder;
 
 - (void)encodeWithCoder:(NSCoder *)coder;
+
+- (NSString*)description;
 
 /**
  * @brief Get default DNS proxy settings
