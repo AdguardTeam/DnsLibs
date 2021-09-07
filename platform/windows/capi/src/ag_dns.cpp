@@ -534,7 +534,7 @@ ag_dnsproxy_settings *ag_dnsproxy_get_settings(ag_dnsproxy *handle) {
     return settings;
 }
 
-void ag_set_default_log_level(ag_log_level level) {
+void ag_set_log_level(ag_log_level level) {
     ag::set_default_log_level((ag::log_level) level);
 }
 
@@ -598,33 +598,9 @@ const char *ag_get_capi_version() {
     return AG_DNSLIBS_H_HASH;
 }
 
-class callback_sink_mt : public spdlog::sinks::base_sink<std::mutex> {
-public:
-    static ag::logger create(const std::string &logger_name, ag_log_cb cb, void *arg) {
-        return spdlog::default_factory::create<callback_sink_mt>(logger_name, cb, arg);
-    }
-
-    callback_sink_mt(ag_log_cb cb, void *cb_arg) : cb{cb}, cb_arg{cb_arg} {}
-
-private:
-    ag_log_cb cb;
-    void *cb_arg;
-
-    void sink_it_(const spdlog::details::log_msg &msg) final {
-        if (!cb) {
-            return;
-        }
-        std::string name{msg.logger_name.data(), msg.logger_name.size()};
-        std::string message{msg.payload.data(), msg.payload.size()};
-        cb(cb_arg, name.c_str(), (ag_log_level) msg.level, message.c_str());
-    }
-
-    void flush_() final {}
-};
-
-void ag_logger_set_default_callback(ag_log_cb callback, void *attachment) {
-    ag::set_logger_factory_callback([callback, attachment](const std::string &name) {
-        return callback_sink_mt::create(name, callback, attachment);
+void ag_set_log_callback(ag_log_cb callback, void *attachment) {
+    ag::set_logger_callback([callback, attachment](ag::log_level level, const char *message, size_t length) {
+        callback(attachment, (ag_log_level) level, message, (uint32_t) length);
     });
 }
 

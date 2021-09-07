@@ -1,6 +1,5 @@
 ﻿using System;
 using System.Runtime.InteropServices;
-using Adguard.Dns.Api.DnsProxyServer.Configs;
 using AdGuard.Utils.Interop;
 
 // ReSharper disable InconsistentNaming
@@ -23,7 +22,7 @@ namespace Adguard.Dns
         /// <summary>
         /// The current API version hash with which the ProxyServer was tested
         /// </summary>
-        private const string API_VERSION_HASH = "fc3b6cac7a6dda89d6fd3bb0b1d65e1e94138e8cc2e4192f1b21c64392e4ec1d";
+        private const string API_VERSION_HASH = "38c47d153a112df9cb13478713b9fbc4fa7d7e3682577086c224deba21c005b0";
         #endregion
 
         #region API Functions
@@ -158,7 +157,7 @@ namespace Adguard.Dns
         /// <param name="level">Verbosity level
         /// (<seealso cref="ag_log_level"/>)</param>
         [DllImport(DnsLibName, CallingConvention = CallingConvention.Cdecl)]
-        internal static extern void ag_set_default_log_level(ag_log_level level);
+        internal static extern void ag_set_log_level(ag_log_level level);
 
         /// <summary>
         /// Sets the default callback for logger
@@ -167,7 +166,7 @@ namespace Adguard.Dns
         /// (<seealso cref="cbd_logger_callback_t"/>)</param>
         /// <param name="pAttachment">Attachment of this callback</param>
         [DllImport(DnsLibName, CallingConvention = CallingConvention.Cdecl)]
-        internal static extern void ag_logger_set_default_callback(
+        internal static extern void ag_set_log_callback(
             [MarshalAs(UnmanagedType.FunctionPtr)]
             cbd_logger_callback_t callback,
             IntPtr pAttachment);
@@ -762,9 +761,9 @@ namespace Adguard.Dns
         [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
         internal delegate void cbd_logger_callback_t(
             IntPtr attachment,
-            IntPtr pName,
             ag_log_level log_level,
-            IntPtr pMessage);
+            IntPtr pMessage,
+            UInt32 length);
 
         #endregion
 

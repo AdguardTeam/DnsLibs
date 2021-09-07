@@ -1,16 +1,21 @@
 #include <ag_logger.h>
-#include <spdlog/sinks/stdout_sinks.h>
 #include <utility>
+#include <memory>
+#include <atomic>
+
+#include "spdlog/sinks/base_sink.h"
+
+static void default_callback(ag::log_level, const char *message, size_t length) {
+    fprintf(stderr, "%.*s", (int) length, message);
+}
 
 struct global_info {
+    std::atomic<ag::log_level> default_log_level = ag::INFO;
+    std::shared_ptr<ag::logger_cb> callback = std::make_shared<ag::logger_cb>(default_callback);
+
     global_info() {
         spdlog::set_pattern("[%Y-%m-%d %H:%M:%S.%f] [%t] [%n] [%l] %v");
     }
-
-    ag::log_level default_log_level = ag::INFO;
-    ag::create_logger_cb create_logger_callback =
-        [] (const std::string &name) { return spdlog::stdout_logger_mt(name); };
-    std::mutex guard;
 };
 
 static global_info *get_globals() {
@@ -18,28 +23,40 @@ static global_info *get_globals() {
     return &info;
 }
 
+struct callback_sink : spdlog::sinks::base_sink<std::mutex> {
+    void sink_it_(const spdlog::details::log_msg &msg) override {
+        spdlog::memory_buf_t formatted;
+        this->formatter_->format(msg, formatted);
+
+        global_info *info = get_globals();
+        std::shared_ptr<ag::logger_cb> callback = std::atomic_load(&info->callback);
+
+        (*callback)((ag::log_level) msg.level, formatted.data(), formatted.size());
+    }
+
+    void flush_() override {
+        // No op
+    }
+};
 
 ag::logger ag::create_logger(const std::string &name) {
-    global_info *info = get_globals();
-    std::scoped_lock lock(info->guard);
-
     ag::logger logger = spdlog::get(name);
     if (logger == nullptr) {
-        logger = info->create_logger_callback(name);
+        logger = spdlog::default_factory::create<callback_sink>(name);
     }
-    logger->set_level((spdlog::level::level_enum)info->default_log_level);
+    global_info *info = get_globals();
+    logger->set_level((spdlog::level::level_enum) info->default_log_level.load());
     return logger;
 }
 
 void ag::set_default_log_level(ag::log_level lvl) {
     global_info *info = get_globals();
-    std::scoped_lock lock(info->guard);
-    info->default_log_level = lvl;
+    info->default_log_level.store(lvl);
     spdlog::set_level((spdlog::level::level_enum)lvl);
 }
 
-void ag::set_logger_factory_callback(create_logger_cb cb) {
+void ag::set_logger_callback(ag::logger_cb cb) {
     global_info *info = get_globals();
-    std::scoped_lock lock(info->guard);
-    info->create_logger_callback = std::move(cb);
+    std::atomic_store(&info->callback, std::make_shared<ag::logger_cb>(
+            cb ? std::move(cb) : default_callback));
 }

@@ -36,7 +36,7 @@ int main() {
                                                optimisticCache:YES
                                                 enableDNSSECOK:NO
                                   enableRetransmissionHandling:NO
-                                                    helperPath:@"/Users/ngorskikh/src/adguard-tools/cmake-build-debug/adguard-tun-helper/adguard-tun-helper"];
+                                                    helperPath:@""]; // Insert path to adguard-tun-helper
 
     auto *handler = [AGDnsProxyEvents new];
     NSError *error;

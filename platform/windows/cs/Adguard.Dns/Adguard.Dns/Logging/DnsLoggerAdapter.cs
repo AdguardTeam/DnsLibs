@@ -58,50 +58,55 @@ namespace Adguard.Dns.Logging
             lock (SYNC_ROOT)
             {
 
-                AGDnsApi.ag_set_default_log_level(m_LoggerLogLevel);
+                AGDnsApi.ag_set_log_level(m_LoggerLogLevel);
                 if (m_LoggerCallback == null)
                 {
                     LOG.WarnFormat("Logger callback hasn't been initialized before");
                     return;
                 }
 
-                AGDnsApi.ag_logger_set_default_callback(m_LoggerCallback, IntPtr.Zero);
+                AGDnsApi.ag_set_log_callback(m_LoggerCallback, IntPtr.Zero);
                 LOG.InfoFormat("Logger callback has been set successfully");
             }
         }
 
         /// <summary>
-        /// This method is called from the CoreLibs and passed to managed code 
+        /// This method is called from the CoreLibs and passed to managed code
         /// </summary>
         /// <param name="attachment">Pointer to the native logger</param>
-        /// <param name="pName">Pointer to the logging category name</param>
         /// <param name="logLevel">Log level</param>
         /// <param name="pMessage">Pointer to the log message</param>
+        /// <param name="length">Message length</param>
         private static void AGOnDnsLogged(
             IntPtr attachment,
-            IntPtr pName,
             AGDnsApi.ag_log_level logLevel,
-            IntPtr pMessage)
+            IntPtr pMessage,
+            UInt32 length)
         {
             try
             {
                 LogLevel level = LOG_LEVELS_MAPPING[logLevel];
-                string name = MarshalUtils.PtrToString(pName);
-                string message = MarshalUtils.PtrToString(pMessage);
-                LOG.Log(level, "{0}: {1}".AsFunc(), null, name, message);
+                MarshalUtils.ag_buffer agBuffer = new MarshalUtils.ag_buffer
+                {
+                    data = pMessage,
+                    size = length
+                };
+
+                string message = MarshalUtils.AgBufferToString(agBuffer);
+                LOG.Log(level, "{0}".AsFunc(), null, message);
             }
             catch (Exception ex)
             {
                 DnsExceptionHandler.HandleManagedException(ex);
             }
         }
-        
+
         // Avoid the closure allocation, see https://gist.github.com/AArnott/d285feef75c18f6ecd2b
         private static Func<T> AsFunc<T>(this T value) where T : class
         {
             return value.Return;
         }
-        
+
         private static T Return<T>(this T value)
         {
             return value;

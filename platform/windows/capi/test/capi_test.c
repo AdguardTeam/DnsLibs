@@ -37,9 +37,9 @@ static ag_certificate_verification_result on_cert(const ag_certificate_verificat
     return AGCVR_OK;
 }
 
-static void on_log(void *arg, const char *name, ag_log_level level, const char *message) {
+static void on_log(void *arg, ag_log_level level, const char *message, uint32_t length) {
     ASSERT((uintptr_t) arg == 42);
-    fprintf(stdout, "test logger: L%d [%s]: %s\n", level, name, message);
+    fprintf(stderr, "on_log: (%d) %.*s", (int) level, (int) length, message);
 }
 
 static void test_proxy() {
@@ -47,7 +47,7 @@ static void test_proxy() {
     ASSERT(version);
     ASSERT(strlen(version));
 
-    ag_logger_set_default_callback(on_log, (void *)(uintptr_t) 42);
+    ag_set_log_callback(on_log, (void *) (uintptr_t) 42);
 
     ag_dnsproxy_settings *settings = ag_dnsproxy_settings_get_default();
 
@@ -164,7 +164,7 @@ static void test_utils() {
 }
 
 int main() {
-    ag_set_default_log_level(AGLL_TRACE);
+    ag_set_log_level(AGLL_TRACE);
 
     test_proxy();
     test_utils();

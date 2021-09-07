@@ -9,7 +9,6 @@
 #include <ag_logger.h>
 #include <dnsproxy.h>
 #include <upstream_utils.h>
-#include <spdlog/sinks/base_sink.h>
 
 #include <string>
 #include <ag_cesu8.h>
@@ -36,27 +35,7 @@ static NSString *convert_string(const std::string &str) {
     return REPLACEMENT_STRING;
 }
 
-static logCallback logFunc;
-
 NSErrorDomain const AGDnsProxyErrorDomain = @"com.adguard.dnsproxy";
-
-class nslog_sink : public spdlog::sinks::base_sink<std::mutex> {
-public:
-    static ag::logger create(const std::string &logger_name) {
-        return spdlog::default_factory::create<nslog_sink>(logger_name);
-    }
-
-private:
-    void sink_it_(const spdlog::details::log_msg &msg) override {
-        spdlog::memory_buf_t formatted;
-        this->formatter_->format(msg, formatted);
-        if (logFunc != nil) {
-            logFunc(formatted.data(), formatted.size());
-        }
-    }
-
-    void flush_() override {}
-};
 
 @implementation AGLogger
 + (void) setLevel: (AGLogLevel) level
@@ -66,8 +45,9 @@ private:
 
 + (void) setCallback: (logCallback) func
 {
-    ag::set_logger_factory_callback(nslog_sink::create);
-    logFunc = func;
+    ag::set_logger_callback([func](ag::log_level level, const char *message, size_t length) mutable {
+        func((AGLogLevel) level, message, (int) length);
+    });
 }
 @end
 
@@ -656,7 +636,7 @@ static ag::server_stamp convert_stamp(AGDnsStamp *stamp) {
         optimisticCache: (BOOL) optimisticCache
         enableDNSSECOK: (BOOL) enableDNSSECOK
         enableRetransmissionHandling: (BOOL) enableRetransmissionHandling
-        helperPath: (NSString *) helperPath;
+        helperPath: (NSString *) helperPath
 {
     const ag::dnsproxy_settings &defaultSettings = ag::dnsproxy_settings::get_default();
     self = [self initWithNative: &defaultSettings];

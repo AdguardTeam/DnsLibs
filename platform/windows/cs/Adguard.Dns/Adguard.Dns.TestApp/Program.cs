@@ -1,4 +1,4 @@
-﻿#define LOG_TO_FILE
+﻿//#define LOG_TO_FILE
 #define UNINSTALL_REDIRECT_DRIVER
 
 using System;

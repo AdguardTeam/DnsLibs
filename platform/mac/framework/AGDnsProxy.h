@@ -70,7 +70,11 @@ typedef NS_ENUM(NSInteger, AGBlockingMode) {
  */
 + (void) setLevel: (AGLogLevel) level;
 
-typedef void (^logCallback)(const char *msg, int length);
+/**
+ * A function that outputs a log message.
+ * The message is already formatted, including the line terminator.
+ */
+typedef void (^logCallback)(AGLogLevel level, const char *msg, int length);
 
 /**
  * Set log callback

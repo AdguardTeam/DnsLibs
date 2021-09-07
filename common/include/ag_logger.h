@@ -1,14 +1,10 @@
 #pragma once
 
 #include <spdlog/spdlog.h>
-#include <spdlog/sinks/sink.h>
 #include <fmt/format.h>
 #include <fmt/chrono.h>
 
 namespace ag {
-
-    using logger = std::shared_ptr<spdlog::logger>;
-    using create_logger_cb = std::function<logger(const std::string &logger_name)>;
 
     enum log_level {
         TRACE = SPDLOG_LEVEL_TRACE,
@@ -17,6 +13,9 @@ namespace ag {
         WARN = SPDLOG_LEVEL_WARN,
         ERR = SPDLOG_LEVEL_ERROR,
     };
+
+    using logger = std::shared_ptr<spdlog::logger>;
+    using logger_cb = std::function<void(ag::log_level level, const char *message, size_t length)>;
 
     /**
      * @brief Create a logger with the given name
@@ -32,10 +31,10 @@ namespace ag {
     void set_default_log_level(log_level lvl);
 
     /**
-     * @brief Set a function which produces the loggers
+     * Set the function that outputs a log message
      * @param cb factory function
      */
-    void set_logger_factory_callback(create_logger_cb cb);
+    void set_logger_callback(logger_cb cb);
 
 } // namespace ag
 

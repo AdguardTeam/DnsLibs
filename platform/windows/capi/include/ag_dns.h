@@ -276,8 +276,11 @@ typedef enum {
 /** Called synchronously when a certificate needs to be verified */
 typedef ag_certificate_verification_result (*ag_certificate_verification_cb)(const ag_certificate_verification_event *);
 
-/** Called when we need to log a message */
-typedef void (*ag_log_cb)(void *attachment, const char *name, ag_log_level level, const char *message);
+/**
+ * Called when we need to log a message.
+ * The message is already formatted, including the line terminator.
+ */
+typedef void (*ag_log_cb)(void *attachment, ag_log_level level, const char *message, uint32_t length);
 
 typedef struct {
     ag_dns_request_processed_cb on_request_processed;
@@ -382,13 +385,13 @@ AG_EXPORT void ag_buffer_free(ag_buffer buf);
 /**
  * Set the log verbosity level.
  */
-AG_EXPORT void ag_set_default_log_level(ag_log_level level);
+AG_EXPORT void ag_set_log_level(ag_log_level level);
 
 /**
  * Set the logging function.
  * @param attachment an argument to the logging function
  */
-AG_EXPORT void ag_logger_set_default_callback(ag_log_cb callback, void *attachment);
+AG_EXPORT void ag_set_log_callback(ag_log_cb callback, void *attachment);
 
 /**
  * Parse a DNS stamp string. The caller is responsible for freeing

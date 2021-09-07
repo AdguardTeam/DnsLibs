@@ -6,60 +6,29 @@
 #include <android_dnsproxy.h>
 #include <scoped_jni_env.h>
 #include <jni_defs.h>
-#include <spdlog/sinks/base_sink.h>
 #include <upstream_utils.h>
-
-class java_sink_mt : public spdlog::sinks::base_sink<std::mutex> {
-public:
-    static ag::logger create(const std::string &logger_name,
-                             JavaVM *vm,
-                             ag::global_ref<jclass> logger_class) {
-
-        return spdlog::default_factory::create<java_sink_mt>(logger_name, vm, std::move(logger_class));
-    }
-
-    java_sink_mt(JavaVM *vm, ag::global_ref<jclass> logger_class)
-            : m_vm{vm}, m_logger_class{std::move(logger_class)} {
-
-        ag::scoped_jni_env env(m_vm, 16);
-        m_log_method = env->GetStaticMethodID(m_logger_class.get(), "log", "(ILjava/lang/String;)V");
-    }
-
-private:
-    JavaVM *m_vm;
-    ag::global_ref<jclass> m_logger_class;
-    jmethodID m_log_method;
-
-    void sink_it_(const spdlog::details::log_msg &msg) final {
-        ag::scoped_jni_env env(m_vm, 16);
-
-        spdlog::memory_buf_t formatted;
-        this->formatter_->format(msg, formatted);
-
-        std::string s{formatted.data(), formatted.size()};
-        while (!s.empty() && std::isspace((unsigned char) s.back())) {
-            s.pop_back();
-        }
-        env->CallStaticVoidMethod(m_logger_class.get(), m_log_method,
-                                  (jint) msg.level, ag::jni_utils::marshal_string(env.get(), s).get());
-
-        if (env->ExceptionCheck()) {
-            env->ExceptionClear();
-            assert(false);
-        }
-    }
-
-    void flush_() final {}
-};
 
 extern "C"
 JNIEXPORT jint JNICALL
 JNI_OnLoad(JavaVM *vm, void *) {
     ag::scoped_jni_env env(vm, 1);
-    ag::global_ref dnsproxy_class(vm, env->FindClass(FQN_DNSPROXY));
-    ag::set_logger_factory_callback([vm, dnsproxy_class](const std::string &name) {
-        return java_sink_mt::create(name, vm, dnsproxy_class);
+
+    ag::global_ref logClass(vm, env->FindClass(FQN_DNSPROXY));
+    jmethodID logMethod = env->GetStaticMethodID(logClass.get(), "log", "(ILjava/lang/String;)V");
+
+    ag::set_logger_callback([vm, clazz = std::move(logClass), method = logMethod]
+                                    (ag::log_level level, const char *message, size_t length) mutable {
+        std::string str{message, length};
+
+        // Remove the line terminator since the logging method always inserts one.
+        if (!str.empty() && str.back() == '\n') {
+            str.pop_back();
+        }
+
+        ag::scoped_jni_env env(vm, 1);
+        env->CallStaticVoidMethod(clazz.get(), method, (jint) level, ag::jni_utils::marshal_string(env.get(), str).get());
     });
+
     return JNI_VERSION_1_2;
 }
 

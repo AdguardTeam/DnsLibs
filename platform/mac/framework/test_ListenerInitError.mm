@@ -1,7 +1,6 @@
 #include <AGDnsProxy/AGDnsProxy.h>
 #include <Foundation/Foundation.h>
 
-/// Test that listeners bind to localhost@53 for TCP/UDP and IPv4/IPv6
 int main() {
     auto *listeners = @[
             // Good
