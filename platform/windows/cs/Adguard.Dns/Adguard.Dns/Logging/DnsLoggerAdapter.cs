@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using Adguard.Dns.Exceptions;
+using AdGuard.Utils.Common;
 using AdGuard.Utils.Interop;
 
 namespace Adguard.Dns.Logging
@@ -93,6 +94,9 @@ namespace Adguard.Dns.Logging
                 };
 
                 string message = MarshalUtils.AgBufferToString(agBuffer);
+                // We have to forcibly trim trailing CR due to
+                // https://bit.adguard.com/projects/ADGUARD-CORE-LIBS/repos/dns-libs/pull-requests/306/diff#platform/windows/capi/include/ag_dns.h
+                message = message.TrimEnd(Environment.NewLine.ToCharArray());
                 LOG.Log(level, "{0}".AsFunc(), null, message);
             }
             catch (Exception ex)
