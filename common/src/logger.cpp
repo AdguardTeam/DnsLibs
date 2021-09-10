@@ -40,12 +40,13 @@ struct callback_sink : spdlog::sinks::base_sink<std::mutex> {
 };
 
 ag::logger ag::create_logger(const std::string &name) {
+    static std::mutex spdlog_registry_mtx;
+    std::scoped_lock l(spdlog_registry_mtx);
     ag::logger logger = spdlog::get(name);
     if (logger == nullptr) {
         logger = spdlog::default_factory::create<callback_sink>(name);
+        logger->set_level((spdlog::level::level_enum) get_globals()->default_log_level.load());
     }
-    global_info *info = get_globals();
-    logger->set_level((spdlog::level::level_enum) info->default_log_level.load());
     return logger;
 }
 
