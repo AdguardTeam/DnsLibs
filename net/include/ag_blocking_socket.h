@@ -26,8 +26,6 @@ public:
         const socket_address &peer;
         /** Operation time out value */
         std::optional<std::chrono::microseconds> timeout;
-        /** SSL context in case it's a secured connection */
-        std::unique_ptr<SSL, ftor<&SSL_free>> ssl;
     };
 
     using receive_dns_packet_result = std::variant<

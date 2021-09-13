@@ -56,28 +56,17 @@ ag::connection_pool::get_result ag::dns_over_tls::tls_pool::create() {
     }
     assert(!resolve_result.addresses.empty());
 
-    SSL_CTX *ctx = SSL_CTX_new(TLS_client_method());
-    SSL_CTX_set_verify(ctx, SSL_VERIFY_PEER, nullptr);
-    SSL_CTX_set_cert_verify_callback(ctx, dns_over_tls::ssl_verify_callback, m_upstream);
-
-    tls_session_cache::prepare_ssl_ctx(ctx);
-
-    std::unique_ptr<SSL, ftor<&SSL_free>> ssl{ SSL_new(ctx) };
-    SSL_set_tlsext_host_name(ssl.get(), m_upstream->m_server_name.c_str());
-
-    m_upstream->m_tls_session_cache.prepare_ssl(ssl.get());
-
-    if (ssl_session_ptr session = m_upstream->m_tls_session_cache.get_session()) {
-        dbglog(m_upstream->m_log, "Using a cached TLS session");
-        SSL_set_session(ssl.get(), session.get()); // UpRefs the session
-    } else {
-        dbglog(m_upstream->m_log, "No cached TLS sessions available");
-    }
+    // https://www.iana.org/assignments/tls-extensiontype-values/tls-extensiontype-values.xml#alpn-protocol-ids
+    static const std::string DOT_ALPN = "dot";
 
     const socket_address &address = resolve_result.addresses[0];
-    connection_ptr connection = create_connection(std::move(ssl), address);
+    connection_ptr connection = create_connection(address,
+            socket_factory::secure_socket_parameters{
+                    &m_upstream->m_tls_session_cache,
+                    m_upstream->m_server_name,
+                    { DOT_ALPN },
+            });
     add_pending_connection(connection);
-    SSL_CTX_free(ctx);
     return { std::move(connection), resolve_result.time_elapsed, std::nullopt };
 }
 

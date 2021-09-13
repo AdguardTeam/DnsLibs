@@ -1,6 +1,7 @@
 #include <ag_socket.h>
 #include "tcp_stream.h"
 #include "udp_socket.h"
+#include "secured_socket.h"
 #include "proxied_socket.h"
 #include "outbound_proxy.h"
 #include "outbound_http_proxy.h"
@@ -33,6 +34,11 @@ socket_factory::socket_ptr socket_factory::make_socket(socket_parameters p) cons
     return socket;
 }
 
+socket_factory::socket_ptr socket_factory::make_secured_socket(socket_parameters p,
+        secure_socket_parameters secure_parameters) const {
+    return this->make_secured_socket(this->make_socket(std::move(p)), std::move(secure_parameters));
+}
+
 socket_factory::socket_ptr socket_factory::make_direct_socket(socket_parameters p) const {
     socket_ptr socket;
 
@@ -48,6 +54,15 @@ socket_factory::socket_ptr socket_factory::make_direct_socket(socket_parameters 
     }
 
     return socket;
+}
+
+socket_factory::socket_ptr socket_factory::make_secured_socket(socket_ptr underlying_socket,
+        secure_socket_parameters secure_parameters) const {
+    return std::make_unique<secured_socket>(
+            std::move(underlying_socket)
+            , this->parameters.verifier
+            , std::move(secure_parameters)
+    );
 }
 
 err_string socket_factory::prepare_fd(evutil_socket_t fd,
@@ -109,7 +124,12 @@ outbound_proxy *socket_factory::make_proxy() const {
     return oproxy;
 }
 
-socket_factory::socket_ptr socket_factory::on_make_proxy_socket(void *arg, utils::transport_protocol proto) {
+socket_factory::socket_ptr socket_factory::on_make_proxy_socket(void *arg,
+        utils::transport_protocol proto, std::optional<secure_socket_parameters> secure_parameters) {
     auto *self = (socket_factory *)arg;
-    return self->make_direct_socket({ proto });
+    socket_ptr s = self->make_direct_socket({ proto });
+    if (secure_parameters.has_value()) {
+        s = self->make_secured_socket(std::move(s), std::move(secure_parameters.value()));
+    }
+    return s;
 }

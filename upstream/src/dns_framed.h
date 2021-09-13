@@ -10,6 +10,7 @@
 #include <event2/bufferevent.h>
 #include <ag_event_loop.h>
 #include "connection.h"
+#include <tls_session_cache.h>
 
 namespace ag {
 
@@ -65,11 +66,12 @@ protected:
 
     /**
      * Creates DNS framed connection from bufferevent.
-     * @param ssl SSL object for communication
      * @param address Destination address
+     * @param secure_socket_parameters Non-nullopt in case it's a secured connection
      * @return Newly created DNS framed connection
      */
-    connection_ptr create_connection(std::unique_ptr<SSL, ftor<&SSL_free>> ssl, const socket_address &address);
+    connection_ptr create_connection(const socket_address &address,
+            std::optional<socket_factory::secure_socket_parameters> secure_socket_parameters);
 
     void close_connection(const connection_ptr &conn);
 };

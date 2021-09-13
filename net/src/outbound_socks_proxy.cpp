@@ -454,7 +454,8 @@ std::optional<socket::error> socks_oproxy::connect_to_proxy(connection *conn) {
                     connection{ this, association->conn_id,
                             { conn->parameters.loop, utils::TP_TCP, socket_address(this->settings->address, this->settings->port),
                                     {}, conn->parameters.timeout } });
-            udp_association_conn->socket = this->parameters.make_socket.func(this->parameters.make_socket.arg, utils::TP_TCP);
+            udp_association_conn->socket = this->parameters.make_socket.func(this->parameters.make_socket.arg,
+                    utils::TP_TCP, std::nullopt);
             proto = utils::TP_TCP;
             conn = udp_association_conn.get();
             dst_addr = conn->parameters.peer;
@@ -467,7 +468,7 @@ std::optional<socket::error> socks_oproxy::connect_to_proxy(connection *conn) {
 
     assert(dst_addr.valid());
 
-    conn->socket = this->parameters.make_socket.func(this->parameters.make_socket.arg, proto);
+    conn->socket = this->parameters.make_socket.func(this->parameters.make_socket.arg, proto, std::nullopt);
     if (auto e = conn->socket->connect({ conn->parameters.loop,
                 dst_addr,
                 { on_connected, on_read, on_close, conn },

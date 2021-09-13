@@ -118,7 +118,6 @@ socket::connect_parameters blocking_socket::make_underlying_connect_parameters(
             params.peer,
             { on_connected, nullptr, on_close, (void *)this },
             params.timeout,
-            std::move(params.ssl),
     };
 }
 

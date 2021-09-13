@@ -45,7 +45,8 @@ public:
 
     struct make_socket_callback {
         /** Raised when proxy wants to create a socket */
-        socket_factory::socket_ptr (* func)(void *arg, utils::transport_protocol proto);
+        socket_factory::socket_ptr (* func)(void *arg, utils::transport_protocol proto,
+                std::optional<socket_factory::secure_socket_parameters> secure_parameters);
         /** User context for the callback */
         void *arg;
     };

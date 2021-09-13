@@ -13,6 +13,7 @@
 #include <ag_dns_utils.h>
 #include <certificate_verifier.h>
 #include <ag_socket.h>
+#include <tls_session_cache.h>
 
 namespace ag {
 
@@ -115,6 +116,12 @@ public:
     [[nodiscard]] socket_factory::socket_ptr make_socket(utils::transport_protocol proto) const {
         return m_config.socket_factory->make_socket(
                 { proto, m_options.outbound_interface, m_options.ignore_proxy_settings });
+    }
+    [[nodiscard]] socket_factory::socket_ptr make_secured_socket(utils::transport_protocol proto,
+            socket_factory::secure_socket_parameters secure_socket_parameters) const {
+        return m_config.socket_factory->make_secured_socket(
+                { proto, m_options.outbound_interface, m_options.ignore_proxy_settings },
+                std::move(secure_socket_parameters));
     }
 
     std::chrono::milliseconds rtt() {

@@ -24,6 +24,8 @@ set(SRCS
         ${SRC_DIR}/outbound_proxy.cpp
         ${SRC_DIR}/outbound_http_proxy.cpp
         ${SRC_DIR}/outbound_socks_proxy.cpp
+        ${SRC_DIR}/tls_codec.cpp
+        ${SRC_DIR}/secured_socket.cpp
         )
 
 add_library(dnslibs_net STATIC EXCLUDE_FROM_ALL ${SRCS})

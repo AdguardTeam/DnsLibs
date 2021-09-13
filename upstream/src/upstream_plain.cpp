@@ -129,7 +129,7 @@ ag::connection_pool::get_result ag::tcp_pool::get() {
 }
 
 ag::connection_pool::get_result ag::tcp_pool::create() {
-    connection_ptr connection = create_connection(nullptr, m_address);
+    connection_ptr connection = create_connection(m_address, std::nullopt);
     add_pending_connection(connection);
     return { std::move(connection), std::chrono::seconds(0), std::nullopt };
 }

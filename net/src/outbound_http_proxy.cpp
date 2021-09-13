@@ -132,11 +132,17 @@ std::optional<socket::error> http_oproxy::connect_to_proxy(uint32_t conn_id, con
     }
 
     conn = std::make_unique<connection>(connection{ this, conn_id, parameters });
-    conn->socket = this->parameters.make_socket.func(this->parameters.make_socket.arg, parameters.proto);
+    if (this->settings->protocol == outbound_proxy_protocol::HTTPS_CONNECT) {
+        conn->socket = this->parameters.make_socket.func(this->parameters.make_socket.arg,
+                parameters.proto, { { &this->tls_session_cache.value() } });
+    } else {
+        conn->socket = this->parameters.make_socket.func(this->parameters.make_socket.arg,
+                parameters.proto, std::nullopt);
+    }
     if (auto e = conn->socket->connect({ parameters.loop,
                 socket_address(this->settings->address, this->settings->port),
                 { on_connected, on_read, on_close, conn.get() },
-                parameters.timeout, this->make_ssl() });
+                parameters.timeout });
             e.has_value()) {
         log_conn(this, conn_id, dbg, "Failed to start socket connection");
         return e;

@@ -28,8 +28,10 @@ class ag::dns_framed_connection : public connection,
 public:
     static constexpr std::string_view UNEXPECTED_EOF = "Unexpected EOF";
 
-    dns_framed_connection(dns_framed_pool *pool, uint32_t id, const upstream *upstream, const socket_address &address);
-    void start(std::unique_ptr<SSL, ftor<&SSL_free>> ssl, milliseconds timeout);
+    dns_framed_connection(dns_framed_pool *pool, uint32_t id, const upstream *upstream,
+            const socket_address &address,
+            std::optional<socket_factory::secure_socket_parameters> secure_socket_parameters);
+    void start(milliseconds timeout);
 
     ~dns_framed_connection() override;
 
@@ -129,21 +131,27 @@ ag::err_string ag::dns_framed_connection::write(int request_id, uint8_view buf) 
 }
 
 ag::dns_framed_connection::dns_framed_connection(dns_framed_pool *pool, uint32_t id,
-        const upstream *upstream, const socket_address &address)
+        const upstream *upstream, const socket_address &address,
+        std::optional<socket_factory::secure_socket_parameters> secure_socket_parameters)
     : connection(address)
     , m_log(create_logger(__func__))
     , m_id(id)
     , m_pool(pool)
-    , m_stream(upstream->make_socket(utils::TP_TCP))
+    , m_stream(secure_socket_parameters.has_value()
+            ? upstream->make_secured_socket(utils::TP_TCP, std::move(secure_socket_parameters.value()))
+            : upstream->make_socket(utils::TP_TCP))
 {
 }
 
-void ag::dns_framed_connection::start(std::unique_ptr<SSL, ftor<&SSL_free>> ssl, std::chrono::milliseconds timeout) {
-    m_pool->m_loop->submit([this, ssl = ssl.release(), timeout] () mutable {
+void ag::dns_framed_connection::start(std::chrono::milliseconds timeout) {
+    m_pool->m_loop->submit([this, timeout] () mutable {
         std::scoped_lock l(m_mutex);
-        auto err = m_stream->connect({ m_pool->m_loop.get(), this->address,
-                                       { on_connected, on_read, on_close, this },
-                                       timeout, std::unique_ptr<SSL, ftor<&SSL_free>>(ssl) });
+        auto err = m_stream->connect({
+                m_pool->m_loop.get(),
+                this->address,
+                { on_connected, on_read, on_close, this },
+                timeout,
+        });
         if (err.has_value()) {
             log_conn(m_log, err, this, "Failed to start connect: {}", err->description);
             on_close(this, { { -1, "Failed to start connect" } });
@@ -299,10 +307,12 @@ void ag::dns_framed_pool::add_pending_connection(const connection_ptr &ptr) {
     m_pending_connections.insert(ptr);
 }
 
-ag::connection_ptr ag::dns_framed_pool::create_connection(std::unique_ptr<SSL, ftor<&SSL_free>> ssl, const socket_address &address) {
+ag::connection_ptr ag::dns_framed_pool::create_connection(const socket_address &address,
+        std::optional<socket_factory::secure_socket_parameters> secure_socket_parameters) {
     static std::atomic_uint32_t conn_id{0};
-    auto ptr = std::make_shared<dns_framed_connection>(this, conn_id++, m_upstream, address);
-    ptr->start(std::move(ssl), m_upstream->options().timeout);
+    auto ptr = std::make_shared<dns_framed_connection>(this, conn_id++, m_upstream, address,
+            std::move(secure_socket_parameters));
+    ptr->start(m_upstream->options().timeout);
     return ptr;
 }
 

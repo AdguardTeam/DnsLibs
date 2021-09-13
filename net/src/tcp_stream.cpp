@@ -1,7 +1,6 @@
 #include <ag_utils.h>
 #include "tcp_stream.h"
 #include <event2/buffer.h>
-#include <event2/bufferevent_ssl.h>
 #include <openssl/err.h>
 
 
@@ -27,12 +26,7 @@ std::optional<socket::error> tcp_stream::connect(connect_parameters params) {
 
     static constexpr int OPTIONS =
             BEV_OPT_THREADSAFE | BEV_OPT_DEFER_CALLBACKS | BEV_OPT_UNLOCK_CALLBACKS | BEV_OPT_CLOSE_ON_FREE;
-    if (params.ssl == nullptr) {
-        this->bev.reset(bufferevent_socket_new(params.loop->c_base(), -1, OPTIONS));
-    } else {
-        this->bev.reset(bufferevent_openssl_socket_new(params.loop->c_base(), -1, params.ssl.release(),
-                BUFFEREVENT_SSL_CONNECTING, OPTIONS));
-    }
+    this->bev.reset(bufferevent_socket_new(params.loop->c_base(), -1, OPTIONS));
     if (this->bev == nullptr) {
         return { { -1, "Failed to create socket buffer event" } };
     }
@@ -142,23 +136,6 @@ int tcp_stream::on_prepare_fd(int fd, const struct sockaddr *sa, int, void *arg)
     return 1;
 }
 
-static err_string get_ssl_errors(bufferevent *bev) {
-    std::vector<std::string> error_strings;
-    ev_uint32_t err;
-    char buffer[256];
-    while (0 != (err = bufferevent_get_openssl_error(bev))) {
-        error_strings.push_back(AG_FMT("{}, ", ERR_error_string_n(err, buffer, sizeof(buffer))));
-    }
-
-    if (error_strings.empty()) {
-        return std::nullopt;
-    }
-
-    error_strings.back().pop_back(); // Remove trailing space
-    error_strings.back().back() = ')'; // Replace ',' by ')'
-    return AG_FMT("OpenSSL errors[{}]({}", error_strings.size(), ag::utils::join(error_strings));
-}
-
 void tcp_stream::on_event(bufferevent *bev, short what, void *arg) {
     auto *self = (tcp_stream *)deferred_arg_to_ptr(arg);
     if (!self) {
@@ -181,8 +158,6 @@ void tcp_stream::on_event(bufferevent *bev, short what, void *arg) {
         error error = { -1 };
         if (int err = evutil_socket_geterror(bufferevent_getfd(bev)); err != 0) {
             error = { err, evutil_socket_error_to_string(err) };
-        } else if (err_string ssl_err = get_ssl_errors(bev); ssl_err.has_value()) {
-            error.description = std::move(ssl_err.value());
         } else {
             error.description = "Unknown error";
         }

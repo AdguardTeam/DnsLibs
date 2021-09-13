@@ -6,9 +6,9 @@
 #include <string>
 #include <variant>
 #include <memory>
+#include <vector>
 #include <event2/event.h>
 #include <event2/util.h>
-#include <openssl/ssl.h>
 #include <ag_defs.h>
 #include <ag_net_utils.h>
 #include <ag_logger.h>
@@ -16,6 +16,7 @@
 #include <ag_outbound_proxy_settings.h>
 #include <ag_event_loop.h>
 #include <certificate_verifier.h>
+#include <tls_session_cache.h>
 
 
 namespace ag {
@@ -41,6 +42,15 @@ public:
         bool ignore_proxy_settings;
     };
 
+    struct secure_socket_parameters {
+        /** TLS session cache */
+        tls_session_cache *session_cache = nullptr;
+        /** Target server name */
+        std::string server_name;
+        /** Application layer protocols */
+        std::vector<std::string> alpn;
+    };
+
     explicit socket_factory(parameters parameters);
     ~socket_factory();
 
@@ -56,6 +66,15 @@ public:
      * @return the socket
      */
     [[nodiscard]] socket_ptr make_socket(socket_parameters parameters) const;
+
+    /**
+     * Create a socket that encrypts the data sent through it
+     * @param parameters the socket parameters
+     * @param secure_parameters the security parameters
+     * @return the socket
+     */
+    [[nodiscard]] socket_ptr make_secured_socket(socket_parameters parameters,
+            secure_socket_parameters secure_parameters) const;
 
     /**
      * Prepare an externally created descriptor in the same way as `make_socket` does
@@ -79,10 +98,13 @@ private:
     outbound_proxy *proxy = nullptr;
 
     [[nodiscard]] socket_ptr make_direct_socket(socket_parameters parameters) const;
+    [[nodiscard]] socket_ptr make_secured_socket(socket_ptr underlying_socket,
+            secure_socket_parameters secure_parameters) const;
     static err_string on_prepare_fd(void *arg, evutil_socket_t fd,
             const socket_address &peer, const if_id_variant &outbound_interface);
     [[nodiscard]] outbound_proxy *make_proxy() const;
-    static socket_factory::socket_ptr on_make_proxy_socket(void *arg, utils::transport_protocol proto);
+    static socket_factory::socket_ptr on_make_proxy_socket(void *arg, utils::transport_protocol proto,
+            std::optional<secure_socket_parameters> secure_parameters);
 };
 
 class socket {
@@ -117,8 +139,6 @@ public:
         callbacks callbacks = {};
         /** Operation time out value */
         std::optional<std::chrono::microseconds> timeout;
-        /** SSL context in case it's a secured connection */
-        std::unique_ptr<SSL, ftor<&SSL_free>> ssl;
     };
 
     virtual ~socket() = default;
