@@ -435,6 +435,11 @@ typedef NS_ENUM(NSInteger, AGOutboundProxyProtocol) {
 - (NSData *) handlePacket: (NSData *) packet;
 
 /**
+ * Stop DnsProxy. Should be called before dealloc.
+ */
+- (void) stop;
+
+/**
 * Check if string is a valid rule
 * @param str string to check
 * @return true if string is a valid rule, false otherwise

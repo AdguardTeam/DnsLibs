@@ -43,6 +43,7 @@ int main() {
     auto *proxy = [[AGDnsProxy alloc] initWithConfig:config handler:handler error:&error];
     if (!proxy) {
         NSLog(@"%@", error);
+        [proxy stop];
         return 1;
     }
     while (getchar() != 's') {

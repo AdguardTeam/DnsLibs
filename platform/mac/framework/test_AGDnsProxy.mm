@@ -40,6 +40,7 @@ static int regressTestListenerFailsInit() {
     NSError *error;
     auto *proxy = [[AGDnsProxy alloc] initWithConfig:config handler:handler error:&error];
     if (!error || proxy) {
+        [proxy stop];
         return 1;
     }
     return 0;

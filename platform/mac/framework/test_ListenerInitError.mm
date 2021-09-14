@@ -40,6 +40,7 @@ int main() {
     NSError *error;
     auto *proxy = [[AGDnsProxy alloc] initWithConfig:config handler:handler error:&error];
     if (proxy || !error || error.code != AGDPE_PROXY_INIT_LISTENER_ERROR) {
+        [proxy stop];
         return 1;
     }
     return 0;

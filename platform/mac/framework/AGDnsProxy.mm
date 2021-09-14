@@ -855,10 +855,19 @@ static ag::server_stamp convert_stamp(AGDnsStamp *stamp) {
     BOOL initialized;
 }
 
-- (void) dealloc
+- (void)dealloc
 {
     if (initialized) {
+        @throw [NSException exceptionWithName:@"Illegal state"
+                                       reason:@"AGDnsProxy was not stopped before dealloc"
+                                     userInfo:nil];
+    }
+}
+
+- (void)stop {
+    if (initialized) {
         self->proxy.deinit();
+        initialized = NO;
     }
 }
 
