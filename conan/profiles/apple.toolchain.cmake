@@ -62,9 +62,9 @@ endif(NOT QUIET)
 
 # Set minimum deployment version
 if(CMAKE_OSX_SYSROOT STREQUAL iphonesimulator)
-    set(CMAKE_OSX_DEPLOYMENT_TARGET "10.0" CACHE STRING "Minimum iOS deployment version")
+    set(CMAKE_OSX_DEPLOYMENT_TARGET "11.2" CACHE STRING "Minimum iOS deployment version")
 elseif(CMAKE_OSX_SYSROOT STREQUAL iphoneos)
-    set(CMAKE_OSX_DEPLOYMENT_TARGET "10.0" CACHE STRING "Minimum iOS deployment version")
+    set(CMAKE_OSX_DEPLOYMENT_TARGET "11.2" CACHE STRING "Minimum iOS deployment version")
     add_compile_options(-fembed-bitcode)
 else()
     set(CMAKE_OSX_DEPLOYMENT_TARGET "10.12" CACHE STRING "Minimum macOS deployment version")
