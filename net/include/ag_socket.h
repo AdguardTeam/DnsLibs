@@ -54,9 +54,8 @@ public:
     explicit socket_factory(parameters parameters);
     ~socket_factory();
 
-    socket_factory(socket_factory &&) = default;
-    socket_factory &operator=(socket_factory &&) = default;
-
+    socket_factory(socket_factory &&) = delete;
+    socket_factory &operator=(socket_factory &&) = delete;
     socket_factory(const socket_factory &) = delete;
     socket_factory &operator=(const socket_factory &) = delete;
 
@@ -92,10 +91,61 @@ public:
      */
     [[nodiscard]] const outbound_proxy_settings *get_outbound_proxy_settings() const;
 
+    /**
+     * Check whether a connection should be routed through proxy
+     * @param proto the connection protocol
+     * @return true if it should be proxied, false otherwise
+     */
+    [[nodiscard]] bool should_route_through_proxy(utils::transport_protocol proto) const;
+
+    /**
+     * Check whether the proxy server is available
+     */
+    [[nodiscard]] bool is_proxy_available() const;
+
+    /**
+     * Register a successful connection to the proxy server
+     */
+    void on_successful_proxy_connection();
+
+    enum proxy_connection_failed_result {
+        /// Close a connection
+        SFPCFR_CLOSE_CONNECTION,
+        /// Re-route a connection directly to the target
+        SFPCFR_RETRY_DIRECTLY,
+    };
+
+    /**
+     * Register the proxy server connection failure
+     * @param err error code, if some
+     */
+    [[nodiscard]] proxy_connection_failed_result on_proxy_connection_failed(std::optional<int> err);
+
+    struct reset_bypassed_proxy_connections_subscriber {
+        void (* func)(void *arg);
+        void *arg;
+    };
+
+    /**
+     * Subscribe to postponed event a handler of which should reset the connections which were
+     * re-routed directly to the host after `SFPCFR_RETRY_DIRECTLY`
+     * @param subscriber the subscriber
+     * @return subscriber ID
+     */
+    uint32_t subscribe_to_reset_bypassed_proxy_connections_event(reset_bypassed_proxy_connections_subscriber subscriber);
+
+    /**
+     * Unsubscribe from the reset event
+     * @param id the subscriber ID
+     */
+    void unsubscribe_from_reset_bypassed_proxy_connections_event(uint32_t id);
+
 private:
+    struct outbound_proxy_state;
+
     parameters parameters = {};
     route_resolver_ptr router;
-    outbound_proxy *proxy = nullptr;
+    std::unique_ptr<outbound_proxy_state> proxy;
 
     [[nodiscard]] socket_ptr make_direct_socket(socket_parameters parameters) const;
     [[nodiscard]] socket_ptr make_secured_socket(socket_ptr underlying_socket,
@@ -103,8 +153,10 @@ private:
     static err_string on_prepare_fd(void *arg, evutil_socket_t fd,
             const socket_address &peer, const if_id_variant &outbound_interface);
     [[nodiscard]] outbound_proxy *make_proxy() const;
+    [[nodiscard]] outbound_proxy *make_fallback_proxy() const;
     static socket_factory::socket_ptr on_make_proxy_socket(void *arg, utils::transport_protocol proto,
             std::optional<secure_socket_parameters> secure_parameters);
+    static void on_reset_bypassed_proxy_connections(void *arg);
 };
 
 class socket {

@@ -308,6 +308,7 @@ ag::outbound_proxy_settings ag::android_dnsproxy::marshal_outbound_proxy(JNIEnv 
     auto address_field = env->GetFieldID(clazz, "address", "Ljava/net/InetSocketAddress;");
     auto auth_info_field = env->GetFieldID(clazz, "authInfo", "L" FQN_OUTBOUND_PROXY_AUTH_INFO ";");
     auto trust_any_certificate_field = env->GetFieldID(clazz, "trustAnyCertificate", "Z");
+    auto ignore_if_unavailable_field = env->GetFieldID(clazz, "ignoreIfUnavailable", "Z");
 
     ag::outbound_proxy_settings csettings = {};
     auto protocol = env->GetObjectField(jsettings, protocol_field);
@@ -339,6 +340,7 @@ ag::outbound_proxy_settings ag::android_dnsproxy::marshal_outbound_proxy(JNIEnv 
 
     csettings.port = env->CallIntMethod(address.get(), env->GetMethodID(sock_addr_clazz, "getPort", "()I"));
     csettings.trust_any_certificate = env->GetBooleanField(jsettings, trust_any_certificate_field);
+    csettings.ignore_if_unavailable = env->GetBooleanField(jsettings, ignore_if_unavailable_field);
 
     return csettings;
 }
@@ -361,10 +363,11 @@ ag::local_ref<jobject> ag::android_dnsproxy::marshal_outbound_proxy(JNIEnv *env,
 
     auto clazz = env->FindClass(FQN_OUTBOUND_PROXY_SETTINGS);
     auto ctor = env->GetMethodID(clazz, "<init>",
-            "(L" FQN_OUTBOUND_PROXY_PROTOCOL ";Ljava/net/InetSocketAddress;L" FQN_OUTBOUND_PROXY_AUTH_INFO ";Z)V");
+            "(L" FQN_OUTBOUND_PROXY_PROTOCOL ";Ljava/net/InetSocketAddress;L" FQN_OUTBOUND_PROXY_AUTH_INFO ";ZZ)V");
     return { env, env->NewObject(clazz, ctor,
             m_proxy_protocol_enum_values.at((size_t)csettings.protocol).get(),
-            address.get(), auth_info.get(), csettings.trust_any_certificate) };
+            address.get(), auth_info.get(), csettings.trust_any_certificate,
+            csettings.ignore_if_unavailable) };
 }
 
 ag::dnsfilter::engine_params ag::android_dnsproxy::marshal_filter_params(JNIEnv *env,

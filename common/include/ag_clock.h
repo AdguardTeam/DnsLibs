@@ -1,6 +1,9 @@
 #pragma once
 
 #include <chrono>
+#include <utility>
+#include <optional>
+
 
 namespace ag {
 
@@ -41,6 +44,61 @@ public:
 
 private:
     static duration m_time_shift;
+};
+
+template<class T, T defaultValue>
+class expiring_value {
+public:
+    using Duration = std::chrono::nanoseconds;
+
+    expiring_value(T v, Duration d)
+        : value(std::move(v))
+        , expireTimestamp(steady_clock::now() + d)
+        , duration(d)
+    {}
+
+    explicit expiring_value(Duration d)
+        : value(defaultValue)
+        , duration(d)
+    {}
+
+    expiring_value()
+        : value(defaultValue)
+    {}
+
+    expiring_value(const expiring_value &other) = default;
+    expiring_value &operator=(const expiring_value &other) = default;
+    expiring_value(expiring_value &&other) = default;
+    expiring_value &operator=(expiring_value &&other) = default;
+
+    expiring_value &operator=(T v) {
+        this->value = std::move(v);
+        this->expireTimestamp = steady_clock::now() + this->duration;
+        return *this;
+    }
+
+    [[nodiscard]] bool is_timed_out() const {
+        return this->expireTimestamp.has_value()
+                && steady_clock::now() > this->expireTimestamp.value();
+    }
+
+    const T &get() const {
+        if (this->is_timed_out()) {
+            this->value = defaultValue;
+            this->expireTimestamp.reset();
+        }
+        return this->value;
+    }
+
+    void reset() {
+        this->value = defaultValue;
+        this->expireTimestamp.reset();
+    }
+
+private:
+    mutable T value = {};
+    mutable std::optional<steady_clock::time_point> expireTimestamp;
+    Duration duration = {};
 };
 
 } // namespace ag

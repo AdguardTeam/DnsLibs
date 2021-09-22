@@ -5,6 +5,7 @@
 #include <functional>
 #include <list>
 #include <mutex>
+#include <chrono>
 #include <event2/event.h>
 #include <ag_defs.h>
 
@@ -36,6 +37,11 @@ public:
      * Submit a task to be executed on the event loop
      */
     void submit(std::function<void()> task);
+
+    /**
+     * Schedule a `task` to be executed on the event loop after the `postpone_time`
+     */
+    void schedule(std::chrono::microseconds postpone_time, std::function<void()> task);
 
     /**
      * Stop event loop
@@ -71,6 +77,19 @@ private:
     /** Submitted tasks */
     with_mtx<tasks> m_tasks;
 
+    struct postponed_tasks {
+        struct task {
+            event_loop *event_loop;
+            uint32_t id;
+            std::function<void()> func;
+        };
+
+        uint32_t next_task_id = 0;
+        std::list<task> queue;
+    };
+    /** Postponed tasks */
+    with_mtx<postponed_tasks> m_postponed_tasks;
+
     explicit event_loop(bool run_immediately);
 
     /** Code for running base loop in thread */
@@ -79,6 +98,7 @@ private:
     void execute_tasks();
 
     static void run_tasks_queue(int, short, void *);
+    static void run_postponed_task(int, short, void *);
 };
 
 } // namespace ag

@@ -24,6 +24,7 @@ set(SRCS
         ${SRC_DIR}/outbound_proxy.cpp
         ${SRC_DIR}/outbound_http_proxy.cpp
         ${SRC_DIR}/outbound_socks_proxy.cpp
+        ${SRC_DIR}/outbound_direct_proxy.cpp
         ${SRC_DIR}/tls_codec.cpp
         ${SRC_DIR}/secured_socket.cpp
         )

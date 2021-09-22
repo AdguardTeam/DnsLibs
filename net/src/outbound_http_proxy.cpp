@@ -112,11 +112,14 @@ void http_oproxy::close_connection(uint32_t conn_id) {
     }
 
     connection *conn = it->second.get();
+    if (conn->state == CS_CONNECTING_SOCKET) {
+        conn->parameters.callbacks.on_proxy_connection_failed(conn->parameters.callbacks.arg, std::nullopt);
+    }
+
     conn->parameters.loop->submit(
-            [conn] () {
-                http_oproxy *self = conn->proxy;
-                std::scoped_lock l(self->guard);
-                self->connections.erase(conn->id);
+            [this, conn_id] () {
+                std::scoped_lock l(this->guard);
+                this->connections.erase(conn_id);
             });
 }
 
@@ -206,11 +209,14 @@ void http_oproxy::on_connected(void *arg) {
     http_oproxy *self = conn->proxy;
     log_conn(self, conn->id, trace, "...");
 
+    if (callbacks cbx = self->get_connection_callbacks_locked(conn);
+            cbx.on_successful_proxy_connection != nullptr) {
+        cbx.on_successful_proxy_connection(cbx.arg);
+    }
+
     if (auto e = self->connect_through_proxy(conn->id, conn->parameters);
             e.has_value()) {
-        if (conn->parameters.callbacks.on_close != nullptr) {
-            conn->parameters.callbacks.on_close(conn->parameters.callbacks.arg, std::move(e));
-        }
+        on_close(conn, std::move(e));
     }
 }
 
@@ -220,9 +226,7 @@ void http_oproxy::on_read(void *arg, uint8_view data) {
     log_conn(self, conn->id, trace, "{}", data.size());
 
     if (data.empty()) {
-        if (conn->parameters.callbacks.on_close != nullptr) {
-            conn->parameters.callbacks.on_close(conn->parameters.callbacks.arg, std::nullopt);
-        }
+        on_close(conn, std::nullopt);
         return;
     }
 
@@ -231,8 +235,9 @@ void http_oproxy::on_read(void *arg, uint8_view data) {
         self->handle_http_response_chunk(conn, { (char *) data.data(), data.size() });
         break;
     case CS_CONNECTED:
-        if (conn->parameters.callbacks.on_read != nullptr) {
-            conn->parameters.callbacks.on_read(conn->parameters.callbacks.arg, data);
+        if (callbacks cbx = self->get_connection_callbacks_locked(conn);
+                cbx.on_read != nullptr) {
+            cbx.on_read(cbx.arg, data);
         } else {
             log_conn(self, conn->id, dbg, "Dropping packet ({} bytes) as read is turned off", data.size());
         }
@@ -240,9 +245,7 @@ void http_oproxy::on_read(void *arg, uint8_view data) {
     case CS_IDLE:
     case CS_CONNECTING_SOCKET: {
         log_conn(self, conn->id, dbg, "Invalid state: {}", magic_enum::enum_name(conn->state));
-        if (conn->parameters.callbacks.on_close != nullptr) {
-            conn->parameters.callbacks.on_close(conn->parameters.callbacks.arg, { { -1, "Invalid state on reading" } });
-        }
+        on_close(conn, { { -1, "Invalid state on reading" } });
         break;
     }
     }
@@ -255,8 +258,14 @@ void http_oproxy::on_close(void *arg, std::optional<socket::error> error) {
         log_conn(self, conn->id, trace, "{} ({})", error->description, error->code);
     }
 
-    if (conn->parameters.callbacks.on_close != nullptr) {
-        conn->parameters.callbacks.on_close(conn->parameters.callbacks.arg, std::move(error));
+    callbacks callbacks = self->get_connection_callbacks_locked(conn);
+    if (conn->state == CS_CONNECTING_SOCKET) {
+        callbacks.on_proxy_connection_failed(callbacks.arg,
+                error.has_value() ? std::make_optional(error->code) : std::nullopt);
+    }
+
+    if (callbacks.on_close != nullptr) {
+        callbacks.on_close(callbacks.arg, std::move(error));
     }
 }
 
@@ -299,16 +308,15 @@ void http_oproxy::handle_http_response_chunk(connection *conn, std::string_view 
 
     if (!utils::starts_with(seek, "HTTP/1.1 200 Connection established\r\n")
             && !utils::starts_with(seek, "HTTP/1.1 200 OK\r\n")) {
-        if (conn->parameters.callbacks.on_close != nullptr) {
-            conn->parameters.callbacks.on_close(conn->parameters.callbacks.arg, { { -1, "Bad response" } });
-        }
+        on_close(conn, { { -1, "Bad response" } });
         return;
     }
 
     conn->state = CS_CONNECTED;
     conn->recv_buffer.resize(0);
-    if (conn->parameters.callbacks.on_connected != nullptr) {
-        conn->parameters.callbacks.on_connected(conn->parameters.callbacks.arg, conn->id);
+    if (callbacks cbx = this->get_connection_callbacks_locked(conn);
+            cbx.on_connected != nullptr) {
+        cbx.on_connected(cbx.arg, conn->id);
     }
 }
 
@@ -338,4 +346,10 @@ std::unique_ptr<SSL, ftor<&SSL_free>> http_oproxy::make_ssl() {
     SSL_CTX_free(ctx);
 
     return ssl;
+}
+
+http_oproxy::callbacks http_oproxy::get_connection_callbacks_locked(connection *conn) {
+    std::scoped_lock l(this->guard);
+    assert(this->connections.count(conn->id) != 0);
+    return conn->parameters.callbacks;
 }

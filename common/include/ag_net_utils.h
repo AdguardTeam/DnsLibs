@@ -15,8 +15,10 @@ namespace ag::utils {
 
 #ifndef _WIN32
 static constexpr auto AG_ETIMEDOUT = ETIMEDOUT;
+static constexpr auto AG_ECONNREFUSED = ECONNREFUSED;
 #else
 static constexpr auto AG_ETIMEDOUT = WSAETIMEDOUT;
+static constexpr auto AG_ECONNREFUSED = WSAECONNREFUSED;
 #endif
 
 enum transport_protocol {

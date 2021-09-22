@@ -29,7 +29,7 @@ static constexpr std::string_view TIMEOUT_STR = "Request timed out";
  * Upstream factory configuration
  */
 struct upstream_factory_config {
-    const socket_factory *socket_factory = nullptr;
+    socket_factory *socket_factory = nullptr;
     const certificate_verifier *cert_verifier = nullptr;
     bool ipv6_available = true;
 };

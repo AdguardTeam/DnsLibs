@@ -1,9 +1,11 @@
 #include <cinttypes>
 #include <cassert>
 #include <algorithm>
+#include <bitset>
 
 #include <ag_utils.h>
 #include <ag_defs.h>
+#include <ag_socket.h>
 #include "upstream_doh.h"
 
 #include <openssl/err.h>
@@ -40,6 +42,13 @@ static constexpr std::string_view USER_AGENT = "ag-dns";
 struct dns_over_https::query_handle {
     using CURL_ptr = std::unique_ptr<CURL, ftor<&curl_easy_cleanup>>;
 
+    enum flag {
+        /// The query uses the proxy
+        QHF_PROXIED,
+        /// A connection through the proxy has failed and the query was re-routed directly
+        QHF_BYPASSED_PROXY,
+    };
+
     const logger *log = nullptr;
     dns_over_https *upstream = nullptr;
     size_t request_id = 0;
@@ -49,12 +58,84 @@ struct dns_over_https::query_handle {
     std::vector<uint8_t> response;
     std::promise<void> barrier;
     std::promise<void> submit_barrier;
+    std::bitset<magic_enum::enum_count<flag>()> flags;
 
     CURL_ptr create_curl_handle();
     bool set_up_proxy(const outbound_proxy_settings *settings);
     void cleanup_request();
     void restore_packet_id(ldns_pkt *packet) const {
         ldns_pkt_set_id(packet, this->request_id);
+    }
+};
+
+struct dns_over_https::check_proxy_state {
+    dns_over_https *upstream = nullptr;
+    std::unique_ptr<socket> socket;
+
+    static std::unique_ptr<check_proxy_state> start(dns_over_https *upstream, microseconds timeout) {
+        socket_factory *socket_factory = upstream->m_config.socket_factory;
+
+        auto self = std::make_unique<check_proxy_state>();
+        self->upstream = upstream;
+        self->socket = socket_factory->make_socket({
+                utils::TP_TCP,
+                upstream->m_options.outbound_interface,
+                true,
+        });
+
+        const outbound_proxy_settings *oproxy_settings = socket_factory->get_outbound_proxy_settings();
+        std::optional<socket::error> error = self->socket->connect({
+                upstream->worker.loop.get(),
+                socket_address(oproxy_settings->address, oproxy_settings->port),
+                { on_connected, nullptr, on_close, self.get() },
+                timeout,
+        });
+
+        if (error.has_value()) {
+            dbglog(upstream->log, "Failed to check connectivity with proxy: {} ({})",
+                    error->description, error->code);
+            self.reset();
+        }
+
+        return self;
+    }
+
+    static void on_connected(void *arg) {
+        auto *self = (check_proxy_state *)arg;
+        dns_over_https *upstream = self->upstream;
+
+        upstream->m_config.socket_factory->on_successful_proxy_connection();
+        upstream->check_proxy.reset();
+        upstream->retry_pending_queries_directly();
+    }
+
+    static void on_close(void *arg, std::optional<socket::error> error) {
+        auto *self = (check_proxy_state *)arg;
+        dns_over_https *upstream = self->upstream;
+
+        socket_factory *factory = upstream->m_config.socket_factory;
+        socket_factory::proxy_connection_failed_result result =
+                factory->on_proxy_connection_failed(
+                        error.has_value() ? std::make_optional(error->code) : std::nullopt);
+
+        upstream->check_proxy.reset();
+
+        switch (result) {
+        case ag::socket_factory::SFPCFR_CLOSE_CONNECTION:
+            upstream->stop_all_with_error("Couldn't connect to proxy server");
+            break;
+        case ag::socket_factory::SFPCFR_RETRY_DIRECTLY:
+            upstream->retry_pending_queries_directly();
+            upstream->reset_bypassed_proxy_connections_subscribe_id =
+                    factory->subscribe_to_reset_bypassed_proxy_connections_event({
+                            [] (void *arg) {
+                                auto *self = (dns_over_https *)arg;
+                                std::scoped_lock l(self->guard);
+                                self->worker.loop->submit([self] () { self->reset_bypassed_proxy_queries(); });
+                            }
+                    });
+            break;
+        }
     }
 };
 
@@ -167,7 +248,7 @@ dns_over_https::query_handle::CURL_ptr dns_over_https::query_handle::create_curl
 }
 
 bool dns_over_https::query_handle::set_up_proxy(const outbound_proxy_settings *settings) {
-    static constexpr curl_proxytype AG_TO_CURL_PROXY_PROTOCOL[] = {
+    static constexpr curl_proxytype AG_TO_CURL_PROXY_PROTOCOL[magic_enum::enum_count<outbound_proxy_protocol>()] = {
             [(int)outbound_proxy_protocol::HTTP_CONNECT] = CURLPROXY_HTTP,
             [(int)outbound_proxy_protocol::HTTPS_CONNECT] = CURLPROXY_HTTPS,
             [(int)outbound_proxy_protocol::SOCKS4] = CURLPROXY_SOCKS4,
@@ -380,6 +461,13 @@ err_string dns_over_https::init() {
 dns_over_https::~dns_over_https() {
     infolog(this->log, "Destroying...");
 
+    {
+        std::unique_lock lock(this->guard);
+        if (auto id = this->reset_bypassed_proxy_connections_subscribe_id; id.has_value()) {
+            this->m_config.socket_factory->unsubscribe_from_reset_bypassed_proxy_connections_event(id.value());
+        }
+    }
+
     infolog(this->log, "Stopping event loop...");
     this->worker.loop->submit([this] () { this->stop_all_with_error("Upstream has been stopped"); });
     // Delete the event before deleting the loop
@@ -403,6 +491,8 @@ dns_over_https::~dns_over_https() {
 
     // Defy stray `query_handle`s not defied on the event loop
     this->defy_requests();
+
+    this->check_proxy.reset();
 
     infolog(this->log, "Destroyed");
 }
@@ -457,9 +547,7 @@ void dns_over_https::read_messages() {
         curl_easy_getinfo(message->easy_handle, CURLINFO_PRIVATE, &handle);
         assert(message->easy_handle == handle->curl_handle.get());
 
-        if (message->data.result != CURLE_OK) {
-            handle->error = AG_FMT("Failed to perform request: {}", curl_easy_strerror(message->data.result));
-        } else {
+        if (message->data.result == CURLE_OK) {
             tracelog_id(handle, "Got response {}", (void*)message->easy_handle);
 
             long response_code;
@@ -475,6 +563,20 @@ void dns_over_https::read_messages() {
             if (handle->response.empty()) {
                 handle->error = "Got empty response";
             }
+        } else {
+            if (handle->flags.test(query_handle::QHF_PROXIED)
+                    && message->data.result == CURLE_COULDNT_CONNECT
+                    && this->m_config.socket_factory->is_proxy_available()) {
+                if (this->check_proxy != nullptr) {
+                    continue;
+                }
+                this->check_proxy = check_proxy_state::start(this, this->m_options.timeout);
+                if (this->check_proxy != nullptr) {
+                    dbglog_id(handle, "Failed to connect through proxy, checking connectivity with proxy server");
+                    continue;
+                }
+            }
+            handle->error = AG_FMT("Failed to perform request: {}", curl_easy_strerror(message->data.result));
         }
 
         handle->cleanup_request();
@@ -546,11 +648,11 @@ int dns_over_https::on_socket_update(CURL *handle, curl_socket_t socket, int wha
 
 void dns_over_https::submit_request(query_handle *handle) {
     tracelog_id(handle, "Submitting request");
+    this->start_request(handle, false);
+    handle->submit_barrier.set_value();
+}
 
-    ag::utils::scope_exit signal_submit_done([&] {
-        handle->submit_barrier.set_value();
-    });
-
+void dns_over_https::start_request(query_handle *handle, bool ignore_proxy) {
     handle->curl_handle = handle->create_curl_handle();
     if (handle->curl_handle == nullptr) {
         // error is already set in `create_curl_handle`
@@ -558,11 +660,20 @@ void dns_over_https::submit_request(query_handle *handle) {
         return;
     }
 
-    if (const outbound_proxy_settings *proxy_settings = this->m_config.socket_factory->get_outbound_proxy_settings();
-            proxy_settings != nullptr && !handle->set_up_proxy(proxy_settings)) {
-        // error is already set in `set_up_proxy`
-        handle->barrier.set_value();
-        return;
+    if (!ignore_proxy && this->m_config.socket_factory->should_route_through_proxy(utils::TP_TCP)) {
+        if (this->check_proxy != nullptr) {
+            // will proceed after the proxy check
+            goto register_handle;
+        }
+
+        if (!handle->set_up_proxy(this->m_config.socket_factory->get_outbound_proxy_settings())) {
+            // error is already set in `set_up_proxy`
+            handle->barrier.set_value();
+            return;
+        }
+        handle->flags.set(query_handle::QHF_PROXIED);
+    } else {
+        handle->flags.reset(query_handle::QHF_PROXIED);
     }
 
     if (CURLMcode e = curl_multi_add_handle(this->pool.handle.get(), handle->curl_handle.get());
@@ -572,6 +683,7 @@ void dns_over_https::submit_request(query_handle *handle) {
         return;
     }
 
+    register_handle:
     this->worker.running_queue.emplace_back(handle);
 }
 
@@ -598,6 +710,32 @@ void dns_over_https::stop_all_with_error(const err_string &e) {
     for (auto i = queue.begin(); i != queue.end();) {
         query_handle *handle = *i;
         handle->error = e;
+        handle->cleanup_request();
+        i = queue.erase(i);
+        handle->barrier.set_value();
+    }
+}
+
+void dns_over_https::retry_pending_queries_directly() {
+    std::deque<query_handle *> queue;
+    queue.swap(this->worker.running_queue);
+
+    for (query_handle *h : queue) {
+        this->start_request(h, true);
+        h->flags.set(query_handle::QHF_BYPASSED_PROXY);
+    }
+}
+
+void dns_over_https::reset_bypassed_proxy_queries() {
+    std::deque<query_handle *> &queue = this->worker.running_queue;
+    for (auto i = queue.begin(); i != queue.end();) {
+        query_handle *handle = *i;
+        if (!handle->flags.test(query_handle::QHF_BYPASSED_PROXY)) {
+            ++i;
+            continue;
+        }
+
+        handle->error = "Reset re-routed directly connection";
         handle->cleanup_request();
         i = queue.erase(i);
         handle->barrier.set_value();

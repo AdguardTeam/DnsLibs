@@ -286,7 +286,19 @@ void socks_oproxy::close_connection(uint32_t conn_id) {
     }
 
     connection *conn = it->second.get();
-    conn->parameters.loop->submit([conn] () { conn->proxy->close_connection(conn); });
+    if (conn->state == CS_CONNECTING_SOCKET) {
+        conn->parameters.callbacks.on_proxy_connection_failed(conn->parameters.callbacks.arg, std::nullopt);
+    }
+
+    conn->parameters.loop->submit(
+            [this, conn_id] () {
+                std::scoped_lock l(this->guard);
+                auto it = this->connections.find(conn_id);
+                if (it != this->connections.end()) {
+                    this->close_connection(it->second.get());
+                    this->connections.erase(it);
+                }
+            });
 }
 
 std::optional<socket::error> socks_oproxy::connect_to_proxy(uint32_t conn_id, const connect_parameters &parameters) {
@@ -353,6 +365,11 @@ void socks_oproxy::on_connected(void *arg) {
     socks_oproxy *self = conn->proxy;
     log_conn(self, conn->id, trace, "...");
 
+    if (callbacks cbx = self->get_connection_callbacks_locked(conn);
+            cbx.on_successful_proxy_connection != nullptr) {
+        cbx.on_successful_proxy_connection(cbx.arg);
+    }
+
     if (auto e = self->connect_through_proxy(conn->id, conn->parameters);
             e.has_value()) {
         self->handle_connection_close(conn, std::move(e));
@@ -382,11 +399,12 @@ void socks_oproxy::on_read(void *arg, uint8_view data) {
         if (self->is_udp_association_connection(conn->id)) {
             log_conn(self, conn->id, dbg, "Unexpected data ({} bytes) on UDP association connection", data.size());
             self->terminate_udp_association(conn);
-        } else if (conn->parameters.callbacks.on_read != nullptr) {
+        } else if (callbacks cbx = self->get_connection_callbacks_locked(conn);
+                cbx.on_read != nullptr) {
             if (conn->parameters.proto == utils::TP_UDP) {
                 data.remove_prefix(get_full_udp_header_size((socks5_udp_header *)data.data()));
             }
-            conn->parameters.callbacks.on_read(conn->parameters.callbacks.arg, data);
+            cbx.on_read(cbx.arg, data);
         } else {
             log_conn(self, conn->id, dbg, "Dropping packet ({} bytes) as read is turned off", data.size());
         }
@@ -450,10 +468,17 @@ std::optional<socket::error> socks_oproxy::connect_to_proxy(connection *conn) {
             log_conn(this, association->conn_id, dbg, "Starting UDP association");
 
             auto &udp_association_conn = this->connections[association->conn_id];
-            udp_association_conn = std::make_unique<connection>(
-                    connection{ this, association->conn_id,
-                            { conn->parameters.loop, utils::TP_TCP, socket_address(this->settings->address, this->settings->port),
-                                    {}, conn->parameters.timeout } });
+            udp_association_conn = std::make_unique<connection>(connection{
+                    this,
+                    association->conn_id,
+                    {
+                        conn->parameters.loop,
+                        utils::TP_TCP,
+                        socket_address(this->settings->address, this->settings->port),
+                        conn->parameters.callbacks,
+                        conn->parameters.timeout,
+                    },
+            });
             udp_association_conn->socket = this->parameters.make_socket.func(this->parameters.make_socket.arg,
                     utils::TP_TCP, std::nullopt);
             proto = utils::TP_TCP;
@@ -487,19 +512,17 @@ void socks_oproxy::close_connection(connection *conn) {
     uint32_t conn_id = conn->id;
     event_loop *loop = conn->parameters.loop;
     utils::transport_protocol proto = conn->parameters.proto;
-
-    std::scoped_lock l(this->guard);
-    this->connections.erase(conn_id);
-
     if (proto != utils::TP_UDP) {
         return;
     }
 
-    bool some_udp_connections_left = std::any_of(this->connections.begin(), this->connections.end(),
-            [loop] (const auto &i) {
-                return i.second->parameters.loop == loop && i.second->parameters.proto == utils::TP_UDP;
+    bool some_other_udp_connections_left = std::any_of(this->connections.begin(), this->connections.end(),
+            [conn_id, loop] (const auto &i) {
+                return conn_id != i.first
+                        && i.second->parameters.loop == loop
+                        && i.second->parameters.proto == utils::TP_UDP;
             });
-    if (some_udp_connections_left) {
+    if (some_other_udp_connections_left) {
         return;
     }
 
@@ -520,7 +543,7 @@ void socks_oproxy::close_connection(connection *conn) {
     // A TCP connection of the UDP association can't be left hanging
     // because it can outlive the event loop which will cause a use-after-free
     // while destructing the connections table
-    this->terminate_udp_association_silently(assoc_conn_it->second.get());
+    this->terminate_udp_association_silently(assoc_conn_it->second.get(), conn_id);
 }
 
 bool socks_oproxy::is_udp_association_connection(uint32_t conn_id) const {
@@ -530,13 +553,22 @@ bool socks_oproxy::is_udp_association_connection(uint32_t conn_id) const {
 }
 
 void socks_oproxy::handle_connection_close(connection *conn, std::optional<socket::error> error) {
+    if (error.has_value()) {
+        log_conn(this, conn->id, dbg, "{} {}", error->code, error->description);
+    }
+
+    struct callbacks callbacks = this->get_connection_callbacks_locked(conn);
+    if (conn->state == CS_CONNECTING_SOCKET) {
+        callbacks.on_proxy_connection_failed(callbacks.arg,
+                error.has_value() ? std::make_optional(error->code) : std::nullopt);
+    }
+
     if (this->is_udp_association_connection(conn->id)) {
         if (!error.has_value() || error->code != utils::AG_ETIMEDOUT) {
             this->terminate_udp_association(conn);
         }
-    } else if (conn->parameters.callbacks.on_close != nullptr) {
-        conn->parameters.callbacks.on_close(conn->parameters.callbacks.arg, std::move(error));
-        this->close_connection(conn);
+    } else if (callbacks.on_close != nullptr) {
+        callbacks.on_close(callbacks.arg, std::move(error));
     }
 }
 
@@ -565,9 +597,13 @@ void socks_oproxy::on_udp_association_established(connection *assoc_conn, socket
     this->guard.unlock();
 
     for (connection *conn : udp_connections) {
-        if (auto e = this->connect_to_proxy(conn);
-                e.has_value() && conn->parameters.callbacks.on_close != nullptr) {
-            conn->parameters.callbacks.on_close(conn->parameters.callbacks.arg, std::move(e));
+        auto e = this->connect_to_proxy(conn);
+        if (!e.has_value()) {
+            continue;
+        }
+        if (callbacks cbx = this->get_connection_callbacks_locked(conn);
+                cbx.on_close != nullptr) {
+            cbx.on_close(cbx.arg, std::move(e));
         }
     }
 }
@@ -575,35 +611,37 @@ void socks_oproxy::on_udp_association_established(connection *assoc_conn, socket
 void socks_oproxy::terminate_udp_association(connection *assoc_conn) {
     log_conn(this, assoc_conn->id, trace, "...");
 
-    std::vector<std::unique_ptr<connection>> udp_connections;
+    std::vector<callbacks> udp_connections_callbacks;
 
     this->guard.lock();
     for (auto i = this->connections.begin(); i != this->connections.end();) {
         auto &conn = i->second;
         if (assoc_conn->parameters.loop == conn->parameters.loop
                 && conn->parameters.proto == utils::TP_UDP) {
-            udp_connections.emplace_back(std::move(conn));
+            udp_connections_callbacks.emplace_back(conn->parameters.callbacks);
             i = this->connections.erase(i);
         } else {
             ++i;
         }
     }
 
-    this->terminate_udp_association_silently(assoc_conn);
+    this->terminate_udp_association_silently(assoc_conn, std::nullopt);
     this->guard.unlock();
 
-    for (auto &conn : udp_connections) {
-        if (conn->parameters.callbacks.on_close != nullptr) {
-            conn->parameters.callbacks.on_close(conn->parameters.callbacks.arg,
-                    { { -1, "UDP association terminated" } });
+    for (auto &cbx : udp_connections_callbacks) {
+        if (cbx.on_close != nullptr) {
+            cbx.on_close(cbx.arg, { { -1, "UDP association terminated" } });
         }
     }
 }
 
-void socks_oproxy::terminate_udp_association_silently(connection *assoc_conn) {
+void socks_oproxy::terminate_udp_association_silently(connection *assoc_conn,
+        std::optional<uint32_t> initiated_conn_id) {
     assert(std::none_of(this->connections.begin(), this->connections.end(),
-            [loop = assoc_conn->parameters.loop] (const auto &i) {
-                return i.second->parameters.loop == loop && i.second->parameters.proto == utils::TP_UDP;
+            [initiated_conn_id, loop = assoc_conn->parameters.loop] (const auto &i) {
+                return initiated_conn_id != i.first
+                        && i.second->parameters.loop == loop
+                        && i.second->parameters.proto == utils::TP_UDP;
             }));
 
     if (auto it = this->udp_associations.find(assoc_conn->parameters.loop);
@@ -611,6 +649,12 @@ void socks_oproxy::terminate_udp_association_silently(connection *assoc_conn) {
         this->connections.erase(assoc_conn->id);
         this->udp_associations.erase(it);
     }
+}
+
+socks_oproxy::callbacks socks_oproxy::get_connection_callbacks_locked(connection *conn) {
+    std::scoped_lock l(this->guard);
+    assert(this->connections.count(conn->id) != 0);
+    return conn->parameters.callbacks;
 }
 
 #define SEND_S(conn_, data_) \
@@ -666,8 +710,9 @@ void socks_oproxy::on_socks4_reply(connection *conn, uint8_view data) {
 
     conn->state = CS_CONNECTED;
     conn->recv_buffer.clear();
-    if (conn->parameters.callbacks.on_connected != nullptr) {
-        conn->parameters.callbacks.on_connected(conn->parameters.callbacks.arg, conn->id);
+    if (callbacks cbx = this->get_connection_callbacks_locked(conn);
+            cbx.on_connected != nullptr) {
+        cbx.on_connected(cbx.arg, conn->id);
     }
 }
 
@@ -868,7 +913,8 @@ void socks_oproxy::on_socks5_connect_response(connection *conn, uint8_view data)
         uint16_t port = ntohs(*(uint16_t *)(reply->bnd_addr + addr.size()));
 
         this->on_udp_association_established(conn, socket_address(addr, port));
-    } else if (conn->parameters.callbacks.on_connected != nullptr) {
-        conn->parameters.callbacks.on_connected(conn->parameters.callbacks.arg, conn->id);
+    } else if (callbacks cbx = this->get_connection_callbacks_locked(conn);
+            cbx.on_connected != nullptr) {
+        cbx.on_connected(cbx.arg, conn->id);
     }
 }

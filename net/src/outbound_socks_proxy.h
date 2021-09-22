@@ -47,7 +47,8 @@ private:
     void handle_connection_close(connection *conn, std::optional<socket::error> error);
     void on_udp_association_established(connection *assoc_conn, socket_address bound_addr);
     void terminate_udp_association(connection *assoc_conn);
-    void terminate_udp_association_silently(connection *assoc_conn);
+    void terminate_udp_association_silently(connection *assoc_conn, std::optional<uint32_t> initiated_conn_id);
+    callbacks get_connection_callbacks_locked(connection *conn);
 
     [[nodiscard]] std::optional<socket::error> send_socks4_request(connection *conn);
     void on_socks4_reply(connection *conn, uint8_view data);

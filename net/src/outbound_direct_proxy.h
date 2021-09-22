@@ -1,30 +1,40 @@
 #pragma once
 
 
-#include <optional>
-#include <mutex>
-#include <ag_defs.h>
-#include <tls_session_cache.h>
 #include "outbound_proxy.h"
 
 
 namespace ag {
 
-class http_oproxy : public outbound_proxy {
+/**
+ * This entity is used if an outbound proxy is not available. In that case all outgoing connection
+ * are routed directly to theirs target hosts through this fake proxy object.
+ */
+class direct_oproxy : public outbound_proxy {
 public:
-    http_oproxy(const outbound_proxy_settings *settings, struct parameters parameters);
-    ~http_oproxy() override = default;
+    explicit direct_oproxy(struct parameters parameters);
+    ~direct_oproxy() override = default;
 
-    http_oproxy(http_oproxy &&) = delete;
-    http_oproxy &operator=(http_oproxy &&) = delete;
-    http_oproxy(const http_oproxy &) = delete;
-    http_oproxy &operator=(const http_oproxy &) = delete;
+    direct_oproxy(direct_oproxy &&) = delete;
+    direct_oproxy &operator=(direct_oproxy &&) = delete;
+    direct_oproxy(const direct_oproxy &) = delete;
+    direct_oproxy &operator=(const direct_oproxy &) = delete;
+
+    /**
+     * Reset all active connections
+     */
+    void reset_connections();
 
 private:
-    struct connection;
     mutable std::mutex guard;
-    hash_map<uint32_t, std::unique_ptr<connection>> connections;
-    std::optional<tls_session_cache> tls_session_cache;
+    struct connection {
+        direct_oproxy *proxy = nullptr;
+        uint32_t id = 0;
+        std::unique_ptr<socket> socket;
+        connect_parameters parameters = {};
+    };
+
+    hash_map<uint32_t, connection> connections;
 
     [[nodiscard]] protocols_set get_supported_protocols() const override;
     [[nodiscard]] std::optional<evutil_socket_t> get_fd(uint32_t conn_id) const override;
@@ -38,11 +48,6 @@ private:
     static void on_connected(void *arg);
     static void on_read(void *arg, uint8_view data);
     static void on_close(void *arg, std::optional<socket::error> error);
-    static int ssl_verify_callback(X509_STORE_CTX *ctx, void *arg);
-
-    void handle_http_response_chunk(connection *conn, std::string_view chunk);
-    [[nodiscard]] std::unique_ptr<SSL, ftor<&SSL_free>> make_ssl();
-    callbacks get_connection_callbacks_locked(connection *conn);
 };
 
 }

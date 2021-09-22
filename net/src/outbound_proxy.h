@@ -26,6 +26,10 @@ public:
     using protocols_set = std::bitset<magic_enum::enum_count<utils::transport_protocol>()>;
 
     struct callbacks {
+        /** Raised after the connection to the proxy server succeeded */
+        void (* on_successful_proxy_connection)(void *arg);
+        /** Raised after an error on the connection to the proxy server */
+        void (* on_proxy_connection_failed)(void *arg, std::optional<int> err);
         /**
          * Raised after tunnel to a peer through the proxy is established
          * @param conn_id ID of the opened connection

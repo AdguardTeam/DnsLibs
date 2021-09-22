@@ -55,6 +55,7 @@ public class OutboundProxySettings {
     private final InetSocketAddress address;
     private final AuthInfo authInfo;
     private final boolean trustAnyCertificate;
+    private final boolean ignoreIfUnavailable;
 
     /**
      * @param protocol The proxy protocol
@@ -65,6 +66,7 @@ public class OutboundProxySettings {
         this.address = address;
         this.authInfo = null;
         this.trustAnyCertificate = false;
+        this.ignoreIfUnavailable = false;
     }
 
     /**
@@ -72,13 +74,17 @@ public class OutboundProxySettings {
      * @param address The proxy server address
      * @param authInfo The authentication information
      * @param trustAnyCertificate If true and the proxy connection is secure, the certificate won't be verified
+     * @param ignoreIfUnavailable Whether the DNS proxy should ignore the outbound proxy and route
+     *                            quries directly to target hosts even if it's determined as unavailable
      */
     public OutboundProxySettings(Protocol protocol, InetSocketAddress address,
-                                 AuthInfo authInfo, boolean trustAnyCertificate) {
+                                 AuthInfo authInfo, boolean trustAnyCertificate,
+                                 boolean ignoreIfUnavailable) {
         this.protocol = protocol;
         this.address = address;
         this.authInfo = authInfo;
         this.trustAnyCertificate = trustAnyCertificate;
+        this.ignoreIfUnavailable = ignoreIfUnavailable;
     }
 
     /**
@@ -109,6 +115,14 @@ public class OutboundProxySettings {
         return trustAnyCertificate;
     }
 
+    /**
+     * @return Whether the DNS proxy should continue trying to go through the proxy
+     *         even if it's determined as unavailable
+     */
+    public boolean isIgnoreIfUnavailable() {
+        return ignoreIfUnavailable;
+    }
+
     @Override
     public boolean equals(Object o) {
         if (this == o) return true;
@@ -117,11 +131,13 @@ public class OutboundProxySettings {
         return this.protocol == that.protocol
                 && Objects.equals(this.address, that.address)
                 && Objects.equals(this.authInfo, that.authInfo)
-                && this.trustAnyCertificate == that.trustAnyCertificate;
+                && this.trustAnyCertificate == that.trustAnyCertificate
+                && this.ignoreIfUnavailable == that.ignoreIfUnavailable;
     }
 
     @Override
     public int hashCode() {
-        return Objects.hash(this.protocol, this.address, this.authInfo, this.trustAnyCertificate);
+        return Objects.hash(this.protocol, this.address, this.authInfo, this.trustAnyCertificate,
+                this.ignoreIfUnavailable);
     }
 }

@@ -45,6 +45,7 @@ public:
 
     struct query_handle;
     struct socket_handle;
+    struct check_proxy_state;
 
 private:
     err_string init() override;
@@ -59,6 +60,8 @@ private:
      * Must be called in worker thread
      */
     void stop_all_with_error(const err_string &e);
+    void retry_pending_queries_directly();
+    void reset_bypassed_proxy_queries();
 
     static CURLcode ssl_callback(CURL *curl, void *sslctx, void *arg);
     static int verify_callback(X509_STORE_CTX *ctx, void *arg);
@@ -71,6 +74,7 @@ private:
     static curl_socket_t curl_opensocket(void *clientp, curlsocktype purpose, struct curl_sockaddr *address);
 
     void submit_request(query_handle *handle);
+    void start_request(query_handle *handle, bool ignore_proxy);
     void defy_requests();
 
     logger log = create_logger("DOH upstream");
@@ -94,6 +98,9 @@ private:
         event_ptr timer_event = nullptr;
     };
     pool_descriptor pool;
+
+    std::unique_ptr<check_proxy_state> check_proxy;
+    std::optional<uint32_t> reset_bypassed_proxy_connections_subscribe_id;
 };
 
 }

@@ -22,11 +22,19 @@ struct outbound_proxy_auth_info {
 };
 
 struct outbound_proxy_settings {
-    outbound_proxy_protocol protocol; // The proxy protocol
-    std::string address; // The proxy server address (must be a valid IP address)
-    uint16_t port; // The proxy server port
-    std::optional<outbound_proxy_auth_info> auth_info; // The authentication information
-    bool trust_any_certificate; // If true and the proxy connection is secure, the certificate won't be verified
+    /// The proxy protocol
+    outbound_proxy_protocol protocol;
+    /// The proxy server address (must be a valid IP address)
+    std::string address;
+    /// The proxy server port
+    uint16_t port;
+    /// The authentication information
+    std::optional<outbound_proxy_auth_info> auth_info;
+    /// If true and the proxy connection is secure, the certificate won't be verified
+    bool trust_any_certificate;
+    /// Whether the DNS proxy should ignore the outbound proxy and route quries directly
+    /// to target hosts even if it's determined as unavailable
+    bool ignore_if_unavailable;
 };
 
 }

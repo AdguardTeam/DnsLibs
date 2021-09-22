@@ -26,43 +26,10 @@ static struct Init {
     }
 } init_;
 
-static ag::upstream_factory::create_result create_upstream(const ag::upstream_options &opts) {
-#ifndef _WIN32
-    static ag::default_verifier cert_verifier;
-#else
-    static ag::application_verifier cert_verifier{[](const ag::certificate_verification_event &) {
-        return std::nullopt;
-    }};
-#endif
-
-    struct ag::socket_factory::parameters sf_parameters = {};
-#if 0
-    static ag::outbound_proxy_settings proxy_settings =
-            { ag::outbound_proxy_protocol::SOCKS5_UDP, "127.0.0.1", 8888, { { "1", "1" } } };
-    sf_parameters.oproxy_settings = &proxy_settings;
-#endif
-    sf_parameters.verifier = &cert_verifier;
-    static ag::socket_factory socket_factory(sf_parameters);
-
-    static bool ipv6_available = test_ipv6_connectivity();
-    static ag::upstream_factory upstream_factory({ &socket_factory, &cert_verifier, ipv6_available });
-    return upstream_factory.create_upstream(opts);
-}
-
 static const ag::logger &logger() {
     static auto result = ag::create_logger("test_upstream_logger");
     return result;
 }
-
-class upstream_test : public ::testing::Test {
-protected:
-    void SetUp() override {
-        ag::set_default_log_level(ag::TRACE);
-    }
-};
-
-template<typename... Ts>
-struct upstream_param_test : upstream_test, ::testing::WithParamInterface<Ts...> {};
 
 namespace concat_err_string {
 
@@ -154,16 +121,63 @@ static void parallel_test_basic(const T &data, const F &function) {
     check_all_futures(futures);
 }
 
-template<typename T>
-static void parallel_test(const T &data) {
-    parallel_test_basic(data, [](const auto &address, const auto &bootstrap, const auto &server_ip) -> ag::err_string {
-        auto[upstream_ptr, upstream_err] = create_upstream({address, bootstrap, DEFAULT_TIMEOUT, server_ip});
-        if (upstream_err) {
-            return AG_FMT("Failed to generate upstream from address {}: {}", address, *upstream_err);
-        }
-        return check_upstream(*upstream_ptr, address);
-    });
-}
+class upstream_test : public ::testing::Test {
+protected:
+    std::unique_ptr<ag::socket_factory> socket_factory;
+    std::unique_ptr<ag::certificate_verifier> verifier;
+    std::unique_ptr<ag::upstream_factory> upstream_factory;
+
+    void SetUp() override {
+        ag::set_default_log_level(ag::TRACE);
+        make_upstream_factory();
+    }
+
+    void make_upstream_factory(ag::outbound_proxy_settings *oproxy = nullptr) {
+#ifndef _WIN32
+        verifier = std::make_unique<ag::default_verifier>();
+#else
+        verifier = std::make_unique<ag::application_verifier>(
+                [](const ag::certificate_verification_event &) {
+                    return std::nullopt;
+                });
+#endif
+
+        struct ag::socket_factory::parameters sf_parameters = {};
+#if 0
+        static ag::outbound_proxy_settings proxy_settings =
+                { ag::outbound_proxy_protocol::SOCKS5_UDP, "127.0.0.1", 8888, { { "1", "1" } } };
+        sf_parameters.oproxy_settings = &proxy_settings;
+#else
+        sf_parameters.oproxy_settings = oproxy;
+#endif
+        sf_parameters.verifier = verifier.get();
+
+        socket_factory = std::make_unique<ag::socket_factory>(sf_parameters);
+
+        static bool ipv6_available = test_ipv6_connectivity();
+        upstream_factory = std::make_unique<ag::upstream_factory>(
+                ag::upstream_factory_config{ socket_factory.get(), verifier.get(), ipv6_available });
+    }
+
+    ag::upstream_factory::create_result create_upstream(const ag::upstream_options &opts) {
+        return upstream_factory->create_upstream(opts);
+    }
+
+    template<typename T>
+    void parallel_test(const T &data) {
+        parallel_test_basic(data,
+                [this] (const auto &address, const auto &bootstrap, const auto &server_ip) -> ag::err_string {
+                    auto[upstream_ptr, upstream_err] = create_upstream({address, bootstrap, DEFAULT_TIMEOUT, server_ip});
+                    if (upstream_err) {
+                        return AG_FMT("Failed to generate upstream from address {}: {}", address, *upstream_err);
+                    }
+                    return check_upstream(*upstream_ptr, address);
+                });
+    }
+};
+
+template<typename... Ts>
+struct upstream_param_test : public upstream_test, public ::testing::WithParamInterface<Ts...> {};
 
 TEST_F(upstream_test, create_upstream_with_wrong_options) {
     static const ag::upstream_options OPTIONS[] = {
@@ -284,7 +298,7 @@ TEST_P(dns_truncated_test, test_dns_truncated) {
     ASSERT_FALSE(ldns_pkt_tc(res.get())) << "Response must NOT be truncated";
 }
 
-INSTANTIATE_TEST_CASE_P(dns_truncated_test, dns_truncated_test, testing::ValuesIn(truncated_test_data));
+INSTANTIATE_TEST_SUITE_P(dns_truncated_test, dns_truncated_test, testing::ValuesIn(truncated_test_data));
 
 struct upstream_test_data {
     std::string address;
@@ -471,7 +485,7 @@ TEST_P(upstream_default_options_test, test_upstream_default_options) {
     ASSERT_FALSE(err) << *err;
 }
 
-INSTANTIATE_TEST_CASE_P(upstream_default_options_test, upstream_default_options_test,
+INSTANTIATE_TEST_SUITE_P(upstream_default_options_test, upstream_default_options_test,
                         testing::ValuesIn(test_upstream_default_options_data));
 
 static const upstream_test_data test_upstreams_invalid_bootstrap_data[]{
@@ -541,6 +555,80 @@ static const upstream_test_data test_upstreams_with_server_ip_data[]{
 TEST_F(upstream_test, test_upstreams_with_server_ip) {
     parallel_test(test_upstreams_with_server_ip_data);
 }
+
+struct dead_proxy_success : upstream_param_test<std::tuple<std::string, ag::outbound_proxy_settings>> {};
+TEST_P(dead_proxy_success, test) {
+    auto oproxy = std::make_unique<ag::outbound_proxy_settings>(std::get<1>(GetParam()));
+    make_upstream_factory(oproxy.get());
+    auto [upstream_ptr, err] = create_upstream({ std::get<0>(GetParam()), { "8.8.8.8" }, DEFAULT_TIMEOUT });
+    ASSERT_FALSE(err.has_value()) << err.value();
+    err = check_upstream(*upstream_ptr, std::get<0>(GetParam()));
+    ASSERT_FALSE(err.has_value()) << err.value();
+}
+
+INSTANTIATE_TEST_SUITE_P(tcp_only_proxy,
+        dead_proxy_success,
+        ::testing::Combine(
+                ::testing::Values(
+                        "tcp://8.8.8.8"
+                        , "tls://dns.adguard.com"
+                        , "https://dns.adguard.com/dns-query"
+                ),
+                ::testing::Values(
+                        ag::outbound_proxy_settings{ ag::outbound_proxy_protocol::HTTP_CONNECT, "127.0.0.1", 42, std::nullopt, false, true }
+                        , ag::outbound_proxy_settings{ ag::outbound_proxy_protocol::HTTPS_CONNECT, "127.0.0.1", 42, std::nullopt, false, true }
+                        , ag::outbound_proxy_settings{ ag::outbound_proxy_protocol::SOCKS4, "127.0.0.1", 42, std::nullopt, false, true }
+                        , ag::outbound_proxy_settings{ ag::outbound_proxy_protocol::SOCKS5, "127.0.0.1", 42, std::nullopt, false, true }
+                )));
+
+INSTANTIATE_TEST_SUITE_P(tcp_udp_proxy,
+        dead_proxy_success,
+        ::testing::Combine(
+                ::testing::Values(
+                        "8.8.8.8"
+                        , "sdns://AQIAAAAAAAAAFDE3Ni4xMDMuMTMwLjEzMDo1NDQzINErR_JS3PLCu_iZEIbq95zkSV2LFsigxDIuUso_OQhzIjIuZG5zY3J5cHQuZGVmYXVsdC5uczEuYWRndWFyZC5jb20"
+                        , "quic://dns.adguard.com:8853"
+                ),
+                ::testing::Values(
+                        ag::outbound_proxy_settings{ ag::outbound_proxy_protocol::SOCKS5_UDP, "127.0.0.1", 42, std::nullopt, false, true }
+                )));
+
+struct dead_proxy_failure : upstream_param_test<std::tuple<std::string, ag::outbound_proxy_settings>> {};
+TEST_P(dead_proxy_failure, failed_exchange) {
+    auto oproxy = std::make_unique<ag::outbound_proxy_settings>(std::get<1>(GetParam()));
+    make_upstream_factory(oproxy.get());
+    auto [upstream_ptr, err] = create_upstream({ std::get<0>(GetParam()), { "8.8.8.8" }, DEFAULT_TIMEOUT });
+    ASSERT_FALSE(err.has_value()) << err.value();
+    err = check_upstream(*upstream_ptr, std::get<0>(GetParam()));
+    ASSERT_TRUE(err.has_value());
+}
+
+INSTANTIATE_TEST_SUITE_P(tcp_only_proxy,
+        dead_proxy_failure,
+        ::testing::Combine(
+                ::testing::Values(
+                        "tcp://8.8.8.8"
+                        , "tls://dns.adguard.com"
+                        , "https://dns.adguard.com/dns-query"
+                ),
+                ::testing::Values(
+                        ag::outbound_proxy_settings{ ag::outbound_proxy_protocol::HTTP_CONNECT, "127.0.0.1", 42 }
+                        , ag::outbound_proxy_settings{ ag::outbound_proxy_protocol::HTTPS_CONNECT, "127.0.0.1", 42 }
+                        , ag::outbound_proxy_settings{ ag::outbound_proxy_protocol::SOCKS4, "127.0.0.1", 42 }
+                        , ag::outbound_proxy_settings{ ag::outbound_proxy_protocol::SOCKS5, "127.0.0.1", 42 }
+                )));
+
+INSTANTIATE_TEST_SUITE_P(udp_proxy,
+        dead_proxy_failure,
+        ::testing::Combine(
+                ::testing::Values(
+                        "8.8.8.8"
+                        , "sdns://AQIAAAAAAAAAFDE3Ni4xMDMuMTMwLjEzMDo1NDQzINErR_JS3PLCu_iZEIbq95zkSV2LFsigxDIuUso_OQhzIjIuZG5zY3J5cHQuZGVmYXVsdC5uczEuYWRndWFyZC5jb20"
+                        , "quic://dns.adguard.com:8853"
+                ),
+                ::testing::Values(
+                        ag::outbound_proxy_settings{ ag::outbound_proxy_protocol::SOCKS5_UDP, "127.0.0.1", 42 }
+                )));
 
 TEST_F(upstream_test, DISABLED_concurrent_requests) {
     using namespace std::chrono_literals;

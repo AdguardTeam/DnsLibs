@@ -3,6 +3,7 @@
 #include <event2/thread.h>
 #include <array>
 #include <ag_logger.h>
+#include <ag_net_utils.h>
 #include <csignal>
 
 static ag::logger event_logger = ag::create_logger("LIBEVENT");
@@ -64,6 +65,26 @@ void ag::event_loop::run_tasks_queue(evutil_socket_t, short, void *arg) {
     self->execute_tasks();
 }
 
+void ag::event_loop::run_postponed_task(evutil_socket_t, short, void *arg) {
+    auto *task_arg = (postponed_tasks::task *)arg;
+    event_loop *self = task_arg->event_loop;
+
+    std::optional<postponed_tasks::task> task;
+    {
+        std::scoped_lock l(self->m_postponed_tasks.mtx);
+        auto it = std::find_if(self->m_postponed_tasks.val.queue.begin(), self->m_postponed_tasks.val.queue.end(),
+                [task_id = task_arg->id] (const postponed_tasks::task &i) -> bool { return i.id == task_id; });
+        if (it != self->m_postponed_tasks.val.queue.end()) {
+            task = std::move(*it);
+            self->m_postponed_tasks.val.queue.erase(it);
+        }
+    }
+
+    if (task.has_value()) {
+        task->func();
+    }
+}
+
 void ag::event_loop::submit(std::function<void()> func) {
     std::scoped_lock l(m_tasks.mtx);
     m_tasks.val.queue.emplace_back(std::move(func));
@@ -71,6 +92,15 @@ void ag::event_loop::submit(std::function<void()> func) {
     if (!m_tasks.val.scheduled) {
         event_base_once(m_base.get(), -1, EV_TIMEOUT, run_tasks_queue, this, nullptr);
     }
+}
+
+void ag::event_loop::schedule(std::chrono::microseconds postpone_time, std::function<void()> func) {
+    std::scoped_lock l(m_postponed_tasks.mtx);
+    auto &task = m_postponed_tasks.val.queue.emplace_back(
+            postponed_tasks::task{ this, m_postponed_tasks.val.next_task_id++, std::move(func) });
+
+    timeval tv = utils::duration_to_timeval(postpone_time);
+    event_base_once(m_base.get(), -1, EV_TIMEOUT, run_postponed_task, &task, &tv);
 }
 
 void ag::event_loop::stop() {
