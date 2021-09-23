@@ -935,11 +935,28 @@ TEST_F(dnsproxy_test, whitelisting) {
     ASSERT_TRUE(last_event.whitelist);
 }
 
-TEST_F(dnsproxy_test, fallbacks_ignore_proxy) {
+TEST_F(dnsproxy_test, fallbacks_ignore_proxy_socks) {
     ag::dnsproxy_settings settings = make_dnsproxy_settings();
     settings.fallbacks = settings.upstreams;
     // some nonexistent proxy
     settings.outbound_proxy = { { ag::outbound_proxy_protocol::SOCKS5_UDP, "255.255.255.255", 1 } };
+
+    ag::dns_request_processed_event last_event{};
+
+    auto [ret, err] = proxy.init(settings, {});
+    ASSERT_TRUE(ret) << *err;
+
+    ag::ldns_pkt_ptr res;
+    ASSERT_NO_FATAL_FAILURE(perform_request(proxy, create_request("example.org", LDNS_RR_TYPE_A, LDNS_RD), res));
+    ASSERT_EQ(LDNS_RCODE_NOERROR, ldns_pkt_get_rcode(res.get()));
+}
+
+TEST_F(dnsproxy_test, fallbacks_ignore_proxy_http) {
+    ag::dnsproxy_settings settings = make_dnsproxy_settings();
+    settings.upstreams = {{ .address = "tcp://94.140.14.140" }};
+    settings.fallbacks = {{ .address = "tcp://94.140.14.140" }};
+    // some nonexistent proxy
+    settings.outbound_proxy = { { ag::outbound_proxy_protocol::HTTP_CONNECT, "255.255.255.255", 1 } };
 
     ag::dns_request_processed_event last_event{};
 

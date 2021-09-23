@@ -148,6 +148,7 @@ std::optional<socket::error> http_oproxy::connect_to_proxy(uint32_t conn_id, con
                 parameters.timeout });
             e.has_value()) {
         log_conn(this, conn_id, dbg, "Failed to start socket connection");
+        this->connections.erase(conn_id);
         return e;
     }
 

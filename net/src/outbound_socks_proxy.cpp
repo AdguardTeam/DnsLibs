@@ -316,7 +316,15 @@ std::optional<socket::error> socks_oproxy::connect_to_proxy(uint32_t conn_id, co
         }
     }
 
-    return this->connect_to_proxy(conn);
+    std::optional err = this->connect_to_proxy(conn);
+    if (err.has_value()) {
+        std::unique_lock l(this->guard);
+        conn->parameters.callbacks = {}; // do not raise `on_close` callback
+        this->close_connection(conn);
+        this->connections.erase(conn_id);
+    }
+
+    return err;
 }
 
 std::optional<socket::error> socks_oproxy::connect_through_proxy(uint32_t conn_id, const connect_parameters &parameters) {

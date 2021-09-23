@@ -110,12 +110,17 @@ std::optional<socket::error> direct_oproxy::connect_through_proxy(uint32_t conn_
                 this->parameters.make_socket.func(this->parameters.make_socket.arg, parameters.proto, std::nullopt),
                 parameters,
             }).first->second;
-    return conn.socket->connect({
-            parameters.loop,
-            parameters.peer,
-            { on_connected, on_read, on_close, &conn },
-            parameters.timeout,
-    });
+    std::optional err = conn.socket->connect({
+                parameters.loop,
+                parameters.peer,
+                { on_connected, on_read, on_close, &conn },
+                parameters.timeout,
+            });
+    if (err.has_value()) {
+        this->connections.erase(conn_id);
+    }
+
+    return err;
 }
 
 void direct_oproxy::on_connected(void *arg) {
