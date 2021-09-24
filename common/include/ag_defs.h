@@ -4,7 +4,8 @@
 #include <cstddef>
 
 #ifdef _WIN32
-typedef intptr_t ssize_t;
+#include <basetsd.h>
+typedef SSIZE_T ssize_t;
 #endif
 
 #include <array>

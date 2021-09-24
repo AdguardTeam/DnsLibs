@@ -13,38 +13,10 @@ A DNS proxy library that supports all existing DNS protocols including `DNS-over
 * CMake 3.6 or higher
 * GCC 9 or higher / Clang 8 or higher
 
-#### How to use conan
-
-Conan is C++ package manager. It is similar to maven, but with recipes and binaries separately.
-Binaries can be uploaded to repo and reused.
-
-We recommend to use custom remote repo as main conan repo (`-i 0`)
-Conan looks up binaries in the repo from which recipes were downloaded.
-So if recipe is from conan-center, you won't be able to store binaries because it has highest priority by default.
-
-```
-conan remote add -i 0 $REMOTE_NAME https://$ARTIFACTORY_HOST/artifactory/api/conan/$REPO_NAME
-```
-
-We customized some packages, so they need to be exported to local conan repository.
-
-```
-cd conan/recipes
-./export.sh
-```
-
-If you want to upload exported recipes to conan remote repository, use following command:
-
-```
-conan upload -r $REMOTE_NAME -c '*'
-```
-
-After successful build, you may want to upload built binaries to remote repo:
-```
-conan upload -t $REMOTE_NAME -c '*' --all
-```
-
 #### Building
+
+If it is a clean build, export custom conan packages to the local conan repository.
+See https://github.com/AdguardTeam/NativeLibsCommon/blob/master/README.md for details.
 
 Execute the following commands in Terminal:
 ```
@@ -70,6 +42,9 @@ ctest -j 4
 * Xcode 11 or higher
 
 #### Building
+
+If it is a clean build, export custom conan packages to the local conan repository.
+See https://github.com/AdguardTeam/NativeLibsCommon/blob/master/README.md for details.
 
 Execute the following commands in Terminal:
 ```
