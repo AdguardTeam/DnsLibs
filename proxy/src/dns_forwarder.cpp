@@ -642,15 +642,15 @@ std::pair<bool, err_string> dns_forwarder::init(const dnsproxy_settings &setting
         return {false, std::move(err)};
     }
 
+    struct socket_factory::parameters sf_parameters = {};
     if (events.on_certificate_verification != nullptr) {
         dbglog(log, "Using application_verifier");
-        this->cert_verifier = std::make_shared<application_verifier>(this->events->on_certificate_verification);
+        sf_parameters.verifier = std::make_unique<application_verifier>(this->events->on_certificate_verification);
     } else {
         dbglog(log, "Using default_verifier");
-        this->cert_verifier = std::make_shared<default_verifier>();
+        sf_parameters.verifier = std::make_unique<default_verifier>();
     }
 
-    struct socket_factory::parameters sf_parameters = {};
     if (settings.outbound_proxy.has_value()) {
         if (socket_address addr(settings.outbound_proxy->address, settings.outbound_proxy->port);
                 !addr.valid()) {
@@ -662,12 +662,11 @@ std::pair<bool, err_string> dns_forwarder::init(const dnsproxy_settings &setting
         }
         sf_parameters.oproxy_settings = &this->settings->outbound_proxy.value();
     }
-    sf_parameters.verifier = this->cert_verifier.get();
 
-    this->socket_factory = std::make_shared<ag::socket_factory>(sf_parameters);
+    this->socket_factory = std::make_shared<ag::socket_factory>(std::move(sf_parameters));
 
     infolog(log, "Initializing upstreams...");
-    upstream_factory us_factory({ this->socket_factory.get(), this->cert_verifier.get(), this->settings->ipv6_available });
+    upstream_factory us_factory({ this->socket_factory.get(), this->settings->ipv6_available });
     this->upstreams.reserve(settings.upstreams.size());
     this->fallbacks.reserve(settings.fallbacks.size());
     for (const upstream_options &options : settings.upstreams) {
@@ -735,12 +734,11 @@ std::pair<bool, err_string> dns_forwarder::init(const dnsproxy_settings &setting
 
         std::thread prefixes_discovery_thread([uss = settings.dns64->upstreams,
                                                socket_factory = this->socket_factory,
-                                               verifier = this->cert_verifier,
                                                prefixes = this->dns64_prefixes,
                                                logger = this->log,
                                                max_tries = settings.dns64->max_tries,
                                                wait_time = settings.dns64->wait_time]() {
-                upstream_factory us_factory({ socket_factory.get(), verifier.get() });
+                upstream_factory us_factory({ socket_factory.get() });
                 auto i = max_tries;
                 while (i--) {
                     std::this_thread::sleep_for(wait_time);

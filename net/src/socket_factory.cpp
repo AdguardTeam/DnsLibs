@@ -126,7 +126,7 @@ socket_factory::socket_ptr socket_factory::make_secured_socket(socket_ptr underl
         secure_socket_parameters secure_parameters) const {
     return std::make_unique<secured_socket>(
             std::move(underlying_socket)
-            , this->parameters.verifier
+            , this->parameters.verifier.get()
             , std::move(secure_parameters)
     );
 }
@@ -159,6 +159,10 @@ err_string socket_factory::prepare_fd(evutil_socket_t fd,
 
 const outbound_proxy_settings *socket_factory::get_outbound_proxy_settings() const {
     return this->parameters.oproxy_settings;
+}
+
+const certificate_verifier *socket_factory::get_certificate_verifier() const {
+    return this->parameters.verifier.get();
 }
 
 bool socket_factory::should_route_through_proxy(utils::transport_protocol proto) const {
@@ -251,7 +255,7 @@ err_string socket_factory::on_prepare_fd(void *arg, evutil_socket_t fd,
 }
 
 outbound_proxy *socket_factory::make_proxy() const {
-    struct outbound_proxy::parameters oproxy_params = { this->parameters.verifier, { on_make_proxy_socket, (void *)this } };
+    struct outbound_proxy::parameters oproxy_params = { this->parameters.verifier.get(), { on_make_proxy_socket, (void *)this } };
 
     outbound_proxy *oproxy = nullptr;
     switch (this->parameters.oproxy_settings->protocol) {
@@ -270,7 +274,7 @@ outbound_proxy *socket_factory::make_proxy() const {
 }
 
 outbound_proxy *socket_factory::make_fallback_proxy() const {
-    return new direct_oproxy({ this->parameters.verifier, { on_make_proxy_socket, (void *)this } });
+    return new direct_oproxy({ this->parameters.verifier.get(), { on_make_proxy_socket, (void *)this } });
 }
 
 socket_factory::socket_ptr socket_factory::on_make_proxy_socket(void *arg,

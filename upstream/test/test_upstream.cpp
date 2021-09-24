@@ -124,25 +124,28 @@ static void parallel_test_basic(const T &data, const F &function) {
 class upstream_test : public ::testing::Test {
 protected:
     std::unique_ptr<ag::socket_factory> socket_factory;
-    std::unique_ptr<ag::certificate_verifier> verifier;
     std::unique_ptr<ag::upstream_factory> upstream_factory;
 
     void SetUp() override {
+#if 0
+        // It is too verbose for a CI report, and also the output in the stderr on Windows
+        // is too slow, so that tests with small timeouts may fail
         ag::set_default_log_level(ag::TRACE);
+#endif
         make_upstream_factory();
     }
 
     void make_upstream_factory(ag::outbound_proxy_settings *oproxy = nullptr) {
+        struct ag::socket_factory::parameters sf_parameters = {};
 #ifndef _WIN32
-        verifier = std::make_unique<ag::default_verifier>();
+        sf_parameters.verifier = std::make_unique<ag::default_verifier>();
 #else
-        verifier = std::make_unique<ag::application_verifier>(
+        sf_parameters.verifier = std::make_unique<ag::application_verifier>(
                 [](const ag::certificate_verification_event &) {
                     return std::nullopt;
                 });
 #endif
 
-        struct ag::socket_factory::parameters sf_parameters = {};
 #if 0
         static ag::outbound_proxy_settings proxy_settings =
                 { ag::outbound_proxy_protocol::SOCKS5_UDP, "127.0.0.1", 8888, { { "1", "1" } } };
@@ -150,13 +153,12 @@ protected:
 #else
         sf_parameters.oproxy_settings = oproxy;
 #endif
-        sf_parameters.verifier = verifier.get();
 
-        socket_factory = std::make_unique<ag::socket_factory>(sf_parameters);
+        socket_factory = std::make_unique<ag::socket_factory>(std::move(sf_parameters));
 
         static bool ipv6_available = test_ipv6_connectivity();
         upstream_factory = std::make_unique<ag::upstream_factory>(
-                ag::upstream_factory_config{ socket_factory.get(), verifier.get(), ipv6_available });
+                ag::upstream_factory_config{ socket_factory.get(), ipv6_available });
     }
 
     ag::upstream_factory::create_result create_upstream(const ag::upstream_options &opts) {
@@ -557,7 +559,13 @@ TEST_F(upstream_test, test_upstreams_with_server_ip) {
 }
 
 struct dead_proxy_success : upstream_param_test<std::tuple<std::string, ag::outbound_proxy_settings>> {};
+
+#ifdef _WIN32
+// On Windows connections to the dead proxy time out instead of being refused
+TEST_P(dead_proxy_success, DISABLED_test) {
+#else
 TEST_P(dead_proxy_success, test) {
+#endif
     auto oproxy = std::make_unique<ag::outbound_proxy_settings>(std::get<1>(GetParam()));
     make_upstream_factory(oproxy.get());
     auto [upstream_ptr, err] = create_upstream({ std::get<0>(GetParam()), { "8.8.8.8" }, DEFAULT_TIMEOUT });
@@ -594,7 +602,12 @@ INSTANTIATE_TEST_SUITE_P(tcp_udp_proxy,
                 )));
 
 struct dead_proxy_failure : upstream_param_test<std::tuple<std::string, ag::outbound_proxy_settings>> {};
+#ifdef _WIN32
+// On Windows connections to the dead proxy time out instead of being refused
+TEST_P(dead_proxy_failure, DISABLED_failed_exchange) {
+#else
 TEST_P(dead_proxy_failure, failed_exchange) {
+#endif
     auto oproxy = std::make_unique<ag::outbound_proxy_settings>(std::get<1>(GetParam()));
     make_upstream_factory(oproxy.get());
     auto [upstream_ptr, err] = create_upstream({ std::get<0>(GetParam()), { "8.8.8.8" }, DEFAULT_TIMEOUT });

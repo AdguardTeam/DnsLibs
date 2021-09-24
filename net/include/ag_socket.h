@@ -30,7 +30,7 @@ public:
 
     struct parameters {
         const outbound_proxy_settings *oproxy_settings = nullptr;
-        const certificate_verifier *verifier = nullptr;
+        std::unique_ptr<certificate_verifier> verifier;
     };
 
     struct socket_parameters {
@@ -90,6 +90,11 @@ public:
      * @return null if the proxy is not configured, non-null otherwise
      */
     [[nodiscard]] const outbound_proxy_settings *get_outbound_proxy_settings() const;
+
+    /**
+     * Get the certificate verifier
+     */
+    [[nodiscard]] const certificate_verifier *get_certificate_verifier() const;
 
     /**
      * Check whether a connection should be routed through proxy

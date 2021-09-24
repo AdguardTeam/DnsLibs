@@ -10,7 +10,6 @@
 #include <dnsfilter.h>
 #include <dns64.h>
 #include <upstream.h>
-#include <certificate_verifier.h>
 #include <shared_mutex>
 #include <uv.h>
 #include <dnsproxy.h>
@@ -113,7 +112,6 @@ private:
     dnsfilter::handle fallback_filter_handle = nullptr;
     dns64::prefixes dns64_prefixes;
     std::shared_ptr<socket_factory> socket_factory;
-    std::shared_ptr<certificate_verifier> cert_verifier;
 
     with_mtx<lru_cache<std::string, cached_response>, std::shared_mutex> response_cache;
 

@@ -1131,12 +1131,13 @@ int dns_over_quic::ssl_verify_callback(X509_STORE_CTX *ctx, void *arg) {
     SSL *ssl = (SSL *)X509_STORE_CTX_get_ex_data(ctx, SSL_get_ex_data_X509_STORE_CTX_idx());
     auto doq = (dns_over_quic *)SSL_get_app_data(ssl);
 
-    if (doq->m_config.cert_verifier == nullptr) {
+    const certificate_verifier *verifier = doq->m_config.socket_factory->get_certificate_verifier();
+    if (verifier == nullptr) {
         dbglog(doq->m_log, "Cannot verify certificate due to verifier is not set");
         return 0;
     }
 
-    if (auto err = doq->m_config.cert_verifier->verify(ctx, SSL_get_servername(ssl, SSL_get_servername_type(ssl)));
+    if (auto err = verifier->verify(ctx, SSL_get_servername(ssl, SSL_get_servername_type(ssl)));
             err.has_value()) {
         dbglog(doq->m_log, "Failed to verify certificate: {}", err.value());
         return 0;

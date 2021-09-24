@@ -193,26 +193,6 @@ ag::err_string ag::dns_over_tls::init() {
 
 ag::dns_over_tls::~dns_over_tls() = default;
 
-int ag::dns_over_tls::ssl_verify_callback(X509_STORE_CTX *ctx, void *arg) {
-    SSL *ssl = (SSL *)X509_STORE_CTX_get_ex_data(ctx, SSL_get_ex_data_X509_STORE_CTX_idx());
-    auto *upstream = (ag::dns_over_tls *)arg;
-
-    if (upstream->m_config.cert_verifier == nullptr) {
-        dbglog(upstream->m_log, "Cannot verify certificate due to verifier is not set");
-        return 0;
-    }
-
-    if (err_string err = upstream->m_config.cert_verifier->verify(ctx, SSL_get_servername(ssl, SSL_get_servername_type(ssl)));
-            err.has_value()) {
-        dbglog(upstream->m_log, "Failed to verify certificate: {}", err.value());
-        return 0;
-    }
-
-    tracelog(upstream->m_log, "Verified successfully");
-
-    return 1;
-}
-
 ag::dns_over_tls::exchange_result ag::dns_over_tls::exchange(ldns_pkt *request_pkt, const dns_message_info *) {
     ldns_buffer_ptr buffer{ldns_buffer_new(REQUEST_BUFFER_INITIAL_CAPACITY)};
     ldns_status status = ldns_pkt2buffer_wire(&*buffer, request_pkt);

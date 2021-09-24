@@ -2,7 +2,12 @@
 #include "upstream_utils.h"
 #include <magic_enum.hpp>
 
-struct upstream_utils_test : ::testing::Test {};
+struct upstream_utils_test : ::testing::Test {
+protected:
+    void SetUp() override {
+        ag::set_default_log_level(ag::TRACE);
+    }
+};
 
 TEST_F(upstream_utils_test, test_upstream) {
     using namespace std::chrono_literals;

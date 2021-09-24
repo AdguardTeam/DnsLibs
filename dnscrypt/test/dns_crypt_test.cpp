@@ -101,7 +101,7 @@ TEST_P(cipher_test, cipher) {
                            std::end(valid_shared_key)));
 }
 
-INSTANTIATE_TEST_CASE_P(cipher_test_instantiation, cipher_test, ::testing::ValuesIn(cipher_test_data_values));
+INSTANTIATE_TEST_SUITE_P(cipher_test_instantiation, cipher_test, ::testing::ValuesIn(cipher_test_data_values));
 
 using parse_stamp_test_data_type = std::tuple<const char *, void(*)(const char *, const ag::server_stamp &)>;
 
@@ -148,7 +148,7 @@ TEST_P(parse_stamp_test, parse_stamp) {
     log_f(stamp_str, stamp);
 }
 
-INSTANTIATE_TEST_CASE_P(parse_stamp_test_instantiation, parse_stamp_test, ::testing::ValuesIn(parse_stamp_test_data));
+INSTANTIATE_TEST_SUITE_P(parse_stamp_test_instantiation, parse_stamp_test, ::testing::ValuesIn(parse_stamp_test_data));
 
 TEST_F(dnscrypt_test, invalid_stamp) {
     ag::dnscrypt::client client;
@@ -244,6 +244,7 @@ TEST_P(check_dns_crypt_server_test, check_dns_crypt_server) {
     free(ldns_rdf_data(rdf0.get()));
 }
 
-INSTANTIATE_TEST_CASE_P(check_dns_crypt_server_test_instantiation, check_dns_crypt_server_test,
-                        ::testing::Combine(::testing::ValuesIn(check_dns_crypt_server_test_stamps),
-                                           ::testing::ValuesIn(check_dns_crypt_server_test_protocols)));
+INSTANTIATE_TEST_SUITE_P(check_dns_crypt_server_test_instantiation, check_dns_crypt_server_test,
+        ::testing::Combine(
+                ::testing::ValuesIn(check_dns_crypt_server_test_stamps),
+                ::testing::ValuesIn(check_dns_crypt_server_test_protocols)));

@@ -340,14 +340,15 @@ int dns_over_https::verify_callback(X509_STORE_CTX *ctx, void *arg) {
         return 1;
     }
 
-    if (upstream->m_config.cert_verifier == nullptr) {
+    const certificate_verifier *verifier = upstream->m_config.socket_factory->get_certificate_verifier();
+    if (verifier == nullptr) {
         std::string err = "Cannot verify certificate due to verifier is not set";
         dbglog_id(handle, "{}", err);
         handle->error = std::move(err);
         return 0;
     }
 
-    if (err_string err = upstream->m_config.cert_verifier->verify(ctx, get_host_name(upstream->m_options.address));
+    if (err_string err = verifier->verify(ctx, get_host_name(upstream->m_options.address));
             err.has_value()) {
         dbglog_id(handle, "Failed to verify certificate: {}", err.value());
         handle->error = std::move(err);
