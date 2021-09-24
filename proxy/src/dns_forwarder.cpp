@@ -84,14 +84,15 @@ make_fallback_filter_params(const std::vector<std::string> &fallback_domains, ag
         }
 
         if (auto pos = p.find_first_not_of(CHARSET); pos != p.npos) {
-            dbglog(log, "Bad character '{}' in pattern '{}'", p[pos], p);
-            return {{}, pattern};
+            dbglog(log, "Bad character '{}' in pattern '{}'", p[pos], pattern);
+
+            continue;
         }
 
         auto wldpos = p.rfind('*');
         if (wldpos == p.size() - 1) {
-            dbglog(log, "Wildcard at the end of pattern '{}'", p);
-            return {{}, pattern};
+            dbglog(log, "Wildcard at the end of pattern '{}'", pattern);
+            continue;
         }
         if (wldpos != 0) {
             // If wildcard is the first char, don't append a pipe
@@ -102,8 +103,8 @@ make_fallback_filter_params(const std::vector<std::string> &fallback_domains, ag
         rule += '^';
 
         if (!ag::dnsfilter::is_valid_rule(rule)) {
-            dbglog(log, "Pattern '{}' results in an invalid rule", p);
-            return {{}, pattern};
+            dbglog(log, "Pattern '{}' results in an invalid rule", pattern);
+            continue;
         }
 
         flt_data += rule;

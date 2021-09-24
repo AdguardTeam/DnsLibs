@@ -7,6 +7,7 @@ using Adguard.Dns.DnsProxyServer;
 using Adguard.Dns.Exceptions;
 using Adguard.Dns.Logging;
 using Adguard.Dns.Utils;
+using AdGuard.Utils.Html;
 using Microsoft.Win32;
 
 namespace Adguard.Dns.Api
@@ -298,6 +299,7 @@ namespace Adguard.Dns.Api
                     continue;
                 }
 
+                LOG.DebugFormat("Add DNS suffix {0}", suffix);
                 ret.Add(suffix);
             }
 
@@ -319,7 +321,7 @@ namespace Adguard.Dns.Api
                         return ret;
                     }
 
-                    string[] searchListArr = searchList.Split(',');
+                    string[] searchListArr = searchList.Split((char)Chars.COMMA, (char)Chars.SPACE);
                     foreach (string suffix in searchListArr)
                     {
                         if (suffix.Length < 2)
@@ -327,6 +329,7 @@ namespace Adguard.Dns.Api
                             continue;
                         }
 
+                        LOG.DebugFormat("Add DNS suffix {0}", suffix);
                         ret.Add(suffix);
                     }
                 }
