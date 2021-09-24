@@ -84,7 +84,7 @@ namespace Adguard.Dns.Api
                 }
                 catch (Exception ex)
                 {
-                    LOG.ErrorFormat("Starting the DNS filtering failed with an error", ex);
+                    LOG.ErrorFormat("Starting the DNS filtering failed with an error: {0}", ex);
                     throw;
                 }
             }
@@ -129,7 +129,7 @@ namespace Adguard.Dns.Api
                 }
                 catch (Exception ex)
                 {
-                    LOG.ErrorFormat("Stopping the DNS filtering failed with an error", ex);
+                    LOG.ErrorFormat("Stopping the DNS filtering failed with an error: {0}", ex);
                     throw;
                 }
             }
@@ -210,7 +210,7 @@ namespace Adguard.Dns.Api
                 }
                 catch (Exception ex)
                 {
-                    LOG.ErrorFormat("Reloading the DNS filtering failed with an error", ex);
+                    LOG.ErrorFormat("Reloading the DNS filtering failed with an error: {0}", ex);
                     if (newDnsProxyServer != null &&
                         newDnsProxyServer.IsStarted)
                     {
@@ -249,7 +249,7 @@ namespace Adguard.Dns.Api
                 }
                 catch (Exception ex)
                 {
-                    LOG.ErrorFormat("Getting current DNS proxy settings failed with an error", ex);
+                    LOG.ErrorFormat("Getting current DNS proxy settings failed with an error: {0}", ex);
                     throw;
                 }
             }
@@ -276,7 +276,7 @@ namespace Adguard.Dns.Api
                 }
                 catch (Exception ex)
                 {
-                    LOG.ErrorFormat("Getting default DNS proxy settings failed with an error", ex);
+                    LOG.ErrorFormat("Getting default DNS proxy settings failed with an error: {0}", ex);
                     throw;
                 }
             }
@@ -362,7 +362,7 @@ namespace Adguard.Dns.Api
             }
             catch (Exception ex)
             {
-                LOG.ErrorFormat("Parsing DNS stamp failed with an error", ex);
+                LOG.ErrorFormat("Parsing DNS stamp failed with an error: {0}", ex);
                 return null;
             }
         }
@@ -387,7 +387,7 @@ namespace Adguard.Dns.Api
             }
             catch (Exception ex)
             {
-                LOG.ErrorFormat("Testing upstream failed with an error", ex);
+                LOG.ErrorFormat("Testing upstream failed with an error: {0}", ex);
                 return false;
             }
         }
@@ -443,7 +443,7 @@ namespace Adguard.Dns.Api
                 }
                 catch (Exception ex)
                 {
-                    LOG.ErrorFormat("Setting unhandled exception configuration failed with an error", ex);
+                    LOG.ErrorFormat("Setting unhandled exception configuration failed with an error: {0}", ex);
                 }
             }
         }

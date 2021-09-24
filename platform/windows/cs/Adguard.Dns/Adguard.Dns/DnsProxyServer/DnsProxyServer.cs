@@ -89,7 +89,7 @@ namespace Adguard.Dns.DnsProxyServer
                 catch (Exception ex)
                 {
                     Dispose();
-                    throw new InvalidOperationException("error while starting the DnsProxyServer", ex);
+                    throw new InvalidOperationException("error while starting the DnsProxyServer: {0}", ex);
                 }
                 finally
                 {
@@ -123,7 +123,7 @@ namespace Adguard.Dns.DnsProxyServer
                 }
                 catch (Exception ex)
                 {
-                    throw new InvalidOperationException("error while stopping the DnsProxyServer", ex);
+                    throw new InvalidOperationException("error while stopping the DnsProxyServer: {0}", ex);
                 }
                 finally
                 {

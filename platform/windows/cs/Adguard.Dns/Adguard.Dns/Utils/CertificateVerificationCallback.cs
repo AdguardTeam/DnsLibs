@@ -14,7 +14,7 @@ namespace Adguard.Dns.Utils
     internal class CertificateVerificationCallback : ICertificateVerificationCallback
     {
         private static readonly ILog LOG = LogProvider.For<CertificateVerificationCallback>();
-        
+
         /// <summary>
         /// Called synchronously when a certificate needs to be verified.
         /// Return NULL for success or an error message
@@ -25,7 +25,7 @@ namespace Adguard.Dns.Utils
         /// <returns>Certificate verification result
         /// (<seealso cref="AGDnsApi.ag_certificate_verification_result"/>)</returns>
         public AGDnsApi.ag_certificate_verification_result OnCertificateVerification(
-            object sender, 
+            object sender,
             CertificateVerificationEventArgs args)
         {
             X509Chain fullChain = new X509Chain();
@@ -64,7 +64,7 @@ namespace Adguard.Dns.Utils
             }
             catch (Exception ex)
             {
-                LOG.InfoException("Verification certificate fails", ex);
+                LOG.InfoException("Verification certificate fails: {0}", ex);
                 return AGDnsApi.ag_certificate_verification_result.AGCVR_COUNT;
             }
         }
