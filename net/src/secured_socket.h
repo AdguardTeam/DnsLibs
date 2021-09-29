@@ -24,9 +24,9 @@ private:
     enum state : int;
 
     state state;
+    with_mtx<callbacks> callbacks;
     socket_factory::socket_ptr underlying_socket;
     tls_codec codec;
-    with_mtx<callbacks> callbacks;
     std::string sni;
     std::vector<std::string> alpn;
     logger log;
