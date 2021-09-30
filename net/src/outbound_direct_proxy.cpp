@@ -83,17 +83,20 @@ std::optional<socket::error> direct_oproxy::set_callbacks(uint32_t conn_id, call
 
 void direct_oproxy::close_connection(uint32_t conn_id) {
     std::scoped_lock l(this->guard);
-    auto it = this->connections.find(conn_id);
-    if (it == this->connections.end()) {
+    auto node = this->connections.extract(conn_id);
+    if (node.empty()) {
         return;
     }
 
-    connection &conn = it->second;
+    connection &conn = node.mapped();
+    this->closing_connections.insert(std::move(node));
+
     [[maybe_unused]] auto e = conn.socket->set_callbacks({});
+    conn.parameters.callbacks = {};
     conn.parameters.loop->submit(
             [this, conn_id] () {
                 std::scoped_lock l(this->guard);
-                this->connections.erase(conn_id);
+                this->closing_connections.erase(conn_id);
             });
 }
 

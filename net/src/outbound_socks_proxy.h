@@ -25,6 +25,7 @@ private:
     mutable std::mutex guard;
     hash_map<uint32_t, std::unique_ptr<connection>> connections;
     hash_map<event_loop *, std::unique_ptr<udp_association>> udp_associations;
+    hash_map<uint32_t, std::unique_ptr<connection>> closing_connections;
 
     [[nodiscard]] protocols_set get_supported_protocols() const override;
     [[nodiscard]] std::optional<evutil_socket_t> get_fd(uint32_t conn_id) const override;

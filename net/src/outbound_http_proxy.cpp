@@ -105,21 +105,26 @@ void http_oproxy::close_connection(uint32_t conn_id) {
     log_conn(this, conn_id, trace, "...");
 
     std::scoped_lock l(this->guard);
-    auto it = this->connections.find(conn_id);
-    if (it == this->connections.end()) {
+    auto node = this->connections.extract(conn_id);
+    if (node.empty()) {
         log_conn(this, conn_id, dbg, "Connection was not found");
         return;
     }
 
-    connection *conn = it->second.get();
+    connection *conn = node.mapped().get();
+    this->closing_connections.insert(std::move(node));
+
     if (conn->state == CS_CONNECTING_SOCKET) {
         conn->parameters.callbacks.on_proxy_connection_failed(conn->parameters.callbacks.arg, std::nullopt);
     }
+    conn->parameters.callbacks = {};
+
+    [[maybe_unused]] auto e = conn->socket->set_callbacks({});
 
     conn->parameters.loop->submit(
             [this, conn_id] () {
                 std::scoped_lock l(this->guard);
-                this->connections.erase(conn_id);
+                this->closing_connections.erase(conn_id);
             });
 }
 
