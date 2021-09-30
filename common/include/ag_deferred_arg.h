@@ -10,18 +10,17 @@ void *deferred_arg_to_ptr(void *deferred_arg);
 
 void deferred_arg_free(void *deferred_arg);
 
-template<class T>
-class enable_deferred_arg {
+class deferred_arg_guard {
 public:
-    enable_deferred_arg() {
-        m_id = deferred_arg_create(static_cast<T *>(this));
+    explicit deferred_arg_guard(void *value) {
+        m_id = deferred_arg_create(value);
     }
 
-    ~enable_deferred_arg() {
+    ~deferred_arg_guard() {
         deferred_arg_free(m_id);
     }
 
-    void *deferred_arg() {
+    void *value() {
         return (void *)m_id;
     }
 

@@ -12,7 +12,7 @@ using namespace std::chrono;
 
 
 tcp_stream::tcp_stream(socket_factory::socket_parameters p, prepare_fd_callback prepare_fd)
-    : socket(__func__, std::move(p), prepare_fd)
+    : socket(__func__, std::move(p), prepare_fd), deferred_arg(this)
 {}
 
 std::optional<evutil_socket_t> tcp_stream::get_fd() const {
@@ -96,7 +96,7 @@ std::optional<socket::error> tcp_stream::set_callbacks(struct callbacks cbx) {
             (cbx.on_read != nullptr) ? on_read : nullptr,
             nullptr,
             (cbx.on_close != nullptr) ? on_event : nullptr,
-            deferred_arg());
+            deferred_arg.value());
 
     return std::nullopt;
 }

@@ -15,7 +15,7 @@
 namespace ag {
 
 
-class udp_socket : public socket, public enable_deferred_arg<udp_socket> {
+class udp_socket : public socket {
 public:
     udp_socket(socket_factory::socket_parameters p, prepare_fd_callback prepare_fd);
     ~udp_socket() override;
@@ -30,6 +30,7 @@ private:
     mutable std::mutex guard;
     callbacks callbacks = {};
     std::optional<std::chrono::microseconds> timeout;
+    ag::deferred_arg_guard deferred_arg;
 
     [[nodiscard]] std::optional<evutil_socket_t> get_fd() const override;
     [[nodiscard]] std::optional<error> connect(connect_parameters params) override;

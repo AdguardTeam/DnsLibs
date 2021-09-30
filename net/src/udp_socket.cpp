@@ -16,7 +16,7 @@ using namespace ag;
 
 
 udp_socket::udp_socket(socket_factory::socket_parameters p, prepare_fd_callback prepare_fd)
-    : socket(__func__, std::move(p), prepare_fd)
+    : socket(__func__, std::move(p), prepare_fd), deferred_arg(this)
 {}
 
 std::optional<evutil_socket_t> udp_socket::get_fd() const {
@@ -54,7 +54,7 @@ std::optional<socket::error> udp_socket::connect(connect_parameters params) {
     }
 
     this->socket_event.reset(
-            event_new(params.loop->c_base(), fd, EV_READ | EV_PERSIST, on_event, deferred_arg()));
+            event_new(params.loop->c_base(), fd, EV_READ | EV_PERSIST, on_event, deferred_arg.value()));
     if (this->socket_event == nullptr) {
         result = { -1, "Failed to create event" };
         goto error;
