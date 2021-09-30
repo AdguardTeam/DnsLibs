@@ -144,7 +144,6 @@ static inline bool is_ip(std::string_view str) {
 bool rule_utils::is_domain_name(std::string_view str) {
     return !str.empty() // Duh
            && !is_ip(str)
-           && str.npos != str.find('.') // Single label is probably not a real domain name
            && str.back() != '.' // We consider a domain name ending with '.' a pattern
            && str.front() != '.' // Valid pattern, but not a valid domain
            && is_valid_domain_pattern(str) // This is a bit more general than Go dnsproxy's regex, but yolo
@@ -458,7 +457,7 @@ static bool is_too_wide_rule(const ag::dnsfilter::adblock_rule_info &rule_info,
         const rule_utils::match_info &match_info) {
     return !rule_info.props.test(ag::dnsfilter::DARP_DNSTYPE)
             && !rule_info.props.test(ag::dnsfilter::DARP_DNSREWRITE)
-            && (match_info.text.empty()
+            && (match_info.text.length() < 3
                     || match_info.text.find_first_not_of(".*") == match_info.text.npos);
 }
 
