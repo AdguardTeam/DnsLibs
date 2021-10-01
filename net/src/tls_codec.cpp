@@ -84,8 +84,11 @@ tls_codec::send_encrypted_result tls_codec::send_encrypted() {
 
     uint8_vector buffer(std::min(BIO_pending(write_bio), ENCRYPTED_READ_CHUNK_SIZE));
     int r = BIO_read(write_bio, buffer.data(), (int)buffer.size());
-    if (r < 0 && !BIO_should_retry(write_bio)) {
-        return error{ "Failed to get buffered data" };
+    if (r < 0) {
+        if (!BIO_should_retry(write_bio)) {
+            return error{"Failed to get buffered data"};
+        }
+        r = 0;
     }
 
     buffer.resize(r);
