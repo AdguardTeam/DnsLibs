@@ -62,6 +62,7 @@ add_library(AGDnsProxy SHARED
     AGDnsProxy.h
     AGDnsProxyEvents.h
     AGDnsProxy.mm
+    module.modulemap
 )
 set_property(TARGET AGDnsProxy PROPERTY POSITION_INDEPENDENT_CODE ON)
 
@@ -80,6 +81,13 @@ set_property(TARGET AGDnsProxy PROPERTY PUBLIC_HEADER
     AGDnsProxy.h
     AGDnsProxyEvents.h
 )
+set_property(SOURCE module.modulemap
+        PROPERTY MACOSX_PACKAGE_LOCATION "Modules")
+if("${TARGET_OS}" STREQUAL "macos")
+add_custom_command(TARGET AGDnsProxy POST_BUILD
+        COMMAND
+        ${CMAKE_COMMAND} -E create_symlink "Versions/Current/Modules" "${CMAKE_BINARY_DIR}/AGDnsProxy.framework/Modules")
+endif()
 
 if (NOT TARGET dnsproxy)
     add_subdirectory(${DNS_LIBS_DIR}/proxy ${CMAKE_BINARY_DIR}/proxy)
