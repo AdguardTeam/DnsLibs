@@ -1107,8 +1107,8 @@ static int bindFd(NSString *helperPath, NSString *address, NSNumber *port, AGLis
         return -1;
     }
 
-    char buf[1] = "";
-    char cmsgspace[CMSG_SPACE(sizeof(int))] = "";
+    char buf[1]{};
+    char cmsgspace[CMSG_SPACE(sizeof(int))]{};
     iovec vec{
             .iov_base = buf,
             .iov_len = sizeof(buf)};
@@ -1119,7 +1119,7 @@ static int bindFd(NSString *helperPath, NSString *address, NSNumber *port, AGLis
             .msg_controllen = CMSG_LEN(sizeof(int))};
 
     r = recvmsg(fdPair.ourFd, &msg, 0);
-    if (r != 0) {
+    if (r < 0) {
         *error = [NSError errorWithDomain:AGDnsProxyErrorDomain
                                      code:AGDPE_PROXY_INIT_ERROR
                                  userInfo:@{NSLocalizedDescriptionKey:
