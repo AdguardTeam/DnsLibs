@@ -11,7 +11,8 @@
 #include <csignal>
 
 
-#define log_id(l_, lvl_, id_, fmt_, ...) lvl_##log(l_, "[{}] " fmt_, id_, ##__VA_ARGS__)
+#define log_listener(l_, lvl_, fmt_, ...) lvl_##log((l_)->m_log, "[{} {}] {}(): " fmt_, magic_enum::enum_name((l_)->m_settings.protocol), (l_)->m_address.str(), __func__, ##__VA_ARGS__)
+#define log_id(l_, lvl_, id_, fmt_, ...) lvl_##log(l_, "[{}] {}(): " fmt_, id_, __func__, ##__VA_ARGS__)
 
 
 // Set the libuv thread pool size. Must happen before any libuv usage to have effect.
@@ -32,7 +33,7 @@ static void dealloc_buf(const uv_buf_t *buf) {
 // Abstract base for listeners, does uv initialization/stopping
 class listener_base : public ag::dnsproxy_listener {
 protected:
-    ag::logger m_log;
+    ag::logger m_log = ag::create_logger("listener");
     ag::dnsproxy *m_proxy{nullptr};
     std::thread m_loop_thread;
     using uv_loop_ptr = std::unique_ptr<uv_loop_t, ag::ftor<&uv_loop_delete>>;
@@ -56,7 +57,7 @@ protected:
 private:
     static void escape_hatch_cb(uv_async_t *handle) {
         auto *self = (listener_base *) handle->data;
-        dbglog(self->m_log, "Received signal to stop");
+        log_listener(self, dbg, "Received signal to stop");
         self->before_stop();
         uv_close((uv_handle_t *) &self->m_escape_hatch, nullptr);
     }
@@ -102,13 +103,9 @@ public:
         if (m_settings.fd == -1) {
             m_address = ag::socket_address{m_settings.address, m_settings.port};
             if (!m_address.valid()) {
-                return fmt::format("Invalid address: {}", settings.address);
+                return AG_FMT("Invalid address: {}", settings.address);
             }
         }
-
-        m_log = ag::create_logger(fmt::format("listener({} {})",
-                                              magic_enum::enum_name(settings.protocol),
-                                              m_address.str()));
 
         int err = 0;
         // Init the loop
@@ -118,7 +115,7 @@ public:
 
         // Init the escape hatch
         if ((err = uv_async_init(m_loop.get(), &m_escape_hatch, escape_hatch_cb))) {
-            return fmt::format("uv_async_init failed: {}", uv_strerror(err));
+            return AG_FMT("uv_async_init failed: {}", uv_strerror(err));
         }
         m_escape_hatch.data = this;
 
@@ -136,9 +133,9 @@ public:
         m_loop_thread = std::thread([this]() {
             int ret = run_loop(m_loop.get(), UV_RUN_DEFAULT);
             if (ret != 0) {
-                errlog(m_log, "uv_run: (%d) %s", ret, uv_strerror(ret));
+                log_listener(this, err, "uv_run: (%d) %s", ret, uv_strerror(ret));
             } else {
-                infolog(m_log, "Finished listening");
+                log_listener(this, info, "Finished listening");
             }
         });
 
@@ -155,7 +152,7 @@ public:
         if (this == m_escape_hatch.data) { // Check async initialized
             int ret = uv_async_send(&m_escape_hatch);
             if (ret != 0) {
-                errlog(m_log, "uv_async_send: (%d) %s", ret, uv_strerror(ret));
+                log_listener(this, err, "uv_async_send: (%d) %s", ret, uv_strerror(ret));
             }
         }
     }
@@ -164,6 +161,10 @@ public:
         if (m_loop_thread.joinable()) { // Allow await_shutdown() to be called more than once
             m_loop_thread.join();
         }
+    }
+
+    std::pair<ag::utils::transport_protocol, ag::socket_address> get_listen_address() const override {
+        return { m_settings.protocol, m_address };
     }
 };
 
@@ -200,7 +201,7 @@ private:
     static void send_cb(uv_udp_send_t *req, int status) {
         auto *m = (task *) req->data;
         if (status != 0) {
-            dbglog(m->self->m_log, "{} error: {}", __func__, uv_strerror(status));
+            log_listener(m->self, dbg, "Error: {}", uv_strerror(status));
         }
         delete req;
         delete m;
@@ -212,7 +213,7 @@ private:
         m->self->m_pending.erase(m);
 
         if (status == UV_ECANCELED || m->response.empty()) {
-            dbglog(m->self->m_log, "{}: {}", __func__, status == UV_ECANCELED ? "Task cancelled" : "Response is empty");
+            log_listener(m->self, dbg, "{}", status == UV_ECANCELED ? "Task cancelled" : "Response is empty");
             delete m;
             return;
         }
@@ -224,7 +225,7 @@ private:
 
         const int err = uv_udp_send(send_req, &m->self->m_udp_handle, &resp_buf, 1, m->peer.c_sockaddr(), send_cb);
         if (err < 0) {
-            dbglog(m->self->m_log, "uv_udp_send failed: {}", uv_strerror(err));
+            log_listener(m->self, dbg, "uv_udp_send failed: {}", uv_strerror(err));
             delete send_req;
             delete m;
         }
@@ -235,17 +236,17 @@ private:
         auto *self = (listener_udp *) handle->data;
 
         if (nread < 0) {
-            dbglog(self->m_log, "{} failed: {}", __func__, uv_strerror(nread));
+            log_listener(self, dbg, "Failed: {}", uv_strerror(nread));
             dealloc_buf(buf);
             return;
         }
         if (nread == 0) {
-            dbglog(self->m_log, "{}: received empty packet", __func__);
+            log_listener(self, dbg, "Received empty packet");
             dealloc_buf(buf);
             return;
         }
         if (flags & UV_UDP_PARTIAL) {
-            dbglog(self->m_log, "{} failed: truncated", __func__);
+            log_listener(self, dbg, "Failed: truncated");
             dealloc_buf(buf);
             return;
         }
@@ -261,39 +262,42 @@ protected:
 
         // Init UDP
         if ((err = uv_udp_init(m_loop.get(), &m_udp_handle)) < 0) {
-            return fmt::format("uv_udp_init failed: {}", uv_strerror(err));
+            return AG_FMT("uv_udp_init failed: {}", uv_strerror(err));
         }
         m_udp_handle.data = this;
 
         if (m_settings.fd == -1) {
             if ((err = uv_udp_bind(&m_udp_handle, m_address.c_sockaddr(), UV_UDP_REUSEADDR)) < 0) {
                 uv_close((uv_handle_t *) &m_udp_handle, nullptr);
-                return fmt::format("uv_udp_bind failed: {}", uv_strerror(err));
+                return AG_FMT("uv_udp_bind failed: {}", uv_strerror(err));
             }
         } else {
             if ((err = uv_udp_open(&m_udp_handle, m_settings.fd)) < 0) {
                 uv_close((uv_handle_t *) &m_udp_handle, nullptr);
-                return fmt::format("uv_udp_open failed: {}", uv_strerror(err));
+                return AG_FMT("uv_udp_open failed: {}", uv_strerror(err));
             }
             m_settings.fd = -1; // uv_udp_open took ownership
         }
 
         if ((err = uv_udp_recv_start(&m_udp_handle, udp_alloc_cb, recv_cb)) < 0) {
             uv_close((uv_handle_t *) &m_udp_handle, nullptr);
-            return fmt::format("uv_udp_recv_start failed: {}", uv_strerror(err));
+            return AG_FMT("uv_udp_recv_start failed: {}", uv_strerror(err));
         }
 
-        sockaddr_storage name{};
-        int namelen = sizeof(name);
-        uv_udp_getsockname(&m_udp_handle, (sockaddr *) &name, &namelen);
-        infolog(m_log, "Listening on {} (UDP)", ag::socket_address((sockaddr *) &name).str(), m_address.str());
+        if (m_address.port() == 0) {
+            sockaddr_storage name{};
+            int namelen = sizeof(name);
+            uv_udp_getsockname(&m_udp_handle, (sockaddr *) &name, &namelen);
+            m_address = ag::socket_address((sockaddr *)&name);
+        }
+        log_listener(this, info, "Listening on {} (UDP)", m_address.str());
 
         return std::nullopt;
     }
 
     void before_stop() override {
         uv_close((uv_handle_t *) &m_udp_handle, nullptr);
-        dbglog(m_log, "Stopping with {} pending tasks", m_pending.size());
+        log_listener(this, dbg, "Stopping with {} pending tasks", m_pending.size());
         for (auto *m : m_pending) {
             uv_cancel((uv_req_t *) &m->work_req);
         }
@@ -359,7 +363,7 @@ public:
                bool persistent,
                std::chrono::milliseconds idle_timeout,
                std::function<void(uint64_t)> close_callback) {
-        log_id(m_log, trace, m_id, "{}", __func__);
+        log_id(m_log, trace, m_id, "...");
 
         assert(proxy);
         assert(idle_timeout.count());
@@ -435,7 +439,7 @@ private:
 
     static void read_cb(uv_stream_t *stream, ssize_t nread, const uv_buf_t *buf) {
         auto *c = (tcp_dns_connection *) stream->data;
-        log_id(c->m_log, trace, c->m_id, "{}: {}", __func__, nread);
+        log_id(c->m_log, trace, c->m_id, "{}", nread);
 
         if (nread < 0) {
             c->do_close();
@@ -501,7 +505,7 @@ private:
         // `c` might be nullptr at this point, e.g. the connection was closed,
         // but libuv still called the pending write callbacks.
         if (c) {
-            log_id(c->m_log, trace, c->m_id, "{} {}", __func__, status);
+            log_id(c->m_log, trace, c->m_id, "{}", status);
             if (!c->m_persistent || status < 0) {
                 c->do_close();
             }
@@ -540,7 +544,7 @@ private:
         }
         m_closed = true;
 
-        log_id(m_log, trace, m_id, "{}", __func__);
+        log_id(m_log, trace, m_id, "...");
         uv_timer_stop(m_idle_timer);
 
         m_idle_timer->data = nullptr;
@@ -572,7 +576,7 @@ private:
         auto *self = (listener_tcp *) server->data;
 
         if (status < 0) {
-            dbglog(self->m_log, "{}: connection failed: {}", __func__, uv_strerror(status));
+            log_listener(self, dbg, "Connection failed: {}", uv_strerror(status));
             return;
         }
 
@@ -580,12 +584,12 @@ private:
 
         int err = uv_tcp_init(self->m_loop.get(), conn->handle());
         if (err < 0) {
-            dbglog(self->m_log, "{}: uv_tcp_init failed: {}", __func__, uv_strerror(err));
+            log_listener(self, dbg, "uv_tcp_init failed: {}", uv_strerror(err));
             return;
         }
 
         if ((err = uv_accept(server, (uv_stream_t *) conn->handle())) < 0) {
-            dbglog(self->m_log, "{}: uv_accept failed: {}", __func__, uv_strerror(err));
+            log_listener(self, dbg, "uv_accept failed: {}", uv_strerror(err));
             return;
         }
 
@@ -604,32 +608,35 @@ protected:
         int err = 0;
 
         if ((err = uv_tcp_init(m_loop.get(), &m_tcp_handle)) < 0) {
-            return fmt::format("uv_tcp_init failed: {}", uv_strerror(err));
+            return AG_FMT("uv_tcp_init failed: {}", uv_strerror(err));
         }
         m_tcp_handle.data = this;
 
         if (m_settings.fd == -1) {
             if ((err = uv_tcp_bind(&m_tcp_handle, m_address.c_sockaddr(), 0)) < 0) {
                 uv_close((uv_handle_t *) &m_tcp_handle, nullptr);
-                return fmt::format("uv_tcp_bind failed: {}", uv_strerror(err));
+                return AG_FMT("uv_tcp_bind failed: {}", uv_strerror(err));
             }
         } else {
             if ((err = uv_tcp_open(&m_tcp_handle, m_settings.fd)) < 0) {
                 uv_close((uv_handle_t *) &m_tcp_handle, nullptr);
-                return fmt::format("uv_tcp_open failed: {}", uv_strerror(err));
+                return AG_FMT("uv_tcp_open failed: {}", uv_strerror(err));
             }
             m_settings.fd = -1; // uv_tcp_open took ownership
         }
 
         if ((err = uv_listen((uv_stream_t *) &m_tcp_handle, BACKLOG, conn_cb)) < 0) {
             uv_close((uv_handle_t *) &m_tcp_handle, nullptr);
-            return fmt::format("uv_listen failed: {}", uv_strerror(err));
+            return AG_FMT("uv_listen failed: {}", uv_strerror(err));
         }
 
-        sockaddr_storage name{};
-        int namelen = sizeof(name);
-        uv_tcp_getsockname(&m_tcp_handle, (sockaddr *) &name, &namelen);
-        infolog(m_log, "Listening on {} (TCP)", ag::socket_address((sockaddr *) &name).str(), m_address.str());
+        if (m_address.port() == 0) {
+            sockaddr_storage name{};
+            int namelen = sizeof(name);
+            uv_tcp_getsockname(&m_tcp_handle, (sockaddr *) &name, &namelen);
+            m_address = ag::socket_address((sockaddr *)&name);
+        }
+        log_listener(this, info, "Listening on {} (TCP)", m_address.str());
 
         return std::nullopt;
     }
@@ -661,7 +668,7 @@ ag::dnsproxy_listener::create_result ag::dnsproxy_listener::create_and_listen(co
         ptr = std::make_unique<listener_tcp>();
         break;
     default:
-        return {nullptr, fmt::format("Protocol {} not implemented", magic_enum::enum_name(settings.protocol))};
+        return {nullptr, AG_FMT("Protocol {} not implemented", magic_enum::enum_name(settings.protocol))};
     }
 
     auto err = ptr->init(settings, proxy);

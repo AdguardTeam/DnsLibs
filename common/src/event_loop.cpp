@@ -30,13 +30,19 @@ static const struct event_log_cb_setter {
     }
 } set_event_log_cb [[maybe_unused]];
 
+extern "C" struct evthread_lock_callbacks *evthread_get_lock_callbacks(void);
+
 ag::event_loop::event_loop(bool run_immediately) {
+    // Check if `evthread_use_*()` was called before, because calling it twice leads to
+    // program termination in case Libevent's debugging checks are enabled
+    if (evthread_get_lock_callbacks()->lock == nullptr) {
 #ifndef _WIN32
-    static const int ensure_threads [[maybe_unused]] = evthread_use_pthreads();
+        static const int ensure_threads [[maybe_unused]] = evthread_use_pthreads();
 #else // _WIN32
-    static const int ensure_threads [[maybe_unused]] = evthread_use_windows_threads();
-    static const int ensure_sockets [[maybe_unused]] = WSAStartup(0x0202, std::array<WSADATA, 1>().data());
+        static const int ensure_threads [[maybe_unused]] = evthread_use_windows_threads();
+        static const int ensure_sockets [[maybe_unused]] = WSAStartup(0x0202, std::array<WSADATA, 1>().data());
 #endif // else of _WIN32
+    }
 
     m_base.reset(event_base_new());
     assert(m_base);

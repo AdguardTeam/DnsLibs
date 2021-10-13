@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.1)
 project(dnsproxy)
 include(../cmake/conan_bootstrap.cmake)
-conan_bootstrap(SRCROOT ".." CONANFILE "../conanfile.txt" SCOPE_NAME agdns)
+conan_bootstrap(SRCROOT ".." CONANFILE "../conanfile.py" SCOPE_NAME agdns)
 
 set(CMAKE_CXX_STANDARD 17)
 

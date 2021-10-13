@@ -584,7 +584,7 @@ const char *ag_test_upstream(const ag_upstream_options *c_upstream, bool ipv6_av
     ag_dnsproxy_events c_events{};
     c_events.on_certificate_verification = on_certificate_verification;
     auto events = marshal_events(&c_events);
-    auto result = ag::test_upstream(upstream, ipv6_available, events.on_certificate_verification);
+    auto result = ag::test_upstream(upstream, ipv6_available, events.on_certificate_verification, false);
     return marshal_str(result.value_or(""));
 }
 

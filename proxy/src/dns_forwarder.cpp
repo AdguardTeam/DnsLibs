@@ -159,7 +159,7 @@ static ldns_pkt *create_response_by_request(const ldns_pkt *request) {
 }
 
 static ldns_rdf *get_mbox(const ldns_pkt *request) {
-    using ldns_rdf_ptr = std::unique_ptr<ldns_rdf, ag::ftor<&ldns_rdf_free>>;
+    using ldns_rdf_ptr = std::unique_ptr<ldns_rdf, ag::ftor<&ldns_rdf_deep_free>>;
     const ldns_rr *question = ldns_rr_list_rr(ldns_pkt_question(request), 0);
 
     ldns_rdf *owner = ldns_rr_owner(question);

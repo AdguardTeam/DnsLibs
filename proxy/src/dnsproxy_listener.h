@@ -31,6 +31,11 @@ public:
      * Block until the listener shuts down
      */
     virtual void await_shutdown() = 0;
+
+    /**
+     * @brief Get the address is being listened for queries
+     */
+    [[nodiscard]] virtual std::pair<utils::transport_protocol, socket_address> get_listen_address() const = 0;
 };
 
 } // namespace ag

@@ -130,6 +130,10 @@ static std::vector<ag::resolver_ptr> create_resolvers(const ag::logger &log, con
     ag::upstream_options opts{};
     opts.outbound_interface = p.outbound_interface;
     for (const std::string &server : p.bootstrap) {
+        if (!p.upstream_config.ipv6_available
+                && ag::socket_address(ag::utils::split_host_port(server).first, 0).is_ipv6()) {
+            continue;
+        }
         opts.address = server;
         ag::resolver_ptr resolver = std::make_unique<ag::resolver>(opts, p.upstream_config);
         if (ag::err_string err = resolver->init(); !err.has_value()) {

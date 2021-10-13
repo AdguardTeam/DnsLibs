@@ -18,7 +18,8 @@ static ag::ldns_pkt_ptr create_message() {
 }
 
 ag::err_string ag::test_upstream(const upstream_options &opts, bool ipv6_available,
-                                 const on_certificate_verification_function &on_certificate_verification) {
+        const on_certificate_verification_function &on_certificate_verification,
+        bool offline) {
     std::unique_ptr<ag::certificate_verifier> cert_verifier;
     if (on_certificate_verification != nullptr) {
         cert_verifier = std::make_unique<ag::application_verifier>(on_certificate_verification);
@@ -30,6 +31,9 @@ ag::err_string ag::test_upstream(const upstream_options &opts, bool ipv6_availab
     auto[upstream_ptr, upstream_err] = upstream_factory.create_upstream(opts);
     if (upstream_err) {
         return upstream_err;
+    }
+    if (offline) {
+        return std::nullopt;
     }
     auto[reply, exchange_err] = upstream_ptr->exchange(create_message().get());
     if (exchange_err) {

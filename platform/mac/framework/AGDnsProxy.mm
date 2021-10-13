@@ -1484,7 +1484,7 @@ static std::optional<std::string> verifyCertificate(ag::certificate_verification
 + (NSError *) testUpstream: (AGDnsUpstream *) opts
              ipv6Available: (BOOL) ipv6Available
 {
-    auto error = ag::test_upstream(convert_upstream(opts), ipv6Available, verifyCertificate);
+    auto error = ag::test_upstream(convert_upstream(opts), ipv6Available, verifyCertificate, false);
     if (error) {
         return [NSError errorWithDomain: AGDnsProxyErrorDomain
                                    code: AGDPE_TEST_UPSTREAM_ERROR

@@ -1357,5 +1357,6 @@ TEST_F(dnsproxy_test, fallback_domains_good) {
         auto [ret, err] = proxy.init(settings, {});
         ASSERT_TRUE(ret) << pattern;
         ASSERT_FALSE(err) << pattern;
+        proxy.deinit();
     }
 }

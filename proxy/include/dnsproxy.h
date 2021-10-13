@@ -56,6 +56,11 @@ public:
     std::vector<uint8_t> handle_message(ag::uint8_view message, const dns_message_info *info);
 
     /**
+     * @brief Get the addresses the proxy is listening for queries
+     */
+    [[nodiscard]] std::vector<std::pair<utils::transport_protocol, socket_address>> get_listen_addresses() const;
+
+    /**
      * @brief Return the DNS proxy library version
      *
      * The caller does not take ownership of the returned string.

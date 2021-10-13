@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.1)
 project(dnslibs_common)
 include(../cmake/conan_bootstrap.cmake)
-conan_bootstrap(SRCROOT ".." CONANFILE "../conanfile.txt" SCOPE_NAME agdns)
+conan_bootstrap(SRCROOT ".." CONANFILE "../conanfile.py" SCOPE_NAME agdns)
 
 set(CMAKE_CXX_STANDARD 17)
 
@@ -40,6 +40,7 @@ set_target_properties(dnslibs_common PROPERTIES POSITION_INDEPENDENT_CODE ON)
 target_include_directories(dnslibs_common PUBLIC include)
 target_compile_definitions(dnslibs_common PUBLIC PCRE2_STATIC=1 PCRE2_CODE_UNIT_WIDTH=8 SPDLOG_NO_EXCEPTIONS=1)
 target_link_libraries(dnslibs_common CONAN_PKG::spdlog CONAN_PKG::libevent CONAN_PKG::pcre2)
+target_link_libraries(dnslibs_common CONAN_PKG::magic_enum)
 
 target_compile_options(dnslibs_common PRIVATE -Wall -Wextra)
 target_compile_options(dnslibs_common PUBLIC -Wno-format-nonliteral) # for fmt's chrono build

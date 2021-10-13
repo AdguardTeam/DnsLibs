@@ -745,7 +745,7 @@ jobject ag::android_dnsproxy::get_settings(JNIEnv *env) {
 jstring ag::android_dnsproxy::test_upstream(JNIEnv *env, jobject upstream_settings, jboolean ipv6, jobject events_adapter) {
     m_events = global_ref(get_vm(env), events_adapter);
     auto err = ag::test_upstream(marshal_upstream(env, upstream_settings), ipv6,
-                                 marshal_events(env, events_adapter).on_certificate_verification);
+            marshal_events(env, events_adapter).on_certificate_verification, false);
     if (err) {
         return (jstring) env->NewLocalRef(m_utils.marshal_string(env, *err).get());
     }

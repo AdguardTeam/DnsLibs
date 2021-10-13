@@ -787,4 +787,5 @@ TEST_F(dnsfilter_test, file_based_filter_auto_update) {
     ASSERT_EQ(rules[0].text + "\n", rule2);
 
     std::remove(file_name.c_str());
+    filter.destroy(handle);
 }

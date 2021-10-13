@@ -13,9 +13,11 @@ namespace ag {
  * @param opts Upstream options
  * @param ipv6_available whether IPv6 is available, i.e. bootstrapper should make AAAA queries
  * @param on_certificate_verification Certificate verification callback
+ * @param offline do not send a query to the wire, just validate the passed parameters
  * @return If it is, no error is returned. Otherwise this method returns an error with an explanation.
  */
 err_string test_upstream(const upstream_options &opts, bool ipv6_available,
-                         const on_certificate_verification_function &on_certificate_verification);
+        const on_certificate_verification_function &on_certificate_verification,
+        bool offline);
 
 } // namespace ag

@@ -263,7 +263,7 @@ bool dns_over_https::query_handle::set_up_proxy(const outbound_proxy_settings *s
         if (CURLcode e = curl_easy_setopt((curl_), (opt_), (val_)); \
                 e != CURLE_OK) { \
             this->error = AG_FMT("Failed to set option {} on curl handle: {} ({})", \
-                    magic_enum::enum_name(opt_), curl_easy_strerror(e), e); \
+                    opt_, curl_easy_strerror(e), e); \
             return false; \
         } \
     } while (0)

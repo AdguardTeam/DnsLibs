@@ -161,6 +161,19 @@ std::vector<uint8_t> dnsproxy::handle_message(ag::uint8_view message, const ag::
     return response;
 }
 
+std::vector<std::pair<utils::transport_protocol, socket_address>> dnsproxy::get_listen_addresses() const {
+    const impl *proxy = this->pimpl.get();
+
+    std::vector<std::pair<utils::transport_protocol, socket_address>> addresses;
+    addresses.reserve(proxy->listeners.size());
+
+    for (const listener_ptr &l : proxy->listeners) {
+        addresses.emplace_back(l->get_listen_address());
+    }
+
+    return addresses;
+}
+
 const char *ag::dnsproxy::version() {
     return AG_DNSLIBS_VERSION;
 }
