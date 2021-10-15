@@ -16,7 +16,6 @@ namespace ag {
 class socket_address {
 public:
     socket_address();
-    socket_address(const socket_address &) = default;
 
     /**
      * @param numeric_host String containing the IP address
