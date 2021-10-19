@@ -28,7 +28,7 @@ TEST_F(upstream_utils_test, valid_upstream_online) {
     // Test for DoT with 2 bootstraps. Only one is valid
     // Use stub verifier b/c certificate verification is not part of the tested logic
     // and would fail on platforms where it is unsupported by ag::default_verifier
-    err = ag::test_upstream({"tls://dns.adguard.com", {"1.2.3.4", "8.8.8.8"}, 10 * timeout}, false,
+    err = ag::test_upstream({"tls://1.1.1.1", {"1.2.3.4", "8.8.8.8"}, 10 * timeout}, false,
             [](const ag::certificate_verification_event &) { return std::nullopt; },
             false);
     ASSERT_FALSE(err) << "Cannot fail: " << *err;

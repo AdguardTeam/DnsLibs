@@ -28,9 +28,18 @@ std::optional<evutil_socket_t> udp_socket::get_fd() const {
 std::optional<socket::error> udp_socket::connect(connect_parameters params) {
     log_sock(this, trace, "{}", params.peer.str());
 
+    evutil_socket_t fd = -1;
     std::optional<error> result;
 
-    evutil_socket_t fd = ::socket(params.peer.c_sockaddr()->sa_family, SOCK_DGRAM, 0);
+    if (this->event_loop != nullptr) {
+        assert(0);
+        result = {-1, "Already connected"};
+        goto error;
+    }
+
+    this->event_loop = params.loop;
+
+    fd = ::socket(params.peer.c_sockaddr()->sa_family, SOCK_DGRAM, 0);
     if (fd < 0) {
         log_sock(this, dbg, "Failed to create socket");
         goto error;
@@ -66,7 +75,7 @@ std::optional<socket::error> udp_socket::connect(connect_parameters params) {
         goto error;
     }
 
-    params.loop->submit([this] () {
+    this->connect_notify_task_id = params.loop->schedule(std::chrono::microseconds{0}, [this] () {
         if (struct callbacks cbx = this->get_callbacks(); cbx.on_connected != nullptr) {
             cbx.on_connected(cbx.arg);
         }
@@ -182,6 +191,7 @@ void udp_socket::on_event(evutil_socket_t fd, short what, void *arg) {
 
 udp_socket::~udp_socket() {
     log_sock(this, trace, "Destroyed");
+    event_loop->cancel(connect_notify_task_id);
     if (socket_event) {
         evutil_socket_t fd = event_get_fd(socket_event.get());
         // epoll is not happy when deleting events after close

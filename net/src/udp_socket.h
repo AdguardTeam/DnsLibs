@@ -31,6 +31,8 @@ private:
     callbacks callbacks = {};
     std::optional<std::chrono::microseconds> timeout;
     ag::deferred_arg_guard deferred_arg;
+    ag::event_loop::task_id connect_notify_task_id;
+    ag::event_loop *event_loop = nullptr;
 
     [[nodiscard]] std::optional<evutil_socket_t> get_fd() const override;
     [[nodiscard]] std::optional<error> connect(connect_parameters params) override;

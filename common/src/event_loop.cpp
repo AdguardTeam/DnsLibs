@@ -86,7 +86,7 @@ void ag::event_loop::run_postponed_task(evutil_socket_t, short, void *arg) {
         }
     }
 
-    if (task.has_value()) {
+    if (task.has_value() && task->func) {
         task->func();
     }
 }
@@ -100,13 +100,27 @@ void ag::event_loop::submit(std::function<void()> func) {
     }
 }
 
-void ag::event_loop::schedule(std::chrono::microseconds postpone_time, std::function<void()> func) {
+ag::event_loop::task_id ag::event_loop::schedule(std::chrono::microseconds postpone_time, std::function<void()> func) {
     std::scoped_lock l(m_postponed_tasks.mtx);
     auto &task = m_postponed_tasks.val.queue.emplace_back(
-            postponed_tasks::task{ this, m_postponed_tasks.val.next_task_id++, std::move(func) });
+            postponed_tasks::task{this, ++m_postponed_tasks.val.task_id_counter, std::move(func) });
 
     timeval tv = utils::duration_to_timeval(postpone_time);
     event_base_once(m_base.get(), -1, EV_TIMEOUT, run_postponed_task, &task, &tv);
+
+    return task.id;
+}
+
+void ag::event_loop::cancel(task_id id) {
+    if (id == task_id{}) {
+        return;
+    }
+    std::scoped_lock l(m_postponed_tasks.mtx);
+    auto it = std::find_if(this->m_postponed_tasks.val.queue.begin(), this->m_postponed_tasks.val.queue.end(),
+                           [id] (const postponed_tasks::task &i) -> bool { return i.id == id; });
+    if (it != this->m_postponed_tasks.val.queue.end()) {
+        it->func = nullptr;
+    }
 }
 
 void ag::event_loop::stop() {

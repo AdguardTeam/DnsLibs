@@ -38,10 +38,24 @@ public:
      */
     void submit(std::function<void()> task);
 
+    class task_id {
+    private:
+        uint64_t value = 0;
+    public:
+        friend bool operator==(const task_id &l, const task_id &r) { return l.value == r.value; }
+        task_id &operator++() { ++value; return *this; }
+    };
+
     /**
      * Schedule a `task` to be executed on the event loop after the `postpone_time`
+     * @return task id
      */
-    void schedule(std::chrono::microseconds postpone_time, std::function<void()> task);
+    task_id schedule(std::chrono::microseconds postpone_time, std::function<void()> task);
+
+    /**
+     * Cancel execution of task (doesn't interrupt already executing task)
+     */
+    void cancel(task_id id);
 
     /**
      * Stop event loop
@@ -80,11 +94,11 @@ private:
     struct postponed_tasks {
         struct task {
             event_loop *event_loop;
-            uint32_t id;
+            task_id id;
             std::function<void()> func;
         };
 
-        uint32_t next_task_id = 0;
+        task_id task_id_counter;
         std::list<task> queue;
     };
     /** Postponed tasks */

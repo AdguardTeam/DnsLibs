@@ -33,7 +33,7 @@ protected:
 
 static ag::dnsproxy_settings make_dnsproxy_settings() {
     auto settings = ag::dnsproxy_settings::get_default();
-    settings.upstreams = {{ .address = "94.140.14.140" }};
+    settings.upstreams = {{ .address = "8.8.8.8" }};
     return settings;
 }
 
@@ -1283,8 +1283,8 @@ TEST_F(dnsproxy_test, fallback_filter_works_and_defaults_are_correct) {
     static constexpr int32_t UPSTREAM_ID = 42;
     static constexpr int32_t FALLBACK_ID = 4242;
     ag::dnsproxy_settings settings = make_dnsproxy_settings();
-    settings.upstreams = {{.address = "94.140.14.140", .id = UPSTREAM_ID}};
-    settings.fallbacks = {{.address = "94.140.14.141", .id = FALLBACK_ID}};
+    settings.upstreams = {{.address = "8.8.8.8", .id = UPSTREAM_ID}};
+    settings.fallbacks = {{.address = "8.8.8.8", .id = FALLBACK_ID}};
     ag::dns_request_processed_event last_event{};
     ag::dnsproxy_events events{
             .on_request_processed = [&last_event](const ag::dns_request_processed_event &event) {

@@ -342,15 +342,15 @@ static const upstream_test_data test_upstreams_data[]{
         {}
     },
     {
-        "tls://dns.adguard.com",
+        "tls://dns.google",
         {"8.8.8.8:53"}
     },
     {
-        "tls://dns.adguard.com:853",
+        "tls://dns.google:853",
         {"8.8.8.8:53"}
     },
     {
-        "tls://dns.adguard.com:853",
+        "tls://dns.google:853",
         {"8.8.8.8"}
     },
     {
