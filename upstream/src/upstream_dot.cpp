@@ -131,14 +131,12 @@ static std::optional<std::string> get_resolved_ip(const ag::logger &log, const a
 static std::string_view strip_dot_url(std::string_view url) {
     assert(ag::utils::starts_with(url, ag::dns_over_tls::SCHEME));
     url.remove_prefix(ag::dns_over_tls::SCHEME.length());
-    if (url.back() == '/') {
-        url.remove_suffix(1);
-    }
+    url = url.substr(0, url.find('/'));
     return url;
 }
 
 static std::string_view get_host_name(std::string_view url) {
-    return ag::utils::split_host_port(strip_dot_url(url)).first;
+    return ag::utils::trim(ag::utils::split_host_port(strip_dot_url(url)).first);
 }
 
 static ag::bootstrapper_ptr create_bootstrapper(const ag::logger &log, const ag::upstream_options &opts,
@@ -170,9 +168,10 @@ ag::dns_over_tls::dns_over_tls(const upstream_options &opts, const upstream_fact
 {}
 
 ag::err_string ag::dns_over_tls::init() {
-    if (this->m_options.bootstrap.empty()
+    if (auto hostname = get_host_name(this->m_options.address);
+            hostname.empty() || (this->m_options.bootstrap.empty()
             && std::holds_alternative<std::monostate>(this->m_options.resolved_server_ip)
-            && !socket_address(get_host_name(this->m_options.address), 0).valid()) {
+            && !socket_address(hostname, 0).valid())) {
         std::string err = "At least one the following should be true: server address is specified, "
                           "url contains valid server address as a host name, bootstrap server is specified";
         errlog(m_log, "{}", err);

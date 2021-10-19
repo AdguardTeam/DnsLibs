@@ -199,6 +199,24 @@ TEST_F(upstream_test, create_upstream_with_wrong_options) {
         { "https://example.com", { "1..1.1" } },
         { "tls://one.one.one.one", { "https://example.com" } },
         { "tls://one.one.one.one", { "1..1.1" } },
+
+        // some degenerate URLs
+        { "tls://", {"1.1.1.1"}},
+        { "tls:///", {"1.1.1.1"}},
+        { "tls://   ", {"1.1.1.1"}},
+        { "tls://   /", {"1.1.1.1"}},
+        { "tcp://", {}},
+        { "tcp:///", {}},
+        { "tcp://   ", {}},
+        { "tcp://   /", {}},
+        { "quic://", {}},
+        { "quic://   ", {}},
+        { "quic:///", {}},
+        { "quic://   /", {}},
+        { "https://", {}},
+        { "https://   ", {}},
+        { "https:///", {}},
+        { "https://   /", {}},
     };
 
     for (const ag::upstream_options &options : OPTIONS) {

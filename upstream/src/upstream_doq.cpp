@@ -59,6 +59,9 @@ dns_over_quic::dns_over_quic(const upstream_options &opts, const upstream_factor
         , m_max_pktlen{NGTCP2_MAX_PKTLEN_IPV6}
         , m_quic_version{NGTCP2_PROTO_VER_V1}
         , m_send_buf(NGTCP2_MAX_PKTLEN_IPV6)
+        , m_idle_timer_event(event_new(m_loop->c_base(), -1, EV_TIMEOUT, idle_timer_cb, this))
+        , m_handshake_timer_event(event_new(m_loop->c_base(), -1, EV_TIMEOUT, handshake_timer_cb, this))
+        , m_retransmit_timer_event(event_new(m_loop->c_base(), -1, EV_TIMEOUT, retransmit_cb, this))
         , m_static_secret{0}
         , m_tls_session_cache(opts.address)
 {}
@@ -244,16 +247,18 @@ err_string dns_over_quic::init() {
 
     assert(ag::utils::starts_with(url, SCHEME));
     url.remove_prefix(SCHEME.size());
-    if (url.back() == '/') {
-        url.remove_suffix(1);
-    }
+    url = url.substr(0, url.find('/'));
 
     auto split_res = ag::utils::split_host_port(url);
-    m_server_name = split_res.first.empty() ? "" : std::string(split_res.first);
+    m_server_name = ag::utils::trim(split_res.first);
+    if (m_server_name.empty()) {
+        return "Server name is empty";
+    }
+
     m_port = split_res.second.empty() ? DEFAULT_PORT : atoi(std::string(split_res.second.data()).c_str());
 
     ag::bootstrapper::params bootstrapper_params = {
-            .address_string = split_res.first,
+            .address_string = m_server_name,
             .default_port = m_port,
             .bootstrap = m_options.bootstrap,
             .timeout = m_options.timeout,
@@ -301,10 +306,6 @@ err_string dns_over_quic::init() {
     };
 
     m_remote_addr_empty = ag::socket_address("::", m_port);
-
-    m_idle_timer_event.reset(event_new(m_loop->c_base(), -1, EV_TIMEOUT, idle_timer_cb, this));
-    m_handshake_timer_event.reset(event_new(m_loop->c_base(), -1, EV_TIMEOUT, handshake_timer_cb, this));
-    m_retransmit_timer_event.reset(event_new(m_loop->c_base(), -1, EV_TIMEOUT, retransmit_cb, this));
 
     if (int ret = init_ssl_ctx(); ret != 0) {
         return "Creation SSL context failed";
