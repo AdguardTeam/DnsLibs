@@ -116,7 +116,7 @@ private:
     };
     struct connection_handshake_initial_info {
         std::vector<std::unique_ptr<socket_context>> sockets;
-        std::unique_ptr<buffer> handshake_initial_buf;
+        socket_context *last_connected_socket = nullptr;
     };
     struct connection_state {
         using state_info_variant = std::variant<

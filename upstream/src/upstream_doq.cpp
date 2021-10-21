@@ -392,20 +392,17 @@ void dns_over_quic::on_socket_connected(void *arg) {
         return;
     }
 
-    std::unique_ptr<buffer> &handshake_initial_buf = info->handshake_initial_buf;
-    if (int r;
-            self->m_conn == nullptr
-            && NETWORK_ERR_OK != (r = self->init_quic_conn(ctx->socket.get()))) {
+    if (int r; self->m_conn == nullptr && NETWORK_ERR_OK != (r = self->init_quic_conn(ctx->socket.get()))) {
         self->disconnect("Internal error");
         return;
     }
 
+    info->last_connected_socket = ctx;
     if (int r = self->on_write(); r != NETWORK_ERR_OK) {
         dbglog(self->m_log, "Failed to send packet to {}: {}", peer.str(), r);
         goto fail;
     }
 
-    tracelog(self->m_log, "Sending packet to {}: {} bytes", peer.str(), handshake_initial_buf->size());
     return;
 
     fail:
@@ -615,21 +612,13 @@ int dns_over_quic::send_packet(socket *active_socket, uint8_view data) {
 int dns_over_quic::send_packet() {
     uint8_view data = { m_send_buf.rpos(), m_send_buf.size() };
     if (auto *info = std::get_if<connection_handshake_initial_info>(&m_conn_state.info);
-            info != nullptr && info->handshake_initial_buf == nullptr) {
-        info->handshake_initial_buf = std::make_unique<buffer>(m_send_buf);
-        assert(info->handshake_initial_buf->size() > 0);
-        data = { info->handshake_initial_buf->rpos(), info->handshake_initial_buf->size() };
-        m_send_buf.reset();
-        int ret = NETWORK_ERR_DROP_CONN;
-        for (auto &socket : info->sockets) {
-            if (send_packet(socket->socket.get(), data) == NETWORK_ERR_OK) {
-                ret = NETWORK_ERR_OK;
-            }
-        }
-        return ret;
+            info != nullptr && info->last_connected_socket != nullptr) {
+        return send_packet(info->last_connected_socket->socket.get(), data);
     } else if (auto *active_socket = std::get_if<std::unique_ptr<socket_context>>(&m_conn_state.info)) {
         return send_packet((*active_socket)->socket.get(), data);
     } else {
+        errlog(m_log, "{}(): no socket to send data on", __func__);
+        assert(0);
         return NETWORK_ERR_DROP_CONN;
     }
 }

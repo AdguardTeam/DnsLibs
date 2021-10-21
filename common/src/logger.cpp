@@ -65,7 +65,7 @@ static void default_callback(ag::log_level lvl, const char *message, size_t leng
     strftime(time_str, sizeof(time_str), "%d.%m.%Y %H:%M:%S", &tm);
 
     fprintf(stderr, "%s.%06d [%" PRIdMAX "] [%s] %.*s",
-            time_str, (int)duration_cast<microseconds>(now.time_since_epoch()).count() % 1000000,
+            time_str, (int)(duration_cast<microseconds>(now.time_since_epoch()).count() % 1000000),
             (intmax_t)gettid(),
             magic_enum::enum_name(lvl).data(),
             (int)length, message);
