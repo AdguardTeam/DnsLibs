@@ -749,7 +749,7 @@ static ag::server_stamp convert_stamp(AGDnsStamp *stamp) {
 @end
 
 @implementation AGDnsRequestProcessedEvent
-- (instancetype) init: (ag::dns_request_processed_event &)event
+- (instancetype) init: (const ag::dns_request_processed_event &)event
 {
     _domain = convert_string(event.domain);
     _type = convert_string(event.type);
@@ -852,6 +852,7 @@ static ag::server_stamp convert_stamp(AGDnsStamp *stamp) {
     ag::dnsproxy proxy;
     ag::logger log;
     AGDnsProxyEvents *events;
+    dispatch_queue_t queue;
     BOOL initialized;
 }
 
@@ -1189,13 +1190,23 @@ static int bindFd(NSString *helperPath, NSString *address, NSNumber *port, AGLis
     }
 
     void *obj = (__bridge void *)self;
+    self->queue = dispatch_queue_create("com.adguard.dnslibs.AGDnsProxy.queue", nil);
     self->events = handler;
     ag::dnsproxy_events native_events = {};
     if (handler != nil && handler.onRequestProcessed != nil) {
          native_events.on_request_processed =
-            [obj] (ag::dns_request_processed_event event) {
-                AGDnsProxy *sself = (__bridge AGDnsProxy *)obj;
-                sself->events.onRequestProcessed([[AGDnsRequestProcessedEvent alloc] init: event]);
+            [obj] (const ag::dns_request_processed_event &event) {
+                auto *sself = (__bridge AGDnsProxy *)obj;
+                @autoreleasepool {
+                    auto *objCEvent = [[AGDnsRequestProcessedEvent alloc] init: event];
+                    __weak AGDnsProxyEvents *weakObjCEvents = sself->events;
+                    dispatch_async(sself->queue, ^{
+                        __strong AGDnsProxyEvents *objCEvents = weakObjCEvents;
+                        if (objCEvents) {
+                            objCEvents.onRequestProcessed(objCEvent);
+                        }
+                    });
+                }
             };
     }
     native_events.on_certificate_verification =
