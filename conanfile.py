@@ -53,6 +53,12 @@ class DnsLibsConan(ConanFile):
 
     def build(self):
         cmake = CMake(self)
+        # A better way to pass these was not found :(
+        if self.settings.os == "Linux":
+            if self.settings.compiler.libcxx:
+                cmake.definitions["CMAKE_CXX_FLAGS"] = "-stdlib=%s" % self.settings.compiler.libcxx
+            if self.settings.compiler.version:
+                cmake.definitions["CMAKE_CXX_COMPILER_VERSION"] = self.settings.compiler.version
         cmake.configure(source_folder="source_subfolder/proxy")
         cmake.build(target="dnsproxy")
 
