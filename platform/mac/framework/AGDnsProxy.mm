@@ -1456,9 +1456,11 @@ static int bindFd(NSString *helperPath, NSString *address, NSNumber *port, AGLis
     if (!stamp_error) {
         return [self initWithNative:&stamp];
     }
-    *error = [NSError errorWithDomain:AGDnsProxyErrorDomain
-                                 code:AGDPE_PARSE_DNS_STAMP_ERROR
-                             userInfo:@{NSLocalizedDescriptionKey: convert_string(*stamp_error)}];
+    if (error) {
+        *error = [NSError errorWithDomain:AGDnsProxyErrorDomain
+                                     code:AGDPE_PARSE_DNS_STAMP_ERROR
+                                 userInfo:@{NSLocalizedDescriptionKey: convert_string(*stamp_error)}];
+    }
     return nil;
 }
 

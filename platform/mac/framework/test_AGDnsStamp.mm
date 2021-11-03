@@ -45,5 +45,12 @@ int main() {
     assert([stamp.prettierUrl isEqualToString:@"dnscrypt://2.dnscrypt-cert.adguard"]);
     assert([stamp.stringValue isEqualToString:@"sdns://AQQAAAAAAAAADDk0LjE0MC4xNC4xNAjK_rq-3q2-7xcyLmRuc2NyeXB0LWNlcnQuYWRndWFyZA"]);
 
+    stamp = [AGDnsStamp stampWithString:@"sdns://AQcAAAAAAAAAI2RvdHRsczovLzIzYTdkYWIxLmQuYWRndWFyZC1kbnMuY29tABAyLmRuc2NyeXB0LWNlcnQu" error:&error];
+    assert(!stamp);
+    assert(error);
+
+    stamp = [AGDnsStamp stampWithString:@"sdns://AQcAAAAAAAAAI2RvdHRsczovLzIzYTdkYWIxLmQuYWRndWFyZC1kbnMuY29tABAyLmRuc2NyeXB0LWNlcnQu" error:nil];
+    assert(!stamp);
+
     return 0;
 }
