@@ -87,15 +87,20 @@ ag::connection::read_result ag::dns_over_tls::tls_pool::perform_request_inner(ui
 
     uint16_t id = ntohs(*(uint16_t *)buf.data());
     if (err_string e = conn->wait_connect_result(id, timeout); e.has_value()) {
+        remove_from_all(conn);
+        m_bootstrapper->remove_resolved(conn->address);
         return { {}, std::move(e) };
     }
 
     if (err_string e = conn->write(id, buf); e.has_value()) {
+        remove_from_all(conn);
+        m_bootstrapper->remove_resolved(conn->address);
         return { {}, std::move(e) };
     }
 
     connection::read_result read_result = conn->read(id, timeout);
     if (read_result.error.has_value()) {
+        remove_from_all(conn);
         m_bootstrapper->remove_resolved(conn->address);
     }
 

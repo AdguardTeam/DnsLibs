@@ -65,3 +65,4 @@ set(TEST_DIR ${CMAKE_CURRENT_SOURCE_DIR}/test)
 
 add_unit_test(test_upstream "${TEST_DIR}" "${DNSLIBS_DIR}/dnscrypt/src" TRUE FALSE)
 add_unit_test(test_upstream_utils "${TEST_DIR}" "" TRUE TRUE)
+add_unit_test(test_dot_invalid_address "${TEST_DIR}" "${DNSLIBS_DIR}/upstream/src" TRUE TRUE)

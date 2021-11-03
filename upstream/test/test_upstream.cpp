@@ -356,7 +356,7 @@ static const upstream_test_data test_upstreams_data[]{
         {}
     },
     {
-        "tls://9.9.9.9:853", // FIXME this server sometimes triggers "Unexpected EOF"
+        "tls://9.9.9.9:853",
         {}
     },
     {
