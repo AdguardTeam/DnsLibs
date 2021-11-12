@@ -880,51 +880,49 @@ static SecCertificateRef convertCertificate(const std::vector<uint8_t> &cert) {
 
 static std::string getTrustCreationErrorStr(OSStatus status) {
 #if !TARGET_OS_IPHONE || (IOS_VERSION_MAJOR >= 11 && IOS_VERSION_MINOR >= 3)
-    CFStringRef err = SecCopyErrorMessageString(status, NULL);
-    return [(__bridge NSString *)err UTF8String];
+    auto *err = (__bridge_transfer NSString *) SecCopyErrorMessageString(status, NULL);
+    return [err UTF8String];
 #else
     return AG_FMT("Failed to create trust object from chain: {}", status);
 #endif
 }
 
+template <typename T>
+using AGUniqueCFRef = std::unique_ptr<std::remove_pointer_t<T>, ag::ftor<&CFRelease>>;
+
 + (std::optional<std::string>) verifyCertificate: (ag::certificate_verification_event *) event log: (ag::logger &) log
 {
     tracelog(log, "[Verification] App callback");
 
-    size_t chainLength = event->chain.size() + 1;
-    SecCertificateRef chain[chainLength];
+    NSMutableArray *trustArray = [[NSMutableArray alloc] initWithCapacity: event->chain.size() + 1];
 
-    chain[0] = convertCertificate(event->certificate);
-    if (chain[0] == NULL) {
+    SecCertificateRef cert = convertCertificate(event->certificate);
+    if (!cert) {
         dbglog(log, "[Verification] Failed to create certificate object");
         return "Failed to create certificate object";
     }
+    [trustArray addObject:(__bridge_transfer id) cert];
 
-    for (size_t i = 0; i < event->chain.size(); ++i) {
-        chain[i + 1] = convertCertificate(event->chain[i]);
-        if (chain[i + 1] == NULL) {
+    for (const auto &chainCert : event->chain) {
+        cert = convertCertificate(chainCert);
+        if (!cert) {
             dbglog(log, "[Verification] Failed to create certificate object");
             return "Failed to create certificate object";
         }
+        [trustArray addObject:(__bridge_transfer id) cert];
     }
 
-    NSMutableArray *trustArray = [[NSMutableArray alloc] initWithCapacity: chainLength];
-    for (size_t i = 0; i < chainLength; ++i) {
-        [trustArray addObject: (__bridge id _Nonnull)chain[i]];
-    }
-
-    SecPolicyRef policy = SecPolicyCreateBasicX509();
+    AGUniqueCFRef<SecPolicyRef> policy{SecPolicyCreateBasicX509()};
     SecTrustRef trust;
-    OSStatus status = SecTrustCreateWithCertificates((__bridge CFTypeRef)trustArray, policy, &trust);
-    if (policy) {
-        CFRelease(policy);
-    }
+    OSStatus status = SecTrustCreateWithCertificates((__bridge CFTypeRef) trustArray, policy.get(), &trust);
 
     if (status != errSecSuccess) {
         std::string err = getTrustCreationErrorStr(status);
         dbglog(log, "[Verification] Failed to create trust object from chain: {}", err);
         return err;
     }
+
+    AGUniqueCFRef<SecTrustRef> trustRef{trust};
 
     SecTrustSetAnchorCertificates(trust, NULL);
     SecTrustSetAnchorCertificatesOnly(trust, NO);
@@ -1211,8 +1209,10 @@ static int bindFd(NSString *helperPath, NSString *address, NSNumber *port, AGLis
     }
     native_events.on_certificate_verification =
         [obj] (ag::certificate_verification_event event) -> std::optional<std::string> {
-            AGDnsProxy *sself = (__bridge AGDnsProxy *)obj;
-            return [AGDnsProxy verifyCertificate: &event log: sself->log];
+            @autoreleasepool {
+                AGDnsProxy *sself = (__bridge AGDnsProxy *)obj;
+                return [AGDnsProxy verifyCertificate: &event log: sself->log];
+            }
         };
 
     if (config.dns64Settings != nil) {
