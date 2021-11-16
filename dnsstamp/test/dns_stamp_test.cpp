@@ -139,7 +139,7 @@ TEST_P(dnscrypt_stamp_parse_test, test_dnscrypt_stamp_parse) {
     test_server_stamp_parse(p.stamp_str, p.server_addr_str_opt ? is_stamp_valid : is_stamp_valid_function());
 }
 
-INSTANTIATE_TEST_CASE_P(dnscrypt_stamp_parse_test, dnscrypt_stamp_parse_test,
+INSTANTIATE_TEST_SUITE_P(dnscrypt_stamp_parse_test, dnscrypt_stamp_parse_test,
                         ::testing::ValuesIn(test_dnscrypt_stamp_parse_data));
 
 TEST_F(dnsstamp_with_pk1_test, test_doh_stamp) {

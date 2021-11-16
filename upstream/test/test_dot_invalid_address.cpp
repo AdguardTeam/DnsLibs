@@ -25,9 +25,9 @@ void ag::bootstrapper::remove_resolved(const socket_address &a) {
     m_resolved_cache.erase(std::remove(m_resolved_cache.begin(), m_resolved_cache.end(), a), m_resolved_cache.end());
 }
 std::string ag::bootstrapper::address() const { return ""; }
-ag::err_string ag::bootstrapper::temporary_disabler_check() {}
+ag::err_string ag::bootstrapper::temporary_disabler_check() { return std::nullopt; }
 void ag::bootstrapper::temporary_disabler_update(const err_string &error) {}
-ag::bootstrapper::resolve_result ag::bootstrapper::resolve() {}
+ag::bootstrapper::resolve_result ag::bootstrapper::resolve() { return {}; }
 
 
 TEST(upstream_dot_test, throws_away_invalid_address) {

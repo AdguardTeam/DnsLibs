@@ -31,10 +31,6 @@ std::optional<socket::error> tcp_stream::connect(connect_parameters params) {
         return { { -1, "Failed to create socket buffer event" } };
     }
 
-    if (params.timeout.has_value() && !this->set_timeout(params.timeout.value())) {
-        return { { -1, "Failed to set bufferevent timeouts" } };
-    }
-
     if (this->prepare_fd.func != nullptr) {
         bufferevent_setpreparecb(this->bev.get(), on_prepare_fd, this);
     }
@@ -50,6 +46,10 @@ std::optional<socket::error> tcp_stream::connect(connect_parameters params) {
         return { { err, evutil_socket_error_to_string(err) } };
     }
 
+    if (params.timeout.has_value() && !this->set_timeout(params.timeout.value())) {
+        return { { -1, "Failed to set time out" } };
+    }
+
     return std::nullopt;
 }
 
@@ -63,7 +63,7 @@ std::optional<socket::error> tcp_stream::send(uint8_view data) {
     }
 
     if (!this->set_timeout()) {
-        return { { -1, "Failed to refresh bufferevent timeouts" } };
+        return { { -1, "Failed to refresh time out" } };
     }
 
     return std::nullopt;
@@ -86,6 +86,10 @@ std::optional<socket::error> tcp_stream::set_callbacks(struct callbacks cbx) {
     this->guard.lock();
     this->callbacks = cbx;
     this->guard.unlock();
+
+    if (this->bev == nullptr) {
+        return std::nullopt;
+    }
 
     auto bufferevent_action = (cbx.on_read != nullptr) ? bufferevent_enable : bufferevent_disable;
     if (0 != bufferevent_action(this->bev.get(), EV_READ)) {
@@ -112,12 +116,29 @@ bool tcp_stream::set_timeout(microseconds timeout) {
 }
 
 bool tcp_stream::set_timeout() {
-    this->guard.lock();
-    microseconds timeout = this->current_timeout;
-    this->guard.unlock();
+    std::scoped_lock l(this->guard);
+    if (this->bev == nullptr) {
+        return true;
+    }
 
-    const timeval tv = utils::duration_to_timeval(timeout);
-    return 0 == bufferevent_set_timeouts(this->bev.get(), &tv, &tv);
+    if (!this->current_timeout.has_value()) {
+        this->reset_timeout();
+        return true;
+    }
+
+    const timeval tv = utils::duration_to_timeval(this->current_timeout.value());
+    if (this->timer == nullptr) {
+        this->timer.reset(
+            event_new(bufferevent_get_base(this->bev.get()), -1, EV_TIMEOUT,
+                on_timeout, this->deferred_arg.value()));
+    }
+    return this->timer != nullptr && 0 == evtimer_add(this->timer.get(), &tv);
+}
+
+void tcp_stream::reset_timeout() {
+    std::scoped_lock l(this->guard);
+    this->timer.reset();
+    this->current_timeout.reset();
 }
 
 struct tcp_stream::callbacks tcp_stream::get_callbacks() const {
@@ -144,17 +165,15 @@ void tcp_stream::on_event(bufferevent *bev, short what, void *arg) {
 
     if (what & BEV_EVENT_CONNECTED) {
         log_stream(self, trace, "Connected");
+        [[maybe_unused]] bool _ = self->set_timeout();
+
         if (struct callbacks cbx = self->get_callbacks(); cbx.on_connected != nullptr) {
             cbx.on_connected(cbx.arg);
         }
-    } else if (what & BEV_EVENT_TIMEOUT) {
-        log_stream(self, trace, "Timed out");
-        int err = utils::AG_ETIMEDOUT;
-        if (struct callbacks cbx = self->get_callbacks(); cbx.on_close != nullptr) {
-            cbx.on_close(cbx.arg, { { err, evutil_socket_error_to_string(err) } });
-        }
     } else if (what & BEV_EVENT_ERROR) {
         log_stream(self, trace, "Error");
+        self->reset_timeout();
+
         error error = { -1 };
         if (int err = evutil_socket_geterror(bufferevent_getfd(bev)); err != 0) {
             error = { err, evutil_socket_error_to_string(err) };
@@ -166,6 +185,8 @@ void tcp_stream::on_event(bufferevent *bev, short what, void *arg) {
         }
     } else if (what & BEV_EVENT_EOF) {
         log_stream(self, trace, "EOF");
+        self->reset_timeout();
+
         if (struct callbacks cbx = self->get_callbacks(); cbx.on_close != nullptr) {
             cbx.on_close(cbx.arg, std::nullopt);
         }
@@ -181,6 +202,8 @@ void tcp_stream::on_read(bufferevent *bev, void *arg) {
         return;
     }
 
+    [[maybe_unused]] bool _ = self->set_timeout();
+
     evbuffer *buffer = bufferevent_get_input(bev);
     auto available_to_read = (ssize_t)evbuffer_get_length(buffer);
     int chunks_num = evbuffer_peek(buffer, available_to_read, nullptr, nullptr, 0);
@@ -195,4 +218,19 @@ void tcp_stream::on_read(bufferevent *bev, void *arg) {
     }
 
     evbuffer_drain(buffer, available_to_read);
+}
+
+void tcp_stream::on_timeout(evutil_socket_t, short, void *arg) {
+    auto *self = (tcp_stream *)deferred_arg_to_ptr(arg);
+    if (!self) {
+        return;
+    }
+
+    log_stream(self, trace, "Timed out");
+    self->reset_timeout();
+
+    int err = utils::AG_ETIMEDOUT;
+    if (struct callbacks cbx = self->get_callbacks(); cbx.on_close != nullptr) {
+        cbx.on_close(cbx.arg, { { err, evutil_socket_error_to_string(err) } });
+    }
 }

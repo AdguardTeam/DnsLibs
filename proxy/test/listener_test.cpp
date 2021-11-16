@@ -155,7 +155,7 @@ TEST(listener_test, shuts_down_if_could_not_initialize) {
     ASSERT_FALSE(ret);
 }
 
-INSTANTIATE_TEST_CASE_P(
+INSTANTIATE_TEST_SUITE_P(
         listener_logic,
         listener_test,
         ::testing::Values(

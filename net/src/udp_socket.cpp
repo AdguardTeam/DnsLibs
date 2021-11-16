@@ -136,6 +136,10 @@ std::optional<socket::error> udp_socket::set_callbacks(struct callbacks cbx) {
     this->callbacks = cbx;
     this->guard.unlock();
 
+    if (this->socket_event == nullptr) {
+        return std::nullopt;
+    }
+
     if (cbx.on_read != nullptr) {
         const timeval tv = utils::duration_to_timeval(this->timeout.value_or(std::chrono::microseconds(0)));
         if (0 != event_add(this->socket_event.get(), this->timeout.has_value() ? &tv : nullptr)) {
