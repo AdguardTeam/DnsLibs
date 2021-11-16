@@ -1,4 +1,5 @@
 #include <numeric>
+#include <cstring>
 #include "tls_codec.h"
 
 
@@ -183,7 +184,20 @@ std::optional<tls_codec::error> tls_codec::proceed_handshake() {
     if (r < 0) {
         r = SSL_get_error(this->ssl.get(), r);
         if (r != SSL_ERROR_WANT_READ && r != SSL_ERROR_WANT_WRITE) {
-            err = { AG_FMT("Failed to perform handshake ({})", r) };
+            std::string errors;
+            uint32_t error;
+            const char *file;
+            int line;
+            while ((error = ERR_get_error_line(&file, &line)) != 0) {
+                if (const char *name;
+                        (name = strrchr(file, '/')) != nullptr
+                        || (name = strrchr(file, '\\')) != nullptr) {
+                    file = name + 1;
+                }
+                errors += AG_FMT("\t{}:{}:{}\n", file, line, ERR_error_string(error, nullptr));
+            }
+
+            err = { AG_FMT("TLS handshake failed (\n{})", errors) };
         }
     }
 
