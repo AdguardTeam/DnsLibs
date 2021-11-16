@@ -576,7 +576,9 @@ void socks_oproxy::handle_connection_close(connection *conn, std::optional<socke
     }
 
     if (this->is_udp_association_connection(conn->id)) {
-        if (!error.has_value() || error->code != utils::AG_ETIMEDOUT) {
+        if (conn->state != CS_CONNECTED
+                || !error.has_value()
+                || error->code != utils::AG_ETIMEDOUT) {
             this->terminate_udp_association(conn);
         }
     } else if (callbacks.on_close != nullptr) {
