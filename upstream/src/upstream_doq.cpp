@@ -770,8 +770,8 @@ int dns_over_quic::feed_data(uint8_view data) {
     ngtcp2_pkt_info pi{};
     auto rv = ngtcp2_conn_read_pkt(m_conn, &path, &pi, data.data(), data.size(), initial_ts);
 
-    if (rv != 0) {
-        errlog(m_log, "ngtcp2_conn_read_pkt: {}", ngtcp2_strerror(rv));
+    if (rv != 0 && rv != NGTCP2_ERR_RECV_VERSION_NEGOTIATION) {
+        dbglog(m_log, "ngtcp2_conn_read_pkt: {}", ngtcp2_strerror(rv));
     }
 
     return rv;
@@ -789,12 +789,22 @@ int dns_over_quic::version_negotiation(ngtcp2_conn *conn, const ngtcp2_pkt_hd *h
             version = std::max(version, sv[i]);
         }
     }
+    if (doq->m_log->should_log(spdlog::level::debug)) {
+        std::string list;
+        for (size_t i = 0; i < nsv; i++) {
+            list += (i ? ", " : "") + AG_FMT("{:#x}", sv[i]);
+        }
+        dbglog(doq->m_log, "Version negotiation. Client supported versions: {:#x}, drafts {:#x} to {:#x}, server supported versions: {}",
+               NGTCP2_PROTO_VER_V1, NGTCP2_PROTO_VER_DRAFT_MIN, NGTCP2_PROTO_VER_DRAFT_MAX, list);
+    }
 
     if (selected) {
+        dbglog(doq->m_log, "Switching from QUIC version {:#x} to negotiated QUIC version {:#x}", doq->m_quic_version, version);
         doq->m_quic_version = version;
         return 0;
     }
 
+    dbglog(doq->m_log, "QUIC version can't be negotiated - no common supported QUIC versions with server.");
     return -1;
 }
 
