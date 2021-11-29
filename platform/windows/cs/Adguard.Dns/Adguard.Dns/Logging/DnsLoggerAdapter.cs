@@ -22,7 +22,7 @@ namespace Adguard.Dns.Logging
                 {AGDnsApi.ag_log_level.AGLL_DEBUG, LogLevel.Debug}
             };
 
-        private static readonly ILog LOG = LogProvider.GetLogger(typeof(DnsLoggerAdapter));
+        private static readonly ILog LOG = LogProvider.GetLogger(null);
         private static AGDnsApi.cbd_logger_callback_t m_LoggerCallback;
         private static AGDnsApi.ag_log_level m_LoggerLogLevel;
         private static readonly object SYNC_ROOT = new object();
