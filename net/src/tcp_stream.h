@@ -39,7 +39,8 @@ private:
     [[nodiscard]] std::optional<error> set_callbacks(struct callbacks cbx) override;
 
     [[nodiscard]] bool set_timeout();
-    void reset_timeout();
+    void reset_timeout_locked();
+    void reset_timeout_nolock();
     [[nodiscard]] struct callbacks get_callbacks() const;
 
     static int on_prepare_fd(int fd, const struct sockaddr *sa, int salen, void *arg);

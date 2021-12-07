@@ -122,7 +122,7 @@ bool tcp_stream::set_timeout() {
     }
 
     if (!this->current_timeout.has_value()) {
-        this->reset_timeout();
+        this->reset_timeout_nolock();
         return true;
     }
 
@@ -135,8 +135,12 @@ bool tcp_stream::set_timeout() {
     return this->timer != nullptr && 0 == evtimer_add(this->timer.get(), &tv);
 }
 
-void tcp_stream::reset_timeout() {
+void tcp_stream::reset_timeout_locked() {
     std::scoped_lock l(this->guard);
+    reset_timeout_nolock();
+}
+
+void tcp_stream::reset_timeout_nolock() {
     this->timer.reset();
     this->current_timeout.reset();
 }
@@ -172,7 +176,7 @@ void tcp_stream::on_event(bufferevent *bev, short what, void *arg) {
         }
     } else if (what & BEV_EVENT_ERROR) {
         log_stream(self, trace, "Error");
-        self->reset_timeout();
+        self->reset_timeout_locked();
 
         error error = { -1 };
         if (int err = evutil_socket_geterror(bufferevent_getfd(bev)); err != 0) {
@@ -185,7 +189,7 @@ void tcp_stream::on_event(bufferevent *bev, short what, void *arg) {
         }
     } else if (what & BEV_EVENT_EOF) {
         log_stream(self, trace, "EOF");
-        self->reset_timeout();
+        self->reset_timeout_locked();
 
         if (struct callbacks cbx = self->get_callbacks(); cbx.on_close != nullptr) {
             cbx.on_close(cbx.arg, std::nullopt);
@@ -227,7 +231,7 @@ void tcp_stream::on_timeout(evutil_socket_t, short, void *arg) {
     }
 
     log_stream(self, trace, "Timed out");
-    self->reset_timeout();
+    self->reset_timeout_locked();
 
     int err = utils::AG_ETIMEDOUT;
     if (struct callbacks cbx = self->get_callbacks(); cbx.on_close != nullptr) {
