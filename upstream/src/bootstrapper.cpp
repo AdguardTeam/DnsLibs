@@ -50,6 +50,7 @@ ag::bootstrapper::resolve_result ag::bootstrapper::resolve() {
         } else {
             std::move(result.addresses.begin(), result.addresses.end(), std::inserter(addrs, addrs.begin()));
             error.reset();
+            break;
         }
         timeout -= single_resolve_timer.elapsed<milliseconds>();
         if (timeout <= resolver::MIN_TIMEOUT) {
@@ -64,7 +65,7 @@ ag::bootstrapper::resolve_result ag::bootstrapper::resolve() {
         }
     }
 
-    milliseconds elapsed = whole_resolve_timer.elapsed<milliseconds>();
+    auto elapsed = whole_resolve_timer.elapsed<milliseconds>();
 
     std::vector<socket_address> addresses(std::move_iterator(addrs.begin()), std::move_iterator(addrs.end()));
     return { std::move(addresses), m_server_name, elapsed, std::move(error) };
