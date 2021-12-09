@@ -5,8 +5,10 @@
 #include <ag_utils.h>
 
 using std::chrono::milliseconds;
+using std::chrono::seconds;
 using std::chrono::duration_cast;
 
+static constexpr auto DOT_IDLE_TIMEOUT = seconds(30);
 
 /**
  * Pool of TLS connections
@@ -65,7 +67,7 @@ ag::connection_pool::get_result ag::dns_over_tls::tls_pool::create() {
                     &m_upstream->m_tls_session_cache,
                     m_upstream->m_server_name,
                     { DOT_ALPN },
-            });
+            }, DOT_IDLE_TIMEOUT);
     add_pending_connection(connection);
     return { std::move(connection), resolve_result.time_elapsed, std::nullopt };
 }

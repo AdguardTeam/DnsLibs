@@ -30,7 +30,8 @@ public:
 
     dns_framed_connection(dns_framed_pool *pool, uint32_t id, const upstream *upstream,
             const socket_address &address,
-            std::optional<socket_factory::secure_socket_parameters> secure_socket_parameters);
+            std::optional<socket_factory::secure_socket_parameters> secure_socket_parameters,
+            std::chrono::milliseconds idle_timeout);
     void start(milliseconds timeout);
 
     ~dns_framed_connection() override;
@@ -49,6 +50,8 @@ public:
     tcp_dns_buffer m_input_buffer;
     /** Connection handle */
     socket_factory::socket_ptr m_stream;
+    /** Idle timeout */
+    std::chrono::milliseconds m_idle_timeout;
     /** Mutex for syncronizing reads and access */
     std::recursive_mutex m_mutex;
     /** Conditional variable for waiting reads */
@@ -132,7 +135,8 @@ ag::err_string ag::dns_framed_connection::write(int request_id, uint8_view buf) 
 
 ag::dns_framed_connection::dns_framed_connection(dns_framed_pool *pool, uint32_t id,
         const upstream *upstream, const socket_address &address,
-        std::optional<socket_factory::secure_socket_parameters> secure_socket_parameters)
+        std::optional<socket_factory::secure_socket_parameters> secure_socket_parameters,
+        std::chrono::milliseconds idle_timeout)
     : connection(address)
     , m_log(create_logger(__func__))
     , m_id(id)
@@ -140,6 +144,7 @@ ag::dns_framed_connection::dns_framed_connection(dns_framed_pool *pool, uint32_t
     , m_stream(secure_socket_parameters.has_value()
             ? upstream->make_secured_socket(utils::TP_TCP, std::move(secure_socket_parameters.value()))
             : upstream->make_socket(utils::TP_TCP))
+    , m_idle_timeout(idle_timeout)
 {
 }
 
@@ -179,6 +184,9 @@ void ag::dns_framed_connection::on_connected(void *arg) {
 
     self->m_pool->add_connected(ptr);
     self->m_connected = true;
+    if (self->m_idle_timeout.count()) {
+        self->m_stream->set_timeout(self->m_idle_timeout);
+    }
     self->m_cond.notify_all();
     log_conn(self->m_log, trace, self, "{} finished", __func__);
 }
@@ -308,10 +316,11 @@ void ag::dns_framed_pool::add_pending_connection(const connection_ptr &ptr) {
 }
 
 ag::connection_ptr ag::dns_framed_pool::create_connection(const socket_address &address,
-        std::optional<socket_factory::secure_socket_parameters> secure_socket_parameters) {
+        std::optional<socket_factory::secure_socket_parameters> secure_socket_parameters,
+        std::chrono::milliseconds idle_timeout) {
     static std::atomic_uint32_t conn_id{0};
     auto ptr = std::make_shared<dns_framed_connection>(this, conn_id++, m_upstream, address,
-            std::move(secure_socket_parameters));
+            std::move(secure_socket_parameters), idle_timeout);
     ptr->start(m_upstream->options().timeout);
     return ptr;
 }

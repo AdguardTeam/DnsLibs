@@ -68,10 +68,12 @@ protected:
      * Creates DNS framed connection from bufferevent.
      * @param address Destination address
      * @param secure_socket_parameters Non-nullopt in case it's a secured connection
+     * @param idle_timeout Idle timeout. If 0, request timeout will be used.
      * @return Newly created DNS framed connection
      */
     connection_ptr create_connection(const socket_address &address,
-            std::optional<socket_factory::secure_socket_parameters> secure_socket_parameters);
+            std::optional<socket_factory::secure_socket_parameters> secure_socket_parameters,
+            std::chrono::milliseconds idle_timeout = std::chrono::milliseconds{0});
 
     void close_connection(const connection_ptr &conn);
 };
