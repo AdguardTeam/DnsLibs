@@ -2,9 +2,9 @@
 #include <cstdarg>
 #include <string_view>
 #include <cstring>
-#include <ag_utils.h>
+#include "common/utils.h"
 #include <ag_file.h>
-#include <ag_logger.h>
+#include "common/logger.h"
 #include <ag_sys.h>
 #include <dnsfilter.h>
 
@@ -14,11 +14,11 @@
 #define DEFAULT_FILTER_PATH "./bench_filter.txt"
 #define DEFAULT_DOMAINS_BASE_PATH "./bench_domains.txt"
 
-#define FAIL_WITH_MSG(msg, ...) SPDLOG_ERROR(msg, ##__VA_ARGS__); exit(1)
+static ag::Logger logger{"dnsfilter_benchmark"};
 
+#define FAIL_WITH_MSG(msg, ...) errlog(logger, msg, ##__VA_ARGS__); exit(1)
 
 #define TICK(ts) do { ts = std::chrono::steady_clock::now(); } while (0)
-
 
 using time_point = std::chrono::time_point<std::chrono::steady_clock>;
 using nanoseconds = std::chrono::nanoseconds;
@@ -77,7 +77,7 @@ static bool add_domain(uint32_t idx, std::string_view line, void *arg) {
 static int parse_domains_base(std::string_view path) {
     ag::file::handle file = ag::file::open(std::string(path), ag::file::RDONLY);
     if (!ag::file::is_valid(file)) {
-        SPDLOG_ERROR("failed to read file: {} ({})",
+        errlog(logger, "failed to read file: {} ({})",
             path, ag::sys::error_string(ag::sys::error_code()));
         return -1;
     }
@@ -125,7 +125,7 @@ static int apply_filter_to_base(test_result_t *tr, ag::dnsfilter *filter, ag::dn
         }
 
         if (i % report_step == 0 && i != 0) {
-            SPDLOG_INFO("matched {} domains", i);
+            infolog(logger, "matched {} domains", i);
         }
     }
 
@@ -138,33 +138,33 @@ static int apply_filter_to_base(test_result_t *tr, ag::dnsfilter *filter, ag::dn
 }
 
 static void report_results(const test_result_t *result) {
-    SPDLOG_INFO("============================================");
-    SPDLOG_INFO("Load rules measurements:");
+    infolog(logger, "============================================");
+    infolog(logger, "Load rules measurements:");
     std::chrono::duration elapsed = std::chrono::duration<double, std::ratio<1>>(result->load_rules.end_ts - result->load_rules.start_ts);
-    SPDLOG_INFO("\tTime elapsed:               {}s", elapsed.count());
-    SPDLOG_INFO("\tRSS before:                 {}kB", result->load_rules.start_rss);
-    SPDLOG_INFO("\tRSS after:                  {}kB", result->load_rules.end_rss);
-    SPDLOG_INFO("\tRSS diff:                   {}kB", result->load_rules.end_rss - result->load_rules.start_rss);
-    SPDLOG_INFO("Match domains measurements:");
-    SPDLOG_INFO("\tTotal tries:                {}", result->match_domains.tries);
-    SPDLOG_INFO("\tTotal rules matched:        {}", result->match_domains.total_matches);
-    SPDLOG_INFO("\tEffective blocking rules:   {}", result->match_domains.effective_blocking_matches);
-    SPDLOG_INFO("\tEffective exception rules:  {}", result->match_domains.effective_exception_matches);
+    infolog(logger, "\tTime elapsed:               {}s", elapsed.count());
+    infolog(logger, "\tRSS before:                 {}kB", result->load_rules.start_rss);
+    infolog(logger, "\tRSS after:                  {}kB", result->load_rules.end_rss);
+    infolog(logger, "\tRSS diff:                   {}kB", result->load_rules.end_rss - result->load_rules.start_rss);
+    infolog(logger, "Match domains measurements:");
+    infolog(logger, "\tTotal tries:                {}", result->match_domains.tries);
+    infolog(logger, "\tTotal rules matched:        {}", result->match_domains.total_matches);
+    infolog(logger, "\tEffective blocking rules:   {}", result->match_domains.effective_blocking_matches);
+    infolog(logger, "\tEffective exception rules:  {}", result->match_domains.effective_exception_matches);
     elapsed = std::chrono::duration<double, std::ratio<1>>(result->match_domains.end_ts - result->match_domains.start_ts);
-    SPDLOG_INFO("\tTime elapsed:               {}s", elapsed.count());
-    SPDLOG_INFO("\tMin per-domain:             {}ns", result->match_domains.min_per_domain.count());
-    SPDLOG_INFO("\tMax per-domain:             {}ns", result->match_domains.max_per_domain.count());
-    SPDLOG_INFO("\tAverage per-domain:         {}ns", uint64_t(elapsed.count() * std::nano::den / result->match_domains.tries));
-    SPDLOG_INFO("\tRSS before:                 {}kB", result->match_domains.start_rss);
-    SPDLOG_INFO("\tRSS after:                  {}kB", result->match_domains.end_rss);
-    SPDLOG_INFO("\tRSS diff:                   {}kB", result->match_domains.end_rss - result->match_domains.start_rss);
-    SPDLOG_INFO("Overall measurements:");
+    infolog(logger, "\tTime elapsed:               {}s", elapsed.count());
+    infolog(logger, "\tMin per-domain:             {}ns", result->match_domains.min_per_domain.count());
+    infolog(logger, "\tMax per-domain:             {}ns", result->match_domains.max_per_domain.count());
+    infolog(logger, "\tAverage per-domain:         {}ns", uint64_t(elapsed.count() * std::nano::den / result->match_domains.tries));
+    infolog(logger, "\tRSS before:                 {}kB", result->match_domains.start_rss);
+    infolog(logger, "\tRSS after:                  {}kB", result->match_domains.end_rss);
+    infolog(logger, "\tRSS diff:                   {}kB", result->match_domains.end_rss - result->match_domains.start_rss);
+    infolog(logger, "Overall measurements:");
     elapsed = std::chrono::duration<double, std::ratio<1>>(result->overall.end_ts - result->overall.start_ts);
-    SPDLOG_INFO("\tTime elapsed:               {}s", elapsed.count());
-    SPDLOG_INFO("\tRSS before:                 {}kB", result->overall.start_rss);
-    SPDLOG_INFO("\tRSS after:                  {}kB", result->overall.end_rss);
-    SPDLOG_INFO("\tRSS diff:                   {}kB", result->overall.end_rss - result->overall.start_rss);
-    SPDLOG_INFO("============================================");
+    infolog(logger, "\tTime elapsed:               {}s", elapsed.count());
+    infolog(logger, "\tRSS before:                 {}kB", result->overall.start_rss);
+    infolog(logger, "\tRSS after:                  {}kB", result->overall.end_rss);
+    infolog(logger, "\tRSS diff:                   {}kB", result->overall.end_rss - result->overall.start_rss);
+    infolog(logger, "============================================");
 }
 
 
@@ -174,7 +174,7 @@ int main(int argc, char **argv) {
 
     for (int i = 1; i < argc; ++i) {
         if (0 == strcmp(argv[i], "-h")) {
-            SPDLOG_INFO("{}", HELP_MESSAGE);
+            infolog(logger, "{}", HELP_MESSAGE);
             return 0;
         } else if (0 == strcmp(argv[i], "-f")) {
             if (i + 1 == argc) {
@@ -195,11 +195,11 @@ int main(int argc, char **argv) {
 
     test_result_t result = {};
 
-    SPDLOG_INFO("Parsing domains base...");
+    infolog(logger, "Parsing domains base...");
     if (0 != parse_domains_base(domains_base_path)) {
         FAIL_WITH_MSG("failed to parse domains base");
     }
-    SPDLOG_INFO("...domains base parsed");
+    infolog(logger, "...domains base parsed");
 
     result.match_domains.tries = domains.size();
 
@@ -208,29 +208,29 @@ int main(int argc, char **argv) {
 
     result.load_rules.start_rss = ag::sys::current_rss();
 
-    SPDLOG_INFO("Loading rules in filter...");
+    infolog(logger, "Loading rules in filter...");
     ag::dnsfilter filter;
     ag::dnsfilter::engine_params filter_params = { { { 0, std::string(filter_list_path) } } };
 
     TICK(result.load_rules.start_ts);
     auto [handle, err_or_warn] = filter.create(filter_params);
     if (!handle) {
-        SPDLOG_ERROR("...failed to load rules: {}", *err_or_warn);
+        errlog(logger, "...failed to load rules: {}", *err_or_warn);
         exit(-1);
     }
     TICK(result.load_rules.end_ts);
     result.load_rules.end_rss = ag::sys::current_rss();
     if (err_or_warn) {
-        SPDLOG_WARN("... rules loaded with warnings: {}", *err_or_warn);
+        warnlog(logger, "... rules loaded with warnings: {}", *err_or_warn);
     } else {
-        SPDLOG_INFO("...rules loaded");
+        infolog(logger, "...rules loaded");
     }
 
-    SPDLOG_INFO("Matching domains against rules...");
+    infolog(logger, "Matching domains against rules...");
     result.match_domains.start_rss = ag::sys::current_rss();
     apply_filter_to_base(&result, &filter, handle);
     result.match_domains.end_rss = ag::sys::current_rss();
-    SPDLOG_INFO("...domains matched");
+    infolog(logger, "...domains matched");
 
     filter.destroy(handle);
 

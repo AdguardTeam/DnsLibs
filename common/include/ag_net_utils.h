@@ -6,8 +6,8 @@
 #include <string_view>
 #include <tuple>
 #include <utility>
-#include <ag_defs.h>
-#include <ag_socket_address.h>
+#include "common/defs.h"
+#include "common/socket_address.h"
 #include <event2/event.h>
 
 namespace ag::utils {
@@ -34,7 +34,7 @@ enum transport_protocol {
  * @param require_non_empty_port Require non-empty port after colon
  * @return Host, port, error
  */
-std::tuple<std::string_view, std::string_view, err_string_view> split_host_port_with_err(
+std::tuple<std::string_view, std::string_view, ErrStringView> split_host_port_with_err(
         std::string_view address_string, bool require_ipv6_addr_in_square_brackets = false,
         bool require_non_empty_port = false);
 
@@ -64,13 +64,13 @@ timeval duration_to_timeval(std::chrono::microseconds usecs);
  * @return a string representation of an IP address, or
  *         an empty string if an error occured or addr is empty
  */
-std::string addr_to_str(uint8_view addr);
+std::string addr_to_str(Uint8View addr);
 
 /**
  * @param address a numeric IP address, with an optional port number
- * @return a socket_address parsed from the address string
+ * @return a SocketAddress parsed from the address string
  */
-socket_address str_to_socket_address(std::string_view address);
+SocketAddress str_to_socket_address(std::string_view address);
 
 /**
  * @param err Socket error
@@ -85,7 +85,7 @@ bool socket_error_is_eagain(int err);
  * @param if_index interface index
  * @return error string or std::nullopt if successful
  */
-err_string bind_socket_to_if(evutil_socket_t fd, int family, uint32_t if_index);
+ErrString bind_socket_to_if(evutil_socket_t fd, int family, uint32_t if_index);
 
 /**
  * Make a socket bound to the specified interface
@@ -94,18 +94,18 @@ err_string bind_socket_to_if(evutil_socket_t fd, int family, uint32_t if_index);
  * @param if_name interface name
  * @return error string or std::nullopt if successful
  */
-err_string bind_socket_to_if(evutil_socket_t fd, int family, const char *if_name);
+ErrString bind_socket_to_if(evutil_socket_t fd, int family, const char *if_name);
 
 /**
  * Get the address of the peer connected to the socket
  * @return some address if successful
  */
-std::optional<socket_address> get_peer_address(evutil_socket_t fd);
+std::optional<SocketAddress> get_peer_address(evutil_socket_t fd);
 
 /**
  * Get the current address to which the socket is bound
  * @return some address if successful
  */
-std::optional<socket_address> get_local_address(evutil_socket_t fd);
+std::optional<SocketAddress> get_local_address(evutil_socket_t fd);
 
 } // namespace ag::utils

@@ -1,15 +1,15 @@
-#include <ag_clock.h>
+#include "common/clock.h"
 #include <gtest/gtest.h>
 #include <dnsproxy.h>
 #include <ldns/ldns.h>
 #include <thread>
 #include <memory>
-#include <ag_utils.h>
+#include "common/utils.h"
 #include <ag_net_consts.h>
 #include <cstring>
 #include <dns_forwarder.h>
 #include <upstream_utils.h>
-#include <ag_logger.h>
+#include "common/logger.h"
 #include <ag_file.h>
 
 #include "../../upstream/test/test_utils.h"
@@ -22,8 +22,10 @@ class dnsproxy_test : public ::testing::Test {
 protected:
     ag::dnsproxy proxy;
 
+    ag::Logger log{"dnsproxy_test"};
+
     void SetUp() override {
-        ag::set_default_log_level(ag::TRACE);
+        ag::Logger::set_log_level(ag::LogLevel::LOG_LEVEL_TRACE);
     }
 
     void TearDown() override {
@@ -48,7 +50,7 @@ static void perform_request(ag::dnsproxy &proxy, const ag::ldns_pkt_ptr &request
     // Avoid rate limit
     std::this_thread::sleep_for(std::chrono::milliseconds(100));
 
-    const std::unique_ptr<ldns_buffer, ag::ftor<ldns_buffer_free>> buffer(
+    const std::unique_ptr<ldns_buffer, ag::Ftor<ldns_buffer_free>> buffer(
             ldns_buffer_new(ag::REQUEST_BUFFER_INITIAL_CAPACITY));
 
     ldns_status status = ldns_pkt2buffer_wire(buffer.get(), request.get());
@@ -63,8 +65,8 @@ static void perform_request(ag::dnsproxy &proxy, const ag::ldns_pkt_ptr &request
     response = ag::ldns_pkt_ptr(resp);
 }
 
-static ag::allocated_ptr<char> make_rr_answer_string(ldns_pkt *pkt) {
-    return ag::allocated_ptr<char>{ ldns_rdf2str(ldns_rr_rdf(ldns_rr_list_rr(ldns_pkt_answer(pkt), 0), 0)) };
+static ag::AllocatedPtr<char> make_rr_answer_string(ldns_pkt *pkt) {
+    return ag::AllocatedPtr<char>{ ldns_rdf2str(ldns_rr_rdf(ldns_rr_list_rr(ldns_pkt_answer(pkt), 0), 0)) };
 }
 
 TEST_F(dnsproxy_test, test_dns64) {
@@ -86,7 +88,7 @@ TEST_F(dnsproxy_test, test_dns64) {
 
     // This is after proxy.init() to not crash in proxy.deinit()
     if (!test_ipv6_connectivity()) {
-        SPDLOG_WARN("IPv6 is NOT available, skipping this test");
+        warnlog(log, "IPv6 is NOT available, skipping this test");
         return;
     }
 
@@ -139,7 +141,7 @@ TEST_F(dnsproxy_test, test_ipv6_blocking) {
     ASSERT_EQ(ldns_pkt_nscount(response.get()), 1);
     ASSERT_EQ(ldns_pkt_get_rcode(response.get()), LDNS_RCODE_NOERROR);
     // Check that message is correctly serialized
-    using ldns_buffer_ptr = std::unique_ptr<ldns_buffer, ag::ftor<&ldns_buffer_free>>;
+    using ldns_buffer_ptr = std::unique_ptr<ldns_buffer, ag::Ftor<&ldns_buffer_free>>;
     ldns_buffer_ptr result(ldns_buffer_new(LDNS_MAX_PACKETLEN));
     ldns_status status = ldns_pkt2buffer_wire(result.get(), response.get());
     ASSERT_EQ(status, LDNS_STATUS_OK);
@@ -268,12 +270,14 @@ protected:
     ag::dnsproxy proxy;
     ag::dns_request_processed_event last_event{};
 
+    ag::Logger log{"dnsproxy_cache_test"};
+
     void TearDown() override {
         proxy.deinit();
     }
 
     void SetUp() override {
-        ag::set_default_log_level(ag::TRACE);
+        ag::Logger::set_log_level(ag::LogLevel::LOG_LEVEL_TRACE);
         ag::dnsproxy_settings settings = make_dnsproxy_settings();
         settings.dns_cache_size = 1;
         settings.optimistic_cache = false;
@@ -310,7 +314,7 @@ TEST_F(dnsproxy_cache_test, cached_response_ttl_decreases) {
 
     const uint32_t ttl = ldns_rr_ttl(ldns_rr_list_rr(ldns_pkt_answer(res.get()), 0));
     ASSERT_GT(ttl, 1);
-    ag::steady_clock::add_time_shift(std::chrono::seconds((ttl / 2) + 1));
+    ag::SteadyClock::add_time_shift(std::chrono::seconds((ttl / 2) + 1));
 
     ASSERT_NO_FATAL_FAILURE(perform_request(proxy, pkt, res));
     ASSERT_TRUE(last_event.cache_hit);
@@ -327,7 +331,7 @@ TEST_F(dnsproxy_cache_test, cached_response_expires) {
 
     const uint32_t ttl = ldns_rr_ttl(ldns_rr_list_rr(ldns_pkt_answer(res.get()), 0));
     ASSERT_GT(ttl, 0);
-    ag::steady_clock::add_time_shift(std::chrono::seconds(ttl + 1));
+    ag::SteadyClock::add_time_shift(std::chrono::seconds(ttl + 1));
 
     ASSERT_NO_FATAL_FAILURE(perform_request(proxy, pkt, res));
     ASSERT_FALSE(last_event.cache_hit);
@@ -342,8 +346,8 @@ TEST_F(dnsproxy_cache_test, cached_response_question_matches_request) {
     ASSERT_TRUE(last_event.cache_hit);
 
     ldns_rr *resp_question = ldns_rr_list_rr(ldns_pkt_question(res.get()), 0);
-    ag::allocated_ptr<char> resp_question_domain(ldns_rdf2str(ldns_rr_owner(resp_question)));
-    ag::allocated_ptr<char> req_question_domain(ldns_rdf2str(ldns_rr_owner(ldns_rr_list_rr(ldns_pkt_question(pkt.get()), 0))));
+    ag::AllocatedPtr<char> resp_question_domain(ldns_rdf2str(ldns_rr_owner(resp_question)));
+    ag::AllocatedPtr<char> req_question_domain(ldns_rdf2str(ldns_rr_owner(ldns_rr_list_rr(ldns_pkt_question(pkt.get()), 0))));
 
     ASSERT_EQ(0, std::strcmp(req_question_domain.get(), resp_question_domain.get()));
     ASSERT_EQ(LDNS_RR_TYPE_A, ldns_rr_get_type(resp_question));
@@ -1065,7 +1069,7 @@ TEST_F(dnsproxy_test, optimistic_cache) {
         max_ttl = std::max(max_ttl, ldns_rr_ttl(ldns_rr_list_rr(ldns_pkt_answer(res.get()), i)));
     }
 
-    ag::steady_clock::add_time_shift(std::chrono::seconds(2 * max_ttl));
+    ag::SteadyClock::add_time_shift(std::chrono::seconds(2 * max_ttl));
 
     ASSERT_NO_FATAL_FAILURE(perform_request(proxy, create_request("example.org", LDNS_RR_TYPE_A, LDNS_RD), res));
     ASSERT_TRUE(last_event.cache_hit);

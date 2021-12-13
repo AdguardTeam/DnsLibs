@@ -5,8 +5,8 @@
 #include <thread>
 #include <ldns/ldns.h>
 #include <fmt/chrono.h>
-#include <ag_logger.h>
-#include <ag_utils.h>
+#include "common/logger.h"
+#include "common/utils.h"
 #include <dns_crypt_ldns.h>
 #include <default_verifier.h>
 #include <application_verifier.h>
@@ -26,14 +26,11 @@ static struct Init {
     }
 } init_;
 
-static const ag::logger &logger() {
-    static auto result = ag::create_logger("test_upstream_logger");
-    return result;
-}
+static ag::Logger logger{"test_upstream"};
 
 namespace concat_err_string {
 
-ag::err_string &operator+=(ag::err_string &result, const ag::err_string &err) {
+ag::ErrString &operator+=(ag::ErrString &result, const ag::ErrString &err) {
     if (err) {
         if (!result) {
             result = std::string{};
@@ -55,7 +52,7 @@ static ag::ldns_pkt_ptr create_test_message() {
     return ag::ldns_pkt_ptr(pkt);
 }
 
-[[nodiscard]] static ag::err_string assert_response(const ldns_pkt &reply) {
+[[nodiscard]] static ag::ErrString assert_response(const ldns_pkt &reply) {
     size_t ancount = ldns_pkt_ancount(&reply);
     if (ancount != 1) {
         return AG_FMT("DNS upstream returned reply with wrong number of answers: {}", ancount);
@@ -74,7 +71,7 @@ static ag::ldns_pkt_ptr create_test_message() {
     return std::nullopt;
 }
 
-[[nodiscard]] static ag::err_string check_upstream(ag::upstream &upstream, const std::string &addr) {
+[[nodiscard]] static ag::ErrString check_upstream(ag::upstream &upstream, const std::string &addr) {
     auto req = create_test_message();
     auto[reply, err] = upstream.exchange(req.get());
     if (err) {
@@ -83,7 +80,7 @@ static ag::ldns_pkt_ptr create_test_message() {
     return assert_response(*reply);
 }
 
-using err_futures = std::vector<std::future<ag::err_string>>;
+using err_futures = std::vector<std::future<ag::ErrString>>;
 
 template<typename F>
 static err_futures make_indexed_futures(size_t count, const F &f) {
@@ -97,7 +94,7 @@ static err_futures make_indexed_futures(size_t count, const F &f) {
 
 static void check_all_futures(err_futures &futures) {
     using namespace concat_err_string;
-    ag::err_string err;
+    ag::ErrString err;
     for (auto &future : futures) {
         err += future.get();
     }
@@ -168,7 +165,7 @@ protected:
     template<typename T>
     void parallel_test(const T &data) {
         parallel_test_basic(data,
-                [this] (const auto &address, const auto &bootstrap, const auto &server_ip) -> ag::err_string {
+                [this] (const auto &address, const auto &bootstrap, const auto &server_ip) -> ag::ErrString {
                     auto[upstream_ptr, upstream_err] = create_upstream({address, bootstrap, DEFAULT_TIMEOUT, server_ip});
                     if (upstream_err) {
                         return AG_FMT("Failed to generate upstream from address {}: {}", address, *upstream_err);
@@ -252,14 +249,14 @@ TEST_F(upstream_test, test_bootstrap_timeout) {
     using namespace concat_err_string;
     static constexpr auto timeout = 100ms;
     static constexpr size_t count = 10;
-    auto futures = make_indexed_futures(count, [&] (size_t index) -> ag::err_string {
-        SPDLOG_INFO("Start {}", index);
+    auto futures = make_indexed_futures(count, [&] (size_t index) -> ag::ErrString {
+        infolog(logger, "Start {}", index);
         // Specifying some wrong port instead so that bootstrap DNS timed out for sure
         auto[upstream_ptr, upstream_err] = create_upstream({"tls://one.one.one.one", {"8.8.8.8:555"}, timeout});
         if (upstream_err.has_value()) {
             return AG_FMT("Failed to create upstream: {}", upstream_err.value());
         }
-        ag::utils::timer timer;
+        ag::utils::Timer timer;
         auto req = create_test_message();
         auto[reply, reply_err] = upstream_ptr->exchange(req.get());
         if (!reply_err) {
@@ -269,24 +266,24 @@ TEST_F(upstream_test, test_bootstrap_timeout) {
         if (elapsed > 2 * timeout) {
             return AG_FMT("Exchange took more time than the configured timeout: {}", elapsed);
         }
-        SPDLOG_INFO("Finished {}", index);
+        infolog(logger, "Finished {}", index);
         return std::nullopt;
     });
-    ag::err_string err;
+    ag::ErrString err;
     for (size_t i = 0, e = futures.size(); i < e; ++i) {
         auto &future = futures[i];
         auto future_status = future.wait_for(10 * timeout);
         if (future_status == std::future_status::timeout) {
             err += AG_FMT("No response in time for {}", i);
-            SPDLOG_ERROR("No response in time for {}", i);
+            errlog(logger, "No response in time for {}", i);
             continue;
         }
         auto result = future.get();
         if (result) {
             err += result;
-            SPDLOG_ERROR("Aborted: {}", *result);
+            errlog(logger, "Aborted: {}", *result);
         } else {
-            SPDLOG_INFO("Got result from {}", i);
+            infolog(logger, "Got result from {}", i);
         }
     }
     if (err) {
@@ -323,7 +320,7 @@ INSTANTIATE_TEST_SUITE_P(dns_truncated_test, dns_truncated_test, testing::Values
 struct upstream_test_data {
     std::string address;
     std::initializer_list<std::string> bootstrap;
-    ag::ip_address_variant server_ip;
+    ag::IpAddress server_ip;
 };
 
 static const upstream_test_data test_upstreams_data[]{
@@ -551,12 +548,12 @@ static const upstream_test_data test_upstreams_with_server_ip_data[]{
     {
         "tls://dns.adguard.com",
         invalid_bootstrap,
-        ag::ipv4_address_array{176, 103, 130, 130}
+        ag::Ipv4Address{176, 103, 130, 130}
     },
     {
         "https://dns.adguard.com/dns-query",
         invalid_bootstrap,
-        ag::ipv4_address_array{176, 103, 130, 130}
+        ag::Ipv4Address{176, 103, 130, 130}
     },
     {
         // AdGuard DNS DOH with the IP address specified
@@ -671,13 +668,13 @@ TEST_F(upstream_test, DISABLED_concurrent_requests) {
 //        .address = "quic://dns.adguard.com:8853", // Uncomment for test DOQ upstream
         .bootstrap = {"8.8.8.8", "1.1.1.1"},
         .timeout = 5s,
-//        .resolved_server_ip = ag::ipv4_address_size{104, 19, 199, 29}, // Uncomment for test this server IP
-//        .resolved_server_ip = ag::ipv6_address_size{0x26, 0x06, 0x47, 0x00, 0x30, 0x0a, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x68, 0x13, 0xc7, 0x1d},  // Uncomment for test this server IP
+//        .resolved_server_ip = ag::IPV4_ADDRESS_SIZE{104, 19, 199, 29}, // Uncomment for test this server IP
+//        .resolved_server_ip = ag::IPV6_ADDRESS_SIZE{0x26, 0x06, 0x47, 0x00, 0x30, 0x0a, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x68, 0x13, 0xc7, 0x1d},  // Uncomment for test this server IP
     };
     auto[upstream_ptr, upstream_err] = create_upstream(opts);
     ASSERT_FALSE(upstream_err) << *upstream_err;
-    parallel_test_basic_n(WORKERS_NUM, [upstream = upstream_ptr.get()](size_t i) -> ag::err_string {
-        ag::err_string result_err;
+    parallel_test_basic_n(WORKERS_NUM, [upstream = upstream_ptr.get()](size_t i) -> ag::ErrString {
+        ag::ErrString result_err;
         for (size_t j = 0; j < REQUESTS_NUM; ++j) {
             ag::ldns_pkt_ptr pkt = create_test_message();
             auto[reply, reply_err] = upstream->exchange(pkt.get());

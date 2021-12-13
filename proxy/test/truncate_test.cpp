@@ -1,15 +1,15 @@
 #include <gtest/gtest.h>
-#include <ag_defs.h>
+#include "common/defs.h"
 #include <ldns/ldns.h>
 #include <dns_truncate.h>
 
 #include "big_dns_packet.inc"
 
-using ldns_pkt_ptr = std::unique_ptr<ldns_pkt, ag::ftor<&ldns_pkt_free>>;
-using ldns_buffer_ptr = std::unique_ptr<ldns_buffer, ag::ftor<&ldns_buffer_free>>;
+using ldns_pkt_ptr = std::unique_ptr<ldns_pkt, ag::Ftor<&ldns_pkt_free>>;
+using ldns_buffer_ptr = std::unique_ptr<ldns_buffer, ag::Ftor<&ldns_buffer_free>>;
 
 TEST(DnsTruncateTest, TruncateMinSize512) {
-    ag::uint8_view pkt_data = {&BIG_PACKET[0], std::size(BIG_PACKET) - 1};
+    ag::Uint8View pkt_data = {&BIG_PACKET[0], std::size(BIG_PACKET) - 1};
     ASSERT_EQ(1946, pkt_data.size());
 
     ldns_pkt *pkt;
@@ -29,7 +29,7 @@ TEST(DnsTruncateTest, TruncateMinSize512) {
 }
 
 TEST(DnsTruncateTest, TruncateWorks) {
-    ag::uint8_view pkt_data = {&BIG_PACKET[0], std::size(BIG_PACKET) - 1};
+    ag::Uint8View pkt_data = {&BIG_PACKET[0], std::size(BIG_PACKET) - 1};
     ASSERT_EQ(1946, pkt_data.size());
 
     ldns_pkt *pkt;

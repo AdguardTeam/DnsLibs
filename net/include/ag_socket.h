@@ -9,9 +9,9 @@
 #include <vector>
 #include <event2/event.h>
 #include <event2/util.h>
-#include <ag_defs.h>
+#include "common/defs.h"
 #include <ag_net_utils.h>
-#include <ag_logger.h>
+#include "common/logger.h"
 #include <ag_route_resolver.h>
 #include <ag_outbound_proxy_settings.h>
 #include <ag_event_loop.h>
@@ -37,7 +37,7 @@ public:
         /** Socket protocol */
         utils::transport_protocol proto;
         /** (Optional) name or index of the network interface to route traffic through */
-        if_id_variant outbound_interface;
+        IfIdVariant outbound_interface;
         /** If set to true, the socket will be connected directly to the peer */
         bool ignore_proxy_settings;
     };
@@ -82,8 +82,8 @@ public:
      * @param outbound_interface name or index of the network interface to route traffic through
      * @return some error if failed
      */
-    [[nodiscard]] err_string prepare_fd(evutil_socket_t fd,
-            const socket_address &peer, const if_id_variant &outbound_interface) const;
+    [[nodiscard]] ErrString prepare_fd(evutil_socket_t fd,
+                                       const SocketAddress &peer, const IfIdVariant &outbound_interface) const;
 
     /**
      * Get outbound proxy settings
@@ -155,8 +155,8 @@ private:
     [[nodiscard]] socket_ptr make_direct_socket(socket_parameters parameters) const;
     [[nodiscard]] socket_ptr make_secured_socket(socket_ptr underlying_socket,
             secure_socket_parameters secure_parameters) const;
-    static err_string on_prepare_fd(void *arg, evutil_socket_t fd,
-            const socket_address &peer, const if_id_variant &outbound_interface);
+    static ErrString on_prepare_fd(void *arg, evutil_socket_t fd,
+                                   const SocketAddress &peer, const IfIdVariant &outbound_interface);
     [[nodiscard]] outbound_proxy *make_proxy() const;
     [[nodiscard]] outbound_proxy *make_fallback_proxy() const;
     static socket_factory::socket_ptr on_make_proxy_socket(void *arg, utils::transport_protocol proto,
@@ -177,7 +177,7 @@ public:
         /** Raised after successful connection */
         void (* on_connected)(void *arg);
         /** Raised after a data chunk has been received */
-        void (* on_read)(void *arg, uint8_view data);
+        void (* on_read)(void *arg, Uint8View data);
         /**
          * Raised after the connection is closed
          * @param error none if closed gracefully
@@ -191,7 +191,7 @@ public:
         /** Event loop for operation */
         event_loop *loop = nullptr;
         /** Address on the peer to connect to */
-        const socket_address &peer;
+        const SocketAddress &peer;
         /** Set of the socket callbacks */
         callbacks callbacks = {};
         /** Operation time out value */
@@ -219,7 +219,7 @@ public:
     /**
      * Get the peer address
      */
-    [[nodiscard]] socket_address get_peer() const;
+    [[nodiscard]] SocketAddress get_peer() const;
 
     /**
      * Initiate connection to the peer
@@ -233,14 +233,14 @@ public:
      * @param data the data
      * @return some error if failed
      */
-    [[nodiscard]] virtual std::optional<error> send(uint8_view data) = 0;
+    [[nodiscard]] virtual std::optional<error> send(Uint8View data) = 0;
 
     /**
      * Send DNS packet to the peer
      * @param data the packet
      * @return some error if failed
      */
-    [[nodiscard]] virtual std::optional<error> send_dns_packet(uint8_view data) = 0;
+    [[nodiscard]] virtual std::optional<error> send_dns_packet(Uint8View data) = 0;
 
     /**
      * Set operation time out
@@ -261,13 +261,13 @@ protected:
 
     struct prepare_fd_callback {
         /** Raised after the descriptor creation */
-        err_string (* func)(void *arg, evutil_socket_t fd,
-                const socket_address &peer, const if_id_variant &outbound_interface);
+        ErrString (* func)(void *arg, evutil_socket_t fd,
+                           const SocketAddress &peer, const IfIdVariant &outbound_interface);
         /** User context for the callback */
         void *arg;
     };
 
-    logger log;
+    Logger log;
     size_t id = 0;
     socket_factory::socket_parameters parameters = {};
     prepare_fd_callback prepare_fd = {};

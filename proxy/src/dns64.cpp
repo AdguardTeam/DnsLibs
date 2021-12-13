@@ -10,7 +10,7 @@ static constexpr auto WKN = "ipv4only.arpa.";
 static constexpr uint8_t WKA0_BYTES[] = {192, 0, 0, 170};
 static constexpr uint8_t WKA1_BYTES[] = {192, 0, 0, 171};
 
-static constexpr ag::uint8_view WELL_KNOWN_ADDRESSES[] = {
+static constexpr ag::Uint8View WELL_KNOWN_ADDRESSES[] = {
         {WKA0_BYTES, std::size(WKA0_BYTES)},
         {WKA1_BYTES, std::size(WKA1_BYTES)}
 };
@@ -22,7 +22,7 @@ static constexpr size_t IPV6_NULL_IDX = 8;
  * @param ip6 IPv4-embedded IPv6 synthesized address
  * @return the prefix, or empty vector if a valid prefix was not found
  */
-static ag::uint8_vector find_pref64(ag::uint8_view ip6, const ag::uint8_view wka) {
+static ag::Uint8Vector find_pref64(ag::Uint8View ip6, const ag::Uint8View wka) {
     assert(ip6.size() == LDNS_IP6ADDRLEN);
     assert(wka.size() == LDNS_IP4ADDRLEN);
 
@@ -38,17 +38,17 @@ static ag::uint8_vector find_pref64(ag::uint8_view ip6, const ag::uint8_view wka
     }
 
     // With other prefix lengths, ip6 has a "hole" at position 8 (bits 64..71) (RFC 6052), ignore it
-    auto vec = ag::utils::join<ag::uint8_vector>(
-            ag::uint8_view(ip6.data(), 8),
-            ag::uint8_view(ip6.data() + 9, 7));
+    auto vec = ag::utils::join<ag::Uint8Vector>(
+            ag::Uint8View(ip6.data(), 8),
+            ag::Uint8View(ip6.data() + 9, 7));
 
     // Replace view
-    ip6 = ag::uint8_view(vec.data(), vec.size());
+    ip6 = ag::Uint8View(vec.data(), vec.size());
 
     first_occur = ip6.find(wka);
     auto last_occur = ip6.rfind(wka);
 
-    if (first_occur != last_occur || first_occur == ag::uint8_view::npos || first_occur < 4 || first_occur > 8) {
+    if (first_occur != last_occur || first_occur == ag::Uint8View::npos || first_occur < 4 || first_occur > 8) {
         // WKA not found, or multiple occurrences found, or WKA found at an inappropriate location
         return {};
     }
@@ -63,7 +63,7 @@ static ag::uint8_vector find_pref64(ag::uint8_view ip6, const ag::uint8_view wka
  * @param ip6 IPv6 synthesized address
  * @return the prefix, or empty vector if a prefix was not found
  */
-static ag::uint8_vector find_pref64(const ag::uint8_view ip6) {
+static ag::Uint8Vector find_pref64(const ag::Uint8View ip6) {
     for (const auto &wka : WELL_KNOWN_ADDRESSES) {
         const auto pref64 = find_pref64(ip6, wka);
         if (!pref64.empty()) {
@@ -92,7 +92,7 @@ ag::dns64::discovery_result ag::dns64::discover_prefixes(const ag::upstream_ptr 
         return {{}, err};
     }
 
-    std::vector<ag::uint8_vector> result;
+    std::vector<ag::Uint8Vector> result;
     const size_t cnt = ldns_pkt_ancount(reply.get());
     for (size_t i = 0; i < cnt; ++i) {
         const auto rr = ldns_rr_list_rr(ldns_pkt_answer(reply.get()), i);
@@ -105,7 +105,7 @@ ag::dns64::discovery_result ag::dns64::discover_prefixes(const ag::upstream_ptr 
             continue;
         }
 
-        const ag::uint8_view ip6{ldns_rdf_data(rdf), ldns_rdf_size(rdf)};
+        const ag::Uint8View ip6{ldns_rdf_data(rdf), ldns_rdf_size(rdf)};
         if (LDNS_IP6ADDRLEN != ip6.size()) {
             continue;
         }
@@ -120,12 +120,12 @@ ag::dns64::discovery_result ag::dns64::discover_prefixes(const ag::upstream_ptr 
     return {result, std::nullopt};
 }
 
-static bool pref64_valid(const ag::uint8_view pref64) {
+static bool pref64_valid(const ag::Uint8View pref64) {
     const auto s = pref64.size();
     return ((s >= 4 && s <= 8) || (s == 12 && pref64[IPV6_NULL_IDX] == 0));
 }
 
-ag::dns64::ipv6_synth_result ag::dns64::synthesize_ipv4_embedded_ipv6_address(ag::uint8_view prefix, ag::uint8_view ip4) {
+ag::dns64::ipv6_synth_result ag::dns64::synthesize_ipv4_embedded_ipv6_address(ag::Uint8View prefix, ag::Uint8View ip4) {
     if (!pref64_valid(prefix)) {
         return {{}, "Invalid Pref64::/n"};
     }
@@ -133,7 +133,7 @@ ag::dns64::ipv6_synth_result ag::dns64::synthesize_ipv4_embedded_ipv6_address(ag
         return {{}, "Invalid IPv4 addr"};
     }
 
-    uint8_array<LDNS_IP6ADDRLEN> result{};
+    Uint8Array<LDNS_IP6ADDRLEN> result{};
 
     std::copy(prefix.cbegin(), prefix.cend(), result.begin());
 

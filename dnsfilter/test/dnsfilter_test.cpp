@@ -3,10 +3,9 @@
 #include <string>
 #include <ag_file.h>
 #include <ag_sys.h>
-#include <ag_logger.h>
-#include <ag_utils.h>
+#include "common/logger.h"
+#include "common/utils.h"
 #include <dnsfilter.h>
-#include <spdlog/spdlog.h>
 #include <rule_utils.h>
 
 class dnsfilter_test : public ::testing::Test {
@@ -14,12 +13,12 @@ protected:
 
     ag::dnsfilter filter;
     ag::file::handle file;
-    ag::logger log = ag::create_logger("dnsfilter_test");
+    ag::Logger log{"dnsfilter_test"};
 
     const std::string TEST_FILTER_NAME = "dnsfilter_test";
 
     void SetUp() override {
-        ag::set_default_log_level(ag::TRACE);
+        ag::Logger::set_log_level(ag::LogLevel::LOG_LEVEL_TRACE);
         file = ag::file::open(file_by_filter_name(TEST_FILTER_NAME), ag::file::CREAT|ag::file::RDONLY);
         ASSERT_TRUE(ag::file::is_valid(file)) << ag::sys::error_string(ag::sys::error_code());
         ag::file::close(file);
@@ -45,7 +44,7 @@ protected:
 
     static void check_rdf(const ldns_rdf *rdf, ldns_rdf_type type, const char *value) {
         ASSERT_EQ(ldns_rdf_get_type(rdf), type);
-        auto rdf_str = ag::allocated_ptr<char>(ldns_rdf2str(rdf));
+        auto rdf_str = ag::AllocatedPtr<char>(ldns_rdf2str(rdf));
         ASSERT_STREQ(rdf_str.get(), value);
     }
 };
@@ -162,7 +161,7 @@ TEST_F(dnsfilter_test, successful_rule_parsing) {
         };
 
     for (const test_data &entry : TEST_DATA) {
-        SPDLOG_INFO("testing {}", entry.text);
+        infolog(log, "testing {}", entry.text);
         std::optional<rule_utils::rule> rule = rule_utils::parse(entry.text, &log);
         ASSERT_TRUE(rule.has_value());
         const auto *content = std::get_if<ag::dnsfilter::adblock_rule_info>(&rule->public_part.content);
@@ -195,7 +194,7 @@ TEST_F(dnsfilter_test, successful_host_syntax_rule_parsing) {
         };
 
     for (const test_data &entry : TEST_DATA) {
-        SPDLOG_INFO("testing {}", entry.text);
+        infolog(log, "testing {}", entry.text);
         std::optional<rule_utils::rule> rule = rule_utils::parse(entry.text, &log);
         ASSERT_TRUE(rule.has_value());
         const auto *content = std::get_if<ag::dnsfilter::etc_hosts_rule_info>(&rule->public_part.content);
@@ -271,7 +270,7 @@ TEST_F(dnsfilter_test, wrong_rule_parsing) {
         };
 
     for (const std::string &entry : TEST_DATA) {
-        SPDLOG_INFO("testing {}", entry);
+        infolog(log, "testing {}", entry);
         std::optional<rule_utils::rule> rule = rule_utils::parse(entry, &log);
         ASSERT_FALSE(rule.has_value());
     }
@@ -335,7 +334,7 @@ const std::vector<basic_test_data> BASIC_TEST_DATA = {
 
 TEST_F(dnsfilter_test, basic_rules_match) {
     for (const auto &entry : BASIC_TEST_DATA) {
-        SPDLOG_INFO("testing {}", entry.domain);
+        infolog(log, "testing {}", entry.domain);
 
         for (const std::string &rule : entry.rules) {
             ASSERT_NO_FATAL_FAILURE(add_rule_in_filter(file_by_filter_name(TEST_FILTER_NAME), rule));
@@ -366,7 +365,7 @@ TEST_F(dnsfilter_test, basic_rules_match) {
 TEST_F(dnsfilter_test, basic_rules_match_in_memory) {
     std::string filter_data;
     for (const auto &entry : BASIC_TEST_DATA) {
-        SPDLOG_INFO("testing {}", entry.domain);
+        infolog(log, "testing {}", entry.domain);
 
         for (const auto &rule : entry.rules) {
             filter_data += rule;
@@ -440,7 +439,7 @@ TEST_F(dnsfilter_test, basic_rules_no_match) {
     ASSERT_TRUE(handle) << *err_or_warn;
 
     for (const test_data &entry : TEST_DATA) {
-        SPDLOG_INFO("testing {}", entry.domain);
+        infolog(log, "testing {}", entry.domain);
         std::vector<ag::dnsfilter::rule> rules = filter.match(handle, { entry.domain });
         ASSERT_EQ(rules.size(), 0);
     }
@@ -471,7 +470,7 @@ TEST_F(dnsfilter_test, wildcard) {
 
     for (const test_data &entry : TEST_DATA) {
         for (const std::string &d : entry.domains) {
-            SPDLOG_INFO("testing {}", d);
+            infolog(log, "testing {}", d);
             std::vector<ag::dnsfilter::rule> rules = filter.match(handle, { d });
             ASSERT_EQ(rules.size(), 1);
             const auto *content = std::get_if<ag::dnsfilter::adblock_rule_info>(&rules[0].content);
@@ -510,7 +509,7 @@ TEST_F(dnsfilter_test, regex) {
     ASSERT_TRUE(handle) << *err_or_warn;
     for (const test_data &entry : TEST_DATA) {
         for (const std::string &d : entry.domains) {
-            SPDLOG_INFO("testing {}", d);
+            infolog(log, "testing {}", d);
             std::vector<ag::dnsfilter::rule> rules = filter.match(handle, { d });
             ASSERT_EQ(rules.size(), 1);
             const auto *content = std::get_if<ag::dnsfilter::adblock_rule_info>(&rules[0].content);
@@ -558,7 +557,7 @@ TEST_F(dnsfilter_test, hosts_file_syntax) {
 
     for (const test_data &entry : TEST_DATA) {
         for (const std::string &d : entry.blocked_domains) {
-            SPDLOG_INFO("testing {}", d);
+            infolog(log, "testing {}", d);
             std::vector<ag::dnsfilter::rule> rules = filter.match(handle, { d });
             ASSERT_EQ(rules.size(), 1);
             if (entry.expected_rule.empty()) {
@@ -599,7 +598,7 @@ TEST_F(dnsfilter_test, badfilter) {
     ASSERT_TRUE(handle) << *err_or_warn;
 
     for (const test_data &entry : TEST_DATA) {
-        SPDLOG_INFO("testing {}", entry.domain);
+        infolog(log, "testing {}", entry.domain);
         std::vector<ag::dnsfilter::rule> rules = filter.match(handle, { entry.domain, LDNS_RR_TYPE_A });
         ASSERT_EQ(rules.size(), 2);
         ag::dnsfilter::effective_rules effective_rules = ag::dnsfilter::get_effective_rules(rules);
@@ -641,7 +640,7 @@ TEST_F(dnsfilter_test, multifilters) {
     ASSERT_TRUE(handle) << *err_or_warn;
 
     for (const test_data &entry : TEST_DATA) {
-        SPDLOG_INFO("testing {}", entry.domain);
+        infolog(log, "testing {}", entry.domain);
         std::vector<ag::dnsfilter::rule> rules = filter.match(handle, { entry.domain });
         ASSERT_GT(rules.size(), 0);
         ag::dnsfilter::effective_rules effective_rules = ag::dnsfilter::get_effective_rules(rules);
@@ -725,7 +724,7 @@ TEST_F(dnsfilter_test, dnstype_modifier) {
     };
 
     for (const test_data &entry : TEST_DATA) {
-        SPDLOG_INFO("testing {}", entry.rule);
+        infolog(log, "testing {}", entry.rule);
 
         ag::dnsfilter::engine_params params = { { { 10, std::string(entry.rule), true } } };
         auto[handle, err_or_warn] = filter.create(params);

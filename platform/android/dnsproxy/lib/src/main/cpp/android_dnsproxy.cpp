@@ -16,9 +16,9 @@ JNI_OnLoad(JavaVM *vm, void *) {
     ag::global_ref logClass(vm, env->FindClass(FQN_DNSPROXY));
     jmethodID logMethod = env->GetStaticMethodID(logClass.get(), "log", "(ILjava/lang/String;)V");
 
-    ag::set_logger_callback([vm, clazz = std::move(logClass), method = logMethod]
-                                    (ag::log_level level, const char *message, size_t length) mutable {
-        std::string str{message, length};
+    ag::Logger::set_callback([vm, clazz = std::move(logClass), method = logMethod]
+                                    (ag::LogLevel level, std::string_view message) mutable {
+        std::string str{message};
 
         // Remove the line terminator since the logging method always inserts one.
         if (!str.empty() && str.back() == '\n') {
@@ -47,7 +47,7 @@ Java_com_adguard_dnslibs_proxy_DnsProxy_delete(JNIEnv *env, jobject thiz, jlong 
 extern "C"
 JNIEXPORT void JNICALL
 Java_com_adguard_dnslibs_proxy_DnsProxy_setLogLevel(JNIEnv *env, jclass clazz, jint level) {
-    ag::set_default_log_level((ag::log_level) level);
+    ag::Logger::set_log_level((ag::LogLevel) level);
 }
 
 extern "C"
@@ -152,13 +152,13 @@ ag::upstream_options ag::android_dnsproxy::marshal_upstream(JNIEnv *env,
 
         auto len = env->GetArrayLength(server_ip.get());
 
-        if (ag::ipv4_address_size == len) {
-            ag::ipv4_address_array ipv4{};
-            env->GetByteArrayRegion(server_ip.get(), 0, ag::ipv4_address_size, (jbyte *) ipv4.data());
+        if (ag::IPV4_ADDRESS_SIZE == len) {
+            ag::Ipv4Address ipv4{};
+            env->GetByteArrayRegion(server_ip.get(), 0, ag::IPV4_ADDRESS_SIZE, (jbyte *) ipv4.data());
             upstream.resolved_server_ip = ipv4;
-        } else if (ag::ipv6_address_size == len) {
-            ag::ipv6_address_array ipv6{};
-            env->GetByteArrayRegion(server_ip.get(), 0, ag::ipv6_address_size, (jbyte *) ipv6.data());
+        } else if (ag::IPV6_ADDRESS_SIZE == len) {
+            ag::Ipv6Address ipv6{};
+            env->GetByteArrayRegion(server_ip.get(), 0, ag::IPV6_ADDRESS_SIZE, (jbyte *) ipv6.data());
             upstream.resolved_server_ip = ipv6;
         }
     }
@@ -186,12 +186,12 @@ ag::local_ref<jobject> ag::android_dnsproxy::marshal_upstream(JNIEnv *env, const
     env->SetLongField(java_upstream, timeout_field, settings.timeout.count());
     env->SetIntField(java_upstream, id_field, settings.id);
 
-    if (std::holds_alternative<ag::ipv4_address_array>(settings.resolved_server_ip)) {
-        auto ipv4 = std::get<ag::ipv4_address_array>(settings.resolved_server_ip);
-        env->SetObjectField(java_upstream, server_ip_field, m_utils.marshal_uint8_view(env, { ipv4.data(), ag::ipv4_address_size }).get());
-    } else if (std::holds_alternative<ag::ipv6_address_array>(settings.resolved_server_ip)) {
-        auto ipv6 = std::get<ag::ipv6_address_array>(settings.resolved_server_ip);
-        env->SetObjectField(java_upstream, server_ip_field, m_utils.marshal_uint8_view(env, { ipv6.data(), ag::ipv6_address_size }).get());
+    if (std::holds_alternative<ag::Ipv4Address>(settings.resolved_server_ip)) {
+        auto ipv4 = std::get<ag::Ipv4Address>(settings.resolved_server_ip);
+        env->SetObjectField(java_upstream, server_ip_field, m_utils.marshal_uint8_view(env, { ipv4.data(), ag::IPV4_ADDRESS_SIZE }).get());
+    } else if (std::holds_alternative<ag::Ipv6Address>(settings.resolved_server_ip)) {
+        auto ipv6 = std::get<ag::Ipv6Address>(settings.resolved_server_ip);
+        env->SetObjectField(java_upstream, server_ip_field, m_utils.marshal_uint8_view(env, { ipv6.data(), ag::IPV6_ADDRESS_SIZE }).get());
     }
 
     if (local_ref bootstrap{env, env->GetObjectField(java_upstream, bootstrap_field)}) {

@@ -22,7 +22,7 @@ secured_socket::secured_socket(socket_factory::socket_ptr underlying_socket,
     , codec(cert_verifier, secure_parameters.session_cache)
     , sni(std::move(secure_parameters.server_name))
     , alpn(std::move(secure_parameters.alpn))
-    , log(create_logger(__func__))
+    , log(__func__)
 {}
 
 std::optional<evutil_socket_t> secured_socket::get_fd() const {
@@ -40,7 +40,7 @@ std::optional<socket::error> secured_socket::connect(connect_parameters params) 
     return err;
 }
 
-std::optional<socket::error> secured_socket::send(uint8_view data) {
+std::optional<socket::error> secured_socket::send(Uint8View data) {
     while (!data.empty()) {
         tls_codec::write_decrypted_result wr_result = this->codec.write_decrypted(data);
         if (auto *err = std::get_if<tls_codec::error>(&wr_result); err != nullptr) {
@@ -57,7 +57,7 @@ std::optional<socket::error> secured_socket::send(uint8_view data) {
     return std::nullopt;
 }
 
-std::optional<socket::error> secured_socket::send_dns_packet(uint8_view data) {
+std::optional<socket::error> secured_socket::send_dns_packet(Uint8View data) {
     uint16_t length = htons(data.size());
 
     uint8_t buffer[sizeof(length) + data.size()];
@@ -99,7 +99,7 @@ void secured_socket::on_connected(void *arg) {
     self->state = SS_CONNECTING_TLS;
 }
 
-void secured_socket::on_read(void *arg, uint8_view data) {
+void secured_socket::on_read(void *arg, Uint8View data) {
     auto *self = (secured_socket *)arg;
 
     if (std::optional err = self->codec.recv_encrypted(data); err.has_value()) {

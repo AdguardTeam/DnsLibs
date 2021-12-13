@@ -3,7 +3,7 @@
 
 #include <variant>
 #include <ag_socket.h>
-#include <ag_clock.h>
+#include "common/clock.h"
 #include "outbound_proxy.h"
 
 
@@ -47,22 +47,22 @@ public:
 private:
     struct fallback_info {
         event_loop *loop = nullptr;
-        socket_address peer;
-        steady_clock::time_point connect_timestamp;
+        SocketAddress peer;
+        SteadyClock::time_point connect_timestamp;
         std::optional<std::chrono::microseconds> timeout;
         outbound_proxy *proxy = nullptr;
     };
 
     outbound_proxy *proxy = nullptr;
-    with_mtx<socket::callbacks> socket_callbacks = {};
+    WithMtx<socket::callbacks> socket_callbacks = {};
     std::optional<uint32_t> proxy_id;
     callbacks proxied_callbacks = {};
     std::unique_ptr<fallback_info> fallback_info;
 
     [[nodiscard]] std::optional<evutil_socket_t> get_fd() const override;
     [[nodiscard]] std::optional<error> connect(connect_parameters params) override;
-    [[nodiscard]] std::optional<error> send(uint8_view data) override;
-    [[nodiscard]] std::optional<error> send_dns_packet(uint8_view data) override;
+    [[nodiscard]] std::optional<error> send(Uint8View data) override;
+    [[nodiscard]] std::optional<error> send_dns_packet(Uint8View data) override;
     [[nodiscard]] bool set_timeout(std::chrono::microseconds timeout) override;
     [[nodiscard]] std::optional<error> set_callbacks(socket::callbacks cbx) override;
 
@@ -71,7 +71,7 @@ private:
     static void on_successful_proxy_connection(void *arg);
     static void on_proxy_connection_failed(void *arg, std::optional<int> err);
     static void on_connected(void *arg, uint32_t conn_id);
-    static void on_read(void *arg, uint8_view data);
+    static void on_read(void *arg, Uint8View data);
     static void on_close(void *arg, std::optional<error> error);
 };
 

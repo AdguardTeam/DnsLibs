@@ -4,8 +4,8 @@
 #include <functional>
 #include <type_traits>
 #include <utility>
-#include <ag_defs.h>
-#include <ag_utils.h>
+#include "common/defs.h"
+#include "common/utils.h"
 #include "dns_crypt_consts.h"
 #include <dns_crypt_utils.h>
 
@@ -18,17 +18,17 @@ class cipher {
 public:
     struct shared_key_result {
         key_array shared_key;
-        err_string error;
+        ErrString error;
     };
 
     struct seal_result {
-        uint8_vector ciphertext;
-        err_string error;
+        Uint8Vector ciphertext;
+        ErrString error;
     };
 
     struct open_result {
-        uint8_vector decrypted;
-        err_string error;
+        Uint8Vector decrypted;
+        ErrString error;
     };
 
     cipher() = default;
@@ -51,7 +51,7 @@ public:
      * @param key Key
      * @return Seal result
      */
-    virtual seal_result seal(uint8_view message, const nonce_array &nonce, const key_array &key) const = 0;
+    virtual seal_result seal(Uint8View message, const nonce_array &nonce, const key_array &key) const = 0;
 
     /**
      * Decrypt ciphertext to message
@@ -60,12 +60,12 @@ public:
      * @param key Key
      * @return Open result
      */
-    virtual open_result open(uint8_view ciphertext, const nonce_array &nonce, const key_array &key) const = 0;
+    virtual open_result open(Uint8View ciphertext, const nonce_array &nonce, const key_array &key) const = 0;
 };
 
 struct create_cipher_result {
     const cipher *cipher_ptr;
-    err_string error;
+    ErrString error;
 };
 
 create_cipher_result create_cipher(crypto_construction value);
@@ -75,7 +75,7 @@ auto apply_cipher_function(crypto_construction local_crypto_construction, F&& f,
     auto[cipher_ptr, cipher_err] = create_cipher(local_crypto_construction);
     if (cipher_err) {
         using result_type = std::invoke_result_t<F&&, decltype(cipher_ptr), Ts&&...>;
-        static constexpr utils::make_error<result_type> make_error;
+        static constexpr utils::MakeError<result_type> make_error;
         return make_error(std::move(cipher_err));
     }
     return std::invoke(std::forward<F>(f), cipher_ptr, std::forward<Ts>(xs)...);

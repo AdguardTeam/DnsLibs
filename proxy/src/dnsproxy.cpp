@@ -2,7 +2,7 @@
 #include <dns64.h>
 #include <dns_forwarder.h>
 #include <dnsproxy_listener.h>
-#include <ag_logger.h>
+#include "common/logger.h"
 #include <default_verifier.h>
 #include <algorithm>
 #include <ag_version.h>
@@ -11,7 +11,7 @@
 using namespace ag;
 using namespace std::chrono;
 
-const err_string dnsproxy::LISTENER_ERROR = "Listener failure";
+const ErrString dnsproxy::LISTENER_ERROR = "Listener failure";
 
 static const dnsproxy_settings DEFAULT_PROXY_SETTINGS = {
     .upstreams = {
@@ -76,7 +76,7 @@ const dnsproxy_settings &dnsproxy_settings::get_default() {
 }
 
 struct dnsproxy::impl {
-    logger log;
+    Logger log{"DNS proxy"};
     dns_forwarder forwarder;
     dnsproxy_settings settings;
     dnsproxy_events events;
@@ -90,9 +90,8 @@ dnsproxy::dnsproxy()
 
 dnsproxy::~dnsproxy() = default;
 
-std::pair<bool, err_string> dnsproxy::init(dnsproxy_settings settings, dnsproxy_events events) {
+std::pair<bool, ErrString> dnsproxy::init(dnsproxy_settings settings, dnsproxy_events events) {
     std::unique_ptr<impl> &proxy = this->pimpl;
-    pimpl->log = ag::create_logger("DNS proxy");
 
     infolog(proxy->log, "Initializing proxy module...");
 
@@ -153,7 +152,7 @@ const dnsproxy_settings &dnsproxy::get_settings() const {
     return this->pimpl->settings;
 }
 
-std::vector<uint8_t> dnsproxy::handle_message(ag::uint8_view message, const ag::dns_message_info *info) {
+std::vector<uint8_t> dnsproxy::handle_message(ag::Uint8View message, const ag::dns_message_info *info) {
     std::unique_ptr<impl> &proxy = this->pimpl;
 
     std::vector<uint8_t> response = proxy->forwarder.handle_message(message, info);
@@ -161,10 +160,10 @@ std::vector<uint8_t> dnsproxy::handle_message(ag::uint8_view message, const ag::
     return response;
 }
 
-std::vector<std::pair<utils::transport_protocol, socket_address>> dnsproxy::get_listen_addresses() const {
+std::vector<std::pair<utils::transport_protocol, SocketAddress>> dnsproxy::get_listen_addresses() const {
     const impl *proxy = this->pimpl.get();
 
-    std::vector<std::pair<utils::transport_protocol, socket_address>> addresses;
+    std::vector<std::pair<utils::transport_protocol, SocketAddress>> addresses;
     addresses.reserve(proxy->listeners.size());
 
     for (const listener_ptr &l : proxy->listeners) {

@@ -7,7 +7,7 @@
 #include <utility>
 #include <vector>
 #include <ldns/packet.h>
-#include <ag_defs.h>
+#include "common/defs.h"
 #include <ag_net_consts.h>
 #include <ag_net_utils.h>
 #include <ag_dns_utils.h>
@@ -20,8 +20,8 @@ namespace ag {
 class upstream;
 
 using upstream_ptr = std::unique_ptr<upstream>;
-using ldns_pkt_ptr = std::unique_ptr<ldns_pkt, ag::ftor<&ldns_pkt_free>>;
-using ldns_buffer_ptr = std::unique_ptr<ldns_buffer, ag::ftor<&ldns_buffer_free>>;
+using ldns_pkt_ptr = std::unique_ptr<ldns_pkt, ag::Ftor<&ldns_pkt_free>>;
+using ldns_buffer_ptr = std::unique_ptr<ldns_buffer, ag::Ftor<&ldns_buffer_free>>;
 
 static constexpr std::string_view TIMEOUT_STR = "Request timed out";
 
@@ -55,13 +55,13 @@ struct upstream_options {
     std::chrono::milliseconds timeout;
 
     /** Upstream's IP address. If specified, the bootstrapper is NOT used */
-    ip_address_variant resolved_server_ip;
+    IpAddress resolved_server_ip;
 
     /** User-provided ID for this upstream */
     int32_t id;
 
     /** (Optional) name or index of the network interface to route traffic through */
-    if_id_variant outbound_interface;
+    IfIdVariant outbound_interface;
 
     /** If set to true, an outbound proxy won't be used for the upstream's network connections */
     bool ignore_proxy_settings; // @todo: expose this flag in the public API if it's needed
@@ -76,14 +76,14 @@ public:
 
     struct exchange_result {
         ldns_pkt_ptr packet;
-        err_string error;
+        ErrString error;
     };
 
     upstream(upstream_options opts, const upstream_factory_config &config)
         : m_options(std::move(opts))
         , m_config(config)
     {
-        m_rtt.val = std::chrono::milliseconds::zero();
+        m_rtt = std::chrono::milliseconds::zero();
         if (!this->m_options.timeout.count()) {
             this->m_options.timeout = DEFAULT_TIMEOUT;
         }
@@ -95,7 +95,7 @@ public:
      * Initialize upstream
      * @return non-nullopt string in case of error
      */
-    virtual err_string init() = 0;
+    virtual ErrString init() = 0;
 
     /**
      * Do DNS exchange, considering that `request` may be a forwarded request.
@@ -124,8 +124,8 @@ public:
     }
 
     std::chrono::milliseconds rtt() {
-        std::lock_guard<std::mutex> lk(m_rtt.mtx);
-        return m_rtt.val;
+        std::lock_guard<std::mutex> lk(m_rtt_guard);
+        return m_rtt;
     }
 
     /**
@@ -133,8 +133,8 @@ public:
      * @param elapsed spent time in exchange()
      */
     void adjust_rtt(std::chrono::milliseconds elapsed) {
-        std::lock_guard<std::mutex> lk(m_rtt.mtx);
-        m_rtt.val = (m_rtt.val + elapsed) / 2;
+        std::lock_guard<std::mutex> lk(m_rtt_guard);
+        m_rtt = (m_rtt + elapsed) / 2;
     }
 
 protected:
@@ -143,7 +143,8 @@ protected:
     /** Upstream factory configuration */
     upstream_factory_config m_config;
     /** RTT + mutex */
-    with_mtx<std::chrono::milliseconds> m_rtt;
+    std::chrono::milliseconds m_rtt;
+    std::mutex m_rtt_guard;
 };
 
 /**
@@ -153,7 +154,7 @@ class upstream_factory {
 public:
     struct create_result {
         upstream_ptr upstream; // created upstream in case of success
-        err_string error; // non-nullopt in case of error
+        ErrString error; // non-nullopt in case of error
     };
 
     explicit upstream_factory(upstream_factory_config cfg);

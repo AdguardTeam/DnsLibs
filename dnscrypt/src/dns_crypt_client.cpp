@@ -2,7 +2,7 @@
 #include <sodium.h>
 #include "dns_crypt_consts.h"
 #include "dns_crypt_ldns.h"
-#include <ag_utils.h>
+#include "common/utils.h"
 #include <ag_net_utils.h>
 #include <dns_crypt_client.h>
 #include <dns_crypt_utils.h>
@@ -38,7 +38,7 @@ ag::dnscrypt::client::client(utils::transport_protocol protocol, bool adjust_pay
 ag::dnscrypt::client::dial_result ag::dnscrypt::client::dial(std::string_view stamp_str,
         std::chrono::milliseconds timeout,
         const socket_factory *socket_factory, socket_factory::socket_parameters socket_parameters) const {
-    static constexpr utils::make_error<dial_result> make_error;
+    static constexpr utils::MakeError<dial_result> make_error;
     auto[stamp, stamp_err] = ag::server_stamp::from_string(stamp_str);
     if (stamp_err) {
         return make_error(std::move(stamp_err));
@@ -52,7 +52,7 @@ ag::dnscrypt::client::dial_result ag::dnscrypt::client::dial(std::string_view st
 ag::dnscrypt::client::dial_result ag::dnscrypt::client::dial(const server_stamp &stamp,
         std::chrono::milliseconds timeout,
         const socket_factory *socket_factory, socket_factory::socket_parameters socket_parameters) const {
-    static constexpr utils::make_error<dial_result> make_error;
+    static constexpr utils::MakeError<dial_result> make_error;
     server_info local_server_info{};
     if (crypto_box_keypair(local_server_info.m_public_key.data(), local_server_info.m_secret_key.data()) != 0) {
         return make_error("Can not generate keypair");
@@ -60,7 +60,7 @@ ag::dnscrypt::client::dial_result ag::dnscrypt::client::dial(const server_stamp 
     // Set the provider properties
     local_server_info.m_server_public_key = stamp.server_pk;
     local_server_info.m_server_address = stamp.server_addr_str;
-    if (socket_address addr = utils::str_to_socket_address(local_server_info.m_server_address);
+    if (SocketAddress addr = utils::str_to_socket_address(local_server_info.m_server_address);
             addr.port() == 0) {
         local_server_info.m_server_address = AG_FMT("{}:{}", addr.host_str(), DEFAULT_PORT);
     }
@@ -85,8 +85,8 @@ ag::dnscrypt::client::dial_result ag::dnscrypt::client::dial(const server_stamp 
 ag::dnscrypt::client::exchange_result ag::dnscrypt::client::exchange(ldns_pkt &message,
         const server_info &local_server_info, std::chrono::milliseconds timeout,
         const socket_factory *socket_factory, socket_factory::socket_parameters socket_parameters) const {
-    static constexpr utils::make_error<exchange_result> make_error;
-    utils::timer timer;
+    static constexpr utils::MakeError<exchange_result> make_error;
+    utils::Timer timer;
     if (m_adjust_payload_size) {
         ldns_pkt_adjust_payload_size(message);
     }
@@ -95,7 +95,7 @@ ag::dnscrypt::client::exchange_result ag::dnscrypt::client::exchange(ldns_pkt &m
         return make_error(std::move(create_ldns_buffer_err));
     }
     auto[encrypted_query, client_nonce, encrypt_err] = local_server_info.encrypt(
-            m_protocol, uint8_view(ldns_buffer_begin(query.get()), ldns_buffer_position(query.get())));
+            m_protocol, Uint8View(ldns_buffer_begin(query.get()), ldns_buffer_position(query.get())));
     if (encrypt_err) {
         return make_error(std::move(encrypt_err));
     }
@@ -115,8 +115,8 @@ ag::dnscrypt::client::exchange_result ag::dnscrypt::client::exchange(ldns_pkt &m
     // the read operation will most likely time out.
     // This might be a signal to re-dial for the server certificate.
     auto[decrypted, decrypt_err] = local_server_info.decrypt(
-            uint8_view(encrypted_response.data(), encrypted_response.size()),
-            uint8_view(client_nonce.data(), client_nonce.size()));
+            Uint8View(encrypted_response.data(), encrypted_response.size()),
+            Uint8View(client_nonce.data(), client_nonce.size()));
     if (decrypt_err) {
         return make_error(std::move(decrypt_err));
     }

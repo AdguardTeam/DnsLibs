@@ -1,5 +1,5 @@
 #include <dnsproxy.h>
-#include <ag_utils.h>
+#include "common/utils.h"
 #include <ldns/ldns.h>
 #include <chrono>
 #include <atomic>
@@ -33,7 +33,7 @@ int main() {
         std::cout << "Warn: " << *err_or_warn << '\n';
     }
 
-    ag::utils::scope_exit se([&proxy]() { proxy.deinit(); });
+    ag::utils::ScopeExit se([&proxy]() { proxy.deinit(); });
 
     ag::ldns_pkt_ptr reqpkt(
             ldns_pkt_query_new(
@@ -45,7 +45,7 @@ int main() {
         return 1;
     }
 
-    std::unique_ptr<ldns_buffer, ag::ftor<ldns_buffer_free>> buf(ldns_buffer_new(512));
+    std::unique_ptr<ldns_buffer, ag::Ftor<ldns_buffer_free>> buf(ldns_buffer_new(512));
     if (ldns_pkt2buffer_wire(buf.get(), reqpkt.get()) != LDNS_STATUS_OK) {
         return 1;
     }

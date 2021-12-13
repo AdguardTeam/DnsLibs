@@ -1,6 +1,7 @@
 #include "upstream_doq.h"
 #include "upstream.h"
 #include <magic_enum.hpp>
+#include <cassert>
 
 #ifdef __linux__
 #include <time.h>
@@ -242,7 +243,7 @@ void dns_over_quic::send_requests() {
     update_idle_timer(false);
 }
 
-err_string dns_over_quic::init() {
+ErrString dns_over_quic::init() {
     std::string_view url = m_options.address;
 
     assert(ag::utils::starts_with(url, SCHEME));
@@ -305,7 +306,7 @@ err_string dns_over_quic::init() {
             ngtcp2_crypto_delete_crypto_cipher_ctx_cb,
     };
 
-    m_remote_addr_empty = ag::socket_address("::", m_port);
+    m_remote_addr_empty = ag::SocketAddress("::", m_port);
 
     if (int ret = init_ssl_ctx(); ret != 0) {
         return "Creation SSL context failed";
@@ -380,7 +381,7 @@ void dns_over_quic::on_socket_connected(void *arg) {
     auto *ctx = (socket_context *)arg;
     dns_over_quic *self = ctx->upstream;
 
-    const socket_address &peer = ctx->socket->get_peer();
+    const SocketAddress &peer = ctx->socket->get_peer();
     tracelog(self->m_log, "{}(): {}", __func__, peer.str());
 
     auto *info = std::get_if<connection_handshake_initial_info>(&self->m_conn_state.info);
@@ -415,7 +416,7 @@ void dns_over_quic::on_socket_connected(void *arg) {
     }
 }
 
-void dns_over_quic::on_socket_read(void *arg, uint8_view data) {
+void dns_over_quic::on_socket_read(void *arg, Uint8View data) {
     auto *ctx = (socket_context *)arg;
     dns_over_quic *self = ctx->upstream;
     tracelog(self->m_log, "{}(): Read {} bytes from {}", __func__, data.size(), ctx->socket->get_peer().str());
@@ -474,7 +475,7 @@ void dns_over_quic::on_socket_close(void *arg, std::optional<socket::error> erro
     auto *ctx = (socket_context *) arg;
     dns_over_quic *self = ctx->upstream;
 
-    const socket_address &peer = ctx->socket->get_peer();
+    const SocketAddress &peer = ctx->socket->get_peer();
     if (error.has_value()) {
         dbglog(self->m_log, "Failed to connect to {}: {} ({})", peer.str(), error->description, error->code);
         if (!self->m_conn_state.is_peer_selected()) {
@@ -593,7 +594,7 @@ int dns_over_quic::write_streams() {
     return 0;
 }
 
-int dns_over_quic::send_packet(socket *active_socket, uint8_view data) {
+int dns_over_quic::send_packet(socket *active_socket, Uint8View data) {
     tracelog(m_log, "Sending {} bytes to {}", data.size(), active_socket->get_peer().str());
     auto e = active_socket->send(data);
     if (e.has_value()) {
@@ -610,7 +611,7 @@ int dns_over_quic::send_packet(socket *active_socket, uint8_view data) {
 }
 
 int dns_over_quic::send_packet() {
-    uint8_view data = { m_send_buf.rpos(), m_send_buf.size() };
+    Uint8View data = { m_send_buf.rpos(), m_send_buf.size() };
     if (auto *info = std::get_if<connection_handshake_initial_info>(&m_conn_state.info);
             info != nullptr && info->last_connected_socket != nullptr) {
         return send_packet(info->last_connected_socket->socket.get(), data);
@@ -623,7 +624,7 @@ int dns_over_quic::send_packet() {
     }
 }
 
-int dns_over_quic::connect_to_peers(const std::vector<ag::socket_address> &current_addresses) {
+int dns_over_quic::connect_to_peers(const std::vector<ag::SocketAddress> &current_addresses) {
     std::vector<std::unique_ptr<socket_context>> sockets;
     sockets.reserve(current_addresses.size());
 
@@ -761,7 +762,7 @@ void dns_over_quic::write_client_handshake(ngtcp2_crypto_level level, const uint
     ngtcp2_conn_submit_crypto_data(m_conn, level, buf.rpos(), buf.size());
 }
 
-int dns_over_quic::feed_data(uint8_view data) {
+int dns_over_quic::feed_data(Uint8View data) {
     auto path = ngtcp2_path{ {(size_t)m_local_addr.c_socklen(), (sockaddr *)m_local_addr.c_sockaddr()},
                              {(size_t)m_remote_addr_empty.c_socklen(), (sockaddr *)m_remote_addr_empty.c_sockaddr()} };
 
@@ -789,7 +790,7 @@ int dns_over_quic::version_negotiation(ngtcp2_conn *conn, const ngtcp2_pkt_hd *h
             version = std::max(version, sv[i]);
         }
     }
-    if (doq->m_log->should_log(spdlog::level::debug)) {
+    if (doq->m_log.is_enabled(ag::LogLevel::LOG_LEVEL_DEBUG)) {
         std::string list;
         for (size_t i = 0; i < nsv; i++) {
             list += (i ? ", " : "") + AG_FMT("{:#x}", sv[i]);
@@ -990,7 +991,7 @@ int dns_over_quic::reinit() {
     m_streams.clear();
     m_stream_send_queue.clear();
 
-    std::vector<ag::socket_address> current_addresses;
+    std::vector<ag::SocketAddress> current_addresses;
 
     {
         std::scoped_lock l(m_global);
@@ -1148,7 +1149,7 @@ int dns_over_quic::ssl_verify_callback(X509_STORE_CTX *ctx, void *arg) {
     return 1;
 }
 
-void dns_over_quic::disqualify_server_address(const socket_address &server_address) {
+void dns_over_quic::disqualify_server_address(const SocketAddress &server_address) {
     std::scoped_lock l(m_global);
     for (auto it_serv = m_server_addresses.begin(); it_serv != m_server_addresses.end(); ++it_serv) {
         if (server_address == it_serv->socket_family_cast(server_address.c_sockaddr()->sa_family)) {

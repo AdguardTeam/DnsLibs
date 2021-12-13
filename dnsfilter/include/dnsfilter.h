@@ -7,7 +7,7 @@
 #include <bitset>
 #include <tuple>
 #include <memory>
-#include <ag_defs.h>
+#include "common/defs.h"
 #include <magic_enum.hpp>
 #include <ldns/ldns.h>
 
@@ -96,7 +96,7 @@ public:
      * @return     An engine handle with an optional warning string, or
      *             nullptr with an error string
      */
-    std::pair<handle, err_string> create(const engine_params &p);
+    std::pair<handle, ErrString> create(const engine_params &p);
 
     /**
      * Destroy filtering engine handle
@@ -144,7 +144,7 @@ public:
 
     struct apply_dnsrewrite_result {
         struct rewrite_info {
-            using ldns_rr_ptr = std::unique_ptr<ldns_rr, ag::ftor<&ldns_rr_free>>;
+            using ldns_rr_ptr = std::unique_ptr<ldns_rr, ag::Ftor<&ldns_rr_free>>;
 
             /** The rcode which should be set to the answer */
             ldns_pkt_rcode rcode = LDNS_RCODE_NOERROR;

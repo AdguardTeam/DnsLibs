@@ -8,15 +8,15 @@
 class dnsrewrite_test : public ::testing::Test {
 protected:
     ag::dnsfilter filter;
-    ag::logger log = ag::create_logger("dnsfilter_test");
+    ag::Logger log{"dnsfilter_test"};
 
     void SetUp() override {
-        ag::set_default_log_level(ag::TRACE);
+        ag::Logger::set_log_level(ag::LogLevel::LOG_LEVEL_TRACE);
     }
 
     static void check_rdf(const ldns_rdf *rdf, ldns_rdf_type type, const char *value) {
         ASSERT_EQ(ldns_rdf_get_type(rdf), type);
-        auto rdf_str = ag::allocated_ptr<char>(ldns_rdf2str(rdf));
+        auto rdf_str = ag::AllocatedPtr<char>(ldns_rdf2str(rdf));
         ASSERT_STREQ(rdf_str.get(), value);
     }
 };

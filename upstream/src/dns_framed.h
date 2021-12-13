@@ -1,6 +1,6 @@
 #pragma once
 
-#include <ag_logger.h>
+#include "common/logger.h"
 #include <ag_event_loop.h>
 #include <upstream.h>
 #include <mutex>
@@ -34,7 +34,7 @@ public:
      * @param timeout operation timeout
      * @return Response in case of success, or an error in case of something went wrong
      */
-    connection::read_result perform_request(uint8_view buf, std::chrono::milliseconds timeout);
+    connection::read_result perform_request(Uint8View buf, std::chrono::milliseconds timeout);
 
 protected:
     friend class dns_framed_connection;
@@ -46,15 +46,15 @@ protected:
     /** Connected connections. They may receive requests */
     std::list<connection_ptr> m_connections;
     /** Pending connections. They may not receive requests yet */
-    hash_set<connection_ptr> m_pending_connections;
+    HashSet<connection_ptr> m_pending_connections;
     /** Parent upstream */
     upstream *m_upstream = nullptr;
     /** The connections about to close. They may not receive requests and responses */
-    hash_set<connection_ptr> m_closing_connections;
+    HashSet<connection_ptr> m_closing_connections;
     /** Signals when all connections are closed */
     std::condition_variable_any m_no_conns_cond;
     /** Logger */
-    logger m_log;
+    Logger m_log;
 
     void add_pending_connection(const connection_ptr &ptr);
 
@@ -62,7 +62,7 @@ protected:
 
     void remove_from_all(const connection_ptr &ptr);
 
-    virtual connection::read_result perform_request_inner(uint8_view buf, std::chrono::milliseconds timeout);
+    virtual connection::read_result perform_request_inner(Uint8View buf, std::chrono::milliseconds timeout);
 
     /**
      * Creates DNS framed connection from bufferevent.
@@ -71,7 +71,7 @@ protected:
      * @param idle_timeout Idle timeout. If 0, request timeout will be used.
      * @return Newly created DNS framed connection
      */
-    connection_ptr create_connection(const socket_address &address,
+    connection_ptr create_connection(const SocketAddress &address,
             std::optional<socket_factory::secure_socket_parameters> secure_socket_parameters,
             std::chrono::milliseconds idle_timeout = std::chrono::milliseconds{0});
 

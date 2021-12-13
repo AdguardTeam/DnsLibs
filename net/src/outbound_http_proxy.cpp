@@ -1,4 +1,4 @@
-#include <ag_utils.h>
+#include "common/utils.h"
 #include <base64.h>
 #include "outbound_http_proxy.h"
 #include <magic_enum.hpp>
@@ -47,7 +47,7 @@ std::optional<evutil_socket_t> http_oproxy::get_fd(uint32_t conn_id) const {
     return (it != this->connections.end()) ? it->second->socket->get_fd() : std::nullopt;
 }
 
-std::optional<socket::error> http_oproxy::send(uint32_t conn_id, uint8_view data) {
+std::optional<socket::error> http_oproxy::send(uint32_t conn_id, Uint8View data) {
     log_conn(this, conn_id, trace, "{}", data.size());
 
     std::scoped_lock l(this->guard);
@@ -148,7 +148,7 @@ std::optional<socket::error> http_oproxy::connect_to_proxy(uint32_t conn_id, con
                 parameters.proto, std::nullopt);
     }
     if (auto e = conn->socket->connect({ parameters.loop,
-                socket_address(this->settings->address, this->settings->port),
+                SocketAddress(this->settings->address, this->settings->port),
                 { on_connected, on_read, on_close, conn.get() },
                 parameters.timeout });
             e.has_value()) {
@@ -162,7 +162,7 @@ std::optional<socket::error> http_oproxy::connect_to_proxy(uint32_t conn_id, con
     return std::nullopt;
 }
 
-static uint8_view string_to_bytes(std::string_view str) {
+static Uint8View string_to_bytes(std::string_view str) {
     return { (uint8_t *)str.data(), str.size() };
 }
 
@@ -226,7 +226,7 @@ void http_oproxy::on_connected(void *arg) {
     }
 }
 
-void http_oproxy::on_read(void *arg, uint8_view data) {
+void http_oproxy::on_read(void *arg, Uint8View data) {
     auto *conn = (connection *)arg;
     http_oproxy *self = conn->proxy;
     log_conn(self, conn->id, trace, "{}", data.size());
@@ -284,8 +284,8 @@ int http_oproxy::ssl_verify_callback(X509_STORE_CTX *ctx, void *arg) {
         return 1;
     }
 
-    if (err_string err = self->parameters.verifier->verify(ctx,
-                SSL_get_servername(ssl, SSL_get_servername_type(ssl)));
+    if (ErrString err = self->parameters.verifier->verify(ctx,
+                                                          SSL_get_servername(ssl, SSL_get_servername_type(ssl)));
             err.has_value()) {
         log_proxy(self, dbg, "Failed to verify certificate: {}", err.value());
         return 0;
@@ -326,7 +326,7 @@ void http_oproxy::handle_http_response_chunk(connection *conn, std::string_view 
     }
 }
 
-std::unique_ptr<SSL, ftor<&SSL_free>> http_oproxy::make_ssl() {
+std::unique_ptr<SSL, Ftor<&SSL_free>> http_oproxy::make_ssl() {
     if (this->settings->protocol != outbound_proxy_protocol::HTTPS_CONNECT) {
         return nullptr;
     }
@@ -337,7 +337,7 @@ std::unique_ptr<SSL, ftor<&SSL_free>> http_oproxy::make_ssl() {
 
     tls_session_cache::prepare_ssl_ctx(ctx);
 
-    std::unique_ptr<SSL, ftor<&SSL_free>> ssl{ SSL_new(ctx) };
+    std::unique_ptr<SSL, Ftor<&SSL_free>> ssl{ SSL_new(ctx) };
     SSL_set_tlsext_host_name(ssl.get(), this->settings->address.c_str());
 
     this->tls_session_cache->prepare_ssl(ssl.get());

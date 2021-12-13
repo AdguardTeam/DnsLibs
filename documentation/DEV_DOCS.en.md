@@ -216,7 +216,7 @@ You can find the implementation of each unit from this list in the folder `proxy
 
 ### `ag::dnsproxy`
 Main class. It receives settings from the user and initializes `dns_forwarder` and `dns_listeners`.
-Each class can also contain `ag::logger`. More details about the syntax of the log you can find [above](#logging).
+Each class can also contain `ag::Logger`. More details about the syntax of the log you can find [above](#logging).
 
 <a name="proxysettings"></a>
 #### `ag::dnsproxy_settings`

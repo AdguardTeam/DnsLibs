@@ -8,6 +8,7 @@
 #include <shared_mutex>
 #include <dnsfilter.h>
 #include "rule_utils.h"
+#include <atomic>
 
 class filter {
 public:

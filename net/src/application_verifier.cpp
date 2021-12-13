@@ -16,8 +16,8 @@ std::optional<std::vector<uint8_t>> ag::application_verifier::serialize_certific
     return out;
 }
 
-ag::err_string ag::application_verifier::verify(X509_STORE_CTX *ctx, std::string_view host) const {
-    if (err_string err = verify_host_name(X509_STORE_CTX_get0_cert(ctx), host); err.has_value()) {
+ag::ErrString ag::application_verifier::verify(X509_STORE_CTX *ctx, std::string_view host) const {
+    if (ErrString err = verify_host_name(X509_STORE_CTX_get0_cert(ctx), host); err.has_value()) {
         return err;
     }
 

@@ -47,7 +47,7 @@ std::optional<evutil_socket_t> direct_oproxy::get_fd(uint32_t conn_id) const {
     return (it != this->connections.end()) ? it->second.socket->get_fd() : std::nullopt;
 }
 
-std::optional<socket::error> direct_oproxy::send(uint32_t conn_id, uint8_view data) {
+std::optional<socket::error> direct_oproxy::send(uint32_t conn_id, Uint8View data) {
     std::scoped_lock l(this->guard);
     auto it = this->connections.find(conn_id);
     return (it != this->connections.end()) ? it->second.socket->send(data) : socket::error{ -1, "Not found" };
@@ -131,7 +131,7 @@ void direct_oproxy::on_connected(void *arg) {
     conn->parameters.callbacks.on_connected(conn->parameters.callbacks.arg, conn->id);
 }
 
-void direct_oproxy::on_read(void *arg, uint8_view data) {
+void direct_oproxy::on_read(void *arg, Uint8View data) {
     auto *conn = (connection *)arg;
     conn->parameters.callbacks.on_read(conn->parameters.callbacks.arg, data);
 }

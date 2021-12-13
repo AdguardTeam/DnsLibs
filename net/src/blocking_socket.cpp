@@ -14,7 +14,7 @@ static std::atomic_size_t next_id = { 0 };
 
 
 blocking_socket::blocking_socket(socket_factory::socket_ptr socket)
-    : log(create_logger(__func__))
+    : log(__func__)
     , id(next_id.fetch_add(1, std::memory_order::memory_order_relaxed))
     , underlying_socket(std::move(socket))
 {}
@@ -41,12 +41,12 @@ std::optional<socket::error> blocking_socket::connect(connect_parameters params)
     return std::exchange(this->pending_error, std::nullopt);
 }
 
-std::optional<socket::error> blocking_socket::send(uint8_view data) {
+std::optional<socket::error> blocking_socket::send(Uint8View data) {
     log_sock(this, trace, "{}", data.size());
     return this->underlying_socket->send(data);
 }
 
-std::optional<socket::error> blocking_socket::send_dns_packet(uint8_view data) {
+std::optional<socket::error> blocking_socket::send_dns_packet(Uint8View data) {
     log_sock(this, trace, "{}", data.size());
     return this->underlying_socket->send_dns_packet(data);
 }
@@ -81,7 +81,7 @@ blocking_socket::receive_dns_packet_result blocking_socket::receive_dns_packet(s
     };
 
     constexpr auto on_read =
-            [] (void *arg, uint8_view data) {
+            [] (void *arg, Uint8View data) {
                 auto *ctx = (read_context *)arg;
                 bool done = false;
                 switch (ctx->protocol) {
@@ -127,7 +127,7 @@ void blocking_socket::on_connected(void *arg) {
     self->event_loop->stop();
 }
 
-void blocking_socket::on_read(void *arg, uint8_view data) {
+void blocking_socket::on_read(void *arg, Uint8View data) {
     auto *self = (blocking_socket *)arg;
     log_sock(self, trace, "{}", data.size());
     if (!self->on_read_callback.func(self->on_read_callback.arg, data)) {

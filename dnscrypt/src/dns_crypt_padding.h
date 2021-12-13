@@ -1,7 +1,7 @@
 #pragma once
 
 #include <cstddef>
-#include <ag_defs.h>
+#include "common/defs.h"
 
 namespace ag::dnscrypt {
 
@@ -11,13 +11,13 @@ namespace ag::dnscrypt {
  * @param min_size Minimum size of packet
  * @return Error optional if failed
  */
-err_string pad(uint8_vector &packet, size_t min_size);
+ErrString pad(Uint8Vector &packet, size_t min_size);
 
 /**
  * Remove padding from packet
  * @param[in,out] packet Packet to unpad
  * @return Error optional if failed
  */
-err_string unpad(uint8_vector &packet);
+ErrString unpad(Uint8Vector &packet);
 
 } // namespace ag::dnscrypt

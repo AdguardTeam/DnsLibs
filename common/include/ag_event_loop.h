@@ -7,7 +7,7 @@
 #include <mutex>
 #include <chrono>
 #include <event2/event.h>
-#include <ag_defs.h>
+#include "common/defs.h"
 
 
 namespace ag {
@@ -80,7 +80,7 @@ public:
 
 private:
     /** Libevent base */
-    std::unique_ptr<event_base, ftor<&event_base_free>> m_base;
+    std::unique_ptr<event_base, Ftor<&event_base_free>> m_base;
     /** Thread where base loop is running */
     std::thread m_base_thread;
 
@@ -89,7 +89,7 @@ private:
         std::list<std::function<void()>> queue;
     };
     /** Submitted tasks */
-    with_mtx<tasks> m_tasks;
+    WithMtx<tasks> m_tasks;
 
     struct postponed_tasks {
         struct task {
@@ -102,7 +102,7 @@ private:
         std::list<task> queue;
     };
     /** Postponed tasks */
-    with_mtx<postponed_tasks> m_postponed_tasks;
+    WithMtx<postponed_tasks> m_postponed_tasks;
 
     explicit event_loop(bool run_immediately);
 

@@ -11,7 +11,7 @@ static std::atomic_uint32_t next_connection_id = { 0 };
 
 outbound_proxy::outbound_proxy(const std::string &logger_name,
         const outbound_proxy_settings *settings, struct parameters parameters)
-    : log(create_logger(logger_name))
+    : log(logger_name)
     , id(next_id.fetch_add(1, std::memory_order::memory_order_relaxed))
     , settings(settings)
     , parameters(parameters)

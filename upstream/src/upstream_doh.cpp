@@ -3,8 +3,8 @@
 #include <algorithm>
 #include <bitset>
 
-#include <ag_utils.h>
-#include <ag_defs.h>
+#include "common/utils.h"
+#include "common/defs.h"
 #include <ag_socket.h>
 #include "upstream_doh.h"
 
@@ -40,7 +40,7 @@ static constexpr std::string_view USER_AGENT = "ag-dns";
 
 
 struct dns_over_https::query_handle {
-    using CURL_ptr = std::unique_ptr<CURL, ftor<&curl_easy_cleanup>>;
+    using CURL_ptr = std::unique_ptr<CURL, Ftor<&curl_easy_cleanup>>;
 
     enum flag {
         /// The query uses the proxy
@@ -49,11 +49,11 @@ struct dns_over_https::query_handle {
         QHF_BYPASSED_PROXY,
     };
 
-    const logger *log = nullptr;
+    const Logger *log = nullptr;
     dns_over_https *upstream = nullptr;
     size_t request_id = 0;
     CURL_ptr curl_handle;
-    err_string error;
+    ErrString error;
     ldns_buffer_ptr request = nullptr;
     std::vector<uint8_t> response;
     std::promise<void> barrier;
@@ -86,7 +86,7 @@ struct dns_over_https::check_proxy_state {
         const outbound_proxy_settings *oproxy_settings = socket_factory->get_outbound_proxy_settings();
         std::optional<socket::error> error = self->socket->connect({
                 upstream->worker.loop.get(),
-                socket_address(oproxy_settings->address, oproxy_settings->port),
+                SocketAddress(oproxy_settings->address, oproxy_settings->port),
                 { on_connected, nullptr, on_close, self.get() },
                 timeout,
         });
@@ -152,7 +152,7 @@ curl_socket_t dns_over_https::curl_opensocket(void *clientp, curlsocktype, struc
     if (curlfd == CURL_SOCKET_BAD) {
         return CURL_SOCKET_BAD;
     }
-    ag::socket_address addr{&address->addr};
+    ag::SocketAddress addr{&address->addr};
     if (auto error = self->m_config.socket_factory->prepare_fd(curlfd, addr, self->m_options.outbound_interface)) {
         warnlog(self->log, "Failed to bind socket to interface: {}", *error);
         evutil_closesocket(curlfd);
@@ -183,7 +183,7 @@ static CURLSH *init_curl_share() {
 }
 
 static CURLSH *get_curl_share() {
-    static std::unique_ptr<CURLSH, ag::ftor<&curl_share_cleanup>> curl_share(init_curl_share());
+    static std::unique_ptr<CURLSH, ag::Ftor<&curl_share_cleanup>> curl_share(init_curl_share());
     return curl_share.get();
 }
 
@@ -235,7 +235,7 @@ dns_over_https::query_handle::CURL_ptr dns_over_https::query_handle::create_curl
             || CURLE_OK != (e = curl_easy_setopt(curl, CURLOPT_OPENSOCKETDATA, upstream))
             || CURLE_OK != (e = curl_easy_setopt(curl, CURLOPT_DEBUGFUNCTION, verbose_callback))
             || CURLE_OK != (e = curl_easy_setopt(curl, CURLOPT_DEBUGDATA, this))
-            || CURLE_OK != (e = curl_easy_setopt(curl, CURLOPT_VERBOSE, (long)((*log)->level() <= SPDLOG_LEVEL_DEBUG)))
+            || CURLE_OK != (e = curl_easy_setopt(curl, CURLOPT_VERBOSE, (long)(log->is_enabled(ag::LogLevel::LOG_LEVEL_DEBUG))))
             || CURLE_OK != (e = curl_easy_setopt(curl, CURLOPT_SHARE, get_curl_share()))
             || (upstream->resolved != nullptr
                 && CURLE_OK != (e = curl_easy_setopt(curl, CURLOPT_RESOLVE, upstream->resolved.get())))) {
@@ -348,7 +348,7 @@ int dns_over_https::verify_callback(X509_STORE_CTX *ctx, void *arg) {
         return 0;
     }
 
-    if (err_string err = verifier->verify(ctx, get_host_name(upstream->m_options.address));
+    if (ErrString err = verifier->verify(ctx, get_host_name(upstream->m_options.address));
             err.has_value()) {
         dbglog_id(handle, "Failed to verify certificate: {}", err.value());
         handle->error = std::move(err);
@@ -366,7 +366,7 @@ CURLcode dns_over_https::ssl_callback(CURL *curl, void *sslctx, void *arg) {
     return CURLE_OK;
 }
 
-static curl_slist_ptr create_resolved_hosts_list(std::string_view url, const ip_address_variant &addr) {
+static curl_slist_ptr create_resolved_hosts_list(std::string_view url, const IpAddress &addr) {
     if (std::holds_alternative<std::monostate>(addr)) {
         return nullptr;
     }
@@ -379,11 +379,11 @@ static curl_slist_ptr create_resolved_hosts_list(std::string_view url, const ip_
     }
 
     std::string entry;
-    if (const auto *ipv4 = std::get_if<uint8_array<4>>(&addr); ipv4 != nullptr) {
+    if (const auto *ipv4 = std::get_if<Uint8Array<4>>(&addr); ipv4 != nullptr) {
         const auto &ip = *ipv4;
         entry = AG_FMT("{}:{}:{}.{}.{}.{}", host, port, ip[0], ip[1], ip[2], ip[3]);
     } else {
-        const auto &ip = std::get<uint8_array<16>>(addr);
+        const auto &ip = std::get<Uint8Array<16>>(addr);
         entry = AG_FMT("{}:{}:[{:02x}{:02x}:{:02x}{:02x}:{:02x}{:02x}:{:02x}{:02x}:{:02x}{:02x}:{:02x}{:02x}:{:02x}{:02x}:{:02x}{:02x}]",
             host, port,
             ip[0], ip[1], ip[2], ip[3], ip[4], ip[5], ip[6], ip[7],
@@ -415,11 +415,12 @@ curl_pool_ptr dns_over_https::create_pool() const {
 
 dns_over_https::dns_over_https(const upstream_options &opts, const upstream_factory_config &config)
     : upstream(opts, config)
+    , log("DOH upstream")
 {
     static const initializer ensure_initialized;
 }
 
-err_string dns_over_https::init() {
+ErrString dns_over_https::init() {
     this->resolved = create_resolved_hosts_list(this->m_options.address, this->m_options.resolved_server_ip);
 
     curl_slist *headers;
@@ -437,12 +438,12 @@ err_string dns_over_https::init() {
     }
 
     if (this->resolved == nullptr) {
-        if (!this->m_options.bootstrap.empty() || socket_address(get_host_name(this->m_options.address), 0).valid()) {
+        if (!this->m_options.bootstrap.empty() || SocketAddress(get_host_name(this->m_options.address), 0).valid()) {
             bootstrapper_ptr bootstrapper = std::make_unique<ag::bootstrapper>(
                 bootstrapper::params{get_host_port(m_options.address), dns_over_https::DEFAULT_PORT,
                                      m_options.bootstrap, m_options.timeout, m_config,
                                      m_options.outbound_interface});
-            if (err_string err = bootstrapper->init(); !err.has_value()) {
+            if (ErrString err = bootstrapper->init(); !err.has_value()) {
                 this->bootstrapper = std::move(bootstrapper);
             } else {
                 std::string err_message = AG_FMT("Failed to create bootstrapper: {}", err.value());
@@ -706,7 +707,7 @@ void dns_over_https::defy_requests() {
     }
 }
 
-void dns_over_https::stop_all_with_error(const err_string &e) {
+void dns_over_https::stop_all_with_error(const ErrString &e) {
     std::deque<query_handle *> &queue = this->worker.running_queue;
     for (auto i = queue.begin(); i != queue.end();) {
         query_handle *handle = *i;
@@ -750,7 +751,7 @@ dns_over_https::exchange_result dns_over_https::exchange(ldns_pkt *request, cons
     this->guard.unlock();
 
     // unregister request at exit for safe destruction
-    utils::scope_exit request_unregister(
+    utils::ScopeExit request_unregister(
         [this] () {
             std::scoped_lock lock(this->guard);
             if (0 == --this->worker.requests_counter) {
@@ -775,7 +776,7 @@ dns_over_https::exchange_result dns_over_https::exchange(ldns_pkt *request, cons
         timeout = this->m_options.timeout - resolve_time;
 
         std::string entry;
-        for (const socket_address &address : resolve_result.addresses) {
+        for (const SocketAddress &address : resolve_result.addresses) {
             assert(address.valid());
 
             std::string addr = address.str();
@@ -807,7 +808,7 @@ dns_over_https::exchange_result dns_over_https::exchange(ldns_pkt *request, cons
                 h->upstream->submit_request(h);
             });
 
-    err_string err;
+    ErrString err;
     ldns_pkt *response = nullptr;
     bool timed_out = false;
     if (std::future_status status = request_completed.wait_for(timeout);

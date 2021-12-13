@@ -4,7 +4,7 @@
 #include <chrono>
 #include <mutex>
 #include <optional>
-#include <ag_defs.h>
+#include "common/defs.h"
 #include <ag_net_utils.h>
 #include <ag_socket.h>
 #include <ag_deferred_arg.h>
@@ -24,8 +24,8 @@ public:
     tcp_stream &operator=(const tcp_stream &) = delete;
 
 private:
-    std::unique_ptr<bufferevent, ftor<&bufferevent_free>> bev;
-    std::unique_ptr<event, ftor<&event_free>> timer;
+    std::unique_ptr<bufferevent, Ftor<&bufferevent_free>> bev;
+    std::unique_ptr<event, Ftor<&event_free>> timer;
     mutable std::mutex guard;
     callbacks callbacks = {};
     std::optional<std::chrono::microseconds> current_timeout;
@@ -33,8 +33,8 @@ private:
 
     [[nodiscard]] std::optional<evutil_socket_t> get_fd() const override;
     [[nodiscard]] std::optional<error> connect(connect_parameters params) override;
-    [[nodiscard]] std::optional<error> send(uint8_view data) override;
-    [[nodiscard]] std::optional<error> send_dns_packet(uint8_view data) override;
+    [[nodiscard]] std::optional<error> send(Uint8View data) override;
+    [[nodiscard]] std::optional<error> send_dns_packet(Uint8View data) override;
     [[nodiscard]] bool set_timeout(std::chrono::microseconds timeout) override;
     [[nodiscard]] std::optional<error> set_callbacks(struct callbacks cbx) override;
 

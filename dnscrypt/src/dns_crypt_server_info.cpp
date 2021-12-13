@@ -10,8 +10,9 @@
 #include "dns_crypt_consts.h"
 #include "dns_crypt_ldns.h"
 #include "dns_crypt_padding.h"
-#include <ag_logger.h>
-#include <ag_utils.h>
+#include "common/logger.h"
+#include "common/utils.h"
+#include "common/time_utils.h"
 #include <ag_net_utils.h>
 #include <dns_crypt_server_info.h>
 #include <dns_crypt_utils.h>
@@ -64,15 +65,15 @@ static constexpr field SIGNED_FIELD{RESOLVER_PK_FIELD.offset, RESOLVER_PK_FIELD,
 static constexpr field CERT_FIELD{0, CERT_MAGIC_FIELD, ES_VERSION_FIELD, PROTOCOL_MINOR_VERSION_FIELD, SIGNATURE_FIELD,
                                   SIGNED_FIELD};
 
-static const ag::logger &server_info_log() {
-    static auto result = ag::create_logger("ag::dnscrypt::server_info");
+static const ag::Logger &server_info_log() {
+    static auto result = ag::Logger{"ag::dnscrypt::server_info"};
     return result;
 }
 
 ag::dnscrypt::server_info::fetch_result ag::dnscrypt::server_info::fetch_current_dnscrypt_cert(
         std::chrono::milliseconds timeout,
         const socket_factory *socket_factory, socket_factory::socket_parameters socket_parameters) {
-    static constexpr utils::make_error<fetch_result> make_error;
+    static constexpr utils::MakeError<fetch_result> make_error;
     if (m_server_public_key.size() != crypto_sign_PUBLICKEYBYTES) {
         return make_error("Invalid public key length");
     }
@@ -117,10 +118,10 @@ ag::dnscrypt::server_info::fetch_result ag::dnscrypt::server_info::fetch_current
 }
 
 ag::dnscrypt::server_info::encrypt_result ag::dnscrypt::server_info::encrypt(utils::transport_protocol local_protocol,
-                                                                             uint8_view packet_initial) const {
-    static constexpr utils::make_error<encrypt_result> make_error;
-    uint8_vector packet(packet_initial.begin(), packet_initial.end());
-    uint8_vector client_nonce(HALF_NONCE_SIZE);
+                                                                             Uint8View packet_initial) const {
+    static constexpr utils::MakeError<encrypt_result> make_error;
+    Uint8Vector packet(packet_initial.begin(), packet_initial.end());
+    Uint8Vector client_nonce(HALF_NONCE_SIZE);
     randombytes_buf(client_nonce.data(), client_nonce.size());
     nonce_array nonce{};
     std::copy(client_nonce.begin(), client_nonce.end(), nonce.begin());
@@ -144,16 +145,16 @@ ag::dnscrypt::server_info::encrypt_result ag::dnscrypt::server_info::encrypt(uti
     if (auto[encrypted, seal_err] = cipher_seal(m_server_cert.encryption_algorithm, utils::make_string_view(packet), nonce,
                                                 m_server_cert.shared_key);
         !seal_err) {
-        auto result = utils::join<uint8_vector>(m_server_cert.magic_query, m_public_key, client_nonce, encrypted);
+        auto result = utils::join<Uint8Vector>(m_server_cert.magic_query, m_public_key, client_nonce, encrypted);
         return {std::move(result), std::move(client_nonce), std::nullopt};
     } else {
         return make_error(std::move(seal_err));
     }
 }
 
-ag::dnscrypt::server_info::decrypt_result ag::dnscrypt::server_info::decrypt(uint8_view encrypted,
-                                                                             uint8_view nonce) const {
-    static constexpr utils::make_error<decrypt_result> make_error;
+ag::dnscrypt::server_info::decrypt_result ag::dnscrypt::server_info::decrypt(Uint8View encrypted,
+                                                                             Uint8View nonce) const {
+    static constexpr utils::MakeError<decrypt_result> make_error;
     const auto &shared_key = m_server_cert.shared_key;
     auto server_magic_len = std::size(SERVER_MAGIC);
     auto response_header_len = server_magic_len + NONCE_SIZE;
@@ -166,7 +167,7 @@ ag::dnscrypt::server_info::decrypt_result ag::dnscrypt::server_info::decrypt(uin
     if (!std::equal(nonce.begin(), nonce.begin() + HALF_NONCE_SIZE, server_nonce.begin())) {
         return make_error("Unexpected nonce");
     }
-    uint8_vector packet;
+    Uint8Vector packet;
     auto encrypted_without_header = encrypted;
     encrypted_without_header.remove_prefix(response_header_len);
     auto[decrypted, open_err] = cipher_open(m_server_cert.encryption_algorithm, encrypted_without_header, server_nonce,
@@ -185,8 +186,8 @@ ag::dnscrypt::server_info::decrypt_result ag::dnscrypt::server_info::decrypt(uin
 ag::dnscrypt::server_info::txt_to_cert_info_result ag::dnscrypt::server_info::txt_to_cert_info(
         const ldns_rr &answer_rr) const {
     namespace chrono = std::chrono;
-    static constexpr utils::make_error<txt_to_cert_info_result> make_error;
-    std::vector<uint8_view> string_data_fields;
+    static constexpr utils::MakeError<txt_to_cert_info_result> make_error;
+    std::vector<Uint8View> string_data_fields;
     size_t rr_count = ldns_rr_rd_count(&answer_rr);
     string_data_fields.reserve(rr_count);
     for (size_t i = 0, e = rr_count; i < e; ++i) {
@@ -199,7 +200,7 @@ ag::dnscrypt::server_info::txt_to_cert_info_result ag::dnscrypt::server_info::tx
             }
         }
     }
-    auto bin_cert = utils::join<uint8_vector>(string_data_fields);
+    auto bin_cert = utils::join<Uint8Vector>(string_data_fields);
     // Validate the cert basic params
     if (bin_cert.size() < CERT_FIELD.size) {
         return make_error("Certificate is too short");
@@ -217,8 +218,8 @@ ag::dnscrypt::server_info::txt_to_cert_info_result ag::dnscrypt::server_info::tx
         return make_error(AG_FMT("Unsupported crypto construction: {}", es_version));
     }
     // Verify the server public key
-    uint8_view signature(&bin_cert[SIGNATURE_FIELD.offset], SIGNATURE_FIELD.size);
-    uint8_view signed_(&bin_cert[SIGNED_FIELD.offset], SIGNED_FIELD.size);
+    Uint8View signature(&bin_cert[SIGNATURE_FIELD.offset], SIGNATURE_FIELD.size);
+    Uint8View signed_(&bin_cert[SIGNED_FIELD.offset], SIGNED_FIELD.size);
     if (crypto_sign_verify_detached(signature.data(), signed_.data(), signed_.size(), m_server_public_key.data()) !=
                 0) {
         return make_error("Incorrect signature");
@@ -229,8 +230,8 @@ ag::dnscrypt::server_info::txt_to_cert_info_result ag::dnscrypt::server_info::tx
     // Validate the certificate date
     if (local_cert_info.not_before >= local_cert_info.not_after) {
         return make_error(AG_FMT("Certificate ends before it starts ({} >= {})",
-                                 utils::time_to_str(local_cert_info.not_before),
-                                 utils::time_to_str(local_cert_info.not_after)));
+                                 ag::format_gmtime(ag::Secs(local_cert_info.not_before)),
+                                 ag::format_gmtime(ag::Secs(local_cert_info.not_after))));
     }
     auto now = chrono::duration_cast<chrono::seconds>(chrono::system_clock::now().time_since_epoch()).count();
     if (now > local_cert_info.not_after || now < local_cert_info.not_before) {

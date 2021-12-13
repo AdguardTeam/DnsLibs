@@ -11,8 +11,8 @@ static constexpr size_t ENCRYPTED_READ_CHUNK_SIZE = 4 * 1024;
 static constexpr size_t DECRYPTED_READ_CHUNK_SIZE = 512;
 
 
-static uint8_vector make_alpn(const std::vector<std::string> &protos) {
-    uint8_vector alpn;
+static Uint8Vector make_alpn(const std::vector<std::string> &protos) {
+    Uint8Vector alpn;
     alpn.reserve(protos.size()
             + std::accumulate(protos.begin(), protos.end(), 0,
                     [] (size_t acc, const std::string &p) { return acc + p.length(); }));
@@ -28,11 +28,11 @@ static uint8_vector make_alpn(const std::vector<std::string> &protos) {
 tls_codec::tls_codec(const certificate_verifier *cert_verifier, tls_session_cache *session_cache)
     : cert_verifier(cert_verifier)
     , session_cache(session_cache)
-    , log(create_logger(__func__))
+    , log(__func__)
 {}
 
 std::optional<tls_codec::error> tls_codec::connect(const std::string &sni, std::vector<std::string> alpn) {
-    std::unique_ptr<SSL_CTX, ftor<&SSL_CTX_free>> ctx{ SSL_CTX_new(TLS_client_method()) };
+    std::unique_ptr<SSL_CTX, Ftor<&SSL_CTX_free>> ctx{ SSL_CTX_new(TLS_client_method()) };
     SSL_CTX_set_verify(ctx.get(), SSL_VERIFY_PEER, nullptr);
     SSL_CTX_set_cert_verify_callback(ctx.get(), ssl_verify_callback, this);
     tls_session_cache::prepare_ssl_ctx(ctx.get());
@@ -44,7 +44,7 @@ std::optional<tls_codec::error> tls_codec::connect(const std::string &sni, std::
     }
 
     if (!alpn.empty()) {
-        uint8_vector serialized = make_alpn(alpn);
+        Uint8Vector serialized = make_alpn(alpn);
         int r = SSL_set_alpn_protos(this->ssl.get(), serialized.data(), serialized.size());
         if (r != 0) {
             return error{ "Failed to set ALPN protocols" };
@@ -83,7 +83,7 @@ tls_codec::send_encrypted_result tls_codec::send_encrypted() {
 
     BIO *write_bio = SSL_get_wbio(this->ssl.get());
 
-    uint8_vector buffer(std::min(BIO_pending(write_bio), ENCRYPTED_READ_CHUNK_SIZE));
+    Uint8Vector buffer(std::min(BIO_pending(write_bio), ENCRYPTED_READ_CHUNK_SIZE));
     int r = BIO_read(write_bio, buffer.data(), (int)buffer.size());
     if (r < 0) {
         if (!BIO_should_retry(write_bio)) {
@@ -96,7 +96,7 @@ tls_codec::send_encrypted_result tls_codec::send_encrypted() {
     return chunk{ { std::move(buffer) } };
 }
 
-std::optional<tls_codec::error> tls_codec::recv_encrypted(uint8_view buffer) {
+std::optional<tls_codec::error> tls_codec::recv_encrypted(Uint8View buffer) {
     if (this->ssl == nullptr) {
         return error{ "Invalid state" };
     }
@@ -119,7 +119,7 @@ tls_codec::read_decrypted_result tls_codec::read_decrypted() {
         return error{ "Invalid state" };
     }
 
-    uint8_vector buffer(DECRYPTED_READ_CHUNK_SIZE);
+    Uint8Vector buffer(DECRYPTED_READ_CHUNK_SIZE);
 
     int r = SSL_read(this->ssl.get(), buffer.data(), (int)buffer.size());
     if (r <= 0) {
@@ -140,7 +140,7 @@ tls_codec::read_decrypted_result tls_codec::read_decrypted() {
     return chunk{ std::move(buffer) };
 }
 
-tls_codec::write_decrypted_result tls_codec::write_decrypted(uint8_view buffer) {
+tls_codec::write_decrypted_result tls_codec::write_decrypted(Uint8View buffer) {
     if (!this->is_connected()) {
         return error{ "Invalid state" };
     }
@@ -167,7 +167,7 @@ int tls_codec::ssl_verify_callback(X509_STORE_CTX *ctx, void *arg) {
         return 0;
     }
 
-    if (err_string err = self->cert_verifier->verify(ctx, SSL_get_servername(ssl, SSL_get_servername_type(ssl)));
+    if (ErrString err = self->cert_verifier->verify(ctx, SSL_get_servername(ssl, SSL_get_servername_type(ssl)));
             err.has_value()) {
         dbglog(self->log, "Failed to verify certificate: {}", err.value());
         return 0;

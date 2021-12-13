@@ -1,8 +1,8 @@
-#include <ag_utils.h>
+#include "common/utils.h"
 #include "tcp_stream.h"
 #include <event2/buffer.h>
 #include <openssl/err.h>
-
+#include <cassert>
 
 #define log_stream(s_, lvl_, fmt_, ...) lvl_##log((s_)->log, "[id={}] {}(): " fmt_, (s_)->id, __func__, ##__VA_ARGS__)
 
@@ -53,7 +53,7 @@ std::optional<socket::error> tcp_stream::connect(connect_parameters params) {
     return std::nullopt;
 }
 
-std::optional<socket::error> tcp_stream::send(uint8_view data) {
+std::optional<socket::error> tcp_stream::send(Uint8View data) {
     log_stream(this, trace, "{}", data.size());
 
     if (0 != bufferevent_write(this->bev.get(), data.data(), data.size())) {
@@ -69,7 +69,7 @@ std::optional<socket::error> tcp_stream::send(uint8_view data) {
     return std::nullopt;
 }
 
-std::optional<socket::error> tcp_stream::send_dns_packet(uint8_view data) {
+std::optional<socket::error> tcp_stream::send_dns_packet(Uint8View data) {
     log_stream(this, trace, "{}", data.size());
 
     uint16_t length = htons(data.size());
@@ -152,8 +152,8 @@ struct tcp_stream::callbacks tcp_stream::get_callbacks() const {
 
 int tcp_stream::on_prepare_fd(int fd, const struct sockaddr *sa, int, void *arg) {
     auto *self = (tcp_stream *)arg;
-    err_string err = self->prepare_fd.func(self->prepare_fd.arg, fd,
-            ag::socket_address{ sa }, self->parameters.outbound_interface);
+    ErrString err = self->prepare_fd.func(self->prepare_fd.arg, fd,
+                                          ag::SocketAddress{ sa }, self->parameters.outbound_interface);
     if (err.has_value()) {
         log_stream(self, warn, "Failed to bind socket to interface: {}", err.value());
         return 0;

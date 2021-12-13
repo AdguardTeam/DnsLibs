@@ -2,7 +2,7 @@
 #include <chrono>
 #include <memory>
 #include <ldns/ldns.h>
-#include <ag_utils.h>
+#include "common/utils.h"
 #include <application_verifier.h>
 #include <default_verifier.h>
 #include <upstream.h>
@@ -17,9 +17,9 @@ static ag::ldns_pkt_ptr create_message() {
     return ag::ldns_pkt_ptr(pkt);
 }
 
-ag::err_string ag::test_upstream(const upstream_options &opts, bool ipv6_available,
-        const on_certificate_verification_function &on_certificate_verification,
-        bool offline) {
+ag::ErrString ag::test_upstream(const upstream_options &opts, bool ipv6_available,
+                                const on_certificate_verification_function &on_certificate_verification,
+                                bool offline) {
     std::unique_ptr<ag::certificate_verifier> cert_verifier;
     if (on_certificate_verification != nullptr) {
         cert_verifier = std::make_unique<ag::application_verifier>(on_certificate_verification);

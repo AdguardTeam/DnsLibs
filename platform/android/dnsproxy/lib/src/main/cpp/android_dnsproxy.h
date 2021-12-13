@@ -1,7 +1,7 @@
 #pragma once
 
 #include <jni.h>
-#include <ag_defs.h>
+#include "common/defs.h"
 #include <jni_utils.h>
 #include <dns_stamp.h>
 

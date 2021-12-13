@@ -2,7 +2,7 @@
 
 #include <memory>
 #include <optional>
-#include <ag_socket_address.h>
+#include "common/socket_address.h"
 
 namespace ag {
 
@@ -29,7 +29,7 @@ public:
      * Thread-safe.
      * On non-Apple always return std::nullopt.
      */
-    virtual std::optional<uint32_t> resolve(const ag::socket_address &address) = 0;
+    virtual std::optional<uint32_t> resolve(const ag::SocketAddress &address) = 0;
 
     /**
      * Flush the routing table cache.

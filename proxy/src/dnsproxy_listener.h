@@ -1,6 +1,6 @@
 #pragma once
 
-#include <ag_defs.h>
+#include "common/defs.h"
 #include <dnsproxy.h>
 
 namespace ag {
@@ -12,7 +12,7 @@ class dnsproxy_listener {
 public:
     virtual ~dnsproxy_listener() = default;
 
-    using create_result = std::pair<listener_ptr, err_string>;
+    using create_result = std::pair<listener_ptr, ErrString>;
 
     /**
      * Create a listener and start listening
@@ -35,7 +35,7 @@ public:
     /**
      * @brief Get the address is being listened for queries
      */
-    [[nodiscard]] virtual std::pair<utils::transport_protocol, socket_address> get_listen_address() const = 0;
+    [[nodiscard]] virtual std::pair<utils::transport_protocol, SocketAddress> get_listen_address() const = 0;
 };
 
 } // namespace ag

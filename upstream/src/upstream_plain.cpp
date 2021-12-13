@@ -1,4 +1,4 @@
-#include <ag_utils.h>
+#include "common/utils.h"
 #include <ag_net_utils.h>
 #include "upstream_plain.h"
 #include <ag_blocking_socket.h>
@@ -8,29 +8,29 @@
 using std::chrono::milliseconds;
 using std::chrono::duration_cast;
 
-ag::tcp_pool::tcp_pool(event_loop_ptr loop, const socket_address &address, plain_dns *upstream)
+ag::tcp_pool::tcp_pool(event_loop_ptr loop, const SocketAddress &address, plain_dns *upstream)
     : dns_framed_pool(std::move(loop), upstream)
     , m_address(address)
 {}
 
-static ag::socket_address prepare_address(const std::string &address_string) {
+static ag::SocketAddress prepare_address(const std::string &address_string) {
     auto address = ag::utils::str_to_socket_address(address_string);
     if (address.port() == 0) {
-        return ag::socket_address(address.addr(), ag::plain_dns::DEFAULT_PORT);
+        return ag::SocketAddress(address.addr(), ag::plain_dns::DEFAULT_PORT);
     }
     return address;
 }
 
 ag::plain_dns::plain_dns(const upstream_options &opts, const upstream_factory_config &config)
         : upstream(opts, config)
-        , m_log(ag::create_logger(AG_FMT("Plain upstream ({})", opts.address)))
+        , m_log(AG_FMT("Plain upstream ({})", opts.address))
         , m_prefer_tcp(utils::starts_with(opts.address, TCP_SCHEME))
         , m_pool(event_loop::create(),
                  prepare_address(m_prefer_tcp
                                  ? opts.address.substr(TCP_SCHEME.length())
                                  : opts.address), this) {}
 
-ag::err_string ag::plain_dns::init() {
+ag::ErrString ag::plain_dns::init() {
     if (!m_pool.address().valid()) {
         return AG_FMT("Passed server address is not valid: {}", this->m_options.address);
     }
@@ -46,13 +46,13 @@ ag::plain_dns::exchange_result ag::plain_dns::exchange(ldns_pkt *request_pkt, co
     }
 
     ldns_rr *question = ldns_rr_list_rr(ldns_pkt_question(request_pkt), 0);
-    allocated_ptr<char> domain;
+    AllocatedPtr<char> domain;
     if (question) {
-        domain = allocated_ptr<char>(ldns_rdf2str(ldns_rr_owner(question)));
+        domain = AllocatedPtr<char>(ldns_rdf2str(ldns_rr_owner(question)));
         tracelog_id(m_log, request_pkt, "Querying for a domain: {}", domain.get());
     }
 
-    utils::timer timer;
+    utils::Timer timer;
     milliseconds timeout = m_options.timeout;
 
     if (!m_prefer_tcp && !(info && info->proto == utils::TP_TCP)) {
@@ -104,7 +104,7 @@ ag::plain_dns::exchange_result ag::plain_dns::exchange(ldns_pkt *request_pkt, co
     }
 
     // TCP request
-    ag::uint8_view buf{ ldns_buffer_begin(buffer.get()), ldns_buffer_position(buffer.get()) };
+    ag::Uint8View buf{ ldns_buffer_begin(buffer.get()), ldns_buffer_position(buffer.get()) };
     tracelog_id(m_log, request_pkt, "Sending TCP request for a domain: {}", domain ? domain.get() : "(unknown)");
     connection::read_result result = m_pool.perform_request(buf, timeout);
     if (result.error.has_value()) {
@@ -134,6 +134,6 @@ ag::connection_pool::get_result ag::tcp_pool::create() {
     return { std::move(connection), std::chrono::seconds(0), std::nullopt };
 }
 
-const ag::socket_address &ag::tcp_pool::address() const {
+const ag::SocketAddress &ag::tcp_pool::address() const {
     return m_address;
 }

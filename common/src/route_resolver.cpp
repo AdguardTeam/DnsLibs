@@ -7,11 +7,11 @@
 #include <algorithm>
 #include <mutex>
 
-#include <ag_defs.h>
-#include <ag_utils.h>
-#include <ag_logger.h>
+#include "common/defs.h"
+#include "common/utils.h"
+#include "common/logger.h"
 #include <ag_net_utils.h>
-#include <ag_clock.h>
+#include "common/clock.h"
 
 #include <sys/sysctl.h>
 #include <sys/socket.h>
@@ -66,7 +66,7 @@ struct rt_msghdr2 {
 // Routing socket alignment requirements
 #define ROUNDUP(a) ((a) > 0 ? (1 + (((a) - 1) | (sizeof(uint32_t) - 1))) : sizeof(uint32_t))
 
-static ag::err_string dump_routing_table(std::vector<uint8_t> &rt, int family) {
+static ag::ErrString dump_routing_table(std::vector<uint8_t> &rt, int family) {
     static constexpr int MAX_TRIES = 10;
     int n_try;
     for (n_try = 0; n_try < MAX_TRIES; ++n_try) {
@@ -100,7 +100,7 @@ static std::string if_name(unsigned int if_index) {
 
 class apple_route_resolver : public ag::route_resolver {
 public:
-    std::optional<uint32_t> resolve(const ag::socket_address &address) override {
+    std::optional<uint32_t> resolve(const ag::SocketAddress &address) override {
         std::scoped_lock l(cache_mutex);
 
         bool ipv4 = address.is_ipv4();
@@ -108,7 +108,7 @@ public:
         std::vector<ip_route> *table_ptr = ipv4 ? &ipv4_cache : &ipv6_cache;
         std::vector<ip_route> table_storage;
 
-        if (auto now = ag::steady_clock::now(); now - created_at < std::chrono::seconds{NO_CACHE_SECONDS}) {
+        if (auto now = ag::SteadyClock::now(); now - created_at < std::chrono::seconds{NO_CACHE_SECONDS}) {
             // Don't read/write the cache during "no cache" period
             table_ptr = &table_storage;
         }
@@ -117,7 +117,7 @@ public:
             cached = false;
         }
 
-        if (log->should_log(spdlog::level::debug)) {
+        if (log.is_enabled(ag::LogLevel::LOG_LEVEL_DEBUG)) {
             tracelog(log, "Using {} table ({} entries, {}):",
                      ipv4 ? "IPv4" : "IPv6", table_ptr->size(), cached ? "cached" : "just read");
             for (auto &route : *table_ptr) {
@@ -158,7 +158,7 @@ private:
         std::array<uint8_t, 16> netmask{};
         uint32_t if_index{0};
 
-        bool matches(ag::uint8_view dest) const {
+        bool matches(ag::Uint8View dest) const {
             for (size_t i = 0; i < dest.size() && i < netmask.size() && netmask[i] != 0; ++i) {
                 if ((dest[i] & netmask[i]) != address[i]) {
                     return false;
@@ -174,16 +174,16 @@ private:
         }
     };
 
-    ag::logger log{ag::create_logger("route_resolver")};
+    ag::Logger log{"route_resolver"};
 
     std::mutex cache_mutex;
     std::vector<ip_route> ipv4_cache;
     std::vector<ip_route> ipv6_cache;
-    ag::steady_clock::time_point created_at{ag::steady_clock::now()};
+    ag::SteadyClock::time_point created_at{ag::SteadyClock::now()};
 
     std::vector<ip_route> read_routing_table(int family) {
         std::vector<uint8_t> rt;
-        ag::err_string error = dump_routing_table(rt, family);
+        ag::ErrString error = dump_routing_table(rt, family);
         if (error) {
             warnlog(log, "Failed to dump routing table: {}", *error);
             return {};
@@ -287,7 +287,7 @@ ag::route_resolver_ptr ag::route_resolver::create() {
 
 class noop_route_resolver : public ag::route_resolver {
 public:
-    std::optional<uint32_t> resolve(const ag::socket_address &) override {
+    std::optional<uint32_t> resolve(const ag::SocketAddress &) override {
         return std::nullopt;
     }
 

@@ -1,6 +1,6 @@
 #include <chrono>
 #include <gtest/gtest.h>
-#include <ag_logger.h>
+#include "common/logger.h"
 #include <ag_socket.h>
 #include <bootstrapper.h>
 
@@ -11,7 +11,7 @@ using namespace std::chrono;
 struct BootstrapperTest : ::testing::Test {
 protected:
     void SetUp() override {
-        ag::set_default_log_level(ag::TRACE);
+        ag::Logger::set_log_level(ag::LogLevel::LOG_LEVEL_TRACE);
     }
 };
 
@@ -26,7 +26,7 @@ TEST_F(BootstrapperTest, DontWaitAll) {
             .upstream_config = { &socket_factory },
     };
     ag::bootstrapper bootstrapper(bootstrapper_params);
-    ag::err_string err = bootstrapper.init();
+    ag::ErrString err = bootstrapper.init();
     ASSERT_FALSE(err.has_value()) << err.value();
 
     auto before_ts = steady_clock::now();

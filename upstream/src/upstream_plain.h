@@ -21,15 +21,15 @@ public:
      * @param address Destination socket address
      * @upstream Parent upstream
      */
-    tcp_pool(event_loop_ptr loop, const socket_address &address, plain_dns *upstream);
+    tcp_pool(event_loop_ptr loop, const SocketAddress &address, plain_dns *upstream);
 
     get_result get() override;
 
-    const socket_address &address() const;
+    const SocketAddress &address() const;
 
 private:
     /** Destination socket address */
-    socket_address m_address;
+    SocketAddress m_address;
 
     get_result create();
 };
@@ -51,10 +51,10 @@ public:
     ~plain_dns() override = default;
 
 private:
-    err_string init() override;
+    ErrString init() override;
     exchange_result exchange(ldns_pkt *request_pkt, const dns_message_info *info) override;
 
-    ag::logger m_log;
+    ag::Logger m_log;
 
     friend class tcp_pool;
 

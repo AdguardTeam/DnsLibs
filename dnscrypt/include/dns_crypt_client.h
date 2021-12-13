@@ -3,7 +3,7 @@
 #include <chrono>
 #include <string_view>
 #include <ldns/packet.h>
-#include <ag_defs.h>
+#include "common/defs.h"
 #include <dns_crypt_server_info.h>
 #include <dns_crypt_utils.h>
 #include <dns_stamp.h>
@@ -19,12 +19,12 @@ public:
     struct dial_result {
         server_info server;
         std::chrono::milliseconds round_trip_time;
-        err_string error;
+        ErrString error;
     };
     struct exchange_result {
         ldns_pkt_ptr packet;
         std::chrono::milliseconds round_trip_time;
-        err_string error;
+        ErrString error;
     };
 
     static constexpr auto DEFAULT_PROTOCOL = utils::TP_UDP;

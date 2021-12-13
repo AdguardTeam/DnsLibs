@@ -1,7 +1,7 @@
 #pragma once
 
 #include <memory>
-#include <ag_defs.h>
+#include "common/defs.h"
 #include "dnsproxy_settings.h"
 #include "dnsproxy_events.h"
 
@@ -13,7 +13,7 @@ namespace ag {
  */
 class dnsproxy {
 public:
-    static const err_string LISTENER_ERROR;
+    static const ErrString LISTENER_ERROR;
 
     dnsproxy();
     ~dnsproxy();
@@ -30,7 +30,7 @@ public:
      * @param events proxy events (see `dnsproxy_events`)
      * @return {true, opt_warning_description} or {false, error_description}
      */
-    std::pair<bool, err_string> init(dnsproxy_settings settings, dnsproxy_events events);
+    std::pair<bool, ErrString> init(dnsproxy_settings settings, dnsproxy_events events);
 
     /**
      * @brief Deinitialize the DNS proxy
@@ -53,12 +53,12 @@ public:
      *         An empty buffer in case of error. This implies that no response
      *         should be sent to the requestor over the network.
      */
-    std::vector<uint8_t> handle_message(ag::uint8_view message, const dns_message_info *info);
+    std::vector<uint8_t> handle_message(ag::Uint8View message, const dns_message_info *info);
 
     /**
      * @brief Get the addresses the proxy is listening for queries
      */
-    [[nodiscard]] std::vector<std::pair<utils::transport_protocol, socket_address>> get_listen_addresses() const;
+    [[nodiscard]] std::vector<std::pair<utils::transport_protocol, SocketAddress>> get_listen_addresses() const;
 
     /**
      * @brief Return the DNS proxy library version

@@ -3,7 +3,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <string_view>
-#include <ag_defs.h>
+#include "common/defs.h"
 #include <ag_net_utils.h>
 #include <ldns/ldns.h>
 
@@ -14,11 +14,11 @@ constexpr size_t CLIENT_MAGIC_LEN = 8;
 constexpr size_t KEY_SIZE = 32;
 constexpr uint16_t DEFAULT_PORT = 443;
 
-using key_array = uint8_array<KEY_SIZE>;
-using client_magic_array = uint8_array<CLIENT_MAGIC_LEN>;
+using key_array = Uint8Array<KEY_SIZE>;
+using client_magic_array = Uint8Array<CLIENT_MAGIC_LEN>;
 
-using ldns_pkt_ptr = std::unique_ptr<ldns_pkt, ag::ftor<&ldns_pkt_free>>;
-using ldns_buffer_ptr = std::unique_ptr<ldns_buffer, ag::ftor<&ldns_buffer_free>>;
+using ldns_pkt_ptr = std::unique_ptr<ldns_pkt, ag::Ftor<&ldns_pkt_free>>;
+using ldns_buffer_ptr = std::unique_ptr<ldns_buffer, ag::Ftor<&ldns_buffer_free>>;
 
 /**
  * Crypto construction represents the encryption algorithm

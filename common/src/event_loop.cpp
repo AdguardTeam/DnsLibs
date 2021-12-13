@@ -2,11 +2,12 @@
 #include <event2/event.h>
 #include <event2/thread.h>
 #include <array>
-#include <ag_logger.h>
 #include <ag_net_utils.h>
 #include <csignal>
+#include "common/logger.h"
+#include <cassert>
 
-static ag::logger event_logger = ag::create_logger("LIBEVENT");
+static ag::Logger event_logger{"LIBEVENT"};
 static const struct event_log_cb_setter {
     event_log_cb_setter() noexcept {
         event_set_log_callback([](int severity, const char *msg) {

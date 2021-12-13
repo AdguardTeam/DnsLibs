@@ -1,15 +1,15 @@
 #pragma once
 
 #include <openssl/ssl.h>
-#include <ag_defs.h>
-#include <ag_logger.h>
+#include "common/defs.h"
+#include "common/logger.h"
 #include <unordered_map>
 #include <list>
 #include <string>
 
 namespace ag {
 
-using ssl_session_ptr = std::unique_ptr<SSL_SESSION, ftor<&SSL_SESSION_free>>;
+using ssl_session_ptr = std::unique_ptr<SSL_SESSION, Ftor<&SSL_SESSION_free>>;
 
 /**
  * A cache of recently seen SSL_SESSIONs for the given URL.
@@ -20,7 +20,7 @@ class tls_session_cache {
 private:
     std::string url;
 
-    static ag::logger log;
+    static ag::Logger log;
     static std::mutex mtx;
     static std::unordered_map<std::string, std::list<ag::ssl_session_ptr>> caches_by_url;
 

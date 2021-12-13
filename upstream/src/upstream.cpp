@@ -9,8 +9,8 @@
 #include "upstream_doq.h"
 #include "upstream_plain.h"
 #include <ag_route_resolver.h>
-#include <ag_utils.h>
-#include <ag_logger.h>
+#include "common/utils.h"
+#include "common/logger.h"
 #include <dns_stamp.h>
 
 enum class scheme : size_t {
@@ -41,7 +41,7 @@ static_assert(std::size(SCHEME_WITH_SUFFIX) + 1 == static_cast<size_t>(scheme::C
 
 
 struct ag::upstream_factory::impl {
-    logger log = create_logger("Upstream factory");
+    ag::Logger log{"Upstream factory"};
     upstream_factory_config config;
 
     impl(upstream_factory_config cfg)
@@ -97,7 +97,7 @@ static ag::upstream_factory::create_result create_upstream_dnsquic(const ag::ups
 
 static ag::upstream_factory::create_result create_upstream_sdns(const ag::upstream_options &local_opts,
         const ag::upstream_factory_config &config) {
-    static constexpr ag::utils::make_error<ag::upstream_factory::create_result> make_error;
+    static constexpr ag::utils::MakeError<ag::upstream_factory::create_result> make_error;
     auto[stamp, stamp_err] = ag::server_stamp::from_string(local_opts.address);
     if (stamp_err) {
         return make_error(std::move(stamp_err));
@@ -108,7 +108,7 @@ static ag::upstream_factory::create_result create_upstream_sdns(const ag::upstre
         if (stamp.server_addr_str.front() == ':') {
             port = stamp.server_addr_str;
         } else {
-            ag::socket_address address = ag::utils::str_to_socket_address(stamp.server_addr_str);
+            ag::SocketAddress address = ag::utils::str_to_socket_address(stamp.server_addr_str);
             opts.resolved_server_ip = address.addr_variant();
             if (address.port()) {
                 port = AG_FMT(":{}", address.port());

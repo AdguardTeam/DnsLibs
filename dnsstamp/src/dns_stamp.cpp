@@ -8,9 +8,9 @@
 #include <utility>
 #include <vector>
 #include <event2/util.h>
-#include <ag_utils.h>
+#include "common/utils.h"
 #include <ag_net_utils.h>
-#include <ag_socket_address.h>
+#include "common/socket_address.h"
 #include <base64.h>
 #include <dns_stamp.h>
 #ifdef _WIN32
@@ -20,7 +20,7 @@
 namespace ag {
 
 using write_stamp_part_function_t = std::function<void(std::vector<uint8_t> &, const server_stamp &)>;
-using read_stamp_part_function_t = std::function<err_string(server_stamp &, size_t &, const std::vector<uint8_t> &)>;
+using read_stamp_part_function_t = std::function<ErrString(server_stamp &, size_t &, const std::vector<uint8_t> &)>;
 
 static constexpr auto PLAIN_STAMP_MIN_SIZE = 17;
 static constexpr auto DNSCRYPT_STAMP_MIN_SIZE = 66;
@@ -132,18 +132,18 @@ static std::string stamp_string(const server_stamp &stamp, stamp_proto_type stam
     for (const auto &f : fs) {
         f(bin, stamp);
     }
-    return STAMP_URL_PREFIX_WITH_SCHEME + encode_to_base64(uint8_view(bin.data(), bin.size()), true);
+    return STAMP_URL_PREFIX_WITH_SCHEME + encode_to_base64(Uint8View(bin.data(), bin.size()), true);
 }
 
-static err_string validate_server_addr_str(std::string_view addr_str) {
+static ErrString validate_server_addr_str(std::string_view addr_str) {
     auto[host, port, err] = utils::split_host_port_with_err(addr_str, true, true);
     if (err) {
-        return err_string(err);
+        return ErrString(err);
     }
     if (!host.empty()) {
-        socket_address addr(host, 0);
+        SocketAddress addr(host, 0);
         if (!addr.valid()) {
-            return err_string("Invalid server address");
+            return ErrString("Invalid server address");
         }
     }
     if (!port.empty()) {
@@ -151,15 +151,15 @@ static err_string validate_server_addr_str(std::string_view addr_str) {
         const char *ptr = portStr.data(), *end = portStr.data() + portStr.size();
         long portNumber = strtol(portStr.c_str(), (char **)&ptr, 10);
         if (ptr != end || portNumber <= 0 || portNumber > 65535) {
-            return err_string("Invalid server port");
+            return ErrString("Invalid server port");
         }
     }
     return std::nullopt;
 }
 
-static err_string read_stamp_proto_props_server_addr_str(server_stamp &stamp, size_t &pos,
-                                                         const std::vector<uint8_t> &value, stamp_proto_type proto,
-                                                         size_t min_value_size, stamp_port default_port) {
+static ErrString read_stamp_proto_props_server_addr_str(server_stamp &stamp, size_t &pos,
+                                                        const std::vector<uint8_t> &value, stamp_proto_type proto,
+                                                        size_t min_value_size, stamp_port default_port) {
     stamp.proto = proto;
     if (value.size() < min_value_size) {
         return "Stamp is too short";
@@ -172,14 +172,14 @@ static err_string read_stamp_proto_props_server_addr_str(server_stamp &stamp, si
     return validate_server_addr_str(stamp.server_addr_str);
 }
 
-static err_string read_stamp_server_pk(server_stamp &stamp, size_t &pos, const std::vector<uint8_t> &value) {
+static ErrString read_stamp_server_pk(server_stamp &stamp, size_t &pos, const std::vector<uint8_t> &value) {
     if (!read_bytes_with_size(stamp.server_pk, pos, value)) {
         return "Invalid stamp";
     }
     return std::nullopt;
 }
 
-static err_string read_stamp_hashes(server_stamp &stamp, size_t &pos, const std::vector<uint8_t> &value) {
+static ErrString read_stamp_hashes(server_stamp &stamp, size_t &pos, const std::vector<uint8_t> &value) {
     while (true) {
         uint8_t hash_size_raw = read_size(pos, value);
         uint8_t hash_size = hash_size_raw & ~0x80u;
@@ -197,22 +197,22 @@ static err_string read_stamp_hashes(server_stamp &stamp, size_t &pos, const std:
     return std::nullopt;
 }
 
-static err_string read_stamp_provider_name(server_stamp &stamp, size_t &pos, const std::vector<uint8_t> &value) {
+static ErrString read_stamp_provider_name(server_stamp &stamp, size_t &pos, const std::vector<uint8_t> &value) {
     if (!read_bytes_with_size(stamp.provider_name, pos, value)) {
         return "Invalid stamp";
     }
     return std::nullopt;
 }
 
-static err_string read_stamp_path(server_stamp &stamp, size_t &pos, const std::vector<uint8_t> &value) {
+static ErrString read_stamp_path(server_stamp &stamp, size_t &pos, const std::vector<uint8_t> &value) {
     if (!read_bytes_with_size(stamp.path, pos, value)) {
         return "Invalid stamp";
     }
     return std::nullopt;
 }
 
-static err_string check_garbage_after_end([[maybe_unused]] server_stamp &stamp, size_t pos,
-                                          const std::vector<uint8_t> &value) {
+static ErrString check_garbage_after_end([[maybe_unused]] server_stamp &stamp, size_t pos,
+                                         const std::vector<uint8_t> &value) {
     if (pos != value.size()) {
         return "Invalid stamp (garbage after end)";
     }

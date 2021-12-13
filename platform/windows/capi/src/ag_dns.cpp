@@ -2,8 +2,6 @@
 
 #include <cstring>
 
-#include <spdlog/sinks/base_sink.h>
-
 #include <dnsproxy.h>
 #include <upstream_utils.h>
 
@@ -78,7 +76,7 @@ static char *marshal_str(const std::string &str) {
     return strdup(str.c_str());
 }
 
-static ag_buffer marshal_buffer(ag::uint8_view v) {
+static ag_buffer marshal_buffer(ag::Uint8View v) {
     ag_buffer buf;
     buf.size = v.size();
     buf.data = (uint8_t *) std::malloc(buf.size);
@@ -108,9 +106,9 @@ static ag_upstream_options marshal_upstream(const ag::upstream_options &upstream
     c_upstream.id = upstream.id;
     c_upstream.timeout_ms = upstream.timeout.count();
 
-    if (const ag::ipv4_address_array *arr4 = std::get_if<ag::ipv4_address_array>(&upstream.resolved_server_ip)) {
+    if (const ag::Ipv4Address *arr4 = std::get_if<ag::Ipv4Address>(&upstream.resolved_server_ip)) {
         c_upstream.resolved_ip_address = marshal_buffer({arr4->data(), arr4->size()});
-    } else if (const ag::ipv6_address_array *arr6 = std::get_if<ag::ipv6_address_array>(&upstream.resolved_server_ip)) {
+    } else if (const ag::Ipv6Address *arr6 = std::get_if<ag::Ipv6Address>(&upstream.resolved_server_ip)) {
         c_upstream.resolved_ip_address = marshal_buffer({arr6->data(), arr6->size()});
     }
 
@@ -313,12 +311,12 @@ static ag::upstream_options marshal_upstream(const ag_upstream_options &c_upstre
     }
     upstream.id = c_upstream.id;
     upstream.timeout = std::chrono::milliseconds{c_upstream.timeout_ms};
-    if (c_upstream.resolved_ip_address.size == ag::ipv4_address_size) {
-        ag::ipv4_address_array arr4;
+    if (c_upstream.resolved_ip_address.size == ag::IPV4_ADDRESS_SIZE) {
+        ag::Ipv4Address arr4;
         std::memcpy(arr4.data(), c_upstream.resolved_ip_address.data, arr4.size());
         upstream.resolved_server_ip = arr4;
-    } else if (c_upstream.resolved_ip_address.size == ag::ipv6_address_size) {
-        ag::ipv6_address_array arr6;
+    } else if (c_upstream.resolved_ip_address.size == ag::IPV6_ADDRESS_SIZE) {
+        ag::Ipv6Address arr6;
         std::memcpy(arr6.data(), c_upstream.resolved_ip_address.data, arr6.size());
         upstream.resolved_server_ip = arr6;
     }
@@ -523,7 +521,7 @@ void ag_dnsproxy_deinit(ag_dnsproxy *handle) {
 
 ag_buffer ag_dnsproxy_handle_message(ag_dnsproxy *handle, ag_buffer message) {
     auto proxy = (ag::dnsproxy *) handle;
-    ag::uint8_vector res = proxy->handle_message({message.data, message.size}, nullptr);
+    ag::Uint8Vector res = proxy->handle_message({message.data, message.size}, nullptr);
     ag_buffer res_buf = marshal_buffer({res.data(), res.size()});
     return res_buf;
 }
@@ -535,7 +533,7 @@ ag_dnsproxy_settings *ag_dnsproxy_get_settings(ag_dnsproxy *handle) {
 }
 
 void ag_set_log_level(ag_log_level level) {
-    ag::set_default_log_level((ag::log_level) level);
+    ag::Logger::set_log_level((ag::LogLevel) level);
 }
 
 ag_dns_stamp *ag_dns_stamp_from_str(const char *stamp_str, const char **error) {
@@ -599,8 +597,8 @@ const char *ag_get_capi_version() {
 }
 
 void ag_set_log_callback(ag_log_cb callback, void *attachment) {
-    ag::set_logger_callback([callback, attachment](ag::log_level level, const char *message, size_t length) {
-        callback(attachment, (ag_log_level) level, message, (uint32_t) length);
+    ag::Logger::set_callback([callback, attachment](ag::LogLevel level, std::string_view message) {
+        callback(attachment, (ag_log_level) level, message.data(), message.size());
     });
 }
 

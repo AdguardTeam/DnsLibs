@@ -2,8 +2,8 @@
 
 #include "bootstrapper.h"
 #include <dns_stamp.h>
-#include <ag_utils.h>
-
+#include "common/utils.h"
+#include <cassert>
 
 #define log_addr(l_, lvl_, addr_, fmt_, ...) lvl_##log(l_, "[{}] " fmt_, addr_, ##__VA_ARGS__)
 
@@ -20,7 +20,7 @@ static constexpr int64_t TEMPORARY_DISABLE_INTERVAL_MS = 7000;
 //
 // Note: in case of success MUST always return vector of addresses in address field of result
 ag::bootstrapper::resolve_result ag::bootstrapper::resolve() {
-    if (socket_address addr(m_server_name, m_server_port); addr.valid()) {
+    if (SocketAddress addr(m_server_name, m_server_port); addr.valid()) {
         return { { addr }, m_server_name, milliseconds(0), std::nullopt };
     }
 
@@ -28,16 +28,16 @@ ag::bootstrapper::resolve_result ag::bootstrapper::resolve() {
         return { {}, m_server_name, milliseconds(0), "Empty bootstrap list" };
     }
 
-    ag::hash_set<ag::socket_address> addrs;
-    utils::timer whole_resolve_timer;
+    ag::HashSet<ag::SocketAddress> addrs;
+    utils::Timer whole_resolve_timer;
     milliseconds timeout = m_timeout;
-    err_string error;
+    ErrString error;
 
     for (size_t tried = 0, failed = 0, curr = 0;
             tried < m_resolvers.size();
             ++tried, curr = tried - failed) {
         const resolver_ptr &resolver = m_resolvers[curr];
-        utils::timer single_resolve_timer;
+        utils::Timer single_resolve_timer;
         milliseconds try_timeout = std::max(timeout / 2, resolver::MIN_TIMEOUT);
         resolver::result result = resolver->resolve(m_server_name, m_server_port, try_timeout);
         if (result.error.has_value()) {
@@ -59,19 +59,19 @@ ag::bootstrapper::resolve_result ag::bootstrapper::resolve() {
         }
     }
 
-    if (m_log->should_log((spdlog::level::level_enum)DEBUG)) {
-        for (const socket_address &a : addrs) {
+    if (m_log.is_enabled(ag::LogLevel::LOG_LEVEL_DEBUG)) {
+        for (const SocketAddress &a : addrs) {
             log_addr(m_log, dbg, m_server_name, "Resolved address: {}", a.str());
         }
     }
 
     auto elapsed = whole_resolve_timer.elapsed<milliseconds>();
 
-    std::vector<socket_address> addresses(std::move_iterator(addrs.begin()), std::move_iterator(addrs.end()));
+    std::vector<SocketAddress> addresses(std::move_iterator(addrs.begin()), std::move_iterator(addrs.end()));
     return { std::move(addresses), m_server_name, elapsed, std::move(error) };
 }
 
-ag::err_string ag::bootstrapper::temporary_disabler_check() {
+ag::ErrString ag::bootstrapper::temporary_disabler_check() {
     using namespace std::chrono;
     if (m_resolve_fail_times_ms.first) {
         if (int64_t tries_timeout_ms = m_resolve_fail_times_ms.first + RESOLVE_TRYING_INTERVAL_MS;
@@ -89,7 +89,7 @@ ag::err_string ag::bootstrapper::temporary_disabler_check() {
     return std::nullopt;
 }
 
-void ag::bootstrapper::temporary_disabler_update(const err_string &error) {
+void ag::bootstrapper::temporary_disabler_update(const ErrString &error) {
     using namespace std::chrono;
     if (error) {
         auto now_ms = duration_cast<milliseconds>(steady_clock::now().time_since_epoch()).count();
@@ -118,13 +118,13 @@ ag::bootstrapper::resolve_result ag::bootstrapper::get() {
     return result;
 }
 
-void ag::bootstrapper::remove_resolved(const socket_address &addr) {
+void ag::bootstrapper::remove_resolved(const SocketAddress &addr) {
     std::scoped_lock l(m_resolved_cache_mutex);
     m_resolved_cache.erase(std::remove(m_resolved_cache.begin(), m_resolved_cache.end(), addr),
         m_resolved_cache.end());
 }
 
-static std::vector<ag::resolver_ptr> create_resolvers(const ag::logger &log, const ag::bootstrapper::params &p) {
+static std::vector<ag::resolver_ptr> create_resolvers(const ag::Logger &log, const ag::bootstrapper::params &p) {
     std::vector<ag::resolver_ptr> resolvers;
     resolvers.reserve(p.bootstrap.size());
 
@@ -132,12 +132,12 @@ static std::vector<ag::resolver_ptr> create_resolvers(const ag::logger &log, con
     opts.outbound_interface = p.outbound_interface;
     for (const std::string &server : p.bootstrap) {
         if (!p.upstream_config.ipv6_available
-                && ag::socket_address(ag::utils::split_host_port(server).first, 0).is_ipv6()) {
+                && ag::SocketAddress(ag::utils::split_host_port(server).first, 0).is_ipv6()) {
             continue;
         }
         opts.address = server;
         ag::resolver_ptr resolver = std::make_unique<ag::resolver>(opts, p.upstream_config);
-        if (ag::err_string err = resolver->init(); !err.has_value()) {
+        if (ag::ErrString err = resolver->init(); !err.has_value()) {
             resolvers.emplace_back(std::move(resolver));
         } else {
             log_addr(log, warn, p.address_string, "Failed to create resolver '{}': {}", server, err.value());
@@ -152,7 +152,7 @@ static std::vector<ag::resolver_ptr> create_resolvers(const ag::logger &log, con
 }
 
 ag::bootstrapper::bootstrapper(const params &p)
-        : m_log(create_logger(__func__))
+        : m_log(__func__)
         , m_timeout(p.timeout)
         , m_resolvers(create_resolvers(m_log, p))
 {
@@ -164,8 +164,8 @@ ag::bootstrapper::bootstrapper(const params &p)
     m_server_name = host;
 }
 
-ag::err_string ag::bootstrapper::init() {
-    if (m_resolvers.empty() && !socket_address(m_server_name, m_server_port).valid()) {
+ag::ErrString ag::bootstrapper::init() {
+    if (m_resolvers.empty() && !SocketAddress(m_server_name, m_server_port).valid()) {
         return "Failed to create any resolver";
     }
 

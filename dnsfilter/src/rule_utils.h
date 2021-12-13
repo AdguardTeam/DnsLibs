@@ -6,7 +6,7 @@
 #include <optional>
 #include <vector>
 #include <variant>
-#include <ag_logger.h>
+#include "common/logger.h"
 #include <dnsfilter.h>
 
 
@@ -40,7 +40,7 @@ namespace rule_utils {
 
     // https://tools.ietf.org/html/draft-ietf-dnsop-svcb-httpssvc-03#section-2.2
     struct dnsrewrite_svcb_value {
-        using ldns_rdf_ptr = std::unique_ptr<ldns_rdf, ag::ftor<&ldns_rdf_deep_free>>;
+        using ldns_rdf_ptr = std::unique_ptr<ldns_rdf, ag::Ftor<&ldns_rdf_deep_free>>;
 
         uint16_t priority = 0;
         std::string domain;
@@ -130,7 +130,7 @@ namespace rule_utils {
      * @return     A rule if parsed successfully,
      *             nullopt otherwise
      */
-    std::optional<rule> parse(std::string_view str, ag::logger *log = nullptr);
+    std::optional<rule> parse(std::string_view str, ag::Logger *log = nullptr);
 
     /**
      * Extract a regular expression text from rule
@@ -172,7 +172,7 @@ namespace rule_utils {
      * @return true if successful
      */
     bool parse_dnsrewrite_modifier(rule_utils::rule &rule, std::string_view params_str,
-            const match_info &match_info, ag::logger *log);
+            const match_info &match_info, ag::Logger *log);
 
     /**
      * Check if the string is a domain name

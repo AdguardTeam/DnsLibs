@@ -3,7 +3,7 @@
 
 #include <vector>
 #include <optional>
-#include <ag_defs.h>
+#include "common/defs.h"
 
 
 namespace ag {
@@ -18,7 +18,7 @@ public:
      * @param data the data chunk
      * @return a part of the chunk remaining after the DNS packet
      */
-    uint8_view store(uint8_view data);
+    Uint8View store(Uint8View data);
 
     /**
      * Try to extract a packet from the buffer

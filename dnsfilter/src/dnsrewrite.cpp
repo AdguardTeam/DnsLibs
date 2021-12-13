@@ -1,6 +1,6 @@
 #include <dnsfilter.h>
 #include <ag_net_utils.h>
-#include <ag_utils.h>
+#include "common/utils.h"
 #include "rule_utils.h"
 #include <algorithm>
 #include <cassert>
@@ -14,7 +14,7 @@ struct applicable_dnsrewrite_rules {
     std::vector<const dnsfilter::rule *> exclusions;
 };
 
-static std::optional<ldns_pkt_rcode> parse_rcode(const std::string &part, ag::logger *log) {
+static std::optional<ldns_pkt_rcode> parse_rcode(const std::string &part, ag::Logger *log) {
     const ldns_lookup_table *entry = ldns_lookup_by_name(ldns_rcodes, part.c_str());
     if (entry == nullptr) {
         return std::nullopt;
@@ -29,7 +29,7 @@ static std::optional<ldns_pkt_rcode> parse_rcode(const std::string &part, ag::lo
     return (ldns_pkt_rcode)entry->id;
 }
 
-static std::optional<ldns_rr_type> parse_rrtype(std::string_view part, ag::logger *log) {
+static std::optional<ldns_rr_type> parse_rrtype(std::string_view part, ag::Logger *log) {
     static constexpr ldns_rr_type SUPPORTED_RR_TYPES[] = {
             LDNS_RR_TYPE_PTR, LDNS_RR_TYPE_A, LDNS_RR_TYPE_AAAA, LDNS_RR_TYPE_CNAME,
             LDNS_RR_TYPE_MX, LDNS_RR_TYPE_TXT, LDNS_RR_TYPE_HTTPS, LDNS_RR_TYPE_SVCB,
@@ -44,7 +44,7 @@ static std::optional<ldns_rr_type> parse_rrtype(std::string_view part, ag::logge
     return type;
 }
 
-static std::optional<rule_utils::dnsrewrite_mx_value> parse_mx(std::string_view str, ag::logger *log) {
+static std::optional<rule_utils::dnsrewrite_mx_value> parse_mx(std::string_view str, ag::Logger *log) {
     std::array mx_parts = ag::utils::split2_by(str, ' ');
 
     std::string pref_str{ mx_parts[0] };
@@ -63,7 +63,7 @@ static std::optional<rule_utils::dnsrewrite_mx_value> parse_mx(std::string_view 
     return rule_utils::dnsrewrite_mx_value{ (uint16_t)pref, std::string(mx_parts[1]) };
 }
 
-static std::optional<rule_utils::dnsrewrite_svcb_value> parse_svcb(std::string_view str, ag::logger *log) {
+static std::optional<rule_utils::dnsrewrite_svcb_value> parse_svcb(std::string_view str, ag::Logger *log) {
     std::array parts = ag::utils::split2_by(str, ' ');
 
     std::string priority_str{ parts[0] };
@@ -97,7 +97,7 @@ static std::optional<rule_utils::dnsrewrite_svcb_value> parse_svcb(std::string_v
 }
 
 static std::pair<bool, std::optional<rule_utils::dnsrewrite_info>> parse_parameters(
-        std::string_view params, ag::logger *log) {
+        std::string_view params, ag::Logger *log) {
     enum part_idx {
         DRPI_RCODE,
         DRPI_RRTYPE,
@@ -181,7 +181,7 @@ static std::pair<bool, std::optional<rule_utils::dnsrewrite_info>> parse_paramet
 }
 
 static bool parse_value_by_rrtype(rule_utils::dnsrewrite_info &info,
-        const rule_utils::match_info &match_info, ag::logger *log) {
+        const rule_utils::match_info &match_info, ag::Logger *log) {
     switch (info.rrtype.value()) {
     case LDNS_RR_TYPE_PTR: {
         if (std::string_view domain = info.value;
@@ -217,7 +217,7 @@ static bool parse_value_by_rrtype(rule_utils::dnsrewrite_info &info,
         break;
     }
     case LDNS_RR_TYPE_A: {
-        if (ag::socket_address addr = ag::utils::str_to_socket_address(info.value);
+        if (ag::SocketAddress addr = ag::utils::str_to_socket_address(info.value);
                 !addr.valid() || addr.is_ipv6() || addr.port() != 0) {
             ru_dbglog(log, "Invalid IP address in value");
             return false;
@@ -225,7 +225,7 @@ static bool parse_value_by_rrtype(rule_utils::dnsrewrite_info &info,
         break;
     }
     case LDNS_RR_TYPE_AAAA: {
-        if (ag::socket_address addr = ag::utils::str_to_socket_address(info.value);
+        if (ag::SocketAddress addr = ag::utils::str_to_socket_address(info.value);
                 !addr.valid() || !addr.is_ipv6() || addr.port() != 0) {
             ru_dbglog(log, "Invalid IP address in value");
             return false;
@@ -264,7 +264,7 @@ static bool parse_value_by_rrtype(rule_utils::dnsrewrite_info &info,
 }
 
 bool rule_utils::parse_dnsrewrite_modifier(rule &rule, std::string_view params_str,
-        const match_info &match_info, ag::logger *log) {
+        const match_info &match_info, ag::Logger *log) {
     auto [success, info] = parse_parameters(params_str, log);
     if (!success) {
         return false;
@@ -285,7 +285,7 @@ bool rule_utils::parse_dnsrewrite_modifier(rule &rule, std::string_view params_s
     } else if (std::string_view value = info->value;
             is_domain_name(value) || is_domain_name(value.substr(0, value.length() - 1))) {
         info->rrtype = LDNS_RR_TYPE_CNAME;
-    } else if (ag::socket_address addr = ag::utils::str_to_socket_address(info->value);
+    } else if (ag::SocketAddress addr = ag::utils::str_to_socket_address(info->value);
             addr.is_ipv6()) {
         info->rrtype = LDNS_RR_TYPE_AAAA;
     } else if (addr.valid()) {

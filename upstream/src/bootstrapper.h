@@ -3,8 +3,8 @@
 #include <string>
 #include <vector>
 #include <memory>
-#include <ag_logger.h>
-#include <ag_socket_address.h>
+#include "common/logger.h"
+#include "common/socket_address.h"
 #include <upstream.h>
 #include "resolver.h"
 
@@ -21,7 +21,7 @@ public:
         const std::vector<std::string> &bootstrap; // list of the resolving servers
         std::chrono::milliseconds timeout; // resolve timeout
         const upstream_factory_config &upstream_config; // configuration of the upstream factory which creates resolving upstream
-        if_id_variant outbound_interface; // interface to bind sockets to
+        IfIdVariant outbound_interface; // interface to bind sockets to
     };
 
     explicit bootstrapper(const params &p);
@@ -30,13 +30,13 @@ public:
      * Initialize bootstrapper
      * @return non-nullopt if something went wrong
      */
-    err_string init();
+    ErrString init();
 
     struct resolve_result {
-        std::vector<socket_address> addresses; // not empty resolved addresses list in case of success
+        std::vector<SocketAddress> addresses; // not empty resolved addresses list in case of success
         std::string server_name; // resolved host name
         std::chrono::microseconds time_elapsed; // time took to resolve
-        err_string error; // non-nullopt if something went wrong
+        ErrString error; // non-nullopt if something went wrong
     };
 
     /**
@@ -48,7 +48,7 @@ public:
      * Remove resolved address from the cache
      * @param addr address to remove
      */
-    void remove_resolved(const socket_address &addr);
+    void remove_resolved(const SocketAddress &addr);
 
     /**
      * Get address to resolve from bootstrapper
@@ -62,17 +62,17 @@ private:
     /**
      * Check if bootstrapper should be temporary disabled
      */
-    err_string temporary_disabler_check();
+    ErrString temporary_disabler_check();
     /**
      * Update information for temporary disabling bootstrapper
      */
-    void temporary_disabler_update(const err_string &error);
+    void temporary_disabler_update(const ErrString &error);
 
 private:
     resolve_result resolve();
 
     /** Logger */
-    logger m_log;
+    Logger m_log;
     /** Server name to resolve */
     std::string m_server_name;
     /** Server port */
@@ -80,7 +80,7 @@ private:
     /** Resolve timeout */
     std::chrono::milliseconds m_timeout;
     /** Resolved addresses cache */
-    std::vector<socket_address> m_resolved_cache;
+    std::vector<SocketAddress> m_resolved_cache;
     /** Times of first and last remove fails */
     std::pair<int64_t, int64_t> m_resolve_fail_times_ms;
     /** Resolved addresses cache mutex */

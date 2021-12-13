@@ -1,7 +1,7 @@
 #include <ldns/error.h>
 #include <ldns/net.h>
 #include "dns_crypt_ldns.h"
-#include <ag_utils.h>
+#include "common/utils.h"
 #include <ag_net_utils.h>
 #include <ag_net_consts.h>
 #include <ag_blocking_socket.h>
@@ -25,7 +25,7 @@ ag::dnscrypt::ldns_pkt_ptr ag::dnscrypt::create_request_ldns_pkt(ldns_rr_type rr
 }
 
 ag::dnscrypt::create_ldns_buffer_result ag::dnscrypt::create_ldns_buffer(const ldns_pkt &request_pkt) {
-    static constexpr utils::make_error<create_ldns_buffer_result> make_error;
+    static constexpr utils::MakeError<create_ldns_buffer_result> make_error;
     ldns_buffer_ptr result(ldns_buffer_new(REQUEST_BUFFER_INITIAL_CAPACITY));
     ldns_status status = ldns_pkt2buffer_wire(result.get(), &request_pkt);
     if (status != LDNS_STATUS_OK) {
@@ -35,7 +35,7 @@ ag::dnscrypt::create_ldns_buffer_result ag::dnscrypt::create_ldns_buffer(const l
 }
 
 ag::dnscrypt::create_ldns_pkt_result ag::dnscrypt::create_ldns_pkt(uint8_t *data, size_t size) {
-    static constexpr utils::make_error<create_ldns_pkt_result> make_error;
+    static constexpr utils::MakeError<create_ldns_pkt_result> make_error;
     ldns_pkt *pkt = nullptr;
     ldns_status status = ldns_wire2pkt(&pkt, data, size);
     ldns_pkt_ptr result(pkt);
@@ -46,11 +46,11 @@ ag::dnscrypt::create_ldns_pkt_result ag::dnscrypt::create_ldns_pkt(uint8_t *data
 }
 
 ag::dnscrypt::dns_exchange_unparsed_result ag::dnscrypt::dns_exchange(std::chrono::milliseconds timeout,
-        const socket_address &socket_address, ldns_buffer &buffer,
+        const SocketAddress &socket_address, ldns_buffer &buffer,
         const socket_factory *socket_factory, socket_factory::socket_parameters socket_parameters) {
-    static constexpr utils::make_error<dns_exchange_unparsed_result> make_error;
+    static constexpr utils::MakeError<dns_exchange_unparsed_result> make_error;
 
-    utils::timer timer;
+    utils::Timer timer;
 
     blocking_socket socket(socket_factory->make_socket(std::move(socket_parameters)));
     if (!socket) {
@@ -80,9 +80,9 @@ ag::dnscrypt::dns_exchange_unparsed_result ag::dnscrypt::dns_exchange(std::chron
 }
 
 ag::dnscrypt::dns_exchange_result ag::dnscrypt::dns_exchange_from_ldns_buffer(std::chrono::milliseconds timeout,
-        const socket_address &socket_address, ldns_buffer &buffer,
+        const SocketAddress &socket_address, ldns_buffer &buffer,
         const socket_factory *socket_factory, socket_factory::socket_parameters socket_parameters) {
-    static constexpr utils::make_error<dns_exchange_result> make_error;
+    static constexpr utils::MakeError<dns_exchange_result> make_error;
     auto[reply, rtt, allocated_err] =
             dns_exchange(timeout, socket_address, buffer, socket_factory, std::move(socket_parameters));
     if (allocated_err) {
@@ -99,9 +99,9 @@ ag::dnscrypt::dns_exchange_result ag::dnscrypt::dns_exchange_from_ldns_buffer(st
 }
 
 ag::dnscrypt::dns_exchange_result ag::dnscrypt::dns_exchange_from_ldns_pkt(std::chrono::milliseconds timeout,
-        const socket_address &socket_address, const ldns_pkt &request_pkt,
+        const SocketAddress &socket_address, const ldns_pkt &request_pkt,
         const socket_factory *socket_factory, socket_factory::socket_parameters socket_parameters) {
-    static constexpr utils::make_error<dns_exchange_result> make_error;
+    static constexpr utils::MakeError<dns_exchange_result> make_error;
     auto[buffer, err] = create_ldns_buffer(request_pkt);
     if (err) {
         return make_error(std::move(err));

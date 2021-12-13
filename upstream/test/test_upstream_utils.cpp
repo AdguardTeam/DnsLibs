@@ -12,7 +12,7 @@ static constexpr auto timeout = 500ms;
 struct upstream_utils_test : ::testing::Test {
 protected:
     void SetUp() override {
-        ag::set_default_log_level(ag::TRACE);
+        ag::Logger::set_log_level(ag::LogLevel::LOG_LEVEL_TRACE);
     }
 };
 

@@ -5,7 +5,7 @@
 #include <string>
 #include <utility>
 #include <functional>
-#include <ag_defs.h>
+#include "common/defs.h"
 #include <dns_crypt_utils.h>
 #include <ag_socket.h>
 
@@ -31,18 +31,18 @@ struct server_info {
     struct fetch_result {
         cert_info certificate;
         std::chrono::milliseconds round_trip_time;
-        err_string error;
+        ErrString error;
     };
 
     struct encrypt_result {
-        uint8_vector ciphertext;
-        uint8_vector client_nonce;
-        err_string error;
+        Uint8Vector ciphertext;
+        Uint8Vector client_nonce;
+        ErrString error;
     };
 
     struct decrypt_result {
-        uint8_vector message;
-        err_string error;
+        Uint8Vector message;
+        ErrString error;
     };
 
     /**
@@ -61,7 +61,7 @@ struct server_info {
      * @param packet Packet to encrypt
      * @return Encryption result
      */
-    encrypt_result encrypt(utils::transport_protocol protocol, uint8_view packet) const;
+    encrypt_result encrypt(utils::transport_protocol protocol, Uint8View packet) const;
 
     /**
      * @brief Decrypt packet using server info
@@ -69,7 +69,7 @@ struct server_info {
      * @param packet Packet to decrypt
      * @return Decryption result
      */
-    decrypt_result decrypt(uint8_view encrypted, uint8_view nonce) const;
+    decrypt_result decrypt(Uint8View encrypted, Uint8View nonce) const;
 
     template<typename T>
     void set_server_address(T&& value) { m_server_address = std::forward<T>(value); }
@@ -81,14 +81,14 @@ struct server_info {
 private:
     struct txt_to_cert_info_result {
         cert_info certificate;
-        err_string error;
+        ErrString error;
     };
 
     txt_to_cert_info_result txt_to_cert_info(const ldns_rr &answer_rr) const;
 
     key_array m_secret_key; /** Client secret key */
     key_array m_public_key; /** Client public key */
-    uint8_vector m_server_public_key; /** Server public key */
+    Uint8Vector m_server_public_key; /** Server public key */
     std::string m_server_address; /** Server IP address */
     std::string m_provider_name; /** Provider name */
     cert_info m_server_cert; /** Certificate info (obtained with the first unencrypted DNS request) */

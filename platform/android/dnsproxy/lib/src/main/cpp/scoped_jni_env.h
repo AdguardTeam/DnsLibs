@@ -2,6 +2,7 @@
 
 #include <jni.h>
 #include <pthread.h>
+#include <cassert>
 
 namespace ag {
 

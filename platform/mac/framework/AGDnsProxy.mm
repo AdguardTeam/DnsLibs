@@ -3,10 +3,11 @@
 #include <arpa/inet.h>
 #include <resolv.h>
 #include <cassert>
+#include <optional>
 
 #import "AGDnsProxy.h"
 
-#include <ag_logger.h>
+#include "common/logger.h"
 #include <dnsproxy.h>
 #include <upstream_utils.h>
 
@@ -26,7 +27,7 @@ static constexpr NSString *REPLACEMENT_STRING = @"<out of memory>";
  *         never nil
  */
 static NSString *convert_string(const std::string &str) {
-    ag::allocated_ptr<char> cesu8{ag::utf8_to_cesu8(str.c_str())};
+    ag::AllocatedPtr<char> cesu8{ag::utf8_to_cesu8(str.c_str())};
     if (cesu8) {
         if (auto *ns_str = [NSString stringWithUTF8String: cesu8.get()]) {
             return ns_str;
@@ -40,13 +41,13 @@ NSErrorDomain const AGDnsProxyErrorDomain = @"com.adguard.dnsproxy";
 @implementation AGLogger
 + (void) setLevel: (AGLogLevel) level
 {
-    ag::set_default_log_level((ag::log_level)level);
+    ag::Logger::set_log_level((ag::LogLevel)level);
 }
 
 + (void) setCallback: (logCallback) func
 {
-    ag::set_logger_callback([func](ag::log_level level, const char *message, size_t length) mutable {
-        func((AGLogLevel) level, message, (int) length);
+    ag::Logger::set_callback([func](ag::LogLevel level, std::string_view message) mutable {
+        func((AGLogLevel) level, message.data(), message.size());
     });
 }
 @end
@@ -850,7 +851,7 @@ static ag::server_stamp convert_stamp(AGDnsStamp *stamp) {
 
 @implementation AGDnsProxy {
     ag::dnsproxy proxy;
-    ag::logger log;
+    std::optional<ag::Logger> log;
     AGDnsProxyEvents *events;
     dispatch_queue_t queue;
     BOOL initialized;
@@ -888,9 +889,9 @@ static std::string getTrustCreationErrorStr(OSStatus status) {
 }
 
 template <typename T>
-using AGUniqueCFRef = std::unique_ptr<std::remove_pointer_t<T>, ag::ftor<&CFRelease>>;
+using AGUniqueCFRef = std::unique_ptr<std::remove_pointer_t<T>, ag::Ftor<&CFRelease>>;
 
-+ (std::optional<std::string>) verifyCertificate: (ag::certificate_verification_event *) event log: (ag::logger &) log
++ (std::optional<std::string>) verifyCertificate: (ag::certificate_verification_event *) event log: (ag::Logger &) log
 {
     tracelog(log, "[Verification] App callback");
 
@@ -971,17 +972,17 @@ static ag::upstream_options convert_upstream(AGDnsUpstream *upstream) {
             bootstrap.emplace_back([server UTF8String]);
         }
     }
-    ag::ip_address_variant addr;
+    ag::IpAddress addr;
     if (upstream.serverIp != nil && [upstream.serverIp length] == 4) {
-        addr.emplace<ag::uint8_array<4>>();
-        std::memcpy(std::get<ag::uint8_array<4>>(addr).data(),
+        addr.emplace<ag::Uint8Array<4>>();
+        std::memcpy(std::get<ag::Uint8Array<4>>(addr).data(),
                     [upstream.serverIp bytes], [upstream.serverIp length]);
     } else if (upstream.serverIp != nil && [upstream.serverIp length] == 16) {
-        addr.emplace<ag::uint8_array<16>>();
-        std::memcpy(std::get<ag::uint8_array<16>>(addr).data(),
+        addr.emplace<ag::Uint8Array<16>>();
+        std::memcpy(std::get<ag::Uint8Array<16>>(addr).data(),
                     [upstream.serverIp bytes], [upstream.serverIp length]);
     }
-    ag::if_id_variant iface;
+    ag::IfIdVariant iface;
     if (upstream.outboundInterfaceName != nil) {
         iface.emplace<std::string>(upstream.outboundInterfaceName.UTF8String);
     }
@@ -1155,9 +1156,9 @@ static int bindFd(NSString *helperPath, NSString *address, NSNumber *port, AGLis
     }
     self->initialized = NO;
 
-    self->log = ag::create_logger("AGDnsProxy");
+    self->log = ag::Logger{"AGDnsProxy"};
 
-    infolog(self->log, "Initializing dns proxy...");
+    infolog(*self->log, "Initializing dns proxy...");
 
     ag::dnsproxy_settings settings = ag::dnsproxy_settings::get_default();
     settings.upstreams = convert_upstreams(config.upstreams);
@@ -1177,7 +1178,7 @@ static int bindFd(NSString *helperPath, NSString *address, NSNumber *port, AGLis
     if (config.filters != nil) {
         settings.filter_params.filters.reserve([config.filters count]);
         for (AGDnsFilterParams *fp in config.filters) {
-            dbglog(self->log, "Filter id={} {}={}", fp.id, fp.inMemory ? "content" : "path", fp.data.UTF8String);
+            dbglog(*self->log, "Filter id={} {}={}", fp.id, fp.inMemory ? "content" : "path", fp.data.UTF8String);
 
             settings.filter_params.filters.emplace_back(
                 ag::dnsfilter::filter_params{(int32_t) fp.id, fp.data.UTF8String, (bool) fp.inMemory});
@@ -1211,16 +1212,16 @@ static int bindFd(NSString *helperPath, NSString *address, NSNumber *port, AGLis
         [obj] (ag::certificate_verification_event event) -> std::optional<std::string> {
             @autoreleasepool {
                 AGDnsProxy *sself = (__bridge AGDnsProxy *)obj;
-                return [AGDnsProxy verifyCertificate: &event log: sself->log];
+                return [AGDnsProxy verifyCertificate: &event log: *sself->log];
             }
         };
 
     if (config.dns64Settings != nil) {
         NSArray<AGDnsUpstream *> *dns64_upstreams = config.dns64Settings.upstreams;
         if (dns64_upstreams == nil) {
-            dbglog(self->log, "DNS64 upstreams list is nil");
+            dbglog(*self->log, "DNS64 upstreams list is nil");
         } else if ([dns64_upstreams count] == 0) {
-            dbglog(self->log, "DNS64 upstreams list is empty");
+            dbglog(*self->log, "DNS64 upstreams list is empty");
         } else {
             settings.dns64 = ag::dns64_settings{
                     .upstreams = convert_upstreams(dns64_upstreams),
@@ -1280,7 +1281,7 @@ static int bindFd(NSString *helperPath, NSString *address, NSNumber *port, AGLis
     auto [ret, err_or_warn] = self->proxy.init(std::move(settings), std::move(native_events));
     if (!ret) {
         auto str = AG_FMT("Failed to initialize the DNS proxy: {}", *err_or_warn);
-        errlog(self->log, "{}", str);
+        errlog(*self->log, "{}", str);
         if (error) {
             if (err_or_warn == ag::dnsproxy::LISTENER_ERROR) {
                 *error = [NSError errorWithDomain: AGDnsProxyErrorDomain
@@ -1302,7 +1303,7 @@ static int bindFd(NSString *helperPath, NSString *address, NSNumber *port, AGLis
     }
     self->initialized = YES;
 
-    infolog(self->log, "Dns proxy initialized");
+    infolog(*self->log, "Dns proxy initialized");
 
     return self;
 }
@@ -1320,14 +1321,14 @@ static int bindFd(NSString *helperPath, NSString *address, NSNumber *port, AGLis
     NSInteger header_length = ip_header_length + sizeof(*udp_header);
 
     char srcv4_str[INET_ADDRSTRLEN], dstv4_str[INET_ADDRSTRLEN];
-    dbglog(self->log, "{}:{} -> {}:{}",
+    dbglog(*self->log, "{}:{} -> {}:{}",
            inet_ntop(AF_INET, &ip_header->ip_src, srcv4_str, sizeof(srcv4_str)), ntohs(udp_header->uh_sport),
            inet_ntop(AF_INET, &ip_header->ip_dst, dstv4_str, sizeof(dstv4_str)), ntohs(udp_header->uh_dport));
 
-    ag::uint8_view payload = {(uint8_t *) packet.bytes + header_length, packet.length - header_length};
+    ag::Uint8View payload = {(uint8_t *) packet.bytes + header_length, packet.length - header_length};
     ag::dns_message_info info{
             .proto = ag::utils::TP_UDP,
-            .peername = ag::socket_address{{(uint8_t *) &ip_header->ip_src, sizeof(ip_header->ip_src)},
+            .peername = ag::SocketAddress{{(uint8_t *) &ip_header->ip_src, sizeof(ip_header->ip_src)},
                                            ntohs(udp_header->uh_sport)}};
     std::vector<uint8_t> response = self->proxy.handle_message(payload, &info);
     if (response.empty()) {
@@ -1349,14 +1350,14 @@ static int bindFd(NSString *helperPath, NSString *address, NSNumber *port, AGLis
     NSInteger header_length = ip_header_length + sizeof(*udp_header);
 
     char srcv6_str[INET6_ADDRSTRLEN], dstv6_str[INET6_ADDRSTRLEN];
-    dbglog(self->log, "[{}]:{} -> [{}]:{}",
+    dbglog(*self->log, "[{}]:{} -> [{}]:{}",
            inet_ntop(AF_INET6, &ip_header->ip6_src, srcv6_str, sizeof(srcv6_str)), ntohs(udp_header->uh_sport),
            inet_ntop(AF_INET6, &ip_header->ip6_dst, dstv6_str, sizeof(dstv6_str)), ntohs(udp_header->uh_dport));
 
-    ag::uint8_view payload = {(uint8_t *) packet.bytes + header_length, packet.length - header_length};
+    ag::Uint8View payload = {(uint8_t *) packet.bytes + header_length, packet.length - header_length};
     ag::dns_message_info info{
             .proto = ag::utils::TP_UDP,
-            .peername = ag::socket_address{{(uint8_t *) &ip_header->ip6_src, sizeof(ip_header->ip6_src)},
+            .peername = ag::SocketAddress{{(uint8_t *) &ip_header->ip6_src, sizeof(ip_header->ip6_src)},
                                            ntohs(udp_header->uh_sport)}};
     std::vector<uint8_t> response = self->proxy.handle_message(payload, &info);
     if (response.empty()) {
@@ -1373,7 +1374,7 @@ static int bindFd(NSString *helperPath, NSString *address, NSNumber *port, AGLis
     } else if (ip_header->ip_v == 6) {
         return [self handleIPv6Packet:packet];
     }
-    dbglog(self->log, "Wrong IP version: %u", ip_header->ip_v);
+    dbglog(*self->log, "Wrong IP version: %u", ip_header->ip_v);
     return nil;
 }
 
@@ -1488,7 +1489,7 @@ static int bindFd(NSString *helperPath, NSString *address, NSNumber *port, AGLis
 
 @implementation AGDnsUtils
 
-static auto dnsUtilsLogger = ag::create_logger("AGDnsUtils");
+static auto dnsUtilsLogger = ag::Logger{"AGDnsUtils"};
 
 static std::optional<std::string> verifyCertificate(ag::certificate_verification_event event) {
     return [AGDnsProxy verifyCertificate: &event log: dnsUtilsLogger];

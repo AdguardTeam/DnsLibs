@@ -15,7 +15,7 @@ using namespace ag;
 using namespace std::chrono;
 
 
-static std::optional<std::string> get_address_from_stamp(const logger &log, std::string_view url) {
+static std::optional<std::string> get_address_from_stamp(const Logger &log, std::string_view url) {
     auto [stamp, error] = server_stamp::from_string(url);
     if (error.has_value()) {
         warnlog(log, "Failed to create stamp from url ({}): {}", url, error.value());
@@ -68,11 +68,11 @@ static bool check_ip_address(std::string_view address) {
         }
     }
 
-    socket_address numeric_ip = ag::utils::str_to_socket_address(address);
+    SocketAddress numeric_ip = ag::utils::str_to_socket_address(address);
     return numeric_ip.valid();
 }
 
-static std::string get_server_address(const logger &log, std::string_view address) {
+static std::string get_server_address(const Logger &log, std::string_view address) {
     std::string result(address);
     if (ag::utils::starts_with(result, STAMP_URL_PREFIX_WITH_SCHEME)) {
         std::optional<std::string> decoded = get_address_from_stamp(log, result);
@@ -95,15 +95,14 @@ static std::string get_server_address(const logger &log, std::string_view addres
 
 
 resolver::resolver(ag::upstream_options options, const upstream_factory_config &upstream_config)
-    : log(create_logger(AG_FMT("Resolver {}", options.address)))
+    : log(AG_FMT("Resolver {}", options.address))
     , upstream_factory(upstream_config)
     , upstream_options(std::move(options))
 {
     upstream_options.address = get_server_address(this->log, upstream_options.address);
-    log = create_logger(AG_FMT("Resolver {}", upstream_options.address));
 }
 
-err_string resolver::init() {
+ErrString resolver::init() {
     if (upstream_options.address.empty()) {
         constexpr std::string_view err = "Failed to get server address";
         log_ip(log, err, upstream_options.address, "{}", err);
@@ -121,8 +120,8 @@ static ldns_pkt_ptr create_req(std::string_view domain_name, ldns_enum_rr_type r
     return ldns_pkt_ptr(request);
 }
 
-static std::vector<socket_address> socket_address_from_reply(const logger &log, ldns_pkt *reply, int port) {
-    std::vector<socket_address> addrs;
+static std::vector<SocketAddress> socket_address_from_reply(const Logger &log, ldns_pkt *reply, int port) {
+    std::vector<SocketAddress> addrs;
     addrs.reserve(5);
     if (!ldns_pkt_ancount(reply)) {
         return addrs;
@@ -131,7 +130,7 @@ static std::vector<socket_address> socket_address_from_reply(const logger &log, 
     for (size_t i = 0; i < ldns_rr_list_rr_count(answer); i++) {
         auto rr = ldns_rr_list_rr(answer, i);
         if (ldns_rdf *rdf = ldns_rr_a_address(rr)) {
-            socket_address addr({ ldns_rdf_data(rdf), ldns_rdf_size(rdf) }, port);
+            SocketAddress addr({ ldns_rdf_data(rdf), ldns_rdf_size(rdf) }, port);
             if (!addr.valid()) {
                 dbglog(log, "Got invalid ip address from server: {}", addr.str());
             } else {
@@ -144,16 +143,16 @@ static std::vector<socket_address> socket_address_from_reply(const logger &log, 
 
 resolver::result resolver::resolve(std::string_view host, int port, milliseconds timeout) const {
     log_ip(log, trace, upstream_options.address, "Resolve {}:{}", host, port);
-    socket_address numeric_ip(host, port);
+    SocketAddress numeric_ip(host, port);
     if (numeric_ip.valid()) {
         return { { numeric_ip }, std::nullopt };
     }
 
-    std::vector<socket_address> addrs;
+    std::vector<SocketAddress> addrs;
     addrs.reserve(5);
 
-    utils::timer timer;
-    err_string error;
+    utils::Timer timer;
+    ErrString error;
     ldns_pkt_ptr a_req = create_req(host, LDNS_RR_TYPE_A);
 
     ag::upstream_options opts = this->upstream_options;

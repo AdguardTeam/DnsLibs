@@ -1,24 +1,24 @@
 #include <algorithm>
 #include <dnsfilter.h>
-#include <ag_logger.h>
+#include "common/logger.h"
 #include <ag_file.h>
 #include "filter.h"
 #include "rule_utils.h"
-#include <ag_utils.h>
+#include "common/utils.h"
 #include <unordered_set>
 #include <atomic>
 using namespace ag;
 
 class engine {
 public:
-    engine() : log(ag::create_logger("dnsfilter")) {}
+    engine() : log("dnsfilter") {}
 
     ~engine() = default;
 
     /**
      * @return {true, optional warning} or {false, error description}
      */
-    std::pair<bool, err_string> init(const dnsfilter::engine_params &p) {
+    std::pair<bool, ErrString> init(const dnsfilter::engine_params &p) {
         mem_limit = p.mem_limit;
         std::string warnings;
         std::unordered_set<uint32_t> ids;
@@ -64,7 +64,7 @@ public:
     }
 
     std::atomic_size_t mem_limit;
-    ag::logger log;
+    ag::Logger log;
     std::vector<filter> filters;
     std::shared_mutex filters_mtx;
 };
@@ -113,7 +113,7 @@ dnsfilter::dnsfilter() = default;
 
 dnsfilter::~dnsfilter() = default;
 
-std::pair<dnsfilter::handle, err_string> dnsfilter::create(const engine_params &p) {
+std::pair<dnsfilter::handle, ErrString> dnsfilter::create(const engine_params &p) {
     auto *e = new(std::nothrow) engine();
     if (!e) {
         return {nullptr, "No memory for the filtering engine"};

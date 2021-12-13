@@ -1,16 +1,19 @@
 #include <chrono>
 #include <memory>
-#include <ag_utils.h>
+#include "common/logger.h"
+#include "common/utils.h"
 #include <sodium.h>
 #include "upstream_dnscrypt.h"
 #include <dns_crypt_client.h>
 
 #define tracelog_id(log_, pkt_, fmt_, ...) tracelog(log_, "[{}] " fmt_, ldns_pkt_id(pkt_), ##__VA_ARGS__)
 
+static ag::Logger logger{"UPSTREAM DNSCRYPT"};
+
 struct initializer {
     initializer() {
         if (sodium_init() == -1) {
-            SPDLOG_ERROR("Failed to initialize libsodium");
+            errlog(logger, "Failed to initialize libsodium");
         }
     }
 };
@@ -30,12 +33,13 @@ ag::upstream_dnscrypt::upstream_dnscrypt(server_stamp &&stamp,
                                          const upstream_options &opts,
                                          const upstream_factory_config &config)
     : upstream(make_dnscrypt_options(stamp, opts), config)
+    , m_log("DNScrypt upstream")
     , m_stamp(std::move(stamp))
 {
     static const initializer ensure_initialized;
 }
 
-ag::err_string ag::upstream_dnscrypt::init() {
+ag::ErrString ag::upstream_dnscrypt::init() {
     return std::nullopt;
 }
 
@@ -44,7 +48,7 @@ ag::upstream_dnscrypt::~upstream_dnscrypt() = default;
 ag::upstream_dnscrypt::exchange_result
 ag::upstream_dnscrypt::exchange(ldns_pkt *request_pkt, const dns_message_info *) {
     tracelog_id(m_log, request_pkt, "Started");
-    static constexpr utils::make_error<exchange_result> make_error;
+    static constexpr utils::MakeError<exchange_result> make_error;
     setup_result result = setup_impl();
     if (result.error.has_value()) {
         return make_error(std::move(result.error));
@@ -90,7 +94,7 @@ ag::upstream_dnscrypt::exchange_result ag::upstream_dnscrypt::apply_exchange(ldn
         local_upstream = *m_impl;
     }
 
-    utils::timer timer;
+    utils::Timer timer;
 
     auto[udp_reply, udp_reply_rtt, udp_reply_err] = local_upstream.udp_client.exchange(request_pkt,
             local_upstream.server_info, timeout, m_config.socket_factory, this->make_socket_parameters());

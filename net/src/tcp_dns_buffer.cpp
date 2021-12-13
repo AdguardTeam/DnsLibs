@@ -22,7 +22,7 @@ static size_t ntoh_length(uint8_t *data) {
     return ntohs(net_length);
 }
 
-uint8_view tcp_dns_buffer::store(uint8_view data) {
+Uint8View tcp_dns_buffer::store(Uint8View data) {
     if (!this->total_length.has_value()) {
         if (this->buffer.empty() && data.size() >= PACKET_LENGTH_LENGTH) {
             this->total_length = ntoh_length((uint8_t *)data.data());

@@ -12,27 +12,27 @@
 #include <ldns/buffer.h>
 #include <ldns/error.h>
 #include <ldns/packet.h>
-#include <ag_defs.h>
+#include "common/defs.h"
 #include <dns_crypt_utils.h>
 #include <dns_stamp.h>
-#include <ag_socket_address.h>
+#include "common/socket_address.h"
 #include <ag_socket.h>
 
 namespace ag::dnscrypt {
 
-using create_ldns_buffer_result = std::pair<ldns_buffer_ptr, err_string>;
-using create_ldns_pkt_result = std::pair<ldns_pkt_ptr, err_string>;
+using create_ldns_buffer_result = std::pair<ldns_buffer_ptr, ErrString>;
+using create_ldns_pkt_result = std::pair<ldns_pkt_ptr, ErrString>;
 
 struct dns_exchange_unparsed_result {
     std::vector<uint8_t> reply;
     std::chrono::milliseconds round_trip_time;
-    err_string error;
+    ErrString error;
 };
 
 struct dns_exchange_result {
     ldns_pkt_ptr reply;
     std::chrono::milliseconds round_trip_time;
-    err_string error;
+    ErrString error;
 };
 
 /**
@@ -72,7 +72,7 @@ create_ldns_pkt_result create_ldns_pkt(uint8_t *data, size_t size);
  * @return DNS exchange allocated result
  */
 dns_exchange_unparsed_result dns_exchange(std::chrono::milliseconds timeout,
-        const socket_address &socket_address, ldns_buffer &buffer,
+        const SocketAddress &socket_address, ldns_buffer &buffer,
         const socket_factory *socket_factory, socket_factory::socket_parameters socket_parameters);
 
 /**
@@ -85,7 +85,7 @@ dns_exchange_unparsed_result dns_exchange(std::chrono::milliseconds timeout,
  * @return DNS exchange result
  */
 dns_exchange_result dns_exchange_from_ldns_buffer(std::chrono::milliseconds timeout,
-        const socket_address &socket_address, ldns_buffer &buffer,
+        const SocketAddress &socket_address, ldns_buffer &buffer,
         const socket_factory *socket_factory, socket_factory::socket_parameters socket_parameters);
 
 /**
@@ -98,7 +98,7 @@ dns_exchange_result dns_exchange_from_ldns_buffer(std::chrono::milliseconds time
  * @return DNS exchange result
  */
 dns_exchange_result dns_exchange_from_ldns_pkt(std::chrono::milliseconds timeout,
-        const socket_address &socket_address, const ldns_pkt &request_pkt,
+        const SocketAddress &socket_address, const ldns_pkt &request_pkt,
         const socket_factory *socket_factory, socket_factory::socket_parameters socket_parameters);
 
 } // namespace ag::dnscrypt

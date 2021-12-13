@@ -1,7 +1,8 @@
 #include "tls_session_cache.h"
-#include <ag_utils.h>
+#include "common/utils.h"
+#include <cassert>
 
-ag::logger ag::tls_session_cache::log = ag::create_logger("TLS session cache");
+ag::Logger ag::tls_session_cache::log {"TLS session cache"};
 std::mutex ag::tls_session_cache::mtx;
 std::unordered_map<std::string, std::list<ag::ssl_session_ptr>> ag::tls_session_cache::caches_by_url;
 
@@ -50,7 +51,7 @@ int ag::tls_session_cache::session_new_cb(SSL *ssl, SSL_SESSION *session) {
 void ag::tls_session_cache::prepare_ssl_ctx(SSL_CTX *ctx) {
 #if 0
     if (char *ssl_keylog_file = getenv("SSLKEYLOGFILE")) {
-        static std::unique_ptr<std::FILE, ftor<&std::fclose>> handle{std::fopen(ssl_keylog_file, "a")};
+        static std::unique_ptr<std::FILE, Ftor<&std::fclose>> handle{std::fopen(ssl_keylog_file, "a")};
         SSL_CTX_set_keylog_callback(ctx,
                 [] (const SSL *, const char *line) {
                     fprintf(handle.get(), "%s\n", line);

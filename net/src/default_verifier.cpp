@@ -1,6 +1,6 @@
 #include <openssl/x509v3.h>
 
-#include <ag_logger.h>
+#include "common/logger.h"
 #include <default_verifier.h>
 
 
@@ -19,7 +19,7 @@ static X509_STORE *create_ca_store() {
 #include <Security/Security.h>
 
 static X509_STORE *create_ca_store() {
-    logger log = create_logger("System CA Store");
+    Logger log{"System CA Store"};
     X509_STORE *store = X509_STORE_new();
     if (store == nullptr) {
         warnlog(log, "Cannot initialize OpenSSL certificate store");
@@ -103,17 +103,17 @@ default_verifier &default_verifier::operator=(default_verifier &&other) {
     return *this;
 }
 
-err_string default_verifier::verify(X509_STORE_CTX *ctx_template, std::string_view host_name) const {
+ErrString default_verifier::verify(X509_STORE_CTX *ctx_template, std::string_view host_name) const {
     if (this->ca_store == nullptr) {
         return "CA store is not set";
     }
 
-    if (err_string err = verify_host_name(X509_STORE_CTX_get0_cert(ctx_template), host_name);
+    if (ErrString err = verify_host_name(X509_STORE_CTX_get0_cert(ctx_template), host_name);
             err.has_value()) {
         return err;
     }
 
-    using X509_STORE_CTX_ptr = std::unique_ptr<X509_STORE_CTX, ftor<&X509_STORE_CTX_free>>;
+    using X509_STORE_CTX_ptr = std::unique_ptr<X509_STORE_CTX, Ftor<&X509_STORE_CTX_free>>;
     X509_STORE_CTX_ptr ctx_holder(X509_STORE_CTX_new());
     X509_STORE_CTX *ctx = ctx_holder.get();
     if (0 == X509_STORE_CTX_init(ctx, this->ca_store,

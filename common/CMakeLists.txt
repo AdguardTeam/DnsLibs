@@ -8,13 +8,9 @@ set(CMAKE_CXX_STANDARD 17)
 set(SRC_DIR src)
 
 set(SRCS
-        ${SRC_DIR}/utils.cpp
         ${SRC_DIR}/sys.cpp
         ${SRC_DIR}/file.cpp
-        ${SRC_DIR}/logger.cpp
-        ${SRC_DIR}/socket_address.cpp
         ${SRC_DIR}/net_utils.cpp
-        ${SRC_DIR}/clock.cpp
         ${SRC_DIR}/cesu8.cpp
         ${SRC_DIR}/route_resolver.cpp
         ${SRC_DIR}/event_loop.cpp
@@ -39,8 +35,8 @@ endif ()
 set_target_properties(dnslibs_common PROPERTIES POSITION_INDEPENDENT_CODE ON)
 target_include_directories(dnslibs_common PUBLIC include)
 target_compile_definitions(dnslibs_common PUBLIC PCRE2_STATIC=1 PCRE2_CODE_UNIT_WIDTH=8 SPDLOG_NO_EXCEPTIONS=1)
-target_link_libraries(dnslibs_common CONAN_PKG::spdlog CONAN_PKG::libevent CONAN_PKG::pcre2)
-target_link_libraries(dnslibs_common CONAN_PKG::magic_enum)
+target_link_libraries(dnslibs_common CONAN_PKG::libevent CONAN_PKG::pcre2)
+target_link_libraries(dnslibs_common CONAN_PKG::magic_enum CONAN_PKG::native_libs_common)
 
 target_compile_options(dnslibs_common PRIVATE -Wall -Wextra)
 target_compile_options(dnslibs_common PUBLIC -Wno-format-nonliteral) # for fmt's chrono build
@@ -58,6 +54,3 @@ enable_testing()
 include(${CMAKE_CURRENT_SOURCE_DIR}/../cmake/add_unit_test.cmake)
 link_libraries(dnslibs_common)
 set(TEST_DIR ${CMAKE_CURRENT_SOURCE_DIR}/test)
-
-add_unit_test(cache_test ${TEST_DIR} "" TRUE TRUE)
-add_unit_test(utils_test ${TEST_DIR} "" TRUE TRUE)

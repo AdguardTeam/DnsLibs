@@ -3,8 +3,10 @@
 #include <algorithm>
 #include <chrono>
 #include <sodium.h>
-#include <spdlog/spdlog.h>
-#include <ag_utils.h>
+#include "common/defs.h"
+#include "common/utils.h"
+#include "common/logger.h"
+#include "common/time_utils.h"
 #include <ag_net_utils.h>
 #include <dns_crypt_cipher.h>
 #include <dns_crypt_ldns.h>
@@ -24,13 +26,11 @@ TEST(dnscrypt_sodium_test, sodium_initialized) {
     }
 }
 
-using ldns_rdf_ptr = std::unique_ptr<ldns_rdf, ag::ftor<&ldns_rdf_free>>;
+using ldns_rdf_ptr = std::unique_ptr<ldns_rdf, ag::Ftor<&ldns_rdf_free>>;
+
+static ag::Logger logger{"dns_crypt_test"};
 
 class dnscrypt_test : public ::testing::Test {
-public:
-    dnscrypt_test() {
-        ag::set_default_log_level(ag::TRACE);
-    }
 
 protected:
     ag::socket_factory socket_factory = ag::socket_factory({});
@@ -41,7 +41,7 @@ struct dnscrypt_test_with_param : dnscrypt_test, ::testing::WithParamInterface<T
 
 struct cipher_test_data {
     ag::dnscrypt::crypto_construction encryption_algorithm;
-    ag::uint8_vector valid_cipher_text;
+    ag::Uint8Vector valid_cipher_text;
     ag::dnscrypt::key_array valid_shared_key;
 };
 
@@ -73,7 +73,7 @@ static const auto cipher_nonce = [] {
 }();
 
 static const auto cipher_src = [] {
-    ag::uint8_array<10> result;
+    ag::Uint8Array<10> result;
     result.fill(42);
     return result;
 }();
@@ -106,10 +106,10 @@ INSTANTIATE_TEST_SUITE_P(cipher_test_instantiation, cipher_test, ::testing::Valu
 using parse_stamp_test_data_type = std::tuple<const char *, void(*)(const char *, const ag::server_stamp &)>;
 
 static void parse_stamp_test_data_log(const char *stamp_str, const ag::server_stamp &stamp) {
-    SPDLOG_INFO(stamp_str);
-    SPDLOG_INFO("Protocol={}", stamp.proto);
-    SPDLOG_INFO("ProviderName={}", stamp.provider_name);
-    SPDLOG_INFO("Path={}", stamp.path);
+    infolog(logger, "{}", stamp_str);
+    infolog(logger, "Protocol={}", stamp.proto);
+    infolog(logger, "ProviderName={}", stamp.provider_name);
+    infolog(logger, "Path={}", stamp.path);
 }
 
 static constexpr parse_stamp_test_data_type parse_stamp_test_data[]{
@@ -128,8 +128,8 @@ static constexpr parse_stamp_test_data_type parse_stamp_test_data[]{
         "sdns://AQIAAAAAAAAAFDE3Ni4xMDMuMTMwLjEzMDo1NDQzINErR_JS3PLCu_iZEIbq95zkSV2LFsigxDIuUso_OQhzIjIuZG5zY3J5cHQuZGVmYXVsdC5uczEuYWRndWFyZC5jb20",
         [](const char *stamp_str, const ag::server_stamp &stamp) {
             parse_stamp_test_data_log(stamp_str, stamp);
-            SPDLOG_INFO("ServerAddrStr={}", stamp.server_addr_str);
-            SPDLOG_INFO("ServerPk len={}\n", stamp.server_pk.size());
+            infolog(logger, "ServerAddrStr={}", stamp.server_addr_str);
+            infolog(logger, "ServerPk len={}\n", stamp.server_pk.size());
         }
     },
 };
@@ -198,7 +198,7 @@ struct check_dns_crypt_server_test : dnscrypt_test_with_param<::testing::tuple<s
                                                                                ag::utils::transport_protocol>> {
 public:
     check_dns_crypt_server_test() {
-        ag::set_default_log_level(ag::TRACE);
+        ag::Logger::set_log_level(ag::LogLevel::LOG_LEVEL_TRACE);
     }
 protected:
     ag::socket_factory socket_factory = ag::socket_factory({});
@@ -211,9 +211,9 @@ TEST_P(check_dns_crypt_server_test, check_dns_crypt_server) {
     ag::dnscrypt::client client(protocol);
     auto[server_info, dial_rtt, dial_err] = client.dial(stamp_str, 10s, &this->socket_factory, {});
     ASSERT_FALSE(dial_err) << "Could not establish connection with " << stamp_str << " cause: " << *dial_err;
-    SPDLOG_INFO("Established a connection with {}, ttl={}, rtt={}ms, protocol={}", server_info.get_provider_name(),
-                ag::utils::time_to_str(server_info.get_server_cert().not_after), dial_rtt.count(),
-                magic_enum::enum_name(protocol));
+    infolog(logger, "Established a connection with {}, ttl={}, rtt={}ms, protocol={}", server_info.get_provider_name(),
+                ag::format_gmtime(ag::Secs(server_info.get_server_cert().not_after)),
+                dial_rtt.count(), magic_enum::enum_name(protocol));
     auto req = ag::dnscrypt::create_request_ldns_pkt(LDNS_RR_TYPE_A, LDNS_RR_CLASS_IN, LDNS_RD,
                                                      "google-public-dns-a.google.com.",
                                                       ag::utils::make_optional_if(
@@ -239,7 +239,7 @@ TEST_P(check_dns_crypt_server_test, check_dns_crypt_server) {
     ASSERT_EQ(ldns_rdf_compare(rdf, rdf0.get()), 0) << "DNS upstream " << server_info.get_provider_name()
                                                     << " returned wrong answer instead of 8.8.8.8: "
                                                     << ag::utils::addr_to_str({ldns_rdf_data(rdf), ldns_rdf_size(rdf)});
-    SPDLOG_INFO("Got proper response from {}, rtt={}ms, protocol={}", server_info.get_provider_name(),
+    infolog(logger, "Got proper response from {}, rtt={}ms, protocol={}", server_info.get_provider_name(),
                 exchange_rtt.count(), magic_enum::enum_name(protocol));
     free(ldns_rdf_data(rdf0.get()));
 }

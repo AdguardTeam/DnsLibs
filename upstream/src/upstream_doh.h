@@ -11,10 +11,10 @@
 #include <deque>
 #include <list>
 
-#include <ag_logger.h>
-#include <ag_defs.h>
+#include "common/logger.h"
+#include "common/defs.h"
 #include <upstream.h>
-#include <ag_socket_address.h>
+#include "common/socket_address.h"
 #include <ag_event_loop.h>
 #include "bootstrapper.h"
 
@@ -27,9 +27,9 @@
 
 namespace ag {
 
-using curl_slist_ptr = std::unique_ptr<curl_slist, ftor<&curl_slist_free_all>>;
-using curl_pool_ptr = std::unique_ptr<CURLM, ftor<&curl_multi_cleanup>>;
-using event_ptr = std::unique_ptr<event, ftor<&event_free>>;
+using curl_slist_ptr = std::unique_ptr<curl_slist, Ftor<&curl_slist_free_all>>;
+using curl_pool_ptr = std::unique_ptr<CURLM, Ftor<&curl_multi_cleanup>>;
+using event_ptr = std::unique_ptr<event, Ftor<&event_free>>;
 
 class dns_over_https : public upstream {
 public:
@@ -48,7 +48,7 @@ public:
     struct check_proxy_state;
 
 private:
-    err_string init() override;
+    ErrString init() override;
     exchange_result exchange(ldns_pkt *, const dns_message_info *info) override;
 
     std::unique_ptr<query_handle> create_handle(ldns_pkt *request, std::chrono::milliseconds timeout) const;
@@ -59,7 +59,7 @@ private:
     /**
      * Must be called in worker thread
      */
-    void stop_all_with_error(const err_string &e);
+    void stop_all_with_error(const ErrString &e);
     void retry_pending_queries_directly();
     void reset_bypassed_proxy_queries();
 
@@ -77,7 +77,7 @@ private:
     void start_request(query_handle *handle, bool ignore_proxy);
     void defy_requests();
 
-    logger log = create_logger("DOH upstream");
+    Logger log;
     curl_slist_ptr resolved = nullptr;
     curl_slist_ptr request_headers = nullptr;
     bootstrapper_ptr bootstrapper;

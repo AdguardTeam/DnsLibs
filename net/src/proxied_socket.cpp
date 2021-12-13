@@ -50,18 +50,18 @@ std::optional<socket::error> proxied_socket::connect(connect_parameters params) 
     this->fallback_info = std::make_unique<struct fallback_info>();
     this->fallback_info->loop = params.loop;
     this->fallback_info->peer = params.peer;
-    this->fallback_info->connect_timestamp = steady_clock::now();
+    this->fallback_info->connect_timestamp = SteadyClock::now();
     this->fallback_info->timeout = params.timeout;
 
     return std::nullopt;
 }
 
-std::optional<socket::error> proxied_socket::send(uint8_view data) {
+std::optional<socket::error> proxied_socket::send(Uint8View data) {
     log_sock(this, trace, "{}", data.size());
     return this->proxy->send(this->proxy_id.value(), data);
 }
 
-std::optional<socket::error> proxied_socket::send_dns_packet(uint8_view data) {
+std::optional<socket::error> proxied_socket::send_dns_packet(Uint8View data) {
     log_sock(this, trace, "{}", data.size());
 
     std::optional<error> err;
@@ -146,7 +146,7 @@ void proxied_socket::on_connected(void *arg, uint32_t conn_id) {
     }
 }
 
-void proxied_socket::on_read(void *arg, uint8_view data) {
+void proxied_socket::on_read(void *arg, Uint8View data) {
     auto *self = (proxied_socket *)arg;
     log_sock(self, trace, "{}", data.size());
     if (socket::callbacks cbx = self->get_callbacks(); cbx.on_read != nullptr) {
@@ -166,7 +166,7 @@ void proxied_socket::on_close(void *arg, std::optional<socket::error> error) {
         self->proxy->close_connection(std::exchange(self->proxy_id, std::nullopt).value());
         self->proxy = info->proxy;
         std::chrono::microseconds elapsed =
-                std::chrono::duration_cast<std::chrono::microseconds>(steady_clock::now() - info->connect_timestamp);
+                std::chrono::duration_cast<std::chrono::microseconds>(SteadyClock::now() - info->connect_timestamp);
         self->socket_callbacks.mtx.lock();
         socket::callbacks socket_callbacks = self->socket_callbacks.val;
         self->socket_callbacks.mtx.unlock();

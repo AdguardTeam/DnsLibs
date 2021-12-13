@@ -29,12 +29,12 @@ public:
     ~dns_over_tls() override;
 
 private:
-    err_string init() override;
+    ErrString init() override;
     exchange_result exchange(ldns_pkt *request_pkt, const dns_message_info *info) override;
 
     class tls_pool;
 
-    logger m_log = create_logger("DOT upstream");
+    Logger m_log;
     /** TLS connection pool */
     std::unique_ptr<tls_pool> m_pool;
     /** DNS server name */

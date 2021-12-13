@@ -23,7 +23,6 @@ class DnsLibsConan(ConanFile):
     generators = "cmake"
 
     def requirements(self):
-        self.requires("spdlog/1.8.0")
         self.requires("magic_enum/0.7.3")
         self.requires("pcre2/10.37@AdguardTeam/NativeLibsCommon")
         self.requires("libsodium/1.0.18@AdguardTeam/NativeLibsCommon")
@@ -33,6 +32,7 @@ class DnsLibsConan(ConanFile):
         self.requires("klib/2021-04-06@AdguardTeam/NativeLibsCommon")
         self.requires("ldns/2021-03-29@AdguardTeam/NativeLibsCommon")
         self.requires("ngtcp2/2021-05-13@AdguardTeam/NativeLibsCommon")
+        self.requires("native_libs_common/777@AdguardTeam/NativeLibsCommon")
 
     def build_requirements(self):
         self.build_requires("gtest/1.11.0")
@@ -40,6 +40,7 @@ class DnsLibsConan(ConanFile):
     def configure(self):
         self.options["spdlog"].no_exceptions = True
         self.options["gtest"].build_gmock = False
+        self.options["native_libs_common"].commit_hash = "62252ff3fe4"
 
     def config_options(self):
         if self.settings.os == "Windows":
@@ -96,7 +97,6 @@ class DnsLibsConan(ConanFile):
         ]
         self.cpp_info.libdirs = ['lib']
         self.cpp_info.requires = [
-            "spdlog::spdlog",
             "magic_enum::magic_enum",
             "pcre2::pcre2",
             "libsodium::libsodium",
@@ -106,4 +106,5 @@ class DnsLibsConan(ConanFile):
             "klib::klib",
             "ldns::ldns",
             "ngtcp2::ngtcp2",
+            "native_libs_common::native_libs_common"
         ]

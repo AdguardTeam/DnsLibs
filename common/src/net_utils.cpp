@@ -1,6 +1,6 @@
-#include <ag_utils.h>
+#include "common/utils.h"
 #include <ag_net_utils.h>
-#include <ag_socket_address.h>
+#include "common/socket_address.h"
 #include <event2/util.h>
 #include <event2/thread.h>
 #include <csignal>
@@ -18,7 +18,7 @@
 #define IF_NAMESIZE 256
 #endif
 
-std::tuple<std::string_view, std::string_view, ag::err_string_view> ag::utils::split_host_port_with_err(
+std::tuple<std::string_view, std::string_view, ag::ErrStringView> ag::utils::split_host_port_with_err(
         std::string_view address_string, bool require_ipv6_addr_in_square_brackets, bool require_non_empty_port) {
     if (!address_string.empty() && address_string.front() == '[') {
         auto pos = address_string.find("]:");
@@ -26,7 +26,7 @@ std::tuple<std::string_view, std::string_view, ag::err_string_view> ag::utils::s
             auto port = address_string.substr(pos + 2);
             return {address_string.substr(1, pos - 1), port,
                     (require_non_empty_port && port.empty())
-                    ? err_string_view("Port after colon is empty in IPv6 address")
+                    ? ErrStringView("Port after colon is empty in IPv6 address")
                     : std::nullopt};
         } else if (address_string.back() == ']') {
             return {address_string.substr(1, address_string.size() - 2), {}, std::nullopt};
@@ -40,13 +40,13 @@ std::tuple<std::string_view, std::string_view, ag::err_string_view> ag::utils::s
             if (pos != rpos) { // This is an IPv6 address without a port
                 return {address_string, {},
                         require_ipv6_addr_in_square_brackets
-                        ? err_string_view("IPv6 address not in square brackets")
+                        ? ErrStringView("IPv6 address not in square brackets")
                         : std::nullopt};
             }
             auto port = address_string.substr(pos + 1);
             return {address_string.substr(0, pos), port,
                     (require_non_empty_port && port.empty())
-                    ? err_string_view("Port after colon is empty in IPv4 address")
+                    ? ErrStringView("Port after colon is empty in IPv4 address")
                     : std::nullopt};
         }
     }
@@ -80,13 +80,13 @@ timeval ag::utils::duration_to_timeval(std::chrono::microseconds usecs) {
     };
 }
 
-std::string ag::utils::addr_to_str(uint8_view v) {
+std::string ag::utils::addr_to_str(Uint8View v) {
     char p[INET6_ADDRSTRLEN];
-    if (v.size() == ipv4_address_size) {
+    if (v.size() == IPV4_ADDRESS_SIZE) {
         if (evutil_inet_ntop(AF_INET, v.data(), p, sizeof(p))) {
             return p;
         }
-    } else if (v.size() == ipv6_address_size) {
+    } else if (v.size() == IPV6_ADDRESS_SIZE) {
         if (evutil_inet_ntop(AF_INET6, v.data(), p, sizeof(p))) {
             return p;
         }
@@ -94,11 +94,11 @@ std::string ag::utils::addr_to_str(uint8_view v) {
     return {};
 }
 
-ag::socket_address ag::utils::str_to_socket_address(std::string_view address) {
+ag::SocketAddress ag::utils::str_to_socket_address(std::string_view address) {
     auto [host_view, port_view] = ag::utils::split_host_port(address);
 
     if (port_view.empty()) {
-        return socket_address{host_view, 0};
+        return SocketAddress{host_view, 0};
     }
 
     std::string port_str{port_view};
@@ -109,7 +109,7 @@ ag::socket_address ag::utils::str_to_socket_address(std::string_view address) {
         return {};
     }
 
-    return socket_address{host_view, (uint16_t) port};
+    return SocketAddress{host_view, (uint16_t) port};
 }
 
 bool ag::utils::socket_error_is_eagain(int err) {
@@ -120,7 +120,7 @@ bool ag::utils::socket_error_is_eagain(int err) {
 #endif
 }
 
-ag::err_string ag::utils::bind_socket_to_if(evutil_socket_t fd, int family, uint32_t if_index) {
+ag::ErrString ag::utils::bind_socket_to_if(evutil_socket_t fd, int family, uint32_t if_index) {
 #if defined(__linux__)
     char buf[IF_NAMESIZE];
     const char *name = if_indextoname(if_index, buf);
@@ -168,7 +168,7 @@ ag::err_string ag::utils::bind_socket_to_if(evutil_socket_t fd, int family, uint
 #endif
 }
 
-ag::err_string ag::utils::bind_socket_to_if(evutil_socket_t fd, int family, const char *if_name) {
+ag::ErrString ag::utils::bind_socket_to_if(evutil_socket_t fd, int family, const char *if_name) {
 #if defined(__linux__)
     (void)family;
     int ret = setsockopt(fd, SOL_SOCKET, SO_BINDTODEVICE, if_name, strlen(if_name));
@@ -185,20 +185,20 @@ ag::err_string ag::utils::bind_socket_to_if(evutil_socket_t fd, int family, cons
 #endif
 }
 
-std::optional<ag::socket_address> ag::utils::get_peer_address(evutil_socket_t fd) {
+std::optional<ag::SocketAddress> ag::utils::get_peer_address(evutil_socket_t fd) {
     sockaddr_storage addr = {};
     socklen_t addrlen = sizeof(addr);
     if (::getpeername(fd, (sockaddr *)&addr, &addrlen) != 0) {
         return std::nullopt;
     }
-    return socket_address((sockaddr *)&addr);
+    return SocketAddress((sockaddr *)&addr);
 }
 
-std::optional<ag::socket_address> ag::utils::get_local_address(evutil_socket_t fd) {
+std::optional<ag::SocketAddress> ag::utils::get_local_address(evutil_socket_t fd) {
     sockaddr_storage addr = {};
     socklen_t addrlen = sizeof(addr);
     if (::getsockname(fd, (sockaddr *)&addr, &addrlen) != 0) {
         return std::nullopt;
     }
-    return socket_address((sockaddr *)&addr);
+    return SocketAddress((sockaddr *)&addr);
 }

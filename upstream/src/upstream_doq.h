@@ -1,10 +1,10 @@
 #pragma once
 
 
-#include <ag_logger.h>
-#include <ag_defs.h>
-#include <ag_utils.h>
-#include <ag_socket_address.h>
+#include "common/logger.h"
+#include "common/defs.h"
+#include "common/utils.h"
+#include "common/socket_address.h"
 #include <ag_event_loop.h>
 #include <ag_socket.h>
 #include <upstream.h>
@@ -95,7 +95,7 @@ private:
         int64_t request_id = 0;
         std::vector<uint8_t> raw_data;
         struct {
-            std::unique_ptr<evbuffer, ag::ftor<&evbuffer_free>> buf;
+            std::unique_ptr<evbuffer, ag::Ftor<&evbuffer_free>> buf;
             int read_position = 0;
         } send_info;
     };
@@ -133,7 +133,7 @@ private:
         std::unique_ptr<socket_context> extract_socket(socket_context *ctx);
     };
 
-    err_string init() override;
+    ErrString init() override;
     exchange_result exchange(ldns_pkt *, const dns_message_info *info) override;
 
     static int version_negotiation(ngtcp2_conn *conn, const ngtcp2_pkt_hd *hd,
@@ -173,7 +173,7 @@ private:
     static void retransmit_cb(evutil_socket_t, short, void *data);
 
     static void on_socket_connected(void *arg);
-    static void on_socket_read(void *arg, uint8_view data);
+    static void on_socket_read(void *arg, Uint8View data);
     static void on_socket_close(void *arg, std::optional<socket::error> error);
 
     int init_quic_conn(const socket *connected_socket);
@@ -182,11 +182,11 @@ private:
     int on_write();
     int write_streams();
     int send_packet();
-    int send_packet(socket *active_socket, uint8_view data);
+    int send_packet(socket *active_socket, Uint8View data);
     int reinit();
     int handle_expiry();
     void ag_ngtcp2_settings_default(ngtcp2_settings &settings, ngtcp2_transport_params &params) const;
-    int feed_data(uint8_view data);
+    int feed_data(Uint8View data);
     void submit(std::function<void()> &&func) const;
     void send_requests();
     void process_reply(int64_t request_id, const uint8_t *request_data, size_t request_data_len);
@@ -194,29 +194,29 @@ private:
     void schedule_retransmit();
     static ngtcp2_tstamp get_tstamp();
     ngtcp2_crypto_level from_ossl_level(enum ssl_encryption_level_t ossl_level) const;
-    void disqualify_server_address(const ag::socket_address &server_address);
+    void disqualify_server_address(const ag::SocketAddress &server_address);
     void update_idle_timer(bool reset);
 
     void write_client_handshake(ngtcp2_crypto_level level, const uint8_t *data, size_t datalen);
     int on_key(ngtcp2_crypto_level level, const uint8_t *rx_secret,
                const uint8_t *tx_secret, size_t secretlen);
 
-    int connect_to_peers(const std::vector<ag::socket_address> &current_addresses);
+    int connect_to_peers(const std::vector<ag::SocketAddress> &current_addresses);
 
     connection_state m_conn_state;
     std::atomic<state> m_state{STOP};
     std::string m_server_name;
     int m_port{0};
-    logger m_log = create_logger("DOQ upstream");
+    ag::Logger m_log{"DOQ upstream"};
     bootstrapper_ptr m_bootstrapper;
-    ag::socket_address m_remote_addr_empty, m_local_addr;
-    std::list<ag::socket_address> m_server_addresses;
+    ag::SocketAddress m_remote_addr_empty, m_local_addr;
+    std::list<ag::SocketAddress> m_server_addresses;
     ngtcp2_callbacks m_callbacks{};
     size_t m_max_pktlen;
     uint32_t m_quic_version;
     buffer m_send_buf;
-    std::unique_ptr<SSL_CTX, ftor<&SSL_CTX_free>> m_ssl_ctx;
-    std::unique_ptr<SSL, ftor<&SSL_free>> m_ssl;
+    std::unique_ptr<SSL_CTX, Ftor<&SSL_CTX_free>> m_ssl_ctx;
+    std::unique_ptr<SSL, Ftor<&SSL_free>> m_ssl;
     ngtcp2_conn *m_conn{nullptr};
     crypto m_crypto[3];
     std::list<int64_t> m_stream_send_queue;
@@ -224,10 +224,10 @@ private:
     std::unordered_map<int64_t, request_t> m_requests;
     std::mutex m_global;
     event_loop_ptr m_loop = event_loop::create();
-    std::unique_ptr<event, ftor<&event_free>> m_read_event;
-    std::unique_ptr<event, ftor<&event_free>> m_idle_timer_event;
-    std::unique_ptr<event, ftor<&event_free>> m_handshake_timer_event;
-    std::unique_ptr<event, ftor<&event_free>> m_retransmit_timer_event;
+    std::unique_ptr<event, Ftor<&event_free>> m_read_event;
+    std::unique_ptr<event, Ftor<&event_free>> m_idle_timer_event;
+    std::unique_ptr<event, Ftor<&event_free>> m_handshake_timer_event;
+    std::unique_ptr<event, Ftor<&event_free>> m_retransmit_timer_event;
     static std::atomic_int64_t m_next_request_id;
     std::array<uint8_t, 32> m_static_secret;
     tls_session_cache m_tls_session_cache;

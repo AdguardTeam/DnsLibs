@@ -5,7 +5,7 @@
 #include <string_view>
 #include <utility>
 #include <vector>
-#include <ag_defs.h>
+#include "common/defs.h"
 
 namespace ag {
 
@@ -49,7 +49,7 @@ enum class stamp_proto_type : uint8_t {
  * server_stamp is the DNS stamp representation
  */
 struct server_stamp {
-    using from_str_result = std::pair<server_stamp, err_string>;
+    using from_str_result = std::pair<server_stamp, ErrString>;
 
     /**
      * Creates string from variables stored in struct

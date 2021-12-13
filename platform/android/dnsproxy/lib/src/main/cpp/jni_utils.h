@@ -1,7 +1,7 @@
 #pragma once
 
 #include <jni.h>
-#include <ag_defs.h>
+#include "common/defs.h"
 #include <functional>
 #include <string_view>
 #include <scoped_jni_env.h>
@@ -204,9 +204,9 @@ public:
     std::optional<int32_t> marshal_integer(JNIEnv *env, jobject value);
 
     /**
-     * Copy a uint8_view to a new Java byte array.
+     * Copy a Uint8View to a new Java byte array.
      */
-    static local_ref<jbyteArray> marshal_uint8_view(JNIEnv *env, uint8_view v);
+    static local_ref<jbyteArray> marshal_uint8_view(JNIEnv *env, Uint8View v);
 
     /**
      * Add `o` to `collection`.

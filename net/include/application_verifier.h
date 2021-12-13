@@ -20,7 +20,7 @@ public:
 
     static std::optional<std::vector<uint8_t>> serialize_certificate(X509 *cert);
 
-    err_string verify(X509_STORE_CTX *ctx, std::string_view host) const override;
+    ErrString verify(X509_STORE_CTX *ctx, std::string_view host) const override;
 
 private:
     on_certificate_verification_function m_on_certificate_verification;

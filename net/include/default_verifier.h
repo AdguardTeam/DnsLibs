@@ -20,7 +20,7 @@ public:
     default_verifier &operator=(const default_verifier &);
     default_verifier &operator=(default_verifier &&);
 
-    err_string verify(X509_STORE_CTX *ctx, std::string_view host_name) const override;
+    ErrString verify(X509_STORE_CTX *ctx, std::string_view host_name) const override;
 
 private:
     X509_STORE *ca_store = nullptr;

@@ -1,7 +1,7 @@
 #pragma once
 
 #include <string>
-#include <ag_defs.h>
+#include "common/defs.h"
 #include <dns_stamp.h>
 #include <application_verifier.h>
 #include <upstream.h>
@@ -16,8 +16,8 @@ namespace ag {
  * @param offline do not send a query to the wire, just validate the passed parameters
  * @return If it is, no error is returned. Otherwise this method returns an error with an explanation.
  */
-err_string test_upstream(const upstream_options &opts, bool ipv6_available,
-        const on_certificate_verification_function &on_certificate_verification,
-        bool offline);
+ErrString test_upstream(const upstream_options &opts, bool ipv6_available,
+                        const on_certificate_verification_function &on_certificate_verification,
+                        bool offline);
 
 } // namespace ag

@@ -1,6 +1,6 @@
 #include <assert.h>
 #include <jni_utils.h>
-#include <ag_utils.h>
+#include "common/utils.h"
 #include <ag_cesu8.h>
 
 void ag::jni_utils::iterate(JNIEnv *env,
@@ -38,7 +38,7 @@ ag::local_ref<jstring> ag::jni_utils::marshal_string(JNIEnv *env, const std::str
     if (str.empty()) {
         return local_ref<jstring>(env, env->NewStringUTF(""));
     }
-    return local_ref<jstring>(env, env->NewStringUTF(ag::allocated_ptr<char>{ag::utf8_to_cesu8(str.c_str())}.get()));
+    return local_ref<jstring>(env, env->NewStringUTF(ag::AllocatedPtr<char>{ag::utf8_to_cesu8(str.c_str())}.get()));
 }
 
 std::string ag::jni_utils::marshal_string(JNIEnv *env, jstring str) {
@@ -110,7 +110,7 @@ jint ag::jni_utils::get_enum_ordinal(JNIEnv *env, jobject enum_value) {
     return env->CallIntMethod(enum_value, m_enum_methods.ordinal);
 }
 
-ag::local_ref<jbyteArray> ag::jni_utils::marshal_uint8_view(JNIEnv *env, ag::uint8_view v) {
+ag::local_ref<jbyteArray> ag::jni_utils::marshal_uint8_view(JNIEnv *env, ag::Uint8View v) {
     jint len = v.size();
     local_ref<jbyteArray> arr(env, env->NewByteArray(len));
     if (!v.empty()) {

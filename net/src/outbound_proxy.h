@@ -7,10 +7,10 @@
 #include <optional>
 #include <magic_enum.hpp>
 #include <ag_outbound_proxy_settings.h>
-#include <ag_defs.h>
+#include "common/defs.h"
 #include <ag_net_utils.h>
-#include <ag_socket_address.h>
-#include <ag_logger.h>
+#include "common/socket_address.h"
+#include "common/logger.h"
 #include <ag_socket.h>
 
 
@@ -36,7 +36,7 @@ public:
          */
         void (* on_connected)(void *arg, uint32_t conn_id);
         /** Raised after a data chunk has been received */
-        void (* on_read)(void *arg, uint8_view data);
+        void (* on_read)(void *arg, Uint8View data);
         /**
          * Raised after the tunnel is closed
          * @param conn_id id of the connection on which error happened
@@ -66,7 +66,7 @@ public:
         /** Connection protocol */
         utils::transport_protocol proto;
         /** Address on the peer to connect to */
-        socket_address peer;
+        SocketAddress peer;
         /** Set of the proxy callbacks */
         callbacks callbacks = {};
         /** Operation time out value */
@@ -100,7 +100,7 @@ public:
      * @param data the data
      * @return some error if failed
      */
-    [[nodiscard]] virtual std::optional<socket::error> send(uint32_t conn_id, uint8_view data) = 0;
+    [[nodiscard]] virtual std::optional<socket::error> send(uint32_t conn_id, Uint8View data) = 0;
 
     /**
      * Set operation time out
@@ -124,7 +124,7 @@ public:
     virtual void close_connection(uint32_t conn_id) = 0;
 
 protected:
-    logger log;
+    Logger log;
     size_t id = 0;
     const outbound_proxy_settings *settings = nullptr;
     struct parameters parameters = {};

@@ -75,7 +75,7 @@ constexpr auto PADDING = '=';
 
 } // namespace
 
-std::string encode_to_base64(uint8_view data, bool url_safe)
+std::string encode_to_base64(Uint8View data, bool url_safe)
 {
     const auto base64_table = url_safe ? BASE64_TABLE_URL_SAFE : BASE64_TABLE_DEFAULT;
     auto in_pos = data.data();

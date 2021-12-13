@@ -1,10 +1,10 @@
 #pragma once
 
 
-#include <ag_logger.h>
-#include <ag_utils.h>
-#include <ag_cache.h>
-#include <ag_clock.h>
+#include "common/logger.h"
+#include "common/utils.h"
+#include "common/cache.h"
+#include "common/clock.h"
 #include <dnsproxy_settings.h>
 #include <dnsproxy_events.h>
 #include <dnsfilter.h>
@@ -19,7 +19,7 @@ namespace ag {
 
 struct cached_response {
     ldns_pkt_ptr response;
-    ag::steady_clock::time_point expires_at;
+    ag::SteadyClock::time_point expires_at;
     std::optional<int32_t> upstream_id;
 };
 
@@ -31,7 +31,7 @@ struct cache_result {
 
 struct upstream_exchange_result {
     ldns_pkt_ptr response;
-    err_string error;
+    ErrString error;
     upstream *upstream;
 };
 
@@ -52,10 +52,10 @@ public:
     dns_forwarder();
     ~dns_forwarder();
 
-    std::pair<bool, err_string> init(const dnsproxy_settings &settings, const dnsproxy_events &events);
+    std::pair<bool, ErrString> init(const dnsproxy_settings &settings, const dnsproxy_events &events);
     void deinit();
 
-    std::vector<uint8_t> handle_message(uint8_view message, const dns_message_info *info);
+    std::vector<uint8_t> handle_message(Uint8View message, const dns_message_info *info);
 
 private:
     static void async_request_worker(uv_work_t *);
@@ -63,7 +63,7 @@ private:
 
     void truncate_response(ldns_pkt *response, const ldns_pkt *request, const dns_message_info *info);
 
-    std::vector<uint8_t> handle_message_internal(uint8_view message, const dns_message_info *info,
+    std::vector<uint8_t> handle_message_internal(Uint8View message, const dns_message_info *info,
                                                  bool fallback_only, uint16_t pkt_id);
 
     upstream_exchange_result do_upstream_exchange(std::string_view normalized_domain, ldns_pkt *request,
@@ -75,7 +75,7 @@ private:
 
     bool apply_fallback_filter(std::string_view hostname, const ldns_pkt *request);
 
-    std::optional<uint8_vector> apply_filter(std::string_view hostname,
+    std::optional<Uint8Vector> apply_filter(std::string_view hostname,
                                              const ldns_pkt *request,
                                              const ldns_pkt *original_response,
                                              dns_request_processed_event &event,
@@ -83,12 +83,12 @@ private:
                                              bool fallback_only,
                                              bool fire_event = true, ldns_pkt_rcode *out_rcode = nullptr);
 
-    std::optional<uint8_vector> apply_cname_filter(const ldns_rr *cname_rr, const ldns_pkt *request,
+    std::optional<Uint8Vector> apply_cname_filter(const ldns_rr *cname_rr, const ldns_pkt *request,
                                                    const ldns_pkt *response, dns_request_processed_event &event,
                                                    std::vector<dnsfilter::rule> &last_effective_rules,
                                                    bool fallback_only);
 
-    std::optional<uint8_vector> apply_ip_filter(const ldns_rr *rr, const ldns_pkt *request,
+    std::optional<Uint8Vector> apply_ip_filter(const ldns_rr *rr, const ldns_pkt *request,
                                                 const ldns_pkt *response, dns_request_processed_event &event,
                                                 std::vector<dnsfilter::rule> &last_effective_rules,
                                                 bool fallback_only);
@@ -96,13 +96,13 @@ private:
     ldns_pkt_ptr try_dns64_aaaa_synthesis(upstream *upstream, const ldns_pkt_ptr &request) const;
 
     void finalize_processed_event(dns_request_processed_event &event,
-        const ldns_pkt *request, const ldns_pkt *response, const ldns_pkt *original_response,
-        std::optional<int32_t> upstream_id, err_string error) const;
+                                  const ldns_pkt *request, const ldns_pkt *response, const ldns_pkt *original_response,
+                                  std::optional<int32_t> upstream_id, ErrString error) const;
 
     bool do_dnssec_log_logic(ldns_pkt *request);
     bool finalize_dnssec_log_logic(ldns_pkt *response, bool is_our_do_bit);
 
-    logger log;
+    Logger logger{"dns_forwarder"};
     const dnsproxy_settings *settings = nullptr;
     const dnsproxy_events *events = nullptr;
     std::vector<upstream_ptr> upstreams;
@@ -113,7 +113,7 @@ private:
     dns64::prefixes dns64_prefixes;
     std::shared_ptr<socket_factory> socket_factory;
 
-    with_mtx<lru_cache<std::string, cached_response>, std::shared_mutex> response_cache;
+    WithMtx<LruCache<std::string, cached_response>, std::shared_mutex> response_cache;
 
     retransmission_detector retransmission_detector;
 

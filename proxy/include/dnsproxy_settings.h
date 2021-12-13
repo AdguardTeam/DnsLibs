@@ -2,7 +2,7 @@
 
 #include <string>
 #include <vector>
-#include <ag_logger.h>
+#include "common/logger.h"
 #include <ag_net_utils.h>
 #include <dnsfilter.h>
 #include <upstream.h>

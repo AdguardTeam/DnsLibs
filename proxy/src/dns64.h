@@ -1,13 +1,13 @@
 #pragma once
 
-#include <ag_defs.h>
+#include "common/defs.h"
 #include <upstream.h>
 
 namespace ag::dns64 {
 
-using discovery_result = std::pair<std::vector<uint8_vector>, err_string>;
-using ipv6_synth_result = std::pair<uint8_array<16>, err_string>;
-using prefixes = std::shared_ptr<with_mtx<std::vector<ag::uint8_vector>>>;
+using discovery_result = std::pair<std::vector<Uint8Vector>, ErrString>;
+using ipv6_synth_result = std::pair<Uint8Array<16>, ErrString>;
+using prefixes = std::shared_ptr<WithMtx<std::vector<ag::Uint8Vector>>>;
 
 /**
  * Discover DNS64 presence.
@@ -22,6 +22,6 @@ discovery_result discover_prefixes(const upstream_ptr &upstream);
  * @param ip4    The IPv4 address to embed. In network order. Must be of correct length.
  * @return The synthesized address, all zeroes if there was an error.
  */
-ipv6_synth_result synthesize_ipv4_embedded_ipv6_address(uint8_view prefix, uint8_view ip4);
+ipv6_synth_result synthesize_ipv4_embedded_ipv6_address(Uint8View prefix, Uint8View ip4);
 
 } // namespace ag::dns64

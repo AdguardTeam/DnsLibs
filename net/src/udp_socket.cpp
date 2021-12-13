@@ -1,5 +1,6 @@
-#include <ag_utils.h>
+#include "common/utils.h"
 #include "udp_socket.h"
+#include <cassert>
 
 #if defined(__linux__) || defined(__LINUX__) || defined(__MACH__)
     #include <unistd.h>
@@ -45,8 +46,8 @@ std::optional<socket::error> udp_socket::connect(connect_parameters params) {
         goto error;
     }
 
-    if (err_string err; this->prepare_fd.func != nullptr
-            && (err = this->prepare_fd.func(this->prepare_fd.arg, fd, params.peer, this->parameters.outbound_interface))
+    if (ErrString err; this->prepare_fd.func != nullptr
+                       && (err = this->prepare_fd.func(this->prepare_fd.arg, fd, params.peer, this->parameters.outbound_interface))
                     .has_value()) {
         result = { -1, AG_FMT("Failed to prepare descriptor: {}", err.value()) };
         goto error;
@@ -94,7 +95,7 @@ std::optional<socket::error> udp_socket::connect(connect_parameters params) {
     return result;
 }
 
-std::optional<socket::error> udp_socket::send(uint8_view data) {
+std::optional<socket::error> udp_socket::send(Uint8View data) {
     log_sock(this, trace, "{}", data.size());
 
     if (ssize_t r = ::send(event_get_fd(this->socket_event.get()), (const char *)data.data(), data.size(), 0);
@@ -108,7 +109,7 @@ std::optional<socket::error> udp_socket::send(uint8_view data) {
     return std::nullopt;
 }
 
-std::optional<socket::error> udp_socket::send_dns_packet(uint8_view data) {
+std::optional<socket::error> udp_socket::send_dns_packet(Uint8View data) {
     return this->send(data);
 }
 

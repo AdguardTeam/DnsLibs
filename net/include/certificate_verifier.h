@@ -3,7 +3,7 @@
 
 #include <string_view>
 #include <openssl/ssl.h>
-#include <ag_utils.h>
+#include "common/utils.h"
 
 
 namespace ag {
@@ -23,7 +23,7 @@ public:
      * @param host_name host name
      * @return nullopt if verified successfully, non-nullopt otherwise
      */
-    virtual err_string verify(X509_STORE_CTX *ctx, std::string_view host_name) const = 0;
+    virtual ErrString verify(X509_STORE_CTX *ctx, std::string_view host_name) const = 0;
 
 protected:
     /**
@@ -33,7 +33,7 @@ protected:
      * @param host server name
      * @return nullopt if verified successfully, non-nullopt otherwise
      */
-    virtual err_string verify_host_name(X509 *certificate, std::string_view host) const;
+    virtual ErrString verify_host_name(X509 *certificate, std::string_view host) const;
 };
 
 

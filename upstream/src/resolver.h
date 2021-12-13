@@ -5,10 +5,10 @@
 #include <string_view>
 #include <chrono>
 
-#include <ag_logger.h>
-#include <ag_defs.h>
-#include <ag_utils.h>
-#include <ag_socket_address.h>
+#include "common/logger.h"
+#include "common/defs.h"
+#include "common/utils.h"
+#include "common/socket_address.h"
 
 #include <upstream.h>
 
@@ -21,8 +21,8 @@ public:
     static constexpr std::chrono::milliseconds MIN_TIMEOUT{ 50 };
 
     struct result {
-        std::vector<socket_address> addresses; // List of resolved addresses (empty if failed)
-        err_string error; // non-nullopt in case of something went wrong
+        std::vector<SocketAddress> addresses; // List of resolved addresses (empty if failed)
+        ErrString error; // non-nullopt in case of something went wrong
     };
 
     /**
@@ -36,7 +36,7 @@ public:
      * Initialize resolver
      * @return non-nullopt if something went wrong
      */
-    err_string init();
+    ErrString init();
 
     /**
      * Resolves host to list of socket addresses with given port attached
@@ -48,7 +48,7 @@ public:
     result resolve(std::string_view host, int port, std::chrono::milliseconds timeout) const;
 private:
     /** Logger */
-    logger log;
+    Logger log;
     /** Upstream factory */
     ag::upstream_factory upstream_factory;
     /** Upstream options */

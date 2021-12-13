@@ -1,7 +1,8 @@
-#include <ag_utils.h>
+#include "common/utils.h"
 #include <ag_net_utils.h>
 #include "outbound_socks_proxy.h"
 #include <magic_enum.hpp>
+#include <cassert>
 
 #ifdef _WIN32
 #include <ws2ipdef.h>
@@ -134,7 +135,7 @@ struct socks_oproxy::connection {
     socket_factory::socket_ptr socket;
     std::vector<uint8_t> recv_buffer;
 
-    uint8_view get_processable_chunk(uint8_view data, size_t expected_length) {
+    Uint8View get_processable_chunk(Uint8View data, size_t expected_length) {
         if (data.size() >= expected_length && this->recv_buffer.empty()) {
             // do nothing
         } else {
@@ -151,7 +152,7 @@ struct socks_oproxy::connection {
 
 struct socks_oproxy::udp_association { // NOLINT(cppcoreguidelines-pro-type-member-init)
     uint32_t conn_id;
-    socket_address bound_addr;
+    SocketAddress bound_addr;
 };
 
 
@@ -186,7 +187,7 @@ static size_t get_full_udp_header_size(const socks5_udp_header *h) {
     return sizeof(*h) + ((h->atyp == S5AT_IPV4) ? 4 : 16) + 2;
 }
 
-std::optional<socket::error> socks_oproxy::send(uint32_t conn_id, uint8_view data) {
+std::optional<socket::error> socks_oproxy::send(uint32_t conn_id, Uint8View data) {
     log_conn(this, conn_id, trace, "{}", data.size());
 
     std::scoped_lock l(this->guard);
@@ -205,7 +206,7 @@ std::optional<socket::error> socks_oproxy::send(uint32_t conn_id, uint8_view dat
     case utils::TP_UDP: {
         socks5_udp_header header = {};
 
-        uint8_view addr_bytes;
+        Uint8View addr_bytes;
         uint16_t port;
         if (const sockaddr *addr = conn->parameters.peer.c_sockaddr();
                 addr->sa_family == AF_INET) {
@@ -388,7 +389,7 @@ void socks_oproxy::on_connected(void *arg) {
     }
 }
 
-void socks_oproxy::on_read(void *arg, uint8_view data) {
+void socks_oproxy::on_read(void *arg, Uint8View data) {
     auto *conn = (connection *)arg;
     socks_oproxy *self = conn->proxy;
     log_conn(self, conn->id, trace, "{}", data.size());
@@ -444,7 +445,7 @@ std::optional<socket::error> socks_oproxy::connect_to_proxy(connection *conn) {
     log_conn(this, conn->id, trace, "...");
 
     utils::transport_protocol proto = conn->parameters.proto;
-    socket_address dst_addr;
+    SocketAddress dst_addr;
     if (proto == utils::TP_UDP) {
         assert(this->settings->protocol == outbound_proxy_protocol::SOCKS5_UDP);
 
@@ -486,7 +487,7 @@ std::optional<socket::error> socks_oproxy::connect_to_proxy(connection *conn) {
                     {
                         conn->parameters.loop,
                         utils::TP_TCP,
-                        socket_address(this->settings->address, this->settings->port),
+                        SocketAddress(this->settings->address, this->settings->port),
                         conn->parameters.callbacks,
                         conn->parameters.timeout,
                     },
@@ -500,7 +501,7 @@ std::optional<socket::error> socks_oproxy::connect_to_proxy(connection *conn) {
             dst_addr = assoc_it->second->bound_addr;
         }
     } else {
-        dst_addr = socket_address(this->settings->address, this->settings->port);
+        dst_addr = SocketAddress(this->settings->address, this->settings->port);
     }
 
     assert(dst_addr.valid());
@@ -586,7 +587,7 @@ void socks_oproxy::handle_connection_close(connection *conn, std::optional<socke
     }
 }
 
-void socks_oproxy::on_udp_association_established(connection *assoc_conn, socket_address bound_addr) {
+void socks_oproxy::on_udp_association_established(connection *assoc_conn, SocketAddress bound_addr) {
     log_conn(this, assoc_conn->id, trace, "...");
 
     std::vector<connection *> udp_connections;
@@ -686,7 +687,7 @@ std::optional<socket::error> socks_oproxy::send_socks4_request(connection *conn)
     request.dstport = htons(conn->parameters.peer.port());
     request.dstip = *(uint32_t *)&((sockaddr_in *)conn->parameters.peer.c_sockaddr())->sin_addr;
 
-    uint8_view data = { (uint8_t *)&request, sizeof(request) };
+    Uint8View data = { (uint8_t *)&request, sizeof(request) };
     SEND_S(conn, data);
 
     static constexpr char ADGUARD[] = "adguard";
@@ -696,7 +697,7 @@ std::optional<socket::error> socks_oproxy::send_socks4_request(connection *conn)
     return std::nullopt;
 }
 
-void socks_oproxy::on_socks4_reply(connection *conn, uint8_view data) {
+void socks_oproxy::on_socks4_reply(connection *conn, Uint8View data) {
     log_conn(this, conn->id, trace, "...");
 
     if (data.size() + conn->recv_buffer.size() > sizeof(socks4_connect_reply)) {
@@ -705,7 +706,7 @@ void socks_oproxy::on_socks4_reply(connection *conn, uint8_view data) {
         return;
     }
 
-    uint8_view seek = conn->get_processable_chunk(data, sizeof(socks4_connect_reply));
+    Uint8View seek = conn->get_processable_chunk(data, sizeof(socks4_connect_reply));
     if (seek.empty()) {
         return;
     }
@@ -738,7 +739,7 @@ std::optional<socket::error> socks_oproxy::send_socks5_auth_method_request(conne
     socks5_auth_method_request request = {};
     request.nmethods = !this->settings->auth_info.has_value() ? 1 : 2;
 
-    uint8_view data = { (uint8_t *)&request, sizeof(request) };
+    Uint8View data = { (uint8_t *)&request, sizeof(request) };
     SEND_S(conn, data);
 
     data = { METHODS, request.nmethods };
@@ -747,7 +748,7 @@ std::optional<socket::error> socks_oproxy::send_socks5_auth_method_request(conne
     return std::nullopt;
 }
 
-void socks_oproxy::on_socks5_auth_method_response(connection *conn, uint8_view data) {
+void socks_oproxy::on_socks5_auth_method_response(connection *conn, Uint8View data) {
     log_conn(this, conn->id, trace, "...");
 
     if (data.size() + conn->recv_buffer.size() > sizeof(socks5_auth_method_response)) {
@@ -756,7 +757,7 @@ void socks_oproxy::on_socks5_auth_method_response(connection *conn, uint8_view d
         return;
     }
 
-    uint8_view seek = conn->get_processable_chunk(data, sizeof(socks5_auth_method_response));
+    Uint8View seek = conn->get_processable_chunk(data, sizeof(socks5_auth_method_response));
     if (seek.empty()) {
         return;
     }
@@ -793,7 +794,7 @@ std::optional<socket::error> socks_oproxy::send_socks5_user_pass_auth_request(co
     log_conn(this, conn->id, trace, "...");
 
     uint8_t ver = S5UPAVN_1;
-    uint8_view data = { (uint8_t *)&ver, sizeof(ver) };
+    Uint8View data = { (uint8_t *)&ver, sizeof(ver) };
     SEND_S(conn, data);
 
     uint8_t ulen = this->settings->auth_info->username.size();
@@ -815,7 +816,7 @@ std::optional<socket::error> socks_oproxy::send_socks5_user_pass_auth_request(co
     return std::nullopt;
 }
 
-void socks_oproxy::on_socks5_user_pass_auth_response(connection *conn, uint8_view data) {
+void socks_oproxy::on_socks5_user_pass_auth_response(connection *conn, Uint8View data) {
     log_conn(this, conn->id, trace, "...");
 
     if (data.size() + conn->recv_buffer.size() > sizeof(socks5_auth_user_pass_response)) {
@@ -824,7 +825,7 @@ void socks_oproxy::on_socks5_user_pass_auth_response(connection *conn, uint8_vie
         return;
     }
 
-    uint8_view seek = conn->get_processable_chunk(data, sizeof(socks5_auth_user_pass_response));
+    Uint8View seek = conn->get_processable_chunk(data, sizeof(socks5_auth_user_pass_response));
     if (seek.empty()) {
         return;
     }
@@ -859,7 +860,7 @@ std::optional<socket::error> socks_oproxy::send_socks5_connect_request(connectio
     request.cmd = this->is_udp_association_connection(conn->id) ? S5CMD_UDP_ASSOCIATE : S5CMD_CONNECT;
     request.atyp = (addr->sa_family == AF_INET) ? S5AT_IPV4 : S5AT_IPV6;
 
-    uint8_view data = { (uint8_t *)&request, sizeof(request) };
+    Uint8View data = { (uint8_t *)&request, sizeof(request) };
     SEND_S(conn, data);
 
     uint16_t port;
@@ -880,10 +881,10 @@ std::optional<socket::error> socks_oproxy::send_socks5_connect_request(connectio
     return std::nullopt;
 }
 
-void socks_oproxy::on_socks5_connect_response(connection *conn, uint8_view data) {
+void socks_oproxy::on_socks5_connect_response(connection *conn, Uint8View data) {
     log_conn(this, conn->id, trace, "...");
 
-    uint8_view seek = conn->get_processable_chunk(data, sizeof(socks5_connect_reply));
+    Uint8View seek = conn->get_processable_chunk(data, sizeof(socks5_connect_reply));
     if (seek.empty()) {
         return;
     }
@@ -923,10 +924,10 @@ void socks_oproxy::on_socks5_connect_response(connection *conn, uint8_view data)
     conn->state = CS_CONNECTED;
     conn->recv_buffer.resize(0);
     if (this->is_udp_association_connection(conn->id)) {
-        uint8_view addr = { reply->bnd_addr, (size_t)((reply->atyp == S5AT_IPV4) ? 4 : 16) };
+        Uint8View addr = { reply->bnd_addr, (size_t)((reply->atyp == S5AT_IPV4) ? 4 : 16) };
         uint16_t port = ntohs(*(uint16_t *)(reply->bnd_addr + addr.size()));
 
-        this->on_udp_association_established(conn, socket_address(addr, port));
+        this->on_udp_association_established(conn, SocketAddress(addr, port));
     } else if (callbacks cbx = this->get_connection_callbacks_locked(conn);
             cbx.on_connected != nullptr) {
         cbx.on_connected(cbx.arg, conn->id);

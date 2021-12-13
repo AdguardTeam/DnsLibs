@@ -1,5 +1,5 @@
 #include <ag_socket.h>
-#include <ag_clock.h>
+#include "common/clock.h"
 #include <ag_event_loop.h>
 #include "tcp_stream.h"
 #include "udp_socket.h"
@@ -36,7 +36,7 @@ struct socket_factory::outbound_proxy_state {
     std::mutex guard;
     /// Whether the proxy is available. If not, the behavior depends on
     /// `outbound_proxy_settings#ignore_if_unavailable` flag
-    expiring_value<proxy_availability_status, PAS_UNKNOWN> availability_status;
+    ExpiringValue<proxy_availability_status, PAS_UNKNOWN> availability_status;
     /// Used for example to reset re-routed directly connection
     event_loop_ptr event_loop;
     /// Whether the event for resetting bypassed connections is scheduled
@@ -44,7 +44,7 @@ struct socket_factory::outbound_proxy_state {
     /// The next reset event subscriber ID
     uint32_t next_subscriber_id = 0;
     /// The reset event subscribers
-    hash_map<uint32_t, reset_bypassed_proxy_connections_subscriber> reset_subscribers;
+    HashMap<uint32_t, reset_bypassed_proxy_connections_subscriber> reset_subscribers;
 
     static void on_successful_proxy_connection(void *arg) {
         auto *self = (socket_factory *)arg;
@@ -131,8 +131,8 @@ socket_factory::socket_ptr socket_factory::make_secured_socket(socket_ptr underl
     );
 }
 
-err_string socket_factory::prepare_fd(evutil_socket_t fd,
-        const socket_address &peer, const if_id_variant &outbound_interface) const {
+ErrString socket_factory::prepare_fd(evutil_socket_t fd,
+                                     const SocketAddress &peer, const IfIdVariant &outbound_interface) const {
     if (const uint32_t *if_index = std::get_if<uint32_t>(&outbound_interface)) {
         return ag::utils::bind_socket_to_if(fd, peer.c_sockaddr()->sa_family, *if_index);
     } else if (const std::string *if_name = std::get_if<std::string>(&outbound_interface)) {
@@ -248,8 +248,8 @@ void socket_factory::unsubscribe_from_reset_bypassed_proxy_connections_event(uin
     this->proxy->reset_subscribers.erase(id);
 }
 
-err_string socket_factory::on_prepare_fd(void *arg, evutil_socket_t fd,
-        const socket_address &peer, const if_id_variant &outbound_interface) {
+ErrString socket_factory::on_prepare_fd(void *arg, evutil_socket_t fd,
+                                        const SocketAddress &peer, const IfIdVariant &outbound_interface) {
     auto *self = (socket_factory *)arg;
     return self->prepare_fd(fd, peer, outbound_interface);
 }

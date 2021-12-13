@@ -1,6 +1,6 @@
 #include "dnsproxy_listener.h"
 
-#include <ag_socket_address.h>
+#include "common/socket_address.h"
 #include <ag_net_consts.h>
 #include <uv.h>
 #include <thread>
@@ -33,13 +33,13 @@ static void dealloc_buf(const uv_buf_t *buf) {
 // Abstract base for listeners, does uv initialization/stopping
 class listener_base : public ag::dnsproxy_listener {
 protected:
-    ag::logger m_log = ag::create_logger("listener");
+    ag::Logger m_log{"listener"};
     ag::dnsproxy *m_proxy{nullptr};
     std::thread m_loop_thread;
-    using uv_loop_ptr = std::unique_ptr<uv_loop_t, ag::ftor<&uv_loop_delete>>;
+    using uv_loop_ptr = std::unique_ptr<uv_loop_t, ag::Ftor<&uv_loop_delete>>;
     uv_loop_ptr m_loop;
     uv_async_t m_escape_hatch{};
-    ag::socket_address m_address;
+    ag::SocketAddress m_address;
     ag::listener_settings m_settings;
 
     // Subclass initializes its handles, callbacks, etc.
@@ -47,7 +47,7 @@ protected:
     // Called on event loop's thread
     // Return nullopt if the loop should run (success)
     // Close any uv_*_init'ed handles before returning in case of an error!
-    virtual ag::err_string before_run() = 0;
+    virtual ag::ErrString before_run() = 0;
 
     // Subclass cleans up to allow the event loop to exit
     // (close handles, cancel pending work, etc.)
@@ -87,7 +87,7 @@ public:
     /**
      * @return std::nullopt if ok, error string otherwise
      */
-    ag::err_string init(const ag::listener_settings &settings, ag::dnsproxy *proxy) {
+    ag::ErrString init(const ag::listener_settings &settings, ag::dnsproxy *proxy) {
         m_settings = settings;
 #ifdef _WIN32
         m_settings.fd = -1; // Unsupported on Windows
@@ -101,7 +101,7 @@ public:
         }
 
         if (m_settings.fd == -1) {
-            m_address = ag::socket_address{m_settings.address, m_settings.port};
+            m_address = ag::SocketAddress{m_settings.address, m_settings.port};
             if (!m_address.valid()) {
                 return AG_FMT("Invalid address: {}", settings.address);
             }
@@ -163,7 +163,7 @@ public:
         }
     }
 
-    std::pair<ag::utils::transport_protocol, ag::socket_address> get_listen_address() const override {
+    std::pair<ag::utils::transport_protocol, ag::SocketAddress> get_listen_address() const override {
         return { m_settings.protocol, m_address };
     }
 };
@@ -173,9 +173,9 @@ private:
     struct task {
         uv_work_t work_req{};
         listener_udp *self;
-        ag::socket_address peer;
+        ag::SocketAddress peer;
         uv_buf_t request;
-        ag::uint8_vector response; // Filled in work_cb
+        ag::Uint8Vector response; // Filled in work_cb
 
         // Takes ownership of request buffer
         task(listener_udp *self, const sockaddr *addr, uv_buf_t request)
@@ -190,7 +190,7 @@ private:
     };
 
     uv_udp_t m_udp_handle{};
-    ag::hash_set<task *> m_pending; // Messages not yet processed by the proxy
+    ag::HashSet<task *> m_pending; // Messages not yet processed by the proxy
 
     static void work_cb(uv_work_t *req) {
         auto *m = (task *) req->data;
@@ -257,7 +257,7 @@ private:
     }
 
 protected:
-    ag::err_string before_run() override {
+    ag::ErrString before_run() override {
         int err = 0;
 
         // Init UDP
@@ -288,7 +288,7 @@ protected:
             sockaddr_storage name{};
             int namelen = sizeof(name);
             uv_udp_getsockname(&m_udp_handle, (sockaddr *) &name, &namelen);
-            m_address = ag::socket_address((sockaddr *)&name);
+            m_address = ag::SocketAddress((sockaddr *)&name);
         }
         log_listener(this, info, "Listening on {} (UDP)", m_address.str());
 
@@ -311,20 +311,20 @@ private:
     };
     state m_state;
     uint16_t m_size;
-    ag::uint8_vector m_data;
+    ag::Uint8Vector m_data;
 
 public:
     tcp_dns_payload_parser() : m_state{state::RD_SIZE}, m_size{0} {
     }
 
     // Push more data to this parser
-    void push_data(ag::uint8_view data) {
+    void push_data(ag::Uint8View data) {
         m_data.insert(m_data.end(), data.begin(), data.end());
     }
 
     // Initialize `out` to contain the next parsed payload
     // Return true if successful or false if more data is needed (in which case `out` won't be modified)
-    bool next_payload(ag::uint8_vector &out) {
+    bool next_payload(ag::Uint8Vector &out) {
         if (m_state == state::RD_SIZE) {
             if (m_data.size() < 2) {
                 return false; // Need more data
@@ -337,7 +337,7 @@ public:
             if (m_data.size() < (size_t) 2 + m_size) {
                 return false; // Need more data
             }
-            out = ag::uint8_vector(m_data.begin() + 2, m_data.begin() + 2 + m_size);
+            out = ag::Uint8Vector(m_data.begin() + 2, m_data.begin() + 2 + m_size);
             m_data.erase(m_data.begin(), m_data.begin() + 2 + m_size);
             m_state = state::RD_SIZE;
         }
@@ -349,7 +349,7 @@ class tcp_dns_connection {
 public:
     explicit tcp_dns_connection(uint64_t id)
             : m_id{id}
-            , m_log(ag::create_logger(__func__))
+            , m_log(__func__)
             , m_tcp((uv_tcp_t *) malloc(sizeof(uv_tcp_t))) // Deleted in close_cb
             , m_idle_timer((uv_timer_t *) malloc(sizeof(uv_timer_t))) // Deleted in close_cb
     {
@@ -393,10 +393,10 @@ private:
     struct work {
         uv_work_t req{};
         tcp_dns_connection *connection;
-        ag::uint8_vector payload;
+        ag::Uint8Vector payload;
         std::atomic_bool cancelled;
 
-        work(tcp_dns_connection *c, ag::uint8_vector &&payload)
+        work(tcp_dns_connection *c, ag::Uint8Vector &&payload)
                 : connection{c},
                   payload{std::move(payload)},
                   cancelled{false} {
@@ -406,11 +406,11 @@ private:
 
     struct write {
         uv_write_t req{};
-        ag::uint8_vector payload;
+        ag::Uint8Vector payload;
         uint16_t size_be; // Big-endian size
         uv_buf_t bufs[2]{};
 
-        explicit write(ag::uint8_vector &&payload) : payload(std::move(payload)) {
+        explicit write(ag::Uint8Vector &&payload) : payload(std::move(payload)) {
             this->req.data = this;
             this->size_be = htons(this->payload.size());
             bufs[0] = uv_buf_init((char *) &this->size_be, sizeof(this->size_be));
@@ -419,7 +419,7 @@ private:
     };
 
     const uint64_t m_id;
-    ag::logger m_log;
+    ag::Logger m_log;
     ag::dnsproxy *m_proxy{};
     bool m_persistent{false};
     uint8_t m_incoming_buf[TCP_RECV_BUF_SIZE]{};
@@ -429,7 +429,7 @@ private:
     std::function<void(uint64_t)> m_close_callback;
     bool m_closed{false};
     tcp_dns_payload_parser m_parser;
-    ag::hash_set<work *> m_pending_works;
+    ag::HashSet<work *> m_pending_works;
 
     static void alloc_cb(uv_handle_t *handle, size_t suggested_size, uv_buf_t *buf) {
         auto *c = (tcp_dns_connection *) handle->data;
@@ -449,7 +449,7 @@ private:
         assert(buf->base == (char *) c->m_incoming_buf);
         c->m_parser.push_data({c->m_incoming_buf, (size_t) nread});
 
-        ag::uint8_vector payload;
+        ag::Uint8Vector payload;
         while (c->m_parser.next_payload(payload)) {
             uv_timer_again(c->m_idle_timer);
 
@@ -475,7 +475,7 @@ private:
         int namelen = sizeof(ss);
         uv_tcp_getpeername(conn->m_tcp, (sockaddr *) &ss, &namelen);
 
-        ag::dns_message_info info{.proto = ag::utils::TP_TCP, .peername = ag::socket_address{(sockaddr *) &ss}};
+        ag::dns_message_info info{.proto = ag::utils::TP_TCP, .peername = ag::SocketAddress{(sockaddr *) &ss}};
         w->payload = conn->m_proxy->handle_message({w->payload.data(), w->payload.size()}, &info);
     }
 
@@ -526,7 +526,7 @@ private:
         uv_timer_start(m_idle_timer, idle_timeout_cb, m_idle_timeout.count(), m_idle_timeout.count());
     }
 
-    void do_write(ag::uint8_vector &&payload) {
+    void do_write(ag::Uint8Vector &&payload) {
         auto *w = new write(std::move(payload));
         if (uv_write(&w->req, (uv_stream_t *) m_tcp, w->bufs, 2, write_cb) < 0) {
             delete w;
@@ -570,7 +570,7 @@ private:
 
     uv_tcp_t m_tcp_handle{};
     uint64_t m_id_counter{0};
-    ag::hash_map<uint64_t, std::unique_ptr<tcp_dns_connection>> m_connections;
+    ag::HashMap<uint64_t, std::unique_ptr<tcp_dns_connection>> m_connections;
 
     static void conn_cb(uv_stream_t *server, int status) {
         auto *self = (listener_tcp *) server->data;
@@ -604,7 +604,7 @@ private:
     }
 
 protected:
-    ag::err_string before_run() override {
+    ag::ErrString before_run() override {
         int err = 0;
 
         if ((err = uv_tcp_init(m_loop.get(), &m_tcp_handle)) < 0) {
@@ -634,7 +634,7 @@ protected:
             sockaddr_storage name{};
             int namelen = sizeof(name);
             uv_tcp_getsockname(&m_tcp_handle, (sockaddr *) &name, &namelen);
-            m_address = ag::socket_address((sockaddr *)&name);
+            m_address = ag::SocketAddress((sockaddr *)&name);
         }
         log_listener(this, info, "Listening on {} (TCP)", m_address.str());
 

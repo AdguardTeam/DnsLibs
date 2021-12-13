@@ -14,7 +14,7 @@ static void sigint_handler(int signal) {
 }
 
 int main() {
-    ag::set_default_log_level(ag::log_level::TRACE);
+    ag::Logger::set_log_level(ag::LogLevel::LOG_LEVEL_TRACE);
     using namespace std::chrono_literals;
 
     constexpr auto address = "::";

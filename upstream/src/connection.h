@@ -1,7 +1,7 @@
 #pragma once
 
-#include <ag_defs.h>
-#include <ag_socket_address.h>
+#include "common/defs.h"
+#include "common/socket_address.h"
 #include <memory>
 #include <vector>
 #include <chrono>
@@ -19,10 +19,10 @@ class connection {
 public:
     struct read_result {
         std::vector<uint8_t> reply; // Reply data
-        err_string error; // Some string in case of error
+        ErrString error; // Some string in case of error
     };
 
-    connection(const socket_address &addr) : address(addr) {}
+    connection(const SocketAddress &addr) : address(addr) {}
 
     virtual ~connection() = default;
 
@@ -32,14 +32,14 @@ public:
      * @param timeout time out value
      * @return none if successful
      */
-    virtual err_string wait_connect_result(int request_id, std::chrono::milliseconds timeout) = 0;
+    virtual ErrString wait_connect_result(int request_id, std::chrono::milliseconds timeout) = 0;
 
     /**
      * Writes given DNS packet to framed connection
      * @param v DNS packet
      * @return none if successful
      */
-    virtual err_string write(int request_id, uint8_view buf) = 0;
+    virtual ErrString write(int request_id, Uint8View buf) = 0;
 
     /**
      * Reads given DNS packet for given request id from framed connection
@@ -52,7 +52,7 @@ public:
     connection(const connection &) = delete;
     connection &operator=(const connection &) = delete;
 
-    const socket_address address;
+    const SocketAddress address;
 };
 
 /**
@@ -65,7 +65,7 @@ public:
     struct get_result {
         connection_ptr conn; /**< Connection or null if error occurred */
         std::chrono::microseconds time_elapsed; /**< Elapsed time. Used for precise total timeout */
-        ag::err_string error;
+        ag::ErrString error;
     };
     /**
      * Get connection from pool

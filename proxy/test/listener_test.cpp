@@ -18,11 +18,12 @@ struct test_params {
 };
 
 class listener_test : public ::testing::TestWithParam<test_params> {
-
+protected:
+    ag::Logger log{"listener_test"};
 };
 
 TEST_P(listener_test, listens_and_responds) {
-    ag::set_default_log_level(ag::TRACE);
+    ag::Logger::set_log_level(ag::LogLevel::LOG_LEVEL_TRACE);
 
     std::mutex mtx;
     std::condition_variable proxy_cond;
@@ -91,7 +92,7 @@ TEST_P(listener_test, listens_and_responds) {
                               &upstream_factory,
                               i,
                               params]() {
-            auto logger = ag::create_logger(fmt::format("test_thread_{}", i));
+            ag::Logger logger{fmt::format("test_thread_{}", i)};
 
             auto[upstream, error] = upstream_factory.create_upstream({
                     .address = address,
@@ -99,7 +100,7 @@ TEST_P(listener_test, listens_and_responds) {
                 });
 
             if (error) {
-                logger->error("Upstream create: {}", *error);
+                errlog(logger, "Upstream create: {}", *error);
                 return;
             }
 
@@ -114,7 +115,7 @@ TEST_P(listener_test, listens_and_responds) {
 
                 auto[resp, error] = upstream->exchange(req.get());
                 if (error) {
-                    logger->error("[id={}] Upstream exchange: {}", ldns_pkt_id(req.get()), *error);
+                    errlog(logger, "[id={}] Upstream exchange: {}", ldns_pkt_id(req.get()), *error);
                     continue;
                 }
 
@@ -125,7 +126,7 @@ TEST_P(listener_test, listens_and_responds) {
                     ++successful_requests;
                 } else {
                     char *str = ldns_pkt2str(resp.get());
-                    logger->error("[id={}] Invalid response:\n{}", ldns_pkt_id(req.get()), str);
+                    errlog(logger, "[id={}] Invalid response:\n{}", ldns_pkt_id(req.get()), str);
                     std::free(str);
                 }
             }

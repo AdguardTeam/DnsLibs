@@ -6,8 +6,8 @@
 #include <optional>
 #include <openssl/ssl.h>
 #include <openssl/bio.h>
-#include <ag_defs.h>
-#include <ag_logger.h>
+#include "common/defs.h"
+#include "common/logger.h"
 #include <certificate_verifier.h>
 #include <tls_session_cache.h>
 
@@ -22,7 +22,7 @@ public:
     };
 
     struct chunk {
-        uint8_vector data;
+        Uint8Vector data;
     };
 
     using send_encrypted_result = std::variant<chunk, error>;
@@ -67,7 +67,7 @@ public:
     /**
      * Feed a data chunk received from network
      */
-    std::optional<error> recv_encrypted(uint8_view buffer);
+    std::optional<error> recv_encrypted(Uint8View buffer);
 
     /**
      * Read a decrypted data chunk from the TLS session
@@ -77,13 +77,13 @@ public:
     /**
      * Encrypt and send a data chunk
      */
-    write_decrypted_result write_decrypted(uint8_view buffer);
+    write_decrypted_result write_decrypted(Uint8View buffer);
 
 private:
     const certificate_verifier *cert_verifier = nullptr;
     tls_session_cache *session_cache = nullptr;
-    std::unique_ptr<SSL, ftor<&SSL_free>> ssl;
-    logger log;
+    std::unique_ptr<SSL, Ftor<&SSL_free>> ssl;
+    Logger log;
 
     static int ssl_verify_callback(X509_STORE_CTX *ctx, void *arg);
     std::optional<error> proceed_handshake();
