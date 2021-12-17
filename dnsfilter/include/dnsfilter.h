@@ -26,7 +26,7 @@ public:
         int32_t id{0}; // filter id
         std::string data; // path to file with rules or actual rules
         bool in_memory{false}; // if true, data is actual rules, otherwise data is path to file with rules
-        time_t mtime{0};  // time of last modification of file with rule
+        SystemTime mtime;  // time of last modification of file with rule
     };
 
     struct engine_params {

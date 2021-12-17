@@ -3,7 +3,7 @@
 #include <string_view>
 #include <cstring>
 #include "common/utils.h"
-#include <ag_file.h>
+#include "common/file.h"
 #include "common/logger.h"
 #include <ag_sys.h>
 #include <dnsfilter.h>
@@ -75,7 +75,7 @@ static bool add_domain(uint32_t idx, std::string_view line, void *arg) {
 
 
 static int parse_domains_base(std::string_view path) {
-    ag::file::handle file = ag::file::open(std::string(path), ag::file::RDONLY);
+    ag::file::Handle file = ag::file::open(std::string(path), ag::file::RDONLY);
     if (!ag::file::is_valid(file)) {
         errlog(logger, "failed to read file: {} ({})",
             path, ag::sys::error_string(ag::sys::error_code()));

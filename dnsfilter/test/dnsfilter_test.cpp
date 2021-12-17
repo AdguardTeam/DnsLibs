@@ -1,7 +1,7 @@
 #include <gtest/gtest.h>
 #include <numeric>
 #include <string>
-#include <ag_file.h>
+#include "common/file.h"
 #include <ag_sys.h>
 #include "common/logger.h"
 #include "common/utils.h"
@@ -12,7 +12,7 @@ class dnsfilter_test : public ::testing::Test {
 protected:
 
     ag::dnsfilter filter;
-    ag::file::handle file;
+    ag::file::Handle file;
     ag::Logger log{"dnsfilter_test"};
 
     const std::string TEST_FILTER_NAME = "dnsfilter_test";
@@ -29,7 +29,7 @@ protected:
     }
 
     static void add_rule_in_filter(std::string_view filter, std::string_view rule) {
-        ag::file::handle file = ag::file::open(std::string(filter), ag::file::WRONLY);
+        ag::file::Handle file = ag::file::open(std::string(filter), ag::file::WRONLY);
         ASSERT_TRUE(ag::file::is_valid(file)) << ag::sys::error_string(ag::sys::error_code());
         ASSERT_TRUE(ag::file::get_size(file) >= 0) << ag::sys::error_string(ag::sys::error_code());
         ag::file::set_position(file, ag::file::get_size(file));
@@ -621,9 +621,9 @@ TEST_F(dnsfilter_test, multifilters) {
             { { "example1.org" }, { "@@example1.org" }, "example1.org", "@@example1.org", },
         };
 
-    ag::file::handle file1 = ag::file::open(file_by_filter_name(TEST_FILTER_NAME + "1"), ag::file::CREAT);
+    ag::file::Handle file1 = ag::file::open(file_by_filter_name(TEST_FILTER_NAME + "1"), ag::file::CREAT);
     ag::file::close(file1);
-    ag::file::handle file2 = ag::file::open(file_by_filter_name(TEST_FILTER_NAME + "2"), ag::file::CREAT);
+    ag::file::Handle file2 = ag::file::open(file_by_filter_name(TEST_FILTER_NAME + "2"), ag::file::CREAT);
     ag::file::close(file2);
 
     for (const test_data &entry : TEST_DATA) {
@@ -754,7 +754,7 @@ TEST_F(dnsfilter_test, file_based_filter_auto_update) {
     const std::string file_name = "file_based_filter_auto_update.txt";
 
     std::remove(file_name.c_str());
-    ag::file::handle fd = ag::file::open(file_name, ag::file::CREAT | ag::file::WRONLY);
+    ag::file::Handle fd = ag::file::open(file_name, ag::file::CREAT | ag::file::WRONLY);
     ag::file::write(fd, rule1.c_str(), rule1.size());
     ag::file::close(fd);
 

@@ -10,7 +10,7 @@
 #include <dns_forwarder.h>
 #include <upstream_utils.h>
 #include "common/logger.h"
-#include <ag_file.h>
+#include "common/file.h"
 
 #include "../../upstream/test/test_utils.h"
 
@@ -983,7 +983,7 @@ TEST_F(dnsproxy_test, rules_load_from_memory) {
     ag::dnsproxy_settings settings = make_dnsproxy_settings();
 
     std::string filter_data;
-    ag::file::handle file_handle = ag::file::open("bad_test_filter.txt", ag::file::RDONLY);
+    ag::file::Handle file_handle = ag::file::open("bad_test_filter.txt", ag::file::RDONLY);
     ag::file::for_each_line(file_handle, [](uint32_t, std::string_view line, void *arg) -> bool {
         auto &s = *(std::string *) arg;
         s += line;

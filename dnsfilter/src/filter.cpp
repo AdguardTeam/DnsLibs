@@ -7,7 +7,7 @@
 #include "common/regex.h"
 #include "common/logger.h"
 #include "common/utils.h"
-#include <ag_file.h>
+#include "common/file.h"
 #include <ag_sys.h>
 #include <dnsfilter.h>
 #include <khash.h>
@@ -34,7 +34,7 @@ static ag::Logger logger{"filter"};
 struct match_arg {
     filter::match_context &ctx;
     filter &f;
-    ag::file::handle file;
+    ag::file::Handle file;
     bool outdated;
 };
 
@@ -249,8 +249,8 @@ bool filter::impl::check_filter_outdated(const filter &filter) {
     if (filter.params.in_memory) {
         return false;
     }
-    time_t file_mtime = ag::file::get_modification_time(filter.params.data.data());
-    if (!file_mtime || file_mtime != filter.params.mtime) {
+    ag::SystemTime file_mtime = ag::file::get_modification_time(filter.params.data.data());
+    if (file_mtime != filter.params.mtime) {
         return true;
     }
     return false;
@@ -381,7 +381,7 @@ next_line:
 #undef CHECK_MEM
 
 std::pair<filter::load_result, size_t> filter::load(const ag::dnsfilter::filter_params &p, size_t mem_limit) {
-    ag::file::handle fd = ag::file::INVALID_HANDLE;
+    ag::file::Handle fd = ag::file::INVALID_HANDLE;
     this->pimpl->m_name = AG_FMT("{}::", p.id);
 
     if (!p.in_memory) {

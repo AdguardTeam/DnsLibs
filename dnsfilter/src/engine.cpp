@@ -1,7 +1,7 @@
 #include <algorithm>
 #include <dnsfilter.h>
 #include "common/logger.h"
-#include <ag_file.h>
+#include "common/file.h"
 #include "filter.h"
 #include "rule_utils.h"
 #include "common/utils.h"
