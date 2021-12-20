@@ -1,23 +1,28 @@
+#import "AGDnsProxy.h"
+#import <TargetConditionals.h>
+#if !TARGET_OS_IPHONE
+#import "NSTask+AGTimeout.h"
+#endif
+
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
 #include <resolv.h>
+#include <poll.h>
 #include <cassert>
-
-#import "AGDnsProxy.h"
+#include <string>
 
 #include <ag_logger.h>
 #include <dnsproxy.h>
 #include <upstream_utils.h>
-
-#include <string>
 #include <ag_cesu8.h>
 
-#include <poll.h>
 
 static constexpr size_t FILTER_PARAMS_MEM_LIMIT_BYTES = 8 * 1024 * 1024;
 
 static constexpr NSString *REPLACEMENT_STRING = @"<out of memory>";
+
+static constexpr int BINDFD_WAIT_MS = 10000;
 
 /**
  * @param str an STL string
@@ -1081,7 +1086,10 @@ static int bindFd(NSString *helperPath, NSString *address, NSNumber *port, AGLis
     auto *task = [[NSTask alloc] init];
     task.launchPath = helperPath;
     task.arguments = @[@"--bind", address, port.stringValue, protoString];
+    NSFileHandle *nullDevice = [NSFileHandle fileHandleWithNullDevice];
+    task.standardInput = nullDevice;
     task.standardOutput = [[NSFileHandle alloc] initWithFileDescriptor:fdPair.theirFd closeOnDealloc:NO];
+    task.standardError = nullDevice;
     [task launch];
     close(fdPair.theirFd);
 
@@ -1128,7 +1136,8 @@ static int bindFd(NSString *helperPath, NSString *address, NSNumber *port, AGLis
         return -1;
     }
     close(fdPair.ourFd);
-    [task waitUntilExit];
+    // Error will be handled after.
+    [task waitUntilExitOrInterruptAfterTimeoutMs:BINDFD_WAIT_MS];
 
     for (cmsghdr *cmsg = CMSG_FIRSTHDR(&msg); cmsg; cmsg = CMSG_NXTHDR(&msg, cmsg)) {
         if (cmsg->cmsg_level == SOL_SOCKET && cmsg->cmsg_type == SCM_RIGHTS) {
