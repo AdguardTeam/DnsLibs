@@ -27,9 +27,9 @@
 
 namespace ag {
 
-using curl_slist_ptr = std::unique_ptr<curl_slist, Ftor<&curl_slist_free_all>>;
-using curl_pool_ptr = std::unique_ptr<CURLM, Ftor<&curl_multi_cleanup>>;
-using event_ptr = std::unique_ptr<event, Ftor<&event_free>>;
+using curl_slist_ptr = UniquePtr<curl_slist, &curl_slist_free_all>;
+using curl_pool_ptr = UniquePtr<CURLM, &curl_multi_cleanup>;
+using event_ptr = UniquePtr<event, &event_free>;
 
 class dns_over_https : public upstream {
 public:

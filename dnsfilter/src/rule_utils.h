@@ -40,7 +40,7 @@ namespace rule_utils {
 
     // https://tools.ietf.org/html/draft-ietf-dnsop-svcb-httpssvc-03#section-2.2
     struct dnsrewrite_svcb_value {
-        using ldns_rdf_ptr = std::unique_ptr<ldns_rdf, ag::Ftor<&ldns_rdf_deep_free>>;
+        using ldns_rdf_ptr = ag::UniquePtr<ldns_rdf, &ldns_rdf_deep_free>;
 
         uint16_t priority = 0;
         std::string domain;

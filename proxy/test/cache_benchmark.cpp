@@ -45,7 +45,7 @@ int main() {
         return 1;
     }
 
-    std::unique_ptr<ldns_buffer, ag::Ftor<ldns_buffer_free>> buf(ldns_buffer_new(512));
+    ag::UniquePtr<ldns_buffer, &ldns_buffer_free> buf(ldns_buffer_new(512));
     if (ldns_pkt2buffer_wire(buf.get(), reqpkt.get()) != LDNS_STATUS_OK) {
         return 1;
     }

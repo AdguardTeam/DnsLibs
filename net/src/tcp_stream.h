@@ -24,8 +24,8 @@ public:
     tcp_stream &operator=(const tcp_stream &) = delete;
 
 private:
-    std::unique_ptr<bufferevent, Ftor<&bufferevent_free>> bev;
-    std::unique_ptr<event, Ftor<&event_free>> timer;
+    UniquePtr<bufferevent, &bufferevent_free> bev;
+    UniquePtr<event, &event_free> timer;
     mutable std::mutex guard;
     callbacks callbacks = {};
     std::optional<std::chrono::microseconds> current_timeout;

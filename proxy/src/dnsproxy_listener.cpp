@@ -36,7 +36,7 @@ protected:
     ag::Logger m_log{"listener"};
     ag::dnsproxy *m_proxy{nullptr};
     std::thread m_loop_thread;
-    using uv_loop_ptr = std::unique_ptr<uv_loop_t, ag::Ftor<&uv_loop_delete>>;
+    using uv_loop_ptr = ag::UniquePtr<uv_loop_t, &uv_loop_delete>;
     uv_loop_ptr m_loop;
     uv_async_t m_escape_hatch{};
     ag::SocketAddress m_address;

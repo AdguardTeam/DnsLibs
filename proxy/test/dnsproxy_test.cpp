@@ -50,7 +50,7 @@ static void perform_request(ag::dnsproxy &proxy, const ag::ldns_pkt_ptr &request
     // Avoid rate limit
     std::this_thread::sleep_for(std::chrono::milliseconds(100));
 
-    const std::unique_ptr<ldns_buffer, ag::Ftor<ldns_buffer_free>> buffer(
+    const ag::UniquePtr<ldns_buffer, &ldns_buffer_free> buffer(
             ldns_buffer_new(ag::REQUEST_BUFFER_INITIAL_CAPACITY));
 
     ldns_status status = ldns_pkt2buffer_wire(buffer.get(), request.get());
@@ -141,7 +141,7 @@ TEST_F(dnsproxy_test, test_ipv6_blocking) {
     ASSERT_EQ(ldns_pkt_nscount(response.get()), 1);
     ASSERT_EQ(ldns_pkt_get_rcode(response.get()), LDNS_RCODE_NOERROR);
     // Check that message is correctly serialized
-    using ldns_buffer_ptr = std::unique_ptr<ldns_buffer, ag::Ftor<&ldns_buffer_free>>;
+    using ldns_buffer_ptr = ag::UniquePtr<ldns_buffer, &ldns_buffer_free>;
     ldns_buffer_ptr result(ldns_buffer_new(LDNS_MAX_PACKETLEN));
     ldns_status status = ldns_pkt2buffer_wire(result.get(), response.get());
     ASSERT_EQ(status, LDNS_STATUS_OK);

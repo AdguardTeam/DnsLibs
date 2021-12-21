@@ -17,8 +17,8 @@ constexpr uint16_t DEFAULT_PORT = 443;
 using key_array = Uint8Array<KEY_SIZE>;
 using client_magic_array = Uint8Array<CLIENT_MAGIC_LEN>;
 
-using ldns_pkt_ptr = std::unique_ptr<ldns_pkt, ag::Ftor<&ldns_pkt_free>>;
-using ldns_buffer_ptr = std::unique_ptr<ldns_buffer, ag::Ftor<&ldns_buffer_free>>;
+using ldns_pkt_ptr = UniquePtr<ldns_pkt, &ldns_pkt_free>;
+using ldns_buffer_ptr = UniquePtr<ldns_buffer, &ldns_buffer_free>;
 
 /**
  * Crypto construction represents the encryption algorithm

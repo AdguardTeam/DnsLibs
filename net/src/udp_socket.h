@@ -26,7 +26,7 @@ public:
     udp_socket &operator=(const udp_socket &) = delete;
 
 private:
-    std::unique_ptr<event, Ftor<&event_free>> socket_event;
+    UniquePtr<event, &event_free> socket_event;
     mutable std::mutex guard;
     callbacks callbacks = {};
     std::optional<std::chrono::microseconds> timeout;

@@ -894,7 +894,7 @@ static std::string getTrustCreationErrorStr(OSStatus status) {
 }
 
 template <typename T>
-using AGUniqueCFRef = std::unique_ptr<std::remove_pointer_t<T>, ag::Ftor<&CFRelease>>;
+using AGUniqueCFRef = ag::UniquePtr<std::remove_pointer_t<T>, &CFRelease>;
 
 + (std::optional<std::string>) verifyCertificate: (ag::certificate_verification_event *) event log: (ag::Logger &) log
 {

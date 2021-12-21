@@ -144,7 +144,7 @@ public:
 
     struct apply_dnsrewrite_result {
         struct rewrite_info {
-            using ldns_rr_ptr = std::unique_ptr<ldns_rr, ag::Ftor<&ldns_rr_free>>;
+            using ldns_rr_ptr = UniquePtr<ldns_rr, &ldns_rr_free>;
 
             /** The rcode which should be set to the answer */
             ldns_pkt_rcode rcode = LDNS_RCODE_NOERROR;

@@ -9,7 +9,7 @@
 
 namespace ag {
 
-using ssl_session_ptr = std::unique_ptr<SSL_SESSION, Ftor<&SSL_SESSION_free>>;
+using ssl_session_ptr = bssl::UniquePtr<SSL_SESSION>;
 
 /**
  * A cache of recently seen SSL_SESSIONs for the given URL.

@@ -326,34 +326,6 @@ void http_oproxy::handle_http_response_chunk(connection *conn, std::string_view 
     }
 }
 
-std::unique_ptr<SSL, Ftor<&SSL_free>> http_oproxy::make_ssl() {
-    if (this->settings->protocol != outbound_proxy_protocol::HTTPS_CONNECT) {
-        return nullptr;
-    }
-
-    SSL_CTX *ctx = SSL_CTX_new(TLS_client_method());
-    SSL_CTX_set_verify(ctx, SSL_VERIFY_PEER, nullptr);
-    SSL_CTX_set_cert_verify_callback(ctx, ssl_verify_callback, this);
-
-    tls_session_cache::prepare_ssl_ctx(ctx);
-
-    std::unique_ptr<SSL, Ftor<&SSL_free>> ssl{ SSL_new(ctx) };
-    SSL_set_tlsext_host_name(ssl.get(), this->settings->address.c_str());
-
-    this->tls_session_cache->prepare_ssl(ssl.get());
-
-    if (ssl_session_ptr session = this->tls_session_cache->get_session()) {
-        log_proxy(this, trace, "Using a cached TLS session");
-        SSL_set_session(ssl.get(), session.get()); // UpRefs the session
-    } else {
-        log_proxy(this, trace, "No cached TLS sessions available");
-    }
-
-    SSL_CTX_free(ctx);
-
-    return ssl;
-}
-
 http_oproxy::callbacks http_oproxy::get_connection_callbacks_locked(connection *conn) {
     std::scoped_lock l(this->guard);
     assert(this->connections.count(conn->id) != 0);

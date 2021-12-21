@@ -42,7 +42,7 @@ private:
     static int ssl_verify_callback(X509_STORE_CTX *ctx, void *arg);
 
     void handle_http_response_chunk(connection *conn, std::string_view chunk);
-    [[nodiscard]] std::unique_ptr<SSL, Ftor<&SSL_free>> make_ssl();
+
     callbacks get_connection_callbacks_locked(connection *conn);
 };
 

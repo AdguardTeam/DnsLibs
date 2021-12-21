@@ -40,7 +40,7 @@ static constexpr std::string_view USER_AGENT = "ag-dns";
 
 
 struct dns_over_https::query_handle {
-    using CURL_ptr = std::unique_ptr<CURL, Ftor<&curl_easy_cleanup>>;
+    using CURL_ptr = UniquePtr<CURL, &curl_easy_cleanup>;
 
     enum flag {
         /// The query uses the proxy
@@ -183,7 +183,7 @@ static CURLSH *init_curl_share() {
 }
 
 static CURLSH *get_curl_share() {
-    static std::unique_ptr<CURLSH, ag::Ftor<&curl_share_cleanup>> curl_share(init_curl_share());
+    static UniquePtr<CURLSH, &curl_share_cleanup> curl_share(init_curl_share());
     return curl_share.get();
 }
 

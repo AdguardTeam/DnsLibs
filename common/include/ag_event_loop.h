@@ -80,7 +80,7 @@ public:
 
 private:
     /** Libevent base */
-    std::unique_ptr<event_base, Ftor<&event_base_free>> m_base;
+    UniquePtr<event_base, &event_base_free> m_base;
     /** Thread where base loop is running */
     std::thread m_base_thread;
 

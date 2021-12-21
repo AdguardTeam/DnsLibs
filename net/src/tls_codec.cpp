@@ -32,7 +32,7 @@ tls_codec::tls_codec(const certificate_verifier *cert_verifier, tls_session_cach
 {}
 
 std::optional<tls_codec::error> tls_codec::connect(const std::string &sni, std::vector<std::string> alpn) {
-    std::unique_ptr<SSL_CTX, Ftor<&SSL_CTX_free>> ctx{ SSL_CTX_new(TLS_client_method()) };
+    bssl::UniquePtr<SSL_CTX> ctx{ SSL_CTX_new(TLS_client_method()) };
     SSL_CTX_set_verify(ctx.get(), SSL_VERIFY_PEER, nullptr);
     SSL_CTX_set_cert_verify_callback(ctx.get(), ssl_verify_callback, this);
     tls_session_cache::prepare_ssl_ctx(ctx.get());

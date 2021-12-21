@@ -51,7 +51,7 @@ int ag::tls_session_cache::session_new_cb(SSL *ssl, SSL_SESSION *session) {
 void ag::tls_session_cache::prepare_ssl_ctx(SSL_CTX *ctx) {
 #if 0
     if (char *ssl_keylog_file = getenv("SSLKEYLOGFILE")) {
-        static std::unique_ptr<std::FILE, Ftor<&std::fclose>> handle{std::fopen(ssl_keylog_file, "a")};
+        static ag::UniquePtr<std::FILE, &std::fclose> handle{std::fopen(ssl_keylog_file, "a")};
         SSL_CTX_set_keylog_callback(ctx,
                 [] (const SSL *, const char *line) {
                     fprintf(handle.get(), "%s\n", line);

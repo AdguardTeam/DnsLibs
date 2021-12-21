@@ -26,7 +26,7 @@ TEST(dnscrypt_sodium_test, sodium_initialized) {
     }
 }
 
-using ldns_rdf_ptr = std::unique_ptr<ldns_rdf, ag::Ftor<&ldns_rdf_free>>;
+using ldns_rdf_ptr = ag::UniquePtr<ldns_rdf, &ldns_rdf_free>;
 
 static ag::Logger logger{"dns_crypt_test"};
 

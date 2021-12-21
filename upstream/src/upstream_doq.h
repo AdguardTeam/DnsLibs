@@ -95,7 +95,7 @@ private:
         int64_t request_id = 0;
         std::vector<uint8_t> raw_data;
         struct {
-            std::unique_ptr<evbuffer, ag::Ftor<&evbuffer_free>> buf;
+            UniquePtr<evbuffer, &evbuffer_free> buf;
             int read_position = 0;
         } send_info;
     };
@@ -215,8 +215,8 @@ private:
     size_t m_max_pktlen;
     uint32_t m_quic_version;
     buffer m_send_buf;
-    std::unique_ptr<SSL_CTX, Ftor<&SSL_CTX_free>> m_ssl_ctx;
-    std::unique_ptr<SSL, Ftor<&SSL_free>> m_ssl;
+    bssl::UniquePtr<SSL_CTX> m_ssl_ctx;
+    bssl::UniquePtr<SSL> m_ssl;
     ngtcp2_conn *m_conn{nullptr};
     crypto m_crypto[3];
     std::list<int64_t> m_stream_send_queue;
@@ -224,10 +224,10 @@ private:
     std::unordered_map<int64_t, request_t> m_requests;
     std::mutex m_global;
     event_loop_ptr m_loop = event_loop::create();
-    std::unique_ptr<event, Ftor<&event_free>> m_read_event;
-    std::unique_ptr<event, Ftor<&event_free>> m_idle_timer_event;
-    std::unique_ptr<event, Ftor<&event_free>> m_handshake_timer_event;
-    std::unique_ptr<event, Ftor<&event_free>> m_retransmit_timer_event;
+    UniquePtr<event, &event_free> m_read_event;
+    UniquePtr<event, &event_free> m_idle_timer_event;
+    UniquePtr<event, &event_free> m_handshake_timer_event;
+    UniquePtr<event, &event_free> m_retransmit_timer_event;
     static std::atomic_int64_t m_next_request_id;
     std::array<uint8_t, 32> m_static_secret;
     tls_session_cache m_tls_session_cache;

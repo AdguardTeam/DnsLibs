@@ -113,7 +113,7 @@ ErrString default_verifier::verify(X509_STORE_CTX *ctx_template, std::string_vie
         return err;
     }
 
-    using X509_STORE_CTX_ptr = std::unique_ptr<X509_STORE_CTX, Ftor<&X509_STORE_CTX_free>>;
+    using X509_STORE_CTX_ptr = bssl::UniquePtr<X509_STORE_CTX>;
     X509_STORE_CTX_ptr ctx_holder(X509_STORE_CTX_new());
     X509_STORE_CTX *ctx = ctx_holder.get();
     if (0 == X509_STORE_CTX_init(ctx, this->ca_store,

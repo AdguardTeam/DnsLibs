@@ -82,7 +82,7 @@ public:
 private:
     const certificate_verifier *cert_verifier = nullptr;
     tls_session_cache *session_cache = nullptr;
-    std::unique_ptr<SSL, Ftor<&SSL_free>> ssl;
+    bssl::UniquePtr<SSL> ssl;
     Logger log;
 
     static int ssl_verify_callback(X509_STORE_CTX *ctx, void *arg);

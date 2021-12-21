@@ -5,8 +5,8 @@
 
 #include "big_dns_packet.inc"
 
-using ldns_pkt_ptr = std::unique_ptr<ldns_pkt, ag::Ftor<&ldns_pkt_free>>;
-using ldns_buffer_ptr = std::unique_ptr<ldns_buffer, ag::Ftor<&ldns_buffer_free>>;
+using ldns_pkt_ptr = ag::UniquePtr<ldns_pkt, &ldns_pkt_free>;
+using ldns_buffer_ptr = ag::UniquePtr<ldns_buffer, &ldns_buffer_free>;
 
 TEST(DnsTruncateTest, TruncateMinSize512) {
     ag::Uint8View pkt_data = {&BIG_PACKET[0], std::size(BIG_PACKET) - 1};
