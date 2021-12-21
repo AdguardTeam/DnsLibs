@@ -64,12 +64,15 @@ add_library(AGDnsProxy SHARED
     AGDnsProxy.mm
     module.modulemap
 )
+if("${TARGET_OS}" STREQUAL "macos")
+    target_sources(AGDnsProxy PRIVATE NSTask+AGTimeout.mm)
+endif()
 set_property(TARGET AGDnsProxy PROPERTY POSITION_INDEPENDENT_CODE ON)
 
 set_target_properties(AGDnsProxy PROPERTIES
     FRAMEWORK TRUE
     FRAMEWORK_VERSION A
-    VERSION 1.6.71
+    VERSION 1.6.72
     MACOSX_FRAMEWORK_INFO_PLIST "${INFOPLIST_FILE}"
     MACOSX_FRAMEWORK_IDENTIFIER com.adguard.dnsproxy
     XCODE_ATTRIBUTE_CODE_SIGN_IDENTITY "Developer ID Application: Performiks OOO (N33TQXN8C7)"
