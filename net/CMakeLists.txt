@@ -7,7 +7,6 @@ set(CMAKE_CXX_STANDARD 17)
 
 set(DNSLIBS_DIR "${CMAKE_CURRENT_SOURCE_DIR}/..")
 set(SRC_DIR "${CMAKE_CURRENT_SOURCE_DIR}/src")
-set(THIRD_PARTY_DIR "${DNSLIBS_DIR}/third-party")
 
 set(SRCS
         ${SRC_DIR}/certificate_verifier.cpp
