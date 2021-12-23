@@ -1,7 +1,7 @@
 #include <assert.h>
 #include <jni_utils.h>
 #include "common/utils.h"
-#include <ag_cesu8.h>
+#include "common/cesu8.h"
 
 void ag::jni_utils::iterate(JNIEnv *env,
                             jobject iterable,
@@ -38,7 +38,7 @@ ag::local_ref<jstring> ag::jni_utils::marshal_string(JNIEnv *env, const std::str
     if (str.empty()) {
         return local_ref<jstring>(env, env->NewStringUTF(""));
     }
-    return local_ref<jstring>(env, env->NewStringUTF(ag::AllocatedPtr<char>{ag::utf8_to_cesu8(str.c_str())}.get()));
+    return local_ref<jstring>(env, env->NewStringUTF(ag::utf8_to_cesu8(str).c_str()));
 }
 
 std::string ag::jni_utils::marshal_string(JNIEnv *env, jstring str) {

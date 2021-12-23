@@ -10,7 +10,6 @@ set(SRC_DIR src)
 set(SRCS
         ${SRC_DIR}/sys.cpp
         ${SRC_DIR}/net_utils.cpp
-        ${SRC_DIR}/cesu8.cpp
         ${SRC_DIR}/route_resolver.cpp
         ${SRC_DIR}/event_loop.cpp
         ${SRC_DIR}/deferred_arg.cpp

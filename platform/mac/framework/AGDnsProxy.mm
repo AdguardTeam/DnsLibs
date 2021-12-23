@@ -16,29 +16,19 @@
 #include "common/logger.h"
 #include <dnsproxy.h>
 #include <upstream_utils.h>
-#include <ag_cesu8.h>
+#include "common/cesu8.h"
 
 
 static constexpr size_t FILTER_PARAMS_MEM_LIMIT_BYTES = 8 * 1024 * 1024;
-
-static constexpr NSString *REPLACEMENT_STRING = @"<out of memory>";
 
 static constexpr int BINDFD_WAIT_MS = 10000;
 
 /**
  * @param str an STL string
- * @return an NSString converted from the C++ string, or
- *         `REPLACEMENT_STRING` if conversion failed for any reason,
- *         never nil
+ * @return an NSString converted from the C++ string
  */
 static NSString *convert_string(const std::string &str) {
-    ag::AllocatedPtr<char> cesu8{ag::utf8_to_cesu8(str.c_str())};
-    if (cesu8) {
-        if (auto *ns_str = [NSString stringWithUTF8String: cesu8.get()]) {
-            return ns_str;
-        }
-    }
-    return REPLACEMENT_STRING;
+    return @(ag::utf8_to_cesu8(str).c_str());
 }
 
 NSErrorDomain const AGDnsProxyErrorDomain = @"com.adguard.dnsproxy";

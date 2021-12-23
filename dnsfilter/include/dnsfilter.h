@@ -11,7 +11,6 @@
 #include <magic_enum.hpp>
 #include <ldns/ldns.h>
 
-
 namespace ag {
 
 /**
