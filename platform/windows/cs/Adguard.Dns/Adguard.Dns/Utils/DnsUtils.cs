@@ -174,8 +174,9 @@ namespace Adguard.Dns.Utils
         /// </summary>
         /// <param name="upstreamOptions">Upstream options
         /// (<seealso cref="UpstreamOptions"/>)</param>
-        /// <param name=ipv6Available">Whether IPv6 is available (i.e., bootstrapper is allowed to make AAAA queries)</param>
-        internal static bool TestUpstream(UpstreamOptions upstreamOptions, bool ipv6Available)
+        /// <param name="ipv6Available">Whether IPv6 is available (i.e., bootstrapper is allowed to make AAAA queries)</param>
+        /// <param name="offline">Don't perform online upstream check</param>
+        internal static bool TestUpstream(UpstreamOptions upstreamOptions, bool ipv6Available, bool offline)
         {
             IntPtr pUpstreamOptionsC = IntPtr.Zero;
             Queue<IntPtr> allocatedPointers = new Queue<IntPtr>();
@@ -189,7 +190,7 @@ namespace Adguard.Dns.Utils
                 AGDnsApi.cbd_onCertificateVerification testUpstreamCallbackC =
                     DnsApiConverter.ToNativeObject(certificateVerificationCallback);
                 pUpstreamOptionsC = MarshalUtils.StructureToPtr(upstreamOptionsC);
-                pError = AGDnsApi.ag_test_upstream(pUpstreamOptionsC, ipv6Available, testUpstreamCallbackC);
+                pError = AGDnsApi.ag_test_upstream(pUpstreamOptionsC, ipv6Available, testUpstreamCallbackC, offline);
                 string error = MarshalUtils.PtrToString(pError);
                 if (string.IsNullOrEmpty(error))
                 {

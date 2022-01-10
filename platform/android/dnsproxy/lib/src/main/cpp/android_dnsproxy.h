@@ -184,7 +184,7 @@ public:
      * Checks if upstream is valid and available.
      * @return Null or error string marshalled to Java.
      */
-    jstring test_upstream(JNIEnv *env, jobject upstream_settings, jboolean ipv6, jobject events_adapter);
+    jstring test_upstream(JNIEnv *env, jobject upstream_settings, jboolean ipv6, jobject events_adapter, jboolean offline);
 };
 
 }

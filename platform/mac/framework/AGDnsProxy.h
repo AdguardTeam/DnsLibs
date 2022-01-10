@@ -530,8 +530,9 @@ typedef NS_ENUM(NSInteger, AGStampProtoType) {
  * Checks if upstream is valid and available
  * @param opts Upstream options
  * @param ipv6Available Whether IPv6 is available (if true, bootstrapper is allowed to make AAAA queries)
+ * @param offline Don't perform online upstream check
  * @return If it is, no error is returned. Otherwise this method returns an error with an explanation.
  */
-+ (NSError *) testUpstream: (AGDnsUpstream *) opts ipv6Available: (BOOL) ipv6Available;
++ (NSError *) testUpstream: (AGDnsUpstream *) opts ipv6Available: (BOOL) ipv6Available offline: (BOOL) offline;
 
 @end

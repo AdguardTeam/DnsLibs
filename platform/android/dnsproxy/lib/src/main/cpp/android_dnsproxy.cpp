@@ -67,9 +67,9 @@ extern "C"
 JNIEXPORT jstring JNICALL
 Java_com_adguard_dnslibs_proxy_DnsProxy_testUpstreamNative(JNIEnv *env, jclass clazz, jlong native_ptr,
                                                            jobject upstream_settings, jboolean ipv6,
-                                                           jobject events_adapter) {
+                                                           jobject events_adapter, jboolean offline) {
     auto *proxy = (ag::android_dnsproxy *) native_ptr;
-    return proxy->test_upstream(env, upstream_settings, ipv6, events_adapter);
+    return proxy->test_upstream(env, upstream_settings, ipv6, events_adapter, offline);
 }
 
 extern "C"
@@ -742,10 +742,11 @@ jobject ag::android_dnsproxy::get_settings(JNIEnv *env) {
     return env->NewLocalRef(marshal_settings(env, m_actual_proxy.get_settings()).get());
 }
 
-jstring ag::android_dnsproxy::test_upstream(JNIEnv *env, jobject upstream_settings, jboolean ipv6, jobject events_adapter) {
+jstring ag::android_dnsproxy::test_upstream(JNIEnv *env, jobject upstream_settings, jboolean ipv6,
+                                            jobject events_adapter, jboolean offline) {
     m_events = global_ref(get_vm(env), events_adapter);
     auto err = ag::test_upstream(marshal_upstream(env, upstream_settings), ipv6,
-            marshal_events(env, events_adapter).on_certificate_verification, false);
+            marshal_events(env, events_adapter).on_certificate_verification, offline);
     if (err) {
         return (jstring) env->NewLocalRef(m_utils.marshal_string(env, *err).get());
     }

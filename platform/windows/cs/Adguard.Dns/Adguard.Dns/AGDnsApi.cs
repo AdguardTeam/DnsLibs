@@ -22,7 +22,7 @@ namespace Adguard.Dns
         /// <summary>
         /// The current API version hash with which the ProxyServer was tested
         /// </summary>
-        private const string API_VERSION_HASH = "38c47d153a112df9cb13478713b9fbc4fa7d7e3682577086c224deba21c005b0";
+        private const string API_VERSION_HASH = "601a11f4fa0823402c1655167a9aa296c9bcb1eb1537b62bba3333f8ef2e9268";
         #endregion
 
         #region API Functions
@@ -90,12 +90,14 @@ namespace Adguard.Dns
         /// <param name="ipv6Available">Whether IPv6 is available (i.e., bootstrapper is allowed to make AAAA queries)</param>
         /// <param name="onCertificateVerification">Certificate verification callback
         /// as a <see cref="cbd_onCertificateVerification"/> object</param>
+        /// <param name="offline">Don't perform online upstream check</param>
         /// <returns>If it is, no error is returned.
         /// Otherwise this method returns an error with an explanation</returns>
         [DllImport(DnsLibName, CallingConvention = CallingConvention.Cdecl)]
         internal static extern IntPtr ag_test_upstream(
             IntPtr pUpstreamOptions, [MarshalAs(UnmanagedType.I1)] bool Ipv6Available,
-            [MarshalAs(UnmanagedType.FunctionPtr)] cbd_onCertificateVerification onCertificateVerification);
+            [MarshalAs(UnmanagedType.FunctionPtr)] cbd_onCertificateVerification onCertificateVerification,
+            [MarshalAs(UnmanagedType.I1)] bool offline);
 
         /// <summary>
         /// Parses a DNS stamp string and returns a instance or an error

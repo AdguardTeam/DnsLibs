@@ -429,11 +429,12 @@ AG_EXPORT const char *ag_dns_stamp_prettier_url(ag_dns_stamp *stamp);
  * Check if an upstream is valid and working.
  * The caller is responsible for freeing the result with `ag_str_free()`.
  * @param ipv6_available whether IPv6 is available, if true, bootstrapper is allowed to make AAAA queries
+ * @param offline Don't perform online upstream check
  * @return NULL if everything is ok, or
  *         an error message.
  */
 AG_EXPORT const char *ag_test_upstream(const ag_upstream_options *upstream, bool ipv6_available,
-                                       ag_certificate_verification_cb on_certificate_verification);
+                                       ag_certificate_verification_cb on_certificate_verification, bool offline);
 
 /**
  * Return the C API version (hash of this file).

@@ -577,12 +577,13 @@ void ag_dns_stamp_free(ag_dns_stamp *stamp) {
 }
 
 const char *ag_test_upstream(const ag_upstream_options *c_upstream, bool ipv6_available,
-                             ag_certificate_verification_cb on_certificate_verification) {
+                             ag_certificate_verification_cb on_certificate_verification,
+                             bool offline) {
     auto upstream = marshal_upstream(*c_upstream);
     ag_dnsproxy_events c_events{};
     c_events.on_certificate_verification = on_certificate_verification;
     auto events = marshal_events(&c_events);
-    auto result = ag::test_upstream(upstream, ipv6_available, events.on_certificate_verification, false);
+    auto result = ag::test_upstream(upstream, ipv6_available, events.on_certificate_verification, offline);
     return marshal_str(result.value_or(""));
 }
 
