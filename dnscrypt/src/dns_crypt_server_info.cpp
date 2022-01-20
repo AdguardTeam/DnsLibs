@@ -13,7 +13,7 @@
 #include "common/logger.h"
 #include "common/utils.h"
 #include "common/time_utils.h"
-#include <ag_net_utils.h>
+#include "common/net_utils.h"
 #include <dns_crypt_server_info.h>
 #include <dns_crypt_utils.h>
 
@@ -117,7 +117,7 @@ ag::dnscrypt::server_info::fetch_result ag::dnscrypt::server_info::fetch_current
     return {local_cert_info, exchange_rtt, std::nullopt};
 }
 
-ag::dnscrypt::server_info::encrypt_result ag::dnscrypt::server_info::encrypt(utils::transport_protocol local_protocol,
+ag::dnscrypt::server_info::encrypt_result ag::dnscrypt::server_info::encrypt(utils::TransportProtocol local_protocol,
                                                                              Uint8View packet_initial) const {
     static constexpr utils::MakeError<encrypt_result> make_error;
     Uint8Vector packet(packet_initial.begin(), packet_initial.end());

@@ -69,7 +69,7 @@ struct socket_factory::outbound_proxy_state {
 
 socket_factory::socket_factory(struct parameters parameters)
     : parameters(std::move(parameters))
-    , router(route_resolver::create())
+    , router(RouteResolver::create())
 {
     if (this->parameters.oproxy_settings != nullptr) {
         this->proxy = std::make_unique<outbound_proxy_state>();
@@ -165,7 +165,7 @@ const certificate_verifier *socket_factory::get_certificate_verifier() const {
     return this->parameters.verifier.get();
 }
 
-bool socket_factory::should_route_through_proxy(utils::transport_protocol proto) const {
+bool socket_factory::should_route_through_proxy(utils::TransportProtocol proto) const {
     if (this->proxy == nullptr) {
         return false;
     }
@@ -278,7 +278,7 @@ outbound_proxy *socket_factory::make_fallback_proxy() const {
 }
 
 socket_factory::socket_ptr socket_factory::on_make_proxy_socket(void *arg,
-        utils::transport_protocol proto, std::optional<secure_socket_parameters> secure_parameters) {
+        utils::TransportProtocol proto, std::optional<secure_socket_parameters> secure_parameters) {
     auto *self = (socket_factory *)arg;
     socket_ptr s = self->make_direct_socket({ proto });
     if (secure_parameters.has_value()) {

@@ -40,7 +40,7 @@ class DnsLibsConan(ConanFile):
     def configure(self):
         self.options["spdlog"].no_exceptions = True
         self.options["gtest"].build_gmock = False
-        self.options["native_libs_common"].commit_hash = "49192770447a0c3e44cbb9fb4f082dde3486a868"
+        self.options["native_libs_common"].commit_hash = "28781a94e56d867a706b4e55b9eae39ed7ce0670"
 
     def config_options(self):
         if self.settings.os == "Windows":

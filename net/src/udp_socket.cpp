@@ -1,4 +1,5 @@
 #include "common/utils.h"
+#include "common/time_utils.h"
 #include "udp_socket.h"
 #include <cassert>
 
@@ -121,7 +122,7 @@ bool udp_socket::set_timeout(std::chrono::microseconds to) {
     this->guard.unlock();
 
     if (this->socket_event != nullptr && event_pending(this->socket_event.get(), EV_TIMEOUT | EV_READ, nullptr)) {
-        const timeval tv = utils::duration_to_timeval(to);
+        const timeval tv = duration_to_timeval(to);
         if (0 != event_add(this->socket_event.get(), &tv)) {
             log_sock(this, dbg, "Failed to add event in event base");
             return false;
@@ -142,7 +143,7 @@ std::optional<socket::error> udp_socket::set_callbacks(struct callbacks cbx) {
     }
 
     if (cbx.on_read != nullptr) {
-        const timeval tv = utils::duration_to_timeval(this->timeout.value_or(std::chrono::microseconds(0)));
+        const timeval tv = duration_to_timeval(this->timeout.value_or(std::chrono::microseconds(0)));
         if (0 != event_add(this->socket_event.get(), this->timeout.has_value() ? &tv : nullptr)) {
             return { { -1, "Failed to add event in event base" } };
         }

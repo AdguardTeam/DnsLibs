@@ -1,3 +1,4 @@
+#include "common/time_utils.h"
 #include "upstream_doq.h"
 #include "upstream.h"
 #include <magic_enum.hpp>
@@ -651,7 +652,7 @@ int dns_over_quic::connect_to_peers(const std::vector<ag::SocketAddress> &curren
     struct timeval tv{};
     evtimer_pending(m_handshake_timer_event.get(), &tv);
     if (!evutil_timerisset(&tv)) {
-        tv = ag::utils::duration_to_timeval(m_options.timeout);
+        tv = duration_to_timeval(m_options.timeout);
         evtimer_add(m_handshake_timer_event.get(), &tv);
     }
     return NETWORK_ERR_OK;
@@ -1119,7 +1120,7 @@ void dns_over_quic::schedule_retransmit() {
     struct timeval tv{0};
     if (expiry_ns > now_ns) {
         nanoseconds timeout_ns{expiry_ns - now_ns};
-        tv = ag::utils::duration_to_timeval(ceil<microseconds>(timeout_ns));
+        tv = duration_to_timeval(ceil<microseconds>(timeout_ns));
     }
     evtimer_del(m_retransmit_timer_event.get());
     tracelog(m_log, "Next retransmit in {}", microseconds(1000000 * tv.tv_sec + tv.tv_usec));
@@ -1216,6 +1217,6 @@ void dns_over_quic::update_idle_timer(bool reset) {
         }
     }
 
-    timeval tv = ag::utils::duration_to_timeval(value);
+    timeval tv = duration_to_timeval(value);
     evtimer_add(m_idle_timer_event.get(), &tv);
 }

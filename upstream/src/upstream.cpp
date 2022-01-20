@@ -1,4 +1,4 @@
-#include <ag_net_utils.h>
+#include "common/net_utils.h"
 #include <cassert>
 #include <functional>
 #include <chrono>
@@ -8,7 +8,7 @@
 #include "upstream_dot.h"
 #include "upstream_doq.h"
 #include "upstream_plain.h"
-#include <ag_route_resolver.h>
+#include "common/route_resolver.h"
 #include "common/utils.h"
 #include "common/logger.h"
 #include <dns_stamp.h>

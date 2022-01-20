@@ -3,7 +3,7 @@
 #include <string>
 #include <vector>
 #include "common/logger.h"
-#include <ag_net_utils.h>
+#include "common/net_utils.h"
 #include <dnsfilter.h>
 #include <upstream.h>
 #include <dnsproxy_events.h>
@@ -45,7 +45,7 @@ enum class dnsproxy_blocking_mode {
 struct listener_settings {
     std::string address{"::"}; // The address to listen on
     uint16_t port{53}; // The port to listen on
-    utils::transport_protocol protocol{utils::TP_UDP}; // The protocol to listen for
+    utils::TransportProtocol protocol{utils::TP_UDP}; // The protocol to listen for
     bool persistent{false}; // If true, don't close the TCP connection after sending the first response
     std::chrono::milliseconds idle_timeout{3000}; // Close the TCP connection this long after the last request received
 

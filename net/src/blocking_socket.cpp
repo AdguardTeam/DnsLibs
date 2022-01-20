@@ -75,7 +75,7 @@ blocking_socket::receive_dns_packet_result blocking_socket::receive_dns_packet(s
     receive_dns_packet_result result;
 
     struct read_context {
-        utils::transport_protocol protocol;
+        utils::TransportProtocol protocol;
         tcp_dns_buffer tcp_buffer;
         std::vector<uint8_t> reply;
     };
@@ -85,14 +85,14 @@ blocking_socket::receive_dns_packet_result blocking_socket::receive_dns_packet(s
                 auto *ctx = (read_context *)arg;
                 bool done = false;
                 switch (ctx->protocol) {
-                case utils::transport_protocol::TP_TCP:
+                case utils::TransportProtocol::TP_TCP:
                     ctx->tcp_buffer.store(data);
                     if (auto p = ctx->tcp_buffer.extract_packet(); p.has_value()) {
                         ctx->reply = std::move(p.value());
                         done = true;
                     }
                     break;
-                case utils::transport_protocol::TP_UDP:
+                case utils::TransportProtocol::TP_UDP:
                     ctx->reply = { data.begin(), data.end() };
                     done = true;
                     break;

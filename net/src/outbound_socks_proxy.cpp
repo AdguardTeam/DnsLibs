@@ -1,5 +1,5 @@
 #include "common/utils.h"
-#include <ag_net_utils.h>
+#include "common/net_utils.h"
 #include "outbound_socks_proxy.h"
 #include <magic_enum.hpp>
 #include <cassert>
@@ -444,7 +444,7 @@ void socks_oproxy::on_close(void *arg, std::optional<socket::error> error) {
 std::optional<socket::error> socks_oproxy::connect_to_proxy(connection *conn) {
     log_conn(this, conn->id, trace, "...");
 
-    utils::transport_protocol proto = conn->parameters.proto;
+    utils::TransportProtocol proto = conn->parameters.proto;
     SocketAddress dst_addr;
     if (proto == utils::TP_UDP) {
         assert(this->settings->protocol == outbound_proxy_protocol::SOCKS5_UDP);
@@ -524,7 +524,7 @@ std::optional<socket::error> socks_oproxy::connect_to_proxy(connection *conn) {
 void socks_oproxy::close_connection(connection *conn) {
     uint32_t conn_id = conn->id;
     event_loop *loop = conn->parameters.loop;
-    utils::transport_protocol proto = conn->parameters.proto;
+    utils::TransportProtocol proto = conn->parameters.proto;
     if (proto != utils::TP_UDP) {
         return;
     }

@@ -1,5 +1,5 @@
 #include <dnsfilter.h>
-#include <ag_net_utils.h>
+#include "common/net_utils.h"
 #include "common/utils.h"
 #include "rule_utils.h"
 #include <algorithm>

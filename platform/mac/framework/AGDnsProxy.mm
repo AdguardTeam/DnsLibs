@@ -1252,7 +1252,7 @@ static int bindFd(NSString *helperPath, NSString *address, NSNumber *port, AGLis
             settings.listeners.emplace_back((ag::listener_settings) {
                 .address = listener.address.UTF8String,
                 .port = (uint16_t) listener.port,
-                .protocol = (ag::utils::transport_protocol) listener.proto,
+                .protocol = (ag::utils::TransportProtocol) listener.proto,
                 .persistent = (bool) listener.persistent,
                 .idle_timeout = std::chrono::milliseconds(listener.idleTimeoutMs),
                 .fd = listenerFd,

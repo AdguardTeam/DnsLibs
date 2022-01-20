@@ -8,7 +8,7 @@
 #include <magic_enum.hpp>
 #include <ag_outbound_proxy_settings.h>
 #include "common/defs.h"
-#include <ag_net_utils.h>
+#include "common/net_utils.h"
 #include "common/socket_address.h"
 #include "common/logger.h"
 #include <ag_socket.h>
@@ -23,7 +23,7 @@ public:
             uint32_t,
             /** Error if failed */
             socket::error>;
-    using protocols_set = std::bitset<magic_enum::enum_count<utils::transport_protocol>()>;
+    using protocols_set = std::bitset<magic_enum::enum_count<utils::TransportProtocol>()>;
 
     struct callbacks {
         /** Raised after the connection to the proxy server succeeded */
@@ -49,7 +49,7 @@ public:
 
     struct make_socket_callback {
         /** Raised when proxy wants to create a socket */
-        socket_factory::socket_ptr (* func)(void *arg, utils::transport_protocol proto,
+        socket_factory::socket_ptr (* func)(void *arg, utils::TransportProtocol proto,
                 std::optional<socket_factory::secure_socket_parameters> secure_parameters);
         /** User context for the callback */
         void *arg;
@@ -64,7 +64,7 @@ public:
         /** Event loop for operation */
         event_loop *loop = nullptr;
         /** Connection protocol */
-        utils::transport_protocol proto;
+        utils::TransportProtocol proto;
         /** Address on the peer to connect to */
         SocketAddress peer;
         /** Set of the proxy callbacks */

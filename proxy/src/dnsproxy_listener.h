@@ -35,7 +35,7 @@ public:
     /**
      * @brief Get the address is being listened for queries
      */
-    [[nodiscard]] virtual std::pair<utils::transport_protocol, SocketAddress> get_listen_address() const = 0;
+    [[nodiscard]] virtual std::pair<utils::TransportProtocol, SocketAddress> get_listen_address() const = 0;
 };
 
 } // namespace ag

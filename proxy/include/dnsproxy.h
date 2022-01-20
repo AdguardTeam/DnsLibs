@@ -58,7 +58,7 @@ public:
     /**
      * @brief Get the addresses the proxy is listening for queries
      */
-    [[nodiscard]] std::vector<std::pair<utils::transport_protocol, SocketAddress>> get_listen_addresses() const;
+    [[nodiscard]] std::vector<std::pair<utils::TransportProtocol, SocketAddress>> get_listen_addresses() const;
 
     /**
      * @brief Return the DNS proxy library version

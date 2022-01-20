@@ -15,7 +15,7 @@ socket::socket(const std::string &logger_name, socket_factory::socket_parameters
     , prepare_fd(prepare_fd)
 {}
 
-utils::transport_protocol socket::get_protocol() const {
+utils::TransportProtocol socket::get_protocol() const {
     return this->parameters.proto;
 }
 

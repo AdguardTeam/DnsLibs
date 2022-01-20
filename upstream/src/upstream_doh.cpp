@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <bitset>
 
+#include "common/time_utils.h"
 #include "common/utils.h"
 #include "common/defs.h"
 #include <ag_socket.h>
@@ -529,7 +530,7 @@ int dns_over_https::on_pool_timer_event(CURLM *multi, long timeout_ms, dns_over_
         event.reset();
     } else {
         event.reset(event_new(upstream->worker.loop->c_base(), 0, EV_TIMEOUT, on_event_timeout, upstream));
-        timeval timeout = utils::duration_to_timeval(milliseconds(timeout_ms));
+        timeval timeout = duration_to_timeval(milliseconds(timeout_ms));
         evtimer_add(event.get(), &timeout);
     }
     return 0;

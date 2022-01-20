@@ -10,9 +10,9 @@
 #include <event2/event.h>
 #include <event2/util.h>
 #include "common/defs.h"
-#include <ag_net_utils.h>
+#include "common/net_utils.h"
 #include "common/logger.h"
-#include <ag_route_resolver.h>
+#include "common/route_resolver.h"
 #include <ag_outbound_proxy_settings.h>
 #include <ag_event_loop.h>
 #include <certificate_verifier.h>
@@ -35,7 +35,7 @@ public:
 
     struct socket_parameters {
         /** Socket protocol */
-        utils::transport_protocol proto;
+        utils::TransportProtocol proto;
         /** (Optional) name or index of the network interface to route traffic through */
         IfIdVariant outbound_interface;
         /** If set to true, the socket will be connected directly to the peer */
@@ -101,7 +101,7 @@ public:
      * @param proto the connection protocol
      * @return true if it should be proxied, false otherwise
      */
-    [[nodiscard]] bool should_route_through_proxy(utils::transport_protocol proto) const;
+    [[nodiscard]] bool should_route_through_proxy(utils::TransportProtocol proto) const;
 
     /**
      * Check whether the proxy server is available
@@ -149,7 +149,7 @@ private:
     struct outbound_proxy_state;
 
     parameters parameters = {};
-    route_resolver_ptr router;
+    RouteResolverPtr router;
     std::unique_ptr<outbound_proxy_state> proxy;
 
     [[nodiscard]] socket_ptr make_direct_socket(socket_parameters parameters) const;
@@ -159,7 +159,7 @@ private:
                                    const SocketAddress &peer, const IfIdVariant &outbound_interface);
     [[nodiscard]] outbound_proxy *make_proxy() const;
     [[nodiscard]] outbound_proxy *make_fallback_proxy() const;
-    static socket_factory::socket_ptr on_make_proxy_socket(void *arg, utils::transport_protocol proto,
+    static socket_factory::socket_ptr on_make_proxy_socket(void *arg, utils::TransportProtocol proto,
             std::optional<secure_socket_parameters> secure_parameters);
     static void on_reset_bypassed_proxy_connections(void *arg);
 };
@@ -209,7 +209,7 @@ public:
     /**
      * Get the socket protocol
      */
-    [[nodiscard]] utils::transport_protocol get_protocol() const;
+    [[nodiscard]] utils::TransportProtocol get_protocol() const;
 
     /**
      * Get underlying file descriptor

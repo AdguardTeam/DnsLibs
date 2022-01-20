@@ -61,7 +61,7 @@ struct server_info {
      * @param packet Packet to encrypt
      * @return Encryption result
      */
-    encrypt_result encrypt(utils::transport_protocol protocol, Uint8View packet) const;
+    encrypt_result encrypt(utils::TransportProtocol protocol, Uint8View packet) const;
 
     /**
      * @brief Decrypt packet using server info

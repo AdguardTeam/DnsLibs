@@ -2,7 +2,7 @@
 #include <ldns/net.h>
 #include "dns_crypt_ldns.h"
 #include "common/utils.h"
-#include <ag_net_utils.h>
+#include "common/net_utils.h"
 #include <ag_net_consts.h>
 #include <ag_blocking_socket.h>
 

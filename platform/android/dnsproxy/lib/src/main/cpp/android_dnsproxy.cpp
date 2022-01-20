@@ -271,7 +271,7 @@ ag::listener_settings ag::android_dnsproxy::marshal_listener(JNIEnv *env,
 
     settings.port = env->GetIntField(java_listener_settings, env->GetFieldID(clazz, "port", "I"));
     if (auto protocol = env->GetObjectField(java_listener_settings, protocol_field)) {
-        settings.protocol = (ag::utils::transport_protocol) m_utils.get_enum_ordinal(env, protocol);
+        settings.protocol = (ag::utils::TransportProtocol) m_utils.get_enum_ordinal(env, protocol);
     }
 
     settings.persistent = env->GetBooleanField(java_listener_settings, persistent_field);

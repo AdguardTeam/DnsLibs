@@ -2,7 +2,7 @@
 #include <event2/event.h>
 #include <event2/thread.h>
 #include <array>
-#include <ag_net_utils.h>
+#include "common/time_utils.h"
 #include <csignal>
 #include "common/logger.h"
 #include <cassert>
@@ -106,7 +106,7 @@ ag::event_loop::task_id ag::event_loop::schedule(std::chrono::microseconds postp
     auto &task = m_postponed_tasks.val.queue.emplace_back(
             postponed_tasks::task{this, ++m_postponed_tasks.val.task_id_counter, std::move(func) });
 
-    timeval tv = utils::duration_to_timeval(postpone_time);
+    timeval tv = ag::duration_to_timeval(postpone_time);
     event_base_once(m_base.get(), -1, EV_TIMEOUT, run_postponed_task, &task, &tv);
 
     return task.id;

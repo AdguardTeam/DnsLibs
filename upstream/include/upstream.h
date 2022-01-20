@@ -9,7 +9,7 @@
 #include <ldns/packet.h>
 #include "common/defs.h"
 #include <ag_net_consts.h>
-#include <ag_net_utils.h>
+#include "common/net_utils.h"
 #include <ag_dns_utils.h>
 #include <certificate_verifier.h>
 #include <ag_socket.h>
@@ -112,11 +112,11 @@ public:
     /**
      * Helper function for easier socket creation
      */
-    [[nodiscard]] socket_factory::socket_ptr make_socket(utils::transport_protocol proto) const {
+    [[nodiscard]] socket_factory::socket_ptr make_socket(utils::TransportProtocol proto) const {
         return m_config.socket_factory->make_socket(
                 { proto, m_options.outbound_interface, m_options.ignore_proxy_settings });
     }
-    [[nodiscard]] socket_factory::socket_ptr make_secured_socket(utils::transport_protocol proto,
+    [[nodiscard]] socket_factory::socket_ptr make_secured_socket(utils::TransportProtocol proto,
             socket_factory::secure_socket_parameters secure_socket_parameters) const {
         return m_config.socket_factory->make_secured_socket(
                 { proto, m_options.outbound_interface, m_options.ignore_proxy_settings },

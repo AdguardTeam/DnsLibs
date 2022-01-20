@@ -44,7 +44,7 @@ public:
      * @param adjust_payload_size If true, the client will automatically add a EDNS0 RR that will advertise
      *                            a larger buffer
      */
-    explicit client(utils::transport_protocol protocol, bool adjust_payload_size = DEFAULT_ADJUST_PAYLOAD_SIZE);
+    explicit client(utils::TransportProtocol protocol, bool adjust_payload_size = DEFAULT_ADJUST_PAYLOAD_SIZE);
 
     /**
      * Dial fetches and validates DNSCrypt certificate from the given server
@@ -84,7 +84,7 @@ public:
             const socket_factory *socket_factory, socket_factory::socket_parameters socket_parameters) const;
 
 private:
-    utils::transport_protocol m_protocol;
+    utils::TransportProtocol m_protocol;
     bool m_adjust_payload_size;
 };
 

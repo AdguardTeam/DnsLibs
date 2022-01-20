@@ -4,7 +4,7 @@
 #include <cstdint>
 #include <string_view>
 #include "common/defs.h"
-#include <ag_net_utils.h>
+#include "common/net_utils.h"
 #include <ldns/ldns.h>
 
 namespace ag::dnscrypt {

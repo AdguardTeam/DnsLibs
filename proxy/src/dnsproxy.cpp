@@ -160,10 +160,10 @@ std::vector<uint8_t> dnsproxy::handle_message(ag::Uint8View message, const ag::d
     return response;
 }
 
-std::vector<std::pair<utils::transport_protocol, SocketAddress>> dnsproxy::get_listen_addresses() const {
+std::vector<std::pair<utils::TransportProtocol, SocketAddress>> dnsproxy::get_listen_addresses() const {
     const impl *proxy = this->pimpl.get();
 
-    std::vector<std::pair<utils::transport_protocol, SocketAddress>> addresses;
+    std::vector<std::pair<utils::TransportProtocol, SocketAddress>> addresses;
     addresses.reserve(proxy->listeners.size());
 
     for (const listener_ptr &l : proxy->listeners) {

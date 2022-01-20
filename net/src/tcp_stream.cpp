@@ -1,3 +1,4 @@
+#include "common/time_utils.h"
 #include "common/utils.h"
 #include "tcp_stream.h"
 #include <event2/buffer.h>
@@ -126,7 +127,7 @@ bool tcp_stream::set_timeout() {
         return true;
     }
 
-    const timeval tv = utils::duration_to_timeval(this->current_timeout.value());
+    const timeval tv = duration_to_timeval(this->current_timeout.value());
     if (this->timer == nullptr) {
         this->timer.reset(
             event_new(bufferevent_get_base(this->bev.get()), -1, EV_TIMEOUT,

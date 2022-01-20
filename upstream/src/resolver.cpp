@@ -1,6 +1,6 @@
 #include <ldns/ldns.h>
 
-#include "ag_net_utils.h"
+#include "common/net_utils.h"
 #include "resolver.h"
 #include "upstream_dot.h"
 #include "upstream_doh.h"

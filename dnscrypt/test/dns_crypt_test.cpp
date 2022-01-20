@@ -7,7 +7,7 @@
 #include "common/utils.h"
 #include "common/logger.h"
 #include "common/time_utils.h"
-#include <ag_net_utils.h>
+#include "common/net_utils.h"
 #include <dns_crypt_cipher.h>
 #include <dns_crypt_ldns.h>
 #include <dns_stamp.h>
@@ -189,13 +189,13 @@ static constexpr std::string_view check_dns_crypt_server_test_stamps[]{
     "sdns://AQIAAAAAAAAAFDE3Ni4xMDMuMTMwLjEzMjo1NDQzILgxXdexS27jIKRw3C7Wsao5jMnlhvhdRUXWuMm1AFq6ITIuZG5zY3J5cHQuZmFtaWx5Lm5zMS5hZGd1YXJkLmNvbQ",
 };
 
-static constexpr ag::utils::transport_protocol check_dns_crypt_server_test_protocols[]{
-    ag::utils::transport_protocol::TP_UDP,
-    ag::utils::transport_protocol::TP_TCP,
+static constexpr ag::utils::TransportProtocol check_dns_crypt_server_test_protocols[]{
+    ag::utils::TransportProtocol::TP_UDP,
+    ag::utils::TransportProtocol::TP_TCP,
 };
 
 struct check_dns_crypt_server_test : dnscrypt_test_with_param<::testing::tuple<std::string_view,
-                                                                               ag::utils::transport_protocol>> {
+                                                                               ag::utils::TransportProtocol>> {
 public:
     check_dns_crypt_server_test() {
         ag::Logger::set_log_level(ag::LogLevel::LOG_LEVEL_TRACE);
@@ -217,7 +217,7 @@ TEST_P(check_dns_crypt_server_test, check_dns_crypt_server) {
     auto req = ag::dnscrypt::create_request_ldns_pkt(LDNS_RR_TYPE_A, LDNS_RR_CLASS_IN, LDNS_RD,
                                                      "google-public-dns-a.google.com.",
                                                       ag::utils::make_optional_if(
-                                                              protocol == ag::utils::transport_protocol::TP_UDP,
+                                                              protocol == ag::utils::TransportProtocol::TP_UDP,
                                                               ag::dnscrypt::MAX_DNS_UDP_SAFE_PACKET_SIZE));
     ldns_pkt_set_random_id(req.get());
     auto[reply, exchange_rtt, exchange_err] = client.exchange(*req, server_info, 10s, &this->socket_factory, {});

@@ -128,7 +128,7 @@ static void log_packet(const Logger &log, const ldns_pkt *packet, std::string_vi
             , pkt_name, ldns_get_errorstr_by_id(status), status);
     } else if (info) {
         dbglog_id(log, packet, "{} from {} over {}:\n{}", pkt_name, info->peername.str(),
-                  magic_enum::enum_name<utils::transport_protocol>(info->proto),
+                  magic_enum::enum_name<utils::TransportProtocol>(info->proto),
                   (char *) ldns_buffer_begin(str_dns));
     } else {
         dbglog_id(log, packet, "{}:\n{}", pkt_name, (char *) ldns_buffer_begin(str_dns));

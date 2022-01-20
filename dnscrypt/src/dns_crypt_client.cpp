@@ -3,7 +3,7 @@
 #include "dns_crypt_consts.h"
 #include "dns_crypt_ldns.h"
 #include "common/utils.h"
-#include <ag_net_utils.h>
+#include "common/net_utils.h"
 #include <dns_crypt_client.h>
 #include <dns_crypt_utils.h>
 #include <dns_stamp.h>
@@ -30,7 +30,7 @@ ag::dnscrypt::client::client(bool adjust_payload_size) :
         client(DEFAULT_PROTOCOL, adjust_payload_size)
 {}
 
-ag::dnscrypt::client::client(utils::transport_protocol protocol, bool adjust_payload_size) :
+ag::dnscrypt::client::client(utils::TransportProtocol protocol, bool adjust_payload_size) :
         m_protocol(protocol),
         m_adjust_payload_size(adjust_payload_size)
 {}
