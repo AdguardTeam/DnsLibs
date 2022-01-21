@@ -1,7 +1,12 @@
 cmake_minimum_required(VERSION 3.1)
 project(AdguardDns C CXX)
 include(../../../cmake/conan_bootstrap.cmake)
-conan_bootstrap(SRCROOT "../../.." CONANFILE "conanfile.txt" SCOPE_NAME capi)
+
+if (WIN32)
+    conan_bootstrap(SRCROOT "../../.." CONANFILE "conanfile_windows.txt" SCOPE_NAME capi)
+else ()
+    conan_bootstrap(SRCROOT "../../.." CONANFILE "conanfile.txt" SCOPE_NAME capi)
+endif ()
 
 set(CMAKE_POLICY_DEFAULT_CMP0063 NEW) # allows visibility=hidden for static targets for subprojects
 cmake_policy(SET CMP0063 NEW) # allows visibility=hidden for static targets for this project

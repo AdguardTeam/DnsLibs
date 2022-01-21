@@ -41,7 +41,7 @@ public:
      * @brief Get the DNS proxy settings
      * @return Current settings
      */
-    const dnsproxy_settings &get_settings() const;
+    [[nodiscard]] const dnsproxy_settings &get_settings() const;
 
     /**
      * @brief Handle a DNS message
@@ -54,11 +54,6 @@ public:
      *         should be sent to the requestor over the network.
      */
     std::vector<uint8_t> handle_message(ag::Uint8View message, const dns_message_info *info);
-
-    /**
-     * @brief Get the addresses the proxy is listening for queries
-     */
-    [[nodiscard]] std::vector<std::pair<utils::TransportProtocol, SocketAddress>> get_listen_addresses() const;
 
     /**
      * @brief Return the DNS proxy library version

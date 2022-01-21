@@ -50,7 +50,6 @@ protected:
 
     // Subclass initializes its handles, callbacks, etc.
     // The loop is initialized, but isn't yet running at this point
-    // Called on event loop's thread
     // Return nullopt if the loop should run (success)
     // Close any uv_*_init'ed handles before returning in case of an error!
     virtual ag::ErrString before_run() = 0;
@@ -78,7 +77,7 @@ private:
         sigemptyset(&sigset);
         sigaddset(&sigset, SIGPIPE);
         pthread_sigmask(SIG_BLOCK, &sigset, &oldset);
-#endif // EVTHREAD_USE_PTHREADS_IMPLEMENTED
+#endif // __MACH__
 
         auto err = uv_run(loop, mode);
 
@@ -169,7 +168,7 @@ public:
         }
     }
 
-    std::pair<ag::utils::TransportProtocol, ag::SocketAddress> get_listen_address() const override {
+    [[nodiscard]] std::pair<ag::utils::TransportProtocol, ag::SocketAddress> get_listen_address() const override {
         return { m_settings.protocol, m_address };
     }
 };

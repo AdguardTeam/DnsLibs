@@ -111,7 +111,7 @@ std::pair<bool, ErrString> dnsproxy::init(dnsproxy_settings settings, dnsproxy_e
     if (!proxy->settings.listeners.empty()) {
         infolog(proxy->log, "Initializing listeners...");
         proxy->listeners.reserve(proxy->settings.listeners.size());
-        for (const auto &listener_settings : proxy->settings.listeners) {
+        for (auto &listener_settings : proxy->settings.listeners) {
             auto[listener, error] = dnsproxy_listener::create_and_listen(listener_settings, this);
             if (error.has_value()) {
                 errlog(proxy->log, "Failed to initialize a listener ({}): {}",
@@ -119,6 +119,8 @@ std::pair<bool, ErrString> dnsproxy::init(dnsproxy_settings settings, dnsproxy_e
                 this->deinit();
                 return {false, LISTENER_ERROR};
             } else {
+                // In case the port was 0 in settings, save the actual port the listener's bound to.
+                listener_settings.port = listener->get_listen_address().second.port();
                 proxy->listeners.push_back(std::move(listener));
             }
         }
@@ -133,15 +135,15 @@ void dnsproxy::deinit() {
     infolog(proxy->log, "Deinitializing proxy module...");
 
     infolog(proxy->log, "Shutting down listeners...");
-    for (auto& listener : proxy->listeners) {
+    for (auto &listener: proxy->listeners) {
         listener->shutdown();
     }
     // Must wait for all listeners to shut down before destroying the forwarder
-    // (there may still be requests in process after a shutdown() call)
-    for (auto& listener : proxy->listeners) {
+    // (there may still be requests in progress after a shutdown() call)
+    for (auto &listener: proxy->listeners) {
         listener->await_shutdown();
     }
-    infolog(proxy->log, "Done");
+    infolog(proxy->log, "Shutting down listeners done");
 
     proxy->forwarder.deinit();
     proxy->settings = {};
@@ -158,19 +160,6 @@ std::vector<uint8_t> dnsproxy::handle_message(ag::Uint8View message, const ag::d
     std::vector<uint8_t> response = proxy->forwarder.handle_message(message, info);
 
     return response;
-}
-
-std::vector<std::pair<utils::TransportProtocol, SocketAddress>> dnsproxy::get_listen_addresses() const {
-    const impl *proxy = this->pimpl.get();
-
-    std::vector<std::pair<utils::TransportProtocol, SocketAddress>> addresses;
-    addresses.reserve(proxy->listeners.size());
-
-    for (const listener_ptr &l : proxy->listeners) {
-        addresses.emplace_back(l->get_listen_address());
-    }
-
-    return addresses;
 }
 
 const char *ag::dnsproxy::version() {

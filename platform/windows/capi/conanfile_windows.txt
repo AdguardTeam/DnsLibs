@@ -1,0 +1,2 @@
+[requires]
+detours/2021-04-14@AdguardTeam/NativeLibsCommon

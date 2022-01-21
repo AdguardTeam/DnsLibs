@@ -1,11 +1,13 @@
 # Changelog
 
+* [Feature] In the settings returned by `dnsproxy::get_settings()`, listener settings now contain
+  the actual port that each listener is listening on.
+
+## V1.6
 * [Feature] Add an ability to route DNS queries directly to a target host in case the configured
             proxy server is determined as unavailable. Mostly intended for Android.
     * [Android] See `OutboundProxySettings`
     * [C API] See `ag_outbound_proxy_settings`
-
-## V1.6
 * [Fix] Accept IPv6 availability parameter in upstream testing methods.
     * Note that the API has changed, see `com.adguard.dnslibs.proxy.DnsProxy#testUpstream`, `+[AGDnsUtils testUpstream:ipv6Available:]`, `ag_test_upstream`.
 * [Feature] Split the blocking mode setting into separate settings for AdBlock-style and hosts-style rules.
