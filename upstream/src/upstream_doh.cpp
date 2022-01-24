@@ -579,7 +579,12 @@ void dns_over_https::read_messages() {
                     continue;
                 }
             }
-            handle->error = AG_FMT("Failed to perform request: {}", curl_easy_strerror(message->data.result));
+
+            if (message->data.result == CURLE_OPERATION_TIMEDOUT) {
+                handle->error = TIMEOUT_STR;
+            } else {
+                handle->error = AG_FMT("Failed to perform request: {}", curl_easy_strerror(message->data.result));
+            }
         }
 
         handle->cleanup_request();

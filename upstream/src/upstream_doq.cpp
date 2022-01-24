@@ -134,7 +134,7 @@ int dns_over_quic::send_alert(SSL *ssl, enum ssl_encryption_level_t level, uint8
             || res == SSL_AD_CERTIFICATE_REVOKED
             || res == SSL_AD_UNSUPPORTED_CERTIFICATE
             || res == SSL_AD_CERTIFICATE_UNKNOWN) {
-        std::lock_guard lg(doq->m_global);
+        std::scoped_lock l(doq->m_global);
         for (auto &cur : doq->m_requests) {
             cur.second.cond.notify_all();
         }
@@ -187,16 +187,16 @@ void dns_over_quic::handshake_timer_cb(evutil_socket_t, short, void *data) {
 void dns_over_quic::send_requests() {
     m_global.lock();
 
-    for (auto &req : m_requests) {
-        if (req.second.is_onfly) {
+    for (auto &[id, req] : m_requests) {
+        if (req.is_onfly) {
             continue;
         }
 
         auto idle_expiry = ngtcp2_conn_get_idle_expiry(m_conn);
-        milliseconds diff = ceil<milliseconds>(nanoseconds{idle_expiry - req.second.starting_time});
+        milliseconds diff = ceil<milliseconds>(nanoseconds{idle_expiry - req.starting_time});
         if (diff < m_options.timeout * 2) {
             m_global.unlock();
-            disconnect(AG_FMT("Too little time to process the request, id: {}", req.second.request_id));
+            disconnect(AG_FMT("Too little time to process the request, id: {}", req.request_id));
             reinit();
             return;
         }
@@ -217,26 +217,26 @@ void dns_over_quic::send_requests() {
 
         stream &stream = m_streams[stream_id];
         stream.stream_id = stream_id;
-        stream.request_id = req.second.request_id;
+        stream.request_id = req.request_id;
         stream.send_info.buf.reset(evbuffer_new());
-        evbuffer_add(stream.send_info.buf.get(), ldns_buffer_current(req.second.request_buffer.get()),
-                     ldns_buffer_remaining(req.second.request_buffer.get()));
+        evbuffer_add(stream.send_info.buf.get(), ldns_buffer_current(req.request_buffer.get()),
+                     ldns_buffer_remaining(req.request_buffer.get()));
 
         m_stream_send_queue.push_back(stream_id);
 
-        tracelog(m_log, "Sending request, id: {}", req.second.request_id);
+        tracelog(m_log, "Sending request, id: {}", req.request_id);
         if (int ret = on_write();
                 ret != NETWORK_ERR_OK) {
             m_global.unlock();
             if (ret == NETWORK_ERR_SEND_BLOCKED) {
-                req.second.is_onfly = true;
+                req.is_onfly = true;
             } else {
-                disconnect(AG_FMT("Sending request error: {}, id: {}", ret, req.first));
+                disconnect(AG_FMT("Sending request error: {}, id: {}", ret, id));
             }
             return;
         }
 
-        req.second.is_onfly = true;
+        req.is_onfly = true;
     }
 
     m_global.unlock();
@@ -251,13 +251,19 @@ ErrString dns_over_quic::init() {
     url.remove_prefix(SCHEME.size());
     url = url.substr(0, url.find('/'));
 
-    auto split_res = ag::utils::split_host_port(url);
-    m_server_name = ag::utils::trim(split_res.first);
+    auto[host, port] = ag::utils::split_host_port(url);
+    m_server_name = ag::utils::trim(host);
     if (m_server_name.empty()) {
         return "Server name is empty";
     }
 
-    m_port = split_res.second.empty() ? DEFAULT_PORT : atoi(std::string(split_res.second.data()).c_str());
+    if (port.empty()) {
+        m_port = DEFAULT_PORT;
+    } else if (auto port_int = ag::utils::to_integer<uint16_t>(port); !port_int.has_value()) {
+        return "Invalid port number";
+    } else {
+        m_port = port_int.value();
+    }
 
     ag::bootstrapper::params bootstrapper_params = {
             .address_string = m_server_name,
@@ -1064,7 +1070,7 @@ void dns_over_quic::submit(std::function<void()> &&f) const {
 }
 
 void dns_over_quic::process_reply(int64_t request_id, const uint8_t *request_data, size_t request_data_len) {
-    std::lock_guard lg(m_global);
+    std::scoped_lock lg(m_global);
     auto req_it = m_requests.find(request_id);
     if (req_it != m_requests.end()) {
         ldns_pkt *pkt = nullptr;
@@ -1091,7 +1097,7 @@ void dns_over_quic::disconnect(std::string_view reason) {
 
     m_ssl.reset();
 
-    std::lock_guard l(m_global);
+    std::scoped_lock l(m_global);
     for (auto &cur : m_requests) {
         if (cur.second.is_onfly) {
             tracelog(m_log, "Call condvar for request, id: {}", cur.first);
@@ -1197,7 +1203,7 @@ void dns_over_quic::update_idle_timer(bool reset) {
 
     milliseconds value{0};
     if (!has_inflight_requests) {
-        intmax_t effective_idle_timeout = ngtcp2_conn_get_idle_expiry(m_conn) - get_tstamp();
+        auto effective_idle_timeout = int64_t(ngtcp2_conn_get_idle_expiry(m_conn)) - get_tstamp();
         if (effective_idle_timeout > 0) {
             value = ceil<milliseconds>(nanoseconds{effective_idle_timeout});
             dbglog(m_log, "Idle timer reset with long timeout, {} left", value);

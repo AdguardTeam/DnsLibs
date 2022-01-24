@@ -76,6 +76,7 @@ public:
 
     struct exchange_result {
         ldns_pkt_ptr packet;
+        // @todo: pass an error code to not rely on an error message in the DNS forwarder
         ErrString error;
     };
 
