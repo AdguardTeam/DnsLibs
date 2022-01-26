@@ -498,7 +498,6 @@
 					};
 					F4AF33871F696BEE00CA0E84 = {
 						CreatedOnToolsVersion = 8.3.3;
-						DevelopmentTeam = N33TQXN8C7;
 						ProvisioningStyle = Automatic;
 						SystemCapabilities = {
 							com.apple.ApplicationGroups.Mac = {
@@ -765,7 +764,7 @@
 				CODE_SIGN_ENTITLEMENTS = "ext-ios/ext_ios.entitlements";
 				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
-				DEVELOPMENT_TEAM = N33TQXN8C7;
+				DEVELOPMENT_TEAM = TC3Q7MAJXF;
 				ENABLE_BITCODE = NO;
 				FRAMEWORK_SEARCH_PATHS = (
 					"$(inherited)",
@@ -784,7 +783,7 @@
 				);
 				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
 				MTL_FAST_MATH = YES;
-				PRODUCT_BUNDLE_IDENTIFIER = "com.adguard.dnsproxy-ios.ext";
+				PRODUCT_BUNDLE_IDENTIFIER = "com.adguard.dnsproxy-ios2.ext";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				PROVISIONING_PROFILE_SPECIFIER = "";
 				SDKROOT = iphoneos;
@@ -808,7 +807,7 @@
 				CODE_SIGN_ENTITLEMENTS = "ext-ios/ext_ios.entitlements";
 				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
-				DEVELOPMENT_TEAM = N33TQXN8C7;
+				DEVELOPMENT_TEAM = TC3Q7MAJXF;
 				ENABLE_BITCODE = NO;
 				FRAMEWORK_SEARCH_PATHS = (
 					"$(inherited)",
@@ -826,7 +825,7 @@
 					"@executable_path/../../Frameworks",
 				);
 				MTL_FAST_MATH = YES;
-				PRODUCT_BUNDLE_IDENTIFIER = "com.adguard.dnsproxy-ios.ext";
+				PRODUCT_BUNDLE_IDENTIFIER = "com.adguard.dnsproxy-ios2.ext";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				PROVISIONING_PROFILE_SPECIFIER = "";
 				SDKROOT = iphoneos;
@@ -851,7 +850,7 @@
 				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
 				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
-				DEVELOPMENT_TEAM = N33TQXN8C7;
+				DEVELOPMENT_TEAM = TC3Q7MAJXF;
 				ENABLE_BITCODE = NO;
 				FRAMEWORK_SEARCH_PATHS = (
 					"$(inherited)",
@@ -866,7 +865,7 @@
 				);
 				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
 				MTL_FAST_MATH = YES;
-				PRODUCT_BUNDLE_IDENTIFIER = "com.adguard.dnsproxy-ios";
+				PRODUCT_BUNDLE_IDENTIFIER = "com.adguard.dnsproxy-ios2";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = iphoneos;
 				TARGETED_DEVICE_FAMILY = "1,2";
@@ -888,7 +887,7 @@
 				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
 				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
-				DEVELOPMENT_TEAM = N33TQXN8C7;
+				DEVELOPMENT_TEAM = TC3Q7MAJXF;
 				ENABLE_BITCODE = NO;
 				FRAMEWORK_SEARCH_PATHS = (
 					"$(inherited)",
@@ -902,7 +901,7 @@
 					"@executable_path/Frameworks",
 				);
 				MTL_FAST_MATH = YES;
-				PRODUCT_BUNDLE_IDENTIFIER = "com.adguard.dnsproxy-ios";
+				PRODUCT_BUNDLE_IDENTIFIER = "com.adguard.dnsproxy-ios2";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = iphoneos;
 				TARGETED_DEVICE_FAMILY = "1,2";
@@ -956,7 +955,7 @@
 				CLANG_CXX_LANGUAGE_STANDARD = "c++17";
 				CODE_SIGN_ENTITLEMENTS = "ext-macos/ext.entitlements";
 				CODE_SIGN_IDENTITY = "Apple Development";
-				DEVELOPMENT_TEAM = N33TQXN8C7;
+				DEVELOPMENT_TEAM = TC3Q7MAJXF;
 				ENABLE_HARDENED_RUNTIME = YES;
 				FRAMEWORK_SEARCH_PATHS = (
 					"$(inherited)",
@@ -973,7 +972,7 @@
 				LIBRARY_SEARCH_PATHS = "";
 				ONLY_ACTIVE_ARCH = YES;
 				OTHER_LDFLAGS = "";
-				PRODUCT_BUNDLE_IDENTIFIER = com.adguard.dnsproxy.ext;
+				PRODUCT_BUNDLE_IDENTIFIER = com.adguard.dnsproxy2.ext;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SKIP_INSTALL = YES;
 				STRINGS_FILE_OUTPUT_ENCODING = "UTF-8";
@@ -986,7 +985,7 @@
 				CLANG_CXX_LANGUAGE_STANDARD = "c++17";
 				CODE_SIGN_ENTITLEMENTS = "ext-macos/ext.entitlements";
 				CODE_SIGN_IDENTITY = "Apple Development";
-				DEVELOPMENT_TEAM = N33TQXN8C7;
+				DEVELOPMENT_TEAM = TC3Q7MAJXF;
 				ENABLE_HARDENED_RUNTIME = YES;
 				FRAMEWORK_SEARCH_PATHS = (
 					"$(inherited)",
@@ -1003,7 +1002,7 @@
 				LIBRARY_SEARCH_PATHS = "";
 				ONLY_ACTIVE_ARCH = YES;
 				OTHER_LDFLAGS = "";
-				PRODUCT_BUNDLE_IDENTIFIER = com.adguard.dnsproxy.ext;
+				PRODUCT_BUNDLE_IDENTIFIER = com.adguard.dnsproxy2.ext;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SKIP_INSTALL = YES;
 				STRINGS_FILE_OUTPUT_ENCODING = "UTF-8";
@@ -1121,7 +1120,7 @@
 				CODE_SIGN_ENTITLEMENTS = "test-macos/test.entitlements";
 				CODE_SIGN_IDENTITY = "Mac Developer";
 				COMBINE_HIDPI_IMAGES = YES;
-				DEVELOPMENT_TEAM = N33TQXN8C7;
+				DEVELOPMENT_TEAM = TC3Q7MAJXF;
 				ENABLE_HARDENED_RUNTIME = YES;
 				FRAMEWORK_SEARCH_PATHS = (
 					"$(inherited)",
@@ -1136,7 +1135,7 @@
 				);
 				LIBRARY_SEARCH_PATHS = "";
 				OTHER_LDFLAGS = "";
-				PRODUCT_BUNDLE_IDENTIFIER = com.adguard.dnsproxy;
+				PRODUCT_BUNDLE_IDENTIFIER = com.adguard.dnsproxy2;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				PROVISIONING_PROFILE_SPECIFIER = "";
 				STRINGS_FILE_OUTPUT_ENCODING = "UTF-8";
@@ -1151,7 +1150,7 @@
 				CODE_SIGN_ENTITLEMENTS = "test-macos/test.entitlements";
 				CODE_SIGN_IDENTITY = "Mac Developer";
 				COMBINE_HIDPI_IMAGES = YES;
-				DEVELOPMENT_TEAM = N33TQXN8C7;
+				DEVELOPMENT_TEAM = TC3Q7MAJXF;
 				ENABLE_HARDENED_RUNTIME = YES;
 				FRAMEWORK_SEARCH_PATHS = (
 					"$(inherited)",
@@ -1166,7 +1165,7 @@
 				);
 				LIBRARY_SEARCH_PATHS = "";
 				OTHER_LDFLAGS = "";
-				PRODUCT_BUNDLE_IDENTIFIER = com.adguard.dnsproxy;
+				PRODUCT_BUNDLE_IDENTIFIER = com.adguard.dnsproxy2;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				PROVISIONING_PROFILE_SPECIFIER = "";
 				STRINGS_FILE_OUTPUT_ENCODING = "UTF-8";

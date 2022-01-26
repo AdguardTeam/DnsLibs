@@ -44,7 +44,7 @@
 
     [AGLogger setLevel: AGLL_TRACE];
     [AGLogger setCallback:
-        ^(const char *msg, int length) {
+        ^(AGLogLevel lvl, const char *msg, int length) {
             NSLog(@"%.*s", (int)length, msg);
         }];
 

@@ -1324,6 +1324,11 @@ static int bindFd(NSString *helperPath, NSString *address, NSNumber *port, AGLis
            inet_ntop(AF_INET, &ip_header->ip_src, srcv4_str, sizeof(srcv4_str)), ntohs(udp_header->uh_sport),
            inet_ntop(AF_INET, &ip_header->ip_dst, dstv4_str, sizeof(dstv4_str)), ntohs(udp_header->uh_dport));
 
+    if (ntohs(udp_header->uh_dport) != ag::DEFAULT_PLAIN_PORT) {
+        dbglog(*self->log, "Dropping non-DNS packet");
+        return nil;
+    }
+
     ag::Uint8View payload = {(uint8_t *) packet.bytes + header_length, packet.length - header_length};
     ag::dns_message_info info{
             .proto = ag::utils::TP_UDP,
@@ -1352,6 +1357,11 @@ static int bindFd(NSString *helperPath, NSString *address, NSNumber *port, AGLis
     dbglog(*self->log, "[{}]:{} -> [{}]:{}",
            inet_ntop(AF_INET6, &ip_header->ip6_src, srcv6_str, sizeof(srcv6_str)), ntohs(udp_header->uh_sport),
            inet_ntop(AF_INET6, &ip_header->ip6_dst, dstv6_str, sizeof(dstv6_str)), ntohs(udp_header->uh_dport));
+
+    if (ntohs(udp_header->uh_dport) != ag::DEFAULT_PLAIN_PORT) {
+        dbglog(*self->log, "Dropping non-DNS packet");
+        return nil;
+    }
 
     ag::Uint8View payload = {(uint8_t *) packet.bytes + header_length, packet.length - header_length};
     ag::dns_message_info info{
