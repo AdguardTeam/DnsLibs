@@ -8,6 +8,7 @@ using Adguard.Dns.Exceptions;
 using Adguard.Dns.Logging;
 using Adguard.Dns.Utils;
 using AdGuard.Utils.Html;
+using AdGuard.Utils.Logging;
 using Microsoft.Win32;
 
 namespace Adguard.Dns.Api
@@ -18,7 +19,6 @@ namespace Adguard.Dns.Api
     /// </summary>
     public class DnsApi : IDnsApi
     {
-        private static readonly ILog LOG = LogProvider.For<DnsApi>();
         private static readonly object SYNC_ROOT = new object();
         private IDnsProxyServer m_DnsProxyServer;
         private static readonly Lazy<IDnsApi> LAZY = new Lazy<IDnsApi> (() => new DnsApi());
@@ -70,22 +70,22 @@ namespace Adguard.Dns.Api
 
                     if (!dnsApiConfiguration.IsEnabled)
                     {
-                        LOG.InfoFormat("DNS filtering is disabled, doing nothing");
+                        Logger.Info("DNS filtering is disabled, doing nothing");
                         return;
                     }
 
-                    LOG.InfoFormat("Starting the DNS filtering");
+                    Logger.Info("Starting the DNS filtering");
                     AddDnsSuffixesAndDefaultFallbacks(dnsApiConfiguration.DnsProxySettings);
                     m_DnsProxyServer = new Dns.DnsProxyServer.DnsProxyServer(
                         dnsApiConfiguration.DnsProxySettings,
                         dnsApiConfiguration.DnsProxyServerCallbackConfiguration);
                     m_CurrentDnsProxySettings = dnsApiConfiguration.DnsProxySettings;
                     m_DnsProxyServer.Start();
-                    LOG.InfoFormat("Starting the DNS filtering has been successfully completed");
+                    Logger.Info("Starting the DNS filtering has been successfully completed");
                 }
                 catch (Exception ex)
                 {
-                    LOG.ErrorFormat("Starting the DNS filtering failed with an error: {0}", ex);
+                    Logger.Error("Starting the DNS filtering failed with an error: {0}", ex);
                     throw;
                 }
             }
@@ -118,7 +118,7 @@ namespace Adguard.Dns.Api
             {
                 try
                 {
-                    LOG.InfoFormat("Stopping the DNS filtering");
+                    Logger.Info("Stopping the DNS filtering");
                     if (m_DnsProxyServer == null)
                     {
                         return;
@@ -126,11 +126,11 @@ namespace Adguard.Dns.Api
 
                     m_DnsProxyServer.Stop();
                     m_DnsProxyServer = null;
-                    LOG.InfoFormat("Stopping the DNS filtering has been successfully completed");
+                    Logger.Info("Stopping the DNS filtering has been successfully completed");
                 }
                 catch (Exception ex)
                 {
-                    LOG.ErrorFormat("Stopping the DNS filtering failed with an error: {0}", ex);
+                    Logger.Error("Stopping the DNS filtering failed with an error: {0}", ex);
                     throw;
                 }
             }
@@ -160,11 +160,11 @@ namespace Adguard.Dns.Api
                 IDnsProxyServer newDnsProxyServer = null;
                 try
                 {
-                    LOG.InfoFormat("Reloading the DNS filtering");
+                    Logger.Info("Reloading the DNS filtering");
                     if (m_DnsProxyServer == null ||
                         m_CurrentDnsProxySettings == null)
                     {
-                        LOG.InfoFormat(
+                        Logger.Info(
                             "Start DNS filtering, because the DNS server is not started and/or configurations are not set");
 
                         StartDnsFiltering(newDnsApiConfiguration);
@@ -189,7 +189,7 @@ namespace Adguard.Dns.Api
                     if (!force &&
                         !isConfigurationChanged)
                     {
-                        LOG.InfoFormat("The DNS server configuration hasn't been changed, no need to reload");
+                        Logger.Info("The DNS server configuration hasn't been changed, no need to reload");
                         return;
                     }
 
@@ -202,16 +202,16 @@ namespace Adguard.Dns.Api
                     m_DnsProxyServer = newDnsProxyServer;
                     if (newDnsApiConfiguration.IsEnabled)
                     {
-                        LOG.InfoFormat("DNS filtering is enabled, starting DNS proxy server");
+                        Logger.Info("DNS filtering is enabled, starting DNS proxy server");
                         m_DnsProxyServer.Start();
                     }
 
                     m_CurrentDnsProxySettings = newDnsApiConfiguration.DnsProxySettings;
-                    LOG.InfoFormat("Reloading the DNS filtering has been successfully completed");
+                    Logger.Info("Reloading the DNS filtering has been successfully completed");
                 }
                 catch (Exception ex)
                 {
-                    LOG.ErrorFormat("Reloading the DNS filtering failed with an error: {0}", ex);
+                    Logger.Error("Reloading the DNS filtering failed with an error: {0}", ex);
                     if (newDnsProxyServer != null &&
                         newDnsProxyServer.IsStarted)
                     {
@@ -238,19 +238,19 @@ namespace Adguard.Dns.Api
             {
                 try
                 {
-                    LOG.InfoFormat("Getting current DNS proxy settings");
+                    Logger.Info("Getting current DNS proxy settings");
                     if (m_DnsProxyServer == null)
                     {
                         return null;
                     }
 
                     DnsProxySettings dnsProxySettings = m_DnsProxyServer.GetCurrentDnsProxySettings();
-                    LOG.InfoFormat("Getting current DNS proxy settings has been successfully completed");
+                    Logger.Info("Getting current DNS proxy settings has been successfully completed");
                     return dnsProxySettings;
                 }
                 catch (Exception ex)
                 {
-                    LOG.ErrorFormat("Getting current DNS proxy settings failed with an error: {0}", ex);
+                    Logger.Error("Getting current DNS proxy settings failed with an error: {0}", ex);
                     throw;
                 }
             }
@@ -269,15 +269,15 @@ namespace Adguard.Dns.Api
             {
                 try
                 {
-                    LOG.InfoFormat("Getting default DNS proxy settings");
+                    Logger.Info("Getting default DNS proxy settings");
                     DnsProxySettings dnsProxySettings =
                         Dns.DnsProxyServer.DnsProxyServer.GetDefaultDnsProxySettings();
-                    LOG.InfoFormat("Getting default DNS proxy settings has been successfully completed");
+                    Logger.Info("Getting default DNS proxy settings has been successfully completed");
                     return dnsProxySettings;
                 }
                 catch (Exception ex)
                 {
-                    LOG.ErrorFormat("Getting default DNS proxy settings failed with an error: {0}", ex);
+                    Logger.Error("Getting default DNS proxy settings failed with an error: {0}", ex);
                     throw;
                 }
             }
@@ -285,7 +285,7 @@ namespace Adguard.Dns.Api
 
         private List<string> GetSystemDNSSuffixes()
         {
-            LOG.Info("Start getting the DNS suffixes");
+            Logger.Info("Start getting the DNS suffixes");
             List<string> ret = new List<string>();
 
             // Getting DHCP suffixes
@@ -299,7 +299,7 @@ namespace Adguard.Dns.Api
                     continue;
                 }
 
-                LOG.DebugFormat("Add DNS suffix {0}", suffix);
+                Logger.Verbose("Add DNS suffix {0}", suffix);
                 ret.Add(suffix);
             }
 
@@ -310,14 +310,14 @@ namespace Adguard.Dns.Api
                 {
                     if (reg == null)
                     {
-                        LOG.InfoFormat("Cannot open {0}", TCP_SETTINGS_SUB_KEY);
+                        Logger.Info("Cannot open {0}", TCP_SETTINGS_SUB_KEY);
                         return ret;
                     }
 
                     string searchList = reg.GetValue(SEARCHLIST) as string;
                     if (searchList == null)
                     {
-                        LOG.InfoFormat("Cannot get {0} value", SEARCHLIST);
+                        Logger.Info("Cannot get {0} value", SEARCHLIST);
                         return ret;
                     }
 
@@ -329,7 +329,7 @@ namespace Adguard.Dns.Api
                             continue;
                         }
 
-                        LOG.DebugFormat("Add DNS suffix {0}", suffix);
+                        Logger.Verbose("Add DNS suffix {0}", suffix);
                         ret.Add(suffix);
                     }
                 }
@@ -339,7 +339,7 @@ namespace Adguard.Dns.Api
                 throw new InvalidOperationException("error while getting the DNS suffixes", ex);
             }
 
-            LOG.Info("Finished getting the DNS suffixes");
+            Logger.Info("Finished getting the DNS suffixes");
             return ret.Distinct().ToList();
         }
 
@@ -358,14 +358,14 @@ namespace Adguard.Dns.Api
         {
             try
             {
-                LOG.InfoFormat("Parsing DNS stamp");
+                Logger.Info("Parsing DNS stamp");
                 DnsStamp dnsStamp = DnsUtils.ParseDnsStamp(dnsStampStr);
-                LOG.InfoFormat("Parsing DNS stamp has been successfully completed");
+                Logger.Info("Parsing DNS stamp has been successfully completed");
                 return dnsStamp;
             }
             catch (Exception ex)
             {
-                LOG.ErrorFormat("Parsing DNS stamp failed with an error: {0}", ex);
+                Logger.Error("Parsing DNS stamp failed with an error: {0}", ex);
                 return null;
             }
         }
@@ -384,14 +384,14 @@ namespace Adguard.Dns.Api
         {
             try
             {
-                LOG.InfoFormat("Testing upstream");
+                Logger.Info("Testing upstream");
                 bool result = DnsUtils.TestUpstream(upstreamOptions, ipv6Available, offline);
-                LOG.InfoFormat("Testing upstream has been successfully completed");
+                Logger.Info("Testing upstream has been successfully completed");
                 return result;
             }
             catch (Exception ex)
             {
-                LOG.ErrorFormat("Testing upstream failed with an error: {0}", ex);
+                Logger.Error("Testing upstream failed with an error: {0}", ex);
                 return false;
             }
         }
@@ -414,7 +414,7 @@ namespace Adguard.Dns.Api
         /// Initializes the DnsLoggerAdapter with the specified log level
         /// </summary>
         /// <param name="logLevel">Log level you'd like to use</param>
-        public void InitLogger(LogLevel logLevel)
+        public void InitLogger(AGDnsApi.ag_log_level logLevel)
         {
             lock (SYNC_ROOT)
             {
@@ -440,14 +440,14 @@ namespace Adguard.Dns.Api
             {
                 try
                 {
-                    LOG.InfoFormat("Setting unhandled exception configuration");
+                    Logger.Info("Setting unhandled exception configuration");
                     DnsExceptionHandler.Init(unhandledExceptionConfiguration);
                     DnsExceptionHandler.SetUnhandledExceptionConfiguration();
-                    LOG.InfoFormat("Setting unhandled exception configuration has been successfully completed");
+                    Logger.Info("Setting unhandled exception configuration has been successfully completed");
                 }
                 catch (Exception ex)
                 {
-                    LOG.ErrorFormat("Setting unhandled exception configuration failed with an error: {0}", ex);
+                    Logger.Error("Setting unhandled exception configuration failed with an error: {0}", ex);
                 }
             }
         }

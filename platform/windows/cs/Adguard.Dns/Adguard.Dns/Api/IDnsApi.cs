@@ -1,7 +1,6 @@
 ﻿using System;
 using Adguard.Dns.Api.DnsProxyServer.Configs;
 using Adguard.Dns.Exceptions;
-using Adguard.Dns.Logging;
 
 namespace Adguard.Dns.Api
 {
@@ -105,7 +104,7 @@ namespace Adguard.Dns.Api
         /// Initializes the DnsLoggerAdapter with the specified log level
         /// </summary>
         /// <param name="logLevel">Log level you'd like to use</param>
-        void InitLogger(LogLevel logLevel);
+        void InitLogger(AGDnsApi.ag_log_level logLevel);
 
         #endregion
 

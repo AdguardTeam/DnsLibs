@@ -1,28 +1,28 @@
 using System;
 using System.Collections.Generic;
-using System.Linq;
 using Adguard.Dns.Exceptions;
-using AdGuard.Utils.Common;
 using AdGuard.Utils.Interop;
+using AdGuard.Utils.Logging;
 
 namespace Adguard.Dns.Logging
 {
     /// <summary>
-    /// Listens to logging messages of the CoreLibs and transforms them to LibLog (with
+    /// Listens to logging messages of the CoreLibs and logs it with <see cref="AdGuard.Utils.Logging.Logger"/> (with
     /// </summary>
     internal static class DnsLoggerAdapter
     {
-        private static readonly Dictionary<AGDnsApi.ag_log_level, LogLevel> LOG_LEVELS_MAPPING =
-            new Dictionary<AGDnsApi.ag_log_level, LogLevel>
+        private delegate void LogBylogLevel(string message, params object[] args);
+
+        private static readonly Dictionary<AGDnsApi.ag_log_level, LogBylogLevel> LOG_LEVELS_MAPPING =
+            new Dictionary<AGDnsApi.ag_log_level, LogBylogLevel>
             {
-                {AGDnsApi.ag_log_level.AGLL_ERR, LogLevel.Error},
-                {AGDnsApi.ag_log_level.AGLL_WARN, LogLevel.Warn},
-                {AGDnsApi.ag_log_level.AGLL_INFO, LogLevel.Info},
-                {AGDnsApi.ag_log_level.AGLL_TRACE, LogLevel.Trace},
-                {AGDnsApi.ag_log_level.AGLL_DEBUG, LogLevel.Debug}
+                {AGDnsApi.ag_log_level.AGLL_ERR, Logger.Error},
+                {AGDnsApi.ag_log_level.AGLL_WARN, Logger.Warn},
+                {AGDnsApi.ag_log_level.AGLL_INFO, Logger.Info},
+                {AGDnsApi.ag_log_level.AGLL_TRACE, Logger.Trace},
+                {AGDnsApi.ag_log_level.AGLL_DEBUG, Logger.Verbose}
             };
 
-        private static readonly ILog LOG = LogProvider.GetLogger(null);
         private static AGDnsApi.cbd_logger_callback_t m_LoggerCallback;
         private static AGDnsApi.ag_log_level m_LoggerLogLevel;
         private static readonly object SYNC_ROOT = new object();
@@ -32,15 +32,13 @@ namespace Adguard.Dns.Logging
         /// with the specified log level
         /// </summary>
         /// <param name="logLevel">Log level you'd like to use</param>
-        internal static void Init(LogLevel logLevel)
+        internal static void Init(AGDnsApi.ag_log_level logLevel)
         {
             lock (SYNC_ROOT)
             {
-                LOG.InfoFormat(
+                Logger.Info(
                     "Initializing the DnsLoggerAdapter with level = {0}", logLevel);
-                m_LoggerLogLevel = LOG_LEVELS_MAPPING.FirstOrDefault(
-                    levelPair =>
-                        levelPair.Value == logLevel).Key;
+                m_LoggerLogLevel = logLevel;
 
                 if (m_LoggerCallback != null)
                 {
@@ -62,12 +60,12 @@ namespace Adguard.Dns.Logging
                 AGDnsApi.ag_set_log_level(m_LoggerLogLevel);
                 if (m_LoggerCallback == null)
                 {
-                    LOG.WarnFormat("Logger callback hasn't been initialized before");
+                    Logger.Warn("Logger callback hasn't been initialized before");
                     return;
                 }
 
                 AGDnsApi.ag_set_log_callback(m_LoggerCallback, IntPtr.Zero);
-                LOG.InfoFormat("Logger callback has been set successfully");
+                Logger.Info("Logger callback has been set successfully");
             }
         }
 
@@ -86,7 +84,7 @@ namespace Adguard.Dns.Logging
         {
             try
             {
-                LogLevel level = LOG_LEVELS_MAPPING[logLevel];
+                LogBylogLevel logByLogLevel = LOG_LEVELS_MAPPING[logLevel];
                 MarshalUtils.ag_buffer agBuffer = new MarshalUtils.ag_buffer
                 {
                     data = pMessage,
@@ -97,7 +95,7 @@ namespace Adguard.Dns.Logging
                 // We have to forcibly trim trailing CR due to
                 // https://bit.adguard.com/projects/ADGUARD-CORE-LIBS/repos/dns-libs/pull-requests/306/diff#platform/windows/capi/include/ag_dns.h
                 message = message.TrimEnd(Environment.NewLine.ToCharArray());
-                LOG.Log(level, "{0}".AsFunc(), null, message);
+                logByLogLevel(message);
             }
             catch (Exception ex)
             {

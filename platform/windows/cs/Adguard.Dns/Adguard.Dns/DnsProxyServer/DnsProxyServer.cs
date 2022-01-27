@@ -3,8 +3,8 @@ using System.Collections.Generic;
 using Adguard.Dns.Api.DnsProxyServer.Callbacks;
 using Adguard.Dns.Api.DnsProxyServer.Configs;
 using Adguard.Dns.Helpers;
-using Adguard.Dns.Logging;
 using AdGuard.Utils.Interop;
+using AdGuard.Utils.Logging;
 
 namespace Adguard.Dns.DnsProxyServer
 {
@@ -14,7 +14,6 @@ namespace Adguard.Dns.DnsProxyServer
         private const string TCP_SETTINGS_SUB_KEY = @"System\CurrentControlSet\Services\Tcpip\Parameters";
         private const string SEARCHLIST = "SearchList";
 
-        private static readonly ILog LOG = LogProvider.For<DnsProxyServer>();
         private IntPtr m_pCallbackConfigurationC;
         private IntPtr m_pProxyServer;
 
@@ -40,7 +39,7 @@ namespace Adguard.Dns.DnsProxyServer
         {
             lock (m_SyncRoot)
             {
-                LOG.Info("Creating the DnsProxyServer");
+                Logger.Info("Creating the DnsProxyServer");
                 AGDnsApi.ValidateApi();
                 m_DnsProxySettings = dnsProxySettings;
                 m_CallbackConfiguration = callbackConfiguration;
@@ -58,10 +57,10 @@ namespace Adguard.Dns.DnsProxyServer
         {
             lock (m_SyncRoot)
             {
-                LOG.Info("Starting the DnsProxyServer");
+                Logger.Info("Starting the DnsProxyServer");
                 if (IsStarted)
                 {
-                    LOG.Info("DnsProxyServer is already started, doing nothing");
+                    Logger.Info("DnsProxyServer is already started, doing nothing");
                     return;
                 }
 
@@ -84,7 +83,7 @@ namespace Adguard.Dns.DnsProxyServer
                     }
 
                     m_IsStarted = true;
-                    LOG.Info("Finished starting the DnsProxyServer");
+                    Logger.Info("Finished starting the DnsProxyServer");
                 }
                 catch (Exception ex)
                 {
@@ -110,16 +109,16 @@ namespace Adguard.Dns.DnsProxyServer
             {
                 try
                 {
-                    LOG.Info("Stopping the DnsProxyServer");
+                    Logger.Info("Stopping the DnsProxyServer");
                     if (!IsStarted)
                     {
-                        LOG.Info("DnsProxyServer is not started, doing nothing");
+                        Logger.Info("DnsProxyServer is not started, doing nothing");
                         return;
                     }
 
                     AGDnsApi.ag_dnsproxy_deinit(m_pProxyServer);
                     m_IsStarted = false;
-                    LOG.Info("Finished stopping the DnsProxyServer");
+                    Logger.Info("Finished stopping the DnsProxyServer");
                 }
                 catch (Exception ex)
                 {
@@ -141,12 +140,12 @@ namespace Adguard.Dns.DnsProxyServer
         /// if cannot get the current dns proxy settings via native method</exception>
         public DnsProxySettings GetCurrentDnsProxySettings()
         {
-            LOG.Info("Get current DnsProxyServer settings");
+            Logger.Info("Get current DnsProxyServer settings");
             lock (m_SyncRoot)
             {
                 if (!IsStarted)
                 {
-                    LOG.Info("DnsProxyServer is not started, doing nothing");
+                    Logger.Info("DnsProxyServer is not started, doing nothing");
                     return null;
                 }
 
@@ -166,7 +165,7 @@ namespace Adguard.Dns.DnsProxyServer
         /// if cannot get the default dns proxy settings via native method</exception>
         public static DnsProxySettings GetDefaultDnsProxySettings()
         {
-            LOG.Info("Get default DnsProxyServer settings");
+            Logger.Info("Get default DnsProxyServer settings");
             IntPtr pSettings = AGDnsApi.ag_dnsproxy_settings_get_default();
             DnsProxySettings defaultDnsProxySettings =
                 GetDnsProxySettings(pSettings);
@@ -184,7 +183,7 @@ namespace Adguard.Dns.DnsProxyServer
         /// <returns>The <see cref="DnsProxySettings"/> object</returns>
         private static DnsProxySettings GetDnsProxySettings(IntPtr pCurrentDnsProxySettings)
         {
-            LOG.Info("Get DNS proxy settings settings");
+            Logger.Info("Get DNS proxy settings settings");
             if (pCurrentDnsProxySettings == IntPtr.Zero)
             {
                 throw new InvalidOperationException("Cannot get the DNS proxy settings");
@@ -193,7 +192,7 @@ namespace Adguard.Dns.DnsProxyServer
             AGDnsApi.ag_dnsproxy_settings currentDnsProxySettingsC =
                 MarshalUtils.PtrToStructure<AGDnsApi.ag_dnsproxy_settings>(pCurrentDnsProxySettings);
             DnsProxySettings currentDnsProxySettings = DnsApiConverter.FromNativeObject(currentDnsProxySettingsC);
-            LOG.Info("Finished getting the DNS proxy settings");
+            Logger.Info("Finished getting the DNS proxy settings");
             return currentDnsProxySettings;
         }
 

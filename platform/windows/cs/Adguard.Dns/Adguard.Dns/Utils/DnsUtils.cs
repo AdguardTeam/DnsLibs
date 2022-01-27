@@ -1,11 +1,10 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Runtime.InteropServices;
-using Adguard.Dns.Api;
 using Adguard.Dns.Api.DnsProxyServer.Configs;
 using Adguard.Dns.Helpers;
-using Adguard.Dns.Logging;
 using AdGuard.Utils.Interop;
+using AdGuard.Utils.Logging;
 
 namespace Adguard.Dns.Utils
 {
@@ -14,8 +13,6 @@ namespace Adguard.Dns.Utils
     /// </summary>
     internal static class DnsUtils
     {
-        private static readonly ILog LOG = LogProvider.For<DnsApi>();
-
         /// <summary>
         /// Gets current DNS proxy version
         /// </summary>
@@ -35,7 +32,7 @@ namespace Adguard.Dns.Utils
         /// <returns>DNS stamp as a <see cref="DnsStamp"/> instance or null if smth went wrong</returns>
         internal static DnsStamp ParseDnsStamp(string dnsStampStr)
         {
-            LOG.InfoFormat("Start parsing DNS stamp {0}", dnsStampStr);
+            Logger.Info("Start parsing DNS stamp {0}", dnsStampStr);
             IntPtr ppError = IntPtr.Zero;
             IntPtr pError = IntPtr.Zero;
             IntPtr pDnsStampResult = IntPtr.Zero;
@@ -47,7 +44,7 @@ namespace Adguard.Dns.Utils
                 {
                     pError = MarshalUtils.SafeReadIntPtr(ppError);
                     string error = MarshalUtils.PtrToString(pError);
-                    LOG.InfoFormat("Parsing DNS stamp {0} failed with an error {1}",
+                    Logger.Info("Parsing DNS stamp {0} failed with an error {1}",
                         dnsStampStr,
                         error);
                     return null;
@@ -56,12 +53,12 @@ namespace Adguard.Dns.Utils
                 AGDnsApi.ag_dns_stamp dnsStampResult =
                     MarshalUtils.PtrToStructure<AGDnsApi.ag_dns_stamp>(pDnsStampResult);
                 DnsStamp dnsStamp = DnsApiConverter.FromNativeObject(dnsStampResult);
-                LOG.Info("Parsing DNS stamp has been completed successfully");
+                Logger.Info("Parsing DNS stamp has been completed successfully");
                 return dnsStamp;
             }
             catch (Exception ex)
             {
-                LOG.InfoException("Parsing DNS stamp failed with an error {0}", ex);
+                Logger.Info("Parsing DNS stamp failed with an error {0}", ex);
                 return null;
             }
             finally
@@ -93,7 +90,7 @@ namespace Adguard.Dns.Utils
             }
             catch (Exception ex)
             {
-                LOG.DebugException("Getting DNS stamp pretty url failed with an error {0}", ex);
+                Logger.Verbose("Getting DNS stamp pretty url failed with an error {0}", ex);
                 return null;
             }
             finally
@@ -124,7 +121,7 @@ namespace Adguard.Dns.Utils
             }
             catch (Exception ex)
             {
-                LOG.DebugException("Getting DNS stamp prettier url failed with an error {0}", ex);
+                Logger.Verbose("Getting DNS stamp prettier url failed with an error {0}", ex);
                 return null;
             }
             finally
@@ -143,7 +140,7 @@ namespace Adguard.Dns.Utils
         internal static string GetDnsStampString(DnsStamp dnsStamp)
         {
             // Don't invoke "dnsStamp.ToString()" within this method to prevent infinite recursion
-            LOG.DebugFormat("Start getting DNS stamp string from {0}",
+            Logger.Verbose("Start getting DNS stamp string from {0}",
                 dnsStamp.ServerAddress);
             IntPtr pDnsStampString = IntPtr.Zero;
             Queue<IntPtr> allocatedPointers = new Queue<IntPtr>();
@@ -154,12 +151,12 @@ namespace Adguard.Dns.Utils
                 IntPtr pDnsStampC = MarshalUtils.StructureToPtr(dnsStampC, allocatedPointers);
                 pDnsStampString = AGDnsApi.ag_dns_stamp_to_str(pDnsStampC);
                 string dnsStampString = MarshalUtils.PtrToString(pDnsStampString);
-                LOG.DebugFormat("Getting DNS stamp string has been successfully completed");
+                Logger.Verbose("Getting DNS stamp string has been successfully completed");
                 return dnsStampString;
             }
             catch (Exception ex)
             {
-                LOG.DebugException("Getting DNS stamp string failed with an error {0}", ex);
+                Logger.Verbose("Getting DNS stamp string failed with an error {0}", ex);
                 return null;
             }
             finally
@@ -183,7 +180,7 @@ namespace Adguard.Dns.Utils
             IntPtr pError = IntPtr.Zero;
             try
             {
-                LOG.InfoFormat("Start testing upstream {0}", upstreamOptions);
+                Logger.Info("Start testing upstream {0}", upstreamOptions);
                 CertificateVerificationCallback certificateVerificationCallback = new CertificateVerificationCallback();
                 AGDnsApi.ag_upstream_options upstreamOptionsC =
                     DnsApiConverter.ToNativeObject(upstreamOptions, allocatedPointers);
@@ -194,16 +191,16 @@ namespace Adguard.Dns.Utils
                 string error = MarshalUtils.PtrToString(pError);
                 if (string.IsNullOrEmpty(error))
                 {
-                    LOG.InfoFormat("Testing upstream has been completed successfully");
+                    Logger.Info("Testing upstream has been completed successfully");
                     return true;
                 }
 
-                LOG.InfoFormat("Testing upstream failed with an error {0}", error);
+                Logger.Info("Testing upstream failed with an error {0}", error);
                 return false;
             }
             catch (Exception ex)
             {
-                LOG.InfoException("Testing upstream failed with an error {0}", ex);
+                Logger.Info("Testing upstream failed with an error {0}", ex);
                 return false;
             }
             finally

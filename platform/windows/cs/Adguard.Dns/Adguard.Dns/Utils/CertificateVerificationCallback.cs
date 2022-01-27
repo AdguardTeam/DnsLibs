@@ -4,7 +4,7 @@ using System.Linq;
 using System.Security.Cryptography.X509Certificates;
 using Adguard.Dns.Api.DnsProxyServer.Callbacks;
 using Adguard.Dns.Api.DnsProxyServer.EventArgs;
-using Adguard.Dns.Logging;
+using AdGuard.Utils.Logging;
 
 namespace Adguard.Dns.Utils
 {
@@ -13,8 +13,6 @@ namespace Adguard.Dns.Utils
     /// </summary>
     internal class CertificateVerificationCallback : ICertificateVerificationCallback
     {
-        private static readonly ILog LOG = LogProvider.For<CertificateVerificationCallback>();
-
         /// <summary>
         /// Called synchronously when a certificate needs to be verified.
         /// Return NULL for success or an error message
@@ -35,7 +33,7 @@ namespace Adguard.Dns.Utils
                 if (certificateData == null ||
                     certificateData.Length == 0)
                 {
-                    LOG.Info("Cannot verify certificate, because cert data is null");
+                    Logger.Info("Cannot verify certificate, because cert data is null");
                     return AGDnsApi.ag_certificate_verification_result.AGCVR_ERROR_CREATE_CERT;
                 }
 
@@ -56,7 +54,7 @@ namespace Adguard.Dns.Utils
                 bool isChainSuccessfullyBuilt = fullChain.Build(certificate);
                 if (!isChainSuccessfullyBuilt)
                 {
-                    LOG.Info("Cannot verify certificate, because cannot build a valid full certificate chain");
+                    Logger.Info("Cannot verify certificate, because cannot build a valid full certificate chain");
                     return AGDnsApi.ag_certificate_verification_result.AGCVR_ERROR_CERT_VERIFICATION;
                 }
 
@@ -64,7 +62,7 @@ namespace Adguard.Dns.Utils
             }
             catch (Exception ex)
             {
-                LOG.InfoException("Verification certificate fails: {0}", ex);
+                Logger.Info("Verification certificate fails: {0}", ex);
                 return AGDnsApi.ag_certificate_verification_result.AGCVR_COUNT;
             }
         }

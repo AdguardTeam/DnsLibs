@@ -9,13 +9,13 @@ using System.Net;
 using Adguard.Dns.Api;
 using Adguard.Dns.Api.DnsProxyServer.Callbacks;
 using Adguard.Dns.Api.DnsProxyServer.Configs;
-using Adguard.Dns.Logging;
+using AdGuard.Utils.Logging;
+using AdGuard.Utils.Logging.TraceListeners;
 
 namespace Adguard.Dns.TestApp
 {
     internal class Program
     {
-        private static ILogProvider m_LogProvider;
         private static IDnsApi m_DnsApi;
         private const string REDIRECTOR_EXECUTABLE_RELATIVE_PATH = @"CoreLibs\Adguard.Core.SampleApp.exe";
         private const string CORE_TOOLS_EXECUTABLE_RELATIVE_PATH = @"CoreLibs\Adguard.Core.Tools.exe";
@@ -32,14 +32,14 @@ namespace Adguard.Dns.TestApp
             bool isRedirectorExist = File.Exists(redirectorAppExecutablePath);
             try
             {
-                m_LogProvider = new ColoredConsoleLogProvider();
-                LogProvider.SetCurrentLogProvider(m_LogProvider);
+                ITraceListener coloredConsoleTraceListener = new ColoredConsoleTraceListener();
+                Logger.SetCustomListener(coloredConsoleTraceListener);
 
 #if LOG_TO_FILE
                 ConsoleToFileRedirector.Start("Logs");
 #endif
                 m_DnsApi = DnsApi.Instance;
-                m_DnsApi.InitLogger(LogLevel.Debug);
+                m_DnsApi.InitLogger(AGDnsApi.ag_log_level.AGLL_DEBUG);
                 DnsProxySettings dnsProxySettings = CreateDnsProxySettings();
                 IDnsProxyServerCallbackConfiguration dnsProxyServerCallbackConfiguration =
                     new DnsProxyServerCallbackConfiguration();

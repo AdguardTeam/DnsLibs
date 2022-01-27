@@ -38,8 +38,9 @@
     <WarningLevel>4</WarningLevel>
   </PropertyGroup>
   <ItemGroup>
-    <Reference Include="AdGuard.Utils, Version=2.1.0.0, Culture=neutral, PublicKeyToken=cc321ba03e90d705, processorArchitecture=MSIL">
-      <HintPath>..\packages\Adguard.Utils.2.1.30\lib\net45\AdGuard.Utils.dll</HintPath>
+    <Reference Include="AdGuard.Utils, Version=2.1.0.0, Culture=neutral, PublicKeyToken=cc321ba03e90d705">
+      <HintPath>..\packages\Adguard.Utils.2.1.80\lib\net45\AdGuard.Utils.dll</HintPath>
+      <Private>True</Private>
     </Reference>
     <Reference Include="Microsoft.CSharp" />
     <Reference Include="Newtonsoft.Json, Version=11.0.0.0, Culture=neutral, PublicKeyToken=30ad4fe6b2a6aeed">
@@ -91,9 +92,7 @@
     <Compile Include="Helpers\DnsApiConverter.cs" />
     <Compile Include="Helpers\TestUpstreamCallbacksAdapter.cs" />
     <Compile Include="Helpers\ProxyServerCallbacksAdapter.cs" />
-    <Compile Include="Logging\ColoredConsoleLogProvider.cs" />
     <Compile Include="Logging\DnsLoggerAdapter.cs" />
-    <Compile Include="Logging\LibLog.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
     <Compile Include="Utils\DnsUtils.cs" />
     <Compile Include="Utils\CertificateVerificationCallback.cs" />
@@ -117,7 +116,7 @@
       <ErrorText>This project references NuGet package(s) that are missing on this computer. Use NuGet Package Restore to download them.  For more information, see http://go.microsoft.com/fwlink/?LinkID=322105. The missing file is {0}.</ErrorText>
     </PropertyGroup>
     <Error Condition="!Exists('..\packages\System.Data.SQLite.Core.1.0.106.0\build\net45\System.Data.SQLite.Core.targets')" Text="$([System.String]::Format('$(ErrorText)', '..\packages\System.Data.SQLite.Core.1.0.106.0\build\net45\System.Data.SQLite.Core.targets'))" />
-    <Error Condition="!Exists('..\packages\Adguard.Utils.2.1.30\build\Adguard.Utils.targets')" Text="$([System.String]::Format('$(ErrorText)', '..\packages\Adguard.Utils.2.1.30\build\Adguard.Utils.targets'))" />
+    <Error Condition="!Exists('..\packages\Adguard.Utils.2.1.80\build\Adguard.Utils.targets')" Text="$([System.String]::Format('$(ErrorText)', '..\packages\Adguard.Utils.2.1.80\build\Adguard.Utils.targets'))" />
   </Target>
-  <Import Project="..\packages\Adguard.Utils.2.1.30\build\Adguard.Utils.targets" Condition="Exists('..\packages\Adguard.Utils.2.1.30\build\Adguard.Utils.targets')" />
+  <Import Project="..\packages\Adguard.Utils.2.1.80\build\Adguard.Utils.targets" Condition="Exists('..\packages\Adguard.Utils.2.1.80\build\Adguard.Utils.targets')" />
 </Project>
