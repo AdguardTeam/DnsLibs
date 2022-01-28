@@ -88,7 +88,7 @@ namespace Adguard.Dns.DnsProxyServer
                 catch (Exception ex)
                 {
                     Dispose();
-                    throw new InvalidOperationException("error while starting the DnsProxyServer: {0}", ex);
+                    throw new InvalidOperationException("error while starting the DnsProxyServer: ", ex);
                 }
                 finally
                 {
