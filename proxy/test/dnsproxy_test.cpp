@@ -188,6 +188,27 @@ TEST_F(dnsproxy_test, test_dnstype_blocking_rule) {
     ASSERT_EQ(last_event.rules.size(), 1);
 }
 
+TEST_F(dnsproxy_test, test_dnstype_reply) {
+    ag::dnsproxy_settings settings = make_dnsproxy_settings();
+    settings.filter_params = {{{1, "d2iwv1xxkqpmiz.cloudfront.net$dnstype=CNAME", true}}};
+
+    ag::dns_request_processed_event last_event{};
+    ag::dnsproxy_events events{
+            .on_request_processed = [&last_event](const ag::dns_request_processed_event &event) {
+                last_event = event;
+            }
+    };
+
+    auto [ret, err] = proxy.init(settings, events);
+    ASSERT_TRUE(ret) << *err;
+
+    ag::ldns_pkt_ptr response;
+    ASSERT_NO_FATAL_FAILURE(perform_request(proxy, create_request("www.abc.com", LDNS_RR_TYPE_A, LDNS_RD), response));
+    ASSERT_EQ(ldns_pkt_ancount(response.get()), 0);
+    ASSERT_EQ(ldns_pkt_get_rcode(response.get()), LDNS_RCODE_REFUSED);
+    ASSERT_EQ(last_event.rules.size(), 1);
+}
+
 TEST_F(dnsproxy_test, test_dnsrewrite_rule) {
     ag::dnsproxy_settings settings = make_dnsproxy_settings();
     settings.filter_params =

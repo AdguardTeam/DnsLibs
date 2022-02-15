@@ -75,13 +75,16 @@ private:
 
     bool apply_fallback_filter(std::string_view hostname, const ldns_pkt *request);
 
-    std::optional<Uint8Vector> apply_filter(std::string_view hostname,
-                                             const ldns_pkt *request,
-                                             const ldns_pkt *original_response,
-                                             dns_request_processed_event &event,
-                                             std::vector<dnsfilter::rule> &last_effective_rules,
-                                             bool fallback_only,
-                                             bool fire_event = true, ldns_pkt_rcode *out_rcode = nullptr);
+    std::optional<Uint8Vector> apply_filter(
+            dnsfilter::match_param match,
+            const ldns_pkt *request,
+            const ldns_pkt *original_response,
+            dns_request_processed_event &event,
+            std::vector<dnsfilter::rule> &last_effective_rules,
+            bool fallback_only,
+            bool fire_event = true,
+            ldns_pkt_rcode *out_rcode = nullptr
+    );
 
     std::optional<Uint8Vector> apply_cname_filter(const ldns_rr *cname_rr, const ldns_pkt *request,
                                                    const ldns_pkt *response, dns_request_processed_event &event,
