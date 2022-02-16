@@ -105,6 +105,8 @@ private:
     bool do_dnssec_log_logic(ldns_pkt *request);
     bool finalize_dnssec_log_logic(ldns_pkt *response, bool is_our_do_bit);
 
+    void remove_ech_svcparam(ldns_pkt *response);
+
     Logger logger{"dns_forwarder"};
     const dnsproxy_settings *settings = nullptr;
     const dnsproxy_events *events = nullptr;

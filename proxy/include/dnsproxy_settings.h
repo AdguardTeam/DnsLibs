@@ -120,6 +120,9 @@ struct dnsproxy_settings {
      * If enabled, detect retransmitted requests and handle them using fallback upstreams only.
      */
     bool enable_retransmission_handling;
+
+    /** Block Encrypted Client Hello by removing the "ech" parameter from SVCB/HTTPS records. */
+    bool block_ech;
 };
 
 }

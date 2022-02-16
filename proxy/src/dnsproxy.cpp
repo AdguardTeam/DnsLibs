@@ -69,6 +69,7 @@ static const dnsproxy_settings DEFAULT_PROXY_SETTINGS = {
     .optimistic_cache = true,
     .enable_dnssec_ok = false,
     .enable_retransmission_handling = false,
+    .block_ech = false,
 };
 
 const dnsproxy_settings &dnsproxy_settings::get_default() {
