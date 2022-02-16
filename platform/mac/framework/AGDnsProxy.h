@@ -315,6 +315,15 @@ typedef NS_ENUM(NSInteger, AGOutboundProxyProtocol) {
  * Filters
  */
 @property(nonatomic, readonly) NSArray<AGDnsFilterParams *> *filters;
+#if TARGET_OS_IPHONE
+/**
+ * If not zero, the filtering engine might not load some rules from the configured
+ * filters to try to keep the estimated memory usage below this limit.
+ * If any rules are not loaded because of this limit, a warning will be returned
+ * from `[AGDnsProxy initWithConfig:]`.
+ */
+@property(nonatomic, readonly) NSUInteger filtersMemoryLimitBytes;
+#endif // TARGET_OS_IPHONE
 /**
  * TTL of the record for the blocked domains (in seconds)
  */
@@ -384,6 +393,9 @@ typedef NS_ENUM(NSInteger, AGOutboundProxyProtocol) {
         fallbackDomains: (NSArray<NSString *> *) fallbackDomains
         detectSearchDomains: (BOOL) detectSearchDomains
         filters: (NSArray<AGDnsFilterParams *> *) filters
+#if TARGET_OS_IPHONE
+        filtersMemoryLimitBytes: (NSUInteger) filtersMemoryLimitBytes
+#endif // TARGET_OS_IPHONE
         blockedResponseTtlSecs: (NSInteger) blockedResponseTtlSecs
         dns64Settings: (AGDns64Settings *) dns64Settings
         listeners: (NSArray<AGListenerSettings *> *) listeners

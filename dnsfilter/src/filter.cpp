@@ -16,13 +16,16 @@
 
 #define log_filter(f_, lvl_, fmt_, ...) lvl_##log(logger, "[{}] {}(): " fmt_, (f_)->m_name, __func__, ##__VA_ARGS__)
 
-static constexpr size_t APPROX_COMPILED_REGEX_BYTES = 1024; // Empirical
-
-// Any rules besides simple domain rules, which into a somewhat
-// contiguous table, cause significant memory fragmentation
-// This coefficient was determined empirically
-static constexpr double APPROX_FRAGMENTATION_COEF = 1.5;
-
+// This multiplier is selected so that when only the unique domains table
+// is occupied, memory usage estimate aligns with what is shown by XCode.
+static constexpr double LOAD_FACTOR_MULTIPLIER = 2;
+// These multipliers are selected so that when only the correspoding table
+// is occupied, memory usage estimate aligns with what is shown by XCode.
+static constexpr double DOMAINS_TABLE_MULTIPLIER = 3;
+static constexpr double SHORTCUTS_TABLE_MULTIPLIER = 2.5;
+// There's no API in pcre2 to determine the compiled code size.
+// Just assume that regexes are expensive.
+static constexpr size_t ESTIMATE_REGEX_CODE_SIZE = 1024;
 
 static constexpr size_t SHORTCUT_LENGTH = 5;
 
@@ -65,7 +68,7 @@ static void destroy_multi_index_table(kh_hash_to_indexes_t *table) {
 struct leftover_entry {
     // @note: each entry must contain either or both of shortcuts and regex
     std::vector<std::string> shortcuts; // list of extracted shortcuts
-    std::optional<ag::Regex> Regex; // compiled regex
+    std::optional<ag::Regex> regex; // compiled regex
     uint32_t file_idx; // file index
 };
 
@@ -86,9 +89,9 @@ public:
         destroy_unique_index_table(this->badfilter_table);
     }
 
-    void put_hash_into_tables(uint32_t hash, uint32_t file_idx,
-                              kh_hash_to_unique_index_t *unique_table,
-                              kh_hash_to_indexes_t *multi_table);
+    size_t put_hash_into_tables(uint32_t hash, uint32_t file_idx,
+                                kh_hash_to_unique_index_t *unique_table,
+                                kh_hash_to_indexes_t *multi_table);
 
     struct load_line_arg {
         impl *filter;
@@ -159,8 +162,8 @@ filter &filter::operator=(filter &&other) {
     return *this;
 }
 
-void filter::impl::put_hash_into_tables(uint32_t hash, uint32_t file_idx,
-                                        kh_hash_to_unique_index_t *unique_table, kh_hash_to_indexes_t *multi_table) {
+size_t filter::impl::put_hash_into_tables(uint32_t hash, uint32_t file_idx,
+                                          kh_hash_to_unique_index_t *unique_table, kh_hash_to_indexes_t *multi_table) {
     bool already_exists = false;
     size_t stored_idx = 0;
 
@@ -171,13 +174,13 @@ void filter::impl::put_hash_into_tables(uint32_t hash, uint32_t file_idx,
         iter = kh_put(hash_to_unique_index, unique_table, hash, &ret);
         if (ret < 0) {
             log_filter(this, err, "Out of memory");
-            return;
+            return 0;
         }
         already_exists = ret == 0;
         if (!already_exists) {
             // domain is unique - save index
             kh_value(unique_table, iter) = file_idx;
-            return;
+            return LOAD_FACTOR_MULTIPLIER * (sizeof(hash) + sizeof(file_idx));
         } else {
             // we have one record for this domain - remove from unique table
             stored_idx = kh_value(unique_table, iter);
@@ -186,26 +189,31 @@ void filter::impl::put_hash_into_tables(uint32_t hash, uint32_t file_idx,
     }
 
     // create record in non-unique table
+    size_t mem_usage = 0;
     iter = kh_put(hash_to_indexes, multi_table, hash, &ret);
     if (ret < 0) {
         log_filter(this, err, "Out of memory");
-        return;
+        return 0;
     } else if (ret > 0) {
         // the record is a new one
         auto *positions = new(std::nothrow) std::vector<uint32_t>;
         if (positions == nullptr) {
             log_filter(this, err, "Out of memory");
-            return;
+            return 0;
         }
         kh_value(multi_table, iter) = positions;
+        mem_usage += LOAD_FACTOR_MULTIPLIER * (sizeof(hash) + sizeof(*positions)); // NOLINT(bugprone-sizeof-container)
     }
     std::vector<uint32_t> *positions = kh_value(multi_table, iter);
     if (already_exists) {
         // put previously stored unique index, if it existed
         positions->reserve(positions->size() + 2);
         positions->push_back(stored_idx);
+        mem_usage += DOMAINS_TABLE_MULTIPLIER * sizeof(stored_idx);
     }
     positions->push_back(file_idx);
+    mem_usage += DOMAINS_TABLE_MULTIPLIER * sizeof(file_idx);
+    return mem_usage;
 }
 
 struct rules_stat {
@@ -256,8 +264,9 @@ bool filter::impl::check_filter_outdated(const filter &filter) {
     return false;
 }
 
-#define CHECK_MEM() do {                                                  \
-    if (a->mem_limit && a->mem_limit < a->approx_mem + approx_rule_mem) { \
+#define CHECK_MEM(mem_increment_) do {                                    \
+    a->approx_mem += (mem_increment_);                                    \
+    if (a->mem_limit && a->approx_mem >= a->mem_limit) {                  \
         a->result = LR_MEM_LIMIT_REACHED;                                 \
         return false;                                                     \
     }                                                                     \
@@ -274,17 +283,15 @@ bool filter::impl::load_line(uint32_t file_idx, std::string_view line, void *arg
         return true;
     }
 
-    size_t approx_rule_mem = 0; // bytes
     const std::string &str = rule->public_part.text;
 
     if (const auto *content = std::get_if<ag::dnsfilter::adblock_rule_info>(&rule->public_part.content);
             content != nullptr && content->props.test(ag::dnsfilter::DARP_BADFILTER)) {
+
+        CHECK_MEM(LOAD_FACTOR_MULTIPLIER * 2 * sizeof(uint32_t));
+
         std::string text = rule_utils::get_text_without_badfilter(rule->public_part);
         uint32_t hash = ag::utils::hash(text);
-
-        approx_rule_mem = 4 * sizeof(uint32_t); // (k + v) * empty buckets coef
-        CHECK_MEM();
-
         int ret;
         khiter_t iter = kh_put(hash_to_unique_index, self->badfilter_table, hash, &ret);
         if (ret < 0) {
@@ -299,12 +306,11 @@ bool filter::impl::load_line(uint32_t file_idx, std::string_view line, void *arg
     switch (rule->match_method) {
     case rule_utils::rule::MMID_EXACT:
     case rule_utils::rule::MMID_SUBDOMAINS:
-        // count * (k + v) * empty buckets coef (assume non-unique domain rules are rare)
-        approx_rule_mem = rule->matching_parts.size() * 4 * sizeof(uint32_t);
-        CHECK_MEM();
         log_filter(self, trace, "Placing a rule in domains table: {}", str);
         for (const std::string &d : rule->matching_parts) {
-            self->put_hash_into_tables(ag::utils::hash(d), file_idx, self->unique_domains_table, self->domains_table);
+            size_t approx_rule_mem = self->put_hash_into_tables(ag::utils::hash(d), file_idx,
+                                                                self->unique_domains_table, self->domains_table);
+            CHECK_MEM(approx_rule_mem);
         }
         goto next_line;
     case rule_utils::rule::MMID_SHORTCUTS:
@@ -334,47 +340,43 @@ bool filter::impl::load_line(uint32_t file_idx, std::string_view line, void *arg
                     log_filter(self, err, "Failed to allocate memory for shortcuts table");
                     return true;
                 }
-                // (k + v) * empty buckets coef
-                approx_rule_mem = 2 * (sizeof(uint32_t) + sizeof(std::vector<uint32_t>) + positions->capacity() * sizeof(uint32_t));
                 kh_value(self->shortcuts_table, iter) = positions;
+
+                CHECK_MEM(LOAD_FACTOR_MULTIPLIER * (sizeof(uint32_t) + sizeof(std::vector<uint32_t>)));
+
             } else { // update existing
                 positions = kh_value(self->shortcuts_table, iter);
             }
             log_filter(self, trace, "Placing a rule in shortcuts table: {} ({})", str, hash);
-            approx_rule_mem -= positions->capacity() * sizeof(uint32_t);
             positions->push_back(file_idx);
-            approx_rule_mem += positions->capacity() * sizeof(uint32_t);
-            approx_rule_mem *= APPROX_FRAGMENTATION_COEF;
-            CHECK_MEM();
+
+            CHECK_MEM(SHORTCUTS_TABLE_MULTIPLIER * sizeof(file_idx));
+
             goto next_line;
         }
         [[fallthrough]];
     }
     case rule_utils::rule::MMID_REGEX: {
+        CHECK_MEM(sizeof(leftover_entry));
         std::vector<std::string> shortcuts = std::move(rule->matching_parts);
         std::transform(shortcuts.begin(), shortcuts.end(), shortcuts.begin(), ag::utils::to_lower);
         std::optional<ag::Regex> re = (rule->match_method == rule_utils::rule::MMID_SHORTCUTS)
                                       ? std::nullopt
                                       : std::make_optional(ag::Regex(rule_utils::get_regex(*rule)));
         assert(!shortcuts.empty() || re.has_value());
-        approx_rule_mem -= self->leftovers_table.capacity() * sizeof(leftover_entry);
+        for (auto &shortcut : shortcuts) {
+            CHECK_MEM(shortcut.size() + sizeof(std::string));
+        }
+        if (re.has_value()) {
+            CHECK_MEM(ESTIMATE_REGEX_CODE_SIZE);
+        }
         self->leftovers_table.emplace_back(leftover_entry{ std::move(shortcuts), std::move(re), file_idx });
-        approx_rule_mem += self->leftovers_table.capacity() * sizeof(leftover_entry);
         log_filter(self, trace, "Rule placed in leftovers table: {}", str);
-        for (auto &s : self->leftovers_table.back().shortcuts) {
-            approx_rule_mem += s.size();
-        }
-        if (self->leftovers_table.back().Regex) {
-            approx_rule_mem += APPROX_COMPILED_REGEX_BYTES;
-        }
-        approx_rule_mem *= APPROX_FRAGMENTATION_COEF;
-        CHECK_MEM();
         goto next_line;
     }
     }
 
 next_line:
-    a->approx_mem += approx_rule_mem;
     a->result = LR_OK;
     return true;
 }
@@ -686,7 +688,7 @@ void filter::impl::search_in_leftovers(match_arg &match) const {
             continue;
         }
 
-        const std::optional<ag::Regex> &re = entry.Regex;
+        const std::optional<ag::Regex> &re = entry.regex;
         if (!re.has_value() || re->match(match.ctx.host)) {
             match_by_file_position(match, entry.file_idx);
         }

@@ -19,7 +19,9 @@
 #include "common/cesu8.h"
 
 
+#if TARGET_OS_IPHONE
 static constexpr size_t FILTER_PARAMS_MEM_LIMIT_BYTES = 8 * 1024 * 1024;
+#endif // TARGET_OS_IPHONE
 
 static constexpr int BINDFD_WAIT_MS = 10000;
 
@@ -588,6 +590,9 @@ static ag::server_stamp convert_stamp(AGDnsStamp *stamp) {
     }
     _fallbackDomains = fallbackDomains;
     _filters = nil;
+#if TARGET_OS_IPHONE
+    _filtersMemoryLimitBytes = FILTER_PARAMS_MEM_LIMIT_BYTES;
+#endif // TARGET_OS_IPHONE
     _blockedResponseTtlSecs = settings->blocked_response_ttl_secs;
     if (settings->dns64.has_value()) {
         _dns64Settings = [[AGDns64Settings alloc] initWithNative: &settings->dns64.value()];
@@ -618,6 +623,9 @@ static ag::server_stamp convert_stamp(AGDnsStamp *stamp) {
         fallbackDomains: (NSArray<NSString *> *) fallbackDomains
         detectSearchDomains: (BOOL) detectSearchDomains
         filters: (NSArray<AGDnsFilterParams *> *) filters
+#if TARGET_OS_IPHONE
+        filtersMemoryLimitBytes: (NSUInteger) filtersMemoryLimitBytes
+#endif // TARGET_OS_IPHONE
         blockedResponseTtlSecs: (NSInteger) blockedResponseTtlSecs
         dns64Settings: (AGDns64Settings *) dns64Settings
         listeners: (NSArray<AGListenerSettings *> *) listeners
@@ -643,6 +651,9 @@ static ag::server_stamp convert_stamp(AGDnsStamp *stamp) {
     _fallbackDomains = fallbackDomains;
     _detectSearchDomains = detectSearchDomains;
     _filters = filters;
+#if TARGET_OS_IPHONE
+    _filtersMemoryLimitBytes = filtersMemoryLimitBytes;
+#endif // TARGET_OS_IPHONE
     if (blockedResponseTtlSecs != 0) {
         _blockedResponseTtlSecs = blockedResponseTtlSecs;
     }
@@ -671,6 +682,9 @@ static ag::server_stamp convert_stamp(AGDnsStamp *stamp) {
         _fallbackDomains = [coder decodeObjectForKey:@"_fallbackDomains"];
         _detectSearchDomains = [coder decodeBoolForKey:@"_detectSearchDomains"];
         _filters = [coder decodeObjectForKey:@"_filters"];
+#if TARGET_OS_IPHONE
+        _filtersMemoryLimitBytes = [coder decodeInt64ForKey:@"_filtersMemoryLimitBytes"];
+#endif // TARGET_OS_IPHONE
         _blockedResponseTtlSecs = [coder decodeInt64ForKey:@"_blockedResponseTtlSecs"];
         _dns64Settings = [coder decodeObjectForKey:@"_dns64Settings"];
         _listeners = [coder decodeObjectForKey:@"_listeners"];
@@ -697,6 +711,9 @@ static ag::server_stamp convert_stamp(AGDnsStamp *stamp) {
     [coder encodeObject:self.fallbackDomains forKey:@"_fallbackDomains"];
     [coder encodeBool:self.detectSearchDomains forKey:@"_detectSearchDomains"];
     [coder encodeObject:self.filters forKey:@"_filters"];
+#if TARGET_OS_IPHONE
+    [coder encodeInt64:self.filtersMemoryLimitBytes forKey:@"_filtersMemoryLimitBytes"];
+#endif // TARGET_OS_IPHONE
     [coder encodeInt64:self.blockedResponseTtlSecs forKey:@"_blockedResponseTtlSecs"];
     [coder encodeObject:self.dns64Settings forKey:@"_dns64Settings"];
     [coder encodeObject:self.listeners forKey:@"_listeners"];
@@ -1183,8 +1200,8 @@ static int bindFd(NSString *helperPath, NSString *address, NSNumber *port, AGLis
                 ag::dnsfilter::filter_params{(int32_t) fp.id, fp.data.UTF8String, (bool) fp.inMemory});
         }
 #if TARGET_OS_IPHONE
-        settings.filter_params.mem_limit = FILTER_PARAMS_MEM_LIMIT_BYTES;
-#endif
+        settings.filter_params.mem_limit = config.filtersMemoryLimitBytes;
+#endif // TARGET_OS_IPHONE
     }
 
     void *obj = (__bridge void *)self;
