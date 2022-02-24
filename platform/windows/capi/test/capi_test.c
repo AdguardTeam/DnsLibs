@@ -62,8 +62,12 @@ static void test_proxy() {
     events.on_request_processed = on_req;
     events.on_certificate_verification = on_cert;
 
-    ag_dnsproxy *proxy = ag_dnsproxy_init(settings, &events);
+    ag_dnsproxy_init_result result;
+    const char *message = NULL;
+    ag_dnsproxy *proxy = ag_dnsproxy_init(settings, &events, &result, &message);
     ASSERT(proxy);
+    ASSERT(result == AGDPIR_OK);
+    ASSERT(message == NULL);
 
     ag_dnsproxy_settings *actual_settings = ag_dnsproxy_get_settings(proxy);
     ASSERT(actual_settings);

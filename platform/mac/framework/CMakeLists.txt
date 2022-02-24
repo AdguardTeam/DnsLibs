@@ -108,16 +108,16 @@ if (NOT TARGET tests)
 endif ()
 
 if("${TARGET_OS}" STREQUAL "macos")
-    add_executable(test_AGDnsProxy EXCLUDE_FROM_ALL test_AGDnsProxy.mm)
-    target_compile_options(test_AGDnsProxy PRIVATE "-fobjc-arc")
-    target_compile_options(test_AGDnsProxy PRIVATE -F${CMAKE_CURRENT_BINARY_DIR})
-    target_link_libraries(test_AGDnsProxy
+    add_executable(test_AGDnsProxyListenerFailsInit EXCLUDE_FROM_ALL test_AGDnsProxyListenerFailsInit.mm)
+    target_compile_options(test_AGDnsProxyListenerFailsInit PRIVATE "-fobjc-arc")
+    target_compile_options(test_AGDnsProxyListenerFailsInit PRIVATE -F${CMAKE_CURRENT_BINARY_DIR})
+    target_link_libraries(test_AGDnsProxyListenerFailsInit
             "-F${CMAKE_CURRENT_BINARY_DIR}"
             "-Wl,-rpath,${CMAKE_CURRENT_BINARY_DIR}"
             "-framework AGDnsProxy -framework Foundation")
-    add_dependencies(test_AGDnsProxy AGDnsProxy)
-    add_dependencies(tests test_AGDnsProxy)
-    add_test(AGDnsProxyTest test_AGDnsProxy)
+    add_dependencies(test_AGDnsProxyListenerFailsInit AGDnsProxy)
+    add_dependencies(tests test_AGDnsProxyListenerFailsInit)
+    add_test(AGDnsProxyTest test_AGDnsProxyListenerFailsInit)
 
     add_executable(test_AGDnsProxyDescriptions EXCLUDE_FROM_ALL test_AGDnsProxyDescriptions.mm)
     target_compile_options(test_AGDnsProxyDescriptions PRIVATE "-fobjc-arc")
@@ -158,4 +158,13 @@ if("${TARGET_OS}" STREQUAL "macos")
             "-F${CMAKE_CURRENT_BINARY_DIR}"
             "-Wl,-rpath,${CMAKE_CURRENT_BINARY_DIR}"
             "-framework AGDnsProxy -framework Foundation")
+
+    add_executable(test_AGDnsProxyStandalone EXCLUDE_FROM_ALL test_AGDnsProxyStandalone.mm)
+    target_compile_options(test_AGDnsProxyStandalone PRIVATE "-fobjc-arc")
+    target_compile_options(test_AGDnsProxyStandalone PRIVATE -F${CMAKE_CURRENT_BINARY_DIR})
+    target_link_libraries(test_AGDnsProxyStandalone
+            "-F${CMAKE_CURRENT_BINARY_DIR}"
+            "-Wl,-rpath,${CMAKE_CURRENT_BINARY_DIR}"
+            "-framework AGDnsProxy -framework Foundation")
+    add_dependencies(test_AGDnsProxyStandalone AGDnsProxy)
 endif()

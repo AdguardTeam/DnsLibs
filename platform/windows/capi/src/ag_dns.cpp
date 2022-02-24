@@ -498,16 +498,31 @@ ag_dnsproxy_settings *ag_dnsproxy_settings_get_default() {
     return c_settings;
 }
 
-ag_dnsproxy *ag_dnsproxy_init(const ag_dnsproxy_settings *c_settings, const ag_dnsproxy_events *c_events) {
+ag_dnsproxy *ag_dnsproxy_init(const ag_dnsproxy_settings *c_settings, const ag_dnsproxy_events *c_events,
+                              ag_dnsproxy_init_result *out_result, const char **out_message) {
     auto settings = marshal_settings(c_settings);
     auto events = marshal_events(c_events);
 
     auto *proxy = new ag::dnsproxy;
+    auto [ret, err_or_warn] = proxy->init(settings, events);
 
-    auto [ret, _] = proxy->init(settings, events);
     if (ret) {
+        if (err_or_warn) {
+            *out_result = AGDPIR_WARNING;
+            *out_message = strdup(err_or_warn->c_str());
+        } else {
+            *out_result = AGDPIR_OK;
+        }
         return (void *) proxy;
     }
+
+    assert(err_or_warn);
+    if (err_or_warn == ag::dnsproxy::LISTENER_ERROR) {
+        *out_result = AGDPIR_LISTENER_ERROR;
+    } else {
+        *out_result = AGDPIR_ERROR;
+    }
+    *out_message = strdup(err_or_warn->c_str());
 
     delete proxy;
     return nullptr;

@@ -22,11 +22,11 @@ typedef NS_ENUM(NSInteger, AGDnsProxyError) {
  * Logging levels
  */
 typedef NS_ENUM(NSInteger, AGLogLevel) {
-    AGLL_TRACE,
-    AGLL_DEBUG,
-    AGLL_INFO,
-    AGLL_WARN,
     AGLL_ERR,
+    AGLL_WARN,
+    AGLL_INFO,
+    AGLL_DEBUG,
+    AGLL_TRACE,
 };
 
 /**

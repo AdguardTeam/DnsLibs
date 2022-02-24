@@ -180,25 +180,13 @@ public class DnsProxy implements Closeable {
     }
 
     public enum LogLevel {
-        TRACE, DEBUG, INFO, WARN, ERROR; // Do NOT change the order
+        ERROR, WARN, INFO, DEBUG, TRACE;
 
-        //#define SPDLOG_LEVEL_TRACE 0
-        //#define SPDLOG_LEVEL_DEBUG 1
-        //#define SPDLOG_LEVEL_INFO 2
-        //#define SPDLOG_LEVEL_WARN 3
-        //#define SPDLOG_LEVEL_ERROR 4
-        //#define SPDLOG_LEVEL_CRITICAL 5
-        //#define SPDLOG_LEVEL_OFF 6
-
-        private static LogLevel[] map = new LogLevel[]{
-                TRACE, DEBUG, INFO, WARN, ERROR, ERROR, // map CRITICAL to ERROR
-        };
-
-        static LogLevel translate(int spdLogLevel) {
-            if (spdLogLevel < 0 || spdLogLevel >= map.length) {
+        static LogLevel translate(int nativeLogLevel) {
+            if (nativeLogLevel < 0 || nativeLogLevel >= values().length) {
                 return TRACE;
             }
-            return map[spdLogLevel];
+            return values()[nativeLogLevel];
         }
     }
 

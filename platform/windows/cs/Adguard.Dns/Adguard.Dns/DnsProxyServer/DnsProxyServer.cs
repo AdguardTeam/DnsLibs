@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Runtime.InteropServices;
 using Adguard.Dns.Api.DnsProxyServer.Callbacks;
 using Adguard.Dns.Api.DnsProxyServer.Configs;
 using Adguard.Dns.Helpers;
@@ -11,9 +12,6 @@ namespace Adguard.Dns.DnsProxyServer
     // ReSharper disable InconsistentNaming
     internal class DnsProxyServer : IDnsProxyServer, IDisposable
     {
-        private const string TCP_SETTINGS_SUB_KEY = @"System\CurrentControlSet\Services\Tcpip\Parameters";
-        private const string SEARCHLIST = "SearchList";
-
         private IntPtr m_pCallbackConfigurationC;
         private IntPtr m_pProxyServer;
 
@@ -65,6 +63,9 @@ namespace Adguard.Dns.DnsProxyServer
                 }
 
                 Queue<IntPtr> allocatedPointers = new Queue<IntPtr>();
+                IntPtr ppOutMessage = IntPtr.Zero;
+                IntPtr pOutMessage = IntPtr.Zero;
+                IntPtr pOutResult = IntPtr.Zero;
                 try
                 {
                     AGDnsApi.ag_dnsproxy_settings dnsProxySettingsC =
@@ -73,12 +74,26 @@ namespace Adguard.Dns.DnsProxyServer
 
                     IntPtr pDnsProxySettingsC = MarshalUtils.StructureToPtr(dnsProxySettingsC, allocatedPointers);
                     m_pCallbackConfigurationC = MarshalUtils.StructureToPtr(m_callbackConfigurationC);
+
+                    pOutResult = Marshal.AllocHGlobal(Marshal.SizeOf(typeof(IntPtr)));
+                    ppOutMessage = Marshal.AllocHGlobal(Marshal.SizeOf(typeof(IntPtr)));
                     m_pProxyServer = AGDnsApi.ag_dnsproxy_init(
                         pDnsProxySettingsC,
-                        m_pCallbackConfigurationC);
+                        m_pCallbackConfigurationC,
+                        pOutResult,
+                        ppOutMessage);
+                    AGDnsApi.ag_dnsproxy_init_result outResultEnum = AGDnsApi.ag_dnsproxy_init_result.AGDPIR_OK;
                     if (m_pProxyServer == IntPtr.Zero)
                     {
-                        const string errorMessage = "Failed to start the DnsProxyServer due to an error";
+                        int? outResult = MarshalUtils.PtrToNullableInt(pOutResult);
+                        if (outResult.HasValue)
+                        {
+                            outResultEnum = (AGDnsApi.ag_dnsproxy_init_result)outResult.Value;
+                        }
+
+                        pOutMessage = MarshalUtils.SafeReadIntPtr(ppOutMessage);
+                        string outMessage = MarshalUtils.PtrToString(pOutMessage);
+                        string errorMessage = $"Failed to start the DnsProxyServer with the result {outResultEnum} and message {outMessage}";
                         throw new InvalidOperationException(errorMessage);
                     }
 
@@ -93,6 +108,9 @@ namespace Adguard.Dns.DnsProxyServer
                 finally
                 {
                     MarshalUtils.SafeFreeHGlobal(allocatedPointers);
+                    AGDnsApi.ag_str_free(pOutMessage);
+                    MarshalUtils.SafeFreeHGlobal(ppOutMessage);
+                    MarshalUtils.SafeFreeHGlobal(pOutResult);
                 }
             }
         }

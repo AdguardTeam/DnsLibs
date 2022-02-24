@@ -23,11 +23,11 @@ extern "C" {
 //
 
 typedef enum {
-    AGLL_TRACE,
-    AGLL_DEBUG,
-    AGLL_INFO,
-    AGLL_WARN,
     AGLL_ERR,
+    AGLL_WARN,
+    AGLL_INFO,
+    AGLL_DEBUG,
+    AGLL_TRACE,
 } ag_log_level;
 
 typedef ARRAY_OF(uint8_t) ag_buffer;
@@ -330,6 +330,12 @@ typedef struct {
     ag_server_informal_properties properties;
 } ag_dns_stamp;
 
+typedef enum {
+    AGDPIR_OK,
+    AGDPIR_WARNING,
+    AGDPIR_LISTENER_ERROR,
+    AGDPIR_ERROR,
+} ag_dnsproxy_init_result;
 
 //
 // API functions
@@ -339,10 +345,12 @@ typedef void ag_dnsproxy;
 
 /**
  * Initialize and start a proxy.
- * @return a proxy handle, or
- *         NULL in case of an error
+ * @param out_result upon return, contains the result of the operation
+ * @param out_message upon return, contains the error or warning message, or is unchanged
+ * @return a proxy handle, or NULL in case of an error
  */
-AG_EXPORT ag_dnsproxy *ag_dnsproxy_init(const ag_dnsproxy_settings *settings, const ag_dnsproxy_events *events);
+AG_EXPORT ag_dnsproxy *ag_dnsproxy_init(const ag_dnsproxy_settings *settings, const ag_dnsproxy_events *events,
+                                        ag_dnsproxy_init_result *out_result, const char **out_message);
 
 /**
  * Stop and destroy a proxy.

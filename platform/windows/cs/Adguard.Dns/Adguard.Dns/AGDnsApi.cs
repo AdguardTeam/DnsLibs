@@ -22,10 +22,19 @@ namespace Adguard.Dns
         /// <summary>
         /// The current API version hash with which the ProxyServer was tested
         /// </summary>
-        private const string API_VERSION_HASH = "601a11f4fa0823402c1655167a9aa296c9bcb1eb1537b62bba3333f8ef2e9268";
+        private const string API_VERSION_HASH = "8f75906ac41e2737734061ee8d292dcf185f7406ced6dedd6e75c026ce770079";
         #endregion
 
         #region API Functions
+
+
+        internal enum ag_dnsproxy_init_result
+        {
+            AGDPIR_OK,
+            AGDPIR_WARNING,
+            AGDPIR_LISTENER_ERROR,
+            AGDPIR_ERROR
+        }
 
         /// <summary>
         /// Initialize the DNS proxy
@@ -34,11 +43,16 @@ namespace Adguard.Dns
         /// <see cref="ag_dnsproxy_settings"/> object</param>
         /// <param name="pDnsProxyCallbacks">Pointer to the
         /// <see cref="AGDnsProxyServerCallbacks"/> object</param>
+        /// <param name="pOutResult">Pointer to the out result
+        /// (<seealso cref="ag_dnsproxy_init_result"/>)</param>
+        /// <param name="ppOutMessage">Pointer to the out message</param>
         /// <returns>Pointer to the proxy, or <see cref="IntPtr.Zero"/> in case of an error</returns>
         [DllImport(DnsLibName, CallingConvention = CallingConvention.Cdecl)]
         internal static extern IntPtr ag_dnsproxy_init(
             IntPtr pDnsProxySettings,
-            IntPtr pDnsProxyCallbacks);
+            IntPtr pDnsProxyCallbacks,
+            IntPtr pOutResult,
+            IntPtr ppOutMessage);
 
         /// <summary>
         /// Deinitializes the DNS proxy
