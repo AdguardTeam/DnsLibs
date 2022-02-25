@@ -11,18 +11,18 @@ namespace Adguard.Dns.Api.DnsProxyServer.Configs
         /// Gets or sets value, whether the DNS filtering is enabled of not
         /// </summary>
         public bool IsEnabled { get; set; }
-        
+
         /// <summary>
         /// DNS proxy settings
         /// (<seealso cref="DnsProxySettings"/>)
         /// </summary>
         public DnsProxySettings DnsProxySettings { get; set; }
-        
+
         /// <summary>
         /// DNS proxy server callback configuration
         /// </summary>
         public IDnsProxyServerCallbackConfiguration DnsProxyServerCallbackConfiguration { get; set; }
-        
+
         #region Equals members
 
         public override bool Equals(object obj)
@@ -47,7 +47,8 @@ namespace Adguard.Dns.Api.DnsProxyServer.Configs
 
         private bool Equals(DnsApiConfiguration other)
         {
-            return Equals(DnsProxySettings, other.DnsProxySettings);
+            return Equals(DnsProxySettings, other.DnsProxySettings) &&
+                   IsEnabled == other.IsEnabled;
         }
 
         public override int GetHashCode()
@@ -55,10 +56,11 @@ namespace Adguard.Dns.Api.DnsProxyServer.Configs
             unchecked
             {
                 int hashCode = (DnsProxySettings != null ? DnsProxySettings.GetHashCode() : 0);
+                hashCode = (hashCode * 397) ^ IsEnabled.GetHashCode();
                 return hashCode;
             }
         }
-        
+
         #endregion
     }
 }

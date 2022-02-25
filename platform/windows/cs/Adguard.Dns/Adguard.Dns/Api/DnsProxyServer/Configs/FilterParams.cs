@@ -23,5 +23,47 @@ namespace Adguard.Dns.Api.DnsProxyServer.Configs
         /// If true, data is rules, otherwise data is path to file with rules
         /// </summary>
         public bool InMemory { get; set; }
+
+        #region Equals members
+
+        public override bool Equals(object obj)
+        {
+            if (ReferenceEquals(null, obj))
+            {
+                return false;
+            }
+
+            if (ReferenceEquals(this, obj))
+            {
+                return true;
+            }
+
+            if (obj.GetType() != typeof(FilterParams))
+            {
+                return false;
+            }
+
+            return Equals((FilterParams)obj);
+        }
+
+        private bool Equals(FilterParams other)
+        {
+            return Id == other.Id &&
+                   Data == other.Data &&
+                   InMemory == other.InMemory;
+        }
+
+        public override int GetHashCode()
+        {
+            unchecked
+            {
+                int hashCode = Id;
+                hashCode = (hashCode * 397) ^ (Data != null ? Data.GetHashCode() : 0);
+                hashCode = (hashCode * 397) ^ InMemory.GetHashCode();
+                return hashCode;
+            }
+        }
+
+        #endregion
     }
 }

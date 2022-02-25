@@ -22,7 +22,7 @@ namespace Adguard.Dns.Api
         private static readonly object SYNC_ROOT = new object();
         private IDnsProxyServer m_DnsProxyServer;
         private static readonly Lazy<IDnsApi> LAZY = new Lazy<IDnsApi> (() => new DnsApi());
-        private DnsProxySettings m_CurrentDnsProxySettings;
+        private DnsApiConfiguration m_CurrentApiConfiguration;
 
         private const string TCP_SETTINGS_SUB_KEY = @"System\CurrentControlSet\Services\Tcpip\Parameters";
         private const string SEARCHLIST = "SearchList";
@@ -64,7 +64,7 @@ namespace Adguard.Dns.Api
                     if (dnsApiConfiguration == null)
                     {
                         throw new ArgumentNullException(
-                            "dnsApiConfiguration",
+                            nameof(dnsApiConfiguration),
                             "dnsApiConfiguration is not specified");
                     }
 
@@ -79,7 +79,7 @@ namespace Adguard.Dns.Api
                     m_DnsProxyServer = new Dns.DnsProxyServer.DnsProxyServer(
                         dnsApiConfiguration.DnsProxySettings,
                         dnsApiConfiguration.DnsProxyServerCallbackConfiguration);
-                    m_CurrentDnsProxySettings = dnsApiConfiguration.DnsProxySettings;
+                    m_CurrentApiConfiguration = dnsApiConfiguration;
                     m_DnsProxyServer.Start();
                     Logger.Info("Starting the DNS filtering has been successfully completed");
                 }
@@ -162,7 +162,7 @@ namespace Adguard.Dns.Api
                 {
                     Logger.Info("Reloading the DNS filtering");
                     if (m_DnsProxyServer == null ||
-                        m_CurrentDnsProxySettings == null)
+                        m_CurrentApiConfiguration == null)
                     {
                         Logger.Info(
                             "Start DNS filtering, because the DNS server is not started and/or configurations are not set");
@@ -174,7 +174,7 @@ namespace Adguard.Dns.Api
                     if (newDnsApiConfiguration == null)
                     {
                         throw new ArgumentNullException(
-                            "newDnsApiConfiguration",
+                            nameof(newDnsApiConfiguration),
                             "newDnsApiConfiguration is not specified");
                     }
 
@@ -182,10 +182,11 @@ namespace Adguard.Dns.Api
                     {
                         throw new ArgumentException(
                             "DnsProxySettings is not initialized",
-                            "newDnsApiConfiguration");
+                            nameof(newDnsApiConfiguration));
                     }
 
-                    bool isConfigurationChanged = !m_CurrentDnsProxySettings.Equals(newDnsApiConfiguration.DnsProxySettings);
+                    bool isConfigurationChanged =
+                        !m_CurrentApiConfiguration.Equals(newDnsApiConfiguration);
                     if (!force &&
                         !isConfigurationChanged)
                     {
@@ -206,7 +207,7 @@ namespace Adguard.Dns.Api
                         m_DnsProxyServer.Start();
                     }
 
-                    m_CurrentDnsProxySettings = newDnsApiConfiguration.DnsProxySettings;
+                    m_CurrentApiConfiguration = newDnsApiConfiguration;
                     Logger.Info("Reloading the DNS filtering has been successfully completed");
                 }
                 catch (Exception ex)
