@@ -26,6 +26,7 @@ namespace Adguard.Dns.Api
 
         private const string TCP_SETTINGS_SUB_KEY = @"System\CurrentControlSet\Services\Tcpip\Parameters";
         private const string SEARCHLIST = "SearchList";
+        private const int GET_NETWORK_INTERFACE_ATTEMPT_COUNT = 5;
 
         #region Singleton
 
@@ -284,13 +285,36 @@ namespace Adguard.Dns.Api
             }
         }
 
+        private NetworkInterface[] GetNetworkInterfaces()
+        {
+            NetworkInterface[] adapters = new NetworkInterface[0];
+            for (int i = 0; i < GET_NETWORK_INTERFACE_ATTEMPT_COUNT; i++)
+            {
+                try
+                {
+                    // Disabling IPv4 while running can cause a NetworkInformationException: The pipe is being closed.
+                    // https://github.com/LibreHardwareMonitor/LibreHardwareMonitor/blob/master/LibreHardwareMonitorLib/Hardware/Network/NetworkGroup.cs
+                    // https://jira.adguard.com/browse/AG-12977
+                    adapters = NetworkInterface.GetAllNetworkInterfaces();
+                    Logger.Verbose("Network interfaces have been got successfully");
+                    return adapters;
+                }
+                catch (NetworkInformationException ex)
+                {
+                    Logger.Error("Cannot get network interfaces: {0}", ex);
+                }
+            }
+
+            return adapters;
+        }
+        
         private List<string> GetSystemDNSSuffixes()
         {
             Logger.Info("Start getting the DNS suffixes");
             List<string> ret = new List<string>();
 
             // Getting DHCP suffixes
-            NetworkInterface[] adapters = NetworkInterface.GetAllNetworkInterfaces();
+            NetworkInterface[] adapters = GetNetworkInterfaces();
             foreach (NetworkInterface adapter in adapters)
             {
                 IPInterfaceProperties properties = adapter.GetIPProperties();
