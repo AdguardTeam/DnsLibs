@@ -1,4 +1,5 @@
-﻿using AdGuard.Utils.Interop;
+﻿using AdGuard.Utils.Common;
+using AdGuard.Utils.Interop;
 
 namespace Adguard.Dns.Api.DnsProxyServer.Configs
 {
@@ -24,6 +25,19 @@ namespace Adguard.Dns.Api.DnsProxyServer.Configs
         /// </summary>
         public bool InMemory { get; set; }
 
+        /// <summary>
+        /// Filters hash
+        /// </summary>
+        public string FiltersHash { get; set; }
+        
+        /// <summary>
+        /// Sets filters hash using data сonsidering <see cref="InMemory"/>
+        /// </summary>
+        public void UpdateFiltersHash(string dataToHash = null)
+        {
+            FiltersHash = StringUtils.GetMd5Hash(dataToHash ?? Data);
+        }
+
         #region Equals members
 
         public override bool Equals(object obj)
@@ -48,9 +62,7 @@ namespace Adguard.Dns.Api.DnsProxyServer.Configs
 
         private bool Equals(FilterParams other)
         {
-            return Id == other.Id &&
-                   Data == other.Data &&
-                   InMemory == other.InMemory;
+            return Id == other.Id && FiltersHash == other.FiltersHash;
         }
 
         public override int GetHashCode()
@@ -58,7 +70,7 @@ namespace Adguard.Dns.Api.DnsProxyServer.Configs
             unchecked
             {
                 int hashCode = Id;
-                hashCode = (hashCode * 397) ^ (Data != null ? Data.GetHashCode() : 0);
+                hashCode = (hashCode * 397) ^ FiltersHash.GetHashCode();
                 hashCode = (hashCode * 397) ^ InMemory.GetHashCode();
                 return hashCode;
             }

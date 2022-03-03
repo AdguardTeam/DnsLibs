@@ -5,10 +5,13 @@ using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
+using System.Linq;
 using System.Net;
+using System.Text;
 using Adguard.Dns.Api;
 using Adguard.Dns.Api.DnsProxyServer.Callbacks;
 using Adguard.Dns.Api.DnsProxyServer.Configs;
+using Adguard.Dns.Helpers;
 using AdGuard.Utils.Logging;
 using AdGuard.Utils.Logging.TraceListeners;
 
@@ -182,6 +185,9 @@ namespace Adguard.Dns.TestApp
                 EnableRetransmissionHandling = false
             };
 
+            FilterParams filterParams = dnsProxySettings.EngineParams.FilterParams[0];
+            string rulesString = FilterParamsHelper.GetStringRulesFromFile(filterParams.Data);
+            filterParams.UpdateFiltersHash(rulesString);
             return dnsProxySettings;
         }
     }

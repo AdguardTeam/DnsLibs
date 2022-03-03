@@ -90,6 +90,7 @@
     <Compile Include="Exceptions\IUnhandledExceptionConfiguration.cs" />
     <Compile Include="Exceptions\UnhandledExceptionCallbackAdapter.cs" />
     <Compile Include="Helpers\DnsApiConverter.cs" />
+    <Compile Include="Helpers\FilterParamsHelper.cs" />
     <Compile Include="Helpers\TestUpstreamCallbacksAdapter.cs" />
     <Compile Include="Helpers\ProxyServerCallbacksAdapter.cs" />
     <Compile Include="Logging\DnsLoggerAdapter.cs" />

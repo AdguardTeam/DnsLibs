@@ -1,14 +1,17 @@
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using System.Net;
 using System.Net.Sockets;
 using System.Runtime.InteropServices;
+using System.Text;
 using Adguard.Dns.Api.DnsProxyServer.Callbacks;
 using Adguard.Dns.Api.DnsProxyServer.Configs;
 using Adguard.Dns.Api.DnsProxyServer.EventArgs;
 using Adguard.Dns.DnsProxyServer;
 using Adguard.Dns.Utils;
+using AdGuard.Utils.Files;
 using AdGuard.Utils.Interop;
 
 namespace Adguard.Dns.Helpers
@@ -421,6 +424,10 @@ namespace Adguard.Dns.Helpers
             FilterParams filterParams = new FilterParams();
             MarshalUtils.AllPtrsToStrings(filterParamsC, filterParams);
             MarshalUtils.CopyFieldsToProperties(filterParamsC, filterParams);
+            string dataToHash = filterParams.InMemory 
+                ? filterParams.Data
+                : FilterParamsHelper.GetStringRulesFromFile(filterParams.Data);
+            filterParams.UpdateFiltersHash(dataToHash);
             return filterParams;
         }
 

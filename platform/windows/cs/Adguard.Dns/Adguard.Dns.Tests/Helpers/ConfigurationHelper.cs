@@ -77,6 +77,7 @@ namespace Adguard.Dns.Tests.Helpers
                 EnableRetransmissionHandling = false
             };
 
+            dnsProxySettings.EngineParams.FilterParams[0].UpdateFiltersHash();
             return dnsProxySettings;
         }
     }
