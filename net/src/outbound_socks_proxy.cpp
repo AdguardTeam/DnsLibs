@@ -535,7 +535,7 @@ void socks_oproxy::close_connection(connection *conn) {
                         && i.second->parameters.loop == loop
                         && i.second->parameters.proto == utils::TP_UDP;
             });
-    if (some_other_udp_connections_left) {
+    if (some_other_udp_connections_left || this->connections.empty()) {
         return;
     }
 
