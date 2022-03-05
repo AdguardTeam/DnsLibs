@@ -37,9 +37,6 @@ struct initializer {
 };
 
 
-static constexpr std::string_view USER_AGENT = "ag-dns";
-
-
 struct dns_over_https::query_handle {
     using CURL_ptr = UniquePtr<CURL, &curl_easy_cleanup>;
 
@@ -218,7 +215,7 @@ dns_over_https::query_handle::CURL_ptr dns_over_https::query_handle::create_curl
             || CURLE_OK != (e = curl_easy_setopt(curl, CURLOPT_CONNECTTIMEOUT_MS, timeout))
             || CURLE_OK != (e = curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, write_callback))
             || CURLE_OK != (e = curl_easy_setopt(curl, CURLOPT_WRITEDATA, this))
-            || CURLE_OK != (e = curl_easy_setopt(curl, CURLOPT_USERAGENT, USER_AGENT.data()))
+            || CURLE_OK != (e = curl_easy_setopt(curl, CURLOPT_USERAGENT, nullptr))
             || CURLE_OK != (e = curl_easy_setopt(curl, CURLOPT_POSTFIELDS, ldns_buffer_at(raw_request, 0)))
             || CURLE_OK != (e = curl_easy_setopt(curl, CURLOPT_POSTFIELDSIZE, ldns_buffer_position(raw_request)))
             || CURLE_OK != (e = curl_easy_setopt(curl, CURLOPT_HTTPHEADER, upstream->request_headers.get()))
