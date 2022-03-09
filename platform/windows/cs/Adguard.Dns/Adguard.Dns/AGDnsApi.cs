@@ -790,11 +790,11 @@ namespace Adguard.Dns
         /// </summary>
         public enum ag_log_level
         {
-            AGLL_TRACE,
-            AGLL_DEBUG,
-            AGLL_INFO,
-            AGLL_WARN,
             AGLL_ERR,
+            AGLL_WARN,
+            AGLL_INFO,
+            AGLL_DEBUG,
+            AGLL_TRACE,
         }
 
         /// <summary>
