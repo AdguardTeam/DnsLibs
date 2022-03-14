@@ -10,7 +10,7 @@ using AdGuard.Utils.Logging;
 namespace Adguard.Dns.DnsProxyServer
 {
     // ReSharper disable InconsistentNaming
-    internal class DnsProxyServer : IDnsProxyServer, IDisposable
+    public class DnsProxyServer : IDnsProxyServer, IDisposable
     {
         private IntPtr m_pCallbackConfigurationC;
         private IntPtr m_pProxyServer;
@@ -31,7 +31,7 @@ namespace Adguard.Dns.DnsProxyServer
         /// <param name="callbackConfiguration">Callback config configuration
         /// (<seealso cref="IDnsProxyServerCallbackConfiguration"/>)</param>
         /// <exception cref="NotSupportedException">Thrown if current API version is not supported</exception>
-        internal DnsProxyServer(
+        public DnsProxyServer(
             DnsProxySettings dnsProxySettings,
             IDnsProxyServerCallbackConfiguration callbackConfiguration)
         {

@@ -27,49 +27,5 @@ namespace Adguard.Dns.Api.DnsProxyServer.Configs
         /// Close the TCP connection this long after the last request received
         /// </summary>
         public uint IdleTimeoutMs { get; set; }
-
-        #region Equals members
-        
-        public override bool Equals(object obj)
-        {
-            if (ReferenceEquals(null, obj))
-            {
-                return false;
-            }
-
-            if (ReferenceEquals(this, obj))
-            {
-                return true;
-            }
-
-            if (obj.GetType() != typeof(ListenerSettings))
-            {
-                return false;
-            }
-
-            return Equals((ListenerSettings)obj);
-        }
-
-        private bool Equals(ListenerSettings other)
-        {
-            return Equals(EndPoint, other.EndPoint) && 
-                   Protocol == other.Protocol && 
-                   IsPersistent == other.IsPersistent && 
-                   IdleTimeoutMs == other.IdleTimeoutMs;
-        }
-
-        public override int GetHashCode()
-        {
-            unchecked
-            {
-                int hashCode = EndPoint != null ? EndPoint.GetHashCode() : 0;
-                hashCode = (hashCode * 397) ^ Protocol.GetHashCode();
-                hashCode = (hashCode * 397) ^ IsPersistent.GetHashCode();
-                hashCode = (hashCode * 397) ^ IdleTimeoutMs.GetHashCode();
-                return hashCode;
-            }
-        }
-        
-        #endregion
     }
 }

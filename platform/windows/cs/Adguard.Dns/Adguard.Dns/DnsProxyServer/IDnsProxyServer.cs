@@ -6,7 +6,7 @@ namespace Adguard.Dns.DnsProxyServer
     /// <summary>
     /// Interface for the proxy server
     /// </summary>
-    internal interface IDnsProxyServer
+    public interface IDnsProxyServer
     {
         /// <summary>
         /// Starts the DnsProxyServer

@@ -5,21 +5,14 @@ using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
-using System.Linq;
 using System.Net;
-using System.Text;
-using Adguard.Dns.Api;
 using Adguard.Dns.Api.DnsProxyServer.Callbacks;
 using Adguard.Dns.Api.DnsProxyServer.Configs;
-using Adguard.Dns.Helpers;
-using AdGuard.Utils.Logging;
-using AdGuard.Utils.Logging.TraceListeners;
 
 namespace Adguard.Dns.TestApp
 {
     internal class Program
     {
-        private static IDnsApi m_DnsApi;
         private const string REDIRECTOR_EXECUTABLE_RELATIVE_PATH = @"CoreLibs\Adguard.Core.SampleApp.exe";
         private const string CORE_TOOLS_EXECUTABLE_RELATIVE_PATH = @"CoreLibs\Adguard.Core.Tools.exe";
         private const string ARG_DRV_UNINSTALL = "/drv_uninstall";
@@ -35,20 +28,13 @@ namespace Adguard.Dns.TestApp
             bool isRedirectorExist = File.Exists(redirectorAppExecutablePath);
             try
             {
-                ITraceListener coloredConsoleTraceListener = new ColoredConsoleTraceListener();
-                Logger.SetCustomListener(coloredConsoleTraceListener);
-
 #if LOG_TO_FILE
                 ConsoleToFileRedirector.Start("Logs");
 #endif
-                m_DnsApi = DnsApi.Instance;
-                m_DnsApi.InitLogger(AGDnsApi.ag_log_level.AGLL_DEBUG);
+                DnsSimpleApi.StartLogger();
                 DnsProxySettings dnsProxySettings = CreateDnsProxySettings();
                 IDnsProxyServerCallbackConfiguration dnsProxyServerCallbackConfiguration =
                     new DnsProxyServerCallbackConfiguration();
-
-                DnsStamp dnsStamp = DnsApi.Instance.ParseDnsStamp("sdns://AQIAAAAAAA_iZEIbq95zkSV2LFsigxDIuUso_OQhzIjIuZG5zY3J5cHQuZGVmYXVsdC5uczEuYWRndWFyZC5jb20");
-
                 int dnsProxyProcessId = Process.GetCurrentProcess().Id;
                 if (isRedirectorExist)
                 {
@@ -63,7 +49,7 @@ namespace Adguard.Dns.TestApp
                 dnsProxySettings.OptimisticCache = true;
                 dnsProxySettings.EnableDNSSECOK = true;
 
-                m_DnsApi.StartDnsFiltering(new DnsApiConfiguration
+                DnsSimpleApi.StartDnsFiltering(new DnsApiConfiguration
                 {
                     IsEnabled = true,
                     DnsProxySettings = dnsProxySettings,
@@ -74,7 +60,7 @@ namespace Adguard.Dns.TestApp
             }
             finally
             {
-                m_DnsApi.StopDnsFiltering();
+                DnsSimpleApi.StopDnsFiltering();
                 if (isRedirectorExist && m_CoreProcess != null)
                 {
                     m_CoreProcess.StandardInput.WriteLine("Switching off the core sample app...");
@@ -185,9 +171,6 @@ namespace Adguard.Dns.TestApp
                 EnableRetransmissionHandling = false
             };
 
-            FilterParams filterParams = dnsProxySettings.EngineParams.FilterParams[0];
-            string rulesString = FilterParamsHelper.GetStringRulesFromFile(filterParams.Data);
-            filterParams.UpdateFiltersHash(rulesString);
             return dnsProxySettings;
         }
     }

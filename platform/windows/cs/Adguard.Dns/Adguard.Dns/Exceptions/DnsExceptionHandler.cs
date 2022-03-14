@@ -28,7 +28,7 @@ namespace Adguard.Dns.Exceptions
         /// <param name="unhandledExceptionConfiguration">Callbacks
         /// for handling the managed and native unhandled exceptions
         /// (<seealso cref="IUnhandledExceptionConfiguration"/>)</param>
-        internal static void Init(IUnhandledExceptionConfiguration unhandledExceptionConfiguration)
+        public static void Init(IUnhandledExceptionConfiguration unhandledExceptionConfiguration)
         {
             lock (SYNC_ROOT)
             {
@@ -51,7 +51,7 @@ namespace Adguard.Dns.Exceptions
         /// <summary>
         /// Sets an stored unhandled exception configuration for the specified Dll
         /// </summary>
-        internal static void SetUnhandledExceptionConfiguration()
+        public static void SetUnhandledExceptionConfiguration()
         {
             lock (SYNC_ROOT)
             {

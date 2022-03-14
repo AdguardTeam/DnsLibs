@@ -1,5 +1,4 @@
-﻿using AdGuard.Utils.Common;
-using AdGuard.Utils.Interop;
+﻿using AdGuard.Utils.Interop;
 
 namespace Adguard.Dns.Api.DnsProxyServer.Configs
 {
@@ -24,58 +23,5 @@ namespace Adguard.Dns.Api.DnsProxyServer.Configs
         /// If true, data is rules, otherwise data is path to file with rules
         /// </summary>
         public bool InMemory { get; set; }
-
-        /// <summary>
-        /// Filters hash
-        /// </summary>
-        public string FiltersHash { get; set; }
-        
-        /// <summary>
-        /// Sets filters hash using data сonsidering <see cref="InMemory"/>
-        /// </summary>
-        public void UpdateFiltersHash(string dataToHash = null)
-        {
-            FiltersHash = StringUtils.GetMd5Hash(dataToHash ?? Data);
-        }
-
-        #region Equals members
-
-        public override bool Equals(object obj)
-        {
-            if (ReferenceEquals(null, obj))
-            {
-                return false;
-            }
-
-            if (ReferenceEquals(this, obj))
-            {
-                return true;
-            }
-
-            if (obj.GetType() != typeof(FilterParams))
-            {
-                return false;
-            }
-
-            return Equals((FilterParams)obj);
-        }
-
-        private bool Equals(FilterParams other)
-        {
-            return Id == other.Id && FiltersHash == other.FiltersHash;
-        }
-
-        public override int GetHashCode()
-        {
-            unchecked
-            {
-                int hashCode = Id;
-                hashCode = (hashCode * 397) ^ FiltersHash.GetHashCode();
-                hashCode = (hashCode * 397) ^ InMemory.GetHashCode();
-                return hashCode;
-            }
-        }
-
-        #endregion
     }
 }

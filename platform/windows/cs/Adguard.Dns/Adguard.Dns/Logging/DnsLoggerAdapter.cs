@@ -9,7 +9,7 @@ namespace Adguard.Dns.Logging
     /// <summary>
     /// Listens to logging messages of the CoreLibs and logs it with <see cref="AdGuard.Utils.Logging.Logger"/> (with
     /// </summary>
-    internal static class DnsLoggerAdapter
+    public static class DnsLoggerAdapter
     {
         private delegate void LogBylogLevel(string message, params object[] args);
 
@@ -32,7 +32,7 @@ namespace Adguard.Dns.Logging
         /// with the specified log level
         /// </summary>
         /// <param name="logLevel">Log level you'd like to use</param>
-        internal static void Init(AGDnsApi.ag_log_level logLevel)
+        public static void Init(AGDnsApi.ag_log_level logLevel)
         {
             lock (SYNC_ROOT)
             {
@@ -52,7 +52,7 @@ namespace Adguard.Dns.Logging
         /// <summary>
         /// Sets the previously initialized logger for the specified Dll
         /// </summary>
-        internal static void SetLogger()
+        public static void SetLogger()
         {
             lock (SYNC_ROOT)
             {

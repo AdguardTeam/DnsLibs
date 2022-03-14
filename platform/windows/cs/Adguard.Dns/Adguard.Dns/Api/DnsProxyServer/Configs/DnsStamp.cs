@@ -1,6 +1,5 @@
 ﻿using System.Collections.Generic;
 using Adguard.Dns.Utils;
-using AdGuard.Utils.Collections;
 
 namespace Adguard.Dns.Api.DnsProxyServer.Configs
 {
@@ -82,59 +81,5 @@ namespace Adguard.Dns.Api.DnsProxyServer.Configs
             string dnsStampString = DnsUtils.GetDnsStampString(this);
             return dnsStampString;
         }
-
-        #region Equals members
-
-        public override bool Equals(object obj)
-        {
-            if (ReferenceEquals(null, obj))
-            {
-                return false;
-            }
-
-            if (ReferenceEquals(this, obj))
-            {
-                return true;
-            }
-
-            if (obj.GetType() != typeof(DnsStamp))
-            {
-                return false;
-            }
-
-            return Equals((DnsStamp)obj);
-        }
-
-        private bool Equals(DnsStamp other)
-        {
-            return ProtoType == other.ProtoType &&
-                   Equals(ServerAddress, other.ServerAddress) &&
-                   ProviderName == other.ProviderName &&
-                   DoHPath == other.DoHPath &&
-                   CollectionUtils.CollectionsEquals(new List<byte>(PublicKey), new List<byte>(other.PublicKey)) &&
-                   Hashes.Count == other.Hashes.Count &&
-                   Properties == other.Properties &&
-                   PrettyUrl == other.PrettyUrl &&
-                   PrettierUrl == other.PrettierUrl;
-        }
-
-        public override int GetHashCode()
-        {
-            unchecked
-            {
-                int hashCode = ProtoType.GetHashCode();
-                hashCode = (hashCode * 397) ^ (ServerAddress != null ? ServerAddress.GetHashCode() : 0);
-                hashCode = (hashCode * 397) ^ (ProviderName != null ? ProviderName.GetHashCode() : 0);
-                hashCode = (hashCode * 397) ^ (DoHPath != null ? DoHPath.GetHashCode() : 0);
-                hashCode = (hashCode * 397) ^ (DoHPath != null ? PublicKey.Length : 0);
-                hashCode = (hashCode * 397) ^ (DoHPath != null ? Hashes.Count : 0);
-                hashCode = (hashCode * 397) ^ Properties.GetHashCode();
-                hashCode = (hashCode * 397) ^ (PrettyUrl != null ? PrettyUrl.GetHashCode() : 0);
-                hashCode = (hashCode * 397) ^ (PrettierUrl != null ? PrettierUrl.GetHashCode() : 0);
-                return hashCode;
-            }
-        }
-
-        #endregion
     }
 }

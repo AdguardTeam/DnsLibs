@@ -68,7 +68,6 @@
       <Link>Properties\SolutionInfo.cs</Link>
     </Compile>
     <Compile Include="AGDnsApi.cs" />
-    <Compile Include="Api\DnsApi.cs" />
     <Compile Include="Api\DnsProxyServer\Callbacks\IDnsProxyServerCallbackConfiguration.cs" />
     <Compile Include="Api\DnsProxyServer\Callbacks\ICertificateVerificationCallback.cs" />
     <Compile Include="Api\DnsProxyServer\Configs\Dns64Settings.cs" />
@@ -83,14 +82,12 @@
     <Compile Include="Api\DnsProxyServer\Configs\ListenerSettings.cs" />
     <Compile Include="Api\DnsProxyServer\EventArgs\CertificateVerificationEventArgs.cs" />
     <Compile Include="Api\DnsProxyServer\EventArgs\DnsRequestProcessedEventArgs.cs" />
-    <Compile Include="Api\IDnsApi.cs" />
     <Compile Include="DnsProxyServer\IDnsProxyServer.cs" />
     <Compile Include="DnsProxyServer\DnsProxyServer.cs" />
     <Compile Include="Exceptions\DnsExceptionHandler.cs" />
     <Compile Include="Exceptions\IUnhandledExceptionConfiguration.cs" />
     <Compile Include="Exceptions\UnhandledExceptionCallbackAdapter.cs" />
     <Compile Include="Helpers\DnsApiConverter.cs" />
-    <Compile Include="Helpers\FilterParamsHelper.cs" />
     <Compile Include="Helpers\TestUpstreamCallbacksAdapter.cs" />
     <Compile Include="Helpers\ProxyServerCallbacksAdapter.cs" />
     <Compile Include="Logging\DnsLoggerAdapter.cs" />

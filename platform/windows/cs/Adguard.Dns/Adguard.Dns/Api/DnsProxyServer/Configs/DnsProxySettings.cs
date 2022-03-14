@@ -1,5 +1,4 @@
 using System.Collections.Generic;
-using AdGuard.Utils.Collections;
 using AdGuard.Utils.Interop;
 
 namespace Adguard.Dns.Api.DnsProxyServer.Configs
@@ -119,77 +118,5 @@ namespace Adguard.Dns.Api.DnsProxyServer.Configs
         /// If a retransmitted request is detected, the original request will NOT be answered at all.
         /// </summary>
         public bool EnableRetransmissionHandling { get; set; }
-
-        #region Equals members
-
-        public override bool Equals(object obj)
-        {
-            if (ReferenceEquals(null, obj))
-            {
-                return false;
-            }
-
-            if (ReferenceEquals(this, obj))
-            {
-                return true;
-            }
-
-            if (obj.GetType() != typeof(DnsProxySettings))
-            {
-                return false;
-            }
-
-            return Equals((DnsProxySettings)obj);
-        }
-
-        private bool Equals(DnsProxySettings other)
-        {
-            return CollectionUtils.CollectionsEquals(Upstreams, other.Upstreams) &&
-                   CollectionUtils.CollectionsEquals(Fallbacks, other.Fallbacks) &&
-                   CollectionUtils.CollectionsEquals(FallbackDomains, other.FallbackDomains) &&
-                   Equals(Dns64, other.Dns64) &&
-                   BlockedResponseTtlSec == other.BlockedResponseTtlSec &&
-                   Equals(EngineParams, other.EngineParams) &&
-                   CollectionUtils.CollectionsEquals(Listeners, other.Listeners) &&
-                   Equals(OutboundProxySettings, other.OutboundProxySettings) &&
-                   Ipv6Available == other.Ipv6Available &&
-                   BlockIpv6 == other.BlockIpv6 &&
-                   AdblockRulesBlockingMode == other.AdblockRulesBlockingMode &&
-                   HostsRulesBlockingMode == other.HostsRulesBlockingMode &&
-                   CustomBlockingIpv4 == other.CustomBlockingIpv4 &&
-                   CustomBlockingIpv6 == other.CustomBlockingIpv6 &&
-                   DnsCacheSize == other.DnsCacheSize &&
-                   OptimisticCache == other.OptimisticCache &&
-                   EnableDNSSECOK == other.EnableDNSSECOK &&
-                   EnableRetransmissionHandling == other.EnableRetransmissionHandling;
-        }
-
-        public override int GetHashCode()
-        {
-            unchecked
-            {
-                int hashCode = (Upstreams != null ? Upstreams.Count : 0);
-                hashCode = (hashCode * 397) ^ (Fallbacks != null ? Fallbacks.Count : 0);
-                hashCode = (hashCode * 397) ^ (FallbackDomains != null ? FallbackDomains.Count : 0);
-                hashCode = (hashCode * 397) ^ (Dns64 != null ? Dns64.GetHashCode() : 0);
-                hashCode = (hashCode * 397) ^ BlockedResponseTtlSec.GetHashCode();
-                hashCode = (hashCode * 397) ^ (EngineParams != null ? EngineParams.GetHashCode() : 0);
-                hashCode = (hashCode * 397) ^ (Listeners != null ? Listeners.Count : 0);
-                hashCode = (hashCode * 397) ^ (OutboundProxySettings != null ? OutboundProxySettings.GetHashCode() : 0);
-                hashCode = (hashCode * 397) ^ Ipv6Available.GetHashCode();
-                hashCode = (hashCode * 397) ^ BlockIpv6.GetHashCode();
-                hashCode = (hashCode * 397) ^ AdblockRulesBlockingMode.GetHashCode();
-                hashCode = (hashCode * 397) ^ HostsRulesBlockingMode.GetHashCode();
-                hashCode = (hashCode * 397) ^ (CustomBlockingIpv4 != null ? CustomBlockingIpv4.GetHashCode() : 0);
-                hashCode = (hashCode * 397) ^ (CustomBlockingIpv6 != null ? CustomBlockingIpv6.GetHashCode() : 0);
-                hashCode = (hashCode * 397) ^ DnsCacheSize.GetHashCode();
-                hashCode = (hashCode * 397) ^ OptimisticCache.GetHashCode();
-                hashCode = (hashCode * 397) ^ EnableDNSSECOK.GetHashCode();
-                hashCode = (hashCode * 397) ^ EnableRetransmissionHandling.GetHashCode();
-                return hashCode;
-            }
-        }
-
-        #endregion
     }
 }

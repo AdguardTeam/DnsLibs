@@ -11,13 +11,13 @@ namespace Adguard.Dns.Utils
     /// <summary>
     /// Helper methods for working with DNS libs
     /// </summary>
-    internal static class DnsUtils
+    public static class DnsUtils
     {
         /// <summary>
         /// Gets current DNS proxy version
         /// </summary>
         /// <returns></returns>
-        internal static string GetDnsProxyVersion()
+        public static string GetDnsProxyVersion()
         {
             IntPtr pDnsProxyVersion = AGDnsApi.ag_dnsproxy_version();
             string dnsProxyVersion = MarshalUtils.PtrToString(pDnsProxyVersion);
@@ -30,7 +30,7 @@ namespace Adguard.Dns.Utils
         /// </summary>
         /// <param name="dnsStampStr">DNS stamp string</param>
         /// <returns>DNS stamp as a <see cref="DnsStamp"/> instance or null if smth went wrong</returns>
-        internal static DnsStamp ParseDnsStamp(string dnsStampStr)
+        public static DnsStamp ParseDnsStamp(string dnsStampStr)
         {
             Logger.Info("Start parsing DNS stamp {0}", dnsStampStr);
             IntPtr ppError = IntPtr.Zero;
@@ -75,7 +75,7 @@ namespace Adguard.Dns.Utils
         /// <param name="dnsStamp">DNS stamp object
         /// (<seealso cref="DnsStamp"/>)</param>
         /// <returns>DNS stamp as a string</returns>
-        internal static string GetDnsStampPrettyUrl(DnsStamp dnsStamp)
+        public static string GetDnsStampPrettyUrl(DnsStamp dnsStamp)
         {
             IntPtr pPrettyUrl = IntPtr.Zero;
             Queue<IntPtr> allocatedPointers = new Queue<IntPtr>();
@@ -106,7 +106,7 @@ namespace Adguard.Dns.Utils
         /// <param name="dnsStamp">DNS stamp object
         /// (<seealso cref="DnsStamp"/>)</param>
         /// <returns>DNS stamp as a string</returns>
-        internal static string GetDnsStampPrettierUrl(DnsStamp dnsStamp)
+        public static string GetDnsStampPrettierUrl(DnsStamp dnsStamp)
         {
             IntPtr pDnsStampPrettierUrl = IntPtr.Zero;
             Queue<IntPtr> allocatedPointers = new Queue<IntPtr>();
@@ -137,7 +137,7 @@ namespace Adguard.Dns.Utils
         /// <param name="dnsStamp">DNS stamp object
         /// (<seealso cref="DnsStamp"/>)</param>
         /// <returns>DNS stamp as a string</returns>
-        internal static string GetDnsStampString(DnsStamp dnsStamp)
+        public static string GetDnsStampString(DnsStamp dnsStamp)
         {
             // Don't invoke "dnsStamp.ToString()" within this method to prevent infinite recursion
             Logger.Verbose("Start getting DNS stamp string from {0}",
@@ -173,7 +173,7 @@ namespace Adguard.Dns.Utils
         /// (<seealso cref="UpstreamOptions"/>)</param>
         /// <param name="ipv6Available">Whether IPv6 is available (i.e., bootstrapper is allowed to make AAAA queries)</param>
         /// <param name="offline">Don't perform online upstream check</param>
-        internal static bool TestUpstream(UpstreamOptions upstreamOptions, bool ipv6Available, bool offline)
+        public static bool TestUpstream(UpstreamOptions upstreamOptions, bool ipv6Available, bool offline)
         {
             IntPtr pUpstreamOptionsC = IntPtr.Zero;
             Queue<IntPtr> allocatedPointers = new Queue<IntPtr>();

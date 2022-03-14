@@ -1,5 +1,4 @@
 ﻿using System.Collections.Generic;
-using AdGuard.Utils.Collections;
 
 namespace Adguard.Dns.Api.DnsProxyServer.Configs
 {
@@ -23,47 +22,5 @@ namespace Adguard.Dns.Api.DnsProxyServer.Configs
         /// How long to wait, in milliseconds, before a pDns64 prefixes discovery attempt.
         /// </summary>
         public uint WaitTimeMs { get; set; }
-
-        #region Equals members
-
-        public override bool Equals(object obj)
-        {
-            if (ReferenceEquals(null, obj))
-            {
-                return false;
-            }
-
-            if (ReferenceEquals(this, obj))
-            {
-                return true;
-            }
-
-            if (obj.GetType() != typeof(Dns64Settings))
-            {
-                return false;
-            }
-
-            return Equals((Dns64Settings)obj);
-        }
-
-        private bool Equals(Dns64Settings other)
-        {
-            return CollectionUtils.CollectionsEquals(Upstreams, other.Upstreams) &&
-                                               MaxTries == other.MaxTries &&
-                                               WaitTimeMs == other.WaitTimeMs;
-        }
-
-        public override int GetHashCode()
-        {
-            unchecked
-            {
-                int hashCode = (Upstreams != null ? Upstreams.Count : 0);
-                hashCode = (hashCode * 397) ^ MaxTries.GetHashCode();
-                hashCode = (hashCode * 397) ^ WaitTimeMs.GetHashCode();
-                return hashCode;
-            }
-        }
-
-        #endregion
     }
 }
