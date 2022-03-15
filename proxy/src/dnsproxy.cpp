@@ -35,6 +35,7 @@ static const dnsproxy_settings DEFAULT_PROXY_SETTINGS = {
                          "wo.vzwwo.com",
                          "epdg.epc.*.pub.3gppnetwork.org",
                          "ss.epdg.epc.*.pub.3gppnetwork.org",
+                         "dengon.docomo.ne.jp",
                          // Router hosts
                          "dlinkap",
                          "dlinkrouter",
