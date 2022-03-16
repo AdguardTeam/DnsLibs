@@ -1,8 +1,12 @@
+#import <common/logger.h>
 #import "NSTask+AGTimeout.h"
+
 
 #define MS_IN_NS INT64_C(1000000)
 
 @implementation NSTask(AGTimeout)
+
+static ag::Logger logger{"NSTask+Timeout"};
 
 - (BOOL)waitUntilExitOrInterruptAfterTimeoutMs:(int64_t)millis {
     __block BOOL ret = NO;
@@ -12,19 +16,14 @@
     dispatch_source_t exitTimeoutSource = dispatch_source_create(DISPATCH_SOURCE_TYPE_TIMER, 0, 0, queue);
     dispatch_source_set_event_handler(exitWaitSource, ^{
         [self waitUntilExit];
-        dispatch_source_cancel(exitWaitSource);
         dispatch_source_cancel(exitTimeoutSource);
         ret = YES;
     });
-    dispatch_group_enter(serviceGroup); // exitWaitSource
-    dispatch_source_set_cancel_handler(exitWaitSource, ^{
-        dispatch_group_leave(serviceGroup); // exitWaitSource
-    });
     dispatch_source_set_event_handler(exitTimeoutSource, ^{
+        errlog(logger, "waitUntilExitOrInterruptAfterTimeoutMs timeout reached");
         if ([self isRunning]) {
             [self interrupt];
         }
-        dispatch_source_cancel(exitWaitSource);
         dispatch_source_cancel(exitTimeoutSource);
     });
     dispatch_group_enter(serviceGroup); // exitTimeoutSource
