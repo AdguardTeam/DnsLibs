@@ -613,9 +613,13 @@ const char *ag_get_capi_version() {
 }
 
 void ag_set_log_callback(ag_log_cb callback, void *attachment) {
-    ag::Logger::set_callback([callback, attachment](ag::LogLevel level, std::string_view message) {
-        callback(attachment, (ag_log_level) level, message.data(), message.size());
-    });
+    if (callback) {
+        ag::Logger::set_callback([callback, attachment](ag::LogLevel level, std::string_view message) {
+            callback(attachment, (ag_log_level) level, message.data(), message.size());
+        });
+    } else {
+        ag::Logger::set_callback(nullptr);
+    }
 }
 
 const char *ag_dnsproxy_version() {

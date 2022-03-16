@@ -16,17 +16,11 @@ JNI_OnLoad(JavaVM *vm, void *) {
     ag::global_ref logClass(vm, env->FindClass(FQN_DNSPROXY));
     jmethodID logMethod = env->GetStaticMethodID(logClass.get(), "log", "(ILjava/lang/String;)V");
 
-    ag::Logger::set_callback([vm, clazz = std::move(logClass), method = logMethod]
+    ag::Logger::set_callback([vm, clazz = std::move(logClass), logMethod]
                                     (ag::LogLevel level, std::string_view message) mutable {
-        std::string str{message};
-
-        // Remove the line terminator since the logging method always inserts one.
-        if (!str.empty() && str.back() == '\n') {
-            str.pop_back();
-        }
-
-        ag::scoped_jni_env env(vm, 1);
-        env->CallStaticVoidMethod(clazz.get(), method, (jint) level, ag::jni_utils::marshal_string(env.get(), str).get());
+        ag::scoped_jni_env env(vm, 8);
+        env->CallStaticVoidMethod(clazz.get(), logMethod, (jint) level,
+                                  ag::jni_utils::marshal_string(env.get(), message).get());
     });
 
     return JNI_VERSION_1_2;

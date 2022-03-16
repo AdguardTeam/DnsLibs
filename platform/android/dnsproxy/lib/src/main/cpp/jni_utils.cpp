@@ -34,7 +34,7 @@ void ag::jni_utils::visit_string(JNIEnv *env,
     env->ReleaseStringUTFChars((jstring) string, str);
 }
 
-ag::local_ref<jstring> ag::jni_utils::marshal_string(JNIEnv *env, const std::string &str) {
+ag::local_ref<jstring> ag::jni_utils::marshal_string(JNIEnv *env, std::string_view str) {
     if (str.empty()) {
         return local_ref<jstring>(env, env->NewStringUTF(""));
     }

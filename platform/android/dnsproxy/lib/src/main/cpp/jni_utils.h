@@ -184,9 +184,9 @@ public:
     static void visit_string(JNIEnv *env, jobject string, const std::function<void(const char *, jsize)> &f);
 
     /**
-     * Marshal a C++ string to Java.
+     * Marshal a C++ string view to Java String.
      */
-    static local_ref<jstring> marshal_string(JNIEnv *env, const std::string &str);
+    static local_ref<jstring> marshal_string(JNIEnv *env, std::string_view str);
 
     /**
      * Marshal a Java string to C++.

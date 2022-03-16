@@ -43,9 +43,13 @@ NSErrorDomain const AGDnsProxyErrorDomain = @"com.adguard.dnsproxy";
 
 + (void) setCallback: (logCallback) func
 {
-    ag::Logger::set_callback([func](ag::LogLevel level, std::string_view message) mutable {
-        func((AGLogLevel) level, message.data(), message.size());
-    });
+    if (func) {
+        ag::Logger::set_callback([func](ag::LogLevel level, std::string_view message) mutable {
+            func((AGLogLevel) level, message.data(), message.size());
+        });
+    } else {
+        ag::Logger::set_callback(nullptr);
+    }
 }
 @end
 
