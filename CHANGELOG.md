@@ -2,6 +2,8 @@
 
 * [Feature] In the settings returned by `dnsproxy::get_settings()`, listener settings now contain
   the actual port that each listener is listening on.
+* [Feature] DNS-over-QUIC default port changed. New port is 853.
+  * ATTENTION! existing user-specified URLs (doq:// and sdns stamps) without port specified should be patched - old port (8853) should be added to them.
 
 ## V1.6
 * [Feature] Add an ability to route DNS queries directly to a target host in case the configured
