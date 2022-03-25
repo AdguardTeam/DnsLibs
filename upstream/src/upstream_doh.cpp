@@ -186,13 +186,13 @@ static CURLSH *get_curl_share() {
 }
 
 static int verbose_callback(CURL *, curl_infotype type, char *data, size_t size, void *arg) {
-    dns_over_https::query_handle *h = (dns_over_https::query_handle *)arg;
+    auto *h = (dns_over_https::query_handle *)arg;
     if (type == CURLINFO_TEXT) {
-        dbglog(*h->log, "CURL id=0x{:04x}: {}", h->request_id, std::string_view{data, size > 0 ? size - 1 : 0});
+        dbglog_id(h, "CURL: {}", ag::utils::trim(std::string_view{data, size}));
     } else if (type == CURLINFO_HEADER_IN) {
-        dbglog(*h->log, "CURL id=0x{:04x}: < {}", h->request_id, std::string_view{data, size > 0 ? size - 1 : 0});
+        dbglog_id(h, "CURL: < {}", ag::utils::trim(std::string_view{data, size}));
     } else if (type == CURLINFO_HEADER_OUT) {
-        dbglog(*h->log, "CURL id=0x{:04x}: > {}", h->request_id, std::string_view{data, size > 0 ? size - 1 : 0});
+        dbglog_id(h, "CURL: > {}", ag::utils::trim(std::string_view{data, size}));
     }
     return 0;
 }
