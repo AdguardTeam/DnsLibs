@@ -294,7 +294,9 @@ void socks_oproxy::close_connection(uint32_t conn_id) {
     }
     conn->parameters.callbacks = {};
 
-    [[maybe_unused]] auto e = conn->socket->set_callbacks({});
+    if (conn->socket != nullptr) {
+        [[maybe_unused]] auto e = conn->socket->set_callbacks({});
+    }
 
     conn->parameters.loop->submit(
             [this, conn_id] () {
