@@ -145,7 +145,7 @@ ag::dnscrypt::server_info::encrypt_result ag::dnscrypt::server_info::encrypt(uti
     if (auto[encrypted, seal_err] = cipher_seal(m_server_cert.encryption_algorithm, utils::make_string_view(packet), nonce,
                                                 m_server_cert.shared_key);
         !seal_err) {
-        auto result = utils::join<Uint8Vector>(m_server_cert.magic_query, m_public_key, client_nonce, encrypted);
+        auto result = utils::concat<Uint8Vector>(m_server_cert.magic_query, m_public_key, client_nonce, encrypted);
         return {std::move(result), std::move(client_nonce), std::nullopt};
     } else {
         return make_error(std::move(seal_err));
@@ -200,7 +200,7 @@ ag::dnscrypt::server_info::txt_to_cert_info_result ag::dnscrypt::server_info::tx
             }
         }
     }
-    auto bin_cert = utils::join<Uint8Vector>(string_data_fields);
+    auto bin_cert = utils::concat<Uint8Vector>(string_data_fields);
     // Validate the cert basic params
     if (bin_cert.size() < CERT_FIELD.size) {
         return make_error("Certificate is too short");

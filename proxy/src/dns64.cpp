@@ -38,7 +38,7 @@ static ag::Uint8Vector find_pref64(ag::Uint8View ip6, const ag::Uint8View wka) {
     }
 
     // With other prefix lengths, ip6 has a "hole" at position 8 (bits 64..71) (RFC 6052), ignore it
-    auto vec = ag::utils::join<ag::Uint8Vector>(
+    auto vec = ag::utils::concat<ag::Uint8Vector>(
             ag::Uint8View(ip6.data(), 8),
             ag::Uint8View(ip6.data() + 9, 7));
 
