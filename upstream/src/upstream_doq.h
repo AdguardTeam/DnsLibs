@@ -35,7 +35,7 @@ namespace ag {
 
 class dns_over_quic : public upstream {
 public:
-    static constexpr auto DEFAULT_PORT = 853;
+    static constexpr auto DEFAULT_PORT = 8853;
     static constexpr std::string_view SCHEME = "quic://";
 
     /**

@@ -269,8 +269,8 @@ TEST_F(dnsstamp_test, test_pretty_url_and_str) {
                     .pretty = "quic://dns.adguard.com",
             },
             {
-                    .ugly = "sdns://BAcAAAAAAAAAEDk0LjE0MC4xNC4xNDo4NTMAD2Rucy5hZGd1YXJkLmNvbQ",
-                    .pretty = "quic://dns.adguard.com:853",
+                    .ugly = "sdns://BAcAAAAAAAAAETk0LjE0MC4xNC4xNDo4ODUzAA9kbnMuYWRndWFyZC5jb20",
+                    .pretty = "quic://dns.adguard.com:8853",
             },
             {
                     .ugly = "sdns://BAcAAAAAAAAAEDk0LjE0MC4xNC4xNDo3ODQAD2Rucy5hZGd1YXJkLmNvbQ",
