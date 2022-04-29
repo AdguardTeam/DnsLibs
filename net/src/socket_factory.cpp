@@ -69,7 +69,7 @@ struct socket_factory::outbound_proxy_state {
 
 socket_factory::socket_factory(struct parameters parameters)
     : parameters(std::move(parameters))
-    , router(RouteResolver::create())
+    , router(parameters.enable_route_resolver ? RouteResolver::create() : RouteResolverPtr{nullptr})
 {
     if (this->parameters.oproxy_settings != nullptr) {
         this->proxy = std::make_unique<outbound_proxy_state>();

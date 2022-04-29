@@ -1,5 +1,11 @@
 # Changelog
 
+## V1.7.28
+
+* [Feature] Route resolver on Apple platforms is now can be enabled via `AGDnsProxySettings.enableRouteResolver`
+
+## V1.7.0
+
 * [Feature] In the settings returned by `dnsproxy::get_settings()`, listener settings now contain
   the actual port that each listener is listening on.
 

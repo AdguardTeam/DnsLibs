@@ -644,6 +644,7 @@ static ag::server_stamp convert_stamp(AGDnsStamp *stamp) {
         optimisticCache: (BOOL) optimisticCache
         enableDNSSECOK: (BOOL) enableDNSSECOK
         enableRetransmissionHandling: (BOOL) enableRetransmissionHandling
+        enableRouteResolver: (BOOL) enableRouteResolver
         helperPath: (NSString *) helperPath
 {
     const ag::dnsproxy_settings &defaultSettings = ag::dnsproxy_settings::get_default();
@@ -675,6 +676,7 @@ static ag::server_stamp convert_stamp(AGDnsStamp *stamp) {
     _enableDNSSECOK = enableDNSSECOK;
     _helperPath = helperPath;
     _enableRetransmissionHandling = enableRetransmissionHandling;
+    _enableRouteResolver = enableRouteResolver;
     return self;
 }
 
@@ -703,6 +705,7 @@ static ag::server_stamp convert_stamp(AGDnsStamp *stamp) {
         _optimisticCache = [coder decodeBoolForKey:@"_optimisticCache"];
         _enableDNSSECOK = [coder decodeBoolForKey:@"_enableDNSSECOK"];
         _enableRetransmissionHandling = [coder decodeBoolForKey:@"_enableRetransmissionHandling"];
+        _enableRouteResolver = [coder decodeBoolForKey:@"_enableRouteResolver"];
         _helperPath = [coder decodeObjectForKey:@"_helperPath"];
     }
 
@@ -732,6 +735,7 @@ static ag::server_stamp convert_stamp(AGDnsStamp *stamp) {
     [coder encodeBool:self.optimisticCache forKey:@"_optimisticCache"];
     [coder encodeBool:self.enableDNSSECOK forKey:@"_enableDNSSECOK"];
     [coder encodeBool:self.enableRetransmissionHandling forKey:@"_enableRetransmissionHandling"];
+    [coder encodeBool:self.enableRouteResolver forKey:@"_enableRouteResolver"];
     [coder encodeObject:self.helperPath forKey:@"_helperPath"];
 }
 
@@ -1297,6 +1301,7 @@ static int bindFd(NSString *helperPath, NSString *address, NSNumber *port, AGLis
     settings.optimistic_cache = config.optimisticCache;
     settings.enable_dnssec_ok = config.enableDNSSECOK;
     settings.enable_retransmission_handling = config.enableRetransmissionHandling;
+    settings.enable_route_resolver = config.enableRouteResolver;
 
     auto [ret, err_or_warn] = self->proxy.init(std::move(settings), std::move(native_events));
     if (!ret) {

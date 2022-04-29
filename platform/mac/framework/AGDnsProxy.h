@@ -384,6 +384,11 @@ typedef NS_ENUM(NSInteger, AGOutboundProxyProtocol) {
  */
 @property(nonatomic, readonly) BOOL enableRetransmissionHandling;
 /**
+ * If enabled, our own route resolver will be used to resolve routes.
+ * This is needed when DnsProxy is used inside network extension and needs to use routes of some VPN.
+ */
+@property(nonatomic, readonly) BOOL enableRouteResolver;
+/**
  * Path to adguard-tun-helper (macOS only)
  */
 @property(nonatomic, readonly) NSString *helperPath;
@@ -410,6 +415,7 @@ typedef NS_ENUM(NSInteger, AGOutboundProxyProtocol) {
         optimisticCache: (BOOL) optimisticCache
         enableDNSSECOK: (BOOL) enableDNSSECOK
         enableRetransmissionHandling: (BOOL) enableRetransmissionHandling
+        enableRouteResolver: (BOOL) enableRouteResolver
         helperPath: (NSString *)helperPath;
 
 - (instancetype)initWithCoder:(NSCoder *)coder;

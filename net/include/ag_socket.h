@@ -31,6 +31,7 @@ public:
     struct parameters {
         const outbound_proxy_settings *oproxy_settings = nullptr;
         std::unique_ptr<certificate_verifier> verifier;
+        bool enable_route_resolver = true;
     };
 
     struct socket_parameters {

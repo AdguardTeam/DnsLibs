@@ -645,6 +645,7 @@ std::pair<bool, ErrString> dns_forwarder::init(const dnsproxy_settings &settings
     }
 
     struct socket_factory::parameters sf_parameters = {};
+    sf_parameters.enable_route_resolver = settings.enable_route_resolver;
     if (events.on_certificate_verification != nullptr) {
         dbglog(logger, "Using application_verifier");
         sf_parameters.verifier = std::make_unique<application_verifier>(this->events->on_certificate_verification);

@@ -123,6 +123,13 @@ struct dnsproxy_settings {
 
     /** Block Encrypted Client Hello by removing the "ech" parameter from SVCB/HTTPS records. */
     bool block_ech;
+
+    /**
+     * Enable route resolver on Apple platforms.
+     * This is needed when DnsProxy is used inside network extension and needs to use routes of some VPN.
+     * No-op on non-Apple platforms.
+     */
+    bool enable_route_resolver = true;
 };
 
 }
