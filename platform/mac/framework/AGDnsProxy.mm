@@ -619,6 +619,8 @@ static ag::server_stamp convert_stamp(AGDnsStamp *stamp) {
     _dnsCacheSize = settings->dns_cache_size;
     _optimisticCache = settings->optimistic_cache;
     _enableDNSSECOK = settings->enable_dnssec_ok;
+    _enableRetransmissionHandling = settings->enable_retransmission_handling;
+    _enableRouteResolver = settings->enable_route_resolver;
     return self;
 }
 
