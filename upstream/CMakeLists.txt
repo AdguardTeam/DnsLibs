@@ -8,17 +8,17 @@ set(CMAKE_CXX_STANDARD 17)
 set(DNSLIBS_DIR ${CMAKE_CURRENT_SOURCE_DIR}/..)
 
 add_library(upstream EXCLUDE_FROM_ALL
-        src/upstream.cpp
-        src/upstream_doh.h src/upstream_doh.cpp
-        src/upstream_dot.h src/upstream_dot.cpp
-        src/upstream_doq.h src/upstream_doq.cpp
-        src/upstream_plain.h src/upstream_plain.cpp
-        src/connection.h src/connection.cpp
-        src/dns_framed.h src/dns_framed.cpp
-        src/bootstrapper.h src/bootstrapper.cpp
-        src/upstream_dnscrypt.h src/upstream_dnscrypt.cpp
-        src/resolver.h src/resolver.cpp
-        src/upstream_utils.cpp
+        upstream.cpp
+        upstream_doh.h upstream_doh.cpp
+        upstream_dot.h upstream_dot.cpp
+        upstream_doq.h upstream_doq.cpp
+        upstream_plain.h upstream_plain.cpp
+        connection.h connection.cpp
+        dns_framed.h dns_framed.cpp
+        bootstrapper.h bootstrapper.cpp
+        upstream_dnscrypt.h upstream_dnscrypt.cpp
+        resolver.h resolver.cpp
+        upstream_utils.cpp
     )
 
 set_target_properties(upstream PROPERTIES POSITION_INDEPENDENT_CODE ON)

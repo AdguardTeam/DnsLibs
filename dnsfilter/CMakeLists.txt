@@ -10,10 +10,10 @@ set(SRC_DIR src)
 set(TEST_DIR test)
 
 set(SRCS
-        ${SRC_DIR}/engine.cpp
-        ${SRC_DIR}/filter.cpp
-        ${SRC_DIR}/rule_utils.cpp
-        ${SRC_DIR}/dnsrewrite.cpp
+        engine.cpp
+        filter.cpp
+        rule_utils.cpp
+        dnsrewrite.cpp
     )
 
 add_library(dnsfilter STATIC EXCLUDE_FROM_ALL ${SRCS})

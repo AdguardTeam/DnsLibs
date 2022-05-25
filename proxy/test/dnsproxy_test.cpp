@@ -1,31 +1,34 @@
-#include "common/clock.h"
-#include <gtest/gtest.h>
-#include <dnsproxy.h>
-#include <ldns/ldns.h>
-#include <thread>
-#include <memory>
-#include "common/utils.h"
-#include <ag_net_consts.h>
 #include <cstring>
-#include <dns_forwarder.h>
-#include <upstream_utils.h>
-#include "common/logger.h"
+#include <gtest/gtest.h>
+#include <ldns/ldns.h>
+#include <memory>
+#include <thread>
+
+#include "common/clock.h"
 #include "common/file.h"
+#include "common/logger.h"
+#include "common/net_consts.h"
+#include "common/utils.h"
+#include "proxy/dnsproxy.h"
+#include "upstream/upstream_utils.h"
 
 #include "../../upstream/test/test_utils.h"
+#include "../dns_forwarder.h"
+
+namespace ag::proxy::test {
 
 static constexpr auto DNS64_SERVER_ADDR = "2001:4860:4860::6464";
 static constexpr auto IPV4_ONLY_HOST = "ipv4only.arpa.";
 static constexpr auto CNAME_BLOCKING_HOST = "test2.meshkov.info";
 
-class dnsproxy_test : public ::testing::Test {
+class DnsProxyTest : public ::testing::Test {
 protected:
-    ag::dnsproxy proxy;
+    DnsProxy proxy;
 
-    ag::Logger log{"dnsproxy_test"};
+    Logger log{"DnsProxyTest"};
 
     void SetUp() override {
-        ag::Logger::set_log_level(ag::LogLevel::LOG_LEVEL_TRACE);
+        Logger::set_log_level(LogLevel::LOG_LEVEL_TRACE);
     }
 
     void TearDown() override {
@@ -33,31 +36,28 @@ protected:
     }
 };
 
-static ag::dnsproxy_settings make_dnsproxy_settings() {
-    auto settings = ag::dnsproxy_settings::get_default();
-    settings.upstreams = {{ .address = "8.8.8.8" }};
+static DnsProxySettings make_dnsproxy_settings() {
+    auto settings = DnsProxySettings::get_default();
+    settings.upstreams = {{.address = "8.8.8.8"}};
     return settings;
 }
 
-static ag::ldns_pkt_ptr create_request(const std::string &domain, ldns_rr_type type, uint16_t flags,
-                                       ldns_rr_class cls = LDNS_RR_CLASS_IN) {
-    return ag::ldns_pkt_ptr(
-            ldns_pkt_query_new(
-                    ldns_dname_new_frm_str(domain.c_str()), type, cls, flags));
+static ag::ldns_pkt_ptr create_request(
+        const std::string &domain, ldns_rr_type type, uint16_t flags, ldns_rr_class cls = LDNS_RR_CLASS_IN) {
+    return ag::ldns_pkt_ptr(ldns_pkt_query_new(ldns_dname_new_frm_str(domain.c_str()), type, cls, flags));
 }
 
-static void perform_request(ag::dnsproxy &proxy, const ag::ldns_pkt_ptr &request, ag::ldns_pkt_ptr &response) {
+static void perform_request(DnsProxy &proxy, const ag::ldns_pkt_ptr &request, ag::ldns_pkt_ptr &response) {
     // Avoid rate limit
-    std::this_thread::sleep_for(std::chrono::milliseconds(100));
+    std::this_thread::sleep_for(Millis(100));
 
-    const ag::UniquePtr<ldns_buffer, &ldns_buffer_free> buffer(
-            ldns_buffer_new(ag::REQUEST_BUFFER_INITIAL_CAPACITY));
+    const UniquePtr<ldns_buffer, &ldns_buffer_free> buffer(ldns_buffer_new(REQUEST_BUFFER_INITIAL_CAPACITY));
 
     ldns_status status = ldns_pkt2buffer_wire(buffer.get(), request.get());
     ASSERT_EQ(status, LDNS_STATUS_OK) << ldns_get_errorstr_by_id(status);
 
-    const auto resp_data = proxy.handle_message({ldns_buffer_at(buffer.get(), 0),
-                                                 ldns_buffer_position(buffer.get())}, nullptr);
+    const auto resp_data
+            = proxy.handle_message({ldns_buffer_at(buffer.get(), 0), ldns_buffer_position(buffer.get())}, nullptr);
 
     ldns_pkt *resp;
     status = ldns_wire2pkt(&resp, resp_data.data(), resp_data.size());
@@ -65,16 +65,16 @@ static void perform_request(ag::dnsproxy &proxy, const ag::ldns_pkt_ptr &request
     response = ag::ldns_pkt_ptr(resp);
 }
 
-static ag::AllocatedPtr<char> make_rr_answer_string(ldns_pkt *pkt) {
-    return ag::AllocatedPtr<char>{ ldns_rdf2str(ldns_rr_rdf(ldns_rr_list_rr(ldns_pkt_answer(pkt), 0), 0)) };
+static AllocatedPtr<char> make_rr_answer_string(ldns_pkt *pkt) {
+    return AllocatedPtr<char>{ldns_rdf2str(ldns_rr_rdf(ldns_rr_list_rr(ldns_pkt_answer(pkt), 0), 0))};
 }
 
-TEST_F(dnsproxy_test, test_dns64) {
+TEST_F(DnsProxyTest, TestDns64) {
     using namespace std::chrono_literals;
 
     // Assume default settings don't include a DNS64 upstream
-    ag::dnsproxy_settings settings = make_dnsproxy_settings();
-    settings.dns64 = ag::dns64_settings{
+    DnsProxySettings settings = make_dnsproxy_settings();
+    settings.dns64 = Dns64Settings{
             .upstreams = {{
                     .address = DNS64_SERVER_ADDR,
                     .timeout = 5000ms,
@@ -101,8 +101,8 @@ TEST_F(dnsproxy_test, test_dns64) {
     ASSERT_GT(ldns_pkt_ancount(response.get()), 0);
 }
 
-TEST_F(dnsproxy_test, test_ipv6_blocking) {
-    ag::dnsproxy_settings settings = make_dnsproxy_settings();
+TEST_F(DnsProxyTest, TestIpv6Blocking) {
+    DnsProxySettings settings = make_dnsproxy_settings();
     settings.block_ipv6 = true;
     settings.ipv6_available = false;
     settings.filter_params = {{{1, "cname_blocking_test_filter.txt"}}};
@@ -134,49 +134,50 @@ TEST_F(dnsproxy_test, test_ipv6_blocking) {
 
     // Long domain name. With "hostmaster." in SOA record it is longer than 253 characters.
     // https://jira.adguard.com/browse/AG-9026
-    pkt = create_request("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.", LDNS_RR_TYPE_AAAA, LDNS_RD);
+    pkt = create_request("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa."
+                         "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa."
+                         "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa."
+                         "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.",
+            LDNS_RR_TYPE_AAAA, LDNS_RD);
     response.reset();
     ASSERT_NO_FATAL_FAILURE(perform_request(proxy, pkt, response));
     ASSERT_EQ(ldns_pkt_ancount(response.get()), 0);
     ASSERT_EQ(ldns_pkt_nscount(response.get()), 1);
     ASSERT_EQ(ldns_pkt_get_rcode(response.get()), LDNS_RCODE_NOERROR);
     // Check that message is correctly serialized
-    using ldns_buffer_ptr = ag::UniquePtr<ldns_buffer, &ldns_buffer_free>;
+    using ldns_buffer_ptr = UniquePtr<ldns_buffer, &ldns_buffer_free>;
     ldns_buffer_ptr result(ldns_buffer_new(LDNS_MAX_PACKETLEN));
     ldns_status status = ldns_pkt2buffer_wire(result.get(), response.get());
     ASSERT_EQ(status, LDNS_STATUS_OK);
 }
 
-TEST_F(dnsproxy_test, test_cname_blocking) {
-    ag::dnsproxy_settings settings = make_dnsproxy_settings();
+TEST_F(DnsProxyTest, TestCnameBlocking) {
+    DnsProxySettings settings = make_dnsproxy_settings();
     settings.filter_params = {{{1, "cname_blocking_test_filter.txt"}}};
 
-    ag::dns_request_processed_event last_event{};
-    ag::dnsproxy_events events{
-            .on_request_processed = [&last_event](const ag::dns_request_processed_event &event) {
-                last_event = event;
-            }
-    };
+    DnsRequestProcessedEvent last_event{};
+    DnsProxyEvents events{.on_request_processed = [&last_event](const DnsRequestProcessedEvent &event) {
+        last_event = event;
+    }};
 
     auto [ret, err] = proxy.init(settings, {});
     ASSERT_TRUE(ret) << *err;
 
     ag::ldns_pkt_ptr response;
-    ASSERT_NO_FATAL_FAILURE(perform_request(proxy, create_request(CNAME_BLOCKING_HOST, LDNS_RR_TYPE_A, LDNS_RD), response));
+    ASSERT_NO_FATAL_FAILURE(
+            perform_request(proxy, create_request(CNAME_BLOCKING_HOST, LDNS_RR_TYPE_A, LDNS_RD), response));
     ASSERT_EQ(ldns_pkt_ancount(response.get()), 0);
     ASSERT_EQ(ldns_pkt_get_rcode(response.get()), LDNS_RCODE_REFUSED);
 }
 
-TEST_F(dnsproxy_test, test_dnstype_blocking_rule) {
-    ag::dnsproxy_settings settings = make_dnsproxy_settings();
+TEST_F(DnsProxyTest, test_dnstype_blocking_rule) {
+    DnsProxySettings settings = make_dnsproxy_settings();
     settings.filter_params = {{{1, "example.com$dnstype=A|AAAA", true}}};
 
-    ag::dns_request_processed_event last_event{};
-    ag::dnsproxy_events events{
-            .on_request_processed = [&last_event](const ag::dns_request_processed_event &event) {
-                last_event = event;
-            }
-    };
+    DnsRequestProcessedEvent last_event{};
+    DnsProxyEvents events{.on_request_processed = [&last_event](const DnsRequestProcessedEvent &event) {
+        last_event = event;
+    }};
 
     auto [ret, err] = proxy.init(settings, events);
     ASSERT_TRUE(ret) << *err;
@@ -188,16 +189,14 @@ TEST_F(dnsproxy_test, test_dnstype_blocking_rule) {
     ASSERT_EQ(last_event.rules.size(), 1);
 }
 
-TEST_F(dnsproxy_test, test_dnstype_reply) {
-    ag::dnsproxy_settings settings = make_dnsproxy_settings();
+TEST_F(DnsProxyTest, TestDnstypeReply) {
+    DnsProxySettings settings = make_dnsproxy_settings();
     settings.filter_params = {{{1, "d2iwv1xxkqpmiz.cloudfront.net$dnstype=CNAME", true}}};
 
-    ag::dns_request_processed_event last_event{};
-    ag::dnsproxy_events events{
-            .on_request_processed = [&last_event](const ag::dns_request_processed_event &event) {
-                last_event = event;
-            }
-    };
+    DnsRequestProcessedEvent last_event{};
+    DnsProxyEvents events{.on_request_processed = [&last_event](const DnsRequestProcessedEvent &event) {
+        last_event = event;
+    }};
 
     auto [ret, err] = proxy.init(settings, events);
     ASSERT_TRUE(ret) << *err;
@@ -209,25 +208,20 @@ TEST_F(dnsproxy_test, test_dnstype_reply) {
     ASSERT_EQ(last_event.rules.size(), 1);
 }
 
-TEST_F(dnsproxy_test, test_dnsrewrite_rule) {
-    ag::dnsproxy_settings settings = make_dnsproxy_settings();
-    settings.filter_params =
-            {{{
-                1,
-                "@@example.com$important\n"
-                "example.com$dnsrewrite=1.2.3.4\n"
-                "example.com$dnsrewrite=NOERROR;A;100.200.200.100\n"
-                "example.com$dnsrewrite=NOERROR;MX;42 example.mail\n"
-                "@@example.com$dnsrewrite=1.2.3.4\n",
-                true
-            }}};
+TEST_F(DnsProxyTest, TestDnsrewriteRule) {
+    DnsProxySettings settings = make_dnsproxy_settings();
+    settings.filter_params = {{{1,
+            "@@example.com$important\n"
+            "example.com$dnsrewrite=1.2.3.4\n"
+            "example.com$dnsrewrite=NOERROR;A;100.200.200.100\n"
+            "example.com$dnsrewrite=NOERROR;MX;42 example.mail\n"
+            "@@example.com$dnsrewrite=1.2.3.4\n",
+            true}}};
 
-    ag::dns_request_processed_event last_event{};
-    ag::dnsproxy_events events{
-            .on_request_processed = [&last_event](const ag::dns_request_processed_event &event) {
-                last_event = event;
-            }
-    };
+    DnsRequestProcessedEvent last_event{};
+    DnsProxyEvents events{.on_request_processed = [&last_event](const DnsRequestProcessedEvent &event) {
+        last_event = event;
+    }};
 
     auto [ret, err] = proxy.init(settings, events);
     ASSERT_TRUE(ret) << *err;
@@ -239,16 +233,14 @@ TEST_F(dnsproxy_test, test_dnsrewrite_rule) {
     ASSERT_EQ(ldns_pkt_get_rcode(response.get()), LDNS_RCODE_NOERROR);
 }
 
-TEST_F(dnsproxy_test, test_dnsrewrite_cname) {
-    ag::dnsproxy_settings settings = make_dnsproxy_settings();
-    settings.filter_params = {{{ 1, "example.com$dnsrewrite=ietf.org", true }}};
+TEST_F(DnsProxyTest, TestDnsrewriteCname) {
+    DnsProxySettings settings = make_dnsproxy_settings();
+    settings.filter_params = {{{1, "example.com$dnsrewrite=ietf.org", true}}};
 
-    ag::dns_request_processed_event last_event{};
-    ag::dnsproxy_events events{
-            .on_request_processed = [&last_event](const ag::dns_request_processed_event &event) {
-                last_event = event;
-            }
-    };
+    DnsRequestProcessedEvent last_event{};
+    DnsProxyEvents events{.on_request_processed = [&last_event](const DnsRequestProcessedEvent &event) {
+        last_event = event;
+    }};
 
     auto [ret, err] = proxy.init(settings, events);
     ASSERT_TRUE(ret) << *err;
@@ -258,7 +250,8 @@ TEST_F(dnsproxy_test, test_dnsrewrite_cname) {
     ASSERT_EQ(last_event.rules.size(), 1);
 
     ag::ldns_pkt_ptr cname_response;
-    ASSERT_NO_FATAL_FAILURE(perform_request(proxy, create_request("ietf.org", LDNS_RR_TYPE_A, LDNS_RD), cname_response));
+    ASSERT_NO_FATAL_FAILURE(
+            perform_request(proxy, create_request("ietf.org", LDNS_RR_TYPE_A, LDNS_RD), cname_response));
 
     size_t num = 0;
     for (size_t i = 0; i < ldns_pkt_ancount(cname_response.get()); ++i) {
@@ -272,12 +265,23 @@ TEST_F(dnsproxy_test, test_dnsrewrite_cname) {
     ASSERT_EQ(ldns_pkt_get_rcode(response.get()), LDNS_RCODE_NOERROR);
 }
 
-TEST(dnsproxy_test_static, cname_formatting) {
-    const uint8_t packet[] = { 0x00, 0x00, 0x81, 0x80, 0x00, 0x01, 0x00, 0x04, 0x00, 0x00, 0x00, 0x00, 0x03, 0x77, 0x77, 0x77, 0x09, 0x6d, 0x69, 0x63, 0x72, 0x6f, 0x73, 0x6f, 0x66, 0x74, 0x03, 0x63, 0x6f, 0x6d, 0x00, 0x00, 0x01, 0x00, 0x01, 0xc0, 0x0c, 0x00, 0x05, 0x00, 0x01, 0x00, 0x00, 0x0c, 0xf5, 0x00, 0x23, 0x03, 0x77, 0x77, 0x77, 0x09, 0x6d, 0x69, 0x63, 0x72, 0x6f, 0x73, 0x6f, 0x66, 0x74, 0x07, 0x63, 0x6f, 0x6d, 0x2d, 0x63, 0x2d, 0x33, 0x07, 0x65, 0x64, 0x67, 0x65, 0x6b, 0x65, 0x79, 0x03, 0x6e, 0x65, 0x74, 0x00, 0xc0, 0x2f, 0x00, 0x05, 0x00, 0x01, 0x00, 0x00, 0x3a, 0x6a, 0x00, 0x37, 0x03, 0x77, 0x77, 0x77, 0x09, 0x6d, 0x69, 0x63, 0x72, 0x6f, 0x73, 0x6f, 0x66, 0x74, 0x07, 0x63, 0x6f, 0x6d, 0x2d, 0x63, 0x2d, 0x33, 0x07, 0x65, 0x64, 0x67, 0x65, 0x6b, 0x65, 0x79, 0x03, 0x6e, 0x65, 0x74, 0x0b, 0x67, 0x6c, 0x6f, 0x62, 0x61, 0x6c, 0x72, 0x65, 0x64, 0x69, 0x72, 0x06, 0x61, 0x6b, 0x61, 0x64, 0x6e, 0x73, 0xc0, 0x4d, 0xc0, 0x5e, 0x00, 0x05, 0x00, 0x01, 0x00, 0x00, 0x01, 0x49, 0x00, 0x19, 0x06, 0x65, 0x31, 0x33, 0x36, 0x37, 0x38, 0x04, 0x64, 0x73, 0x70, 0x62, 0x0a, 0x61, 0x6b, 0x61, 0x6d, 0x61, 0x69, 0x65, 0x64, 0x67, 0x65, 0xc0, 0x4d, 0xc0, 0xa1, 0x00, 0x01, 0x00, 0x01, 0x00, 0x00, 0x00, 0x13, 0x00, 0x04, 0x02, 0x15, 0xc6, 0xe5, };
+TEST(DnsProxyTest_static, CnameFormatting) {
+    const uint8_t packet[] = {0x00, 0x00, 0x81, 0x80, 0x00, 0x01, 0x00, 0x04, 0x00, 0x00, 0x00, 0x00, 0x03, 0x77, 0x77,
+            0x77, 0x09, 0x6d, 0x69, 0x63, 0x72, 0x6f, 0x73, 0x6f, 0x66, 0x74, 0x03, 0x63, 0x6f, 0x6d, 0x00, 0x00, 0x01,
+            0x00, 0x01, 0xc0, 0x0c, 0x00, 0x05, 0x00, 0x01, 0x00, 0x00, 0x0c, 0xf5, 0x00, 0x23, 0x03, 0x77, 0x77, 0x77,
+            0x09, 0x6d, 0x69, 0x63, 0x72, 0x6f, 0x73, 0x6f, 0x66, 0x74, 0x07, 0x63, 0x6f, 0x6d, 0x2d, 0x63, 0x2d, 0x33,
+            0x07, 0x65, 0x64, 0x67, 0x65, 0x6b, 0x65, 0x79, 0x03, 0x6e, 0x65, 0x74, 0x00, 0xc0, 0x2f, 0x00, 0x05, 0x00,
+            0x01, 0x00, 0x00, 0x3a, 0x6a, 0x00, 0x37, 0x03, 0x77, 0x77, 0x77, 0x09, 0x6d, 0x69, 0x63, 0x72, 0x6f, 0x73,
+            0x6f, 0x66, 0x74, 0x07, 0x63, 0x6f, 0x6d, 0x2d, 0x63, 0x2d, 0x33, 0x07, 0x65, 0x64, 0x67, 0x65, 0x6b, 0x65,
+            0x79, 0x03, 0x6e, 0x65, 0x74, 0x0b, 0x67, 0x6c, 0x6f, 0x62, 0x61, 0x6c, 0x72, 0x65, 0x64, 0x69, 0x72, 0x06,
+            0x61, 0x6b, 0x61, 0x64, 0x6e, 0x73, 0xc0, 0x4d, 0xc0, 0x5e, 0x00, 0x05, 0x00, 0x01, 0x00, 0x00, 0x01, 0x49,
+            0x00, 0x19, 0x06, 0x65, 0x31, 0x33, 0x36, 0x37, 0x38, 0x04, 0x64, 0x73, 0x70, 0x62, 0x0a, 0x61, 0x6b, 0x61,
+            0x6d, 0x61, 0x69, 0x65, 0x64, 0x67, 0x65, 0xc0, 0x4d, 0xc0, 0xa1, 0x00, 0x01, 0x00, 0x01, 0x00, 0x00, 0x00,
+            0x13, 0x00, 0x04, 0x02, 0x15, 0xc6, 0xe5};
     ldns_pkt *pkt = nullptr;
     ldns_wire2pkt(&pkt, packet, sizeof(packet));
     ASSERT_NE(pkt, nullptr);
-    std::string answer = ag::dns_forwarder_utils::rr_list_to_string(ldns_pkt_answer(pkt));
+    std::string answer = DnsForwarderUtils::rr_list_to_string(ldns_pkt_answer(pkt));
     std::string expected_answer = "CNAME, www.microsoft.com-c-3.edgekey.net.\n"
                                   "CNAME, www.microsoft.com-c-3.edgekey.net.globalredir.akadns.net.\n"
                                   "CNAME, e13678.dspb.akamaiedge.net.\n"
@@ -286,35 +290,33 @@ TEST(dnsproxy_test_static, cname_formatting) {
     ldns_pkt_free(pkt);
 }
 
-class dnsproxy_cache_test : public ::testing::Test {
+class DnsProxyCacheTest : public ::testing::Test {
 protected:
-    ag::dnsproxy proxy;
-    ag::dns_request_processed_event last_event{};
+    DnsProxy proxy;
+    DnsRequestProcessedEvent last_event{};
 
-    ag::Logger log{"dnsproxy_cache_test"};
+    Logger log{"DnsProxyCacheTest"};
 
     void TearDown() override {
         proxy.deinit();
     }
 
     void SetUp() override {
-        ag::Logger::set_log_level(ag::LogLevel::LOG_LEVEL_TRACE);
-        ag::dnsproxy_settings settings = make_dnsproxy_settings();
+        Logger::set_log_level(LogLevel::LOG_LEVEL_TRACE);
+        DnsProxySettings settings = make_dnsproxy_settings();
         settings.dns_cache_size = 1;
         settings.optimistic_cache = false;
 
-        ag::dnsproxy_events events{
-            .on_request_processed = [this](ag::dns_request_processed_event event) {
-                last_event = std::move(event);
-            }
-        };
+        DnsProxyEvents events{.on_request_processed = [this](DnsRequestProcessedEvent event) {
+            last_event = std::move(event);
+        }};
 
         auto [ret, err] = proxy.init(settings, events);
         ASSERT_TRUE(ret) << *err;
     }
 };
 
-TEST_F(dnsproxy_cache_test, cache_works) {
+TEST_F(DnsProxyCacheTest, CacheWorks) {
     ag::ldns_pkt_ptr pkt = create_request("google.com.", LDNS_RR_TYPE_A, LDNS_RD);
     ag::ldns_pkt_ptr res;
     ASSERT_NO_FATAL_FAILURE(perform_request(proxy, pkt, res));
@@ -326,7 +328,7 @@ TEST_F(dnsproxy_cache_test, cache_works) {
     ASSERT_EQ(last_event.upstream_id, first_upstream_id);
 }
 
-TEST_F(dnsproxy_cache_test, cached_response_ttl_decreases) {
+TEST_F(DnsProxyCacheTest, CachedResponseTtlDecreases) {
     ag::ldns_pkt_ptr pkt = create_request("example.org.", LDNS_RR_TYPE_SOA, LDNS_RD);
     ag::ldns_pkt_ptr res;
     ASSERT_NO_FATAL_FAILURE(perform_request(proxy, pkt, res));
@@ -335,7 +337,7 @@ TEST_F(dnsproxy_cache_test, cached_response_ttl_decreases) {
 
     const uint32_t ttl = ldns_rr_ttl(ldns_rr_list_rr(ldns_pkt_answer(res.get()), 0));
     ASSERT_GT(ttl, 1);
-    ag::SteadyClock::add_time_shift(std::chrono::seconds((ttl / 2) + 1));
+    SteadyClock::add_time_shift(Secs((ttl / 2) + 1));
 
     ASSERT_NO_FATAL_FAILURE(perform_request(proxy, pkt, res));
     ASSERT_TRUE(last_event.cache_hit);
@@ -343,7 +345,7 @@ TEST_F(dnsproxy_cache_test, cached_response_ttl_decreases) {
     ASSERT_LE(cached_ttl, ttl / 2);
 }
 
-TEST_F(dnsproxy_cache_test, cached_response_expires) {
+TEST_F(DnsProxyCacheTest, CachedResponseExpires) {
     ag::ldns_pkt_ptr pkt = create_request("example.org.", LDNS_RR_TYPE_A, LDNS_RD);
     ag::ldns_pkt_ptr res;
     ASSERT_NO_FATAL_FAILURE(perform_request(proxy, pkt, res));
@@ -352,13 +354,13 @@ TEST_F(dnsproxy_cache_test, cached_response_expires) {
 
     const uint32_t ttl = ldns_rr_ttl(ldns_rr_list_rr(ldns_pkt_answer(res.get()), 0));
     ASSERT_GT(ttl, 0);
-    ag::SteadyClock::add_time_shift(std::chrono::seconds(ttl + 1));
+    SteadyClock::add_time_shift(Secs(ttl + 1));
 
     ASSERT_NO_FATAL_FAILURE(perform_request(proxy, pkt, res));
     ASSERT_FALSE(last_event.cache_hit);
 }
 
-TEST_F(dnsproxy_cache_test, cached_response_question_matches_request) {
+TEST_F(DnsProxyCacheTest, CachedResponseQuestionMatchesRequest) {
     ag::ldns_pkt_ptr pkt = create_request("GoOGLe.CoM", LDNS_RR_TYPE_A, LDNS_RD);
     ag::ldns_pkt_ptr res;
     ASSERT_NO_FATAL_FAILURE(perform_request(proxy, pkt, res));
@@ -367,14 +369,15 @@ TEST_F(dnsproxy_cache_test, cached_response_question_matches_request) {
     ASSERT_TRUE(last_event.cache_hit);
 
     ldns_rr *resp_question = ldns_rr_list_rr(ldns_pkt_question(res.get()), 0);
-    ag::AllocatedPtr<char> resp_question_domain(ldns_rdf2str(ldns_rr_owner(resp_question)));
-    ag::AllocatedPtr<char> req_question_domain(ldns_rdf2str(ldns_rr_owner(ldns_rr_list_rr(ldns_pkt_question(pkt.get()), 0))));
+    AllocatedPtr<char> resp_question_domain(ldns_rdf2str(ldns_rr_owner(resp_question)));
+    AllocatedPtr<char> req_question_domain(
+            ldns_rdf2str(ldns_rr_owner(ldns_rr_list_rr(ldns_pkt_question(pkt.get()), 0))));
 
     ASSERT_EQ(0, std::strcmp(req_question_domain.get(), resp_question_domain.get()));
     ASSERT_EQ(LDNS_RR_TYPE_A, ldns_rr_get_type(resp_question));
 }
 
-TEST_F(dnsproxy_cache_test, cache_size_is_set) {
+TEST_F(DnsProxyCacheTest, CacheSizeIsSet) {
     // Cache size is 1 for this test
     ag::ldns_pkt_ptr res;
     ASSERT_NO_FATAL_FAILURE(perform_request(proxy, create_request("google.com", LDNS_RR_TYPE_A, LDNS_RD), res));
@@ -387,7 +390,7 @@ TEST_F(dnsproxy_cache_test, cache_size_is_set) {
     ASSERT_FALSE(last_event.cache_hit);
 }
 
-TEST_F(dnsproxy_cache_test, cache_key_test) {
+TEST_F(DnsProxyCacheTest, CacheKeyTest) {
     ag::ldns_pkt_ptr res;
 
     ASSERT_NO_FATAL_FAILURE(perform_request(proxy, create_request("google.com", LDNS_RR_TYPE_A, LDNS_RD), res));
@@ -398,7 +401,8 @@ TEST_F(dnsproxy_cache_test, cache_key_test) {
     ASSERT_TRUE(last_event.cache_hit);
 
     // Check class matters
-    ASSERT_NO_FATAL_FAILURE(perform_request(proxy, create_request("google.com", LDNS_RR_TYPE_A, LDNS_RD, LDNS_RR_CLASS_CH), res));
+    ASSERT_NO_FATAL_FAILURE(
+            perform_request(proxy, create_request("google.com", LDNS_RR_TYPE_A, LDNS_RD, LDNS_RR_CLASS_CH), res));
     ASSERT_FALSE(last_event.cache_hit);
 
     // Check type matters
@@ -406,7 +410,8 @@ TEST_F(dnsproxy_cache_test, cache_key_test) {
     ASSERT_FALSE(last_event.cache_hit);
 
     // Check CD flag matters
-    ASSERT_NO_FATAL_FAILURE(perform_request(proxy, create_request("google.com", LDNS_RR_TYPE_A, LDNS_RD | LDNS_CD), res));
+    ASSERT_NO_FATAL_FAILURE(
+            perform_request(proxy, create_request("google.com", LDNS_RR_TYPE_A, LDNS_RD | LDNS_CD), res));
     ASSERT_FALSE(last_event.cache_hit);
 
     // Check DO flag matters
@@ -416,12 +421,12 @@ TEST_F(dnsproxy_cache_test, cache_key_test) {
     ASSERT_FALSE(last_event.cache_hit);
 }
 
-TEST_F(dnsproxy_test, blocking_mode_default) {
-    ag::dnsproxy_settings settings = make_dnsproxy_settings();
+TEST_F(DnsProxyTest, BlockingModeDefault) {
+    DnsProxySettings settings = make_dnsproxy_settings();
     settings.filter_params = {{{1, "blocking_modes_test_filter.txt"}}};
 
-    ASSERT_EQ(ag::dnsproxy_blocking_mode::REFUSED, settings.adblock_rules_blocking_mode);
-    ASSERT_EQ(ag::dnsproxy_blocking_mode::ADDRESS, settings.hosts_rules_blocking_mode);
+    ASSERT_EQ(DnsProxyBlockingMode::REFUSED, settings.adblock_rules_blocking_mode);
+    ASSERT_EQ(DnsProxyBlockingMode::ADDRESS, settings.hosts_rules_blocking_mode);
 
     auto [ret, err] = proxy.init(settings, {});
     ASSERT_TRUE(ret) << *err;
@@ -435,56 +440,66 @@ TEST_F(dnsproxy_test, blocking_mode_default) {
     ASSERT_EQ(LDNS_RCODE_REFUSED, ldns_pkt_get_rcode(res.get()));
 
     // Check weird qtype
-    ASSERT_NO_FATAL_FAILURE(perform_request(proxy, create_request("privacy-policy.truste.com", (ldns_rr_type) 65, LDNS_RD), res));
+    ASSERT_NO_FATAL_FAILURE(
+            perform_request(proxy, create_request("privacy-policy.truste.com", (ldns_rr_type) 65, LDNS_RD), res));
     ASSERT_EQ(LDNS_RCODE_REFUSED, ldns_pkt_get_rcode(res.get()));
-    ASSERT_NO_FATAL_FAILURE(perform_request(proxy, create_request("hosts-style.truste.com", (ldns_rr_type) 65, LDNS_RD), res));
+    ASSERT_NO_FATAL_FAILURE(
+            perform_request(proxy, create_request("hosts-style.truste.com", (ldns_rr_type) 65, LDNS_RD), res));
     ASSERT_EQ(LDNS_RCODE_NOERROR, ldns_pkt_get_rcode(res.get()));
     ASSERT_EQ(1, ldns_pkt_nscount(res.get()));
 
-    ASSERT_NO_FATAL_FAILURE(perform_request(proxy, create_request("hosts-style-unspec.com", LDNS_RR_TYPE_A, LDNS_RD), res));
+    ASSERT_NO_FATAL_FAILURE(
+            perform_request(proxy, create_request("hosts-style-unspec.com", LDNS_RR_TYPE_A, LDNS_RD), res));
     ASSERT_EQ(LDNS_RCODE_NOERROR, ldns_pkt_get_rcode(res.get()));
     ASSERT_STREQ("0.0.0.0", make_rr_answer_string(res.get()).get());
 
-    ASSERT_NO_FATAL_FAILURE(perform_request(proxy, create_request("hosts-style-unspec-6.com", LDNS_RR_TYPE_AAAA, LDNS_RD), res));
+    ASSERT_NO_FATAL_FAILURE(
+            perform_request(proxy, create_request("hosts-style-unspec-6.com", LDNS_RR_TYPE_AAAA, LDNS_RD), res));
     ASSERT_EQ(LDNS_RCODE_NOERROR, ldns_pkt_get_rcode(res.get()));
     ASSERT_STREQ("::", make_rr_answer_string(res.get()).get());
 
     // Check loopback is equivalent to unspec
-    ASSERT_NO_FATAL_FAILURE(perform_request(proxy, create_request("hosts-style-loopback.com", LDNS_RR_TYPE_A, LDNS_RD), res));
+    ASSERT_NO_FATAL_FAILURE(
+            perform_request(proxy, create_request("hosts-style-loopback.com", LDNS_RR_TYPE_A, LDNS_RD), res));
     ASSERT_EQ(LDNS_RCODE_NOERROR, ldns_pkt_get_rcode(res.get()));
     ASSERT_STREQ("0.0.0.0", make_rr_answer_string(res.get()).get());
 
     // Check loopback is equivalent to unspec for IPv6
-    ASSERT_NO_FATAL_FAILURE(perform_request(proxy, create_request("hosts-style-loopback-6.com", LDNS_RR_TYPE_AAAA, LDNS_RD), res));
+    ASSERT_NO_FATAL_FAILURE(
+            perform_request(proxy, create_request("hosts-style-loopback-6.com", LDNS_RR_TYPE_AAAA, LDNS_RD), res));
     ASSERT_EQ(LDNS_RCODE_NOERROR, ldns_pkt_get_rcode(res.get()));
     ASSERT_STREQ("::", make_rr_answer_string(res.get()).get());
 
     // Check custom IP works
-    ASSERT_NO_FATAL_FAILURE(perform_request(proxy, create_request("hosts-style-custom.com", LDNS_RR_TYPE_A, LDNS_RD), res));
+    ASSERT_NO_FATAL_FAILURE(
+            perform_request(proxy, create_request("hosts-style-custom.com", LDNS_RR_TYPE_A, LDNS_RD), res));
     ASSERT_EQ(LDNS_RCODE_NOERROR, ldns_pkt_get_rcode(res.get()));
     ASSERT_STREQ("1.2.3.4", make_rr_answer_string(res.get()).get());
 
     // Check custom IP works for IPv6
-    ASSERT_NO_FATAL_FAILURE(perform_request(proxy, create_request("hosts-style-custom-6.com", LDNS_RR_TYPE_AAAA, LDNS_RD), res));
+    ASSERT_NO_FATAL_FAILURE(
+            perform_request(proxy, create_request("hosts-style-custom-6.com", LDNS_RR_TYPE_AAAA, LDNS_RD), res));
     ASSERT_EQ(LDNS_RCODE_NOERROR, ldns_pkt_get_rcode(res.get()));
     ASSERT_STREQ("12::34", make_rr_answer_string(res.get()).get());
 
     // Check custom (from rule!) IP works
-    ASSERT_NO_FATAL_FAILURE(perform_request(proxy, create_request("hosts-style-4-and-6.com", LDNS_RR_TYPE_A, LDNS_RD), res));
+    ASSERT_NO_FATAL_FAILURE(
+            perform_request(proxy, create_request("hosts-style-4-and-6.com", LDNS_RR_TYPE_A, LDNS_RD), res));
     ASSERT_EQ(LDNS_RCODE_NOERROR, ldns_pkt_get_rcode(res.get()));
     ASSERT_STREQ("4.5.6.7", make_rr_answer_string(res.get()).get());
 
     // Check custom (from rule!) IP works for IPv6
-    ASSERT_NO_FATAL_FAILURE(perform_request(proxy, create_request("hosts-style-4-and-6.com", LDNS_RR_TYPE_AAAA, LDNS_RD), res));
+    ASSERT_NO_FATAL_FAILURE(
+            perform_request(proxy, create_request("hosts-style-4-and-6.com", LDNS_RR_TYPE_AAAA, LDNS_RD), res));
     ASSERT_EQ(LDNS_RCODE_NOERROR, ldns_pkt_get_rcode(res.get()));
     ASSERT_STREQ("45::67", make_rr_answer_string(res.get()).get());
 }
 
-TEST_F(dnsproxy_test, blocking_mode_nxdomain) {
-    ag::dnsproxy_settings settings = make_dnsproxy_settings();
+TEST_F(DnsProxyTest, BlockingModeNxdomain) {
+    DnsProxySettings settings = make_dnsproxy_settings();
     settings.filter_params = {{{1, "blocking_modes_test_filter.txt"}}};
-    settings.adblock_rules_blocking_mode = ag::dnsproxy_blocking_mode::NXDOMAIN;
-    settings.hosts_rules_blocking_mode = ag::dnsproxy_blocking_mode::NXDOMAIN;
+    settings.adblock_rules_blocking_mode = DnsProxyBlockingMode::NXDOMAIN;
+    settings.hosts_rules_blocking_mode = DnsProxyBlockingMode::NXDOMAIN;
 
     auto [ret, err] = proxy.init(settings, {});
     ASSERT_TRUE(ret) << *err;
@@ -499,55 +514,64 @@ TEST_F(dnsproxy_test, blocking_mode_nxdomain) {
     ASSERT_EQ(LDNS_RCODE_NXDOMAIN, ldns_pkt_get_rcode(res.get()));
     ASSERT_EQ(ldns_pkt_nscount(res.get()), 1);
 
-    ASSERT_NO_FATAL_FAILURE(perform_request(proxy, create_request("hosts-style-unspec.com", LDNS_RR_TYPE_A, LDNS_RD), res));
+    ASSERT_NO_FATAL_FAILURE(
+            perform_request(proxy, create_request("hosts-style-unspec.com", LDNS_RR_TYPE_A, LDNS_RD), res));
     ASSERT_EQ(LDNS_RCODE_NXDOMAIN, ldns_pkt_get_rcode(res.get()));
     ASSERT_EQ(ldns_pkt_nscount(res.get()), 1);
 
-    ASSERT_NO_FATAL_FAILURE(perform_request(proxy, create_request("hosts-style-unspec-6.com", LDNS_RR_TYPE_AAAA, LDNS_RD), res));
+    ASSERT_NO_FATAL_FAILURE(
+            perform_request(proxy, create_request("hosts-style-unspec-6.com", LDNS_RR_TYPE_AAAA, LDNS_RD), res));
     ASSERT_EQ(LDNS_RCODE_NXDOMAIN, ldns_pkt_get_rcode(res.get()));
     ASSERT_EQ(ldns_pkt_nscount(res.get()), 1);
 
     // Check loopback is equivalent to unspec
-    ASSERT_NO_FATAL_FAILURE(perform_request(proxy, create_request("hosts-style-loopback.com", LDNS_RR_TYPE_A, LDNS_RD), res));
+    ASSERT_NO_FATAL_FAILURE(
+            perform_request(proxy, create_request("hosts-style-loopback.com", LDNS_RR_TYPE_A, LDNS_RD), res));
     ASSERT_EQ(LDNS_RCODE_NXDOMAIN, ldns_pkt_get_rcode(res.get()));
     ASSERT_EQ(ldns_pkt_nscount(res.get()), 1);
 
     // Check loopback is equivalent to unspec for IPv6
-    ASSERT_NO_FATAL_FAILURE(perform_request(proxy, create_request("hosts-style-loopback-6.com", LDNS_RR_TYPE_AAAA, LDNS_RD), res));
+    ASSERT_NO_FATAL_FAILURE(
+            perform_request(proxy, create_request("hosts-style-loopback-6.com", LDNS_RR_TYPE_AAAA, LDNS_RD), res));
     ASSERT_EQ(LDNS_RCODE_NXDOMAIN, ldns_pkt_get_rcode(res.get()));
     ASSERT_EQ(ldns_pkt_nscount(res.get()), 1);
 
     // Check weird qtype
-    ASSERT_NO_FATAL_FAILURE(perform_request(proxy, create_request("privacy-policy.truste.com", (ldns_rr_type) 65, LDNS_RD), res));
+    ASSERT_NO_FATAL_FAILURE(
+            perform_request(proxy, create_request("privacy-policy.truste.com", (ldns_rr_type) 65, LDNS_RD), res));
     ASSERT_EQ(LDNS_RCODE_NXDOMAIN, ldns_pkt_get_rcode(res.get()));
     ASSERT_EQ(ldns_pkt_nscount(res.get()), 1);
 
     // Check custom IP works
-    ASSERT_NO_FATAL_FAILURE(perform_request(proxy, create_request("hosts-style-custom.com", LDNS_RR_TYPE_A, LDNS_RD), res));
+    ASSERT_NO_FATAL_FAILURE(
+            perform_request(proxy, create_request("hosts-style-custom.com", LDNS_RR_TYPE_A, LDNS_RD), res));
     ASSERT_EQ(LDNS_RCODE_NOERROR, ldns_pkt_get_rcode(res.get()));
     ASSERT_STREQ("1.2.3.4", make_rr_answer_string(res.get()).get());
 
     // Check custom IP works for IPv6
-    ASSERT_NO_FATAL_FAILURE(perform_request(proxy, create_request("hosts-style-custom-6.com", LDNS_RR_TYPE_AAAA, LDNS_RD), res));
+    ASSERT_NO_FATAL_FAILURE(
+            perform_request(proxy, create_request("hosts-style-custom-6.com", LDNS_RR_TYPE_AAAA, LDNS_RD), res));
     ASSERT_EQ(LDNS_RCODE_NOERROR, ldns_pkt_get_rcode(res.get()));
     ASSERT_STREQ("12::34", make_rr_answer_string(res.get()).get());
 
     // Check custom (from rule!) IP works
-    ASSERT_NO_FATAL_FAILURE(perform_request(proxy, create_request("hosts-style-4-and-6.com", LDNS_RR_TYPE_A, LDNS_RD), res));
+    ASSERT_NO_FATAL_FAILURE(
+            perform_request(proxy, create_request("hosts-style-4-and-6.com", LDNS_RR_TYPE_A, LDNS_RD), res));
     ASSERT_EQ(LDNS_RCODE_NOERROR, ldns_pkt_get_rcode(res.get()));
     ASSERT_STREQ("4.5.6.7", make_rr_answer_string(res.get()).get());
 
     // Check custom (from rule!) IP works for IPv6
-    ASSERT_NO_FATAL_FAILURE(perform_request(proxy, create_request("hosts-style-4-and-6.com", LDNS_RR_TYPE_AAAA, LDNS_RD), res));
+    ASSERT_NO_FATAL_FAILURE(
+            perform_request(proxy, create_request("hosts-style-4-and-6.com", LDNS_RR_TYPE_AAAA, LDNS_RD), res));
     ASSERT_EQ(LDNS_RCODE_NOERROR, ldns_pkt_get_rcode(res.get()));
     ASSERT_STREQ("45::67", make_rr_answer_string(res.get()).get());
 }
 
-TEST_F(dnsproxy_test, blocking_mode_refused) {
-    ag::dnsproxy_settings settings = make_dnsproxy_settings();
+TEST_F(DnsProxyTest, BlockingModeRefused) {
+    DnsProxySettings settings = make_dnsproxy_settings();
     settings.filter_params = {{{1, "blocking_modes_test_filter.txt"}}};
-    settings.adblock_rules_blocking_mode = ag::dnsproxy_blocking_mode::REFUSED;
-    settings.hosts_rules_blocking_mode = ag::dnsproxy_blocking_mode::REFUSED;
+    settings.adblock_rules_blocking_mode = DnsProxyBlockingMode::REFUSED;
+    settings.hosts_rules_blocking_mode = DnsProxyBlockingMode::REFUSED;
 
     auto [ret, err] = proxy.init(settings, {});
     ASSERT_TRUE(ret) << *err;
@@ -560,56 +584,66 @@ TEST_F(dnsproxy_test, blocking_mode_refused) {
     ASSERT_NO_FATAL_FAILURE(perform_request(proxy, create_request("adb-style.com", LDNS_RR_TYPE_AAAA, LDNS_RD), res));
     ASSERT_EQ(LDNS_RCODE_REFUSED, ldns_pkt_get_rcode(res.get()));
 
-    ASSERT_NO_FATAL_FAILURE(perform_request(proxy, create_request("hosts-style-unspec.com", LDNS_RR_TYPE_A, LDNS_RD), res));
+    ASSERT_NO_FATAL_FAILURE(
+            perform_request(proxy, create_request("hosts-style-unspec.com", LDNS_RR_TYPE_A, LDNS_RD), res));
     ASSERT_EQ(LDNS_RCODE_REFUSED, ldns_pkt_get_rcode(res.get()));
 
-    ASSERT_NO_FATAL_FAILURE(perform_request(proxy, create_request("hosts-style-unspec-6.com", LDNS_RR_TYPE_AAAA, LDNS_RD), res));
+    ASSERT_NO_FATAL_FAILURE(
+            perform_request(proxy, create_request("hosts-style-unspec-6.com", LDNS_RR_TYPE_AAAA, LDNS_RD), res));
     ASSERT_EQ(LDNS_RCODE_REFUSED, ldns_pkt_get_rcode(res.get()));
 
     // Check loopback is equivalent to unspec
-    ASSERT_NO_FATAL_FAILURE(perform_request(proxy, create_request("hosts-style-loopback.com", LDNS_RR_TYPE_A, LDNS_RD), res));
+    ASSERT_NO_FATAL_FAILURE(
+            perform_request(proxy, create_request("hosts-style-loopback.com", LDNS_RR_TYPE_A, LDNS_RD), res));
     ASSERT_EQ(LDNS_RCODE_REFUSED, ldns_pkt_get_rcode(res.get()));
 
     // Check loopback is equivalent to unspec for IPv6
-    ASSERT_NO_FATAL_FAILURE(perform_request(proxy, create_request("hosts-style-loopback-6.com", LDNS_RR_TYPE_AAAA, LDNS_RD), res));
+    ASSERT_NO_FATAL_FAILURE(
+            perform_request(proxy, create_request("hosts-style-loopback-6.com", LDNS_RR_TYPE_AAAA, LDNS_RD), res));
     ASSERT_EQ(LDNS_RCODE_REFUSED, ldns_pkt_get_rcode(res.get()));
 
     // Check weird qtype
-    ASSERT_NO_FATAL_FAILURE(perform_request(proxy, create_request("privacy-policy.truste.com", (ldns_rr_type) 65, LDNS_RD), res));
+    ASSERT_NO_FATAL_FAILURE(
+            perform_request(proxy, create_request("privacy-policy.truste.com", (ldns_rr_type) 65, LDNS_RD), res));
     ASSERT_EQ(LDNS_RCODE_REFUSED, ldns_pkt_get_rcode(res.get()));
 
     // Check weird qtype (hosts-style rule)
-    ASSERT_NO_FATAL_FAILURE(perform_request(proxy, create_request("hosts-style-custom.com", (ldns_rr_type) 65, LDNS_RD), res));
+    ASSERT_NO_FATAL_FAILURE(
+            perform_request(proxy, create_request("hosts-style-custom.com", (ldns_rr_type) 65, LDNS_RD), res));
     ASSERT_EQ(LDNS_RCODE_NOERROR, ldns_pkt_get_rcode(res.get()));
     ASSERT_EQ(0, ldns_pkt_ancount(res.get()));
     ASSERT_EQ(1, ldns_pkt_nscount(res.get()));
 
     // Check rule IP works
-    ASSERT_NO_FATAL_FAILURE(perform_request(proxy, create_request("hosts-style-custom.com", LDNS_RR_TYPE_A, LDNS_RD), res));
+    ASSERT_NO_FATAL_FAILURE(
+            perform_request(proxy, create_request("hosts-style-custom.com", LDNS_RR_TYPE_A, LDNS_RD), res));
     ASSERT_EQ(LDNS_RCODE_NOERROR, ldns_pkt_get_rcode(res.get()));
     ASSERT_STREQ("1.2.3.4", make_rr_answer_string(res.get()).get());
 
     // Check rule IP works
-    ASSERT_NO_FATAL_FAILURE(perform_request(proxy, create_request("hosts-style-custom-6.com", LDNS_RR_TYPE_AAAA, LDNS_RD), res));
+    ASSERT_NO_FATAL_FAILURE(
+            perform_request(proxy, create_request("hosts-style-custom-6.com", LDNS_RR_TYPE_AAAA, LDNS_RD), res));
     ASSERT_EQ(LDNS_RCODE_NOERROR, ldns_pkt_get_rcode(res.get()));
     ASSERT_STREQ("12::34", make_rr_answer_string(res.get()).get());
 
     // Check rule IP works
-    ASSERT_NO_FATAL_FAILURE(perform_request(proxy, create_request("hosts-style-4-and-6.com", LDNS_RR_TYPE_A, LDNS_RD), res));
+    ASSERT_NO_FATAL_FAILURE(
+            perform_request(proxy, create_request("hosts-style-4-and-6.com", LDNS_RR_TYPE_A, LDNS_RD), res));
     ASSERT_EQ(LDNS_RCODE_NOERROR, ldns_pkt_get_rcode(res.get()));
     ASSERT_STREQ("4.5.6.7", make_rr_answer_string(res.get()).get());
 
     // Check rule IP works
-    ASSERT_NO_FATAL_FAILURE(perform_request(proxy, create_request("hosts-style-4-and-6.com", LDNS_RR_TYPE_AAAA, LDNS_RD), res));
+    ASSERT_NO_FATAL_FAILURE(
+            perform_request(proxy, create_request("hosts-style-4-and-6.com", LDNS_RR_TYPE_AAAA, LDNS_RD), res));
     ASSERT_EQ(LDNS_RCODE_NOERROR, ldns_pkt_get_rcode(res.get()));
     ASSERT_STREQ("45::67", make_rr_answer_string(res.get()).get());
 }
 
-TEST_F(dnsproxy_test, blocking_mode_unspecified_address) {
-    ag::dnsproxy_settings settings = make_dnsproxy_settings();
+TEST_F(DnsProxyTest, BlockingModeUnspecifiedAddress) {
+    DnsProxySettings settings = make_dnsproxy_settings();
     settings.filter_params = {{{1, "blocking_modes_test_filter.txt"}}};
-    settings.adblock_rules_blocking_mode = ag::dnsproxy_blocking_mode::ADDRESS;
-    settings.hosts_rules_blocking_mode = ag::dnsproxy_blocking_mode::ADDRESS;
+    settings.adblock_rules_blocking_mode = DnsProxyBlockingMode::ADDRESS;
+    settings.hosts_rules_blocking_mode = DnsProxyBlockingMode::ADDRESS;
 
     auto [ret, err] = proxy.init(settings, {});
     ASSERT_TRUE(ret) << *err;
@@ -617,7 +651,8 @@ TEST_F(dnsproxy_test, blocking_mode_unspecified_address) {
     ag::ldns_pkt_ptr res;
 
     // Check weird qtype
-    ASSERT_NO_FATAL_FAILURE(perform_request(proxy, create_request("privacy-policy.truste.com", (ldns_rr_type) 65, LDNS_RD), res));
+    ASSERT_NO_FATAL_FAILURE(
+            perform_request(proxy, create_request("privacy-policy.truste.com", (ldns_rr_type) 65, LDNS_RD), res));
     ASSERT_EQ(LDNS_RCODE_NOERROR, ldns_pkt_get_rcode(res.get()));
     ASSERT_EQ(1, ldns_pkt_nscount(res.get()));
 
@@ -629,50 +664,58 @@ TEST_F(dnsproxy_test, blocking_mode_unspecified_address) {
     ASSERT_EQ(LDNS_RCODE_NOERROR, ldns_pkt_get_rcode(res.get()));
     ASSERT_STREQ("::", make_rr_answer_string(res.get()).get());
 
-    ASSERT_NO_FATAL_FAILURE(perform_request(proxy, create_request("hosts-style-unspec.com", LDNS_RR_TYPE_A, LDNS_RD), res));
+    ASSERT_NO_FATAL_FAILURE(
+            perform_request(proxy, create_request("hosts-style-unspec.com", LDNS_RR_TYPE_A, LDNS_RD), res));
     ASSERT_EQ(LDNS_RCODE_NOERROR, ldns_pkt_get_rcode(res.get()));
     ASSERT_STREQ("0.0.0.0", make_rr_answer_string(res.get()).get());
 
-    ASSERT_NO_FATAL_FAILURE(perform_request(proxy, create_request("hosts-style-unspec-6.com", LDNS_RR_TYPE_AAAA, LDNS_RD), res));
+    ASSERT_NO_FATAL_FAILURE(
+            perform_request(proxy, create_request("hosts-style-unspec-6.com", LDNS_RR_TYPE_AAAA, LDNS_RD), res));
     ASSERT_EQ(LDNS_RCODE_NOERROR, ldns_pkt_get_rcode(res.get()));
     ASSERT_STREQ("::", make_rr_answer_string(res.get()).get());
 
     // Check loopback is equivalent to unspec
-    ASSERT_NO_FATAL_FAILURE(perform_request(proxy, create_request("hosts-style-loopback.com", LDNS_RR_TYPE_A, LDNS_RD), res));
+    ASSERT_NO_FATAL_FAILURE(
+            perform_request(proxy, create_request("hosts-style-loopback.com", LDNS_RR_TYPE_A, LDNS_RD), res));
     ASSERT_EQ(LDNS_RCODE_NOERROR, ldns_pkt_get_rcode(res.get()));
     ASSERT_STREQ("0.0.0.0", make_rr_answer_string(res.get()).get());
 
     // Check loopback is equivalent to unspec for IPv6
-    ASSERT_NO_FATAL_FAILURE(perform_request(proxy, create_request("hosts-style-loopback-6.com", LDNS_RR_TYPE_AAAA, LDNS_RD), res));
+    ASSERT_NO_FATAL_FAILURE(
+            perform_request(proxy, create_request("hosts-style-loopback-6.com", LDNS_RR_TYPE_AAAA, LDNS_RD), res));
     ASSERT_EQ(LDNS_RCODE_NOERROR, ldns_pkt_get_rcode(res.get()));
     ASSERT_STREQ("::", make_rr_answer_string(res.get()).get());
 
     // Check custom IP works
-    ASSERT_NO_FATAL_FAILURE(perform_request(proxy, create_request("hosts-style-custom.com", LDNS_RR_TYPE_A, LDNS_RD), res));
+    ASSERT_NO_FATAL_FAILURE(
+            perform_request(proxy, create_request("hosts-style-custom.com", LDNS_RR_TYPE_A, LDNS_RD), res));
     ASSERT_EQ(LDNS_RCODE_NOERROR, ldns_pkt_get_rcode(res.get()));
     ASSERT_STREQ("1.2.3.4", make_rr_answer_string(res.get()).get());
 
     // Check custom IP works for IPv6
-    ASSERT_NO_FATAL_FAILURE(perform_request(proxy, create_request("hosts-style-custom-6.com", LDNS_RR_TYPE_AAAA, LDNS_RD), res));
+    ASSERT_NO_FATAL_FAILURE(
+            perform_request(proxy, create_request("hosts-style-custom-6.com", LDNS_RR_TYPE_AAAA, LDNS_RD), res));
     ASSERT_EQ(LDNS_RCODE_NOERROR, ldns_pkt_get_rcode(res.get()));
     ASSERT_STREQ("12::34", make_rr_answer_string(res.get()).get());
 
     // Check custom (from rule!) IP works
-    ASSERT_NO_FATAL_FAILURE(perform_request(proxy, create_request("hosts-style-4-and-6.com", LDNS_RR_TYPE_A, LDNS_RD), res));
+    ASSERT_NO_FATAL_FAILURE(
+            perform_request(proxy, create_request("hosts-style-4-and-6.com", LDNS_RR_TYPE_A, LDNS_RD), res));
     ASSERT_EQ(LDNS_RCODE_NOERROR, ldns_pkt_get_rcode(res.get()));
     ASSERT_STREQ("4.5.6.7", make_rr_answer_string(res.get()).get());
 
     // Check custom (from rule!) IP works for IPv6
-    ASSERT_NO_FATAL_FAILURE(perform_request(proxy, create_request("hosts-style-4-and-6.com", LDNS_RR_TYPE_AAAA, LDNS_RD), res));
+    ASSERT_NO_FATAL_FAILURE(
+            perform_request(proxy, create_request("hosts-style-4-and-6.com", LDNS_RR_TYPE_AAAA, LDNS_RD), res));
     ASSERT_EQ(LDNS_RCODE_NOERROR, ldns_pkt_get_rcode(res.get()));
     ASSERT_STREQ("45::67", make_rr_answer_string(res.get()).get());
 }
 
-TEST_F(dnsproxy_test, blocking_mode_custom_address) {
-    ag::dnsproxy_settings settings = make_dnsproxy_settings();
+TEST_F(DnsProxyTest, BlockingModeCustomAddress) {
+    DnsProxySettings settings = make_dnsproxy_settings();
     settings.filter_params = {{{1, "blocking_modes_test_filter.txt"}}};
-    settings.adblock_rules_blocking_mode = ag::dnsproxy_blocking_mode::ADDRESS;
-    settings.hosts_rules_blocking_mode = ag::dnsproxy_blocking_mode::ADDRESS;
+    settings.adblock_rules_blocking_mode = DnsProxyBlockingMode::ADDRESS;
+    settings.hosts_rules_blocking_mode = DnsProxyBlockingMode::ADDRESS;
     settings.custom_blocking_ipv4 = "4.3.2.1";
     settings.custom_blocking_ipv6 = "43::21";
 
@@ -682,7 +725,8 @@ TEST_F(dnsproxy_test, blocking_mode_custom_address) {
     ag::ldns_pkt_ptr res;
 
     // Check weird qtype
-    ASSERT_NO_FATAL_FAILURE(perform_request(proxy, create_request("privacy-policy.truste.com", (ldns_rr_type) 65, LDNS_RD), res));
+    ASSERT_NO_FATAL_FAILURE(
+            perform_request(proxy, create_request("privacy-policy.truste.com", (ldns_rr_type) 65, LDNS_RD), res));
     ASSERT_EQ(LDNS_RCODE_NOERROR, ldns_pkt_get_rcode(res.get()));
     ASSERT_EQ(0, ldns_pkt_ancount(res.get()));
     ASSERT_EQ(1, ldns_pkt_nscount(res.get()));
@@ -695,50 +739,58 @@ TEST_F(dnsproxy_test, blocking_mode_custom_address) {
     ASSERT_EQ(LDNS_RCODE_NOERROR, ldns_pkt_get_rcode(res.get()));
     ASSERT_STREQ("43::21", make_rr_answer_string(res.get()).get());
 
-    ASSERT_NO_FATAL_FAILURE(perform_request(proxy, create_request("hosts-style-unspec.com", LDNS_RR_TYPE_A, LDNS_RD), res));
+    ASSERT_NO_FATAL_FAILURE(
+            perform_request(proxy, create_request("hosts-style-unspec.com", LDNS_RR_TYPE_A, LDNS_RD), res));
     ASSERT_EQ(LDNS_RCODE_NOERROR, ldns_pkt_get_rcode(res.get()));
     ASSERT_STREQ("4.3.2.1", make_rr_answer_string(res.get()).get());
 
-    ASSERT_NO_FATAL_FAILURE(perform_request(proxy, create_request("hosts-style-unspec-6.com", LDNS_RR_TYPE_AAAA, LDNS_RD), res));
+    ASSERT_NO_FATAL_FAILURE(
+            perform_request(proxy, create_request("hosts-style-unspec-6.com", LDNS_RR_TYPE_AAAA, LDNS_RD), res));
     ASSERT_EQ(LDNS_RCODE_NOERROR, ldns_pkt_get_rcode(res.get()));
     ASSERT_STREQ("43::21", make_rr_answer_string(res.get()).get());
 
     // Check loopback is equivalent to unspec
-    ASSERT_NO_FATAL_FAILURE(perform_request(proxy, create_request("hosts-style-loopback.com", LDNS_RR_TYPE_A, LDNS_RD), res));
+    ASSERT_NO_FATAL_FAILURE(
+            perform_request(proxy, create_request("hosts-style-loopback.com", LDNS_RR_TYPE_A, LDNS_RD), res));
     ASSERT_EQ(LDNS_RCODE_NOERROR, ldns_pkt_get_rcode(res.get()));
     ASSERT_STREQ("4.3.2.1", make_rr_answer_string(res.get()).get());
 
     // Check loopback is equivalent to unspec for IPv6
-    ASSERT_NO_FATAL_FAILURE(perform_request(proxy, create_request("hosts-style-loopback-6.com", LDNS_RR_TYPE_AAAA, LDNS_RD), res));
+    ASSERT_NO_FATAL_FAILURE(
+            perform_request(proxy, create_request("hosts-style-loopback-6.com", LDNS_RR_TYPE_AAAA, LDNS_RD), res));
     ASSERT_EQ(LDNS_RCODE_NOERROR, ldns_pkt_get_rcode(res.get()));
     ASSERT_STREQ("43::21", make_rr_answer_string(res.get()).get());
 
     // Check custom (from rule!) IP works
-    ASSERT_NO_FATAL_FAILURE(perform_request(proxy, create_request("hosts-style-custom.com", LDNS_RR_TYPE_A, LDNS_RD), res));
+    ASSERT_NO_FATAL_FAILURE(
+            perform_request(proxy, create_request("hosts-style-custom.com", LDNS_RR_TYPE_A, LDNS_RD), res));
     ASSERT_EQ(LDNS_RCODE_NOERROR, ldns_pkt_get_rcode(res.get()));
     ASSERT_STREQ("1.2.3.4", make_rr_answer_string(res.get()).get());
 
     // Check custom (from rule!) IP works for IPv6
-    ASSERT_NO_FATAL_FAILURE(perform_request(proxy, create_request("hosts-style-custom-6.com", LDNS_RR_TYPE_AAAA, LDNS_RD), res));
+    ASSERT_NO_FATAL_FAILURE(
+            perform_request(proxy, create_request("hosts-style-custom-6.com", LDNS_RR_TYPE_AAAA, LDNS_RD), res));
     ASSERT_EQ(LDNS_RCODE_NOERROR, ldns_pkt_get_rcode(res.get()));
     ASSERT_STREQ("12::34", make_rr_answer_string(res.get()).get());
 
     // Check custom (from rule!) IP works
-    ASSERT_NO_FATAL_FAILURE(perform_request(proxy, create_request("hosts-style-4-and-6.com", LDNS_RR_TYPE_A, LDNS_RD), res));
+    ASSERT_NO_FATAL_FAILURE(
+            perform_request(proxy, create_request("hosts-style-4-and-6.com", LDNS_RR_TYPE_A, LDNS_RD), res));
     ASSERT_EQ(LDNS_RCODE_NOERROR, ldns_pkt_get_rcode(res.get()));
     ASSERT_STREQ("4.5.6.7", make_rr_answer_string(res.get()).get());
 
     // Check custom (from rule!) IP works for IPv6
-    ASSERT_NO_FATAL_FAILURE(perform_request(proxy, create_request("hosts-style-4-and-6.com", LDNS_RR_TYPE_AAAA, LDNS_RD), res));
+    ASSERT_NO_FATAL_FAILURE(
+            perform_request(proxy, create_request("hosts-style-4-and-6.com", LDNS_RR_TYPE_AAAA, LDNS_RD), res));
     ASSERT_EQ(LDNS_RCODE_NOERROR, ldns_pkt_get_rcode(res.get()));
     ASSERT_STREQ("45::67", make_rr_answer_string(res.get()).get());
 }
 
-TEST_F(dnsproxy_test, blocking_mode_custom_address_ipv4_only) {
-    ag::dnsproxy_settings settings = make_dnsproxy_settings();
+TEST_F(DnsProxyTest, BlockingModeCustomAddressIpv4Only) {
+    DnsProxySettings settings = make_dnsproxy_settings();
     settings.filter_params = {{{1, "blocking_modes_test_filter.txt"}}};
-    settings.adblock_rules_blocking_mode = ag::dnsproxy_blocking_mode::ADDRESS;
-    settings.hosts_rules_blocking_mode = ag::dnsproxy_blocking_mode::ADDRESS;
+    settings.adblock_rules_blocking_mode = DnsProxyBlockingMode::ADDRESS;
+    settings.hosts_rules_blocking_mode = DnsProxyBlockingMode::ADDRESS;
     settings.custom_blocking_ipv4 = "4.3.2.1";
 
     auto [ret, err] = proxy.init(settings, {});
@@ -747,7 +799,8 @@ TEST_F(dnsproxy_test, blocking_mode_custom_address_ipv4_only) {
     ag::ldns_pkt_ptr res;
 
     // Check weird qtype
-    ASSERT_NO_FATAL_FAILURE(perform_request(proxy, create_request("privacy-policy.truste.com", (ldns_rr_type) 65, LDNS_RD), res));
+    ASSERT_NO_FATAL_FAILURE(
+            perform_request(proxy, create_request("privacy-policy.truste.com", (ldns_rr_type) 65, LDNS_RD), res));
     ASSERT_EQ(LDNS_RCODE_NOERROR, ldns_pkt_get_rcode(res.get()));
     ASSERT_EQ(0, ldns_pkt_ancount(res.get()));
     ASSERT_EQ(1, ldns_pkt_nscount(res.get()));
@@ -761,52 +814,60 @@ TEST_F(dnsproxy_test, blocking_mode_custom_address_ipv4_only) {
     ASSERT_EQ(0, ldns_pkt_ancount(res.get()));
     ASSERT_EQ(1, ldns_pkt_nscount(res.get()));
 
-    ASSERT_NO_FATAL_FAILURE(perform_request(proxy, create_request("hosts-style-unspec.com", LDNS_RR_TYPE_A, LDNS_RD), res));
+    ASSERT_NO_FATAL_FAILURE(
+            perform_request(proxy, create_request("hosts-style-unspec.com", LDNS_RR_TYPE_A, LDNS_RD), res));
     ASSERT_EQ(LDNS_RCODE_NOERROR, ldns_pkt_get_rcode(res.get()));
     ASSERT_STREQ("4.3.2.1", make_rr_answer_string(res.get()).get());
 
-    ASSERT_NO_FATAL_FAILURE(perform_request(proxy, create_request("hosts-style-unspec-6.com", LDNS_RR_TYPE_AAAA, LDNS_RD), res));
+    ASSERT_NO_FATAL_FAILURE(
+            perform_request(proxy, create_request("hosts-style-unspec-6.com", LDNS_RR_TYPE_AAAA, LDNS_RD), res));
     ASSERT_EQ(LDNS_RCODE_NOERROR, ldns_pkt_get_rcode(res.get()));
     ASSERT_EQ(0, ldns_pkt_ancount(res.get()));
     ASSERT_EQ(1, ldns_pkt_nscount(res.get()));
 
     // Check loopback is equivalent to unspec
-    ASSERT_NO_FATAL_FAILURE(perform_request(proxy, create_request("hosts-style-loopback.com", LDNS_RR_TYPE_A, LDNS_RD), res));
+    ASSERT_NO_FATAL_FAILURE(
+            perform_request(proxy, create_request("hosts-style-loopback.com", LDNS_RR_TYPE_A, LDNS_RD), res));
     ASSERT_EQ(LDNS_RCODE_NOERROR, ldns_pkt_get_rcode(res.get()));
     ASSERT_STREQ("4.3.2.1", make_rr_answer_string(res.get()).get());
 
     // Check loopback is equivalent to unspec for IPv6
-    ASSERT_NO_FATAL_FAILURE(perform_request(proxy, create_request("hosts-style-loopback-6.com", LDNS_RR_TYPE_AAAA, LDNS_RD), res));
+    ASSERT_NO_FATAL_FAILURE(
+            perform_request(proxy, create_request("hosts-style-loopback-6.com", LDNS_RR_TYPE_AAAA, LDNS_RD), res));
     ASSERT_EQ(LDNS_RCODE_NOERROR, ldns_pkt_get_rcode(res.get()));
     ASSERT_EQ(0, ldns_pkt_ancount(res.get()));
     ASSERT_EQ(1, ldns_pkt_nscount(res.get()));
 
     // Check custom (from rule!) IP works
-    ASSERT_NO_FATAL_FAILURE(perform_request(proxy, create_request("hosts-style-custom.com", LDNS_RR_TYPE_A, LDNS_RD), res));
+    ASSERT_NO_FATAL_FAILURE(
+            perform_request(proxy, create_request("hosts-style-custom.com", LDNS_RR_TYPE_A, LDNS_RD), res));
     ASSERT_EQ(LDNS_RCODE_NOERROR, ldns_pkt_get_rcode(res.get()));
     ASSERT_STREQ("1.2.3.4", make_rr_answer_string(res.get()).get());
 
     // Check custom (from rule!) IP works for IPv6
-    ASSERT_NO_FATAL_FAILURE(perform_request(proxy, create_request("hosts-style-custom-6.com", LDNS_RR_TYPE_AAAA, LDNS_RD), res));
+    ASSERT_NO_FATAL_FAILURE(
+            perform_request(proxy, create_request("hosts-style-custom-6.com", LDNS_RR_TYPE_AAAA, LDNS_RD), res));
     ASSERT_EQ(LDNS_RCODE_NOERROR, ldns_pkt_get_rcode(res.get()));
     ASSERT_STREQ("12::34", make_rr_answer_string(res.get()).get());
 
     // Check custom (from rule!) IP works
-    ASSERT_NO_FATAL_FAILURE(perform_request(proxy, create_request("hosts-style-4-and-6.com", LDNS_RR_TYPE_A, LDNS_RD), res));
+    ASSERT_NO_FATAL_FAILURE(
+            perform_request(proxy, create_request("hosts-style-4-and-6.com", LDNS_RR_TYPE_A, LDNS_RD), res));
     ASSERT_EQ(LDNS_RCODE_NOERROR, ldns_pkt_get_rcode(res.get()));
     ASSERT_STREQ("4.5.6.7", make_rr_answer_string(res.get()).get());
 
     // Check custom (from rule!) IP works for IPv6
-    ASSERT_NO_FATAL_FAILURE(perform_request(proxy, create_request("hosts-style-4-and-6.com", LDNS_RR_TYPE_AAAA, LDNS_RD), res));
+    ASSERT_NO_FATAL_FAILURE(
+            perform_request(proxy, create_request("hosts-style-4-and-6.com", LDNS_RR_TYPE_AAAA, LDNS_RD), res));
     ASSERT_EQ(LDNS_RCODE_NOERROR, ldns_pkt_get_rcode(res.get()));
     ASSERT_STREQ("45::67", make_rr_answer_string(res.get()).get());
 }
 
-TEST_F(dnsproxy_test, blocking_mode_custom_address_ipv6_only) {
-    ag::dnsproxy_settings settings = make_dnsproxy_settings();
+TEST_F(DnsProxyTest, BlockingModeCustomAddressIpv6Only) {
+    DnsProxySettings settings = make_dnsproxy_settings();
     settings.filter_params = {{{1, "blocking_modes_test_filter.txt"}}};
-    settings.adblock_rules_blocking_mode = ag::dnsproxy_blocking_mode::ADDRESS;
-    settings.hosts_rules_blocking_mode = ag::dnsproxy_blocking_mode::ADDRESS;
+    settings.adblock_rules_blocking_mode = DnsProxyBlockingMode::ADDRESS;
+    settings.hosts_rules_blocking_mode = DnsProxyBlockingMode::ADDRESS;
     settings.custom_blocking_ipv6 = "43::21";
 
     auto [ret, err] = proxy.init(settings, {});
@@ -815,7 +876,8 @@ TEST_F(dnsproxy_test, blocking_mode_custom_address_ipv6_only) {
     ag::ldns_pkt_ptr res;
 
     // Check weird qtype
-    ASSERT_NO_FATAL_FAILURE(perform_request(proxy, create_request("privacy-policy.truste.com", (ldns_rr_type) 65, LDNS_RD), res));
+    ASSERT_NO_FATAL_FAILURE(
+            perform_request(proxy, create_request("privacy-policy.truste.com", (ldns_rr_type) 65, LDNS_RD), res));
     ASSERT_EQ(LDNS_RCODE_NOERROR, ldns_pkt_get_rcode(res.get()));
     ASSERT_EQ(0, ldns_pkt_ancount(res.get()));
     ASSERT_EQ(1, ldns_pkt_nscount(res.get()));
@@ -829,82 +891,88 @@ TEST_F(dnsproxy_test, blocking_mode_custom_address_ipv6_only) {
     ASSERT_EQ(LDNS_RCODE_NOERROR, ldns_pkt_get_rcode(res.get()));
     ASSERT_STREQ("43::21", make_rr_answer_string(res.get()).get());
 
-    ASSERT_NO_FATAL_FAILURE(perform_request(proxy, create_request("hosts-style-unspec.com", LDNS_RR_TYPE_A, LDNS_RD), res));
+    ASSERT_NO_FATAL_FAILURE(
+            perform_request(proxy, create_request("hosts-style-unspec.com", LDNS_RR_TYPE_A, LDNS_RD), res));
     ASSERT_EQ(LDNS_RCODE_NOERROR, ldns_pkt_get_rcode(res.get()));
     ASSERT_EQ(0, ldns_pkt_ancount(res.get()));
     ASSERT_EQ(1, ldns_pkt_nscount(res.get()));
 
-    ASSERT_NO_FATAL_FAILURE(perform_request(proxy, create_request("hosts-style-unspec-6.com", LDNS_RR_TYPE_AAAA, LDNS_RD), res));
+    ASSERT_NO_FATAL_FAILURE(
+            perform_request(proxy, create_request("hosts-style-unspec-6.com", LDNS_RR_TYPE_AAAA, LDNS_RD), res));
     ASSERT_EQ(LDNS_RCODE_NOERROR, ldns_pkt_get_rcode(res.get()));
     ASSERT_STREQ("43::21", make_rr_answer_string(res.get()).get());
 
     // Check loopback is equivalent to unspec
-    ASSERT_NO_FATAL_FAILURE(perform_request(proxy, create_request("hosts-style-loopback.com", LDNS_RR_TYPE_A, LDNS_RD), res));
+    ASSERT_NO_FATAL_FAILURE(
+            perform_request(proxy, create_request("hosts-style-loopback.com", LDNS_RR_TYPE_A, LDNS_RD), res));
     ASSERT_EQ(LDNS_RCODE_NOERROR, ldns_pkt_get_rcode(res.get()));
     ASSERT_EQ(0, ldns_pkt_ancount(res.get()));
     ASSERT_EQ(1, ldns_pkt_nscount(res.get()));
 
     // Check loopback is equivalent to unspec for IPv6
-    ASSERT_NO_FATAL_FAILURE(perform_request(proxy, create_request("hosts-style-loopback-6.com", LDNS_RR_TYPE_AAAA, LDNS_RD), res));
+    ASSERT_NO_FATAL_FAILURE(
+            perform_request(proxy, create_request("hosts-style-loopback-6.com", LDNS_RR_TYPE_AAAA, LDNS_RD), res));
     ASSERT_EQ(LDNS_RCODE_NOERROR, ldns_pkt_get_rcode(res.get()));
     ASSERT_STREQ("43::21", make_rr_answer_string(res.get()).get());
 
     // Check custom (from rule!) IP works
-    ASSERT_NO_FATAL_FAILURE(perform_request(proxy, create_request("hosts-style-custom.com", LDNS_RR_TYPE_A, LDNS_RD), res));
+    ASSERT_NO_FATAL_FAILURE(
+            perform_request(proxy, create_request("hosts-style-custom.com", LDNS_RR_TYPE_A, LDNS_RD), res));
     ASSERT_EQ(LDNS_RCODE_NOERROR, ldns_pkt_get_rcode(res.get()));
     ASSERT_STREQ("1.2.3.4", make_rr_answer_string(res.get()).get());
 
     // Check custom (from rule!) IP works for IPv6
-    ASSERT_NO_FATAL_FAILURE(perform_request(proxy, create_request("hosts-style-custom-6.com", LDNS_RR_TYPE_AAAA, LDNS_RD), res));
+    ASSERT_NO_FATAL_FAILURE(
+            perform_request(proxy, create_request("hosts-style-custom-6.com", LDNS_RR_TYPE_AAAA, LDNS_RD), res));
     ASSERT_EQ(LDNS_RCODE_NOERROR, ldns_pkt_get_rcode(res.get()));
     ASSERT_STREQ("12::34", make_rr_answer_string(res.get()).get());
 
     // Check custom (from rule!) IP works
-    ASSERT_NO_FATAL_FAILURE(perform_request(proxy, create_request("hosts-style-4-and-6.com", LDNS_RR_TYPE_A, LDNS_RD), res));
+    ASSERT_NO_FATAL_FAILURE(
+            perform_request(proxy, create_request("hosts-style-4-and-6.com", LDNS_RR_TYPE_A, LDNS_RD), res));
     ASSERT_EQ(LDNS_RCODE_NOERROR, ldns_pkt_get_rcode(res.get()));
     ASSERT_STREQ("4.5.6.7", make_rr_answer_string(res.get()).get());
 
     // Check custom (from rule!) IP works for IPv6
-    ASSERT_NO_FATAL_FAILURE(perform_request(proxy, create_request("hosts-style-4-and-6.com", LDNS_RR_TYPE_AAAA, LDNS_RD), res));
+    ASSERT_NO_FATAL_FAILURE(
+            perform_request(proxy, create_request("hosts-style-4-and-6.com", LDNS_RR_TYPE_AAAA, LDNS_RD), res));
     ASSERT_EQ(LDNS_RCODE_NOERROR, ldns_pkt_get_rcode(res.get()));
     ASSERT_STREQ("45::67", make_rr_answer_string(res.get()).get());
 }
 
-TEST_F(dnsproxy_test, custom_blocking_address_validation_1) {
-    ag::dnsproxy_settings settings = make_dnsproxy_settings();
+TEST_F(DnsProxyTest, CustomBlockingAddressValidation1) {
+    DnsProxySettings settings = make_dnsproxy_settings();
     auto [ret, err] = proxy.init(settings, {});
     ASSERT_TRUE(ret) << *err;
 }
 
-TEST_F(dnsproxy_test, custom_blocking_address_validation_2) {
-    ag::dnsproxy_settings settings = make_dnsproxy_settings();
+TEST_F(DnsProxyTest, CustomBlockingAddressValidation2) {
+    DnsProxySettings settings = make_dnsproxy_settings();
     settings.custom_blocking_ipv4 = "abracadabra";
     settings.custom_blocking_ipv6 = "::1";
     auto [ret, _] = proxy.init(settings, {});
     ASSERT_FALSE(ret);
 }
 
-TEST_F(dnsproxy_test, custom_blocking_address_validation_3) {
-    ag::dnsproxy_settings settings = make_dnsproxy_settings();
+TEST_F(DnsProxyTest, CustomBlockingAddressValidation3) {
+    DnsProxySettings settings = make_dnsproxy_settings();
     settings.custom_blocking_ipv4 = "127.0.0.1";
     settings.custom_blocking_ipv6 = "abracadabra";
     auto [ret, _] = proxy.init(settings, {});
     ASSERT_FALSE(ret);
 }
 
-TEST_F(dnsproxy_test, correct_filter_ids_in_event) {
-    ag::dnsproxy_settings settings = make_dnsproxy_settings();
+TEST_F(DnsProxyTest, CorrectFilterIdsInEvent) {
+    DnsProxySettings settings = make_dnsproxy_settings();
     settings.filter_params = {{
-        {15, "cname_blocking_test_filter.txt"},
-        {-3, "blocking_modes_test_filter.txt"},
+            {15, "cname_blocking_test_filter.txt"},
+            {-3, "blocking_modes_test_filter.txt"},
     }};
 
-    ag::dns_request_processed_event last_event{};
-    ag::dnsproxy_events events{
-        .on_request_processed = [&last_event](const ag::dns_request_processed_event &event) {
-            last_event = event;
-        }
-    };
+    DnsRequestProcessedEvent last_event{};
+    DnsProxyEvents events{.on_request_processed = [&last_event](const DnsRequestProcessedEvent &event) {
+        last_event = event;
+    }};
 
     auto [ret, err] = proxy.init(settings, events);
     ASSERT_TRUE(ret) << *err;
@@ -920,18 +988,16 @@ TEST_F(dnsproxy_test, correct_filter_ids_in_event) {
     ASSERT_EQ(-3, last_event.filter_list_ids[0]);
 }
 
-TEST_F(dnsproxy_test, whitelisting) {
-    ag::dnsproxy_settings settings = make_dnsproxy_settings();
+TEST_F(DnsProxyTest, Whitelisting) {
+    DnsProxySettings settings = make_dnsproxy_settings();
     settings.filter_params = {{
-        {15, "whitelist_test_filter.txt"},
+            {15, "whitelist_test_filter.txt"},
     }};
 
-    ag::dns_request_processed_event last_event{};
-    ag::dnsproxy_events events{
-        .on_request_processed = [&last_event](const ag::dns_request_processed_event &event) {
-            last_event = event;
-        }
-    };
+    DnsRequestProcessedEvent last_event{};
+    DnsProxyEvents events{.on_request_processed = [&last_event](const DnsRequestProcessedEvent &event) {
+        last_event = event;
+    }};
 
     auto [ret, err] = proxy.init(settings, events);
     ASSERT_TRUE(ret) << *err;
@@ -960,13 +1026,13 @@ TEST_F(dnsproxy_test, whitelisting) {
     ASSERT_TRUE(last_event.whitelist);
 }
 
-TEST_F(dnsproxy_test, fallbacks_ignore_proxy_socks) {
-    ag::dnsproxy_settings settings = make_dnsproxy_settings();
+TEST_F(DnsProxyTest, FallbacksIgnoreProxySocks) {
+    DnsProxySettings settings = make_dnsproxy_settings();
     settings.fallbacks = settings.upstreams;
     // some nonexistent proxy
-    settings.outbound_proxy = { { ag::outbound_proxy_protocol::SOCKS5_UDP, "255.255.255.255", 1 } };
+    settings.outbound_proxy = {{OutboundProxyProtocol::SOCKS5_UDP, "255.255.255.255", 1}};
 
-    ag::dns_request_processed_event last_event{};
+    DnsRequestProcessedEvent last_event{};
 
     auto [ret, err] = proxy.init(settings, {});
     ASSERT_TRUE(ret) << *err;
@@ -976,14 +1042,14 @@ TEST_F(dnsproxy_test, fallbacks_ignore_proxy_socks) {
     ASSERT_EQ(LDNS_RCODE_NOERROR, ldns_pkt_get_rcode(res.get()));
 }
 
-TEST_F(dnsproxy_test, fallbacks_ignore_proxy_http) {
-    ag::dnsproxy_settings settings = make_dnsproxy_settings();
-    settings.upstreams = {{ .address = "tcp://94.140.14.140" }};
-    settings.fallbacks = {{ .address = "tcp://94.140.14.140" }};
+TEST_F(DnsProxyTest, fallbacks_ignore_proxy_http) {
+    DnsProxySettings settings = make_dnsproxy_settings();
+    settings.upstreams = {{.address = "tcp://94.140.14.140"}};
+    settings.fallbacks = {{.address = "tcp://94.140.14.140"}};
     // some nonexistent proxy
-    settings.outbound_proxy = { { ag::outbound_proxy_protocol::HTTP_CONNECT, "255.255.255.255", 1 } };
+    settings.outbound_proxy = {{OutboundProxyProtocol::HTTP_CONNECT, "255.255.255.255", 1}};
 
-    ag::dns_request_processed_event last_event{};
+    DnsRequestProcessedEvent last_event{};
 
     auto [ret, err] = proxy.init(settings, {});
     ASSERT_TRUE(ret) << *err;
@@ -993,40 +1059,47 @@ TEST_F(dnsproxy_test, fallbacks_ignore_proxy_http) {
     ASSERT_EQ(LDNS_RCODE_NOERROR, ldns_pkt_get_rcode(res.get()));
 }
 
-TEST_F(dnsproxy_test, bad_filter_file_does_not_crash) {
-    ag::dnsproxy_settings settings = make_dnsproxy_settings();
-    settings.filter_params = {{ {111, "bad_test_filter.txt"}, }};
+TEST_F(DnsProxyTest, BadFilterFileDoesNotCrash) {
+    DnsProxySettings settings = make_dnsproxy_settings();
+    settings.filter_params = {{
+            {111, "bad_test_filter.txt"},
+    }};
     auto [ret, err] = proxy.init(settings, {});
     ASSERT_TRUE(ret) << *err;
 }
 
-TEST_F(dnsproxy_test, rules_load_from_memory) {
-    ag::dnsproxy_settings settings = make_dnsproxy_settings();
+TEST_F(DnsProxyTest, RulesLoadFromMemory) {
+    DnsProxySettings settings = make_dnsproxy_settings();
 
     std::string filter_data;
     ag::file::Handle file_handle = ag::file::open("bad_test_filter.txt", ag::file::RDONLY);
-    ag::file::for_each_line(file_handle, [](uint32_t, std::string_view line, void *arg) -> bool {
-        auto &s = *(std::string *) arg;
-        s += line;
-        s += "\r\n";
-        return true;
-    }, &filter_data);
+    ag::file::for_each_line(
+            file_handle,
+            [](uint32_t, std::string_view line, void *arg) -> bool {
+                auto &s = *(std::string *) arg;
+                s += line;
+                s += "\r\n";
+                return true;
+            },
+            &filter_data);
 
-    settings.filter_params = {{ {42, filter_data, true}, }};
+    settings.filter_params = {{
+            {42, filter_data, true},
+    }};
     auto [ret, err] = proxy.init(settings, {});
     ASSERT_TRUE(ret) << *err;
 }
 
-TEST_F(dnsproxy_test, ip_blocking_regress) {
-    ag::dnsproxy_settings settings = make_dnsproxy_settings();
-    settings.filter_params = {{ {15, "crash_regress_test_filter.txt"}, }};
+TEST_F(DnsProxyTest, IpBlockingRegress) {
+    DnsProxySettings settings = make_dnsproxy_settings();
+    settings.filter_params = {{
+            {15, "crash_regress_test_filter.txt"},
+    }};
 
-    ag::dns_request_processed_event last_event{};
-    ag::dnsproxy_events events{
-            .on_request_processed = [&last_event](const ag::dns_request_processed_event &event) {
-                last_event = event;
-            }
-    };
+    DnsRequestProcessedEvent last_event{};
+    DnsProxyEvents events{.on_request_processed = [&last_event](const DnsRequestProcessedEvent &event) {
+        last_event = event;
+    }};
 
     auto [ret, err] = proxy.init(settings, events);
     ASSERT_TRUE(ret) << *err;
@@ -1045,10 +1118,12 @@ TEST_F(dnsproxy_test, ip_blocking_regress) {
     ASSERT_FALSE(last_event.whitelist);
 }
 
-TEST_F(dnsproxy_test, warnings) {
-    ag::dnsproxy_settings settings = make_dnsproxy_settings();
+TEST_F(DnsProxyTest, Warnings) {
+    DnsProxySettings settings = make_dnsproxy_settings();
 
-    settings.filter_params = {{ {15, "blocking_modes_test_filter.txt"}, }};
+    settings.filter_params = {{
+            {15, "blocking_modes_test_filter.txt"},
+    }};
     {
         auto [ret, err_or_warn] = proxy.init(settings, {});
         ASSERT_TRUE(ret) << *err_or_warn;
@@ -1064,17 +1139,15 @@ TEST_F(dnsproxy_test, warnings) {
     }
 }
 
-TEST_F(dnsproxy_test, optimistic_cache) {
-    ag::dnsproxy_settings settings = make_dnsproxy_settings();
+TEST_F(DnsProxyTest, OptimisticCache) {
+    DnsProxySettings settings = make_dnsproxy_settings();
     settings.optimistic_cache = true;
     settings.dns_cache_size = 100;
 
-    ag::dns_request_processed_event last_event{};
-    ag::dnsproxy_events events{
-            .on_request_processed = [&last_event](const ag::dns_request_processed_event &event) {
-                last_event = event;
-            }
-    };
+    DnsRequestProcessedEvent last_event{};
+    DnsProxyEvents events{.on_request_processed = [&last_event](const DnsRequestProcessedEvent &event) {
+        last_event = event;
+    }};
 
     auto [ret, err] = proxy.init(settings, events);
     ASSERT_TRUE(ret) << *err;
@@ -1090,7 +1163,7 @@ TEST_F(dnsproxy_test, optimistic_cache) {
         max_ttl = std::max(max_ttl, ldns_rr_ttl(ldns_rr_list_rr(ldns_pkt_answer(res.get()), i)));
     }
 
-    ag::SteadyClock::add_time_shift(std::chrono::seconds(2 * max_ttl));
+    SteadyClock::add_time_shift(Secs(2 * max_ttl));
 
     ASSERT_NO_FATAL_FAILURE(perform_request(proxy, create_request("example.org", LDNS_RR_TYPE_A, LDNS_RD), res));
     ASSERT_TRUE(last_event.cache_hit);
@@ -1101,20 +1174,18 @@ TEST_F(dnsproxy_test, optimistic_cache) {
     }
 }
 
-TEST_F(dnsproxy_test, dnssec_simple_test) {
-    ag::dnsproxy_settings settings = make_dnsproxy_settings();
+TEST_F(DnsProxyTest, DnssecSimpleTest) {
+    DnsProxySettings settings = make_dnsproxy_settings();
     settings.enable_dnssec_ok = true;
 
-    std::vector<std::string> dnssecSupport = { "cloudflare.com", "example.org" };
-    std::vector<std::string> dnssecNotSupport = { "adguard.com", "google.com" };
-    ldns_enum_rr_type arrOfTypes[] = { LDNS_RR_TYPE_AAAA, LDNS_RR_TYPE_A, LDNS_RR_TYPE_TXT };
+    std::vector<std::string> dnssecSupport = {"cloudflare.com", "example.org"};
+    std::vector<std::string> dnssecNotSupport = {"adguard.com", "google.com"};
+    ldns_enum_rr_type arrOfTypes[] = {LDNS_RR_TYPE_AAAA, LDNS_RR_TYPE_A, LDNS_RR_TYPE_TXT};
 
-    ag::dns_request_processed_event last_event{};
-    ag::dnsproxy_events events{
-            .on_request_processed = [&last_event](const ag::dns_request_processed_event &event) {
-                last_event = event;
-            }
-    };
+    DnsRequestProcessedEvent last_event{};
+    DnsProxyEvents events{.on_request_processed = [&last_event](const DnsRequestProcessedEvent &event) {
+        last_event = event;
+    }};
 
     auto [ret, err] = proxy.init(settings, events);
     ASSERT_TRUE(ret) << *err;
@@ -1150,16 +1221,14 @@ TEST_F(dnsproxy_test, dnssec_simple_test) {
     }
 }
 
-TEST_F(dnsproxy_test, dnssec_request_with_do_bit) {
-    ag::dnsproxy_settings settings = make_dnsproxy_settings();
+TEST_F(DnsProxyTest, DnssecRequestWithDOBit) {
+    DnsProxySettings settings = make_dnsproxy_settings();
     settings.enable_dnssec_ok = true;
 
-    ag::dns_request_processed_event last_event{};
-    ag::dnsproxy_events events{
-            .on_request_processed = [&last_event](const ag::dns_request_processed_event &event) {
-                last_event = event;
-            }
-    };
+    DnsRequestProcessedEvent last_event{};
+    DnsProxyEvents events{.on_request_processed = [&last_event](const DnsRequestProcessedEvent &event) {
+        last_event = event;
+    }};
 
     auto [ret, err] = proxy.init(settings, events);
     ASSERT_TRUE(ret) << *err;
@@ -1179,16 +1248,14 @@ TEST_F(dnsproxy_test, dnssec_request_with_do_bit) {
     ldns_rr_list_deep_free(ptr);
 }
 
-TEST_F(dnsproxy_test, dnssec_ds_request) {
-    ag::dnsproxy_settings settings = make_dnsproxy_settings();
+TEST_F(DnsProxyTest, DnssecDSRequest) {
+    DnsProxySettings settings = make_dnsproxy_settings();
     settings.enable_dnssec_ok = true;
 
-    ag::dns_request_processed_event last_event{};
-    ag::dnsproxy_events events{
-            .on_request_processed = [&last_event](const ag::dns_request_processed_event &event) {
-                last_event = event;
-            }
-    };
+    DnsRequestProcessedEvent last_event{};
+    DnsProxyEvents events{.on_request_processed = [&last_event](const DnsRequestProcessedEvent &event) {
+        last_event = event;
+    }};
 
     auto [ret, err] = proxy.init(settings, events);
     ASSERT_TRUE(ret) << *err;
@@ -1209,18 +1276,16 @@ TEST_F(dnsproxy_test, dnssec_ds_request) {
     ldns_rr_list_deep_free(ptr);
 }
 
-TEST_F(dnsproxy_test, dnssec_the_same_qtype_request) {
-    ag::dnsproxy_settings settings = make_dnsproxy_settings();
+TEST_F(DnsProxyTest, DnssecTheSameQtypeRequest) {
+    DnsProxySettings settings = make_dnsproxy_settings();
     // dns.adguard.com answers SERVFAIL
-    settings.upstreams = {{ .address = "1.1.1.1" }};
+    settings.upstreams = {{.address = "1.1.1.1"}};
     settings.enable_dnssec_ok = true;
 
-    ag::dns_request_processed_event last_event{};
-    ag::dnsproxy_events events{
-            .on_request_processed = [&last_event](const ag::dns_request_processed_event &event) {
-                last_event = event;
-            }
-    };
+    DnsRequestProcessedEvent last_event{};
+    DnsProxyEvents events{.on_request_processed = [&last_event](const DnsRequestProcessedEvent &event) {
+        last_event = event;
+    }};
 
     auto [ret, err] = proxy.init(settings, events);
     ASSERT_TRUE(ret) << *err;
@@ -1236,23 +1301,22 @@ TEST_F(dnsproxy_test, dnssec_the_same_qtype_request) {
     ldns_rr_list_deep_free(ptr);
 }
 
-TEST_F(dnsproxy_test, dnssec_regress_does_not_scrub_cname) {
-    ag::dnsproxy_settings settings = make_dnsproxy_settings();
-    settings.upstreams = {{ .address = "1.1.1.1" }};
+TEST_F(DnsProxyTest, DnssecRegressDoesNotScrubCname) {
+    DnsProxySettings settings = make_dnsproxy_settings();
+    settings.upstreams = {{.address = "1.1.1.1"}};
     settings.enable_dnssec_ok = true;
 
-    ag::dns_request_processed_event last_event{};
-    ag::dnsproxy_events events{
-            .on_request_processed = [&last_event](const ag::dns_request_processed_event &event) {
-                last_event = event;
-            }
-    };
+    DnsRequestProcessedEvent last_event{};
+    DnsProxyEvents events{.on_request_processed = [&last_event](const DnsRequestProcessedEvent &event) {
+        last_event = event;
+    }};
 
     auto [ret, err] = proxy.init(settings, {});
     ASSERT_TRUE(ret) << *err;
 
     ag::ldns_pkt_ptr response;
-    ASSERT_NO_FATAL_FAILURE(perform_request(proxy, create_request(CNAME_BLOCKING_HOST, LDNS_RR_TYPE_A, LDNS_RD), response));
+    ASSERT_NO_FATAL_FAILURE(
+            perform_request(proxy, create_request(CNAME_BLOCKING_HOST, LDNS_RR_TYPE_A, LDNS_RD), response));
     ASSERT_GT(ldns_pkt_ancount(response.get()), 0);
     ASSERT_EQ(ldns_pkt_get_rcode(response.get()), LDNS_RCODE_NOERROR);
 
@@ -1267,31 +1331,25 @@ TEST_F(dnsproxy_test, dnssec_regress_does_not_scrub_cname) {
     ldns_rr_list_deep_free(rrs);
 }
 
-TEST_F(dnsproxy_test, dnssec_autority_section) {
-    ag::dnsproxy_settings settings = make_dnsproxy_settings();
+TEST_F(DnsProxyTest, DnssecAuthoritySection) {
+    DnsProxySettings settings = make_dnsproxy_settings();
     settings.enable_dnssec_ok = true;
 
-    ag::dns_request_processed_event last_event{};
-    ag::dnsproxy_events events{
-            .on_request_processed = [&last_event](const ag::dns_request_processed_event &event) {
-                last_event = event;
-            }
-    };
+    DnsRequestProcessedEvent last_event{};
+    DnsProxyEvents events{.on_request_processed = [&last_event](const DnsRequestProcessedEvent &event) {
+        last_event = event;
+    }};
 
-    static const ldns_enum_rr_type SPECIAL_TYPES_DNSSEC_LOG_LOGIC[] = {
-            LDNS_RR_TYPE_DS,
-            LDNS_RR_TYPE_DNSKEY,
-            LDNS_RR_TYPE_NSEC,
-            LDNS_RR_TYPE_NSEC3,
-            LDNS_RR_TYPE_RRSIG
-    };
+    static const ldns_enum_rr_type SPECIAL_TYPES_DNSSEC_LOG_LOGIC[]
+            = {LDNS_RR_TYPE_DS, LDNS_RR_TYPE_DNSKEY, LDNS_RR_TYPE_NSEC, LDNS_RR_TYPE_NSEC3, LDNS_RR_TYPE_RRSIG};
 
     auto [ret, err] = proxy.init(settings, events);
     ASSERT_TRUE(ret) << *err;
 
     for (auto cur : SPECIAL_TYPES_DNSSEC_LOG_LOGIC) {
         ag::ldns_pkt_ptr res;
-        ASSERT_NO_FATAL_FAILURE(perform_request(proxy, create_request("actuallythissitedoesnotexist.fuu", cur, LDNS_RD), res));
+        ASSERT_NO_FATAL_FAILURE(
+                perform_request(proxy, create_request("actuallythissitedoesnotexist.fuu", cur, LDNS_RD), res));
         ASSERT_EQ(LDNS_RCODE_NXDOMAIN, ldns_pkt_get_rcode(res.get()));
         auto ptr = ldns_pkt_rr_list_by_type(res.get(), LDNS_RR_TYPE_SIG, LDNS_SECTION_ANSWER);
         ASSERT_EQ(nullptr, ptr);
@@ -1304,49 +1362,49 @@ TEST_F(dnsproxy_test, dnssec_autority_section) {
     }
 }
 
-TEST_F(dnsproxy_test, fallback_filter_works_and_defaults_are_correct) {
+TEST_F(DnsProxyTest, FallbackFilterWorksAndDefaultsAreCorrect) {
     static constexpr int32_t UPSTREAM_ID = 42;
     static constexpr int32_t FALLBACK_ID = 4242;
-    ag::dnsproxy_settings settings = make_dnsproxy_settings();
+    DnsProxySettings settings = make_dnsproxy_settings();
     settings.upstreams = {{.address = "8.8.8.8", .id = UPSTREAM_ID}};
     settings.fallbacks = {{.address = "8.8.8.8", .id = FALLBACK_ID}};
-    ag::dns_request_processed_event last_event{};
-    ag::dnsproxy_events events{
-            .on_request_processed = [&last_event](const ag::dns_request_processed_event &event) {
-                last_event = event;
-            }
-    };
+    DnsRequestProcessedEvent last_event{};
+    DnsProxyEvents events{.on_request_processed = [&last_event](const DnsRequestProcessedEvent &event) {
+        last_event = event;
+    }};
     auto [ret, err] = proxy.init(settings, events);
     ASSERT_TRUE(ret) << *err;
-    for (const std::string &host : {"epdg.epc.aptg.com.tw",
-                                    "epdg.epc.att.net",
-                                    "epdg.mobileone.net.sg",
-                                    "primgw.vowifina.spcsdns.net",
-                                    "swu-loopback-epdg.qualcomm.com",
-                                    "vowifi.jio.com",
-                                    "weconnect.globe.com.ph",
-                                    "wlan.three.com.hk",
-                                    "wo.vzwwo.com",
-                                    "epdg.epc.mncXXX.mccYYY.pub.3gppnetwork.org",
-                                    "ss.epdg.epc.mncXXX.mccYYY.pub.3gppnetwork.org",
-                                    }) {
+    for (const std::string &host : {
+                 "epdg.epc.aptg.com.tw",
+                 "epdg.epc.att.net",
+                 "epdg.mobileone.net.sg",
+                 "primgw.vowifina.spcsdns.net",
+                 "swu-loopback-epdg.qualcomm.com",
+                 "vowifi.jio.com",
+                 "weconnect.globe.com.ph",
+                 "wlan.three.com.hk",
+                 "wo.vzwwo.com",
+                 "epdg.epc.mncXXX.mccYYY.pub.3gppnetwork.org",
+                 "ss.epdg.epc.mncXXX.mccYYY.pub.3gppnetwork.org",
+         }) {
         ag::ldns_pkt_ptr res;
         ASSERT_NO_FATAL_FAILURE(perform_request(proxy, create_request(host, LDNS_RR_TYPE_A, LDNS_RD), res));
         ASSERT_TRUE(last_event.upstream_id.has_value()) << last_event.error;
         ASSERT_EQ(FALLBACK_ID, *last_event.upstream_id) << last_event.domain;
     }
-    for (const std::string &host : {"a.epdg.epc.aptg.com.tw",
-                                    "b.epdg.epc.att.net",
-                                    "c.epdg.mobileone.net.sg",
-                                    "d.primgw.vowifina.spcsdns.net",
-                                    "e.swu-loopback-epdg.qualcomm.com",
-                                    "f.vowifi.jio.com",
-                                    "g.weconnect.globe.com.ph",
-                                    "h.wlan.three.com.hk",
-                                    "i.wo.vzwwo.com",
-                                    "pub.3gppnetwork.org",
-                                    "xyz.pub.3gppnetwork.org",
-                                    }) {
+    for (const std::string &host : {
+                 "a.epdg.epc.aptg.com.tw",
+                 "b.epdg.epc.att.net",
+                 "c.epdg.mobileone.net.sg",
+                 "d.primgw.vowifina.spcsdns.net",
+                 "e.swu-loopback-epdg.qualcomm.com",
+                 "f.vowifi.jio.com",
+                 "g.weconnect.globe.com.ph",
+                 "h.wlan.three.com.hk",
+                 "i.wo.vzwwo.com",
+                 "pub.3gppnetwork.org",
+                 "xyz.pub.3gppnetwork.org",
+         }) {
         ag::ldns_pkt_ptr res;
         ASSERT_NO_FATAL_FAILURE(perform_request(proxy, create_request(host, LDNS_RR_TYPE_A, LDNS_RD), res));
         ASSERT_TRUE(last_event.upstream_id.has_value()) << last_event.error;
@@ -1354,7 +1412,7 @@ TEST_F(dnsproxy_test, fallback_filter_works_and_defaults_are_correct) {
     }
 }
 
-// TEST_F(dnsproxy_test, fallback_domains_bad) {
+// TestF(DnsProxyTest, FallbackDomainsBad) {
 //     ag::dnsproxy_settings settings = make_dnsproxy_settings();
 //     for (const std::string &pattern : {"...",
 //                                        "*",
@@ -1369,15 +1427,16 @@ TEST_F(dnsproxy_test, fallback_filter_works_and_defaults_are_correct) {
 //     }
 // }
 
-TEST_F(dnsproxy_test, fallback_domains_good) {
-    ag::dnsproxy_settings settings = make_dnsproxy_settings();
-    for (const std::string &pattern : {"*.example.org",
-                                       "*exampl",
-                                       "exa*mp*l.com",
-                                       "mygateway",
-                                       "*.local",
-                                       "*.company.local",
-                                       }) {
+TEST_F(DnsProxyTest, FallbackDomainsGood) {
+    DnsProxySettings settings = make_dnsproxy_settings();
+    for (const std::string &pattern : {
+                 "*.example.org",
+                 "*exampl",
+                 "exa*mp*l.com",
+                 "mygateway",
+                 "*.local",
+                 "*.company.local",
+         }) {
         settings.fallback_domains = {pattern};
         auto [ret, err] = proxy.init(settings, {});
         ASSERT_TRUE(ret) << pattern;
@@ -1385,3 +1444,5 @@ TEST_F(dnsproxy_test, fallback_domains_good) {
         proxy.deinit();
     }
 }
+
+} // namespace ag::proxy::test

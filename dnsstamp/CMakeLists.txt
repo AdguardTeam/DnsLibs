@@ -12,8 +12,8 @@ if(NOT TARGET dnslibs_common)
 endif(NOT TARGET dnslibs_common)
 
 add_library(dnsstamp EXCLUDE_FROM_ALL
-        include/dns_stamp.h
-        src/dns_stamp.cpp)
+        include/dnsstamp/dns_stamp.h
+        dns_stamp.cpp)
 
 set_target_properties(dnsstamp PROPERTIES POSITION_INDEPENDENT_CODE ON)
 target_include_directories(dnsstamp PUBLIC include)

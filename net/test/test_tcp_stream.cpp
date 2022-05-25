@@ -1,31 +1,33 @@
 #include <gtest/gtest.h>
-#include <ag_socket.h>
-#include <ag_blocking_socket.h>
-#include "common/logger.h"
 
-static ag::Logger logger{"test_tcp_stream"};
+#include "common/logger.h"
+#include "net/blocking_socket.h"
+#include "net/socket.h"
+
+namespace ag::test {
+
+static Logger logger{"test_tcp_stream"};
 
 TEST(TcpStream, DISABLED_Blocking) {
-    ag::socket_factory factory({});
-    ag::blocking_socket socket(factory.make_socket({ ag::utils::TP_TCP }));
+    SocketFactory factory({});
+    BlockingSocket socket(factory.make_socket({utils::TP_TCP}));
     ASSERT_TRUE(socket);
 
-    auto e = socket.connect(
-            { ag::SocketAddress("1.1.1.1", 80), std::chrono::seconds(1) });
+    auto e = socket.connect({SocketAddress("1.1.1.1", 80), Secs(1)});
     ASSERT_FALSE(e.has_value()) << e->description;
 
     std::string_view GET = "GET / HTTP/1.1\r\nHost: 1.1.1.1\r\n\r\n";
-    e = socket.send({ (uint8_t *)GET.data(), GET.size() });
+    e = socket.send({(uint8_t *) GET.data(), GET.size()});
     ASSERT_FALSE(e.has_value()) << e->description;
 
     std::string received_data;
     e = socket.receive(
             {
-                [] (void *arg, ag::Uint8View data) {
-                    *(std::string *)arg = { (char *)data.data(), data.size() };
-                    return false;
-                },
-                &received_data,
+                    [](void *arg, Uint8View data) {
+                        *(std::string *) arg = {(char *) data.data(), data.size()};
+                        return false;
+                    },
+                    &received_data,
             },
             std::nullopt);
     ASSERT_FALSE(e.has_value()) << e->description;
@@ -33,26 +35,25 @@ TEST(TcpStream, DISABLED_Blocking) {
 }
 
 TEST(TcpStream, DISABLED_HttpProxy) {
-    ag::Logger::set_log_level(ag::LogLevel::LOG_LEVEL_TRACE);
+    Logger::set_log_level(LogLevel::LOG_LEVEL_TRACE);
 
-    ag::outbound_proxy_settings proxy_settings = { ag::outbound_proxy_protocol::HTTP_CONNECT, "127.0.0.1", 3129 };
-    ag::socket_factory factory({ &proxy_settings });
-    ag::blocking_socket socket(factory.make_socket({ ag::utils::TP_TCP }));
+    OutboundProxySettings proxy_settings = {OutboundProxyProtocol::HTTP_CONNECT, "127.0.0.1", 3129};
+    SocketFactory factory({&proxy_settings});
+    BlockingSocket socket(factory.make_socket({utils::TP_TCP}));
     ASSERT_TRUE(socket);
 
-    auto e = socket.connect(
-            { ag::SocketAddress("1.1.1.1", 80), std::chrono::seconds(1) });
+    auto e = socket.connect({SocketAddress("1.1.1.1", 80), Secs(1)});
     ASSERT_FALSE(e.has_value()) << e->description;
 
     std::string_view GET = "GET / HTTP/1.1\r\nHost: 1.1.1.1\r\n\r\n";
-    e = socket.send({ (uint8_t *)GET.data(), GET.size() });
+    e = socket.send({(uint8_t *) GET.data(), GET.size()});
     ASSERT_FALSE(e.has_value()) << e->description;
 
     std::string received_data;
     e = socket.receive(
             {
-                    [] (void *arg, ag::Uint8View data) {
-                        *(std::string *)arg = { (char *)data.data(), data.size() };
+                    [](void *arg, Uint8View data) {
+                        *(std::string *) arg = {(char *) data.data(), data.size()};
                         return false;
                     },
                     &received_data,
@@ -63,26 +64,25 @@ TEST(TcpStream, DISABLED_HttpProxy) {
 }
 
 TEST(TcpStream, DISABLED_SocksProxy) {
-    ag::Logger::set_log_level(ag::LogLevel::LOG_LEVEL_TRACE);
+    Logger::set_log_level(LogLevel::LOG_LEVEL_TRACE);
 
-    ag::outbound_proxy_settings proxy_settings = { ag::outbound_proxy_protocol::SOCKS5, "127.0.0.1", 8888 };
-    ag::socket_factory factory({ &proxy_settings });
-    ag::blocking_socket socket(factory.make_socket({ ag::utils::TP_TCP }));
+    OutboundProxySettings proxy_settings = {OutboundProxyProtocol::SOCKS5, "127.0.0.1", 8888};
+    SocketFactory factory({&proxy_settings});
+    BlockingSocket socket(factory.make_socket({utils::TP_TCP}));
     ASSERT_TRUE(socket);
 
-    auto e = socket.connect(
-            { ag::SocketAddress("1.1.1.1", 80), std::chrono::seconds(1) });
+    auto e = socket.connect({SocketAddress("1.1.1.1", 80), Secs(1)});
     ASSERT_FALSE(e.has_value()) << e->description;
 
     std::string_view GET = "GET / HTTP/1.1\r\nHost: 1.1.1.1\r\n\r\n";
-    e = socket.send({ (uint8_t *)GET.data(), GET.size() });
+    e = socket.send({(uint8_t *) GET.data(), GET.size()});
     ASSERT_FALSE(e.has_value()) << e->description;
 
     std::string received_data;
     e = socket.receive(
             {
-                    [] (void *arg, ag::Uint8View data) {
-                        *(std::string *)arg = { (char *)data.data(), data.size() };
+                    [](void *arg, Uint8View data) {
+                        *(std::string *) arg = {(char *) data.data(), data.size()};
                         return false;
                     },
                     &received_data,
@@ -91,3 +91,5 @@ TEST(TcpStream, DISABLED_SocksProxy) {
     ASSERT_FALSE(e.has_value()) << e->description;
     infolog(logger, "Received data:\n{}", received_data);
 }
+
+} // namespace ag::test

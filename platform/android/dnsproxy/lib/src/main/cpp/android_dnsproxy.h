@@ -1,29 +1,32 @@
 #pragma once
 
 #include <jni.h>
+
 #include "common/defs.h"
-#include <jni_utils.h>
-#include <dns_stamp.h>
+#include "dnsstamp/dns_stamp.h"
+#include "proxy/dnsproxy.h"
+
+#include "jni_utils.h"
 
 namespace ag {
 
-class android_dnsproxy {
+class AndroidDnsProxy {
 private:
-    dnsproxy m_actual_proxy;
+    DnsProxy m_actual_proxy;
     // Sequentially-consistently store after initializing,
     // and sequentially-consistently load BEFORE using,
     // the JNI handles and utils below.
     // Needed for thread-safety if you want to init things in one thread and use them in another.
     std::atomic_bool m_jni_initialized{false};
 
-    jni_utils m_utils;
+    jni::JniUtils m_utils;
 
-    global_ref<jobject> m_events{}; // Java events interface
+    jni::GlobalRef<jobject> m_events{}; // Java events interface
 
     struct {
-        global_ref<jclass> events_interface;
-        global_ref<jclass> processed_event;
-        global_ref<jclass> cert_verify_event;
+        jni::GlobalRef<jclass> events_interface;
+        jni::GlobalRef<jclass> processed_event;
+        jni::GlobalRef<jclass> cert_verify_event;
     } m_jclasses{};
 
     struct {
@@ -63,91 +66,91 @@ private:
         jmethodID ctor;
     } m_cert_verify_event_methods{};
 
-    std::vector<global_ref<jobject>> m_listener_protocol_enum_values;
-    std::vector<global_ref<jobject>> m_proxy_protocol_enum_values;
-    std::vector<global_ref<jobject>> m_blocking_mode_values;
+    std::vector<jni::GlobalRef<jobject>> m_listener_protocol_enum_values;
+    std::vector<jni::GlobalRef<jobject>> m_proxy_protocol_enum_values;
+    std::vector<jni::GlobalRef<jobject>> m_blocking_mode_values;
 
     /**
      * Marshal upstream settings from Java to C++.
      */
-    upstream_options marshal_upstream(JNIEnv *env, jobject java_upstream_settings);
+    UpstreamOptions marshal_upstream(JNIEnv *env, jobject java_upstream_settings);
 
     /**
      * Marshal upstream settings from C++ to Java.
      */
-    local_ref<jobject> marshal_upstream(JNIEnv *env, const upstream_options &settings);
+    jni::LocalRef<jobject> marshal_upstream(JNIEnv *env, const UpstreamOptions &settings);
 
     /**
      * Marshal DNS64 settings from Java to C++;
      */
-    dns64_settings marshal_dns64(JNIEnv *env, jobject java_dns64_settings);
+    Dns64Settings marshal_dns64(JNIEnv *env, jobject java_dns64_settings);
 
     /**
      * Marshal DNS64 settings from C++ to Java.
      */
-    local_ref<jobject> marshal_dns64(JNIEnv *env, const dns64_settings &settings);
+    jni::LocalRef<jobject> marshal_dns64(JNIEnv *env, const Dns64Settings &settings);
 
     /**
      * Marshal listener settings from Java to C++.
      */
-    listener_settings marshal_listener(JNIEnv *env, jobject java_listener_settings);
+    ListenerSettings marshal_listener(JNIEnv *env, jobject java_listener_settings);
 
     /**
      * Marshal listener settings from C++ to Java.
      */
-    local_ref<jobject> marshal_listener(JNIEnv *env, const listener_settings &settings);
+    jni::LocalRef<jobject> marshal_listener(JNIEnv *env, const ListenerSettings &settings);
 
     /**
      * Marshal DNS64 settings from Java to C++;
      */
-    outbound_proxy_settings marshal_outbound_proxy(JNIEnv *env, jobject jsettings);
+    OutboundProxySettings marshal_outbound_proxy(JNIEnv *env, jobject jsettings);
 
     /**
      * Marshal DNS64 settings from C++ to Java.
      */
-    local_ref<jobject> marshal_outbound_proxy(JNIEnv *env, const outbound_proxy_settings &csettings);
+    jni::LocalRef<jobject> marshal_outbound_proxy(JNIEnv *env, const OutboundProxySettings &csettings);
 
     /**
      * Marshal filter parameters from Java to C++.
      */
-    dnsfilter::engine_params marshal_filter_params(JNIEnv *env, jobject java_filter_params);
+    DnsFilter::EngineParams marshal_filter_params(JNIEnv *env, jobject java_filter_params);
 
     /**
      * Marshal filter parameters from C++ to Java.
      */
-    local_ref<jobject> marshal_filter_params(JNIEnv *env, const dnsfilter::filter_params &params);
+    jni::LocalRef<jobject> marshal_filter_params(JNIEnv *env, const DnsFilter::FilterParams &params);
 
     /**
      * Marshal DNS proxy settings from Java to C++.
      */
-    dnsproxy_settings marshal_settings(JNIEnv *env, jobject java_dnsproxy_settings);
+    DnsProxySettings marshal_settings(JNIEnv *env, jobject java_dnsproxy_settings);
 
     /**
      * Marshal DNS proxy settings from C++ to Java.
      */
-    local_ref<jobject> marshal_settings(JNIEnv *env, const dnsproxy_settings &settings);
+    jni::LocalRef<jobject> marshal_settings(JNIEnv *env, const DnsProxySettings &settings);
 
     /**
      * Marshal a "DNS request processed" event from C++ to Java.
      */
-    local_ref<jobject> marshal_processed_event(JNIEnv *env, const dns_request_processed_event &event);
+    jni::LocalRef<jobject> marshal_processed_event(JNIEnv *env, const DnsRequestProcessedEvent &event);
 
     /**
      * Marshal a "Certificate verification" event from C++ to Java.
      */
-    local_ref<jobject> marshal_certificate_verification_event(JNIEnv *env, const certificate_verification_event &event);
+    jni::LocalRef<jobject> marshal_certificate_verification_event(JNIEnv *env, const CertificateVerificationEvent &event);
 
     /**
      * Marshal Java events interface to C++ dnsproxy_events struct.
      */
-    dnsproxy_events marshal_events(JNIEnv *env, jobject java_events);
+    DnsProxyEvents marshal_events(JNIEnv *env, jobject java_events);
 
 public:
 
     /**
      * Initializes global refs.
      */
-    explicit android_dnsproxy(JavaVM *vm);
+    explicit AndroidDnsProxy(JavaVM *vm);
 
     /**
      * Initialize the actual proxy.

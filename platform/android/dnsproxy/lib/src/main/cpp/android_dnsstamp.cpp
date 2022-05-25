@@ -1,30 +1,34 @@
 #include <assert.h>
 #include <memory>
+
 #include "android_dnsstamp.h"
 #include "jni_defs.h"
 #include "jni_utils.h"
 
-static std::unique_ptr<ag::android_dnsstamp> g_dnsstamp_impl;
+using namespace ag;
+using namespace ag::jni;
+
+static std::unique_ptr<AndroidDnsStamp> g_dnsstamp_impl;
 
 static int init_dnsstamp_impl(JNIEnv *env) {
     JavaVM *vm = nullptr;
     env->GetJavaVM(&vm);
-    g_dnsstamp_impl = std::make_unique<ag::android_dnsstamp>(vm);
+    g_dnsstamp_impl = std::make_unique<AndroidDnsStamp>(vm);
     return 0;
 }
 
-static ag::android_dnsstamp &dnsstamp_impl(JNIEnv *env) {
+static AndroidDnsStamp &dnsstamp_impl(JNIEnv *env) {
     int ensure_dnsstamp_impl_initialized [[maybe_unused]] = init_dnsstamp_impl(env);
     return *g_dnsstamp_impl;
 }
 
-ag::android_dnsstamp::android_dnsstamp(JavaVM *vm) : m_utils(vm) {
-    ag::scoped_jni_env env(vm, 1);
+AndroidDnsStamp::AndroidDnsStamp(JavaVM *vm)
+        : m_utils(vm) {
+    ScopedJniEnv env(vm, 1);
     m_dnsstamp_prototype_values = m_utils.get_enum_values(env.get(), FQN_DNSSTAMP_PROTOTYPE);
 }
 
-ag::local_ref<jobject>
-ag::android_dnsstamp::marshal_dnsstamp(JNIEnv *env, const ag::server_stamp &stamp) {
+LocalRef<jobject> AndroidDnsStamp::marshal_dnsstamp(JNIEnv *env, const ServerStamp &stamp) {
 
     auto clazz = env->FindClass(FQN_DNSSTAMP);
     auto ctor = env->GetMethodID(clazz, "<init>", "()V");
@@ -46,22 +50,23 @@ ag::android_dnsstamp::marshal_dnsstamp(JNIEnv *env, const ag::server_stamp &stam
 
     if (!stamp.server_pk.empty()) {
         env->SetObjectField(dns_stamp, server_pk_field,
-                            m_utils.marshal_uint8_view(env, { stamp.server_pk.data(), stamp.server_pk.size() }).get());
+                m_utils.marshal_uint8_view(env, {stamp.server_pk.data(), stamp.server_pk.size()}).get());
     }
 
     clazz = env->FindClass(FQN_DNSSTAMP_INFORMAL_PROPERTIES);
     auto to_enum_set_method = env->GetStaticMethodID(clazz, "toEnumSet", "(I)Ljava/util/EnumSet;");
-    if (local_ref props{ env, env->CallStaticObjectMethod(clazz, to_enum_set_method, (jint)stamp.props) }) {
+    if (LocalRef props{env, env->CallStaticObjectMethod(clazz, to_enum_set_method, (jint) stamp.props)}) {
         env->SetObjectField(dns_stamp, props_field, props.get());
     }
 
     if (!stamp.hashes.empty()) {
         clazz = env->FindClass("java/util/ArrayList");
         ctor = env->GetMethodID(clazz, "<init>", "()V");
-        local_ref<jobject> hashes{env, env->NewObject(clazz, ctor)};
+        LocalRef<jobject> hashes{env, env->NewObject(clazz, ctor)};
         auto add_method = env->GetMethodID(clazz, "add", "(Ljava/lang/Object;)Z");
         for (const std::vector<uint8_t> &h : stamp.hashes) {
-            env->CallBooleanMethod(hashes.get(), add_method, m_utils.marshal_uint8_view(env, {h.data(), h.size()}).get());
+            env->CallBooleanMethod(
+                    hashes.get(), add_method, m_utils.marshal_uint8_view(env, {h.data(), h.size()}).get());
         }
         env->SetObjectField(dns_stamp, hashes_field, hashes.get());
     }
@@ -69,7 +74,7 @@ ag::android_dnsstamp::marshal_dnsstamp(JNIEnv *env, const ag::server_stamp &stam
     return {env, dns_stamp};
 }
 
-ag::server_stamp ag::android_dnsstamp::marshal_dnsstamp(JNIEnv *env, jobject java_dns_stamp) {
+ServerStamp AndroidDnsStamp::marshal_dnsstamp(JNIEnv *env, jobject java_dns_stamp) {
     auto clazz = env->FindClass(FQN_DNSSTAMP);
 
     auto proto_field = env->GetFieldID(clazz, "proto", "L" FQN_DNSSTAMP_PROTOTYPE ";");
@@ -80,48 +85,48 @@ ag::server_stamp ag::android_dnsstamp::marshal_dnsstamp(JNIEnv *env, jobject jav
     auto props_field = env->GetFieldID(clazz, "properties", "Ljava/util/EnumSet;");
     auto hashes_field = env->GetFieldID(clazz, "hashes", "Ljava/util/ArrayList;");
 
-    ag::server_stamp stamp;
-    if (auto value = local_ref<jobject>(env, env->GetObjectField(java_dns_stamp, proto_field))) {
+    ServerStamp stamp;
+    if (auto value = LocalRef<jobject>(env, env->GetObjectField(java_dns_stamp, proto_field))) {
         clazz = env->FindClass(FQN_DNSSTAMP_PROTOTYPE);
         auto ordinal_method = env->GetMethodID(clazz, "ordinal", "()I");
-        stamp.proto = (stamp_proto_type) env->CallIntMethod(value.get(), ordinal_method);
+        stamp.proto = (StampProtoType) env->CallIntMethod(value.get(), ordinal_method);
     }
-    if (auto value = local_ref<jstring>(env, (jstring)env->GetObjectField(java_dns_stamp, server_addr_field))) {
-        stamp.server_addr_str = ag::jni_utils::marshal_string(env, value.get());
+    if (auto value = LocalRef<jstring>(env, (jstring) env->GetObjectField(java_dns_stamp, server_addr_field))) {
+        stamp.server_addr_str = JniUtils::marshal_string(env, value.get());
     }
-    if (auto value = local_ref<jstring>(env, (jstring)env->GetObjectField(java_dns_stamp, provider_name_field))) {
-        stamp.provider_name = ag::jni_utils::marshal_string(env, value.get());
+    if (auto value = LocalRef<jstring>(env, (jstring) env->GetObjectField(java_dns_stamp, provider_name_field))) {
+        stamp.provider_name = JniUtils::marshal_string(env, value.get());
     }
-    if (auto value = local_ref<jstring>(env, (jstring)env->GetObjectField(java_dns_stamp, path_field))) {
-        stamp.path = ag::jni_utils::marshal_string(env, value.get());
+    if (auto value = LocalRef<jstring>(env, (jstring) env->GetObjectField(java_dns_stamp, path_field))) {
+        stamp.path = JniUtils::marshal_string(env, value.get());
     }
-    if (auto value = local_ref<jbyteArray>(env, (jbyteArray)env->GetObjectField(java_dns_stamp, server_pk_field))) {
+    if (auto value = LocalRef<jbyteArray>(env, (jbyteArray) env->GetObjectField(java_dns_stamp, server_pk_field))) {
         stamp.server_pk.resize(env->GetArrayLength(value.get()));
-        env->GetByteArrayRegion(value.get(), 0, stamp.server_pk.size(), (jbyte *)&stamp.server_pk[0]);
+        env->GetByteArrayRegion(value.get(), 0, stamp.server_pk.size(), (jbyte *) &stamp.server_pk[0]);
     }
-    if (auto value = local_ref<jobject>(env, env->GetObjectField(java_dns_stamp, props_field))) {
+    if (auto value = LocalRef<jobject>(env, env->GetObjectField(java_dns_stamp, props_field))) {
         clazz = env->FindClass("java/util/EnumSet");
         auto to_array_method = env->GetMethodID(clazz, "toArray", "()[Ljava/lang/Object;");
-        auto enum_set = local_ref<jobjectArray>(env, (jobjectArray)env->CallObjectMethod(value.get(), to_array_method));
+        auto enum_set = LocalRef<jobjectArray>(env, (jobjectArray) env->CallObjectMethod(value.get(), to_array_method));
         clazz = env->FindClass(FQN_DNSSTAMP_INFORMAL_PROPERTIES);
         auto flag_value_field = env->GetFieldID(clazz, "flagValue", "I");
         uint64_t props = 0;
         for (jint i = 0; i < env->GetArrayLength(enum_set.get()); i++) {
-            local_ref<jobject> enum_value(env, env->GetObjectArrayElement(enum_set.get(), i));
-            props |= (uint64_t)env->GetIntField(enum_value.get(), flag_value_field);
+            LocalRef<jobject> enum_value(env, env->GetObjectArrayElement(enum_set.get(), i));
+            props |= (uint64_t) env->GetIntField(enum_value.get(), flag_value_field);
         }
-        stamp.props = (server_informal_properties)props;
+        stamp.props = (ServerInformalProperties) props;
     }
-    if (auto value = local_ref<jobject>(env, env->GetObjectField(java_dns_stamp, hashes_field))) {
+    if (auto value = LocalRef<jobject>(env, env->GetObjectField(java_dns_stamp, hashes_field))) {
         clazz = env->FindClass("java/util/ArrayList");
         auto size_method = env->GetMethodID(clazz, "size", "()I");
-        auto get_method  = env->GetMethodID(clazz, "get", "(I)Ljava/lang/Object;");
+        auto get_method = env->GetMethodID(clazz, "get", "(I)Ljava/lang/Object;");
         jint size = env->CallIntMethod(value.get(), size_method);
         for (jint i = 0; i < size; i++) {
-            auto jhash = local_ref<jbyteArray>{env, (jbyteArray)env->CallObjectMethod(value.get(), get_method, i)};
+            auto jhash = LocalRef<jbyteArray>{env, (jbyteArray) env->CallObjectMethod(value.get(), get_method, i)};
             std::vector<uint8_t> hash;
             hash.resize(env->GetArrayLength(jhash.get()));
-            env->GetByteArrayRegion(jhash.get(), 0, hash.size(), (jbyte *)&hash[0]);
+            env->GetByteArrayRegion(jhash.get(), 0, hash.size(), (jbyte *) &hash[0]);
             stamp.hashes.push_back(std::move(hash));
         }
     }
@@ -129,40 +134,33 @@ ag::server_stamp ag::android_dnsstamp::marshal_dnsstamp(JNIEnv *env, jobject jav
     return stamp;
 }
 
-extern "C"
-JNIEXPORT jstring JNICALL
-Java_com_adguard_dnslibs_proxy_DnsStamp_toString(JNIEnv *env, jobject thiz) {
-    ag::android_dnsstamp impl = dnsstamp_impl(env);
+extern "C" JNIEXPORT jstring JNICALL Java_com_adguard_dnslibs_proxy_DnsStamp_toString(JNIEnv *env, jobject thiz) {
+    AndroidDnsStamp impl = dnsstamp_impl(env);
     auto stamp = impl.marshal_dnsstamp(env, thiz);
-    return (jstring)env->NewLocalRef(ag::jni_utils::marshal_string(env, stamp.str()).get());
+    return (jstring) env->NewLocalRef(JniUtils::marshal_string(env, stamp.str()).get());
 }
 
-extern "C"
-JNIEXPORT jstring JNICALL
-Java_com_adguard_dnslibs_proxy_DnsStamp_getPrettyUrl(JNIEnv *env, jobject thiz) {
-    ag::android_dnsstamp impl = dnsstamp_impl(env);
+extern "C" JNIEXPORT jstring JNICALL Java_com_adguard_dnslibs_proxy_DnsStamp_getPrettyUrl(JNIEnv *env, jobject thiz) {
+    AndroidDnsStamp impl = dnsstamp_impl(env);
     auto stamp = impl.marshal_dnsstamp(env, thiz);
-    return (jstring)env->NewLocalRef(ag::jni_utils::marshal_string(env, stamp.pretty_url(false)).get());
+    return (jstring) env->NewLocalRef(JniUtils::marshal_string(env, stamp.pretty_url(false)).get());
 }
 
-extern "C"
-JNIEXPORT jstring JNICALL
-Java_com_adguard_dnslibs_proxy_DnsStamp_getPrettierUrl(JNIEnv *env, jobject thiz) {
-    ag::android_dnsstamp impl = dnsstamp_impl(env);
+extern "C" JNIEXPORT jstring JNICALL Java_com_adguard_dnslibs_proxy_DnsStamp_getPrettierUrl(JNIEnv *env, jobject thiz) {
+    AndroidDnsStamp impl = dnsstamp_impl(env);
     auto stamp = impl.marshal_dnsstamp(env, thiz);
-    return (jstring)env->NewLocalRef(ag::jni_utils::marshal_string(env, stamp.pretty_url(true)).get());
+    return (jstring) env->NewLocalRef(JniUtils::marshal_string(env, stamp.pretty_url(true)).get());
 }
 
-extern "C"
-JNIEXPORT jobject JNICALL
-Java_com_adguard_dnslibs_proxy_DnsStamp_parse0(JNIEnv *env, jclass clazz, jstring stamp_str) {
-    auto [stamp, err] = ag::server_stamp::from_string(ag::jni_utils::marshal_string(env, stamp_str));
+extern "C" JNIEXPORT jobject JNICALL Java_com_adguard_dnslibs_proxy_DnsStamp_parse0(
+        JNIEnv *env, jclass clazz, jstring stamp_str) {
+    auto [stamp, err] = ServerStamp::from_string(JniUtils::marshal_string(env, stamp_str));
 
     if (err) {
         env->ThrowNew(env->FindClass("java/lang/IllegalArgumentException"), err->c_str());
         return nullptr;
     }
 
-    ag::android_dnsstamp impl = dnsstamp_impl(env);
+    AndroidDnsStamp impl = dnsstamp_impl(env);
     return env->NewLocalRef(impl.marshal_dnsstamp(env, stamp).get());
 }

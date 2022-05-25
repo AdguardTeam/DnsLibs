@@ -2,11 +2,13 @@
 
 #include <cstring>
 
-#include <dnsproxy.h>
-#include <upstream_utils.h>
+#include "proxy/dnsproxy.h"
+#include "upstream/upstream_utils.h"
 
 #ifdef _WIN32
 #include <detours.h>
+
+using namespace ag;
 
 /**
  * Deactivated version of SetUnhandledExceptionFilter that does nothing.
@@ -14,23 +16,23 @@
  * @param lpTopLevelExceptionFilter Pointer to exception filter function
  * @return Pointer if success, NULL if error is occurred. This function always succeeds.
  */
-static LPTOP_LEVEL_EXCEPTION_FILTER WINAPI
-DontSetUnhandledExceptionFilter(LPTOP_LEVEL_EXCEPTION_FILTER lpTopLevelExceptionFilter) {
+static LPTOP_LEVEL_EXCEPTION_FILTER WINAPI DontSetUnhandledExceptionFilter(
+        LPTOP_LEVEL_EXCEPTION_FILTER lpTopLevelExceptionFilter) {
     // Do nothing
     return lpTopLevelExceptionFilter;
 }
 
-static void *detoursHook_SetUnhandledExceptionFilter = (void *)SetUnhandledExceptionFilter;
+static void *detoursHook_SetUnhandledExceptionFilter = (void *) SetUnhandledExceptionFilter;
 
 void ag_disable_SetUnhandledExceptionFilter(void) {
     DetourTransactionBegin();
-    DetourAttach(&detoursHook_SetUnhandledExceptionFilter, (void *)DontSetUnhandledExceptionFilter);
+    DetourAttach(&detoursHook_SetUnhandledExceptionFilter, (void *) DontSetUnhandledExceptionFilter);
     DetourTransactionCommit();
 }
 
 void ag_enable_SetUnhandledExceptionFilter(void) {
     DetourTransactionBegin();
-    DetourDetach(&detoursHook_SetUnhandledExceptionFilter, (void *)DontSetUnhandledExceptionFilter);
+    DetourDetach(&detoursHook_SetUnhandledExceptionFilter, (void *) DontSetUnhandledExceptionFilter);
     DetourTransactionCommit();
 }
 #endif // _WIN32
@@ -76,7 +78,7 @@ static char *marshal_str(const std::string &str) {
     return strdup(str.c_str());
 }
 
-static ag_buffer marshal_buffer(ag::Uint8View v) {
+static ag_buffer marshal_buffer(Uint8View v) {
     ag_buffer buf;
     buf.size = v.size();
     buf.data = (uint8_t *) std::malloc(buf.size);
@@ -99,16 +101,16 @@ static const char **marshal_strs(const std::vector<std::string> &strs) {
     return c_strs;
 }
 
-static ag_upstream_options marshal_upstream(const ag::upstream_options &upstream) {
+static ag_upstream_options marshal_upstream(const UpstreamOptions &upstream) {
     ag_upstream_options c_upstream{};
 
     c_upstream.address = marshal_str(upstream.address);
     c_upstream.id = upstream.id;
     c_upstream.timeout_ms = upstream.timeout.count();
 
-    if (const ag::Ipv4Address *arr4 = std::get_if<ag::Ipv4Address>(&upstream.resolved_server_ip)) {
+    if (const Ipv4Address *arr4 = std::get_if<Ipv4Address>(&upstream.resolved_server_ip)) {
         c_upstream.resolved_ip_address = marshal_buffer({arr4->data(), arr4->size()});
-    } else if (const ag::Ipv6Address *arr6 = std::get_if<ag::Ipv6Address>(&upstream.resolved_server_ip)) {
+    } else if (const Ipv6Address *arr6 = std::get_if<Ipv6Address>(&upstream.resolved_server_ip)) {
         c_upstream.resolved_ip_address = marshal_buffer({arr6->data(), arr6->size()});
     }
 
@@ -122,7 +124,7 @@ static ag_upstream_options marshal_upstream(const ag::upstream_options &upstream
     return c_upstream;
 }
 
-static ag_upstream_options *marshal_upstreams(const std::vector<ag::upstream_options> &upstreams) {
+static ag_upstream_options *marshal_upstreams(const std::vector<UpstreamOptions> &upstreams) {
     if (upstreams.empty()) {
         return nullptr;
     }
@@ -133,7 +135,7 @@ static ag_upstream_options *marshal_upstreams(const std::vector<ag::upstream_opt
     return c_upstreams;
 }
 
-static ag_dns64_settings *marshal_dns64(const std::optional<ag::dns64_settings> &dns64) {
+static ag_dns64_settings *marshal_dns64(const std::optional<Dns64Settings> &dns64) {
     if (!dns64) {
         return nullptr;
     }
@@ -152,7 +154,7 @@ static void free_dns64(ag_dns64_settings *dns64) {
     std::free(dns64);
 }
 
-static ag_filter_params marshal_filter_params(const ag::dnsfilter::filter_params &params) {
+static ag_filter_params marshal_filter_params(const DnsFilter::FilterParams &params) {
     ag_filter_params c_params{};
     c_params.data = marshal_str(params.data);
     c_params.in_memory = params.in_memory;
@@ -160,7 +162,7 @@ static ag_filter_params marshal_filter_params(const ag::dnsfilter::filter_params
     return c_params;
 }
 
-static ag_filter_params *marshal_filters(const std::vector<ag::dnsfilter::filter_params> &filters) {
+static ag_filter_params *marshal_filters(const std::vector<DnsFilter::FilterParams> &filters) {
     if (filters.empty()) {
         return nullptr;
     }
@@ -171,14 +173,14 @@ static ag_filter_params *marshal_filters(const std::vector<ag::dnsfilter::filter
     return c_filters;
 }
 
-static ag_filter_engine_params marshal_engine_params(const ag::dnsfilter::engine_params &params) {
+static ag_filter_engine_params marshal_engine_params(const DnsFilter::EngineParams &params) {
     ag_filter_engine_params c_params{};
     c_params.filters.size = params.filters.size();
     c_params.filters.data = marshal_filters(params.filters);
     return c_params;
 }
 
-static ag_listener_settings marshal_listener(const ag::listener_settings &listener) {
+static ag_listener_settings marshal_listener(const ListenerSettings &listener) {
     ag_listener_settings c_listener{};
     c_listener.address = marshal_str(listener.address);
     c_listener.port = listener.port;
@@ -188,7 +190,7 @@ static ag_listener_settings marshal_listener(const ag::listener_settings &listen
     return c_listener;
 }
 
-static ag_listener_settings *marshal_listeners(const std::vector<ag::listener_settings> &listeners) {
+static ag_listener_settings *marshal_listeners(const std::vector<ListenerSettings> &listeners) {
     if (listeners.empty()) {
         return nullptr;
     }
@@ -199,16 +201,16 @@ static ag_listener_settings *marshal_listeners(const std::vector<ag::listener_se
     return c_listeners;
 }
 
-static ag_outbound_proxy_settings *marshal_outbound_proxy(const std::optional<ag::outbound_proxy_settings> &outbound_proxy) {
+static ag_outbound_proxy_settings *marshal_outbound_proxy(const std::optional<OutboundProxySettings> &outbound_proxy) {
     if (!outbound_proxy.has_value()) {
         return nullptr;
     }
-    auto *c_outbound_proxy = (ag_outbound_proxy_settings *)std::malloc(sizeof(ag_outbound_proxy_settings));
-    c_outbound_proxy->protocol = (ag_outbound_proxy_protocol)outbound_proxy->protocol;
+    auto *c_outbound_proxy = (ag_outbound_proxy_settings *) std::malloc(sizeof(ag_outbound_proxy_settings));
+    c_outbound_proxy->protocol = (ag_outbound_proxy_protocol) outbound_proxy->protocol;
     c_outbound_proxy->address = marshal_str(outbound_proxy->address);
     c_outbound_proxy->port = outbound_proxy->port;
     if (outbound_proxy->auth_info.has_value()) {
-        c_outbound_proxy->auth_info = (ag_outbound_proxy_auth_info *)std::malloc(sizeof(ag_outbound_proxy_auth_info));
+        c_outbound_proxy->auth_info = (ag_outbound_proxy_auth_info *) std::malloc(sizeof(ag_outbound_proxy_auth_info));
         c_outbound_proxy->auth_info->username = marshal_str(outbound_proxy->auth_info->username);
         c_outbound_proxy->auth_info->password = marshal_str(outbound_proxy->auth_info->password);
     } else {
@@ -223,18 +225,18 @@ static void free_outbound_proxy(ag_outbound_proxy_settings *outbound_proxy) {
         return;
     }
 
-    std::free((void *)outbound_proxy->address);
+    std::free((void *) outbound_proxy->address);
 
     if (outbound_proxy->auth_info != nullptr) {
-        std::free((void *)outbound_proxy->auth_info->username);
-        std::free((void *)outbound_proxy->auth_info->password);
+        std::free((void *) outbound_proxy->auth_info->username);
+        std::free((void *) outbound_proxy->auth_info->password);
         std::free(outbound_proxy->auth_info);
     }
 
     std::free(outbound_proxy);
 }
 
-static ag_dnsproxy_settings *marshal_settings(const ag::dnsproxy_settings &settings) {
+static ag_dnsproxy_settings *marshal_settings(const DnsProxySettings &settings) {
     auto *c_settings = (ag_dnsproxy_settings *) std::malloc(sizeof(ag_dnsproxy_settings));
 
     c_settings->block_ipv6 = settings.block_ipv6;
@@ -263,9 +265,9 @@ static ag_dnsproxy_settings *marshal_settings(const ag::dnsproxy_settings &setti
     return c_settings;
 }
 
-static ag::server_stamp marshal_stamp(const ag_dns_stamp *c_stamp) {
-    ag::server_stamp stamp{};
-    stamp.proto = (ag::stamp_proto_type) c_stamp->proto;
+static ServerStamp marshal_stamp(const ag_dns_stamp *c_stamp) {
+    ServerStamp stamp{};
+    stamp.proto = (StampProtoType) c_stamp->proto;
     if (c_stamp->path) {
         stamp.path = c_stamp->path;
     }
@@ -275,13 +277,13 @@ static ag::server_stamp marshal_stamp(const ag_dns_stamp *c_stamp) {
     if (c_stamp->provider_name) {
         stamp.provider_name = c_stamp->provider_name;
     }
-    stamp.server_pk.assign(c_stamp->server_public_key.data,
-                           c_stamp->server_public_key.data + c_stamp->server_public_key.size);
+    stamp.server_pk.assign(
+            c_stamp->server_public_key.data, c_stamp->server_public_key.data + c_stamp->server_public_key.size);
     for (size_t i = 0; i < c_stamp->hashes.size; ++i) {
         const ag_buffer &hash = c_stamp->hashes.data[i];
         stamp.hashes.emplace_back(hash.data, hash.data + hash.size);
     }
-    stamp.props = (ag::server_informal_properties) c_stamp->properties;
+    stamp.props = (ServerInformalProperties) c_stamp->properties;
     return stamp;
 }
 
@@ -304,19 +306,19 @@ void ag_dnsproxy_settings_free(ag_dnsproxy_settings *settings) {
     std::free(settings);
 }
 
-static ag::upstream_options marshal_upstream(const ag_upstream_options &c_upstream) {
-    ag::upstream_options upstream{};
+static UpstreamOptions marshal_upstream(const ag_upstream_options &c_upstream) {
+    UpstreamOptions upstream{};
     if (c_upstream.address) {
         upstream.address.assign(c_upstream.address);
     }
     upstream.id = c_upstream.id;
-    upstream.timeout = std::chrono::milliseconds{c_upstream.timeout_ms};
-    if (c_upstream.resolved_ip_address.size == ag::IPV4_ADDRESS_SIZE) {
-        ag::Ipv4Address arr4;
+    upstream.timeout = Millis{c_upstream.timeout_ms};
+    if (c_upstream.resolved_ip_address.size == IPV4_ADDRESS_SIZE) {
+        Ipv4Address arr4;
         std::memcpy(arr4.data(), c_upstream.resolved_ip_address.data, arr4.size());
         upstream.resolved_server_ip = arr4;
-    } else if (c_upstream.resolved_ip_address.size == ag::IPV6_ADDRESS_SIZE) {
-        ag::Ipv6Address arr6;
+    } else if (c_upstream.resolved_ip_address.size == IPV6_ADDRESS_SIZE) {
+        Ipv6Address arr6;
         std::memcpy(arr6.data(), c_upstream.resolved_ip_address.data, arr6.size());
         upstream.resolved_server_ip = arr6;
     }
@@ -329,8 +331,8 @@ static ag::upstream_options marshal_upstream(const ag_upstream_options &c_upstre
     return upstream;
 }
 
-static std::vector<ag::upstream_options> marshal_upstreams(const ag_upstream_options *c_upstreams, size_t n) {
-    std::vector<ag::upstream_options> upstreams;
+static std::vector<UpstreamOptions> marshal_upstreams(const ag_upstream_options *c_upstreams, size_t n) {
+    std::vector<UpstreamOptions> upstreams;
     upstreams.reserve(n);
     for (size_t i = 0; i < n; ++i) {
         upstreams.emplace_back(marshal_upstream(c_upstreams[i]));
@@ -338,20 +340,20 @@ static std::vector<ag::upstream_options> marshal_upstreams(const ag_upstream_opt
     return upstreams;
 }
 
-static ag::listener_settings marshal_listener(const ag_listener_settings &c_listener) {
-    ag::listener_settings listener{};
+static ListenerSettings marshal_listener(const ag_listener_settings &c_listener) {
+    ListenerSettings listener{};
     if (c_listener.address) {
         listener.address.assign(c_listener.address);
     }
     listener.port = c_listener.port;
-    listener.protocol = (ag::utils::TransportProtocol) c_listener.protocol;
+    listener.protocol = (utils::TransportProtocol) c_listener.protocol;
     listener.persistent = c_listener.persistent;
-    listener.idle_timeout = std::chrono::milliseconds{c_listener.idle_timeout_ms};
+    listener.idle_timeout = Millis{c_listener.idle_timeout_ms};
     return listener;
 }
 
-static std::vector<ag::listener_settings> marshal_listeners(const ag_listener_settings *c_listeners, size_t n) {
-    std::vector<ag::listener_settings> listeners;
+static std::vector<ListenerSettings> marshal_listeners(const ag_listener_settings *c_listeners, size_t n) {
+    std::vector<ListenerSettings> listeners;
     listeners.reserve(n);
     for (size_t i = 0; i < n; ++i) {
         listeners.emplace_back(marshal_listener(c_listeners[i]));
@@ -359,8 +361,8 @@ static std::vector<ag::listener_settings> marshal_listeners(const ag_listener_se
     return listeners;
 }
 
-static ag::dnsfilter::filter_params marshal_filter_params(const ag_filter_params &c_params) {
-    ag::dnsfilter::filter_params params{};
+static DnsFilter::FilterParams marshal_filter_params(const ag_filter_params &c_params) {
+    DnsFilter::FilterParams params{};
     if (c_params.data) {
         params.data.assign(c_params.data);
     }
@@ -369,8 +371,8 @@ static ag::dnsfilter::filter_params marshal_filter_params(const ag_filter_params
     return params;
 }
 
-static std::vector<ag::dnsfilter::filter_params> marshal_filters(const ag_filter_params *c_filters, size_t n) {
-    std::vector<ag::dnsfilter::filter_params> filters;
+static std::vector<DnsFilter::FilterParams> marshal_filters(const ag_filter_params *c_filters, size_t n) {
+    std::vector<DnsFilter::FilterParams> filters;
     filters.reserve(n);
     for (size_t i = 0; i < n; ++i) {
         filters.emplace_back(marshal_filter_params(c_filters[i]));
@@ -378,15 +380,15 @@ static std::vector<ag::dnsfilter::filter_params> marshal_filters(const ag_filter
     return filters;
 }
 
-static ag::dnsproxy_settings marshal_settings(const ag_dnsproxy_settings *c_settings) {
-    ag::dnsproxy_settings settings{};
+static DnsProxySettings marshal_settings(const ag_dnsproxy_settings *c_settings) {
+    DnsProxySettings settings{};
 
     settings.block_ipv6 = c_settings->block_ipv6;
     settings.ipv6_available = c_settings->ipv6_available;
     settings.dns_cache_size = c_settings->dns_cache_size;
     settings.blocked_response_ttl_secs = c_settings->blocked_response_ttl_secs;
-    settings.adblock_rules_blocking_mode = (ag::dnsproxy_blocking_mode) c_settings->adblock_rules_blocking_mode;
-    settings.hosts_rules_blocking_mode = (ag::dnsproxy_blocking_mode) c_settings->hosts_rules_blocking_mode;
+    settings.adblock_rules_blocking_mode = (DnsProxyBlockingMode) c_settings->adblock_rules_blocking_mode;
+    settings.hosts_rules_blocking_mode = (DnsProxyBlockingMode) c_settings->hosts_rules_blocking_mode;
     if (c_settings->custom_blocking_ipv4) {
         settings.custom_blocking_ipv4.assign(c_settings->custom_blocking_ipv4);
     }
@@ -394,11 +396,10 @@ static ag::dnsproxy_settings marshal_settings(const ag_dnsproxy_settings *c_sett
         settings.custom_blocking_ipv6.assign(c_settings->custom_blocking_ipv6);
     }
     if (c_settings->dns64) {
-        ag::dns64_settings dns64{};
-        dns64.upstreams = marshal_upstreams(c_settings->dns64->upstreams.data,
-                                            c_settings->dns64->upstreams.size);
+        Dns64Settings dns64{};
+        dns64.upstreams = marshal_upstreams(c_settings->dns64->upstreams.data, c_settings->dns64->upstreams.size);
         dns64.max_tries = c_settings->dns64->max_tries;
-        dns64.wait_time = std::chrono::milliseconds{c_settings->dns64->wait_time_ms};
+        dns64.wait_time = Millis{c_settings->dns64->wait_time_ms};
         settings.dns64 = dns64;
     }
     settings.upstreams = marshal_upstreams(c_settings->upstreams.data, c_settings->upstreams.size);
@@ -409,8 +410,8 @@ static ag::dnsproxy_settings marshal_settings(const ag_dnsproxy_settings *c_sett
     }
 
     settings.listeners = marshal_listeners(c_settings->listeners.data, c_settings->listeners.size);
-    settings.filter_params.filters = marshal_filters(c_settings->filter_params.filters.data,
-                                                     c_settings->filter_params.filters.size);
+    settings.filter_params.filters
+            = marshal_filters(c_settings->filter_params.filters.data, c_settings->filter_params.filters.size);
     settings.optimistic_cache = c_settings->optimistic_cache;
     settings.enable_dnssec_ok = c_settings->enable_dnssec_ok;
     settings.enable_retransmission_handling = c_settings->enable_retransmission_handling;
@@ -422,14 +423,13 @@ static const char *c_str_if_not_empty(const std::string &str) {
     return str.empty() ? nullptr : str.c_str();
 }
 
-static ag::dnsproxy_events marshal_events(const ag_dnsproxy_events *c_events) {
-    ag::dnsproxy_events events{};
+static DnsProxyEvents marshal_events(const ag_dnsproxy_events *c_events) {
+    DnsProxyEvents events{};
     if (!c_events) {
         return events;
     }
     if (c_events->on_request_processed) {
-        events.on_request_processed = [cb = c_events->on_request_processed]
-                (const ag::dns_request_processed_event &event) {
+        events.on_request_processed = [cb = c_events->on_request_processed](const DnsRequestProcessedEvent &event) {
             ag_dns_request_processed_event e{};
 
             e.whitelist = event.whitelist;
@@ -451,9 +451,9 @@ static ag::dnsproxy_events marshal_events(const ag_dnsproxy_events *c_events) {
 
             std::vector<const char *> c_rules;
             c_rules.reserve(event.rules.size());
-            std::for_each(event.rules.begin(),
-                          event.rules.end(),
-                          [&c_rules](auto &rule) { c_rules.push_back(rule.c_str()); });
+            std::for_each(event.rules.begin(), event.rules.end(), [&c_rules](auto &rule) {
+                c_rules.push_back(rule.c_str());
+            });
             e.rules.data = c_rules.data();
             e.rules.size = c_rules.size();
 
@@ -461,8 +461,9 @@ static ag::dnsproxy_events marshal_events(const ag_dnsproxy_events *c_events) {
         };
     }
     if (c_events->on_certificate_verification) {
-        events.on_certificate_verification = [cb = c_events->on_certificate_verification]
-                (const ag::certificate_verification_event &event) -> std::optional<std::string> {
+        events.on_certificate_verification
+                = [cb = c_events->on_certificate_verification](
+                          const CertificateVerificationEvent &event) -> std::optional<std::string> {
             ag_certificate_verification_event e{};
 
             e.certificate.size = event.certificate.size();
@@ -470,12 +471,10 @@ static ag::dnsproxy_events marshal_events(const ag_dnsproxy_events *c_events) {
 
             std::vector<ag_buffer> c_buffers;
             c_buffers.reserve(event.chain.size());
-            std::for_each(event.chain.begin(),
-                          event.chain.end(),
-                          [&c_buffers](auto &cert) {
-                              ag_buffer buf{(uint8_t *) cert.data(), (uint32_t) cert.size()};
-                              c_buffers.emplace_back(std::move(buf));
-                          });
+            std::for_each(event.chain.begin(), event.chain.end(), [&c_buffers](auto &cert) {
+                ag_buffer buf{(uint8_t *) cert.data(), (uint32_t) cert.size()};
+                c_buffers.emplace_back(std::move(buf));
+            });
             e.chain.size = c_buffers.size();
             e.chain.data = c_buffers.data();
 
@@ -493,17 +492,17 @@ static ag::dnsproxy_events marshal_events(const ag_dnsproxy_events *c_events) {
 }
 
 ag_dnsproxy_settings *ag_dnsproxy_settings_get_default() {
-    const auto &settings = ag::dnsproxy_settings::get_default();
+    const auto &settings = DnsProxySettings::get_default();
     auto *c_settings = marshal_settings(settings);
     return c_settings;
 }
 
 ag_dnsproxy *ag_dnsproxy_init(const ag_dnsproxy_settings *c_settings, const ag_dnsproxy_events *c_events,
-                              ag_dnsproxy_init_result *out_result, const char **out_message) {
+        ag_dnsproxy_init_result *out_result, const char **out_message) {
     auto settings = marshal_settings(c_settings);
     auto events = marshal_events(c_events);
 
-    auto *proxy = new ag::dnsproxy;
+    auto *proxy = new DnsProxy;
     auto [ret, err_or_warn] = proxy->init(settings, events);
 
     if (ret) {
@@ -517,7 +516,7 @@ ag_dnsproxy *ag_dnsproxy_init(const ag_dnsproxy_settings *c_settings, const ag_d
     }
 
     assert(err_or_warn);
-    if (err_or_warn == ag::dnsproxy::LISTENER_ERROR) {
+    if (err_or_warn == DnsProxy::LISTENER_ERROR) {
         *out_result = AGDPIR_LISTENER_ERROR;
     } else {
         *out_result = AGDPIR_ERROR;
@@ -529,30 +528,30 @@ ag_dnsproxy *ag_dnsproxy_init(const ag_dnsproxy_settings *c_settings, const ag_d
 }
 
 void ag_dnsproxy_deinit(ag_dnsproxy *handle) {
-    auto proxy = (ag::dnsproxy *) handle;
+    auto proxy = (DnsProxy *) handle;
     proxy->deinit();
     delete proxy;
 }
 
 ag_buffer ag_dnsproxy_handle_message(ag_dnsproxy *handle, ag_buffer message) {
-    auto proxy = (ag::dnsproxy *) handle;
-    ag::Uint8Vector res = proxy->handle_message({message.data, message.size}, nullptr);
+    auto proxy = (DnsProxy *) handle;
+    Uint8Vector res = proxy->handle_message({message.data, message.size}, nullptr);
     ag_buffer res_buf = marshal_buffer({res.data(), res.size()});
     return res_buf;
 }
 
 ag_dnsproxy_settings *ag_dnsproxy_get_settings(ag_dnsproxy *handle) {
-    auto proxy = (ag::dnsproxy *) handle;
+    auto proxy = (DnsProxy *) handle;
     ag_dnsproxy_settings *settings = marshal_settings(proxy->get_settings());
     return settings;
 }
 
 void ag_set_log_level(ag_log_level level) {
-    ag::Logger::set_log_level((ag::LogLevel) level);
+    Logger::set_log_level((LogLevel) level);
 }
 
 ag_dns_stamp *ag_dns_stamp_from_str(const char *stamp_str, const char **error) {
-    auto [stamp, stamp_err] = ag::server_stamp::from_string(stamp_str);
+    auto [stamp, stamp_err] = ServerStamp::from_string(stamp_str);
     if (stamp_err) {
         *error = marshal_str(*stamp_err);
         return nullptr;
@@ -563,16 +562,16 @@ ag_dns_stamp *ag_dns_stamp_from_str(const char *stamp_str, const char **error) {
     c_result->server_addr = marshal_str(stamp.server_addr_str);
     c_result->provider_name = marshal_str(stamp.provider_name);
     if (const auto &key = stamp.server_pk; !key.empty()) {
-        c_result->server_public_key = marshal_buffer({ key.data(), key.size() });
+        c_result->server_public_key = marshal_buffer({key.data(), key.size()});
     }
     if (const auto &hashes = stamp.hashes; !hashes.empty()) {
-        c_result->hashes = { (ag_buffer *)std::malloc(hashes.size() * sizeof(ag_buffer)), (uint32_t)hashes.size() };
+        c_result->hashes = {(ag_buffer *) std::malloc(hashes.size() * sizeof(ag_buffer)), (uint32_t) hashes.size()};
         for (size_t i = 0; i < hashes.size(); ++i) {
             const auto &h = hashes[i];
-            c_result->hashes.data[i] = marshal_buffer({ h.data(), h.size() });
+            c_result->hashes.data[i] = marshal_buffer({h.data(), h.size()});
         }
     }
-    c_result->properties = (ag_server_informal_properties)stamp.props;
+    c_result->properties = (ag_server_informal_properties) stamp.props;
     return c_result;
 }
 
@@ -592,13 +591,12 @@ void ag_dns_stamp_free(ag_dns_stamp *stamp) {
 }
 
 const char *ag_test_upstream(const ag_upstream_options *c_upstream, bool ipv6_available,
-                             ag_certificate_verification_cb on_certificate_verification,
-                             bool offline) {
+        ag_certificate_verification_cb on_certificate_verification, bool offline) {
     auto upstream = marshal_upstream(*c_upstream);
     ag_dnsproxy_events c_events{};
     c_events.on_certificate_verification = on_certificate_verification;
     auto events = marshal_events(&c_events);
-    auto result = ag::test_upstream(upstream, ipv6_available, events.on_certificate_verification, offline);
+    auto result = test_upstream(upstream, ipv6_available, events.on_certificate_verification, offline);
     return marshal_str(result.value_or(""));
 }
 
@@ -614,29 +612,29 @@ const char *ag_get_capi_version() {
 
 void ag_set_log_callback(ag_log_cb callback, void *attachment) {
     if (callback) {
-        ag::Logger::set_callback([callback, attachment](ag::LogLevel level, std::string_view message) {
+        Logger::set_callback([callback, attachment](LogLevel level, std::string_view message) {
             callback(attachment, (ag_log_level) level, message.data(), message.size());
         });
     } else {
-        ag::Logger::set_callback(nullptr);
+        Logger::set_callback(nullptr);
     }
 }
 
 const char *ag_dnsproxy_version() {
-    return ag::dnsproxy::version();
+    return DnsProxy::version();
 }
 
 const char *ag_dns_stamp_to_str(ag_dns_stamp *c_stamp) {
-    ag::server_stamp stamp = marshal_stamp(c_stamp);
+    ServerStamp stamp = marshal_stamp(c_stamp);
     return marshal_str(stamp.str());
 }
 
 const char *ag_dns_stamp_pretty_url(ag_dns_stamp *c_stamp) {
-    ag::server_stamp stamp = marshal_stamp(c_stamp);
+    ServerStamp stamp = marshal_stamp(c_stamp);
     return marshal_str(stamp.pretty_url(false));
 }
 
 const char *ag_dns_stamp_prettier_url(ag_dns_stamp *c_stamp) {
-    ag::server_stamp stamp = marshal_stamp(c_stamp);
+    ServerStamp stamp = marshal_stamp(c_stamp);
     return marshal_str(stamp.pretty_url(true));
 }

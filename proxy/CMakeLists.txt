@@ -6,16 +6,15 @@ conan_bootstrap(SRCROOT ".." CONANFILE "../conanfile.py" SCOPE_NAME agdns)
 set(CMAKE_CXX_STANDARD 17)
 
 set(DNSLIBS_DIR ..)
-set(SRC_DIR src)
 set(TEST_DIR test)
 
 set(SRCS
-        ${SRC_DIR}/dnsproxy.cpp
-        ${SRC_DIR}/dns64.cpp
-        ${SRC_DIR}/dns_forwarder.cpp
-        ${SRC_DIR}/dnsproxy_listener.cpp
-        ${SRC_DIR}/retransmission_detector.cpp
-        ${SRC_DIR}/dns_truncate.cpp
+        dnsproxy.cpp
+        dns64.cpp
+        dns_forwarder.cpp
+        dnsproxy_listener.cpp
+        retransmission_detector.cpp
+        dns_truncate.cpp
     )
 
 add_library(dnsproxy EXCLUDE_FROM_ALL ${SRCS})
@@ -45,7 +44,6 @@ endif(NOT TARGET dnslibs_net)
 
 set_target_properties(dnsproxy PROPERTIES POSITION_INDEPENDENT_CODE ON)
 target_include_directories(dnsproxy PUBLIC ./include)
-target_include_directories(dnsproxy PRIVATE ./src)
 target_link_libraries(dnsproxy dnslibs_common dnsfilter upstream dnslibs_net CONAN_PKG::ldns CONAN_PKG::libuv)
 
 target_compile_options(dnsproxy PRIVATE -Wall -Wextra -Wformat=2 -Wno-unused-parameter -Wno-unused-variable -Wno-ignored-qualifiers -Wno-missing-field-initializers)
@@ -65,10 +63,10 @@ configure_file(test/whitelist_test_filter.txt whitelist_test_filter.txt COPYONLY
 configure_file(test/bad_test_filter.txt bad_test_filter.txt COPYONLY)
 configure_file(test/crash_regress_test_filter.txt crash_regress_test_filter.txt COPYONLY)
 
-add_unit_test(dns64_test ${TEST_DIR} ${SRC_DIR} TRUE TRUE)
-add_unit_test(dnsproxy_test ${TEST_DIR} ${SRC_DIR} TRUE TRUE)
-add_unit_test(listener_test ${TEST_DIR} ${SRC_DIR} TRUE FALSE)
-add_unit_test(truncate_test ${TEST_DIR} ${SRC_DIR} TRUE TRUE)
+add_unit_test(dns64_test ${TEST_DIR} "" TRUE TRUE)
+add_unit_test(dnsproxy_test ${TEST_DIR} "" TRUE TRUE)
+add_unit_test(listener_test ${TEST_DIR} "" TRUE FALSE)
+add_unit_test(truncate_test ${TEST_DIR} "" TRUE TRUE)
 
 add_executable(listener_standalone EXCLUDE_FROM_ALL test/listener_standalone.cpp)
 add_executable(cache_benchmark EXCLUDE_FROM_ALL test/cache_benchmark.cpp)

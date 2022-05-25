@@ -5,13 +5,11 @@ conan_bootstrap(SRCROOT ".." CONANFILE "../conanfile.py" SCOPE_NAME agdns)
 
 set(CMAKE_CXX_STANDARD 17)
 
-set(SRC_DIR src)
-
 set(SRCS
-        ${SRC_DIR}/sys.cpp
-        ${SRC_DIR}/event_loop.cpp
-        ${SRC_DIR}/deferred_arg.cpp
-    )
+        sys.cpp
+        event_loop.cpp
+        deferred_arg.cpp
+)
 
 add_library(dnslibs_common STATIC EXCLUDE_FROM_ALL ${SRCS})
 

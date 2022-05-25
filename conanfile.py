@@ -32,7 +32,7 @@ class DnsLibsConan(ConanFile):
         self.requires("klib/2021-04-06@AdguardTeam/NativeLibsCommon")
         self.requires("ldns/2021-03-29@AdguardTeam/NativeLibsCommon")
         self.requires("ngtcp2/2021-05-13@AdguardTeam/NativeLibsCommon")
-        self.requires("native_libs_common/1.0.10@AdguardTeam/NativeLibsCommon")
+        self.requires("native_libs_common/1.0.14@AdguardTeam/NativeLibsCommon")
 
     def build_requirements(self):
         self.build_requires("gtest/1.11.0")

@@ -18,7 +18,7 @@ public class DnsProxySettings {
      * with the address specified by the rule.
      */
     public enum BlockingMode {
-        // MUST keep names and ordinals in sync with ag::dnsproxy_blocking_mode
+        // MUST keep names and ordinals in sync with ag::DnsProxyBlockingMode
 
         /** Respond with REFUSED response code */
         REFUSED(4),

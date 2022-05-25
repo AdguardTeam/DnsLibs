@@ -21,8 +21,6 @@ add_library(adguard-dns SHARED
         src/main/cpp/android_dnsstamp.cpp
         )
 
-target_include_directories(adguard-dns PRIVATE src/main/cpp)
-
 if (NOT TARGET dnsproxy)
     add_subdirectory(${DNS_LIBS_DIR}/proxy ${CMAKE_BINARY_DIR}/proxy)
 endif ()

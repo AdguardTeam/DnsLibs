@@ -13,11 +13,12 @@
 #include <optional>
 #include <string>
 
-#include "common/logger.h"
-#include <dnsproxy.h>
-#include <upstream_utils.h>
 #include "common/cesu8.h"
+#include "common/logger.h"
+#include "proxy/dnsproxy.h"
+#include "upstream/upstream_utils.h"
 
+using namespace ag;
 
 #if TARGET_OS_IPHONE
 static constexpr size_t FILTER_PARAMS_MEM_LIMIT_BYTES = 8 * 1024 * 1024;
@@ -38,17 +39,17 @@ NSErrorDomain const AGDnsProxyErrorDomain = @"com.adguard.dnsproxy";
 @implementation AGLogger
 + (void) setLevel: (AGLogLevel) level
 {
-    ag::Logger::set_log_level((ag::LogLevel)level);
+    Logger::set_log_level((LogLevel)level);
 }
 
 + (void) setCallback: (logCallback) func
 {
     if (func) {
-        ag::Logger::set_callback([func](ag::LogLevel level, std::string_view message) mutable {
+        Logger::set_callback([func](LogLevel level, std::string_view message) mutable {
             func((AGLogLevel) level, message.data(), message.size());
         });
     } else {
-        ag::Logger::set_callback(nullptr);
+        Logger::set_callback(nullptr);
     }
 }
 @end
@@ -220,9 +221,9 @@ static NSData *create_response_packet_v6(const struct iphdr6 *ip6_header,
     return response_packet;
 }
 
-static ag::server_stamp convert_stamp(AGDnsStamp *stamp) {
-    ag::server_stamp native{};
-    native.proto = (ag::stamp_proto_type) stamp.proto;
+static ServerStamp convert_stamp(AGDnsStamp *stamp) {
+    ServerStamp native{};
+    native.proto = (StampProtoType) stamp.proto;
     if (stamp.serverAddr) {
         native.server_addr_str = stamp.serverAddr.UTF8String;
     }
@@ -242,20 +243,20 @@ static ag::server_stamp convert_stamp(AGDnsStamp *stamp) {
     }
     uint64_t props = 0;
     if (stamp.dnssec) {
-        props |= ag::DNSSEC;
+        props |= DNSSEC;
     }
     if (stamp.noFilter) {
-        props |= ag::NO_FILTER;
+        props |= NO_FILTER;
     }
     if (stamp.noLog) {
-        props |= ag::NO_LOG;
+        props |= NO_LOG;
     }
-    native.props = (ag::server_informal_properties) props;
+    native.props = (ServerInformalProperties) props;
     return native;
 }
 
 @implementation AGDnsUpstream
-- (instancetype) initWithNative: (const ag::upstream_options *) settings
+- (instancetype) initWithNative: (const UpstreamOptions *) settings
 {
     self = [super init];
     _address = convert_string(settings->address);
@@ -322,7 +323,7 @@ static ag::server_stamp convert_stamp(AGDnsStamp *stamp) {
 @end
 
 @implementation AGDns64Settings
-- (instancetype) initWithNative: (const ag::dns64_settings *) settings
+- (instancetype) initWithNative: (const Dns64Settings *) settings
 {
     self = [super init];
     NSMutableArray<AGDnsUpstream *> *upstreams = [[NSMutableArray alloc] initWithCapacity: settings->upstreams.size()];
@@ -371,7 +372,7 @@ static ag::server_stamp convert_stamp(AGDnsStamp *stamp) {
 @end
 
 @implementation AGListenerSettings
-- (instancetype)initWithNative:(const ag::listener_settings *)settings
+- (instancetype)initWithNative:(const ListenerSettings *)settings
 {
     self = [super init];
     _address = convert_string(settings->address);
@@ -438,7 +439,7 @@ static ag::server_stamp convert_stamp(AGDnsStamp *stamp) {
     return self;
 }
 
-- (instancetype) initWithNative: (const ag::outbound_proxy_auth_info *)info
+- (instancetype) initWithNative: (const OutboundProxyAuthInfo *)info
 {
     self = [super init];
     if (self) {
@@ -488,7 +489,7 @@ static ag::server_stamp convert_stamp(AGDnsStamp *stamp) {
     return self;
 }
 
-- (instancetype) initWithNative: (const ag::outbound_proxy_settings *)settings
+- (instancetype) initWithNative: (const OutboundProxySettings *)settings
 {
     self = [super init];
     if (self) {
@@ -572,18 +573,18 @@ static ag::server_stamp convert_stamp(AGDnsStamp *stamp) {
 
 @implementation AGDnsProxyConfig
 
-- (instancetype) initWithNative: (const ag::dnsproxy_settings *) settings
+- (instancetype) initWithNative: (const DnsProxySettings *) settings
 {
     self = [super init];
     NSMutableArray<AGDnsUpstream *> *upstreams =
         [[NSMutableArray alloc] initWithCapacity: settings->upstreams.size()];
-    for (const ag::upstream_options &us : settings->upstreams) {
+    for (const UpstreamOptions &us : settings->upstreams) {
         [upstreams addObject: [[AGDnsUpstream alloc] initWithNative: &us]];
     }
     _upstreams = upstreams;
     NSMutableArray<AGDnsUpstream *> *fallbacks =
             [[NSMutableArray alloc] initWithCapacity: settings->fallbacks.size()];
-    for (const ag::upstream_options &us : settings->fallbacks) {
+    for (const UpstreamOptions &us : settings->fallbacks) {
         [fallbacks addObject: [[AGDnsUpstream alloc] initWithNative: &us]];
     }
     _fallbacks = fallbacks;
@@ -603,7 +604,7 @@ static ag::server_stamp convert_stamp(AGDnsStamp *stamp) {
     }
     NSMutableArray<AGListenerSettings *> *listeners =
             [[NSMutableArray alloc] initWithCapacity: settings->listeners.size()];
-    for (const ag::listener_settings &ls : settings->listeners) {
+    for (const ListenerSettings &ls : settings->listeners) {
         [listeners addObject: [[AGListenerSettings alloc] initWithNative: &ls]];
     }
     _listeners = listeners;
@@ -649,7 +650,7 @@ static ag::server_stamp convert_stamp(AGDnsStamp *stamp) {
         enableRouteResolver: (BOOL) enableRouteResolver
         helperPath: (NSString *) helperPath
 {
-    const ag::dnsproxy_settings &defaultSettings = ag::dnsproxy_settings::get_default();
+    const DnsProxySettings &defaultSettings = DnsProxySettings::get_default();
     self = [self initWithNative: &defaultSettings];
     if (upstreams != nil) {
         _upstreams = upstreams;
@@ -766,13 +767,13 @@ static ag::server_stamp convert_stamp(AGDnsStamp *stamp) {
 
 + (instancetype) getDefault
 {
-    const ag::dnsproxy_settings &defaultSettings = ag::dnsproxy_settings::get_default();
+    const DnsProxySettings &defaultSettings = DnsProxySettings::get_default();
     return [[AGDnsProxyConfig alloc] initWithNative: &defaultSettings];
 }
 @end
 
 @implementation AGDnsRequestProcessedEvent
-- (instancetype) init: (const ag::dns_request_processed_event &)event
+- (instancetype) init: (const DnsRequestProcessedEvent &)event
 {
     _domain = convert_string(event.domain);
     _type = convert_string(event.type);
@@ -872,8 +873,8 @@ static ag::server_stamp convert_stamp(AGDnsStamp *stamp) {
 @end
 
 @implementation AGDnsProxy {
-    ag::dnsproxy proxy;
-    std::optional<ag::Logger> log;
+    DnsProxy proxy;
+    std::optional<Logger> log;
     AGDnsProxyEvents *events;
     dispatch_queue_t queue;
     BOOL initialized;
@@ -911,9 +912,9 @@ static std::string getTrustCreationErrorStr(OSStatus status) {
 }
 
 template <typename T>
-using AGUniqueCFRef = ag::UniquePtr<std::remove_pointer_t<T>, &CFRelease>;
+using AGUniqueCFRef = UniquePtr<std::remove_pointer_t<T>, &CFRelease>;
 
-+ (std::optional<std::string>) verifyCertificate: (ag::certificate_verification_event *) event log: (ag::Logger &) log
++ (std::optional<std::string>) verifyCertificate: (CertificateVerificationEvent *) event log: (Logger &) log
 {
     tracelog(log, "[Verification] App callback");
 
@@ -986,7 +987,7 @@ using AGUniqueCFRef = ag::UniquePtr<std::remove_pointer_t<T>, &CFRelease>;
     return errStr;
 }
 
-static ag::upstream_options convert_upstream(AGDnsUpstream *upstream) {
+static UpstreamOptions convert_upstream(AGDnsUpstream *upstream) {
     std::vector<std::string> bootstrap;
     if (upstream.bootstrap != nil) {
         bootstrap.reserve([upstream.bootstrap count]);
@@ -994,21 +995,21 @@ static ag::upstream_options convert_upstream(AGDnsUpstream *upstream) {
             bootstrap.emplace_back([server UTF8String]);
         }
     }
-    ag::IpAddress addr;
+    IpAddress addr;
     if (upstream.serverIp != nil && [upstream.serverIp length] == 4) {
-        addr.emplace<ag::Uint8Array<4>>();
-        std::memcpy(std::get<ag::Uint8Array<4>>(addr).data(),
+        addr.emplace<Uint8Array<4>>();
+        std::memcpy(std::get<Uint8Array<4>>(addr).data(),
                     [upstream.serverIp bytes], [upstream.serverIp length]);
     } else if (upstream.serverIp != nil && [upstream.serverIp length] == 16) {
-        addr.emplace<ag::Uint8Array<16>>();
-        std::memcpy(std::get<ag::Uint8Array<16>>(addr).data(),
+        addr.emplace<Uint8Array<16>>();
+        std::memcpy(std::get<Uint8Array<16>>(addr).data(),
                     [upstream.serverIp bytes], [upstream.serverIp length]);
     }
-    ag::IfIdVariant iface;
+    IfIdVariant iface;
     if (upstream.outboundInterfaceName != nil) {
         iface.emplace<std::string>(upstream.outboundInterfaceName.UTF8String);
     }
-    return ag::upstream_options{[upstream.address UTF8String],
+    return UpstreamOptions{[upstream.address UTF8String],
                                 std::move(bootstrap),
                                 std::chrono::milliseconds(upstream.timeoutMs),
                                 std::move(addr),
@@ -1016,8 +1017,8 @@ static ag::upstream_options convert_upstream(AGDnsUpstream *upstream) {
                                 std::move(iface)};
 }
 
-static std::vector<ag::upstream_options> convert_upstreams(NSArray<AGDnsUpstream *> *upstreams) {
-    std::vector<ag::upstream_options> converted;
+static std::vector<UpstreamOptions> convert_upstreams(NSArray<AGDnsUpstream *> *upstreams) {
+    std::vector<UpstreamOptions> converted;
     if (upstreams != nil) {
         converted.reserve([upstreams count]);
         for (AGDnsUpstream *upstream in upstreams) {
@@ -1182,11 +1183,11 @@ static int bindFd(NSString *helperPath, NSString *address, NSNumber *port, AGLis
     }
     self->initialized = NO;
 
-    self->log = ag::Logger{"AGDnsProxy"};
+    self->log = Logger{"AGDnsProxy"};
 
     infolog(*self->log, "Initializing dns proxy...");
 
-    ag::dnsproxy_settings settings = ag::dnsproxy_settings::get_default();
+    DnsProxySettings settings = DnsProxySettings::get_default();
     settings.upstreams = convert_upstreams(config.upstreams);
     settings.fallbacks = convert_upstreams(config.fallbacks);
 
@@ -1207,7 +1208,7 @@ static int bindFd(NSString *helperPath, NSString *address, NSNumber *port, AGLis
             dbglog(*self->log, "Filter id={} {}={}", fp.id, fp.inMemory ? "content" : "path", fp.data.UTF8String);
 
             settings.filter_params.filters.emplace_back(
-                ag::dnsfilter::filter_params{(int32_t) fp.id, fp.data.UTF8String, (bool) fp.inMemory});
+                DnsFilter::FilterParams{(int32_t) fp.id, fp.data.UTF8String, (bool) fp.inMemory});
         }
 #if TARGET_OS_IPHONE
         settings.filter_params.mem_limit = config.filtersMemoryLimitBytes;
@@ -1217,10 +1218,10 @@ static int bindFd(NSString *helperPath, NSString *address, NSNumber *port, AGLis
     void *obj = (__bridge void *)self;
     self->queue = dispatch_queue_create("com.adguard.dnslibs.AGDnsProxy.queue", nil);
     self->events = handler;
-    ag::dnsproxy_events native_events = {};
+    DnsProxyEvents native_events = {};
     if (handler != nil && handler.onRequestProcessed != nil) {
          native_events.on_request_processed =
-            [obj] (const ag::dns_request_processed_event &event) {
+            [obj] (const DnsRequestProcessedEvent &event) {
                 auto *sself = (__bridge AGDnsProxy *)obj;
                 @autoreleasepool {
                     auto *objCEvent = [[AGDnsRequestProcessedEvent alloc] init: event];
@@ -1235,7 +1236,7 @@ static int bindFd(NSString *helperPath, NSString *address, NSNumber *port, AGLis
             };
     }
     native_events.on_certificate_verification =
-        [obj] (ag::certificate_verification_event event) -> std::optional<std::string> {
+        [obj] (CertificateVerificationEvent event) -> std::optional<std::string> {
             @autoreleasepool {
                 AGDnsProxy *sself = (__bridge AGDnsProxy *)obj;
                 return [AGDnsProxy verifyCertificate: &event log: *sself->log];
@@ -1249,7 +1250,7 @@ static int bindFd(NSString *helperPath, NSString *address, NSNumber *port, AGLis
         } else if ([dns64_upstreams count] == 0) {
             dbglog(*self->log, "DNS64 upstreams list is empty");
         } else {
-            settings.dns64 = ag::dns64_settings{
+            settings.dns64 = Dns64Settings{
                     .upstreams = convert_upstreams(dns64_upstreams),
                     .max_tries = config.dns64Settings.maxTries > 0
                                  ? static_cast<uint32_t>(config.dns64Settings.maxTries) : 0,
@@ -1276,7 +1277,7 @@ static int bindFd(NSString *helperPath, NSString *address, NSNumber *port, AGLis
                 }); // Close on return (listener does dup())
             }
 #endif
-            settings.listeners.emplace_back((ag::listener_settings) {
+            settings.listeners.emplace_back((ListenerSettings) {
                 .address = listener.address.UTF8String,
                 .port = (uint16_t) listener.port,
                 .protocol = (ag::utils::TransportProtocol) listener.proto,
@@ -1290,8 +1291,8 @@ static int bindFd(NSString *helperPath, NSString *address, NSNumber *port, AGLis
     settings.ipv6_available = config.ipv6Available;
     settings.block_ipv6 = config.blockIpv6;
 
-    settings.adblock_rules_blocking_mode = (ag::dnsproxy_blocking_mode) config.adblockRulesBlockingMode;
-    settings.hosts_rules_blocking_mode = (ag::dnsproxy_blocking_mode) config.hostsRulesBlockingMode;
+    settings.adblock_rules_blocking_mode = (DnsProxyBlockingMode) config.adblockRulesBlockingMode;
+    settings.hosts_rules_blocking_mode = (DnsProxyBlockingMode) config.hostsRulesBlockingMode;
     if (config.customBlockingIpv4 != nil) {
         settings.custom_blocking_ipv4 = [config.customBlockingIpv4 UTF8String];
     }
@@ -1310,7 +1311,7 @@ static int bindFd(NSString *helperPath, NSString *address, NSNumber *port, AGLis
         auto str = AG_FMT("Failed to initialize the DNS proxy: {}", *err_or_warn);
         errlog(*self->log, "{}", str);
         if (error) {
-            if (err_or_warn == ag::dnsproxy::LISTENER_ERROR) {
+            if (err_or_warn == DnsProxy::LISTENER_ERROR) {
                 *error = [NSError errorWithDomain: AGDnsProxyErrorDomain
                                              code: AGDPE_PROXY_INIT_LISTENER_ERROR
                                          userInfo: @{ NSLocalizedDescriptionKey: convert_string(str) }];
@@ -1352,15 +1353,15 @@ static int bindFd(NSString *helperPath, NSString *address, NSNumber *port, AGLis
            inet_ntop(AF_INET, &ip_header->ip_src, srcv4_str, sizeof(srcv4_str)), ntohs(udp_header->uh_sport),
            inet_ntop(AF_INET, &ip_header->ip_dst, dstv4_str, sizeof(dstv4_str)), ntohs(udp_header->uh_dport));
 
-    if (ntohs(udp_header->uh_dport) != ag::DEFAULT_PLAIN_PORT) {
+    if (ntohs(udp_header->uh_dport) != DEFAULT_PLAIN_PORT) {
         dbglog(*self->log, "Dropping non-DNS packet");
         return nil;
     }
 
-    ag::Uint8View payload = {(uint8_t *) packet.bytes + header_length, packet.length - header_length};
-    ag::dns_message_info info{
+    Uint8View payload = {(uint8_t *) packet.bytes + header_length, packet.length - header_length};
+    DnsMessageInfo info{
             .proto = ag::utils::TP_UDP,
-            .peername = ag::SocketAddress{{(uint8_t *) &ip_header->ip_src, sizeof(ip_header->ip_src)},
+            .peername = SocketAddress{{(uint8_t *) &ip_header->ip_src, sizeof(ip_header->ip_src)},
                                            ntohs(udp_header->uh_sport)}};
     std::vector<uint8_t> response = self->proxy.handle_message(payload, &info);
     if (response.empty()) {
@@ -1386,15 +1387,15 @@ static int bindFd(NSString *helperPath, NSString *address, NSNumber *port, AGLis
            inet_ntop(AF_INET6, &ip_header->ip6_src, srcv6_str, sizeof(srcv6_str)), ntohs(udp_header->uh_sport),
            inet_ntop(AF_INET6, &ip_header->ip6_dst, dstv6_str, sizeof(dstv6_str)), ntohs(udp_header->uh_dport));
 
-    if (ntohs(udp_header->uh_dport) != ag::DEFAULT_PLAIN_PORT) {
+    if (ntohs(udp_header->uh_dport) != DEFAULT_PLAIN_PORT) {
         dbglog(*self->log, "Dropping non-DNS packet");
         return nil;
     }
 
-    ag::Uint8View payload = {(uint8_t *) packet.bytes + header_length, packet.length - header_length};
-    ag::dns_message_info info{
+    Uint8View payload = {(uint8_t *) packet.bytes + header_length, packet.length - header_length};
+    DnsMessageInfo info{
             .proto = ag::utils::TP_UDP,
-            .peername = ag::SocketAddress{{(uint8_t *) &ip_header->ip6_src, sizeof(ip_header->ip6_src)},
+            .peername = SocketAddress{{(uint8_t *) &ip_header->ip6_src, sizeof(ip_header->ip6_src)},
                                            ntohs(udp_header->uh_sport)}};
     std::vector<uint8_t> response = self->proxy.handle_message(payload, &info);
     if (response.empty()) {
@@ -1417,18 +1418,18 @@ static int bindFd(NSString *helperPath, NSString *address, NSNumber *port, AGLis
 
 + (BOOL) isValidRule: (NSString *) str
 {
-    return ag::dnsfilter::is_valid_rule([str UTF8String]);
+    return DnsFilter::is_valid_rule([str UTF8String]);
 }
 
 + (NSString *)libraryVersion {
-    return convert_string(ag::dnsproxy::version());
+    return convert_string(DnsProxy::version());
 }
 
 @end
 
 @implementation AGDnsStamp
 
-- (instancetype) initWithNative: (const ag::server_stamp *) stamp
+- (instancetype) initWithNative: (const ServerStamp *) stamp
 {
     self = [super init];
     if (self) {
@@ -1446,13 +1447,13 @@ static int bindFd(NSString *helperPath, NSString *address, NSNumber *port, AGLis
             }
             _hashes = hs;
         }
-        if (stamp->props & ag::DNSSEC) {
+        if (stamp->props & DNSSEC) {
             _dnssec = YES;
         }
-        if (stamp->props & ag::NO_LOG) {
+        if (stamp->props & NO_LOG) {
             _noLog = YES;
         }
-        if (stamp->props & ag::NO_FILTER) {
+        if (stamp->props & NO_FILTER) {
             _noFilter = YES;
         }
     }
@@ -1490,7 +1491,7 @@ static int bindFd(NSString *helperPath, NSString *address, NSNumber *port, AGLis
 
 - (instancetype)initWithString:(NSString *)stampStr
                          error:(NSError **)error {
-    auto[stamp, stamp_error] = ag::server_stamp::from_string(stampStr.UTF8String);
+    auto[stamp, stamp_error] = ServerStamp::from_string(stampStr.UTF8String);
     if (!stamp_error) {
         return [self initWithNative:&stamp];
     }
@@ -1508,17 +1509,17 @@ static int bindFd(NSString *helperPath, NSString *address, NSNumber *port, AGLis
 }
 
 - (NSString *)prettyUrl {
-    ag::server_stamp stamp = convert_stamp(self);
+    ServerStamp stamp = convert_stamp(self);
     return convert_string(stamp.pretty_url(false));
 }
 
 - (NSString *)prettierUrl {
-    ag::server_stamp stamp = convert_stamp(self);
+    ServerStamp stamp = convert_stamp(self);
     return convert_string(stamp.pretty_url(true));
 }
 
 - (NSString *)stringValue {
-    ag::server_stamp stamp = convert_stamp(self);
+    ServerStamp stamp = convert_stamp(self);
     return convert_string(stamp.str());
 }
 
@@ -1526,9 +1527,9 @@ static int bindFd(NSString *helperPath, NSString *address, NSNumber *port, AGLis
 
 @implementation AGDnsUtils
 
-static auto dnsUtilsLogger = ag::Logger{"AGDnsUtils"};
+static auto dnsUtilsLogger = Logger{"AGDnsUtils"};
 
-static std::optional<std::string> verifyCertificate(ag::certificate_verification_event event) {
+static std::optional<std::string> verifyCertificate(CertificateVerificationEvent event) {
     return [AGDnsProxy verifyCertificate: &event log: dnsUtilsLogger];
 }
 

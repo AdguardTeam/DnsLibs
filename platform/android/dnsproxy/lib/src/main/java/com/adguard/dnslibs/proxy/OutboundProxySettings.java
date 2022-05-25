@@ -5,7 +5,7 @@ import java.util.Objects;
 
 public class OutboundProxySettings {
     public enum Protocol {
-        // MUST keep names and ordinals in sync with ag::outbound_proxy_protocol
+        // MUST keep names and ordinals in sync with ag::OutboundProxyProtocol
 
         /** Plain HTTP proxy */
         HTTP_CONNECT,

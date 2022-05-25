@@ -6,26 +6,25 @@ conan_bootstrap(SRCROOT ".." CONANFILE "../conanfile.py" SCOPE_NAME agdns)
 set(CMAKE_CXX_STANDARD 17)
 
 set(DNSLIBS_DIR "${CMAKE_CURRENT_SOURCE_DIR}/..")
-set(SRC_DIR "${CMAKE_CURRENT_SOURCE_DIR}/src")
 
 set(SRCS
-        ${SRC_DIR}/certificate_verifier.cpp
-        ${SRC_DIR}/application_verifier.cpp
-        ${SRC_DIR}/default_verifier.cpp
-        ${SRC_DIR}/tls_session_cache.cpp
-        ${SRC_DIR}/socket.cpp
-        ${SRC_DIR}/socket_factory.cpp
-        ${SRC_DIR}/blocking_socket.cpp
-        ${SRC_DIR}/tcp_stream.cpp
-        ${SRC_DIR}/udp_socket.cpp
-        ${SRC_DIR}/tcp_dns_buffer.cpp
-        ${SRC_DIR}/proxied_socket.cpp
-        ${SRC_DIR}/outbound_proxy.cpp
-        ${SRC_DIR}/outbound_http_proxy.cpp
-        ${SRC_DIR}/outbound_socks_proxy.cpp
-        ${SRC_DIR}/outbound_direct_proxy.cpp
-        ${SRC_DIR}/tls_codec.cpp
-        ${SRC_DIR}/secured_socket.cpp
+        certificate_verifier.cpp
+        application_verifier.cpp
+        default_verifier.cpp
+        tls_session_cache.cpp
+        socket.cpp
+        socket_factory.cpp
+        blocking_socket.cpp
+        tcp_stream.cpp
+        udp_socket.cpp
+        tcp_dns_buffer.cpp
+        proxied_socket.cpp
+        outbound_proxy.cpp
+        outbound_http_proxy.cpp
+        outbound_socks_proxy.cpp
+        outbound_direct_proxy.cpp
+        tls_codec.cpp
+        secured_socket.cpp
         )
 
 add_library(dnslibs_net STATIC EXCLUDE_FROM_ALL ${SRCS})

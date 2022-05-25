@@ -1,0 +1,26 @@
+---
+# We'll use defaults from the LLVM style, but with 4 columns indentation.
+BasedOnStyle: LLVM
+ColumnLimit: 120
+IndentWidth: 4
+ContinuationIndentWidth: 8
+---
+Language: Cpp
+AccessModifierOffset: -4
+ConstructorInitializerIndentWidth: 8
+IndentCaseLabels: false
+NamespaceIndentation: None
+SpaceBeforeRangeBasedForLoopColon: true
+AllowAllArgumentsOnNextLine: true
+AllowShortBlocksOnASingleLine: Never
+AllowShortFunctionsOnASingleLine: None
+AllowShortLambdasOnASingleLine: Empty
+BreakConstructorInitializers: BeforeComma
+SpaceAfterCStyleCast: true
+BreakBeforeBinaryOperators: true
+AlignAfterOpenBracket: DontAlign
+AlignOperands: DontAlign
+AlignTrailingComments: false
+AlwaysBreakTemplateDeclarations: Yes
+# LLVM 15: InsertBraces: true
+---

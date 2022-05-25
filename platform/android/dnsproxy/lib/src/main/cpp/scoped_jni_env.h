@@ -4,7 +4,7 @@
 #include <pthread.h>
 #include <cassert>
 
-namespace ag {
+namespace ag::jni {
 
 /**
  * A helper to get the JavaVM from JNIEnv.
@@ -18,13 +18,13 @@ inline JavaVM *get_vm(JNIEnv *env) {
 /**
  * Attaches the current thread, if necessary, and pushes a local reference frame. Reverses that in dtor.
  */
-class scoped_jni_env {
+class ScopedJniEnv {
 private:
     JavaVM *m_vm{};
     JNIEnv *m_env{};
 
 public:
-    scoped_jni_env(JavaVM *vm, jint max_local_refs) {
+    ScopedJniEnv(JavaVM *vm, jint max_local_refs) {
         m_vm = vm;
 
         int64_t ret = m_vm->GetEnv((void **) &m_env, JNI_VERSION_1_2);
@@ -58,7 +58,7 @@ public:
         assert(0 == ret);
     }
 
-    ~scoped_jni_env() {
+    ~ScopedJniEnv() {
         m_env->PopLocalFrame(nullptr);
     }
 

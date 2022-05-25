@@ -64,7 +64,7 @@ where `<build_path>` is the build path one passed to script, `<target_name>` is 
 
 ## Useful notes
 
-* Proxy configuration: [native](proxy/include/dnsproxy_settings.h), [mac](platform/mac/framework/AGDnsProxy.h),
+* Proxy configuration: [native](proxy/include/proxy/DnsProxySettings.h), [mac](platform/mac/framework/AGDnsProxy.h),
 [android](platform/android/dnsproxy/lib/src/main/java/com/adguard/dnslibs/proxy/DnsProxySettings.java)
 * [Rules syntax](https://github.com/AdguardTeam/AdguardHome/wiki/Hosts-Blocklists)
 * [Developer documentation](documentation/DEV_DOCS.en.md)

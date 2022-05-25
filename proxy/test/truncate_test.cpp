@@ -1,15 +1,18 @@
-#include <gtest/gtest.h>
 #include "common/defs.h"
+#include <gtest/gtest.h>
 #include <ldns/ldns.h>
-#include <dns_truncate.h>
+
+#include "../dns_truncate.h"
+
+namespace ag::proxy::test {
 
 #include "big_dns_packet.inc"
 
-using ldns_pkt_ptr = ag::UniquePtr<ldns_pkt, &ldns_pkt_free>;
-using ldns_buffer_ptr = ag::UniquePtr<ldns_buffer, &ldns_buffer_free>;
+using ldns_pkt_ptr = UniquePtr<ldns_pkt, &ldns_pkt_free>;
+using ldns_buffer_ptr = UniquePtr<ldns_buffer, &ldns_buffer_free>;
 
 TEST(DnsTruncateTest, TruncateMinSize512) {
-    ag::Uint8View pkt_data = {&BIG_PACKET[0], std::size(BIG_PACKET) - 1};
+    Uint8View pkt_data = {&BIG_PACKET[0], std::size(BIG_PACKET) - 1};
     ASSERT_EQ(1946, pkt_data.size());
 
     ldns_pkt *pkt;
@@ -29,7 +32,7 @@ TEST(DnsTruncateTest, TruncateMinSize512) {
 }
 
 TEST(DnsTruncateTest, TruncateWorks) {
-    ag::Uint8View pkt_data = {&BIG_PACKET[0], std::size(BIG_PACKET) - 1};
+    Uint8View pkt_data = {&BIG_PACKET[0], std::size(BIG_PACKET) - 1};
     ASSERT_EQ(1946, pkt_data.size());
 
     ldns_pkt *pkt;
@@ -61,3 +64,5 @@ TEST(DnsTruncateTest, TruncateWorks) {
         ASSERT_EQ(ldns_pkt_tc(pkt_dec), truncated);
     }
 }
+
+} // namespace ag::proxy::test

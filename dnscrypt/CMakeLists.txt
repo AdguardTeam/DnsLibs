@@ -16,19 +16,20 @@ if(NOT TARGET dnslibs_net)
 endif(NOT TARGET dnslibs_net)
 
 add_library(dnscrypt EXCLUDE_FROM_ALL
-        include/dns_crypt_cipher.h
-        include/dns_crypt_client.h
-        include/dns_crypt_consts.h
-        include/dns_crypt_server_info.h
-        include/dns_crypt_utils.h
-        src/dns_crypt_cipher.cpp
-        src/dns_crypt_client.cpp
-        src/dns_crypt_ldns.h
-        src/dns_crypt_ldns.cpp
-        src/dns_crypt_padding.cpp
-        src/dns_crypt_padding.h
-        src/dns_crypt_server_info.cpp
-        src/dns_crypt_utils.cpp)
+        include/dnscrypt/dns_crypt_cipher.h
+        include/dnscrypt/dns_crypt_client.h
+        include/dnscrypt/dns_crypt_consts.h
+        include/dnscrypt/dns_crypt_server_info.h
+        include/dnscrypt/dns_crypt_utils.h
+        include/dnscrypt/dns_crypt_ldns.h
+        dns_crypt_cipher.cpp
+        dns_crypt_client.cpp
+        dns_crypt_ldns.cpp
+        dns_crypt_padding.cpp
+        dns_crypt_padding.h
+        dns_crypt_server_info.cpp
+        dns_crypt_utils.cpp
+        )
 
 set_target_properties(dnscrypt PROPERTIES POSITION_INDEPENDENT_CODE ON)
 target_include_directories(dnscrypt PUBLIC include)

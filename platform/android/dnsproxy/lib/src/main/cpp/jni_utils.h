@@ -1,56 +1,58 @@
 #pragma once
 
 #include <jni.h>
-#include "common/defs.h"
 #include <functional>
 #include <string_view>
-#include <scoped_jni_env.h>
 
-namespace ag {
+#include "common/defs.h"
+
+#include "scoped_jni_env.h"
+
+namespace ag::jni {
 
 /**
  * NewGlobalRef in ctor, DeleteGlobalRef in dtor.
  */
 template <typename T>
-class global_ref {
+class GlobalRef {
 private:
     JavaVM *m_vm{};
     T m_ref{};
 
     void delete_global_ref() const {
         if (m_vm) {
-            scoped_jni_env env(m_vm, 1);
+            ScopedJniEnv env(m_vm, 1);
             env->DeleteGlobalRef(m_ref);
         }
     }
 
 public:
-    global_ref() = default;
+    GlobalRef() = default;
 
-    global_ref(JavaVM *vm, T ref) : m_vm{vm} {
-        scoped_jni_env env(vm, 1);
+    GlobalRef(JavaVM *vm, T ref) : m_vm{vm} {
+        ScopedJniEnv env(vm, 1);
         m_ref = (T) env->NewGlobalRef(ref);
     }
 
-    global_ref(const global_ref &other) {
+    GlobalRef(const GlobalRef &other) {
         *this = other;
     }
 
-    global_ref &operator=(const global_ref &other) {
+    GlobalRef &operator=(const GlobalRef &other) {
         if (&other != this) {
             delete_global_ref();
             m_vm = other.m_vm;
-            scoped_jni_env env(m_vm, 1);
+            ScopedJniEnv env(m_vm, 1);
             m_ref = (T) env->NewGlobalRef(other.m_ref);
         }
         return *this;
     }
 
-    global_ref(global_ref &&other) noexcept {
+    GlobalRef(GlobalRef &&other) noexcept {
         *this = std::move(other);
     }
 
-    global_ref &operator=(global_ref &&other) noexcept {
+    GlobalRef &operator=(GlobalRef &&other) noexcept {
         if (&other != this) {
             delete_global_ref();
             m_vm = other.m_vm;
@@ -61,7 +63,7 @@ public:
         return *this;
     }
 
-    ~global_ref() {
+    ~GlobalRef() {
         delete_global_ref();
     }
 
@@ -79,7 +81,7 @@ public:
  * DeleteLocalRef in dtor.
  */
 template <typename T>
-class local_ref {
+class LocalRef {
 private:
     JNIEnv *m_env{};
     T m_ref{};
@@ -91,21 +93,21 @@ private:
     }
 
 public:
-    local_ref() = default;
+    LocalRef() = default;
 
-    local_ref(JNIEnv *env, T ref) : m_env{env}, m_ref{ref} {}
+    LocalRef(JNIEnv *env, T ref) : m_env{env}, m_ref{ref} {}
 
-    local_ref(JNIEnv *env, const global_ref<T> &global) : m_env{env}, m_ref{env->NewLocalRef(global.get())} {}
+    LocalRef(JNIEnv *env, const GlobalRef<T> &global) : m_env{env}, m_ref{env->NewLocalRef(global.get())} {}
 
-    local_ref(const local_ref &) = delete;
+    LocalRef(const LocalRef &) = delete;
 
-    local_ref &operator=(const local_ref &) = delete;
+    LocalRef &operator=(const LocalRef &) = delete;
 
-    local_ref(local_ref &&other) noexcept {
+    LocalRef(LocalRef &&other) noexcept {
         *this = std::move(other);
     }
 
-    local_ref &operator=(local_ref &&other) noexcept {
+    LocalRef &operator=(LocalRef &&other) noexcept {
         if (&other != this) {
             delete_local_ref();
             m_env = other.m_env;
@@ -116,7 +118,7 @@ public:
         return *this;
     }
 
-    ~local_ref() {
+    ~LocalRef() {
         delete_local_ref();
     }
 
@@ -132,15 +134,15 @@ public:
 /**
  * This class is NOT thread-safe!
  */
-class jni_utils {
+class JniUtils {
 private:
     struct {
-        global_ref<jclass> collection;
-        global_ref<jclass> iterable;
-        global_ref<jclass> iterator;
-        global_ref<jclass> string;
-        global_ref<jclass> enum_base;
-        global_ref<jclass> integer;
+        GlobalRef<jclass> collection;
+        GlobalRef<jclass> iterable;
+        GlobalRef<jclass> iterator;
+        GlobalRef<jclass> string;
+        GlobalRef<jclass> enum_base;
+        GlobalRef<jclass> integer;
     } m_jclasses{};
 
     struct {
@@ -170,12 +172,12 @@ public:
     /**
      * Initialize global refs.
      */
-    explicit jni_utils(JavaVM *vm);
+    explicit JniUtils(JavaVM *vm);
 
     /**
      * Call `f` for each object in `iterable`.
      */
-    void iterate(JNIEnv *env, jobject iterable, const std::function<void(local_ref<jobject> &&)> &f);
+    void iterate(JNIEnv *env, jobject iterable, const std::function<void(LocalRef<jobject> &&)> &f);
 
     /**
      * Call `f` for `string`.
@@ -186,7 +188,7 @@ public:
     /**
      * Marshal a C++ string view to Java String.
      */
-    static local_ref<jstring> marshal_string(JNIEnv *env, std::string_view str);
+    static LocalRef<jstring> marshal_string(JNIEnv *env, std::string_view str);
 
     /**
      * Marshal a Java string to C++.
@@ -196,7 +198,7 @@ public:
     /**
      * Marshal C++ std::optional<int32_t> to Java Integer.
      */
-    local_ref<jobject> marshal_integer(JNIEnv *env, const std::optional<int32_t>& value);
+    LocalRef<jobject> marshal_integer(JNIEnv *env, const std::optional<int32_t>& value);
 
     /**
      * Marshal a Java Integer to C++ std::optional<int32_t>.
@@ -206,7 +208,7 @@ public:
     /**
      * Copy a Uint8View to a new Java byte array.
      */
-    static local_ref<jbyteArray> marshal_uint8_view(JNIEnv *env, Uint8View v);
+    static LocalRef<jbyteArray> marshal_uint8_view(JNIEnv *env, Uint8View v);
 
     /**
      * Add `o` to `collection`.
@@ -218,7 +220,7 @@ public:
      * @param enum_class The fully qualified name of a Java enum.
      * @return The enum's values.
      */
-    std::vector<global_ref<jobject>> get_enum_values(JNIEnv *env, const std::string &enum_class);
+    std::vector<GlobalRef<jobject>> get_enum_values(JNIEnv *env, const std::string &enum_class);
 
     /**
      * @return The ordinal of the given enum value. See Javadoc for definition of ordinal.
