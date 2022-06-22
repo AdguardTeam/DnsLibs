@@ -401,7 +401,7 @@ void SocksOProxy::on_read(void *arg, Uint8View data) {
     case CS_CONNECTED:
         if (self->is_udp_association_connection(conn->id)) {
             log_conn(self, conn->id, dbg, "Unexpected data ({} bytes) on UDP association connection", data.size());
-            self->terminate_udp_association(conn);
+            self->terminate_udp_association(conn, {{-1, "Unexpected data"}});
         } else if (Callbacks cbx = self->get_connection_callbacks_locked(conn); cbx.on_read != nullptr) {
             if (conn->parameters.proto == utils::TP_UDP) {
                 data.remove_prefix(get_full_udp_header_size((Socks5UdpHeader *) data.data()));
@@ -562,7 +562,7 @@ void SocksOProxy::handle_connection_close(Connection *conn, std::optional<Socket
 
     if (this->is_udp_association_connection(conn->id)) {
         if (conn->state != CS_CONNECTED || !error.has_value() || error->code != utils::AG_ETIMEDOUT) {
-            this->terminate_udp_association(conn);
+            this->terminate_udp_association(conn, std::move(error));
         }
     } else if (callbacks.on_close != nullptr) {
         callbacks.on_close(callbacks.arg, std::move(error));
@@ -580,7 +580,7 @@ void SocksOProxy::on_udp_association_established(Connection *assoc_conn, SocketA
     } else {
         log_conn(this, assoc_conn->id, dbg, "UDP association is not found");
         m_guard.unlock();
-        this->terminate_udp_association(assoc_conn);
+        this->terminate_udp_association(assoc_conn, {{-1, "UDP association is not found"}});
         return;
     }
 
@@ -602,7 +602,7 @@ void SocksOProxy::on_udp_association_established(Connection *assoc_conn, SocketA
     }
 }
 
-void SocksOProxy::terminate_udp_association(Connection *assoc_conn) {
+void SocksOProxy::terminate_udp_association(Connection *assoc_conn, std::optional<Socket::Error> error) {
     log_conn(this, assoc_conn->id, trace, "...");
 
     std::vector<Callbacks> udp_connections_callbacks;
@@ -623,7 +623,11 @@ void SocksOProxy::terminate_udp_association(Connection *assoc_conn) {
 
     for (auto &cbx : udp_connections_callbacks) {
         if (cbx.on_close != nullptr) {
-            cbx.on_close(cbx.arg, {{-1, "UDP association terminated"}});
+            if (error.has_value()) {
+                cbx.on_close(cbx.arg, {{error->code, "UDP association terminated: " + error->description}});
+            } else {
+                cbx.on_close(cbx.arg, {{-1, "UDP association terminated"}});
+            }
         }
     }
 }

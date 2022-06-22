@@ -480,8 +480,12 @@ void DoqUpstream::on_socket_close(void *arg, std::optional<Socket::Error> error)
         if (!self->m_conn_state.is_peer_selected()) {
             self->disqualify_server_address(peer);
         }
+        if (error->code == utils::AG_ECONNREFUSED) {
+            self->m_socket_error = true;
+        }
     } else {
         dbglog(self->m_log, "Connection to {} closed", peer.str());
+        self->m_socket_error = false;
     }
 
     auto drop = self->m_conn_state.extract_socket(ctx);
@@ -1083,7 +1087,7 @@ void DoqUpstream::disconnect(std::string_view reason) {
 
     std::scoped_lock l(m_global);
     for (auto &cur : m_requests) {
-        if (cur.second.is_onfly) {
+        if (cur.second.is_onfly || m_socket_error) {
             tracelog(m_log, "Call condvar for request, id: {}", cur.first);
             cur.second.cond.notify_all();
         }

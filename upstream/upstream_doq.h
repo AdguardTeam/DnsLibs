@@ -231,6 +231,7 @@ private:
     static std::atomic_int64_t m_next_request_id;
     std::array<uint8_t, 32> m_static_secret;
     TlsSessionCache m_tls_session_cache;
+    std::atomic_bool m_socket_error{false};
 };
 
 } // ag
