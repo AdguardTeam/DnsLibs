@@ -76,7 +76,7 @@ class DnsLibsConan(ConanFile):
         ]
 
         for m in MODULES:
-            self.copy("*.h", dst="include", src="source_subfolder/%s/include" % m, keep_path=False)
+            self.copy("*.h", dst="include", src="source_subfolder/%s/include" % m)
 
         self.copy("*.lib", dst="lib", keep_path=False)
         self.copy("*.dll", dst="bin", keep_path=False)
