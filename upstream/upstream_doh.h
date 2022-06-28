@@ -33,7 +33,6 @@ using event_ptr = UniquePtr<event, &event_free>;
 
 class DohUpstream : public Upstream {
 public:
-    static constexpr int DEFAULT_PORT = 443;
     static constexpr std::string_view SCHEME = "https://";
 
     /**

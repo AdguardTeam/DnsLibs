@@ -15,6 +15,7 @@
 
 #include "common/base64.h"
 #include "common/net_utils.h"
+#include "common/net_consts.h"
 #include "common/socket_address.h"
 #include "common/utils.h"
 #include "dnsstamp/dns_stamp.h"
@@ -161,7 +162,7 @@ static ErrString validate_server_addr_str(std::string_view addr_str) {
 }
 
 static ErrString read_stamp_proto_props_server_addr_str(ServerStamp &stamp, size_t &pos, const Uint8Vector &value,
-        StampProtoType proto, size_t min_value_size, StampPort default_port) {
+        StampProtoType proto, size_t min_value_size, uint16_t default_port) {
     stamp.proto = proto;
     if (value.size() < min_value_size) {
         return "Stamp is too short";
@@ -233,7 +234,7 @@ static ServerStamp::FromStringResult new_server_stamp_basic(
 }
 
 static ServerStamp::FromStringResult new_server_stamp(const Uint8Vector &bin, StampProtoType proto,
-        size_t min_value_size, StampPort port, std::list<ReadStampPartFunction> fs) {
+        size_t min_value_size, uint16_t port, std::list<ReadStampPartFunction> fs) {
     using namespace std::placeholders;
     fs.emplace_front([proto, min_value_size, port](ServerStamp &stamp, size_t &pos, const Uint8Vector &value) {
         return read_stamp_proto_props_server_addr_str(stamp, pos, value, proto, min_value_size, port);
@@ -280,11 +281,11 @@ static std::string stamp_doq_string(const ServerStamp &stamp) {
 }
 
 static ServerStamp::FromStringResult new_plain_server_stamp(const Uint8Vector &bin) {
-    return new_server_stamp(bin, StampProtoType::PLAIN, PLAIN_STAMP_MIN_SIZE, DEFAULT_PLAIN_PORT, {});
+    return new_server_stamp(bin, StampProtoType::PLAIN, PLAIN_STAMP_MIN_SIZE, ag::DEFAULT_PLAIN_PORT, {});
 }
 
 static ServerStamp::FromStringResult new_dnscrypt_server_stamp(const Uint8Vector &bin) {
-    return new_server_stamp(bin, StampProtoType::DNSCRYPT, DNSCRYPT_STAMP_MIN_SIZE, DEFAULT_DOH_PORT,
+    return new_server_stamp(bin, StampProtoType::DNSCRYPT, DNSCRYPT_STAMP_MIN_SIZE, ag::DEFAULT_DOH_PORT,
             {
                     read_stamp_server_pk,
                     read_stamp_provider_name,
@@ -292,7 +293,7 @@ static ServerStamp::FromStringResult new_dnscrypt_server_stamp(const Uint8Vector
 }
 
 static ServerStamp::FromStringResult new_doh_server_stamp(const Uint8Vector &bin) {
-    return new_server_stamp(bin, StampProtoType::DOH, DOH_STAMP_MIN_SIZE, DEFAULT_DOH_PORT,
+    return new_server_stamp(bin, StampProtoType::DOH, DOH_STAMP_MIN_SIZE, ag::DEFAULT_DOH_PORT,
             {
                     read_stamp_hashes,
                     read_stamp_provider_name,
@@ -301,7 +302,7 @@ static ServerStamp::FromStringResult new_doh_server_stamp(const Uint8Vector &bin
 }
 
 static ServerStamp::FromStringResult new_dot_server_stamp(const Uint8Vector &bin) {
-    return new_server_stamp(bin, StampProtoType::TLS, DOT_STAMP_MIN_SIZE, DEFAULT_DOT_PORT,
+    return new_server_stamp(bin, StampProtoType::TLS, DOT_STAMP_MIN_SIZE, ag::DEFAULT_DOT_PORT,
             {
                     read_stamp_hashes,
                     read_stamp_provider_name,
@@ -309,7 +310,7 @@ static ServerStamp::FromStringResult new_dot_server_stamp(const Uint8Vector &bin
 }
 
 static ServerStamp::FromStringResult new_doq_server_stamp(const Uint8Vector &bin) {
-    return new_server_stamp(bin, StampProtoType::DOQ, DOT_STAMP_MIN_SIZE, DEFAULT_DOQ_PORT,
+    return new_server_stamp(bin, StampProtoType::DOQ, DOT_STAMP_MIN_SIZE, ag::DEFAULT_DOQ_PORT,
             {
                     read_stamp_hashes,
                     read_stamp_provider_name,

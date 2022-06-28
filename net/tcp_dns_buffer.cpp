@@ -13,7 +13,7 @@ namespace ag {
 static constexpr size_t PACKET_LENGTH_LENGTH = 2;
 static constexpr size_t BUFFER_MIN_CAPACITY = 512;
 
-static size_t ntoh_length(uint8_t *data) {
+static size_t ntoh_length(const uint8_t *data) {
     uint16_t net_length;
     std::memcpy(&net_length, data, PACKET_LENGTH_LENGTH);
     return ntohs(net_length);
@@ -22,14 +22,14 @@ static size_t ntoh_length(uint8_t *data) {
 Uint8View TcpDnsBuffer::store(Uint8View data) {
     if (!m_total_length.has_value()) {
         if (m_buffer.empty() && data.size() >= PACKET_LENGTH_LENGTH) {
-            m_total_length = ntoh_length((uint8_t *) data.data());
+            m_total_length = ntoh_length(data.data());
             data.remove_prefix(PACKET_LENGTH_LENGTH);
         } else if (m_buffer.size() < PACKET_LENGTH_LENGTH) {
             m_buffer.reserve(BUFFER_MIN_CAPACITY);
             size_t to_insert = std::min(data.size(), PACKET_LENGTH_LENGTH);
-            m_buffer.insert(m_buffer.end(), data.begin(), std::next(data.begin(), (ssize_t) to_insert));
+            m_buffer.insert(m_buffer.end(), data.begin(), std::next(data.begin(), ssize_t(to_insert)));
             if (m_buffer.size() >= PACKET_LENGTH_LENGTH) {
-                m_total_length = ntoh_length((uint8_t *) m_buffer.data());
+                m_total_length = ntoh_length(m_buffer.data());
                 m_buffer.erase(m_buffer.begin(), std::next(m_buffer.begin(), PACKET_LENGTH_LENGTH));
                 data.remove_prefix(to_insert);
             }

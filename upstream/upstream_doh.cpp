@@ -367,10 +367,7 @@ static curl_slist_ptr create_resolved_hosts_list(std::string_view url, const IpA
 
     std::string_view host_port = get_host_port(url);
     auto [host, port_str] = utils::split_host_port(host_port);
-    int port = DohUpstream::DEFAULT_PORT;
-    if (int p; !port_str.empty() && 0 != (p = std::strtol(std::string(port_str).c_str(), nullptr, 10))) {
-        port = p;
-    }
+    uint16_t port = ag::utils::to_integer<uint16_t>(port_str).value_or(ag::DEFAULT_DOH_PORT);
 
     std::string entry;
     if (const auto *ipv4 = std::get_if<Uint8Array<4>>(&addr); ipv4 != nullptr) {
@@ -432,7 +429,7 @@ ErrString DohUpstream::init() {
     if (m_resolved == nullptr) {
         if (!m_options.bootstrap.empty() || SocketAddress(get_host_name(m_options.address), 0).valid()) {
             BootstrapperPtr bootstrapper = std::make_unique<Bootstrapper>(
-                    Bootstrapper::Params{get_host_port(m_options.address), DohUpstream::DEFAULT_PORT,
+                    Bootstrapper::Params{get_host_port(m_options.address), DEFAULT_DOH_PORT,
                             m_options.bootstrap, m_options.timeout, m_config, m_options.outbound_interface});
             if (ErrString err = bootstrapper->init(); !err.has_value()) {
                 m_bootstrapper = std::move(bootstrapper);

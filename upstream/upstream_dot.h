@@ -16,7 +16,6 @@ namespace ag {
 class DotUpstream : public Upstream {
 public:
     /** Default port for DoT */
-    static constexpr auto DEFAULT_PORT = 853;
     static constexpr std::string_view SCHEME = "tls://";
 
     /**

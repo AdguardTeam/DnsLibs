@@ -9,12 +9,6 @@
 
 namespace ag {
 
-using StampPort = uint16_t;
-
-constexpr StampPort DEFAULT_DOH_PORT = 443;
-constexpr StampPort DEFAULT_DOT_PORT = 853;
-constexpr StampPort DEFAULT_DOQ_PORT = 8853;
-constexpr StampPort DEFAULT_PLAIN_PORT = 53;
 constexpr auto STAMP_URL_PREFIX_WITH_SCHEME = "sdns://";
 
 /**

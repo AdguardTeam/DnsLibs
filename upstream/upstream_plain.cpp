@@ -17,7 +17,7 @@ TcpPool::TcpPool(EventLoopPtr loop, const SocketAddress &address, PlainUpstream 
 static SocketAddress prepare_address(const std::string &address_string) {
     auto address = ag::utils::str_to_socket_address(address_string);
     if (address.port() == 0) {
-        return SocketAddress(address.addr(), PlainUpstream::DEFAULT_PORT);
+        return SocketAddress(address.addr(), ag::DEFAULT_PLAIN_PORT);
     }
     return address;
 }

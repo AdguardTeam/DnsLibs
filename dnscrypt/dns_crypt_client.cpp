@@ -3,6 +3,7 @@
 
 #include "dnscrypt/dns_crypt_client.h"
 #include "common/net_utils.h"
+#include "common/net_consts.h"
 #include "common/utils.h"
 #include "dnscrypt/dns_crypt_consts.h"
 #include "dnscrypt/dns_crypt_ldns.h"
@@ -60,7 +61,7 @@ Client::DialResult Client::dial(const ServerStamp &stamp, Millis timeout, const 
     local_server_info.m_server_public_key = stamp.server_pk;
     local_server_info.m_server_address = stamp.server_addr_str;
     if (SocketAddress addr = utils::str_to_socket_address(local_server_info.m_server_address); addr.port() == 0) {
-        local_server_info.m_server_address = AG_FMT("{}:{}", addr.host_str(), DEFAULT_PORT);
+        local_server_info.m_server_address = AG_FMT("{}:{}", addr.host_str(), DEFAULT_DOQ_PORT);
     }
     local_server_info.m_provider_name = stamp.provider_name;
     if (local_server_info.m_provider_name.empty()) {

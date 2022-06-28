@@ -19,7 +19,7 @@ using namespace std::chrono;
 
 namespace ag {
 
-static constexpr std::string_view DQ_ALPNS[] = {"doq-i02", "doq-i00", "doq", "dq"};
+static constexpr std::string_view DQ_ALPNS[] = {DoqUpstream::RFC9250_ALPN};
 static constexpr int LOCAL_IDLE_TIMEOUT_SEC = 180;
 
 #undef NEVER
@@ -213,6 +213,9 @@ void DoqUpstream::send_requests() {
         stream.stream_id = stream_id;
         stream.request_id = req.request_id;
         stream.send_info.buf.reset(evbuffer_new());
+        uint16_t length_prefix = ldns_buffer_remaining(req.request_buffer.get());
+        length_prefix = htons(length_prefix);
+        evbuffer_add(stream.send_info.buf.get(), &length_prefix, sizeof(length_prefix));
         evbuffer_add(stream.send_info.buf.get(), ldns_buffer_current(req.request_buffer.get()),
                 ldns_buffer_remaining(req.request_buffer.get()));
 
@@ -249,14 +252,7 @@ ErrString DoqUpstream::init() {
     if (m_server_name.empty()) {
         return "Server name is empty";
     }
-
-    if (port.empty()) {
-        m_port = DEFAULT_PORT;
-    } else if (auto port_int = ag::utils::to_integer<uint16_t>(port); !port_int.has_value()) {
-        return "Invalid port number";
-    } else {
-        m_port = port_int.value();
-    }
+    m_port = ag::utils::to_integer<uint16_t>(port).value_or(ag::DEFAULT_DOQ_PORT);
 
     Bootstrapper::Params bootstrapper_params = {
             .address_string = m_server_name,
@@ -913,14 +909,14 @@ int DoqUpstream::recv_stream_data(ngtcp2_conn *conn, uint32_t flags, int64_t str
     }
 
     if (st->second.raw_data.empty() && (flags & NGTCP2_STREAM_DATA_FLAG_FIN)) {
-        doq->process_reply(st->second.request_id, data, datalen);
+        doq->process_reply(st->second.request_id, {data, datalen});
     } else {
         auto &raw_vec = st->second.raw_data;
         raw_vec.reserve(raw_vec.size() + datalen);
         std::copy(data, data + datalen, std::back_inserter(raw_vec));
 
         if (flags & NGTCP2_STREAM_DATA_FLAG_FIN) {
-            doq->process_reply(st->second.request_id, raw_vec.data(), raw_vec.size());
+            doq->process_reply(st->second.request_id, {raw_vec.data(), raw_vec.size()});
         }
     }
 
@@ -948,7 +944,7 @@ int DoqUpstream::get_new_connection_id(
 int DoqUpstream::handshake_confirmed(ngtcp2_conn *conn, void *data) {
     (void) conn;
 
-    auto doq = (DoqUpstream *) data;
+    auto *doq = (DoqUpstream *) data;
     tracelog(doq->m_log, "{}", __func__);
     evtimer_del(doq->m_handshake_timer_event.get());
 
@@ -1057,13 +1053,16 @@ void DoqUpstream::submit(std::function<void()> &&f) const {
     m_loop->submit(std::move(f));
 }
 
-void DoqUpstream::process_reply(int64_t request_id, const uint8_t *request_data, size_t request_data_len) {
+void DoqUpstream::process_reply(int64_t request_id, Uint8View reply) {
     std::scoped_lock lg(m_global);
     auto req_it = m_requests.find(request_id);
     if (req_it != m_requests.end()) {
         ldns_pkt *pkt = nullptr;
-        int r = ldns_wire2pkt(&pkt, request_data, request_data_len);
+        // Ignore the 2-byte length prefix. We only need the first reply.
+        reply.remove_prefix(2);
+        ldns_status r = ldns_wire2pkt(&pkt, reply.data(), reply.size());
         if (r != LDNS_STATUS_OK) {
+            dbglog(m_log, "Failed to parse reply for [{}]: {}", request_id, magic_enum::enum_name(r).data());
             pkt = nullptr;
         }
         req_it->second.reply_pkt.reset(pkt);

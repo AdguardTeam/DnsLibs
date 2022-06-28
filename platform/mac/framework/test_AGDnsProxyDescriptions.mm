@@ -102,6 +102,7 @@ int main() {
                                                        optimisticCache:YES
                                                         enableDNSSECOK:NO
                                           enableRetransmissionHandling:NO
+                                                   enableRouteResolver:NO
                                                             helperPath:@"path/to/helper"];
     {
         NSString *expected = [NSString stringWithFormat:

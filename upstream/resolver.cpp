@@ -45,9 +45,9 @@ static bool check_ip_address(std::string_view address) {
         int port;
     };
     static constexpr as_entry ALLOWED_SCHEMES[] = {
-            {DotUpstream::SCHEME, DotUpstream::DEFAULT_PORT},
-            {DohUpstream::SCHEME, DohUpstream::DEFAULT_PORT},
-            {PlainUpstream::TCP_SCHEME, PlainUpstream::DEFAULT_PORT},
+            {DotUpstream::SCHEME, DEFAULT_DOT_PORT},
+            {DohUpstream::SCHEME, DEFAULT_DOH_PORT},
+            {PlainUpstream::TCP_SCHEME, DEFAULT_PLAIN_PORT},
     };
 
     const as_entry *found = nullptr;

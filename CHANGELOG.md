@@ -1,5 +1,8 @@
 # Changelog
 
+* [Feature] The DoQ upstream now uses the port 853 by default (was 8853), conforms to RFC-9250, and doesn't support ALPNs other than "doq".
+            ACHTUNG: Some changes might be required on the application side due to the default port change? 
+
 ## V1.7.28
 
 * [Feature] Route resolver on Apple platforms is now can be enabled via `AGDnsProxySettings.enableRouteResolver`

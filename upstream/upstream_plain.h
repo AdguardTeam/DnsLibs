@@ -40,7 +40,6 @@ private:
 class PlainUpstream : public Upstream {
 public:
     static constexpr std::string_view TCP_SCHEME = "tcp://";
-    static constexpr int DEFAULT_PORT = 53;
 
     /**
      * Create plain DNS upstream

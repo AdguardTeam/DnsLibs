@@ -1,5 +1,8 @@
 #pragma once
 
+#include <cstdint>
+#include <cstddef>
+
 namespace ag {
 
 // An ldns_buffer grows automatically.
@@ -16,4 +19,10 @@ constexpr size_t REQUEST_BUFFER_INITIAL_CAPACITY = 64;
 // (remember, this constant only affects incoming packets, we always send back as much as the upstream returned)
 static constexpr size_t UDP_RECV_BUF_SIZE = 4096;
 
-}
+static constexpr uint16_t DEFAULT_PLAIN_PORT = 53;
+static constexpr uint16_t DEFAULT_DNSCRYPT_PORT = 53;
+static constexpr uint16_t DEFAULT_DOH_PORT = 443;
+static constexpr uint16_t DEFAULT_DOT_PORT = 853;
+static constexpr uint16_t DEFAULT_DOQ_PORT = 853;
+
+} // namespace ag

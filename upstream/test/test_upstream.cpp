@@ -367,6 +367,8 @@ static const UpstreamTestData test_upstreams_data[]{
         {// Cloudflare DNS
                 "https://1.1.1.1/dns-query", {}},
         {// AdGuard DNS (DNS-over-QUIC)
+                "quic://dns.adguard.com", {"8.8.8.8:53"}},
+        {// AdGuard DNS (DNS-over-QUIC) custom port
                 "quic://dns.adguard.com:8853", {"8.8.8.8:53"}},
         {// AdGuard DNS (DNS-over-QUIC) stamp with only the port specified in server address field
                 "sdns://BAAAAAAAAAAABDo3ODQAD2Rucy5hZGd1YXJkLmNvbQ", {"8.8.8.8:53"}},

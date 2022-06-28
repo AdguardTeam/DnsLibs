@@ -35,7 +35,8 @@ namespace ag {
 
 class DoqUpstream : public Upstream {
 public:
-    static constexpr auto DEFAULT_PORT = 8853;
+    static constexpr std::string_view RFC9250_ALPN = "doq";
+    static constexpr uint16_t RFC9250_PORT = 853;
     static constexpr std::string_view SCHEME = "quic://";
 
     /**
@@ -189,7 +190,7 @@ private:
     int feed_data(Uint8View data);
     void submit(std::function<void()> &&func) const;
     void send_requests();
-    void process_reply(int64_t request_id, const uint8_t *request_data, size_t request_data_len);
+    void process_reply(int64_t request_id, Uint8View reply);
     void disconnect(std::string_view reason);
     void schedule_retransmit();
     static ngtcp2_tstamp get_tstamp();

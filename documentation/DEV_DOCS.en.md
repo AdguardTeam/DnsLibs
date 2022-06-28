@@ -135,7 +135,7 @@ cached or filtered, then these servers will respond. `UpstreamOptions` contains:
         - `tcp://8.8.8.8:53` plain DNS over TCP.
         - `tls://1.1.1.1` DNS-over-TLS.
         - `https://dns.adguard.com/dns-query` DNS-over-HTTPS.
-        - `quic://dns.adguard.com:8853` DNS-over-QUIC.
+        - `quic://dns.adguard.com:853` DNS-over-QUIC.
         - `sdns://...` DNS stamp (see [DNSCrypt](https://dnscrypt.info/stamps-specifications) specifications).
     - `std::vector<std::string> bootstrap` List of plain DNS servers to be used to resolve the hostname in upstreams' address.
 - `dnsfilter::EngineParams FilterParams` Filtering engine parameters. Contains a vector of file paths with filter rules.

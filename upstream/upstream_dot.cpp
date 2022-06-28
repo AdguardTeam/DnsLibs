@@ -116,9 +116,9 @@ static std::optional<std::string> get_resolved_ip(const Logger &log, const IpAdd
 
     SocketAddress parsed;
     if (const Ipv4Address *ipv4 = std::get_if<Ipv4Address>(&addr); ipv4 != nullptr) {
-        parsed = SocketAddress({ipv4->data(), ipv4->size()}, DotUpstream::DEFAULT_PORT);
+        parsed = SocketAddress({ipv4->data(), ipv4->size()}, ag::DEFAULT_DOT_PORT);
     } else if (const Ipv6Address *ipv6 = std::get_if<Ipv6Address>(&addr); ipv6 != nullptr) {
-        parsed = SocketAddress({ipv6->data(), ipv6->size()}, DotUpstream::DEFAULT_PORT);
+        parsed = SocketAddress({ipv6->data(), ipv6->size()}, ag::DEFAULT_DOT_PORT);
     } else {
         errlog(log, "Wrong resolved server ip address");
         assert(0);
@@ -161,7 +161,7 @@ static BootstrapperPtr create_bootstrapper(
         }
     }
 
-    return std::make_unique<Bootstrapper>(Bootstrapper::Params{address, (port == 0) ? DotUpstream::DEFAULT_PORT : port,
+    return std::make_unique<Bootstrapper>(Bootstrapper::Params{address, (port == 0) ? ag::DEFAULT_DOT_PORT : port,
             opts.bootstrap, opts.timeout, config, opts.outbound_interface});
 }
 
