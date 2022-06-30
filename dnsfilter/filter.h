@@ -23,7 +23,7 @@ public:
         std::string reverse_lookup_fqdn; // non-empty if the request is a reverse DNS lookup
     };
 
-    static MatchContext create_match_context(ag::DnsFilter::MatchParam param);
+    static void init_match_context(MatchContext &ctx, ag::DnsFilter::MatchParam param);
 
     Filter();
     ~Filter();

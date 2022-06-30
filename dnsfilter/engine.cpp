@@ -144,7 +144,8 @@ std::vector<DnsFilter::Rule> DnsFilter::match(Handle obj, MatchParam param) {
 
     tracelog(e->m_log, "Matching {}", param.domain);
 
-    dnsfilter::Filter::MatchContext context = dnsfilter::Filter::create_match_context(param);
+    dnsfilter::Filter::MatchContext context{};
+    dnsfilter::Filter::init_match_context(context, param);
 
     auto outdated_filters = inner_match(obj, param, context);
 

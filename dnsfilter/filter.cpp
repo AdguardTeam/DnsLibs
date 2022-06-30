@@ -749,8 +749,9 @@ void Filter::update(std::atomic_size_t &mem_limit) {
     log_filter(m_pimpl, info, "Update {} successful", params.id);
 }
 
-Filter::MatchContext Filter::create_match_context(DnsFilter::MatchParam param) {
-    MatchContext ctx = {utils::to_lower(param.domain), {}, {}, param.rr_type, {}};
+void Filter::init_match_context(Filter::MatchContext &ctx, DnsFilter::MatchParam param) {
+    ctx.host = utils::to_lower(param.domain);
+    ctx.rr_type = param.rr_type;
 
     size_t n = std::count(ctx.host.begin(), ctx.host.end(), '.');
     if (n > 0) {
@@ -761,7 +762,7 @@ Filter::MatchContext Filter::create_match_context(DnsFilter::MatchParam param) {
     ctx.subdomains.reserve(n + 1);
     ctx.subdomains.emplace_back(ctx.host);
     for (size_t i = 0; i < n; ++i) {
-        std::array<std::string_view, 2> parts = utils::split2_by(ctx.subdomains[i], '.');
+        std::array<std::string_view, 2> parts = utils::split2_by(ctx.subdomains.back(), '.');
         ctx.subdomains.emplace_back(parts[1]);
     }
 
@@ -775,8 +776,6 @@ Filter::MatchContext Filter::create_match_context(DnsFilter::MatchParam param) {
                     || utils::ends_with(ctx.host, REVERSE_IPV6_DNS_DOMAIN_SUFFIX))) {
         ctx.reverse_lookup_fqdn = AG_FMT("{}.", ctx.host);
     }
-
-    return ctx;
 }
 
 } // namespace ag::dnsfilter
