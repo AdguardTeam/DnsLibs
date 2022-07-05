@@ -16,7 +16,7 @@ DL - Android build and deploy:
   key: JOB1
   description: Builds and deploy libraries
   docker:
-    image: adguard/core-libs:latest
+    image: adguard/core-libs:1.4
     volumes:
       ${bamboo.working.directory}: ${bamboo.working.directory}
       ${bamboo.tmp.directory}: ${bamboo.tmp.directory}
@@ -42,7 +42,7 @@ DL - Android build and deploy:
 
         conan remote add -i 0 art ${bamboo.conanRepoUrl} || true
 
-        cp ../../../../dns-libs-private/* .
+        cp -r ../../../../dns-libs-private/* .
 
         current_branch=${bamboo_repository_branch_name}
         if [ "${bamboo_customRevision}" != "" ]; then
