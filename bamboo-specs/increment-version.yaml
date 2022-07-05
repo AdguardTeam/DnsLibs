@@ -43,6 +43,9 @@ DL - Increment version:
 
 
         cp ../dns-libs-private/* .
+        if [ ${bamboo_custom_version} = "none" ]; then
+            bamboo_custom_version=
+        fi
         ./increment_version.sh ${bamboo_custom_version} || exit 1
 
         git remote set-url origin ${bamboo_planRepository_repositoryUrl}
@@ -69,7 +72,7 @@ DL - Increment version:
   - adg-privileged-docker
   artifact-subscriptions: []
 variables:
-  custom.version: ''
+  custom.version: 'none'
 repositories:
 - dns-libs:
     scope: global
