@@ -102,7 +102,6 @@ repositories:
     scope: global
 - dns-libs-private:
     scope: global
-triggers: []
 branches:
   create: for-pull-request
   delete:
