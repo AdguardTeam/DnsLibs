@@ -1,0 +1,152 @@
+---
+version: 2
+plan:
+  project-key: CL
+  key: DNSWL
+  name: DnsLibs - Windows library
+  description: Windows library
+stages:
+- Default Stage:
+    manual: false
+    final: false
+    jobs:
+    - DL - Win tests and deploy
+DL - Win tests and deploy:
+  key: JOB1
+  tasks:
+  - checkout:
+      path: dns-libs
+      force-clean-build: 'true'
+      description: Checkout main repository
+  - script:
+      interpreter: BINSH_OR_CMDEXE
+      scripts:
+      - |-
+        call vcvars32
+        conan remove -f "*"
+        set CMAKE=cmake
+        set CTEST=ctest
+        set CMAKE_MAKE_PROGRAM=ninja
+        set CMAKE_MAKE_FLAGS=""
+        set CMAKE_GENERATOR="Ninja"
+        set CL_GIT_ROOT=%cd%
+        cd %bamboo_winProjectDir%/capi
+        set CL_ROOT=%cd%
+
+        if exist build\ rmdir /s /q build || exit /b 1
+        mkdir build || exit /b 1
+        cd build || exit /b 1
+
+        %CMAKE% -DCMAKE_BUILD_TYPE=%bamboo_cmakeBuildProfile% ^
+            -DCMAKE_USE_OPENSSL=ON ^
+            -DCMAKE_C_COMPILER="C:/Program Files (x86)/LLVM/bin/clang-cl.exe" ^
+            -DCMAKE_CXX_COMPILER="C:/Program Files (x86)/LLVM/bin/clang-cl.exe" ^
+            -DCMAKE_C_FLAGS="--target=i686-pc-windows-msvc" ^
+            -DCMAKE_CXX_FLAGS="--target=i686-pc-windows-msvc" ^
+            -DCMAKE_MAKE_PROGRAM=%CMAKE_MAKE_PROGRAM% ^
+            -G "%CMAKE_GENERATOR%" ^
+            ..
+
+        rem Target "tests" depends on everything, so this will also build AdguardDns.dll
+        %CMAKE_MAKE_PROGRAM% tests || exit /b 1
+        %CTEST% -D ExperimentalTest --no-compress-output || exit /b 1
+      working-dir: dns-libs
+      description: Compile and run tests
+  - script:
+      interpreter: BINSH_OR_CMDEXE
+      scripts:
+      - |-
+        call vcvars32
+        set CL_GIT_ROOT=%cd%
+        cd %bamboo_winProjectDir%
+        set CL_ROOT=%cd%
+        cd cs\Adguard.Dns
+        REM build csharp library
+        del /s *.nupkg
+        REM set NUGET_PACKAGES=c:\builder\BambooNuGetPackages
+        set NUGET_PACKAGES=%cd%/packages
+        nuget restore
+        msbuild Adguard.Dns.Tests /t:Build /t:Test /p:Configuration=Release /p:Platform=AnyCPU || exit /b 1
+        exit 0
+      working-dir: dns-libs
+      description: Build C#library and Run C# tests
+  - checkout:
+      repository: dns-libs-private
+      path: dns-libs\dns-libs-private
+      force-clean-build: 'true'
+      description: Checkout private repository
+  - script:
+      interpreter: BINSH_OR_CMDEXE
+      scripts:
+      - |-
+        echo "Repo path is ${bamboo.build.working.directory}"
+        cd dns-libs-private/platform/windows/Scripts
+        python adguard_dns_private.py --dns_libs_repo_path="${bamboo.build.working.directory}" --sentry_dnslibs_version=42 --configuration_name="Release" --password="podcolcokolcakolco"
+      working-dir: dns-libs
+      description: Sign binaries
+  - script:
+      interpreter: BINSH_OR_CMDEXE
+      scripts:
+      - |-
+        cd %bamboo_winProjectDir%\cs\Adguard.Dns
+
+        if not %bamboo_repository_branch_name%==release (
+            copy /y Adguard.Dns\Adguard.Dns.nuspec.snapshot Adguard.Dns\Adguard.Dns.nuspec
+        )
+        nuget pack Adguard.Dns -p Configuration=Release -p Platform=AnyCPU || exit /b 1|| exit /b 1
+        REM deploy master or release
+        nuget push Adguard.Dns.*.nupkg -source Artifactory || exit /b 1
+        REM upload release symbols
+        if %bamboo_repository_branch_name%==release (
+            call ${bamboo.build.working.directory}\dns-libs\dns-libs-private\platform\windows\Scripts\UploadSyms.bat %bamboo_sentryAuthToken%
+        )
+
+        :finish
+        exit 0
+      working-dir: dns-libs
+      description: Publish nuget and symbols
+  final-tasks:
+  - any-task:
+      plugin-key: fr.cstb.bamboo.plugins.ctest.bamboo-ctest-plugin:test
+      configuration:
+        testFilePathPattern: '**/Testing/*/*.xml'
+  - any-task:
+      plugin-key: com.atlassian.bamboo.plugin.dotnet:nunit
+      configuration:
+        testResultsDirectory: '**/Adguard.Dns.Tests/TestResult.xml'
+        pickupOutdatedFiles: 'false'
+  - script:
+      interpreter: SHELL
+      scripts:
+      - |-
+        conan upload -r art --all -c "*" > upload.txt 2>&1
+        echo conan upload finished with status %ERRORLEVEL%
+        conan remove -f "*"
+        conan remove -f --locks
+      description: Conan upload and cleanup
+  requirements:
+  - system.builder.msbuild.MSBuild v15.0 (32bit)
+  artifact-subscriptions: []
+variables:
+  cmakeBuildProfile: RelWithDebInfo
+  sentryAuthToken: 65da97ad9f9542e9ab349b380baef027c0b9a0f46dbb4999a27c5971329949f1
+  winProjectDir: platform/windows
+repositories:
+- dns-libs:
+    scope: global
+- dns-libs-private:
+    scope: global
+triggers: []
+branches:
+  create: for-pull-request
+  delete:
+    after-deleted-days: 4
+    after-inactive-days: 30
+  integration:
+    push-on-success: false
+    merge-from: DnsLibs - Windows Library
+  link-to-jira: true
+notifications: []
+labels: []
+other:
+  concurrent-build-plugin: system-default

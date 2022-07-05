@@ -1,0 +1,10 @@
+---
+!include 'android-library.yaml'
+---
+!include 'apple-framework.yaml'
+---
+!include 'windows-library.yaml'
+---
+!include 'run-tests.yaml'
+---
+!include 'increment-version.yaml'

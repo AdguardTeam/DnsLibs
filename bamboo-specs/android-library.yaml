@@ -1,0 +1,118 @@
+---
+version: 2
+plan:
+  project-key: CL
+  key: DD
+  name: DnsLibs - Android library
+  description: Build and deploy Android library to Artifactory
+stages:
+- Deployment, increment:
+    description: Deploys artifacts and increments version
+    manual: false
+    final: false
+    jobs:
+    - DL - Android build and deploy
+DL - Android build and deploy:
+  key: JOB1
+  description: Builds and deploy libraries
+  docker:
+    image: adguard/core-libs:latest
+    volumes:
+      ${bamboo.working.directory}: ${bamboo.working.directory}
+      ${bamboo.tmp.directory}: ${bamboo.tmp.directory}
+    docker-run-arguments: []
+  tasks:
+  - !include docker-clean.yaml
+  - checkout:
+      repository: dns-libs
+      path: dns-libs
+      force-clean-build: 'true'
+      description: Checkouts Default Repository
+  - checkout:
+      repository: dns-libs-private
+      path: dns-libs-private
+      force-clean-build: 'true'
+      description: Checkouts Default Repository
+  - script:
+      interpreter: SHELL
+      scripts:
+      - |-
+        set -x
+        set -e
+
+        conan remote add -i 0 art ${bamboo.conanRepoUrl} || true
+
+        cp ../../../../dns-libs-private/* .
+
+        current_branch=${bamboo_repository_branch_name}
+        if [ "${bamboo_customRevision}" != "" ]; then
+            current_branch=${bamboo_customRevision}
+        fi
+
+        case "${current_branch}" in
+        master|stable-*)
+            cat > properties.additional.gradle \
+        << EOF
+            ext {
+                adguardArtifactoryUsername = '${bamboo.artifactoryUser}'
+                adguardArtifactoryPassword = '${bamboo.artifactoryPassword}'
+            }
+        EOF
+            ./gradlew :lib:publishRelease
+            ;;
+        *)
+            ./gradlew :lib:assembleRelease
+            ;;
+        esac
+
+        if [ "${current_branch}" = "master" ]; then
+            conan export ../../.. AdguardTeam/NativeLibsCommon
+        fi
+      working-dir: dns-libs/platform/android/dnsproxy
+      description: Publishes or assembles libraries
+  - script:
+      interpreter: SHELL
+      scripts:
+      - |-
+        mv lib/build/outputs/aar/lib-release.aar lib.aar
+        exit $?
+      working-dir: dns-libs/platform/android/dnsproxy
+      description: Moves artifacts to the root
+  final-tasks:
+  - script:
+      interpreter: SHELL
+      scripts:
+      - |-
+        conan user -p "${bamboo_artifactoryPassword}" -r art "${bamboo_artifactoryUser}" > upload.txt 2>&1
+        conan upload -r art --all -c '*' > upload.txt 2>&1
+        echo conan upload finished with status $?
+        conan remove -f '*'
+      description: Conan upload and cleanup
+  artifacts:
+  - name: aar
+    location: dns-libs/platform/android/dnsproxy
+    pattern: lib.aar
+    shared: true
+    required: true
+  requirements:
+  - adg-privileged-docker
+  artifact-subscriptions: []
+repositories:
+- dns-libs:
+    scope: global
+- dns-libs-private:
+    scope: global
+triggers: []
+branches:
+  create: for-pull-request
+  delete:
+    after-deleted-days: 7
+    after-inactive-days: 30
+  integration:
+    push-on-success: false
+    merge-from: DnsLibs - Android library
+  link-to-jira: true
+notifications: []
+labels: []
+other:
+  concurrent-build-plugin: system-default

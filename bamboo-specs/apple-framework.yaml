@@ -1,0 +1,82 @@
+---
+version: 2
+plan:
+  project-key: CL
+  key: DM
+  name: DnsLibs - Apple framework
+stages:
+- Default Stage:
+    manual: false
+    final: false
+    jobs:
+    - DL - Mac tests and deploy
+DL - Mac tests and deploy:
+  key: JOB1
+  tasks:
+  - checkout:
+      force-clean-build: 'true'
+      description: Checkout Default Repository
+  - script:
+      interpreter: SHELL
+      scripts:
+      - |-
+        git submodule update --init --force
+
+        cd platform/mac
+        mkdir -p build
+        cd build
+
+        export SRCROOT="${PWD}"
+
+        conan remove -f '*'
+
+        ../framework/build_dnsproxy_framework.sh --os all --iosv 10.0
+      description: Build
+  - checkout:
+      repository: podspecs
+      path: podspecs
+      force-clean-build: 'true'
+      description: podspecs, dns-libs-private
+  - checkout:
+      repository: dns-libs-private
+      path: dns-libs-private
+      force-clean-build: 'true'
+      description: podspecs, dns-libs-private
+  - script:
+      interpreter: SHELL
+      file: dns-libs-private/platform/mac/deploy-to-pods.sh
+      description: Publish
+  final-tasks:
+  - script:
+      interpreter: SHELL
+      scripts:
+      - |-
+        conan upload -r art --all -c '*' > upload.txt 2>&1
+        echo conan upload finished with status $?
+        conan remove -f '*'
+        conan remove --locks
+      description: Conan upload and cleanup
+  requirements:
+  - system.builder.xcode.macOS 10.14
+  artifact-subscriptions: []
+repositories:
+- dns-libs:
+    scope: global
+- podspecs:
+    scope: global
+- dns-libs-private:
+    scope: global
+triggers: []
+branches:
+  create: for-pull-request
+  delete:
+    after-deleted-days: 7
+    after-inactive-days: 30
+  integration:
+    push-on-success: false
+    merge-from: DnsLibs - Mac Framework
+  link-to-jira: true
+notifications: []
+labels: []
+other:
+  concurrent-build-plugin: system-default
