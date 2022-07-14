@@ -25,6 +25,7 @@ static constexpr size_t FILTER_PARAMS_MEM_LIMIT_BYTES = 8 * 1024 * 1024;
 #endif // TARGET_OS_IPHONE
 
 static constexpr int BINDFD_WAIT_MS = 10000;
+static constexpr int ERR_BIND_IN_USE = 14;
 
 /**
  * @param str an STL string
@@ -1164,10 +1165,23 @@ static int bindFd(NSString *helperPath, NSString *address, NSNumber *port, AGLis
             return receivedFd;
         }
     }
-
-    *error = [NSError errorWithDomain:AGDnsProxyErrorDomain
-                                 code:AGDPE_PROXY_INIT_ERROR
-                             userInfo:@{NSLocalizedDescriptionKey: @"Failed to receive fd: control message not found"}];
+    switch (task.terminationStatus) {
+    case 0:
+        *error = [NSError errorWithDomain:AGDnsProxyErrorDomain
+                                     code:AGDPE_PROXY_INIT_ERROR
+                                 userInfo:@{NSLocalizedDescriptionKey: @"Failed to receive fd: control message not found"}];
+        break;
+    case ERR_BIND_IN_USE:
+        *error = [NSError errorWithDomain:AGDnsProxyErrorDomain
+                                     code:AGDPE_PROXY_INIT_HELPER_BIND_ERROR
+                                 userInfo:@{NSLocalizedDescriptionKey: @"Failed to receive fd: can't bind"}];
+        break;
+    default:
+        NSString *description = [NSString stringWithFormat: @"Failed to receive fd: helper return %d", task.terminationStatus];
+        *error = [NSError errorWithDomain:AGDnsProxyErrorDomain
+                                     code:AGDPE_PROXY_INIT_HELPER_ERROR
+                                 userInfo:@{NSLocalizedDescriptionKey: description}];
+    }
     return -1;
 }
 
