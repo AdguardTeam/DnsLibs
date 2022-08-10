@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Runtime.InteropServices;
 using Adguard.Dns.Api.DnsProxyServer.Callbacks;
 using Adguard.Dns.Api.DnsProxyServer.Configs;
+using Adguard.Dns.Exceptions;
 using Adguard.Dns.Helpers;
 using AdGuard.Utils.Interop;
 using AdGuard.Utils.Logging;
@@ -93,12 +94,18 @@ namespace Adguard.Dns.DnsProxyServer
 
                         pOutMessage = MarshalUtils.SafeReadIntPtr(ppOutMessage);
                         string outMessage = MarshalUtils.PtrToString(pOutMessage);
-                        string errorMessage = $"Failed to start the DnsProxyServer with the result {outResultEnum} and message {outMessage}";
-                        throw new InvalidOperationException(errorMessage);
+                        string errorMessage =
+                            $"Failed to start the DnsProxyServer with the result {outResultEnum} and message {outMessage}";
+                        throw new DnsProxyInitializationException(errorMessage, outResultEnum);
                     }
 
                     m_IsStarted = true;
                     Logger.Info("Finished starting the DnsProxyServer");
+                }
+                catch (DnsProxyInitializationException)
+                {
+                    Dispose();
+                    throw;
                 }
                 catch (Exception ex)
                 {

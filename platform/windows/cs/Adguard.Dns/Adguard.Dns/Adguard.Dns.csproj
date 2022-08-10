@@ -85,6 +85,7 @@
     <Compile Include="DnsProxyServer\IDnsProxyServer.cs" />
     <Compile Include="DnsProxyServer\DnsProxyServer.cs" />
     <Compile Include="Exceptions\DnsExceptionHandler.cs" />
+    <Compile Include="Exceptions\DnsProxyInitializationException.cs" />
     <Compile Include="Exceptions\IUnhandledExceptionConfiguration.cs" />
     <Compile Include="Exceptions\UnhandledExceptionCallbackAdapter.cs" />
     <Compile Include="Helpers\DnsApiConverter.cs" />

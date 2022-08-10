@@ -27,8 +27,10 @@ namespace Adguard.Dns
 
         #region API Functions
 
-
-        internal enum ag_dnsproxy_init_result
+        /// <summary>
+        /// Dns proxy initialization result
+        /// </summary>
+        public enum ag_dnsproxy_init_result
         {
             AGDPIR_OK,
             AGDPIR_WARNING,
