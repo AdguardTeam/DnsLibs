@@ -1,7 +1,7 @@
 #include <ldns/ldns.h>
 
 #include "common/net_utils.h"
-#include "dnsstamp/dns_stamp.h"
+#include "dns/dnsstamp/dns_stamp.h"
 
 #include "resolver.h"
 #include "upstream_doh.h"
@@ -12,29 +12,29 @@
 
 using namespace std::chrono;
 
-namespace ag {
+namespace ag::dns {
 
 static std::optional<std::string> get_address_from_stamp(const Logger &log, std::string_view url) {
-    auto [stamp, error] = ServerStamp::from_string(url);
-    if (error.has_value()) {
-        warnlog(log, "Failed to create stamp from url ({}): {}", url, error.value());
+    auto stamp = ServerStamp::from_string(url);
+    if (stamp.has_error()) {
+        warnlog(log, "Failed to create stamp from url ({}): {}", url, stamp.error()->str());
         return std::nullopt;
     }
 
-    switch (stamp.proto) {
+    switch (stamp->proto) {
     case StampProtoType::PLAIN:
     case StampProtoType::DNSCRYPT:
-        return stamp.server_addr_str;
+        return stamp->server_addr_str;
     case StampProtoType::DOH:
     case StampProtoType::TLS:
     case StampProtoType::DOQ:
-        if (!stamp.server_addr_str.empty()) {
-            return stamp.server_addr_str;
+        if (!stamp->server_addr_str.empty()) {
+            return stamp->server_addr_str;
         } else {
-            return stamp.provider_name;
+            return stamp->provider_name;
         }
     }
-    warnlog(log, "Unknown stamp protocol type: {}", stamp.proto);
+    warnlog(log, "Unknown stamp protocol type: {}", stamp->proto);
     assert(0);
     return std::nullopt;
 }
@@ -96,16 +96,17 @@ Resolver::Resolver(UpstreamOptions options, const UpstreamFactoryConfig &upstrea
         , m_upstream_factory(upstream_config)
         , m_upstream_options(std::move(options)) {
     m_upstream_options.address = get_server_address(m_log, m_upstream_options.address);
+    m_shutdown_guard = std::make_shared<bool>(true);
 }
 
-ErrString Resolver::init() {
+Error<Resolver::ResolverError> Resolver::init() {
     if (m_upstream_options.address.empty()) {
         constexpr std::string_view err = "Failed to get server address";
         log_ip(m_log, err, m_upstream_options.address, "{}", err);
-        return std::string(err);
+        return make_error(ResolverError::AE_INVALID_ADDRESS);
     }
 
-    return std::nullopt;
+    return {};
 }
 
 static ldns_pkt_ptr create_req(std::string_view domain_name, ldns_enum_rr_type rr_type) {
@@ -136,68 +137,69 @@ static std::vector<SocketAddress> socket_address_from_reply(const Logger &log, l
     return addrs;
 }
 
-Resolver::Result Resolver::resolve(std::string_view host, int port, Millis timeout) const {
+coro::Task<Resolver::Result> Resolver::resolve(std::string_view host, int port, Millis timeout) const {
     log_ip(m_log, trace, m_upstream_options.address, "Resolve {}:{}", host, port);
     SocketAddress numeric_ip(host, port);
     if (numeric_ip.valid()) {
-        return {{numeric_ip}, std::nullopt};
+        co_return std::vector<SocketAddress>{numeric_ip};
     }
 
     std::vector<SocketAddress> addrs;
     addrs.reserve(5);
 
     utils::Timer timer;
-    ErrString error;
+    Error<ResolverError> error;
     ldns_pkt_ptr a_req = create_req(host, LDNS_RR_TYPE_A);
 
     UpstreamOptions opts = m_upstream_options;
     opts.timeout = timeout;
     const std::string &resolver_address = opts.address;
     UpstreamFactory::CreateResult factory_result = m_upstream_factory.create_upstream(opts);
-    if (factory_result.error != std::nullopt) {
-        std::string err = AG_FMT("Failed to create upstream: {}", factory_result.error.value());
-        log_ip(m_log, dbg, resolver_address, "{}", err);
-        return {{}, std::move(err)};
+    if (factory_result.has_error()) {
+        std::string err = AG_FMT("Failed to create upstream: {}", factory_result.error()->str());
+        log_ip(m_log, dbg, resolver_address, "{}", factory_result.error()->str());
+        co_return make_error(ResolverError::AE_UPSTREAM_INIT_FAILED, factory_result.error());
     }
-    UpstreamPtr &upstream = factory_result.upstream;
+    UpstreamPtr &upstream = factory_result.value();
 
-    log_ip(m_log, trace, resolver_address, "Trying to get A record for {}", host);
-    auto [a_reply, a_err] = upstream->exchange(a_req.get());
-
+    log_ip(m_log, trace, resolver_address, "Trying to get A/AAAA records for {}", host);
+    ldns_pkt_ptr aaaa_req;
+    if (upstream->config().ipv6_available) {
+        aaaa_req = create_req(host, LDNS_RR_TYPE_AAAA);
+    }
+    std::weak_ptr<bool> shutdown_guard = m_shutdown_guard;
+    auto replies = upstream->config().ipv6_available
+            ? co_await parallel::all_of<Upstream::ExchangeResult>(upstream->exchange(a_req.get()), upstream->exchange(aaaa_req.get()))
+            : co_await parallel::all_of<Upstream::ExchangeResult>(upstream->exchange(a_req.get()));
     timeout -= timer.elapsed<Millis>();
-
-    if (!a_err) {
-        auto a_addrs = socket_address_from_reply(m_log, a_reply.get(), port);
-        log_ip(m_log, trace, resolver_address, "Got {} A records for host '{}' (elapsed:{})", a_addrs.size(), host,
-                timer.elapsed<Millis>());
-        std::move(a_addrs.begin(), a_addrs.end(), std::back_inserter(addrs));
-    } else {
-        error = std::move(a_err);
-        log_ip(m_log, dbg, resolver_address, "Failed to get A record for host '{}': {} (elapsed:{})", host,
-                error.value(), timer.elapsed<Millis>());
+    if (shutdown_guard.expired()) {
+        co_return make_error(ResolverError::AE_SHUTTING_DOWN);
     }
 
-    if (upstream->config().ipv6_available && timeout > MIN_TIMEOUT) {
-        log_ip(m_log, trace, resolver_address, "Trying to get AAAA record for {}", host);
-
-        ldns_pkt_ptr aaaa_req = create_req(host, LDNS_RR_TYPE_AAAA);
-        auto [aaaa_reply, aaaa_err] = upstream->exchange(aaaa_req.get());
-        if (!aaaa_err) {
-            auto aaaa_addrs = socket_address_from_reply(m_log, aaaa_reply.get(), port);
-            log_ip(m_log, trace, resolver_address, "Got {} AAAA records for host '{}' (elapsed:{})", aaaa_addrs.size(),
-                    host, timer.elapsed<Millis>());
-            std::move(aaaa_addrs.begin(), aaaa_addrs.end(), std::back_inserter(addrs));
-        } else {
-            error = std::move(aaaa_err);
-            log_ip(m_log, dbg, resolver_address, "Failed to get AAAA record for host '{}': {}", host, error.value());
+    Error<ResolverError> last_error{};
+    for (auto &reply : replies) {
+        if (reply.has_error()) {
+            log_ip(m_log, dbg, resolver_address, "Failed to talk to upstream for host '{}' (elapsed:{}):\n{}", host, timer.elapsed<Millis>(), reply.error()->str());
+            last_error = make_error(ResolverError::AE_EXCHANGE_FAILED, AG_FMT("Could not resolve {}", host), reply.error());
+            continue;
         }
+        auto reply_addrs = socket_address_from_reply(m_log, reply->get(), port);
+        std::move(reply_addrs.begin(), reply_addrs.end(), std::back_inserter(addrs));
     }
 
-    if (!error.has_value() && addrs.empty()) {
-        error = AG_FMT("Could not resolve {}", host);
+    if (addrs.empty()) {
+        error = last_error ? last_error : make_error(ResolverError::AE_EMPTY_ADDRS, AG_FMT("Could not resolve {}", host));
     }
 
-    return {std::move(addrs), std::move(error)};
+    if (error) {
+        co_return error;
+    } else {
+        co_return addrs;
+    }
 }
 
-} // namespace ag
+Resolver::~Resolver() {
+    tracelog(m_log, "");
+}
+
+} // namespace ag::dns

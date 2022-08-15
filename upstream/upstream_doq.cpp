@@ -10,14 +10,15 @@
 #endif
 
 #include "common/clock.h"
+#include "common/parallel.h"
 #include "common/time_utils.h"
-#include "upstream/upstream.h"
+#include "dns/upstream/upstream.h"
 
 #include "upstream_doq.h"
 
 using namespace std::chrono;
 
-namespace ag {
+namespace ag::dns {
 
 static constexpr std::string_view DQ_ALPNS[] = {DoqUpstream::RFC9250_ALPN};
 static constexpr int LOCAL_IDLE_TIMEOUT_SEC = 180;
@@ -66,20 +67,18 @@ DoqUpstream::DoqUpstream(const UpstreamOptions &opts, const UpstreamFactoryConfi
         , m_max_pktlen{NGTCP2_MAX_PKTLEN_IPV6}
         , m_quic_version{NGTCP2_PROTO_VER_V1}
         , m_send_buf(NGTCP2_MAX_PKTLEN_IPV6)
-        , m_idle_timer_event(event_new(m_loop->c_base(), -1, EV_TIMEOUT, idle_timer_cb, this))
-        , m_handshake_timer_event(event_new(m_loop->c_base(), -1, EV_TIMEOUT, handshake_timer_cb, this))
-        , m_retransmit_timer_event(event_new(m_loop->c_base(), -1, EV_TIMEOUT, retransmit_cb, this))
+        , m_idle_timer{Uv<uv_timer_t>::create_with_parent(this)}
+        , m_handshake_timer(Uv<uv_timer_t>::create_with_parent(this))
+        , m_retransmit_timer(Uv<uv_timer_t>::create_with_parent(this))
         , m_static_secret{0}
         , m_tls_session_cache(opts.address) {
+    uv_timer_init(config.loop.handle(), m_idle_timer->raw());
+    uv_timer_init(config.loop.handle(), m_handshake_timer->raw());
+    uv_timer_init(config.loop.handle(), m_retransmit_timer->raw());
 }
 
 DoqUpstream::~DoqUpstream() {
-    submit([this] {
-        disconnect("Destructor");
-    });
-
-    m_loop->stop(); // Cleanup should still execute since this is event_loopexit
-    m_loop->join();
+    disconnect("Destructor");
 }
 
 #if BORINGSSL_API_VERSION < 10
@@ -132,13 +131,10 @@ int DoqUpstream::send_alert(SSL *ssl, enum ssl_encryption_level_t level, uint8_t
     auto res = SSL_alert_from_verify_result(alert);
     if (res == SSL_AD_BAD_CERTIFICATE || res == SSL_AD_CERTIFICATE_EXPIRED || res == SSL_AD_CERTIFICATE_REVOKED
             || res == SSL_AD_UNSUPPORTED_CERTIFICATE || res == SSL_AD_CERTIFICATE_UNKNOWN) {
-        std::scoped_lock l(doq->m_global);
-        for (auto &cur : doq->m_requests) {
-            cur.second.cond.notify_all();
-        }
+        ngtcp2_conn_set_tls_error(doq->m_conn, res);
     }
 
-    return 1;
+    return 0;
 }
 
 static auto quic_method = SSL_QUIC_METHOD {
@@ -150,8 +146,8 @@ static auto quic_method = SSL_QUIC_METHOD {
             DoqUpstream::add_handshake_data, DoqUpstream::flush_flight, DoqUpstream::send_alert,
 };
 
-void DoqUpstream::retransmit_cb(evutil_socket_t, short, void *data) {
-    auto doq = static_cast<DoqUpstream *>(data);
+void DoqUpstream::retransmit_cb(uv_timer_t *timer) {
+    auto doq = static_cast<DoqUpstream *>(Uv<uv_timer_t>::parent_from_data(timer->data));
     tracelog(doq->m_log, "{}(): ...", __func__);
     if (doq->m_state == STOP) {
         return;
@@ -167,19 +163,19 @@ void DoqUpstream::retransmit_cb(evutil_socket_t, short, void *data) {
     }
 }
 
-void DoqUpstream::idle_timer_cb(evutil_socket_t, short, void *data) {
-    auto doq = static_cast<DoqUpstream *>(data);
+void DoqUpstream::idle_timer_cb(uv_timer_t *timer) {
+    auto doq = static_cast<DoqUpstream *>(Uv<uv_timer_t>::parent_from_data(timer->data));
     doq->disconnect("Idle timer expired");
 }
 
-void DoqUpstream::handshake_timer_cb(evutil_socket_t, short, void *data) {
-    auto doq = static_cast<DoqUpstream *>(data);
-    evtimer_del(doq->m_idle_timer_event.get());
+void DoqUpstream::handshake_timer_cb(uv_timer_t *timer) {
+    auto doq = static_cast<DoqUpstream *>(Uv<uv_timer_t>::parent_from_data(timer->data));
+    // also stop idle timer
+    uv_timer_stop(doq->m_idle_timer->raw());
     doq->disconnect("Handshake timer expired");
 }
 
 void DoqUpstream::send_requests() {
-    m_global.lock();
 
     for (auto &[id, req] : m_requests) {
         if (req.is_onfly) {
@@ -189,7 +185,6 @@ void DoqUpstream::send_requests() {
         auto idle_expiry = ngtcp2_conn_get_idle_expiry(m_conn);
         Millis diff = ceil<Millis>(Nanos{idle_expiry - req.starting_time});
         if (diff < m_options.timeout * 2) {
-            m_global.unlock();
             disconnect(AG_FMT("Too little time to process the request, id: {}", req.request_id));
             reinit();
             return;
@@ -204,7 +199,6 @@ void DoqUpstream::send_requests() {
         }
 
         if (stream_id == -1) {
-            m_global.unlock();
             disconnect("Stream ID is wrong");
             return;
         }
@@ -223,7 +217,6 @@ void DoqUpstream::send_requests() {
 
         tracelog(m_log, "Sending request, id: {}", req.request_id);
         if (int ret = on_write(); ret != NETWORK_ERR_OK) {
-            m_global.unlock();
             if (ret == NETWORK_ERR_SEND_BLOCKED) {
                 req.is_onfly = true;
             } else {
@@ -235,12 +228,10 @@ void DoqUpstream::send_requests() {
         req.is_onfly = true;
     }
 
-    m_global.unlock();
-
     update_idle_timer(false);
 }
 
-ErrString DoqUpstream::init() {
+Error<Upstream::InitError> DoqUpstream::init() {
     std::string_view url = m_options.address;
 
     assert(ag::utils::starts_with(url, SCHEME));
@@ -250,9 +241,9 @@ ErrString DoqUpstream::init() {
     auto [host, port] = ag::utils::split_host_port(url);
     m_server_name = ag::utils::trim(host);
     if (m_server_name.empty()) {
-        return "Server name is empty";
+        return make_error(InitError::AE_EMPTY_SERVER_NAME);
     }
-    m_port = ag::utils::to_integer<uint16_t>(port).value_or(ag::DEFAULT_DOQ_PORT);
+    m_port = ag::utils::to_integer<uint16_t>(port).value_or(DEFAULT_DOQ_PORT);
 
     Bootstrapper::Params bootstrapper_params = {
             .address_string = m_server_name,
@@ -263,8 +254,8 @@ ErrString DoqUpstream::init() {
             .outbound_interface = m_options.outbound_interface,
     };
     m_bootstrapper = std::make_unique<Bootstrapper>(bootstrapper_params);
-    if (auto check = m_bootstrapper->init(); check.has_value()) {
-        return "Bootstrapper init failed";
+    if (auto err = m_bootstrapper->init()) {
+        return make_error(InitError::AE_BOOTSTRAPPER_INIT_FAILED, err);
     }
 
     m_callbacks = ngtcp2_callbacks{
@@ -305,18 +296,20 @@ ErrString DoqUpstream::init() {
     m_remote_addr_empty = SocketAddress("::", m_port);
 
     if (int ret = init_ssl_ctx(); ret != 0) {
-        return "Creation SSL context failed";
+        return make_error(InitError::AE_SSL_CONTEXT_INIT_FAILED);
     }
 
-    return std::nullopt;
+    m_shutdown_guard = std::make_shared<bool>(true);
+
+    return {};
 }
 
-DoqUpstream::ExchangeResult DoqUpstream::exchange(ldns_pkt *request, const DnsMessageInfo *) {
-    if (std::scoped_lock l(m_global); m_server_addresses.empty()) {
-        Bootstrapper::ResolveResult bootstrapper_res = m_bootstrapper->get();
-        if (bootstrapper_res.error.has_value()) {
+coro::Task<Upstream::ExchangeResult> DoqUpstream::exchange(ldns_pkt *request, const DnsMessageInfo *) {
+    if (m_server_addresses.empty()) {
+        Bootstrapper::ResolveResult bootstrapper_res = co_await m_bootstrapper->get();
+        if (bootstrapper_res.error) {
             warnlog(m_log, "Bootstrapper hasn't results");
-            return {nullptr, "Failed to resolve address of server"};
+            co_return make_error(DE_BOOTSTRAP_ERROR, bootstrapper_res.error);
         }
 
         m_server_addresses.assign(bootstrapper_res.addresses.begin(), bootstrapper_res.addresses.end());
@@ -326,51 +319,61 @@ DoqUpstream::ExchangeResult DoqUpstream::exchange(ldns_pkt *request, const DnsMe
     ldns_status status = ldns_pkt2buffer_wire(buffer, request);
     if (status != LDNS_STATUS_OK) {
         assert(0);
-        return {nullptr, ldns_get_errorstr_by_id(status)};
+        co_return make_error(DE_ENCODE_ERROR, ldns_get_errorstr_by_id(status));
     }
     ldns_buffer_flip(buffer);
 
     int64_t request_id = m_next_request_id++;
-    {
-        std::scoped_lock l(m_global);
-        Request &req = m_requests[request_id];
-        req.starting_time = get_tstamp();
-        req.request_id = request_id;
-        req.request_buffer.reset(buffer);
-    }
+    Request &req = m_requests[request_id];
+    req.starting_time = get_tstamp();
+    req.request_id = request_id;
+    req.request_buffer.reset(buffer);
     tracelog_id(m_log, request, "Creation new request, id: {}, connection state: {}", request_id,
             magic_enum::enum_name(m_state.load()));
 
-    submit([this] {
-        if (m_state != RUN) {
-            int res = this->reinit();
-            if (res != NETWORK_ERR_HANDSHAKE_RUN && res != NETWORK_ERR_OK) {
-                disconnect(AG_FMT("Reinit failed ({})", res));
-            }
-        } else {
-            this->send_requests();
+    if (m_state != RUN) {
+        int res = this->reinit();
+        if (res != NETWORK_ERR_HANDSHAKE_RUN && res != NETWORK_ERR_OK) {
+            disconnect(AG_FMT("Reinit failed ({})", res));
         }
-    });
+    } else {
+        this->send_requests();
+    }
 
-    std::unique_lock l(m_global);
-    Request &req = m_requests[request_id];
-    auto timeout = req.cond.wait_for(l, m_options.timeout);
+    auto await_result = [](Request &req) {
+        struct AwaitResult { // NOLINT: coroutine awaitable
+            Request &req;
+            bool await_ready() const { return req.completed; }
+            void await_suspend(std::coroutine_handle<> h) { req.caller = h; }
+            std::cv_status await_resume() { return std::cv_status::no_timeout; }
+        };
+        return AwaitResult{.req = req};
+    };
+    auto await_timeout = [](EventLoop &loop, auto timeout) -> coro::Task<std::cv_status> {
+        co_await loop.co_sleep(timeout);
+        co_return std::cv_status::timeout;
+    };
+    auto timeout = co_await parallel::any_of<std::cv_status>(
+            await_result(req),
+            await_timeout(config().loop, m_options.timeout)
+    );
 
     ldns_pkt *res = req.reply_pkt.release();
+    auto err = req.error;
     assert(m_requests.count(request_id));
     tracelog_id(m_log, request, "Erase request, id: {}, connection state: {}", request_id,
             magic_enum::enum_name(m_state.load()));
     m_requests.erase(request_id);
 
     if (timeout == std::cv_status::timeout) {
-        return {nullptr, TIMEOUT_STR.data()};
+        co_return make_error(DE_TIMED_OUT);
     }
 
     if (res != nullptr) {
-        return {ldns_pkt_ptr(res), std::nullopt};
+        co_return ldns_pkt_ptr{res};
     }
 
-    return {nullptr, "Request failed (empty packet)"};
+    co_return err ? err : make_error(DE_RESPONSE_PACKET_TOO_SHORT);
 }
 
 void DoqUpstream::on_socket_connected(void *arg) {
@@ -419,6 +422,10 @@ void DoqUpstream::on_socket_read(void *arg, Uint8View data) {
 
     std::string disconnect_reason;
     if (int ret = self->feed_data(data); ret != NETWORK_ERR_OK) {
+        if (ret == NGTCP2_ERR_CALLBACK_FAILURE) {
+            // Shutting down
+            return;
+        }
         if (ret == NGTCP2_ERR_RECV_VERSION_NEGOTIATION) {
             self->disconnect("Switching QUIC version");
             self->reinit();
@@ -457,7 +464,7 @@ void DoqUpstream::on_socket_read(void *arg, Uint8View data) {
     return;
 
 fail:
-    // if the peer is not yet selected and we have some pending endpoints,
+    // if the peer is not yet selected, and we have some pending endpoints,
     // do not disconnect immediately - wait for other ones
     if (const ConnectionHandshakeInitialInfo * info; self->m_conn_state.is_peer_selected()
             || nullptr == (info = std::get_if<ConnectionHandshakeInitialInfo>(&self->m_conn_state.info))
@@ -466,22 +473,22 @@ fail:
     }
 }
 
-void DoqUpstream::on_socket_close(void *arg, std::optional<Socket::Error> error) {
+void DoqUpstream::on_socket_close(void *arg, Error<SocketError> error) {
     auto *ctx = (SocketContext *) arg;
     DoqUpstream *self = ctx->upstream;
 
     const SocketAddress &peer = ctx->socket->get_peer();
-    if (error.has_value()) {
-        dbglog(self->m_log, "Failed to connect to {}: {} ({})", peer.str(), error->description, error->code);
+    if (error) {
+        dbglog(self->m_log, "Failed to connect to {}: {}", peer.str(), error->str());
         if (!self->m_conn_state.is_peer_selected()) {
             self->disqualify_server_address(peer);
         }
-        if (error->code == utils::AG_ECONNREFUSED) {
-            self->m_socket_error = true;
+        if (error->value() == SocketError::AE_CONNECTION_REFUSED) {
+            self->m_fatal_error = make_error(DnsError::DE_SOCKET_ERROR, error);
         }
     } else {
         dbglog(self->m_log, "Connection to {} closed", peer.str());
-        self->m_socket_error = false;
+        self->m_fatal_error = nullptr;
     }
 
     auto drop = self->m_conn_state.extract_socket(ctx);
@@ -594,17 +601,13 @@ int DoqUpstream::write_streams() {
 int DoqUpstream::send_packet(Socket *active_socket, Uint8View data) {
     tracelog(m_log, "Sending {} bytes to {}", data.size(), active_socket->get_peer().str());
     auto e = active_socket->send(data);
-    if (e.has_value()) {
-        if (ag::utils::socket_error_is_eagain(e->code)) {
-            return NETWORK_ERR_SEND_BLOCKED;
-        } else {
-            dbglog(m_log, "Failed to send packet: {} ({})", e->description, e->code);
-        }
+    if (e) {
+        dbglog(m_log, "Failed to send packet: {}", e->str());
     }
 
     m_send_buf.reset();
 
-    return !e.has_value() ? NETWORK_ERR_OK : NETWORK_ERR_DROP_CONN;
+    return !e ? NETWORK_ERR_OK : NETWORK_ERR_DROP_CONN;
 }
 
 int DoqUpstream::send_packet() {
@@ -629,10 +632,9 @@ int DoqUpstream::connect_to_peers(const std::vector<SocketAddress> &current_addr
         auto &ctx = sockets.emplace_back(new SocketContext{});
         ctx->upstream = this;
         ctx->socket = this->make_socket(utils::TP_UDP);
-        if (auto e = ctx->socket->connect(
-                    {m_loop.get(), address, {on_socket_connected, on_socket_read, on_socket_close, ctx.get()}});
-                e.has_value()) {
-            dbglog(m_log, "Failed to start connection to {}: {} ({})", address.str(), e->description, e->code);
+        if (auto err = ctx->socket->connect(
+                    {&config().loop, address, {on_socket_connected, on_socket_read, on_socket_close, ctx.get()}})) {
+            dbglog(m_log, "Failed to start connection to {}: {}", address.str(), err->str());
             disqualify_server_address(address);
             sockets.erase(std::next(sockets.end(), -1));
         }
@@ -645,11 +647,9 @@ int DoqUpstream::connect_to_peers(const std::vector<SocketAddress> &current_addr
 
     m_conn_state.info = ConnectionHandshakeInitialInfo{std::move(sockets)};
 
-    timeval tv{};
-    evtimer_pending(m_handshake_timer_event.get(), &tv);
-    if (!evutil_timerisset(&tv)) {
-        tv = duration_to_timeval(m_options.timeout);
-        evtimer_add(m_handshake_timer_event.get(), &tv);
+    uint64_t pending_ms = uv_timer_get_due_in(m_handshake_timer->raw());
+    if (pending_ms == 0) {
+        uv_timer_start(m_handshake_timer->raw(), handshake_timer_cb, to_millis(m_options.timeout).count(), 0);
     }
     return NETWORK_ERR_OK;
 }
@@ -768,7 +768,9 @@ int DoqUpstream::feed_data(Uint8View data) {
     auto rv = ngtcp2_conn_read_pkt(m_conn, &path, &pi, data.data(), data.size(), initial_ts);
 
     if (rv != 0 && rv != NGTCP2_ERR_RECV_VERSION_NEGOTIATION) {
-        dbglog(m_log, "ngtcp2_conn_read_pkt: {}", ngtcp2_strerror(rv));
+        if (rv != NGTCP2_ERR_CALLBACK_FAILURE) {
+            dbglog(m_log, "ngtcp2_conn_read_pkt: {}", ngtcp2_strerror(rv));
+        }
     }
 
     return rv;
@@ -814,7 +816,8 @@ int DoqUpstream::recv_crypto_data(ngtcp2_conn *conn, ngtcp2_crypto_level crypto_
     (void) user_data;
     if (ngtcp2_crypto_read_write_crypto_data(conn, crypto_level, data, datalen) != 0) {
         if (auto err = ngtcp2_conn_get_tls_error(conn); err) {
-            return err;
+            auto doq = static_cast<DoqUpstream *>(user_data);
+            doq->m_fatal_error = make_error(DE_HANDSHAKE_ERROR, SSL_alert_desc_string(err));
         }
         return NGTCP2_ERR_CRYPTO;
     }
@@ -908,6 +911,7 @@ int DoqUpstream::recv_stream_data(ngtcp2_conn *conn, uint32_t flags, int64_t str
         return 0;
     }
 
+    std::weak_ptr<bool> shutdown_guard = doq->m_shutdown_guard;
     if (st->second.raw_data.empty() && (flags & NGTCP2_STREAM_DATA_FLAG_FIN)) {
         doq->process_reply(st->second.request_id, {data, datalen});
     } else {
@@ -920,7 +924,7 @@ int DoqUpstream::recv_stream_data(ngtcp2_conn *conn, uint32_t flags, int64_t str
         }
     }
 
-    return 0;
+    return shutdown_guard.expired() ? NGTCP2_ERR_DROP_CONN : 0;
 }
 
 int DoqUpstream::get_new_connection_id(
@@ -946,7 +950,7 @@ int DoqUpstream::handshake_confirmed(ngtcp2_conn *conn, void *data) {
 
     auto *doq = (DoqUpstream *) data;
     tracelog(doq->m_log, "{}", __func__);
-    evtimer_del(doq->m_handshake_timer_event.get());
+    uv_timer_stop(doq->m_handshake_timer->raw());
 
     const uint8_t *buf = nullptr;
     uint32_t len = 0;
@@ -986,24 +990,21 @@ int DoqUpstream::reinit() {
 
     std::vector<SocketAddress> current_addresses;
 
-    {
-        std::scoped_lock l(m_global);
-        // Getting one ipv6 address
-        if (m_config.ipv6_available) {
-            for (auto &cur : m_server_addresses) {
-                if (cur.is_ipv6()) {
-                    current_addresses.emplace_back(cur);
-                    break;
-                }
-            }
-        }
-
-        // Getting one ipv4 address
+    // Getting one ipv6 address
+    if (m_config.ipv6_available) {
         for (auto &cur : m_server_addresses) {
-            if (cur.is_ipv4()) {
+            if (cur.is_ipv6()) {
                 current_addresses.emplace_back(cur);
                 break;
             }
+        }
+    }
+
+    // Getting one ipv4 address
+    for (auto &cur : m_server_addresses) {
+        if (cur.is_ipv4()) {
+            current_addresses.emplace_back(cur);
+            break;
         }
     }
 
@@ -1015,6 +1016,8 @@ int DoqUpstream::reinit() {
         assert(0);
         return -1;
     }
+
+    m_shutdown_guard = std::make_shared<bool>(true);
 
     return 0;
 }
@@ -1049,12 +1052,7 @@ int DoqUpstream::acked_stream_data_offset(ngtcp2_conn *conn, int64_t stream_id, 
     return 0;
 }
 
-void DoqUpstream::submit(std::function<void()> &&f) const {
-    m_loop->submit(std::move(f));
-}
-
 void DoqUpstream::process_reply(int64_t request_id, Uint8View reply) {
-    std::scoped_lock lg(m_global);
     auto req_it = m_requests.find(request_id);
     if (req_it != m_requests.end()) {
         ldns_pkt *pkt = nullptr;
@@ -1066,7 +1064,7 @@ void DoqUpstream::process_reply(int64_t request_id, Uint8View reply) {
             pkt = nullptr;
         }
         req_it->second.reply_pkt.reset(pkt);
-        req_it->second.cond.notify_all();
+        req_it->second.complete();
     }
 }
 
@@ -1075,20 +1073,26 @@ void DoqUpstream::disconnect(std::string_view reason) {
 
     dbglog(m_log, "Disconnect reason: {}", reason);
     ngtcp2_conn_del(std::exchange(m_conn, nullptr));
-    m_read_event.reset();
-    evtimer_del(m_handshake_timer_event.get());
-    evtimer_del(m_idle_timer_event.get());
-    evtimer_del(m_retransmit_timer_event.get());
+    m_shutdown_guard.reset();
+    uv_timer_stop(m_handshake_timer->raw());
+    uv_timer_stop(m_idle_timer->raw());
+    uv_timer_stop(m_retransmit_timer->raw());
 
     m_conn_state.info.emplace<std::monostate>();
 
     m_ssl.reset();
 
-    std::scoped_lock l(m_global);
+    std::vector<int64_t> requests_to_complete;
     for (auto &cur : m_requests) {
-        if (cur.second.is_onfly || m_socket_error) {
-            tracelog(m_log, "Call condvar for request, id: {}", cur.first);
-            cur.second.cond.notify_all();
+        if (cur.second.is_onfly || m_fatal_error) {
+            tracelog(m_log, "Completing request, id: {}", cur.first);
+            cur.second.error = m_fatal_error ? m_fatal_error :make_error(DE_CONNECTION_CLOSED);
+            requests_to_complete.push_back(cur.first);
+        }
+    }
+    for (int64_t id : requests_to_complete) {
+        if (auto it = m_requests.find(id); it != m_requests.end()) {
+            it->second.complete();
         }
     }
 }
@@ -1110,14 +1114,14 @@ void DoqUpstream::schedule_retransmit() {
     }
     auto now_ns = get_tstamp();
 
-    timeval tv{0};
+    Millis ms{0};
     if (expiry_ns > now_ns) {
         Nanos timeout_ns{expiry_ns - now_ns};
-        tv = duration_to_timeval(ceil<microseconds>(timeout_ns));
+        ms = ceil<Millis>(timeout_ns);
     }
-    evtimer_del(m_retransmit_timer_event.get());
-    tracelog(m_log, "Next retransmit in {}", microseconds(1000000 * tv.tv_sec + tv.tv_usec));
-    evtimer_add(m_retransmit_timer_event.get(), &tv);
+    uv_timer_stop(m_retransmit_timer->raw());
+    tracelog(m_log, "Next retransmit in {}", ms);
+    uv_timer_start(m_retransmit_timer->raw(), retransmit_cb, ms.count(), 0);
 }
 
 int DoqUpstream::ssl_verify_callback(X509_STORE_CTX *ctx, void *arg) {
@@ -1143,7 +1147,6 @@ int DoqUpstream::ssl_verify_callback(X509_STORE_CTX *ctx, void *arg) {
 }
 
 void DoqUpstream::disqualify_server_address(const SocketAddress &server_address) {
-    std::scoped_lock l(m_global);
     for (auto it_serv = m_server_addresses.begin(); it_serv != m_server_addresses.end(); ++it_serv) {
         if (server_address == it_serv->socket_family_cast(server_address.c_sockaddr()->sa_family)) {
             // Put current address to back of queue
@@ -1169,23 +1172,8 @@ ngtcp2_crypto_level DoqUpstream::from_ossl_level(enum ssl_encryption_level_t oss
     }
 }
 
-static microseconds get_event_remaining_timeout(event *ev) {
-    timeval next{}, now{};
-    evtimer_pending(ev, &next);
-    event_base_gettimeofday_cached(event_get_base(ev), &now);
-    if (evutil_timercmp(&next, &now, >)) {
-        evutil_timersub(&next, &now, &next);
-        return microseconds{next.tv_sec * 1000000LL + next.tv_usec};
-    }
-    return microseconds{0};
-}
-
 void DoqUpstream::update_idle_timer(bool reset) {
-    bool has_inflight_requests = false;
-    {
-        std::scoped_lock l(m_global);
-        has_inflight_requests = !m_requests.empty();
-    }
+    bool has_inflight_requests = !m_requests.empty();
 
     Millis value{0};
     if (!has_inflight_requests) {
@@ -1197,7 +1185,7 @@ void DoqUpstream::update_idle_timer(bool reset) {
     } else {
         value = m_options.timeout * 2;
         if (!reset) {
-            Millis pending = ceil<Millis>(get_event_remaining_timeout(m_idle_timer_event.get()));
+            Millis pending = Millis{uv_timer_get_due_in(m_idle_timer->raw())};
             if (pending <= value) {
                 dbglog(m_log, "Idle timer unchanged, {} left", pending);
                 return;
@@ -1209,8 +1197,7 @@ void DoqUpstream::update_idle_timer(bool reset) {
         }
     }
 
-    timeval tv = duration_to_timeval(value);
-    evtimer_add(m_idle_timer_event.get(), &tv);
+    uv_timer_start(m_idle_timer->raw(), idle_timer_cb, value.count(), 0);
 }
 
 } // namespace ag

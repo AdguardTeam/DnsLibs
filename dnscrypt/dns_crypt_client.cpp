@@ -1,16 +1,16 @@
 #include <sodium.h>
 #include <utility>
 
-#include "dnscrypt/dns_crypt_client.h"
+#include "dns/dnscrypt/dns_crypt_client.h"
 #include "common/net_utils.h"
-#include "common/net_consts.h"
 #include "common/utils.h"
-#include "dnscrypt/dns_crypt_consts.h"
-#include "dnscrypt/dns_crypt_ldns.h"
-#include "dnscrypt/dns_crypt_utils.h"
-#include "dnsstamp/dns_stamp.h"
+#include "dns/common/net_consts.h"
+#include "dns/dnscrypt/dns_crypt_consts.h"
+#include "dns/dnscrypt/dns_crypt_ldns.h"
+#include "dns/dnscrypt/dns_crypt_utils.h"
+#include "dns/dnsstamp/dns_stamp.h"
 
-namespace ag::dnscrypt {
+namespace ag::dns::dnscrypt {
 
 /**
  * Adjusts the maximum payload size advertised in queries sent to upstream servers
@@ -37,25 +37,25 @@ Client::Client(utils::TransportProtocol protocol, bool adjust_payload_size)
         , m_adjust_payload_size(adjust_payload_size) {
 }
 
-Client::DialResult Client::dial(std::string_view stamp_str, Millis timeout, const SocketFactory *socket_factory,
-        SocketFactory::SocketParameters socket_parameters) const {
-    static constexpr utils::MakeError<DialResult> make_error;
-    auto [stamp, stamp_err] = ServerStamp::from_string(stamp_str);
-    if (stamp_err) {
-        return make_error(std::move(stamp_err));
+coro::Task<Client::DialResult> Client::dial(std::string_view stamp_str, EventLoop &loop, Millis timeout,
+        const SocketFactory *socket_factory, SocketFactory::SocketParameters socket_parameters) const {
+
+    auto stamp_res = ServerStamp::from_string(stamp_str);
+    if (stamp_res.has_error()) {
+        co_return make_error(DialError::AE_STAMP_PARSE_ERROR, stamp_res.error());
     }
-    if (stamp.proto != StampProtoType::DNSCRYPT) {
-        return make_error("Stamp is not for a DNSCrypt server");
+    if (stamp_res->proto != StampProtoType::DNSCRYPT) {
+        co_return make_error(DialError::AE_BAD_PROTOCOL);
     }
-    return dial(stamp, timeout, socket_factory, std::move(socket_parameters));
+    co_return co_await dial(*stamp_res, loop, timeout, socket_factory, std::move(socket_parameters));
 }
 
-Client::DialResult Client::dial(const ServerStamp &stamp, Millis timeout, const SocketFactory *socket_factory,
-        SocketFactory::SocketParameters socket_parameters) const {
-    static constexpr utils::MakeError<DialResult> make_error;
+coro::Task<Client::DialResult> Client::dial(const ServerStamp &stamp, EventLoop &loop, Millis timeout,
+        const SocketFactory *socket_factory, SocketFactory::SocketParameters socket_parameters) const {
+
     ServerInfo local_server_info{};
     if (crypto_box_keypair(local_server_info.m_public_key.data(), local_server_info.m_secret_key.data()) != 0) {
-        return make_error("Can not generate keypair");
+        co_return make_error(DialError::AE_KEYPAIR_GENERATION_ERROR);
     }
     // Set the provider properties
     local_server_info.m_server_public_key = stamp.server_pk;
@@ -65,65 +65,66 @@ Client::DialResult Client::dial(const ServerStamp &stamp, Millis timeout, const 
     }
     local_server_info.m_provider_name = stamp.provider_name;
     if (local_server_info.m_provider_name.empty()) {
-        return make_error("Provider name is empty");
+        co_return make_error(DialError::AE_EMPTY_PROVIDER_NAME);
     }
     if (local_server_info.m_provider_name.back() != '.') {
         local_server_info.m_provider_name.push_back('.');
     }
     socket_parameters.proto = m_protocol;
     // Fetch the certificate and validate it
-    auto [cert_info, rtt, err]
-            = local_server_info.fetch_current_dnscrypt_cert(timeout, socket_factory, std::move(socket_parameters));
-    if (err) {
-        return make_error(std::move(err));
+    auto fetch_res = co_await local_server_info.fetch_current_dnscrypt_cert(
+            loop, timeout, socket_factory, std::move(socket_parameters));
+    if (fetch_res.has_error()) {
+        co_return make_error(DialError::AE_FETCH_DNSCRYPT_CERT_ERROR, fetch_res.error());
     }
+    auto &[cert_info, rtt] = fetch_res.value();
     local_server_info.m_server_cert = cert_info;
-    return {std::move(local_server_info), rtt, std::nullopt};
+    co_return DialInfo{std::move(local_server_info), rtt};
 }
 
-Client::ExchangeResult Client::exchange(ldns_pkt &message, const ServerInfo &local_server_info, Millis timeout,
-        const SocketFactory *socket_factory, SocketFactory::SocketParameters socket_parameters) const {
-    static constexpr utils::MakeError<ExchangeResult> make_error;
+coro::Task<Client::ExchangeResult> Client::exchange(ldns_pkt &message, const ServerInfo &local_server_info, EventLoop &loop,
+        Millis timeout, const SocketFactory *socket_factory, SocketFactory::SocketParameters socket_parameters) const {
+
     utils::Timer timer;
     if (m_adjust_payload_size) {
         ldns_pkt_adjust_payload_size(message);
     }
-    auto [query, create_ldns_buffer_err] = create_ldns_buffer(message);
-    if (create_ldns_buffer_err) {
-        return make_error(std::move(create_ldns_buffer_err));
+    auto query_res = create_ldns_buffer(message);
+    if (query_res.has_error()) {
+        co_return query_res.error();
     }
-    auto [encrypted_query, client_nonce, encrypt_err] = local_server_info.encrypt(
-            m_protocol, Uint8View(ldns_buffer_begin(query.get()), ldns_buffer_position(query.get())));
-    if (encrypt_err) {
-        return make_error(std::move(encrypt_err));
+    auto encrypt_res = local_server_info.encrypt(
+            m_protocol, Uint8View(ldns_buffer_begin(query_res->get()), ldns_buffer_position(query_res->get())));
+    if (encrypt_res.has_error()) {
+        co_return make_error(DE_ENCRYPT_ERROR, encrypt_res.error());
     }
+    auto &[encrypted_query, client_nonce] = encrypt_res.value();
     ldns_buffer encrypted_query_buffer = {};
     ldns_buffer_new_frm_data(&encrypted_query_buffer, encrypted_query.data(), encrypted_query.size());
     ldns_buffer_set_position(&encrypted_query_buffer, encrypted_query.size());
     socket_parameters.proto = m_protocol;
-    auto [encrypted_response, exchange_rtt, exchange_err]
-            = dns_exchange(timeout, utils::str_to_socket_address(local_server_info.m_server_address),
-                    encrypted_query_buffer, socket_factory, std::move(socket_parameters));
+    auto [encrypted_response, exchange_rtt, exchange_err] = co_await dns_exchange(loop,
+            timeout, utils::str_to_socket_address(local_server_info.m_server_address),
+            encrypted_query_buffer, socket_factory, std::move(socket_parameters));
     free(ldns_buffer_export(&encrypted_query_buffer));
     if (exchange_err) {
-        return make_error(std::move(exchange_err));
+        co_return make_error(DE_NESTED_DNS_ERROR, exchange_err);
     }
     // Reading the response
     // In case if the server local_server_info is not valid anymore (for instance, certificate was rotated)
     // the read operation will most likely time out.
     // This might be a signal to re-dial for the server certificate.
-    auto [decrypted, decrypt_err]
-            = local_server_info.decrypt(Uint8View(encrypted_response.data(), encrypted_response.size()),
-                    Uint8View(client_nonce.data(), client_nonce.size()));
-    if (decrypt_err) {
-        return make_error(std::move(decrypt_err));
+    auto decrypt_res = local_server_info.decrypt(Uint8View(encrypted_response.data(), encrypted_response.size()),
+            Uint8View(client_nonce.data(), client_nonce.size()));
+    if (decrypt_res.has_error()) {
+        co_return make_error(DE_DECRYPT_ERROR, decrypt_res.error());
     }
-    auto [reply_pkt_unique_ptr, reply_err] = create_ldns_pkt(decrypted.data(), decrypted.size());
-    if (reply_err) {
-        return make_error(std::move(reply_err));
+    auto reply_pkt_res = create_ldns_pkt(decrypt_res->data(), decrypt_res->size());
+    if (reply_pkt_res.has_error()) {
+        co_return reply_pkt_res.error();
     }
     auto rtt = timer.elapsed<Millis>();
-    return {std::move(reply_pkt_unique_ptr), rtt, std::nullopt};
+    co_return ExchangeInfo{std::move(reply_pkt_res.value()), rtt};
 }
 
-} // namespace ag::dnscrypt
+} // namespace ag::dns::dnscrypt

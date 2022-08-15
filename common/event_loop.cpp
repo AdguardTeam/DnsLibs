@@ -1,202 +1,229 @@
-#include <array>
-#include <cassert>
-#include <csignal>
-#include <event2/event.h>
-#include <event2/thread.h>
-
-#include "common/event_loop.h"
 #include "common/logger.h"
 #include "common/time_utils.h"
+#include "dns/common/event_loop.h"
 
-namespace ag {
+namespace ag::dns {
 
-static Logger g_event_logger{"LIBEVENT"};
-static const struct EventLogCbSetter {
-    EventLogCbSetter() noexcept {
-        event_set_log_callback([](int severity, const char *msg) {
-            switch (severity) {
-            case EVENT_LOG_DEBUG:
-                dbglog(g_event_logger, "{}", msg);
-                break;
-            case EVENT_LOG_MSG:
-                infolog(g_event_logger, "{}", msg);
-                break;
-            case EVENT_LOG_WARN:
-                warnlog(g_event_logger, "{}", msg);
-                break;
-            case EVENT_LOG_ERR:
-                errlog(g_event_logger, "{}", msg);
-                break;
-            default:
-                tracelog(g_event_logger, "???: {}", msg);
-            }
-        });
-    }
-} g_set_event_log_cb [[maybe_unused]];
+static constexpr int MAX_STOPPER_ITERATIONS = 10;
 
-extern "C" struct evthread_lock_callbacks *evthread_get_lock_callbacks(void);
-
-EventLoop::EventLoop(bool run_immediately) {
-    // Check if `evthread_use_*()` was called before, because calling it twice leads to
-    // program termination in case Libevent's debugging checks are enabled
-    if (evthread_get_lock_callbacks()->lock == nullptr) {
-#ifndef _WIN32
-        static const int ensure_threads [[maybe_unused]] = evthread_use_pthreads();
-#else // _WIN32
-        static const int ensure_threads [[maybe_unused]] = evthread_use_windows_threads();
-        static const int ensure_sockets [[maybe_unused]] = WSAStartup(0x0202, std::array<WSADATA, 1>().data());
-#endif // else of _WIN32
-    }
-
-    m_base.reset(event_base_new());
-    assert(m_base);
-    evthread_make_base_notifiable(m_base.get());
-
-    if (run_immediately) {
-        start();
-    }
+EventLoopPtr EventLoop::create() {
+    return std::make_shared<EventLoop>(ConstructorAccess{});
 }
 
-EventLoop::~EventLoop() {
-    stop();
-    join();
-    m_base.reset();
-}
-
-void EventLoop::start() {
-    assert(!m_base_thread.joinable());
-    this->join();
-
-    m_base_thread = std::thread([this] {
-        run();
-    });
-}
-
-void EventLoop::run_tasks_queue(evutil_socket_t, short, void *arg) {
-    auto *self = (EventLoop *) arg;
-    self->execute_tasks();
-}
-
-void EventLoop::run_postponed_task(evutil_socket_t, short, void *arg) {
-    auto *task_arg = (PostponedTasks::Task *) arg;
-    EventLoop *self = task_arg->event_loop;
-
-    std::optional<PostponedTasks::Task> task;
-    {
-        std::scoped_lock l(self->m_postponed_tasks.mtx);
-        auto it = std::find_if(self->m_postponed_tasks.val.queue.begin(), self->m_postponed_tasks.val.queue.end(),
-                [task_id = task_arg->id](const PostponedTasks::Task &i) -> bool {
-                    return i.id == task_id;
-                });
-        if (it != self->m_postponed_tasks.val.queue.end()) {
-            task = std::move(*it);
-            self->m_postponed_tasks.val.queue.erase(it);
-        }
-    }
-
-    if (task.has_value() && task->func) {
-        task->func();
-    }
-}
-
-void EventLoop::submit(std::function<void()> func) {
-    std::scoped_lock l(m_tasks.mtx);
-    m_tasks.val.queue.emplace_back(std::move(func));
-
-    if (!m_tasks.val.scheduled) {
-        event_base_once(m_base.get(), -1, EV_TIMEOUT, run_tasks_queue, this, nullptr);
-    }
-}
-
-EventLoop::TaskId EventLoop::schedule(Micros postpone_time, std::function<void()> func) {
-    std::scoped_lock l(m_postponed_tasks.mtx);
-    auto &task = m_postponed_tasks.val.queue.emplace_back(
-            PostponedTasks::Task{this, ++m_postponed_tasks.val.task_id_counter, std::move(func)});
-
-    timeval tv = ag::duration_to_timeval(postpone_time);
-    event_base_once(m_base.get(), -1, EV_TIMEOUT, run_postponed_task, &task, &tv);
-
-    return task.id;
-}
-
-void EventLoop::cancel(TaskId id) {
-    if (id == TaskId{}) {
+EventLoop::EventLoop(const EventLoop::ConstructorAccess & /* access */)
+        : m_log(__func__)
+{
+    m_handle = Uv<uv_loop_t>::create_with_parent(this);
+    if (0 != uv_loop_init(m_handle->raw())) {
+        m_handle.reset();
         return;
     }
-    std::scoped_lock l(m_postponed_tasks.mtx);
-    auto it = std::find_if(m_postponed_tasks.val.queue.begin(), m_postponed_tasks.val.queue.end(),
-            [id](const PostponedTasks::Task &i) -> bool {
-                return i.id == id;
-            });
-    if (it != m_postponed_tasks.val.queue.end()) {
-        it->func = nullptr;
+    m_async = Uv<uv_async_t>::create_with_parent(this);
+    uv_async_init(m_handle->raw(), m_async->raw(), [](uv_async_t *handle) {
+        if (auto *self = static_cast<EventLoop *>(Uv<uv_async_t>::parent_from_data(handle->data))) {
+            self->execute_async_tasks();
+        }
+    });
+    m_timer = Uv<uv_timer_t>::create_with_parent(this);
+    uv_timer_init(m_handle->raw(), m_timer->raw());
+}
+
+uv_loop_t *EventLoop::handle() {
+    return m_handle->raw();
+}
+
+std::vector<uv_handle_t *> EventLoop::get_active_handles() {
+    struct WalkInfo {
+        std::vector<uv_handle_t *> active_handles;
+        EventLoop &loop;
+    } walk_info{.loop = *this};
+    auto walker = [](uv_handle_t *handle, void *arg){
+        WalkInfo &walk_info = *(WalkInfo *)arg;
+        if (walk_info.loop.m_async && (void *) walk_info.loop.m_async->raw() == (void *) handle) {
+            return;
+        }
+        if (walk_info.loop.m_timer && (void *) walk_info.loop.m_timer->raw() == (void *) handle) {
+            return;
+        }
+        if (walk_info.loop.m_stopper && (void *) walk_info.loop.m_stopper->raw() == (void *) handle) {
+            return;
+        }
+        walk_info.active_handles.emplace_back(handle);
+    };
+    uv_walk(m_handle->raw(), walker, &walk_info);
+    return walk_info.active_handles;
+}
+
+void EventLoop::force_fire_timers() {
+    auto force_fire_timers = [](uv_handle_t *handle, void * /* arg */){
+        if (handle->type == UV_TIMER && uv_is_active(handle)) {
+            auto *timer = (uv_timer_t *) handle;
+            uv_timer_stop(timer);
+            if (timer->timer_cb) {
+                timer->timer_cb(timer);
+            }
+        }
+    };
+    uv_walk(m_handle->raw(), force_fire_timers, nullptr);
+}
+
+void EventLoop::execute_stopper_iteration() noexcept {
+    this->force_fire_timers();
+    this->execute_async_tasks();
+    this->execute_timer_tasks();
+    std::scoped_lock l(m_async_mutex, m_timer_mutex);
+    std::vector<uv_handle_t *> active_handles = this->get_active_handles();
+    if (m_async_queue.empty() && m_timer_queue.queue.empty()) {
+        if (active_handles.empty()) {
+            m_async.reset();
+            m_timer.reset();
+            m_stopper.reset();
+            return;
+        }
+        warnlog(m_log, "Warning! Active handles exist on the event loop stop:");
+        for (uv_handle_t *ah : active_handles) {
+            warnlog(m_log, "{} {}", uv_handle_type_name(ah->type), (void *)ah);
+        }
+    }
+    if (++m_stopping_cycle == MAX_STOPPER_ITERATIONS) {
+        warnlog(m_log, "Event loop didn't stop after 10 iterations, aborting");
+        abort();
     }
 }
 
 void EventLoop::stop() {
-    event_base_loopexit(m_base.get(), nullptr);
+    submit([this]{
+        m_stopping = true;
+        m_stopper = Uv<uv_idle_t>::create_with_parent(this);
+        uv_idle_init(m_handle->raw(), m_stopper->raw());
+        uv_idle_start(m_stopper->raw(), [](uv_idle_t *idle) {
+            if (auto *self = static_cast<EventLoop *>(Uv<uv_timer_t>::parent_from_data(idle->data))) {
+                self->execute_stopper_iteration();
+            }
+        });
+    });
 }
 
 void EventLoop::join() {
-    if (m_base_thread.joinable()) {
-        m_base_thread.join();
+    dbglog(m_log, "Joining");
+    if (m_thread.joinable()) {
+        m_thread.join();
     }
+    dbglog(m_log, "Joined");
 }
 
-event_base *EventLoop::c_base() {
-    return m_base.get();
-}
-
-void EventLoop::run() {
-#ifdef __MACH__
-    static auto ensure_sigpipe_ignored [[maybe_unused]] = signal(SIGPIPE, SIG_IGN);
-
-#elif defined EVTHREAD_USE_PTHREADS_IMPLEMENTED
-    // Block SIGPIPE
-    sigset_t sigset, oldset;
-    sigemptyset(&sigset);
-    sigaddset(&sigset, SIGPIPE);
-    pthread_sigmask(SIG_BLOCK, &sigset, &oldset);
-#endif // EVTHREAD_USE_PTHREADS_IMPLEMENTED
-
-    event_base_loop(m_base.get(), EVLOOP_NO_EXIT_ON_EMPTY);
-
-#if defined(EVTHREAD_USE_PTHREADS_IMPLEMENTED) && !defined(__MACH__)
-    // Restore SIGPIPE state
-    pthread_sigmask(SIG_SETMASK, &oldset, nullptr);
+void EventLoop::start() {
+    if (m_handle && !m_running) {
+        m_running = true;
+        m_thread = std::thread([this]{
+#ifndef _WIN32
+            signal(SIGPIPE, SIG_IGN);
 #endif
-
-    execute_tasks();
-}
-
-void EventLoop::execute_tasks() {
-    size_t left;
-    {
-        std::scoped_lock l(m_tasks.mtx);
-        // This should be reworked to ids if there will be cancellable tasks.
-        left = m_tasks.val.queue.size();
+            uv_run(m_handle->raw(), UV_RUN_DEFAULT);
+            m_running = false;
+            m_handle.reset();
+        });
     }
-    do {
-        std::function<void()> task;
-        {
-            std::scoped_lock l(m_tasks.mtx);
-            if (m_tasks.val.queue.empty()) {
-                m_tasks.val.scheduled = false;
-                break;
-            } else if (left == 0) {
-                event_base_once(m_base.get(), -1, EV_TIMEOUT, run_tasks_queue, this, nullptr);
-                break;
-            }
-            task = std::move(m_tasks.val.queue.front());
-            m_tasks.val.queue.pop_front();
-            left--;
+}
+
+EventLoop::~EventLoop() {
+    dbglog(m_log, "Destroying");
+    if (m_running) {
+        errlog(m_log, "Event loop was not stopped before destruction");
+        abort();
+    }
+    join();
+    dbglog(m_log, "Destroyed");
+}
+
+void EventLoop::execute_async_tasks() noexcept {
+    if (std::unique_lock l(m_async_mutex); !m_async_queue.empty()) {
+        std::list<std::function<void()>> tasks;
+        tasks.splice(tasks.end(), m_async_queue, m_async_queue.begin());
+        l.unlock();
+        for (auto &&task : tasks) {
+            task();
         }
-        task();
-    } while (true);
+        l.lock();
+        if (!m_async_queue.empty()) {
+            uv_async_send(m_async->raw());
+        }
+    }
 }
 
-EventLoopPtr EventLoop::create(bool run_immediately) {
-    return EventLoopPtr(new EventLoop(run_immediately));
+EventLoop::TaskId EventLoop::schedule(Micros postpone_time, std::function<void()> task) {
+    EventLoop::TaskId id;
+    {
+        std::scoped_lock l(m_timer_mutex);
+        id = ++m_timer_queue.task_id_counter;
+        m_timer_queue.queue.emplace(SteadyClock::now() + postpone_time, PostponedTasks::Task{
+                .task_id = id,
+                .func = std::move(task)
+        });
+    }
+    submit([this]{
+        update_timer();
+    });
+    return id;
 }
 
-} // namespace ag
+std::function<void()> EventLoop::pop_timer_task(SteadyClock::time_point before) {
+    std::function<void()> ret = nullptr;
+    std::scoped_lock l(m_timer_mutex);
+    if (m_timer_queue.queue.empty()) {
+        return ret;
+    }
+    if (auto it = m_timer_queue.queue.begin(); it->first <= before || m_stopping) {
+        ret = std::move(it->second.func);
+        m_timer_queue.queue.erase(it);
+    }
+    return ret;
+}
+
+void EventLoop::execute_timer_tasks() noexcept {
+    auto now = SteadyClock::now();
+    tracelog(m_log, "Starting executing scheduled tasks");
+    int count = 0;
+    for (;;) {
+        std::function<void()> f = pop_timer_task(now);
+        if (!f) {
+            break;
+        }
+        f();
+        count++;
+    }
+    tracelog(m_log, "Executed {} scheduled tasks", count);
+    update_timer();
+}
+
+void EventLoop::cancel(TaskId id) {
+    std::scoped_lock l(m_timer_mutex);
+    for (auto it = m_timer_queue.queue.begin(); it != m_timer_queue.queue.end();) {
+        if (it->second.task_id == id) {
+            it = m_timer_queue.queue.erase(it);
+        } else {
+            it++;
+        }
+    }
+}
+
+void EventLoop::update_timer() {
+    std::scoped_lock l(m_timer_mutex);
+    if (m_timer == nullptr) {
+        // timer already stopped
+        return;
+    }
+    if (auto begin = m_timer_queue.queue.begin(); begin != m_timer_queue.queue.end()) {
+        auto timeout = std::max(Millis{0}, std::chrono::ceil<Millis>(begin->first - SteadyClock::now()));
+        tracelog(m_log, "Scheduled next task in {}", timeout);
+        uv_timer_start(m_timer->raw(), [](uv_timer_t *timer){
+            if (auto *self = static_cast<EventLoop *>(Uv<uv_timer_t>::parent_from_data(timer->data))) {
+                self->execute_timer_tasks();
+            }
+        }, timeout.count(), 0);
+    } else {
+        uv_timer_stop(m_timer->raw());
+    }
+}
+
+} // namespace ag::dns

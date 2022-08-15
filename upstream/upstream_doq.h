@@ -5,9 +5,9 @@
 #include "common/defs.h"
 #include "common/utils.h"
 #include "common/socket_address.h"
-#include "common/event_loop.h"
-#include "net/socket.h"
-#include "upstream/upstream.h"
+#include "dns/common/event_loop.h"
+#include "dns/net/socket.h"
+#include "dns/upstream/upstream.h"
 #include "bootstrapper.h"
 
 #include <openssl/ssl.h>
@@ -27,11 +27,11 @@
 #include <condition_variable>
 #include <list>
 #include <variant>
-#include "net/tls_session_cache.h"
+#include "dns/net/tls_session_cache.h"
 
 using namespace std::chrono;
 
-namespace ag {
+namespace ag::dns {
 
 class DoqUpstream : public Upstream {
 public:
@@ -106,10 +106,22 @@ private:
     struct Request {
         int64_t request_id = -1;
         ngtcp2_tstamp starting_time{0};
-        ag::ldns_pkt_ptr reply_pkt;
-        ag::ldns_buffer_ptr request_buffer;
-        std::condition_variable cond;
+        ldns_pkt_ptr reply_pkt;
+        ldns_buffer_ptr request_buffer;
+        bool completed = false;
+        std::coroutine_handle<> caller{};
         bool is_onfly{false};
+        Error<DnsError> error;
+
+        void complete() {
+            completed = true;
+            if (caller) {
+                std::exchange(caller, nullptr).resume();
+            }
+        }
+        ~Request() {
+            complete();
+        }
     };
     struct SocketContext {
         DoqUpstream *upstream = nullptr;
@@ -134,8 +146,8 @@ private:
         std::unique_ptr<SocketContext> extract_socket(SocketContext *ctx);
     };
 
-    ErrString init() override;
-    ExchangeResult exchange(ldns_pkt *, const DnsMessageInfo *info) override;
+    Error<InitError> init() override;
+    coro::Task<ExchangeResult> exchange(ldns_pkt *, const DnsMessageInfo *info) override;
 
     static int version_negotiation(ngtcp2_conn *conn, const ngtcp2_pkt_hd *hd,
         const uint32_t *sv, size_t nsv, void *user_data);
@@ -169,13 +181,13 @@ private:
     static int handshake_confirmed(ngtcp2_conn *, void *data);
     static int ssl_verify_callback(X509_STORE_CTX *ctx, void *arg);
 
-    static void idle_timer_cb(evutil_socket_t, short, void *data);
-    static void handshake_timer_cb(evutil_socket_t, short, void *data);
-    static void retransmit_cb(evutil_socket_t, short, void *data);
+    static void idle_timer_cb(uv_timer_t *timer);
+    static void handshake_timer_cb(uv_timer_t *timer);
+    static void retransmit_cb(uv_timer_t *timer);
 
     static void on_socket_connected(void *arg);
     static void on_socket_read(void *arg, Uint8View data);
-    static void on_socket_close(void *arg, std::optional<Socket::Error> error);
+    static void on_socket_close(void *arg, Error<SocketError> error);
 
     int init_quic_conn(const Socket *connected_socket);
     int init_ssl_ctx();
@@ -188,7 +200,6 @@ private:
     int handle_expiry();
     void ag_ngtcp2_settings_default(ngtcp2_settings &settings, ngtcp2_transport_params &params) const;
     int feed_data(Uint8View data);
-    void submit(std::function<void()> &&func) const;
     void send_requests();
     void process_reply(int64_t request_id, Uint8View reply);
     void disconnect(std::string_view reason);
@@ -223,16 +234,14 @@ private:
     std::list<int64_t> m_stream_send_queue;
     std::unordered_map<int64_t, Stream> m_streams;
     std::unordered_map<int64_t, Request> m_requests;
-    std::mutex m_global;
-    EventLoopPtr m_loop = EventLoop::create();
-    UniquePtr<event, &event_free> m_read_event;
-    UniquePtr<event, &event_free> m_idle_timer_event;
-    UniquePtr<event, &event_free> m_handshake_timer_event;
-    UniquePtr<event, &event_free> m_retransmit_timer_event;
+    UvPtr<uv_timer_t> m_idle_timer;
+    UvPtr<uv_timer_t> m_handshake_timer;
+    UvPtr<uv_timer_t> m_retransmit_timer;
     static std::atomic_int64_t m_next_request_id;
     std::array<uint8_t, 32> m_static_secret;
     TlsSessionCache m_tls_session_cache;
-    std::atomic_bool m_socket_error{false};
+    Error<DnsError> m_fatal_error;
+    std::shared_ptr<bool> m_shutdown_guard;
 };
 
 } // ag

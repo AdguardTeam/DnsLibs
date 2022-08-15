@@ -5,12 +5,12 @@
 #include <vector>
 #include <string>
 #include "common/defs.h"
-#include "net/socket.h"
+#include "dns/net/socket.h"
 #include "common/logger.h"
 #include "tls_codec.h"
 
 
-namespace ag {
+namespace ag::dns {
 
 
 class SecuredSocket : public Socket {
@@ -30,22 +30,23 @@ private:
     std::string m_sni;
     std::vector<std::string> m_alpn;
     Logger m_log;
+    std::shared_ptr<bool> m_shutdown_guard;
 
     [[nodiscard]] std::optional<evutil_socket_t> get_fd() const override;
-    [[nodiscard]] std::optional<Error> connect(ConnectParameters params) override;
-    [[nodiscard]] std::optional<Error> send(Uint8View data) override;
-    [[nodiscard]] std::optional<Error> send_dns_packet(Uint8View data) override;
+    [[nodiscard]] Error<SocketError> connect(ConnectParameters params) override;
+    [[nodiscard]] Error<SocketError> send(Uint8View data) override;
+    [[nodiscard]] Error<SocketError> send_dns_packet(Uint8View data) override;
     [[nodiscard]] bool set_timeout(Micros timeout) override;
-    [[nodiscard]] std::optional<Error> set_callbacks(Callbacks cbx) override;
+    [[nodiscard]] Error<SocketError> set_callbacks(Callbacks cbx) override;
 
     static void on_connected(void *arg);
     static void on_read(void *arg, Uint8View data);
-    static void on_close(void *arg, std::optional<Socket::Error> error);
+    static void on_close(void *arg, Error<SocketError> error);
 
     ConnectParameters make_underlying_connect_parameters(ConnectParameters &params) const;
     struct Callbacks get_callbacks();
-    std::optional<Error> flush_pending_encrypted_data();
+    Error<SocketError> flush_pending_encrypted_data();
 };
 
 
-} // namespace ag
+} // namespace ag::dns

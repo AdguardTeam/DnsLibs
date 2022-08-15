@@ -5,9 +5,9 @@
 #include <thread>
 
 #include "common/utils.h"
-#include "proxy/dnsproxy.h"
+#include "dns/proxy/dnsproxy.h"
 
-using namespace ag;
+using namespace ag::dns;
 
 static constexpr int N_REQUESTS = 1000000;
 static constexpr int N_THREADS = 12;
@@ -58,7 +58,7 @@ int main() {
             t = std::thread([&]() {
                 int j;
                 for (j = 0; j < N_REQUESTS / N_THREADS; ++j) {
-                    const auto r = proxy.handle_message(
+                    const auto r = proxy.handle_message_sync(
                             {ldns_buffer_at(buf.get(), 0), ldns_buffer_position(buf.get())}, nullptr);
                     if (r.empty()) {
                         std::cout << "Error: empty response!\n";

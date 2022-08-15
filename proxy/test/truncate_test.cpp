@@ -4,7 +4,7 @@
 
 #include "../dns_truncate.h"
 
-namespace ag::proxy::test {
+namespace ag::dns::proxy::test {
 
 #include "big_dns_packet.inc"
 
@@ -22,7 +22,7 @@ TEST(DnsTruncateTest, TruncateMinSize512) {
 
     for (size_t max_size = 0; max_size < 256; ++max_size) {
         ldns_pkt_ptr pkt_tc{ldns_pkt_clone(pkt)};
-        ASSERT_TRUE(ag::ldns_pkt_truncate(pkt_tc.get(), max_size));
+        ASSERT_TRUE(dns::ldns_pkt_truncate(pkt_tc.get(), max_size));
         ldns_buffer_ptr buf{ldns_buffer_new(LDNS_MAX_PACKETLEN)};
         status = ldns_pkt2buffer_wire(buf.get(), pkt_tc.get());
         ASSERT_EQ(LDNS_STATUS_OK, status) << ldns_get_errorstr_by_id(status);
@@ -47,7 +47,7 @@ TEST(DnsTruncateTest, TruncateWorks) {
         ldns_pkt_ptr pkt_tc{ldns_pkt_clone(pkt)};
 
         // Might not truncate, but result could still be smaller due to compression
-        bool truncated = ag::ldns_pkt_truncate(pkt_tc.get(), max_size);
+        bool truncated = dns::ldns_pkt_truncate(pkt_tc.get(), max_size);
 
         ldns_buffer_ptr buf{ldns_buffer_new(LDNS_MAX_PACKETLEN)};
         status = ldns_pkt2buffer_wire(buf.get(), pkt_tc.get());
@@ -65,4 +65,4 @@ TEST(DnsTruncateTest, TruncateWorks) {
     }
 }
 
-} // namespace ag::proxy::test
+} // namespace ag::dns::proxy::test

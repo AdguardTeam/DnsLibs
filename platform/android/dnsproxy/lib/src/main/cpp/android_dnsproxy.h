@@ -3,12 +3,12 @@
 #include <jni.h>
 
 #include "common/defs.h"
-#include "dnsstamp/dns_stamp.h"
-#include "proxy/dnsproxy.h"
+#include "dns/dnsstamp/dns_stamp.h"
+#include "dns/proxy/dnsproxy.h"
 
 #include "jni_utils.h"
 
-namespace ag {
+namespace ag::dns {
 
 class AndroidDnsProxy {
 private:

@@ -15,10 +15,11 @@
 
 #include "common/cesu8.h"
 #include "common/logger.h"
-#include "proxy/dnsproxy.h"
-#include "upstream/upstream_utils.h"
+#include "dns/proxy/dnsproxy.h"
+#include "dns/upstream/upstream_utils.h"
 
 using namespace ag;
+using namespace ag::dns;
 
 #if TARGET_OS_IPHONE
 static constexpr size_t FILTER_PARAMS_MEM_LIMIT_BYTES = 8 * 1024 * 1024;
@@ -1350,12 +1351,12 @@ static int bindFd(NSString *helperPath, NSString *address, NSNumber *port, AGLis
     return self;
 }
 
-- (NSData *)handleIPv4Packet:(NSData *)packet
+static coro::Task<NSData *> handleIPv4Packet(AGDnsProxy *self, NSData *packet)
 {
     auto *ip_header = (struct iphdr *) packet.bytes;
     // @todo: handle tcp packets also
     if (ip_header->ip_p != IPPROTO_UDP) {
-        return nil;
+        co_return nil;
     }
 
     NSInteger ip_header_length = ip_header->ip_hl * 4;
@@ -1369,7 +1370,7 @@ static int bindFd(NSString *helperPath, NSString *address, NSNumber *port, AGLis
 
     if (ntohs(udp_header->uh_dport) != DEFAULT_PLAIN_PORT) {
         dbglog(*self->log, "Dropping non-DNS packet");
-        return nil;
+        co_return nil;
     }
 
     Uint8View payload = {(uint8_t *) packet.bytes + header_length, packet.length - header_length};
@@ -1377,19 +1378,19 @@ static int bindFd(NSString *helperPath, NSString *address, NSNumber *port, AGLis
             .proto = ag::utils::TP_UDP,
             .peername = SocketAddress{{(uint8_t *) &ip_header->ip_src, sizeof(ip_header->ip_src)},
                                            ntohs(udp_header->uh_sport)}};
-    std::vector<uint8_t> response = self->proxy.handle_message(payload, &info);
+    std::vector<uint8_t> response = co_await self->proxy.handle_message(payload, &info);
     if (response.empty()) {
-        return nil;
+        co_return nil;
     }
-    return create_response_packet(ip_header, udp_header, response);
+    co_return create_response_packet(ip_header, udp_header, response);
 }
 
-- (NSData *)handleIPv6Packet:(NSData *)packet
+static coro::Task<NSData *> handleIPv6Packet(AGDnsProxy *self, NSData *packet)
 {
     auto *ip_header = (struct iphdr6 *) packet.bytes;
     // @todo: handle tcp packets also
     if (ip_header->ip6_nh != IPPROTO_UDP) {
-        return nil;
+        co_return nil;
     }
 
     NSInteger ip_header_length = sizeof(*ip_header);
@@ -1403,7 +1404,7 @@ static int bindFd(NSString *helperPath, NSString *address, NSNumber *port, AGLis
 
     if (ntohs(udp_header->uh_dport) != DEFAULT_PLAIN_PORT) {
         dbglog(*self->log, "Dropping non-DNS packet");
-        return nil;
+        co_return nil;
     }
 
     Uint8View payload = {(uint8_t *) packet.bytes + header_length, packet.length - header_length};
@@ -1411,23 +1412,27 @@ static int bindFd(NSString *helperPath, NSString *address, NSNumber *port, AGLis
             .proto = ag::utils::TP_UDP,
             .peername = SocketAddress{{(uint8_t *) &ip_header->ip6_src, sizeof(ip_header->ip6_src)},
                                            ntohs(udp_header->uh_sport)}};
-    std::vector<uint8_t> response = self->proxy.handle_message(payload, &info);
+    std::vector<uint8_t> response = co_await self->proxy.handle_message(payload, &info);
     if (response.empty()) {
-        return nil;
+        co_return nil;
     }
-    return create_response_packet_v6(ip_header, udp_header, response);
+    co_return create_response_packet_v6(ip_header, udp_header, response);
 }
 
-- (NSData *)handlePacket:(NSData *)packet
+- (void)handlePacket:(NSData *)packet completionHandler:(void(^)(NSData *)) completionHandler
 {
-    auto *ip_header = (const struct iphdr *)packet.bytes;
-    if (ip_header->ip_v == 4) {
-        return [self handleIPv4Packet:packet];
-    } else if (ip_header->ip_v == 6) {
-        return [self handleIPv6Packet:packet];
-    }
-    dbglog(*self->log, "Wrong IP version: %u", ip_header->ip_v);
-    return nil;
+    coro::run_detached([](AGDnsProxy *self, NSData *packet, void (^completionHandler)(NSData *)) -> coro::Task<void> {
+        @autoreleasepool {
+            auto *ip_header = (const struct iphdr *)packet.bytes;
+            if (ip_header->ip_v == 4) {
+                completionHandler(co_await handleIPv4Packet(self, packet));
+            } else if (ip_header->ip_v == 6) {
+                completionHandler(co_await handleIPv6Packet(self, packet));
+            }
+            dbglog(*self->log, "Wrong IP version: %u", ip_header->ip_v);
+            completionHandler(nil);
+        }
+    }(self, packet, completionHandler));
 }
 
 + (BOOL) isValidRule: (NSString *) str
@@ -1505,14 +1510,14 @@ static int bindFd(NSString *helperPath, NSString *address, NSNumber *port, AGLis
 
 - (instancetype)initWithString:(NSString *)stampStr
                          error:(NSError **)error {
-    auto[stamp, stamp_error] = ServerStamp::from_string(stampStr.UTF8String);
-    if (!stamp_error) {
-        return [self initWithNative:&stamp];
+    auto stamp = ServerStamp::from_string(stampStr.UTF8String);
+    if (!stamp.has_error()) {
+        return [self initWithNative:&stamp.value()];
     }
     if (error) {
         *error = [NSError errorWithDomain:AGDnsProxyErrorDomain
                                      code:AGDPE_PARSE_DNS_STAMP_ERROR
-                                 userInfo:@{NSLocalizedDescriptionKey: convert_string(*stamp_error)}];
+                                 userInfo:@{NSLocalizedDescriptionKey: convert_string(stamp.error()->str())}];
     }
     return nil;
 }
@@ -1551,7 +1556,7 @@ static std::optional<std::string> verifyCertificate(CertificateVerificationEvent
              ipv6Available: (BOOL) ipv6Available
                    offline: (BOOL) offline
 {
-    auto error = ag::test_upstream(convert_upstream(opts), ipv6Available, verifyCertificate, offline);
+    auto error = ag::dns::test_upstream(convert_upstream(opts), ipv6Available, verifyCertificate, offline);
     if (error) {
         return [NSError errorWithDomain: AGDnsProxyErrorDomain
                                    code: AGDPE_TEST_UPSTREAM_ERROR

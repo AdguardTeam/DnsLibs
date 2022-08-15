@@ -4,7 +4,7 @@
 
 #include "dns64.h"
 
-namespace ag::dns64 {
+namespace ag::dns::dns64 {
 
 // Well-known host used to discover dns64 presence
 static constexpr auto WKN = "ipv4only.arpa.";
@@ -73,28 +73,28 @@ static Uint8Vector find_pref64(const Uint8View ip6) {
     return {};
 }
 
-DiscoveryResult discover_prefixes(const UpstreamPtr &upstream) {
+coro::Task<DiscoveryResult> discover_prefixes(const UpstreamPtr &upstream) {
     ldns_pkt_ptr pkt(ldns_pkt_query_new(ldns_dname_new_frm_str(WKN), LDNS_RR_TYPE_AAAA, LDNS_RR_CLASS_IN, LDNS_RD));
 
     // Must set CD to 0, otherwise the DNS64 server will not perform IPv6 address synthesis (Section 3 of [RFC6147])
     ldns_pkt_set_cd(pkt.get(), false);
     ldns_pkt_set_random_id(pkt.get());
 
-    auto [reply, err] = upstream->exchange(pkt.get());
+    auto reply_res = co_await upstream->exchange(pkt.get());
 
-    if (err.has_value()) {
-        return {{}, err};
+    if (reply_res.has_error()) {
+        co_return reply_res.error();
     }
 
     std::vector<Uint8Vector> result;
-    const size_t cnt = ldns_pkt_ancount(reply.get());
+    const size_t cnt = ldns_pkt_ancount(reply_res->get());
     for (size_t i = 0; i < cnt; ++i) {
-        const auto rr = ldns_rr_list_rr(ldns_pkt_answer(reply.get()), i);
+        const auto rr = ldns_rr_list_rr(ldns_pkt_answer(reply_res->get()), i);
         if (LDNS_RR_TYPE_AAAA != ldns_rr_get_type(rr)) {
             continue;
         }
 
-        const auto rdf = ldns_rr_rdf(rr, 0); // first and only field
+        const auto *rdf = ldns_rr_rdf(rr, 0); // first and only field
         if (!rdf) {
             continue;
         }
@@ -105,13 +105,13 @@ DiscoveryResult discover_prefixes(const UpstreamPtr &upstream) {
         }
 
         auto pref64 = find_pref64(ip6);
-        const auto find_result = std::find(result.cbegin(), result.cend(), pref64);
+        auto find_result = std::find(result.cbegin(), result.cend(), pref64);
         if (!pref64.empty() && result.cend() == find_result) { // Satisfy uniqueness AND preserve original order
             result.push_back(std::move(pref64));
         }
     }
 
-    return {result, std::nullopt};
+    co_return result;
 }
 
 static bool pref64_valid(const Uint8View pref64) {
@@ -121,10 +121,10 @@ static bool pref64_valid(const Uint8View pref64) {
 
 Ipv6SynthResult synthesize_ipv4_embedded_ipv6_address(Uint8View prefix, Uint8View ip4) {
     if (!pref64_valid(prefix)) {
-        return {{}, "Invalid Pref64::/n"};
+        return make_error(Ipv6SynthError::AE_INVALID_PREF64);
     }
     if (ip4.size() != LDNS_IP4ADDRLEN) {
-        return {{}, "Invalid IPv4 addr"};
+        return make_error(Ipv6SynthError::AE_INVALID_IPV4);
     }
 
     Uint8Array<LDNS_IP6ADDRLEN> result{};
@@ -139,7 +139,7 @@ Ipv6SynthResult synthesize_ipv4_embedded_ipv6_address(Uint8View prefix, Uint8Vie
     }
 
     // Suffix is all zeros
-    return {result, std::nullopt};
+    return result;
 }
 
-} // namespace ag::dns64
+} // namespace ag::dns::dns64

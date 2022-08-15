@@ -26,13 +26,13 @@ class DnsLibsConan(ConanFile):
         self.requires("magic_enum/0.7.3")
         self.requires("pcre2/10.37@AdguardTeam/NativeLibsCommon")
         self.requires("libsodium/1.0.18@AdguardTeam/NativeLibsCommon")
-        self.requires("libcurl/7.78.0@AdguardTeam/NativeLibsCommon")
+        self.requires("libcurl/7.78.0-adguard2@AdguardTeam/NativeLibsCommon")
         self.requires("libevent/2.1.11@AdguardTeam/NativeLibsCommon")
         self.requires("libuv/1.41.0@AdguardTeam/NativeLibsCommon")
         self.requires("klib/2021-04-06@AdguardTeam/NativeLibsCommon")
         self.requires("ldns/2021-03-29@AdguardTeam/NativeLibsCommon")
         self.requires("ngtcp2/2021-05-13@AdguardTeam/NativeLibsCommon")
-        self.requires("native_libs_common/1.0.14@AdguardTeam/NativeLibsCommon")
+        self.requires("native_libs_common/2.0.12@AdguardTeam/NativeLibsCommon")
 
     def build_requirements(self):
         self.build_requires("gtest/1.11.0")
@@ -40,6 +40,7 @@ class DnsLibsConan(ConanFile):
     def configure(self):
         self.options["spdlog"].no_exceptions = True
         self.options["gtest"].build_gmock = False
+        self.options["pcre2"].build_pcre2grep = False
         # Commit hash should only be used with native_libs_common/777
         # self.options["native_libs_common"].commit_hash = "72731a36771d550ffae8c1223e0a129fefc2384c"
 

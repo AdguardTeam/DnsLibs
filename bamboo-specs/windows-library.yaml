@@ -39,10 +39,8 @@ DL - Win tests and deploy:
 
         %CMAKE% -DCMAKE_BUILD_TYPE=%bamboo_cmakeBuildProfile% ^
             -DCMAKE_USE_OPENSSL=ON ^
-            -DCMAKE_C_COMPILER="C:/Program Files (x86)/LLVM/bin/clang-cl.exe" ^
-            -DCMAKE_CXX_COMPILER="C:/Program Files (x86)/LLVM/bin/clang-cl.exe" ^
-            -DCMAKE_C_FLAGS="--target=i686-pc-windows-msvc" ^
-            -DCMAKE_CXX_FLAGS="--target=i686-pc-windows-msvc" ^
+            -DCMAKE_C_COMPILER="cl.exe" ^
+            -DCMAKE_CXX_COMPILER="cl.exe" ^
             -DCMAKE_MAKE_PROGRAM=%CMAKE_MAKE_PROGRAM% ^
             -G "%CMAKE_GENERATOR%" ^
             ..

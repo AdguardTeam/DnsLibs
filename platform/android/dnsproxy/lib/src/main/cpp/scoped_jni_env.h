@@ -71,4 +71,4 @@ public:
     }
 };
 
-} // namespace ag
+} // namespace ag::jni

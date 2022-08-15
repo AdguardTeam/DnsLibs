@@ -57,7 +57,7 @@ DL - Mac tests and deploy:
         conan remove --locks
       description: Conan upload and cleanup
   requirements:
-  - system.builder.xcode.macOS 10.14
+  - macOS 11.0 or later
   artifact-subscriptions: []
 repositories:
 - dns-libs:

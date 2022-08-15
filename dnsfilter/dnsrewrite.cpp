@@ -3,11 +3,11 @@
 
 #include "common/net_utils.h"
 #include "common/utils.h"
-#include "dnsfilter/dnsfilter.h"
+#include "dns/dnsfilter/dnsfilter.h"
 
 #include "rule_utils.h"
 
-namespace ag::dnsfilter {
+namespace ag::dns::dnsfilter {
 
 struct ApplicableDnsrewriteRules {
     std::vector<const DnsFilter::Rule *> blocking;
@@ -358,9 +358,9 @@ static ApplicableDnsrewriteRules get_applicable_rules(const std::vector<const Dn
     return applicable_rules;
 }
 
-} // namespace ag::dnsfilter
+} // namespace ag::dns::dnsfilter
 
-namespace ag {
+namespace ag::dns {
 
 using namespace dnsfilter;
 
@@ -441,4 +441,4 @@ DnsFilter::ApplyDnsrewriteResult DnsFilter::apply_dnsrewrite_rules(const std::ve
     return result;
 }
 
-} // namespace ag
+} // namespace ag::dns

@@ -1,14 +1,16 @@
-#include "common/file.h"
-#include "common/logger.h"
-#include "common/utils.h"
-#include "dnsfilter/dnsfilter.h"
-#include "filter.h"
-#include "rule_utils.h"
 #include <algorithm>
 #include <atomic>
 #include <unordered_set>
 
-namespace ag::dnsfilter {
+#include "common/file.h"
+#include "common/logger.h"
+#include "common/utils.h"
+
+#include "dns/dnsfilter/dnsfilter.h"
+#include "filter.h"
+#include "rule_utils.h"
+
+namespace ag::dns::dnsfilter {
 
 class Engine {
 public:
@@ -113,9 +115,9 @@ static void inner_match_outdated(DnsFilter::Handle obj, DnsFilter::MatchParam pa
     outdated_filters.clear();
 }
 
-} // namespace ag::dnsfilter
+} // namespace ag::dns::dnsfilter
 
-namespace ag {
+namespace ag::dns {
 
 DnsFilter::DnsFilter() = default;
 
@@ -144,7 +146,7 @@ std::vector<DnsFilter::Rule> DnsFilter::match(Handle obj, MatchParam param) {
 
     tracelog(e->m_log, "Matching {}", param.domain);
 
-    dnsfilter::Filter::MatchContext context{};
+    dnsfilter::Filter::MatchContext context;
     dnsfilter::Filter::init_match_context(context, param);
 
     auto outdated_filters = inner_match(obj, param, context);
@@ -216,28 +218,30 @@ static bool has_higher_priority(const DnsFilter::Rule *l, const DnsFilter::Rule 
 }
 
 static std::vector<const DnsFilter::Rule *> filter_out_by_badfilter(const std::vector<DnsFilter::Rule> &rules) {
-    const DnsFilter::Rule *rule_ptrs[rules.size()];
-    std::transform(rules.begin(), rules.end(), rule_ptrs, [](const DnsFilter::Rule &r) {
+    std::vector<const DnsFilter::Rule *> rule_ptrs;
+    rule_ptrs.reserve(rules.size());
+    std::transform(rules.begin(), rules.end(), std::back_inserter(rule_ptrs), [](const DnsFilter::Rule &r) {
         return &r;
     });
 
-    auto badfilter_rules_start = std::partition(rule_ptrs, rule_ptrs + rules.size(), [](const DnsFilter::Rule *r) {
+    auto badfilter_rules_start = std::partition(rule_ptrs.begin(), rule_ptrs.end(), [](const DnsFilter::Rule *r) {
         const auto *info = std::get_if<DnsFilter::AdblockRuleInfo>(&r->content);
         return info == nullptr || !info->props.test(DnsFilter::DARP_BADFILTER);
     });
 
-    std::string badfilter_texts[std::distance(badfilter_rules_start, rule_ptrs + rules.size())];
-    std::string *badfilter_texts_end = badfilter_texts + std::distance(badfilter_rules_start, rule_ptrs + rules.size());
-    std::transform(badfilter_rules_start, rule_ptrs + rules.size(), badfilter_texts, [](const DnsFilter::Rule *r) {
+    std::vector<std::string> badfilter_texts;
+    badfilter_texts.reserve(std::distance(badfilter_rules_start, rule_ptrs.end()));
+    auto badfilter_texts_end = badfilter_texts.begin() + std::distance(badfilter_rules_start, rule_ptrs.end());
+    std::transform(badfilter_rules_start, rule_ptrs.end(), std::back_inserter(badfilter_texts), [](const DnsFilter::Rule *r) {
         return dnsfilter::rule_utils::get_text_without_badfilter(*r);
     });
 
     std::vector<const DnsFilter::Rule *> result;
-    result.reserve(std::distance(rule_ptrs, badfilter_rules_start));
-    for (size_t i = 0; i < (size_t) std::distance(rule_ptrs, badfilter_rules_start); ++i) {
+    result.reserve(std::distance(rule_ptrs.begin(), badfilter_rules_start));
+    for (size_t i = 0; i < (size_t) std::distance(rule_ptrs.begin(), badfilter_rules_start); ++i) {
         const DnsFilter::Rule *r = rule_ptrs[i];
 
-        const std::string *found = std::find(badfilter_texts, badfilter_texts_end, r->text);
+        auto found = std::find(badfilter_texts.begin(), badfilter_texts_end, r->text);
         if (found == badfilter_texts_end) {
             result.push_back(r);
         }
@@ -286,4 +290,4 @@ DnsFilter::effective_rules DnsFilter::get_effective_rules(const std::vector<Rule
     return effective_rules;
 }
 
-} // namespace ag
+} // namespace ag::dns

@@ -1,237 +1,287 @@
-#include "tcp_stream.h"
-#include "common/time_utils.h"
-#include "common/utils.h"
 #include <cassert>
 #include <event2/buffer.h>
 #include <openssl/err.h>
 
-namespace ag {
+#include "common/time_utils.h"
+#include "common/utils.h"
+#include "dns/common/dns_defs.h"
+
+#include "tcp_stream.h"
+
+namespace ag::dns {
 
 #define log_stream(s_, lvl_, fmt_, ...)                                                                                \
     lvl_##log((s_)->m_log, "[id={}] {}(): " fmt_, (s_)->m_id, __func__, ##__VA_ARGS__)
 
-using namespace std::chrono;
-
 TcpStream::TcpStream(SocketFactory::SocketParameters p, PrepareFdCallback prepare_fd)
         : Socket(__func__, std::move(p), prepare_fd)
-        , m_deferred_arg(this) {
-}
+{}
 
 std::optional<evutil_socket_t> TcpStream::get_fd() const {
-    return (m_bev != nullptr) ? std::make_optional(bufferevent_getfd(m_bev.get())) : std::nullopt;
+    uv_os_fd_t fd;
+    if (0 == uv_fileno((uv_handle_t *) m_tcp->raw(), &fd)) {
+        return std::make_optional((evutil_socket_t) fd);
+    }
+    return std::nullopt;
 }
 
-std::optional<Socket::Error> TcpStream::connect(ConnectParameters params) {
+Error<SocketError> TcpStream::connect(ConnectParameters params) {
     log_stream(this, trace, "{}", params.peer.str());
 
-    static constexpr int OPTIONS
-            = BEV_OPT_THREADSAFE | BEV_OPT_DEFER_CALLBACKS | BEV_OPT_UNLOCK_CALLBACKS | BEV_OPT_CLOSE_ON_FREE;
-    m_bev.reset(bufferevent_socket_new(params.loop->c_base(), -1, OPTIONS));
-    if (m_bev == nullptr) {
-        return {{-1, "Failed to create socket buffer event"}};
+    if (m_connected) {
+        assert(0);
+        return make_error(SocketError::AE_ALREADY_CONNECTED);
     }
 
-    if (m_prepare_fd.func != nullptr) {
-        bufferevent_setpreparecb(m_bev.get(), on_prepare_fd, this);
+    m_tcp = Uv<uv_tcp_t>::create_with_parent(this);
+    if (int err = uv_tcp_init_ex(params.loop->handle(), m_tcp->raw(), (uint8_t)params.peer.c_sockaddr()->sa_family)) {
+        auto error = make_error(uv_errno_t(err));
+        return make_error(SocketError::AE_SOCK_ERROR, "Failed to create socket", error);
     }
 
-    if (auto e = this->set_callbacks(params.callbacks); e.has_value()) {
+    m_timer = Uv<uv_timer_t>::create_with_parent(this);
+    if (int err = uv_timer_init(params.loop->handle(), m_timer->raw())) {
+        auto error = make_error(uv_errno_t(err));
+        return make_error(SocketError::AE_SOCK_ERROR, "Failed to create timer", error);
+    }
+
+    uv_os_fd_t fd;
+    uv_fileno((uv_handle_t *) m_tcp->raw(), &fd);
+    if (ErrString err; m_prepare_fd.func != nullptr
+                       && (err = m_prepare_fd.func(m_prepare_fd.arg, (evutil_socket_t) fd, params.peer, m_parameters.outbound_interface))
+                               .has_value()) {
+        return make_error(SocketError::AE_PREPARE_ERROR, AG_FMT("Failed to prepare descriptor: {}", err.value()));
+    }
+
+    if (auto e = this->set_callbacks(params.callbacks); e) {
         log_stream(this, dbg, "Failed to set callbacks");
         return e;
     }
 
-    if (0 != bufferevent_socket_connect(m_bev.get(), params.peer.c_sockaddr(), (int) params.peer.c_socklen())) {
+    uv_connect_t *req = new uv_connect_t;
+    req->data = new UvWeak<uv_tcp_t>(m_tcp);
+    sockaddr_in *t = (sockaddr_in *) params.peer.c_sockaddr();
+    Error<SocketError> sock_err;
+    if (int err = uv_tcp_connect(req, m_tcp->raw(), (sockaddr *) t, on_event)) {
+        delete Uv<uv_tcp_t>::weak_from_data(req->data);
+        delete req;
         log_stream(this, dbg, "Failed to start connection");
-        int err = evutil_socket_geterror(bufferevent_getfd(m_bev.get()));
-        return {{err, evutil_socket_error_to_string(err)}};
+        auto error = make_error(uv_errno_t(err));
+        sock_err = (err == UV_ECONNREFUSED)
+                ?  make_error(SocketError::AE_CONNECTION_REFUSED, error)
+                : make_error(SocketError::AE_SOCK_ERROR, error);
     }
 
     if (params.timeout.has_value() && !this->set_timeout(params.timeout.value())) {
-        return {{-1, "Failed to set time out"}};
+        return make_error(SocketError::AE_SET_TIMEOUT_ERROR);
     }
 
-    return std::nullopt;
+    if (sock_err) {
+        params.loop->submit([sock_err, weak = m_tcp->weak_from_this()](){
+            if (auto *tcp = weak.lock().get()) {
+                if (Callbacks cbx = static_cast<TcpStream *>(tcp->parent())->get_callbacks(); cbx.on_close != nullptr) {
+                    cbx.on_close(cbx.arg, sock_err);
+                }
+            }
+        });
+    }
+    return {};
 }
 
-std::optional<Socket::Error> TcpStream::send(Uint8View data) {
+void TcpStream::on_write(uv_write_t *req, int status) {
+    auto *weak_data = Uv<uv_tcp_t>::weak_from_data(req->data);
+    if (auto tcp_handle = weak_data->lock()) {
+        auto *self = (TcpStream *) tcp_handle->parent();
+        self->m_writes.erase(req);
+    }
+    delete weak_data;
+    delete req;
+}
+
+Error<SocketError> TcpStream::send(Uint8View data) {
     log_stream(this, trace, "{}", data.size());
 
-    if (0 != bufferevent_write(m_bev.get(), data.data(), data.size())) {
+    auto req = new uv_write_t;
+    req->data = new UvWeak<uv_tcp_t>(m_tcp);
+    m_writes[req].assign(data.begin(), data.begin() + data.size());
+    uv_buf_t buf = uv_buf_init((char *) m_writes[req].data(), m_writes[req].size());
+    if (int err = uv_write(req, (uv_stream_t *) m_tcp->raw(), &buf, 1, &on_write)) {
         log_stream(this, dbg, "Failed to write data");
-        int err = evutil_socket_geterror(bufferevent_getfd(m_bev.get()));
-        return {{err, evutil_socket_error_to_string(err)}};
+        return make_error(SocketError::AE_SOCK_ERROR, make_error(uv_errno_t(err)));
     }
 
-    if (!this->set_timeout()) {
-        return {{-1, "Failed to refresh time out"}};
+    if (!this->update_timer()) {
+        return make_error(SocketError::AE_SET_TIMEOUT_ERROR);
     }
 
-    return std::nullopt;
+    return {};
 }
 
-std::optional<Socket::Error> TcpStream::send_dns_packet(Uint8View data) {
+Error<SocketError> TcpStream::send_dns_packet(Uint8View data) {
     log_stream(this, trace, "{}", data.size());
 
     uint16_t length = htons(data.size());
-    if (auto e = this->send({(uint8_t *) &length, 2}); e.has_value()) {
+    if (auto e = this->send({ (uint8_t *)&length, 2 }); e) {
         return e;
     }
 
     return this->send(data);
 }
 
-std::optional<Socket::Error> TcpStream::set_callbacks(Callbacks cbx) {
+void TcpStream::allocate_read(uv_handle_t *handle, size_t size, uv_buf_t *buf) {
+    auto *self = (TcpStream *) Uv<uv_tcp_t>::parent_from_data(handle->data);
+    if (!self) {
+        return;
+    }
+    std::unique_ptr<char[]> ptr{new char[size]};
+    auto [it, _] = self->m_reads.emplace(ptr.get(), std::move(ptr));
+    buf->base = it->first;
+    buf->len = buf->base ? size : 0;
+}
+
+Error<SocketError> TcpStream::set_callbacks(Callbacks cbx) {
     log_stream(this, trace, "...");
 
-    m_guard.lock();
     m_callbacks = cbx;
-    m_guard.unlock();
 
-    if (m_bev == nullptr) {
-        return std::nullopt;
-    }
+    update_read_status();
 
-    auto bufferevent_action = (cbx.on_read != nullptr) ? bufferevent_enable : bufferevent_disable;
-    if (0 != bufferevent_action(m_bev.get(), EV_READ)) {
-        return {{-1, AG_FMT("Failed to {} read event", (cbx.on_read != nullptr) ? "enable" : "disable")}};
-    }
-
-    bufferevent_setcb(m_bev.get(), (cbx.on_read != nullptr) ? on_read : nullptr, nullptr,
-            (cbx.on_close != nullptr) ? on_event : nullptr, m_deferred_arg.value());
-
-    return std::nullopt;
+    return {};
 }
 
-bool TcpStream::set_timeout(microseconds timeout) {
+bool TcpStream::set_timeout(Micros timeout) {
     log_stream(this, trace, "{}", timeout);
 
-    m_guard.lock();
     m_current_timeout = timeout;
-    m_guard.unlock();
 
-    return this->set_timeout();
+    return this->update_timer();
 }
 
-bool TcpStream::set_timeout() {
-    std::scoped_lock l(m_guard);
-    if (m_bev == nullptr) {
-        return true;
-    }
-
-    if (!m_current_timeout.has_value()) {
-        this->reset_timeout_nolock();
-        return true;
-    }
-
-    const timeval tv = duration_to_timeval(m_current_timeout.value());
-    if (m_timer == nullptr) {
-        m_timer.reset(event_new(bufferevent_get_base(m_bev.get()), -1, EV_TIMEOUT, on_timeout, m_deferred_arg.value()));
-    }
-    return m_timer != nullptr && 0 == evtimer_add(m_timer.get(), &tv);
-}
-
-void TcpStream::reset_timeout_locked() {
-    std::scoped_lock l(m_guard);
-    reset_timeout_nolock();
-}
-
-void TcpStream::reset_timeout_nolock() {
-    m_timer.reset();
+void TcpStream::reset_timeout() {
     m_current_timeout.reset();
+    if (!this->update_timer()) {
+        warnlog(m_log, "Failed to update timeout");
+    }
 }
 
 struct TcpStream::Callbacks TcpStream::get_callbacks() const {
-    std::scoped_lock l(m_guard);
     return m_callbacks;
 }
 
-int TcpStream::on_prepare_fd(int fd, const struct sockaddr *sa, int, void *arg) {
-    auto *self = (TcpStream *) arg;
-    ErrString err = self->m_prepare_fd.func(
-            self->m_prepare_fd.arg, fd, SocketAddress{sa}, self->m_parameters.outbound_interface);
-    if (err.has_value()) {
-        log_stream(self, warn, "Failed to bind socket to interface: {}", err.value());
-        return 0;
-    }
-    return 1;
-}
-
-void TcpStream::on_event(bufferevent *bev, short what, void *arg) {
-    auto *self = (TcpStream *) DeferredArg::to_ptr(arg);
+void TcpStream::on_event(uv_connect_t *req, int status) {
+    auto *weak_data = Uv<uv_tcp_t>::weak_from_data(req->data);
+    auto *self = (TcpStream *) Uv<uv_tcp_t>::parent_from_weak(weak_data);
+    delete weak_data;
+    delete req;
     if (!self) {
         return;
     }
 
-    if (what & BEV_EVENT_CONNECTED) {
+    if (status == 0) {
         log_stream(self, trace, "Connected");
-        [[maybe_unused]] bool _ = self->set_timeout();
+        if (self->update_timer()) {
+            self->m_connected = true;
+            self->update_read_status();
 
-        if (Callbacks cbx = self->get_callbacks(); cbx.on_connected != nullptr) {
-            cbx.on_connected(cbx.arg);
-        }
-    } else if (what & BEV_EVENT_ERROR) {
-        log_stream(self, trace, "Error");
-        self->reset_timeout_locked();
-
-        Error error = {-1};
-        if (int err = evutil_socket_geterror(bufferevent_getfd(bev)); err != 0) {
-            error = {err, evutil_socket_error_to_string(err)};
+            if (Callbacks cbx = self->get_callbacks(); cbx.on_connected != nullptr) {
+                cbx.on_connected(cbx.arg);
+            }
+            return;
         } else {
-            error.description = "Unknown error";
+            log_stream(self, warn, "Failed to set timeout for socket, closing");
         }
-        if (Callbacks cbx = self->get_callbacks(); cbx.on_close != nullptr) {
-            cbx.on_close(cbx.arg, std::move(error));
-        }
-    } else if (what & BEV_EVENT_EOF) {
-        log_stream(self, trace, "EOF");
-        self->reset_timeout_locked();
+    }
 
-        if (Callbacks cbx = self->get_callbacks(); cbx.on_close != nullptr) {
-            cbx.on_close(cbx.arg, std::nullopt);
-        }
+    log_stream(self, trace, "Error");
+    self->reset_timeout();
+
+    Error<SocketError> error;
+    if (status == UV_ETIMEDOUT) {
+        error = make_error(SocketError::AE_TIMED_OUT);
+    } else if (status == UV_ECONNREFUSED) {
+        error = make_error(SocketError::AE_CONNECTION_REFUSED);
     } else {
-        log_stream(self, trace, "Unexpected event: {}", what);
-        assert(0);
+        error = make_error(SocketError::AE_SOCK_ERROR, make_error(uv_errno_t(status)));
+    }
+    if (Callbacks cbx = self->get_callbacks(); cbx.on_close != nullptr) {
+        cbx.on_close(cbx.arg, error);
     }
 }
 
-void TcpStream::on_read(bufferevent *bev, void *arg) {
-    auto *self = (TcpStream *) DeferredArg::to_ptr(arg);
+void TcpStream::on_read(uv_stream_t *stream, ssize_t nread, const uv_buf_t *buf) {
+    auto *self = (TcpStream *) Uv<uv_tcp_t>::parent_from_data(stream->data);
     if (!self) {
         return;
     }
 
-    [[maybe_unused]] bool _ = self->set_timeout();
+    if (nread < 0) {
+        if (nread == UV_EOF) {
+            log_stream(self, trace, "EOF");
+            self->reset_timeout();
+            uv_read_stop((uv_stream_t *) self->m_tcp->raw());
 
-    evbuffer *buffer = bufferevent_get_input(bev);
-    auto available_to_read = (ssize_t) evbuffer_get_length(buffer);
-    int chunks_num = evbuffer_peek(buffer, available_to_read, nullptr, nullptr, 0);
-
-    evbuffer_iovec chunks[chunks_num];
-    int chunks_peeked = evbuffer_peek(buffer, available_to_read, nullptr, chunks, chunks_num);
-    for (int i = 0; i < chunks_peeked; ++i) {
-        log_stream(self, trace, "{}", chunks[i].iov_len);
-        if (Callbacks cbx = self->get_callbacks(); cbx.on_read != nullptr) {
-            cbx.on_read(cbx.arg, {(uint8_t *) chunks[i].iov_base, chunks[i].iov_len});
+            if (Callbacks cbx = self->get_callbacks(); cbx.on_close != nullptr) {
+                cbx.on_close(cbx.arg, {});
+            }
+            return;
         }
+        dbglog(self->m_log, "Read error: {}", nread);
+        return;
     }
 
-    evbuffer_drain(buffer, available_to_read);
+    if (Callbacks cbx = self->get_callbacks(); cbx.on_read != nullptr) {
+        auto node = self->m_reads.extract(buf->base);
+        cbx.on_read(cbx.arg, { (uint8_t *) node.key(), size_t(nread) });
+        // Parent may be destroyed inside read.
+        return;
+    } else {
+        // FIXME: dropped read?
+        abort();
+    }
 }
 
-void TcpStream::on_timeout(evutil_socket_t, short, void *arg) {
-    auto *self = (TcpStream *) DeferredArg::to_ptr(arg);
+void TcpStream::on_timeout(uv_timer_t *handle) {
+    auto *self = (TcpStream *) Uv<uv_tcp_t>::parent_from_data(handle->data);
     if (!self) {
         return;
     }
 
     log_stream(self, trace, "Timed out");
-    self->reset_timeout_locked();
+    self->reset_timeout();
 
-    int err = utils::AG_ETIMEDOUT;
+    auto err = make_error(SocketError::AE_TIMED_OUT);
     if (Callbacks cbx = self->get_callbacks(); cbx.on_close != nullptr) {
-        cbx.on_close(cbx.arg, {{err, evutil_socket_error_to_string(err)}});
+        cbx.on_close(cbx.arg, err);
     }
 }
 
-} // namespace ag
+bool TcpStream::update_timer() {
+    if (m_timer != nullptr) {
+        if (m_current_timeout.has_value()) {
+            int timeout_ms = ag::to_millis(*m_current_timeout).count();
+            return 0 == uv_timer_start(m_timer->raw(), &on_timeout, timeout_ms, 0);
+        } else {
+            return 0 == uv_timer_stop(m_timer->raw());
+        }
+    }
+    return true;
+}
+
+void TcpStream::update_read_status() {
+    if (m_tcp != nullptr) {
+        if (m_callbacks.on_read != nullptr) {
+            uv_read_start((uv_stream_t *) m_tcp->raw(), allocate_read, on_read);
+        } else {
+            uv_read_stop((uv_stream_t *) m_tcp->raw());
+        }
+    }
+}
+
+TcpStream::~TcpStream() {
+    dbglog(m_log, "");
+    if (m_tcp) {
+        uv_read_stop((uv_stream_t *) m_tcp->raw());
+    }
+}
+
+} // namespace ag::dns

@@ -1,14 +1,15 @@
 #include <algorithm>
 #include <cassert>
 
+#include "common/parallel.h"
 #include "common/utils.h"
-#include "dnsstamp/dns_stamp.h"
+#include "dns/dnsstamp/dns_stamp.h"
 
 #include "bootstrapper.h"
 
 #define log_addr(l_, lvl_, addr_, fmt_, ...) lvl_##log(l_, "[{}] " fmt_, addr_, ##__VA_ARGS__)
 
-namespace ag {
+namespace ag::dns {
 
 using std::chrono::duration_cast;
 
@@ -19,42 +20,43 @@ static constexpr int64_t TEMPORARY_DISABLE_INTERVAL_MS = 7000;
 // of the list to give it a chance in the future.
 //
 // Note: in case of success MUST always return vector of addresses in address field of result
-Bootstrapper::ResolveResult Bootstrapper::resolve() {
+coro::Task<Bootstrapper::ResolveResult> Bootstrapper::resolve() {
     if (SocketAddress addr(m_server_name, m_server_port); addr.valid()) {
-        return {{addr}, m_server_name, Millis(0), std::nullopt};
+        co_return {{addr}, m_server_name, Millis(0), {}};
     }
 
     if (m_resolvers.empty()) {
-        return {{}, m_server_name, Millis(0), "Empty bootstrap list"};
+        co_return {{}, m_server_name, Millis(0), make_error(BootstrapperError::AE_EMPTY_LIST)};
     }
 
     HashSet<SocketAddress> addrs;
     utils::Timer whole_resolve_timer;
     Millis timeout = m_timeout;
-    ErrString error;
+    Error<Resolver::ResolverError> error;
 
-    for (size_t tried = 0, failed = 0, curr = 0; tried < m_resolvers.size(); ++tried, curr = tried - failed) {
-        const ResolverPtr &resolver = m_resolvers[curr];
-        utils::Timer single_resolve_timer;
-        Millis try_timeout = std::max(timeout / 2, Resolver::MIN_TIMEOUT);
-        Resolver::Result result = resolver->resolve(m_server_name, m_server_port, try_timeout);
-        if (result.error.has_value()) {
-            log_addr(m_log, dbg, m_server_name, "Failed to resolve host: {}", result.error.value());
-            std::rotate(m_resolvers.begin() + curr, m_resolvers.begin() + curr + 1, m_resolvers.end());
-            ++failed;
-            if (addrs.empty()) {
-                error = AG_FMT("{}{}\n", error.has_value() ? error.value() : "", result.error.value());
-            }
-        } else {
-            std::move(result.addresses.begin(), result.addresses.end(), std::inserter(addrs, addrs.begin()));
-            error.reset();
-            break;
+    auto aw = parallel::any_of_cond<Resolver::Result>([log = m_log, server_name = m_server_name, &error](const Resolver::Result &result){
+        if (result.has_error()) {
+            log_addr(log, dbg, server_name, "Failed to resolve host: {}", result.error()->str());
+            error = result.error();
+            return false;
         }
-        timeout -= single_resolve_timer.elapsed<Millis>();
-        if (timeout <= Resolver::MIN_TIMEOUT) {
-            log_addr(m_log, dbg, m_server_name, "Stop resolving loop as timeout reached ({})", m_timeout);
-            break;
-        }
+        return true;
+    });
+    for (auto &resolver : m_resolvers) {
+        aw.add(resolver->resolve(m_server_name, m_server_port, timeout));
+    }
+    std::string server_name = m_server_name;
+    std::weak_ptr<bool> shutdown_guard = m_shutdown_guard;
+    std::optional<Resolver::Result> res = co_await aw;
+    if (shutdown_guard.expired()) {
+        co_return Bootstrapper::ResolveResult{
+            .server_name = server_name,
+            .error = make_error(BootstrapperError::AE_SHUTTING_DOWN)
+        };
+    }
+    if (res.has_value()) {
+        std::move(res->value().begin(), res->value().end(), std::inserter(addrs, addrs.begin()));
+        error.reset();
     }
 
     if (m_log.is_enabled(LogLevel::LOG_LEVEL_DEBUG)) {
@@ -66,7 +68,11 @@ Bootstrapper::ResolveResult Bootstrapper::resolve() {
     auto elapsed = whole_resolve_timer.elapsed<Millis>();
 
     std::vector<SocketAddress> addresses(std::move_iterator(addrs.begin()), std::move_iterator(addrs.end()));
-    return {std::move(addresses), m_server_name, elapsed, std::move(error)};
+    co_return {std::move(addresses), m_server_name, elapsed,
+            error ? error->value() == Resolver::ResolverError::AE_SHUTTING_DOWN
+                            ? make_error(BootstrapperError::AE_SHUTTING_DOWN, error)
+                            : make_error(BootstrapperError::AE_RESOLVE_FAILED, error)
+                  : nullptr};
 }
 
 ErrString Bootstrapper::temporary_disabler_check() {
@@ -78,18 +84,17 @@ ErrString Bootstrapper::temporary_disabler_check() {
             if (int64_t disabled_for_ms = now_ms - tries_timeout_ms,
                     remaining_ms = TEMPORARY_DISABLE_INTERVAL_MS - disabled_for_ms;
                     remaining_ms > 0) {
-                return AG_FMT("Bootstrapping this server is disabled for {}ms, too many failures", remaining_ms);
-            } else {
-                m_resolve_fail_times_ms.first = 0;
+                return AG_FMT("Disabled for {}ms", remaining_ms);
             }
+            m_resolve_fail_times_ms.first = 0;
         }
     }
     return std::nullopt;
 }
 
-void Bootstrapper::temporary_disabler_update(const ErrString &error) {
+void Bootstrapper::temporary_disabler_update(bool fail) {
     using namespace std::chrono;
-    if (error) {
+    if (fail) {
         auto now_ms = duration_cast<Millis>(steady_clock::now().time_since_epoch()).count();
         m_resolve_fail_times_ms.second = now_ms;
         if (!m_resolve_fail_times_ms.first) {
@@ -100,23 +105,23 @@ void Bootstrapper::temporary_disabler_update(const ErrString &error) {
     }
 }
 
-Bootstrapper::ResolveResult Bootstrapper::get() {
-    std::scoped_lock l(m_resolved_cache_mutex);
+coro::Task<Bootstrapper::ResolveResult> Bootstrapper::get() {
     if (!m_resolved_cache.empty()) {
-        return {m_resolved_cache, m_server_name, Millis(0), std::nullopt};
+        co_return {m_resolved_cache, m_server_name, Millis(0), {}};
     } else if (auto error = temporary_disabler_check()) {
-        return {{}, m_server_name, Millis(0), error};
+        co_return {{}, m_server_name, Millis(0), make_error(BootstrapperError::AE_TEMPORARY_DISABLED, *error)};
     }
 
-    ResolveResult result = resolve();
-    assert(result.error.has_value() == result.addresses.empty());
-    temporary_disabler_update(result.error);
-    m_resolved_cache = result.addresses;
-    return result;
+    ResolveResult result = co_await resolve();
+    assert(bool(result.error) == result.addresses.empty());
+    if (!result.error || result.error->value() != BootstrapperError::AE_SHUTTING_DOWN) {
+        temporary_disabler_update(bool(result.error));
+        m_resolved_cache = result.addresses;
+    }
+    co_return result;
 }
 
 void Bootstrapper::remove_resolved(const SocketAddress &addr) {
-    std::scoped_lock l(m_resolved_cache_mutex);
     m_resolved_cache.erase(std::remove(m_resolved_cache.begin(), m_resolved_cache.end(), addr), m_resolved_cache.end());
 }
 
@@ -132,10 +137,10 @@ static std::vector<ResolverPtr> create_resolvers(const Logger &log, const Bootst
         }
         opts.address = server;
         ResolverPtr resolver = std::make_unique<Resolver>(opts, p.upstream_config);
-        if (ErrString err = resolver->init(); !err.has_value()) {
+        if (auto err = resolver->init(); !err) {
             resolvers.emplace_back(std::move(resolver));
         } else {
-            log_addr(log, warn, p.address_string, "Failed to create resolver '{}': {}", server, err.value());
+            log_addr(log, warn, p.address_string, "Failed to create resolver '{}':\n{}", server, err->str());
         }
     }
 
@@ -156,18 +161,19 @@ Bootstrapper::Bootstrapper(const Params &p)
         m_server_port = p.default_port;
     }
     m_server_name = host;
+    m_shutdown_guard = std::make_shared<bool>(true);
 }
 
-ErrString Bootstrapper::init() {
+Error<Bootstrapper::BootstrapperError> Bootstrapper::init() {
     if (m_resolvers.empty() && !SocketAddress(m_server_name, m_server_port).valid()) {
-        return "Failed to create any resolver";
+        return make_error(BootstrapperError::AE_NO_VALID_RESOLVERS);
     }
 
-    return std::nullopt;
+    return {};
 }
 
 std::string Bootstrapper::address() const {
     return AG_FMT("{}:{}", m_server_name, m_server_port);
 }
 
-} // namespace ag
+} // namespace ag::dns

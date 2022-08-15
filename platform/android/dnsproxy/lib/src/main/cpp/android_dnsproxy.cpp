@@ -6,10 +6,11 @@
 #include <jni.h>
 #include <string>
 
-#include "proxy/dnsproxy.h"
-#include "upstream/upstream_utils.h"
+#include "dns/proxy/dnsproxy.h"
+#include "dns/upstream/upstream_utils.h"
 
 using namespace ag;
+using namespace ag::dns;
 using namespace ag::jni;
 
 extern "C" JNIEXPORT jint JNICALL JNI_OnLoad(JavaVM *vm, void *) {
@@ -708,7 +709,7 @@ jbyteArray AndroidDnsProxy::handle_message(JNIEnv *env, jbyteArray message) {
     auto elements = env->GetByteArrayElements(message, nullptr); // May copy, must call ReleaseByteArrayElements
     auto size = env->GetArrayLength(message);
 
-    auto result = m_actual_proxy.handle_message({(uint8_t *) elements, (size_t) size}, nullptr);
+    auto result = m_actual_proxy.handle_message_sync({(uint8_t *) elements, (size_t) size}, nullptr);
 
     // Free the buffer without copying back the possible changes
     env->ReleaseByteArrayElements(message, elements, JNI_ABORT);
@@ -734,7 +735,7 @@ jobject AndroidDnsProxy::get_settings(JNIEnv *env) {
 jstring AndroidDnsProxy::test_upstream(
         JNIEnv *env, jobject upstream_settings, jboolean ipv6, jobject events_adapter, jboolean offline) {
     m_events = GlobalRef(get_vm(env), events_adapter);
-    auto err = ag::test_upstream(marshal_upstream(env, upstream_settings), ipv6,
+    auto err = ag::dns::test_upstream(marshal_upstream(env, upstream_settings), ipv6,
             marshal_events(env, events_adapter).on_certificate_verification, offline);
     if (err) {
         return (jstring) env->NewLocalRef(m_utils.marshal_string(env, *err).get());

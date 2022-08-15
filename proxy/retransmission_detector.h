@@ -5,7 +5,7 @@
 #include <mutex>
 #include <unordered_map>
 
-namespace ag::retransmission_detector {
+namespace ag::dns::retransmission_detector {
 
 struct RequestKey {
     uint16_t id; // Request ID
@@ -15,18 +15,18 @@ struct RequestKey {
         return id == other.id && peername == other.peername;
     }
 };
-} // namespace ag
+} // namespace ag::dns
 
 namespace std {
 template<>
-struct hash<ag::retransmission_detector::RequestKey> {
-    size_t operator()(const ag::retransmission_detector::RequestKey &key) const {
+struct hash<ag::dns::retransmission_detector::RequestKey> {
+    size_t operator()(const ag::dns::retransmission_detector::RequestKey &key) const {
         return ag::utils::hash_combine(key.id, key.peername);
     }
 };
 } // namespace std
 
-namespace ag {
+namespace ag::dns {
 
 class RetransmissionDetector {
 public:
@@ -45,4 +45,5 @@ private:
     std::mutex m_mtx;
     std::unordered_map<retransmission_detector::RequestKey, int> m_count_map; // value is never 0: incremented on insertion
 };
-} // namespace ag
+
+} // namespace ag::dns

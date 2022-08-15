@@ -2,7 +2,7 @@
 #include <cstring>
 #include <numeric>
 
-namespace ag {
+namespace ag::dns {
 
 static constexpr size_t ENCRYPTED_READ_CHUNK_SIZE = 4 * 1024;
 /// Cover the most common DNS response sizes
@@ -28,7 +28,7 @@ TlsCodec::TlsCodec(const CertificateVerifier *cert_verifier, TlsSessionCache *se
         , m_log(__func__) {
 }
 
-std::optional<TlsCodec::Error> TlsCodec::connect(const std::string &sni, std::vector<std::string> alpn) {
+Error<TlsCodec::TlsError> TlsCodec::connect(const std::string &sni, std::vector<std::string> alpn) {
     bssl::UniquePtr<SSL_CTX> ctx{SSL_CTX_new(TLS_client_method())};
     SSL_CTX_set_verify(ctx.get(), SSL_VERIFY_PEER, nullptr);
     SSL_CTX_set_cert_verify_callback(ctx.get(), ssl_verify_callback, this);
@@ -44,7 +44,7 @@ std::optional<TlsCodec::Error> TlsCodec::connect(const std::string &sni, std::ve
         Uint8Vector serialized = make_alpn(alpn);
         int r = SSL_set_alpn_protos(m_ssl.get(), serialized.data(), serialized.size());
         if (r != 0) {
-            return Error{"Failed to set ALPN protocols"};
+            return make_error(AE_ALPN_SET_FAILED);
         }
     }
 
@@ -74,7 +74,7 @@ bool TlsCodec::is_connected() const {
 
 TlsCodec::SendEncryptedResult TlsCodec::send_encrypted() {
     if (m_ssl == nullptr) {
-        return Error{"Invalid state"};
+        return make_error(TlsError::AE_INVALID_STATE);
     }
 
     BIO *write_bio = SSL_get_wbio(m_ssl.get());
@@ -83,7 +83,7 @@ TlsCodec::SendEncryptedResult TlsCodec::send_encrypted() {
     int r = BIO_read(write_bio, buffer.data(), (int) buffer.size());
     if (r < 0) {
         if (!BIO_should_retry(write_bio)) {
-            return Error{"Failed to get buffered data"};
+            return make_error(TlsError::AE_BUFFER_ERROR);
         }
         r = 0;
     }
@@ -92,27 +92,27 @@ TlsCodec::SendEncryptedResult TlsCodec::send_encrypted() {
     return Chunk{{std::move(buffer)}};
 }
 
-std::optional<TlsCodec::Error> TlsCodec::recv_encrypted(Uint8View buffer) {
+Error<TlsCodec::TlsError> TlsCodec::recv_encrypted(Uint8View buffer) {
     if (m_ssl == nullptr) {
-        return Error{"Invalid state"};
+        return make_error(TlsError::AE_INVALID_STATE);
     }
 
     BIO *read_bio = SSL_get_rbio(m_ssl.get());
     int r = BIO_write(read_bio, buffer.data(), (int) buffer.size());
     if (r < 0) {
-        return Error{"Failed to write received data in crypto buffer"};
+        return make_error(TlsError::AE_WRITE_ERROR);
     }
 
     if (!this->is_connected()) {
         return this->proceed_handshake();
     }
 
-    return std::nullopt;
+    return {};
 }
 
 TlsCodec::ReadDecryptedResult TlsCodec::read_decrypted() {
     if (!this->is_connected()) {
-        return Error{"Invalid state"};
+        return make_error(TlsError::AE_INVALID_STATE);
     }
 
     Uint8Vector buffer(DECRYPTED_READ_CHUNK_SIZE);
@@ -122,13 +122,14 @@ TlsCodec::ReadDecryptedResult TlsCodec::read_decrypted() {
         r = SSL_get_error(m_ssl.get(), r);
         switch (r) {
         case SSL_ERROR_ZERO_RETURN:
-            return Error{"Remote server unexpectedly closed TLS connection"};
+            return make_error(TlsError::AE_UNEXPECTED_EOF);
         case SSL_ERROR_WANT_READ:
         case SSL_ERROR_WANT_WRITE:
             r = 0;
             break;
         default:
-            return Error{AG_FMT("Failed to read from TLS connection ({})", SSL_get_error(m_ssl.get(), r))};
+            auto err = make_error(OSslError(r));
+            return make_error(TlsError::AE_READ_ERROR, err);
         }
     }
 
@@ -138,16 +139,17 @@ TlsCodec::ReadDecryptedResult TlsCodec::read_decrypted() {
 
 TlsCodec::WriteDecryptedResult TlsCodec::write_decrypted(Uint8View buffer) {
     if (!this->is_connected()) {
-        return Error{"Invalid state"};
+        return make_error(TlsError::AE_INVALID_STATE);
     }
 
     int r = SSL_write(m_ssl.get(), buffer.data(), (int) buffer.size());
     if (r <= 0 && r != SSL_ERROR_WANT_READ && r != SSL_ERROR_WANT_WRITE) {
         r = SSL_get_error(m_ssl.get(), r);
         if (r == SSL_ERROR_ZERO_RETURN) {
-            return Error{"Remote server unexpectedly closed TLS connection"};
+            return make_error(TlsError::AE_UNEXPECTED_EOF);
         } else {
-            return Error{AG_FMT("Failed to write in TLS connection ({})", r)};
+            auto err = make_error(OSslError(r));
+            return make_error(TlsError::AE_WRITE_ERROR, err);
         }
     }
 
@@ -173,8 +175,8 @@ int TlsCodec::ssl_verify_callback(X509_STORE_CTX *ctx, void *arg) {
     return 1;
 }
 
-std::optional<TlsCodec::Error> TlsCodec::proceed_handshake() {
-    std::optional<TlsCodec::Error> err;
+Error<TlsCodec::TlsError> TlsCodec::proceed_handshake() {
+    Error<TlsCodec::TlsError> err;
 
     int r = SSL_do_handshake(m_ssl.get());
     if (r < 0) {
@@ -192,11 +194,11 @@ std::optional<TlsCodec::Error> TlsCodec::proceed_handshake() {
                 errors += AG_FMT("\t{}:{}:{}\n", file, line, ERR_error_string(error, nullptr));
             }
 
-            err = {AG_FMT("TLS handshake failed (\n{})", errors)};
+            err = make_error(TlsError::AE_HANDSHAKE_ERROR, AG_FMT("TLS handshake failed (\n{})", errors));
         }
     }
 
     return err;
 }
 
-} // namespace ag
+} // namespace ag::dns

@@ -3,21 +3,21 @@
 #include <cstddef>
 #include "common/defs.h"
 
-namespace ag::dnscrypt {
+namespace ag::dns::dnscrypt {
 
 /**
  * Add padding to packet
  * @param[in,out] packet Packet to pad
  * @param min_size Minimum size of packet
- * @return Error optional if failed
+ * @return True on success
  */
-ErrString pad(Uint8Vector &packet, size_t min_size);
+bool pad(Uint8Vector &packet, size_t min_size);
 
 /**
  * Remove padding from packet
  * @param[in,out] packet Packet to unpad
- * @return Error optional if failed
+ * @return True on success
  */
-ErrString unpad(Uint8Vector &packet);
+bool unpad(Uint8Vector &packet);
 
-} // namespace ag::dnscrypt
+} // namespace ag::dns::dnscrypt

@@ -3,7 +3,7 @@ project(agdns_upstream C CXX)
 include(../cmake/conan_bootstrap.cmake)
 conan_bootstrap(SRCROOT ".." CONANFILE "../conanfile.py" SCOPE_NAME agdns)
 
-set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD 20)
 
 set(DNSLIBS_DIR ${CMAKE_CURRENT_SOURCE_DIR}/..)
 
@@ -22,10 +22,15 @@ add_library(upstream EXCLUDE_FROM_ALL
     )
 
 set_target_properties(upstream PROPERTIES POSITION_INDEPENDENT_CODE ON)
-target_compile_options(upstream PRIVATE
+if (NOT MSVC)
+    target_compile_options(upstream PRIVATE
         -Wall -Wextra -Werror
         -Wno-unused-parameter
-        -Wno-missing-field-initializers)
+        -Wno-missing-field-initializers
+        )
+else()
+    target_compile_options(upstream PRIVATE /W3)
+endif()
 
 include(CheckCXXCompilerFlag)
 check_cxx_compiler_flag("-Wgnu-designator" COMPILER_SUPPORTS_GNU_DESIGNATOR)

@@ -1,12 +1,13 @@
-#include <gtest/gtest.h>
 #include <ldns/ldns.h>
 
-#include "../bootstrapper.h"
-#include "net/application_verifier.h"
-#include "net/socket.h"
-#include "upstream/upstream.h"
+#include "common/gtest_coro.h"
+#include "dns/net/application_verifier.h"
+#include "dns/net/socket.h"
+#include "dns/upstream/upstream.h"
 
-namespace ag {
+#include "../bootstrapper.h"
+
+namespace ag::dns {
 
 std::vector<SocketAddress> RESOLVED_ADDRESSES = {
         SocketAddress("0.0.0.0", 853),
@@ -16,17 +17,17 @@ std::vector<SocketAddress> RESOLVED_ADDRESSES = {
         SocketAddress("1.1.1.1", 853),
 };
 
-Bootstrapper::ResolveResult Bootstrapper::get() {
-    return {.addresses = m_resolved_cache};
+coro::Task<Bootstrapper::ResolveResult> Bootstrapper::get() {
+    co_return {.addresses = m_resolved_cache};
 }
 
 Bootstrapper::Bootstrapper(const Params &p)
         : m_log("bootstrapper test") {
 }
 
-ErrString Bootstrapper::init() {
+Error<Bootstrapper::BootstrapperError> Bootstrapper::init() {
     m_resolved_cache = RESOLVED_ADDRESSES;
-    return std::nullopt;
+    return {};
 }
 
 void Bootstrapper::remove_resolved(const SocketAddress &a) {
@@ -41,33 +42,49 @@ ErrString Bootstrapper::temporary_disabler_check() {
     return std::nullopt;
 }
 
-void Bootstrapper::temporary_disabler_update(const ErrString &error) {
+void Bootstrapper::temporary_disabler_update(bool) {
 }
 
-Bootstrapper::ResolveResult Bootstrapper::resolve() {
-    return {};
+coro::Task<Bootstrapper::ResolveResult> Bootstrapper::resolve() {
+    co_return {};
 }
 
-} // namespace ag
+} // namespace ag::dns
 
-namespace ag::upstream::test {
+namespace ag::dns::upstream::test {
 
-TEST(DotUpstreamTest, ThrowsAwayInvalidAddress) {
+class DotUpstreamTest : public ::testing::Test {
+public:
+    void SetUp() override {
+        m_loop = EventLoop::create();
+        m_loop->start();
+    }
+
+    void TearDown() override {
+        m_loop->stop();
+        m_loop->join();
+    }
+
+    EventLoopPtr m_loop;
+};
+
+TEST_F(DotUpstreamTest, ThrowsAwayInvalidAddress) {
     Logger::set_log_level(LogLevel::LOG_LEVEL_TRACE);
     SocketFactory sf{{
+            .loop = *m_loop,
             .verifier = std::make_unique<ApplicationVerifier>([](const CertificateVerificationEvent &) {
                 return std::nullopt;
             }),
     }};
-    UpstreamFactory factory({.socket_factory = &sf});
-    auto [upstream, error] = factory.create_upstream({.address = "tls://cloudflare-dns.com", .bootstrap = {"1.2.3.4"}});
-    ASSERT_FALSE(error) << *error;
+    UpstreamFactory factory({.loop = *m_loop, .socket_factory = &sf});
+    auto upstream_res = factory.create_upstream({.address = "tls://cloudflare-dns.com", .bootstrap = {"1.2.3.4"}});
+    ASSERT_FALSE(upstream_res.has_error()) << upstream_res.error()->str();
     bool success = false;
     for (int i = 0; i < RESOLVED_ADDRESSES.size(); ++i) {
         ldns_pkt_ptr pkt{
                 ldns_pkt_query_new(ldns_dname_new_frm_str("google.com"), LDNS_RR_TYPE_A, LDNS_RR_CLASS_IN, LDNS_RD)};
-        auto [resp, error] = upstream->exchange(pkt.get());
-        if (!error && ldns_pkt_get_rcode(resp.get()) == LDNS_RCODE_NOERROR) {
+        auto res = co_await upstream_res.value()->exchange(pkt.get());
+        if (!res.has_error() && ldns_pkt_get_rcode(res->get()) == LDNS_RCODE_NOERROR) {
             success = true;
             break;
         }
@@ -75,4 +92,4 @@ TEST(DotUpstreamTest, ThrowsAwayInvalidAddress) {
     ASSERT_TRUE(success);
 }
 
-} // namespace ag::upstream::test
+} // namespace ag::dns::upstream::test

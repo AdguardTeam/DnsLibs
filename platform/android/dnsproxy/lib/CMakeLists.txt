@@ -4,7 +4,7 @@ cmake_minimum_required(VERSION 3.4.1)
 project(jni C CXX)
 
 set(CMAKE_C_STANDARD 11)
-set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD 20)
 
 set(CMAKE_POLICY_DEFAULT_CMP0063 NEW) # allows visibility=hidden for static targets for subprojects
 cmake_policy(SET CMP0063 NEW) # allows visibility=hidden for static targets for this project

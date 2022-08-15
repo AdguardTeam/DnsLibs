@@ -4,19 +4,18 @@
 #include <chrono>
 #include <mutex>
 #include <optional>
-#include "common/defs.h"
-#include "common/net_utils.h"
-#include "net/socket.h"
-#include "common/deferred_arg.h"
 #include <event2/bufferevent.h>
 
+#include "common/defs.h"
+#include "common/net_utils.h"
+#include "dns/net/socket.h"
 
-namespace ag {
+namespace ag::dns {
 
 class TcpStream : public Socket {
 public:
     TcpStream(SocketFactory::SocketParameters p, PrepareFdCallback prepare_fd);
-    ~TcpStream() override = default;
+    ~TcpStream() override;
 
     TcpStream(TcpStream &&) = delete;
     TcpStream &operator=(TcpStream &&) = delete;
@@ -24,29 +23,32 @@ public:
     TcpStream &operator=(const TcpStream &) = delete;
 
 private:
-    UniquePtr<bufferevent, &bufferevent_free> m_bev;
-    UniquePtr<event, &event_free> m_timer;
-    mutable std::mutex m_guard;
+    UvPtr<uv_tcp_t> m_tcp;
+    UvPtr<uv_timer_t> m_timer;
     Callbacks m_callbacks = {};
-    std::optional<Micros> m_current_timeout;
-    DeferredArg::Guard m_deferred_arg;
+    bool m_connected = false;
+    std::optional<std::chrono::microseconds> m_current_timeout;
+    HashMap<uv_write_t *, Uint8Vector> m_writes;
+    HashMap<char *, std::unique_ptr<char[]>> m_reads;
 
     [[nodiscard]] std::optional<evutil_socket_t> get_fd() const override;
-    [[nodiscard]] std::optional<Error> connect(ConnectParameters params) override;
-    [[nodiscard]] std::optional<Error> send(Uint8View data) override;
-    [[nodiscard]] std::optional<Error> send_dns_packet(Uint8View data) override;
+    [[nodiscard]] Error<SocketError> connect(ConnectParameters params) override;
+    [[nodiscard]] Error<SocketError> send(Uint8View data) override;
+    [[nodiscard]] Error<SocketError> send_dns_packet(Uint8View data) override;
     [[nodiscard]] bool set_timeout(Micros timeout) override;
-    [[nodiscard]] std::optional<Error> set_callbacks(Callbacks cbx) override;
+    [[nodiscard]] Error<SocketError> set_callbacks(Callbacks cbx) override;
+
+    void reset_timeout();
+    [[nodiscard]] bool update_timer();
+    void update_read_status();
 
     [[nodiscard]] Callbacks get_callbacks() const;
-    [[nodiscard]] bool set_timeout();
-    void reset_timeout_locked();
-    void reset_timeout_nolock();
 
-    static int on_prepare_fd(int fd, const struct sockaddr *sa, int salen, void *arg);
-    static void on_event(bufferevent *bev, short what, void *arg);
-    static void on_read(bufferevent *bev, void *arg);
-    static void on_timeout(evutil_socket_t, short, void *arg);
+    static void on_event(uv_connect_t* req, int status);
+    static void on_read(uv_stream_t *stream, ssize_t nread, const uv_buf_t *buf);
+    static void on_timeout(uv_timer_t *handle);
+    static void on_write(uv_write_t *req, int status);
+    static void allocate_read(uv_handle_t *handle, size_t size, uv_buf_t *buf);
 };
 
 }

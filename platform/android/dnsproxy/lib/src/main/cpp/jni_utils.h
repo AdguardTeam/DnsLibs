@@ -229,4 +229,4 @@ public:
 
 };
 
-}
+} // namespace ag::jni

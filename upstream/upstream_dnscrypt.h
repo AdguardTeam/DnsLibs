@@ -2,11 +2,11 @@
 
 #include <chrono>
 #include <memory>
-#include "dnsstamp/dns_stamp.h"
-#include "upstream/upstream.h"
+#include "dns/dnsstamp/dns_stamp.h"
+#include "dns/upstream/upstream.h"
 #include "common/logger.h"
 
-namespace ag {
+namespace ag::dns {
 
 class DnscryptUpstream : public Upstream {
 public:
@@ -21,25 +21,24 @@ public:
     ~DnscryptUpstream() override;
 
 private:
-    ErrString init() override;
-    ExchangeResult exchange(ldns_pkt *request_pkt, const DnsMessageInfo *info) override;
+    Error<InitError> init() override;
+    coro::Task<ExchangeResult> exchange(ldns_pkt *request_pkt, const DnsMessageInfo *info) override;
 
     struct Impl;
     using ImplPtr = std::unique_ptr<Impl>;
 
     struct SetupResult {
         Millis rtt;
-        ErrString error;
+        Error<DnsError> error;
     };
 
-    SetupResult setup_impl();
-    ExchangeResult apply_exchange(ldns_pkt &request_pkt, Millis timeout);
+    coro::Task<SetupResult> setup_impl();
+    coro::Task<ExchangeResult> apply_exchange(ldns_pkt &request_pkt, Millis timeout);
     [[nodiscard]] SocketFactory::SocketParameters make_socket_parameters() const;
 
     Logger m_log;
     ServerStamp m_stamp;
     ImplPtr m_impl;
-    std::mutex m_guard;
 };
 
-} // namespace ag
+} // namespace ag::dns

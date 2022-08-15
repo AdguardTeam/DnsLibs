@@ -3,7 +3,7 @@ project(agdns_dnsstamp C CXX)
 include(../cmake/conan_bootstrap.cmake)
 conan_bootstrap(SRCROOT ".." CONANFILE "../conanfile.py" SCOPE_NAME agdns)
 
-set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD 20)
 
 set(DNSLIBS_DIR ${CMAKE_CURRENT_SOURCE_DIR}/..)
 
@@ -12,7 +12,7 @@ if(NOT TARGET dnslibs_common)
 endif(NOT TARGET dnslibs_common)
 
 add_library(dnsstamp EXCLUDE_FROM_ALL
-        include/dnsstamp/dns_stamp.h
+        include/dns/dnsstamp/dns_stamp.h
         dns_stamp.cpp)
 
 set_target_properties(dnsstamp PROPERTIES POSITION_INDEPENDENT_CODE ON)

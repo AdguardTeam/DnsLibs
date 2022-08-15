@@ -1,7 +1,7 @@
 #include "secured_socket.h"
 #include <cassert>
 
-namespace ag {
+namespace ag::dns {
 
 enum SecuredSocket::State : int {
     SS_IDLE,
@@ -19,74 +19,75 @@ SecuredSocket::SecuredSocket(SocketFactory::SocketPtr underlying_socket, const C
         , m_sni(std::move(secure_parameters.server_name))
         , m_alpn(std::move(secure_parameters.alpn))
         , m_log(__func__) {
+    m_shutdown_guard = std::make_shared<bool>(true);
 }
 
 std::optional<evutil_socket_t> SecuredSocket::get_fd() const {
     return m_underlying_socket->get_fd();
 }
 
-std::optional<Socket::Error> SecuredSocket::connect(ConnectParameters params) {
-    std::optional err = m_underlying_socket->connect(this->make_underlying_connect_parameters(params));
-    if (!err.has_value()) {
+Error<SocketError> SecuredSocket::connect(ConnectParameters params) {
+    auto err = m_underlying_socket->connect(this->make_underlying_connect_parameters(params));
+    if (!err) {
         err = this->set_callbacks(params.callbacks);
     }
-    if (!err.has_value()) {
+    if (!err) {
         m_state = SS_CONNECTING_SOCKET;
     }
     return err;
 }
 
-std::optional<Socket::Error> SecuredSocket::send(Uint8View data) {
+Error<SocketError> SecuredSocket::send(Uint8View data) {
     while (!data.empty()) {
         TlsCodec::WriteDecryptedResult wr_result = m_codec.write_decrypted(data);
-        if (auto *err = std::get_if<TlsCodec::Error>(&wr_result); err != nullptr) {
-            return {{-1, std::move(err->description)}};
+        if (wr_result.has_error()) {
+            return make_error(SocketError::AE_TLS_ERROR, wr_result.error());
         }
 
-        if (std::optional err = this->flush_pending_encrypted_data(); err.has_value()) {
+        if (auto err = this->flush_pending_encrypted_data()) {
             return err;
         }
 
-        data.remove_prefix(std::get<TlsCodec::DecryptedBytesWritten>(wr_result).num);
+        data.remove_prefix(wr_result->num);
     }
 
-    return std::nullopt;
+    return {};
 }
 
-std::optional<Socket::Error> SecuredSocket::send_dns_packet(Uint8View data) {
+Error<SocketError> SecuredSocket::send_dns_packet(Uint8View data) {
     uint16_t length = htons(data.size());
 
-    uint8_t buffer[sizeof(length) + data.size()];
-    memcpy(buffer, (uint8_t *) &length, sizeof(length));
-    memcpy(buffer + sizeof(length), data.data(), data.size());
+    std::vector<uint8_t> buffer(sizeof(length) + data.size());
+    memcpy(buffer.data(), (uint8_t *) &length, sizeof(length));
+    memcpy(buffer.data() + sizeof(length), data.data(), data.size());
 
-    return this->send({buffer, sizeof(buffer)});
+    return this->send({buffer.data(), buffer.size()});
 }
 
 bool SecuredSocket::set_timeout(Micros timeout) {
     return m_underlying_socket->set_timeout(timeout);
 }
 
-std::optional<Socket::Error> SecuredSocket::set_callbacks(Callbacks cbx) {
+Error<SocketError> SecuredSocket::set_callbacks(Callbacks cbx) {
     std::scoped_lock l(m_callbacks.mtx);
     m_callbacks.val = cbx;
-    return std::nullopt;
+    return {};
 }
 
 void SecuredSocket::on_connected(void *arg) {
     auto *self = (SecuredSocket *) arg;
     assert(self->m_state == SS_CONNECTING_SOCKET);
 
-    if (std::optional err = self->m_codec.connect(self->m_sni, self->m_alpn); err.has_value()) {
+    if (auto err = self->m_codec.connect(self->m_sni, self->m_alpn)) {
         if (Callbacks cbx = self->get_callbacks(); cbx.on_close != nullptr) {
-            cbx.on_close(cbx.arg, {{-1, std::move(err->description)}});
+            cbx.on_close(cbx.arg, make_error(SocketError::AE_TLS_ERROR, err));
             return;
         }
     }
 
-    if (std::optional err = self->flush_pending_encrypted_data(); err.has_value()) {
+    if (auto err = self->flush_pending_encrypted_data()) {
         if (Callbacks cbx = self->get_callbacks(); cbx.on_close != nullptr) {
-            cbx.on_close(cbx.arg, std::move(err));
+            cbx.on_close(cbx.arg, err);
             return;
         }
     }
@@ -97,15 +98,17 @@ void SecuredSocket::on_connected(void *arg) {
 void SecuredSocket::on_read(void *arg, Uint8View data) {
     auto *self = (SecuredSocket *) arg;
 
-    if (std::optional err = self->m_codec.recv_encrypted(data); err.has_value()) {
+    if (auto err = self->m_codec.recv_encrypted(data)) {
         if (Callbacks cbx = self->get_callbacks(); cbx.on_close != nullptr) {
-            cbx.on_close(cbx.arg, {{-1, std::move(err->description)}});
+            cbx.on_close(cbx.arg, make_error(SocketError::AE_TLS_ERROR, err));
+            return;
         }
     }
 
-    if (std::optional err = self->flush_pending_encrypted_data(); err.has_value()) {
+    if (auto err = self->flush_pending_encrypted_data()) {
         if (Callbacks cbx = self->get_callbacks(); cbx.on_close != nullptr) {
-            cbx.on_close(cbx.arg, std::move(err));
+            cbx.on_close(cbx.arg, err);
+            return;
         }
     }
 
@@ -116,27 +119,28 @@ void SecuredSocket::on_read(void *arg, Uint8View data) {
         }
     }
 
-    while (self->m_codec.want_read_decrypted()) {
+    bool want_read = self->m_codec.want_read_decrypted();
+    while (want_read) {
         TlsCodec::Chunk decrypted_chunk;
 
-        {
-            std::unique_lock l(self->m_callbacks.mtx);
+        if (std::unique_lock l{self->m_callbacks.mtx}) {
             Callbacks cbx = self->m_callbacks.val;
             if (cbx.on_read == nullptr) {
                 break;
             }
 
             TlsCodec::ReadDecryptedResult r = self->m_codec.read_decrypted();
-            if (auto *err = std::get_if<TlsCodec::Error>(&r); err != nullptr) {
+            if (r.has_error()) {
                 if (cbx.on_close != nullptr) {
                     l.unlock();
-                    cbx.on_close(cbx.arg, {{-1, std::move(err->description)}});
+                    cbx.on_close(cbx.arg, make_error(SocketError::AE_TLS_ERROR, r.error()));
                     l.lock();
-                    return;
                 }
+                return;
             }
 
-            decrypted_chunk = std::move(std::get<TlsCodec::Chunk>(r));
+            want_read = self->m_codec.want_read_decrypted();
+            decrypted_chunk = std::move(r.value());
         }
 
         if (Callbacks cbx = self->get_callbacks(); cbx.on_read != nullptr) {
@@ -144,12 +148,16 @@ void SecuredSocket::on_read(void *arg, Uint8View data) {
                 // @todo: buffer and re-raise it later if needed
                 dbglog(self->m_log, "{} bytes were dropped", decrypted_chunk.data.size());
             }
+            std::weak_ptr<bool> shutdown_guard = self->m_shutdown_guard;
             cbx.on_read(cbx.arg, {decrypted_chunk.data.data(), decrypted_chunk.data.size()});
+            if (shutdown_guard.expired()) {
+                return;
+            }
         }
     }
 }
 
-void SecuredSocket::on_close(void *arg, std::optional<Error> error) {
+void SecuredSocket::on_close(void *arg, Error<SocketError> error) {
     auto *self = (SecuredSocket *) arg;
     if (Callbacks cbx = self->get_callbacks(); cbx.on_close != nullptr) {
         cbx.on_close(cbx.arg, std::move(error));
@@ -170,20 +178,20 @@ Socket::Callbacks SecuredSocket::get_callbacks() {
     return m_callbacks.val;
 }
 
-std::optional<Socket::Error> SecuredSocket::flush_pending_encrypted_data() {
+Error<SocketError> SecuredSocket::flush_pending_encrypted_data() {
     while (m_codec.want_send_encrypted()) {
         TlsCodec::SendEncryptedResult send_result = m_codec.send_encrypted();
-        if (auto *err = std::get_if<TlsCodec::Error>(&send_result); err != nullptr) {
-            return {{-1, std::move(err->description)}};
+        if (send_result.has_error()) {
+            return make_error(SocketError::AE_TLS_ERROR, send_result.error());
         }
 
-        const auto &chunk = std::get<TlsCodec::Chunk>(send_result);
-        if (auto err = m_underlying_socket->send({chunk.data.data(), chunk.data.size()}); err.has_value()) {
+        const auto &chunk = send_result.value();
+        if (auto err = m_underlying_socket->send({chunk.data.data(), chunk.data.size()})) {
             return err;
         }
     }
 
-    return std::nullopt;
+    return {};
 }
 
-} // namespace ag
+} // namespace ag::dns

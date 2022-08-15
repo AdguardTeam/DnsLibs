@@ -2,24 +2,27 @@
 #include <fmt/chrono.h>
 #include <functional>
 #include <future>
-#include <gtest/gtest.h>
 #include <ldns/ldns.h>
 #include <thread>
 
+#include "common/gtest_coro.h"
 #include "common/logger.h"
+#include "common/parallel.h"
 #include "common/utils.h"
-#include "dnscrypt/dns_crypt_ldns.h"
-#include "net/application_verifier.h"
-#include "net/default_verifier.h"
-#include "upstream/upstream.h"
-#include "upstream/upstream_utils.h"
+#include "dns/dnscrypt/dns_crypt_ldns.h"
+#include "dns/net/application_verifier.h"
+#include "dns/net/default_verifier.h"
+#include "dns/upstream/upstream.h"
+#include "dns/upstream/upstream_utils.h"
 
 #include "test_utils.h"
 
-namespace ag::upstream::test {
+namespace ag::dns::upstream::test {
 
 static constexpr Secs DEFAULT_TIMEOUT(10);
 static constexpr Millis DELAY_BETWEEN_REQUESTS{500};
+
+using TestError = std::optional<std::string>;
 
 static struct Init {
     Init() {
@@ -33,7 +36,7 @@ static Logger logger{"test_upstream"};
 
 namespace concat_err_string {
 
-ErrString &operator+=(ErrString &result, const ErrString &err) {
+TestError &operator+=(TestError &result, const TestError &err) {
     if (err) {
         if (!result) {
             result = std::string{};
@@ -47,15 +50,15 @@ ErrString &operator+=(ErrString &result, const ErrString &err) {
 
 } // namespace concat_err_string
 
-static ag::ldns_pkt_ptr create_test_message() {
+static ldns_pkt_ptr create_test_message() {
     ldns_pkt *pkt = ldns_pkt_query_new(
             ldns_dname_new_frm_str("google-public-dns-a.google.com."), LDNS_RR_TYPE_A, LDNS_RR_CLASS_IN, LDNS_RD);
     static size_t id = 0;
     ldns_pkt_set_id(pkt, id++);
-    return ag::ldns_pkt_ptr(pkt);
+    return ldns_pkt_ptr(pkt);
 }
 
-[[nodiscard]] static ErrString assert_response(const ldns_pkt &reply) {
+[[nodiscard]] static TestError assert_response(const ldns_pkt &reply) {
     size_t ancount = ldns_pkt_ancount(&reply);
     if (ancount != 1) {
         return AG_FMT("DNS upstream returned reply with wrong number of answers: {}", ancount);
@@ -73,69 +76,81 @@ static ag::ldns_pkt_ptr create_test_message() {
     return std::nullopt;
 }
 
-[[nodiscard]] static ErrString check_upstream(Upstream &upstream, const std::string &addr) {
+[[nodiscard]] static coro::Task<TestError> check_upstream(Upstream &upstream, const std::string &addr) {
     auto req = create_test_message();
-    auto [reply, err] = upstream.exchange(req.get());
-    if (err) {
-        return AG_FMT("Couldn't talk to upstream {}: {}", addr, *err);
+    auto reply = co_await upstream.exchange(req.get());
+    if (reply.has_error()) {
+        co_return AG_FMT("Couldn't talk to upstream {}: {}", addr, reply.error()->str());
     }
-    return assert_response(*reply);
+    co_return assert_response(*reply.value());
 }
 
-using ErrFutures = std::vector<std::future<ErrString>>;
-
-template <typename F>
-static ErrFutures make_indexed_futures(size_t count, const F &f) {
-    ErrFutures futures;
-    futures.reserve(count);
-    for (size_t i = 0, e = count; i < e; ++i) {
-        futures.emplace_back(ag::utils::async_detached(f, i));
-    }
-    return futures;
-}
-
-static void check_all_futures(ErrFutures &futures) {
+static coro::Task<void> check_all_results(const std::vector<TestError> &errors) {
     using namespace concat_err_string;
-    ErrString err;
-    for (auto &future : futures) {
-        err += future.get();
+    TestError err;
+    for (auto &error : errors) {
+        err += error;
     }
     ASSERT_FALSE(err) << *err;
 }
 
 template <typename F>
-static void parallel_test_basic_n(size_t count, const F &f) {
-    auto futures = make_indexed_futures(count, f);
-    check_all_futures(futures);
+static auto parallel_run_n(EventLoop &loop, size_t count, const F &f) {
+    auto all_of_awaitable = parallel::all_of<TestError>();
+    for (size_t i = 0; i != count; i++) {
+        all_of_awaitable.add(f(i));
+    }
+    return all_of_awaitable;
+}
+
+template <typename F>
+static coro::Task<void> parallel_test_basic_n(EventLoop &loop, size_t count, const F &f) {
+    co_await loop.co_submit();
+    auto results = co_await parallel_run_n(loop, count, f);
+    co_await check_all_results(results);
 }
 
 template <typename T, typename F>
-static void parallel_test_basic(const T &data, const F &function) {
-    ErrFutures futures;
-    futures.reserve(std::size(data));
-    for (const auto &[address, bootstrap, server_ip] : data) {
-        std::this_thread::sleep_for(DELAY_BETWEEN_REQUESTS);
-        futures.emplace_back(ag::utils::async_detached(function, address, bootstrap, server_ip));
+static coro::Task<void> parallel_test_basic(EventLoop &loop, const T *tests, size_t count, const F &function) {
+    co_await loop.co_submit();
+    auto all_of_awaitable = parallel::all_of<TestError>();
+    for (size_t i = 0; i < count; i++) {
+        const auto &[address, bootstrap, server_ip] = tests[i];
+        all_of_awaitable.add(
+                [](EventLoop &loop, size_t idx, const F &function, auto &address, auto &bootstrap,
+                        auto &server_ip) -> coro::Task<TestError> {
+            co_await loop.co_sleep(DELAY_BETWEEN_REQUESTS * idx);
+            co_return co_await function(address, bootstrap, server_ip);
+        }(loop, ++i, function, address, bootstrap, server_ip));
     }
-    check_all_futures(futures);
+    auto v = co_await all_of_awaitable;
+    co_await check_all_results(v);
 }
 
 class UpstreamTest : public ::testing::Test {
 protected:
-    std::unique_ptr<SocketFactory> socket_factory;
-    std::unique_ptr<UpstreamFactory> upstream_factory;
+    EventLoopPtr m_loop;
+    std::unique_ptr<SocketFactory> m_socket_factory;
+    std::unique_ptr<UpstreamFactory> m_upstream_factory;
 
     void SetUp() override {
 #if 0
         // It is too verbose for a CI report, and also the output in the stderr on Windows
         // is too slow, so that tests with small timeouts may fail
-        ag::set_default_log_level(TRACE);
+        Logger::set_log_level(LOG_LEVEL_TRACE);
 #endif
+        m_loop = EventLoop::create();
+        m_loop->start();
         make_upstream_factory();
     }
 
+    void TearDown() override {
+        m_loop->stop();
+        m_loop->join();
+    }
+
     void make_upstream_factory(OutboundProxySettings *oproxy = nullptr) {
-        struct SocketFactory::Parameters sf_parameters = {};
+        struct SocketFactory::Parameters sf_parameters = {.loop = *m_loop};
 #ifndef _WIN32
         sf_parameters.verifier = std::make_unique<DefaultVerifier>();
 #else
@@ -152,27 +167,26 @@ protected:
         sf_parameters.oproxy_settings = oproxy;
 #endif
 
-        socket_factory = std::make_unique<SocketFactory>(std::move(sf_parameters));
+        m_socket_factory = std::make_unique<SocketFactory>(std::move(sf_parameters));
 
         static bool ipv6_available = test_ipv6_connectivity();
-        upstream_factory
-                = std::make_unique<UpstreamFactory>(UpstreamFactoryConfig{socket_factory.get(), ipv6_available});
+        m_upstream_factory = std::make_unique<UpstreamFactory>(
+                UpstreamFactoryConfig{*m_loop, m_socket_factory.get(), ipv6_available});
     }
 
     UpstreamFactory::CreateResult create_upstream(const UpstreamOptions &opts) {
-        return upstream_factory->create_upstream(opts);
+        return m_upstream_factory->create_upstream(opts);
     }
 
-    template <typename T>
-    void parallel_test(const T &data) {
-        parallel_test_basic(
-                data, [this](const auto &address, const auto &bootstrap, const auto &server_ip) -> ErrString {
-                    auto [upstream_ptr, upstream_err]
-                            = create_upstream({address, bootstrap, DEFAULT_TIMEOUT, server_ip});
-                    if (upstream_err) {
-                        return AG_FMT("Failed to generate upstream from address {}: {}", address, *upstream_err);
+    template <typename TestData>
+    coro::Task<void> parallel_test(const TestData *tests, size_t count) {
+        co_await parallel_test_basic(
+                *m_loop, tests, count, [this](const auto &address, const auto &bootstrap, const auto &server_ip) -> coro::Task<TestError> {
+                    auto upstream_res = create_upstream({address, bootstrap, DEFAULT_TIMEOUT, server_ip});
+                    if (upstream_res.has_error()) {
+                        co_return AG_FMT("Failed to generate upstream from address {}: {}", address, upstream_res.error()->str());
                     }
-                    return check_upstream(*upstream_ptr, address);
+                    co_return co_await check_upstream(*upstream_res.value(), address);
                 });
     }
 };
@@ -181,6 +195,7 @@ template <typename... Ts>
 struct UpstreamParamTest : public UpstreamTest, public ::testing::WithParamInterface<Ts...> {};
 
 TEST_F(UpstreamTest, CreateUpstreamWithWrongOptions) {
+    co_await m_loop->co_submit();
     static const UpstreamOptions OPTIONS[] = {
             // malformed ip address
             {"8..8.8:53"},
@@ -220,11 +235,12 @@ TEST_F(UpstreamTest, CreateUpstreamWithWrongOptions) {
 
     for (const UpstreamOptions &options : OPTIONS) {
         UpstreamFactory::CreateResult r = create_upstream(options);
-        ASSERT_TRUE(r.error.has_value()) << options.address;
+        ASSERT_TRUE(r.has_error()) << "Address should be bad: " << options.address << ", failing test";
     }
 }
 
 TEST_F(UpstreamTest, UseUpstreamWithWrongOptions) {
+    co_await m_loop->co_submit();
     static const UpstreamOptions OPTIONS[]{
             // non existent domain, valid bootstrap
             {"https://qwer.zxcv.asdf.", {"8.8.8.8"}},
@@ -237,12 +253,12 @@ TEST_F(UpstreamTest, UseUpstreamWithWrongOptions) {
     };
 
     for (const UpstreamOptions &options : OPTIONS) {
-        auto [upstream, uerror] = create_upstream(options);
-        ASSERT_FALSE(uerror.has_value()) << uerror.value();
+        auto upstream_res = create_upstream(options);
+        ASSERT_FALSE(upstream_res.has_error()) << upstream_res.error()->str();
 
-        ag::ldns_pkt_ptr msg = create_test_message();
-        auto [reply, eerror] = upstream->exchange(msg.get());
-        ASSERT_TRUE(eerror.has_value()) << "Expected this upstream to error out: " << options.address;
+        ldns_pkt_ptr msg = create_test_message();
+        auto reply_res = co_await upstream_res.value()->exchange(msg.get());
+        ASSERT_TRUE(reply_res.has_error()) << "Expected this upstream to error out: " << options.address;
     }
 }
 
@@ -251,36 +267,30 @@ TEST_F(UpstreamTest, TestBootstrapTimeout) {
     using namespace concat_err_string;
     static constexpr auto timeout = 100ms;
     static constexpr size_t count = 10;
-    auto futures = make_indexed_futures(count, [&](size_t index) -> ErrString {
+    co_await m_loop->co_submit();
+    auto errs = co_await parallel_run_n(*m_loop, count, [&](size_t index) -> coro::Task<TestError> {
         infolog(logger, "Start {}", index);
         // Specifying some wrong port instead so that bootstrap DNS timed out for sure
-        auto [upstream_ptr, upstream_err] = create_upstream({"tls://one.one.one.one", {"8.8.8.8:555"}, timeout});
-        if (upstream_err.has_value()) {
-            return AG_FMT("Failed to create upstream: {}", upstream_err.value());
+        auto upstream_res = create_upstream({"tls://one.one.one.one", {"8.8.8.8:555"}, timeout});
+        if (upstream_res.has_error()) {
+            co_return AG_FMT("Failed to create upstream: {}", upstream_res.error()->str());
         }
         ag::utils::Timer timer;
         auto req = create_test_message();
-        auto [reply, reply_err] = upstream_ptr->exchange(req.get());
-        if (!reply_err) {
-            return "The upstream must have timed out";
+        auto reply_res = co_await upstream_res.value()->exchange(req.get());
+        if (!reply_res.has_error()) {
+            co_return "The upstream must have timed out";
         }
         auto elapsed = timer.elapsed<Millis>();
         if (elapsed > 2 * timeout) {
-            return AG_FMT("Exchange took more time than the configured timeout: {}", elapsed);
+            co_return AG_FMT("Exchange took more time than the configured timeout: {}", elapsed);
         }
         infolog(logger, "Finished {}", index);
-        return std::nullopt;
+        co_return std::nullopt;
     });
-    ErrString err;
-    for (size_t i = 0, e = futures.size(); i < e; ++i) {
-        auto &future = futures[i];
-        auto future_status = future.wait_for(10 * timeout);
-        if (future_status == std::future_status::timeout) {
-            err += AG_FMT("No response in time for {}", i);
-            errlog(logger, "No response in time for {}", i);
-            continue;
-        }
-        auto result = future.get();
+    TestError err;
+    for (size_t i = 0; i != errs.size(); ++i) {
+        auto result = errs[i];
         if (result) {
             err += result;
             errlog(logger, "Aborted: {}", *result);
@@ -288,9 +298,7 @@ TEST_F(UpstreamTest, TestBootstrapTimeout) {
             infolog(logger, "Got result from {}", i);
         }
     }
-    if (err) {
-        ASSERT_FALSE(err) << *err;
-    }
+    ASSERT_FALSE(err) << *err;
 }
 
 struct DnsTruncatedTest : UpstreamParamTest<std::string_view> {};
@@ -308,15 +316,16 @@ static constexpr std::string_view truncated_test_data[]{
 };
 
 TEST_P(DnsTruncatedTest, TestDnsTruncated) {
+    co_await m_loop->co_submit();
     const auto &address = GetParam();
-    auto [upstream, upstream_err] = create_upstream({std::string(address), {}, Secs(5)});
-    ASSERT_FALSE(upstream_err) << "Error while creating an upstream: " << *upstream_err;
-    auto request = ag::dnscrypt::create_request_ldns_pkt(
+    auto upstream_res = create_upstream({std::string(address), {}, Secs(5)});
+    ASSERT_FALSE(upstream_res.has_error()) << "Error while creating an upstream: " << upstream_res.error()->str();
+    auto request = dnscrypt::create_request_ldns_pkt(
             LDNS_RR_TYPE_TXT, LDNS_RR_CLASS_IN, LDNS_RD, "unit-test2.dns.adguard.com.", std::nullopt);
     ldns_pkt_set_random_id(request.get());
-    auto [res, err] = upstream->exchange(request.get());
-    ASSERT_FALSE(err) << "Error while making a request: " << *err;
-    ASSERT_FALSE(ldns_pkt_tc(res.get())) << "Response must NOT be truncated";
+    auto res = co_await upstream_res.value()->exchange(request.get());
+    ASSERT_FALSE(res.has_error()) << "Error while making a request: " << res.error()->str();
+    ASSERT_FALSE(ldns_pkt_tc(res->get())) << "Response must NOT be truncated";
 }
 
 INSTANTIATE_TEST_SUITE_P(DnsTruncatedTest, DnsTruncatedTest, testing::ValuesIn(truncated_test_data));
@@ -399,11 +408,14 @@ TEST_F(UpstreamTest, TestUpstreams) {
 #ifdef __linux__
     int fd_count_before = count_open_fds();
 #endif
-    parallel_test(test_upstreams_data);
+    co_await parallel_test(test_upstreams_data, std::size(test_upstreams_data));
 #ifdef __linux__
+    co_await m_loop->co_sleep(Millis{500});
     // If there was fd leak, new fd number will be different.
+    // There can be extra fd for /dev/null writing.
     int fd_count_after = count_open_fds();
-    ASSERT_EQ(fd_count_before, fd_count_after);
+    ASSERT_TRUE(fd_count_before <= fd_count_after);
+    ASSERT_TRUE(fd_count_after <= fd_count_before + 1);
 #endif
 }
 
@@ -428,7 +440,8 @@ static const UpstreamTestData upstream_dot_bootstrap_test_data[]{
 };
 
 TEST_F(UpstreamTest, TestUpstreamDotBootstrap) {
-    parallel_test(upstream_dot_bootstrap_test_data);
+    co_await m_loop->co_submit();
+    co_await parallel_test(upstream_dot_bootstrap_test_data, std::size(upstream_dot_bootstrap_test_data));
 }
 
 struct UpstreamDefaultOptionsTest : UpstreamParamTest<std::string> {};
@@ -439,10 +452,11 @@ static const std::string test_upstream_default_options_data[]{
 };
 
 TEST_P(UpstreamDefaultOptionsTest, TestUpstreamDefaultOptions) {
+    co_await m_loop->co_submit();
     const auto &address = GetParam();
-    auto [upstream_ptr, upstream_err] = create_upstream({address, {}, DEFAULT_TIMEOUT});
-    ASSERT_FALSE(upstream_err) << "Failed to generate upstream from address " << address << ": " << *upstream_err;
-    auto err = check_upstream(*upstream_ptr, address);
+    auto upstream_res = create_upstream({address, {}, DEFAULT_TIMEOUT});
+    ASSERT_FALSE(upstream_res.has_error()) << "Failed to generate upstream from address " << address << ": " << upstream_res.error()->str();
+    auto err = co_await check_upstream(*upstream_res.value(), address);
     ASSERT_FALSE(err) << *err;
 }
 
@@ -482,7 +496,8 @@ static const UpstreamTestData test_upstreams_invalid_bootstrap_data[]{
 
 // Test for DoH and DoT upstreams with two bootstraps (only one is valid)
 TEST_F(UpstreamTest, TestUpstreamsInvalidBootstrap) {
-    parallel_test(test_upstreams_invalid_bootstrap_data);
+    co_await m_loop->co_submit();
+    co_await parallel_test(test_upstreams_invalid_bootstrap_data, std::size(test_upstreams_invalid_bootstrap_data));
 }
 
 struct UpstreamsWithServerIpTest : UpstreamParamTest<UpstreamTestData> {};
@@ -491,17 +506,18 @@ struct UpstreamsWithServerIpTest : UpstreamParamTest<UpstreamTestData> {};
 static const std::initializer_list<std::string> invalid_bootstrap{"1.2.3.4:55"};
 
 static const UpstreamTestData test_upstreams_with_server_ip_data[]{
-        {"tls://dns.adguard.com", invalid_bootstrap, Ipv4Address{176, 103, 130, 130}},
-        {"https://dns.adguard.com/dns-query", invalid_bootstrap, Ipv4Address{176, 103, 130, 130}},
+        {"tls://dns.adguard.com", invalid_bootstrap, Ipv4Address{94, 140, 14, 14}},
+        {"https://dns.adguard.com/dns-query", invalid_bootstrap, Ipv4Address{94, 140, 14, 14}},
         {// AdGuard DNS DOH with the IP address specified
-                "sdns://AgcAAAAAAAAADzE3Ni4xMDMuMTMwLjEzMAAPZG5zLmFkZ3VhcmQuY29tCi9kbnMtcXVlcnk", invalid_bootstrap,
+                "sdns://AgcAAAAAAAAADDk0LjE0MC4xNC4xNAAPZG5zLmFkZ3VhcmQuY29tCi9kbnMtcXVlcnk", invalid_bootstrap,
                 {}},
         {// AdGuard DNS DOT with the IP address specified
-                "sdns://AwAAAAAAAAAAEzE3Ni4xMDMuMTMwLjEzMDo4NTMAD2Rucy5hZGd1YXJkLmNvbQ", invalid_bootstrap, {}},
+                "sdns://AwAAAAAAAAAAEDk0LjE0MC4xNC4xNDo4NTMAD2Rucy5hZGd1YXJkLmNvbQ", invalid_bootstrap, {}},
 };
 
 TEST_F(UpstreamTest, TestUpstreamsWithServerIp) {
-    parallel_test(test_upstreams_with_server_ip_data);
+    co_await m_loop->co_submit();
+    co_await parallel_test(test_upstreams_with_server_ip_data, std::size(test_upstreams_with_server_ip_data));
 }
 
 struct DeadProxySuccess : UpstreamParamTest<std::tuple<std::string, OutboundProxySettings>> {};
@@ -512,11 +528,12 @@ TEST_P(DeadProxySuccess, DISABLED_test) {
 #else
 TEST_P(DeadProxySuccess, test) {
 #endif
+    co_await m_loop->co_submit();
     auto oproxy = std::make_unique<OutboundProxySettings>(std::get<1>(GetParam()));
     make_upstream_factory(oproxy.get());
-    auto [upstream_ptr, err] = create_upstream({std::get<0>(GetParam()), {"8.8.8.8"}, DEFAULT_TIMEOUT});
-    ASSERT_FALSE(err.has_value()) << err.value();
-    err = check_upstream(*upstream_ptr, std::get<0>(GetParam()));
+    auto upstream_res = create_upstream({std::get<0>(GetParam()), {"8.8.8.8"}, DEFAULT_TIMEOUT});
+    ASSERT_FALSE(upstream_res.has_error()) << upstream_res.error()->str();
+    auto err = co_await check_upstream(*upstream_res.value(), std::get<0>(GetParam()));
     ASSERT_FALSE(err.has_value()) << err.value();
 }
 
@@ -548,11 +565,12 @@ TEST_P(DeadProxyFailure, DISABLED_FailedExchange) {
 #else
 TEST_P(DeadProxyFailure, FailedExchange) {
 #endif
+    co_await m_loop->co_submit();
     auto oproxy = std::make_unique<OutboundProxySettings>(std::get<1>(GetParam()));
     make_upstream_factory(oproxy.get());
-    auto [upstream_ptr, err] = create_upstream({std::get<0>(GetParam()), {"8.8.8.8"}, DEFAULT_TIMEOUT});
-    ASSERT_FALSE(err.has_value()) << err.value();
-    err = check_upstream(*upstream_ptr, std::get<0>(GetParam()));
+    auto upstream_res = create_upstream({std::get<0>(GetParam()), {"8.8.8.8"}, DEFAULT_TIMEOUT});
+    ASSERT_FALSE(upstream_res.has_error()) << upstream_res.error()->str();
+    auto err = co_await check_upstream(*upstream_res.value(), std::get<0>(GetParam()));
     ASSERT_TRUE(err.has_value());
 }
 
@@ -573,6 +591,7 @@ INSTANTIATE_TEST_SUITE_P(UdpProxy, DeadProxyFailure,
                 ::testing::Values(OutboundProxySettings{OutboundProxyProtocol::SOCKS5_UDP, "127.0.0.1", 42})));
 
 TEST_F(UpstreamTest, DISABLED_ConcurrentRequests) {
+    co_await m_loop->co_submit();
     using namespace std::chrono_literals;
     using namespace concat_err_string;
     static constexpr size_t REQUESTS_NUM = 128;
@@ -586,42 +605,43 @@ TEST_F(UpstreamTest, DISABLED_ConcurrentRequests) {
             //        .resolved_server_ip = IPV6_ADDRESS_SIZE{0x26, 0x06, 0x47, 0x00, 0x30, 0x0a, 0x00, 0x00, 0x00,
             //        0x00, 0x00, 0x00, 0x68, 0x13, 0xc7, 0x1d},  // Uncomment for test this server IP
     };
-    auto [upstream_ptr, upstream_err] = create_upstream(opts);
-    ASSERT_FALSE(upstream_err) << *upstream_err;
-    parallel_test_basic_n(WORKERS_NUM, [upstream = upstream_ptr.get()](size_t i) -> ErrString {
-        ErrString result_err;
+    auto upstream_res = create_upstream(opts);
+    ASSERT_FALSE(upstream_res.has_error()) << upstream_res.error()->str();
+    co_await parallel_test_basic_n(*m_loop, WORKERS_NUM, [upstream = upstream_res->get()](size_t i) -> coro::Task<TestError> {
+        TestError result_err;
         for (size_t j = 0; j < REQUESTS_NUM; ++j) {
-            ag::ldns_pkt_ptr pkt = create_test_message();
-            auto [reply, reply_err] = upstream->exchange(pkt.get());
-            if (reply_err) {
-                result_err += AG_FMT("Upstream i = {} reply error: {}", i, *reply_err);
+            ldns_pkt_ptr pkt = create_test_message();
+            auto reply = co_await upstream->exchange(pkt.get());
+            if (reply.has_error()) {
+                result_err += AG_FMT("Upstream i = {} reply error: {}", i, reply.error()->str());
                 continue;
             }
             if (!reply) {
                 result_err += "Upstream reply is null";
                 continue;
             }
-            result_err += assert_response(*reply);
+            result_err += assert_response(*reply.value());
         }
-        return result_err;
+        co_return result_err;
     });
 }
 
 TEST_F(UpstreamTest, DISABLED_doq_easy_test) {
+    co_await m_loop->co_submit();
     for (int i = 0; i < 1000; ++i) {
         using namespace std::chrono_literals;
         using namespace concat_err_string;
         static const UpstreamOptions opts{
                 .address = "quic://dns.adguard.com:8853", .bootstrap = {"8.8.8.8"}, .timeout = 5s};
-        auto [upstream_ptr, upstream_err] = create_upstream(opts);
-        ASSERT_FALSE(upstream_err) << *upstream_err;
+        auto upstream_res = create_upstream(opts);
+        ASSERT_FALSE(upstream_res.has_error()) << upstream_res.error()->str();
 
-        ag::ldns_pkt_ptr pkt = create_test_message();
+        ldns_pkt_ptr pkt = create_test_message();
 
-        auto [reply, reply_err] = upstream_ptr.get()->exchange(pkt.get());
-        ASSERT_FALSE(reply_err.has_value()) << *reply_err;
-        ASSERT_NE(reply, nullptr);
+        auto reply_res = co_await upstream_res.value()->exchange(pkt.get());
+        ASSERT_FALSE(reply_res.has_error()) << reply_res.error()->str();
+        ASSERT_NE(reply_res.value(), nullptr);
     }
 }
 
-} // namespace ag::upstream::test
+} // namespace ag::dns::upstream::test

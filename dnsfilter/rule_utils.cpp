@@ -8,7 +8,7 @@
 #include <array>
 #include <cassert>
 
-namespace ag::dnsfilter {
+namespace ag::dns::dnsfilter {
 
 static constexpr int MODIFIERS_MARKER = '$';
 static constexpr int MODIFIERS_DELIMITER = ',';
@@ -370,7 +370,7 @@ static inline bool is_host_rule(std::string_view str) {
 
 // https://github.com/AdguardTeam/AdguardHome/wiki/Hosts-Blocklists#domains-only
 static inline rule_utils::Rule make_exact_domain_name_rule(std::string_view name) {
-    rule_utils::Rule r = {.public_part = {.content = ag::DnsFilter::AdblockRuleInfo{}}};
+    rule_utils::Rule r = {.public_part = {.content = DnsFilter::AdblockRuleInfo{}}};
     r.public_part.text = std::string{name};
     r.match_method = rule_utils::Rule::MMID_EXACT;
     r.matching_parts = {ag::utils::to_lower(name)};
@@ -616,9 +616,9 @@ std::string rule_utils::get_text_without_badfilter(const DnsFilter::Rule &r) {
     return AG_FMT("{}{}", prefix, suffix);
 }
 
-} // namespace ag::dnsfilter
+} // namespace ag::dns::dnsfilter
 
-namespace ag {
+namespace ag::dns {
 
 DnsFilter::AdblockRuleInfo::AdblockRuleInfo(PropsSet props)
         : props(props) {
@@ -652,4 +652,4 @@ bool DnsFilter::is_valid_rule(std::string_view str) {
     return dnsfilter::rule_utils::parse(str).has_value();
 }
 
-} // namespace ag
+} // namespace ag::dns

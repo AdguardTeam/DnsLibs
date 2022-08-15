@@ -2,13 +2,13 @@
 
 #include "common/cache.h"
 #include "common/utils.h"
-#include "net/application_verifier.h"
-#include "net/default_verifier.h"
+#include "dns/net/application_verifier.h"
+#include "dns/net/default_verifier.h"
 #include <cassert>
 #include <cstring>
 #include <string>
 
-#include "proxy/dnsproxy.h"
+#include "dns/proxy/dnsproxy.h"
 #include <ldns/ldns.h>
 
 #include "dns64.h"
@@ -28,7 +28,7 @@
 
 using std::chrono::duration_cast;
 
-namespace ag {
+namespace ag::dns {
 
 static constexpr std::string_view MOZILLA_DOH_HOST = "use-application-dns.net.";
 
@@ -108,7 +108,7 @@ static std::tuple<DnsFilter::EngineParams, ErrString> make_fallback_filter_param
         flt_data += rule;
         flt_data += "\n";
     }
-    return {(DnsFilter::EngineParams){.filters = {{.data = std::move(flt_data), .in_memory = true}}}, std::nullopt};
+    return {DnsFilter::EngineParams{.filters = {{.data = std::move(flt_data), .in_memory = true}}}, std::nullopt};
 }
 
 // info not nullptr when logging incoming packet, nullptr for outgoing packets
@@ -218,7 +218,7 @@ static ldns_pkt *create_soa_response(const ldns_pkt *request, const DnsProxySett
 }
 
 static ldns_pkt *create_arecord_response(
-        const ldns_pkt *request, const DnsProxySettings *settings, const DnsFilter::Rule **rules) {
+        const ldns_pkt *request, const DnsProxySettings *settings, const std::vector<const DnsFilter::Rule *> &rules) {
     const ldns_rr *question = ldns_rr_list_rr(ldns_pkt_question(request), 0);
 
     ldns_rr *answer = ldns_rr_new();
@@ -227,8 +227,8 @@ static ldns_pkt *create_arecord_response(
     ldns_rr_set_ttl(answer, settings->blocked_response_ttl_secs);
     ldns_rr_set_type(answer, LDNS_RR_TYPE_A);
     ldns_rr_set_class(answer, LDNS_RR_CLASS_IN);
-    for (size_t i = 0; rules[i] != nullptr; ++i) {
-        const std::string &ip = std::get<DnsFilter::HostsRuleInfo>(rules[i]->content).ip;
+    for (auto *rule : rules) {
+        const std::string &ip = std::get<DnsFilter::HostsRuleInfo>(rule->content).ip;
         ldns_rdf *rdf = ldns_rdf_new_frm_str(LDNS_RDF_TYPE_A, ip.c_str());
         assert(rdf);
         ldns_rr_push_rdf(answer, rdf);
@@ -240,7 +240,7 @@ static ldns_pkt *create_arecord_response(
 }
 
 static ldns_pkt *create_aaaarecord_response(
-        const ldns_pkt *request, const DnsProxySettings *settings, const DnsFilter::Rule **rules) {
+        const ldns_pkt *request, const DnsProxySettings *settings, const std::vector<const DnsFilter::Rule *> &rules) {
     const ldns_rr *question = ldns_rr_list_rr(ldns_pkt_question(request), 0);
 
     ldns_rr *answer = ldns_rr_new();
@@ -249,8 +249,8 @@ static ldns_pkt *create_aaaarecord_response(
     ldns_rr_set_ttl(answer, settings->blocked_response_ttl_secs);
     ldns_rr_set_type(answer, LDNS_RR_TYPE_AAAA);
     ldns_rr_set_class(answer, LDNS_RR_CLASS_IN);
-    for (size_t i = 0; rules[i] != nullptr; ++i) {
-        const std::string &ip = std::get<DnsFilter::HostsRuleInfo>(rules[i]->content).ip;
+    for (auto *rule : rules) {
+        const std::string &ip = std::get<DnsFilter::HostsRuleInfo>(rule->content).ip;
         ldns_rdf *rdf = ldns_rdf_new_frm_str(LDNS_RDF_TYPE_AAAA, ip.c_str());
         assert(rdf);
         ldns_rr_push_rdf(answer, rdf);
@@ -265,30 +265,29 @@ static ldns_pkt *create_response_with_ips(
         const ldns_pkt *request, const DnsProxySettings *settings, const std::vector<const DnsFilter::Rule *> &rules) {
     const ldns_rr *question = ldns_rr_list_rr(ldns_pkt_question(request), 0);
     ldns_rr_type type = ldns_rr_get_type(question);
+
     if (type == LDNS_RR_TYPE_A) {
-        const DnsFilter::Rule *ipv4_rules[rules.size() + 1];
-        std::fill(ipv4_rules, ipv4_rules + rules.size() + 1, nullptr);
-        size_t num = 0;
+        std::vector<const DnsFilter::Rule *> ipv4_rules;
+        ipv4_rules.reserve(rules.size() + 1);
         for (const DnsFilter::Rule *r : rules) {
             const auto *content = std::get_if<DnsFilter::HostsRuleInfo>(&r->content);
             if (content != nullptr && utils::is_valid_ip4(content->ip)) {
-                ipv4_rules[num++] = r;
+                ipv4_rules.push_back(r);
             }
         }
-        if (num > 0) {
+        if (ipv4_rules.size() != 0) {
             return create_arecord_response(request, settings, ipv4_rules);
         }
     } else if (type == LDNS_RR_TYPE_AAAA) {
-        const DnsFilter::Rule *ipv6_rules[rules.size() + 1];
-        std::fill(ipv6_rules, ipv6_rules + rules.size() + 1, nullptr);
-        size_t num = 0;
+        std::vector<const DnsFilter::Rule *>ipv6_rules;
+        ipv6_rules.reserve(rules.size() + 1);
         for (const DnsFilter::Rule *r : rules) {
             const auto *content = std::get_if<DnsFilter::HostsRuleInfo>(&r->content);
             if (content != nullptr && !utils::is_valid_ip4(content->ip)) {
-                ipv6_rules[num++] = r;
+                ipv6_rules.push_back(r);
             }
         }
-        if (num > 0) {
+        if (ipv6_rules.size() != 0) {
             return create_aaaarecord_response(request, settings, ipv6_rules);
         }
     }
@@ -512,18 +511,18 @@ void DnsForwarder::finalize_processed_event(DnsRequestProcessedEvent &event, con
 
 // If we know any DNS64 prefixes, request A RRs from `upstream` and
 // return a synthesized AAAA response or nullptr if synthesis was unsuccessful
-ldns_pkt_ptr DnsForwarder::try_dns64_aaaa_synthesis(Upstream *upstream, const ldns_pkt_ptr &request) const {
+coro::Task<ldns_pkt_ptr> DnsForwarder::try_dns64_aaaa_synthesis(Upstream *upstream, const ldns_pkt_ptr &request) const {
     std::scoped_lock l(m_dns64_prefixes->mtx);
 
     if (m_dns64_prefixes->val.empty()) {
         // No prefixes
-        return nullptr;
+        co_return nullptr;
     }
 
     const ldns_rr *question = ldns_rr_list_rr(ldns_pkt_question(request.get()), 0);
     if (!question || !ldns_rr_owner(question)) {
         dbglog_fid(m_log, request.get(), "DNS64: could not synthesize AAAA response: invalid request");
-        return nullptr;
+        co_return nullptr;
     }
 
     const ldns_pkt_ptr request_a(
@@ -533,23 +532,23 @@ ldns_pkt_ptr DnsForwarder::try_dns64_aaaa_synthesis(Upstream *upstream, const ld
     ldns_pkt_set_rd(request_a.get(), ldns_pkt_rd(request.get()));
     ldns_pkt_set_random_id(request_a.get());
 
-    const auto [response_a, err] = upstream->exchange(request_a.get());
-    if (err.has_value()) {
+    const auto response_a = co_await upstream->exchange(request_a.get());
+    if (response_a.has_error()) {
         dbglog_fid(m_log, request.get(),
-                "DNS64: could not synthesize AAAA response: upstream failed to perform A query: {}", err->c_str());
-        return nullptr;
+                "DNS64: could not synthesize AAAA response: upstream failed to perform A query:\n{}", response_a.error()->str());
+        co_return nullptr;
     }
 
-    const size_t ancount = ldns_pkt_ancount(response_a.get());
+    const size_t ancount = ldns_pkt_ancount(response_a->get());
     if (ancount == 0) {
         dbglog_fid(m_log, request.get(), "DNS64: could not synthesize AAAA response: upstream returned no A records");
-        return nullptr;
+        co_return nullptr;
     }
 
     ldns_rr_list *rr_list = ldns_rr_list_new();
     size_t aaaa_rr_count = 0;
     for (size_t i = 0; i < ancount; ++i) {
-        const ldns_rr *a_rr = ldns_rr_list_rr(ldns_pkt_answer(response_a.get()), i);
+        const ldns_rr *a_rr = ldns_rr_list_rr(ldns_pkt_answer(response_a->get()), i);
 
         if (LDNS_RR_TYPE_A != ldns_rr_get_type(a_rr)) {
             ldns_rr_list_push_rr(rr_list, ldns_rr_clone(a_rr));
@@ -564,13 +563,14 @@ ldns_pkt_ptr DnsForwarder::try_dns64_aaaa_synthesis(Upstream *upstream, const ld
         const Uint8View ip4{ldns_rdf_data(rdf), ldns_rdf_size(rdf)};
 
         for (const Uint8Vector &pref : m_dns64_prefixes->val) { // assume `dns64_prefixes->mtx` is held
-            const auto [ip6, err_synth]
-                    = dns64::synthesize_ipv4_embedded_ipv6_address({pref.data(), std::size(pref)}, ip4);
-            if (err_synth.has_value()) {
+            const auto synth_res =
+                    dns64::synthesize_ipv4_embedded_ipv6_address({pref.data(), std::size(pref)}, ip4);
+            if (synth_res.has_error()) {
                 dbglog_fid(
-                        m_log, request.get(), "DNS64: could not synthesize IPv4-embedded IPv6: {}", err_synth->c_str());
+                        m_log, request.get(), "DNS64: could not synthesize IPv4-embedded IPv6:\n{}", synth_res.error()->str());
                 continue; // Try the next prefix
             }
+            auto &ip6 = synth_res.value();
 
             ldns_rr *aaaa_rr = ldns_rr_clone(a_rr);
             ldns_rr_set_type(aaaa_rr, LDNS_RR_TYPE_AAAA);
@@ -585,14 +585,14 @@ ldns_pkt_ptr DnsForwarder::try_dns64_aaaa_synthesis(Upstream *upstream, const ld
     dbglog_fid(m_log, request.get(), "DNS64: synthesized AAAA RRs: {}", aaaa_rr_count);
     if (aaaa_rr_count == 0) {
         ldns_rr_list_free(rr_list);
-        return nullptr;
+        co_return nullptr;
     }
 
     ldns_pkt *aaaa_resp = ldns_pkt_new();
     ldns_pkt_set_id(aaaa_resp, ldns_pkt_id(request.get()));
     ldns_pkt_set_rd(aaaa_resp, ldns_pkt_rd(request.get()));
-    ldns_pkt_set_ra(aaaa_resp, ldns_pkt_ra(response_a.get()));
-    ldns_pkt_set_cd(aaaa_resp, ldns_pkt_cd(response_a.get()));
+    ldns_pkt_set_ra(aaaa_resp, ldns_pkt_ra(response_a->get()));
+    ldns_pkt_set_cd(aaaa_resp, ldns_pkt_cd(response_a->get()));
     ldns_pkt_set_qr(aaaa_resp, true);
 
     ldns_rr_list_deep_free(ldns_pkt_question(aaaa_resp));
@@ -603,7 +603,7 @@ ldns_pkt_ptr DnsForwarder::try_dns64_aaaa_synthesis(Upstream *upstream, const ld
     ldns_pkt_set_ancount(aaaa_resp, ldns_rr_list_rr_count(rr_list));
     ldns_pkt_set_answer(aaaa_resp, rr_list);
 
-    return ldns_pkt_ptr(aaaa_resp);
+    co_return ldns_pkt_ptr(aaaa_resp);
 }
 
 static Uint8Vector transform_response_to_raw_data(const ldns_pkt *response) {
@@ -620,8 +620,15 @@ DnsForwarder::DnsForwarder() = default;
 
 DnsForwarder::~DnsForwarder() = default;
 
-std::pair<bool, ErrString> DnsForwarder::init(const DnsProxySettings &settings, const DnsProxyEvents &events) {
+static coro::Task<void>
+discover_dns64_prefixes(std::vector<UpstreamOptions> uss, std::shared_ptr<SocketFactory> socket_factory,
+                        dns64::Prefixes prefixes, Logger logger, EventLoop &loop, uint32_t max_tries,
+                        Millis wait_time);
+
+std::pair<bool, ErrString> DnsForwarder::init(EventLoopPtr loop, const DnsProxySettings &settings, const DnsProxyEvents &events) {
     m_log = ag::Logger{"DNS forwarder"};
+    m_loop = std::move(loop);
+    m_shutdown_guard = std::make_shared<bool>(true);
     infolog(m_log, "Initializing forwarder...");
 
     m_settings = &settings;
@@ -640,7 +647,7 @@ std::pair<bool, ErrString> DnsForwarder::init(const DnsProxySettings &settings, 
         return {false, std::move(err)};
     }
 
-    struct SocketFactory::Parameters sf_parameters = {};
+    struct SocketFactory::Parameters sf_parameters = {.loop = *m_loop};
     sf_parameters.enable_route_resolver = settings.enable_route_resolver;
     if (events.on_certificate_verification != nullptr) {
         dbglog(m_log, "Using application_verifier");
@@ -664,26 +671,26 @@ std::pair<bool, ErrString> DnsForwarder::init(const DnsProxySettings &settings, 
     m_socket_factory = std::make_shared<SocketFactory>(std::move(sf_parameters));
 
     infolog(m_log, "Initializing upstreams...");
-    UpstreamFactory us_factory({m_socket_factory.get(), m_settings->ipv6_available});
+    UpstreamFactory us_factory({*m_loop, m_socket_factory.get(), m_settings->ipv6_available});
     m_upstreams.reserve(settings.upstreams.size());
     m_fallbacks.reserve(settings.fallbacks.size());
     for (const UpstreamOptions &options : settings.upstreams) {
         infolog(m_log, "Initializing upstream {}...", options.address);
-        auto [upstream, err] = us_factory.create_upstream(options);
-        if (err.has_value()) {
-            errlog(m_log, "Failed to create upstream: {}", err.value());
+        auto upstream_result = us_factory.create_upstream(options);
+        if (upstream_result.has_error()) {
+            errlog(m_log, "Failed to create upstream: {}", upstream_result.error()->str());
         } else {
-            m_upstreams.emplace_back(std::move(upstream));
+            m_upstreams.emplace_back(std::move(upstream_result.value()));
             infolog(m_log, "Upstream created successfully");
         }
     }
     for (const UpstreamOptions &options : settings.fallbacks) {
         infolog(m_log, "Initializing fallback upstream {}...", options.address);
-        auto [upstream, err] = us_factory.create_upstream(options);
-        if (err.has_value()) {
-            errlog(m_log, "Failed to create fallback upstream: {}", err.value());
+        auto upstream_result = us_factory.create_upstream(options);
+        if (upstream_result.has_error()) {
+            errlog(m_log, "Failed to create fallback upstream: {}", upstream_result.error()->str());
         } else {
-            m_fallbacks.emplace_back(std::move(upstream));
+            m_fallbacks.emplace_back(std::move(upstream_result.value()));
             infolog(m_log, "Fallback upstream created successfully");
         }
     }
@@ -729,44 +736,8 @@ std::pair<bool, ErrString> DnsForwarder::init(const DnsProxySettings &settings, 
     m_dns64_prefixes = std::make_shared<WithMtx<std::vector<Uint8Vector>>>();
     if (settings.dns64.has_value()) {
         infolog(m_log, "DNS64 discovery is enabled");
-
-        std::thread prefixes_discovery_thread(
-                [uss = settings.dns64->upstreams, socket_factory = m_socket_factory, prefixes = m_dns64_prefixes,
-                        m_log = m_log, max_tries = settings.dns64->max_tries, wait_time = settings.dns64->wait_time]() {
-                    UpstreamFactory us_factory({socket_factory.get()});
-                    auto i = max_tries;
-                    while (i--) {
-                        std::this_thread::sleep_for(wait_time);
-                        for (auto &us : uss) {
-                            auto [upstream, err_upstream] = us_factory.create_upstream(us);
-                            if (err_upstream.has_value()) {
-                                dbglog(m_log, "DNS64: failed to create DNS64 upstream: {}", err_upstream->c_str());
-                                continue;
-                            }
-
-                            auto [result, err_prefixes] = dns64::discover_prefixes(upstream);
-                            if (err_prefixes.has_value()) {
-                                dbglog(m_log, "DNS64: error discovering prefixes: {}", err_prefixes->c_str());
-                                continue;
-                            }
-
-                            if (result.empty()) {
-                                dbglog(m_log, "DNS64: no prefixes discovered, retrying");
-                                continue;
-                            }
-
-                            std::scoped_lock l(prefixes->mtx);
-                            prefixes->val = std::move(result);
-
-                            infolog(m_log, "DNS64 prefixes discovered: {}", prefixes->val.size());
-                            return;
-                        }
-                    }
-
-                    dbglog(m_log, "DNS64: failed to discover any prefixes");
-                });
-
-        prefixes_discovery_thread.detach();
+        coro::run_detached(discover_dns64_prefixes(settings.dns64->upstreams, m_socket_factory, m_dns64_prefixes,
+                m_log, *m_loop, settings.dns64->max_tries, settings.dns64->wait_time));
     }
 
     {
@@ -778,30 +749,48 @@ std::pair<bool, ErrString> DnsForwarder::init(const DnsProxySettings &settings, 
     return {true, std::move(err_or_warn)};
 }
 
+static coro::Task<void> discover_dns64_prefixes(std::vector<UpstreamOptions> uss,
+        std::shared_ptr<SocketFactory> socket_factory, dns64::Prefixes prefixes,
+        Logger logger, EventLoop &loop, uint32_t max_tries, Millis wait_time) {
+
+    UpstreamFactory us_factory({.loop = loop, .socket_factory = socket_factory.get()});
+    auto i = max_tries;
+    while (i--) {
+        co_await loop.co_sleep(wait_time);
+        for (auto &us: uss) {
+            auto upstream_result = us_factory.create_upstream(us);
+            if (upstream_result.has_error()) {
+                dbglog(logger, "DNS64: failed to create DNS64 upstream: {}", upstream_result.error()->str());
+                continue;
+            }
+
+            auto result = co_await dns64::discover_prefixes(upstream_result.value());
+            if (result.has_error()) {
+                dbglog(logger, "DNS64: error discovering prefixes:\n{}", result.error()->str());
+                continue;
+            }
+
+            if (result->empty()) {
+                dbglog(logger, "DNS64: no prefixes discovered, retrying");
+                continue;
+            }
+
+            std::scoped_lock l(prefixes->mtx);
+            prefixes->val = std::move(result.value());
+
+            infolog(logger, "DNS64 prefixes discovered: {}", prefixes->val.size());
+            co_return;
+        }
+    }
+
+    dbglog(logger, "DNS64: failed to discover any prefixes");
+}
+
 void DnsForwarder::deinit() {
     infolog(m_log, "Deinitializing...");
 
-    {
-        infolog(m_log, "Cancelling unstarted async requests...");
-        std::unique_lock l(m_async_reqs_mtx);
-        for (auto it = m_async_reqs.begin(); it != m_async_reqs.end();) {
-            if (int r = uv_cancel((uv_req_t *) &it->second.work); r != 0) {
-                assert(r == UV_EBUSY);
-                ++it;
-            } else {
-                it = m_async_reqs.erase(it);
-            }
-        }
-
-        infolog(m_log, "Wait for started async requests to finish...");
-        m_async_reqs_cv.wait(l, [&]() {
-            return m_async_reqs.empty();
-        });
-        infolog(m_log, "Done");
-
-        infolog(m_log, "All async requests are cancelled");
-    }
     m_settings = nullptr;
+    m_shutdown_guard.reset();
 
     infolog(m_log, "Destroying upstreams...");
     m_upstreams.clear();
@@ -880,7 +869,7 @@ CacheResult DnsForwarder::create_response_from_cache(const std::string &key, con
 
     // Patch EDNS UDP SIZE
     if (ldns_pkt_edns(r.response.get())) {
-        ldns_pkt_set_edns_udp_size(r.response.get(), ag::UDP_RECV_BUF_SIZE);
+        ldns_pkt_set_edns_udp_size(r.response.get(), UDP_RECV_BUF_SIZE);
     }
 
     // Patch response question section
@@ -981,7 +970,7 @@ static ldns_rr_type question_rr_type(const ldns_pkt *request) {
     return ldns_rr_get_type(ldns_rr_list_rr(ldns_pkt_question(request), 0));
 }
 
-Uint8Vector DnsForwarder::handle_message_internal(
+coro::Task<Uint8Vector> DnsForwarder::handle_message_internal(
         Uint8View message, const DnsMessageInfo *info, bool fallback_only, uint16_t pkt_id) {
     DnsRequestProcessedEvent event = {};
     event.start_time = duration_cast<Millis>(SystemClock::now().time_since_epoch()).count();
@@ -994,7 +983,7 @@ Uint8Vector DnsForwarder::handle_message_internal(
         finalize_processed_event(event, nullptr, nullptr, nullptr, std::nullopt, std::move(err));
         ldns_pkt_ptr response(create_formerr_response(pkt_id));
         log_packet(m_log, response.get(), "Format error response");
-        return transform_response_to_raw_data(response.get());
+        co_return transform_response_to_raw_data(response.get());
     }
 
     ldns_pkt_ptr req_holder = ldns_pkt_ptr(request);
@@ -1008,7 +997,7 @@ Uint8Vector DnsForwarder::handle_message_internal(
         log_packet(m_log, response.get(), "Server failure response");
         finalize_processed_event(event, nullptr, response.get(), nullptr, std::nullopt, std::move(err));
         Uint8Vector raw_response = transform_response_to_raw_data(response.get());
-        return raw_response;
+        co_return raw_response;
     }
 
     auto domain = AllocatedPtr<char>(ldns_rdf2str(ldns_rr_owner(question)));
@@ -1030,19 +1019,13 @@ Uint8Vector DnsForwarder::handle_message_internal(
         Uint8Vector raw_response = transform_response_to_raw_data(cached.response.get());
         if (cached.expired) {
             assert(m_settings->optimistic_cache);
-            std::unique_lock l(m_async_reqs_mtx);
-            auto [it, emplaced] = m_async_reqs.emplace(
-                    std::piecewise_construct, std::forward_as_tuple(cache_key), std::forward_as_tuple());
-            if (emplaced) {
-                AsyncRequest &task = it->second;
-                task.forwarder = this;
-                task.request = std::move(req_holder);
-                task.cache_key = std::move(cache_key);
-                task.normalized_domain = normalized_domain;
-                uv_queue_work(nullptr, &task.work, async_request_worker, async_request_finalizer);
-            }
+            this->optimistic_cache_background_resolve(
+                        std::move(req_holder),
+                        std::move(cache_key),
+                        std::string{normalized_domain})
+                    .run_detached();
         }
-        return raw_response;
+        co_return raw_response;
     }
 
     const ldns_rr_type type = ldns_rr_get_type(question);
@@ -1053,7 +1036,7 @@ Uint8Vector DnsForwarder::handle_message_internal(
         log_packet(m_log, response.get(), "Mozilla DOH blocking response");
         Uint8Vector raw_response = transform_response_to_raw_data(response.get());
         finalize_processed_event(event, request, response.get(), nullptr, std::nullopt, std::nullopt);
-        return raw_response;
+        co_return raw_response;
     }
 
     tracelog_fid(m_log, request, "Query domain: {}", normalized_domain);
@@ -1063,7 +1046,7 @@ Uint8Vector DnsForwarder::handle_message_internal(
     // IPv6 blocking
     if (m_settings->block_ipv6 && LDNS_RR_TYPE_AAAA == type) {
         ldns_pkt_rcode rc = LDNS_RCODE_NOERROR;
-        auto raw_blocking_response = apply_filter(
+        auto raw_blocking_response = co_await apply_filter(
                 {
                         .domain = normalized_domain,
                         .rr_type = question_rr_type(request),
@@ -1073,56 +1056,58 @@ Uint8Vector DnsForwarder::handle_message_internal(
             dbglog_fid(m_log, request, "AAAA DNS query blocked because IPv6 blocking is enabled");
             ldns_pkt_ptr response(create_soa_response(request, m_settings, SOA_RETRY_IPV6_BLOCK));
             log_packet(m_log, response.get(), "IPv6 blocking response");
-            return transform_response_to_raw_data(response.get());
+            co_return transform_response_to_raw_data(response.get());
         }
-        return *raw_blocking_response;
+        co_return *raw_blocking_response;
     }
 
-    if (auto raw_blocking_response = apply_filter(
+    if (auto raw_blocking_response = co_await apply_filter(
                 {
                         .domain = normalized_domain,
                         .rr_type = question_rr_type(request),
                 },
                 request, nullptr, event, effective_rules, fallback_only)) {
-        return *raw_blocking_response;
+        co_return *raw_blocking_response;
     }
 
     bool is_our_do_bit = do_dnssec_log_logic(request);
 
     // If this is a retransmitted request, use fallback upstreams only
-    auto [response, err_str, selected_upstream] = do_upstream_exchange(normalized_domain, request, fallback_only, info);
+    auto [response, selected_upstream] = co_await do_upstream_exchange(
+            normalized_domain, request, fallback_only, info);
 
     if (!response) {
+        auto err = response.error();
         response = ldns_pkt_ptr(create_servfail_response(request));
-        log_packet(m_log, response.get(), "Server failure response");
-        Uint8Vector raw_response = transform_response_to_raw_data(response.get());
-        finalize_processed_event(event, request, response.get(), nullptr,
-                std::make_optional(selected_upstream->options().id), std::move(err_str));
-        return raw_response;
+        log_packet(m_log, response->get(), "Server failure response");
+        Uint8Vector raw_response = transform_response_to_raw_data(response->get());
+        finalize_processed_event(event, request, response->get(), nullptr,
+                std::make_optional(selected_upstream->options().id), err->str());
+        co_return raw_response;
     }
 
-    log_packet(m_log, response.get(), AG_FMT("Upstream ({}) response", selected_upstream->options().address).c_str());
+    log_packet(m_log, response->get(), AG_FMT("Upstream ({}) response", selected_upstream->options().address).c_str());
 
-    event.dnssec = finalize_dnssec_log_logic(response.get(), is_our_do_bit);
+    event.dnssec = finalize_dnssec_log_logic(response->get(), is_our_do_bit);
 
-    const auto ancount = ldns_pkt_ancount(response.get());
-    const auto rcode = ldns_pkt_get_rcode(response.get());
+    const auto ancount = ldns_pkt_ancount(response->get());
+    const auto rcode = ldns_pkt_get_rcode(response->get());
 
     if (LDNS_RCODE_NOERROR == rcode) {
         for (size_t i = 0; i < ancount; ++i) {
             // CNAME response blocking
-            auto rr = ldns_rr_list_rr(ldns_pkt_answer(response.get()), i);
+            auto rr = ldns_rr_list_rr(ldns_pkt_answer(response->get()), i);
             if (ldns_rr_get_type(rr) == LDNS_RR_TYPE_CNAME) {
-                if (auto raw_response
-                        = apply_cname_filter(rr, request, response.get(), event, effective_rules, fallback_only)) {
-                    return *raw_response;
+                if (auto raw_response = co_await apply_cname_filter(
+                        rr, request, response->get(), event, effective_rules, fallback_only)) {
+                    co_return *raw_response;
                 }
             }
             // IP response blocking
             if (ldns_rr_get_type(rr) == LDNS_RR_TYPE_A || ldns_rr_get_type(rr) == LDNS_RR_TYPE_AAAA) {
-                if (auto raw_response
-                        = apply_ip_filter(rr, request, response.get(), event, effective_rules, fallback_only)) {
-                    return *raw_response;
+                if (auto raw_response = co_await apply_ip_filter(
+                        rr, request, response->get(), event, effective_rules, fallback_only)) {
+                    co_return *raw_response;
                 }
             }
         }
@@ -1131,46 +1116,48 @@ Uint8Vector DnsForwarder::handle_message_internal(
         if (m_settings->dns64.has_value() && LDNS_RR_TYPE_AAAA == type) {
             bool has_aaaa = false;
             for (size_t i = 0; i < ancount; ++i) {
-                auto rr = ldns_rr_list_rr(ldns_pkt_answer(response.get()), i);
+                auto rr = ldns_rr_list_rr(ldns_pkt_answer(response->get()), i);
                 if (ldns_rr_get_type(rr) == LDNS_RR_TYPE_AAAA) {
                     has_aaaa = true;
                 }
             }
             if (!has_aaaa) {
-                if (auto synth_response = try_dns64_aaaa_synthesis(selected_upstream, req_holder)) {
+                if (auto synth_response = co_await try_dns64_aaaa_synthesis(selected_upstream, req_holder)) {
                     response = std::move(synth_response);
-                    log_packet(m_log, response.get(), "DNS64 synthesized response");
+                    log_packet(m_log, response->get(), "DNS64 synthesized response");
                 }
             }
         }
 
         if (m_settings->block_ech) {
-            remove_ech_svcparam(response.get());
+            remove_ech_svcparam(response->get());
         }
     }
 
-    truncate_response(response.get(), request, info);
-    Uint8Vector raw_response = transform_response_to_raw_data(response.get());
+    truncate_response(response->get(), request, info);
+    Uint8Vector raw_response = transform_response_to_raw_data(response->get());
     event.bytes_sent = message.size();
     event.bytes_received = raw_response.size();
-    finalize_processed_event(event, request, response.get(), nullptr, selected_upstream->options().id, std::nullopt);
-    put_response_into_cache(std::move(cache_key), std::move(response), selected_upstream->options().id);
-    return raw_response;
+    finalize_processed_event(event, request, response->get(), nullptr, selected_upstream->options().id, std::nullopt);
+    put_response_into_cache(std::move(cache_key), std::move(response.value()), selected_upstream->options().id);
+    co_return raw_response;
 }
 
-std::optional<Uint8Vector> DnsForwarder::apply_cname_filter(const ldns_rr *cname_rr, const ldns_pkt *request,
+coro::Task<std::optional<Uint8Vector>> DnsForwarder::apply_cname_filter(
+        const ldns_rr *cname_rr, const ldns_pkt *request,
         const ldns_pkt *response, DnsRequestProcessedEvent &event, std::vector<DnsFilter::Rule> &last_effective_rules,
         bool fallback_only) {
+
     assert(ldns_rr_get_type(cname_rr) == LDNS_RR_TYPE_CNAME);
 
     auto rdf = ldns_rr_rdf(cname_rr, 0);
     if (!rdf) {
-        return std::nullopt;
+        co_return std::nullopt;
     }
 
     AllocatedPtr<char> cname_ptr(ldns_rdf2str(rdf));
     if (!cname_ptr) {
-        return std::nullopt;
+        co_return std::nullopt;
     }
 
     std::string_view cname = cname_ptr.get();
@@ -1180,7 +1167,7 @@ std::optional<Uint8Vector> DnsForwarder::apply_cname_filter(const ldns_rr *cname
 
     tracelog_fid(m_log, response, "Response CNAME: {}", cname);
 
-    return apply_filter(
+    co_return co_await apply_filter(
             {
                     .domain = cname,
                     .rr_type = LDNS_RR_TYPE_CNAME,
@@ -1188,28 +1175,32 @@ std::optional<Uint8Vector> DnsForwarder::apply_cname_filter(const ldns_rr *cname
             request, response, event, last_effective_rules, fallback_only);
 }
 
-std::optional<Uint8Vector> DnsForwarder::apply_ip_filter(const ldns_rr *rr, const ldns_pkt *request,
+coro::Task<std::optional<Uint8Vector>> DnsForwarder::apply_ip_filter(
+        const ldns_rr *rr, const ldns_pkt *request,
         const ldns_pkt *response, DnsRequestProcessedEvent &event, std::vector<DnsFilter::Rule> &last_effective_rules,
         bool fallback_only) {
     assert(ldns_rr_get_type(rr) == LDNS_RR_TYPE_A || ldns_rr_get_type(rr) == LDNS_RR_TYPE_AAAA);
 
     auto rdf = ldns_rr_rdf(rr, 0);
     if (!rdf || (ldns_rdf_size(rdf) != IPV4_ADDRESS_SIZE && ldns_rdf_size(rdf) != IPV6_ADDRESS_SIZE)) {
-        return std::nullopt;
+        co_return std::nullopt;
     }
     Uint8View addr{ldns_rdf_data(rdf), ldns_rdf_size(rdf)};
     std::string addr_str = ag::utils::addr_to_str(addr);
 
     tracelog_fid(m_log, response, "Response IP: {}", addr_str);
 
-    return apply_filter({.domain = addr_str, .rr_type = ldns_rr_get_type(rr)}, request, response, event,
+    co_return co_await apply_filter(
+            {.domain = addr_str, .rr_type = ldns_rr_get_type(rr)}, request, response, event,
             last_effective_rules, fallback_only);
 }
 
-std::optional<Uint8Vector> DnsForwarder::apply_filter(DnsFilter::MatchParam match, const ldns_pkt *request,
+coro::Task<std::optional<Uint8Vector>> DnsForwarder::apply_filter(
+        DnsFilter::MatchParam match, const ldns_pkt *request,
         const ldns_pkt *original_response, DnsRequestProcessedEvent &event,
         std::vector<DnsFilter::Rule> &last_effective_rules, bool fallback_only, bool fire_event,
         ldns_pkt_rcode *out_rcode) {
+
     auto rules = m_filter.match(m_filter_handle, match);
     for (const DnsFilter::Rule &rule : rules) {
         tracelog_fid(m_log, request, "Matched rule: {}", rule.text);
@@ -1245,13 +1236,13 @@ std::optional<Uint8Vector> DnsForwarder::apply_filter(DnsFilter::MatchParam matc
         event_append_rules(event, effective_rules.leftovers);
     }
 
-    if (const ag::DnsFilter::AdblockRuleInfo * content; !rewrite_info.has_value()
+    if (const DnsFilter::AdblockRuleInfo * content; !rewrite_info.has_value()
             && (effective_rules.leftovers.empty()
                     || (nullptr
-                                    != (content = std::get_if<ag::DnsFilter::AdblockRuleInfo>(
+                                    != (content = std::get_if<DnsFilter::AdblockRuleInfo>(
                                                 &effective_rules.leftovers[0]->content))
                             && content->props.test(DnsFilter::DARP_EXCEPTION)))) {
-        return std::nullopt;
+        co_return std::nullopt;
     }
 
     if (effective_rules.dnsrewrite.empty()) {
@@ -1273,15 +1264,15 @@ std::optional<Uint8Vector> DnsForwarder::apply_filter(DnsFilter::MatchParam matc
 
         log_packet(m_log, rewritten_request.get(), "Rewritten cname request");
 
-        auto [response, err, _] = this->do_upstream_exchange(rwr_cname, rewritten_request.get(), fallback_only);
+        auto [response, _] = co_await this->do_upstream_exchange(rwr_cname, rewritten_request.get(), fallback_only);
         if (!response) {
-            dbglog_id(m_log, rewritten_request.get(), "Failed to resolve rewritten cname: {}", *err);
-            return std::nullopt;
+            dbglog_id(m_log, rewritten_request.get(), "Failed to resolve rewritten cname: {}", response.error()->str());
+            co_return std::nullopt;
         }
 
         log_packet(m_log, rewritten_request.get(), "Rewritten cname response");
-        for (size_t i = 0; i < ldns_pkt_ancount(response.get()); ++i) {
-            ldns_rr *rr = ldns_rr_list_rr(ldns_pkt_answer(response.get()), i);
+        for (size_t i = 0; i < ldns_pkt_ancount(response->get()); ++i) {
+            ldns_rr *rr = ldns_rr_list_rr(ldns_pkt_answer(response->get()), i);
             if (ldns_rr_get_type(rr) == ldns_rr_get_type(question)) {
                 ldns_rdf_deep_free(ldns_rr_owner(rr));
                 ldns_rr_set_owner(rr, nullptr);
@@ -1301,10 +1292,10 @@ std::optional<Uint8Vector> DnsForwarder::apply_filter(DnsFilter::MatchParam matc
         finalize_processed_event(event, request, response.get(), original_response, std::nullopt, std::nullopt);
     }
 
-    return raw_response;
+    co_return raw_response;
 }
 
-UpstreamExchangeResult DnsForwarder::do_upstream_exchange(
+coro::Task<UpstreamExchangeResult> DnsForwarder::do_upstream_exchange(
         std::string_view normalized_domain, ldns_pkt *request, bool fallback_only, const DnsMessageInfo *info) {
     bool use_only_fallbacks
             = !m_fallbacks.empty() && (fallback_only || apply_fallback_filter(normalized_domain, request));
@@ -1316,7 +1307,8 @@ UpstreamExchangeResult DnsForwarder::do_upstream_exchange(
 
     assert(m_upstreams.size() + m_fallbacks.size());
     Upstream *cur_upstream;
-    std::string err_str;
+    Error<DnsError> err;
+    std::weak_ptr<bool> guard = m_shutdown_guard;
     for (auto upstream_vector : v) {
         std::vector<Upstream *> sorted_upstreams;
         sorted_upstreams.reserve(upstream_vector->size());
@@ -1329,61 +1321,52 @@ UpstreamExchangeResult DnsForwarder::do_upstream_exchange(
 
         for (auto &sorted_upstream : sorted_upstreams) {
             cur_upstream = sorted_upstream;
+            std::string address = cur_upstream->options().address;
 
             ag::utils::Timer t;
-            tracelog_id(m_log, request, "Upstream ({}) is starting an exchange", cur_upstream->options().address);
-            Upstream::ExchangeResult result = cur_upstream->exchange(request, info);
-            tracelog_id(m_log, request, "Upstream's ({}) exchanging is done", cur_upstream->options().address);
+            tracelog_id(m_log, request, "Upstream ({}) is starting an exchange", address);
+            Upstream::ExchangeResult result = co_await cur_upstream->exchange(request, info);
+            tracelog_id(m_log, request, "Upstream's ({}) exchanging is done", address);
+            if (guard.expired()) {
+                co_return {make_error(DE_SHUTTING_DOWN), nullptr};
+            }
             cur_upstream->adjust_rtt(t.elapsed<Millis>());
 
-            if (!result.error.has_value()) {
-                return {std::move(result.packet), std::nullopt, cur_upstream};
-            } else if (result.error.value() != TIMEOUT_STR) {
+            if (!result.has_error()) {
+                co_return {std::move(result.value()), cur_upstream};
+            } else if (result.error()->value() != DE_TIMED_OUT && result.error()->value() != DE_SHUTTING_DOWN) {
                 // https://github.com/AdguardTeam/DnsLibs/issues/86
-                Upstream::ExchangeResult retry_result = cur_upstream->exchange(request, info);
-                if (!retry_result.error.has_value()) {
-                    return {std::move(retry_result.packet), std::nullopt, cur_upstream};
+                Upstream::ExchangeResult retry_result = co_await cur_upstream->exchange(request, info);
+                if (!retry_result.has_error()) {
+                    co_return {std::move(retry_result.value()), cur_upstream};
                 }
-                err_str = AG_FMT("Upstream ({}) exchange failed: first reason is {}, second is: {}",
-                        cur_upstream->options().address, result.error.value(), retry_result.error.value());
-                dbglog_id(m_log, request, "{}", err_str);
+                err = make_error(DE_NESTED_DNS_ERROR, AG_FMT("Upstream ({}) exchange failed: first reason is:\n{}\nsecond reason is:", address, result.error()->str()), retry_result.error());
+                dbglog_id(m_log, request, "{}", err->str());
             } else {
-                dbglog_id(m_log, request, "Upstream ({}) exchange failed: {}", cur_upstream->options().address,
-                        result.error.value());
+                err = make_error(DE_NESTED_DNS_ERROR, AG_FMT("Upstream ({}) exchange failed", address, result.error()->str()));
+                dbglog_id(m_log, request, "{}", err->str());
             }
         }
     }
-    return {nullptr, std::move(err_str), cur_upstream};
+    co_return {err, cur_upstream};
 }
 
-void DnsForwarder::async_request_worker(uv_work_t *work) {
-    auto *task = (AsyncRequest *) work->data;
-    auto *self = task->forwarder;
-    auto *req = task->request.get();
-    const std::string &key = task->cache_key;
-    const std::string &normalized_domain = task->normalized_domain;
-
-    dbglog_id(self->m_log, req, "Starting async upstream exchange for {}", key);
-
-    auto [res, err, upstream] = self->do_upstream_exchange(normalized_domain, req, false);
-    if (!res) {
-        dbglog_id(self->m_log, req, "Async upstream exchange failed: {}, removing entry from cache", *err);
-        std::unique_lock l(self->m_response_cache.mtx);
-        self->m_response_cache.val.erase(key);
-    } else {
-        log_packet(self->m_log, res.get(), "Async upstream exchange result");
-        self->put_response_into_cache(key, std::move(res), upstream->options().id);
+coro::Task<void> DnsForwarder::optimistic_cache_background_resolve(ldns_pkt_ptr req,
+        std::string key, std::string normalized_domain) {
+    dbglog_id(m_log, req.get(), "Starting async upstream exchange for {}", key);
+    std::weak_ptr<bool> guard = m_shutdown_guard;
+    auto [res, upstream] = co_await do_upstream_exchange(normalized_domain, req.get(), false);
+    if (guard.expired()) {
+        co_return;
     }
-}
-
-void DnsForwarder::async_request_finalizer(uv_work_t *work, int) {
-    auto *task = (AsyncRequest *) work->data;
-    auto *self = task->forwarder;
-    std::string key = std::move(task->cache_key);
-    self->m_async_reqs_mtx.lock();
-    self->m_async_reqs.erase(key);
-    self->m_async_reqs_mtx.unlock();
-    self->m_async_reqs_cv.notify_all();
+    if (res.has_error()) {
+        dbglog_id(m_log, req.get(), "Async upstream exchange failed, removing entry from cache: {}", res.error()->str());
+        m_response_cache.val.erase(key);
+    } else {
+        log_packet(m_log, res->get(), "Async upstream exchange result");
+        this->put_response_into_cache(key, std::move(res.value()), upstream->options().id);
+    }
+    co_return;
 }
 
 bool DnsForwarder::do_dnssec_log_logic(ldns_pkt *request) {
@@ -1395,7 +1378,7 @@ bool DnsForwarder::do_dnssec_log_logic(ldns_pkt *request) {
         // https://tools.ietf.org/html/rfc3225#section-3
         ldns_pkt_set_edns_do(request, true);
         // @todo truncate reply to size expected by client
-        ldns_pkt_set_edns_udp_size(request, ag::UDP_RECV_BUF_SIZE);
+        ldns_pkt_set_edns_udp_size(request, UDP_RECV_BUF_SIZE);
         is_our_do_bit = true;
     }
 
@@ -1501,10 +1484,17 @@ bool DnsForwarder::apply_fallback_filter(std::string_view hostname, const ldns_p
     return false;
 }
 
-Uint8Vector DnsForwarder::handle_message(Uint8View message, const DnsMessageInfo *info) {
+coro::Task<Uint8Vector> DnsForwarder::handle_message(Uint8View message, const DnsMessageInfo *info) {
+    std::weak_ptr<bool> guard = m_shutdown_guard;
+    // Move to EventLoop
+    co_await m_loop->co_submit();
+    if (guard.expired()) {
+        co_return {};
+    }
+
     if (message.size() < LDNS_HEADER_SIZE) {
         dbglog_f(m_log, "Not responding to malformed message");
-        return {};
+        co_return {};
     }
 
     uint16_t pkt_id = read_uint16_be(message);
@@ -1519,20 +1509,23 @@ Uint8Vector DnsForwarder::handle_message(Uint8View message, const DnsMessageInfo
         }
     }
 
-    Uint8Vector result = this->handle_message_internal(message, info, retransmitted, pkt_id);
+    Uint8Vector result = co_await this->handle_message_internal(message, info, retransmitted, pkt_id);
+    if (guard.expired()) {
+        co_return {};
+    }
 
     if (retransmission_handling) {
         m_retransmission_detector.deregister_packet(pkt_id, info->peername);
     }
 
-    return result;
+    co_return result;
 }
 
 // Truncate response, if needed
 void DnsForwarder::truncate_response(ldns_pkt *response, const ldns_pkt *request, const DnsMessageInfo *info) {
     if (info && info->proto == utils::TP_UDP) {
         size_t max_size = ldns_pkt_edns(request) ? ldns_pkt_edns_udp_size(request) : 512;
-        bool truncated = ag::ldns_pkt_truncate(response, max_size);
+        bool truncated = dns::ldns_pkt_truncate(response, max_size);
         if (truncated && m_log.is_enabled(ag::LogLevel::LOG_LEVEL_DEBUG)) {
             log_packet(m_log, response,
                     AG_FMT("Truncated response (edns: {}, max size: {})", ldns_pkt_edns(request), max_size));
@@ -1591,4 +1584,4 @@ void DnsForwarder::remove_ech_svcparam(ldns_pkt *response) {
     }
 }
 
-} // namespace ag
+} // namespace ag::dns

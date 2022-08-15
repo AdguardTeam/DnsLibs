@@ -1,13 +1,13 @@
-#include "net/socket.h"
+#include "dns/net/socket.h"
 #include <atomic>
 
-namespace ag {
+namespace ag::dns {
 
 static std::atomic_size_t next_id = {0};
 
 Socket::Socket(const std::string &logger_name, SocketFactory::SocketParameters parameters, PrepareFdCallback prepare_fd)
         : m_log(logger_name)
-        , m_id(next_id.fetch_add(1, std::memory_order::memory_order_relaxed))
+        , m_id(next_id.fetch_add(1, std::memory_order_relaxed))
         , m_parameters(std::move(parameters))
         , m_prepare_fd(prepare_fd) {
 }
@@ -25,4 +25,4 @@ SocketAddress Socket::get_peer() const {
     return utils::get_peer_address(fd.value()).value_or(SocketAddress{});
 }
 
-} // namespace ag
+} // namespace ag::dns

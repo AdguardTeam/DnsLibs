@@ -1,9 +1,9 @@
 #include <openssl/x509v3.h>
 
 #include "common/logger.h"
-#include "net/default_verifier.h"
+#include "dns/net/default_verifier.h"
 
-namespace ag {
+namespace ag::dns {
 
 #if defined __APPLE__ && defined __MACH__ && TARGET_OS_IPHONE
 
@@ -128,4 +128,4 @@ ErrString DefaultVerifier::verify(X509_STORE_CTX *ctx_template, std::string_view
     return std::nullopt;
 }
 
-} // namespace ag
+} // namespace ag::dns

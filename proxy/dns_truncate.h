@@ -2,7 +2,7 @@
 
 #include <ldns/packet.h>
 
-namespace ag {
+namespace ag::dns {
 
 /**
  * Remove zero or more RRs from `pkt` so that the output of `ldns_pkt2buffer_wire` would not exceed `max_size`.
@@ -11,4 +11,4 @@ namespace ag {
  */
 bool ldns_pkt_truncate(ldns_pkt *pkt, uint16_t max_size);
 
-} // namespace ag
+} // namespace ag::dns

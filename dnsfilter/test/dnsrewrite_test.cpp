@@ -2,11 +2,11 @@
 #include <gtest/gtest.h>
 #include <numeric>
 
-#include "dnsfilter/dnsfilter.h"
+#include "dns/dnsfilter/dnsfilter.h"
 
 #include "../rule_utils.h"
 
-namespace ag::dnsfilter::test {
+namespace ag::dns::dnsfilter::test {
 
 class DnsrewriteTest : public ::testing::Test {
 protected:
@@ -492,4 +492,4 @@ TEST_F(DnsrewriteTest, ExcludeSpecific) {
     ASSERT_TRUE(r.rewritten_info.has_value());
 }
 
-} // namespace ag::dnsfilter::test
+} // namespace ag::dns::dnsfilter::test

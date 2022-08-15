@@ -6,10 +6,10 @@
 #include <string_view>
 #include <vector>
 
-#include "dnsstamp/dns_stamp.h"
+#include "dns/dnsstamp/dns_stamp.h"
 #include <gtest/gtest.h>
 
-namespace ag::test {
+namespace ag::dns::test {
 
 // generated with:
 // openssl x509 -noout -fingerprint -sha256 -inform pem -in /etc/ssl/certs/Go_Daddy_Class_2_CA.pem
@@ -45,21 +45,21 @@ protected:
 static void test_server_stamp_create(const ServerStamp &stamp, std::string_view expected) {
     auto stamp_str = stamp.str();
     ASSERT_EQ(stamp_str, expected);
-    auto [parsed_stamp, err] = ServerStamp::from_string(stamp_str);
-    ASSERT_FALSE(err);
-    auto ps = parsed_stamp.str();
+    auto parse_result = ServerStamp::from_string(stamp_str);
+    ASSERT_FALSE(parse_result.has_error());
+    auto ps = parse_result->str();
     ASSERT_EQ(ps, stamp_str);
 }
 
 using IsStampValidFunction = std::function<bool(const ServerStamp &)>;
 
 static void test_server_stamp_parse(const char *stamp_str, const IsStampValidFunction &is_stamp_valid) {
-    auto [stamp, err] = ServerStamp::from_string(stamp_str);
+    auto parse_result = ServerStamp::from_string(stamp_str);
     if (is_stamp_valid) {
-        ASSERT_FALSE(err) << *err;
-        ASSERT_TRUE(is_stamp_valid(stamp));
+        ASSERT_FALSE(parse_result.has_error()) << parse_result.error()->str();
+        ASSERT_TRUE(is_stamp_valid(parse_result.value()));
     } else {
-        ASSERT_TRUE(err);
+        ASSERT_TRUE(parse_result.has_error());
     }
 }
 
@@ -319,10 +319,10 @@ TEST_F(DnsstampTest, TestPrettyUrlAndStr) {
             },
     };
     for (auto &d : data) {
-        auto [stamp, error] = ServerStamp::from_string(d.ugly);
-        ASSERT_FALSE(error) << *error << " (" << d.ugly << ")";
-        ASSERT_EQ(d.pretty, stamp.pretty_url(d.pretty_dnscrypt));
-        ASSERT_EQ(d.ugly, stamp.str());
+        auto stamp_result = ServerStamp::from_string(d.ugly);
+        ASSERT_FALSE(stamp_result.has_error()) << stamp_result.error()->str() << " (" << d.ugly << ")";
+        ASSERT_EQ(d.pretty, stamp_result->pretty_url(d.pretty_dnscrypt));
+        ASSERT_EQ(d.ugly, stamp_result->str());
     }
 }
 

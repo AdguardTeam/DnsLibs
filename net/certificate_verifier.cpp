@@ -1,7 +1,7 @@
-#include "net/certificate_verifier.h"
+#include "dns/net/certificate_verifier.h"
 #include <openssl/x509v3.h>
 
-namespace ag {
+namespace ag::dns {
 
 ErrString CertificateVerifier::verify_host_name(X509 *certificate, std::string_view host) const {
     uint32_t flags = X509_CHECK_FLAG_ALWAYS_CHECK_SUBJECT;
@@ -13,4 +13,4 @@ ErrString CertificateVerifier::verify_host_name(X509 *certificate, std::string_v
     }
 }
 
-} // namespace ag
+} // namespace ag::dns

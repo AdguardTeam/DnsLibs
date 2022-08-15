@@ -4,9 +4,11 @@
 #include <csignal>
 #include <thread>
 
-#include "proxy/dnsproxy.h"
+#include "dns/proxy/dnsproxy.h"
 
-using namespace ag;
+using namespace ag::dns;
+using ag::Logger;
+using ag::LogLevel;
 
 static_assert(std::atomic_bool::is_always_lock_free, "Atomic bools are not always lock-free");
 static std::atomic_bool keep_running{true};
@@ -28,9 +30,8 @@ int main() {
     DnsProxySettings settings = DnsProxySettings::get_default();
     settings.listeners = {{address, port, ag::utils::TP_UDP, persistent, idle_timeout},
             {address, port, ag::utils::TP_TCP, persistent, idle_timeout}};
-    /* settings.upstreams = {{.address = "https://cloudflare-dns.com/dns-query", .bootstrap = {"1.1.1.1"}, .timeout =
-     * 2s}}; */
-    /* settings.upstreams = {{.address = "quic://dns.adguard.com", .bootstrap = {"1.1.1.1"}, .timeout = 2s}}; */
+    //settings.upstreams = {{.address = "https://cloudflare-dns.com/dns-query", .bootstrap = {"1.1.1.1"}, .timeout = 2s}};
+    //settings.upstreams = {{.address = "quic://dns.adguard.com", .bootstrap = {"1.1.1.1"}, .timeout = 2s}};
     settings.upstreams = {{.address = "94.140.14.14", .bootstrap = {}, .timeout = 2s}};
     settings.filter_params = {{{.data = "0.0.0.0 evil.com\n"
                                         "||evil.org^\n",
@@ -49,9 +50,7 @@ int main() {
     std::signal(SIGPIPE, SIG_IGN);
 #endif
 
-    while (keep_running) {
-        std::this_thread::sleep_for(100ms);
-    }
+    getchar();
 
     proxy.deinit();
     return 0;

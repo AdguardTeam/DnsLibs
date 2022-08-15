@@ -2,7 +2,7 @@
 
 #define log_sock(s_, lvl_, fmt_, ...) lvl_##log((s_)->m_log, "[id={}] {}(): " fmt_, (s_)->m_id, __func__, ##__VA_ARGS__)
 
-namespace ag {
+namespace ag::dns {
 
 ProxiedSocket::ProxiedSocket(Parameters p)
         : Socket(__func__, std::move(p.socket_parameters), p.prepare_fd)
@@ -21,11 +21,11 @@ std::optional<evutil_socket_t> ProxiedSocket::get_fd() const {
     return !m_proxy_id.has_value() ? std::nullopt : m_proxy->get_fd(m_proxy_id.value());
 }
 
-std::optional<Socket::Error> ProxiedSocket::connect(ConnectParameters params) {
+Error<SocketError> ProxiedSocket::connect(ConnectParameters params) {
     log_sock(this, trace, "{}", params.peer.str());
 
-    if (auto err = this->set_callbacks(params.callbacks); err.has_value()) {
-        log_sock(this, dbg, "Failed to set callbacks: {} ({})", err->description, err->code);
+    if (auto err = this->set_callbacks(params.callbacks)) {
+        log_sock(this, dbg, "Failed to set callbacks: {}", err->str());
         assert(0);
         return err;
     }
@@ -33,11 +33,11 @@ std::optional<Socket::Error> ProxiedSocket::connect(ConnectParameters params) {
     auto r = m_proxy->connect({params.loop, this->get_protocol(), params.peer,
             {on_successful_proxy_connection, on_proxy_connection_failed, on_connected, on_read, on_close, this},
             params.timeout});
-    if (auto *e = std::get_if<Socket::Error>(&r); e != nullptr) {
-        return std::move(*e);
+    if (r.has_error()) {
+        return r.error();
     }
 
-    m_proxy_id = std::get<uint32_t>(r);
+    m_proxy_id = r.value();
 
     m_fallback_info = std::make_unique<struct FallbackInfo>();
     m_fallback_info->loop = params.loop;
@@ -45,18 +45,18 @@ std::optional<Socket::Error> ProxiedSocket::connect(ConnectParameters params) {
     m_fallback_info->connect_timestamp = SteadyClock::now();
     m_fallback_info->timeout = params.timeout;
 
-    return std::nullopt;
+    return {};
 }
 
-std::optional<Socket::Error> ProxiedSocket::send(Uint8View data) {
+Error<SocketError> ProxiedSocket::send(Uint8View data) {
     log_sock(this, trace, "{}", data.size());
     return m_proxy->send(m_proxy_id.value(), data);
 }
 
-std::optional<Socket::Error> ProxiedSocket::send_dns_packet(Uint8View data) {
+Error<SocketError> ProxiedSocket::send_dns_packet(Uint8View data) {
     log_sock(this, trace, "{}", data.size());
 
-    std::optional<Error> err;
+    Error<SocketError> err;
 
     switch (this->get_protocol()) {
     case utils::TP_UDP:
@@ -65,7 +65,7 @@ std::optional<Socket::Error> ProxiedSocket::send_dns_packet(Uint8View data) {
     case utils::TP_TCP: {
         uint16_t length = htons(data.size());
         err = m_proxy->send(m_proxy_id.value(), {(uint8_t *) &length, 2});
-        if (!err.has_value()) {
+        if (!err) {
             err = m_proxy->send(m_proxy_id.value(), data);
         }
         break;
@@ -83,10 +83,10 @@ bool ProxiedSocket::set_timeout(Micros timeout) {
     return m_proxy->set_timeout(m_proxy_id.value(), timeout);
 }
 
-std::optional<Socket::Error> ProxiedSocket::set_callbacks(Socket::Callbacks cbx) {
+Error<SocketError> ProxiedSocket::set_callbacks(Socket::Callbacks cbx) {
     log_sock(this, trace, "...");
 
-    std::optional<Socket::Error> err;
+    Error<SocketError> err;
 
     m_socket_callbacks.mtx.lock();
     m_socket_callbacks.val = cbx;
@@ -117,7 +117,7 @@ void ProxiedSocket::on_successful_proxy_connection(void *arg) {
     self->m_proxied_callbacks.on_successful_proxy_connection(self->m_proxied_callbacks.arg);
 }
 
-void ProxiedSocket::on_proxy_connection_failed(void *arg, std::optional<int> err) {
+void ProxiedSocket::on_proxy_connection_failed(void *arg, Error<SocketError> err) {
     auto *self = (ProxiedSocket *) arg;
 
     ProxyConnectionFailedResult r
@@ -146,10 +146,10 @@ void ProxiedSocket::on_read(void *arg, Uint8View data) {
     }
 }
 
-void ProxiedSocket::on_close(void *arg, std::optional<Socket::Error> error) {
+void ProxiedSocket::on_close(void *arg, Error<SocketError> error) {
     auto *self = (ProxiedSocket *) arg;
-    if (error.has_value()) {
-        log_sock(self, dbg, "{} ({})", error->description, error->code);
+    if (error) {
+        log_sock(self, dbg, "{}", error->str());
     }
 
     if (std::unique_ptr info = std::move(self->m_fallback_info); info != nullptr && info->proxy != nullptr) {
@@ -168,7 +168,7 @@ void ProxiedSocket::on_close(void *arg, std::optional<Socket::Error> error) {
                         ? std::make_optional<Micros>(std::max(Micros(0), info->timeout.value() - elapsed))
                         : std::nullopt,
         });
-        if (!error.has_value()) {
+        if (!error) {
             return;
         }
         log_sock(self, dbg, "Failed to fall back");
@@ -179,4 +179,4 @@ void ProxiedSocket::on_close(void *arg, std::optional<Socket::Error> error) {
     }
 }
 
-} // namespace ag
+} // namespace ag::dns

@@ -2,7 +2,7 @@
 #include "common/clock.h"
 #include "common/logger.h"
 #include "common/utils.h"
-#include "dnscrypt/dns_crypt_client.h"
+#include "dns/dnscrypt/dns_crypt_client.h"
 #include <chrono>
 #include <memory>
 #include <sodium.h>
@@ -11,7 +11,7 @@
 
 using std::chrono::duration_cast;
 
-namespace ag {
+namespace ag::dns {
 
 static Logger logger{"UPSTREAM DNSCRYPT"};
 
@@ -42,76 +42,83 @@ DnscryptUpstream::DnscryptUpstream(
     static const SodiumInitializer ensure_initialized;
 }
 
-ErrString DnscryptUpstream::init() {
-    return std::nullopt;
+Error<Upstream::InitError> DnscryptUpstream::init() {
+    return {};
 }
 
 DnscryptUpstream::~DnscryptUpstream() = default;
 
-DnscryptUpstream::ExchangeResult DnscryptUpstream::exchange(ldns_pkt *request_pkt, const DnsMessageInfo *) {
+coro::Task<Upstream::ExchangeResult> DnscryptUpstream::exchange(ldns_pkt *request_pkt, const DnsMessageInfo *) {
     tracelog_id(m_log, request_pkt, "Started");
-    static constexpr utils::MakeError<ExchangeResult> make_error;
-    SetupResult result = setup_impl();
-    if (result.error.has_value()) {
-        return make_error(std::move(result.error));
+
+    SetupResult result = co_await setup_impl();
+    if (result.error) {
+        co_return result.error;
     }
     if (m_options.timeout < result.rtt) {
-        return make_error(AG_FMT("Certificate fetch took too much time: {}ms", result.rtt.count()));
+        co_return make_error(DE_TIMED_OUT, AG_FMT("Certificate fetch took too much time: {}ms", result.rtt.count()));
     }
-    auto [reply, reply_err] = apply_exchange(*request_pkt, m_options.timeout - result.rtt);
-    if (reply_err) {
-        return make_error(std::move(reply_err));
+    auto reply = co_await apply_exchange(*request_pkt, m_options.timeout - result.rtt);
+    if (reply.has_error()) {
+        co_return reply.error();
     }
-    if (reply && ldns_pkt_id(reply.get()) != ldns_pkt_id(request_pkt)) {
-        return make_error("Request and reply ids are not equal");
+    if (reply && ldns_pkt_id(reply->get()) != ldns_pkt_id(request_pkt)) {
+        co_return make_error(DE_REPLY_PACKET_ID_MISMATCH);
     }
     tracelog_id(m_log, request_pkt, "Finished");
-    return {std::move(reply), std::nullopt};
+    co_return std::move(reply.value());
 }
 
-DnscryptUpstream::SetupResult DnscryptUpstream::setup_impl() {
+coro::Task<DnscryptUpstream::SetupResult> DnscryptUpstream::setup_impl() {
     Millis rtt(0);
     auto now = duration_cast<Millis>(SteadyClock::now().time_since_epoch()).count();
-    if (std::scoped_lock l(m_guard); !m_impl || m_impl->server_info.get_server_cert().not_after < now) {
-        ag::dnscrypt::Client client;
-        auto [dial_server_info, dial_rtt, dial_err]
-                = client.dial(m_stamp, m_options.timeout, m_config.socket_factory, this->make_socket_parameters());
-        if (dial_err) {
-            return {rtt,
-                    AG_FMT("Failed to fetch certificate info from {} with error: {}", m_options.address, *dial_err)};
+    if (!m_impl || m_impl->server_info.get_server_cert().not_after < now) {
+        dnscrypt::Client client;
+        auto dial_res
+                = co_await client.dial(m_stamp, this->config().loop, m_options.timeout, m_config.socket_factory, this->make_socket_parameters());
+        if (dial_res.has_error()) {
+            co_return {rtt, make_error(DE_HANDSHAKE_ERROR,
+                    AG_FMT("Failed to fetch certificate info from {}", m_options.address), dial_res.error())};
         }
+        auto &[dial_server_info, dial_rtt] = *dial_res;
         m_impl = std::make_unique<Impl>(Impl{client, std::move(dial_server_info)});
         rtt = dial_rtt;
     }
-    return {rtt};
+    co_return {rtt};
 }
 
-DnscryptUpstream::ExchangeResult DnscryptUpstream::apply_exchange(ldns_pkt &request_pkt, Millis timeout) {
+coro::Task<Upstream::ExchangeResult> DnscryptUpstream::apply_exchange(ldns_pkt &request_pkt, Millis timeout) {
     Impl local_upstream;
-    {
-        std::scoped_lock l(m_guard);
-        local_upstream = *m_impl;
-    }
+    local_upstream = *m_impl;
 
     utils::Timer timer;
 
-    auto [udp_reply, udp_reply_rtt, udp_reply_err] = local_upstream.udp_client.exchange(
-            request_pkt, local_upstream.server_info, timeout, m_config.socket_factory, this->make_socket_parameters());
+    auto udp_reply_res = co_await local_upstream.udp_client.exchange(
+            request_pkt, local_upstream.server_info, this->config().loop,
+            timeout, m_config.socket_factory, this->make_socket_parameters());
 
-    if (udp_reply && ldns_pkt_tc(udp_reply.get())) {
+    if (udp_reply_res && ldns_pkt_tc(udp_reply_res->packet.get())) {
         tracelog_id(m_log, &request_pkt, "Truncated message was received, retrying over TCP");
         dnscrypt::Client tcp_client(utils::TP_TCP);
 
         timeout -= timer.elapsed<decltype(timeout)>();
         if (timeout <= decltype(timeout)(0)) {
-            return {nullptr, evutil_socket_error_to_string(utils::AG_ETIMEDOUT)};
+            co_return make_error(DE_TIMED_OUT, AG_FMT("Can't retry over tcp: {}", evutil_socket_error_to_string(utils::AG_ETIMEDOUT)));
         }
 
-        auto [tcp_reply, tcp_reply_rtt, tcp_reply_err] = tcp_client.exchange(request_pkt, local_upstream.server_info,
-                timeout, m_config.socket_factory, this->make_socket_parameters());
-        return {std::move(tcp_reply), std::move(tcp_reply_err)};
+        auto tcp_reply_res = co_await tcp_client.exchange(request_pkt, local_upstream.server_info,
+                this->config().loop, timeout, m_config.socket_factory, this->make_socket_parameters());
+        if (tcp_reply_res) {
+            co_return std::move(tcp_reply_res->packet);
+        } else {
+            co_return make_error(DE_INTERNAL_ERROR, tcp_reply_res.error());
+        }
     }
-    return {std::move(udp_reply), std::move(udp_reply_err)};
+    if (udp_reply_res) {
+        co_return std::move(udp_reply_res->packet);
+    } else {
+        co_return make_error(DE_INTERNAL_ERROR, udp_reply_res.error());
+    }
 }
 
 SocketFactory::SocketParameters DnscryptUpstream::make_socket_parameters() const {
@@ -121,4 +128,4 @@ SocketFactory::SocketParameters DnscryptUpstream::make_socket_parameters() const
     return socket_parameters;
 }
 
-} // namespace ag
+} // namespace ag::dns

@@ -2,13 +2,14 @@
 
 #include <cstring>
 
-#include "proxy/dnsproxy.h"
-#include "upstream/upstream_utils.h"
+#include "dns/proxy/dnsproxy.h"
+#include "dns/upstream/upstream_utils.h"
 
 #ifdef _WIN32
 #include <detours.h>
 
 using namespace ag;
+using namespace ag::dns;
 
 /**
  * Deactivated version of SetUnhandledExceptionFilter that does nothing.
@@ -38,9 +39,10 @@ void ag_enable_SetUnhandledExceptionFilter(void) {
 #endif // _WIN32
 
 static constexpr const char *AGCVR_TO_STRING[] = {
-        [AGCVR_ERROR_CREATE_CERT] = "ERROR_CREATE_CERT",
-        [AGCVR_ERROR_ACCESS_TO_STORE] = "ERROR_ACCESS_TO_STORE",
-        [AGCVR_ERROR_CERT_VERIFICATION] = "ERROR_CERT_VERIFICATION",
+        "ERROR_OK",
+        "ERROR_CREATE_CERT",
+        "ERROR_ACCESS_TO_STORE",
+        "ERROR_CERT_VERIFICATION",
 };
 
 static void free_upstreams(ag_upstream_options *upstreams, size_t n) {
@@ -535,7 +537,7 @@ void ag_dnsproxy_deinit(ag_dnsproxy *handle) {
 
 ag_buffer ag_dnsproxy_handle_message(ag_dnsproxy *handle, ag_buffer message) {
     auto proxy = (DnsProxy *) handle;
-    Uint8Vector res = proxy->handle_message({message.data, message.size}, nullptr);
+    Uint8Vector res = proxy->handle_message_sync({message.data, message.size}, nullptr);
     ag_buffer res_buf = marshal_buffer({res.data(), res.size()});
     return res_buf;
 }
@@ -551,27 +553,27 @@ void ag_set_log_level(ag_log_level level) {
 }
 
 ag_dns_stamp *ag_dns_stamp_from_str(const char *stamp_str, const char **error) {
-    auto [stamp, stamp_err] = ServerStamp::from_string(stamp_str);
-    if (stamp_err) {
-        *error = marshal_str(*stamp_err);
+    auto stamp = ServerStamp::from_string(stamp_str);
+    if (stamp.has_error()) {
+        *error = marshal_str(stamp.error()->str());
         return nullptr;
     }
     auto *c_result = (ag_dns_stamp *) std::calloc(1, sizeof(ag_dns_stamp));
-    c_result->proto = (ag_stamp_proto_type) stamp.proto;
-    c_result->path = marshal_str(stamp.path);
-    c_result->server_addr = marshal_str(stamp.server_addr_str);
-    c_result->provider_name = marshal_str(stamp.provider_name);
-    if (const auto &key = stamp.server_pk; !key.empty()) {
+    c_result->proto = (ag_stamp_proto_type) stamp->proto;
+    c_result->path = marshal_str(stamp->path);
+    c_result->server_addr = marshal_str(stamp->server_addr_str);
+    c_result->provider_name = marshal_str(stamp->provider_name);
+    if (const auto &key = stamp->server_pk; !key.empty()) {
         c_result->server_public_key = marshal_buffer({key.data(), key.size()});
     }
-    if (const auto &hashes = stamp.hashes; !hashes.empty()) {
+    if (const auto &hashes = stamp->hashes; !hashes.empty()) {
         c_result->hashes = {(ag_buffer *) std::malloc(hashes.size() * sizeof(ag_buffer)), (uint32_t) hashes.size()};
         for (size_t i = 0; i < hashes.size(); ++i) {
             const auto &h = hashes[i];
             c_result->hashes.data[i] = marshal_buffer({h.data(), h.size()});
         }
     }
-    c_result->properties = (ag_server_informal_properties) stamp.props;
+    c_result->properties = (ag_server_informal_properties) stamp->props;
     return c_result;
 }
 

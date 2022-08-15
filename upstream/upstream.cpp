@@ -1,19 +1,21 @@
-#include "upstream/upstream.h"
+#include <cassert>
+#include <chrono>
+#include <functional>
+
 #include "common/logger.h"
 #include "common/net_utils.h"
 #include "common/route_resolver.h"
 #include "common/utils.h"
-#include "dnsstamp/dns_stamp.h"
+#include "dns/dnsstamp/dns_stamp.h"
 #include "upstream_dnscrypt.h"
 #include "upstream_doh.h"
 #include "upstream_doq.h"
 #include "upstream_dot.h"
 #include "upstream_plain.h"
-#include <cassert>
-#include <chrono>
-#include <functional>
 
-namespace ag {
+#include "dns/upstream/upstream.h"
+
+namespace ag::dns {
 
 enum class Scheme : size_t {
     SDNS,
@@ -58,43 +60,40 @@ static Scheme get_address_scheme(std::string_view address) {
     return Scheme::UNDEFINED;
 }
 
-static UpstreamFactory::CreateResult create_upstream_tls(
+using CreateResult = UpstreamFactory::CreateResult;
+
+static CreateResult create_upstream_tls(
         const UpstreamOptions &opts, const UpstreamFactoryConfig &config) {
-    return {std::make_unique<DotUpstream>(opts, config), std::nullopt};
+    return CreateResult{std::make_unique<DotUpstream>(opts, config)};
 }
 
-static UpstreamFactory::CreateResult create_upstream_doq(
+static CreateResult create_upstream_doq(
         const UpstreamOptions &opts, const UpstreamFactoryConfig &config) {
-    return {std::make_unique<DoqUpstream>(opts, config), std::nullopt};
+    return CreateResult{std::make_unique<DoqUpstream>(opts, config)};
 }
 
 static UpstreamFactory::CreateResult create_upstream_https(
         const UpstreamOptions &opts, const UpstreamFactoryConfig &config) {
-    return {std::make_unique<DohUpstream>(opts, config), std::nullopt};
+    return CreateResult{std::make_unique<DohUpstream>(opts, config)};
 }
 
-static UpstreamFactory::CreateResult create_upstream_plain(
+static CreateResult create_upstream_plain(
         const UpstreamOptions &opts, const UpstreamFactoryConfig &config) {
-    return {std::make_unique<PlainUpstream>(opts, config), std::nullopt};
+    return CreateResult{std::make_unique<PlainUpstream>(opts, config)};
 }
 
-static UpstreamFactory::CreateResult create_upstream_dnscrypt(
+static CreateResult create_upstream_dnscrypt(
         ServerStamp &&stamp, const UpstreamOptions &opts, const UpstreamFactoryConfig &config) {
-    return {std::make_unique<DnscryptUpstream>(std::move(stamp), opts, config), std::nullopt};
+    return CreateResult{std::make_unique<DnscryptUpstream>(std::move(stamp), opts, config)};
 }
 
-static UpstreamFactory::CreateResult create_upstream_dnsquic(
-        const UpstreamOptions &opts, const UpstreamFactoryConfig &config) {
-    return {std::make_unique<DoqUpstream>(opts, config), std::nullopt};
-}
-
-static UpstreamFactory::CreateResult create_upstream_sdns(
+static CreateResult create_upstream_sdns(
         const UpstreamOptions &local_opts, const UpstreamFactoryConfig &config) {
-    static constexpr utils::MakeError<UpstreamFactory::CreateResult> make_error;
-    auto [stamp, stamp_err] = ServerStamp::from_string(local_opts.address);
-    if (stamp_err) {
-        return make_error(std::move(stamp_err));
+    auto stamp_res = ServerStamp::from_string(local_opts.address);
+    if (stamp_res.has_error()) {
+        return CreateResult{make_error(UpstreamFactory::AE_INVALID_STAMP, stamp_res.error())};
     }
+    auto &stamp = stamp_res.value();
     auto opts = local_opts;
     std::string port; // With leading ':'
     if (!stamp.server_addr_str.empty()) {
@@ -126,7 +125,7 @@ static UpstreamFactory::CreateResult create_upstream_sdns(
         return create_upstream_doq(opts, config);
     }
     assert(false);
-    return make_error(AG_FMT("Unknown stamp protocol: {}", stamp.proto));
+    return make_error(UpstreamFactory::AE_INVALID_STAMP, AG_FMT("Unknown stamp protocol: {}", stamp.proto));
 }
 
 UpstreamFactory::CreateResult UpstreamFactory::Impl::create_upstream(const UpstreamOptions &opts) const {
@@ -137,7 +136,7 @@ UpstreamFactory::CreateResult UpstreamFactory::Impl::create_upstream(const Upstr
             &create_upstream_plain,
             &create_upstream_tls,
             &create_upstream_https,
-            &create_upstream_dnsquic,
+            &create_upstream_doq,
             &create_upstream_plain,
     };
     static_assert(std::size(create_functions) == static_cast<size_t>(Scheme::COUNT),
@@ -153,23 +152,19 @@ UpstreamFactory::UpstreamFactory(UpstreamFactoryConfig cfg)
 UpstreamFactory::~UpstreamFactory() = default;
 
 UpstreamFactory::CreateResult UpstreamFactory::create_upstream(const UpstreamOptions &opts) const {
-    CreateResult result;
-    if (opts.address.find("://") != std::string_view::npos) {
-        result = m_factory->create_upstream(opts);
-    } else {
-        // We don't have scheme in the url, so it's just a plain DNS host:port
-        result = create_upstream_plain(opts, m_factory->config);
-    }
+    bool have_scheme = (opts.address.find("://") != std::string_view::npos);
+    CreateResult result = have_scheme
+            ? m_factory->create_upstream(opts)
+            : create_upstream_plain(opts, m_factory->config);
 
-    if (!result.error.has_value()) {
-        result.error = result.upstream->init();
-    }
-
-    if (result.error.has_value()) {
-        result.upstream.reset();
+    if (result.has_value()) {
+        auto init_err = result.value()->init();
+        if (init_err) {
+            return make_error(UpstreamFactory::AE_INIT_FAILED, init_err);
+        }
     }
 
     return result;
 }
 
-} // namespace ag
+} // namespace ag::dns

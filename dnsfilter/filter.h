@@ -6,11 +6,11 @@
 #include <vector>
 #include <string>
 #include <shared_mutex>
-#include "dnsfilter/dnsfilter.h"
+#include "dns/dnsfilter/dnsfilter.h"
 #include "rule_utils.h"
 #include <atomic>
 
-namespace ag::dnsfilter {
+namespace ag::dns::dnsfilter {
 
 class Filter {
 public:
@@ -18,12 +18,12 @@ public:
     struct MatchContext {
         std::string host; // matching domain name
         std::vector<std::string_view> subdomains; // list of subdomains
-        std::vector<ag::DnsFilter::Rule> matched_rules; // list of matched rules
+        std::vector<DnsFilter::Rule> matched_rules; // list of matched rules
         ldns_rr_type rr_type; // query RR type
         std::string reverse_lookup_fqdn; // non-empty if the request is a reverse DNS lookup
     };
 
-    static void init_match_context(MatchContext &ctx, ag::DnsFilter::MatchParam param);
+    static void init_match_context(MatchContext &ctx, DnsFilter::MatchParam param);
 
     Filter();
     ~Filter();
@@ -44,7 +44,7 @@ public:
      * @param      mem_limit if not 0, stop loading rules when the approximate memory consumption reaches this limit
      * @return     {load_result, approximate memory consumption}
      */
-    std::pair<LoadResult, size_t> load(const ag::DnsFilter::FilterParams &params, size_t mem_limit);
+    std::pair<LoadResult, size_t> load(const DnsFilter::FilterParams &params, size_t mem_limit);
 
     /**
      * Match domain against rules
@@ -60,11 +60,11 @@ public:
     void update(std::atomic_size_t &mem_limit);
 
     // Filter parameters
-    ag::DnsFilter::FilterParams params;
+    DnsFilter::FilterParams params;
 
 private:
     class Impl;
     std::unique_ptr<Impl> m_pimpl;
 };
 
-} // namespace ag::dnsfilter
+} // namespace ag::dns::dnsfilter

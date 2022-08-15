@@ -1,24 +1,21 @@
 #include "dns_crypt_padding.h"
 #include <sodium.h>
 
-namespace ag::dnscrypt {
+namespace ag::dns::dnscrypt {
 
-ErrString pad(Uint8Vector &packet, size_t min_size) {
+bool pad(Uint8Vector &packet, size_t min_size) {
     auto unpadded_buflen = packet.size();
     packet.resize(min_size);
-    if (sodium_pad(nullptr, packet.data(), unpadded_buflen, packet.size(), packet.size()) != 0) {
-        return "Can not pad";
-    }
-    return std::nullopt;
+    return 0 == sodium_pad(nullptr, packet.data(), unpadded_buflen, packet.size(), packet.size());
 }
 
-ErrString unpad(Uint8Vector &packet) {
+bool unpad(Uint8Vector &packet) {
     size_t unpadded_buflen = 0;
-    if (sodium_unpad(&unpadded_buflen, packet.data(), packet.size(), packet.size()) != 0) {
-        return "Can not unpad";
+    if (0 != sodium_unpad(&unpadded_buflen, packet.data(), packet.size(), packet.size())) {
+        return false;
     }
     packet.resize(unpadded_buflen);
-    return std::nullopt;
+    return true;
 }
 
-} // namespace ag::dnscrypt
+} // namespace ag::dns::dnscrypt

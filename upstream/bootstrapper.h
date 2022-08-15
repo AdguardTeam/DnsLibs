@@ -5,12 +5,14 @@
 #include <memory>
 #include "common/logger.h"
 #include "common/socket_address.h"
-#include "upstream/upstream.h"
+#include "dns/upstream/upstream.h"
 #include "resolver.h"
 
 namespace ag {
+namespace dns {
 
 class Resolver;
+
 using ResolverPtr = std::unique_ptr<Resolver>;
 
 class Bootstrapper {
@@ -26,23 +28,31 @@ public:
 
     explicit Bootstrapper(const Params &p);
 
+    enum BootstrapperError {
+        AE_NO_VALID_RESOLVERS,
+        AE_EMPTY_LIST,
+        AE_RESOLVE_FAILED,
+        AE_TEMPORARY_DISABLED,
+        AE_SHUTTING_DOWN,
+    };
+
     /**
      * Initialize bootstrapper
      * @return non-nullopt if something went wrong
      */
-    ErrString init();
+    Error<BootstrapperError> init();
 
     struct ResolveResult {
         std::vector<SocketAddress> addresses; // not empty resolved addresses list in case of success
         std::string server_name; // resolved host name
         Micros time_elapsed; // time took to resolve
-        ErrString error; // non-nullopt if something went wrong
+        Error<BootstrapperError> error; // non-nullopt if something went wrong
     };
 
     /**
      * Get resolved addresses from bootstrapper
      */
-    ResolveResult get();
+    coro::Task<ResolveResult> get();
 
     /**
      * Remove resolved address from the cache
@@ -57,19 +67,22 @@ public:
 
     // Non-copyable
     Bootstrapper(const Bootstrapper &) = delete;
+
     Bootstrapper &operator=(const Bootstrapper &) = delete;
+
 private:
     /**
      * Check if bootstrapper should be temporary disabled
      */
     ErrString temporary_disabler_check();
+
     /**
      * Update information for temporary disabling bootstrapper
      */
-    void temporary_disabler_update(const ErrString &error);
+    void temporary_disabler_update(bool fail);
 
 private:
-    ResolveResult resolve();
+    coro::Task<ResolveResult> resolve();
 
     /** Logger */
     Logger m_log;
@@ -83,12 +96,28 @@ private:
     std::vector<SocketAddress> m_resolved_cache;
     /** Times of first and last remove fails */
     std::pair<int64_t, int64_t> m_resolve_fail_times_ms;
-    /** Resolved addresses cache mutex */
-    std::mutex m_resolved_cache_mutex;
     /** List of resolvers to use */
     std::vector<ResolverPtr> m_resolvers;
+    /** Shutdown guard */
+    std::shared_ptr<bool> m_shutdown_guard;
 };
 
 using BootstrapperPtr = std::unique_ptr<Bootstrapper>;
+
+} // namespace dns
+
+template<>
+struct ErrorCodeToString<dns::Bootstrapper::BootstrapperError> {
+    std::string operator()(dns::Bootstrapper::BootstrapperError e) {
+        switch (e) {
+        case decltype(e)::AE_NO_VALID_RESOLVERS: return "Failed to create any resolver";
+        case decltype(e)::AE_EMPTY_LIST: return "Empty bootstrap list";
+        case decltype(e)::AE_RESOLVE_FAILED: return "Failed to resolve host";
+        case decltype(e)::AE_TEMPORARY_DISABLED: return "Bootstrapping this server is temporary disabled due to many failures";
+        case decltype(e)::AE_SHUTTING_DOWN: return "Shutting down";
+        default: return "Unknown error";
+        }
+    }
+};
 
 } // namespace ag

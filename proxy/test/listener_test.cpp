@@ -5,10 +5,10 @@
 #include <magic_enum.hpp>
 #include <thread>
 
-#include "proxy/dnsproxy.h"
-#include "upstream/upstream.h"
+#include "dns/proxy/dnsproxy.h"
+#include "dns/upstream/upstream.h"
 
-namespace ag::proxy::test {
+namespace ag::dns::proxy::test {
 
 using namespace std::chrono_literals;
 
@@ -79,40 +79,63 @@ TEST_P(ListenerTest, ListensAndResponds) {
 
     std::atomic_long successful_requests{0};
     static std::atomic_int request_id{0};
-    std::vector<std::thread> workers;
-    workers.reserve(params.n_threads);
-
-    SocketFactory socket_factory({});
-    UpstreamFactory upstream_factory({&socket_factory});
+    struct Worker {
+        Worker(EventLoopPtr loop, std::future<void> future) : loop(loop), future(std::move(future)) {
+            loop->start();
+        }
+        Worker(Worker &&other) : loop(std::exchange(other.loop, nullptr)), future(std::move(other.future)) {}
+        ~Worker() {
+            if (loop) {
+                loop->stop();
+                loop->join();
+            }
+        }
+        void join() {
+            future.get();
+        }
+        EventLoopPtr loop;
+        std::future<void> future;
+    };
+    std::vector<Worker> workers;
 
     const auto address = fmt::format("{}[{}]:{}", listener_settings.protocol == ag::utils::TP_TCP ? "tcp://" : "",
             params.request_addr, listener_settings.port);
 
     for (size_t i = 0; i < params.n_threads; ++i) {
         std::this_thread::sleep_for(10ms);
-        workers.emplace_back([&successful_requests, listener_settings, address, &upstream_factory, i, params]() {
-            Logger logger{fmt::format("test_thread_{}", i)};
+        EventLoopPtr loop = EventLoop::create();
+        Worker worker{loop,
+        coro::to_future([](std::atomic_long &successful_requests,
+                                ListenerSettings listener_settings,
+                                const std::string &address,
+                                size_t i,
+                                auto params,
+                                EventLoopPtr loop) -> coro::Task<void> {
+            Logger logger{fmt::format("test_coro_{}", i)};
+            SocketFactory socket_factory({*loop});
+            UpstreamFactory upstream_factory({*loop, &socket_factory});
 
-            auto [upstream, error] = upstream_factory.create_upstream({
+            auto upstream_res = upstream_factory.create_upstream({
                     .address = address,
                     .timeout = 1000ms,
             });
 
-            if (error) {
-                errlog(logger, "Upstream create: {}", *error);
-                return;
+            if (upstream_res.has_error()) {
+                errlog(logger, "Upstream create: {}", upstream_res.error()->str());
+                co_return;
             }
 
             for (size_t j = 0; j < params.requests_per_thread; ++j) {
-                ag::ldns_pkt_ptr req(ldns_pkt_query_new(
+                ldns_pkt_ptr req(ldns_pkt_query_new(
                         ldns_dname_new_frm_str(params.query), LDNS_RR_TYPE_AAAA, LDNS_RR_CLASS_IN, LDNS_RD));
                 ldns_pkt_set_id(req.get(), ++request_id);
 
-                auto [resp, error] = upstream->exchange(req.get());
-                if (error) {
-                    errlog(logger, "[id={}] Upstream exchange: {}", ldns_pkt_id(req.get()), *error);
+                auto res = co_await upstream_res.value()->exchange(req.get());
+                if (res.has_error()) {
+                    errlog(logger, "[id={}] Upstream exchange: {}", ldns_pkt_id(req.get()), res.error()->str());
                     continue;
                 }
+                auto &resp = res.value();
 
                 const auto rcode = ldns_pkt_get_rcode(resp.get());
                 if (LDNS_RCODE_NOERROR == rcode
@@ -124,7 +147,8 @@ TEST_P(ListenerTest, ListensAndResponds) {
                     std::free(str);
                 }
             }
-        });
+        }(successful_requests, listener_settings, address, i, params, loop))};
+        workers.emplace_back(std::move(worker));
     }
     for (auto &w : workers) {
         w.join();
@@ -154,7 +178,7 @@ INSTANTIATE_TEST_SUITE_P(ListenerLogic, ListenerTest,
         ::testing::Values(TestParams{ListenerSettings{.address = "::1", .port = 1234, .protocol = ag::utils::TP_UDP}},
                 TestParams{ListenerSettings{
                         .address = "::1", .port = 1234, .protocol = ag::utils::TP_TCP, .persistent = false}},
-                TestParams{ag::ListenerSettings{.address = "::1",
+                TestParams{ListenerSettings{.address = "::1",
                         .port = 1234,
                         .protocol = ag::utils::TP_TCP,
                         .persistent = true,
@@ -166,4 +190,4 @@ INSTANTIATE_TEST_SUITE_P(ListenerLogic, ListenerTest,
                             : "");
         });
 
-} // namespace ag::proxy::test
+} // namespace ag::dns::proxy::test

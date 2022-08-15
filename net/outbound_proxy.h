@@ -11,26 +11,22 @@
 #include "common/net_utils.h"
 #include "common/socket_address.h"
 #include "common/logger.h"
-#include "net/outbound_proxy_settings.h"
-#include "net/socket.h"
+#include "dns/net/outbound_proxy_settings.h"
+#include "dns/net/socket.h"
 
 
-namespace ag {
+namespace ag::dns {
 
 class OutboundProxy {
 public:
-    using ConnectResult = std::variant<
-            /** Connection id if successful */
-            uint32_t,
-            /** Error if failed */
-            Socket::Error>;
+    using ConnectResult = Result<uint32_t /* Connection ID */, SocketError>;
     using ProtocolsSet = std::bitset<magic_enum::enum_count<utils::TransportProtocol>()>;
 
     struct Callbacks {
         /** Raised after the connection to the proxy server succeeded */
         void (* on_successful_proxy_connection)(void *arg);
         /** Raised after an error on the connection to the proxy server */
-        void (* on_proxy_connection_failed)(void *arg, std::optional<int> err);
+        void (* on_proxy_connection_failed)(void *arg, Error<SocketError> err);
         /**
          * Raised after tunnel to a peer through the proxy is established
          * @param conn_id ID of the opened connection
@@ -43,7 +39,7 @@ public:
          * @param conn_id id of the connection on which error happened
          * @param error none if closed gracefully
          */
-        void (* on_close)(void *arg, std::optional<Socket::Error> error);
+        void (* on_close)(void *arg, Error<SocketError> error);
         /** User context for the callbacks */
         void *arg;
     };
@@ -101,7 +97,7 @@ public:
      * @param data the data
      * @return some error if failed
      */
-    [[nodiscard]] virtual std::optional<Socket::Error> send(uint32_t conn_id, Uint8View data) = 0;
+    [[nodiscard]] virtual Error<SocketError> send(uint32_t conn_id, Uint8View data) = 0;
 
     /**
      * Set operation time out
@@ -116,7 +112,7 @@ public:
      * @param cbx the callbacks
      * @return some error if failed
      */
-    [[nodiscard]] virtual std::optional<Socket::Error> set_callbacks(uint32_t conn_id, Callbacks cbx) = 0;
+    [[nodiscard]] virtual Error<SocketError> set_callbacks(uint32_t conn_id, Callbacks cbx) = 0;
 
     /**
      * Close the connection
@@ -135,12 +131,12 @@ protected:
     /**
      * Connect to the proxy server
      */
-    [[nodiscard]] virtual std::optional<Socket::Error> connect_to_proxy(uint32_t conn_id, const ConnectParameters &parameters) = 0;
+    [[nodiscard]] virtual Error<SocketError> connect_to_proxy(uint32_t conn_id, const ConnectParameters &parameters) = 0;
 
     /**
      * Connect to the peer through the proxy server
      */
-    [[nodiscard]] virtual std::optional<Socket::Error> connect_through_proxy(uint32_t conn_id, const ConnectParameters &parameters) = 0;
+    [[nodiscard]] virtual Error<SocketError> connect_through_proxy(uint32_t conn_id, const ConnectParameters &parameters) = 0;
 
     /**
      * Get the next connection ID

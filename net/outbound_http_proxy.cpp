@@ -8,13 +8,14 @@
 #define log_conn(p_, id_, lvl_, fmt_, ...)                                                                             \
     lvl_##log((p_)->m_log, "[id={}/{}] {}(): " fmt_, (p_)->m_id, (id_), __func__, ##__VA_ARGS__)
 
-namespace ag {
+namespace ag::dns {
 
 enum ConnectionState {
     CS_IDLE,
     CS_CONNECTING_SOCKET,
     CS_CONNECTING_HTTP,
     CS_CONNECTED,
+    CS_CLOSING,
 };
 
 struct HttpOProxy::Connection {
@@ -44,22 +45,22 @@ std::optional<evutil_socket_t> HttpOProxy::get_fd(uint32_t conn_id) const {
     return (it != m_connections.end()) ? it->second->socket->get_fd() : std::nullopt;
 }
 
-std::optional<Socket::Error> HttpOProxy::send(uint32_t conn_id, Uint8View data) {
+Error<SocketError> HttpOProxy::send(uint32_t conn_id, Uint8View data) {
     log_conn(this, conn_id, trace, "{}", data.size());
 
     std::scoped_lock l(m_guard);
     auto it = m_connections.find(conn_id);
     if (it == m_connections.end()) {
-        return {{-1, AG_FMT("Non-existent connection: {}", conn_id)}};
+        return make_error(SocketError::AE_CONNECTION_ID_NOT_FOUND, fmt::to_string(conn_id));
     }
 
     Connection *conn = it->second.get();
-    if (auto e = conn->socket->send(data); e.has_value()) {
+    if (auto e = conn->socket->send(data)) {
         log_conn(this, conn_id, dbg, "Failed to send data chunk");
         return e;
     }
 
-    return std::nullopt;
+    return {};
 }
 
 bool HttpOProxy::set_timeout(uint32_t conn_id, Micros timeout) {
@@ -75,24 +76,23 @@ bool HttpOProxy::set_timeout(uint32_t conn_id, Micros timeout) {
     return it->second->socket->set_timeout(timeout);
 }
 
-std::optional<Socket::Error> HttpOProxy::set_callbacks(uint32_t conn_id, Callbacks cbx) {
+Error<SocketError> HttpOProxy::set_callbacks(uint32_t conn_id, Callbacks cbx) {
     log_conn(this, conn_id, trace, "...");
 
     std::scoped_lock l(m_guard);
     auto it = m_connections.find(conn_id);
     if (it == m_connections.end()) {
-        return {{-1, AG_FMT("Non-existent connection: {}", conn_id)}};
+        return make_error(SocketError::AE_CONNECTION_ID_NOT_FOUND, fmt::to_string(conn_id));
     }
 
     Connection *conn = it->second.get();
     conn->parameters.callbacks = cbx;
     if (auto e = it->second->socket->set_callbacks({(cbx.on_connected != nullptr) ? on_connected : nullptr,
-                (cbx.on_read != nullptr) ? on_read : nullptr, (cbx.on_close != nullptr) ? on_close : nullptr, conn});
-            e.has_value()) {
+                (cbx.on_read != nullptr) ? on_read : nullptr, (cbx.on_close != nullptr) ? on_close : nullptr, conn})) {
         return e;
     }
 
-    return std::nullopt;
+    return {};
 }
 
 void HttpOProxy::close_connection(uint32_t conn_id) {
@@ -109,7 +109,7 @@ void HttpOProxy::close_connection(uint32_t conn_id) {
     m_closing_connections.insert(std::move(node));
 
     if (conn->state == CS_CONNECTING_SOCKET) {
-        conn->parameters.callbacks.on_proxy_connection_failed(conn->parameters.callbacks.arg, std::nullopt);
+        conn->parameters.callbacks.on_proxy_connection_failed(conn->parameters.callbacks.arg, {});
     }
     conn->parameters.callbacks = {};
 
@@ -121,14 +121,14 @@ void HttpOProxy::close_connection(uint32_t conn_id) {
     });
 }
 
-std::optional<Socket::Error> HttpOProxy::connect_to_proxy(uint32_t conn_id, const ConnectParameters &parameters) {
+Error<SocketError> HttpOProxy::connect_to_proxy(uint32_t conn_id, const ConnectParameters &parameters) {
     log_conn(this, conn_id, trace, "{}:{} == {}", m_settings->address, m_settings->port, parameters.peer.str());
     assert(parameters.proto == utils::TP_TCP);
 
     std::scoped_lock l(m_guard);
     auto &conn = m_connections[conn_id];
     if (conn != nullptr) {
-        return {{-1, AG_FMT("Duplicate ID: {}", conn_id)}};
+        return make_error(SocketError::AE_DUPLICATE_ID, fmt::to_string(conn_id));
     }
 
     conn = std::make_unique<Connection>(Connection{this, conn_id, parameters});
@@ -139,8 +139,7 @@ std::optional<Socket::Error> HttpOProxy::connect_to_proxy(uint32_t conn_id, cons
         conn->socket = m_parameters.make_socket.func(m_parameters.make_socket.arg, parameters.proto, std::nullopt);
     }
     if (auto e = conn->socket->connect({parameters.loop, SocketAddress(m_settings->address, m_settings->port),
-                {on_connected, on_read, on_close, conn.get()}, parameters.timeout});
-            e.has_value()) {
+                {on_connected, on_read, on_close, conn.get()}, parameters.timeout})) {
         log_conn(this, conn_id, dbg, "Failed to start socket connection");
         m_connections.erase(conn_id);
         return e;
@@ -148,30 +147,30 @@ std::optional<Socket::Error> HttpOProxy::connect_to_proxy(uint32_t conn_id, cons
 
     conn->state = CS_CONNECTING_SOCKET;
 
-    return std::nullopt;
+    return {};
 }
 
 static Uint8View string_to_bytes(std::string_view str) {
     return {(uint8_t *) str.data(), str.size()};
 }
 
-std::optional<Socket::Error> HttpOProxy::connect_through_proxy(uint32_t conn_id, const ConnectParameters &parameters) {
+Error<SocketError> HttpOProxy::connect_through_proxy(uint32_t conn_id, const ConnectParameters &parameters) {
     log_conn(this, conn_id, trace, "{}:{} == {}", m_settings->address, m_settings->port, parameters.peer.str());
 
     std::scoped_lock l(m_guard);
     auto &conn = m_connections[conn_id];
     if (conn == nullptr) {
-        return {{-1, AG_FMT("Non-existent connection: {}", conn_id)}};
+        return make_error(SocketError::AE_CONNECTION_ID_NOT_FOUND, fmt::to_string(conn_id));
     }
 
     if (conn->state != CS_CONNECTING_SOCKET) {
         log_conn(this, conn_id, dbg, "Invalid connection state: {}", magic_enum::enum_name(conn->state));
-        return {{-1, "Invalid connection state"}};
+        return make_error(SocketError::AE_INVALID_CONN_STATE, AG_FMT("id={} state={}", conn_id, magic_enum::enum_name(conn->state)));
     }
 
 #define SEND_S(conn_, str_)                                                                                            \
     do {                                                                                                               \
-        if (auto e = (conn_)->socket->send(string_to_bytes(str_)); e.has_value()) {                                    \
+        if (auto e = (conn_)->socket->send(string_to_bytes(str_))) {                                                   \
             log_conn(this, conn_id, dbg, "Failed to send connect request");                                            \
             return e;                                                                                                  \
         }                                                                                                              \
@@ -194,7 +193,7 @@ std::optional<Socket::Error> HttpOProxy::connect_through_proxy(uint32_t conn_id,
 
     conn->state = CS_CONNECTING_HTTP;
 
-    return std::nullopt;
+    return {};
 }
 
 void HttpOProxy::on_connected(void *arg) {
@@ -206,7 +205,7 @@ void HttpOProxy::on_connected(void *arg) {
         cbx.on_successful_proxy_connection(cbx.arg);
     }
 
-    if (auto e = self->connect_through_proxy(conn->id, conn->parameters); e.has_value()) {
+    if (auto e = self->connect_through_proxy(conn->id, conn->parameters)) {
         on_close(conn, std::move(e));
     }
 }
@@ -217,7 +216,7 @@ void HttpOProxy::on_read(void *arg, Uint8View data) {
     log_conn(self, conn->id, trace, "{}", data.size());
 
     if (data.empty()) {
-        on_close(conn, std::nullopt);
+        on_close(conn, {});
         return;
     }
 
@@ -233,26 +232,30 @@ void HttpOProxy::on_read(void *arg, Uint8View data) {
         }
         break;
     case CS_IDLE:
-    case CS_CONNECTING_SOCKET: {
+    case CS_CONNECTING_SOCKET:
+    case CS_CLOSING:
+    {
         log_conn(self, conn->id, dbg, "Invalid state: {}", magic_enum::enum_name(conn->state));
-        on_close(conn, {{-1, "Invalid state on reading"}});
+        auto err = make_error(SocketError::AE_INVALID_CONN_STATE, AG_FMT("id={} state={}", conn->id, magic_enum::enum_name(conn->state)));
+        on_close(conn, err);
         break;
     }
     }
 }
 
-void HttpOProxy::on_close(void *arg, std::optional<Socket::Error> error) {
+void HttpOProxy::on_close(void *arg, Error<SocketError> error) {
     auto *conn = (Connection *) arg;
     HttpOProxy *self = conn->proxy;
-    if (error.has_value()) {
-        log_conn(self, conn->id, trace, "{} ({})", error->description, error->code);
+    if (error) {
+        log_conn(self, conn->id, trace, "{}", error->str());
     }
 
     Callbacks callbacks = self->get_connection_callbacks_locked(conn);
     if (conn->state == CS_CONNECTING_SOCKET) {
-        callbacks.on_proxy_connection_failed(
-                callbacks.arg, error.has_value() ? std::make_optional(error->code) : std::nullopt);
+        callbacks.on_proxy_connection_failed(callbacks.arg, error);
     }
+
+    conn->state = CS_CLOSING;
 
     if (callbacks.on_close != nullptr) {
         callbacks.on_close(callbacks.arg, std::move(error));
@@ -297,7 +300,7 @@ void HttpOProxy::handle_http_response_chunk(Connection *conn, std::string_view c
 
     if (!utils::starts_with(seek, "HTTP/1.1 200 Connection established\r\n")
             && !utils::starts_with(seek, "HTTP/1.1 200 OK\r\n")) {
-        on_close(conn, {{-1, "Bad response"}});
+        on_close(conn, make_error(SocketError::AE_BAD_PROXY_REPLY));
         return;
     }
 
@@ -314,4 +317,4 @@ HttpOProxy::Callbacks HttpOProxy::get_connection_callbacks_locked(Connection *co
     return conn->parameters.callbacks;
 }
 
-} // namespace ag
+} // namespace ag::dns

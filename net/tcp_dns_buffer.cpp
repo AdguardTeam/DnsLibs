@@ -1,4 +1,4 @@
-#include "net/tcp_dns_buffer.h"
+#include "dns/net/tcp_dns_buffer.h"
 #include <cassert>
 #include <cstring>
 
@@ -8,7 +8,7 @@
 #include <Winsock2.h>
 #endif
 
-namespace ag {
+namespace ag::dns {
 
 static constexpr size_t PACKET_LENGTH_LENGTH = 2;
 static constexpr size_t BUFFER_MIN_CAPACITY = 512;
@@ -60,4 +60,4 @@ std::optional<Uint8Vector> TcpDnsBuffer::extract_packet() {
     return std::exchange(m_buffer, {});
 }
 
-} // namespace ag
+} // namespace ag::dns

@@ -6,6 +6,7 @@
 #include "jni_utils.h"
 
 using namespace ag;
+using namespace ag::dns;
 using namespace ag::jni;
 
 static std::unique_ptr<AndroidDnsStamp> g_dnsstamp_impl;
@@ -154,13 +155,13 @@ extern "C" JNIEXPORT jstring JNICALL Java_com_adguard_dnslibs_proxy_DnsStamp_get
 
 extern "C" JNIEXPORT jobject JNICALL Java_com_adguard_dnslibs_proxy_DnsStamp_parse0(
         JNIEnv *env, jclass clazz, jstring stamp_str) {
-    auto [stamp, err] = ServerStamp::from_string(JniUtils::marshal_string(env, stamp_str));
+    auto stamp = ServerStamp::from_string(JniUtils::marshal_string(env, stamp_str));
 
-    if (err) {
-        env->ThrowNew(env->FindClass("java/lang/IllegalArgumentException"), err->c_str());
+    if (stamp.has_error()) {
+        env->ThrowNew(env->FindClass("java/lang/IllegalArgumentException"), stamp.error()->str().c_str());
         return nullptr;
     }
 
     AndroidDnsStamp impl = dnsstamp_impl(env);
-    return env->NewLocalRef(impl.marshal_dnsstamp(env, stamp).get());
+    return env->NewLocalRef(impl.marshal_dnsstamp(env, stamp.value()).get());
 }

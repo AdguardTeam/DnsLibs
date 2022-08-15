@@ -1,81 +1,135 @@
 #pragma once
 
-#include "common/logger.h"
-#include "common/event_loop.h"
-#include "upstream/upstream.h"
 #include <mutex>
 #include <list>
 #include <condition_variable>
 #include <event2/event.h>
 #include <event2/bufferevent.h>
-#include "common/event_loop.h"
-#include "connection.h"
-#include "net/tls_session_cache.h"
 
-namespace ag {
+#include "common/logger.h"
+#include "common/parallel.h"
+#include "dns/common/event_loop.h"
+#include "dns/net/tcp_dns_buffer.h"
+#include "dns/net/tls_session_cache.h"
+#include "dns/upstream/upstream.h"
+
+#include "connection.h"
+
+namespace ag::dns {
 
 class DnsFramedConnection;
 
+using DnsFramedConnectionPtr = std::shared_ptr<DnsFramedConnection>;
+
 /**
- * Abstract pool of DNS framed connections
+ * DNS framed connection class.
+ * It uses format specified in DNS RFC for TCP connections:
+ * - Header is 2 bytes - length of payload
+ * - Payload is DNS packet content as sent by UDP
+ *
+ * Note that this class is extendable (for DoT) but already inherited from `enable_shared_from_this`.
  */
-class DnsFramedPool : public ConnectionPool {
+class DnsFramedConnection : public Connection, public std::enable_shared_from_this<DnsFramedConnection> {
 public:
-    DnsFramedPool(EventLoopPtr loop, Upstream *upstream);
-    ~DnsFramedPool() override;
+    DnsFramedConnection(const ConstructorAccess &access, EventLoop &loop, const ConnectionPoolPtr &pool,
+            const std::string &address_str);
+    static DnsFramedConnectionPtr create(
+            EventLoop &loop, const ConnectionPoolPtr &pool, const std::string &address_str) {
+        return std::make_shared<DnsFramedConnection>(ConstructorAccess{}, loop, pool, address_str);
+    }
+    virtual void connect();
 
-    // Copy is prohibited
-    DnsFramedPool(const DnsFramedPool &) = delete;
-    DnsFramedPool &operator=(const DnsFramedPool &) = delete;
+    ~DnsFramedConnection() override;
 
-    /**
-     * Send given data to the server and get the response
-     * @param buf request data
-     * @param timeout operation timeout
-     * @return Response in case of success, or an error in case of something went wrong
-     */
-    Connection::ReadResult perform_request(Uint8View buf, Millis timeout);
-
-protected:
-    friend class DnsFramedConnection;
-
-    /** Event loop */
-    EventLoopPtr m_loop;
-    /** Mutex for connections */
-    mutable std::mutex m_mutex;
-    /** Connected connections. They may receive requests */
-    std::list<ConnectionPtr> m_connections;
-    /** Pending connections. They may not receive requests yet */
-    HashSet<ConnectionPtr> m_pending_connections;
-    /** Parent upstream */
-    Upstream *m_upstream = nullptr;
-    /** The connections about to close. They may not receive requests and responses */
-    HashSet<ConnectionPtr> m_closing_connections;
-    /** Signals when all connections are closed */
-    std::condition_variable_any m_no_conns_cond;
     /** Logger */
     Logger m_log;
+    /** Connection id */
+    uint32_t m_id{};
+    /** Address */
+    SocketAddress m_address;
+    /** Input buffer */
+    TcpDnsBuffer m_input_buffer;
+    /** Connection handle */
+    SocketFactory::SocketPtr m_stream;
+    /** Idle timeout */
+    std::chrono::milliseconds m_idle_timeout{};
+    /** Map of requests */
+    HashMap<int, Request *> m_requests;
+    /** Next request id */
+    static std::atomic<uint16_t> m_next_request_id;
+    coro::Task<Reply> perform_request(Uint8View packet, Millis timeout) override;
+    virtual void resume_request(uint16_t request_id);
+    virtual void finish_request(uint16_t request_id, Reply &&reply);
 
-    void add_pending_connection(const ConnectionPtr &ptr);
+    static void on_connected(void *arg);
+    static void on_read(void *arg, Uint8View data);
+    static void on_close(void *arg, Error<SocketError> error);
+    void on_close(Error<DnsError> dns_error);
+    std::string address_str() {
+        if (m_address.valid()) {
+            return AG_FMT("{}({})", m_address_str, m_address.str());
+        } else {
+            return AG_FMT("{}()", m_address_str);
+        }
+    }
 
-    void add_connected(const ConnectionPtr &ptr);
+    auto ensure_connected(Request *request) {
+        struct Awaitable {
+            DnsFramedConnection *self;
+            Request *req;
+            bool await_ready() {
+                if (self->m_state == Connection::Status::PENDING) {
+                    return false;
+                }
+                if (self->m_state == Connection::Status::CLOSED) {
+                    req->reply = Reply(make_error(DE_CONNECTION_CLOSED));
+                }
+                return true;
+            }
+            void await_suspend(std::coroutine_handle<> h) {
+                self->m_requests[req->request_id] = req;
+                req->caller = h;
+                self->connect();
+            }
+            void await_resume() {}
+        };
+        auto wait_timeout = [](EventLoop &loop, std::weak_ptr<DnsFramedConnection> conn, Millis timeout, uint16_t request_id) -> coro::Task<void> {
+            co_await loop.co_sleep(timeout);
+            if (DnsFramedConnection *self = conn.lock().get()) {
+                self->finish_request(request_id, Reply{make_error(DE_TIMED_OUT)});
+            }
+        };
+        return parallel::any_of_void(
+                Awaitable{.self = this, .req = request},
+                wait_timeout(m_loop, weak_from_this(), request->timeout, request->request_id)
+        );
+    }
 
-    void remove_from_all(const ConnectionPtr &ptr);
-
-    virtual Connection::ReadResult perform_request_inner(Uint8View buf, Millis timeout);
-
-    /**
-     * Creates DNS framed connection from bufferevent.
-     * @param address Destination address
-     * @param secure_socket_parameters Non-nullopt in case it's a secured connection
-     * @param idle_timeout Idle timeout. If 0, request timeout will be used.
-     * @return Newly created DNS framed connection
-     */
-    ConnectionPtr create_connection(const SocketAddress &address,
-                                    std::optional<SocketFactory::SecureSocketParameters> secure_socket_parameters,
-                                    Millis idle_timeout = Millis{0});
-
-    void close_connection(const ConnectionPtr &conn);
+    auto wait_response(Request *request) {
+        struct Awaitable {
+            DnsFramedConnection *self;
+            Request *req;
+            bool await_ready() {
+                return false;
+            }
+            void await_suspend(std::coroutine_handle<> h) {
+                dbglog(self->m_log, "Waiting response...");
+                self->m_requests[req->request_id] = req;
+                req->caller = h;
+            }
+            void await_resume() {}
+        };
+        auto wait_timeout = [](EventLoop &loop, std::weak_ptr<DnsFramedConnection> conn, Millis timeout, uint16_t request_id) -> coro::Task<void> {
+            co_await loop.co_sleep(timeout);
+            if (DnsFramedConnection *self = conn.lock().get()) {
+                self->finish_request(request_id, Reply{make_error(DE_TIMED_OUT)});
+            }
+        };
+        return parallel::any_of_void(
+                Awaitable{.self = this, .req = request},
+                wait_timeout(m_loop, weak_from_this(), request->timeout, request->request_id)
+        );
+    }
 };
 
-} // namespace ag
+} // namespace ag::dns

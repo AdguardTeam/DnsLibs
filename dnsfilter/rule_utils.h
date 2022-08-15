@@ -7,7 +7,7 @@
 #include <vector>
 #include <variant>
 #include "common/logger.h"
-#include "dnsfilter/dnsfilter.h"
+#include "dns/dnsfilter/dnsfilter.h"
 
 
 /**
@@ -15,12 +15,12 @@
  *  Useful links:
  *   - https://github.com/AdguardTeam/AdguardHome/wiki/Hosts-Blocklists
  */
-namespace ag::dnsfilter::rule_utils {
+namespace ag::dns::dnsfilter::rule_utils {
 
 static constexpr std::string_view REVERSE_DNS_DOMAIN_SUFFIX = ".in-addr.arpa.";
 static constexpr std::string_view REVERSE_IPV6_DNS_DOMAIN_SUFFIX = ".ip6.arpa.";
 
-#define ru_dbglog(l_, ...) do { if ((l_) != nullptr) dbglog(*(l_), __VA_ARGS__); } while (0)
+#define ru_dbglog(l, fmt, ...) do { if ((l) != nullptr && (l)->is_enabled(ag::LOG_LEVEL_DEBUG)) (l)->log(ag::LOG_LEVEL_DEBUG, FMT_STRING("{}: " fmt), __func__, ##__VA_ARGS__); } while(0)
 
 struct DnstypeInfo {
     enum MatchMode {
@@ -187,11 +187,11 @@ bool is_domain_name(std::string_view str);
 
 } // namespace ag::dnsfilter::rule_utils
 
-namespace ag {
+namespace ag::dns {
 
 struct DnsFilter::AdblockRuleInfo::Parameters {
     // non-nullopt if the rule has `$dnsrewrite` modifier
-    std::optional<ag::dnsfilter::rule_utils::DnsrewriteInfo> dnsrewrite;
+    std::optional<dnsfilter::rule_utils::DnsrewriteInfo> dnsrewrite;
 };
 
-} // namespace ag
+} // namespace ag::dns

@@ -1,8 +1,8 @@
-#include "net/tls_session_cache.h"
+#include "dns/net/tls_session_cache.h"
 #include "common/utils.h"
 #include <cassert>
 
-namespace ag {
+namespace ag::dns {
 
 Logger TlsSessionCache::m_log{"TLS session cache"};
 std::mutex TlsSessionCache::m_mtx;
@@ -82,4 +82,4 @@ static int get_ex_data_idx() {
     return ret;
 }
 
-} // namespace ag
+} // namespace ag::dns

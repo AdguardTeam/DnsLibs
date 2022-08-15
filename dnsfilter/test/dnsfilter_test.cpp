@@ -1,14 +1,16 @@
-#include "../rule_utils.h"
-#include "common/file.h"
-#include "common/logger.h"
-#include "common/sys.h"
-#include "common/utils.h"
-#include "dnsfilter/dnsfilter.h"
 #include <gtest/gtest.h>
 #include <numeric>
 #include <string>
 
-namespace ag::dnsfilter::test {
+#include "common/file.h"
+#include "common/logger.h"
+#include "common/utils.h"
+#include "dns/common/sys.h"
+#include "dns/dnsfilter/dnsfilter.h"
+
+#include "../rule_utils.h"
+
+namespace ag::dns::dnsfilter::test {
 
 class DnsfilterTest : public ::testing::Test {
 protected:
@@ -21,7 +23,7 @@ protected:
     void SetUp() override {
         Logger::set_log_level(LogLevel::LOG_LEVEL_TRACE);
         file = ag::file::open(file_by_filter_name(TEST_FILTER_NAME), ag::file::CREAT | ag::file::RDONLY);
-        ASSERT_TRUE(ag::file::is_valid(file)) << ag::sys::error_string(ag::sys::error_code());
+        ASSERT_TRUE(ag::file::is_valid(file)) << ag::dns::sys::error_string(ag::dns::sys::error_code());
         ag::file::close(file);
     }
 
@@ -31,8 +33,8 @@ protected:
 
     static void add_rule_in_filter(std::string_view filter, std::string_view rule) {
         ag::file::Handle file = ag::file::open(std::string(filter), ag::file::WRONLY);
-        ASSERT_TRUE(ag::file::is_valid(file)) << ag::sys::error_string(ag::sys::error_code());
-        ASSERT_TRUE(ag::file::get_size(file) >= 0) << ag::sys::error_string(ag::sys::error_code());
+        ASSERT_TRUE(ag::file::is_valid(file)) << ag::dns::sys::error_string(ag::dns::sys::error_code());
+        ASSERT_TRUE(ag::file::get_size(file) >= 0) << ag::dns::sys::error_string(ag::dns::sys::error_code());
         ag::file::set_position(file, ag::file::get_size(file));
         EXPECT_EQ(ag::file::write(file, rule.data(), rule.length()), rule.length());
         EXPECT_EQ(ag::file::write(file, "\n", 1), 1);
@@ -1135,4 +1137,4 @@ TEST_F(DnsfilterTest, FileBasedFilterAutoUpdate) {
     filter.destroy(handle);
 }
 
-} // namespace ag::dnsfilter::test
+} // namespace ag::dns::dnsfilter::test

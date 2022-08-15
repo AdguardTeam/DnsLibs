@@ -1,13 +1,14 @@
 #include <ldns/error.h>
 #include <ldns/net.h>
 
-#include "common/net_consts.h"
 #include "common/net_utils.h"
 #include "common/utils.h"
-#include "dnscrypt/dns_crypt_ldns.h"
-#include "net/blocking_socket.h"
+#include "dns/common/dns_defs.h"
+#include "dns/common/net_consts.h"
+#include "dns/dnscrypt/dns_crypt_ldns.h"
+#include "dns/net/aio_socket.h"
 
-namespace ag::dnscrypt {
+namespace ag::dns::dnscrypt {
 
 ldns_pkt_ptr create_request_ldns_pkt(ldns_rr_type rr_type, ldns_rr_class rr_class, uint16_t flags,
         std::string_view dname_str, std::optional<size_t> size_opt) {
@@ -26,88 +27,74 @@ ldns_pkt_ptr create_request_ldns_pkt(ldns_rr_type rr_type, ldns_rr_class rr_clas
     return pkt;
 }
 
-CreateLdnsBufferResult create_ldns_buffer(const ldns_pkt &request_pkt) {
-    static constexpr utils::MakeError<CreateLdnsBufferResult> make_error;
+LdnsEncodeResult create_ldns_buffer(const ldns_pkt &request_pkt) {
     ldns_buffer_ptr result(ldns_buffer_new(REQUEST_BUFFER_INITIAL_CAPACITY));
     ldns_status status = ldns_pkt2buffer_wire(result.get(), &request_pkt);
     if (status != LDNS_STATUS_OK) {
-        return make_error(ldns_get_errorstr_by_id(status));
+        return make_error(DE_ENCODE_ERROR, ldns_get_errorstr_by_id(status));
     }
-    return {std::move(result), std::nullopt};
+    return result;
 }
 
-CreateLdnsPktResult create_ldns_pkt(uint8_t *data, size_t size) {
-    static constexpr utils::MakeError<CreateLdnsPktResult> make_error;
+LdnsDecodeResult create_ldns_pkt(uint8_t *data, size_t size) {
     ldns_pkt *pkt = nullptr;
     ldns_status status = ldns_wire2pkt(&pkt, data, size);
     ldns_pkt_ptr result(pkt);
     if (status != LDNS_STATUS_OK) {
-        return make_error(ldns_get_errorstr_by_id(status));
+        return make_error(DE_DECODE_ERROR, ldns_get_errorstr_by_id(status));
     }
-    return {std::move(result), std::nullopt};
+    return result;
 }
 
-DnsExchangeUnparsedResult dns_exchange(Millis timeout, const SocketAddress &socket_address, ldns_buffer &buffer,
+coro::Task<DnsExchangeUnparsedResult> dns_exchange(EventLoop &loop, Millis timeout, const SocketAddress &socket_address, ldns_buffer &buffer,
         const SocketFactory *socket_factory, SocketFactory::SocketParameters socket_parameters) {
-    static constexpr utils::MakeError<DnsExchangeUnparsedResult> make_error;
 
     utils::Timer timer;
 
-    BlockingSocket socket(socket_factory->make_socket(std::move(socket_parameters)));
-    if (!socket) {
-        return make_error("Can't initialize blocking socket wrapper");
-    }
-    if (auto e = socket.connect({socket_address, timeout}); e.has_value()) {
-        return make_error(std::move(e->description));
+    AioSocket socket(socket_factory->make_socket(std::move(socket_parameters)));
+    if (auto err = co_await socket.connect({&loop, socket_address, timeout})) {
+        co_return {.error = make_error(DE_SOCKET_ERROR, err)};
     }
 
     timeout -= timer.elapsed<decltype(timeout)>();
     if (timeout <= decltype(timeout)(0)) {
-        return make_error(evutil_socket_error_to_string(utils::AG_ETIMEDOUT));
+        co_return {.error = make_error(DE_TIMED_OUT)};
     }
 
-    if (auto e = socket.send_dns_packet({(uint8_t *) ldns_buffer_begin(&buffer), ldns_buffer_position(&buffer)});
-            e.has_value()) {
-        return make_error(std::move(e->description));
+    if (auto err = socket.send_dns_packet({(uint8_t *) ldns_buffer_begin(&buffer), ldns_buffer_position(&buffer)})) {
+        co_return {.error = make_error(DE_SOCKET_ERROR, err)};
     }
 
-    auto r = socket.receive_dns_packet(timeout);
-    if (auto *e = std::get_if<Socket::Error>(&r); e != nullptr) {
-        return make_error(std::move(e->description));
+    auto r = co_await socket.receive_dns_packet(timeout);
+    if (r.has_error()) {
+        co_return {.error = make_error(DE_SOCKET_ERROR, r.error())};
     }
 
-    auto &reply = std::get<Uint8Vector>(r);
-    return {std::move(reply), timer.elapsed<Millis>()};
+    auto &reply = r.value();
+    co_return {std::move(reply), timer.elapsed<Millis>()};
 }
 
-DnsExchangeResult dns_exchange_from_ldns_buffer(Millis timeout, const SocketAddress &socket_address,
-        ldns_buffer &buffer, const SocketFactory *socket_factory, SocketFactory::SocketParameters socket_parameters) {
-    static constexpr utils::MakeError<DnsExchangeResult> make_error;
-    auto [reply, rtt, allocated_err]
-            = dns_exchange(timeout, socket_address, buffer, socket_factory, std::move(socket_parameters));
-    if (allocated_err) {
-        return make_error(std::move(allocated_err));
-    }
-    auto [reply_pkt_unique_ptr, reply_err] = create_ldns_pkt(reply.data(), reply.size());
-    if (reply_err) {
-        return make_error(std::move(reply_err));
-    }
-    if (ldns_pkt_tc(reply_pkt_unique_ptr.get())) {
-        return make_error("Truncated response");
-    }
-    return {std::move(reply_pkt_unique_ptr), rtt, std::nullopt};
-}
-
-DnsExchangeResult dns_exchange_from_ldns_pkt(Millis timeout, const SocketAddress &socket_address,
+coro::Task<DnsExchangeResult> dns_exchange_from_ldns_pkt(EventLoop &loop, Millis timeout, const SocketAddress &socket_address,
         const ldns_pkt &request_pkt, const SocketFactory *socket_factory,
         SocketFactory::SocketParameters socket_parameters) {
-    static constexpr utils::MakeError<DnsExchangeResult> make_error;
-    auto [buffer, err] = create_ldns_buffer(request_pkt);
-    if (err) {
-        return make_error(std::move(err));
+
+    auto buffer = create_ldns_buffer(request_pkt);
+    if (buffer.has_error()) {
+        co_return {.error = buffer.error()};
     }
-    return dns_exchange_from_ldns_buffer(
-            timeout, socket_address, *buffer, socket_factory, std::move(socket_parameters));
+    auto [reply, rtt, allocated_err]
+            = co_await dns_exchange(loop, timeout, socket_address, *buffer.value(), socket_factory, std::move(socket_parameters));
+    if (allocated_err) {
+        co_return {.error = allocated_err};
+    }
+    auto reply_pkt = create_ldns_pkt(reply.data(), reply.size());
+    if (reply_pkt.has_error()) {
+        co_return {.error = reply_pkt.error()};
+    }
+    if (ldns_pkt_tc(reply_pkt->get())) {
+        co_return {.error = make_error(DE_TRUNCATED_RESPONSE)};
+    }
+    co_return {std::move(reply_pkt.value()), rtt, {}};
 }
 
-} // namespace ag::dnscrypt
+} // namespace ag::dns::dnscrypt

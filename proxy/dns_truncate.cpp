@@ -8,7 +8,7 @@
 
 #include "dns_truncate.h"
 
-namespace ag {
+namespace ag::dns {
 
 // `pos` is the "virtual" buffer position needed for compression
 static size_t dname_size(const ldns_rdf *name, ldns_rbtree_t *compression, size_t pos) {
@@ -155,4 +155,4 @@ bool ldns_pkt_truncate(ldns_pkt *pkt, uint16_t max_size) {
     return truncated;
 }
 
-} // namespace ag
+} // namespace ag::dns

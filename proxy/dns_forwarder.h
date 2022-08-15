@@ -7,16 +7,16 @@
 #include "common/utils.h"
 #include "common/cache.h"
 #include "common/clock.h"
-#include "dnsfilter/dnsfilter.h"
-#include "proxy/dnsproxy_settings.h"
-#include "proxy/dnsproxy_events.h"
-#include "proxy/dnsproxy.h"
-#include "upstream/upstream.h"
+#include "dns/dnsfilter/dnsfilter.h"
+#include "dns/proxy/dnsproxy_settings.h"
+#include "dns/proxy/dnsproxy_events.h"
+#include "dns/proxy/dnsproxy.h"
+#include "dns/upstream/upstream.h"
 
 #include "dns64.h"
 #include "retransmission_detector.h"
 
-namespace ag {
+namespace ag::dns {
 
 struct CachedResponse {
     ldns_pkt_ptr response;
@@ -31,8 +31,7 @@ struct CacheResult {
 };
 
 struct UpstreamExchangeResult {
-    ldns_pkt_ptr response;
-    ErrString error;
+    Result<ldns_pkt_ptr, DnsError> result;
     Upstream *upstream;
 };
 
@@ -53,22 +52,20 @@ public:
     DnsForwarder();
     ~DnsForwarder();
 
-    std::pair<bool, ErrString> init(const DnsProxySettings &settings, const DnsProxyEvents &events);
+    std::pair<bool, ErrString> init(EventLoopPtr loop, const DnsProxySettings &settings, const DnsProxyEvents &events);
     void deinit();
 
-    Uint8Vector handle_message(Uint8View message, const DnsMessageInfo *info);
+    coro::Task<Uint8Vector> handle_message(Uint8View message, const DnsMessageInfo *info);
 
 private:
-    static void async_request_worker(uv_work_t *);
-    static void async_request_finalizer(uv_work_t *, int);
 
     void truncate_response(ldns_pkt *response, const ldns_pkt *request, const DnsMessageInfo *info);
 
-    Uint8Vector handle_message_internal(Uint8View message, const DnsMessageInfo *info,
-                                        bool fallback_only, uint16_t pkt_id);
+    coro::Task<Uint8Vector> handle_message_internal(Uint8View message, const DnsMessageInfo *info,
+            bool fallback_only, uint16_t pkt_id);
 
-    UpstreamExchangeResult do_upstream_exchange(std::string_view normalized_domain, ldns_pkt *request,
-                                                bool fallback_only, const DnsMessageInfo *info = nullptr);
+    coro::Task<UpstreamExchangeResult> do_upstream_exchange(std::string_view normalized_domain, ldns_pkt *request,
+            bool fallback_only, const DnsMessageInfo *info = nullptr);
 
     CacheResult create_response_from_cache(const std::string &key, const ldns_pkt *request);
 
@@ -76,7 +73,7 @@ private:
 
     bool apply_fallback_filter(std::string_view hostname, const ldns_pkt *request);
 
-    std::optional<Uint8Vector> apply_filter(
+    coro::Task<std::optional<Uint8Vector>> apply_filter(
             DnsFilter::MatchParam match,
             const ldns_pkt *request,
             const ldns_pkt *original_response,
@@ -87,17 +84,19 @@ private:
             ldns_pkt_rcode *out_rcode = nullptr
     );
 
-    std::optional<Uint8Vector> apply_cname_filter(const ldns_rr *cname_rr, const ldns_pkt *request,
-                                                  const ldns_pkt *response, DnsRequestProcessedEvent &event,
-                                                  std::vector<DnsFilter::Rule> &last_effective_rules,
-                                                  bool fallback_only);
+    coro::Task<std::optional<Uint8Vector>> apply_cname_filter(
+            const ldns_rr *cname_rr, const ldns_pkt *request,
+            const ldns_pkt *response, DnsRequestProcessedEvent &event,
+            std::vector<DnsFilter::Rule> &last_effective_rules,
+            bool fallback_only);
 
-    std::optional<Uint8Vector> apply_ip_filter(const ldns_rr *rr, const ldns_pkt *request,
-                                               const ldns_pkt *response, DnsRequestProcessedEvent &event,
-                                               std::vector<DnsFilter::Rule> &last_effective_rules,
-                                               bool fallback_only);
+    coro::Task<std::optional<Uint8Vector>> apply_ip_filter(
+            const ldns_rr *rr, const ldns_pkt *request,
+            const ldns_pkt *response, DnsRequestProcessedEvent &event,
+            std::vector<DnsFilter::Rule> &last_effective_rules,
+            bool fallback_only);
 
-    ldns_pkt_ptr try_dns64_aaaa_synthesis(Upstream *upstream, const ldns_pkt_ptr &request) const;
+    coro::Task<ldns_pkt_ptr> try_dns64_aaaa_synthesis(Upstream *upstream, const ldns_pkt_ptr &request) const;
 
     void finalize_processed_event(DnsRequestProcessedEvent &event,
                                   const ldns_pkt *request, const ldns_pkt *response, const ldns_pkt *original_response,
@@ -109,6 +108,7 @@ private:
     void remove_ech_svcparam(ldns_pkt *response);
 
     Logger m_log{"dns_forwarder"};
+    EventLoopPtr m_loop;
     const DnsProxySettings *m_settings = nullptr;
     const DnsProxyEvents *m_events = nullptr;
     std::vector<UpstreamPtr> m_upstreams;
@@ -118,27 +118,13 @@ private:
     DnsFilter::Handle m_fallback_filter_handle = nullptr;
     dns64::Prefixes m_dns64_prefixes;
     std::shared_ptr<SocketFactory> m_socket_factory;
+    std::shared_ptr<bool> m_shutdown_guard;
 
     WithMtx<LruCache<std::string, CachedResponse>, std::shared_mutex> m_response_cache;
 
     RetransmissionDetector m_retransmission_detector;
 
-    struct AsyncRequest {
-        uv_work_t work{};
-        DnsForwarder *forwarder{};
-        ldns_pkt_ptr request;
-        std::string cache_key;
-        std::string normalized_domain; // domain name without dot in the end
-
-        AsyncRequest() {
-            work.data = this;
-        }
-    };
-
-    // Map of async requests in flight (cache key -> uv work handle)
-    std::unordered_map<std::string, AsyncRequest> m_async_reqs;
-    std::mutex m_async_reqs_mtx;
-    std::condition_variable m_async_reqs_cv;
+    coro::Task<void> optimistic_cache_background_resolve(ldns_pkt_ptr req, std::string cache_key, std::string normalized_domain);
 };
 
-} // namespace ag
+} // namespace ag::dns

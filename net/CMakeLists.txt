@@ -3,7 +3,7 @@ project(dnslibs_net)
 include(../cmake/conan_bootstrap.cmake)
 conan_bootstrap(SRCROOT ".." CONANFILE "../conanfile.py" SCOPE_NAME agdns)
 
-set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD 20)
 
 set(DNSLIBS_DIR "${CMAKE_CURRENT_SOURCE_DIR}/..")
 
@@ -14,7 +14,6 @@ set(SRCS
         tls_session_cache.cpp
         socket.cpp
         socket_factory.cpp
-        blocking_socket.cpp
         tcp_stream.cpp
         udp_socket.cpp
         tcp_dns_buffer.cpp
@@ -25,15 +24,20 @@ set(SRCS
         outbound_direct_proxy.cpp
         tls_codec.cpp
         secured_socket.cpp
+        aio_socket.cpp
         )
 
 add_library(dnslibs_net STATIC EXCLUDE_FROM_ALL ${SRCS})
 set_target_properties(dnslibs_net PROPERTIES POSITION_INDEPENDENT_CODE ON)
 
-target_compile_options(dnslibs_net PRIVATE
+if (NOT MSVC)
+    target_compile_options(dnslibs_net PRIVATE
         -Wall -Wextra -Werror
         -Wno-unused-parameter
         -Wno-missing-field-initializers)
+else()
+    target_compile_options(dnslibs_net PRIVATE /W3)
+endif()
 
 if (NOT TARGET dnslibs_common)
     add_subdirectory(${DNSLIBS_DIR}/common ${CMAKE_BINARY_DIR}/common)
@@ -52,4 +56,4 @@ include(${CMAKE_CURRENT_SOURCE_DIR}/../cmake/add_unit_test.cmake)
 link_libraries(dnslibs_net)
 set(TEST_DIR ${CMAKE_CURRENT_SOURCE_DIR}/test)
 
-add_unit_test(test_tcp_stream ${TEST_DIR} "src" TRUE TRUE)
+add_unit_test(test_tcp_stream ${TEST_DIR} . TRUE FALSE)

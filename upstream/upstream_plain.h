@@ -1,38 +1,16 @@
 #pragma once
 
 #include <utility>
-#include "upstream/upstream.h"
 #include <event2/event.h>
 #include <ldns/net.h>
+
+#include "dns/upstream/upstream.h"
+
 #include "dns_framed.h"
 
-namespace ag {
+namespace ag::dns {
 
 class PlainUpstream;
-
-/**
- * Pool of TCP connections
- */
-class TcpPool : public DnsFramedPool {
-public:
-    /**
-     * Create pool of TCP connections
-     * @param loop Event loop
-     * @param address Destination socket address
-     * @upstream Parent upstream
-     */
-    TcpPool(EventLoopPtr loop, const SocketAddress &address, PlainUpstream *upstream);
-
-    GetResult get() override;
-
-    const SocketAddress &address() const;
-
-private:
-    /** Destination socket address */
-    SocketAddress m_address;
-
-    GetResult create();
-};
 
 /**
  * Plain DNS upstream
@@ -50,8 +28,8 @@ public:
     ~PlainUpstream() override = default;
 
 private:
-    ErrString init() override;
-    ExchangeResult exchange(ldns_pkt *request_pkt, const DnsMessageInfo *info) override;
+    Error<InitError> init() override;
+    coro::Task<ExchangeResult> exchange(ldns_pkt *request_pkt, const DnsMessageInfo *info) override;
 
     Logger m_log;
 
@@ -60,7 +38,9 @@ private:
     /** Prefer TCP */
     bool m_prefer_tcp;
     /** TCP connection pool */
-    TcpPool m_pool;
+    ConnectionPoolPtr m_pool;
+    /** Socket address */
+    SocketAddress m_address;
 };
 
-} // namespace ag
+} // namespace ag::dns

@@ -3,13 +3,13 @@
 
 #include "common/clock.h"
 #include "common/logger.h"
-#include "net/socket.h"
+#include "dns/net/socket.h"
 
 #include "../bootstrapper.h"
 
 using namespace std::chrono;
 
-namespace ag::upstream::test {
+namespace ag::dns::upstream::test {
 
 struct BootstrapperTest : ::testing::Test {
 protected:
@@ -19,25 +19,34 @@ protected:
 };
 
 TEST_F(BootstrapperTest, DontWaitAll) {
-    SocketFactory socket_factory({});
+    EventLoopPtr loop = EventLoop::create();
+    loop->start();
+    SocketFactory socket_factory({*loop});
     Bootstrapper::Params bootstrapper_params = {
             .address_string = "example.com",
             .default_port = 0,
             .bootstrap = {"1.1.1.1:53", "1.1.1.1:55"},
             .timeout = Secs(30),
-            .upstream_config = {&socket_factory},
+            .upstream_config = {*loop, &socket_factory},
     };
-    Bootstrapper bootstrapper(bootstrapper_params);
-    ErrString err = bootstrapper.init();
-    ASSERT_FALSE(err.has_value()) << err.value();
+    auto bootstrapper = std::make_unique<Bootstrapper>(bootstrapper_params);
+    auto err = bootstrapper->init();
+    ASSERT_FALSE(err) << err->str();
 
     auto before_ts = SteadyClock::now();
-    Bootstrapper::ResolveResult result = bootstrapper.get();
+    Bootstrapper::ResolveResult result = coro::to_future(
+            [](EventLoop &loop, Bootstrapper &bootstrapper) -> coro::Task<Bootstrapper::ResolveResult> {
+                co_await loop.co_submit();
+                co_return co_await bootstrapper.get();
+            }(*loop, *bootstrapper)).get();
+    bootstrapper.reset();
+    loop->stop();
+    loop->join();
     auto after_ts = SteadyClock::now();
 
-    ASSERT_FALSE(result.error.has_value()) << result.error.value();
+    ASSERT_FALSE(result.error) << result.error->str();
     ASSERT_FALSE(result.addresses.empty());
     ASSERT_LT(duration_cast<Millis>(after_ts - before_ts), bootstrapper_params.timeout / 2);
 }
 
-} // namespace ag::upstream::test
+} // namespace ag::dns::upstream::test

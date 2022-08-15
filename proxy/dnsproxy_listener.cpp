@@ -7,8 +7,8 @@
 #include <thread>
 #include <uv.h>
 
-#include "common/net_consts.h"
 #include "common/socket_address.h"
+#include "dns/common/net_consts.h"
 
 #include "dnsproxy_listener.h"
 
@@ -27,7 +27,7 @@ static const int THREAD_POOL_SIZE_RESULT [[maybe_unused]] = uv_os_setenv("UV_THR
 static const int THREAD_POOL_SIZE_RESULT [[maybe_unused]] = uv_os_setenv("UV_THREADPOOL_SIZE", "24");
 #endif
 
-namespace ag {
+namespace ag::dns {
 
 // For TCP this could be arbitrarily small, but we would prefer to catch the whole request in one buffer.
 static constexpr size_t TCP_RECV_BUF_SIZE = UDP_RECV_BUF_SIZE + 2; // + 2 for payload length
@@ -37,21 +37,15 @@ static void udp_alloc_cb(uv_handle_t *handle, size_t suggested_size, uv_buf_t *b
     buf->len = UDP_RECV_BUF_SIZE;
 }
 
-static void dealloc_buf(const uv_buf_t *buf) {
-    delete[] buf->base;
-}
-
 // Abstract base for listeners, does uv initialization/stopping
 class ListenerBase : public DnsProxyListener {
 protected:
     Logger m_log{"listener"};
     DnsProxy *m_proxy{nullptr};
-    std::thread m_loop_thread;
-    using uv_loop_ptr = UniquePtr<uv_loop_t, &uv_loop_delete>;
-    uv_loop_ptr m_loop;
-    uv_async_t m_escape_hatch{};
+    EventLoop *m_loop;
     SocketAddress m_address;
     ListenerSettings m_settings;
+    std::shared_ptr<bool> m_shutdown_guard;
 
     // Subclass initializes its handles, callbacks, etc.
     // The loop is initialized, but isn't yet running at this point
@@ -59,45 +53,11 @@ protected:
     // Close any uv_*_init'ed handles before returning in case of an error!
     virtual ErrString before_run() = 0;
 
-    // Subclass cleans up to allow the event loop to exit
-    // (close handles, cancel pending work, etc.)
-    // Called on event loop's thread
-    virtual void before_stop() = 0;
-
-private:
-    static void escape_hatch_cb(uv_async_t *handle) {
-        auto *self = (ListenerBase *) handle->data;
-        log_listener(self, dbg, "Received signal to stop");
-        self->before_stop();
-        uv_close((uv_handle_t *) &self->m_escape_hatch, nullptr);
-    }
-
-    static int run_loop(uv_loop_t *loop, uv_run_mode mode) {
-#ifdef __MACH__
-        static auto ensure_sigpipe_ignored [[maybe_unused]] = signal(SIGPIPE, SIG_IGN);
-
-#elif defined EVTHREAD_USE_PTHREADS_IMPLEMENTED
-        // Block SIGPIPE
-        sigset_t sigset, oldset;
-        sigemptyset(&sigset);
-        sigaddset(&sigset, SIGPIPE);
-        pthread_sigmask(SIG_BLOCK, &sigset, &oldset);
-#endif // __MACH__
-
-        auto err = uv_run(loop, mode);
-
-#if defined(EVTHREAD_USE_PTHREADS_IMPLEMENTED) && !defined(__MACH__)
-        // Restore SIGPIPE state
-        pthread_sigmask(SIG_SETMASK, &oldset, nullptr);
-#endif
-        return err;
-    }
-
 public:
     /**
      * @return std::nullopt if ok, error string otherwise
      */
-    ErrString init(const ListenerSettings &settings, DnsProxy *proxy) {
+    ErrString init(const ListenerSettings &settings, DnsProxy *proxy, EventLoop *loop) {
         m_settings = settings;
 #ifdef _WIN32
         m_settings.fd = -1; // Unsupported on Windows
@@ -109,6 +69,10 @@ public:
         if (!m_proxy) {
             return "Proxy is not set";
         }
+        m_loop = loop;
+        if (!m_loop) {
+            return "Event loop is not set";
+        }
 
         if (m_settings.fd == -1) {
             m_address = SocketAddress{m_settings.address, m_settings.port};
@@ -118,59 +82,19 @@ public:
         }
 
         int err = 0;
-        // Init the loop
-        if (m_loop = uv_loop_ptr(uv_loop_new()); m_loop == nullptr) {
-            return "Failed to create uv loop";
-        }
-
-        // Init the escape hatch
-        if ((err = uv_async_init(m_loop.get(), &m_escape_hatch, escape_hatch_cb))) {
-            return AG_FMT("uv_async_init failed: {}", uv_strerror(err));
-        }
-        m_escape_hatch.data = this;
 
         auto err_str = before_run();
         if (err_str.has_value()) {
-            uv_close((uv_handle_t *) &m_escape_hatch, nullptr);
-
-            // Run the loop once to let libuv close the handles cleanly
-            err = run_loop(m_loop.get(), UV_RUN_DEFAULT);
-            assert(0 == err);
-
             return err_str;
         }
 
-        m_loop_thread = std::thread([this]() {
-            int ret = run_loop(m_loop.get(), UV_RUN_DEFAULT);
-            if (ret != 0) {
-                log_listener(this, err, "uv_run: (%d) %s", ret, uv_strerror(ret));
-            } else {
-                log_listener(this, info, "Finished listening");
-            }
-        });
+        m_shutdown_guard = std::make_shared<bool>(true);
 
         return std::nullopt;
     }
 
     ~ListenerBase() override {
-        await_shutdown();
         evutil_closesocket(m_settings.fd);
-    }
-
-    void shutdown() final {
-        // The next invocation of escape_hatch_cb will close all handles, allowing the loop to exit
-        if (this == m_escape_hatch.data) { // Check async initialized
-            int ret = uv_async_send(&m_escape_hatch);
-            if (ret != 0) {
-                log_listener(this, err, "uv_async_send: (%d) %s", ret, uv_strerror(ret));
-            }
-        }
-    }
-
-    void await_shutdown() final {
-        if (m_loop_thread.joinable()) { // Allow await_shutdown() to be called more than once
-            m_loop_thread.join();
-        }
     }
 
     [[nodiscard]] std::pair<ag::utils::TransportProtocol, SocketAddress> get_listen_address() const override {
@@ -180,92 +104,81 @@ public:
 
 class UdpListener : public ListenerBase {
 private:
-    struct Task {
-        uv_work_t work_req{};
-        UdpListener *self;
-        SocketAddress peer;
-        uv_buf_t request;
-        Uint8Vector response; // Filled in work_cb
+    UvPtr<uv_udp_t> m_udp;
 
-        // Takes ownership of request buffer
-        Task(UdpListener *self, const sockaddr *addr, uv_buf_t request)
-                : self(self)
-                , peer(addr)
-                , request(request) {
-
-            work_req.data = this;
-        }
-
-        ~Task() {
-            dealloc_buf(&request);
-        }
-    };
-
-    uv_udp_t m_udp_handle{};
-    HashSet<Task *> m_pending; // Messages not yet processed by the proxy
-
-    static void work_cb(uv_work_t *req) {
-        auto *m = (Task *) req->data;
-        DnsMessageInfo info{.proto = ag::utils::TP_UDP, .peername = m->peer};
-        m->response = m->self->m_proxy->handle_message({(uint8_t *) m->request.base, m->request.len}, &info);
+    auto send_reply(uv_buf_t reply, const sockaddr *addr) {
+        struct Awaitable {
+            uv_udp_t *m_udp{};
+            uv_buf_t m_reply{};
+            const sockaddr *m_addr{};
+            uv_udp_send_t m_req{};
+            std::coroutine_handle<> m_h;
+            int m_status = 0;
+            bool await_ready() {
+                m_req.data = this;
+                m_status = uv_udp_send(&m_req, m_udp, &m_reply, 1, m_addr, send_cb);
+                return m_status != 0;
+            }
+            auto await_suspend(std::coroutine_handle<> h) {
+                m_h = h;
+            }
+            static void send_cb(uv_udp_send_t *req, int status) {
+                auto *self = (Awaitable *) req->data;
+                self->m_status = status;
+                self->m_h.resume();
+            }
+            int await_resume() {
+                return m_status;
+            }
+        };
+        return Awaitable{.m_udp = m_udp->raw(), .m_reply = reply, .m_addr = addr};
     }
 
-    static void send_cb(uv_udp_send_t *req, int status) {
-        auto *m = (Task *) req->data;
-        if (status != 0) {
-            log_listener(m->self, dbg, "Error: {}", uv_strerror(status));
+    coro::Task<void> process_request(uv_buf_t request, const sockaddr *addr) {
+        std::unique_ptr<char[]> ptr{request.base};
+        DnsMessageInfo info{.proto = utils::TP_UDP, .peername = SocketAddress{addr}};
+        std::weak_ptr<bool> guard = m_shutdown_guard;
+        Uint8Vector result = co_await m_proxy->handle_message(Uint8View{(uint8_t *)request.base, request.len}, &info);
+        if (guard.expired()) {
+            co_return;
         }
-        delete req;
-        delete m;
-    }
-
-    static void after_work_cb(uv_work_t *req, int status) {
-        auto *m = (Task *) req->data;
-
-        m->self->m_pending.erase(m);
-
-        if (status == UV_ECANCELED || m->response.empty()) {
-            log_listener(m->self, dbg, "{}", status == UV_ECANCELED ? "Task cancelled" : "Response is empty");
-            delete m;
-            return;
+        uv_buf_t reply = uv_buf_init((char *) result.data(), result.size());
+        int err = co_await send_reply(reply, info.peername.c_sockaddr());
+        if (guard.expired()) {
+            co_return;
         }
-
-        auto resp_buf = uv_buf_init((char *) m->response.data(), m->response.size());
-
-        auto *send_req = new uv_udp_send_t;
-        send_req->data = m;
-
-        const int err = uv_udp_send(send_req, &m->self->m_udp_handle, &resp_buf, 1, m->peer.c_sockaddr(), send_cb);
         if (err < 0) {
-            log_listener(m->self, dbg, "uv_udp_send failed: {}", uv_strerror(err));
-            delete send_req;
-            delete m;
+            log_listener(this, dbg, "uv_udp_send failed: {}", uv_strerror(err));
         }
+        co_return;
     }
 
     static void recv_cb(
-            uv_udp_t *handle, ssize_t nread, const uv_buf_t *buf, const struct sockaddr *addr, unsigned flags) {
-        auto *self = (UdpListener *) handle->data;
+            uv_udp_t *handle, ssize_t nread,
+            const uv_buf_t *buf, const struct sockaddr *addr, unsigned flags) {
+        std::unique_ptr<char[]> ptr{buf->base};
+        auto *self = (UdpListener *) Uv<uv_udp_t>::parent_from_data(handle->data);
+        if (!self) {
+            return;
+        }
 
         if (nread < 0) {
             log_listener(self, dbg, "Failed: {}", uv_strerror(nread));
-            dealloc_buf(buf);
             return;
         }
         if (nread == 0) {
-            log_listener(self, dbg, "Received empty packet");
-            dealloc_buf(buf);
+            if (addr != nullptr) {
+                log_listener(self, dbg, "Received empty packet");
+            }
             return;
         }
         if (flags & UV_UDP_PARTIAL) {
             log_listener(self, dbg, "Failed: truncated");
-            dealloc_buf(buf);
             return;
         }
 
-        auto *m = new Task(self, addr, *buf);
-        uv_queue_work(self->m_loop.get(), &m->work_req, work_cb, after_work_cb);
-        self->m_pending.insert(m);
+        ptr.release();
+        coro::run_detached(self->process_request(*buf, addr));
     }
 
 protected:
@@ -273,46 +186,35 @@ protected:
         int err = 0;
 
         // Init UDP
-        if ((err = uv_udp_init(m_loop.get(), &m_udp_handle)) < 0) {
+        m_udp = Uv<uv_udp_t>::create_with_parent(this);
+        if ((err = uv_udp_init(m_loop->handle(), m_udp->raw())) < 0) {
             return AG_FMT("uv_udp_init failed: {}", uv_strerror(err));
         }
-        m_udp_handle.data = this;
 
         if (m_settings.fd == -1) {
-            if ((err = uv_udp_bind(&m_udp_handle, m_address.c_sockaddr(), UV_UDP_REUSEADDR)) < 0) {
-                uv_close((uv_handle_t *) &m_udp_handle, nullptr);
+            if ((err = uv_udp_bind(m_udp->raw(), m_address.c_sockaddr(), UV_UDP_REUSEADDR)) < 0) {
                 return AG_FMT("uv_udp_bind failed: {}", uv_strerror(err));
             }
         } else {
-            if ((err = uv_udp_open(&m_udp_handle, m_settings.fd)) < 0) {
-                uv_close((uv_handle_t *) &m_udp_handle, nullptr);
+            if ((err = uv_udp_open(m_udp->raw(), m_settings.fd)) < 0) {
                 return AG_FMT("uv_udp_open failed: {}", uv_strerror(err));
             }
             m_settings.fd = -1; // uv_udp_open took ownership
         }
 
-        if ((err = uv_udp_recv_start(&m_udp_handle, udp_alloc_cb, recv_cb)) < 0) {
-            uv_close((uv_handle_t *) &m_udp_handle, nullptr);
+        if ((err = uv_udp_recv_start(m_udp->raw(), udp_alloc_cb, recv_cb)) < 0) {
             return AG_FMT("uv_udp_recv_start failed: {}", uv_strerror(err));
         }
 
         if (m_address.port() == 0) {
             sockaddr_storage name{};
             int namelen = sizeof(name);
-            uv_udp_getsockname(&m_udp_handle, (sockaddr *) &name, &namelen);
+            uv_udp_getsockname(m_udp->raw(), (sockaddr *) &name, &namelen);
             m_address = SocketAddress((sockaddr *) &name);
         }
         log_listener(this, info, "Listening on {} (UDP)", m_address.str());
 
         return std::nullopt;
-    }
-
-    void before_stop() override {
-        uv_close((uv_handle_t *) &m_udp_handle, nullptr);
-        log_listener(this, dbg, "Stopping with {} pending tasks", m_pending.size());
-        for (auto *m : m_pending) {
-            uv_cancel((uv_req_t *) &m->work_req);
-        }
     }
 };
 
@@ -362,11 +264,8 @@ public:
     explicit TcpDnsConnection(uint64_t id)
             : m_id{id}
             , m_log(__func__)
-            , m_tcp((uv_tcp_t *) malloc(sizeof(uv_tcp_t))) // Deleted in close_cb
-            , m_idle_timer((uv_timer_t *) malloc(sizeof(uv_timer_t))) // Deleted in close_cb
     {
-        m_tcp->data = this;
-        m_idle_timer->data = this;
+        m_tcp = Uv<uv_tcp_t>::create_with_parent(this);
     }
 
     // Call after *handle() is properly initialized
@@ -377,12 +276,14 @@ public:
         assert(proxy);
         assert(idle_timeout.count());
 
-        uv_timer_init(loop, m_idle_timer);
+        m_idle_timer = Uv<uv_timer_t>::create_with_parent(this);
+        uv_timer_init(loop, m_idle_timer->raw());
 
         m_proxy = proxy;
         m_persistent = persistent;
         m_idle_timeout = idle_timeout;
         m_close_callback = std::move(close_callback);
+        m_shutdown_guard = std::make_shared<bool>(true);
         do_read();
     }
 
@@ -395,60 +296,96 @@ public:
     }
 
     uv_tcp_t *handle() {
-        return m_tcp;
+        return m_tcp->raw();
     }
 
 private:
-    struct Work {
-        uv_work_t req{};
-        TcpDnsConnection *connection;
-        Uint8Vector payload;
-        std::atomic_bool cancelled;
-
-        Work(TcpDnsConnection *c, Uint8Vector &&payload)
-                : connection{c}
-                , payload{std::move(payload)}
-                , cancelled{false} {
-            this->req.data = this;
-        }
-    };
-
-    struct Write {
-        uv_write_t req{};
-        Uint8Vector payload;
-        uint16_t size_be; // Big-endian size
-        uv_buf_t bufs[2]{};
-
-        explicit Write(Uint8Vector &&payload)
-                : payload(std::move(payload)) {
-            this->req.data = this;
-            this->size_be = htons(this->payload.size());
-            bufs[0] = uv_buf_init((char *) &this->size_be, sizeof(this->size_be));
-            bufs[1] = uv_buf_init((char *) this->payload.data(), this->payload.size());
-        }
-    };
-
     const uint64_t m_id;
     Logger m_log;
     DnsProxy *m_proxy{};
     bool m_persistent{false};
     uint8_t m_incoming_buf[TCP_RECV_BUF_SIZE]{};
-    uv_tcp_t *m_tcp{};
-    uv_timer_t *m_idle_timer{};
+    UvPtr<uv_tcp_t> m_tcp;
+    UvPtr<uv_timer_t> m_idle_timer;
     Millis m_idle_timeout{0};
     std::function<void(uint64_t)> m_close_callback;
     bool m_closed{false};
     TcpDnsPayloadParser m_parser;
-    HashSet<Work *> m_pending_works;
+    std::shared_ptr<bool> m_shutdown_guard;
 
     static void alloc_cb(uv_handle_t *handle, size_t suggested_size, uv_buf_t *buf) {
-        auto *c = (TcpDnsConnection *) handle->data;
+        auto *c = (TcpDnsConnection *) Uv<uv_tcp_t>::parent_from_data(handle->data);
         buf->base = (char *) c->m_incoming_buf;
         buf->len = sizeof(c->m_incoming_buf);
     }
 
+    auto send_reply(uv_buf_t reply) {
+        struct Awaitable {
+            uv_stream_t *m_handle{};
+            uv_buf_t m_reply;
+            uint16_t m_reply_size_buf_data{};
+            uv_buf_t m_bufs[2]{};
+            uv_write_t m_req{};
+            std::coroutine_handle<> m_h;
+            int m_status = 0;
+            bool await_ready() {
+                m_reply_size_buf_data = htons(m_reply.len);
+                m_bufs[0] = uv_buf_init((char *) &m_reply_size_buf_data, sizeof(m_reply_size_buf_data));
+                m_bufs[1] = m_reply;
+                m_req.data = this;
+                m_status = uv_write(&m_req, m_handle, m_bufs, 2, write_cb);
+                return m_status != 0;
+            }
+            auto await_suspend(std::coroutine_handle<> h) {
+                m_h = h;
+            }
+            static void write_cb(uv_write_t *req, int status) {
+                auto *self = (Awaitable *) req->data;
+                self->m_status = status;
+                self->m_h.resume();
+            }
+            int await_resume() {
+                return m_status;
+            }
+        };
+        return Awaitable{.m_handle = (uv_stream_t *) m_tcp->raw(), .m_reply = reply};
+    }
+
+    coro::Task<void> process_request(Uint8Vector &&payload) {
+        Uint8Vector packet_data = std::move(payload);
+        uv_buf_t request = uv_buf_init((char *) packet_data.data(), packet_data.size());
+
+        sockaddr_storage ss{};
+        int namelen = sizeof(ss);
+        uv_tcp_getpeername(m_tcp->raw(), (sockaddr *) &ss, &namelen);
+        auto *addr = (sockaddr *) &ss;
+
+        DnsMessageInfo info{.proto = ag::utils::TP_TCP, .peername = SocketAddress{addr}};
+        std::weak_ptr<bool> guard = m_shutdown_guard;
+        auto result = co_await m_proxy->handle_message({(const uint8_t *) request.base, request.len}, &info);
+        if (guard.expired()) {
+            co_return;
+        }
+        uv_buf_t reply = uv_buf_init((char *) result.data(), result.size());
+        int err = co_await this->send_reply(reply);
+        if (guard.expired()) {
+            co_return;
+        }
+        if (err < 0) {
+            log_id(m_log, trace, m_id, "send error: {}", uv_strerror(err));
+        }
+        if (!m_persistent) {
+            this->do_close();
+        }
+
+        co_return;
+    }
+
     static void read_cb(uv_stream_t *stream, ssize_t nread, const uv_buf_t *buf) {
-        auto *c = (TcpDnsConnection *) stream->data;
+        auto *c = (TcpDnsConnection *) Uv<uv_tcp_t>::parent_from_data(stream->data);
+        if (c == nullptr) {
+            return;
+        }
         log_id(c->m_log, trace, c->m_id, "{}", nread);
 
         if (nread < 0) {
@@ -461,12 +398,9 @@ private:
 
         Uint8Vector payload;
         while (c->m_parser.next_payload(payload)) {
-            uv_timer_again(c->m_idle_timer);
+            uv_timer_again(c->m_idle_timer->raw());
 
-            auto *w = new Work(c, std::move(payload));
-
-            uv_queue_work(stream->loop, &w->req, work_cb, after_work_cb);
-            c->m_pending_works.insert(w);
+            coro::run_detached(c->process_request(std::move(payload)));
 
             if (!c->m_persistent) { // Stop after the first request
                 uv_read_stop(stream);
@@ -475,77 +409,17 @@ private:
         }
     }
 
-    static void work_cb(uv_work_t *w_req) {
-        auto *w = (Work *) w_req->data;
-        if (w->cancelled) {
-            return;
-        }
-        auto *conn = w->connection;
-        sockaddr_storage ss{};
-        int namelen = sizeof(ss);
-        uv_tcp_getpeername(conn->m_tcp, (sockaddr *) &ss, &namelen);
-
-        DnsMessageInfo info{.proto = ag::utils::TP_TCP, .peername = SocketAddress{(sockaddr *) &ss}};
-        w->payload = conn->m_proxy->handle_message({w->payload.data(), w->payload.size()}, &info);
-    }
-
-    static void after_work_cb(uv_work_t *w_req, int status) {
-        auto *w = (Work *) w_req->data;
-        if (w->cancelled) { // Connection already closed
-            delete w;
-            return;
-        }
-        auto *conn = w->connection;
-        conn->m_pending_works.erase(w);
-        if (w->payload.empty()) {
-            if (!conn->m_persistent) {
-                conn->do_close();
-            }
-            delete w;
-            return;
-        }
-        conn->do_write(std::move(w->payload));
-        delete w;
-    }
-
-    static void write_cb(uv_write_t *w_req, int status) {
-        auto *w = (Write *) w_req->data;
-        auto *h = (uv_handle_t *) w_req->handle;
-        auto *c = (TcpDnsConnection *) h->data;
-        // `c` might be nullptr at this point, e.g. the connection was closed,
-        // but libuv still called the pending write callbacks.
-        if (c) {
-            log_id(c->m_log, trace, c->m_id, "{}", status);
-            if (!c->m_persistent || status < 0) {
-                c->do_close();
-            }
-        }
-        delete w;
-    }
-
     static void idle_timeout_cb(uv_timer_t *h) {
-        auto *c = (TcpDnsConnection *) h->data;
+        auto *c = (TcpDnsConnection *) Uv<uv_timer_t>::parent_from_data(h->data);
         c->do_close();
     }
 
     void do_read() {
-        if (uv_read_start((uv_stream_t *) m_tcp, alloc_cb, read_cb) < 0) {
+        if (uv_read_start((uv_stream_t *) m_tcp->raw(), alloc_cb, read_cb) < 0) {
             do_close();
             return;
         }
-        uv_timer_start(m_idle_timer, idle_timeout_cb, m_idle_timeout.count(), m_idle_timeout.count());
-    }
-
-    void do_write(Uint8Vector &&payload) {
-        auto *w = new Write(std::move(payload));
-        if (uv_write(&w->req, (uv_stream_t *) m_tcp, w->bufs, 2, write_cb) < 0) {
-            delete w;
-            do_close();
-        }
-    }
-
-    static void close_cb(uv_handle_t *h) {
-        free(h);
+        uv_timer_start(m_idle_timer->raw(), idle_timeout_cb, m_idle_timeout.count(), m_idle_timeout.count());
     }
 
     void do_close() {
@@ -553,20 +427,6 @@ private:
             return;
         }
         m_closed = true;
-
-        log_id(m_log, trace, m_id, "...");
-        uv_timer_stop(m_idle_timer);
-
-        m_idle_timer->data = nullptr;
-        uv_close((uv_handle_t *) m_idle_timer, close_cb);
-
-        std::for_each(m_pending_works.begin(), m_pending_works.end(), [](Work *w) {
-            w->cancelled = true;
-            uv_cancel((uv_req_t *) &w->req);
-        });
-
-        m_tcp->data = nullptr;
-        uv_close((uv_handle_t *) m_tcp, close_cb);
 
         if (m_close_callback) {
             m_close_callback(m_id);
@@ -578,12 +438,12 @@ class TcpListener : public ListenerBase {
 private:
     static constexpr auto BACKLOG = 128;
 
-    uv_tcp_t m_tcp_handle{};
+    UvPtr<uv_tcp_t> m_tcp{};
     uint64_t m_id_counter{0};
     HashMap<uint64_t, std::unique_ptr<TcpDnsConnection>> m_connections;
 
     static void conn_cb(uv_stream_t *server, int status) {
-        auto *self = (TcpListener *) server->data;
+        auto *self = (TcpListener *) Uv<uv_tcp_t>::parent_from_data(server->data);
 
         if (status < 0) {
             log_listener(self, dbg, "Connection failed: {}", uv_strerror(status));
@@ -592,7 +452,7 @@ private:
 
         auto conn = std::make_unique<TcpDnsConnection>(self->m_id_counter++);
 
-        int err = uv_tcp_init(self->m_loop.get(), conn->handle());
+        int err = uv_tcp_init(self->m_loop->handle(), conn->handle());
         if (err < 0) {
             log_listener(self, dbg, "uv_tcp_init failed: {}", uv_strerror(err));
             return;
@@ -603,9 +463,11 @@ private:
             return;
         }
 
-        conn->start(self->m_loop.get(), self->m_proxy, self->m_settings.persistent, self->m_settings.idle_timeout,
-                [self](uint64_t id) {
-                    self->m_connections.erase(id);
+        conn->start(self->m_loop->handle(), self->m_proxy, self->m_settings.persistent, self->m_settings.idle_timeout,
+                [self, guard = std::weak_ptr<bool>{self->m_shutdown_guard}](uint64_t id) {
+                    if (!guard.expired()) {
+                        self->m_connections.erase(id);
+                    }
                 });
         self->m_connections[conn->id()] = std::move(conn);
     }
@@ -614,53 +476,39 @@ protected:
     ErrString before_run() override {
         int err = 0;
 
-        if ((err = uv_tcp_init(m_loop.get(), &m_tcp_handle)) < 0) {
+        m_tcp = Uv<uv_tcp_t>::create_with_parent(this);
+        if ((err = uv_tcp_init(m_loop->handle(), m_tcp->raw())) < 0) {
             return AG_FMT("uv_tcp_init failed: {}", uv_strerror(err));
         }
-        m_tcp_handle.data = this;
 
         if (m_settings.fd == -1) {
-            if ((err = uv_tcp_bind(&m_tcp_handle, m_address.c_sockaddr(), 0)) < 0) {
-                uv_close((uv_handle_t *) &m_tcp_handle, nullptr);
+            if ((err = uv_tcp_bind(m_tcp->raw(), m_address.c_sockaddr(), 0)) < 0) {
                 return AG_FMT("uv_tcp_bind failed: {}", uv_strerror(err));
             }
         } else {
-            if ((err = uv_tcp_open(&m_tcp_handle, m_settings.fd)) < 0) {
-                uv_close((uv_handle_t *) &m_tcp_handle, nullptr);
+            if ((err = uv_tcp_open(m_tcp->raw(), m_settings.fd)) < 0) {
                 return AG_FMT("uv_tcp_open failed: {}", uv_strerror(err));
             }
             m_settings.fd = -1; // uv_tcp_open took ownership
         }
 
-        if ((err = uv_listen((uv_stream_t *) &m_tcp_handle, BACKLOG, conn_cb)) < 0) {
-            uv_close((uv_handle_t *) &m_tcp_handle, nullptr);
+        if ((err = uv_listen((uv_stream_t *) m_tcp->raw(), BACKLOG, conn_cb)) < 0) {
             return AG_FMT("uv_listen failed: {}", uv_strerror(err));
         }
 
         if (m_address.port() == 0) {
             sockaddr_storage name{};
             int namelen = sizeof(name);
-            uv_tcp_getsockname(&m_tcp_handle, (sockaddr *) &name, &namelen);
+            uv_tcp_getsockname(m_tcp->raw(), (sockaddr *) &name, &namelen);
             m_address = SocketAddress((sockaddr *) &name);
         }
         log_listener(this, info, "Listening on {} (TCP)", m_address.str());
 
         return std::nullopt;
     }
-
-    void before_stop() override {
-        uv_close((uv_handle_t *) &m_tcp_handle, nullptr);
-        for (auto i = m_connections.begin(); i != m_connections.end();) {
-            // close removes current element from the list
-            auto next = i;
-            std::advance(next, 1);
-            i->second->close();
-            i = next;
-        }
-    }
 };
 
-DnsProxyListener::CreateResult DnsProxyListener::create_and_listen(const ListenerSettings &settings, DnsProxy *proxy) {
+DnsProxyListener::CreateResult DnsProxyListener::create_and_listen(const ListenerSettings &settings, DnsProxy *proxy, EventLoop *loop) {
     if (!proxy) {
         return {nullptr, "proxy is nullptr"};
     }
@@ -677,7 +525,7 @@ DnsProxyListener::CreateResult DnsProxyListener::create_and_listen(const Listene
         return {nullptr, AG_FMT("Protocol {} not implemented", magic_enum::enum_name(settings.protocol))};
     }
 
-    auto err = ptr->init(settings, proxy);
+    auto err = ptr->init(settings, proxy, loop);
     if (err.has_value()) {
         return {nullptr, err};
     }
@@ -685,4 +533,4 @@ DnsProxyListener::CreateResult DnsProxyListener::create_and_listen(const Listene
     return {std::move(ptr), std::nullopt};
 }
 
-} // namespace ag
+} // namespace ag::dns

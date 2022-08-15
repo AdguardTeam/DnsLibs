@@ -448,11 +448,12 @@ typedef NS_ENUM(NSInteger, AGOutboundProxyProtocol) {
 /**
  * @brief Process UDP/TCP packet payload
  *
- * @param packet data to process
+ * @param Packet data to process
+ * @param completionHandler Completion handler
  * @return Response packet payload, or
  *         nil if nothing shoud be sent in response
  */
-- (NSData *) handlePacket: (NSData *) packet;
+- (void) handlePacket: (NSData *) packet completionHandler: (void (^)(NSData *)) completionHandler;
 
 /**
  * Stop DnsProxy. Should be called before dealloc.

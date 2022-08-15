@@ -1,21 +1,23 @@
 #include <cerrno>
 #include <cstring>
 
-#include "common/sys.h"
 #include "common/utils.h"
+#include "dns/common/sys.h"
+
+namespace ag::dns::sys {
 
 #if defined(__linux__) || defined(__LINUX__) || defined(__MACH__)
 #include <sys/resource.h>
 
-int ag::sys::error_code() {
+int error_code() {
     return errno;
 }
 
-std::string ag::sys::error_string(int err) {
+std::string error_string(int err) {
     return strerror(err);
 }
 
-size_t ag::sys::current_rss() {
+size_t current_rss() {
     struct rusage ru = {};
     getrusage(RUSAGE_SELF, &ru);
 #if defined(__MACH__)
@@ -32,17 +34,17 @@ size_t ag::sys::current_rss() {
 #include <psapi.h>
 #include <stdio.h>
 
-int ag::sys::error_code() {
+int error_code() {
     int err;
     _get_errno(&err);
     return err;
 }
 
-std::string ag::sys::error_string(int err) {
+std::string error_string(int err) {
     return ag::utils::from_wstring(_wcserror(err));
 }
 
-size_t ag::sys::current_rss() {
+size_t current_rss() {
     PROCESS_MEMORY_COUNTERS pmc;
     if (GetProcessMemoryInfo(GetCurrentProcess(), &pmc, sizeof(pmc))) {
         return pmc.WorkingSetSize / 1024l;
@@ -53,3 +55,5 @@ size_t ag::sys::current_rss() {
 #else
 #error not supported
 #endif
+
+} // namespace ag::dns::sys

@@ -1,14 +1,18 @@
 #pragma once
 
 #include <utility>
-#include "upstream/upstream.h"
 #include <event2/event.h>
 #include <ldns/net.h>
+
+#include "dns/net/tls_session_cache.h"
+#include "dns/upstream/upstream.h"
+
 #include "dns_framed.h"
 #include "bootstrapper.h"
-#include "net/tls_session_cache.h"
 
-namespace ag {
+namespace ag::dns {
+
+class DotConnection;
 
 /**
  * DNS-over-TLS upstream
@@ -28,18 +32,20 @@ public:
     ~DotUpstream() override;
 
 private:
-    ErrString init() override;
-    ExchangeResult exchange(ldns_pkt *request_pkt, const DnsMessageInfo *info) override;
-
-    class TlsPool;
+    Error<InitError> init() override;
+    coro::Task<ExchangeResult> exchange(ldns_pkt *request, const DnsMessageInfo *info = nullptr) override;
 
     Logger m_log;
     /** TLS connection pool */
-    std::unique_ptr<TlsPool> m_pool;
+    ConnectionPoolPtr m_pool;
     /** DNS server name */
     std::string m_server_name;
     /** TLS sessions cache */
     TlsSessionCache m_tls_session_cache;
+    /** Bootstrapper */
+    BootstrapperPtr m_bootstrapper;
+
+    friend class DotConnection;
 };
 
-} // namespace ag
+} // namespace ag::dns

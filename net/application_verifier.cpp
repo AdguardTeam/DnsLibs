@@ -1,6 +1,6 @@
-#include "net/application_verifier.h"
+#include "dns/net/application_verifier.h"
 
-namespace ag {
+namespace ag::dns {
 
 ApplicationVerifier::ApplicationVerifier(const OnCertificateVerificationFn &on_certificate_verification)
         : m_on_certificate_verification(on_certificate_verification) {
@@ -47,4 +47,4 @@ ErrString ApplicationVerifier::verify(X509_STORE_CTX *ctx, std::string_view host
     return m_on_certificate_verification(std::move(event));
 }
 
-} // namespace ag
+} // namespace ag::dns

@@ -15,17 +15,19 @@
 
 #include "common/base64.h"
 #include "common/net_utils.h"
-#include "common/net_consts.h"
 #include "common/socket_address.h"
 #include "common/utils.h"
-#include "dnsstamp/dns_stamp.h"
+#include "dns/common/net_consts.h"
+#include "dns/dnsstamp/dns_stamp.h"
 
-namespace ag {
+namespace ag::dns {
 
 /// Function that writes stamp part
 using WriteStampPartFunction = std::function<void(Uint8Vector &, const ServerStamp &)>;
 /// Function that reads stamp part
-using ReadStampPartFunction = std::function<ErrString(ServerStamp &, size_t &, const Uint8Vector &)>;
+using ReadStampPartFunction = std::function<Error<ServerStamp::FromStringError>(ServerStamp &, size_t &, const Uint8Vector &)>;
+
+using StampError = Error<ServerStamp::FromStringError>;
 
 static constexpr auto PLAIN_STAMP_MIN_SIZE = 17;
 static constexpr auto DNSCRYPT_STAMP_MIN_SIZE = 66;
@@ -139,15 +141,15 @@ static std::string stamp_string(
     return STAMP_URL_PREFIX_WITH_SCHEME + encode_to_base64(Uint8View(bin.data(), bin.size()), true);
 }
 
-static ErrString validate_server_addr_str(std::string_view addr_str) {
+static StampError validate_server_addr_str(std::string_view addr_str) {
     auto [host, port, err] = utils::split_host_port_with_err(addr_str, true, true);
     if (err) {
-        return ErrString(err);
+        return make_error(ServerStamp::AE_INVALID_HOST_PORT_FORMAT, *err);
     }
     if (!host.empty()) {
         SocketAddress addr(host, 0);
         if (!addr.valid()) {
-            return ErrString("Invalid server address");
+            return make_error(ServerStamp::AE_INVALID_ADDRESS);
         }
     }
     if (!port.empty()) {
@@ -155,39 +157,39 @@ static ErrString validate_server_addr_str(std::string_view addr_str) {
         const char *ptr = portStr.data(), *end = portStr.data() + portStr.size();
         long portNumber = strtol(portStr.c_str(), (char **) &ptr, 10);
         if (ptr != end || portNumber <= 0 || portNumber > 65535) {
-            return ErrString("Invalid server port");
+            return make_error(ServerStamp::AE_INVALID_PORT);
         }
     }
-    return std::nullopt;
+    return {};
 }
 
-static ErrString read_stamp_proto_props_server_addr_str(ServerStamp &stamp, size_t &pos, const Uint8Vector &value,
-        StampProtoType proto, size_t min_value_size, uint16_t default_port) {
+static StampError read_stamp_proto_props_server_addr_str(ServerStamp &stamp, size_t &pos,
+        const Uint8Vector &value, StampProtoType proto, size_t min_value_size, uint16_t default_port) {
     stamp.proto = proto;
     if (value.size() < min_value_size) {
-        return "Stamp is too short";
+        return make_error(ServerStamp::AE_TOO_SHORT);
     }
     pos = 1;
     read_bytes(stamp.props, pos, value);
     if (!read_bytes_with_size(stamp.server_addr_str, pos, value)) {
-        return "Invalid stamp";
+        return make_error(ServerStamp::AE_INVALID_STAMP);
     }
     return validate_server_addr_str(stamp.server_addr_str);
 }
 
-static ErrString read_stamp_server_pk(ServerStamp &stamp, size_t &pos, const Uint8Vector &value) {
+static StampError read_stamp_server_pk(ServerStamp &stamp, size_t &pos, const Uint8Vector &value) {
     if (!read_bytes_with_size(stamp.server_pk, pos, value)) {
-        return "Invalid stamp";
+        return make_error(ServerStamp::AE_INVALID_STAMP);
     }
-    return std::nullopt;
+    return {};
 }
 
-static ErrString read_stamp_hashes(ServerStamp &stamp, size_t &pos, const Uint8Vector &value) {
+static StampError read_stamp_hashes(ServerStamp &stamp, size_t &pos, const Uint8Vector &value) {
     while (true) {
         uint8_t hash_size_raw = read_size(pos, value);
         uint8_t hash_size = hash_size_raw & ~0x80u;
         if (!check_size(hash_size, pos, value)) {
-            return "Invalid stamp";
+            return make_error(ServerStamp::AE_INVALID_STAMP);
         }
         if (hash_size > 0) {
             stamp.hashes.emplace_back();
@@ -197,28 +199,28 @@ static ErrString read_stamp_hashes(ServerStamp &stamp, size_t &pos, const Uint8V
             break;
         }
     }
-    return std::nullopt;
+    return {};
 }
 
-static ErrString read_stamp_provider_name(ServerStamp &stamp, size_t &pos, const Uint8Vector &value) {
+static StampError read_stamp_provider_name(ServerStamp &stamp, size_t &pos, const Uint8Vector &value) {
     if (!read_bytes_with_size(stamp.provider_name, pos, value)) {
-        return "Invalid stamp";
+        return make_error(ServerStamp::AE_INVALID_STAMP);
     }
-    return std::nullopt;
+    return {};
 }
 
-static ErrString read_stamp_path(ServerStamp &stamp, size_t &pos, const Uint8Vector &value) {
+static StampError read_stamp_path(ServerStamp &stamp, size_t &pos, const Uint8Vector &value) {
     if (!read_bytes_with_size(stamp.path, pos, value)) {
-        return "Invalid stamp";
+        return make_error(ServerStamp::AE_INVALID_STAMP);
     }
-    return std::nullopt;
+    return {};
 }
 
-static ErrString check_garbage_after_end([[maybe_unused]] ServerStamp &stamp, size_t pos, const Uint8Vector &value) {
+static StampError check_garbage_after_end([[maybe_unused]] ServerStamp &stamp, size_t pos, const Uint8Vector &value) {
     if (pos != value.size()) {
-        return "Invalid stamp (garbage after end)";
+        return make_error(ServerStamp::AE_GARBAGE_AFTER_END);
     }
-    return std::nullopt;
+    return {};
 }
 
 static ServerStamp::FromStringResult new_server_stamp_basic(
@@ -227,10 +229,10 @@ static ServerStamp::FromStringResult new_server_stamp_basic(
     size_t pos{};
     for (const auto &f : fs) {
         if (auto error = f(result, pos, bin)) {
-            return {std::move(result), std::move(error)};
+            return error;
         }
     }
-    return {std::move(result), std::nullopt};
+    return result;
 }
 
 static ServerStamp::FromStringResult new_server_stamp(const Uint8Vector &bin, StampProtoType proto,
@@ -281,11 +283,11 @@ static std::string stamp_doq_string(const ServerStamp &stamp) {
 }
 
 static ServerStamp::FromStringResult new_plain_server_stamp(const Uint8Vector &bin) {
-    return new_server_stamp(bin, StampProtoType::PLAIN, PLAIN_STAMP_MIN_SIZE, ag::DEFAULT_PLAIN_PORT, {});
+    return new_server_stamp(bin, StampProtoType::PLAIN, PLAIN_STAMP_MIN_SIZE, DEFAULT_PLAIN_PORT, {});
 }
 
 static ServerStamp::FromStringResult new_dnscrypt_server_stamp(const Uint8Vector &bin) {
-    return new_server_stamp(bin, StampProtoType::DNSCRYPT, DNSCRYPT_STAMP_MIN_SIZE, ag::DEFAULT_DOH_PORT,
+    return new_server_stamp(bin, StampProtoType::DNSCRYPT, DNSCRYPT_STAMP_MIN_SIZE, DEFAULT_DOH_PORT,
             {
                     read_stamp_server_pk,
                     read_stamp_provider_name,
@@ -293,7 +295,7 @@ static ServerStamp::FromStringResult new_dnscrypt_server_stamp(const Uint8Vector
 }
 
 static ServerStamp::FromStringResult new_doh_server_stamp(const Uint8Vector &bin) {
-    return new_server_stamp(bin, StampProtoType::DOH, DOH_STAMP_MIN_SIZE, ag::DEFAULT_DOH_PORT,
+    return new_server_stamp(bin, StampProtoType::DOH, DOH_STAMP_MIN_SIZE, DEFAULT_DOH_PORT,
             {
                     read_stamp_hashes,
                     read_stamp_provider_name,
@@ -302,7 +304,7 @@ static ServerStamp::FromStringResult new_doh_server_stamp(const Uint8Vector &bin
 }
 
 static ServerStamp::FromStringResult new_dot_server_stamp(const Uint8Vector &bin) {
-    return new_server_stamp(bin, StampProtoType::TLS, DOT_STAMP_MIN_SIZE, ag::DEFAULT_DOT_PORT,
+    return new_server_stamp(bin, StampProtoType::TLS, DOT_STAMP_MIN_SIZE, DEFAULT_DOT_PORT,
             {
                     read_stamp_hashes,
                     read_stamp_provider_name,
@@ -310,7 +312,7 @@ static ServerStamp::FromStringResult new_dot_server_stamp(const Uint8Vector &bin
 }
 
 static ServerStamp::FromStringResult new_doq_server_stamp(const Uint8Vector &bin) {
-    return new_server_stamp(bin, StampProtoType::DOQ, DOT_STAMP_MIN_SIZE, ag::DEFAULT_DOQ_PORT,
+    return new_server_stamp(bin, StampProtoType::DOQ, DOT_STAMP_MIN_SIZE, DEFAULT_DOQ_PORT,
             {
                     read_stamp_hashes,
                     read_stamp_provider_name,
@@ -336,17 +338,17 @@ std::string ServerStamp::str() const {
 
 ServerStamp::FromStringResult ServerStamp::from_string(std::string_view url) {
     if (!utils::starts_with(url, STAMP_URL_PREFIX_WITH_SCHEME)) {
-        return {{}, AG_FMT("Stamps are expected to start with {}", STAMP_URL_PREFIX_WITH_SCHEME)};
+        return make_error(AE_NO_STAMP_PREFIX);
     }
     std::string_view encoded(url);
     encoded.remove_prefix(std::string_view(STAMP_URL_PREFIX_WITH_SCHEME).size());
     auto decoded_optional = decode_base64(encoded, true);
     if (!decoded_optional) {
-        return {{}, "Invalid stamp"};
+        return make_error(AE_INVALID_STAMP);
     }
     auto &decoded = *decoded_optional;
     if (decoded.empty()) {
-        return {{}, "Stamp is too short"};
+        return make_error(AE_TOO_SHORT);
     }
     switch (StampProtoType{decoded[0]}) {
     case StampProtoType::PLAIN:
@@ -360,7 +362,7 @@ ServerStamp::FromStringResult ServerStamp::from_string(std::string_view url) {
     case StampProtoType::DOQ:
         return new_doq_server_stamp(decoded);
     default:
-        return {{}, "Unsupported stamp version or protocol"};
+        return make_error(AE_UNSUPPORTED_PROTOCOL);
     }
 }
 
@@ -412,4 +414,4 @@ std::string ServerStamp::pretty_url(bool pretty_dnscrypt) const {
     return AG_FMT("{}{}{}{}", scheme, provider_name, port, path);
 }
 
-} // namespace ag
+} // namespace ag::dns

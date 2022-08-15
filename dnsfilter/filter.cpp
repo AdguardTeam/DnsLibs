@@ -9,14 +9,14 @@
 #include "common/file.h"
 #include "common/logger.h"
 #include "common/regex.h"
-#include "common/sys.h"
 #include "common/utils.h"
-#include "dnsfilter/dnsfilter.h"
+#include "dns/common/sys.h"
+#include "dns/dnsfilter/dnsfilter.h"
 
 #include "filter.h"
 #include "rule_utils.h"
 
-namespace ag::dnsfilter {
+namespace ag::dns::dnsfilter {
 
 #define log_filter(f_, lvl_, fmt_, ...) lvl_##log(logger, "[{}] {}(): " fmt_, (f_)->m_name, __func__, ##__VA_ARGS__)
 
@@ -750,8 +750,7 @@ void Filter::update(std::atomic_size_t &mem_limit) {
 }
 
 void Filter::init_match_context(Filter::MatchContext &ctx, DnsFilter::MatchParam param) {
-    ctx.host = utils::to_lower(param.domain);
-    ctx.rr_type = param.rr_type;
+    ctx = {utils::to_lower(param.domain), {}, {}, param.rr_type, {}};
 
     size_t n = std::count(ctx.host.begin(), ctx.host.end(), '.');
     if (n > 0) {
@@ -778,4 +777,4 @@ void Filter::init_match_context(Filter::MatchContext &ctx, DnsFilter::MatchParam
     }
 }
 
-} // namespace ag::dnsfilter
+} // namespace ag::dns::dnsfilter

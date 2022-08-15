@@ -1,19 +1,19 @@
 #include <algorithm>
 #include <chrono>
-#include <gtest/gtest.h>
 #include <magic_enum.hpp>
 #include <sodium.h>
 
 #include "common/defs.h"
+#include "common/gtest_coro.h"
 #include "common/logger.h"
 #include "common/net_utils.h"
 #include "common/time_utils.h"
 #include "common/utils.h"
-#include "dnscrypt/dns_crypt_cipher.h"
-#include "dnscrypt/dns_crypt_client.h"
-#include "dnsstamp/dns_stamp.h"
+#include "dns/dnscrypt/dns_crypt_cipher.h"
+#include "dns/dnscrypt/dns_crypt_client.h"
+#include "dns/dnsstamp/dns_stamp.h"
 
-#include "dnscrypt/dns_crypt_ldns.h"
+#include "dns/dnscrypt/dns_crypt_ldns.h"
 
 #ifdef _WIN32
 #include <array>
@@ -21,7 +21,7 @@
 static const int ensure_sockets [[maybe_unused]] = WSAStartup(0x0202, std::array<WSADATA, 1>().data());
 #endif
 
-namespace ag::dnscrypt::test {
+namespace ag::dns::dnscrypt::test {
 
 TEST(DnscryptSodiumTest, SodiumInitialized) {
     // `1` means `already initialized`
@@ -36,8 +36,19 @@ static Logger logger{"dns_crypt_test"};
 
 class DnscryptTest : public ::testing::Test {
 
+    void SetUp() override {
+        Logger::set_log_level(LOG_LEVEL_TRACE);
+        m_loop->start();
+    }
+
+    void TearDown() override {
+        m_loop->stop();
+        m_loop->join();
+    }
+
 protected:
-    SocketFactory socket_factory = SocketFactory({});
+    EventLoopPtr m_loop = EventLoop::create();
+    SocketFactory m_socket_factory = SocketFactory({*m_loop});
 };
 
 template <typename... Ts>
@@ -88,22 +99,25 @@ static const auto cipher_src = [] {
 
 TEST_P(CipherTest, Cipher) {
     const auto &[encryption_algorithm, valid_cipher_text, valid_shared_key] = GetParam();
-    auto [ciphertext, seal_err] = dnscrypt::cipher_seal(
+    auto seal_res = dnscrypt::cipher_seal(
             encryption_algorithm, utils::make_string_view(cipher_src), cipher_nonce, cipher_key);
-    ASSERT_FALSE(seal_err) << "Seal error: " << *seal_err;
+    ASSERT_FALSE(seal_res.has_error()) << "Seal error: " << seal_res.error()->str();
+    auto &ciphertext = *seal_res;
     ASSERT_TRUE(std::equal(
             ciphertext.begin(), ciphertext.end(), std::begin(valid_cipher_text), std::end(valid_cipher_text)));
-    auto [decrypted, open_err] = dnscrypt::cipher_open(
-            encryption_algorithm, utils::make_string_view(ciphertext), cipher_nonce, cipher_key);
-    ASSERT_FALSE(open_err) << "Open error: " << *open_err;
+    auto open_res = dnscrypt::cipher_open(
+            encryption_algorithm, utils::make_string_view(seal_res.value()), cipher_nonce, cipher_key);
+    ASSERT_FALSE(open_res.has_error()) << "Open error: " << open_res.error()->str();
+    auto &decrypted = *open_res;
     ASSERT_TRUE(std::equal(cipher_src.begin(), cipher_src.end(), decrypted.begin(), decrypted.end()))
             << "Src and decrypted not equal";
     ++ciphertext.front();
-    auto [bad_decrypted, bad_decrypted_err] = dnscrypt::cipher_open(
+    auto bad_decrypted_res = dnscrypt::cipher_open(
             encryption_algorithm, utils::make_string_view(ciphertext), cipher_nonce, cipher_key);
-    ASSERT_TRUE(bad_decrypted_err) << "Tag validation failed";
-    auto [shared_key, shared_key_err] = dnscrypt::cipher_shared_key(encryption_algorithm, cipher_key, cipher_key);
-    ASSERT_FALSE(shared_key_err) << "Can not shared key: " << *shared_key_err;
+    ASSERT_TRUE(bad_decrypted_res.has_error()) << "Tag validation failed";
+    auto shared_key_res = dnscrypt::cipher_shared_key(encryption_algorithm, cipher_key, cipher_key);
+    ASSERT_FALSE(shared_key_res.has_error()) << "Can not shared key: " << shared_key_res.error()->str();
+    auto &shared_key = shared_key_res.value();
     ASSERT_TRUE(
             std::equal(shared_key.begin(), shared_key.end(), std::begin(valid_shared_key), std::end(valid_shared_key)));
 }
@@ -137,53 +151,57 @@ static constexpr ParseStampTestDataType parse_stamp_test_data[]{
 
 struct ParseStampTest : DnsCryptTestWithParam<ParseStampTestDataType> {
 protected:
-    SocketFactory socket_factory = SocketFactory({});
+    SocketFactory m_socket_factory = SocketFactory({*m_loop});
 };
 
 TEST_P(ParseStampTest, parse_stamp) {
     const auto &stamp_str = std::get<0>(GetParam());
     const auto &log_f = std::get<1>(GetParam());
-    auto [stamp, stamp_err] = ServerStamp::from_string(stamp_str);
-    ASSERT_FALSE(stamp_err || stamp.provider_name.empty())
-            << "Could not parse stamp " << stamp_str << (stamp_err ? ": " + *stamp_err : "");
-    log_f(stamp_str, stamp);
+    auto stamp = ServerStamp::from_string(stamp_str);
+    ASSERT_FALSE(stamp.has_error()) << stamp.error()->str();
+    ASSERT_FALSE(stamp->provider_name.empty()) << "Empty provider name";
+    log_f(stamp_str, *stamp);
 }
 
 INSTANTIATE_TEST_SUITE_P(ParseStampTestInstantiation, ParseStampTest, ::testing::ValuesIn(parse_stamp_test_data));
 
 TEST_F(DnscryptTest, InvalidStamp) {
     dnscrypt::Client client;
-    auto err
-            = client.dial("sdns://AQIAAAAAAAAAFDE", dnscrypt::Client::DEFAULT_TIMEOUT, &this->socket_factory, {}).error;
+    co_await m_loop->co_submit();
+    auto err = (co_await client.dial(
+            "sdns://AQIAAAAAAAAAFDE", *m_loop, dnscrypt::Client::DEFAULT_TIMEOUT, &m_socket_factory, {})).error();
     ASSERT_TRUE(err) << "Dial must not have been possible";
 }
 
 TEST_F(DnscryptTest, TimeoutOnDialError) {
     using namespace std::literals::chrono_literals;
+    co_await m_loop->co_submit();
     // AdGuard DNS pointing to a wrong IP
     static constexpr auto stamp_str = "sdns://"
                                       "AQIAAAAAAAAADDguOC44Ljg6NTQ0MyDRK0fyUtzywrv4mRCG6vec5EldixbIoMQyLlLKPzkIcyIyLmRu"
                                       "c2NyeXB0LmRlZmF1bHQubnMxLmFkZ3VhcmQuY29t";
     dnscrypt::Client client;
-    auto err = client.dial(stamp_str, 300ms, &this->socket_factory, {}).error;
+    auto err = (co_await client.dial(stamp_str, *m_loop, 300ms, &m_socket_factory, {})).error();
     ASSERT_TRUE(err) << "Dial must not have been possible";
 }
 
 TEST_F(DnscryptTest, TimeoutOnDialExchange) {
     using namespace std::literals::chrono_literals;
+    co_await m_loop->co_submit();
     // AdGuard DNS
     static constexpr auto stamp_str = "sdns://"
                                       "AQIAAAAAAAAAFDE3Ni4xMDMuMTMwLjEzMDo1NDQzINErR_JS3PLCu_iZEIbq95zkSV2LFsigxDIuUso_"
                                       "OQhzIjIuZG5zY3J5cHQuZGVmYXVsdC5uczEuYWRndWFyZC5jb20";
     dnscrypt::Client client;
-    auto [server_info, _, dial_err] = client.dial(stamp_str, 1000ms, &this->socket_factory, {});
-    ASSERT_FALSE(dial_err) << "Could not establish connection with " << stamp_str << " cause: " << *dial_err;
+    auto dial_res = co_await client.dial(stamp_str, *m_loop, 1000ms, &m_socket_factory, {});
+    ASSERT_FALSE(dial_res.has_error()) << "Could not establish connection with " << stamp_str << " cause: " << dial_res.error()->str();
+    auto &server_info = dial_res->server;
     // Point it to an IP where there's no DNSCrypt server
     server_info.set_server_address("8.8.8.8:5443");
     auto req = dnscrypt::create_request_ldns_pkt(LDNS_RR_TYPE_A, LDNS_RR_CLASS_IN, LDNS_RD,
             "google-public-dns-a.google.com.", dnscrypt::MAX_DNS_UDP_SAFE_PACKET_SIZE);
     ldns_pkt_set_random_id(req.get());
-    auto exchange_err = client.exchange(*req, server_info, 1000ms, &this->socket_factory, {}).error;
+    auto exchange_err = (co_await client.exchange(*req, server_info, *m_loop, 1000ms, &m_socket_factory, {})).error();
     ASSERT_TRUE(exchange_err) << "Exchange must not have been possible";
 }
 
@@ -210,16 +228,18 @@ public:
     }
 
 protected:
-    SocketFactory socket_factory = SocketFactory({});
+    SocketFactory m_socket_factory = SocketFactory({*m_loop});
 };
 
 TEST_P(CheckDnscryptServerTest, CheckDnscryptServer) {
     using namespace std::literals::chrono_literals;
+    co_await m_loop->co_submit();
     const auto &stamp_str = std::get<0>(GetParam());
     const auto &protocol = std::get<1>(GetParam());
     dnscrypt::Client client(protocol);
-    auto [server_info, dial_rtt, dial_err] = client.dial(stamp_str, 10s, &this->socket_factory, {});
-    ASSERT_FALSE(dial_err) << "Could not establish connection with " << stamp_str << " cause: " << *dial_err;
+    auto dial_res = co_await client.dial(stamp_str, *m_loop, 10s, &m_socket_factory, {});
+    ASSERT_FALSE(dial_res.has_error()) << "Could not establish connection with " << stamp_str << " cause: " << dial_res.error()->str();
+    auto &[server_info, dial_rtt] = *dial_res;
     infolog(logger, "Established a connection with {}, ttl={}, rtt={}ms, protocol={}", server_info.get_provider_name(),
             format_gmtime(Secs(server_info.get_server_cert().not_after)), dial_rtt.count(),
             magic_enum::enum_name(protocol));
@@ -228,9 +248,10 @@ TEST_P(CheckDnscryptServerTest, CheckDnscryptServer) {
             utils::make_optional_if(
                     protocol == utils::TransportProtocol::TP_UDP, dnscrypt::MAX_DNS_UDP_SAFE_PACKET_SIZE));
     ldns_pkt_set_random_id(req.get());
-    auto [reply, exchange_rtt, exchange_err] = client.exchange(*req, server_info, 10s, &this->socket_factory, {});
-    ASSERT_FALSE(exchange_err) << "Couldn't talk to upstream " << server_info.get_provider_name() << ": "
-                               << *exchange_err;
+    auto exchange_res = co_await client.exchange(*req, server_info, *m_loop, 10s, &m_socket_factory, {});
+    ASSERT_FALSE(exchange_res.has_error()) << "Couldn't talk to upstream " << server_info.get_provider_name() << ": "
+                               << exchange_res.error()->str();
+    auto &[reply, exchange_rtt] = *exchange_res;
     ldns_rr_list *reply_answer = ldns_pkt_answer(reply.get());
     size_t reply_answer_count = ldns_rr_list_rr_count(reply_answer);
     ASSERT_EQ(reply_answer_count, 1) << "DNS upstream " << server_info.get_provider_name()

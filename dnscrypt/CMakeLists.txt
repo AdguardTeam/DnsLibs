@@ -3,7 +3,7 @@ project(agdns_dnscrypt C CXX)
 include(../cmake/conan_bootstrap.cmake)
 conan_bootstrap(SRCROOT ".." CONANFILE "../conanfile.py" SCOPE_NAME agdns)
 
-set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD 20)
 
 set(DNSLIBS_DIR ${CMAKE_CURRENT_SOURCE_DIR}/..)
 
@@ -16,12 +16,12 @@ if(NOT TARGET dnslibs_net)
 endif(NOT TARGET dnslibs_net)
 
 add_library(dnscrypt EXCLUDE_FROM_ALL
-        include/dnscrypt/dns_crypt_cipher.h
-        include/dnscrypt/dns_crypt_client.h
-        include/dnscrypt/dns_crypt_consts.h
-        include/dnscrypt/dns_crypt_server_info.h
-        include/dnscrypt/dns_crypt_utils.h
-        include/dnscrypt/dns_crypt_ldns.h
+        include/dns/dnscrypt/dns_crypt_cipher.h
+        include/dns/dnscrypt/dns_crypt_client.h
+        include/dns/dnscrypt/dns_crypt_consts.h
+        include/dns/dnscrypt/dns_crypt_server_info.h
+        include/dns/dnscrypt/dns_crypt_utils.h
+        include/dns/dnscrypt/dns_crypt_ldns.h
         dns_crypt_cipher.cpp
         dns_crypt_client.cpp
         dns_crypt_ldns.cpp

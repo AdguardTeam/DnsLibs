@@ -49,13 +49,17 @@ project(dnsproxy_framework)
 
 # Ensure that API is compatible with minimum MacOS version
 add_compile_options(-Werror=unguarded-availability)
+# AppleClang crashes when sees our code
+add_compile_options(-O0)
 
 set(CMAKE_C_STANDARD   11)
-set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD 20)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+set(CMAKE_CXX_EXTENSIONS OFF)
 
 set(DNS_LIBS_DIR ../../..)
 
-add_compile_options(-fno-strict-aliasing -fno-exceptions -fno-rtti -fobjc-abi-version=2)
+add_compile_options(-fno-strict-aliasing -fno-exceptions -fobjc-abi-version=2)
 add_definitions(-DFMT_EXCEPTIONS=0)
 
 add_library(AGDnsProxy SHARED

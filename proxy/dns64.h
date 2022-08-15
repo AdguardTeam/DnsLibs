@@ -1,12 +1,18 @@
 #pragma once
 
+#include "common/coro.h"
 #include "common/defs.h"
-#include "upstream/upstream.h"
+#include "dns/upstream/upstream.h"
 
-namespace ag::dns64 {
+namespace ag::dns::dns64 {
 
-using DiscoveryResult = std::pair<std::vector<Uint8Vector>, ErrString>;
-using Ipv6SynthResult = std::pair<Uint8Array<16>, ErrString>;
+enum class Ipv6SynthError {
+    AE_INVALID_PREF64,
+    AE_INVALID_IPV4
+};
+
+using DiscoveryResult = Result<std::vector<Uint8Vector>, DnsError>;
+using Ipv6SynthResult = Result<Uint8Array<16>, Ipv6SynthError>;
 using Prefixes = std::shared_ptr<WithMtx<std::vector<ag::Uint8Vector>>>;
 
 /**
@@ -14,7 +20,7 @@ using Prefixes = std::shared_ptr<WithMtx<std::vector<ag::Uint8Vector>>>;
  * @param upstream The upstream to query for DNS64 prefixes.
  * @return Unique prefixes, in the same order as returned by the upstream. Empty vector if no prefixes were found.
  */
-DiscoveryResult discover_prefixes(const UpstreamPtr &upstream);
+coro::Task<DiscoveryResult> discover_prefixes(const UpstreamPtr &upstream);
 
 /**
  * Make an IPv4-embedded IPv6 address using the specified prefix. Returns all zeros if there was an error (see params).
@@ -24,4 +30,18 @@ DiscoveryResult discover_prefixes(const UpstreamPtr &upstream);
  */
 Ipv6SynthResult synthesize_ipv4_embedded_ipv6_address(Uint8View prefix, Uint8View ip4);
 
-} // namespace ag::dns64
+} // namespace ag::dns::dns64
+
+namespace ag {
+
+template<>
+struct ErrorCodeToString<dns::dns64::Ipv6SynthError> {
+    std::string operator()(dns::dns64::Ipv6SynthError e) {
+        switch (e) {
+        case decltype(e)::AE_INVALID_PREF64: return "Invalid Pref64::/n";
+        case decltype(e)::AE_INVALID_IPV4: return "Invalid IPv4 addr";
+        }
+    }
+};
+
+} // namespace ag

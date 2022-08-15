@@ -15,7 +15,7 @@ set(CMAKE_C_VISIBILITY_PRESET hidden)
 set(CMAKE_CXX_VISIBILITY_PRESET hidden)
 
 set(CMAKE_C_STANDARD 11)
-set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD 20)
 
 if (MSVC)
     set(LinkerFlags
@@ -38,7 +38,7 @@ if (MSVC)
             CMAKE_C_FLAGS
             CMAKE_C_FLAGS_DEBUG
             CMAKE_C_FLAGS_RELEASE
-            CMAKE_CXX_FLAGS_RELWITHDEBINFO
+            CMAKE_C_FLAGS_RELWITHDEBINFO
             )
     foreach (CompilerFlag ${CompilerFlags})
         string(REPLACE "/MDd" "/MT" ${CompilerFlag} "${${CompilerFlag}}")
@@ -48,10 +48,11 @@ if (MSVC)
         string(REPLACE "/MD" "/MT" ${CompilerFlag} "${${CompilerFlag}}")
         string(REPLACE "-MD" "-MT" ${CompilerFlag} "${${CompilerFlag}}")
         string(REPLACE "/RTC1" "" ${CompilerFlag} "${${CompilerFlag}}")
+        string(REPLACE "/EHsc" "" ${CompilerFlag} "${${CompilerFlag}}")
     endforeach ()
 
-    set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} /MT /Zi /EHs-c- /W0")
-    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /MT /Zi /EHs-c- /std:c++latest /W0")
+    set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} /MT /Zi /EHs-c-")
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /MT /Zi /EHs-c-")
 else ()
     set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -fno-strict-aliasing -fno-exceptions")
     set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fno-strict-aliasing -fno-exceptions")
@@ -63,6 +64,7 @@ if (WIN32)
     # Minimum supported Windows API is 6.1 (Windows 7)
     add_definitions(-D_WIN32_WINNT=0x0601)
     add_definitions(-D__USE_MINGW_ANSI_STDIO=1 -D_CRT_SECURE_NO_WARNINGS -D_CRT_NONSTDC_NO_DEPRECATE)
+    add_definitions(-D_HAS_EXCEPTIONS=0)
 
     set(CMAKE_SHARED_LIBRARY_PREFIX "")
     set(CMAKE_SHARED_LIBRARY_SUFFIX ".dll")

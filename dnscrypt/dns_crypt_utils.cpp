@@ -1,1 +1,1 @@
-#include "dnscrypt/dns_crypt_utils.h"
+#include "dns/dnscrypt/dns_crypt_utils.h"

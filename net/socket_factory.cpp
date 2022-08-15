@@ -1,6 +1,6 @@
 #include "common/clock.h"
-#include "common/event_loop.h"
-#include "net/socket.h"
+#include "dns/common/event_loop.h"
+#include "dns/net/socket.h"
 #include "outbound_direct_proxy.h"
 #include "outbound_http_proxy.h"
 #include "outbound_proxy.h"
@@ -10,7 +10,7 @@
 #include "tcp_stream.h"
 #include "udp_socket.h"
 
-namespace ag {
+namespace ag::dns {
 
 static constexpr Secs PROXY_UNAVAILABLE_TIMEOUT(10);
 static constexpr Secs PROXY_AVAILABLE_TIMEOUT(3);
@@ -34,8 +34,6 @@ struct SocketFactory::OutboundProxyState {
     /// Whether the proxy is available. If not, the behavior depends on
     /// `outbound_proxy_settings#ignore_if_unavailable` flag
     ExpiringValue<proxy_availability_status, PAS_UNKNOWN> availability_status;
-    /// Used for example to reset re-routed directly connection
-    EventLoopPtr event_loop;
     /// Whether the event for resetting bypassed connections is scheduled
     bool reset_task_scheduled = false;
     /// The next reset event subscriber ID
@@ -47,12 +45,11 @@ struct SocketFactory::OutboundProxyState {
         auto *self = (SocketFactory *) arg;
         ((DirectOProxy *) self->m_proxy->fallback_proxy.get())->reset_connections();
         self->m_proxy->reset_task_scheduled = false;
-        self->m_proxy->event_loop.reset();
     }
 
-    static ProxiedSocket::ProxyConnectionFailedResult on_proxy_connection_failed(void *arg, std::optional<int> err) {
+    static ProxiedSocket::ProxyConnectionFailedResult on_proxy_connection_failed(void *arg, Error<SocketError> err) {
         auto *self = (SocketFactory *) arg;
-        switch (self->on_proxy_connection_failed(err)) {
+        switch (self->on_proxy_connection_failed(std::move(err))) {
         case SFPCFR_CLOSE_CONNECTION:
             break;
         case SFPCFR_RETRY_DIRECTLY:
@@ -60,6 +57,8 @@ struct SocketFactory::OutboundProxyState {
         }
         return ProxiedSocket::CloseConnection{};
     }
+
+    ~OutboundProxyState() {}
 };
 
 SocketFactory::SocketFactory(struct Parameters parameters)
@@ -188,8 +187,8 @@ void SocketFactory::on_successful_proxy_connection() {
     m_proxy->availability_status = {PAS_AVAILABLE, PROXY_AVAILABLE_TIMEOUT};
 }
 
-SocketFactory::ProxyConectionFailedResult SocketFactory::on_proxy_connection_failed(std::optional<int> err) {
-    if (err != utils::AG_ECONNREFUSED) {
+SocketFactory::ProxyConectionFailedResult SocketFactory::on_proxy_connection_failed(Error<SocketError> err) {
+    if (!err || err->value() != SocketError::AE_CONNECTION_REFUSED) {
         return SFPCFR_CLOSE_CONNECTION;
     }
 
@@ -202,13 +201,9 @@ SocketFactory::ProxyConectionFailedResult SocketFactory::on_proxy_connection_fai
     }
 
     if (!m_proxy->reset_task_scheduled) {
-        if (m_proxy->event_loop == nullptr) {
-            m_proxy->event_loop = EventLoop::create();
-        }
-
         this->subscribe_to_reset_bypassed_proxy_connections_event({on_reset_bypassed_proxy_connections, this});
 
-        m_proxy->event_loop->schedule(PROXY_UNAVAILABLE_TIMEOUT, [this]() {
+        m_parameters.loop.schedule(PROXY_UNAVAILABLE_TIMEOUT, [this]() {
             decltype(m_proxy->reset_subscribers) subscribers;
 
             {
@@ -283,4 +278,4 @@ void SocketFactory::on_reset_bypassed_proxy_connections(void *arg) {
     ((DirectOProxy *) self->m_proxy->fallback_proxy.get())->reset_connections();
 }
 
-} // namespace ag
+} // namespace ag::dns

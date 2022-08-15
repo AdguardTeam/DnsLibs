@@ -1,9 +1,9 @@
 #pragma once
 
 #include "common/defs.h"
-#include "proxy/dnsproxy.h"
+#include "dns/proxy/dnsproxy.h"
 
-namespace ag {
+namespace ag::dns {
 
 class DnsProxyListener;
 using ListenerPtr = std::unique_ptr<DnsProxyListener>;
@@ -16,21 +16,12 @@ public:
 
     /**
      * Create a listener and start listening
-     * @param settings the listener settings
-     * @param proxy    the dnsproxy to use for handling requests
+     * @param settings Listener settings
+     * @param proxy    Dnsproxy to use for handling requests
+     * @param loop     Event loop
      * @return a listener pointer or an error string
      */
-    static CreateResult create_and_listen(const ListenerSettings &settings, DnsProxy *proxy);
-
-    /**
-     * Request this listener to shutdown
-     */
-    virtual void shutdown() = 0;
-
-    /**
-     * Block until the listener shuts down
-     */
-    virtual void await_shutdown() = 0;
+    static CreateResult create_and_listen(const ListenerSettings &settings, DnsProxy *proxy, EventLoop *loop);
 
     /**
      * @brief Get the address is being listened for queries
@@ -38,4 +29,4 @@ public:
     [[nodiscard]] virtual std::pair<utils::TransportProtocol, SocketAddress> get_listen_address() const = 0;
 };
 
-} // namespace ag
+} // namespace ag::dns

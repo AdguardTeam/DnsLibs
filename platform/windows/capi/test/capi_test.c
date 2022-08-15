@@ -58,7 +58,7 @@ static void test_proxy() {
     settings->upstreams.data[0].address = "tls://1.1.1.1";
     settings->upstreams.data[0].id = 42;
 
-    ag_dnsproxy_events events = {};
+    ag_dnsproxy_events events = {0};
     events.on_request_processed = on_req;
     events.on_certificate_verification = on_cert;
 
@@ -79,7 +79,7 @@ static void test_proxy() {
 
     ldns_pkt *query = ldns_pkt_query_new(ldns_dname_new_frm_str("example.org"),
                                          LDNS_RR_TYPE_A, LDNS_RR_CLASS_IN, LDNS_RD);
-    ag_buffer msg = {};
+    ag_buffer msg = {0};
     size_t out_size;
     ldns_pkt2wire(&msg.data, query, &out_size);
     msg.size = out_size;
@@ -149,7 +149,7 @@ static void test_dnsstamp() {
 
 static void test_utils() {
     // test_upstream
-    ag_upstream_options upstream = {};
+    ag_upstream_options upstream = {0};
     upstream.address = "https://dns.adguard.com/dns-query";
     upstream.bootstrap.size = 1;
     upstream.bootstrap.data = malloc(sizeof(const char *));

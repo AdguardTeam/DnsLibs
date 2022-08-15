@@ -4,15 +4,14 @@
 #include "common/defs.h"
 #include "common/net_utils.h"
 #include "common/logger.h"
-#include "net/socket.h"
-#include "common/deferred_arg.h"
+#include "dns/net/socket.h"
 #include <event2/event.h>
 #include <optional>
 #include <memory>
 #include <mutex>
 
 
-namespace ag {
+namespace ag::dns {
 
 
 class UdpSocket : public Socket {
@@ -26,24 +25,29 @@ public:
     UdpSocket &operator=(const UdpSocket &) = delete;
 
 private:
-    UniquePtr<event, &event_free> m_socket_event;
-    mutable std::mutex m_guard;
+    UvPtr<uv_udp_t> m_udp;
+    UvPtr<uv_timer_t> m_timer;
     Callbacks m_callbacks = {};
-    std::optional<Micros> m_timeout;
-    DeferredArg::Guard m_deferred_arg;
-    EventLoop::TaskId m_connect_notify_task_id;
-    EventLoop *m_event_loop = nullptr;
+    bool m_connected = false;
+    std::optional<std::chrono::microseconds> m_current_timeout;
+    HashMap<char *, std::unique_ptr<char[]>> m_reads;
 
     [[nodiscard]] std::optional<evutil_socket_t> get_fd() const override;
-    [[nodiscard]] std::optional<Error> connect(ConnectParameters params) override;
-    [[nodiscard]] std::optional<Error> send(Uint8View data) override;
-    [[nodiscard]] std::optional<Error> send_dns_packet(Uint8View data) override;
+    [[nodiscard]] Error<SocketError> connect(ConnectParameters params) override;
+    [[nodiscard]] Error<SocketError> send(Uint8View data) override;
+    [[nodiscard]] Error<SocketError> send_dns_packet(Uint8View data) override;
     [[nodiscard]] bool set_timeout(Micros timeout) override;
-    [[nodiscard]] std::optional<Error> set_callbacks(Callbacks cbx) override;
+    [[nodiscard]] Error<SocketError> set_callbacks(Callbacks cbx) override;
 
     [[nodiscard]] Callbacks get_callbacks() const;
 
-    static void on_event(evutil_socket_t fd, short what, void *arg);
+    void reset_timeout();
+    [[nodiscard]] bool update_timer();
+    void update_read_status();
+
+    static void on_timeout(uv_timer_t *handle);
+    static void on_read(uv_udp_t *udp, ssize_t nread, const uv_buf_t *buf, const sockaddr * /* addr */, uint32_t /* flags */);
+    static void allocate_read(uv_handle_t *handle, size_t size, uv_buf_t *buf);
 };
 
 }

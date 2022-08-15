@@ -1,5 +1,7 @@
 # Changelog
 
+* [Feature] DnsProxy calls are now asynchronous. On iOS [handlePacket:completionHandler:] should be called instead of synchronous one.
+
 * [Feature] The DoQ upstream now uses the port 853 by default (was 8853), conforms to RFC-9250, and doesn't support ALPNs other than "doq".
             ACHTUNG: Some changes might be required on the application side due to the default port change? 
 

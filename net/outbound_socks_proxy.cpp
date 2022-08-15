@@ -13,7 +13,7 @@
 #define log_conn(p_, id_, lvl_, fmt_, ...)                                                                             \
     lvl_##log((p_)->m_log, "[id={}/{}] {}(): " fmt_, (p_)->m_id, (id_), __func__, ##__VA_ARGS__)
 
-namespace ag {
+namespace ag::dns {
 
 enum socks_version_number {
     SVN_4 = 0x4,
@@ -124,6 +124,7 @@ enum connection_state {
     CS_S5_AUTHENTICATING,
     CS_S5_ESTABLISHING_TUNNEL,
     CS_CONNECTED,
+    CS_CLOSING,
 };
 
 struct SocksOProxy::Connection {
@@ -184,16 +185,16 @@ static size_t get_full_udp_header_size(const Socks5UdpHeader *h) {
     return sizeof(*h) + ((h->atyp == S5AT_IPV4) ? 4 : 16) + 2;
 }
 
-std::optional<Socket::Error> SocksOProxy::send(uint32_t conn_id, Uint8View data) {
+Error<SocketError> SocksOProxy::send(uint32_t conn_id, Uint8View data) {
     log_conn(this, conn_id, trace, "{}", data.size());
 
     std::scoped_lock l(m_guard);
     auto it = m_connections.find(conn_id);
     if (it == m_connections.end()) {
-        return {{-1, AG_FMT("Non-existent connection: {}", conn_id)}};
+        return make_error(SocketError::AE_CONNECTION_ID_NOT_FOUND, fmt::to_string(conn_id));
     }
 
-    std::optional<Socket::Error> e;
+    Error<SocketError> e;
 
     Connection *conn = it->second.get();
     switch (conn->parameters.proto) {
@@ -201,7 +202,8 @@ std::optional<Socket::Error> SocksOProxy::send(uint32_t conn_id, Uint8View data)
         e = conn->socket->send(data);
         break;
     case utils::TP_UDP: {
-        Socks5UdpHeader header = {};
+        Socks5UdpHeader header;
+        memset(&header, 0, sizeof(header));
 
         Uint8View addr_bytes;
         uint16_t port;
@@ -229,7 +231,7 @@ std::optional<Socket::Error> SocksOProxy::send(uint32_t conn_id, Uint8View data)
     }
     }
 
-    if (e.has_value()) {
+    if (e) {
         log_conn(this, conn_id, dbg, "Failed to send data chunk");
     }
 
@@ -249,24 +251,23 @@ bool SocksOProxy::set_timeout(uint32_t conn_id, Micros timeout) {
     return it->second->socket->set_timeout(timeout);
 }
 
-std::optional<Socket::Error> SocksOProxy::set_callbacks(uint32_t conn_id, Callbacks cbx) {
+Error<SocketError> SocksOProxy::set_callbacks(uint32_t conn_id, Callbacks cbx) {
     log_conn(this, conn_id, trace, "...");
 
     std::scoped_lock l(m_guard);
     auto it = m_connections.find(conn_id);
     if (it == m_connections.end()) {
-        return {{-1, AG_FMT("Non-existent connection: {}", conn_id)}};
+        return make_error(SocketError::AE_CONNECTION_ID_NOT_FOUND, fmt::to_string(conn_id));
     }
 
     Connection *conn = it->second.get();
     conn->parameters.callbacks = cbx;
     if (auto e = it->second->socket->set_callbacks({(cbx.on_connected != nullptr) ? on_connected : nullptr,
-                (cbx.on_read != nullptr) ? on_read : nullptr, (cbx.on_close != nullptr) ? on_close : nullptr, conn});
-            e.has_value()) {
+                (cbx.on_read != nullptr) ? on_read : nullptr, (cbx.on_close != nullptr) ? on_close : nullptr, conn})) {
         return e;
     }
 
-    return std::nullopt;
+    return {};
 }
 
 void SocksOProxy::close_connection(uint32_t conn_id) {
@@ -283,7 +284,7 @@ void SocksOProxy::close_connection(uint32_t conn_id) {
     m_closing_connections.insert(std::move(node));
 
     if (conn->state == CS_CONNECTING_SOCKET) {
-        conn->parameters.callbacks.on_proxy_connection_failed(conn->parameters.callbacks.arg, std::nullopt);
+        conn->parameters.callbacks.on_proxy_connection_failed(conn->parameters.callbacks.arg, {});
     }
     conn->parameters.callbacks = {};
 
@@ -300,7 +301,7 @@ void SocksOProxy::close_connection(uint32_t conn_id) {
     });
 }
 
-std::optional<Socket::Error> SocksOProxy::connect_to_proxy(uint32_t conn_id, const ConnectParameters &parameters) {
+Error<SocketError> SocksOProxy::connect_to_proxy(uint32_t conn_id, const ConnectParameters &parameters) {
     log_conn(this, conn_id, trace, "{}:{} == {}", m_settings->address, m_settings->port, parameters.peer.str());
 
     Connection *conn = nullptr;
@@ -310,12 +311,12 @@ std::optional<Socket::Error> SocksOProxy::connect_to_proxy(uint32_t conn_id, con
             c = std::make_unique<Connection>(Connection{this, conn_id, parameters});
             conn = c.get();
         } else {
-            return {{-1, AG_FMT("Duplicate ID: {}", conn_id)}};
+            return make_error(SocketError::AE_DUPLICATE_ID, fmt::to_string(conn_id));
         }
     }
 
-    std::optional err = this->connect_to_proxy(conn);
-    if (err.has_value()) {
+    auto err = this->connect_to_proxy(conn);
+    if (err) {
         std::unique_lock l(m_guard);
         conn->parameters.callbacks = {}; // do not raise `on_close` callback
         this->close_connection(conn);
@@ -325,18 +326,18 @@ std::optional<Socket::Error> SocksOProxy::connect_to_proxy(uint32_t conn_id, con
     return err;
 }
 
-std::optional<Socket::Error> SocksOProxy::connect_through_proxy(uint32_t conn_id, const ConnectParameters &parameters) {
+Error<SocketError> SocksOProxy::connect_through_proxy(uint32_t conn_id, const ConnectParameters &parameters) {
     log_conn(this, conn_id, trace, "{}:{} == {}", m_settings->address, m_settings->port, parameters.peer.str());
 
     std::unique_lock l(m_guard);
     auto &conn = m_connections[conn_id];
     if (conn == nullptr) {
-        return {{-1, AG_FMT("Non-existent connection: {}", conn_id)}};
+        return make_error(SocketError::AE_CONNECTION_ID_NOT_FOUND, fmt::to_string(conn_id));
     }
 
     if (conn->state != CS_CONNECTING_SOCKET) {
         log_conn(this, conn_id, dbg, "Invalid connection state: {}", magic_enum::enum_name(conn->state));
-        return {{-1, "Invalid connection state"}};
+        return make_error(SocketError::AE_INVALID_CONN_STATE, AG_FMT("id={} state={}", conn_id, magic_enum::enum_name(conn->state)));
     }
 
     if (conn->parameters.proto == utils::TP_UDP) {
@@ -346,23 +347,23 @@ std::optional<Socket::Error> SocksOProxy::connect_through_proxy(uint32_t conn_id
             conn->parameters.callbacks.on_connected(conn->parameters.callbacks.arg, conn->id);
             l.lock();
         }
-        return std::nullopt;
+        return {};
     }
 
-    std::optional<Socket::Error> e;
+    Error<SocketError> e;
     if (m_settings->protocol == OutboundProxyProtocol::SOCKS4) {
         e = this->send_socks4_request(conn.get());
     } else {
         e = this->send_socks5_auth_method_request(conn.get());
     }
 
-    if (e.has_value()) {
+    if (e) {
         return e;
     }
 
     conn->state = CS_CONNECTING_SOCKS;
 
-    return std::nullopt;
+    return {};
 }
 
 void SocksOProxy::on_connected(void *arg) {
@@ -374,8 +375,8 @@ void SocksOProxy::on_connected(void *arg) {
         cbx.on_successful_proxy_connection(cbx.arg);
     }
 
-    if (auto e = self->connect_through_proxy(conn->id, conn->parameters); e.has_value()) {
-        self->handle_connection_close(conn, std::move(e));
+    if (auto err = self->connect_through_proxy(conn->id, conn->parameters)) {
+        self->handle_connection_close(conn, std::move(err));
     }
 }
 
@@ -401,7 +402,8 @@ void SocksOProxy::on_read(void *arg, Uint8View data) {
     case CS_CONNECTED:
         if (self->is_udp_association_connection(conn->id)) {
             log_conn(self, conn->id, dbg, "Unexpected data ({} bytes) on UDP association connection", data.size());
-            self->terminate_udp_association(conn, {{-1, "Unexpected data"}});
+            auto error = make_error(SocketError::AE_UNEXPECTED_DATA, AG_FMT("Unexpected data ({} bytes) on UDP association connection", data.size()));
+            self->terminate_udp_association(conn, error);
         } else if (Callbacks cbx = self->get_connection_callbacks_locked(conn); cbx.on_read != nullptr) {
             if (conn->parameters.proto == utils::TP_UDP) {
                 data.remove_prefix(get_full_udp_header_size((Socks5UdpHeader *) data.data()));
@@ -412,25 +414,27 @@ void SocksOProxy::on_read(void *arg, Uint8View data) {
         }
         break;
     case CS_IDLE:
-    case CS_CONNECTING_SOCKET: {
+    case CS_CONNECTING_SOCKET:
+    case CS_CLOSING: {
         log_conn(self, conn->id, dbg, "Invalid state: {}", magic_enum::enum_name(conn->state));
-        self->handle_connection_close(conn, {{-1, "Invalid state on reading"}});
+        auto error = make_error(SocketError::AE_INVALID_CONN_STATE, AG_FMT("id={} state={}", conn->id, magic_enum::enum_name(conn->state)));
+        self->handle_connection_close(conn, error);
         break;
     }
     }
 }
 
-void SocksOProxy::on_close(void *arg, std::optional<Socket::Error> error) {
+void SocksOProxy::on_close(void *arg, Error<SocketError> error) {
     auto *conn = (Connection *) arg;
     SocksOProxy *self = conn->proxy;
-    if (error.has_value()) {
-        log_conn(self, conn->id, trace, "{} ({})", error->description, error->code);
+    if (error) {
+        log_conn(self, conn->id, trace, "{}", error->str());
     }
 
     self->handle_connection_close(conn, std::move(error));
 }
 
-std::optional<Socket::Error> SocksOProxy::connect_to_proxy(Connection *conn) {
+Error<SocketError> SocksOProxy::connect_to_proxy(Connection *conn) {
     log_conn(this, conn->id, trace, "...");
 
     utils::TransportProtocol proto = conn->parameters.proto;
@@ -450,7 +454,7 @@ std::optional<Socket::Error> SocksOProxy::connect_to_proxy(Connection *conn) {
             } else if (assoc_conn_it->second->state != CS_CONNECTED) {
                 log_conn(this, conn->id, trace, "Postpone until UDP association completion");
                 conn->state = CS_CONNECTING_SOCKET;
-                return std::nullopt;
+                return {};
             }
         }
 
@@ -494,15 +498,14 @@ std::optional<Socket::Error> SocksOProxy::connect_to_proxy(Connection *conn) {
 
     conn->socket = m_parameters.make_socket.func(m_parameters.make_socket.arg, proto, std::nullopt);
     if (auto e = conn->socket->connect(
-                {conn->parameters.loop, dst_addr, {on_connected, on_read, on_close, conn}, conn->parameters.timeout});
-            e.has_value()) {
+                {conn->parameters.loop, dst_addr, {on_connected, on_read, on_close, conn}, conn->parameters.timeout})) {
         log_conn(this, conn->id, dbg, "Failed to start socket connection");
         return e;
     }
 
     conn->state = CS_CONNECTING_SOCKET;
 
-    return std::nullopt;
+    return {};
 }
 
 void SocksOProxy::close_connection(Connection *conn) {
@@ -549,22 +552,26 @@ bool SocksOProxy::is_udp_association_connection(uint32_t conn_id) const {
     });
 }
 
-void SocksOProxy::handle_connection_close(Connection *conn, std::optional<Socket::Error> error) {
-    if (error.has_value()) {
-        log_conn(this, conn->id, dbg, "{} {}", error->code, error->description);
+void SocksOProxy::handle_connection_close(Connection *conn, Error<SocketError> error) {
+    if (error) {
+        log_conn(this, conn->id, dbg, "{}", error->str());
     }
 
     Callbacks callbacks = this->get_connection_callbacks_locked(conn);
     if (conn->state == CS_CONNECTING_SOCKET) {
-        callbacks.on_proxy_connection_failed(
-                callbacks.arg, error.has_value() ? std::make_optional(error->code) : std::nullopt);
+        callbacks.on_proxy_connection_failed(callbacks.arg, error);
     }
 
     if (this->is_udp_association_connection(conn->id)) {
-        if (conn->state != CS_CONNECTED || !error.has_value() || error->code != utils::AG_ETIMEDOUT) {
+        if (conn->state != CS_CONNECTED || !error || error->value() != SocketError::AE_TIMED_OUT) {
             this->terminate_udp_association(conn, std::move(error));
         }
-    } else if (callbacks.on_close != nullptr) {
+        return;
+    }
+
+    conn->state = CS_CLOSING;
+
+    if (callbacks.on_close != nullptr) {
         callbacks.on_close(callbacks.arg, std::move(error));
     }
 }
@@ -580,7 +587,8 @@ void SocksOProxy::on_udp_association_established(Connection *assoc_conn, SocketA
     } else {
         log_conn(this, assoc_conn->id, dbg, "UDP association is not found");
         m_guard.unlock();
-        this->terminate_udp_association(assoc_conn, {{-1, "UDP association is not found"}});
+        auto error = make_error(SocketError::AE_UDP_ASSOCIATION_NOT_FOUND);
+        this->terminate_udp_association(assoc_conn, error);
         return;
     }
 
@@ -593,16 +601,15 @@ void SocksOProxy::on_udp_association_established(Connection *assoc_conn, SocketA
 
     for (Connection *conn : udp_connections) {
         auto e = this->connect_to_proxy(conn);
-        if (!e.has_value()) {
-            continue;
-        }
-        if (Callbacks cbx = this->get_connection_callbacks_locked(conn); cbx.on_close != nullptr) {
-            cbx.on_close(cbx.arg, std::move(e));
+        if (e) {
+            if (Callbacks cbx = this->get_connection_callbacks_locked(conn); cbx.on_close != nullptr) {
+                cbx.on_close(cbx.arg, std::move(e));
+            }
         }
     }
 }
 
-void SocksOProxy::terminate_udp_association(Connection *assoc_conn, std::optional<Socket::Error> error) {
+void SocksOProxy::terminate_udp_association(Connection *assoc_conn, Error<SocketError> error) {
     log_conn(this, assoc_conn->id, trace, "...");
 
     std::vector<Callbacks> udp_connections_callbacks;
@@ -623,11 +630,7 @@ void SocksOProxy::terminate_udp_association(Connection *assoc_conn, std::optiona
 
     for (auto &cbx : udp_connections_callbacks) {
         if (cbx.on_close != nullptr) {
-            if (error.has_value()) {
-                cbx.on_close(cbx.arg, {{error->code, "UDP association terminated: " + error->description}});
-            } else {
-                cbx.on_close(cbx.arg, {{-1, "UDP association terminated"}});
-            }
+            cbx.on_close(cbx.arg, make_error(SocketError::AE_UDP_ASSOCIATION_TERMINATED, error));
         }
     }
 }
@@ -654,13 +657,13 @@ SocksOProxy::Callbacks SocksOProxy::get_connection_callbacks_locked(Connection *
 
 #define SEND_S(conn_, data_)                                                                                           \
     do {                                                                                                               \
-        if (auto e = (conn_)->socket->send(data_); e.has_value()) {                                                    \
+        if (auto e = (conn_)->socket->send(data_)) {                                                                   \
             log_conn(this, (conn_)->id, dbg, "Failed to send data");                                                   \
             return e;                                                                                                  \
         }                                                                                                              \
     } while (0)
 
-std::optional<Socket::Error> SocksOProxy::send_socks4_request(Connection *conn) {
+Error<SocketError> SocksOProxy::send_socks4_request(Connection *conn) {
     log_conn(this, conn->id, trace, "...");
 
     Socks4ConnectRequest request = {};
@@ -674,7 +677,7 @@ std::optional<Socket::Error> SocksOProxy::send_socks4_request(Connection *conn) 
     data = {(uint8_t *) &ADGUARD, sizeof(ADGUARD)};
     SEND_S(conn, data);
 
-    return std::nullopt;
+    return {};
 }
 
 void SocksOProxy::on_socks4_reply(Connection *conn, Uint8View data) {
@@ -682,7 +685,7 @@ void SocksOProxy::on_socks4_reply(Connection *conn, Uint8View data) {
 
     if (data.size() + conn->recv_buffer.size() > sizeof(Socks4ConnectReply)) {
         log_conn(this, conn->id, dbg, "Too long: {} bytes", data.size() + conn->recv_buffer.size());
-        this->handle_connection_close(conn, {{-1, "Bad reply"}});
+        this->handle_connection_close(conn, make_error(SocketError::AE_BAD_PROXY_REPLY));
         return;
     }
 
@@ -694,12 +697,12 @@ void SocksOProxy::on_socks4_reply(Connection *conn, Uint8View data) {
     const auto *reply = (Socks4ConnectReply *) seek.data();
     if (reply->ver != 0x0) {
         log_conn(this, conn->id, dbg, "Malformed version number: {}", reply->ver);
-        this->handle_connection_close(conn, {{-1, "Bad reply"}});
+        this->handle_connection_close(conn, make_error(SocketError::AE_BAD_PROXY_REPLY));
         return;
     }
     if (reply->cd != S4CMD_REQUEST_GRANTED) {
         log_conn(this, conn->id, dbg, "Bad command: {}", reply->cd);
-        this->handle_connection_close(conn, {{-1, "Bad reply"}});
+        this->handle_connection_close(conn, make_error(SocketError::AE_BAD_PROXY_REPLY));
         return;
     }
 
@@ -710,7 +713,7 @@ void SocksOProxy::on_socks4_reply(Connection *conn, Uint8View data) {
     }
 }
 
-std::optional<Socket::Error> SocksOProxy::send_socks5_auth_method_request(Connection *conn) {
+Error<SocketError> SocksOProxy::send_socks5_auth_method_request(Connection *conn) {
     log_conn(this, conn->id, trace, "...");
 
     static constexpr uint8_t METHODS[] = {S5AM_NO_AUTHENTICATION_REQUIRED, S5AM_USERNAME_PASSWORD};
@@ -724,7 +727,7 @@ std::optional<Socket::Error> SocksOProxy::send_socks5_auth_method_request(Connec
     data = {METHODS, request.nmethods};
     SEND_S(conn, data);
 
-    return std::nullopt;
+    return {};
 }
 
 void SocksOProxy::on_socks5_auth_method_response(Connection *conn, Uint8View data) {
@@ -732,7 +735,7 @@ void SocksOProxy::on_socks5_auth_method_response(Connection *conn, Uint8View dat
 
     if (data.size() + conn->recv_buffer.size() > sizeof(Socks5AuthMethodResponse)) {
         log_conn(this, conn->id, dbg, "Too long: {} bytes", data.size() + conn->recv_buffer.size());
-        this->handle_connection_close(conn, {{-1, "Bad reply"}});
+        this->handle_connection_close(conn, make_error(SocketError::AE_BAD_PROXY_REPLY));
         return;
     }
 
@@ -744,16 +747,16 @@ void SocksOProxy::on_socks5_auth_method_response(Connection *conn, Uint8View dat
     const auto *reply = (Socks5AuthMethodResponse *) seek.data();
     if (reply->ver != SVN_5) {
         log_conn(this, conn->id, dbg, "Malformed version number: {}", reply->ver);
-        this->handle_connection_close(conn, {{-1, "Bad reply"}});
+        this->handle_connection_close(conn, make_error(SocketError::AE_BAD_PROXY_REPLY));
         return;
     }
     if (reply->method != S5AM_NO_AUTHENTICATION_REQUIRED && reply->method != S5AM_USERNAME_PASSWORD) {
         log_conn(this, conn->id, dbg, "Unsupported authentication method: {}", reply->method);
-        this->handle_connection_close(conn, {{-1, "Bad reply"}});
+        this->handle_connection_close(conn, make_error(SocketError::AE_BAD_PROXY_REPLY));
         return;
     }
 
-    std::optional<Socket::Error> e;
+    Error<SocketError> e;
     if (reply->method == S5AM_USERNAME_PASSWORD) {
         e = this->send_socks5_user_pass_auth_request(conn);
         conn->state = CS_S5_AUTHENTICATING;
@@ -763,13 +766,13 @@ void SocksOProxy::on_socks5_auth_method_response(Connection *conn, Uint8View dat
     }
 
     conn->recv_buffer.clear();
-    if (e.has_value()) {
+    if (e) {
         this->handle_connection_close(conn, std::move(e));
     }
 }
 
 // https://tools.ietf.org/html/rfc1929
-std::optional<Socket::Error> SocksOProxy::send_socks5_user_pass_auth_request(Connection *conn) {
+Error<SocketError> SocksOProxy::send_socks5_user_pass_auth_request(Connection *conn) {
     log_conn(this, conn->id, trace, "...");
 
     uint8_t ver = S5UPAVN_1;
@@ -792,7 +795,7 @@ std::optional<Socket::Error> SocksOProxy::send_socks5_user_pass_auth_request(Con
             std::min(m_settings->auth_info->password.size(), (size_t) 255)};
     SEND_S(conn, data);
 
-    return std::nullopt;
+    return {};
 }
 
 void SocksOProxy::on_socks5_user_pass_auth_response(Connection *conn, Uint8View data) {
@@ -800,7 +803,7 @@ void SocksOProxy::on_socks5_user_pass_auth_response(Connection *conn, Uint8View 
 
     if (data.size() + conn->recv_buffer.size() > sizeof(Socks5AuthUserPassResponse)) {
         log_conn(this, conn->id, dbg, "Too long: {} bytes", data.size() + conn->recv_buffer.size());
-        this->handle_connection_close(conn, {{-1, "Bad reply"}});
+        this->handle_connection_close(conn, make_error(SocketError::AE_BAD_PROXY_REPLY));
         return;
     }
 
@@ -812,25 +815,25 @@ void SocksOProxy::on_socks5_user_pass_auth_response(Connection *conn, Uint8View 
     const auto *reply = (Socks5AuthUserPassResponse *) seek.data();
     if (reply->ver != S5UPAVN_1) {
         log_conn(this, conn->id, dbg, "Malformed version number: {}", reply->ver);
-        this->handle_connection_close(conn, {{-1, "Bad reply"}});
+        this->handle_connection_close(conn, make_error(SocketError::AE_BAD_PROXY_REPLY));
         return;
     }
     if (reply->status != S5UPAS_SUCCESS) {
         log_conn(this, conn->id, dbg, "Bad authentication status: {}", reply->status);
-        this->handle_connection_close(conn, {{-1, "Bad reply"}});
+        this->handle_connection_close(conn, make_error(SocketError::AE_BAD_PROXY_REPLY));
         return;
     }
 
-    std::optional<Socket::Error> e = this->send_socks5_connect_request(conn);
+    Error<SocketError> e = this->send_socks5_connect_request(conn);
     conn->state = CS_S5_ESTABLISHING_TUNNEL;
     conn->recv_buffer.clear();
 
-    if (e.has_value()) {
+    if (e) {
         this->handle_connection_close(conn, std::move(e));
     }
 }
 
-std::optional<Socket::Error> SocksOProxy::send_socks5_connect_request(Connection *conn) {
+Error<SocketError> SocksOProxy::send_socks5_connect_request(Connection *conn) {
     log_conn(this, conn->id, trace, "...");
 
     const sockaddr *addr = conn->parameters.peer.c_sockaddr();
@@ -857,7 +860,7 @@ std::optional<Socket::Error> SocksOProxy::send_socks5_connect_request(Connection
     data = {(uint8_t *) &port, sizeof(port)};
     SEND_S(conn, data);
 
-    return std::nullopt;
+    return {};
 }
 
 void SocksOProxy::on_socks5_connect_response(Connection *conn, Uint8View data) {
@@ -871,17 +874,17 @@ void SocksOProxy::on_socks5_connect_response(Connection *conn, Uint8View data) {
     const auto *reply = (Socks5ConnectReply *) seek.data();
     if (reply->ver != SVN_5) {
         log_conn(this, conn->id, dbg, "Malformed version number: {}", reply->ver);
-        this->handle_connection_close(conn, {{-1, "Bad reply"}});
+        this->handle_connection_close(conn, make_error(SocketError::AE_BAD_PROXY_REPLY));
         return;
     }
     if (reply->rep != S5RS_SUCCEEDED) {
         log_conn(this, conn->id, dbg, "Bad status: {}", reply->rep);
-        this->handle_connection_close(conn, {{-1, "Bad reply"}});
+        this->handle_connection_close(conn, make_error(SocketError::AE_BAD_PROXY_REPLY));
         return;
     }
     if (reply->atyp != S5AT_IPV4 && reply->atyp != S5AT_IPV6) {
         log_conn(this, conn->id, dbg, "Bad address type: {}", reply->atyp);
-        this->handle_connection_close(conn, {{-1, "Bad reply"}});
+        this->handle_connection_close(conn, make_error(SocketError::AE_BAD_PROXY_REPLY));
         return;
     }
 
@@ -895,7 +898,7 @@ void SocksOProxy::on_socks5_connect_response(Connection *conn, Uint8View data) {
     }
     if (seek.size() > full_length) {
         log_conn(this, conn->id, dbg, "Too long: {} bytes", seek.size());
-        this->handle_connection_close(conn, {{-1, "Bad reply"}});
+        this->handle_connection_close(conn, make_error(SocketError::AE_BAD_PROXY_REPLY));
         return;
     }
 
@@ -911,4 +914,4 @@ void SocksOProxy::on_socks5_connect_response(Connection *conn, Uint8View data) {
     }
 }
 
-} // namespace ag
+} // namespace ag::dns

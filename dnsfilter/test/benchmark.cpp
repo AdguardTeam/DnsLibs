@@ -7,9 +7,9 @@
 #include "common/clock.h"
 #include "common/file.h"
 #include "common/logger.h"
-#include "common/sys.h"
+#include "dns/common/sys.h"
 #include "common/utils.h"
-#include "dnsfilter/dnsfilter.h"
+#include "dns/dnsfilter/dnsfilter.h"
 
 #undef max // `Nanos::max()` conflicts with `max` macro from `minwindef.h` on Windows
 
@@ -17,6 +17,7 @@
 #define DEFAULT_DOMAINS_BASE_PATH "./bench_domains.txt"
 
 using namespace ag;
+using namespace ag::dns;
 
 static Logger g_log{"dnsfilter_benchmark"};
 
@@ -82,7 +83,7 @@ static bool add_domain(uint32_t idx, std::string_view line, void *arg) {
 static int parse_domains_base(std::string_view path) {
     ag::file::Handle file = ag::file::open(std::string(path), ag::file::RDONLY);
     if (!ag::file::is_valid(file)) {
-        errlog(g_log, "failed to read file: {} ({})", path, ag::sys::error_string(ag::sys::error_code()));
+        errlog(g_log, "failed to read file: {} ({})", path, ag::dns::sys::error_string(ag::dns::sys::error_code()));
         return -1;
     }
     ag::file::for_each_line(file, &add_domain, nullptr);
@@ -211,10 +212,10 @@ int main(int argc, char **argv) {
 
     result.match_domains.tries = domains.size();
 
-    result.overall.start_rss = ag::sys::current_rss();
+    result.overall.start_rss = ag::dns::sys::current_rss();
     TICK(result.overall.start_ts);
 
-    result.load_rules.start_rss = ag::sys::current_rss();
+    result.load_rules.start_rss = ag::dns::sys::current_rss();
 
     infolog(g_log, "Loading rules in filter...");
     DnsFilter filter;
@@ -227,7 +228,7 @@ int main(int argc, char **argv) {
         exit(-1);
     }
     TICK(result.load_rules.end_ts);
-    result.load_rules.end_rss = ag::sys::current_rss();
+    result.load_rules.end_rss = ag::dns::sys::current_rss();
     if (err_or_warn) {
         warnlog(g_log, "... rules loaded with warnings: {}", *err_or_warn);
     } else {
@@ -235,15 +236,15 @@ int main(int argc, char **argv) {
     }
 
     infolog(g_log, "Matching domains against rules...");
-    result.match_domains.start_rss = ag::sys::current_rss();
+    result.match_domains.start_rss = ag::dns::sys::current_rss();
     apply_filter_to_base(&result, &filter, handle);
-    result.match_domains.end_rss = ag::sys::current_rss();
+    result.match_domains.end_rss = ag::dns::sys::current_rss();
     infolog(g_log, "...domains matched");
 
     filter.destroy(handle);
 
     TICK(result.overall.end_ts);
-    result.overall.end_rss = ag::sys::current_rss();
+    result.overall.end_rss = ag::dns::sys::current_rss();
 
     report_results(&result);
 }

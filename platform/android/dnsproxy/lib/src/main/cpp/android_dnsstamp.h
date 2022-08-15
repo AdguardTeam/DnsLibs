@@ -1,9 +1,9 @@
 #pragma once
 
 #include "jni_utils.h"
-#include "dnsstamp/dns_stamp.h"
+#include "dns/dnsstamp/dns_stamp.h"
 
-namespace ag {
+namespace ag::dns {
     class AndroidDnsStamp {
         jni::JniUtils m_utils;
         std::vector<jni::GlobalRef<jobject>> m_dnsstamp_prototype_values;
@@ -21,4 +21,4 @@ namespace ag {
          */
         jni::LocalRef<jobject> marshal_dnsstamp(JNIEnv *env, const ServerStamp &stamp);
     };
-}
+} // namespace ag::dns
