@@ -706,8 +706,13 @@ void Filter::Impl::search_badfilter_rules(MatchArg &match) const {
     if (match.outdated) {
         return;
     }
+    std::vector<std::string> matched_rule_texts;
+    matched_rule_texts.reserve(match.ctx.matched_rules.size());
     for (const DnsFilter::Rule &rule : match.ctx.matched_rules) {
-        khiter_t iter = kh_get(hash_to_unique_index, this->badfilter_table, utils::hash(rule.text));
+        matched_rule_texts.emplace_back(rule.text);
+    }
+    for (std::string_view text : matched_rule_texts) {
+        khiter_t iter = kh_get(hash_to_unique_index, this->badfilter_table, utils::hash(text));
         if (iter != kh_end(this->badfilter_table)) {
             match_by_file_position(match, kh_value(this->badfilter_table, iter));
         }

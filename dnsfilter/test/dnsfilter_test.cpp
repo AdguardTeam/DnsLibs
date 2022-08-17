@@ -541,6 +541,11 @@ const std::vector<BasicTestData> BASIC_TEST_DATA = {
                 "example60.com",
                 true,
         },
+        {
+                {"@@||app.adjust.com^|", "||adjust.com^", "@@||app.adjust.com^|$badfilter"},
+                "app.adjust.com",
+                true,
+        },
 };
 
 TEST_F(DnsfilterTest, BasicRulesMatch) {

@@ -33,9 +33,15 @@ int main() {
     //settings.upstreams = {{.address = "https://cloudflare-dns.com/dns-query", .bootstrap = {"1.1.1.1"}, .timeout = 2s}};
     //settings.upstreams = {{.address = "quic://dns.adguard.com", .bootstrap = {"1.1.1.1"}, .timeout = 2s}};
     settings.upstreams = {{.address = "94.140.14.14", .bootstrap = {}, .timeout = 2s}};
-    settings.filter_params = {{{.data = "0.0.0.0 evil.com\n"
-                                        "||evil.org^\n",
-            .in_memory = true}}};
+    settings.filter_params = {
+            .filters = {
+                    {
+                            .data = "0.0.0.0 evil.com\n"
+                                    "||evil.org^\n",
+                            .in_memory = true,
+                    },
+            },
+    };
     settings.dns_cache_size = 0;
     settings.optimistic_cache = false;
 
