@@ -60,6 +60,7 @@ static const DnsProxySettings DEFAULT_PROXY_SETTINGS = {
                         "tplinklogin.net",
                         "tplinkwifi.net",
                         "tplinkrepeater.net",
+                        "oppowifi.com",
                 },
         .dns64 = std::nullopt,
         .blocked_response_ttl_secs = 3600,
