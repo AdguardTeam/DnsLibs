@@ -170,7 +170,7 @@ private:
                           const uint8_t *current_tx_secret, size_t secretlen,
                           void *user_data);
 
-    static int on_close_stream(ngtcp2_conn *conn, int64_t stream_id,
+    static int on_close_stream(ngtcp2_conn *conn, uint32_t flags, int64_t stream_id,
                                uint64_t app_error_code, void *user_data,
                                void *stream_user_data);
 
@@ -181,7 +181,7 @@ private:
     static int handshake_confirmed(ngtcp2_conn *, void *data);
     static int ssl_verify_callback(X509_STORE_CTX *ctx, void *arg);
 
-    static void idle_timer_cb(uv_timer_t *timer);
+    static void short_timeout_timer_cb(uv_timer_t *timer);
     static void handshake_timer_cb(uv_timer_t *timer);
     static void retransmit_cb(uv_timer_t *timer);
 
@@ -212,6 +212,7 @@ private:
     void write_client_handshake(ngtcp2_crypto_level level, const uint8_t *data, size_t datalen);
     int on_key(ngtcp2_crypto_level level, const uint8_t *rx_secret,
                const uint8_t *tx_secret, size_t secretlen);
+    static void on_rand(uint8_t *dest, size_t destlen, const ngtcp2_rand_ctx *rand_ctx);
 
     int connect_to_peers(const std::vector<ag::SocketAddress> &current_addresses);
 
@@ -234,7 +235,7 @@ private:
     std::list<int64_t> m_stream_send_queue;
     std::unordered_map<int64_t, Stream> m_streams;
     std::unordered_map<int64_t, Request> m_requests;
-    UvPtr<uv_timer_t> m_idle_timer;
+    UvPtr<uv_timer_t> m_short_timeout_timer;
     UvPtr<uv_timer_t> m_handshake_timer;
     UvPtr<uv_timer_t> m_retransmit_timer;
     static std::atomic_int64_t m_next_request_id;

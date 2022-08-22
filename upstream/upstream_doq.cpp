@@ -1,5 +1,7 @@
 #include <cassert>
 #include <magic_enum.hpp>
+#include <openssl/rand.h>
+
 #ifdef __linux__
 #include <time.h>
 #endif
@@ -21,7 +23,9 @@ using namespace std::chrono;
 namespace ag::dns {
 
 static constexpr std::string_view DQ_ALPNS[] = {DoqUpstream::RFC9250_ALPN};
+static constexpr int KEEPALIVE_INTERVAL_SEC = 30;
 static constexpr int LOCAL_IDLE_TIMEOUT_SEC = 180;
+static constexpr int MAX_PKTLEN_IPV6 = 1232;
 
 #undef NEVER
 #define NEVER (UINT64_MAX / 2)
@@ -64,15 +68,15 @@ std::unique_ptr<DoqUpstream::SocketContext> DoqUpstream::ConnectionState::extrac
 
 DoqUpstream::DoqUpstream(const UpstreamOptions &opts, const UpstreamFactoryConfig &config)
         : Upstream(opts, config)
-        , m_max_pktlen{NGTCP2_MAX_PKTLEN_IPV6}
+        , m_max_pktlen{MAX_PKTLEN_IPV6}
         , m_quic_version{NGTCP2_PROTO_VER_V1}
-        , m_send_buf(NGTCP2_MAX_PKTLEN_IPV6)
-        , m_idle_timer{Uv<uv_timer_t>::create_with_parent(this)}
+        , m_send_buf(m_max_pktlen)
+        , m_short_timeout_timer{Uv<uv_timer_t>::create_with_parent(this)}
         , m_handshake_timer(Uv<uv_timer_t>::create_with_parent(this))
         , m_retransmit_timer(Uv<uv_timer_t>::create_with_parent(this))
         , m_static_secret{0}
         , m_tls_session_cache(opts.address) {
-    uv_timer_init(config.loop.handle(), m_idle_timer->raw());
+    uv_timer_init(config.loop.handle(), m_short_timeout_timer->raw());
     uv_timer_init(config.loop.handle(), m_handshake_timer->raw());
     uv_timer_init(config.loop.handle(), m_retransmit_timer->raw());
 }
@@ -115,16 +119,11 @@ int DoqUpstream::add_handshake_data(SSL *ssl, enum ssl_encryption_level_t ossl_l
     return 1;
 }
 
-int DoqUpstream::flush_flight(SSL *ssl) {
-    (void) ssl;
+int DoqUpstream::flush_flight(SSL * /*ssl*/) {
     return 1;
 }
 
-int DoqUpstream::send_alert(SSL *ssl, enum ssl_encryption_level_t level, uint8_t alert) {
-    (void) ssl;
-    (void) level;
-    (void) alert;
-
+int DoqUpstream::send_alert(SSL *ssl, enum ssl_encryption_level_t /*level*/, uint8_t alert) {
     auto doq = (DoqUpstream *) SSL_get_app_data(ssl);
     errlog(doq->m_log, "SSL error ({}), sending alert", alert);
 
@@ -154,7 +153,11 @@ void DoqUpstream::retransmit_cb(uv_timer_t *timer) {
     }
 
     if (int ret = doq->handle_expiry(); ret != 0) {
-        doq->disconnect("Handling expiry error");
+        if (ret == NGTCP2_ERR_IDLE_CLOSE) {
+            doq->disconnect("Idle timeout");
+        } else {
+            doq->disconnect(AG_FMT("Handling expiry error: {}", ngtcp2_strerror(ret)));
+        }
         return;
     }
 
@@ -163,15 +166,15 @@ void DoqUpstream::retransmit_cb(uv_timer_t *timer) {
     }
 }
 
-void DoqUpstream::idle_timer_cb(uv_timer_t *timer) {
+void DoqUpstream::short_timeout_timer_cb(uv_timer_t *timer) {
     auto doq = static_cast<DoqUpstream *>(Uv<uv_timer_t>::parent_from_data(timer->data));
-    doq->disconnect("Idle timer expired");
+    doq->disconnect("Short timeout timer expired");
 }
 
 void DoqUpstream::handshake_timer_cb(uv_timer_t *timer) {
     auto doq = static_cast<DoqUpstream *>(Uv<uv_timer_t>::parent_from_data(timer->data));
     // also stop idle timer
-    uv_timer_stop(doq->m_idle_timer->raw());
+    uv_timer_stop(doq->m_short_timeout_timer->raw());
     doq->disconnect("Handshake timer expired");
 }
 
@@ -180,14 +183,6 @@ void DoqUpstream::send_requests() {
     for (auto &[id, req] : m_requests) {
         if (req.is_onfly) {
             continue;
-        }
-
-        auto idle_expiry = ngtcp2_conn_get_idle_expiry(m_conn);
-        Millis diff = ceil<Millis>(Nanos{idle_expiry - req.starting_time});
-        if (diff < m_options.timeout * 2) {
-            disconnect(AG_FMT("Too little time to process the request, id: {}", req.request_id));
-            reinit();
-            return;
         }
 
         int64_t stream_id = -1;
@@ -263,20 +258,19 @@ Error<Upstream::InitError> DoqUpstream::init() {
             nullptr, // recv_client_initial
             recv_crypto_data,
             nullptr, // handshake_completed,
-            version_negotiation, // recv_version_negotiation
+            version_negotiation,
             ngtcp2_crypto_encrypt_cb,
             ngtcp2_crypto_decrypt_cb,
             ngtcp2_crypto_hp_mask,
             recv_stream_data,
-            nullptr, // acked_crypto_offset,
             acked_stream_data_offset, // acked_stream_data_offset,
-            nullptr, // stream_open
+            nullptr,                  // stream_open
             on_close_stream,
             nullptr, // recv_stateless_reset
             ngtcp2_crypto_recv_retry_cb,
             nullptr, // extend_max_streams_bidi,
             nullptr, // extend_max_streams_uni
-            nullptr, // rand,
+            on_rand, // rand,
             get_new_connection_id,
             nullptr, // remove_connection_id,
             update_key,
@@ -291,6 +285,12 @@ Error<Upstream::InitError> DoqUpstream::init() {
             nullptr, // recv_new_token,
             ngtcp2_crypto_delete_crypto_aead_ctx_cb,
             ngtcp2_crypto_delete_crypto_cipher_ctx_cb,
+            nullptr, // recv_datagram
+            nullptr, // ack_datagram
+            nullptr, // lost_datagram
+            ngtcp2_crypto_get_path_challenge_data_cb,
+            nullptr, // stream_stop_sending
+            ngtcp2_crypto_version_negotiation_cb,
     };
 
     m_remote_addr_empty = SocketAddress("::", m_port);
@@ -343,9 +343,15 @@ coro::Task<Upstream::ExchangeResult> DoqUpstream::exchange(ldns_pkt *request, co
     auto await_result = [](Request &req) {
         struct AwaitResult { // NOLINT: coroutine awaitable
             Request &req;
-            bool await_ready() const { return req.completed; }
-            void await_suspend(std::coroutine_handle<> h) { req.caller = h; }
-            std::cv_status await_resume() { return std::cv_status::no_timeout; }
+            bool await_ready() const {
+                return req.completed;
+            }
+            void await_suspend(std::coroutine_handle<> h) {
+                req.caller = h;
+            }
+            std::cv_status await_resume() {
+                return std::cv_status::no_timeout;
+            }
         };
         return AwaitResult{.req = req};
     };
@@ -667,8 +673,8 @@ int DoqUpstream::init_quic_conn(const Socket *connected_socket) {
         m_local_addr = bound_addr.value();
     }
 
-    ngtcp2_path path = {{(size_t) m_local_addr.c_socklen(), (sockaddr *) m_local_addr.c_sockaddr()},
-            {(size_t) m_remote_addr_empty.c_socklen(), (sockaddr *) m_remote_addr_empty.c_sockaddr()}};
+    ngtcp2_path path = {{.addr = (sockaddr *) m_local_addr.c_sockaddr(), .addrlen = m_local_addr.c_socklen()},
+            {.addr = (sockaddr *) m_remote_addr_empty.c_sockaddr(), .addrlen = m_remote_addr_empty.c_socklen()}};
 
     ngtcp2_settings settings;
     ngtcp2_settings_default(&settings);
@@ -693,6 +699,7 @@ int DoqUpstream::init_quic_conn(const Socket *connected_socket) {
         errlog(m_log, "Failed to create ngtcp2_conn: {}", ngtcp2_strerror(rv));
         return -1;
     }
+    ngtcp2_conn_set_keep_alive_timeout(m_conn, KEEPALIVE_INTERVAL_SEC * NGTCP2_SECONDS);
 
     if (init_ssl() != 0) {
         errlog(m_log, "Failed to create SSL");
@@ -759,8 +766,8 @@ void DoqUpstream::write_client_handshake(ngtcp2_crypto_level level, const uint8_
 }
 
 int DoqUpstream::feed_data(Uint8View data) {
-    auto path = ngtcp2_path{{(size_t) m_local_addr.c_socklen(), (sockaddr *) m_local_addr.c_sockaddr()},
-            {(size_t) m_remote_addr_empty.c_socklen(), (sockaddr *) m_remote_addr_empty.c_sockaddr()}};
+    ngtcp2_path path = {{.addr = (sockaddr *) m_local_addr.c_sockaddr(), .addrlen = m_local_addr.c_socklen()},
+            {.addr = (sockaddr *) m_remote_addr_empty.c_sockaddr(), .addrlen = m_remote_addr_empty.c_socklen()}};
 
     auto initial_ts = get_tstamp();
 
@@ -777,7 +784,7 @@ int DoqUpstream::feed_data(Uint8View data) {
 }
 
 int DoqUpstream::version_negotiation(
-        ngtcp2_conn *conn, const ngtcp2_pkt_hd *hd, const uint32_t *sv, size_t nsv, void *user_data) {
+        ngtcp2_conn * /*conn*/, const ngtcp2_pkt_hd * /*hd*/, const uint32_t *sv, size_t nsv, void *user_data) {
     auto doq = static_cast<DoqUpstream *>(user_data);
     uint32_t version = 0;
     bool selected = false;
@@ -810,10 +817,9 @@ int DoqUpstream::version_negotiation(
     return -1;
 }
 
-int DoqUpstream::recv_crypto_data(ngtcp2_conn *conn, ngtcp2_crypto_level crypto_level, uint64_t offset,
+int DoqUpstream::recv_crypto_data(ngtcp2_conn *conn, ngtcp2_crypto_level crypto_level, uint64_t /*offset*/,
         const uint8_t *data, size_t datalen, void *user_data) {
-    (void) offset;
-    (void) user_data;
+
     if (ngtcp2_crypto_read_write_crypto_data(conn, crypto_level, data, datalen) != 0) {
         if (auto err = ngtcp2_conn_get_tls_error(conn); err) {
             auto doq = static_cast<DoqUpstream *>(user_data);
@@ -868,8 +874,7 @@ int DoqUpstream::on_key(
 
 int DoqUpstream::update_key(ngtcp2_conn *conn, uint8_t *rx_secret, uint8_t *tx_secret,
         ngtcp2_crypto_aead_ctx *rx_aead_ctx, uint8_t *rx_iv, ngtcp2_crypto_aead_ctx *tx_aead_ctx, uint8_t *tx_iv,
-        const uint8_t *current_rx_secret, const uint8_t *current_tx_secret, size_t secretlen, void *user_data) {
-    (void) user_data;
+        const uint8_t *current_rx_secret, const uint8_t *current_tx_secret, size_t secretlen, void * /*user_data*/) {
 
     std::array<uint8_t, 64> rx_key{}, tx_key{};
 
@@ -894,12 +899,8 @@ ngtcp2_tstamp DoqUpstream::get_tstamp() {
     return duration_cast<Nanos>(SteadyClock::now().time_since_epoch()).count();
 }
 
-int DoqUpstream::recv_stream_data(ngtcp2_conn *conn, uint32_t flags, int64_t stream_id, uint64_t offset,
-        const uint8_t *data, size_t datalen, void *user_data, void *stream_user_data) {
-    (void) conn;
-    (void) flags;
-    (void) offset;
-    (void) stream_user_data;
+int DoqUpstream::recv_stream_data(ngtcp2_conn * /*conn*/, uint32_t flags, int64_t stream_id, uint64_t /*offset*/,
+        const uint8_t *data, size_t datalen, void *user_data, void * /*stream_user_data*/) {
 
     auto doq = static_cast<DoqUpstream *>(user_data);
 
@@ -928,16 +929,14 @@ int DoqUpstream::recv_stream_data(ngtcp2_conn *conn, uint32_t flags, int64_t str
 }
 
 int DoqUpstream::get_new_connection_id(
-        ngtcp2_conn *conn, ngtcp2_cid *cid, uint8_t *token, size_t cidlen, void *user_data) {
-    (void) conn;
+        ngtcp2_conn * /*conn*/, ngtcp2_cid *cid, uint8_t *token, size_t cidlen, void *user_data) {
 
     auto doq = (DoqUpstream *) user_data;
 
     RAND_bytes(cid->data, cidlen);
     cid->datalen = cidlen;
-    auto md = ngtcp2_crypto_md{const_cast<EVP_MD *>(EVP_sha256())};
     if (ngtcp2_crypto_generate_stateless_reset_token(
-                token, &md, doq->m_static_secret.data(), doq->m_static_secret.size(), cid)
+                token, doq->m_static_secret.data(), doq->m_static_secret.size(), cid)
             != 0) {
         return NGTCP2_ERR_CALLBACK_FAILURE;
     }
@@ -945,8 +944,7 @@ int DoqUpstream::get_new_connection_id(
     return 0;
 }
 
-int DoqUpstream::handshake_confirmed(ngtcp2_conn *conn, void *data) {
-    (void) conn;
+int DoqUpstream::handshake_confirmed(ngtcp2_conn * /*conn*/, void *data) {
 
     auto *doq = (DoqUpstream *) data;
     tracelog(doq->m_log, "{}", __func__);
@@ -1022,11 +1020,8 @@ int DoqUpstream::reinit() {
     return 0;
 }
 
-int DoqUpstream::on_close_stream(
-        ngtcp2_conn *conn, int64_t stream_id, uint64_t app_error_code, void *user_data, void *stream_user_data) {
-    (void) conn;
-    (void) app_error_code;
-    (void) stream_user_data;
+int DoqUpstream::on_close_stream(ngtcp2_conn * /*conn*/, uint32_t /*flags*/, int64_t stream_id,
+        uint64_t /*app_error_code*/, void *user_data, void * /*stream_user_data*/) {
 
     auto doq = static_cast<DoqUpstream *>(user_data);
 
@@ -1034,11 +1029,8 @@ int DoqUpstream::on_close_stream(
     return 0;
 }
 
-int DoqUpstream::acked_stream_data_offset(ngtcp2_conn *conn, int64_t stream_id, uint64_t offset, uint64_t datalen,
-        void *user_data, void *stream_user_data) {
-    (void) conn;
-    (void) offset;
-    (void) stream_user_data;
+int DoqUpstream::acked_stream_data_offset(ngtcp2_conn * /*conn*/, int64_t stream_id, uint64_t /*offset*/,
+        uint64_t datalen, void *user_data, void * /*stream_user_data*/) {
 
     auto doq = (DoqUpstream *) user_data;
     if (auto it = doq->m_streams.find(stream_id); it != doq->m_streams.end()) {
@@ -1075,7 +1067,7 @@ void DoqUpstream::disconnect(std::string_view reason) {
     ngtcp2_conn_del(std::exchange(m_conn, nullptr));
     m_shutdown_guard.reset();
     uv_timer_stop(m_handshake_timer->raw());
-    uv_timer_stop(m_idle_timer->raw());
+    uv_timer_stop(m_short_timeout_timer->raw());
     uv_timer_stop(m_retransmit_timer->raw());
 
     m_conn_state.info.emplace<std::monostate>();
@@ -1086,7 +1078,7 @@ void DoqUpstream::disconnect(std::string_view reason) {
     for (auto &cur : m_requests) {
         if (cur.second.is_onfly || m_fatal_error) {
             tracelog(m_log, "Completing request, id: {}", cur.first);
-            cur.second.error = m_fatal_error ? m_fatal_error :make_error(DE_CONNECTION_CLOSED);
+            cur.second.error = m_fatal_error ? m_fatal_error : make_error(DE_CONNECTION_CLOSED);
             requests_to_complete.push_back(cur.first);
         }
     }
@@ -1099,12 +1091,7 @@ void DoqUpstream::disconnect(std::string_view reason) {
 
 int DoqUpstream::handle_expiry() {
     auto now = get_tstamp();
-    if (auto rv = ngtcp2_conn_handle_expiry(m_conn, now); rv != 0) {
-        errlog(m_log, "Handling expiry error: {}", ngtcp2_strerror(rv));
-        return -1;
-    }
-
-    return 0;
+    return ngtcp2_conn_handle_expiry(m_conn, now);
 }
 
 void DoqUpstream::schedule_retransmit() {
@@ -1124,8 +1111,7 @@ void DoqUpstream::schedule_retransmit() {
     uv_timer_start(m_retransmit_timer->raw(), retransmit_cb, ms.count(), 0);
 }
 
-int DoqUpstream::ssl_verify_callback(X509_STORE_CTX *ctx, void *arg) {
-    (void) arg;
+int DoqUpstream::ssl_verify_callback(X509_STORE_CTX *ctx, void * /*arg*/) {
 
     SSL *ssl = (SSL *) X509_STORE_CTX_get_ex_data(ctx, SSL_get_ex_data_X509_STORE_CTX_idx());
     auto doq = (DoqUpstream *) SSL_get_app_data(ssl);
@@ -1175,29 +1161,28 @@ ngtcp2_crypto_level DoqUpstream::from_ossl_level(enum ssl_encryption_level_t oss
 void DoqUpstream::update_idle_timer(bool reset) {
     bool has_inflight_requests = !m_requests.empty();
 
-    Millis value{0};
+    Millis value = m_options.timeout * 2;
     if (!has_inflight_requests) {
-        auto effective_idle_timeout = int64_t(ngtcp2_conn_get_idle_expiry(m_conn)) - get_tstamp();
-        if (effective_idle_timeout > 0) {
-            value = ceil<Millis>(Nanos{effective_idle_timeout});
-            dbglog(m_log, "Idle timer reset with long timeout, {} left", value);
-        }
+        uv_timer_stop(m_short_timeout_timer->raw());
+        dbglog(m_log, "Short timeout timer stopped");
+        return;
     } else {
-        value = m_options.timeout * 2;
-        if (!reset) {
-            Millis pending = Millis{uv_timer_get_due_in(m_idle_timer->raw())};
-            if (pending <= value) {
-                dbglog(m_log, "Idle timer unchanged, {} left", pending);
-                return;
-            } else {
-                dbglog(m_log, "Idle timer reduced from {} to short timeout, {} left", pending, value);
-            }
+        if (uv_is_active((uv_handle_t *) m_short_timeout_timer->raw())) {
+            dbglog(m_log, "Short timeout timer started, {} left", value);
+        } else if (reset) {
+            dbglog(m_log, "Short timeout timer reset, {} left", value);
         } else {
-            dbglog(m_log, "Idle timer reset with short timeout, {} left", value);
+            Millis pending = Millis{uv_timer_get_due_in(m_short_timeout_timer->raw())};
+            dbglog(m_log, "Short timeout timer unchanged, {} left", pending);
+            return;
         }
     }
 
-    uv_timer_start(m_idle_timer->raw(), idle_timer_cb, value.count(), 0);
+    uv_timer_start(m_short_timeout_timer->raw(), short_timeout_timer_cb, value.count(), 0);
 }
 
-} // namespace ag
+void DoqUpstream::on_rand(uint8_t *dest, size_t destlen, const ngtcp2_rand_ctx *rand_ctx) {
+    RAND_bytes(dest, destlen);
+}
+
+} // namespace ag::dns
