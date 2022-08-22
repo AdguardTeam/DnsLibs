@@ -12,6 +12,7 @@ set(SRCS
         dnsproxy.cpp
         dns64.cpp
         dns_forwarder.cpp
+        dns_forwarder_utils.cpp
         dnsproxy_listener.cpp
         retransmission_detector.cpp
         dns_truncate.cpp

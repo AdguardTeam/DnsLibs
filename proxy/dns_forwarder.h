@@ -15,37 +15,14 @@
 
 #include "dns64.h"
 #include "retransmission_detector.h"
+#include "response_cache.h"
 
 namespace ag::dns {
-
-struct CachedResponse {
-    ldns_pkt_ptr response;
-    SteadyClock::time_point expires_at;
-    std::optional<int32_t> upstream_id;
-};
-
-struct CacheResult {
-    ldns_pkt_ptr response;
-    std::optional<int32_t> upstream_id;
-    bool expired;
-};
 
 struct UpstreamExchangeResult {
     Result<ldns_pkt_ptr, DnsError> result;
     Upstream *upstream;
 };
-
-namespace DnsForwarderUtils {
-/**
-* Format RR list using the following format:
-* <Type>, <RDFs, space separated>\n
-* e.g.:
-* A, 1.2.3.4
-* AAAA, 12::34
-* CNAME, google.com.
-*/
-std::string rr_list_to_string(const ldns_rr_list *rr_list);
-} // namespace dns_forwarder_utils
 
 class DnsForwarder {
 public:
@@ -66,10 +43,6 @@ private:
 
     coro::Task<UpstreamExchangeResult> do_upstream_exchange(std::string_view normalized_domain, ldns_pkt *request,
             bool fallback_only, const DnsMessageInfo *info = nullptr);
-
-    CacheResult create_response_from_cache(const std::string &key, const ldns_pkt *request);
-
-    void put_response_into_cache(std::string key, ldns_pkt_ptr response, std::optional<int32_t> upstream_id);
 
     bool apply_fallback_filter(std::string_view hostname, const ldns_pkt *request);
 
@@ -105,8 +78,6 @@ private:
     bool do_dnssec_log_logic(ldns_pkt *request);
     bool finalize_dnssec_log_logic(ldns_pkt *response, bool is_our_do_bit);
 
-    void remove_ech_svcparam(ldns_pkt *response);
-
     Logger m_log{"dns_forwarder"};
     EventLoopPtr m_loop;
     const DnsProxySettings *m_settings = nullptr;
@@ -120,11 +91,11 @@ private:
     std::shared_ptr<SocketFactory> m_socket_factory;
     std::shared_ptr<bool> m_shutdown_guard;
 
-    WithMtx<LruCache<std::string, CachedResponse>, std::shared_mutex> m_response_cache;
+    ResponseCache m_response_cache;
 
     RetransmissionDetector m_retransmission_detector;
 
-    coro::Task<void> optimistic_cache_background_resolve(ldns_pkt_ptr req, std::string cache_key, std::string normalized_domain);
+    coro::Task<void> optimistic_cache_background_resolve(ldns_pkt_ptr req, std::string normalized_domain);
 };
 
 } // namespace ag::dns

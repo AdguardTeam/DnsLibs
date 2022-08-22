@@ -14,6 +14,7 @@
 
 #include "../../upstream/test/test_utils.h"
 #include "../dns_forwarder.h"
+#include "../dns_forwarder_utils.h"
 
 namespace ag::dns::proxy::test {
 

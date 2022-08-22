@@ -1,19 +1,23 @@
+#include <cassert>
+#include <cstring>
+#include <ldns/ldns.h>
+#include <string>
 #include <thread>
 
 #include "common/cache.h"
 #include "common/utils.h"
 #include "dns/net/application_verifier.h"
 #include "dns/net/default_verifier.h"
-#include <cassert>
-#include <cstring>
-#include <string>
-
 #include "dns/proxy/dnsproxy.h"
-#include <ldns/ldns.h>
 
 #include "dns64.h"
 #include "dns_forwarder.h"
+#include "dns_forwarder_utils.h"
 #include "dns_truncate.h"
+#include "dnssec_ok.h"
+#include "ech.h"
+#include "response_cache.h"
+#include "response_helpers.h"
 #include "retransmission_detector.h"
 
 #define errlog_id(l_, pkt_, fmt_, ...) errlog((l_), "[{}] " fmt_, ldns_pkt_id(pkt_), ##__VA_ARGS__)
@@ -32,40 +36,7 @@ namespace ag::dns {
 
 static constexpr std::string_view MOZILLA_DOH_HOST = "use-application-dns.net.";
 
-static constexpr uint32_t SOA_RETRY_DEFAULT = 900;
 static constexpr uint32_t SOA_RETRY_IPV6_BLOCK = 60;
-
-static std::string get_cache_key(const ldns_pkt *request) {
-    const auto *question = ldns_rr_list_rr(ldns_pkt_question(request), 0);
-    std::string key = fmt::format("{}|{}|{}{}|", // '|' is to avoid collisions
-            ldns_rr_get_type(question), ldns_rr_get_class(question), ldns_pkt_edns_do(request) ? "1" : "0",
-            ldns_pkt_cd(request) ? "1" : "0");
-
-    // Compute the domain name, in lower case for case-insensitivity
-    const auto *owner = ldns_rr_owner(question);
-    const size_t size = ldns_rdf_size(owner);
-    key.reserve(key.size() + size);
-    if (size == 1) {
-        key.push_back('.');
-    } else {
-        auto *data = (uint8_t *) ldns_rdf_data(owner);
-        uint8_t len = data[0];
-        uint8_t src_pos = 0;
-        while ((len > 0) && (src_pos < size)) {
-            ++src_pos;
-            for (int_fast32_t i = 0; i < len; ++i) {
-                key.push_back(std::tolower(data[src_pos]));
-                ++src_pos;
-            }
-            if (src_pos < size) {
-                key.push_back('.');
-            }
-            len = data[src_pos];
-        }
-    }
-
-    return key;
-}
 
 // Return filter engine params or the offending pattern
 static std::tuple<DnsFilter::EngineParams, ErrString> make_fallback_filter_params(
@@ -131,284 +102,9 @@ static void log_packet(
     ldns_buffer_free(str_dns);
 }
 
-static ldns_pkt *create_response_by_request(const ldns_pkt *request) {
-    ldns_pkt *response = nullptr;
-    if (ldns_rr *question = ldns_rr_list_rr(ldns_pkt_question(request), 0)) {
-        ldns_rr_type type = ldns_rr_get_type(question);
-        if (type != LDNS_RR_TYPE_AAAA) {
-            type = LDNS_RR_TYPE_A;
-        }
-        response = ldns_pkt_query_new(
-                ldns_rdf_clone(ldns_rr_owner(question)), type, LDNS_RR_CLASS_IN, LDNS_RD | LDNS_RA);
-        assert(response != nullptr);
-    } else {
-        response = ldns_pkt_new();
-        assert(response != nullptr);
-        ldns_pkt_set_flags(response, LDNS_RD | LDNS_RA);
-    }
-    ldns_pkt_set_id(response, ldns_pkt_id(request));
-    ldns_pkt_set_qr(response, true); // answer flag
-    ldns_pkt_set_qdcount(response, ldns_pkt_section_count(request, LDNS_SECTION_QUESTION));
-    ldns_rr_list_deep_free(ldns_pkt_question(response));
-    ldns_pkt_set_question(response, ldns_pkt_get_section_clone(request, LDNS_SECTION_QUESTION));
-    return response;
-}
-
-static ldns_rdf *get_mbox(const ldns_pkt *request) {
-    using ldns_rdf_ptr = UniquePtr<ldns_rdf, &ldns_rdf_deep_free>;
-    const ldns_rr *question = ldns_rr_list_rr(ldns_pkt_question(request), 0);
-
-    ldns_rdf *owner = ldns_rr_owner(question);
-
-    ldns_rdf_ptr hostmaster{ldns_dname_new_frm_str("hostmaster.")};
-    ldns_rdf_ptr mbox{ldns_dname_cat_clone(hostmaster.get(), owner)};
-    if (mbox) {
-        if (auto valid = AllocatedPtr<char>{ldns_rdf2str(mbox.get())}) {
-            return mbox.release();
-        }
-    }
-
-    return hostmaster.release();
-}
-
 static uint16_t read_uint16_be(Uint8View pkt) {
     assert(pkt.size() >= 2);
     return pkt[0] << 8 | pkt[1];
-}
-
-// Taken from AdGuardHome/dnsforward.go/genSOA
-static ldns_rr *create_soa(const ldns_pkt *request, const DnsProxySettings *settings, uint32_t retry_secs) {
-    const ldns_rr *question = ldns_rr_list_rr(ldns_pkt_question(request), 0);
-
-    ldns_rr *soa = ldns_rr_new();
-    assert(soa != nullptr);
-    ldns_rr_set_owner(soa, ldns_rdf_clone(ldns_rr_owner(question)));
-    ldns_rr_set_ttl(soa, settings->blocked_response_ttl_secs);
-    ldns_rr_set_type(soa, LDNS_RR_TYPE_SOA);
-    ldns_rr_set_class(soa, LDNS_RR_CLASS_IN);
-    // fill soa rdata
-    ldns_rr_push_rdf(soa, ldns_dname_new_frm_str("fake-for-negative-caching.adguard.com.")); // MNAME
-    ldns_rr_push_rdf(soa, get_mbox(request)); // RNAME
-    ldns_rr_push_rdf(soa, ldns_native2rdf_int32(LDNS_RDF_TYPE_TIME, time(nullptr) + 100500)); // SERIAL
-    ldns_rr_push_rdf(soa, ldns_native2rdf_int32(LDNS_RDF_TYPE_PERIOD, 1800)); // REFRESH
-    ldns_rr_push_rdf(soa, ldns_native2rdf_int32(LDNS_RDF_TYPE_PERIOD, retry_secs)); // RETRY
-    ldns_rr_push_rdf(soa, ldns_native2rdf_int32(LDNS_RDF_TYPE_PERIOD, 604800)); // EXPIRE
-    ldns_rr_push_rdf(soa, ldns_native2rdf_int32(LDNS_RDF_TYPE_PERIOD, 86400)); // MINIMUM
-    return soa;
-}
-
-static ldns_pkt *create_nxdomain_response(const ldns_pkt *request, const DnsProxySettings *settings) {
-    ldns_pkt *response = create_response_by_request(request);
-    ldns_pkt_set_rcode(response, LDNS_RCODE_NXDOMAIN);
-    ldns_pkt_push_rr(response, LDNS_SECTION_AUTHORITY, create_soa(request, settings, 900));
-    return response;
-}
-
-static ldns_pkt *create_refused_response(const ldns_pkt *request, const DnsProxySettings *) {
-    ldns_pkt *response = create_response_by_request(request);
-    ldns_pkt_set_rcode(response, LDNS_RCODE_REFUSED);
-    return response;
-}
-
-static ldns_pkt *create_soa_response(const ldns_pkt *request, const DnsProxySettings *settings, uint32_t retry_secs) {
-    ldns_pkt *response = create_response_by_request(request);
-    ldns_pkt_set_rcode(response, LDNS_RCODE_NOERROR);
-    ldns_pkt_push_rr(response, LDNS_SECTION_AUTHORITY, create_soa(request, settings, retry_secs));
-    return response;
-}
-
-static ldns_pkt *create_arecord_response(
-        const ldns_pkt *request, const DnsProxySettings *settings, const std::vector<const DnsFilter::Rule *> &rules) {
-    const ldns_rr *question = ldns_rr_list_rr(ldns_pkt_question(request), 0);
-
-    ldns_rr *answer = ldns_rr_new();
-    assert(answer != nullptr);
-    ldns_rr_set_owner(answer, ldns_rdf_clone(ldns_rr_owner(question)));
-    ldns_rr_set_ttl(answer, settings->blocked_response_ttl_secs);
-    ldns_rr_set_type(answer, LDNS_RR_TYPE_A);
-    ldns_rr_set_class(answer, LDNS_RR_CLASS_IN);
-    for (auto *rule : rules) {
-        const std::string &ip = std::get<DnsFilter::HostsRuleInfo>(rule->content).ip;
-        ldns_rdf *rdf = ldns_rdf_new_frm_str(LDNS_RDF_TYPE_A, ip.c_str());
-        assert(rdf);
-        ldns_rr_push_rdf(answer, rdf);
-    }
-
-    ldns_pkt *response = create_response_by_request(request);
-    ldns_pkt_push_rr(response, LDNS_SECTION_ANSWER, answer);
-    return response;
-}
-
-static ldns_pkt *create_aaaarecord_response(
-        const ldns_pkt *request, const DnsProxySettings *settings, const std::vector<const DnsFilter::Rule *> &rules) {
-    const ldns_rr *question = ldns_rr_list_rr(ldns_pkt_question(request), 0);
-
-    ldns_rr *answer = ldns_rr_new();
-    assert(answer != nullptr);
-    ldns_rr_set_owner(answer, ldns_rdf_clone(ldns_rr_owner(question)));
-    ldns_rr_set_ttl(answer, settings->blocked_response_ttl_secs);
-    ldns_rr_set_type(answer, LDNS_RR_TYPE_AAAA);
-    ldns_rr_set_class(answer, LDNS_RR_CLASS_IN);
-    for (auto *rule : rules) {
-        const std::string &ip = std::get<DnsFilter::HostsRuleInfo>(rule->content).ip;
-        ldns_rdf *rdf = ldns_rdf_new_frm_str(LDNS_RDF_TYPE_AAAA, ip.c_str());
-        assert(rdf);
-        ldns_rr_push_rdf(answer, rdf);
-    }
-
-    ldns_pkt *response = create_response_by_request(request);
-    ldns_pkt_push_rr(response, LDNS_SECTION_ANSWER, answer);
-    return response;
-}
-
-static ldns_pkt *create_response_with_ips(
-        const ldns_pkt *request, const DnsProxySettings *settings, const std::vector<const DnsFilter::Rule *> &rules) {
-    const ldns_rr *question = ldns_rr_list_rr(ldns_pkt_question(request), 0);
-    ldns_rr_type type = ldns_rr_get_type(question);
-
-    if (type == LDNS_RR_TYPE_A) {
-        std::vector<const DnsFilter::Rule *> ipv4_rules;
-        ipv4_rules.reserve(rules.size() + 1);
-        for (const DnsFilter::Rule *r : rules) {
-            const auto *content = std::get_if<DnsFilter::HostsRuleInfo>(&r->content);
-            if (content != nullptr && utils::is_valid_ip4(content->ip)) {
-                ipv4_rules.push_back(r);
-            }
-        }
-        if (ipv4_rules.size() != 0) {
-            return create_arecord_response(request, settings, ipv4_rules);
-        }
-    } else if (type == LDNS_RR_TYPE_AAAA) {
-        std::vector<const DnsFilter::Rule *>ipv6_rules;
-        ipv6_rules.reserve(rules.size() + 1);
-        for (const DnsFilter::Rule *r : rules) {
-            const auto *content = std::get_if<DnsFilter::HostsRuleInfo>(&r->content);
-            if (content != nullptr && !utils::is_valid_ip4(content->ip)) {
-                ipv6_rules.push_back(r);
-            }
-        }
-        if (ipv6_rules.size() != 0) {
-            return create_aaaarecord_response(request, settings, ipv6_rules);
-        }
-    }
-    // empty response
-    return create_soa_response(request, settings, SOA_RETRY_DEFAULT);
-}
-
-// Whether the given IP is considered "blocking"
-static bool is_blocking_ip(std::string_view ip) {
-    static constexpr std::string_view BLOCKING_IPS[] = {"0.0.0.0", "127.0.0.1", "::", "::1", "[::]", "[::1]"};
-    return !ip.empty()
-            && std::any_of(std::begin(BLOCKING_IPS), std::end(BLOCKING_IPS), [ip](std::string_view blocking_ip) {
-                   return blocking_ip == ip;
-               });
-}
-
-// Whether the given set of rules contains IPs considered "blocking",
-// i.e. the proxy must respond with a blocking response according to the blocking_mode
-static bool rules_contain_blocking_ip(const std::vector<const DnsFilter::Rule *> &rules) {
-    return std::any_of(rules.begin(), rules.end(), [](const DnsFilter::Rule *rule) -> bool {
-        const auto *content = std::get_if<DnsFilter::HostsRuleInfo>(&rule->content);
-        return content != nullptr && is_blocking_ip(content->ip);
-    });
-}
-
-// Return empty SOA response if question type is not A or AAAA
-static ldns_pkt *create_address_or_soa_response(const ldns_pkt *request, const DnsProxySettings *settings) {
-    ldns_rr *question = ldns_rr_list_rr(ldns_pkt_question(request), 0);
-    ldns_rr_type type = ldns_rr_get_type(question);
-
-    ldns_rdf *rdf;
-    switch (type) {
-    case LDNS_RR_TYPE_A: {
-        if (!settings->custom_blocking_ipv4.empty()) {
-            assert(utils::is_valid_ip4(settings->custom_blocking_ipv4));
-            rdf = ldns_rdf_new_frm_str(LDNS_RDF_TYPE_A, settings->custom_blocking_ipv4.c_str());
-        } else if (settings->custom_blocking_ipv6.empty() || is_blocking_ip(settings->custom_blocking_ipv6)) {
-            rdf = ldns_rdf_new_frm_str(LDNS_RDF_TYPE_A, "0.0.0.0");
-        } else {
-            return create_soa_response(request, settings, SOA_RETRY_DEFAULT);
-        }
-        break;
-    }
-    case LDNS_RR_TYPE_AAAA: {
-        if (!settings->custom_blocking_ipv6.empty()) {
-            assert(utils::is_valid_ip6(settings->custom_blocking_ipv6));
-            rdf = ldns_rdf_new_frm_str(LDNS_RDF_TYPE_AAAA, settings->custom_blocking_ipv6.c_str());
-        } else if (settings->custom_blocking_ipv4.empty() || is_blocking_ip(settings->custom_blocking_ipv6)) {
-            rdf = ldns_rdf_new_frm_str(LDNS_RDF_TYPE_AAAA, "::");
-        } else {
-            return create_soa_response(request, settings, SOA_RETRY_DEFAULT);
-        }
-        break;
-    }
-    default:
-        return create_soa_response(request, settings, SOA_RETRY_DEFAULT);
-    }
-
-    ldns_rr *rr = ldns_rr_new();
-    ldns_rr_set_owner(rr, ldns_rdf_clone(ldns_rr_owner(question)));
-    ldns_rr_set_ttl(rr, settings->blocked_response_ttl_secs);
-    ldns_rr_set_type(rr, type);
-    ldns_rr_set_class(rr, ldns_rr_get_class(question));
-    ldns_rr_push_rdf(rr, rdf);
-
-    ldns_pkt *response = create_response_by_request(request);
-    ldns_pkt_push_rr(response, LDNS_SECTION_ANSWER, rr);
-    return response;
-}
-
-static ldns_pkt *create_blocking_response(const ldns_pkt *request, const DnsProxySettings *settings,
-        const std::vector<const DnsFilter::Rule *> &rules,
-        std::optional<DnsFilter::ApplyDnsrewriteResult::RewriteInfo> rewritten_info) {
-    const ldns_rr *question = ldns_rr_list_rr(ldns_pkt_question(request), 0);
-    ldns_rr_type type = ldns_rr_get_type(question);
-
-    if (rewritten_info.has_value()) {
-        ldns_pkt *response = create_response_by_request(request);
-        ldns_pkt_set_rcode(response, rewritten_info->rcode);
-        for (auto &rr : rewritten_info->rrs) {
-            ldns_rr_set_owner(rr.get(), ldns_rdf_clone(ldns_rr_owner(question)));
-            ldns_rr_set_ttl(rr.get(), settings->blocked_response_ttl_secs);
-            ldns_pkt_push_rr(response, LDNS_SECTION_ANSWER, rr.release());
-        }
-        return response;
-    }
-    DnsProxyBlockingMode mode;
-    const DnsFilter::Rule *effective_rule = rules.front();
-    if (nullptr != std::get_if<DnsFilter::AdblockRuleInfo>(&effective_rule->content)) {
-        mode = settings->adblock_rules_blocking_mode;
-    } else if (rules_contain_blocking_ip(rules)) {
-        mode = settings->hosts_rules_blocking_mode;
-    } else { // hosts-style IP rule
-        return create_response_with_ips(request, settings, rules);
-    }
-    ldns_pkt *response;
-    switch (mode) {
-    case DnsProxyBlockingMode::REFUSED:
-        response = create_refused_response(request, settings);
-        break;
-    case DnsProxyBlockingMode::NXDOMAIN:
-        response = create_nxdomain_response(request, settings);
-        break;
-    case DnsProxyBlockingMode::ADDRESS:
-        response = create_address_or_soa_response(request, settings);
-        break;
-    }
-    return response;
-}
-
-static ldns_pkt *create_servfail_response(const ldns_pkt *request) {
-    ldns_pkt *response = create_response_by_request(request);
-    ldns_pkt_set_rcode(response, LDNS_RCODE_SERVFAIL);
-    return response;
-}
-
-static ldns_pkt *create_formerr_response(uint16_t id) {
-    ldns_pkt *response = ldns_pkt_new();
-    ldns_pkt_set_id(response, id);
-    ldns_pkt_set_rcode(response, LDNS_RCODE_FORMERR);
-    return response;
 }
 
 static void event_append_rules(
@@ -435,37 +131,6 @@ static void event_append_rules(
 
     const auto *content = std::get_if<DnsFilter::AdblockRuleInfo>(&additional_rules[0]->content);
     event.whitelist = content != nullptr && content->props.test(DnsFilter::DARP_EXCEPTION);
-}
-
-std::string DnsForwarderUtils::rr_list_to_string(const ldns_rr_list *rr_list) {
-    if (rr_list == nullptr) {
-        return {};
-    }
-    AllocatedPtr<char> answer(ldns_rr_list2str(rr_list));
-    if (answer == nullptr) {
-        return {};
-    }
-    std::string_view answer_view = answer.get();
-    std::string out;
-    out.reserve(answer_view.size());
-    for (auto record : ag::utils::split_by(answer_view, '\n')) {
-        auto record_parts = ag::utils::split_by(record, '\t');
-        auto it = record_parts.begin();
-        if (record_parts.size() >= 4) {
-            it++; // Skip owner
-            it++; // Skip ttl
-            it++; // Skip class
-            out += *it++; // Add type
-            out += ',';
-            // Add serialized RDFs
-            while (it != record_parts.end()) {
-                out += ' ';
-                out += *it++;
-            }
-            out += '\n';
-        }
-    }
-    return out;
 }
 
 void DnsForwarder::finalize_processed_event(DnsRequestProcessedEvent &event, const ldns_pkt *request,
@@ -535,7 +200,8 @@ coro::Task<ldns_pkt_ptr> DnsForwarder::try_dns64_aaaa_synthesis(Upstream *upstre
     const auto response_a = co_await upstream->exchange(request_a.get());
     if (response_a.has_error()) {
         dbglog_fid(m_log, request.get(),
-                "DNS64: could not synthesize AAAA response: upstream failed to perform A query:\n{}", response_a.error()->str());
+                "DNS64: could not synthesize AAAA response: upstream failed to perform A query:\n{}",
+                response_a.error()->str());
         co_return nullptr;
     }
 
@@ -563,11 +229,10 @@ coro::Task<ldns_pkt_ptr> DnsForwarder::try_dns64_aaaa_synthesis(Upstream *upstre
         const Uint8View ip4{ldns_rdf_data(rdf), ldns_rdf_size(rdf)};
 
         for (const Uint8Vector &pref : m_dns64_prefixes->val) { // assume `dns64_prefixes->mtx` is held
-            const auto synth_res =
-                    dns64::synthesize_ipv4_embedded_ipv6_address({pref.data(), std::size(pref)}, ip4);
+            const auto synth_res = dns64::synthesize_ipv4_embedded_ipv6_address({pref.data(), std::size(pref)}, ip4);
             if (synth_res.has_error()) {
-                dbglog_fid(
-                        m_log, request.get(), "DNS64: could not synthesize IPv4-embedded IPv6:\n{}", synth_res.error()->str());
+                dbglog_fid(m_log, request.get(), "DNS64: could not synthesize IPv4-embedded IPv6:\n{}",
+                        synth_res.error()->str());
                 continue; // Try the next prefix
             }
             auto &ip6 = synth_res.value();
@@ -620,12 +285,12 @@ DnsForwarder::DnsForwarder() = default;
 
 DnsForwarder::~DnsForwarder() = default;
 
-static coro::Task<void>
-discover_dns64_prefixes(std::vector<UpstreamOptions> uss, std::shared_ptr<SocketFactory> socket_factory,
-                        dns64::Prefixes prefixes, Logger logger, EventLoop &loop, uint32_t max_tries,
-                        Millis wait_time);
+static coro::Task<void> discover_dns64_prefixes(std::vector<UpstreamOptions> uss,
+        std::shared_ptr<SocketFactory> socket_factory, dns64::Prefixes prefixes, Logger logger, EventLoop &loop,
+        uint32_t max_tries, Millis wait_time);
 
-std::pair<bool, ErrString> DnsForwarder::init(EventLoopPtr loop, const DnsProxySettings &settings, const DnsProxyEvents &events) {
+std::pair<bool, ErrString> DnsForwarder::init(
+        EventLoopPtr loop, const DnsProxySettings &settings, const DnsProxyEvents &events) {
     m_log = ag::Logger{"DNS forwarder"};
     m_loop = std::move(loop);
     m_shutdown_guard = std::make_shared<bool>(true);
@@ -736,28 +401,25 @@ std::pair<bool, ErrString> DnsForwarder::init(EventLoopPtr loop, const DnsProxyS
     m_dns64_prefixes = std::make_shared<WithMtx<std::vector<Uint8Vector>>>();
     if (settings.dns64.has_value()) {
         infolog(m_log, "DNS64 discovery is enabled");
-        coro::run_detached(discover_dns64_prefixes(settings.dns64->upstreams, m_socket_factory, m_dns64_prefixes,
-                m_log, *m_loop, settings.dns64->max_tries, settings.dns64->wait_time));
+        coro::run_detached(discover_dns64_prefixes(settings.dns64->upstreams, m_socket_factory, m_dns64_prefixes, m_log,
+                *m_loop, settings.dns64->max_tries, settings.dns64->wait_time));
     }
 
-    {
-        std::scoped_lock l(m_response_cache.mtx);
-        m_response_cache.val.set_capacity(m_settings->dns_cache_size);
-    }
+    m_response_cache.set_capacity(m_settings->dns_cache_size);
 
     infolog(m_log, "Forwarder initialized");
     return {true, std::move(err_or_warn)};
 }
 
 static coro::Task<void> discover_dns64_prefixes(std::vector<UpstreamOptions> uss,
-        std::shared_ptr<SocketFactory> socket_factory, dns64::Prefixes prefixes,
-        Logger logger, EventLoop &loop, uint32_t max_tries, Millis wait_time) {
+        std::shared_ptr<SocketFactory> socket_factory, dns64::Prefixes prefixes, Logger logger, EventLoop &loop,
+        uint32_t max_tries, Millis wait_time) {
 
     UpstreamFactory us_factory({.loop = loop, .socket_factory = socket_factory.get()});
     auto i = max_tries;
     while (i--) {
         co_await loop.co_sleep(wait_time);
-        for (auto &us: uss) {
+        for (auto &us : uss) {
             auto upstream_result = us_factory.create_upstream(us);
             if (upstream_result.has_error()) {
                 dbglog(logger, "DNS64: failed to create DNS64 upstream: {}", upstream_result.error()->str());
@@ -808,162 +470,11 @@ void DnsForwarder::deinit() {
     m_filter.destroy(std::exchange(m_fallback_filter_handle, nullptr));
     infolog(m_log, "Done");
 
-    {
-        infolog(m_log, "Clearing cache...");
-        std::scoped_lock l(m_response_cache.mtx);
-        m_response_cache.val.clear();
-        infolog(m_log, "Done");
-    }
+    infolog(m_log, "Clearing cache...");
+    m_response_cache.clear();
+    infolog(m_log, "Done");
 
     infolog(m_log, "Deinitialized");
-}
-
-static bool has_unsupported_extensions(const ldns_pkt *pkt) {
-    return ldns_pkt_edns_data(pkt) || ldns_pkt_edns_extended_rcode(pkt) || ldns_pkt_edns_unassigned(pkt);
-}
-
-// Returns null result if no cache entry satisfies the given key.
-// Otherwise, a response is synthesized from the cached template.
-// If the cache entry is expired, it becomes least recently used,
-// all response records' TTLs are set to 1 second,
-// and `expired` is set to `true`.
-CacheResult DnsForwarder::create_response_from_cache(const std::string &key, const ldns_pkt *request) {
-    CacheResult r{};
-
-    if (!m_settings->dns_cache_size) { // Caching disabled
-        return r;
-    }
-
-    if (has_unsupported_extensions(request)) {
-        dbglog(m_log, "{}: Request has unsupported extensions", __func__);
-        return r;
-    }
-
-    uint32_t ttl;
-    {
-        std::shared_lock l(m_response_cache.mtx);
-        auto &cache = m_response_cache.val;
-
-        auto cached_response_acc = cache.get(key);
-        if (!cached_response_acc) {
-            dbglog(m_log, "{}: Cache miss for key {}", __func__, key);
-            return {nullptr};
-        }
-
-        r.upstream_id = cached_response_acc->upstream_id;
-        auto cached_response_ttl = std::chrono::ceil<Secs>(cached_response_acc->expires_at - ag::SteadyClock::now());
-        if (cached_response_ttl.count() <= 0) {
-            cache.make_lru(cached_response_acc);
-            dbglog(m_log, "{}: Expired cache entry for key {}", __func__, key);
-            ttl = 1;
-            r.expired = true;
-        } else {
-            ttl = cached_response_ttl.count();
-        }
-
-        r.response.reset(ldns_pkt_clone(cached_response_acc->response.get()));
-    }
-
-    // Patch response id
-    ldns_pkt_set_id(r.response.get(), ldns_pkt_id(request));
-
-    // Patch EDNS UDP SIZE
-    if (ldns_pkt_edns(r.response.get())) {
-        ldns_pkt_set_edns_udp_size(r.response.get(), UDP_RECV_BUF_SIZE);
-    }
-
-    // Patch response question section
-    assert(!ldns_pkt_question(r.response.get()));
-    ldns_pkt_set_qdcount(r.response.get(), ldns_pkt_qdcount(request));
-    ldns_pkt_set_question(r.response.get(), ldns_pkt_get_section_clone(request, LDNS_SECTION_QUESTION));
-
-    // Patch response TTLs
-    for (int_fast32_t i = 0; i < ldns_pkt_ancount(r.response.get()); ++i) {
-        ldns_rr_set_ttl(ldns_rr_list_rr(ldns_pkt_answer(r.response.get()), i), ttl);
-    }
-    for (int_fast32_t i = 0; i < ldns_pkt_nscount(r.response.get()); ++i) {
-        ldns_rr_set_ttl(ldns_rr_list_rr(ldns_pkt_authority(r.response.get()), i), ttl);
-    }
-    for (int_fast32_t i = 0; i < ldns_pkt_arcount(r.response.get()); ++i) {
-        ldns_rr_set_ttl(ldns_rr_list_rr(ldns_pkt_additional(r.response.get()), i), ttl);
-    }
-
-    return r;
-}
-
-uint32_t compute_min_rr_ttl(const ldns_pkt *pkt) {
-    uint32_t min_rr_ttl = UINT32_MAX;
-    for (int_fast32_t i = 0; i < ldns_pkt_ancount(pkt); ++i) {
-        min_rr_ttl = std::min(min_rr_ttl, ldns_rr_ttl(ldns_rr_list_rr(ldns_pkt_answer(pkt), i)));
-    }
-    for (int_fast32_t i = 0; i < ldns_pkt_arcount(pkt); ++i) {
-        min_rr_ttl = std::min(min_rr_ttl, ldns_rr_ttl(ldns_rr_list_rr(ldns_pkt_additional(pkt), i)));
-    }
-    for (int_fast32_t i = 0; i < ldns_pkt_nscount(pkt); ++i) {
-        min_rr_ttl = std::min(min_rr_ttl, ldns_rr_ttl(ldns_rr_list_rr(ldns_pkt_authority(pkt), i)));
-    }
-    if (min_rr_ttl == UINT32_MAX) { // No RRs in pkt (or insanely large TTL)
-        min_rr_ttl = 0;
-    }
-    return min_rr_ttl;
-}
-
-// Checks cacheability and puts an eligible response to the cache
-void DnsForwarder::put_response_into_cache(std::string key, ldns_pkt_ptr response, std::optional<int32_t> upstream_id) {
-    if (!m_settings->dns_cache_size) {
-        // Caching disabled
-        return;
-    }
-    if (ldns_pkt_tc(response.get()) // Truncated
-            || ldns_pkt_qdcount(response.get()) != 1 // Invalid
-            || ldns_pkt_get_rcode(response.get()) != LDNS_RCODE_NOERROR // Error
-            || has_unsupported_extensions(response.get())) {
-        // Not cacheable
-        return;
-    }
-
-    const auto *question = ldns_rr_list_rr(ldns_pkt_question(response.get()), 0);
-    const auto type = ldns_rr_get_type(question);
-    if (type == LDNS_RR_TYPE_A || type == LDNS_RR_TYPE_AAAA) {
-        // Check contains at least one record of requested type
-        bool found = false;
-        for (int_fast32_t i = 0; i < ldns_pkt_ancount(response.get()); ++i) {
-            const ldns_rr *rr = ldns_rr_list_rr(ldns_pkt_answer(response.get()), i);
-            if (rr && ldns_rr_get_type(rr) == type) {
-                found = true;
-                break;
-            }
-        }
-        if (!found) {
-            // Not cacheable
-            return;
-        }
-    }
-
-    // Will be patched when returning the cached response
-    ldns_rr_list_deep_free(ldns_pkt_question(response.get()));
-    ldns_pkt_set_question(response.get(), nullptr);
-    ldns_pkt_set_qdcount(response.get(), 0);
-
-    // This is NOT an authoritative answer
-    ldns_pkt_set_aa(response.get(), false);
-
-    // Compute the TTL of the cached response as the minimum of the response RR's TTLs
-    uint32_t min_rr_ttl = compute_min_rr_ttl(response.get());
-    if (min_rr_ttl == 0) {
-        // Not cacheable
-        return;
-    }
-
-    CachedResponse cached_response{
-            .response = std::move(response),
-            .expires_at = SteadyClock::now() + Secs(min_rr_ttl),
-            .upstream_id = upstream_id,
-    };
-
-    std::unique_lock l(m_response_cache.mtx);
-    auto &cache = m_response_cache.val;
-    cache.insert(std::move(key), std::move(cached_response));
 }
 
 static ldns_rr_type question_rr_type(const ldns_pkt *request) {
@@ -981,7 +492,7 @@ coro::Task<Uint8Vector> DnsForwarder::handle_message_internal(
         std::string err = AG_FMT("Failed to parse payload: {} ({})", ldns_get_errorstr_by_id(status), status);
         dbglog(m_log, "{} {}", __func__, err);
         finalize_processed_event(event, nullptr, nullptr, nullptr, std::nullopt, std::move(err));
-        ldns_pkt_ptr response(create_formerr_response(pkt_id));
+        ldns_pkt_ptr response{ResponseHelpers::create_formerr_response(pkt_id)};
         log_packet(m_log, response.get(), "Format error response");
         co_return transform_response_to_raw_data(response.get());
     }
@@ -993,7 +504,7 @@ coro::Task<Uint8Vector> DnsForwarder::handle_message_internal(
     if (question == nullptr) {
         std::string err = "Message has no question section";
         dbglog_fid(m_log, request, "{}", err);
-        ldns_pkt_ptr response(create_servfail_response(request));
+        ldns_pkt_ptr response{ResponseHelpers::create_servfail_response(request)};
         log_packet(m_log, response.get(), "Server failure response");
         finalize_processed_event(event, nullptr, response.get(), nullptr, std::nullopt, std::move(err));
         Uint8Vector raw_response = transform_response_to_raw_data(response.get());
@@ -1008,8 +519,7 @@ coro::Task<Uint8Vector> DnsForwarder::handle_message_internal(
         normalized_domain.remove_suffix(1); // drop trailing dot
     }
 
-    std::string cache_key = get_cache_key(request);
-    CacheResult cached = create_response_from_cache(cache_key, request);
+    ResponseCache::Result cached = m_response_cache.get(request);
 
     if (cached.response && (!cached.expired || m_settings->optimistic_cache)) {
         log_packet(m_log, cached.response.get(), "Cached response");
@@ -1019,10 +529,7 @@ coro::Task<Uint8Vector> DnsForwarder::handle_message_internal(
         Uint8Vector raw_response = transform_response_to_raw_data(cached.response.get());
         if (cached.expired) {
             assert(m_settings->optimistic_cache);
-            this->optimistic_cache_background_resolve(
-                        std::move(req_holder),
-                        std::move(cache_key),
-                        std::string{normalized_domain})
+            this->optimistic_cache_background_resolve(std::move(req_holder), std::string{normalized_domain})
                     .run_detached();
         }
         co_return raw_response;
@@ -1032,7 +539,7 @@ coro::Task<Uint8Vector> DnsForwarder::handle_message_internal(
 
     // disable Mozilla DoH
     if ((type == LDNS_RR_TYPE_A || type == LDNS_RR_TYPE_AAAA) && 0 == strcmp(domain.get(), MOZILLA_DOH_HOST.data())) {
-        ldns_pkt_ptr response(create_nxdomain_response(request, m_settings));
+        ldns_pkt_ptr response{ResponseHelpers::create_nxdomain_response(request, m_settings)};
         log_packet(m_log, response.get(), "Mozilla DOH blocking response");
         Uint8Vector raw_response = transform_response_to_raw_data(response.get());
         finalize_processed_event(event, request, response.get(), nullptr, std::nullopt, std::nullopt);
@@ -1054,7 +561,7 @@ coro::Task<Uint8Vector> DnsForwarder::handle_message_internal(
                 request, nullptr, event, effective_rules, fallback_only, false, &rc);
         if (!raw_blocking_response || rc == LDNS_RCODE_NOERROR) {
             dbglog_fid(m_log, request, "AAAA DNS query blocked because IPv6 blocking is enabled");
-            ldns_pkt_ptr response(create_soa_response(request, m_settings, SOA_RETRY_IPV6_BLOCK));
+            ldns_pkt_ptr response{ResponseHelpers::create_soa_response(request, m_settings, SOA_RETRY_IPV6_BLOCK)};
             log_packet(m_log, response.get(), "IPv6 blocking response");
             co_return transform_response_to_raw_data(response.get());
         }
@@ -1070,15 +577,14 @@ coro::Task<Uint8Vector> DnsForwarder::handle_message_internal(
         co_return *raw_blocking_response;
     }
 
-    bool is_our_do_bit = do_dnssec_log_logic(request);
+    bool is_our_do_bit = m_settings->enable_dnssec_ok && DnssecHelpers::set_do_bit(request);
 
     // If this is a retransmitted request, use fallback upstreams only
-    auto [response, selected_upstream] = co_await do_upstream_exchange(
-            normalized_domain, request, fallback_only, info);
+    auto [response, selected_upstream] = co_await do_upstream_exchange(normalized_domain, request, fallback_only, info);
 
     if (!response) {
         auto err = response.error();
-        response = ldns_pkt_ptr(create_servfail_response(request));
+        response = ldns_pkt_ptr{ResponseHelpers::create_servfail_response(request)};
         log_packet(m_log, response->get(), "Server failure response");
         Uint8Vector raw_response = transform_response_to_raw_data(response->get());
         finalize_processed_event(event, request, response->get(), nullptr,
@@ -1099,14 +605,14 @@ coro::Task<Uint8Vector> DnsForwarder::handle_message_internal(
             auto rr = ldns_rr_list_rr(ldns_pkt_answer(response->get()), i);
             if (ldns_rr_get_type(rr) == LDNS_RR_TYPE_CNAME) {
                 if (auto raw_response = co_await apply_cname_filter(
-                        rr, request, response->get(), event, effective_rules, fallback_only)) {
+                            rr, request, response->get(), event, effective_rules, fallback_only)) {
                     co_return *raw_response;
                 }
             }
             // IP response blocking
             if (ldns_rr_get_type(rr) == LDNS_RR_TYPE_A || ldns_rr_get_type(rr) == LDNS_RR_TYPE_AAAA) {
                 if (auto raw_response = co_await apply_ip_filter(
-                        rr, request, response->get(), event, effective_rules, fallback_only)) {
+                            rr, request, response->get(), event, effective_rules, fallback_only)) {
                     co_return *raw_response;
                 }
             }
@@ -1130,7 +636,9 @@ coro::Task<Uint8Vector> DnsForwarder::handle_message_internal(
         }
 
         if (m_settings->block_ech) {
-            remove_ech_svcparam(response->get());
+            if (EchHelpers::remove_ech_svcparam(response->get())) {
+                dbglog_fid(m_log, response->get(), "Removed ECH parameters from SVCB/HTTPS RR");
+            }
         }
     }
 
@@ -1139,14 +647,13 @@ coro::Task<Uint8Vector> DnsForwarder::handle_message_internal(
     event.bytes_sent = message.size();
     event.bytes_received = raw_response.size();
     finalize_processed_event(event, request, response->get(), nullptr, selected_upstream->options().id, std::nullopt);
-    put_response_into_cache(std::move(cache_key), std::move(response.value()), selected_upstream->options().id);
+    m_response_cache.put(req_holder.get(), std::move(response.value()), selected_upstream->options().id);
     co_return raw_response;
 }
 
-coro::Task<std::optional<Uint8Vector>> DnsForwarder::apply_cname_filter(
-        const ldns_rr *cname_rr, const ldns_pkt *request,
-        const ldns_pkt *response, DnsRequestProcessedEvent &event, std::vector<DnsFilter::Rule> &last_effective_rules,
-        bool fallback_only) {
+coro::Task<std::optional<Uint8Vector>> DnsForwarder::apply_cname_filter(const ldns_rr *cname_rr,
+        const ldns_pkt *request, const ldns_pkt *response, DnsRequestProcessedEvent &event,
+        std::vector<DnsFilter::Rule> &last_effective_rules, bool fallback_only) {
 
     assert(ldns_rr_get_type(cname_rr) == LDNS_RR_TYPE_CNAME);
 
@@ -1175,8 +682,7 @@ coro::Task<std::optional<Uint8Vector>> DnsForwarder::apply_cname_filter(
             request, response, event, last_effective_rules, fallback_only);
 }
 
-coro::Task<std::optional<Uint8Vector>> DnsForwarder::apply_ip_filter(
-        const ldns_rr *rr, const ldns_pkt *request,
+coro::Task<std::optional<Uint8Vector>> DnsForwarder::apply_ip_filter(const ldns_rr *rr, const ldns_pkt *request,
         const ldns_pkt *response, DnsRequestProcessedEvent &event, std::vector<DnsFilter::Rule> &last_effective_rules,
         bool fallback_only) {
     assert(ldns_rr_get_type(rr) == LDNS_RR_TYPE_A || ldns_rr_get_type(rr) == LDNS_RR_TYPE_AAAA);
@@ -1190,13 +696,11 @@ coro::Task<std::optional<Uint8Vector>> DnsForwarder::apply_ip_filter(
 
     tracelog_fid(m_log, response, "Response IP: {}", addr_str);
 
-    co_return co_await apply_filter(
-            {.domain = addr_str, .rr_type = ldns_rr_get_type(rr)}, request, response, event,
+    co_return co_await apply_filter({.domain = addr_str, .rr_type = ldns_rr_get_type(rr)}, request, response, event,
             last_effective_rules, fallback_only);
 }
 
-coro::Task<std::optional<Uint8Vector>> DnsForwarder::apply_filter(
-        DnsFilter::MatchParam match, const ldns_pkt *request,
+coro::Task<std::optional<Uint8Vector>> DnsForwarder::apply_filter(DnsFilter::MatchParam match, const ldns_pkt *request,
         const ldns_pkt *original_response, DnsRequestProcessedEvent &event,
         std::vector<DnsFilter::Rule> &last_effective_rules, bool fallback_only, bool fire_event,
         ldns_pkt_rcode *out_rcode) {
@@ -1281,8 +785,8 @@ coro::Task<std::optional<Uint8Vector>> DnsForwarder::apply_filter(
         }
     }
 
-    ldns_pkt_ptr response(
-            create_blocking_response(request, m_settings, effective_rules.leftovers, std::move(rewrite_info)));
+    ldns_pkt_ptr response{ResponseHelpers::create_blocking_response(
+            request, m_settings, effective_rules.leftovers, std::move(rewrite_info))};
     log_packet(m_log, response.get(), "Rule blocked response");
     if (out_rcode) {
         *out_rcode = ldns_pkt_get_rcode(response.get());
@@ -1297,8 +801,8 @@ coro::Task<std::optional<Uint8Vector>> DnsForwarder::apply_filter(
 
 coro::Task<UpstreamExchangeResult> DnsForwarder::do_upstream_exchange(
         std::string_view normalized_domain, ldns_pkt *request, bool fallback_only, const DnsMessageInfo *info) {
-    bool use_only_fallbacks
-            = !m_fallbacks.empty() && (fallback_only || apply_fallback_filter(normalized_domain, request));
+    bool use_only_fallbacks =
+            !m_fallbacks.empty() && (fallback_only || apply_fallback_filter(normalized_domain, request));
     std::vector<std::vector<UpstreamPtr> *> v;
     if (!use_only_fallbacks) {
         v.emplace_back(&m_upstreams);
@@ -1340,10 +844,14 @@ coro::Task<UpstreamExchangeResult> DnsForwarder::do_upstream_exchange(
                 if (!retry_result.has_error()) {
                     co_return {std::move(retry_result.value()), cur_upstream};
                 }
-                err = make_error(DE_NESTED_DNS_ERROR, AG_FMT("Upstream ({}) exchange failed: first reason is:\n{}\nsecond reason is:", address, result.error()->str()), retry_result.error());
+                err = make_error(DE_NESTED_DNS_ERROR,
+                        AG_FMT("Upstream ({}) exchange failed: first reason is:\n{}\nsecond reason is:", address,
+                                result.error()->str()),
+                        retry_result.error());
                 dbglog_id(m_log, request, "{}", err->str());
             } else {
-                err = make_error(DE_NESTED_DNS_ERROR, AG_FMT("Upstream ({}) exchange failed", address, result.error()->str()));
+                err = make_error(
+                        DE_NESTED_DNS_ERROR, AG_FMT("Upstream ({}) exchange failed", address, result.error()->str()));
                 dbglog_id(m_log, request, "{}", err->str());
             }
         }
@@ -1351,109 +859,22 @@ coro::Task<UpstreamExchangeResult> DnsForwarder::do_upstream_exchange(
     co_return {err, cur_upstream};
 }
 
-coro::Task<void> DnsForwarder::optimistic_cache_background_resolve(ldns_pkt_ptr req,
-        std::string key, std::string normalized_domain) {
-    dbglog_id(m_log, req.get(), "Starting async upstream exchange for {}", key);
+coro::Task<void> DnsForwarder::optimistic_cache_background_resolve(ldns_pkt_ptr req, std::string normalized_domain) {
+    dbglog_id(m_log, req.get(), "Starting async upstream exchange for {}", normalized_domain);
     std::weak_ptr<bool> guard = m_shutdown_guard;
     auto [res, upstream] = co_await do_upstream_exchange(normalized_domain, req.get(), false);
     if (guard.expired()) {
         co_return;
     }
     if (res.has_error()) {
-        dbglog_id(m_log, req.get(), "Async upstream exchange failed, removing entry from cache: {}", res.error()->str());
-        m_response_cache.val.erase(key);
+        dbglog_id(
+                m_log, req.get(), "Async upstream exchange failed, removing entry from cache: {}", res.error()->str());
+        m_response_cache.erase(req.get());
     } else {
         log_packet(m_log, res->get(), "Async upstream exchange result");
-        this->put_response_into_cache(key, std::move(res.value()), upstream->options().id);
+        m_response_cache.put(req.get(), std::move(res.value()), upstream->options().id);
     }
     co_return;
-}
-
-bool DnsForwarder::do_dnssec_log_logic(ldns_pkt *request) {
-    bool is_our_do_bit = false;
-    bool request_has_do_bit = ldns_pkt_edns_do(request);
-
-    // if request has DO bit then we don't change it
-    if (m_settings->enable_dnssec_ok && !request_has_do_bit) {
-        // https://tools.ietf.org/html/rfc3225#section-3
-        ldns_pkt_set_edns_do(request, true);
-        // @todo truncate reply to size expected by client
-        ldns_pkt_set_edns_udp_size(request, UDP_RECV_BUF_SIZE);
-        is_our_do_bit = true;
-    }
-
-    return is_our_do_bit;
-}
-
-static ldns_rr_list *get_pkt_section(ldns_pkt *pkt, ldns_pkt_section section) {
-    switch (section) {
-    case LDNS_SECTION_QUESTION:
-        return ldns_pkt_question(pkt);
-    case LDNS_SECTION_ANSWER:
-        return ldns_pkt_answer(pkt);
-    case LDNS_SECTION_AUTHORITY:
-        return ldns_pkt_authority(pkt);
-    case LDNS_SECTION_ADDITIONAL:
-        return ldns_pkt_additional(pkt);
-    case LDNS_SECTION_ANY:
-    case LDNS_SECTION_ANY_NOQUESTION:
-        assert(0);
-        break;
-    }
-    return nullptr;
-}
-
-static void set_pkt_section(ldns_pkt *pkt, ldns_pkt_section section, ldns_rr_list *new_value) {
-    switch (section) {
-    case LDNS_SECTION_QUESTION:
-        return ldns_pkt_set_question(pkt, new_value);
-    case LDNS_SECTION_ANSWER:
-        return ldns_pkt_set_answer(pkt, new_value);
-    case LDNS_SECTION_AUTHORITY:
-        return ldns_pkt_set_authority(pkt, new_value);
-    case LDNS_SECTION_ADDITIONAL:
-        return ldns_pkt_set_additional(pkt, new_value);
-    case LDNS_SECTION_ANY:
-    case LDNS_SECTION_ANY_NOQUESTION:
-        assert(0);
-    }
-}
-
-// Scrub all DNSSEC RRs from the answer and authority sections,
-// except those which are requested
-// Return true if pkt was modified
-static bool scrub_dnssec_rrs(ldns_pkt *pkt) {
-    static constexpr ldns_rr_type DNSSEC_RRTYPES[]
-            = {LDNS_RR_TYPE_DS, LDNS_RR_TYPE_DNSKEY, LDNS_RR_TYPE_NSEC, LDNS_RR_TYPE_NSEC3, LDNS_RR_TYPE_RRSIG};
-
-    ldns_rr_type qtype = ldns_rr_get_type(ldns_rr_list_rr(ldns_pkt_question(pkt), 0));
-    bool modified = false;
-
-    for (ldns_pkt_section section : {LDNS_SECTION_ANSWER, LDNS_SECTION_AUTHORITY}) {
-        size_t old_count = ldns_pkt_section_count(pkt, section);
-        if (old_count == 0) {
-            continue;
-        }
-        auto *old_section = get_pkt_section(pkt, section);
-        auto *new_section = ldns_rr_list_new();
-        for (size_t i = 0; i < old_count; ++i) {
-            auto *rr = ldns_rr_list_rr(old_section, i);
-            ldns_rr_type type = ldns_rr_get_type(rr);
-            if ((section == LDNS_SECTION_ANSWER && type == qtype)
-                    || std::none_of(
-                            std::begin(DNSSEC_RRTYPES), std::end(DNSSEC_RRTYPES), [type](ldns_enum_rr_type extype) {
-                                return extype == type;
-                            })) {
-                ldns_rr_list_push_rr(new_section, ldns_rr_clone(rr));
-            }
-        }
-        modified = modified || ldns_rr_list_rr_count(new_section) != old_count;
-        ldns_rr_list_deep_free(old_section);
-        set_pkt_section(pkt, section, new_section);
-        ldns_pkt_set_section_count(pkt, section, ldns_rr_list_rr_count(new_section));
-    }
-
-    return modified;
 }
 
 bool DnsForwarder::finalize_dnssec_log_logic(ldns_pkt *response, bool is_our_do_bit) {
@@ -1462,7 +883,7 @@ bool DnsForwarder::finalize_dnssec_log_logic(ldns_pkt *response, bool is_our_do_
     if (m_settings->enable_dnssec_ok) {
         server_uses_dnssec = ldns_dnssec_pkt_has_rrsigs(response);
         tracelog(m_log, "Server uses DNSSEC: {}", server_uses_dnssec ? "YES" : "NO");
-        if (is_our_do_bit && scrub_dnssec_rrs(response)) {
+        if (is_our_do_bit && DnssecHelpers::scrub_dnssec_rrs(response)) {
             log_packet(m_log, response, "DNSSEC-scrubbed response");
         }
     }
@@ -1529,57 +950,6 @@ void DnsForwarder::truncate_response(ldns_pkt *response, const ldns_pkt *request
         if (truncated && m_log.is_enabled(ag::LogLevel::LOG_LEVEL_DEBUG)) {
             log_packet(m_log, response,
                     AG_FMT("Truncated response (edns: {}, max size: {})", ldns_pkt_edns(request), max_size));
-        }
-    }
-}
-
-// Remove the "ech" parameter from the SvcParams part of any SVCB/HTTPS record contained in `response`
-void DnsForwarder::remove_ech_svcparam(ldns_pkt *response) {
-    for (size_t i = 0; i < ldns_pkt_ancount(response); ++i) {
-        ldns_rr *rr = ldns_rr_list_rr(ldns_pkt_answer(response), i);
-
-        if (auto type = ldns_rr_get_type(rr);
-                (type != LDNS_RR_TYPE_SVCB && type != LDNS_RR_TYPE_HTTPS) || (ldns_rr_rd_count(rr) != 3)) {
-            continue;
-        }
-
-        ldns_rdf *params = ldns_rr_rdf(rr, 2);
-
-        if (ldns_rdf_get_type(params) != LDNS_RDF_TYPE_SVCPARAMS) {
-            continue;
-        }
-
-        uint8_t *current_param_start = nullptr;
-        uint16_t key, len;
-        ag::Uint8View params_tail = {ldns_rdf_data(params), ldns_rdf_size(params)};
-        while (params_tail.size() >= sizeof(key)) {
-            current_param_start = (uint8_t *) params_tail.data();
-
-            std::memcpy(&key, params_tail.data(), sizeof(key));
-            params_tail.remove_prefix(sizeof(key));
-
-            if (params_tail.size() < sizeof(len)) {
-                break;
-            }
-
-            std::memcpy(&len, params_tail.data(), sizeof(len));
-            params_tail.remove_prefix(sizeof(len));
-
-            key = ntohs(key);
-            len = ntohs(len);
-
-            if (params_tail.size() < len) {
-                break;
-            }
-
-            params_tail.remove_prefix(len);
-
-            if (key == LDNS_SVCPARAM_KEY_ECHCONFIG) {
-                dbglog_fid(m_log, response, "Removing ECH parameters from SVCB/HTTPS RR");
-                std::memmove(current_param_start, params_tail.data(), params_tail.size());
-                ldns_rdf_set_size(params, ldns_rdf_size(params) - sizeof(key) - sizeof(len) - len);
-                break;
-            }
         }
     }
 }
