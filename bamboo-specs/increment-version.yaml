@@ -55,7 +55,7 @@ DL - Increment version:
         git add platform/mac/framework/CMakeLists.txt
         git add platform/windows/capi/src/ag_dns.rc
         git add platform/windows/cs/Adguard.Dns/SolutionInfo.cs
-        git add common/include/ag_version.h
+        git add common/include/dns/common/version.h
         git commit -m "skipci: Automatic version increment by Bamboo"
         git push
 
