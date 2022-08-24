@@ -1438,9 +1438,10 @@ static coro::Task<NSData *> handleIPv6Packet(AGDnsProxy *self, NSData *packet)
                 completionHandler(co_await handleIPv4Packet(self, packet));
             } else if (ip_header->ip_v == 6) {
                 completionHandler(co_await handleIPv6Packet(self, packet));
+            } else {
+                dbglog(*self->log, "Wrong IP version: %u", ip_header->ip_v);
+                completionHandler(nil);
             }
-            dbglog(*self->log, "Wrong IP version: %u", ip_header->ip_v);
-            completionHandler(nil);
         }
     }(self, packet, completionHandler));
 }
