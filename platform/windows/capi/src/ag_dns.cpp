@@ -211,6 +211,8 @@ static ag_outbound_proxy_settings *marshal_outbound_proxy(const std::optional<Ou
     c_outbound_proxy->protocol = (ag_outbound_proxy_protocol) outbound_proxy->protocol;
     c_outbound_proxy->address = marshal_str(outbound_proxy->address);
     c_outbound_proxy->port = outbound_proxy->port;
+    c_outbound_proxy->bootstrap.size = outbound_proxy->bootstrap.size();
+    c_outbound_proxy->bootstrap.data = marshal_strs(outbound_proxy->bootstrap);
     if (outbound_proxy->auth_info.has_value()) {
         c_outbound_proxy->auth_info = (ag_outbound_proxy_auth_info *) std::malloc(sizeof(ag_outbound_proxy_auth_info));
         c_outbound_proxy->auth_info->username = marshal_str(outbound_proxy->auth_info->username);
@@ -219,6 +221,7 @@ static ag_outbound_proxy_settings *marshal_outbound_proxy(const std::optional<Ou
         c_outbound_proxy->auth_info = nullptr;
     }
     c_outbound_proxy->trust_any_certificate = outbound_proxy->trust_any_certificate;
+    c_outbound_proxy->ignore_if_unavailable = outbound_proxy->ignore_if_unavailable;
     return c_outbound_proxy;
 }
 
@@ -228,6 +231,11 @@ static void free_outbound_proxy(ag_outbound_proxy_settings *outbound_proxy) {
     }
 
     std::free((void *) outbound_proxy->address);
+
+    for (size_t j = 0; j < outbound_proxy->bootstrap.size; ++j) {
+        ag_str_free(outbound_proxy->bootstrap.data[j]);
+    }
+    std::free(outbound_proxy->bootstrap.data);
 
     if (outbound_proxy->auth_info != nullptr) {
         std::free((void *) outbound_proxy->auth_info->username);
@@ -363,6 +371,34 @@ static std::vector<ListenerSettings> marshal_listeners(const ag_listener_setting
     return listeners;
 }
 
+static std::optional<OutboundProxySettings> marshal_outbound_proxy(const ag_outbound_proxy_settings *c_settings) {
+    if (c_settings == nullptr) {
+        return std::nullopt;
+    }
+
+    OutboundProxySettings settings = {};
+    if (c_settings->address != nullptr) {
+        settings.address.assign(c_settings->address);
+    }
+    settings.port = c_settings->port;
+    settings.bootstrap.reserve(c_settings->bootstrap.size);
+    for (size_t i = 0; i < c_settings->bootstrap.size; ++i) {
+        settings.bootstrap.emplace_back(c_settings->bootstrap.data[i]);
+    }
+    if (const ag_outbound_proxy_auth_info *c_auth_info = c_settings->auth_info; c_auth_info != nullptr) {
+        OutboundProxyAuthInfo &auth_info = settings.auth_info.emplace();
+        if (c_auth_info->username != nullptr) {
+            auth_info.username.assign(c_auth_info->username);
+        }
+        if (c_auth_info->password != nullptr) {
+            auth_info.password.assign(c_auth_info->password);
+        }
+    }
+    settings.trust_any_certificate = c_settings->trust_any_certificate;
+    settings.ignore_if_unavailable = c_settings->ignore_if_unavailable;
+    return std::move(settings);
+}
+
 static DnsFilter::FilterParams marshal_filter_params(const ag_filter_params &c_params) {
     DnsFilter::FilterParams params{};
     if (c_params.data) {
@@ -412,6 +448,7 @@ static DnsProxySettings marshal_settings(const ag_dnsproxy_settings *c_settings)
     }
 
     settings.listeners = marshal_listeners(c_settings->listeners.data, c_settings->listeners.size);
+    settings.outbound_proxy = marshal_outbound_proxy(c_settings->outbound_proxy);
     settings.filter_params.filters
             = marshal_filters(c_settings->filter_params.filters.data, c_settings->filter_params.filters.size);
     settings.optimistic_cache = c_settings->optimistic_cache;

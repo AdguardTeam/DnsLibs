@@ -1,11 +1,11 @@
 #pragma once
 
 
-#include <memory>
-#include <variant>
 #include <bitset>
-#include <optional>
 #include <magic_enum.hpp>
+#include <memory>
+#include <optional>
+#include <variant>
 
 #include "common/defs.h"
 #include "common/net_utils.h"
@@ -47,13 +47,14 @@ public:
     struct MakeSocketCallback {
         /** Raised when proxy wants to create a socket */
         SocketFactory::SocketPtr (* func)(void *arg, utils::TransportProtocol proto,
-                                           std::optional<SocketFactory::SecureSocketParameters> secure_parameters);
+                std::optional<SocketFactory::SecureSocketParameters> secure_parameters);
         /** User context for the callback */
         void *arg;
     };
 
     struct Parameters {
         const CertificateVerifier *verifier = nullptr;
+        SocketFactory::ProxyBootstrapper *bootstrapper = nullptr;
         MakeSocketCallback make_socket = {};
     };
 
@@ -62,12 +63,14 @@ public:
         EventLoop *loop = nullptr;
         /** Connection protocol */
         utils::TransportProtocol proto;
-        /** Address on the peer to connect to */
+        /** Address of the peer to connect to */
         SocketAddress peer;
         /** Set of the proxy callbacks */
         Callbacks callbacks = {};
         /** Operation time out value */
         std::optional<Micros> timeout;
+        /** (Optional) name or index of the network interface to route traffic through */
+        IfIdVariant outbound_interface;
     };
 
     virtual ~OutboundProxy() = default;
@@ -112,19 +115,21 @@ public:
      * @param cbx the callbacks
      * @return some error if failed
      */
-    [[nodiscard]] virtual Error<SocketError> set_callbacks(uint32_t conn_id, Callbacks cbx) = 0;
+    [[nodiscard]] Error<SocketError> set_callbacks(uint32_t conn_id, Callbacks cbx);
 
     /**
      * Close the connection
      * @param conn_id the connection ID
      */
-    virtual void close_connection(uint32_t conn_id) = 0;
+    void close_connection(uint32_t conn_id);
 
 protected:
     Logger m_log;
     size_t m_id = 0;
     const OutboundProxySettings *m_settings = nullptr;
+    std::optional<SocketAddress> m_resolved_proxy_address;
     Parameters m_parameters = {};
+    HashMap<uint32_t, ConnectParameters> m_bootstrap_waiters;
 
     OutboundProxy(const std::string &logger_name, const OutboundProxySettings *settings, Parameters parameters);
 
@@ -139,9 +144,22 @@ protected:
     [[nodiscard]] virtual Error<SocketError> connect_through_proxy(uint32_t conn_id, const ConnectParameters &parameters) = 0;
 
     /**
+     * Update socket callbacks. May be used to turn on/off the read events
+     */
+    [[nodiscard]] virtual Error<SocketError> set_callbacks_impl(uint32_t conn_id, Callbacks cbx) = 0;
+
+    /**
+     * Close the connection
+     */
+    virtual void close_connection_impl(uint32_t conn_id) = 0;
+
+    /**
      * Get the next connection ID
      */
     [[nodiscard]] static uint32_t get_next_connection_id();
+
+private:
+    void on_bootstrap_ready(std::optional<SocketAddress> address);
 };
 
-}
+} // namespace ag::dns

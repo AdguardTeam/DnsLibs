@@ -52,7 +52,7 @@ public:
      * @param timeout Resolve timeout
      * @return See `resolver::result` structure
      */
-    [[nodiscard]] coro::Task <Result> resolve(std::string_view host, int port, Millis timeout) const;
+    [[nodiscard]] coro::Task<Result> resolve(std::string_view host, int port, Millis timeout) const;
 
 private:
     /** Logger */

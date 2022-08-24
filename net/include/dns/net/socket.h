@@ -1,13 +1,13 @@
 #pragma once
 
-#include <optional>
 #include <chrono>
-#include <string>
-#include <variant>
-#include <memory>
-#include <vector>
 #include <event2/event.h>
 #include <event2/util.h>
+#include <memory>
+#include <optional>
+#include <string>
+#include <variant>
+#include <vector>
 
 #include "common/defs.h"
 #include "common/error.h"
@@ -50,9 +50,33 @@ class SocketFactory {
 public:
     using SocketPtr = std::unique_ptr<Socket>;
 
+    struct ProxyBootstrapper { // NOLINT(cppcoreguidelines-special-member-functions,hicpp-special-member-functions)
+        /**
+         * `nullopt` argument means the resolve failure
+         */
+        using Callback = std::function<void(std::optional<SocketAddress>)>;
+
+        virtual ~ProxyBootstrapper() = default;
+
+        /**
+         * Resolve the hostname
+         * @param host The name to resolve
+         * @param bootstrap The bootstrap servers
+         * @param timeout The resolve timeout
+         * @param outbound_interface (optional) The network interface to route traffic through
+         * @param callback The result handling procedure
+         * @return true if started successfully, false otherwise
+         */
+        virtual bool resolve(std::string_view host, const std::vector<std::string> &bootstrap, Millis timeout,
+                IfIdVariant outbound_interface, Callback callback) = 0;
+    };
+
     struct Parameters {
         EventLoop &loop;
-        const OutboundProxySettings *oproxy_settings = nullptr;
+        struct {
+            const OutboundProxySettings *settings = nullptr;
+            std::unique_ptr<ProxyBootstrapper> bootstrapper;
+        } oproxy;
         std::unique_ptr<CertificateVerifier> verifier;
         bool enable_route_resolver = true;
     };

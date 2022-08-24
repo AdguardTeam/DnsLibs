@@ -4,8 +4,8 @@
 #include "common/parallel.h"
 #include "common/utils.h"
 #include "dns/dnsstamp/dns_stamp.h"
-
-#include "bootstrapper.h"
+#include "dns/upstream/bootstrapper.h"
+#include "resolver.h"
 
 #define log_addr(l_, lvl_, addr_, fmt_, ...) lvl_##log(l_, "[{}] " fmt_, addr_, ##__VA_ARGS__)
 
@@ -163,6 +163,10 @@ Bootstrapper::Bootstrapper(const Params &p)
     m_server_name = host;
     m_shutdown_guard = std::make_shared<bool>(true);
 }
+
+Bootstrapper::~Bootstrapper() = default;
+Bootstrapper::Bootstrapper(Bootstrapper &&) = default;
+Bootstrapper &Bootstrapper::operator=(Bootstrapper &&) = default;
 
 Error<Bootstrapper::BootstrapperError> Bootstrapper::init() {
     if (m_resolvers.empty() && !SocketAddress(m_server_name, m_server_port).valid()) {

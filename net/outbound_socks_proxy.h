@@ -31,8 +31,8 @@ private:
     [[nodiscard]] std::optional<evutil_socket_t> get_fd(uint32_t conn_id) const override;
     [[nodiscard]] Error<SocketError> send(uint32_t conn_id, Uint8View data) override;
     [[nodiscard]] bool set_timeout(uint32_t conn_id, Micros timeout) override;
-    [[nodiscard]] Error<SocketError> set_callbacks(uint32_t conn_id, Callbacks cbx) override;
-    void close_connection(uint32_t conn_id) override;
+    [[nodiscard]] Error<SocketError> set_callbacks_impl(uint32_t conn_id, Callbacks cbx) override;
+    void close_connection_impl(uint32_t conn_id) override;
     [[nodiscard]] Error<SocketError> connect_to_proxy(uint32_t conn_id,
                                                                 const ConnectParameters &parameters) override;
     [[nodiscard]] Error<SocketError> connect_through_proxy(uint32_t conn_id,

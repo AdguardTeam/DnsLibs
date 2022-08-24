@@ -32,7 +32,10 @@ ErrString test_upstream(const UpstreamOptions &opts, bool ipv6_available,
     }
     EventLoopPtr loop = EventLoop::create();
     loop->start();
-    SocketFactory socket_factory({*loop, nullptr, std::move(cert_verifier)});
+    SocketFactory socket_factory({
+            .loop = *loop,
+            .verifier = std::move(cert_verifier),
+    });
     std::shared_ptr<void> defer(nullptr, [loop](void */*unused*/) {
         loop->stop();
         loop->join();

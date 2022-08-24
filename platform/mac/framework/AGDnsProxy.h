@@ -240,10 +240,17 @@ typedef NS_ENUM(NSInteger, AGOutboundProxyProtocol) {
 @interface AGOutboundProxySettings : NSObject<NSCoding>
 /** The proxy protocol */
 @property(nonatomic, readonly) AGOutboundProxyProtocol protocol;
-/** The proxy server address (must be a valid IP address) */
+/** The proxy server IP address or hostname */
 @property(nonatomic, readonly) NSString *address;
 /** The proxy server port */
 @property(nonatomic, readonly) NSInteger port;
+/**
+ * List of the DNS server URLs to be used to resolve a hostname in the proxy server address.
+ * The URLs MUST contain the resolved server addresses, not hostnames.
+ * E.g. `https://94.140.14.14` is correct, while `dns.adguard.com:53` is not.
+ * MUST NOT be empty in case the `address` is a hostname.
+ */
+@property(nonatomic, readonly) NSArray<NSString *> *bootstrap;
 /** The authentication information (if nil, authentication is not performed) */
 @property(nonatomic, readonly) AGOutboundProxyAuthInfo *authInfo;
 /** If true and the proxy connection is secure, the certificate won't be verified */

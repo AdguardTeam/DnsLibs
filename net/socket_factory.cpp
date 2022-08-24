@@ -64,7 +64,7 @@ struct SocketFactory::OutboundProxyState {
 SocketFactory::SocketFactory(struct Parameters parameters)
         : m_parameters(std::move(parameters))
         , m_router(parameters.enable_route_resolver ? RouteResolver::create() : RouteResolverPtr{nullptr}) {
-    if (m_parameters.oproxy_settings != nullptr) {
+    if (m_parameters.oproxy.settings != nullptr) {
         m_proxy = std::make_unique<OutboundProxyState>();
         m_proxy->main_proxy.reset(this->make_proxy());
         m_proxy->fallback_proxy.reset(this->make_fallback_proxy());
@@ -148,7 +148,7 @@ ErrString SocketFactory::prepare_fd(
 }
 
 const OutboundProxySettings *SocketFactory::get_outbound_proxy_settings() const {
-    return m_parameters.oproxy_settings;
+    return m_parameters.oproxy.settings;
 }
 
 const CertificateVerifier *SocketFactory::get_certificate_verifier() const {
@@ -239,19 +239,22 @@ ErrString SocketFactory::on_prepare_fd(
 }
 
 OutboundProxy *SocketFactory::make_proxy() const {
-    struct OutboundProxy::Parameters oproxy_params
-            = {m_parameters.verifier.get(), {on_make_proxy_socket, (void *) this}};
+    struct OutboundProxy::Parameters oproxy_params = {
+            .verifier = m_parameters.verifier.get(),
+            .bootstrapper = m_parameters.oproxy.bootstrapper.get(),
+            .make_socket = {on_make_proxy_socket, (void *) this},
+    };
 
     OutboundProxy *oproxy = nullptr;
-    switch (m_parameters.oproxy_settings->protocol) {
+    switch (m_parameters.oproxy.settings->protocol) {
     case OutboundProxyProtocol::HTTP_CONNECT:
     case OutboundProxyProtocol::HTTPS_CONNECT:
-        oproxy = new HttpOProxy(m_parameters.oproxy_settings, oproxy_params);
+        oproxy = new HttpOProxy(m_parameters.oproxy.settings, oproxy_params);
         break;
     case OutboundProxyProtocol::SOCKS4:
     case OutboundProxyProtocol::SOCKS5:
     case OutboundProxyProtocol::SOCKS5_UDP:
-        oproxy = new SocksOProxy(m_parameters.oproxy_settings, oproxy_params);
+        oproxy = new SocksOProxy(m_parameters.oproxy.settings, oproxy_params);
         break;
     }
 
@@ -259,7 +262,10 @@ OutboundProxy *SocketFactory::make_proxy() const {
 }
 
 OutboundProxy *SocketFactory::make_fallback_proxy() const {
-    return new DirectOProxy({m_parameters.verifier.get(), {on_make_proxy_socket, (void *) this}});
+    return new DirectOProxy({
+            .verifier = m_parameters.verifier.get(),
+            .make_socket = {on_make_proxy_socket, (void *) this},
+    });
 }
 
 SocketFactory::SocketPtr SocketFactory::on_make_proxy_socket(

@@ -78,7 +78,25 @@ namespace Adguard.Dns.Tests.Helpers
                 CustomBlockingIpv4 = "1.2.3.4",
                 CustomBlockingIpv6 = "::AA",
                 DnsCacheSize = 23,
-                OptimisticCache = true
+                OptimisticCache = true,
+                OutboundProxySettings = new OutboundProxySettings
+                {
+                    Protocol = AGDnsApi.ag_outbound_proxy_protocol.AGOPP_SOCKS5,
+                    Address = "127.0.0.1",
+                    AuthInfo = new OutboundProxyAuthInfo
+                    {
+                        Password = "123",
+                        Username = "username"
+                    },
+                    Port = 6754,
+                    Bootstrap = new List<string>
+                    {
+                        "https://94.140.14.14",
+                        "https://94.140.15.15"
+                    },
+                    TrustAnyCertificate = true,
+                    IgnoreIfUnavailable = true
+                }
             };
             Queue<IntPtr> allocatedPointers = new Queue<IntPtr>();
 
@@ -107,6 +125,32 @@ namespace Adguard.Dns.Tests.Helpers
             Assert.AreEqual(dnsSettings.HostsRulesBlockingMode, dnsSettingsConverted.HostsRulesBlockingMode);
             bool isUpstreamsEqual = CollectionUtils.CollectionsEquals(dnsSettingsConverted.Upstreams, dnsSettings.Upstreams);
             Assert.IsTrue(isUpstreamsEqual);
+            Assert.AreEqual(
+                dnsSettings.OutboundProxySettings.Protocol,
+                dnsSettingsConverted.OutboundProxySettings.Protocol);
+            Assert.AreEqual(
+                dnsSettings.OutboundProxySettings.Address,
+                dnsSettingsConverted.OutboundProxySettings.Address);
+            Assert.AreEqual(
+                dnsSettings.OutboundProxySettings.AuthInfo.Password,
+                dnsSettingsConverted.OutboundProxySettings.AuthInfo.Password);
+            Assert.AreEqual(
+                dnsSettings.OutboundProxySettings.AuthInfo.Username,
+                dnsSettingsConverted.OutboundProxySettings.AuthInfo.Username);
+            Assert.AreEqual(
+                dnsSettings.OutboundProxySettings.Port,
+                dnsSettingsConverted.OutboundProxySettings.Port);
+            bool isBootstrapEquals = CollectionUtils.CollectionsEquals(
+                dnsSettings.OutboundProxySettings.Bootstrap,
+                dnsSettingsConverted.OutboundProxySettings.Bootstrap);
+            Assert.IsTrue(isBootstrapEquals);
+            Assert.AreEqual(
+                dnsSettings.OutboundProxySettings.TrustAnyCertificate,
+                dnsSettingsConverted.OutboundProxySettings.TrustAnyCertificate);
+            Assert.AreEqual(
+                dnsSettings.OutboundProxySettings.IgnoreIfUnavailable,
+                dnsSettingsConverted.OutboundProxySettings.IgnoreIfUnavailable);
+
         }
 
         [Test]

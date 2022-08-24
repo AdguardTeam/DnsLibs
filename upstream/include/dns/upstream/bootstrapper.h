@@ -1,18 +1,17 @@
 #pragma once
 
+#include <memory>
 #include <string>
 #include <vector>
-#include <memory>
+
 #include "common/logger.h"
 #include "common/socket_address.h"
 #include "dns/upstream/upstream.h"
-#include "resolver.h"
 
 namespace ag {
 namespace dns {
 
 class Resolver;
-
 using ResolverPtr = std::unique_ptr<Resolver>;
 
 class Bootstrapper {
@@ -27,6 +26,9 @@ public:
     };
 
     explicit Bootstrapper(const Params &p);
+    ~Bootstrapper();
+    Bootstrapper(Bootstrapper &&);
+    Bootstrapper &operator=(Bootstrapper &&);
 
     enum BootstrapperError {
         AE_NO_VALID_RESOLVERS,
@@ -63,11 +65,10 @@ public:
     /**
      * Get address to resolve from bootstrapper
      */
-    std::string address() const;
+    [[nodiscard]] std::string address() const;
 
     // Non-copyable
     Bootstrapper(const Bootstrapper &) = delete;
-
     Bootstrapper &operator=(const Bootstrapper &) = delete;
 
 private:
@@ -81,7 +82,6 @@ private:
      */
     void temporary_disabler_update(bool fail);
 
-private:
     coro::Task<ResolveResult> resolve();
 
     /** Logger */

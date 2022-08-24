@@ -8,7 +8,7 @@
 #include "dns/upstream/upstream.h"
 
 #include "dns_framed.h"
-#include "bootstrapper.h"
+#include "dns/upstream/bootstrapper.h"
 
 namespace ag::dns {
 

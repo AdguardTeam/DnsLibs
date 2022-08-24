@@ -163,7 +163,13 @@ namespace Adguard.Dns.TestApp
                         Username = "username"
                     },
                     Port = 6754,
-                    TrustAnyCertificate = false
+                    Bootstrap = new List<string>
+                    {
+                        "https://94.140.14.14",
+                        "https://94.140.15.15"
+                    },
+                    TrustAnyCertificate = false,
+                    IgnoreIfUnavailable = true
                 },
                 Ipv6Available = false,
                 OptimisticCache = false,

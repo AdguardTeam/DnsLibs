@@ -3,9 +3,10 @@
 #include "common/gtest_coro.h"
 #include "dns/net/application_verifier.h"
 #include "dns/net/socket.h"
+#include "dns/upstream/bootstrapper.h"
 #include "dns/upstream/upstream.h"
 
-#include "../bootstrapper.h"
+#include "../resolver.h"
 
 namespace ag::dns {
 
@@ -24,6 +25,10 @@ coro::Task<Bootstrapper::ResolveResult> Bootstrapper::get() {
 Bootstrapper::Bootstrapper(const Params &p)
         : m_log("bootstrapper test") {
 }
+
+Bootstrapper::~Bootstrapper() = default;
+Bootstrapper::Bootstrapper(Bootstrapper &&) = default;
+Bootstrapper &Bootstrapper::operator=(Bootstrapper &&) = default;
 
 Error<Bootstrapper::BootstrapperError> Bootstrapper::init() {
     m_resolved_cache = RESOLVED_ADDRESSES;

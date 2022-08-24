@@ -1,10 +1,7 @@
 
 #include <algorithm>
-#include <atomic>
 #include <cassert>
-#include <csignal>
 #include <magic_enum.hpp>
-#include <thread>
 #include <uv.h>
 
 #include "common/socket_address.h"
@@ -13,19 +10,9 @@
 #include "dnsproxy_listener.h"
 
 #define log_listener(l_, lvl_, fmt_, ...)                                                                              \
-    lvl_##log((l_)->m_log, "[{} {}] {}(): " fmt_, magic_enum::enum_name((l_)->m_settings.protocol),                    \
-            (l_)->m_address.str(), __func__, ##__VA_ARGS__)
-#define log_id(l_, lvl_, id_, fmt_, ...) lvl_##log(l_, "[{}] {}(): " fmt_, id_, __func__, ##__VA_ARGS__)
-
-#if defined(__APPLE__)
-#include <TargetConditionals.h>
-#endif // defined(__APPLE__)
-// Set the libuv thread pool size. Must happen before any libuv usage to have effect.
-#if TARGET_OS_IPHONE
-static const int THREAD_POOL_SIZE_RESULT [[maybe_unused]] = uv_os_setenv("UV_THREADPOOL_SIZE", "8");
-#else
-static const int THREAD_POOL_SIZE_RESULT [[maybe_unused]] = uv_os_setenv("UV_THREADPOOL_SIZE", "24");
-#endif
+    lvl_##log((l_)->m_log, "[{} {}] " fmt_, magic_enum::enum_name((l_)->m_settings.protocol),                    \
+            (l_)->m_address.str(), ##__VA_ARGS__)
+#define log_id(l_, lvl_, id_, fmt_, ...) lvl_##log(l_, "[{}] " fmt_, id_, ##__VA_ARGS__)
 
 namespace ag::dns {
 

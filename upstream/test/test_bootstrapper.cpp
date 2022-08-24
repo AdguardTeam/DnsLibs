@@ -4,8 +4,7 @@
 #include "common/clock.h"
 #include "common/logger.h"
 #include "dns/net/socket.h"
-
-#include "../bootstrapper.h"
+#include "dns/upstream/bootstrapper.h"
 
 using namespace std::chrono;
 

@@ -1,6 +1,9 @@
 package com.adguard.dnslibs.proxy;
 
 import java.net.InetSocketAddress;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.List;
 import java.util.Objects;
 
 public class OutboundProxySettings {
@@ -52,7 +55,9 @@ public class OutboundProxySettings {
     }
 
     private final Protocol protocol;
-    private final InetSocketAddress address;
+    private final String address;
+    private final int port;
+    private final List<String> bootstrap;
     private final AuthInfo authInfo;
     private final boolean trustAnyCertificate;
     private final boolean ignoreIfUnavailable;
@@ -63,7 +68,9 @@ public class OutboundProxySettings {
      */
     public OutboundProxySettings(Protocol protocol, InetSocketAddress address) {
         this.protocol = protocol;
-        this.address = address;
+        this.address = address.getAddress().toString();
+        this.port = address.getPort();
+        this.bootstrap = new ArrayList<>();
         this.authInfo = null;
         this.trustAnyCertificate = false;
         this.ignoreIfUnavailable = false;
@@ -71,17 +78,28 @@ public class OutboundProxySettings {
 
     /**
      * @param protocol The proxy protocol
-     * @param address The proxy server address
+     * @param address The proxy server IP address or hostname
+     * @param port The proxy server port (0 means default)
+     * @param bootstrap List of the DNS server URLs to be used to resolve a hostname in the proxy server address.
+     *                  The URLs MUST contain the resolved server addresses, not hostnames.
+     *                  E.g. `https://94.140.14.14` is correct, while `dns.adguard.com:53` is not.
+     *                  MUST NOT be empty in case the `address` is a hostname.
      * @param authInfo The authentication information
      * @param trustAnyCertificate If true and the proxy connection is secure, the certificate won't be verified
      * @param ignoreIfUnavailable Whether the DNS proxy should ignore the outbound proxy and route
-     *                            quries directly to target hosts even if it's determined as unavailable
+     *                            queries directly to target hosts even if it's determined as unavailable
      */
-    public OutboundProxySettings(Protocol protocol, InetSocketAddress address,
-                                 AuthInfo authInfo, boolean trustAnyCertificate,
-                                 boolean ignoreIfUnavailable) {
+    public OutboundProxySettings(Protocol protocol, String address, int port,
+                                 List<String> bootstrap, AuthInfo authInfo,
+                                 boolean trustAnyCertificate, boolean ignoreIfUnavailable) {
         this.protocol = protocol;
         this.address = address;
+        this.port = port;
+        if (null == bootstrap) {
+            this.bootstrap = new ArrayList<>();
+        } else {
+            this.bootstrap = new ArrayList<>(bootstrap);
+        }
         this.authInfo = authInfo;
         this.trustAnyCertificate = trustAnyCertificate;
         this.ignoreIfUnavailable = ignoreIfUnavailable;
@@ -97,8 +115,22 @@ public class OutboundProxySettings {
     /**
      * @return The proxy server address
      */
-    public InetSocketAddress getAddress() {
+    public String getAddress() {
         return address;
+    }
+
+    /**
+     * @return The proxy server port
+     */
+    public int getPort() {
+        return port;
+    }
+
+    /**
+     * @return The bootstrap servers
+     */
+    public List<String> getBootstrap() {
+        return bootstrap;
     }
 
     /**
@@ -130,6 +162,8 @@ public class OutboundProxySettings {
         OutboundProxySettings that = (OutboundProxySettings)o;
         return this.protocol == that.protocol
                 && Objects.equals(this.address, that.address)
+                && this.port == that.port
+                && this.bootstrap.equals(that.bootstrap)
                 && Objects.equals(this.authInfo, that.authInfo)
                 && this.trustAnyCertificate == that.trustAnyCertificate
                 && this.ignoreIfUnavailable == that.ignoreIfUnavailable;
@@ -137,7 +171,7 @@ public class OutboundProxySettings {
 
     @Override
     public int hashCode() {
-        return Objects.hash(this.protocol, this.address, this.authInfo, this.trustAnyCertificate,
-                this.ignoreIfUnavailable);
+        return Objects.hash(this.protocol, this.address, this.port, this.bootstrap, this.authInfo,
+                this.trustAnyCertificate, this.ignoreIfUnavailable);
     }
 }

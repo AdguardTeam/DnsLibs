@@ -477,6 +477,7 @@ static ServerStamp convert_stamp(AGDnsStamp *stamp) {
 - (instancetype) initWithProtocol: (AGOutboundProxyProtocol)protocol
                           address: (NSString *)address
                              port: (NSInteger)port
+                        bootstrap: (NSArray<NSString *> *) bootstrap
                          authInfo: (AGOutboundProxyAuthInfo *)authInfo
               trustAnyCertificate: (BOOL)trustAnyCertificate
 {
@@ -485,6 +486,7 @@ static ServerStamp convert_stamp(AGDnsStamp *stamp) {
         _protocol = protocol;
         _address = address;
         _port = port;
+        _bootstrap = bootstrap;
         _authInfo = authInfo;
         _trustAnyCertificate = trustAnyCertificate;
     }
@@ -498,6 +500,12 @@ static ServerStamp convert_stamp(AGDnsStamp *stamp) {
         _protocol = (AGOutboundProxyProtocol)settings->protocol;
         _address = convert_string(settings->address);
         _port = settings->port;
+        NSMutableArray<NSString *> *bootstrap =
+                [[NSMutableArray alloc] initWithCapacity: settings->bootstrap.size()];
+        for (const std::string &server : settings->bootstrap) {
+            [bootstrap addObject: convert_string(server)];
+        }
+        _bootstrap = bootstrap;
         if (settings->auth_info.has_value()) {
             _authInfo = [[AGOutboundProxyAuthInfo alloc] initWithNative: &settings->auth_info.value()];
         }
@@ -513,6 +521,7 @@ static ServerStamp convert_stamp(AGDnsStamp *stamp) {
         _protocol = (AGOutboundProxyProtocol)[coder decodeIntForKey:@"_protocol"];
         _address = [coder decodeObjectForKey:@"_address"];
         _port = [coder decodeInt64ForKey:@"_port"];
+        _bootstrap = [coder decodeObjectForKey:@"_bootstrap"];
         _authInfo = [coder decodeObjectForKey:@"_authInfo"];
         _trustAnyCertificate = [coder decodeBoolForKey:@"_trustAnyCertificate"];
     }
@@ -524,14 +533,15 @@ static ServerStamp convert_stamp(AGDnsStamp *stamp) {
     [coder encodeInt:self.protocol forKey:@"_protocol"];
     [coder encodeObject:self.address forKey:@"_address"];
     [coder encodeInt64:self.port forKey:@"_port"];
+    [coder encodeObject:self.bootstrap forKey:@"_bootstrap"];
     [coder encodeObject:self.authInfo forKey:@"_authInfo"];
     [coder encodeBool:self.trustAnyCertificate forKey:@"_trustAnyCertificate"];
 }
 
 - (NSString*)description {
     return [NSString stringWithFormat:
-            @"[(%p)AGOutboundProxySettings: protocol=%ld, address=%@, port=%ld, authInfo=%@, trustAnyCertificate=%@]",
-            self, _protocol, _address, _port, _authInfo, _trustAnyCertificate ? @"YES" : @"NO"];
+            @"[(%p)AGOutboundProxySettings: protocol=%ld, address=%@, port=%ld, bootstrap=(%@), authInfo=%@, trustAnyCertificate=%@]",
+            self, _protocol, _address, _port, [_bootstrap componentsJoinedByString:@", "], _authInfo, _trustAnyCertificate ? @"YES" : @"NO"];
 }
 
 @end

@@ -289,7 +289,9 @@ OutboundProxySettings AndroidDnsProxy::marshal_outbound_proxy(JNIEnv *env, jobje
     assert(env->IsInstanceOf(jsettings, clazz));
 
     auto protocol_field = env->GetFieldID(clazz, "protocol", "L" FQN_OUTBOUND_PROXY_PROTOCOL ";");
-    auto address_field = env->GetFieldID(clazz, "address", "Ljava/net/InetSocketAddress;");
+    auto address_field = env->GetFieldID(clazz, "address", "Ljava/lang/String;");
+    auto port_field = env->GetFieldID(clazz, "port", "I");
+    auto bootstrap_field = env->GetFieldID(clazz, "bootstrap", "Ljava/util/List;");
     auto auth_info_field = env->GetFieldID(clazz, "authInfo", "L" FQN_OUTBOUND_PROXY_AUTH_INFO ";");
     auto trust_any_certificate_field = env->GetFieldID(clazz, "trustAnyCertificate", "Z");
     auto ignore_if_unavailable_field = env->GetFieldID(clazz, "ignoreIfUnavailable", "Z");
@@ -298,19 +300,20 @@ OutboundProxySettings AndroidDnsProxy::marshal_outbound_proxy(JNIEnv *env, jobje
     auto protocol = env->GetObjectField(jsettings, protocol_field);
     csettings.protocol = (OutboundProxyProtocol) m_utils.get_enum_ordinal(env, protocol);
 
-    LocalRef<jobject> address = {env, env->GetObjectField(jsettings, address_field)};
-    jclass sock_addr_clazz = env->FindClass("java/net/InetSocketAddress");
+    if (LocalRef address{env, env->GetObjectField(jsettings, address_field)}) {
+        m_utils.visit_string(env, address.get(), [&](const char *str, jsize len) {
+            csettings.address.assign(str, len);
+        });
+    }
+    csettings.port = env->GetIntField(jsettings, env->GetFieldID(clazz, "port", "I"));
 
-    LocalRef<jobject> ip_addr = {env,
-            env->CallObjectMethod(
-                    address.get(), env->GetMethodID(sock_addr_clazz, "getAddress", "()Ljava/net/InetAddress;"))};
-    LocalRef<jobject> ip_str = {env,
-            env->CallObjectMethod(ip_addr.get(),
-                    env->GetMethodID(
-                            env->FindClass("java/net/InetAddress"), "getHostAddress", "()Ljava/lang/String;"))};
-    m_utils.visit_string(env, ip_str.get(), [&csettings](const char *str, jsize len) {
-        csettings.address.assign(str, len);
-    });
+    if (LocalRef bootstrap{env, env->GetObjectField(jsettings, bootstrap_field)}) {
+        m_utils.iterate(env, bootstrap.get(), [&](LocalRef<jobject> &&java_str) {
+            m_utils.visit_string(env, java_str.get(), [&](const char *str, jsize len) {
+                csettings.bootstrap.emplace_back(str, len);
+            });
+        });
+    }
 
     if (LocalRef<jobject> jinfo = {env, env->GetObjectField(jsettings, auth_info_field)}) {
         jclass auth_info_clazz = env->FindClass(FQN_OUTBOUND_PROXY_AUTH_INFO);
@@ -328,7 +331,6 @@ OutboundProxySettings AndroidDnsProxy::marshal_outbound_proxy(JNIEnv *env, jobje
         });
     }
 
-    csettings.port = env->CallIntMethod(address.get(), env->GetMethodID(sock_addr_clazz, "getPort", "()I"));
     csettings.trust_any_certificate = env->GetBooleanField(jsettings, trust_any_certificate_field);
     csettings.ignore_if_unavailable = env->GetBooleanField(jsettings, ignore_if_unavailable_field);
 
@@ -336,11 +338,14 @@ OutboundProxySettings AndroidDnsProxy::marshal_outbound_proxy(JNIEnv *env, jobje
 }
 
 LocalRef<jobject> AndroidDnsProxy::marshal_outbound_proxy(JNIEnv *env, const OutboundProxySettings &csettings) {
-    jclass sock_addr_clazz = env->FindClass("java/net/InetSocketAddress");
-    jmethodID sock_addr_ctor = env->GetMethodID(sock_addr_clazz, "<init>", "(Ljava/lang/String;I)V");
-    LocalRef<jobject> address = {env,
-            env->NewObject(sock_addr_clazz, sock_addr_ctor, m_utils.marshal_string(env, csettings.address).get(),
-                    (int) csettings.port)};
+    LocalRef<jstring> address = m_utils.marshal_string(env, csettings.address);
+
+    jclass array_clazz = env->FindClass("java/net/ArrayList");
+    jmethodID array_ctor = env->GetMethodID(array_clazz, "<init>", "(I)V");
+    LocalRef<jobject> bootstrap = {env, env->NewObject(array_clazz, array_ctor, (jint) csettings.bootstrap.size())};
+    for (auto &bootstrap_address : csettings.bootstrap) {
+        m_utils.collection_add(env, bootstrap.get(), m_utils.marshal_string(env, bootstrap_address).get());
+    }
 
     LocalRef<jobject> auth_info;
     if (csettings.auth_info.has_value()) {
@@ -353,10 +358,11 @@ LocalRef<jobject> AndroidDnsProxy::marshal_outbound_proxy(JNIEnv *env, const Out
 
     auto clazz = env->FindClass(FQN_OUTBOUND_PROXY_SETTINGS);
     auto ctor = env->GetMethodID(clazz, "<init>",
-            "(L" FQN_OUTBOUND_PROXY_PROTOCOL ";Ljava/net/InetSocketAddress;L" FQN_OUTBOUND_PROXY_AUTH_INFO ";ZZ)V");
+            "(L" FQN_OUTBOUND_PROXY_PROTOCOL ";Ljava/lang/String;ILjava/util/List;L" FQN_OUTBOUND_PROXY_AUTH_INFO ";ZZ)V");
     return {env,
             env->NewObject(clazz, ctor, m_proxy_protocol_enum_values.at((size_t) csettings.protocol).get(),
-                    address.get(), auth_info.get(), csettings.trust_any_certificate, csettings.ignore_if_unavailable)};
+                    address.get(), (jint) csettings.port, bootstrap.get(), auth_info.get(),
+                    csettings.trust_any_certificate, csettings.ignore_if_unavailable)};
 }
 
 DnsFilter::EngineParams AndroidDnsProxy::marshal_filter_params(JNIEnv *env, jobject java_filter_params) {

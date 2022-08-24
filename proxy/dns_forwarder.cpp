@@ -16,19 +16,19 @@
 #include "dns_truncate.h"
 #include "dnssec_ok.h"
 #include "ech.h"
+#include "proxy_bootstrapper.h"
 #include "response_cache.h"
 #include "response_helpers.h"
 #include "retransmission_detector.h"
 
 #define errlog_id(l_, pkt_, fmt_, ...) errlog((l_), "[{}] " fmt_, ldns_pkt_id(pkt_), ##__VA_ARGS__)
-#define errlog_fid(l_, pkt_, fmt_, ...) errlog((l_), "[{}] {} " fmt_, ldns_pkt_id(pkt_), __func__, ##__VA_ARGS__)
+#define errlog_fid(l_, pkt_, fmt_, ...) errlog((l_), "[{}] " fmt_, ldns_pkt_id(pkt_), ##__VA_ARGS__)
 #define warnlog_id(l_, pkt_, fmt_, ...) warnlog((l_), "[{}] " fmt_, ldns_pkt_id(pkt_), ##__VA_ARGS__)
-#define warnlog_fid(l_, pkt_, fmt_, ...) warnlog((l_), "[{}] {} " fmt_, ldns_pkt_id(pkt_), __func__, ##__VA_ARGS__)
-#define dbglog_f(l_, fmt_, ...) dbglog((l_), "{} " fmt_, __func__, ##__VA_ARGS__)
+#define warnlog_fid(l_, pkt_, fmt_, ...) warnlog((l_), "[{}] " fmt_, ldns_pkt_id(pkt_), ##__VA_ARGS__)
 #define dbglog_id(l_, pkt_, fmt_, ...) dbglog((l_), "[{}] " fmt_, ldns_pkt_id(pkt_), ##__VA_ARGS__)
-#define dbglog_fid(l_, pkt_, fmt_, ...) dbglog((l_), "[{}] {} " fmt_, ldns_pkt_id(pkt_), __func__, ##__VA_ARGS__)
+#define dbglog_fid(l_, pkt_, fmt_, ...) dbglog((l_), "[{}] " fmt_, ldns_pkt_id(pkt_), ##__VA_ARGS__)
 #define tracelog_id(l_, pkt_, fmt_, ...) tracelog((l_), "[{}] " fmt_, ldns_pkt_id(pkt_), ##__VA_ARGS__)
-#define tracelog_fid(l_, pkt_, fmt_, ...) tracelog((l_), "[{}] {} " fmt_, ldns_pkt_id(pkt_), __func__, ##__VA_ARGS__)
+#define tracelog_fid(l_, pkt_, fmt_, ...) tracelog((l_), "[{}] " fmt_, ldns_pkt_id(pkt_), ##__VA_ARGS__)
 
 using std::chrono::duration_cast;
 
@@ -323,14 +323,10 @@ std::pair<bool, ErrString> DnsForwarder::init(
     }
 
     if (settings.outbound_proxy.has_value()) {
-        if (SocketAddress addr(settings.outbound_proxy->address, settings.outbound_proxy->port); !addr.valid()) {
-            auto err = AG_FMT("Invalid outbound proxy address: {}:{}", settings.outbound_proxy->address,
-                    settings.outbound_proxy->port);
-            errlog(m_log, "{}", err);
-            this->deinit();
-            return {false, std::move(err)};
-        }
-        sf_parameters.oproxy_settings = &m_settings->outbound_proxy.value();
+        sf_parameters.oproxy = {
+                .settings = &m_settings->outbound_proxy.value(),
+                .bootstrapper = std::make_unique<ProxyBootstrapper>(*m_loop, *m_settings, *m_events),
+        };
     }
 
     m_socket_factory = std::make_shared<SocketFactory>(std::move(sf_parameters));
@@ -490,7 +486,7 @@ coro::Task<Uint8Vector> DnsForwarder::handle_message_internal(
     ldns_status status = ldns_wire2pkt(&request, message.data(), message.length());
     if (status != LDNS_STATUS_OK) {
         std::string err = AG_FMT("Failed to parse payload: {} ({})", ldns_get_errorstr_by_id(status), status);
-        dbglog(m_log, "{} {}", __func__, err);
+        dbglog(m_log, "{}", err);
         finalize_processed_event(event, nullptr, nullptr, nullptr, std::nullopt, std::move(err));
         ldns_pkt_ptr response{ResponseHelpers::create_formerr_response(pkt_id)};
         log_packet(m_log, response.get(), "Format error response");
@@ -914,7 +910,7 @@ coro::Task<Uint8Vector> DnsForwarder::handle_message(Uint8View message, const Dn
     }
 
     if (message.size() < LDNS_HEADER_SIZE) {
-        dbglog_f(m_log, "Not responding to malformed message");
+        dbglog(m_log, "Not responding to malformed message");
         co_return {};
     }
 
@@ -925,7 +921,7 @@ coro::Task<Uint8Vector> DnsForwarder::handle_message(Uint8View message, const Dn
     bool retransmission_handling = m_settings->enable_retransmission_handling && info && info->proto == utils::TP_UDP;
     if (retransmission_handling) {
         if (m_retransmission_detector.register_packet(pkt_id, info->peername) > 1) {
-            dbglog_f(m_log, "Detected retransmitted request [{}] from {}", pkt_id, info->peername.str());
+            dbglog(m_log, "Detected retransmitted request [{}] from {}", pkt_id, info->peername.str());
             retransmitted = true;
         }
     }

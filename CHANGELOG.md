@@ -1,5 +1,7 @@
 # Changelog
 
+* [Feature] DnsProxy now accepts a hostname as an address of the outbound proxy. In that case an application should also pass a list of the bootstrapping resolvers.
+
 * [Feature] DnsProxy calls are now asynchronous. On iOS [handlePacket:completionHandler:] should be called instead of synchronous one.
 
 * [Feature] The DoQ upstream now uses the port 853 by default (was 8853), conforms to RFC-9250, and doesn't support ALPNs other than "doq".

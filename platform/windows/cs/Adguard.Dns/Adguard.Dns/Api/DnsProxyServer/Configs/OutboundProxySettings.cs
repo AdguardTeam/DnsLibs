@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Collections.Generic;
 using AdGuard.Utils.Interop;
 
 namespace Adguard.Dns.Api.DnsProxyServer.Configs
@@ -25,6 +26,14 @@ namespace Adguard.Dns.Api.DnsProxyServer.Configs
         public UInt16 Port { get; set; }
 
         /// <summary>
+        /// List of the DNS server URLs to be used to resolve a hostname in the proxy server address.
+        /// The URLs MUST contain the resolved server addresses, not hostnames.
+        /// E.g. `https://94.140.14.14` is correct, while `dns.adguard.com:53` is not.
+        /// MUST NOT be empty in case the `address` is a hostname.
+        /// </summary>
+        public List<string> Bootstrap { get; set; }
+
+        /// <summary>
         /// The authentication information
         /// </summary>
         public OutboundProxyAuthInfo AuthInfo { get; set; }
@@ -33,5 +42,11 @@ namespace Adguard.Dns.Api.DnsProxyServer.Configs
         /// If true and the proxy connection is secure, the certificate won't be verified
         /// </summary>
         public bool TrustAnyCertificate { get; set; }
+
+        /// <summary>
+        /// Whether the DNS proxy should ignore the outbound proxy and route queries directly
+        /// to target hosts even if it's determined as unavailable
+        /// </summary>
+        public bool IgnoreIfUnavailable { get; set; }
     }
 }

@@ -245,8 +245,8 @@ public class DnsProxyTest {
         settings.getFallbacks().add(fallbackUpstream);
 
         settings.setOutboundProxy(
-                new OutboundProxySettings(OutboundProxySettings.Protocol.SOCKS5_UDP, new InetSocketAddress("::", 1234),
-                        new OutboundProxySettings.AuthInfo("1", "2"), true));
+                new OutboundProxySettings(OutboundProxySettings.Protocol.SOCKS5_UDP, "::", 1234,
+                        null, new OutboundProxySettings.AuthInfo("1", "2"), true, false));
 
         try (final DnsProxy proxy = new DnsProxy(context, settings)) {
             assertEquals(settings, proxy.getSettings());

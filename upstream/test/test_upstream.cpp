@@ -164,7 +164,7 @@ protected:
                 { OutboundProxyProtocol::SOCKS5_UDP, "127.0.0.1", 8888, { { "1", "1" } } };
         sf_parameters.oproxy_settings = &proxy_settings;
 #else
-        sf_parameters.oproxy_settings = oproxy;
+        sf_parameters.oproxy.settings = oproxy;
 #endif
 
         m_socket_factory = std::make_unique<SocketFactory>(std::move(sf_parameters));
@@ -540,14 +540,31 @@ TEST_P(DeadProxySuccess, test) {
 INSTANTIATE_TEST_SUITE_P(TcpOnlyProxy, DeadProxySuccess,
         ::testing::Combine(
                 ::testing::Values("tcp://8.8.8.8", "tls://dns.adguard.com", "https://dns.adguard.com/dns-query"),
-                ::testing::Values(OutboundProxySettings{OutboundProxyProtocol::HTTP_CONNECT, "127.0.0.1", 42,
-                                          std::nullopt, false, true},
+                ::testing::Values(
                         OutboundProxySettings{
-                                OutboundProxyProtocol::HTTPS_CONNECT, "127.0.0.1", 42, std::nullopt, false, true},
+                                .protocol = OutboundProxyProtocol::HTTP_CONNECT,
+                                .address = "127.0.0.1",
+                                .port = 42,
+                                .ignore_if_unavailable = true,
+                        },
                         OutboundProxySettings{
-                                OutboundProxyProtocol::SOCKS4, "127.0.0.1", 42, std::nullopt, false, true},
+                                .protocol = OutboundProxyProtocol::HTTPS_CONNECT,
+                                .address = "127.0.0.1",
+                                .port = 42,
+                                .ignore_if_unavailable = true,
+                        },
                         OutboundProxySettings{
-                                OutboundProxyProtocol::SOCKS5, "127.0.0.1", 42, std::nullopt, false, true})));
+                                .protocol = OutboundProxyProtocol::SOCKS4,
+                                .address = "127.0.0.1",
+                                .port = 42,
+                                .ignore_if_unavailable = true,
+                        },
+                        OutboundProxySettings{
+                                .protocol = OutboundProxyProtocol::SOCKS5,
+                                .address = "127.0.0.1",
+                                .port = 42,
+                                .ignore_if_unavailable = true,
+                        })));
 
 INSTANTIATE_TEST_SUITE_P(TcpUdpProxy, DeadProxySuccess,
         ::testing::Combine(::testing::Values("8.8.8.8",
@@ -556,7 +573,11 @@ INSTANTIATE_TEST_SUITE_P(TcpUdpProxy, DeadProxySuccess,
                                    "OQhzIjIuZG5zY3J5cHQuZGVmYXVsdC5uczEuYWRndWFyZC5jb20",
                                    "quic://dns.adguard.com:8853"),
                 ::testing::Values(OutboundProxySettings{
-                        OutboundProxyProtocol::SOCKS5_UDP, "127.0.0.1", 42, std::nullopt, false, true})));
+                        .protocol = OutboundProxyProtocol::SOCKS5_UDP,
+                        .address = "127.0.0.1",
+                        .port = 42,
+                        .ignore_if_unavailable = true,
+                })));
 
 struct DeadProxyFailure : UpstreamParamTest<std::tuple<std::string, OutboundProxySettings>> {};
 #ifdef _WIN32

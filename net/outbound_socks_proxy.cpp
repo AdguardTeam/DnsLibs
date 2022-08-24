@@ -251,7 +251,7 @@ bool SocksOProxy::set_timeout(uint32_t conn_id, Micros timeout) {
     return it->second->socket->set_timeout(timeout);
 }
 
-Error<SocketError> SocksOProxy::set_callbacks(uint32_t conn_id, Callbacks cbx) {
+Error<SocketError> SocksOProxy::set_callbacks_impl(uint32_t conn_id, Callbacks cbx) {
     log_conn(this, conn_id, trace, "...");
 
     std::scoped_lock l(m_guard);
@@ -270,7 +270,7 @@ Error<SocketError> SocksOProxy::set_callbacks(uint32_t conn_id, Callbacks cbx) {
     return {};
 }
 
-void SocksOProxy::close_connection(uint32_t conn_id) {
+void SocksOProxy::close_connection_impl(uint32_t conn_id) {
     log_conn(this, conn_id, trace, "...");
 
     std::scoped_lock l(m_guard);
@@ -302,7 +302,7 @@ void SocksOProxy::close_connection(uint32_t conn_id) {
 }
 
 Error<SocketError> SocksOProxy::connect_to_proxy(uint32_t conn_id, const ConnectParameters &parameters) {
-    log_conn(this, conn_id, trace, "{}:{} == {}", m_settings->address, m_settings->port, parameters.peer.str());
+    log_conn(this, conn_id, trace, "{} == {}", m_resolved_proxy_address->str(), m_settings->port, parameters.peer.str());
 
     Connection *conn = nullptr;
     {
@@ -477,7 +477,7 @@ Error<SocketError> SocksOProxy::connect_to_proxy(Connection *conn) {
                     {
                             conn->parameters.loop,
                             utils::TP_TCP,
-                            SocketAddress(m_settings->address, m_settings->port),
+                            m_resolved_proxy_address.value(),
                             conn->parameters.callbacks,
                             conn->parameters.timeout,
                     },

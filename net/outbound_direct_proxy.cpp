@@ -61,7 +61,7 @@ bool DirectOProxy::set_timeout(uint32_t conn_id, Micros timeout) {
             : false;
 }
 
-Error<SocketError> DirectOProxy::set_callbacks(uint32_t conn_id, Callbacks cbx) {
+Error<SocketError> DirectOProxy::set_callbacks_impl(uint32_t conn_id, Callbacks cbx) {
     std::scoped_lock l(m_guard);
     auto it = m_connections.find(conn_id);
     if (it == m_connections.end()) {
@@ -78,7 +78,7 @@ Error<SocketError> DirectOProxy::set_callbacks(uint32_t conn_id, Callbacks cbx) 
     return {};
 }
 
-void DirectOProxy::close_connection(uint32_t conn_id) {
+void DirectOProxy::close_connection_impl(uint32_t conn_id) {
     std::scoped_lock l(m_guard);
     auto node = m_connections.extract(conn_id);
     if (node.empty()) {

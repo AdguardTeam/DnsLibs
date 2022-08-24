@@ -10,5 +10,5 @@
 192.0.0.171$important
 192.0.0.170
 
-||datamind.ru^
-@@||sync.datamind.ru^|
+||adguard.com^
+@@||auth.adguard.com^|

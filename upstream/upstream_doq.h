@@ -8,7 +8,7 @@
 #include "dns/common/event_loop.h"
 #include "dns/net/socket.h"
 #include "dns/upstream/upstream.h"
-#include "bootstrapper.h"
+#include "dns/upstream/bootstrapper.h"
 
 #include <openssl/ssl.h>
 #include <openssl/crypto.h>

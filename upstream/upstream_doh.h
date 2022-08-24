@@ -16,7 +16,7 @@
 #include "dns/upstream/upstream.h"
 #include "common/socket_address.h"
 #include "dns/common/event_loop.h"
-#include "bootstrapper.h"
+#include "dns/upstream/bootstrapper.h"
 
 #include <ldns/packet.h>
 #include <curl/curl.h>

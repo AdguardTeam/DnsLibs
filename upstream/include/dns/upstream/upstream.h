@@ -24,8 +24,8 @@ namespace dns {
 class Upstream;
 
 using UpstreamPtr = std::shared_ptr<Upstream>;
-using ldns_pkt_ptr = UniquePtr<ldns_pkt, &ldns_pkt_free>;
-using ldns_buffer_ptr = UniquePtr<ldns_buffer, &ldns_buffer_free>;
+using ldns_pkt_ptr = UniquePtr<ldns_pkt, &ldns_pkt_free>; // NOLINT(readability-identifier-naming)
+using ldns_buffer_ptr = UniquePtr<ldns_buffer, &ldns_buffer_free>; // NOLINT(readability-identifier-naming)
 
 /**
  * Upstream factory configuration
@@ -51,7 +51,11 @@ struct UpstreamOptions {
      */
     std::string address;
 
-    /** List of plain DNS servers to be used to resolve the hostname in upstreams's address. */
+    /**
+     * List of the DNS server URLs to be used to resolve a hostname in the upstream address.
+     * The URLs MUST contain the resolved server addresses, not hostnames.
+     * E.g. `https://94.140.14.14` is correct, while `dns.adguard.com:53` is not.
+     */
     std::vector<std::string> bootstrap;
 
     /** Upstream timeout. 0 means "default". */

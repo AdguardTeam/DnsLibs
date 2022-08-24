@@ -1,6 +1,6 @@
 #include "proxied_socket.h"
 
-#define log_sock(s_, lvl_, fmt_, ...) lvl_##log((s_)->m_log, "[id={}] {}(): " fmt_, (s_)->m_id, __func__, ##__VA_ARGS__)
+#define log_sock(s_, lvl_, fmt_, ...) lvl_##log((s_)->m_log, "[id={}] " fmt_, (s_)->m_id, ##__VA_ARGS__)
 
 namespace ag::dns {
 
@@ -30,9 +30,14 @@ Error<SocketError> ProxiedSocket::connect(ConnectParameters params) {
         return err;
     }
 
-    auto r = m_proxy->connect({params.loop, this->get_protocol(), params.peer,
-            {on_successful_proxy_connection, on_proxy_connection_failed, on_connected, on_read, on_close, this},
-            params.timeout});
+    auto r = m_proxy->connect({
+            .loop = params.loop,
+            .proto = this->get_protocol(),
+            .peer = params.peer,
+            .callbacks = {on_successful_proxy_connection, on_proxy_connection_failed, on_connected, on_read, on_close, this},
+            .timeout = params.timeout,
+            .outbound_interface = m_parameters.outbound_interface,
+    });
     if (r.has_error()) {
         return r.error();
     }
@@ -121,7 +126,7 @@ void ProxiedSocket::on_proxy_connection_failed(void *arg, Error<SocketError> err
     auto *self = (ProxiedSocket *) arg;
 
     ProxyConnectionFailedResult r
-            = self->m_proxied_callbacks.on_proxy_connection_failed(self->m_proxied_callbacks.arg, err);
+            = self->m_proxied_callbacks.on_proxy_connection_failed(self->m_proxied_callbacks.arg, std::move(err));
     if (std::holds_alternative<CloseConnection>(r)) {
         return;
     }
@@ -129,7 +134,7 @@ void ProxiedSocket::on_proxy_connection_failed(void *arg, Error<SocketError> err
     self->m_fallback_info->proxy = std::get<Fallback>(r).proxy;
 }
 
-void ProxiedSocket::on_connected(void *arg, uint32_t conn_id) {
+void ProxiedSocket::on_connected(void *arg, uint32_t) {
     auto *self = (ProxiedSocket *) arg;
     log_sock(self, trace, "...");
     self->m_fallback_info.reset();

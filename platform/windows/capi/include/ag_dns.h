@@ -143,17 +143,31 @@ typedef struct {
     /** The proxy protocol */
     ag_outbound_proxy_protocol protocol;
 
-    /** The proxy server address (must be a valid IP address) */
+    /** The proxy server IP address or hostname */
     const char *address;
 
     /** The proxy server port */
     uint16_t port;
+
+    /**
+     * List of the DNS server URLs to be used to resolve a hostname in the proxy server address.
+     * The URLs MUST contain the resolved server addresses, not hostnames.
+     * E.g. `https://94.140.14.14` is correct, while `dns.adguard.com:53` is not.
+     * MUST NOT be empty in case the `address` is a hostname.
+     */
+    ARRAY_OF(const char *) bootstrap;
 
     /** The authentication information */
     ag_outbound_proxy_auth_info *auth_info;
 
     /** If true and the proxy connection is secure, the certificate won't be verified */
     bool trust_any_certificate;
+
+    /**
+     * Whether the DNS proxy should ignore the outbound proxy and route queries directly
+     * to target hosts even if it's determined as unavailable
+     */
+    bool ignore_if_unavailable;
 } ag_outbound_proxy_settings;
 
 typedef struct {

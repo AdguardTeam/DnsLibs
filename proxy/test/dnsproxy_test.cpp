@@ -105,6 +105,32 @@ TEST_F(DnsProxyTest, TestDns64) {
     ASSERT_GT(ldns_pkt_ancount(response.get()), 0);
 }
 
+TEST_F(DnsProxyTest, DISABLED_BootstrapOutboundProxy) {
+    DnsProxySettings settings = make_dnsproxy_settings();
+    settings.upstreams = {{.address = "tls://dns.adguard.com", .bootstrap = {"1.1.1.1"}}};
+    settings.outbound_proxy = OutboundProxySettings{
+            .protocol = OutboundProxyProtocol::HTTP_CONNECT,
+            .address = "localhost",
+            .port = 3129,
+            .bootstrap = {"127.0.0.53"},
+    };
+    settings.ipv6_available = false;
+
+    DnsRequestProcessedEvent last_event{};
+    DnsProxyEvents events{.on_request_processed = [&last_event](const DnsRequestProcessedEvent &event) {
+        last_event = event;
+    }};
+
+    auto [ret, err] = m_proxy->init(settings, events);
+    ASSERT_TRUE(ret) << *err;
+
+    ldns_pkt_ptr response;
+    ASSERT_NO_FATAL_FAILURE(
+            perform_request(*m_proxy, create_request("example.com", LDNS_RR_TYPE_A, LDNS_RD), response));
+    ASSERT_EQ(ldns_pkt_ancount(response.get()), 1);
+    ASSERT_EQ(ldns_pkt_get_rcode(response.get()), LDNS_RCODE_NOERROR);
+}
+
 TEST_F(DnsProxyTest, TestIpv6Blocking) {
     DnsProxySettings settings = make_dnsproxy_settings();
     settings.block_ipv6 = true;
@@ -1029,7 +1055,7 @@ TEST_F(DnsProxyTest, Whitelisting) {
     ASSERT_EQ(0, last_event.filter_list_ids.size()); // Not blocked
     ASSERT_FALSE(last_event.whitelist); // Neither whitelisted
 
-    ASSERT_NO_FATAL_FAILURE(perform_request(*m_proxy, create_request("sync.datamind.ru", LDNS_RR_TYPE_A, LDNS_RD), res));
+    ASSERT_NO_FATAL_FAILURE(perform_request(*m_proxy, create_request("auth.adguard.com", LDNS_RR_TYPE_A, LDNS_RD), res));
     ASSERT_GT(ldns_pkt_ancount(res.get()), 0);
     ASSERT_EQ(ldns_pkt_get_rcode(res.get()), LDNS_RCODE_NOERROR);
     ASSERT_TRUE(last_event.whitelist);

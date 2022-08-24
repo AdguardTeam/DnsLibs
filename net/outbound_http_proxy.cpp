@@ -1,7 +1,8 @@
-#include "outbound_http_proxy.h"
+#include <magic_enum.hpp>
+
 #include "common/base64.h"
 #include "common/utils.h"
-#include <magic_enum.hpp>
+#include "outbound_http_proxy.h"
 
 #define log_proxy(p_, lvl_, fmt_, ...)                                                                                 \
     lvl_##log((p_)->m_log, "[id={}] {}(): " fmt_, (p_)->m_id, __func__, ##__VA_ARGS__)
@@ -76,7 +77,7 @@ bool HttpOProxy::set_timeout(uint32_t conn_id, Micros timeout) {
     return it->second->socket->set_timeout(timeout);
 }
 
-Error<SocketError> HttpOProxy::set_callbacks(uint32_t conn_id, Callbacks cbx) {
+Error<SocketError> HttpOProxy::set_callbacks_impl(uint32_t conn_id, Callbacks cbx) {
     log_conn(this, conn_id, trace, "...");
 
     std::scoped_lock l(m_guard);
@@ -95,7 +96,7 @@ Error<SocketError> HttpOProxy::set_callbacks(uint32_t conn_id, Callbacks cbx) {
     return {};
 }
 
-void HttpOProxy::close_connection(uint32_t conn_id) {
+void HttpOProxy::close_connection_impl(uint32_t conn_id) {
     log_conn(this, conn_id, trace, "...");
 
     std::scoped_lock l(m_guard);
@@ -122,7 +123,7 @@ void HttpOProxy::close_connection(uint32_t conn_id) {
 }
 
 Error<SocketError> HttpOProxy::connect_to_proxy(uint32_t conn_id, const ConnectParameters &parameters) {
-    log_conn(this, conn_id, trace, "{}:{} == {}", m_settings->address, m_settings->port, parameters.peer.str());
+    log_conn(this, conn_id, trace, "{} == {}", m_resolved_proxy_address->str(), parameters.peer.str());
     assert(parameters.proto == utils::TP_TCP);
 
     std::scoped_lock l(m_guard);
@@ -138,7 +139,7 @@ Error<SocketError> HttpOProxy::connect_to_proxy(uint32_t conn_id, const ConnectP
     } else {
         conn->socket = m_parameters.make_socket.func(m_parameters.make_socket.arg, parameters.proto, std::nullopt);
     }
-    if (auto e = conn->socket->connect({parameters.loop, SocketAddress(m_settings->address, m_settings->port),
+    if (auto e = conn->socket->connect({parameters.loop, m_resolved_proxy_address.value(),
                 {on_connected, on_read, on_close, conn.get()}, parameters.timeout})) {
         log_conn(this, conn_id, dbg, "Failed to start socket connection");
         m_connections.erase(conn_id);

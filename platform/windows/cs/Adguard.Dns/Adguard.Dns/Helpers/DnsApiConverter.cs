@@ -138,10 +138,16 @@ namespace Adguard.Dns.Helpers
                     allocatedPointers);
             }
 
+            MarshalUtils.ag_list bootstrapC = MarshalUtils.ListToAgList(
+                outboundProxySettings.Bootstrap,
+                MarshalUtils.StringToPtr,
+                allocatedPointers);
+
             AGDnsApi.ag_outbound_proxy_settings outboundProxySettingsC =
                 new AGDnsApi.ag_outbound_proxy_settings
             {
-                auth_info = pOutboundProxyAuthInfoC
+                auth_info = pOutboundProxyAuthInfoC,
+                bootstrap = bootstrapC
             };
 
             MarshalUtils.CopyPropertiesToFields(outboundProxySettings, ref outboundProxySettingsC);
@@ -362,15 +368,18 @@ namespace Adguard.Dns.Helpers
         private static OutboundProxySettings FromNativeObject(
             AGDnsApi.ag_outbound_proxy_settings outboundProxySettingsC)
         {
-
             AGDnsApi.ag_outbound_proxy_auth_info outboundProxyAuthInfoC =
                 MarshalUtils.PtrToStructure<AGDnsApi.ag_outbound_proxy_auth_info>(
                     outboundProxySettingsC.auth_info);
 
+            List<string> bootstrap = MarshalUtils.AgListToList<IntPtr, string>(
+                outboundProxySettingsC.bootstrap,
+                MarshalUtils.PtrToString);
             OutboundProxyAuthInfo authInfo = FromNativeObject(outboundProxyAuthInfoC);
             OutboundProxySettings outboundProxySettings = new OutboundProxySettings
             {
-                AuthInfo = authInfo
+                AuthInfo = authInfo,
+                Bootstrap = bootstrap
             };
 
             MarshalUtils.CopyFieldsToProperties(outboundProxySettingsC, outboundProxySettings);

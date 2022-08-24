@@ -22,7 +22,7 @@ namespace Adguard.Dns
         /// <summary>
         /// The current API version hash with which the ProxyServer was tested
         /// </summary>
-        private const string API_VERSION_HASH = "260d86f394504758fc7ca56f85fd981e01cff06f229007fd8b305445586bfa93";
+        private const string API_VERSION_HASH = "ace9ef69345f6013fc258a2d28d4905f876b3fdd2c5940b9b8ee76d07ad51fda";
         #endregion
 
         #region API Functions
@@ -293,7 +293,7 @@ namespace Adguard.Dns
             [NativeName("protocol")]
             ag_outbound_proxy_protocol Protocol;
 
-            /** The proxy server address (must be a valid IP address) */
+            /** The proxy server IP address or hostname */
             [ManualMarshalPtrToString]
             [NativeName("address")]
             internal IntPtr Address;
@@ -303,6 +303,15 @@ namespace Adguard.Dns
             [NativeName("port")]
             internal UInt16 Port;
 
+            /**
+             * List of the DNS server URLs to be used to resolve a hostname in the proxy server address.
+             * The URLs MUST contain the resolved server addresses, not hostnames.
+             * E.g. `https://94.140.14.14` is correct, while `dns.adguard.com:53` is not.
+             * MUST NOT be empty in case the `address` is a hostname.
+             */
+            [MarshalAs(UnmanagedType.Struct)]
+            internal MarshalUtils.ag_list bootstrap;
+
             /** The authentication information (pointer to <see cref="ag_outbound_proxy_auth_info"/>)*/
             internal IntPtr auth_info;
 
@@ -310,6 +319,14 @@ namespace Adguard.Dns
             [MarshalAs(UnmanagedType.I1)]
             [NativeName("trust_any_certificate")]
             internal bool TrustAnyCertificate;
+
+            /**
+             * Whether the DNS proxy should ignore the outbound proxy and route queries directly
+             * to target hosts even if it's determined as unavailable
+             */
+            [MarshalAs(UnmanagedType.I1)]
+            [NativeName("ignore_if_unavailable")]
+            internal bool IgnoreIfUnavailable;
         };
 
         [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Ansi)]
