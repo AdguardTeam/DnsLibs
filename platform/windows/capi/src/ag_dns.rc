@@ -16,7 +16,7 @@ BEGIN
                 BLOCK "040904b0"
                 BEGIN
                         VALUE "FileDescription", "Adguard DNS for Windows"
-                        VALUE "LegalCopyright", "(C) 2009-2020 Adguard Software Ltd"
+                        VALUE "LegalCopyright", "(C) 2009-2022 Adguard Software Ltd"
                         VALUE "CompanyName", "Adguard Software Ltd"
                         VALUE "ProductName", "Adguard DNS for Windows"
                         VALUE "ProductVersion", "1.7.44"
