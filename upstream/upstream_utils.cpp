@@ -22,45 +22,51 @@ static ldns_pkt_ptr create_message() {
     return ldns_pkt_ptr(pkt);
 }
 
-ErrString test_upstream(const UpstreamOptions &opts, bool ipv6_available,
+static coro::Task<ErrString> test_upstream_internal(EventLoop &loop, const UpstreamOptions &opts, bool ipv6_available,
         const OnCertificateVerificationFn &on_certificate_verification, bool offline) {
+    co_await loop.co_submit();
+
     std::unique_ptr<CertificateVerifier> cert_verifier;
     if (on_certificate_verification != nullptr) {
         cert_verifier = std::make_unique<ApplicationVerifier>(on_certificate_verification);
     } else {
         cert_verifier = std::make_unique<DefaultVerifier>();
     }
-    EventLoopPtr loop = EventLoop::create();
-    loop->start();
     SocketFactory socket_factory({
-            .loop = *loop,
+            .loop = loop,
             .verifier = std::move(cert_verifier),
     });
-    std::shared_ptr<void> defer(nullptr, [loop](void */*unused*/) {
-        loop->stop();
-        loop->join();
-    });
-    UpstreamFactory upstream_factory({*loop, &socket_factory, ipv6_available});
+    UpstreamFactory upstream_factory({loop, &socket_factory, ipv6_available});
     auto upstream_result = upstream_factory.create_upstream(opts);
     if (upstream_result.has_error()) {
-        return upstream_result.error()->str();
+        co_return upstream_result.error()->str();
     }
+    UpstreamPtr &upstream = upstream_result.value();
     if (offline) {
-        return {};
+        co_return {};
     }
-    auto reply = coro::to_future([](EventLoop &loop, Upstream *upstream) -> coro::Task<Upstream::ExchangeResult> {
-        co_await loop.co_submit();
-        co_return co_await upstream->exchange(create_message().get());
-    }(*loop, upstream_result.value().get())).get();
-    upstream_result.value().reset();
+    auto reply = co_await upstream->exchange(create_message().get());
+    upstream.reset();
     if (reply.has_error()) {
-        return reply.error()->str();
+        co_return reply.error()->str();
     }
     if (ldns_rr_list_rr_count(ldns_pkt_answer(reply->get())) == 0) {
-        return "DNS upstream returned reply with wrong number of answers";
+        co_return "DNS upstream returned reply with wrong number of answers";
     }
     // Everything else is supposed to be success
-    return std::nullopt;
+    co_return std::nullopt;
+}
+
+ErrString test_upstream(const UpstreamOptions &opts, bool ipv6_available,
+        const OnCertificateVerificationFn &on_certificate_verification, bool offline) {
+    EventLoopPtr loop = EventLoop::create();
+    loop->start();
+    ErrString ret =
+            coro::to_future(test_upstream_internal(*loop, opts, ipv6_available, on_certificate_verification, offline))
+                    .get();
+    loop->stop();
+    loop->join();
+    return ret;
 }
 
 } // namespace ag::dns
