@@ -74,6 +74,7 @@ public:
 };
 
 TEST_F(DotUpstreamTest, ThrowsAwayInvalidAddress) {
+    co_await m_loop->co_submit();
     Logger::set_log_level(LogLevel::LOG_LEVEL_TRACE);
     SocketFactory sf{{
             .loop = *m_loop,

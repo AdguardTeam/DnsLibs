@@ -90,8 +90,10 @@ public:
             if (reply.error()->value() == DE_SOCKET_ERROR
                     || reply.error()->value() == DE_TIMED_OUT
                     || reply.error()->value() == DE_CONNECTION_CLOSED) {
-                if (auto *upstream = (DotUpstream *) m_pool.lock()->upstream()) {
-                    upstream->m_bootstrapper->remove_resolved(m_address);
+                if (auto pool = m_pool.lock()) {
+                    if (auto *upstream = (DotUpstream *) pool->upstream()) {
+                        upstream->m_bootstrapper->remove_resolved(m_address);
+                    }
                 }
             }
         }

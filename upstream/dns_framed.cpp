@@ -44,6 +44,11 @@ DnsFramedConnection::DnsFramedConnection(
 }
 
 void DnsFramedConnection::connect() {
+    assert(m_state == Connection::Status::PENDING);
+    if (m_stream) {
+        log_conn(m_log, dbg, this, "Connect is already in progress");
+        return;
+    }
     Upstream *upstream = m_pool.lock()->upstream();
     assert(upstream != nullptr);
     m_stream = upstream->make_socket(utils::TP_TCP);

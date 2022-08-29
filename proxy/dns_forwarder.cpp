@@ -479,6 +479,7 @@ static ldns_rr_type question_rr_type(const ldns_pkt *request) {
 
 coro::Task<Uint8Vector> DnsForwarder::handle_message_internal(
         Uint8View message, const DnsMessageInfo *info, bool fallback_only, uint16_t pkt_id) {
+    std::weak_ptr<bool> guard = m_shutdown_guard;
     DnsRequestProcessedEvent event = {};
     event.start_time = duration_cast<Millis>(SystemClock::now().time_since_epoch()).count();
 
@@ -577,6 +578,9 @@ coro::Task<Uint8Vector> DnsForwarder::handle_message_internal(
 
     // If this is a retransmitted request, use fallback upstreams only
     auto [response, selected_upstream] = co_await do_upstream_exchange(normalized_domain, request, fallback_only, info);
+    if (guard.expired()) {
+        co_return {};
+    }
 
     if (!response) {
         auto err = response.error();
