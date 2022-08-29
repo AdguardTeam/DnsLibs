@@ -495,19 +495,25 @@ typedef NS_ENUM(NSInteger, AGStampProtoType) {
 
 @interface AGDnsStamp : NSObject<NSCoding>
 /**
- * Protocol
+ * Protocol.
  */
 @property(nonatomic) AGStampProtoType proto;
 /**
- * Server address
+ * Server numerical IP address, represented as a string.
  */
 @property(nonatomic) NSString *serverAddr;
 /**
- * Provider name
+ * Optional provider name (i.e. hostname in case of DoH/DoQ)
+ * and optional port (written as ":<PortNumber>").
+ * The grammar is something like this:
+ * ```
+ * providerName := [(ProviderName | Hostname)] [":" PortNumber]
+ * PortNumber := DIGIT+
+ * ```
  */
 @property(nonatomic) NSString *providerName;
 /**
- * Path (for DOH)
+ * Optional path (for DOH).
  */
 @property(nonatomic) NSString *path;
 /**
