@@ -48,7 +48,9 @@ std::vector<uv_handle_t *> EventLoop::get_active_handles() {
         if (walk_info.loop.m_stopper && (void *) walk_info.loop.m_stopper->raw() == (void *) handle) {
             return;
         }
-        walk_info.active_handles.emplace_back(handle);
+        if (!uv_is_closing(handle)) {
+            walk_info.active_handles.emplace_back(handle);
+        }
     };
     uv_walk(m_handle->raw(), walker, &walk_info);
     return walk_info.active_handles;
