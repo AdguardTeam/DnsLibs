@@ -49,7 +49,8 @@ project(dnsproxy_framework)
 
 # Ensure that API is compatible with minimum MacOS version
 add_compile_options(-Werror=unguarded-availability)
-# AppleClang crashes when sees our code
+# todo: Bring back optimizations when Apple will fix its compiler,
+#       otherwise AppleClang crashes when sees our code
 add_compile_options(-O0)
 
 set(CMAKE_C_STANDARD   11)
