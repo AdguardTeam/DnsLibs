@@ -96,7 +96,7 @@ DL - Win tests and deploy:
         nuget push Adguard.Dns.*.nupkg -source Artifactory || exit /b 1
         REM upload release symbols
         if %bamboo_repository_branch_name%==release (
-            call ${bamboo.build.working.directory}\dns-libs\dns-libs-private\platform\windows\Scripts\UploadSyms.bat %bamboo_sentryAuthToken%
+            call ${bamboo.build.working.directory}\dns-libs\dns-libs-private\platform\windows\Scripts\UploadSyms.bat %bamboo_sentryAuthToken% || exit /b
         )
 
         :finish
