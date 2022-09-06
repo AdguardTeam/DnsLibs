@@ -179,7 +179,6 @@ void DoqUpstream::handshake_timer_cb(uv_timer_t *timer) {
 }
 
 void DoqUpstream::send_requests() {
-
     for (auto &[id, req] : m_requests) {
         if (req.is_onfly) {
             continue;
@@ -199,7 +198,6 @@ void DoqUpstream::send_requests() {
         }
 
         Stream &stream = m_streams[stream_id];
-        stream.stream_id = stream_id;
         stream.request_id = req.request_id;
         stream.send_info.buf.reset(evbuffer_new());
         uint16_t length_prefix = ldns_buffer_remaining(req.request_buffer.get());
@@ -212,11 +210,7 @@ void DoqUpstream::send_requests() {
 
         tracelog(m_log, "Sending request, id: {}", req.request_id);
         if (int ret = on_write(); ret != NETWORK_ERR_OK) {
-            if (ret == NETWORK_ERR_SEND_BLOCKED) {
-                req.is_onfly = true;
-            } else {
-                disconnect(AG_FMT("Sending request error: {}, id: {}", ret, id));
-            }
+            disconnect(AG_FMT("Sending request error: {}, id: {}", ret, id));
             return;
         }
 
@@ -325,7 +319,6 @@ coro::Task<Upstream::ExchangeResult> DoqUpstream::exchange(ldns_pkt *request, co
 
     int64_t request_id = m_next_request_id++;
     Request &req = m_requests[request_id];
-    req.starting_time = get_tstamp();
     req.request_id = request_id;
     req.request_buffer.reset(buffer);
     tracelog_id(m_log, request, "Creation new request, id: {}, connection state: {}", request_id,
@@ -366,7 +359,6 @@ coro::Task<Upstream::ExchangeResult> DoqUpstream::exchange(ldns_pkt *request, co
 
     ldns_pkt *res = req.reply_pkt.release();
     auto err = req.error;
-    assert(m_requests.count(request_id));
     tracelog_id(m_log, request, "Erase request, id: {}, connection state: {}", request_id,
             magic_enum::enum_name(m_state.load()));
     m_requests.erase(request_id);
@@ -510,9 +502,7 @@ void DoqUpstream::on_socket_close(void *arg, Error<SocketError> error) {
 int DoqUpstream::on_write() {
     if (m_send_buf.size() > 0) {
         if (auto rv = send_packet(); rv != NETWORK_ERR_OK) {
-            if (rv != NETWORK_ERR_SEND_BLOCKED) {
-                disconnect("Resending packet failed");
-            }
+            disconnect("Resending packet failed");
             return rv;
         }
     }
@@ -520,9 +510,7 @@ int DoqUpstream::on_write() {
     assert(m_send_buf.left() >= m_max_pktlen);
 
     if (auto rv = write_streams(); rv != NETWORK_ERR_OK) {
-        if (rv == NETWORK_ERR_SEND_BLOCKED) {
-            schedule_retransmit();
-        }
+        schedule_retransmit();
         return rv;
     }
 
@@ -621,13 +609,15 @@ int DoqUpstream::send_packet() {
     if (auto *info = std::get_if<ConnectionHandshakeInitialInfo>(&m_conn_state.info);
             info != nullptr && info->last_connected_socket != nullptr) {
         return send_packet(info->last_connected_socket->socket.get(), data);
-    } else if (auto *active_socket = std::get_if<std::unique_ptr<SocketContext>>(&m_conn_state.info)) {
-        return send_packet((*active_socket)->socket.get(), data);
-    } else {
-        errlog(m_log, "{}(): no socket to send data on", __func__);
-        assert(0);
-        return NETWORK_ERR_DROP_CONN;
     }
+
+    if (auto *active_socket = std::get_if<std::unique_ptr<SocketContext>>(&m_conn_state.info)) {
+        return send_packet((*active_socket)->socket.get(), data);
+    }
+
+    errlog(m_log, "{}(): no socket to send data on", __func__);
+    assert(0);
+    return NETWORK_ERR_DROP_CONN;
 }
 
 int DoqUpstream::connect_to_peers(const std::vector<SocketAddress> &current_addresses) {
@@ -1045,19 +1035,21 @@ int DoqUpstream::acked_stream_data_offset(ngtcp2_conn * /*conn*/, int64_t stream
 }
 
 void DoqUpstream::process_reply(int64_t request_id, Uint8View reply) {
-    auto req_it = m_requests.find(request_id);
-    if (req_it != m_requests.end()) {
-        ldns_pkt *pkt = nullptr;
-        // Ignore the 2-byte length prefix. We only need the first reply.
-        reply.remove_prefix(2);
-        ldns_status r = ldns_wire2pkt(&pkt, reply.data(), reply.size());
-        if (r != LDNS_STATUS_OK) {
-            dbglog(m_log, "Failed to parse reply for [{}]: {}", request_id, magic_enum::enum_name(r).data());
-            pkt = nullptr;
-        }
-        req_it->second.reply_pkt.reset(pkt);
-        req_it->second.complete();
+    auto node = m_requests.extract(request_id);
+    if (node.empty()) {
+        return;
     }
+
+    ldns_pkt *pkt = nullptr;
+    // Ignore the 2-byte length prefix. We only need the first reply.
+    reply.remove_prefix(2);
+    ldns_status r = ldns_wire2pkt(&pkt, reply.data(), reply.size());
+    if (r != LDNS_STATUS_OK) {
+        dbglog(m_log, "Failed to parse reply for [{}]: {}", request_id, magic_enum::enum_name(r));
+        pkt = nullptr;
+    }
+    node.mapped().reply_pkt.reset(pkt);
+    node.mapped().complete();
 }
 
 void DoqUpstream::disconnect(std::string_view reason) {
@@ -1076,15 +1068,14 @@ void DoqUpstream::disconnect(std::string_view reason) {
 
     std::vector<int64_t> requests_to_complete;
     for (auto &cur : m_requests) {
-        if (cur.second.is_onfly || m_fatal_error) {
-            tracelog(m_log, "Completing request, id: {}", cur.first);
-            cur.second.error = m_fatal_error ? m_fatal_error : make_error(DE_CONNECTION_CLOSED);
-            requests_to_complete.push_back(cur.first);
-        }
+        tracelog(m_log, "Completing request, id: {}", cur.first);
+        cur.second.error = m_fatal_error ? m_fatal_error : make_error(DE_CONNECTION_CLOSED);
+        requests_to_complete.push_back(cur.first);
     }
     for (int64_t id : requests_to_complete) {
-        if (auto it = m_requests.find(id); it != m_requests.end()) {
-            it->second.complete();
+        auto node = m_requests.extract(id);
+        if (!node.empty()) {
+            node.mapped().complete();
         }
     }
 }

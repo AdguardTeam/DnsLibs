@@ -36,7 +36,6 @@ namespace ag::dns {
 class DoqUpstream : public Upstream {
 public:
     static constexpr std::string_view RFC9250_ALPN = "doq";
-    static constexpr uint16_t RFC9250_PORT = 853;
     static constexpr std::string_view SCHEME = "quic://";
 
     /**
@@ -67,9 +66,6 @@ private:
         NETWORK_ERR_HANDSHAKE_RUN = 1,
         NETWORK_ERR_OK = 0,
         NETWORK_ERR_FATAL = -10,
-        NETWORK_ERR_SEND_BLOCKED = -11,
-        NETWORK_ERR_CLOSE_WAIT = -12,
-        NETWORK_ERR_RETRY = -13,
         NETWORK_ERR_DROP_CONN = -14
     };
     enum State {
@@ -92,7 +88,6 @@ private:
         size_t tail;
     };
     struct Stream {
-        int64_t stream_id = -1; // actually not used
         int64_t request_id = 0;
         Uint8Vector raw_data;
         struct {
@@ -105,7 +100,6 @@ private:
     };
     struct Request {
         int64_t request_id = -1;
-        ngtcp2_tstamp starting_time{0};
         ldns_pkt_ptr reply_pkt;
         ldns_buffer_ptr request_buffer;
         bool completed = false;
