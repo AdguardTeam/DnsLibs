@@ -57,9 +57,10 @@ namespace Adguard.Dns.Helpers
         {
             try
             {
-                AGDnsApi.ag_dns_request_processed_event coreArgs =
-                    MarshalUtils.PtrToStructure<AGDnsApi.ag_dns_request_processed_event>(pInfo);
-                DnsRequestProcessedEventArgs args = DnsApiConverter.FromNativeObject(coreArgs);
+                DnsRequestProcessedEventArgs args =
+                    MarshalUtils.PtrToClass<DnsRequestProcessedEventArgs, AGDnsApi.ag_dns_request_processed_event>(
+                        pInfo,
+                        DnsApiConverter.FromNativeObject);
                 m_DnsServerCallbackConfiguration.OnDnsRequestProcessed(m_ProxyServer, args);
             }
             catch (Exception ex)
@@ -79,9 +80,10 @@ namespace Adguard.Dns.Helpers
         {
             try
             {
-                AGDnsApi.ag_certificate_verification_event coreArgs =
-                    MarshalUtils.PtrToStructure<AGDnsApi.ag_certificate_verification_event>(pInfo);
-                CertificateVerificationEventArgs args = DnsApiConverter.FromNativeObject(coreArgs);
+                CertificateVerificationEventArgs args =
+                    MarshalUtils.PtrToClass<CertificateVerificationEventArgs, AGDnsApi.ag_certificate_verification_event>(
+                        pInfo,
+                        DnsApiConverter.FromNativeObject);
                 AGDnsApi.ag_certificate_verification_result certificateVerificationResult =
                     m_CertificateVerificationCallback.OnCertificateVerification(this, args);
                 return certificateVerificationResult;

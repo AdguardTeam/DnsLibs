@@ -52,17 +52,18 @@ namespace Adguard.Dns.Utils
                 fullChain.ChainPolicy.RevocationMode = X509RevocationMode.NoCheck;
                 fullChain.ChainPolicy.VerificationFlags = X509VerificationFlags.IgnoreWrongUsage;
                 bool isChainSuccessfullyBuilt = fullChain.Build(certificate);
-                if (!isChainSuccessfullyBuilt)
+                if (isChainSuccessfullyBuilt)
                 {
-                    Logger.Info("Cannot verify certificate, because cannot build a valid full certificate chain");
-                    return AGDnsApi.ag_certificate_verification_result.AGCVR_ERROR_CERT_VERIFICATION;
+                    return AGDnsApi.ag_certificate_verification_result.AGCVR_OK;
                 }
 
-                return AGDnsApi.ag_certificate_verification_result.AGCVR_OK;
+                Logger.Info("Cannot verify certificate, because cannot build a valid full certificate chain");
+                return AGDnsApi.ag_certificate_verification_result.AGCVR_ERROR_CERT_VERIFICATION;
+
             }
             catch (Exception ex)
             {
-                Logger.Info("Verification certificate fails: {0}", ex);
+                Logger.QuietWarn(ex,"Verification certificate fails");
                 return AGDnsApi.ag_certificate_verification_result.AGCVR_COUNT;
             }
         }

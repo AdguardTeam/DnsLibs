@@ -214,9 +214,10 @@ namespace Adguard.Dns.DnsProxyServer
                 throw new InvalidOperationException("Cannot get the DNS proxy settings");
             }
 
-            AGDnsApi.ag_dnsproxy_settings currentDnsProxySettingsC =
-                MarshalUtils.PtrToStructure<AGDnsApi.ag_dnsproxy_settings>(pCurrentDnsProxySettings);
-            DnsProxySettings currentDnsProxySettings = DnsApiConverter.FromNativeObject(currentDnsProxySettingsC);
+            DnsProxySettings currentDnsProxySettings =
+                MarshalUtils.PtrToClass<DnsProxySettings, AGDnsApi.ag_dnsproxy_settings>(
+                    pCurrentDnsProxySettings,
+                    DnsApiConverter.FromNativeObject);
             Logger.Info("Finished getting the DNS proxy settings");
             return currentDnsProxySettings;
         }

@@ -50,15 +50,16 @@ namespace Adguard.Dns.Utils
                     return null;
                 }
 
-                AGDnsApi.ag_dns_stamp dnsStampResult =
-                    MarshalUtils.PtrToStructure<AGDnsApi.ag_dns_stamp>(pDnsStampResult);
-                DnsStamp dnsStamp = DnsApiConverter.FromNativeObject(dnsStampResult);
+                DnsStamp dnsStamp =
+                    MarshalUtils.PtrToClass<DnsStamp, AGDnsApi.ag_dns_stamp>(
+                        pDnsStampResult,
+                        DnsApiConverter.FromNativeObject);
                 Logger.Info("Parsing DNS stamp has been completed successfully");
                 return dnsStamp;
             }
             catch (Exception ex)
             {
-                Logger.Info("Parsing DNS stamp failed with an error {0}", ex);
+                Logger.QuietWarn(ex, "Parsing DNS stamp failed with an error");
                 return null;
             }
             finally
@@ -200,7 +201,7 @@ namespace Adguard.Dns.Utils
             }
             catch (Exception ex)
             {
-                Logger.Info("Testing upstream failed with an error {0}", ex);
+                Logger.QuietWarn(ex,"Testing upstream failed with an error");
                 return false;
             }
             finally

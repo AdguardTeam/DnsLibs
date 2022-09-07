@@ -320,19 +320,19 @@ namespace Adguard.Dns.Helpers
                 dnsProxySettingsC.fallbackDomains,
                 MarshalUtils.PtrToString);
 
-            AGDnsApi.ag_dns64_settings dns64C =
-                MarshalUtils.PtrToStructure<AGDnsApi.ag_dns64_settings>(dnsProxySettingsC.pDns64);
-            Dns64Settings dns64 = FromNativeObject(dns64C);
+            Dns64Settings dns64 = MarshalUtils.PtrToClass<Dns64Settings, AGDnsApi.ag_dns64_settings>(
+                dnsProxySettingsC.pDns64,
+                FromNativeObject);
             EngineParams engineParams = FromNativeObject(dnsProxySettingsC.FilterParams);
             List<ListenerSettings> listeners =
                 MarshalUtils.AgListToList<AGDnsApi.ag_listener_settings, ListenerSettings>(
                     dnsProxySettingsC.listeners,
                     FromNativeObject);
-
-            AGDnsApi.ag_outbound_proxy_settings outboundProxySettingsC =
-                MarshalUtils.PtrToStructure<AGDnsApi.ag_outbound_proxy_settings>(dnsProxySettingsC.outbound_proxy);
             OutboundProxySettings outboundProxySettings =
-                FromNativeObject(outboundProxySettingsC);
+                MarshalUtils.PtrToClass<OutboundProxySettings, AGDnsApi.ag_outbound_proxy_settings>(
+                    dnsProxySettingsC.outbound_proxy,
+                    FromNativeObject);
+
             DnsProxySettings dnsProxySettings = new DnsProxySettings
             {
                 Upstreams = upstreams,
@@ -368,14 +368,14 @@ namespace Adguard.Dns.Helpers
         private static OutboundProxySettings FromNativeObject(
             AGDnsApi.ag_outbound_proxy_settings outboundProxySettingsC)
         {
-            AGDnsApi.ag_outbound_proxy_auth_info outboundProxyAuthInfoC =
-                MarshalUtils.PtrToStructure<AGDnsApi.ag_outbound_proxy_auth_info>(
-                    outboundProxySettingsC.auth_info);
+            OutboundProxyAuthInfo authInfo =
+                MarshalUtils.PtrToClass<OutboundProxyAuthInfo, AGDnsApi.ag_outbound_proxy_auth_info>(
+                    outboundProxySettingsC.auth_info,
+                    FromNativeObject);
 
             List<string> bootstrap = MarshalUtils.AgListToList<IntPtr, string>(
                 outboundProxySettingsC.bootstrap,
                 MarshalUtils.PtrToString);
-            OutboundProxyAuthInfo authInfo = FromNativeObject(outboundProxyAuthInfoC);
             OutboundProxySettings outboundProxySettings = new OutboundProxySettings
             {
                 AuthInfo = authInfo,
