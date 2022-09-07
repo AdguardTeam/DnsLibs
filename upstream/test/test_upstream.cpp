@@ -3,6 +3,7 @@
 #include <functional>
 #include <future>
 #include <ldns/ldns.h>
+#include <span>
 #include <thread>
 
 #include "common/gtest_coro.h"
@@ -127,6 +128,12 @@ static coro::Task<void> parallel_test_basic(EventLoop &loop, const T *tests, siz
     co_await check_all_results(v);
 }
 
+struct UpstreamTestData {
+    std::string address;
+    std::initializer_list<std::string> bootstrap;
+    IpAddress server_ip;
+};
+
 class UpstreamTest : public ::testing::Test {
 protected:
     EventLoopPtr m_loop;
@@ -178,16 +185,23 @@ protected:
         return m_upstream_factory->create_upstream(opts);
     }
 
-    template <typename TestData>
-    coro::Task<void> parallel_test(const TestData *tests, size_t count) {
-        co_await parallel_test_basic(
-                *m_loop, tests, count, [this](const auto &address, const auto &bootstrap, const auto &server_ip) -> coro::Task<TestError> {
-                    auto upstream_res = create_upstream({address, bootstrap, DEFAULT_TIMEOUT, server_ip});
-                    if (upstream_res.has_error()) {
-                        co_return AG_FMT("Failed to generate upstream from address {}: {}", address, upstream_res.error()->str());
-                    }
-                    co_return co_await check_upstream(*upstream_res.value(), address);
-                });
+    coro::Task<TestError> check_upstream_internal(UpstreamPtr upstream, std::string addr) {
+        co_await m_loop->co_submit();
+        TestError error = co_await check_upstream(*upstream, addr);
+        upstream.reset();
+        co_return error;
+    }
+
+    coro::Task<void> sequential_test(std::span<const UpstreamTestData> test_data) {
+        for (const UpstreamTestData &data : test_data) {
+            infolog(logger, "Testing upstream: {}", data.address);
+            std::this_thread::sleep_for(DELAY_BETWEEN_REQUESTS);
+            auto upstream_res = create_upstream({data.address, data.bootstrap, DEFAULT_TIMEOUT, data.server_ip});
+            ASSERT_FALSE(upstream_res.has_error()) << AG_FMT(
+                    "Failed to generate upstream from address {}: {}", data.address, upstream_res.error()->str());
+            auto error = coro::to_future(check_upstream_internal(std::move(upstream_res.value()), data.address)).get();
+            ASSERT_FALSE(error) << *error;
+        }
     }
 };
 
@@ -330,12 +344,6 @@ TEST_P(DnsTruncatedTest, TestDnsTruncated) {
 
 INSTANTIATE_TEST_SUITE_P(DnsTruncatedTest, DnsTruncatedTest, testing::ValuesIn(truncated_test_data));
 
-struct UpstreamTestData {
-    std::string address;
-    std::initializer_list<std::string> bootstrap;
-    IpAddress server_ip;
-};
-
 static const UpstreamTestData test_upstreams_data[]{
         {"tcp://8.8.8.8", {}},
         {"8.8.8.8:53", {"8.8.8.8:53"}},
@@ -352,6 +360,9 @@ static const UpstreamTestData test_upstreams_data[]{
         {"https://dns9.quad9.net:443/dns-query", {"8.8.8.8"}},
         {"https://dns.cloudflare.com/dns-query", {"8.8.8.8:53"}},
         {"https://dns.google/dns-query", {"8.8.8.8"}},
+        {// Cisco OpenDNS DNS (DNSCrypt) (no port in stamp, default port test)
+            "sdns://AQEAAAAAAAAADjIwOC42Ny4yMjAuMTIzILc1EUAgbyJdPivYItf9aR6hwzzI1maNDL4Ev6vKQ_t5GzIuZG5zY3J5cHQtY2VydC5vcGVuZG5zLmNvbQ"
+        },
         {// AdGuard DNS (DNSCrypt)
                 "sdns://"
                 "AQIAAAAAAAAAFDE3Ni4xMDMuMTMwLjEzMDo1NDQzINErR_JS3PLCu_iZEIbq95zkSV2LFsigxDIuUso_"
@@ -408,7 +419,7 @@ TEST_F(UpstreamTest, TestUpstreams) {
 #ifdef __linux__
     int fd_count_before = count_open_fds();
 #endif
-    co_await parallel_test(test_upstreams_data, std::size(test_upstreams_data));
+    ASSERT_NO_FATAL_FAILURE(co_await sequential_test(test_upstreams_data));
 #ifdef __linux__
     co_await m_loop->co_sleep(Millis{500});
     // If there was fd leak, new fd number will be different.
@@ -440,8 +451,7 @@ static const UpstreamTestData upstream_dot_bootstrap_test_data[]{
 };
 
 TEST_F(UpstreamTest, TestUpstreamDotBootstrap) {
-    co_await m_loop->co_submit();
-    co_await parallel_test(upstream_dot_bootstrap_test_data, std::size(upstream_dot_bootstrap_test_data));
+    ASSERT_NO_FATAL_FAILURE(co_await sequential_test(upstream_dot_bootstrap_test_data));
 }
 
 struct UpstreamDefaultOptionsTest : UpstreamParamTest<std::string> {};
@@ -496,8 +506,7 @@ static const UpstreamTestData test_upstreams_invalid_bootstrap_data[]{
 
 // Test for DoH and DoT upstreams with two bootstraps (only one is valid)
 TEST_F(UpstreamTest, TestUpstreamsInvalidBootstrap) {
-    co_await m_loop->co_submit();
-    co_await parallel_test(test_upstreams_invalid_bootstrap_data, std::size(test_upstreams_invalid_bootstrap_data));
+    ASSERT_NO_FATAL_FAILURE(co_await sequential_test(test_upstreams_invalid_bootstrap_data));
 }
 
 struct UpstreamsWithServerIpTest : UpstreamParamTest<UpstreamTestData> {};
@@ -516,8 +525,7 @@ static const UpstreamTestData test_upstreams_with_server_ip_data[]{
 };
 
 TEST_F(UpstreamTest, TestUpstreamsWithServerIp) {
-    co_await m_loop->co_submit();
-    co_await parallel_test(test_upstreams_with_server_ip_data, std::size(test_upstreams_with_server_ip_data));
+    ASSERT_NO_FATAL_FAILURE(co_await sequential_test(test_upstreams_with_server_ip_data));
 }
 
 struct DeadProxySuccess : UpstreamParamTest<std::tuple<std::string, OutboundProxySettings>> {};

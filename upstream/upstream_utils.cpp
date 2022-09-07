@@ -43,7 +43,7 @@ static coro::Task<ErrString> test_upstream_internal(EventLoop &loop, const Upstr
     }
     UpstreamPtr &upstream = upstream_result.value();
     if (offline) {
-        co_return {};
+        co_return std::nullopt;
     }
     auto reply = co_await upstream->exchange(create_message().get());
     upstream.reset();

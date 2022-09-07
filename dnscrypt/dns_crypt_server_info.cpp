@@ -94,7 +94,7 @@ coro::Task<ServerInfo::FetchResult> ServerInfo::fetch_current_dnscrypt_cert(Even
     auto [exchange_reply, exchange_rtt, exchange_err] = co_await dns_exchange_from_ldns_pkt(loop, timeout,
             ag::utils::str_to_socket_address(m_server_address), *query, socket_factory, std::move(socket_parameters));
     if (exchange_err) {
-        co_return make_error(FetchError::AE_DNS_ERROR);
+        co_return make_error(FetchError::AE_DNS_ERROR, exchange_err);
     }
     CertInfo local_cert_info{};
     ldns_rr_list *answer = ldns_pkt_answer(exchange_reply.get());

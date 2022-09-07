@@ -134,4 +134,4 @@ struct DnsProxySettings {
     bool enable_route_resolver = true;
 };
 
-}
+}  // namespace ag::dns

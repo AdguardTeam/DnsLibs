@@ -259,6 +259,7 @@ typedef NS_ENUM(NSInteger, AGOutboundProxyProtocol) {
 - (instancetype) initWithProtocol: (AGOutboundProxyProtocol)protocol
                           address: (NSString *)address
                              port: (NSInteger)port
+                        bootstrap: (NSArray<NSString *> *) bootstrap
                          authInfo: (AGOutboundProxyAuthInfo *)authInfo
               trustAnyCertificate: (BOOL)trustAnyCertificate;
 

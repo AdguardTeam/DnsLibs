@@ -480,20 +480,20 @@ Error<Upstream::InitError> DohUpstream::init() {
 }
 
 DohUpstream::~DohUpstream() {
-    infolog(m_log, "Destroying...");
+    dbglog(m_log, "Destroying...");
 
     if (auto id = m_reset_bypassed_proxy_connections_subscribe_id; id.has_value()) {
         m_config.socket_factory->unsubscribe_from_reset_bypassed_proxy_connections_event(id.value());
     }
 
-    infolog(m_log, "Stopping queries...");
+    dbglog(m_log, "Stopping queries...");
     this->stop_all_with_error(make_error(DE_SHUTTING_DOWN));
     m_pool.timer.reset();
-    infolog(m_log, "Done");
+    dbglog(m_log, "Done");
 
     m_check_proxy.reset();
 
-    infolog(m_log, "Destroyed");
+    dbglog(m_log, "Destroyed");
 }
 
 struct DohUpstream::SocketHandle {

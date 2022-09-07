@@ -56,7 +56,9 @@ int main() {
     std::signal(SIGPIPE, SIG_IGN);
 #endif
 
-    getchar();
+    while (keep_running) {
+        std::this_thread::sleep_for(std::chrono::milliseconds(100));
+    }
 
     proxy.deinit();
     return 0;
