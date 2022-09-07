@@ -1,6 +1,4 @@
-cmake-build-release
-cmake-build-debug
-cmake-build-win
+cmake-build-*
 .idea
 .vscode
 build/
