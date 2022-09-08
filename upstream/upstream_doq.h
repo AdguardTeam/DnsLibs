@@ -201,7 +201,7 @@ private:
     static ngtcp2_tstamp get_tstamp();
     ngtcp2_crypto_level from_ossl_level(enum ssl_encryption_level_t ossl_level) const;
     void disqualify_server_address(const ag::SocketAddress &server_address);
-    void update_idle_timer(bool reset);
+    void update_req_idle_timer();
 
     void write_client_handshake(ngtcp2_crypto_level level, const uint8_t *data, size_t datalen);
     int on_key(ngtcp2_crypto_level level, const uint8_t *rx_secret,
@@ -229,9 +229,9 @@ private:
     std::list<int64_t> m_stream_send_queue;
     std::unordered_map<int64_t, Stream> m_streams;
     std::unordered_map<int64_t, Request> m_requests;
-    UvPtr<uv_timer_t> m_short_timeout_timer;
+    UvPtr<uv_timer_t> m_req_idle_timer; // See `update_req_idle_timer()`.
     UvPtr<uv_timer_t> m_handshake_timer;
-    UvPtr<uv_timer_t> m_retransmit_timer;
+    UvPtr<uv_timer_t> m_retransmit_timer; // This is also the idle timer.
     static std::atomic_int64_t m_next_request_id;
     std::array<uint8_t, 32> m_static_secret;
     TlsSessionCache m_tls_session_cache;

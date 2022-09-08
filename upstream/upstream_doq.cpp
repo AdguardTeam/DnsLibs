@@ -71,12 +71,12 @@ DoqUpstream::DoqUpstream(const UpstreamOptions &opts, const UpstreamFactoryConfi
         , m_max_pktlen{MAX_PKTLEN_IPV6}
         , m_quic_version{NGTCP2_PROTO_VER_V1}
         , m_send_buf(m_max_pktlen)
-        , m_short_timeout_timer{Uv<uv_timer_t>::create_with_parent(this)}
+        , m_req_idle_timer{Uv<uv_timer_t>::create_with_parent(this)}
         , m_handshake_timer(Uv<uv_timer_t>::create_with_parent(this))
         , m_retransmit_timer(Uv<uv_timer_t>::create_with_parent(this))
         , m_static_secret{0}
         , m_tls_session_cache(opts.address) {
-    uv_timer_init(config.loop.handle(), m_short_timeout_timer->raw());
+    uv_timer_init(config.loop.handle(), m_req_idle_timer->raw());
     uv_timer_init(config.loop.handle(), m_handshake_timer->raw());
     uv_timer_init(config.loop.handle(), m_retransmit_timer->raw());
 }
@@ -174,7 +174,7 @@ void DoqUpstream::short_timeout_timer_cb(uv_timer_t *timer) {
 void DoqUpstream::handshake_timer_cb(uv_timer_t *timer) {
     auto doq = static_cast<DoqUpstream *>(Uv<uv_timer_t>::parent_from_data(timer->data));
     // also stop idle timer
-    uv_timer_stop(doq->m_short_timeout_timer->raw());
+    uv_timer_stop(doq->m_req_idle_timer->raw());
     doq->disconnect("Handshake timer expired");
 }
 
@@ -217,7 +217,7 @@ void DoqUpstream::send_requests() {
         req.is_onfly = true;
     }
 
-    update_idle_timer(false);
+    update_req_idle_timer();
 }
 
 Error<Upstream::InitError> DoqUpstream::init() {
@@ -457,8 +457,6 @@ void DoqUpstream::on_socket_read(void *arg, Uint8View data) {
         goto fail;
     }
 
-    self->update_idle_timer(false);
-
     return;
 
 fail:
@@ -697,7 +695,6 @@ int DoqUpstream::init_quic_conn(const Socket *connected_socket) {
     }
     ngtcp2_conn_set_tls_native_handle(m_conn, m_ssl.get());
 
-    update_idle_timer(true);
     return NETWORK_ERR_OK;
 }
 
@@ -894,8 +891,6 @@ int DoqUpstream::recv_stream_data(ngtcp2_conn * /*conn*/, uint32_t flags, int64_
 
     auto doq = static_cast<DoqUpstream *>(user_data);
 
-    doq->update_idle_timer(true);
-
     auto st = doq->m_streams.find(stream_id);
     if (st == doq->m_streams.end()) {
         warnlog(doq->m_log, "Stream died");
@@ -946,7 +941,6 @@ int DoqUpstream::handshake_confirmed(ngtcp2_conn * /*conn*/, void *data) {
     dbglog(doq->m_log, "Selected ALPN: {}", std::string_view{(char *) buf, len});
 
     doq->m_state = RUN;
-    doq->update_idle_timer(true);
     doq->send_requests();
     return 0;
 }
@@ -1036,6 +1030,9 @@ int DoqUpstream::acked_stream_data_offset(ngtcp2_conn * /*conn*/, int64_t stream
 
 void DoqUpstream::process_reply(int64_t request_id, Uint8View reply) {
     auto node = m_requests.extract(request_id);
+
+    update_req_idle_timer();
+
     if (node.empty()) {
         return;
     }
@@ -1059,7 +1056,7 @@ void DoqUpstream::disconnect(std::string_view reason) {
     ngtcp2_conn_del(std::exchange(m_conn, nullptr));
     m_shutdown_guard.reset();
     uv_timer_stop(m_handshake_timer->raw());
-    uv_timer_stop(m_short_timeout_timer->raw());
+    uv_timer_stop(m_req_idle_timer->raw());
     uv_timer_stop(m_retransmit_timer->raw());
 
     m_conn_state.info.emplace<std::monostate>();
@@ -1149,27 +1146,24 @@ ngtcp2_crypto_level DoqUpstream::from_ossl_level(enum ssl_encryption_level_t oss
     }
 }
 
-void DoqUpstream::update_idle_timer(bool reset) {
-    bool has_inflight_requests = !m_requests.empty();
-
-    Millis value = m_options.timeout * 2;
-    if (!has_inflight_requests) {
-        uv_timer_stop(m_short_timeout_timer->raw());
+// This is a workaround for cases when connection is lost (since we don't have migration),
+// but waiting for the whole connection idle timer to expire would be too long:
+// 1. Start as soon as there are outstanding requests.
+// 2. Reset each time we receive a reply.
+// 3. Stop when there are no more outstanding requests.
+void DoqUpstream::update_req_idle_timer() {
+    if (m_requests.empty()) {
+        uv_timer_stop(m_req_idle_timer->raw());
         dbglog(m_log, "Short timeout timer stopped");
         return;
-    } else {
-        if (uv_is_active((uv_handle_t *) m_short_timeout_timer->raw())) {
-            dbglog(m_log, "Short timeout timer started, {} left", value);
-        } else if (reset) {
-            dbglog(m_log, "Short timeout timer reset, {} left", value);
-        } else {
-            Millis pending = Millis{uv_timer_get_due_in(m_short_timeout_timer->raw())};
-            dbglog(m_log, "Short timeout timer unchanged, {} left", pending);
-            return;
-        }
     }
-
-    uv_timer_start(m_short_timeout_timer->raw(), short_timeout_timer_cb, value.count(), 0);
+    if (uv_is_active((uv_handle_t *) m_req_idle_timer->raw())) {
+        tracelog(m_log, "Short timeout timer already running");
+        return;
+    }
+    Millis value = m_options.timeout * 2;
+    uv_timer_start(m_req_idle_timer->raw(), short_timeout_timer_cb, value.count(), 0);
+    dbglog(m_log, "Short timeout timer set to {}", value);
 }
 
 void DoqUpstream::on_rand(uint8_t *dest, size_t destlen, const ngtcp2_rand_ctx *rand_ctx) {
