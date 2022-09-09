@@ -249,12 +249,7 @@ namespace Adguard.Dns.Helpers
             }
 
             MarshalUtils.ag_buffer addressC = MarshalUtils.BytesToAgBuffer(addressBytes);
-
-            if (allocatedPointers != null)
-            {
-                allocatedPointers.Enqueue(addressC.data);
-            }
-
+            allocatedPointers?.Enqueue(addressC.data);
             AGDnsApi.ag_upstream_options upstreamOptionsC = new AGDnsApi.ag_upstream_options
             {
                 bootstrap = bootstrapC,

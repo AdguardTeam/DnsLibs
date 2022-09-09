@@ -79,6 +79,7 @@
     <Compile Include="TestApi\TestDnsServer.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
     <Compile Include="TestUtils\TestCertificateVerificationCallback.cs" />
+    <Compile Include="TestUtils\TestUpstreamEqualityComparer.cs" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\Adguard.Dns\Adguard.Dns.csproj">

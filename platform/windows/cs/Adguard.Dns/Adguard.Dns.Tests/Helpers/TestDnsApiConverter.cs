@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Collections;
 using System.Collections.Generic;
 using System.Net;
 using Adguard.Dns.Api.DnsProxyServer.Callbacks;
@@ -6,6 +7,7 @@ using Adguard.Dns.Api.DnsProxyServer.Configs;
 using Adguard.Dns.Api.DnsProxyServer.EventArgs;
 using Adguard.Dns.DnsProxyServer;
 using Adguard.Dns.Helpers;
+using Adguard.Dns.Tests.TestUtils;
 using Adguard.Dns.Utils;
 using AdGuard.Utils.Collections;
 using AdGuard.Utils.Interop;
@@ -36,25 +38,41 @@ namespace Adguard.Dns.Tests.Helpers
                     },
                     new UpstreamOptions
                     {
-                    Id = 3,
-                    Bootstrap = new List<string>
-                    {
-                        "bootStrapBegin",
-                        "bootStrapEnd"
+                        Id = 3,
+                        Bootstrap = new List<string>
+                        {
+                            "bootStrapBegin",
+                            "bootStrapEnd"
+                        }
                     }
-                }
                 },
                 Fallbacks = new List<UpstreamOptions>()
                 {
                     new UpstreamOptions
                     {
-                        Bootstrap = new List<string>()
+                        Bootstrap = new List<string>
+                        {
+                            "1.1.1.1",
+                            "8.8.8.8",
+                            "9.9.9.9"
+                        }
                     }
                 },
                 BlockedResponseTtlSec = 64,
                 Dns64 = new Dns64Settings
                 {
-                    Upstreams = new List<UpstreamOptions>()
+                    Upstreams = new List<UpstreamOptions>
+                    {
+                        new UpstreamOptions
+                        {
+                            Bootstrap = new List<string>
+                            {
+                                "1.1.1.1",
+                                "8.8.8.8",
+                                "9.9.9.9"
+                            }
+                        }
+                    }
                 },
                 EngineParams = new EngineParams
                 {
@@ -123,8 +141,21 @@ namespace Adguard.Dns.Tests.Helpers
             Assert.AreEqual( dnsSettings.CustomBlockingIpv6, dnsSettingsConverted.CustomBlockingIpv6);
             Assert.AreEqual( dnsSettings.AdblockRulesBlockingMode, dnsSettingsConverted.AdblockRulesBlockingMode);
             Assert.AreEqual(dnsSettings.HostsRulesBlockingMode, dnsSettingsConverted.HostsRulesBlockingMode);
-            bool isUpstreamsEqual = CollectionUtils.CollectionsEquals(dnsSettingsConverted.Upstreams, dnsSettings.Upstreams);
-            Assert.IsTrue(isUpstreamsEqual);
+            IEqualityComparer<UpstreamOptions> upstreamEqualityComparer = new TestUpstreamEqualityComparer();
+            bool isUpstreamsEqual = CollectionUtils.CollectionsEquals(
+                dnsSettingsConverted.Upstreams,
+                dnsSettings.Upstreams,
+                upstreamEqualityComparer);
+            bool isFallbacksEqual = CollectionUtils.CollectionsEquals(
+                dnsSettingsConverted.Fallbacks,
+                dnsSettings.Fallbacks,
+                upstreamEqualityComparer);
+            Assert.IsTrue(isFallbacksEqual);
+            bool isDns64UpstreamsEqual = CollectionUtils.CollectionsEquals(
+                dnsSettingsConverted.Dns64.Upstreams,
+                dnsSettings.Dns64.Upstreams,
+                upstreamEqualityComparer);
+            Assert.IsTrue(isDns64UpstreamsEqual);
             Assert.AreEqual(
                 dnsSettings.OutboundProxySettings.Protocol,
                 dnsSettingsConverted.OutboundProxySettings.Protocol);
