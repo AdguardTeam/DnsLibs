@@ -134,7 +134,7 @@ void SecuredSocket::on_read(void *arg, Uint8View data) {
                 if (cbx.on_close != nullptr) {
                     l.unlock();
                     cbx.on_close(cbx.arg, make_error(SocketError::AE_TLS_ERROR, r.error()));
-                    l.lock();
+                    // on_close might have deleted `self`
                 }
                 return;
             }
