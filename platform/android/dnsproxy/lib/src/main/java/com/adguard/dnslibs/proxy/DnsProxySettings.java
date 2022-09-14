@@ -67,6 +67,7 @@ public class DnsProxySettings {
     private boolean optimisticCache;
     private boolean enableDNSSECOK;
     private boolean enableRetransmissionHandling;
+    private boolean blockEch;
 
     /**
      * @return Maximum number of cached responses
@@ -355,6 +356,20 @@ public class DnsProxySettings {
         this.enableRetransmissionHandling = enableRetransmissionHandling;
     }
 
+    /**
+     * @return whether stripping of Encrypted Client Hello parameters is enabled.
+     */
+    public boolean isBlockEch() {
+        return blockEch;
+    }
+
+    /**
+     * @param blockEch if true, Encrypted Client Hello parameters will be striped from responses.
+     */
+    public void setBlockEch(boolean blockEch) {
+        this.blockEch = blockEch;
+    }
+
     @Override
     public boolean equals(Object o) {
         if (this == o) return true;
@@ -378,7 +393,8 @@ public class DnsProxySettings {
                 dnsCacheSize == that.dnsCacheSize &&
                 optimisticCache == that.optimisticCache &&
                 enableDNSSECOK == that.enableDNSSECOK &&
-                enableRetransmissionHandling == that.enableRetransmissionHandling;
+                enableRetransmissionHandling == that.enableRetransmissionHandling &&
+                blockEch == that.blockEch;
     }
 
     @Override
@@ -386,7 +402,7 @@ public class DnsProxySettings {
         return Objects.hash(upstreams, fallbacks, fallbackDomains, detectSearchDomains, dns64, blockedResponseTtlSecs,
                 filterParams, listeners, outboundProxy, ipv6Available, blockIpv6, adblockRulesBlockingMode, hostsRulesBlockingMode,
                 customBlockingIpv4, customBlockingIpv6,
-                dnsCacheSize, optimisticCache, enableDNSSECOK, enableRetransmissionHandling);
+                dnsCacheSize, optimisticCache, enableDNSSECOK, enableRetransmissionHandling, blockEch);
     }
 
     /**

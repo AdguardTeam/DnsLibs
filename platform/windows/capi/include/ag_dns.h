@@ -230,6 +230,8 @@ typedef struct {
     bool enable_dnssec_ok;
     /** If enabled, detect retransmitted requests and handle them using fallback upstreams only */
     bool enable_retransmission_handling;
+    /** If enabled, strip Encrypted Client Hello parameters from responses. */
+    bool block_ech;
 } ag_dnsproxy_settings;
 
 typedef struct {

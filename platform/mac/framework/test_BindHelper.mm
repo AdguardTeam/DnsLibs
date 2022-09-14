@@ -36,6 +36,8 @@ int main() {
                                                optimisticCache:YES
                                                 enableDNSSECOK:NO
                                   enableRetransmissionHandling:NO
+                                           enableRouteResolver:NO
+                                                      blockEch:NO
                                                     helperPath:@""]; // Insert path to adguard-tun-helper
 
     auto *handler = [AGDnsProxyEvents new];

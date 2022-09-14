@@ -143,6 +143,7 @@ if("${TARGET_OS}" STREQUAL "macos")
             "-F${CMAKE_CURRENT_BINARY_DIR}"
             "-Wl,-rpath,${CMAKE_CURRENT_BINARY_DIR}"
             "-framework AGDnsProxy -framework Foundation")
+    add_dependencies(tests test_BindHelper)
 
     add_executable(test_ListenerInitError EXCLUDE_FROM_ALL test_ListenerInitError.mm)
     target_compile_options(test_ListenerInitError PRIVATE "-fobjc-arc")
@@ -152,6 +153,7 @@ if("${TARGET_OS}" STREQUAL "macos")
             "-F${CMAKE_CURRENT_BINARY_DIR}"
             "-Wl,-rpath,${CMAKE_CURRENT_BINARY_DIR}"
             "-framework AGDnsProxy -framework Foundation")
+    add_dependencies(tests test_ListenerInitError)
 
     add_executable(test_AGDnsProxyStandalone EXCLUDE_FROM_ALL test_AGDnsProxyStandalone.mm)
     target_compile_options(test_AGDnsProxyStandalone PRIVATE "-fobjc-arc")
@@ -161,4 +163,5 @@ if("${TARGET_OS}" STREQUAL "macos")
             "-Wl,-rpath,${CMAKE_CURRENT_BINARY_DIR}"
             "-framework AGDnsProxy -framework Foundation")
     add_dependencies(test_AGDnsProxyStandalone AGDnsProxy)
+    add_dependencies(tests test_AGDnsProxyStandalone)
 endif()

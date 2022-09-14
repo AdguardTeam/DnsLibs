@@ -429,6 +429,7 @@ DnsProxySettings AndroidDnsProxy::marshal_settings(JNIEnv *env, jobject java_dns
     auto optimistic_cache_field = env->GetFieldID(clazz, "optimisticCache", "Z");
     auto enable_dnssec_ok_field = env->GetFieldID(clazz, "enableDNSSECOK", "Z");
     auto enable_retr_field = env->GetFieldID(clazz, "enableRetransmissionHandling", "Z");
+    auto block_ech_field = env->GetFieldID(clazz, "blockEch", "Z");
 
     DnsProxySettings settings{};
 
@@ -496,6 +497,7 @@ DnsProxySettings AndroidDnsProxy::marshal_settings(JNIEnv *env, jobject java_dns
     settings.optimistic_cache = env->GetBooleanField(java_dnsproxy_settings, optimistic_cache_field);
     settings.enable_dnssec_ok = env->GetBooleanField(java_dnsproxy_settings, enable_dnssec_ok_field);
     settings.enable_retransmission_handling = env->GetBooleanField(java_dnsproxy_settings, enable_retr_field);
+    settings.block_ech = env->GetBooleanField(java_dnsproxy_settings, block_ech_field);
 
     return settings;
 }
@@ -522,6 +524,7 @@ LocalRef<jobject> AndroidDnsProxy::marshal_settings(JNIEnv *env, const DnsProxyS
     auto optimistic_cache_field = env->GetFieldID(clazz, "optimisticCache", "Z");
     auto enable_dnssec_ok_field = env->GetFieldID(clazz, "enableDNSSECOK", "Z");
     auto enable_retr_field = env->GetFieldID(clazz, "enableRetransmissionHandling", "Z");
+    auto block_ech_field = env->GetFieldID(clazz, "blockEch", "Z");
 
     auto java_settings = env->NewObject(clazz, ctor);
 
@@ -581,6 +584,7 @@ LocalRef<jobject> AndroidDnsProxy::marshal_settings(JNIEnv *env, const DnsProxyS
     env->SetBooleanField(java_settings, optimistic_cache_field, (jboolean) settings.optimistic_cache);
     env->SetBooleanField(java_settings, enable_dnssec_ok_field, (jboolean) settings.enable_dnssec_ok);
     env->SetBooleanField(java_settings, enable_retr_field, (jboolean) settings.enable_retransmission_handling);
+    env->SetBooleanField(java_settings, block_ech_field, (jboolean) settings.block_ech);
 
     return LocalRef(env, java_settings);
 }

@@ -399,6 +399,10 @@ typedef NS_ENUM(NSInteger, AGOutboundProxyProtocol) {
  */
 @property(nonatomic, readonly) BOOL enableRouteResolver;
 /**
+ * If enabled, strip Encrypted Client Hello parameters from responses.
+ */
+@property(nonatomic, readonly) BOOL blockEch;
+/**
  * Path to adguard-tun-helper (macOS only)
  */
 @property(nonatomic, readonly) NSString *helperPath;
@@ -426,6 +430,7 @@ typedef NS_ENUM(NSInteger, AGOutboundProxyProtocol) {
         enableDNSSECOK: (BOOL) enableDNSSECOK
         enableRetransmissionHandling: (BOOL) enableRetransmissionHandling
         enableRouteResolver: (BOOL) enableRouteResolver
+        blockEch: (BOOL) blockEch
         helperPath: (NSString *)helperPath;
 
 - (instancetype)initWithCoder:(NSCoder *)coder;

@@ -118,5 +118,10 @@ namespace Adguard.Dns.Api.DnsProxyServer.Configs
         /// If a retransmitted request is detected, the original request will NOT be answered at all.
         /// </summary>
         public bool EnableRetransmissionHandling { get; set; }
+
+        /// <summary>
+        /// If enabled, strip Encrypted Client Hello parameters from responses.
+        /// </summary>
+        public bool BlockEch { get; set; }
     }
 }

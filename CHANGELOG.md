@@ -1,5 +1,10 @@
 # Changelog
 
+* [Feature] Add an option to strip Encrypted Client Hello parameters from responses, effectively blocking ECH.
+  See `ag_dnsproxy_settings::block_ech` (C),
+  `AGDnsProxyConfig.blockEch` (Apple),
+  `DnsProxySettings.setBlockEch()` (Android).
+
 * [Feature] DnsProxy now accepts a hostname as an address of the outbound proxy. In that case an application should also pass a list of the bootstrapping resolvers.
 
 * [Feature] DnsProxy calls are now asynchronous. On iOS [handlePacket:completionHandler:] should be called instead of synchronous one.

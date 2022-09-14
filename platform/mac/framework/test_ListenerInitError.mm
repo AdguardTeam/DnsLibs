@@ -34,6 +34,8 @@ int main() {
                                                optimisticCache:YES
                                                 enableDNSSECOK:NO
                                   enableRetransmissionHandling:NO
+                                           enableRouteResolver:NO
+                                                      blockEch:NO
                                                     helperPath:nil];
 
     auto *handler = [AGDnsProxyEvents new];

@@ -634,6 +634,7 @@ static ServerStamp convert_stamp(AGDnsStamp *stamp) {
     _enableDNSSECOK = settings->enable_dnssec_ok;
     _enableRetransmissionHandling = settings->enable_retransmission_handling;
     _enableRouteResolver = settings->enable_route_resolver;
+    _blockEch = settings->block_ech;
     return self;
 }
 
@@ -660,6 +661,7 @@ static ServerStamp convert_stamp(AGDnsStamp *stamp) {
         enableDNSSECOK: (BOOL) enableDNSSECOK
         enableRetransmissionHandling: (BOOL) enableRetransmissionHandling
         enableRouteResolver: (BOOL) enableRouteResolver
+        blockEch: (BOOL) blockEch
         helperPath: (NSString *) helperPath
 {
     const DnsProxySettings &defaultSettings = DnsProxySettings::get_default();
@@ -692,6 +694,7 @@ static ServerStamp convert_stamp(AGDnsStamp *stamp) {
     _helperPath = helperPath;
     _enableRetransmissionHandling = enableRetransmissionHandling;
     _enableRouteResolver = enableRouteResolver;
+    _blockEch = blockEch;
     return self;
 }
 
@@ -721,6 +724,7 @@ static ServerStamp convert_stamp(AGDnsStamp *stamp) {
         _enableDNSSECOK = [coder decodeBoolForKey:@"_enableDNSSECOK"];
         _enableRetransmissionHandling = [coder decodeBoolForKey:@"_enableRetransmissionHandling"];
         _enableRouteResolver = [coder decodeBoolForKey:@"_enableRouteResolver"];
+        _blockEch = [coder decodeBoolForKey:@"_blockEch"];
         _helperPath = [coder decodeObjectForKey:@"_helperPath"];
     }
 
@@ -751,6 +755,7 @@ static ServerStamp convert_stamp(AGDnsStamp *stamp) {
     [coder encodeBool:self.enableDNSSECOK forKey:@"_enableDNSSECOK"];
     [coder encodeBool:self.enableRetransmissionHandling forKey:@"_enableRetransmissionHandling"];
     [coder encodeBool:self.enableRouteResolver forKey:@"_enableRouteResolver"];
+    [coder encodeBool:self.blockEch forKey:@"_blockEch"];
     [coder encodeObject:self.helperPath forKey:@"_helperPath"];
 }
 
@@ -764,6 +769,7 @@ static ServerStamp convert_stamp(AGDnsStamp *stamp) {
             "customBlockingIpv6=%@,\n"
             "enableDNSSECOK=%@,\n"
             "enableRetransmissionHandling=%@,\n"
+            "blockEch=%@,\n"
             "detectSearchDomains=%@,\n"
             "outboundProxy=%@,\n"
             "upstreams=%@,\n"
@@ -773,8 +779,8 @@ static ServerStamp convert_stamp(AGDnsStamp *stamp) {
             "dns64Settings=%@,\n"
             "listeners=%@]",
             self, _ipv6Available ? @"YES" : @"NO", _blockIpv6 ? @"YES" : @"NO", _adblockRulesBlockingMode, _hostsRulesBlockingMode, _customBlockingIpv4,
-            _customBlockingIpv6, _enableDNSSECOK ? @"YES" : @"NO", _enableRetransmissionHandling ? @"YES" : @"NO", _detectSearchDomains ? @"YES" : @"NO",
-            _outboundProxy, _upstreams, _fallbacks, _fallbackDomains, _filters, _dns64Settings, _listeners];
+            _customBlockingIpv6, _enableDNSSECOK ? @"YES" : @"NO", _enableRetransmissionHandling ? @"YES" : @"NO", _blockEch ? @"YES" : @"NO",
+            _detectSearchDomains ? @"YES" : @"NO", _outboundProxy, _upstreams, _fallbacks, _fallbackDomains, _filters, _dns64Settings, _listeners];
 }
 
 + (instancetype) getDefault
@@ -1330,6 +1336,7 @@ static int bindFd(NSString *helperPath, NSString *address, NSNumber *port, AGLis
     settings.enable_dnssec_ok = config.enableDNSSECOK;
     settings.enable_retransmission_handling = config.enableRetransmissionHandling;
     settings.enable_route_resolver = config.enableRouteResolver;
+    settings.block_ech = config.blockEch;
 
     auto [ret, err_or_warn] = self->proxy.init(std::move(settings), std::move(native_events));
     if (!ret) {

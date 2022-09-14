@@ -271,6 +271,7 @@ static ag_dnsproxy_settings *marshal_settings(const DnsProxySettings &settings) 
     c_settings->optimistic_cache = settings.optimistic_cache;
     c_settings->enable_dnssec_ok = settings.enable_dnssec_ok;
     c_settings->enable_retransmission_handling = settings.enable_retransmission_handling;
+    c_settings->block_ech = settings.block_ech;
 
     return c_settings;
 }
@@ -454,6 +455,7 @@ static DnsProxySettings marshal_settings(const ag_dnsproxy_settings *c_settings)
     settings.optimistic_cache = c_settings->optimistic_cache;
     settings.enable_dnssec_ok = c_settings->enable_dnssec_ok;
     settings.enable_retransmission_handling = c_settings->enable_retransmission_handling;
+    settings.block_ech = c_settings->block_ech;
 
     return settings;
 }
