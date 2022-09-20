@@ -30,7 +30,7 @@ DL - Mac tests and deploy:
 
         conan remove -f '*'
 
-        ../framework/build_dnsproxy_framework.sh --os all --iosv 10.0
+        ../framework/build_dnsproxy_framework.sh --os all --iosv 11.2
       description: Build
   - checkout:
       repository: podspecs
