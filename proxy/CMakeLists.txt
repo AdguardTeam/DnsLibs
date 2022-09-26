@@ -5,12 +5,6 @@ conan_bootstrap(SRCROOT ".." CONANFILE "../conanfile.py" SCOPE_NAME agdns)
 
 set(CMAKE_CXX_STANDARD 20)
 
-# todo: Bring back optimizations when Apple will fix its compiler,
-#       otherwise AppleClang crashes when sees our code
-if (APPLE)
-    add_compile_options(-O0)
-endif()
-
 set(DNSLIBS_DIR ..)
 set(TEST_DIR test)
 
