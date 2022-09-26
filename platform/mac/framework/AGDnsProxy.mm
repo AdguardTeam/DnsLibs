@@ -276,23 +276,6 @@ static ServerStamp convert_stamp(AGDnsStamp *stamp) {
     return self;
 }
 
-- (instancetype) initWithAddress: (NSString *) address
-        bootstrap: (NSArray<NSString *> *) bootstrap
-        timeoutMs: (NSInteger) timeoutMs
-        serverIp: (NSData *) serverIp
-        id: (NSInteger) id
-        outboundInterfaceName: (NSString *) outboundInterfaceName
-{
-    self = [super init];
-    _address = address;
-    _bootstrap = bootstrap;
-    _timeoutMs = timeoutMs;
-    _serverIp = serverIp;
-    _id = id;
-    _outboundInterfaceName = outboundInterfaceName;
-    return self;
-}
-
 - (instancetype)initWithCoder:(NSCoder *)coder {
     self = [super init];
     if (self) {
@@ -338,16 +321,6 @@ static ServerStamp convert_stamp(AGDnsStamp *stamp) {
     return self;
 }
 
-- (instancetype) initWithUpstreams: (NSArray<AGDnsUpstream *> *) upstreams
-                          maxTries: (NSInteger) maxTries waitTimeMs: (NSInteger) waitTimeMs
-{
-    self = [super init];
-    _upstreams = upstreams;
-    _maxTries = maxTries;
-    _waitTimeMs = waitTimeMs;
-    return self;
-}
-
 - (instancetype)initWithCoder:(NSCoder *)coder {
     self = [super init];
     if (self) {
@@ -385,21 +358,6 @@ static ServerStamp convert_stamp(AGDnsStamp *stamp) {
     return self;
 }
 
-- (instancetype)initWithAddress:(NSString *)address
-                           port:(NSInteger)port
-                          proto:(AGListenerProtocol)proto
-                     persistent:(BOOL)persistent
-                  idleTimeoutMs:(NSInteger)idleTimeoutMs
-{
-    self = [super init];
-    _address = address;
-    _port = port;
-    _proto = proto;
-    _persistent = persistent;
-    _idleTimeoutMs = idleTimeoutMs;
-    return self;
-}
-
 - (instancetype)initWithCoder:(NSCoder *)coder {
     self = [super init];
     if (self) {
@@ -430,17 +388,6 @@ static ServerStamp convert_stamp(AGDnsStamp *stamp) {
 @end
 
 @implementation AGOutboundProxyAuthInfo
-- (instancetype) initWithUsername: (NSString *)username
-                         password: (NSString *)password
-{
-    self = [super init];
-    if (self) {
-        _username = username;
-        _password = password;
-    }
-    return self;
-}
-
 - (instancetype) initWithNative: (const OutboundProxyAuthInfo *)info
 {
     self = [super init];
@@ -474,25 +421,6 @@ static ServerStamp convert_stamp(AGDnsStamp *stamp) {
 @end
 
 @implementation AGOutboundProxySettings
-- (instancetype) initWithProtocol: (AGOutboundProxyProtocol)protocol
-                          address: (NSString *)address
-                             port: (NSInteger)port
-                        bootstrap: (NSArray<NSString *> *) bootstrap
-                         authInfo: (AGOutboundProxyAuthInfo *)authInfo
-              trustAnyCertificate: (BOOL)trustAnyCertificate
-{
-    self = [super init];
-    if (self) {
-        _protocol = protocol;
-        _address = address;
-        _port = port;
-        _bootstrap = bootstrap;
-        _authInfo = authInfo;
-        _trustAnyCertificate = trustAnyCertificate;
-    }
-    return self;
-}
-
 - (instancetype) initWithNative: (const OutboundProxySettings *)settings
 {
     self = [super init];
@@ -547,19 +475,6 @@ static ServerStamp convert_stamp(AGDnsStamp *stamp) {
 @end
 
 @implementation AGDnsFilterParams
-- (instancetype) initWithId:(NSInteger)id
-                       data:(NSString *)data
-                   inMemory:(BOOL)inMemory
-{
-    self = [super init];
-    if (self) {
-        _id = id;
-        _data = data;
-        _inMemory = inMemory;
-    }
-    return self;
-}
-
 - (instancetype)initWithCoder:(NSCoder *)coder {
     self = [super init];
     if (self) {
@@ -635,66 +550,6 @@ static ServerStamp convert_stamp(AGDnsStamp *stamp) {
     _enableRetransmissionHandling = settings->enable_retransmission_handling;
     _enableRouteResolver = settings->enable_route_resolver;
     _blockEch = settings->block_ech;
-    return self;
-}
-
-- (instancetype) initWithUpstreams: (NSArray<AGDnsUpstream *> *) upstreams
-        fallbacks: (NSArray<AGDnsUpstream *> *) fallbacks
-        fallbackDomains: (NSArray<NSString *> *) fallbackDomains
-        detectSearchDomains: (BOOL) detectSearchDomains
-        filters: (NSArray<AGDnsFilterParams *> *) filters
-#if TARGET_OS_IPHONE
-        filtersMemoryLimitBytes: (NSUInteger) filtersMemoryLimitBytes
-#endif // TARGET_OS_IPHONE
-        blockedResponseTtlSecs: (NSInteger) blockedResponseTtlSecs
-        dns64Settings: (AGDns64Settings *) dns64Settings
-        listeners: (NSArray<AGListenerSettings *> *) listeners
-        outboundProxy: (AGOutboundProxySettings *) outboundProxy
-        ipv6Available: (BOOL) ipv6Available
-        blockIpv6: (BOOL) blockIpv6
-        adblockRulesBlockingMode: (AGBlockingMode) adblockRulesBlockingMode
-        hostsRulesBlockingMode: (AGBlockingMode) hostsRulesBlockingMode
-        customBlockingIpv4: (NSString *) customBlockingIpv4
-        customBlockingIpv6: (NSString *) customBlockingIpv6
-        dnsCacheSize: (NSUInteger) dnsCacheSize
-        optimisticCache: (BOOL) optimisticCache
-        enableDNSSECOK: (BOOL) enableDNSSECOK
-        enableRetransmissionHandling: (BOOL) enableRetransmissionHandling
-        enableRouteResolver: (BOOL) enableRouteResolver
-        blockEch: (BOOL) blockEch
-        helperPath: (NSString *) helperPath
-{
-    const DnsProxySettings &defaultSettings = DnsProxySettings::get_default();
-    self = [self initWithNative: &defaultSettings];
-    if (upstreams != nil) {
-        _upstreams = upstreams;
-    }
-    _fallbacks = fallbacks;
-    _fallbackDomains = fallbackDomains;
-    _detectSearchDomains = detectSearchDomains;
-    _filters = filters;
-#if TARGET_OS_IPHONE
-    _filtersMemoryLimitBytes = filtersMemoryLimitBytes;
-#endif // TARGET_OS_IPHONE
-    if (blockedResponseTtlSecs != 0) {
-        _blockedResponseTtlSecs = blockedResponseTtlSecs;
-    }
-    _dns64Settings = dns64Settings;
-    _listeners = listeners;
-    _outboundProxy = outboundProxy;
-    _ipv6Available = ipv6Available;
-    _blockIpv6 = blockIpv6;
-    _adblockRulesBlockingMode = adblockRulesBlockingMode;
-    _hostsRulesBlockingMode = hostsRulesBlockingMode;
-    _customBlockingIpv4 = customBlockingIpv4;
-    _customBlockingIpv6 = customBlockingIpv6;
-    _dnsCacheSize = dnsCacheSize;
-    _optimisticCache = optimisticCache;
-    _enableDNSSECOK = enableDNSSECOK;
-    _helperPath = helperPath;
-    _enableRetransmissionHandling = enableRetransmissionHandling;
-    _enableRouteResolver = enableRouteResolver;
-    _blockEch = blockEch;
     return self;
 }
 
@@ -1438,15 +1293,15 @@ static coro::Task<NSData *> handleIPv6Packet(AGDnsProxy *self, NSData *packet)
 
 - (void)handlePacket:(NSData *)packet completionHandler:(void(^)(NSData *)) completionHandler
 {
-    coro::run_detached([](AGDnsProxy *self, NSData *packet, void (^completionHandler)(NSData *)) -> coro::Task<void> {
+    coro::run_detached([](AGDnsProxy *sself, NSData *packet, void (^completionHandler)(NSData *)) -> coro::Task<void> {
         @autoreleasepool {
             auto *ip_header = (const struct iphdr *)packet.bytes;
             if (ip_header->ip_v == 4) {
-                completionHandler(co_await handleIPv4Packet(self, packet));
+                completionHandler(co_await handleIPv4Packet(sself, packet));
             } else if (ip_header->ip_v == 6) {
-                completionHandler(co_await handleIPv6Packet(self, packet));
+                completionHandler(co_await handleIPv6Packet(sself, packet));
             } else {
-                dbglog(*self->log, "Wrong IP version: %u", ip_header->ip_v);
+                dbglog(*sself->log, "Wrong IP version: %u", ip_header->ip_v);
                 completionHandler(nil);
             }
         }

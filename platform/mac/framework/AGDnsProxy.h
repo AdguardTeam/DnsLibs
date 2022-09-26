@@ -98,36 +98,29 @@ typedef void (^logCallback)(AGLogLevel level, const char *msg, int length);
  *      sdns://... -- DNS stamp (see https://dnscrypt.info/stamps-specifications)
  *      quic://dns.adguard.com:853 -- DNS-over-QUIC
  */
-@property(nonatomic, readonly) NSString *address;
+@property(nonatomic) NSString *address;
 /**
  * List of plain DNS servers to be used to resolve DOH/DOT hostnames (if any)
  */
-@property(nonatomic, readonly) NSArray<NSString *> *bootstrap;
+@property(nonatomic) NSArray<NSString *> *bootstrap;
 /**
  * Default upstream timeout in milliseconds. Also used as a timeout for bootstrap DNS requests.
  * timeout = 0 means infinite timeout.
  */
-@property(nonatomic, readonly) NSInteger timeoutMs;
+@property(nonatomic) NSInteger timeoutMs;
 /**
  * Resolver's IP address. In the case if it's specified,
  * bootstrap DNS servers won't be used at all.
  */
-@property(nonatomic, readonly) NSData *serverIp;
+@property(nonatomic) NSData *serverIp;
 /**
  * User-provided ID for this upstream
  */
-@property(nonatomic, readonly) NSInteger id;
+@property(nonatomic) NSInteger id;
 /**
  * Name of the network interface to route traffic through, nil is default
  */
-@property(nonatomic, readonly) NSString *outboundInterfaceName;
-
-- (instancetype) initWithAddress: (NSString *) address
-        bootstrap: (NSArray<NSString *> *) bootstrap
-        timeoutMs: (NSInteger) timeoutMs
-        serverIp: (NSData *) serverIp
-        id: (NSInteger) id
-        outboundInterfaceName: (NSString *) outboundInterfaceName;
+@property(nonatomic) NSString *outboundInterfaceName;
 
 - (instancetype)initWithCoder:(NSCoder *)coder;
 
@@ -142,21 +135,17 @@ typedef void (^logCallback)(AGLogLevel level, const char *msg, int length);
 /**
  * The upstream to use for discovery of DNS64 prefixes
  */
-@property(nonatomic, readonly) NSArray<AGDnsUpstream *> *upstreams;
+@property(nonatomic) NSArray<AGDnsUpstream *> *upstreams;
 
 /**
  * How many times, at most, to try DNS64 prefixes discovery before giving up
  */
-@property(nonatomic, readonly) NSInteger maxTries;
+@property(nonatomic) NSInteger maxTries;
 
 /**
  * How long to wait before a dns64 prefixes discovery attempt, in milliseconds
  */
-@property(nonatomic, readonly) NSInteger waitTimeMs;
-
-- (instancetype) initWithUpstreams: (NSArray<AGDnsUpstream *> *) upstreams
-            maxTries: (NSInteger) maxTries
-            waitTimeMs: (NSInteger) waitTimeMs;
+@property(nonatomic) NSInteger waitTimeMs;
 
 - (instancetype)initWithCoder:(NSCoder *)coder;
 
@@ -171,33 +160,27 @@ typedef void (^logCallback)(AGLogLevel level, const char *msg, int length);
 /**
  * The address to listen on
  */
-@property(nonatomic, readonly) NSString *address;
+@property(nonatomic) NSString *address;
 
 /**
  * The port to listen on
  */
-@property(nonatomic, readonly) NSInteger port;
+@property(nonatomic) NSInteger port;
 
 /**
  * The protocol to listen for
  */
-@property(nonatomic, readonly) AGListenerProtocol proto;
+@property(nonatomic) AGListenerProtocol proto;
 
 /**
  * Don't close the TCP connection after sending the first response
  */
-@property(nonatomic, readonly) BOOL persistent;
+@property(nonatomic) BOOL persistent;
 
 /**
  * Close the TCP connection this long after the last request received, in milliseconds
  */
-@property(nonatomic, readonly) NSInteger idleTimeoutMs;
-
-- (instancetype) initWithAddress: (NSString *) address
-                            port: (NSInteger) port
-                           proto: (AGListenerProtocol) proto
-                      persistent: (BOOL) persistent
-                   idleTimeoutMs: (NSInteger) idleTimeoutMs;
+@property(nonatomic) NSInteger idleTimeoutMs;
 
 - (instancetype)initWithCoder:(NSCoder *)coder;
 
@@ -220,12 +203,9 @@ typedef NS_ENUM(NSInteger, AGOutboundProxyProtocol) {
 
 @interface AGOutboundProxyAuthInfo : NSObject<NSCoding>
 /** User name for authentication */
-@property(nonatomic, readonly) NSString *username;
+@property(nonatomic) NSString *username;
 /** Password for authentication */
-@property(nonatomic, readonly) NSString *password;
-
-- (instancetype) initWithUsername: (NSString *)username
-                         password: (NSString *)password;
+@property(nonatomic) NSString *password;
 
 - (instancetype) init NS_UNAVAILABLE;
 
@@ -239,29 +219,22 @@ typedef NS_ENUM(NSInteger, AGOutboundProxyProtocol) {
 
 @interface AGOutboundProxySettings : NSObject<NSCoding>
 /** The proxy protocol */
-@property(nonatomic, readonly) AGOutboundProxyProtocol protocol;
+@property(nonatomic) AGOutboundProxyProtocol protocol;
 /** The proxy server IP address or hostname */
-@property(nonatomic, readonly) NSString *address;
+@property(nonatomic) NSString *address;
 /** The proxy server port */
-@property(nonatomic, readonly) NSInteger port;
+@property(nonatomic) NSInteger port;
 /**
  * List of the DNS server URLs to be used to resolve a hostname in the proxy server address.
  * The URLs MUST contain the resolved server addresses, not hostnames.
  * E.g. `https://94.140.14.14` is correct, while `dns.adguard.com:53` is not.
  * MUST NOT be empty in case the `address` is a hostname.
  */
-@property(nonatomic, readonly) NSArray<NSString *> *bootstrap;
+@property(nonatomic) NSArray<NSString *> *bootstrap;
 /** The authentication information (if nil, authentication is not performed) */
-@property(nonatomic, readonly) AGOutboundProxyAuthInfo *authInfo;
+@property(nonatomic) AGOutboundProxyAuthInfo *authInfo;
 /** If true and the proxy connection is secure, the certificate won't be verified */
-@property(nonatomic, readonly) BOOL trustAnyCertificate;
-
-- (instancetype) initWithProtocol: (AGOutboundProxyProtocol)protocol
-                          address: (NSString *)address
-                             port: (NSInteger)port
-                        bootstrap: (NSArray<NSString *> *) bootstrap
-                         authInfo: (AGOutboundProxyAuthInfo *)authInfo
-              trustAnyCertificate: (BOOL)trustAnyCertificate;
+@property(nonatomic) BOOL trustAnyCertificate;
 
 - (instancetype) init NS_UNAVAILABLE;
 
@@ -277,20 +250,16 @@ typedef NS_ENUM(NSInteger, AGOutboundProxyProtocol) {
 /**
  * Filter identifier
  */
-@property(nonatomic, readonly) NSInteger id;
+@property(nonatomic) NSInteger id;
 /**
  * Filter data
  * Either path to file with rules, or rules as a string
  */
-@property(nonatomic, readonly) NSString *data;
+@property(nonatomic) NSString *data;
 /**
  * If YES, data is rules, otherwise data is path to file with rules
  */
-@property(nonatomic, readonly) BOOL inMemory;
-
-- (instancetype) initWithId:(NSInteger)id
-                       data:(NSString *)data
-                   inMemory:(BOOL)inMemory;
+@property(nonatomic) BOOL inMemory;
 
 - (instancetype)initWithCoder:(NSCoder *)coder;
 
@@ -304,27 +273,27 @@ typedef NS_ENUM(NSInteger, AGOutboundProxyProtocol) {
 /**
  * Upstreams settings
  */
-@property(nonatomic, readonly) NSArray<AGDnsUpstream *> *upstreams;
+@property(nonatomic) NSArray<AGDnsUpstream *> *upstreams;
 /**
  * Fallback upstreams settings
  */
-@property(nonatomic, readonly) NSArray<AGDnsUpstream *> *fallbacks;
+@property(nonatomic) NSArray<AGDnsUpstream *> *fallbacks;
 /**
  * Requests for these domains will be forwarded directly to the fallback upstreams, if there are any.
  * A wildcard character, `*`, which stands for any number of characters, is allowed to appear multiple
  * times anywhere except at the end of the domain (which implies that a domain consisting only of
  * wildcard characters is invalid).
  */
-@property(nonatomic, readonly) NSArray<NSString *> *fallbackDomains;
+@property(nonatomic) NSArray<NSString *> *fallbackDomains;
 /**
  * If enabled, DNS search domains will be automatically appended to the fallback domains,
  * allowing to forward requests for, e.g., *.local, directly to the fallback upstreams.
  */
-@property(nonatomic, readonly) BOOL detectSearchDomains;
+@property(nonatomic) BOOL detectSearchDomains;
 /**
  * Filters
  */
-@property(nonatomic, readonly) NSArray<AGDnsFilterParams *> *filters;
+@property(nonatomic) NSArray<AGDnsFilterParams *> *filters;
 #if TARGET_OS_IPHONE
 /**
  * If not zero, the filtering engine might not load some rules from the configured
@@ -332,106 +301,80 @@ typedef NS_ENUM(NSInteger, AGOutboundProxyProtocol) {
  * If any rules are not loaded because of this limit, a warning will be returned
  * from `[AGDnsProxy initWithConfig:]`.
  */
-@property(nonatomic, readonly) NSUInteger filtersMemoryLimitBytes;
+@property(nonatomic) NSUInteger filtersMemoryLimitBytes;
 #endif // TARGET_OS_IPHONE
 /**
  * TTL of the record for the blocked domains (in seconds)
  */
-@property(nonatomic, readonly) NSInteger blockedResponseTtlSecs;
+@property(nonatomic) NSInteger blockedResponseTtlSecs;
 /**
  * DNS64 settings. If nil, DNS64 is disabled
  */
-@property(nonatomic, readonly) AGDns64Settings *dns64Settings;
+@property(nonatomic) AGDns64Settings *dns64Settings;
 /**
  * List of addresses/ports/protocols/etc... to listen on
  */
-@property(nonatomic, readonly) NSArray<AGListenerSettings *> *listeners;
+@property(nonatomic) NSArray<AGListenerSettings *> *listeners;
 /**
  * Outbound proxy settings
  */
-@property(nonatomic, readonly) AGOutboundProxySettings *outboundProxy;
+@property(nonatomic) AGOutboundProxySettings *outboundProxy;
 /**
  * If false, bootstrappers will fetch only A records.
  */
-@property(nonatomic, readonly) BOOL ipv6Available;
+@property(nonatomic) BOOL ipv6Available;
 /**
  * Block AAAA requests.
  */
-@property(nonatomic, readonly) BOOL blockIpv6;
+@property(nonatomic) BOOL blockIpv6;
 /**
  * How to respond to requests blocked by AdBlock-style rules
  */
-@property(nonatomic, readonly) AGBlockingMode adblockRulesBlockingMode;
+@property(nonatomic) AGBlockingMode adblockRulesBlockingMode;
 /**
  * How to respond to requests blocked by hosts-style rules
  */
-@property(nonatomic, readonly) AGBlockingMode hostsRulesBlockingMode;
+@property(nonatomic) AGBlockingMode hostsRulesBlockingMode;
 /**
  * Custom IPv4 address to return for filtered requests
  */
-@property(nonatomic, readonly) NSString *customBlockingIpv4;
+@property(nonatomic) NSString *customBlockingIpv4;
 /**
  * Custom IPv6 address to return for filtered requests
  */
-@property(nonatomic, readonly) NSString *customBlockingIpv6;
+@property(nonatomic) NSString *customBlockingIpv6;
 /**
  * Maximum number of cached responses
  */
-@property(nonatomic, readonly) NSUInteger dnsCacheSize;
+@property(nonatomic) NSUInteger dnsCacheSize;
 /**
  * Enable optimistic DNS caching
  */
-@property(nonatomic, readonly) BOOL optimisticCache;
+@property(nonatomic) BOOL optimisticCache;
 /**
  * Enable DNSSEC OK extension.
  * This options tells server that we want to receive DNSSEC records along with normal queries.
  * If they exist, request processed event will have DNSSEC flag on.
  * WARNING: may increase data usage and probability of TCP fallbacks.
  */
-@property(nonatomic, readonly) BOOL enableDNSSECOK;
+@property(nonatomic) BOOL enableDNSSECOK;
 /**
  * If enabled, detect retransmitted requests and handle them using fallback upstreams only.
  */
-@property(nonatomic, readonly) BOOL enableRetransmissionHandling;
+@property(nonatomic) BOOL enableRetransmissionHandling;
 /**
  * If enabled, our own route resolver will be used to resolve routes.
  * This is needed when DnsProxy is used inside network extension and needs to use routes of some VPN.
  */
-@property(nonatomic, readonly) BOOL enableRouteResolver;
+@property(nonatomic) BOOL enableRouteResolver;
 /**
  * If enabled, strip Encrypted Client Hello parameters from responses.
  */
-@property(nonatomic, readonly) BOOL blockEch;
+@property(nonatomic) BOOL blockEch;
 /**
  * Path to adguard-tun-helper (macOS only)
  */
-@property(nonatomic, readonly) NSString *helperPath;
-
-- (instancetype) initWithUpstreams: (NSArray<AGDnsUpstream *> *) upstreams
-        fallbacks: (NSArray<AGDnsUpstream *> *) fallbacks
-        fallbackDomains: (NSArray<NSString *> *) fallbackDomains
-        detectSearchDomains: (BOOL) detectSearchDomains
-        filters: (NSArray<AGDnsFilterParams *> *) filters
-#if TARGET_OS_IPHONE
-        filtersMemoryLimitBytes: (NSUInteger) filtersMemoryLimitBytes
-#endif // TARGET_OS_IPHONE
-        blockedResponseTtlSecs: (NSInteger) blockedResponseTtlSecs
-        dns64Settings: (AGDns64Settings *) dns64Settings
-        listeners: (NSArray<AGListenerSettings *> *) listeners
-        outboundProxy: (AGOutboundProxySettings *) outboundProxy
-        ipv6Available: (BOOL) ipv6Available
-        blockIpv6: (BOOL) blockIpv6
-        adblockRulesBlockingMode: (AGBlockingMode) adblockRulesBlockingMode
-        hostsRulesBlockingMode: (AGBlockingMode) hostsRulesBlockingMode
-        customBlockingIpv4: (NSString *) customBlockingIpv4
-        customBlockingIpv6: (NSString *) customBlockingIpv6
-        dnsCacheSize: (NSUInteger) dnsCacheSize
-        optimisticCache: (BOOL) optimisticCache
-        enableDNSSECOK: (BOOL) enableDNSSECOK
-        enableRetransmissionHandling: (BOOL) enableRetransmissionHandling
-        enableRouteResolver: (BOOL) enableRouteResolver
-        blockEch: (BOOL) blockEch
-        helperPath: (NSString *)helperPath;
+@property(nonatomic) NSString *helperPath;
 
 - (instancetype)initWithCoder:(NSCoder *)coder;
 

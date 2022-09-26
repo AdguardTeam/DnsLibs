@@ -4,39 +4,44 @@
 /// Test that we don't crash when `[AGDnsProxy initWithConfig]` fails because listeners couldn't be initialized
 static int regressTestListenerFailsInit() {
     // This listener MUST cause initialization to fail
-    auto *listener = [[AGListenerSettings alloc] initWithAddress:@"asdf"
-                                                            port:0
-                                                           proto:AGLP_UDP
-                                                      persistent:NO
-                                                   idleTimeoutMs:10];
-    auto *upstream = [[AGDnsUpstream alloc] initWithAddress:@"1.1.1.1"
-                                                  bootstrap:nil
-                                                  timeoutMs:1000
-                                                   serverIp:nil
-                                                         id:42
-                                      outboundInterfaceName:nil];
-    auto *config = [[AGDnsProxyConfig alloc] initWithUpstreams:@[upstream]
-                                                     fallbacks:@[]
-                                               fallbackDomains:@[]
-                                           detectSearchDomains:YES
-                                                       filters:@[]
-                                        blockedResponseTtlSecs:0
-                                                 dns64Settings:nil
-                                                     listeners:@[listener]
-                                                 outboundProxy:nil
-                                                 ipv6Available:NO
-                                                     blockIpv6:NO
-                                      adblockRulesBlockingMode:AGBM_REFUSED
-                                        hostsRulesBlockingMode:AGBM_ADDRESS
-                                            customBlockingIpv4:nil
-                                            customBlockingIpv6:nil
-                                                  dnsCacheSize:0
-                                               optimisticCache:YES
-                                                enableDNSSECOK:NO
-                                  enableRetransmissionHandling:NO
-                                           enableRouteResolver:NO
-                                                      blockEch:NO
-                                                    helperPath:nil];
+    auto *listener = [[AGListenerSettings alloc] init];
+    listener.address = @"asdf";
+    listener.port = 0;
+    listener.proto = AGLP_UDP;
+    listener.persistent = NO;
+    listener.idleTimeoutMs = 10;
+
+    auto *upstream = [[AGDnsUpstream alloc] init];
+    upstream.address = @"1.1.1.1";
+    upstream.bootstrap = nil;
+    upstream.timeoutMs = 1000;
+    upstream.serverIp = nil;
+    upstream.id = 42;
+    upstream.outboundInterfaceName = nil;
+
+    auto *config = [[AGDnsProxyConfig alloc] init];
+    config.upstreams = @[upstream];
+    config.fallbacks = @[];
+    config.fallbackDomains = @[];
+    config.detectSearchDomains = YES;
+    config.filters = @[];
+    config.blockedResponseTtlSecs = 0;
+    config.dns64Settings = nil;
+    config.listeners = @[listener];
+    config.outboundProxy = nil;
+    config.ipv6Available = NO;
+    config.blockIpv6 = NO;
+    config.adblockRulesBlockingMode = AGBM_REFUSED;
+    config.hostsRulesBlockingMode = AGBM_ADDRESS;
+    config.customBlockingIpv4 = nil;
+    config.customBlockingIpv6 = nil;
+    config.dnsCacheSize = 0;
+    config.optimisticCache = YES;
+    config.enableDNSSECOK = NO;
+    config.enableRetransmissionHandling = NO;
+    config.enableRouteResolver = NO;
+    config.blockEch = NO;
+    config.helperPath = nil;
 
     auto *handler = [AGDnsProxyEvents new];
     NSError *error;
