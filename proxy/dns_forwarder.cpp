@@ -841,6 +841,9 @@ coro::Task<UpstreamExchangeResult> DnsForwarder::do_upstream_exchange(
             } else if (result.error()->value() != DE_TIMED_OUT && result.error()->value() != DE_SHUTTING_DOWN) {
                 // https://github.com/AdguardTeam/DnsLibs/issues/86
                 Upstream::ExchangeResult retry_result = co_await cur_upstream->exchange(request, info);
+                if (guard.expired()) {
+                    co_return {make_error(DE_SHUTTING_DOWN), nullptr};
+                }
                 if (!retry_result.has_error()) {
                     co_return {std::move(retry_result.value()), cur_upstream};
                 }
