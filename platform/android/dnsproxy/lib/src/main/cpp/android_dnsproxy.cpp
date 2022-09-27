@@ -340,7 +340,7 @@ OutboundProxySettings AndroidDnsProxy::marshal_outbound_proxy(JNIEnv *env, jobje
 LocalRef<jobject> AndroidDnsProxy::marshal_outbound_proxy(JNIEnv *env, const OutboundProxySettings &csettings) {
     LocalRef<jstring> address = m_utils.marshal_string(env, csettings.address);
 
-    jclass array_clazz = env->FindClass("java/net/ArrayList");
+    jclass array_clazz = env->FindClass("java/util/ArrayList");
     jmethodID array_ctor = env->GetMethodID(array_clazz, "<init>", "(I)V");
     LocalRef<jobject> bootstrap = {env, env->NewObject(array_clazz, array_ctor, (jint) csettings.bootstrap.size())};
     for (auto &bootstrap_address : csettings.bootstrap) {
@@ -368,8 +368,6 @@ LocalRef<jobject> AndroidDnsProxy::marshal_outbound_proxy(JNIEnv *env, const Out
 DnsFilter::EngineParams AndroidDnsProxy::marshal_filter_params(JNIEnv *env, jobject java_filter_params) {
 
     auto clazz = env->FindClass(FQN_FILTER_PARAMS);
-    assert(env->IsInstanceOf(java_filter_params, clazz));
-
     auto id_field = env->GetFieldID(clazz, "id", "I");
     auto data_field = env->GetFieldID(clazz, "data", "Ljava/lang/String;");
     auto in_memory_field = env->GetFieldID(clazz, "inMemory", "Z");
@@ -377,9 +375,10 @@ DnsFilter::EngineParams AndroidDnsProxy::marshal_filter_params(JNIEnv *env, jobj
     DnsFilter::EngineParams params{};
 
     m_utils.iterate(env, java_filter_params, [&](LocalRef<jobject> jfp) {
+        assert(env->IsInstanceOf(jfp.get(), clazz));
         DnsFilter::FilterParams fp{};
         fp.id = env->GetIntField(jfp.get(), id_field);
-        if (jstring jdata = (jstring) env->GetObjectField(jfp.get(), data_field); !env->IsSameObject(nullptr, jdata)) {
+        if (auto jdata = (jstring) env->GetObjectField(jfp.get(), data_field); !env->IsSameObject(nullptr, jdata)) {
             fp.data = m_utils.marshal_string(env, jdata);
         }
         fp.in_memory = env->GetBooleanField(jfp.get(), in_memory_field);
