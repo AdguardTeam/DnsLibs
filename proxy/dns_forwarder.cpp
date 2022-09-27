@@ -287,7 +287,7 @@ DnsForwarder::~DnsForwarder() = default;
 
 static coro::Task<void> discover_dns64_prefixes(std::vector<UpstreamOptions> uss,
         std::shared_ptr<SocketFactory> socket_factory, dns64::Prefixes prefixes, Logger logger, EventLoop &loop,
-        uint32_t max_tries, Millis wait_time);
+        uint32_t max_tries, Millis wait_time, std::weak_ptr<bool> shutdown_guard);
 
 std::pair<bool, ErrString> DnsForwarder::init(
         EventLoopPtr loop, const DnsProxySettings &settings, const DnsProxyEvents &events) {
@@ -398,7 +398,7 @@ std::pair<bool, ErrString> DnsForwarder::init(
     if (settings.dns64.has_value()) {
         infolog(m_log, "DNS64 discovery is enabled");
         coro::run_detached(discover_dns64_prefixes(settings.dns64->upstreams, m_socket_factory, m_dns64_prefixes, m_log,
-                *m_loop, settings.dns64->max_tries, settings.dns64->wait_time));
+                *m_loop, settings.dns64->max_tries, settings.dns64->wait_time, m_shutdown_guard));
     }
 
     m_response_cache.set_capacity(m_settings->dns_cache_size);
@@ -409,12 +409,15 @@ std::pair<bool, ErrString> DnsForwarder::init(
 
 static coro::Task<void> discover_dns64_prefixes(std::vector<UpstreamOptions> uss,
         std::shared_ptr<SocketFactory> socket_factory, dns64::Prefixes prefixes, Logger logger, EventLoop &loop,
-        uint32_t max_tries, Millis wait_time) {
-
+        uint32_t max_tries, Millis wait_time, std::weak_ptr<bool> shutdown_guard) {
+    co_await loop.co_submit();
     UpstreamFactory us_factory({.loop = loop, .socket_factory = socket_factory.get()});
     auto i = max_tries;
     while (i--) {
         co_await loop.co_sleep(wait_time);
+        if (shutdown_guard.expired()) {
+            co_return;
+        }
         for (auto &us : uss) {
             auto upstream_result = us_factory.create_upstream(us);
             if (upstream_result.has_error()) {
@@ -423,6 +426,9 @@ static coro::Task<void> discover_dns64_prefixes(std::vector<UpstreamOptions> uss
             }
 
             auto result = co_await dns64::discover_prefixes(upstream_result.value());
+            if (shutdown_guard.expired()) {
+                co_return;
+            }
             if (result.has_error()) {
                 dbglog(logger, "DNS64: error discovering prefixes:\n{}", result.error()->str());
                 continue;
