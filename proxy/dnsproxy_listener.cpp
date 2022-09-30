@@ -261,14 +261,15 @@ public:
         log_id(m_log, trace, m_id, "...");
 
         assert(proxy);
-        assert(idle_timeout.count());
 
         m_idle_timer = Uv<uv_timer_t>::create_with_parent(this);
         uv_timer_init(loop, m_idle_timer->raw());
 
         m_proxy = proxy;
         m_persistent = persistent;
-        m_idle_timeout = idle_timeout;
+        if (idle_timeout.count()) {
+            m_idle_timeout = idle_timeout;
+        }
         m_close_callback = std::move(close_callback);
         m_shutdown_guard = std::make_shared<bool>(true);
         do_read();
@@ -287,6 +288,8 @@ public:
     }
 
 private:
+    static constexpr Millis DEFAULT_IDLE_TIMEOUT{30000};
+
     const uint64_t m_id;
     Logger m_log;
     DnsProxy *m_proxy{};
@@ -294,7 +297,7 @@ private:
     uint8_t m_incoming_buf[TCP_RECV_BUF_SIZE]{};
     UvPtr<uv_tcp_t> m_tcp;
     UvPtr<uv_timer_t> m_idle_timer;
-    Millis m_idle_timeout{0};
+    Millis m_idle_timeout{DEFAULT_IDLE_TIMEOUT};
     std::function<void(uint64_t)> m_close_callback;
     bool m_closed{false};
     TcpDnsPayloadParser m_parser;
@@ -398,6 +401,7 @@ private:
 
     static void idle_timeout_cb(uv_timer_t *h) {
         auto *c = (TcpDnsConnection *) Uv<uv_timer_t>::parent_from_data(h->data);
+        log_id(c->m_log, dbg, c->m_id, "Idle timer expired, disconnecting");
         c->do_close();
     }
 

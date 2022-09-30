@@ -45,16 +45,16 @@ enum class DnsProxyBlockingMode {
 };
 
 struct ListenerSettings {
-    std::string address{"::"}; // The address to listen on
-    uint16_t port{53}; // The port to listen on
-    utils::TransportProtocol protocol{utils::TP_UDP}; // The protocol to listen for
-    bool persistent{false}; // If true, don't close the TCP connection after sending the first response
-    Millis idle_timeout{3000}; // Close the TCP connection this long after the last request received
+    std::string address; // The address to listen on
+    uint16_t port = 0; // The port to listen on
+    utils::TransportProtocol protocol = utils::TP_UDP; // The protocol to listen for
+    bool persistent = false; // If true, don't close the TCP connection after sending the first response
+    Millis idle_timeout{}; // Close the TCP connection this long after the last request received
 
     /// If not -1, listen on this file descriptor, which must already be bound.
     /// The ownership is not transferred (caller must close the fd).
     /// Ignored on Windows.
-    evutil_socket_t fd{-1};
+    evutil_socket_t fd = -1;
 
     std::string str() const {
         return fmt::format(

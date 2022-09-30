@@ -54,5 +54,6 @@ int main() {
     while (getchar() != 's') {
         ;
     }
+    [proxy stop];
     return 0;
 }
