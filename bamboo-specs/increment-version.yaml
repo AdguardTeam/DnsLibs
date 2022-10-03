@@ -41,11 +41,12 @@ DL - Increment version:
         git config user.name "Bamboo"
         git config user.email "Bamboo"
 
-
         cp ../dns-libs-private/* .
+
         if [ ${bamboo_custom_version} = "none" ]; then
             bamboo_custom_version=
         fi
+
         ./increment_version.sh ${bamboo_custom_version} || exit 1
 
         git remote set-url origin ${bamboo_planRepository_repositoryUrl}
@@ -56,16 +57,17 @@ DL - Increment version:
         git add platform/windows/capi/src/ag_dns.rc
         git add platform/windows/cs/Adguard.Dns/SolutionInfo.cs
         git add common/include/dns/common/version.h
-        git commit -m "skipci: Automatic version increment by Bamboo"
-        git push
 
-        #if [ "${bamboo_repository_branch_name}" = "master" ]; then
-        #  BAMBOO_URL=$(echo ${bamboo_resultsUrl} | sed -ne 's|\(https://[^/]\+\)/.*|\1|p')
-        #  for plan in CL-DD CL-DNSWL CL-DRT CL-DM; do
-        #    curl -H "Authorization: Bearer ${bamboo.bambooTriggerTokenSecret}" \
-        #      "${BAMBOO_URL}/rest/api/latest/queue/$plan" -X POST -d "executeAllStages=1"
-        #  done
-        #fi
+        case "${bamboo_repository_branch_name}" in
+        master|stable-*)
+
+            ./increment_conan_version.sh ${bamboo_custom_version} || exit 1
+
+            git add conandata.yml
+            git commit -m "skipci: Automatic version increment by Bamboo"
+            git push
+
+        esac
       working-dir: dns-libs
       description: Increment version
   requirements:
