@@ -47,10 +47,10 @@ Error<SocketError> TcpStream::connect(ConnectParameters params) {
 
     uv_os_fd_t fd;
     uv_fileno((uv_handle_t *) m_tcp->raw(), &fd);
-    if (ErrString err; m_prepare_fd.func != nullptr
-                       && (err = m_prepare_fd.func(m_prepare_fd.arg, (evutil_socket_t) fd, params.peer, m_parameters.outbound_interface))
-                               .has_value()) {
-        return make_error(SocketError::AE_PREPARE_ERROR, AG_FMT("Failed to prepare descriptor: {}", err.value()));
+    if (Error<SocketError> err; m_prepare_fd.func != nullptr
+            && (err = m_prepare_fd.func(
+                        m_prepare_fd.arg, (evutil_socket_t) fd, params.peer, m_parameters.outbound_interface))) {
+        return make_error(SocketError::AE_PREPARE_ERROR, AG_FMT("Failed to prepare descriptor: {}", err->str()));
     }
 
     if (auto e = this->set_callbacks(params.callbacks); e) {

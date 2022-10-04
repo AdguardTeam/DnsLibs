@@ -263,7 +263,7 @@ TEST_F(DnsrewriteTest, FullSVCB) {
 TEST_F(DnsrewriteTest, A_vs_AAAA_query) {
     DnsFilter::EngineParams params = {{{10, "example.com$dnsrewrite=NOERROR;A;1.2.3.4", true}}};
     auto [handle, err_or_warn] = filter.create(params);
-    ASSERT_TRUE(handle) << *err_or_warn;
+    ASSERT_TRUE(handle) << err_or_warn->str();
 
     std::vector<DnsFilter::Rule> rules = filter.match(handle, {"example.com", LDNS_RR_TYPE_AAAA});
     ASSERT_EQ(rules.size(), 0);
@@ -274,7 +274,7 @@ TEST_F(DnsrewriteTest, A_vs_AAAA_query) {
 TEST_F(DnsrewriteTest, AAAA_vs_A_query) {
     DnsFilter::EngineParams params = {{{10, "example.com$dnsrewrite=NOERROR;AAAA;abcd::1234", true}}};
     auto [handle, err_or_warn] = filter.create(params);
-    ASSERT_TRUE(handle) << *err_or_warn;
+    ASSERT_TRUE(handle) << err_or_warn->str();
 
     std::vector<DnsFilter::Rule> rules = filter.match(handle, {"example.com", LDNS_RR_TYPE_A});
     ASSERT_EQ(rules.size(), 0);
@@ -285,7 +285,7 @@ TEST_F(DnsrewriteTest, AAAA_vs_A_query) {
 TEST_F(DnsrewriteTest, MatchReverse) {
     DnsFilter::EngineParams params = {{{10, "||4.3.2.1.in-addr.arpa.^$dnsrewrite=REFUSED;PTR;example.com.", true}}};
     auto [handle, err_or_warn] = filter.create(params);
-    ASSERT_TRUE(handle) << *err_or_warn;
+    ASSERT_TRUE(handle) << err_or_warn->str();
 
     std::vector<DnsFilter::Rule> rules = filter.match(handle, {"4.3.2.1.in-addr.arpa", LDNS_RR_TYPE_PTR});
     ASSERT_EQ(rules.size(), 1);
@@ -301,7 +301,7 @@ TEST_F(DnsrewriteTest, MatchReverseIpv6) {
             "example.com.",
             true}}};
     auto [handle, err_or_warn] = filter.create(params);
-    ASSERT_TRUE(handle) << *err_or_warn;
+    ASSERT_TRUE(handle) << err_or_warn->str();
 
     std::vector<DnsFilter::Rule> rules = filter.match(
             handle, {"a.9.8.7.6.5.e.f.f.f.4.3.2.1.0.0.0.0.0.0.0.0.f.0.8.b.d.0.1.0.0.2.ip6.arpa", LDNS_RR_TYPE_PTR});
@@ -316,7 +316,7 @@ TEST_F(DnsrewriteTest, MatchReverseIpv6) {
 TEST_F(DnsrewriteTest, CnameMatch) {
     DnsFilter::EngineParams params = {{{10, "example.com$dnsrewrite=NOERROR;CNAME;example.net.", true}}};
     auto [handle, err_or_warn] = filter.create(params);
-    ASSERT_TRUE(handle) << *err_or_warn;
+    ASSERT_TRUE(handle) << err_or_warn->str();
 
     std::vector<DnsFilter::Rule> rules = filter.match(handle, {"example.com", LDNS_RR_TYPE_A});
     ASSERT_EQ(rules.size(), 1);

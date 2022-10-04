@@ -75,7 +75,7 @@ coro::Task<Bootstrapper::ResolveResult> Bootstrapper::resolve() {
                   : nullptr};
 }
 
-ErrString Bootstrapper::temporary_disabler_check() {
+Error<Bootstrapper::BootstrapperError> Bootstrapper::temporary_disabler_check() {
     using namespace std::chrono;
     if (m_resolve_fail_times_ms.first) {
         if (int64_t tries_timeout_ms = m_resolve_fail_times_ms.first + RESOLVE_TRYING_INTERVAL_MS;
@@ -84,12 +84,12 @@ ErrString Bootstrapper::temporary_disabler_check() {
             if (int64_t disabled_for_ms = now_ms - tries_timeout_ms,
                     remaining_ms = TEMPORARY_DISABLE_INTERVAL_MS - disabled_for_ms;
                     remaining_ms > 0) {
-                return AG_FMT("Disabled for {}ms", remaining_ms);
+                return make_error(BootstrapperError::AE_TEMPORARY_DISABLED, AG_FMT("Disabled for {}ms", remaining_ms));
             }
             m_resolve_fail_times_ms.first = 0;
         }
     }
-    return std::nullopt;
+    return {};
 }
 
 void Bootstrapper::temporary_disabler_update(bool fail) {
@@ -109,7 +109,7 @@ coro::Task<Bootstrapper::ResolveResult> Bootstrapper::get() {
     if (!m_resolved_cache.empty()) {
         co_return {m_resolved_cache, m_server_name, Millis(0), {}};
     } else if (auto error = temporary_disabler_check()) {
-        co_return {{}, m_server_name, Millis(0), make_error(BootstrapperError::AE_TEMPORARY_DISABLED, *error)};
+        co_return {{}, m_server_name, Millis(0), error};
     }
 
     ResolveResult result = co_await resolve();
@@ -132,7 +132,10 @@ static std::vector<ResolverPtr> create_resolvers(const Logger &log, const Bootst
     UpstreamOptions opts{};
     opts.outbound_interface = p.outbound_interface;
     for (const std::string &server : p.bootstrap) {
-        if (!p.upstream_config.ipv6_available && SocketAddress(ag::utils::split_host_port(server).first, 0).is_ipv6()) {
+        auto split_result = ag::utils::split_host_port(server);
+        if (!p.upstream_config.ipv6_available
+                && !split_result.has_error()
+                && SocketAddress(split_result.value().first, 0).is_ipv6()) {
             continue;
         }
         opts.address = server;
@@ -155,12 +158,12 @@ Bootstrapper::Bootstrapper(const Params &p)
         : m_log(__func__)
         , m_timeout(p.timeout)
         , m_resolvers(create_resolvers(m_log, p)) {
-    auto [host, port] = utils::split_host_port(p.address_string);
-    m_server_port = std::strtol(std::string(port).c_str(), nullptr, 10);
-    if (m_server_port == 0) {
-        m_server_port = p.default_port;
+    auto split_result = utils::split_host_port(p.address_string);
+    if (!split_result.has_error()) {
+        auto [host, port] = split_result.value();
+        m_server_port = utils::to_integer<uint16_t>(port).value_or(p.default_port);
+        m_server_name = host;
     }
-    m_server_name = host;
     m_shutdown_guard = std::make_shared<bool>(true);
 }
 

@@ -1,9 +1,9 @@
-
 #include <algorithm>
 #include <cassert>
 #include <magic_enum.hpp>
 #include <uv.h>
 
+#include "common/error.h"
 #include "common/socket_address.h"
 #include "dns/common/net_consts.h"
 
@@ -38,13 +38,13 @@ protected:
     // The loop is initialized, but isn't yet running at this point
     // Return nullopt if the loop should run (success)
     // Close any uv_*_init'ed handles before returning in case of an error!
-    virtual ErrString before_run() = 0;
+    virtual Error<DnsProxyInitError> before_run() = 0;
 
 public:
     /**
      * @return std::nullopt if ok, error string otherwise
      */
-    ErrString init(const ListenerSettings &settings, DnsProxy *proxy, EventLoop *loop) {
+    Error<DnsProxyInitError> init(const ListenerSettings &settings, DnsProxy *proxy, EventLoop *loop) {
         m_settings = settings;
 #ifdef _WIN32
         m_settings.fd = -1; // Unsupported on Windows
@@ -54,30 +54,28 @@ public:
 
         m_proxy = proxy;
         if (!m_proxy) {
-            return "Proxy is not set";
+            return make_error(DnsProxyInitError::AE_PROXY_NOT_SET);
         }
         m_loop = loop;
         if (!m_loop) {
-            return "Event loop is not set";
+            return make_error(DnsProxyInitError::AE_EVENT_LOOP_NOT_SET);
         }
 
         if (m_settings.fd == -1) {
             m_address = SocketAddress{m_settings.address, m_settings.port};
             if (!m_address.valid()) {
-                return AG_FMT("Invalid address: {}", settings.address);
+                return make_error(DnsProxyInitError::AE_INVALID_ADDRESS, AG_FMT("{}", settings.address));
             }
         }
 
-        int err = 0;
-
-        auto err_str = before_run();
-        if (err_str.has_value()) {
-            return err_str;
+        auto err = before_run();
+        if (err) {
+            return err;
         }
 
         m_shutdown_guard = std::make_shared<bool>(true);
 
-        return std::nullopt;
+        return {};
     }
 
     ~ListenerBase() override {
@@ -125,7 +123,7 @@ private:
         std::unique_ptr<char[]> ptr{request.base};
         DnsMessageInfo info{.proto = utils::TP_UDP, .peername = SocketAddress{addr}};
         std::weak_ptr<bool> guard = m_shutdown_guard;
-        Uint8Vector result = co_await m_proxy->handle_message(Uint8View{(uint8_t *)request.base, request.len}, &info);
+        Uint8Vector result = co_await m_proxy->handle_message(Uint8View{(uint8_t *) request.base, request.len}, &info);
         if (guard.expired()) {
             co_return;
         }
@@ -141,8 +139,7 @@ private:
     }
 
     static void recv_cb(
-            uv_udp_t *handle, ssize_t nread,
-            const uv_buf_t *buf, const struct sockaddr *addr, unsigned flags) {
+            uv_udp_t *handle, ssize_t nread, const uv_buf_t *buf, const struct sockaddr *addr, unsigned flags) {
         std::unique_ptr<char[]> ptr{buf->base};
         auto *self = (UdpListener *) Uv<uv_udp_t>::parent_from_data(handle->data);
         if (!self) {
@@ -169,28 +166,28 @@ private:
     }
 
 protected:
-    ErrString before_run() override {
+    Error<DnsProxyInitError> before_run() override {
         int err = 0;
 
         // Init UDP
         m_udp = Uv<uv_udp_t>::create_with_parent(this);
         if ((err = uv_udp_init(m_loop->handle(), m_udp->raw())) < 0) {
-            return AG_FMT("uv_udp_init failed: {}", uv_strerror(err));
+            return make_error(DnsProxyInitError::AE_LISTENER_INIT_ERROR, uv_strerror(err));
         }
 
         if (m_settings.fd == -1) {
             if ((err = uv_udp_bind(m_udp->raw(), m_address.c_sockaddr(), UV_UDP_REUSEADDR)) < 0) {
-                return AG_FMT("uv_udp_bind failed: {}", uv_strerror(err));
+                return make_error(DnsProxyInitError::AE_LISTENER_INIT_ERROR, uv_strerror(err));
             }
         } else {
             if ((err = uv_udp_open(m_udp->raw(), m_settings.fd)) < 0) {
-                return AG_FMT("uv_udp_open failed: {}", uv_strerror(err));
+                return make_error(DnsProxyInitError::AE_LISTENER_INIT_ERROR, uv_strerror(err));
             }
             m_settings.fd = -1; // uv_udp_open took ownership
         }
 
         if ((err = uv_udp_recv_start(m_udp->raw(), udp_alloc_cb, recv_cb)) < 0) {
-            return AG_FMT("uv_udp_recv_start failed: {}", uv_strerror(err));
+            return make_error(DnsProxyInitError::AE_LISTENER_INIT_ERROR, uv_strerror(err));
         }
 
         if (m_address.port() == 0) {
@@ -201,7 +198,7 @@ protected:
         }
         log_listener(this, info, "Listening on {} (UDP)", m_address.str());
 
-        return std::nullopt;
+        return {};
     }
 };
 
@@ -250,8 +247,7 @@ class TcpDnsConnection {
 public:
     explicit TcpDnsConnection(uint64_t id)
             : m_id{id}
-            , m_log(__func__)
-    {
+            , m_log(__func__) {
         m_tcp = Uv<uv_tcp_t>::create_with_parent(this);
     }
 
@@ -460,27 +456,27 @@ private:
     }
 
 protected:
-    ErrString before_run() override {
+    Error<DnsProxyInitError> before_run() override {
         int err = 0;
 
         m_tcp = Uv<uv_tcp_t>::create_with_parent(this);
         if ((err = uv_tcp_init(m_loop->handle(), m_tcp->raw())) < 0) {
-            return AG_FMT("uv_tcp_init failed: {}", uv_strerror(err));
+            return make_error(DnsProxyInitError::AE_LISTENER_INIT_ERROR, uv_strerror(err));
         }
 
         if (m_settings.fd == -1) {
             if ((err = uv_tcp_bind(m_tcp->raw(), m_address.c_sockaddr(), 0)) < 0) {
-                return AG_FMT("uv_tcp_bind failed: {}", uv_strerror(err));
+                return make_error(DnsProxyInitError::AE_LISTENER_INIT_ERROR, uv_strerror(err));
             }
         } else {
             if ((err = uv_tcp_open(m_tcp->raw(), m_settings.fd)) < 0) {
-                return AG_FMT("uv_tcp_open failed: {}", uv_strerror(err));
+                return make_error(DnsProxyInitError::AE_LISTENER_INIT_ERROR, uv_strerror(err));
             }
             m_settings.fd = -1; // uv_tcp_open took ownership
         }
 
         if ((err = uv_listen((uv_stream_t *) m_tcp->raw(), BACKLOG, conn_cb)) < 0) {
-            return AG_FMT("uv_listen failed: {}", uv_strerror(err));
+            return make_error(DnsProxyInitError::AE_LISTENER_INIT_ERROR, uv_strerror(err));
         }
 
         if (m_address.port() == 0) {
@@ -491,13 +487,14 @@ protected:
         }
         log_listener(this, info, "Listening on {} (TCP)", m_address.str());
 
-        return std::nullopt;
+        return {};
     }
 };
 
-DnsProxyListener::CreateResult DnsProxyListener::create_and_listen(const ListenerSettings &settings, DnsProxy *proxy, EventLoop *loop) {
+DnsProxyListener::CreateResult DnsProxyListener::create_and_listen(
+        const ListenerSettings &settings, DnsProxy *proxy, EventLoop *loop) {
     if (!proxy) {
-        return {nullptr, "proxy is nullptr"};
+        return make_error(DnsProxyInitError::AE_EMPTY_PROXY);
     }
 
     std::unique_ptr<ListenerBase> ptr;
@@ -509,15 +506,15 @@ DnsProxyListener::CreateResult DnsProxyListener::create_and_listen(const Listene
         ptr = std::make_unique<TcpListener>();
         break;
     default:
-        return {nullptr, AG_FMT("Protocol {} not implemented", magic_enum::enum_name(settings.protocol))};
+        return make_error(DnsProxyInitError::AE_PROTOCOL_ERROR, AG_FMT("{}", magic_enum::enum_name(settings.protocol)));
     }
 
     auto err = ptr->init(settings, proxy, loop);
-    if (err.has_value()) {
-        return {nullptr, err};
+    if (err) {
+        return err;
     }
 
-    return {std::move(ptr), std::nullopt};
+    return std::move(ptr);
 }
 
 } // namespace ag::dns

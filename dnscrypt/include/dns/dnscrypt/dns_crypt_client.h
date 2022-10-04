@@ -18,7 +18,7 @@ namespace ag::dns::dnscrypt {
  */
 class Client {
 public:
-    enum DialError {
+    enum class DialError {
         AE_STAMP_PARSE_ERROR,
         AE_BAD_PROTOCOL,
         AE_KEYPAIR_GENERATION_ERROR,
@@ -104,6 +104,7 @@ private:
 
 namespace ag {
 
+// clang format off
 template<>
 struct ErrorCodeToString<ag::dns::dnscrypt::Client::DialError> {
     std::string operator()(ag::dns::dnscrypt::Client::DialError e) {
@@ -113,9 +114,9 @@ struct ErrorCodeToString<ag::dns::dnscrypt::Client::DialError> {
         case decltype(e)::AE_KEYPAIR_GENERATION_ERROR: return "Can not generate keypair";
         case decltype(e)::AE_EMPTY_PROVIDER_NAME: return "Provider name is empty";
         case decltype(e)::AE_FETCH_DNSCRYPT_CERT_ERROR: return "Error fetching DNSCrypt cert";
-        default: return "Unknown error";
         }
     }
 };
+// clang format on
 
 } // namespace ag

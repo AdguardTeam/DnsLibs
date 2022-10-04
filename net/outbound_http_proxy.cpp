@@ -272,9 +272,8 @@ int HttpOProxy::ssl_verify_callback(X509_STORE_CTX *ctx, void *arg) {
         return 1;
     }
 
-    if (ErrString err = self->m_parameters.verifier->verify(ctx, SSL_get_servername(ssl, SSL_get_servername_type(ssl)));
-            err.has_value()) {
-        log_proxy(self, dbg, "Failed to verify certificate: {}", err.value());
+    if (auto err = self->m_parameters.verifier->verify(ctx, SSL_get_servername(ssl, SSL_get_servername_type(ssl)))) {
+        log_proxy(self, dbg, "Failed to verify certificate: {}", *err);
         return 0;
     }
 

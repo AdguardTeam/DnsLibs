@@ -304,7 +304,8 @@ TEST_F(DnsstampTest, TestPrettyUrlAndStr) {
                             "5mdRZvMAzBuQ5kbnMuZ29vZ2xlLmNvbQ0vZXhwZXJpbWVudGFs",
                     .pretty = "https://dns.google.com/experimental",
             },
-            {.ugly = "sdns://"
+            {
+                    .ugly = "sdns://"
                      "AQIAAAAAAAAADzE3Ni4xMDMuMTMwLjEzMCDRK0fyUtzywrv4mRCG6vec5EldixbIoMQyLlLKPzkIcyIyLmRuc2NyeXB0LmRlZ"
                      "mF1bHQubnMxLmFkZ3VhcmQuY29t",
                     .pretty = "dnscrypt://2.dnscrypt.default.ns1.adguard.com"},

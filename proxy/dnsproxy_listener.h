@@ -1,6 +1,7 @@
 #pragma once
 
 #include "common/defs.h"
+#include "common/error.h"
 #include "dns/proxy/dnsproxy.h"
 
 namespace ag::dns {
@@ -12,7 +13,7 @@ class DnsProxyListener {
 public:
     virtual ~DnsProxyListener() = default;
 
-    using CreateResult = std::pair<ListenerPtr, ErrString>;
+    using CreateResult = Result<ListenerPtr, DnsProxyInitError>;
 
     /**
      * Create a listener and start listening

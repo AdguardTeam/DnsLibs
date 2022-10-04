@@ -14,6 +14,7 @@
 #include <string>
 
 #include "common/cesu8.h"
+#include "common/error.h"
 #include "common/logger.h"
 #include "dns/proxy/dnsproxy.h"
 #include "dns/upstream/upstream_utils.h"
@@ -1122,7 +1123,7 @@ static int bindFd(NSString *helperPath, NSString *address, NSNumber *port, AGLis
             };
     }
     native_events.on_certificate_verification =
-        [obj] (CertificateVerificationEvent event) -> std::optional<std::string> {
+        [obj] (CertificateVerificationEvent event) {
             @autoreleasepool {
                 AGDnsProxy *sself = (__bridge AGDnsProxy *)obj;
                 return [AGDnsProxy verifyCertificate: &event log: *sself->log];
@@ -1195,26 +1196,20 @@ static int bindFd(NSString *helperPath, NSString *address, NSNumber *port, AGLis
 
     auto [ret, err_or_warn] = self->proxy.init(std::move(settings), std::move(native_events));
     if (!ret) {
-        auto str = AG_FMT("Failed to initialize the DNS proxy: {}", *err_or_warn);
+        auto str = AG_FMT("Failed to initialize the DNS proxy: {}", err_or_warn->str());
         errlog(*self->log, "{}", str);
         if (error) {
-            if (err_or_warn == DnsProxy::LISTENER_ERROR) {
-                *error = [NSError errorWithDomain: AGDnsProxyErrorDomain
-                                             code: AGDPE_PROXY_INIT_LISTENER_ERROR
-                                         userInfo: @{ NSLocalizedDescriptionKey: convert_string(str) }];
-            } else {
-                *error = [NSError errorWithDomain: AGDnsProxyErrorDomain
-                                             code: AGDPE_PROXY_INIT_ERROR
-                                         userInfo: @{ NSLocalizedDescriptionKey: convert_string(str) }];
-            }
+            *error = [NSError errorWithDomain:AGDnsProxyErrorDomain
+                                         code:(AGDnsProxyInitError)(err_or_warn->value())
+                                     userInfo:@{NSLocalizedDescriptionKey : convert_string(str)}];
         }
         return nil;
     }
     if (error && err_or_warn) {
-        auto str = AG_FMT("DNS proxy initialized with warnings:\n{}", *err_or_warn);
-        *error = [NSError errorWithDomain: AGDnsProxyErrorDomain
-                                     code: AGDPE_PROXY_INIT_WARNING
-                                 userInfo: @{ NSLocalizedDescriptionKey: convert_string(str) }];
+        auto str = AG_FMT("DNS proxy initialized with warnings:\n{}", err_or_warn->str());
+        *error = [NSError errorWithDomain:AGDnsProxyErrorDomain
+                                     code:(AGDnsProxyInitError)(err_or_warn->value())
+                                 userInfo:@{NSLocalizedDescriptionKey : convert_string(str)}];
     }
     self->initialized = YES;
 
@@ -1389,7 +1384,7 @@ static coro::Task<NSData *> handleIPv6Packet(AGDnsProxy *self, NSData *packet)
     }
     if (error) {
         *error = [NSError errorWithDomain:AGDnsProxyErrorDomain
-                                     code:AGDPE_PARSE_DNS_STAMP_ERROR
+                                     code:(int)(stamp.error()->value())
                                  userInfo:@{NSLocalizedDescriptionKey: convert_string(stamp.error()->str())}];
     }
     return nil;
@@ -1433,7 +1428,7 @@ static std::optional<std::string> verifyCertificate(CertificateVerificationEvent
     if (error) {
         return [NSError errorWithDomain: AGDnsProxyErrorDomain
                                    code: AGDPE_TEST_UPSTREAM_ERROR
-                               userInfo: @{NSLocalizedDescriptionKey: convert_string(*error)}];
+                               userInfo: @{NSLocalizedDescriptionKey: convert_string(error->str())}];
     }
     return nil;
 }

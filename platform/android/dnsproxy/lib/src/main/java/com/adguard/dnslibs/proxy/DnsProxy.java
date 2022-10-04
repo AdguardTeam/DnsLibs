@@ -17,6 +17,38 @@ import javax.net.ssl.TrustManagerFactory;
 import javax.net.ssl.X509TrustManager;
 
 public class DnsProxy implements Closeable {
+
+    public enum DnsProxyInitErrorCode {
+        PROXY_NOT_SET,
+        EVENT_LOOP_NOT_SET,
+        INVALID_ADDRESS,
+        EMPTY_PROXY,
+        PROTOCOL_ERROR,
+        LISTENER_INIT_ERROR,
+        INVALID_IPV4,
+        INVALID_IPV6,
+        UPSTREAM_INIT_ERROR,
+        FALLBACK_FILTER_INIT_ERROR,
+        FILTER_LOAD_ERROR,
+        MEM_LIMIT_REACHED,
+        NON_UNIQUE_FILTER_ID,
+        OK,
+    }
+
+    /**
+     * Possible combination of `success` and `code` + `description`:
+     * 1) if success = true and `code` == `DnsProxyInitErrorCode::OK` -> there are no error occurred
+     * (`description` contains default value)
+     * 2) if success = true and `code` != `DnsProxyInitErrorCode::OK` -> there are some warnings, see
+     * `description`
+     * 3) if success = false -> `code` and `description` contains error code and description for error
+     */
+    public class DnsProxyInitResult {
+        public boolean success;
+        public DnsProxyInitErrorCode code = DnsProxyInitErrorCode.OK;
+        public String description = "";
+    }
+
     private static final Logger log = LoggerFactory.getLogger(DnsProxy.class);
 
     private enum State {
@@ -84,8 +116,9 @@ public class DnsProxy implements Closeable {
                 }
             }
 
-            if (!init(nativePtr, settings, new EventsAdapter(events))) {
-                throw new RuntimeException("Failed to initialize the native proxy, see log for details.");
+            DnsProxyInitResult result = init(nativePtr, settings, new EventsAdapter(events));
+            if (!result.success) {
+                throw new RuntimeException(result.description);
             }
             state = State.INITIALIZED;
         } catch (RuntimeException e) {
@@ -150,7 +183,7 @@ public class DnsProxy implements Closeable {
 
     private native long create();
 
-    private native boolean init(long nativePtr, DnsProxySettings settings, EventsAdapter events);
+    private native DnsProxyInitResult init(long nativePtr, DnsProxySettings settings, EventsAdapter events);
 
     private native void deinit(long nativePtr);
 

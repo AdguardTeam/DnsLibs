@@ -548,8 +548,8 @@ ag_dnsproxy *ag_dnsproxy_init(const ag_dnsproxy_settings *c_settings, const ag_d
 
     if (ret) {
         if (err_or_warn) {
-            *out_result = AGDPIR_WARNING;
-            *out_message = strdup(err_or_warn->c_str());
+            *out_result = (ag_dnsproxy_init_result) err_or_warn->value();
+            *out_message = strdup(err_or_warn->str().c_str());
         } else {
             *out_result = AGDPIR_OK;
         }
@@ -557,12 +557,8 @@ ag_dnsproxy *ag_dnsproxy_init(const ag_dnsproxy_settings *c_settings, const ag_d
     }
 
     assert(err_or_warn);
-    if (err_or_warn == DnsProxy::LISTENER_ERROR) {
-        *out_result = AGDPIR_LISTENER_ERROR;
-    } else {
-        *out_result = AGDPIR_ERROR;
-    }
-    *out_message = strdup(err_or_warn->c_str());
+    *out_result = (ag_dnsproxy_init_result) err_or_warn->value();
+    *out_message = strdup(err_or_warn->str().c_str());
 
     delete proxy;
     return nullptr;
@@ -638,7 +634,7 @@ const char *ag_test_upstream(const ag_upstream_options *c_upstream, bool ipv6_av
     c_events.on_certificate_verification = on_certificate_verification;
     auto events = marshal_events(&c_events);
     auto result = test_upstream(upstream, ipv6_available, events.on_certificate_verification, offline);
-    return marshal_str(result.value_or(""));
+    return result ? marshal_str(result->str()) : marshal_str("");
 }
 
 void ag_str_free(const char *str) {

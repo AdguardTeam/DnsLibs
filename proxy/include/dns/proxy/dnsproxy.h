@@ -1,19 +1,22 @@
 #pragma once
 
 #include <memory>
+
 #include "common/defs.h"
+#include "common/error.h"
+
 #include "dns/proxy/dnsproxy_settings.h"
 #include "dns/proxy/dnsproxy_events.h"
 
 namespace ag::dns {
 
 /**
- * DNS proxy module is intended to incapsulate DNS messages processing.
+ * DNS proxy module encapsulates DNS messages processing.
  * It parses, filters, communicates with a DNS resolver and generates answer to a client.
  */
 class DnsProxy {
 public:
-    static const ErrString LISTENER_ERROR;
+    using DnsProxyInitResult = std::pair<bool, Error<DnsProxyInitError>>;
 
     DnsProxy();
     ~DnsProxy();
@@ -26,11 +29,11 @@ public:
     /**
      * @brief Initialize the DNS proxy
      *
-     * @param settings proxy settings (see `dnsproxy_settings`)
-     * @param events proxy events (see `dnsproxy_events`)
+     * @param settings proxy settings (see `DnsProxySettings`)
+     * @param events proxy events (see `DnsProxyEvents`)
      * @return {true, opt_warning_description} or {false, error_description}
      */
-    std::pair<bool, ErrString> init(DnsProxySettings settings, DnsProxyEvents events);
+    [[nodiscard]] DnsProxyInitResult init(DnsProxySettings settings, DnsProxyEvents events);
 
     /**
      * @brief Deinitialize the DNS proxy

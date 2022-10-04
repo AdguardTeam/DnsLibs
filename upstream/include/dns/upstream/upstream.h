@@ -81,7 +81,7 @@ class Upstream : public std::enable_shared_from_this<Upstream> {
 public:
     static constexpr Millis DEFAULT_TIMEOUT{5000};
 
-    enum InitError {
+    enum class InitError {
         AE_EMPTY_SERVER_NAME,
         AE_EMPTY_BOOTSTRAP,
         AE_BOOTSTRAPPER_INIT_FAILED,
@@ -165,7 +165,7 @@ protected:
  */
 class UpstreamFactory {
 public:
-    enum UpstreamCreateError {
+    enum class UpstreamCreateError {
         AE_INVALID_URL,
         AE_INVALID_STAMP,
         AE_INIT_FAILED,
@@ -190,6 +190,7 @@ private:
 
 } // namespace dns
 
+// clang format off
 template<>
 struct ErrorCodeToString<dns::UpstreamFactory::UpstreamCreateError> {
     std::string operator()(dns::UpstreamFactory::UpstreamCreateError e) {
@@ -197,7 +198,6 @@ struct ErrorCodeToString<dns::UpstreamFactory::UpstreamCreateError> {
         case decltype(e)::AE_INVALID_URL: return "Invalid URL";
         case decltype(e)::AE_INVALID_STAMP: return "Invalid DNS stamp";
         case decltype(e)::AE_INIT_FAILED: return "Error initializing upstream";
-        default: return "Unknown error";
         }
     }
 };
@@ -213,9 +213,9 @@ struct ErrorCodeToString<dns::Upstream::InitError> {
         case decltype(e)::AE_SSL_CONTEXT_INIT_FAILED: return "Failed to initialize SSL context";
         case decltype(e)::AE_CURL_HEADERS_INIT_FAILED: return "Failed to initialize CURL headers";
         case decltype(e)::AE_CURL_POOL_INIT_FAILED: return "Failed to initialize CURL connection pool";
-        default: return "Unknown error";
         }
     }
 };
+// clang format on
 
 } // namespace ag

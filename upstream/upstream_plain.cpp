@@ -43,7 +43,7 @@ coro::Task<Upstream::ExchangeResult> PlainUpstream::exchange(ldns_pkt *request_p
     ldns_buffer_ptr buffer{ldns_buffer_new(REQUEST_BUFFER_INITIAL_CAPACITY)};
     ldns_status status = ldns_pkt2buffer_wire(&*buffer, request_pkt);
     if (status != LDNS_STATUS_OK) {
-        co_return make_error(DE_ENCODE_ERROR, ldns_get_errorstr_by_id(status));
+        co_return make_error(DnsError::AE_ENCODE_ERROR, ldns_get_errorstr_by_id(status));
     }
 
     ldns_rr *question = ldns_rr_list_rr(ldns_pkt_question(request_pkt), 0);
@@ -60,33 +60,33 @@ coro::Task<Upstream::ExchangeResult> PlainUpstream::exchange(ldns_pkt *request_p
         AioSocket socket(this->make_socket(utils::TP_UDP));
         if (auto err = co_await socket.connect({&m_config.loop, m_address, timeout})) {
             co_return (err->value() == SocketError::AE_TIMED_OUT) // To cancel second retry of exchange
-                            ? make_error(DE_TIMED_OUT, "Timed out while connecting to remote host via UDP")
-                            : make_error(DE_SOCKET_ERROR, err);
+                            ? make_error(DnsError::AE_TIMED_OUT, "Timed out while connecting to remote host via UDP")
+                            : make_error(DnsError::AE_SOCKET_ERROR, err);
         }
 
         timeout -= timer.elapsed<decltype(timeout)>();
         if (timeout.count() <= 0) {
-            co_return make_error(DE_TIMED_OUT, "Timed out after connecting to remote host");
+            co_return make_error(DnsError::AE_TIMED_OUT, "Timed out after connecting to remote host");
         }
         timer.reset();
 
         if (auto err = socket.send_dns_packet(
                     {(uint8_t *) ldns_buffer_begin(buffer.get()), ldns_buffer_position(buffer.get())})) {
-            co_return make_error(DE_SOCKET_ERROR, err);
+            co_return make_error(DnsError::AE_SOCKET_ERROR, err);
         }
 
         auto r = co_await socket.receive_dns_packet(timeout);
         if (r.has_error()) {
             co_return (r.error()->value() == SocketError::AE_TIMED_OUT) // To cancel second retry of exchange
-                    ? make_error(DE_TIMED_OUT, "Timed out while waiting for DNS reply via UDP")
-                    : make_error(DE_SOCKET_ERROR, r.error());
+                    ? make_error(DnsError::AE_TIMED_OUT, "Timed out while waiting for DNS reply via UDP")
+                    : make_error(DnsError::AE_SOCKET_ERROR, r.error());
         }
 
         auto &reply = r.value();
         ldns_pkt *reply_pkt = nullptr;
         status = ldns_wire2pkt(&reply_pkt, reply.data(), reply.size());
         if (status != LDNS_STATUS_OK) {
-            co_return make_error(DE_DECODE_ERROR, ldns_get_errorstr_by_id(status));
+            co_return make_error(DnsError::AE_DECODE_ERROR, ldns_get_errorstr_by_id(status));
         }
         // If not truncated, return result. Otherwise, try TCP.
         if (!ldns_pkt_tc(reply_pkt)) {
@@ -97,7 +97,7 @@ coro::Task<Upstream::ExchangeResult> PlainUpstream::exchange(ldns_pkt *request_p
 
     timeout -= timer.elapsed<decltype(timeout)>();
     if (timeout.count() <= 0) {
-        co_return make_error(DE_TIMED_OUT, "TCP request should be done but no time left");
+        co_return make_error(DnsError::AE_TIMED_OUT, "TCP request should be done but no time left");
     }
 
     // TCP request
@@ -112,7 +112,7 @@ coro::Task<Upstream::ExchangeResult> PlainUpstream::exchange(ldns_pkt *request_p
     ldns_pkt *reply_pkt = nullptr;
     status = ldns_wire2pkt(&reply_pkt, reply.data(), reply.size());
     if (status != LDNS_STATUS_OK) {
-        co_return make_error(DE_DECODE_ERROR, ldns_get_errorstr_by_id(status));
+        co_return make_error(DnsError::AE_DECODE_ERROR, ldns_get_errorstr_by_id(status));
     }
     co_return ldns_pkt_ptr{reply_pkt};
 }

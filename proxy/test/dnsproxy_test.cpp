@@ -88,7 +88,7 @@ TEST_F(DnsProxyTest, TestDns64) {
     };
 
     auto [ret, err] = m_proxy->init(settings, {});
-    ASSERT_TRUE(ret) << *err;
+    ASSERT_TRUE(ret) << err->str();
 
     // This is after m_proxy->init() to not crash in m_proxy->deinit()
     if (!test_ipv6_connectivity()) {
@@ -122,7 +122,7 @@ TEST_F(DnsProxyTest, DISABLED_BootstrapOutboundProxy) {
     }};
 
     auto [ret, err] = m_proxy->init(settings, events);
-    ASSERT_TRUE(ret) << *err;
+    ASSERT_TRUE(ret) << err->str();
 
     ldns_pkt_ptr response;
     ASSERT_NO_FATAL_FAILURE(
@@ -138,7 +138,7 @@ TEST_F(DnsProxyTest, TestIpv6Blocking) {
     settings.filter_params = {{{1, "cname_blocking_test_filter.txt"}}};
 
     auto [ret, err] = m_proxy->init(settings, {});
-    ASSERT_TRUE(ret) << *err;
+    ASSERT_TRUE(ret) << err->str();
 
     ldns_pkt_ptr pkt = create_request(IPV4_ONLY_HOST, LDNS_RR_TYPE_AAAA, LDNS_RD);
     ldns_pkt_ptr response;
@@ -191,7 +191,7 @@ TEST_F(DnsProxyTest, TestCnameBlocking) {
     }};
 
     auto [ret, err] = m_proxy->init(settings, {});
-    ASSERT_TRUE(ret) << *err;
+    ASSERT_TRUE(ret) << err->str();
 
     ldns_pkt_ptr response;
     ASSERT_NO_FATAL_FAILURE(
@@ -210,7 +210,7 @@ TEST_F(DnsProxyTest, test_dnstype_blocking_rule) {
     }};
 
     auto [ret, err] = m_proxy->init(settings, events);
-    ASSERT_TRUE(ret) << *err;
+    ASSERT_TRUE(ret) << err->str();
 
     ldns_pkt_ptr response;
     ASSERT_NO_FATAL_FAILURE(perform_request(*m_proxy, create_request("example.com", LDNS_RR_TYPE_A, LDNS_RD), response));
@@ -229,7 +229,7 @@ TEST_F(DnsProxyTest, TestDnstypeReply) {
     }};
 
     auto [ret, err] = m_proxy->init(settings, events);
-    ASSERT_TRUE(ret) << *err;
+    ASSERT_TRUE(ret) << err->str();
 
     ldns_pkt_ptr response;
     ASSERT_NO_FATAL_FAILURE(perform_request(*m_proxy, create_request("www.abc.com", LDNS_RR_TYPE_A, LDNS_RD), response));
@@ -254,7 +254,7 @@ TEST_F(DnsProxyTest, TestDnsrewriteRule) {
     }};
 
     auto [ret, err] = m_proxy->init(settings, events);
-    ASSERT_TRUE(ret) << *err;
+    ASSERT_TRUE(ret) << err->str();
 
     ldns_pkt_ptr response;
     ASSERT_NO_FATAL_FAILURE(perform_request(*m_proxy, create_request("example.com", LDNS_RR_TYPE_A, LDNS_RD), response));
@@ -273,7 +273,7 @@ TEST_F(DnsProxyTest, TestDnsrewriteCname) {
     }};
 
     auto [ret, err] = m_proxy->init(settings, events);
-    ASSERT_TRUE(ret) << *err;
+    ASSERT_TRUE(ret) << err->str();
 
     ldns_pkt_ptr response;
     ASSERT_NO_FATAL_FAILURE(perform_request(*m_proxy, create_request("example.com", LDNS_RR_TYPE_A, LDNS_RD), response));
@@ -345,7 +345,7 @@ protected:
 
         m_proxy = std::make_unique<DnsProxy>();
         auto [ret, err] = m_proxy->init(settings, events);
-        ASSERT_TRUE(ret) << *err;
+        ASSERT_TRUE(ret) << err->str();
     }
 };
 
@@ -462,7 +462,7 @@ TEST_F(DnsProxyTest, BlockingModeDefault) {
     ASSERT_EQ(DnsProxyBlockingMode::ADDRESS, settings.hosts_rules_blocking_mode);
 
     auto [ret, err] = m_proxy->init(settings, {});
-    ASSERT_TRUE(ret) << *err;
+    ASSERT_TRUE(ret) << err->str();
 
     ldns_pkt_ptr res;
 
@@ -535,7 +535,7 @@ TEST_F(DnsProxyTest, BlockingModeNxdomain) {
     settings.hosts_rules_blocking_mode = DnsProxyBlockingMode::NXDOMAIN;
 
     auto [ret, err] = m_proxy->init(settings, {});
-    ASSERT_TRUE(ret) << *err;
+    ASSERT_TRUE(ret) << err->str();
 
     ldns_pkt_ptr res;
 
@@ -607,7 +607,7 @@ TEST_F(DnsProxyTest, BlockingModeRefused) {
     settings.hosts_rules_blocking_mode = DnsProxyBlockingMode::REFUSED;
 
     auto [ret, err] = m_proxy->init(settings, {});
-    ASSERT_TRUE(ret) << *err;
+    ASSERT_TRUE(ret) << err->str();
 
     ldns_pkt_ptr res;
 
@@ -679,7 +679,7 @@ TEST_F(DnsProxyTest, BlockingModeUnspecifiedAddress) {
     settings.hosts_rules_blocking_mode = DnsProxyBlockingMode::ADDRESS;
 
     auto [ret, err] = m_proxy->init(settings, {});
-    ASSERT_TRUE(ret) << *err;
+    ASSERT_TRUE(ret) << err->str();
 
     ldns_pkt_ptr res;
 
@@ -753,7 +753,7 @@ TEST_F(DnsProxyTest, BlockingModeCustomAddress) {
     settings.custom_blocking_ipv6 = "43::21";
 
     auto [ret, err] = m_proxy->init(settings, {});
-    ASSERT_TRUE(ret) << *err;
+    ASSERT_TRUE(ret) << err->str();
 
     ldns_pkt_ptr res;
 
@@ -827,7 +827,7 @@ TEST_F(DnsProxyTest, BlockingModeCustomAddressIpv4Only) {
     settings.custom_blocking_ipv4 = "4.3.2.1";
 
     auto [ret, err] = m_proxy->init(settings, {});
-    ASSERT_TRUE(ret) << *err;
+    ASSERT_TRUE(ret) << err->str();
 
     ldns_pkt_ptr res;
 
@@ -904,7 +904,7 @@ TEST_F(DnsProxyTest, BlockingModeCustomAddressIpv6Only) {
     settings.custom_blocking_ipv6 = "43::21";
 
     auto [ret, err] = m_proxy->init(settings, {});
-    ASSERT_TRUE(ret) << *err;
+    ASSERT_TRUE(ret) << err->str();
 
     ldns_pkt_ptr res;
 
@@ -976,7 +976,7 @@ TEST_F(DnsProxyTest, BlockingModeCustomAddressIpv6Only) {
 TEST_F(DnsProxyTest, CustomBlockingAddressValidation1) {
     DnsProxySettings settings = make_dnsproxy_settings();
     auto [ret, err] = m_proxy->init(settings, {});
-    ASSERT_TRUE(ret) << *err;
+    ASSERT_TRUE(ret) << err->str();
 }
 
 TEST_F(DnsProxyTest, CustomBlockingAddressValidation2) {
@@ -1010,7 +1010,7 @@ TEST_F(DnsProxyTest, CorrectFilterIdsInEvent) {
     }};
 
     auto [ret, err] = m_proxy->init(settings, events);
-    ASSERT_TRUE(ret) << *err;
+    ASSERT_TRUE(ret) << err->str();
 
     ldns_pkt_ptr res;
 
@@ -1035,7 +1035,7 @@ TEST_F(DnsProxyTest, Whitelisting) {
     }};
 
     auto [ret, err] = m_proxy->init(settings, events);
-    ASSERT_TRUE(ret) << *err;
+    ASSERT_TRUE(ret) << err->str();
 
     ldns_pkt_ptr res;
 
@@ -1070,7 +1070,7 @@ TEST_F(DnsProxyTest, FallbacksIgnoreProxySocks) {
     DnsRequestProcessedEvent last_event{};
 
     auto [ret, err] = m_proxy->init(settings, {});
-    ASSERT_TRUE(ret) << *err;
+    ASSERT_TRUE(ret) << err->str();
 
     ldns_pkt_ptr res;
     ASSERT_NO_FATAL_FAILURE(perform_request(*m_proxy, create_request("example.org", LDNS_RR_TYPE_A, LDNS_RD), res));
@@ -1087,7 +1087,7 @@ TEST_F(DnsProxyTest, FallbacksIgnoreProxyHttp) {
     DnsRequestProcessedEvent last_event{};
 
     auto [ret, err] = m_proxy->init(settings, {});
-    ASSERT_TRUE(ret) << *err;
+    ASSERT_TRUE(ret) << err->str();
 
     ldns_pkt_ptr res;
     ASSERT_NO_FATAL_FAILURE(perform_request(*m_proxy, create_request("example.org", LDNS_RR_TYPE_A, LDNS_RD), res));
@@ -1100,7 +1100,7 @@ TEST_F(DnsProxyTest, BadFilterFileDoesNotCrash) {
             {111, "bad_test_filter.txt"},
     }};
     auto [ret, err] = m_proxy->init(settings, {});
-    ASSERT_TRUE(ret) << *err;
+    ASSERT_TRUE(ret) << err->str();
 }
 
 TEST_F(DnsProxyTest, RulesLoadFromMemory) {
@@ -1122,7 +1122,7 @@ TEST_F(DnsProxyTest, RulesLoadFromMemory) {
             {42, filter_data, true},
     }};
     auto [ret, err] = m_proxy->init(settings, {});
-    ASSERT_TRUE(ret) << *err;
+    ASSERT_TRUE(ret) << err->str();
 }
 
 TEST_F(DnsProxyTest, IpBlockingRegress) {
@@ -1137,7 +1137,7 @@ TEST_F(DnsProxyTest, IpBlockingRegress) {
     }};
 
     auto [ret, err] = m_proxy->init(settings, events);
-    ASSERT_TRUE(ret) << *err;
+    ASSERT_TRUE(ret) << err->str();
 
     ldns_pkt_ptr res;
 
@@ -1161,15 +1161,15 @@ TEST_F(DnsProxyTest, Warnings) {
     }};
     {
         auto [ret, err_or_warn] = m_proxy->init(settings, {});
-        ASSERT_TRUE(ret) << *err_or_warn;
-        ASSERT_FALSE(err_or_warn); // No warning
+        ASSERT_TRUE(ret) << err_or_warn->str();
+        ASSERT_FALSE(err_or_warn) << err_or_warn->str();; // No warning
         m_proxy->deinit();
     }
 
     settings.filter_params.mem_limit = 1;
     {
         auto [ret, err_or_warn] = m_proxy->init(settings, {});
-        ASSERT_TRUE(ret) << *err_or_warn;
+        ASSERT_TRUE(ret) << err_or_warn->str();
         ASSERT_TRUE(err_or_warn); // Mem usage warning
     }
 }
@@ -1185,7 +1185,7 @@ TEST_F(DnsProxyTest, OptimisticCache) {
     }};
 
     auto [ret, err] = m_proxy->init(settings, events);
-    ASSERT_TRUE(ret) << *err;
+    ASSERT_TRUE(ret) << err->str();
 
     ldns_pkt_ptr res;
     ASSERT_NO_FATAL_FAILURE(perform_request(*m_proxy, create_request("example.org", LDNS_RR_TYPE_A, LDNS_RD), res));
@@ -1223,7 +1223,7 @@ TEST_F(DnsProxyTest, DnssecSimpleTest) {
     }};
 
     auto [ret, err] = m_proxy->init(settings, events);
-    ASSERT_TRUE(ret) << *err;
+    ASSERT_TRUE(ret) << err->str();
 
     for (auto &curAddress : dnssecSupport) {
         for (auto curType : arrOfTypes) {
@@ -1266,7 +1266,7 @@ TEST_F(DnsProxyTest, DnssecRequestWithDOBit) {
     }};
 
     auto [ret, err] = m_proxy->init(settings, events);
-    ASSERT_TRUE(ret) << *err;
+    ASSERT_TRUE(ret) << err->str();
 
     ldns_pkt_ptr res;
     auto req = create_request("cloudflare.com", LDNS_RR_TYPE_A, LDNS_RD);
@@ -1293,7 +1293,7 @@ TEST_F(DnsProxyTest, DnssecDSRequest) {
     }};
 
     auto [ret, err] = m_proxy->init(settings, events);
-    ASSERT_TRUE(ret) << *err;
+    ASSERT_TRUE(ret) << err->str();
 
     ldns_pkt_ptr res;
     ASSERT_NO_FATAL_FAILURE(perform_request(*m_proxy, create_request("cloudflare.com", LDNS_RR_TYPE_DS, LDNS_RD), res));
@@ -1323,7 +1323,7 @@ TEST_F(DnsProxyTest, DnssecTheSameQtypeRequest) {
     }};
 
     auto [ret, err] = m_proxy->init(settings, events);
-    ASSERT_TRUE(ret) << *err;
+    ASSERT_TRUE(ret) << err->str();
 
     ldns_pkt_ptr res;
     ASSERT_NO_FATAL_FAILURE(perform_request(*m_proxy, create_request("example.org", LDNS_RR_TYPE_RRSIG, LDNS_RD), res));
@@ -1347,7 +1347,7 @@ TEST_F(DnsProxyTest, DnssecRegressDoesNotScrubCname) {
     }};
 
     auto [ret, err] = m_proxy->init(settings, {});
-    ASSERT_TRUE(ret) << *err;
+    ASSERT_TRUE(ret) << err->str();
 
     ldns_pkt_ptr response;
     ASSERT_NO_FATAL_FAILURE(
@@ -1379,7 +1379,7 @@ TEST_F(DnsProxyTest, DnssecAuthoritySection) {
             = {LDNS_RR_TYPE_DS, LDNS_RR_TYPE_DNSKEY, LDNS_RR_TYPE_NSEC, LDNS_RR_TYPE_NSEC3, LDNS_RR_TYPE_RRSIG};
 
     auto [ret, err] = m_proxy->init(settings, events);
-    ASSERT_TRUE(ret) << *err;
+    ASSERT_TRUE(ret) << err->str();
 
     for (auto cur : SPECIAL_TYPES_DNSSEC_LOG_LOGIC) {
         ldns_pkt_ptr res;
@@ -1408,7 +1408,7 @@ TEST_F(DnsProxyTest, FallbackFilterWorksAndDefaultsAreCorrect) {
         last_event = event;
     }};
     auto [ret, err] = m_proxy->init(settings, events);
-    ASSERT_TRUE(ret) << *err;
+    ASSERT_TRUE(ret) << err->str();
     for (const std::string &host : {
                  "epdg.epc.aptg.com.tw",
                  "epdg.epc.att.net",
@@ -1458,7 +1458,7 @@ TEST_F(DnsProxyTest, FallbackFilterWorksAndDefaultsAreCorrect) {
 //         auto [ret, err] = m_proxy->init(settings, {});
 //         ASSERT_FALSE(ret) << pattern;
 //         ASSERT_TRUE(err) << pattern;
-//         ASSERT_TRUE(strstr(err->c_str(), pattern.c_str())) << *err;
+//         ASSERT_TRUE(strstr(err->c_str(), pattern.c_str())) << err->str();
 //     }
 // }
 

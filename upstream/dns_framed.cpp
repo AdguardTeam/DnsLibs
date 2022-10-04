@@ -127,9 +127,9 @@ void DnsFramedConnection::on_close(void *arg, Error<SocketError> error) {
 
     Error<DnsError> err;
     if (error) {
-        err = make_error(DE_SOCKET_ERROR, error);
+        err = make_error(DnsError::AE_SOCKET_ERROR, error);
     } else {
-        err = make_error(DE_CONNECTION_CLOSED);
+        err = make_error(DnsError::AE_CONNECTION_CLOSED);
     }
     self->on_close(err);
 }
@@ -143,7 +143,7 @@ void DnsFramedConnection::on_close(Error<DnsError> dns_error) {
         return;
     }
 
-    if (dns_error->value() != DE_CONNECTION_CLOSED) {
+    if (dns_error->value() != DnsError::AE_CONNECTION_CLOSED) {
         log_conn(m_log, trace, this, "{} error {}", __func__, dns_error->str());
     }
 
@@ -164,7 +164,7 @@ void DnsFramedConnection::on_close(Error<DnsError> dns_error) {
 
 coro::Task<Connection::Reply> DnsFramedConnection::perform_request(Uint8View packet, Millis timeout) {
     if (packet.size() < 2) {
-        co_return Reply(make_error(DE_REQUEST_PACKET_TOO_SHORT));
+        co_return Reply(make_error(DnsError::AE_REQUEST_PACKET_TOO_SHORT));
     }
 
     Uint8Vector request_to_send{packet.begin(), packet.end()};

@@ -2,10 +2,15 @@
 
 * [Feature] A non-standard `h3://` URL scheme can now be used to force a DoH upstream to use HTTP/3.
 
+* [Feature] Now DnsProxy.init() return more informative error code with description.
+  * [C API] See `DnsProxy.DnsProxyInitResult`
+  * [Apple] See `AGDnsProxyError`
+  * [Android] See `ag_dnsproxy_init_result`
+
 * [Feature] Add an option to strip Encrypted Client Hello parameters from responses, effectively blocking ECH.
-  See `ag_dnsproxy_settings::block_ech` (C),
-  `AGDnsProxyConfig.blockEch` (Apple),
-  `DnsProxySettings.setBlockEch()` (Android).
+  * [C API] See `ag_dnsproxy_settings::block_ech`
+  * [Apple] See `AGDnsProxyConfig.blockEch`
+  * [Android] See `DnsProxySettings.setBlockEch()`.
 
 * [Feature] DnsProxy now accepts a hostname as an address of the outbound proxy. In that case an application should also pass a list of the bootstrapping resolvers.
 

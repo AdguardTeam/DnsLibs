@@ -6,6 +6,7 @@
 #include "common/logger.h"
 #include "common/utils.h"
 
+#include "dns/common/dns_defs.h"
 #include "dns/dnsfilter/dnsfilter.h"
 #include "filter.h"
 #include "rule_utils.h"
@@ -23,10 +24,10 @@ public:
     /**
      * @return {true, optional warning} or {false, error description}
      */
-    std::pair<bool, ErrString> init(const DnsFilter::EngineParams &p) {
+    [[nodiscard]] std::pair<bool, Error<DnsProxyInitError>> init(const DnsFilter::EngineParams &p) {
         m_mem_limit = p.mem_limit;
-        std::string warnings;
         std::unordered_set<uint32_t> ids;
+        Error<DnsProxyInitError> warning;
 
         m_filters.reserve(p.filters.size());
         for (const DnsFilter::FilterParams &fp : p.filters) {
@@ -37,25 +38,23 @@ public:
                 m_filters.emplace_back(std::move(f));
                 infolog(m_log, "Filter {} added successfully", fp.id);
             } else if (res == Filter::LR_ERROR) {
-                auto err = AG_FMT("Filter {} was not added because of an error", fp.id);
-                errlog(m_log, "{}", err);
                 m_filters.clear();
-                return {false, std::move(err)};
+                return {false, make_error(DnsProxyInitError::AE_FILTER_LOAD_ERROR, AG_FMT("{}", fp.id))};
             } else if (res == Filter::LR_MEM_LIMIT_REACHED) {
-                warnings += AG_FMT("Filter {} added partially (reached memory limit)\n", fp.id);
+                warning = make_error(DnsProxyInitError::AE_MEM_LIMIT_REACHED, AG_FMT("{}", fp.id));
                 break;
             }
-            if (ids.count(fp.id)) {
-                warnings += AG_FMT("Non unique filter id: {}, data: {}\n", fp.id, fp.data);
+            if (ids.contains(fp.id)) {
+                warning = make_error(DnsProxyInitError::AE_NON_UNIQUE_FILTER_ID, AG_FMT("{}, {}", fp.id, fp.data));
             }
             ids.insert(fp.id);
         }
         m_filters.shrink_to_fit();
-        if (!warnings.empty()) {
-            warnlog(m_log, "Filters loaded with warnings:\n{}", warnings);
-            return {true, std::move(warnings)};
+        if (warning) {
+            warnlog(m_log, "Filters loaded with warnings: {}", warning->str());
+            return {true, warning};
         }
-        return {true, std::nullopt};
+        return {true, {}};
     }
 
     /**
@@ -123,26 +122,23 @@ DnsFilter::DnsFilter() = default;
 
 DnsFilter::~DnsFilter() = default;
 
-std::pair<DnsFilter::Handle, ErrString> DnsFilter::create(const EngineParams &p) {
+DnsFilter::DnsFilterResult DnsFilter::create(const EngineParams &p) {
     auto *e = new (std::nothrow) dnsfilter::Engine();
-    if (!e) {
-        return {nullptr, "No memory for the filtering engine"};
-    }
     auto [ret, err_or_warn] = e->init(p);
     if (!ret) {
         delete e;
-        return {nullptr, std::move(err_or_warn)};
+        return {nullptr, err_or_warn};
     }
-    return {e, std::move(err_or_warn)};
+    return {e, err_or_warn};
 }
 
 void DnsFilter::destroy(Handle obj) {
-    dnsfilter::Engine *e = (dnsfilter::Engine *) obj;
+    auto *e = (dnsfilter::Engine *) obj;
     delete e;
 }
 
 std::vector<DnsFilter::Rule> DnsFilter::match(Handle obj, MatchParam param) {
-    dnsfilter::Engine *e = (dnsfilter::Engine *) obj;
+    auto *e = (dnsfilter::Engine *) obj;
 
     tracelog(e->m_log, "Matching {}", param.domain);
 
@@ -250,8 +246,8 @@ static std::vector<const DnsFilter::Rule *> filter_out_by_badfilter(const std::v
     return result;
 }
 
-static DnsFilter::effective_rules categorize_rules(const std::vector<const DnsFilter::Rule *> &rules) {
-    DnsFilter::effective_rules result;
+static DnsFilter::EffectiveRules categorize_rules(const std::vector<const DnsFilter::Rule *> &rules) {
+    DnsFilter::EffectiveRules result;
     for (const DnsFilter::Rule *r : rules) {
         if (const auto *info = std::get_if<DnsFilter::AdblockRuleInfo>(&r->content);
                 info != nullptr && info->props.test(DnsFilter::DARP_DNSREWRITE)) {
@@ -263,9 +259,9 @@ static DnsFilter::effective_rules categorize_rules(const std::vector<const DnsFi
     return result;
 }
 
-DnsFilter::effective_rules DnsFilter::get_effective_rules(const std::vector<Rule> &rules) {
+DnsFilter::EffectiveRules DnsFilter::get_effective_rules(const std::vector<Rule> &rules) {
     std::vector<const Rule *> good_rules = filter_out_by_badfilter(rules);
-    effective_rules effective_rules = categorize_rules(good_rules);
+    EffectiveRules effective_rules = categorize_rules(good_rules);
     if (effective_rules.leftovers.empty()) {
         return effective_rules;
     }

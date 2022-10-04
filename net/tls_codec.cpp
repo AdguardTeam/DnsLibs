@@ -44,7 +44,7 @@ Error<TlsCodec::TlsError> TlsCodec::connect(const std::string &sni, std::vector<
         Uint8Vector serialized = make_alpn(alpn);
         int r = SSL_set_alpn_protos(m_ssl.get(), serialized.data(), serialized.size());
         if (r != 0) {
-            return make_error(AE_ALPN_SET_FAILED);
+            return make_error(TlsError::AE_ALPN_SET_FAILED);
         }
     }
 
@@ -128,8 +128,7 @@ TlsCodec::ReadDecryptedResult TlsCodec::read_decrypted() {
             r = 0;
             break;
         default:
-            auto err = make_error(OSslError(r));
-            return make_error(TlsError::AE_READ_ERROR, err);
+            return make_error(TlsError::AE_READ_ERROR, AG_FMT("{}", r));
         }
     }
 
@@ -165,9 +164,8 @@ int TlsCodec::ssl_verify_callback(X509_STORE_CTX *ctx, void *arg) {
         return 0;
     }
 
-    if (ErrString err = self->m_cert_verifier->verify(ctx, SSL_get_servername(ssl, SSL_get_servername_type(ssl)));
-            err.has_value()) {
-        dbglog(self->m_log, "Failed to verify certificate: {}", err.value());
+    if (auto err = self->m_cert_verifier->verify(ctx, SSL_get_servername(ssl, SSL_get_servername_type(ssl)))) {
+        dbglog(self->m_log, "Failed to verify certificate: {}", *err);
         return 0;
     }
 

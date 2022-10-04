@@ -77,7 +77,7 @@ struct DohUpstream::QueryHandle {
 
     ~QueryHandle() {
         if (!completed && response.empty()) {
-            error = make_error(DE_SHUTTING_DOWN);
+            error = make_error(DnsError::AE_SHUTTING_DOWN);
         }
         complete();
     }
@@ -134,7 +134,7 @@ struct DohUpstream::CheckProxyState {
 
         switch (result) {
         case SocketFactory::SFPCFR_CLOSE_CONNECTION:
-            upstream->stop_all_with_error(make_error(DE_OUTBOUND_PROXY_ERROR));
+            upstream->stop_all_with_error(make_error(DnsError::AE_OUTBOUND_PROXY_ERROR));
             break;
         case SocketFactory::SFPCFR_RETRY_DIRECTLY:
             upstream->retry_pending_queries_directly();
@@ -165,7 +165,7 @@ curl_socket_t DohUpstream::curl_opensocket(void *clientp, curlsocktype, struct c
     }
     SocketAddress addr{&address->addr};
     if (auto error = self->m_config.socket_factory->prepare_fd(curlfd, addr, self->m_options.outbound_interface)) {
-        warnlog(self->m_log, "Failed to bind socket to interface: {}", *error);
+        warnlog(self->m_log, "Failed to bind socket to interface: {}", error->str());
         evutil_closesocket(curlfd);
         return CURL_SOCKET_BAD;
     }
@@ -213,18 +213,18 @@ static int verbose_callback(CURL *, curl_infotype type, char *data, size_t size,
 DohUpstream::QueryHandle::CURL_ptr DohUpstream::QueryHandle::create_curl_handle() {
     CURL_ptr curl_ptr{curl_easy_init()};
     if (curl_ptr == nullptr) {
-        this->error = make_error(DE_CURL_ERROR, "Failed to init curl handle");
+        this->error = make_error(DnsError::AE_CURL_ERROR, "Failed to init curl handle");
         return nullptr;
     }
 
-    DohUpstream *upstream = this->upstream;
+    DohUpstream *doh_upstream = this->upstream;
     ldns_buffer *raw_request = this->request.get();
-    uint64_t timeout = upstream->m_options.timeout.count();
-    this->resolved_addrs = upstream->m_resolved;
+    uint64_t timeout = doh_upstream->m_options.timeout.count();
+    this->resolved_addrs = doh_upstream->m_resolved;
     CURL *curl = curl_ptr.get();
     if (CURLcode e;
             // clang-format off
-               CURLE_OK != (e = curl_easy_setopt(curl, CURLOPT_URL, upstream->m_curlopt_url.c_str()))
+               CURLE_OK != (e = curl_easy_setopt(curl, CURLOPT_URL, doh_upstream->m_curlopt_url.c_str()))
             || CURLE_OK != (e = curl_easy_setopt(curl, CURLOPT_NOPROGRESS, true))
             || CURLE_OK != (e = curl_easy_setopt(curl, CURLOPT_TIMEOUT_MS, timeout))
             || CURLE_OK != (e = curl_easy_setopt(curl, CURLOPT_CONNECTTIMEOUT_MS, timeout))
@@ -233,8 +233,8 @@ DohUpstream::QueryHandle::CURL_ptr DohUpstream::QueryHandle::create_curl_handle(
             || CURLE_OK != (e = curl_easy_setopt(curl, CURLOPT_USERAGENT, nullptr))
             || CURLE_OK != (e = curl_easy_setopt(curl, CURLOPT_POSTFIELDS, ldns_buffer_at(raw_request, 0)))
             || CURLE_OK != (e = curl_easy_setopt(curl, CURLOPT_POSTFIELDSIZE, ldns_buffer_position(raw_request)))
-            || CURLE_OK != (e = curl_easy_setopt(curl, CURLOPT_HTTPHEADER, upstream->m_request_headers.get()))
-            || CURLE_OK != (e = curl_easy_setopt(curl, CURLOPT_HTTP_VERSION, upstream->m_curlopt_http_ver))
+            || CURLE_OK != (e = curl_easy_setopt(curl, CURLOPT_HTTPHEADER, doh_upstream->m_request_headers.get()))
+            || CURLE_OK != (e = curl_easy_setopt(curl, CURLOPT_HTTP_VERSION, doh_upstream->m_curlopt_http_ver))
             || CURLE_OK != (e = curl_easy_setopt(curl, CURLOPT_PRIVATE, this))
             || CURLE_OK != (e = curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, true))
             || CURLE_OK != (e = curl_easy_setopt(curl, CURLOPT_PROTOCOLS, CURLPROTO_HTTPS))
@@ -245,16 +245,16 @@ DohUpstream::QueryHandle::CURL_ptr DohUpstream::QueryHandle::create_curl_handle(
             || CURLE_OK != (e = curl_easy_setopt(curl, CURLOPT_SSL_VERIFYHOST, false)) // We verify ourselves, see DohUpstream::ssl_callback
             || CURLE_OK != (e = curl_easy_setopt(curl, CURLOPT_SSL_ENABLE_ALPN, true))
             || CURLE_OK != (e = curl_easy_setopt(curl, CURLOPT_OPENSOCKETFUNCTION, curl_opensocket))
-            || CURLE_OK != (e = curl_easy_setopt(curl, CURLOPT_OPENSOCKETDATA, upstream))
+            || CURLE_OK != (e = curl_easy_setopt(curl, CURLOPT_OPENSOCKETDATA, doh_upstream))
             || CURLE_OK != (e = curl_easy_setopt(curl, CURLOPT_DEBUGFUNCTION, verbose_callback))
             || CURLE_OK != (e = curl_easy_setopt(curl, CURLOPT_DEBUGDATA, this))
             || CURLE_OK != (e = curl_easy_setopt(curl, CURLOPT_VERBOSE, (long) (log->is_enabled(LogLevel::LOG_LEVEL_DEBUG))))
             || CURLE_OK != (e = curl_easy_setopt(curl, CURLOPT_SHARE, get_curl_share()))
-            || (upstream->m_resolved != nullptr && CURLE_OK != (e = curl_easy_setopt(curl, CURLOPT_RESOLVE, this->resolved_addrs.get())))
+            || (doh_upstream->m_resolved != nullptr && CURLE_OK != (e = curl_easy_setopt(curl, CURLOPT_RESOLVE, this->resolved_addrs.get())))
             // clang-format on
     ) {
-        this->error = make_error(
-                DE_CURL_ERROR, AG_FMT("Failed to set options on curl handle: {} (id={})", curl_easy_strerror(e), e));
+        this->error = make_error(DnsError::AE_CURL_ERROR,
+                AG_FMT("Failed to set options on curl handle: {} (id={})", curl_easy_strerror(e), e));
         return nullptr;
     }
 
@@ -290,8 +290,8 @@ bool DohUpstream::QueryHandle::set_up_proxy(const OutboundProxySettings *setting
 #define SETOPT_S(curl_, opt_, val_)                                                                                    \
     do {                                                                                                               \
         if (CURLcode e = curl_easy_setopt((curl_), (opt_), (val_)); e != CURLE_OK) {                                   \
-            this->error =                                                                                              \
-                    make_error(DE_CURL_ERROR, make_error(e, AG_FMT("Failed to set option {} on curl handle", opt_)));  \
+            this->error = make_error(                                                                                  \
+                    DnsError::AE_CURL_ERROR, make_error(e, AG_FMT("Failed to set option {} on curl handle", opt_)));   \
             return false;                                                                                              \
         }                                                                                                              \
     } while (0)
@@ -352,8 +352,12 @@ static std::string_view get_host_port(std::string_view url) {
     return url;
 }
 
-static std::string_view get_host_name(std::string_view url) {
-    return utils::split_host_port(get_host_port(url)).first;
+static Result<std::string_view, Upstream::InitError> get_host_name(std::string_view url) {
+    auto split_result = utils::split_host_port(get_host_port(url));
+    if (split_result.has_error()) {
+        return make_error(Upstream::InitError::AE_INVALID_ADDRESS);
+    }
+    return split_result.value().first;
 }
 
 int DohUpstream::verify_callback(X509_STORE_CTX *ctx, void *arg) {
@@ -364,10 +368,11 @@ int DohUpstream::verify_callback(X509_STORE_CTX *ctx, void *arg) {
     const char *sni = SSL_get_servername(ssl, TLSEXT_NAMETYPE_host_name);
     tracelog_id(handle, "{}(): SNI={}", __func__, (sni == nullptr) ? "null" : sni);
 
+    auto host = get_host_name(upstream->m_options.address);
+
     if (const OutboundProxySettings *proxy_settings = upstream->m_config.socket_factory->get_outbound_proxy_settings();
             proxy_settings != nullptr && proxy_settings->protocol == OutboundProxyProtocol::HTTPS_CONNECT
-            && proxy_settings->trust_any_certificate
-            && (sni == nullptr || sni != get_host_name(upstream->m_options.address))) {
+            && proxy_settings->trust_any_certificate && !host.has_error() && (sni == nullptr || sni != host.value())) {
         tracelog_id(handle, "Trusting any proxy certificate as specified in settings");
         return 1;
     }
@@ -376,13 +381,13 @@ int DohUpstream::verify_callback(X509_STORE_CTX *ctx, void *arg) {
     if (verifier == nullptr) {
         std::string err = "Cannot verify certificate due to verifier is not set";
         dbglog_id(handle, "{}", err);
-        handle->error = make_error(DE_HANDSHAKE_ERROR, err);
+        handle->error = make_error(DnsError::AE_HANDSHAKE_ERROR, err);
         return 0;
     }
 
-    if (ErrString err = verifier->verify(ctx, get_host_name(upstream->m_options.address)); err.has_value()) {
-        dbglog_id(handle, "Failed to verify certificate: {}", err.value());
-        handle->error = make_error(DE_HANDSHAKE_ERROR, *err);
+    if (auto err = verifier->verify(ctx, host.value())) {
+        dbglog_id(handle, "Failed to verify certificate: {}", *err);
+        handle->error = make_error(DnsError::AE_HANDSHAKE_ERROR, *err);
         return 0;
     }
 
@@ -397,13 +402,17 @@ CURLcode DohUpstream::ssl_callback(CURL *curl, void *sslctx, void *arg) {
     return CURLE_OK;
 }
 
-static curl_slist_ptr create_resolved_hosts_list(std::string_view url, const IpAddress &addr) {
+static Result<curl_slist_ptr, Upstream::InitError> create_resolved_hosts_list(std::string_view url, const IpAddress &addr) {
     if (std::holds_alternative<std::monostate>(addr)) {
-        return nullptr;
+        return (curl_slist_ptr)nullptr;
     }
 
     std::string_view host_port = get_host_port(url);
-    auto [host, port_str] = utils::split_host_port(host_port);
+    auto split_result = utils::split_host_port(host_port);
+    if (split_result.has_error()) {
+        make_error(Upstream::InitError::AE_INVALID_ADDRESS);
+    }
+    auto [host, port_str] = split_result.value();
     uint16_t port = ag::utils::to_integer<uint16_t>(port_str).value_or(DEFAULT_DOH_PORT);
 
     std::string entry;
@@ -453,7 +462,11 @@ Error<Upstream::InitError> DohUpstream::init() {
         m_curlopt_http_ver = CURL_HTTP_VERSION_3;
     }
 
-    m_resolved = create_resolved_hosts_list(m_options.address, m_options.resolved_server_ip);
+    auto create_result = create_resolved_hosts_list(m_options.address, m_options.resolved_server_ip);
+    if (create_result.has_error()) {
+        return make_error(InitError::AE_INVALID_ADDRESS);
+    }
+    m_resolved = std::move(create_result.value());
 
     curl_slist *headers;
     if (nullptr == (headers = curl_slist_append(nullptr, "Content-Type: application/dns-message"))
@@ -468,7 +481,7 @@ Error<Upstream::InitError> DohUpstream::init() {
     }
 
     if (m_resolved == nullptr) {
-        if (!m_options.bootstrap.empty() || SocketAddress(get_host_name(m_options.address), 0).valid()) {
+        if (!m_options.bootstrap.empty() || SocketAddress(get_host_name(m_options.address).value(), 0).valid()) {
             BootstrapperPtr bootstrapper = std::make_unique<Bootstrapper>(
                     Bootstrapper::Params{get_host_port(m_options.address), DEFAULT_DOH_PORT, m_options.bootstrap,
                             m_options.timeout, m_config, m_options.outbound_interface});
@@ -495,7 +508,7 @@ DohUpstream::~DohUpstream() {
     }
 
     dbglog(m_log, "Stopping queries...");
-    this->stop_all_with_error(make_error(DE_SHUTTING_DOWN));
+    this->stop_all_with_error(make_error(DnsError::AE_SHUTTING_DOWN));
     m_pool.timer.reset();
     dbglog(m_log, "Done");
 
@@ -576,16 +589,17 @@ void DohUpstream::read_messages() {
             long response_code;
             curl_easy_getinfo(message->easy_handle, CURLINFO_RESPONSE_CODE, &response_code);
             if (response_code < 200 || response_code >= 300) {
-                handle->error = make_error(DE_BAD_RESPONSE, AG_FMT("Got bad response status: {}", response_code));
+                handle->error =
+                        make_error(DnsError::AE_BAD_RESPONSE, AG_FMT("Got bad response status: {}", response_code));
             }
             char *content_type = nullptr;
             curl_easy_getinfo(message->easy_handle, CURLINFO_CONTENT_TYPE, &content_type);
             if (content_type == nullptr || 0 != strcmp(content_type, "application/dns-message")) {
-                handle->error = make_error(DE_BAD_RESPONSE,
+                handle->error = make_error(DnsError::AE_BAD_RESPONSE,
                         AG_FMT("Got bad response content_type: {}", content_type ? content_type : "(null)"));
             }
             if (handle->response.empty()) {
-                handle->error = make_error(DE_RESPONSE_PACKET_TOO_SHORT);
+                handle->error = make_error(DnsError::AE_RESPONSE_PACKET_TOO_SHORT);
             }
         } else {
             if (handle->flags.test(QueryHandle::QHF_PROXIED) && message->data.result == CURLE_COULDNT_CONNECT
@@ -602,9 +616,9 @@ void DohUpstream::read_messages() {
 
             auto curl_err = make_error(message->data.result);
             if (message->data.result == CURLE_OPERATION_TIMEDOUT) {
-                handle->error = make_error(DE_TIMED_OUT, curl_err);
+                handle->error = make_error(DnsError::AE_TIMED_OUT, curl_err);
             } else {
-                handle->error = make_error(DE_CURL_ERROR, curl_err);
+                handle->error = make_error(DnsError::AE_CURL_ERROR, curl_err);
             }
         }
 
@@ -630,7 +644,7 @@ void DohUpstream::on_poll_event(uv_poll_t *poll_handle, int status, int events) 
     uv_fileno((uv_handle_t *) poll_handle, &fd);
     CURLMcode err = curl_multi_socket_action(pool.handle.get(), (curl_socket_t) fd, action, &still_running);
     if (err != CURLM_OK) {
-        upstream->stop_all_with_error(make_error(DE_CURL_ERROR, make_error(err)));
+        upstream->stop_all_with_error(make_error(DnsError::AE_CURL_ERROR, make_error(err)));
         return;
     }
 
@@ -647,7 +661,7 @@ void DohUpstream::on_timeout(uv_timer_t *timer) {
     int still_running;
     CURLMcode err = curl_multi_socket_action(pool.handle.get(), CURL_SOCKET_TIMEOUT, 0, &still_running);
     if (err != CURLM_OK) {
-        upstream->stop_all_with_error(make_error(DE_CURL_ERROR, make_error(err)));
+        upstream->stop_all_with_error(make_error(DnsError::AE_CURL_ERROR, make_error(err)));
         return;
     }
 
@@ -729,7 +743,7 @@ void DohUpstream::start_request(QueryHandle *handle, bool ignore_proxy) {
     }
 
     if (CURLMcode e = curl_multi_add_handle(m_pool.handle.get(), handle->curl_handle.get()); e != CURLM_OK) {
-        handle->error = make_error(DE_CURL_ERROR, "Failed to add request in pool", make_error(e));
+        handle->error = make_error(DnsError::AE_CURL_ERROR, "Failed to add request in pool", make_error(e));
         handle->complete();
         return;
     }
@@ -768,7 +782,7 @@ void DohUpstream::reset_bypassed_proxy_queries() {
             continue;
         }
 
-        handle->error = make_error(DE_OUTBOUND_PROXY_ERROR, "Reset re-routed directly connection");
+        handle->error = make_error(DnsError::AE_OUTBOUND_PROXY_ERROR, "Reset re-routed directly connection");
         handle->cleanup_request();
         i = m_running_queue.erase(i);
         handle->complete();
@@ -783,16 +797,16 @@ coro::Task<Upstream::ExchangeResult> DohUpstream::exchange(ldns_pkt *request, co
     if (m_resolved == nullptr) {
         Bootstrapper::ResolveResult resolve_result = co_await m_bootstrapper->get();
         if (guard.expired()) {
-            co_return make_error(DE_SHUTTING_DOWN);
+            co_return make_error(DnsError::AE_SHUTTING_DOWN);
         }
         if (resolve_result.error) {
-            co_return make_error(DE_BOOTSTRAP_ERROR, resolve_result.error);
+            co_return make_error(DnsError::AE_BOOTSTRAP_ERROR, resolve_result.error);
         }
         assert(!resolve_result.addresses.empty());
 
         Millis resolve_time = duration_cast<Millis>(resolve_result.time_elapsed);
         if (m_options.timeout < resolve_time) {
-            co_return make_error(DE_TIMED_OUT,
+            co_return make_error(DnsError::AE_TIMED_OUT,
                     AG_FMT("DNS server name resolving took too much time: {}us", resolve_result.time_elapsed.count()));
         }
         timeout = m_options.timeout - resolve_time;
@@ -804,8 +818,12 @@ coro::Task<Upstream::ExchangeResult> DohUpstream::exchange(ldns_pkt *request, co
             std::string addr = address.str();
             tracelog(m_log, "Server address: {}", addr);
 
-            auto [ip, port] = utils::split_host_port(addr);
-            std::string_view host = get_host_name(m_options.address);
+            auto split_result = utils::split_host_port(addr);
+            if (split_result.has_error()) {
+                co_return make_error(DnsError::AE_INTERNAL_ERROR, split_result.error());
+            }
+            auto [ip, port] = split_result.value();
+            std::string_view host = get_host_name(m_options.address).value();
             if (entry.empty()) {
                 entry = AG_FMT("{}:{}:{}", host, port, ip);
             } else {
@@ -818,7 +836,7 @@ coro::Task<Upstream::ExchangeResult> DohUpstream::exchange(ldns_pkt *request, co
 
     std::unique_ptr<QueryHandle> handle = create_handle(request, timeout);
     if (handle == nullptr) {
-        co_return make_error(DE_INTERNAL_ERROR, "Failed to create request handle");
+        co_return make_error(DnsError::AE_INTERNAL_ERROR, "Failed to create request handle");
     }
 
     tracelog_id(handle, "Started");
@@ -827,14 +845,14 @@ coro::Task<Upstream::ExchangeResult> DohUpstream::exchange(ldns_pkt *request, co
     ldns_pkt *response = nullptr;
     co_await handle->upstream->submit_request(handle.get());
     if (guard.expired()) {
-        co_return make_error(DE_SHUTTING_DOWN);
+        co_return make_error(DnsError::AE_SHUTTING_DOWN);
     }
 
     if (handle->error) {
         err = handle->error;
     } else if (ldns_status status = ldns_wire2pkt(&response, handle->response.data(), handle->response.size());
                status != LDNS_STATUS_OK) {
-        err = make_error(DE_DECODE_ERROR, ldns_get_errorstr_by_id(status));
+        err = make_error(DnsError::AE_DECODE_ERROR, ldns_get_errorstr_by_id(status));
     }
 
     handle->restore_packet_id(request);
@@ -853,6 +871,7 @@ coro::Task<Upstream::ExchangeResult> DohUpstream::exchange(ldns_pkt *request, co
 
 } // namespace dns
 
+// clang format off
 template <>
 struct ErrorCodeToString<CURLcode> {
     std::string operator()(CURLcode e) {
@@ -860,6 +879,7 @@ struct ErrorCodeToString<CURLcode> {
         return msg ? msg : AG_FMT("Unknown error: {}", (int) e);
     }
 };
+
 template <>
 struct ErrorCodeToString<CURLMcode> {
     std::string operator()(CURLMcode e) {
@@ -874,5 +894,6 @@ struct ErrorCodeToString<CURLSHcode> {
         return msg ? msg : AG_FMT("Unknown error: {}", (int) e);
     }
 };
+// clang format on
 
 } // namespace ag

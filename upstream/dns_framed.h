@@ -82,7 +82,7 @@ public:
                     return false;
                 }
                 if (self->m_state == Connection::Status::CLOSED) {
-                    req->reply = Reply(make_error(DE_CONNECTION_CLOSED));
+                    req->reply = Reply(make_error(DnsError::AE_CONNECTION_CLOSED));
                 }
                 return true;
             }
@@ -96,7 +96,7 @@ public:
         auto wait_timeout = [](EventLoop &loop, std::weak_ptr<DnsFramedConnection> conn, Millis timeout, uint16_t request_id) -> coro::Task<void> {
             co_await loop.co_sleep(timeout);
             if (DnsFramedConnection *self = conn.lock().get()) {
-                self->finish_request(request_id, Reply{make_error(DE_TIMED_OUT)});
+                self->finish_request(request_id, Reply{make_error(DnsError::AE_TIMED_OUT)});
             }
         };
         return parallel::any_of_void(
@@ -122,7 +122,7 @@ public:
         auto wait_timeout = [](EventLoop &loop, std::weak_ptr<DnsFramedConnection> conn, Millis timeout, uint16_t request_id) -> coro::Task<void> {
             co_await loop.co_sleep(timeout);
             if (DnsFramedConnection *self = conn.lock().get()) {
-                self->finish_request(request_id, Reply{make_error(DE_TIMED_OUT)});
+                self->finish_request(request_id, Reply{make_error(DnsError::AE_TIMED_OUT)});
             }
         };
         return parallel::any_of_void(

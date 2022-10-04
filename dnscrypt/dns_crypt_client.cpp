@@ -96,7 +96,7 @@ coro::Task<Client::ExchangeResult> Client::exchange(ldns_pkt &message, const Ser
     auto encrypt_res = local_server_info.encrypt(
             m_protocol, Uint8View(ldns_buffer_begin(query_res->get()), ldns_buffer_position(query_res->get())));
     if (encrypt_res.has_error()) {
-        co_return make_error(DE_ENCRYPT_ERROR, encrypt_res.error());
+        co_return make_error(DnsError::AE_ENCRYPT_ERROR, encrypt_res.error());
     }
     auto &[encrypted_query, client_nonce] = encrypt_res.value();
     ldns_buffer encrypted_query_buffer = {};
@@ -108,7 +108,7 @@ coro::Task<Client::ExchangeResult> Client::exchange(ldns_pkt &message, const Ser
             encrypted_query_buffer, socket_factory, std::move(socket_parameters));
     free(ldns_buffer_export(&encrypted_query_buffer));
     if (exchange_err) {
-        co_return make_error(DE_NESTED_DNS_ERROR, exchange_err);
+        co_return make_error(DnsError::AE_NESTED_DNS_ERROR, exchange_err);
     }
     // Reading the response
     // In case if the server local_server_info is not valid anymore (for instance, certificate was rotated)
@@ -117,7 +117,7 @@ coro::Task<Client::ExchangeResult> Client::exchange(ldns_pkt &message, const Ser
     auto decrypt_res = local_server_info.decrypt(Uint8View(encrypted_response.data(), encrypted_response.size()),
             Uint8View(client_nonce.data(), client_nonce.size()));
     if (decrypt_res.has_error()) {
-        co_return make_error(DE_DECRYPT_ERROR, decrypt_res.error());
+        co_return make_error(DnsError::AE_DECRYPT_ERROR, decrypt_res.error());
     }
     auto reply_pkt_res = create_ldns_pkt(decrypt_res->data(), decrypt_res->size());
     if (reply_pkt_res.has_error()) {

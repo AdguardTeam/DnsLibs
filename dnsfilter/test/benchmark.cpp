@@ -106,7 +106,7 @@ static int apply_filter_to_base(test_result_t *tr, DnsFilter *filter, DnsFilter:
     for (size_t i = 0; i < domains_num; ++i) {
         TICK(before);
         std::vector<DnsFilter::Rule> rules = filter->match(handle, {domains[i], LDNS_RR_TYPE_A});
-        DnsFilter::effective_rules effective_rules = DnsFilter::get_effective_rules(rules);
+        DnsFilter::EffectiveRules effective_rules = DnsFilter::get_effective_rules(rules);
         TICK(after);
 
         tr->match_domains.total_matches += rules.size();
@@ -224,13 +224,13 @@ int main(int argc, char **argv) {
     TICK(result.load_rules.start_ts);
     auto [handle, err_or_warn] = filter.create(filter_params);
     if (!handle) {
-        errlog(g_log, "...failed to load rules: {}", *err_or_warn);
+        errlog(g_log, "...failed to load rules: {}", err_or_warn->str());
         exit(-1);
     }
     TICK(result.load_rules.end_ts);
     result.load_rules.end_rss = ag::dns::sys::current_rss();
     if (err_or_warn) {
-        warnlog(g_log, "... rules loaded with warnings: {}", *err_or_warn);
+        warnlog(g_log, "... rules loaded with warnings: {}", err_or_warn->str());
     } else {
         infolog(g_log, "...rules loaded");
     }

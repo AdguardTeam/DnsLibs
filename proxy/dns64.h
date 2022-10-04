@@ -34,6 +34,7 @@ Ipv6SynthResult synthesize_ipv4_embedded_ipv6_address(Uint8View prefix, Uint8Vie
 
 namespace ag {
 
+// clang format off
 template<>
 struct ErrorCodeToString<dns::dns64::Ipv6SynthError> {
     std::string operator()(dns::dns64::Ipv6SynthError e) {
@@ -43,5 +44,6 @@ struct ErrorCodeToString<dns::dns64::Ipv6SynthError> {
         }
     }
 };
+// clang format on
 
 } // namespace ag

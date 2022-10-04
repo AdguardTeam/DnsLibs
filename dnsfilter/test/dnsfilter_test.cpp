@@ -558,13 +558,13 @@ TEST_F(DnsfilterTest, BasicRulesMatch) {
 
         DnsFilter::EngineParams params = {{{10, file_by_filter_name(TEST_FILTER_NAME)}}};
         auto [handle, err_or_warn] = filter.create(params);
-        ASSERT_TRUE(handle) << *err_or_warn;
+        ASSERT_TRUE(handle) << err_or_warn->str();
         std::vector<DnsFilter::Rule> rules = filter.match(handle, {entry.domain});
         ASSERT_GT(rules.size(), 0);
         for (const DnsFilter::Rule &r : rules) {
             ASSERT_EQ(r.filter_id, 10);
         }
-        DnsFilter::effective_rules effective_rules = DnsFilter::get_effective_rules(rules);
+        DnsFilter::EffectiveRules effective_rules = DnsFilter::get_effective_rules(rules);
         ASSERT_EQ(effective_rules.leftovers.size(), 1);
         const auto *content = std::get_if<DnsFilter::AdblockRuleInfo>(&effective_rules.leftovers[0]->content);
         ASSERT_NE(content, nullptr);
@@ -590,14 +590,14 @@ TEST_F(DnsfilterTest, BasicRulesMatchInMemory) {
 
         DnsFilter::EngineParams params = {{{10, filter_data, true}}};
         auto [handle, err_or_warn] = filter.create(params);
-        ASSERT_TRUE(handle) << *err_or_warn;
+        ASSERT_TRUE(handle) << err_or_warn->str();
 
         std::vector<DnsFilter::Rule> rules = filter.match(handle, {entry.domain});
         ASSERT_GT(rules.size(), 0);
         for (const DnsFilter::Rule &r : rules) {
             ASSERT_EQ(r.filter_id, 10);
         }
-        DnsFilter::effective_rules effective_rules = DnsFilter::get_effective_rules(rules);
+        DnsFilter::EffectiveRules effective_rules = DnsFilter::get_effective_rules(rules);
         ASSERT_EQ(effective_rules.leftovers.size(), 1);
         const auto *content = std::get_if<DnsFilter::AdblockRuleInfo>(&effective_rules.leftovers[0]->content);
         ASSERT_NE(content, nullptr);
@@ -692,7 +692,7 @@ TEST_F(DnsfilterTest, BasicRulesNoMatch) {
 
     DnsFilter::EngineParams params = {{{0, file_by_filter_name(TEST_FILTER_NAME)}}};
     auto [handle, err_or_warn] = filter.create(params);
-    ASSERT_TRUE(handle) << *err_or_warn;
+    ASSERT_TRUE(handle) << err_or_warn->str();
 
     for (const TestData &entry : TEST_DATA) {
         infolog(log, "testing {}", entry.domain);
@@ -747,7 +747,7 @@ TEST_F(DnsfilterTest, Wildcard) {
 
     DnsFilter::EngineParams params = {{{0, file_by_filter_name(TEST_FILTER_NAME)}}};
     auto [handle, err_or_warn] = filter.create(params);
-    ASSERT_TRUE(handle) << *err_or_warn;
+    ASSERT_TRUE(handle) << err_or_warn->str();
 
     for (const TestData &entry : TEST_DATA) {
         for (const std::string &d : entry.domains) {
@@ -819,7 +819,7 @@ TEST_F(DnsfilterTest, Regex) {
 
     DnsFilter::EngineParams params = {{{0, file_by_filter_name(TEST_FILTER_NAME)}}};
     auto [handle, err_or_warn] = filter.create(params);
-    ASSERT_TRUE(handle) << *err_or_warn;
+    ASSERT_TRUE(handle) << err_or_warn->str();
     for (const TestData &entry : TEST_DATA) {
         for (const std::string &d : entry.domains) {
             infolog(log, "testing {}", d);
@@ -888,7 +888,7 @@ TEST_F(DnsfilterTest, HostsFileSyntax) {
 
     DnsFilter::EngineParams params = {{{0, file_by_filter_name(TEST_FILTER_NAME)}}};
     auto [handle, err_or_warn] = filter.create(params);
-    ASSERT_TRUE(handle) << *err_or_warn;
+    ASSERT_TRUE(handle) << err_or_warn->str();
 
     for (const TestData &entry : TEST_DATA) {
         for (const std::string &d : entry.blocked_domains) {
@@ -944,13 +944,13 @@ TEST_F(DnsfilterTest, Badfilter) {
 
     DnsFilter::EngineParams params = {{{0, file_by_filter_name(TEST_FILTER_NAME)}}};
     auto [handle, err_or_warn] = filter.create(params);
-    ASSERT_TRUE(handle) << *err_or_warn;
+    ASSERT_TRUE(handle) << err_or_warn->str();
 
     for (const TestData &entry : TEST_DATA) {
         infolog(log, "testing {}", entry.domain);
         std::vector<DnsFilter::Rule> rules = filter.match(handle, {entry.domain, LDNS_RR_TYPE_A});
         ASSERT_EQ(rules.size(), 2);
-        DnsFilter::effective_rules effective_rules = DnsFilter::get_effective_rules(rules);
+        DnsFilter::EffectiveRules effective_rules = DnsFilter::get_effective_rules(rules);
         ASSERT_EQ(effective_rules.leftovers.size(), 0);
     }
 
@@ -991,13 +991,13 @@ TEST_F(DnsfilterTest, MultipleFilters) {
     DnsFilter::EngineParams params
             = {{{0, file_by_filter_name(TEST_FILTER_NAME + "1")}, {1, file_by_filter_name(TEST_FILTER_NAME + "2")}}};
     auto [handle, err_or_warn] = filter.create(params);
-    ASSERT_TRUE(handle) << *err_or_warn;
+    ASSERT_TRUE(handle) << err_or_warn->str();
 
     for (const TestData &entry : TEST_DATA) {
         infolog(log, "testing {}", entry.domain);
         std::vector<DnsFilter::Rule> rules = filter.match(handle, {entry.domain});
         ASSERT_GT(rules.size(), 0);
-        DnsFilter::effective_rules effective_rules = DnsFilter::get_effective_rules(rules);
+        DnsFilter::EffectiveRules effective_rules = DnsFilter::get_effective_rules(rules);
         ASSERT_EQ(effective_rules.leftovers.size(), 1);
         ASSERT_EQ(effective_rules.leftovers[0]->text, entry.expected_rule);
     }
@@ -1040,7 +1040,7 @@ TEST_F(DnsfilterTest, RuleSelection) {
             rules.push_back(std::move(rule->public_part));
         }
 
-        DnsFilter::effective_rules effective_rules = DnsFilter::get_effective_rules(rules);
+        DnsFilter::EffectiveRules effective_rules = DnsFilter::get_effective_rules(rules);
         ASSERT_EQ(effective_rules.leftovers.size(), entry.expected_ids.size());
         for (size_t id : entry.expected_ids) {
             const std::string &wanted_rule = entry.rules[id];
@@ -1081,7 +1081,7 @@ TEST_F(DnsfilterTest, DnstypeModifier) {
 
         DnsFilter::EngineParams params = {{{10, std::string(entry.rule), true}}};
         auto [handle, err_or_warn] = filter.create(params);
-        ASSERT_TRUE(handle) << *err_or_warn;
+        ASSERT_TRUE(handle) << err_or_warn->str();
 
         std::vector<DnsFilter::Rule> rules = filter.match(handle, {entry.param});
         if (entry.expect_blocked) {
@@ -1113,7 +1113,7 @@ TEST_F(DnsfilterTest, FileBasedFilterAutoUpdate) {
 
     DnsFilter::EngineParams params = {{{5, file_name, false}}};
     auto [handle, err_or_warn] = filter.create(params);
-    ASSERT_TRUE(handle) << *err_or_warn;
+    ASSERT_TRUE(handle) << err_or_warn->str();
 
     std::vector<DnsFilter::Rule> rules = filter.match(handle, {"example.com", LDNS_RR_TYPE_A});
     ASSERT_EQ(rules.size(), 1U);

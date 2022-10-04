@@ -142,14 +142,15 @@ static std::string stamp_string(
 }
 
 static StampError validate_server_addr_str(std::string_view addr_str) {
-    auto [host, port, err] = utils::split_host_port_with_err(addr_str, true, true);
-    if (err) {
-        return make_error(ServerStamp::AE_INVALID_HOST_PORT_FORMAT, *err);
+    auto split_result = utils::split_host_port(addr_str, true, true);
+    if (split_result.has_error()) {
+        return make_error(ServerStamp::FromStringError::AE_INVALID_HOST_PORT_FORMAT, split_result.error());
     }
+    auto [host, port] = split_result.value();
     if (!host.empty()) {
         SocketAddress addr(host, 0);
         if (!addr.valid()) {
-            return make_error(ServerStamp::AE_INVALID_ADDRESS);
+            return make_error(ServerStamp::FromStringError::AE_INVALID_ADDRESS);
         }
     }
     if (!port.empty()) {
@@ -157,7 +158,7 @@ static StampError validate_server_addr_str(std::string_view addr_str) {
         const char *ptr = portStr.data(), *end = portStr.data() + portStr.size();
         long portNumber = strtol(portStr.c_str(), (char **) &ptr, 10);
         if (ptr != end || portNumber <= 0 || portNumber > 65535) {
-            return make_error(ServerStamp::AE_INVALID_PORT);
+            return make_error(ServerStamp::FromStringError::AE_INVALID_PORT);
         }
     }
     return {};
@@ -167,19 +168,19 @@ static StampError read_stamp_proto_props_server_addr_str(ServerStamp &stamp, siz
         const Uint8Vector &value, StampProtoType proto, size_t min_value_size, uint16_t default_port) {
     stamp.proto = proto;
     if (value.size() < min_value_size) {
-        return make_error(ServerStamp::AE_TOO_SHORT);
+        return make_error(ServerStamp::FromStringError::AE_TOO_SHORT);
     }
     pos = 1;
     read_bytes(stamp.props, pos, value);
     if (!read_bytes_with_size(stamp.server_addr_str, pos, value)) {
-        return make_error(ServerStamp::AE_INVALID_STAMP);
+        return make_error(ServerStamp::FromStringError::AE_INVALID_STAMP);
     }
     return validate_server_addr_str(stamp.server_addr_str);
 }
 
 static StampError read_stamp_server_pk(ServerStamp &stamp, size_t &pos, const Uint8Vector &value) {
     if (!read_bytes_with_size(stamp.server_pk, pos, value)) {
-        return make_error(ServerStamp::AE_INVALID_STAMP);
+        return make_error(ServerStamp::FromStringError::AE_INVALID_STAMP);
     }
     return {};
 }
@@ -189,7 +190,7 @@ static StampError read_stamp_hashes(ServerStamp &stamp, size_t &pos, const Uint8
         uint8_t hash_size_raw = read_size(pos, value);
         uint8_t hash_size = hash_size_raw & ~0x80u;
         if (!check_size(hash_size, pos, value)) {
-            return make_error(ServerStamp::AE_INVALID_STAMP);
+            return make_error(ServerStamp::FromStringError::AE_INVALID_STAMP);
         }
         if (hash_size > 0) {
             stamp.hashes.emplace_back();
@@ -204,21 +205,21 @@ static StampError read_stamp_hashes(ServerStamp &stamp, size_t &pos, const Uint8
 
 static StampError read_stamp_provider_name(ServerStamp &stamp, size_t &pos, const Uint8Vector &value) {
     if (!read_bytes_with_size(stamp.provider_name, pos, value)) {
-        return make_error(ServerStamp::AE_INVALID_STAMP);
+        return make_error(ServerStamp::FromStringError::AE_INVALID_STAMP);
     }
     return {};
 }
 
 static StampError read_stamp_path(ServerStamp &stamp, size_t &pos, const Uint8Vector &value) {
     if (!read_bytes_with_size(stamp.path, pos, value)) {
-        return make_error(ServerStamp::AE_INVALID_STAMP);
+        return make_error(ServerStamp::FromStringError::AE_INVALID_STAMP);
     }
     return {};
 }
 
 static StampError check_garbage_after_end([[maybe_unused]] ServerStamp &stamp, size_t pos, const Uint8Vector &value) {
     if (pos != value.size()) {
-        return make_error(ServerStamp::AE_GARBAGE_AFTER_END);
+        return make_error(ServerStamp::FromStringError::AE_GARBAGE_AFTER_END);
     }
     return {};
 }
@@ -338,17 +339,17 @@ std::string ServerStamp::str() const {
 
 ServerStamp::FromStringResult ServerStamp::from_string(std::string_view url) {
     if (!utils::starts_with(url, STAMP_URL_PREFIX_WITH_SCHEME)) {
-        return make_error(AE_NO_STAMP_PREFIX);
+        return make_error(FromStringError::AE_NO_STAMP_PREFIX);
     }
     std::string_view encoded(url);
     encoded.remove_prefix(std::string_view(STAMP_URL_PREFIX_WITH_SCHEME).size());
     auto decoded_optional = decode_base64(encoded, true);
     if (!decoded_optional) {
-        return make_error(AE_INVALID_STAMP);
+        return make_error(FromStringError::AE_INVALID_STAMP);
     }
     auto &decoded = *decoded_optional;
     if (decoded.empty()) {
-        return make_error(AE_TOO_SHORT);
+        return make_error(FromStringError::AE_TOO_SHORT);
     }
     switch (StampProtoType{decoded[0]}) {
     case StampProtoType::PLAIN:
@@ -362,7 +363,7 @@ ServerStamp::FromStringResult ServerStamp::from_string(std::string_view url) {
     case StampProtoType::DOQ:
         return new_doq_server_stamp(decoded);
     default:
-        return make_error(AE_UNSUPPORTED_PROTOCOL);
+        return make_error(FromStringError::AE_UNSUPPORTED_PROTOCOL);
     }
 }
 
@@ -375,8 +376,8 @@ std::string ServerStamp::pretty_url(bool pretty_dnscrypt) const {
     }
 
     if (proto == StampProtoType::PLAIN) {
-        auto [host, port] = ag::utils::split_host_port(server_addr_str);
-        return port.empty() ? std::string{host} : server_addr_str;
+        auto split_result = ag::utils::split_host_port(server_addr_str);
+        return split_result.has_error() ? server_addr_str : std::string(split_result.value().first);
     }
 
     std::string scheme;
@@ -404,9 +405,9 @@ std::string ServerStamp::pretty_url(bool pretty_dnscrypt) const {
         if (server_addr_str.front() == ':') {
             port = server_addr_str;
         } else {
-            auto [host, port_view] = ag::utils::split_host_port(server_addr_str);
-            if (!port_view.empty()) {
-                port = AG_FMT(":{}", port_view);
+            auto split_result = ag::utils::split_host_port(server_addr_str);
+            if (!split_result.has_error() && !split_result.value().second.empty()) {
+                port = AG_FMT(":{}", split_result.value().second);
             }
         }
     }

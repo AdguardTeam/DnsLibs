@@ -101,21 +101,22 @@ DefaultVerifier &DefaultVerifier::operator=(DefaultVerifier &&other) noexcept {
     return *this;
 }
 
-ErrString DefaultVerifier::verify(X509_STORE_CTX *ctx_template, std::string_view host_name) const {
+std::optional<std::string> DefaultVerifier::verify(
+        X509_STORE_CTX *ctx_template, std::string_view host_name) const {
     if (m_ca_store == nullptr) {
         return "CA store is not set";
     }
 
-    if (ErrString err = verify_host_name(X509_STORE_CTX_get0_cert(ctx_template), host_name); err.has_value()) {
+    if (auto err = verify_host_name(X509_STORE_CTX_get0_cert(ctx_template), host_name)) {
         return err;
     }
 
     using X509_STORE_CTX_ptr = bssl::UniquePtr<X509_STORE_CTX>;
     X509_STORE_CTX_ptr ctx_holder(X509_STORE_CTX_new());
     X509_STORE_CTX *ctx = ctx_holder.get();
-    if (0
-            == X509_STORE_CTX_init(ctx, m_ca_store, X509_STORE_CTX_get0_cert(ctx_template),
-                    X509_STORE_CTX_get0_untrusted(ctx_template))) {
+    if (X509_STORE_CTX_init(
+                ctx, m_ca_store, X509_STORE_CTX_get0_cert(ctx_template), X509_STORE_CTX_get0_untrusted(ctx_template))
+            == 0) {
         return "Can't verify certificate chain: can't initialize STORE_CTX";
     }
     if (0 == X509_STORE_CTX_set_purpose(ctx, X509_PURPOSE_SSL_SERVER)) {

@@ -9,7 +9,11 @@
 #include <memory>
 #include <magic_enum.hpp>
 #include <ldns/ldns.h>
+
+#include "common/error.h"
 #include "common/defs.h"
+
+#include "dns/common/dns_defs.h"
 
 namespace ag::dns {
 
@@ -20,6 +24,8 @@ namespace ag::dns {
 class DnsFilter {
 public:
     using Handle = void *;
+
+    using DnsFilterResult = std::pair<Handle, Error<DnsProxyInitError>>;
 
     struct FilterParams {
         int32_t id{0}; // filter id
@@ -93,9 +99,9 @@ public:
      * Create filtering engine handle
      * @param[in]  p     engine parameters
      * @return     An engine handle with an optional warning string, or
-     *             nullptr with an error string
+     *             error string
      */
-    std::pair<Handle, ErrString> create(const EngineParams &p);
+    [[nodiscard]] DnsFilterResult create(const EngineParams &p);
 
     /**
      * Destroy filtering engine handle
@@ -113,14 +119,14 @@ public:
      */
     std::vector<Rule> match(Handle obj, MatchParam param);
 
-    struct effective_rules {
+    struct EffectiveRules {
         /** `$dnsrewrite` rules are special */
         std::vector<const Rule *> dnsrewrite;
         /**
          * All other rules. Contains the rules which have equal priority and the same kind.
          * For example, if the following rules were matched:
          *    `example.com`, `@@example.com` and `@@example.com$dnstype=a`,
-         * the leftovers list will contain: `@@example.com` and `@@example.com$dnstype=a`.
+         * the leftovers list would contain: `@@example.com` and `@@example.com$dnstype=a`.
          */
         std::vector<const Rule *> leftovers;
     };
@@ -132,7 +138,7 @@ public:
      * @param[in]  rules  matched rules
      * @return     Selected rules
      */
-    static effective_rules get_effective_rules(const std::vector<Rule> &rules);
+    static EffectiveRules get_effective_rules(const std::vector<Rule> &rules);
 
     /**
      * Check if string is a valid rule

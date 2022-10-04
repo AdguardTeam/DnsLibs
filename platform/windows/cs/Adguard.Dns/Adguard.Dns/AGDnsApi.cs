@@ -22,7 +22,7 @@ namespace Adguard.Dns
         /// <summary>
         /// The current API version hash with which the ProxyServer was tested
         /// </summary>
-        private const string API_VERSION_HASH = "d6cad016242d50dd33b79e34ab944d8a82fd53d32db4bf96889c322cad55434d";
+        private const string API_VERSION_HASH = "5dbee37b7066e8f4c38875c23b16a5d85090e9beaaf6b76f750ab934ae73fa30";
         #endregion
 
         #region API Functions
@@ -32,10 +32,20 @@ namespace Adguard.Dns
         /// </summary>
         public enum ag_dnsproxy_init_result
         {
-            AGDPIR_OK,
-            AGDPIR_WARNING,
-            AGDPIR_LISTENER_ERROR,
-            AGDPIR_ERROR
+            AGDPIR_PROXY_NOT_SET,
+            AGDPIR_EVENT_LOOP_NOT_SET,
+            AGDPIR_INVALID_ADDRESS,
+            AGDPIR_EMPTY_PROXY,
+            AGDPIR_PROTOCOL_ERROR,
+            AGDPIR_LISTENER_INIT_ERROR,
+            AGDPIR_INVALID_IPV4,
+            AGDPIR_INVALID_IPV6,
+            AGDPIR_UPSTREAM_INIT_ERROR,
+            AGDPIR_FALLBACK_FILTER_INIT_ERROR,
+            AGDPIR_FILTER_LOAD_ERROR,
+            AGDPIR_MEM_LIMIT_REACHED,
+            AGDPIR_NON_UNIQUE_FILTER_ID,
+            AGDPIR_OK
         }
 
         /// <summary>

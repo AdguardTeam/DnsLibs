@@ -56,14 +56,14 @@ coro::Task<Upstream::ExchangeResult> DnscryptUpstream::exchange(ldns_pkt *reques
         co_return result.error;
     }
     if (m_options.timeout < result.rtt) {
-        co_return make_error(DE_TIMED_OUT, AG_FMT("Certificate fetch took too much time: {}ms", result.rtt.count()));
+        co_return make_error(DnsError::AE_TIMED_OUT, AG_FMT("Certificate fetch took too much time: {}ms", result.rtt.count()));
     }
     auto reply = co_await apply_exchange(*request_pkt, m_options.timeout - result.rtt);
     if (reply.has_error()) {
         co_return reply.error();
     }
     if (reply && ldns_pkt_id(reply->get()) != ldns_pkt_id(request_pkt)) {
-        co_return make_error(DE_REPLY_PACKET_ID_MISMATCH);
+        co_return make_error(DnsError::AE_REPLY_PACKET_ID_MISMATCH);
     }
     tracelog_id(m_log, request_pkt, "Finished");
     co_return std::move(reply.value());
@@ -77,7 +77,7 @@ coro::Task<DnscryptUpstream::SetupResult> DnscryptUpstream::setup_impl() {
         auto dial_res
                 = co_await client.dial(m_stamp, this->config().loop, m_options.timeout, m_config.socket_factory, this->make_socket_parameters());
         if (dial_res.has_error()) {
-            co_return {rtt, make_error(DE_HANDSHAKE_ERROR,
+            co_return {rtt, make_error(DnsError::AE_HANDSHAKE_ERROR,
                     AG_FMT("Failed to fetch certificate info from {}", m_options.address), dial_res.error())};
         }
         auto &[dial_server_info, dial_rtt] = *dial_res;
@@ -103,7 +103,8 @@ coro::Task<Upstream::ExchangeResult> DnscryptUpstream::apply_exchange(ldns_pkt &
 
         timeout -= timer.elapsed<decltype(timeout)>();
         if (timeout <= decltype(timeout)(0)) {
-            co_return make_error(DE_TIMED_OUT, AG_FMT("Can't retry over tcp: {}", evutil_socket_error_to_string(utils::AG_ETIMEDOUT)));
+            co_return make_error(DnsError::AE_TIMED_OUT,
+                    AG_FMT("Can't retry over tcp: {}", evutil_socket_error_to_string(utils::AG_ETIMEDOUT)));
         }
 
         auto tcp_reply_res = co_await tcp_client.exchange(request_pkt, local_upstream.server_info,
@@ -111,13 +112,13 @@ coro::Task<Upstream::ExchangeResult> DnscryptUpstream::apply_exchange(ldns_pkt &
         if (tcp_reply_res) {
             co_return std::move(tcp_reply_res->packet);
         } else {
-            co_return make_error(DE_INTERNAL_ERROR, tcp_reply_res.error());
+            co_return make_error(DnsError::AE_INTERNAL_ERROR, tcp_reply_res.error());
         }
     }
     if (udp_reply_res) {
         co_return std::move(udp_reply_res->packet);
     } else {
-        co_return make_error(DE_INTERNAL_ERROR, udp_reply_res.error());
+        co_return make_error(DnsError::AE_INTERNAL_ERROR, udp_reply_res.error());
     }
 }
 

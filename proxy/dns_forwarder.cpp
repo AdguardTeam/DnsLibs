@@ -5,6 +5,7 @@
 #include <thread>
 
 #include "common/cache.h"
+#include "common/error.h"
 #include "common/utils.h"
 #include "dns/net/application_verifier.h"
 #include "dns/net/default_verifier.h"
@@ -39,7 +40,7 @@ static constexpr std::string_view MOZILLA_DOH_HOST = "use-application-dns.net.";
 static constexpr uint32_t SOA_RETRY_IPV6_BLOCK = 60;
 
 // Return filter engine params or the offending pattern
-static std::tuple<DnsFilter::EngineParams, ErrString> make_fallback_filter_params(
+static DnsFilter::EngineParams make_fallback_filter_params(
         const std::vector<std::string> &fallback_domains, Logger &log) {
     static constexpr std::string_view CHARSET = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_-.*";
     std::string flt_data;
@@ -54,7 +55,6 @@ static std::tuple<DnsFilter::EngineParams, ErrString> make_fallback_filter_param
 
         if (auto pos = p.find_first_not_of(CHARSET); pos != p.npos) {
             dbglog(log, "Bad character '{}' in pattern '{}'", p[pos], pattern);
-
             continue;
         }
 
@@ -79,7 +79,7 @@ static std::tuple<DnsFilter::EngineParams, ErrString> make_fallback_filter_param
         flt_data += rule;
         flt_data += "\n";
     }
-    return {DnsFilter::EngineParams{.filters = {{.data = std::move(flt_data), .in_memory = true}}}, std::nullopt};
+    return {.filters = {{.data = std::move(flt_data), .in_memory = true}}};
 }
 
 // info not nullptr when logging incoming packet, nullptr for outgoing packets
@@ -135,7 +135,7 @@ static void event_append_rules(
 
 void DnsForwarder::finalize_processed_event(DnsRequestProcessedEvent &event, const ldns_pkt *request,
         const ldns_pkt *response, const ldns_pkt *original_response, std::optional<int32_t> upstream_id,
-        ErrString error) const {
+        Error<DnsError> error) const {
     if (request != nullptr) {
         const ldns_rr *question = ldns_rr_list_rr(ldns_pkt_question(request), 0);
         char *type = ldns_rr_type2str(ldns_rr_get_type(question));
@@ -162,8 +162,9 @@ void DnsForwarder::finalize_processed_event(DnsRequestProcessedEvent &event, con
 
     event.upstream_id = upstream_id;
 
-    if (error.has_value()) {
-        event.error = std::move(error.value());
+    if (error) {
+        dbglog(m_log, "{}", error->str());
+        event.error = error->str();
     } else {
         event.error.clear();
     }
@@ -289,7 +290,7 @@ static coro::Task<void> discover_dns64_prefixes(std::vector<UpstreamOptions> uss
         std::shared_ptr<SocketFactory> socket_factory, dns64::Prefixes prefixes, Logger logger, EventLoop &loop,
         uint32_t max_tries, Millis wait_time);
 
-std::pair<bool, ErrString> DnsForwarder::init(
+DnsForwarder::InitResult DnsForwarder::init(
         EventLoopPtr loop, const DnsProxySettings &settings, const DnsProxyEvents &events) {
     m_log = ag::Logger{"DNS forwarder"};
     m_loop = std::move(loop);
@@ -300,16 +301,12 @@ std::pair<bool, ErrString> DnsForwarder::init(
     m_events = &events;
 
     if (!settings.custom_blocking_ipv4.empty() && !utils::is_valid_ip4(settings.custom_blocking_ipv4)) {
-        auto err = AG_FMT("Invalid custom blocking IPv4 address: {}", settings.custom_blocking_ipv4);
-        errlog(m_log, "{}", err);
         this->deinit();
-        return {false, std::move(err)};
+        return {false, make_error(DnsProxyInitError::AE_INVALID_IPV4, AG_FMT("{}", settings.custom_blocking_ipv4))};
     }
     if (!settings.custom_blocking_ipv6.empty() && !utils::is_valid_ip6(settings.custom_blocking_ipv6)) {
-        auto err = AG_FMT("Invalid custom blocking IPv6 address: {}", settings.custom_blocking_ipv6);
-        errlog(m_log, "{}", err);
         this->deinit();
-        return {false, std::move(err)};
+        return {false, make_error(DnsProxyInitError::AE_INVALID_IPV6, AG_FMT("{}", settings.custom_blocking_ipv6))};
     }
 
     struct SocketFactory::Parameters sf_parameters = {.loop = *m_loop};
@@ -356,42 +353,33 @@ std::pair<bool, ErrString> DnsForwarder::init(
         }
     }
     if (m_upstreams.empty() && m_fallbacks.empty()) {
-        constexpr auto err = "Failed to initialize any upstream";
-        errlog(m_log, "{}", err);
         this->deinit();
-        return {false, err};
+        return {false, make_error(DnsProxyInitError::AE_UPSTREAM_INIT_ERROR)};
     }
     infolog(m_log, "Upstreams initialized");
 
     infolog(m_log, "Initializing the filtering module...");
     auto [handle, err_or_warn] = m_filter.create(settings.filter_params);
     if (!handle) {
-        errlog(m_log, "Failed to initialize the filtering module");
         this->deinit();
-        return {false, std::move(err_or_warn)};
+        return {false, err_or_warn};
     }
     m_filter_handle = handle;
     if (err_or_warn) {
-        warnlog(m_log, "Filtering module initialized with warnings:\n{}", *err_or_warn);
+        warnlog(m_log, "Filtering module initialized with warnings:\n{}", err_or_warn->str());
     } else {
         infolog(m_log, "Filtering module initialized");
     }
 
     if (!settings.fallback_domains.empty()) {
         infolog(m_log, "Initializing the fallback filter...");
-        auto [params, bad_pattern] = make_fallback_filter_params(settings.fallback_domains, m_log);
-        if (bad_pattern) {
-            errlog(m_log, "Failed to initialize the fallback filter, bad fallback domain: {}", *bad_pattern);
+        auto params = make_fallback_filter_params(settings.fallback_domains, m_log);
+        auto [fallback_handle, fallback_err_or_warn] = m_filter.create(params);
+        if (fallback_err_or_warn) { // Fallback filter must initialize cleanly, warnings are errors
             this->deinit();
-            return {false, std::move(bad_pattern)};
+            return {false, make_error(DnsProxyInitError::AE_FALLBACK_FILTER_INIT_ERROR, fallback_err_or_warn)};
         }
-        auto [handle, err_or_warn] = m_filter.create(params);
-        if (err_or_warn) { // Fallback filter must initialize cleanly, warnings are errors
-            errlog(m_log, "Failed to initialize the fallback filter: {}", *err_or_warn);
-            this->deinit();
-            return {false, std::move(err_or_warn)};
-        }
-        m_fallback_filter_handle = handle;
+        m_fallback_filter_handle = fallback_handle;
     }
 
     m_dns64_prefixes = std::make_shared<WithMtx<std::vector<Uint8Vector>>>();
@@ -404,7 +392,7 @@ std::pair<bool, ErrString> DnsForwarder::init(
     m_response_cache.set_capacity(m_settings->dns_cache_size);
 
     infolog(m_log, "Forwarder initialized");
-    return {true, std::move(err_or_warn)};
+    return {true, err_or_warn};
 }
 
 static coro::Task<void> discover_dns64_prefixes(std::vector<UpstreamOptions> uss,
@@ -486,9 +474,10 @@ coro::Task<Uint8Vector> DnsForwarder::handle_message_internal(
     ldns_pkt *request;
     ldns_status status = ldns_wire2pkt(&request, message.data(), message.length());
     if (status != LDNS_STATUS_OK) {
-        std::string err = AG_FMT("Failed to parse payload: {} ({})", ldns_get_errorstr_by_id(status), status);
-        dbglog(m_log, "{}", err);
-        finalize_processed_event(event, nullptr, nullptr, nullptr, std::nullopt, std::move(err));
+        dbglog(m_log, "Failed to parse payload: {} ({})", ldns_get_errorstr_by_id(status), status);
+        finalize_processed_event(event, nullptr, nullptr, nullptr, std::nullopt,
+                make_error(DnsError::AE_DECODE_ERROR,
+                        AG_FMT("{} ({})", ldns_get_errorstr_by_id(status), status)));
         ldns_pkt_ptr response{ResponseHelpers::create_formerr_response(pkt_id)};
         log_packet(m_log, response.get(), "Format error response");
         co_return transform_response_to_raw_data(response.get());
@@ -499,11 +488,10 @@ coro::Task<Uint8Vector> DnsForwarder::handle_message_internal(
 
     const ldns_rr *question = ldns_rr_list_rr(ldns_pkt_question(request), 0);
     if (question == nullptr) {
-        std::string err = "Message has no question section";
-        dbglog_fid(m_log, request, "{}", err);
         ldns_pkt_ptr response{ResponseHelpers::create_servfail_response(request)};
         log_packet(m_log, response.get(), "Server failure response");
-        finalize_processed_event(event, nullptr, response.get(), nullptr, std::nullopt, std::move(err));
+        finalize_processed_event(
+                event, nullptr, response.get(), nullptr, std::nullopt, make_error(DnsError::AE_DECODE_ERROR));
         Uint8Vector raw_response = transform_response_to_raw_data(response.get());
         co_return raw_response;
     }
@@ -522,7 +510,7 @@ coro::Task<Uint8Vector> DnsForwarder::handle_message_internal(
         log_packet(m_log, cached.response.get(), "Cached response");
         event.cache_hit = true;
         truncate_response(cached.response.get(), request, info);
-        finalize_processed_event(event, request, cached.response.get(), nullptr, cached.upstream_id, std::nullopt);
+        finalize_processed_event(event, request, cached.response.get(), nullptr, cached.upstream_id, {});
         Uint8Vector raw_response = transform_response_to_raw_data(cached.response.get());
         if (cached.expired) {
             assert(m_settings->optimistic_cache);
@@ -539,7 +527,7 @@ coro::Task<Uint8Vector> DnsForwarder::handle_message_internal(
         ldns_pkt_ptr response{ResponseHelpers::create_nxdomain_response(request, m_settings)};
         log_packet(m_log, response.get(), "Mozilla DOH blocking response");
         Uint8Vector raw_response = transform_response_to_raw_data(response.get());
-        finalize_processed_event(event, request, response.get(), nullptr, std::nullopt, std::nullopt);
+        finalize_processed_event(event, request, response.get(), nullptr, std::nullopt, {});
         co_return raw_response;
     }
 
@@ -588,7 +576,8 @@ coro::Task<Uint8Vector> DnsForwarder::handle_message_internal(
         log_packet(m_log, response->get(), "Server failure response");
         Uint8Vector raw_response = transform_response_to_raw_data(response->get());
         finalize_processed_event(event, request, response->get(), nullptr,
-                std::make_optional(selected_upstream->options().id), err->str());
+                std::make_optional(selected_upstream->options().id),
+                make_error(DnsError::AE_EXCHANGE_ERROR, err));
         co_return raw_response;
     }
 
@@ -646,7 +635,7 @@ coro::Task<Uint8Vector> DnsForwarder::handle_message_internal(
     Uint8Vector raw_response = transform_response_to_raw_data(response->get());
     event.bytes_sent = message.size();
     event.bytes_received = raw_response.size();
-    finalize_processed_event(event, request, response->get(), nullptr, selected_upstream->options().id, std::nullopt);
+    finalize_processed_event(event, request, response->get(), nullptr, selected_upstream->options().id, {});
     m_response_cache.put(req_holder.get(), std::move(response.value()), selected_upstream->options().id);
     co_return raw_response;
 }
@@ -793,7 +782,7 @@ coro::Task<std::optional<Uint8Vector>> DnsForwarder::apply_filter(DnsFilter::Mat
     }
     Uint8Vector raw_response = transform_response_to_raw_data(response.get());
     if (fire_event) {
-        finalize_processed_event(event, request, response.get(), original_response, std::nullopt, std::nullopt);
+        finalize_processed_event(event, request, response.get(), original_response, std::nullopt, {});
     }
 
     co_return raw_response;
@@ -832,26 +821,27 @@ coro::Task<UpstreamExchangeResult> DnsForwarder::do_upstream_exchange(
             Upstream::ExchangeResult result = co_await cur_upstream->exchange(request, info);
             tracelog_id(m_log, request, "Upstream's ({}) exchanging is done", address);
             if (guard.expired()) {
-                co_return {make_error(DE_SHUTTING_DOWN), nullptr};
+                co_return {make_error(DnsError::AE_SHUTTING_DOWN), nullptr};
             }
             cur_upstream->adjust_rtt(t.elapsed<Millis>());
 
             if (!result.has_error()) {
                 co_return {std::move(result.value()), cur_upstream};
-            } else if (result.error()->value() != DE_TIMED_OUT && result.error()->value() != DE_SHUTTING_DOWN) {
+            } else if (result.error()->value() != DnsError::AE_TIMED_OUT
+                    && result.error()->value() != DnsError::AE_SHUTTING_DOWN) {
                 // https://github.com/AdguardTeam/DnsLibs/issues/86
                 Upstream::ExchangeResult retry_result = co_await cur_upstream->exchange(request, info);
                 if (!retry_result.has_error()) {
                     co_return {std::move(retry_result.value()), cur_upstream};
                 }
-                err = make_error(DE_NESTED_DNS_ERROR,
+                err = make_error(DnsError::AE_NESTED_DNS_ERROR,
                         AG_FMT("Upstream ({}) exchange failed: first reason is:\n{}\nsecond reason is:", address,
                                 result.error()->str()),
                         retry_result.error());
                 dbglog_id(m_log, request, "{}", err->str());
             } else {
-                err = make_error(
-                        DE_NESTED_DNS_ERROR, AG_FMT("Upstream ({}) exchange failed", address, result.error()->str()));
+                err = make_error(DnsError::AE_NESTED_DNS_ERROR,
+                        AG_FMT("Upstream ({}) exchange failed", address, result.error()->str()));
                 dbglog_id(m_log, request, "{}", err->str());
             }
         }

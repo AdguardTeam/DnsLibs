@@ -22,7 +22,7 @@ TEST_F(UpstreamUtilsTest, InvalidUpstreamOnline) {
 
 TEST_F(UpstreamUtilsTest, ValidUpstreamOnline) {
     auto err = dns::test_upstream({"8.8.8.8:53", {}, 10 * timeout}, false, nullptr, false);
-    ASSERT_FALSE(err) << "Cannot fail: " << *err;
+    ASSERT_FALSE(err) << "Cannot fail: " << err->str();
 
     // Test for DoT with 2 bootstraps. Only one is valid
     // Use stub verifier b/c certificate verification is not part of the tested logic
@@ -33,12 +33,12 @@ TEST_F(UpstreamUtilsTest, ValidUpstreamOnline) {
                 return std::nullopt;
             },
             false);
-    ASSERT_FALSE(err) << "Cannot fail: " << *err;
+    ASSERT_FALSE(err) << "Cannot fail: " << err->str();
 }
 
 TEST_F(UpstreamUtilsTest, InvalidUpstreamOfflineLooksValid) {
     auto err = dns::test_upstream({"123.12.32.1:1493", {}, timeout}, false, nullptr, true);
-    ASSERT_FALSE(err) << "Cannot fail: " << *err;
+    ASSERT_FALSE(err) << "Cannot fail: " << err->str();
 }
 
 TEST_F(UpstreamUtilsTest, InvalidUpstreamOfflineUnknownScheme) {

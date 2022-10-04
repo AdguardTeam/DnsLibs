@@ -69,6 +69,7 @@ private:
     std::vector<jni::GlobalRef<jobject>> m_listener_protocol_enum_values;
     std::vector<jni::GlobalRef<jobject>> m_proxy_protocol_enum_values;
     std::vector<jni::GlobalRef<jobject>> m_blocking_mode_values;
+    std::vector<jni::GlobalRef<jobject>> m_dnsproxy_init_result;
 
     /**
      * Marshal upstream settings from Java to C++.
@@ -145,6 +146,11 @@ private:
      */
     DnsProxyEvents marshal_events(JNIEnv *env, jobject java_events);
 
+    /**
+     * Marshal DnsProxyInitResult from C++ to Java.
+     */
+    jni::LocalRef<jobject> marshal_init_result(JNIEnv *env, const DnsProxy::DnsProxyInitResult &init_result);
+
 public:
 
     /**
@@ -158,7 +164,7 @@ public:
      * @param events   Proxy events interface from Java.
      * @return Whether initialization was successful.
      */
-    bool init(JNIEnv *env, jobject settings, jobject events);
+    jobject init(JNIEnv *env, jobject settings, jobject events);
 
     /**
      * Deinit the actual proxy and release all resources held by this object.

@@ -3,14 +3,15 @@
 #include <uv.h>
 #include <shared_mutex>
 
-#include "common/logger.h"
-#include "common/utils.h"
 #include "common/cache.h"
 #include "common/clock.h"
+#include "common/error.h"
+#include "common/logger.h"
+#include "common/utils.h"
 #include "dns/dnsfilter/dnsfilter.h"
-#include "dns/proxy/dnsproxy_settings.h"
-#include "dns/proxy/dnsproxy_events.h"
 #include "dns/proxy/dnsproxy.h"
+#include "dns/proxy/dnsproxy_events.h"
+#include "dns/proxy/dnsproxy_settings.h"
 #include "dns/upstream/upstream.h"
 
 #include "dns64.h"
@@ -26,10 +27,12 @@ struct UpstreamExchangeResult {
 
 class DnsForwarder {
 public:
+    using InitResult = std::pair<bool, Error<DnsProxyInitError>>;
+
     DnsForwarder();
     ~DnsForwarder();
 
-    std::pair<bool, ErrString> init(EventLoopPtr loop, const DnsProxySettings &settings, const DnsProxyEvents &events);
+    InitResult init(EventLoopPtr loop, const DnsProxySettings &settings, const DnsProxyEvents &events);
     void deinit();
 
     coro::Task<Uint8Vector> handle_message(Uint8View message, const DnsMessageInfo *info);
@@ -73,9 +76,8 @@ private:
 
     void finalize_processed_event(DnsRequestProcessedEvent &event,
                                   const ldns_pkt *request, const ldns_pkt *response, const ldns_pkt *original_response,
-                                  std::optional<int32_t> upstream_id, ErrString error) const;
+                                  std::optional<int32_t> upstream_id, Error<DnsError> error) const;
 
-    bool do_dnssec_log_logic(ldns_pkt *request);
     bool finalize_dnssec_log_logic(ldns_pkt *response, bool is_our_do_bit);
 
     Logger m_log{"dns_forwarder"};

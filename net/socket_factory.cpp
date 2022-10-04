@@ -121,30 +121,34 @@ SocketFactory::SocketPtr SocketFactory::make_secured_socket(
             std::move(underlying_socket), m_parameters.verifier.get(), std::move(secure_parameters));
 }
 
-ErrString SocketFactory::prepare_fd(
+Error<SocketError> SocketFactory::prepare_fd(
         evutil_socket_t fd, const SocketAddress &peer, const IfIdVariant &outbound_interface) const {
     if (const uint32_t *if_index = std::get_if<uint32_t>(&outbound_interface)) {
-        return ag::utils::bind_socket_to_if(fd, peer.c_sockaddr()->sa_family, *if_index);
+        return make_error(SocketError::AE_BIND_TO_IF_ERROR,
+                ag::utils::bind_socket_to_if(fd, peer.c_sockaddr()->sa_family, *if_index));
     } else if (const std::string *if_name = std::get_if<std::string>(&outbound_interface)) {
-        return ag::utils::bind_socket_to_if(fd, peer.c_sockaddr()->sa_family, if_name->c_str());
+        return make_error(SocketError::AE_BIND_TO_IF_ERROR,
+                ag::utils::bind_socket_to_if(fd, peer.c_sockaddr()->sa_family, if_name->c_str()));
     }
     if (m_router == nullptr) {
-        return std::nullopt;
+        return {};
     }
 
     if (auto idx = m_router->resolve(peer); idx.has_value()) {
         auto err = ag::utils::bind_socket_to_if(fd, peer.c_sockaddr()->sa_family, *idx);
-        if (err.has_value()) {
-            err = std::nullopt;
+        if (err) {
+            err.reset();
             m_router->flush_cache();
             if (idx = m_router->resolve(peer); idx.has_value()) {
                 err = ag::utils::bind_socket_to_if(fd, peer.c_sockaddr()->sa_family, *idx);
+                if (err) {
+                    return make_error(SocketError::AE_BIND_TO_IF_ERROR, err);
+                }
             }
         }
-        return err;
     }
 
-    return std::nullopt;
+    return {};
 }
 
 const OutboundProxySettings *SocketFactory::get_outbound_proxy_settings() const {
@@ -232,7 +236,7 @@ void SocketFactory::unsubscribe_from_reset_bypassed_proxy_connections_event(uint
     m_proxy->reset_subscribers.erase(id);
 }
 
-ErrString SocketFactory::on_prepare_fd(
+Error<SocketError> SocketFactory::on_prepare_fd(
         void *arg, evutil_socket_t fd, const SocketAddress &peer, const IfIdVariant &outbound_interface) {
     auto *self = (SocketFactory *) arg;
     return self->prepare_fd(fd, peer, outbound_interface);

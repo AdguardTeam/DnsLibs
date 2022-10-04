@@ -3,13 +3,14 @@
 
 #include <string_view>
 #include <openssl/ssl.h>
+
 #include "common/utils.h"
 
 
 namespace ag::dns {
 
 /**
- * An abstract verifier which incapsulates the SSL/TLS certificate verification procedure.
+ * An abstract verifier which encapsulates the SSL/TLS certificate verification procedure.
  * It's used in the DNS-over-HTTPS and DNS-over-TLS upstreams, for example.
  */
 class CertificateVerifier {
@@ -23,7 +24,7 @@ public:
      * @param host_name host name
      * @return nullopt if verified successfully, non-nullopt otherwise
      */
-    virtual ErrString verify(X509_STORE_CTX *ctx, std::string_view host_name) const = 0;
+    virtual std::optional<std::string> verify(X509_STORE_CTX *ctx, std::string_view host_name) const = 0;
 
 protected:
     /**
@@ -33,8 +34,7 @@ protected:
      * @param host server name
      * @return nullopt if verified successfully, non-nullopt otherwise
      */
-    virtual ErrString verify_host_name(X509 *certificate, std::string_view host) const;
+    virtual std::optional<std::string> verify_host_name(X509 *certificate, std::string_view host) const;
 };
-
 
 } // namespace ag::dns

@@ -47,7 +47,7 @@ enum class StampProtoType : uint8_t {
  * server_stamp is the DNS stamp representation
  */
 struct ServerStamp {
-    enum FromStringError {
+    enum class FromStringError {
         AE_NO_STAMP_PREFIX,
         AE_INVALID_STAMP,
         AE_TOO_SHORT,
@@ -110,11 +110,12 @@ struct ServerStamp {
 
 } // namespace dns
 
+// clang format off
 template<>
 struct ErrorCodeToString<dns::ServerStamp::FromStringError> {
     std::string operator()(dns::ServerStamp::FromStringError e) {
         switch (e) {
-            case decltype(e)::AE_NO_STAMP_PREFIX: return AG_FMT("Stamps are expected to start with {}", dns::STAMP_URL_PREFIX_WITH_SCHEME);
+        case decltype(e)::AE_NO_STAMP_PREFIX: return AG_FMT("Stamps are expected to start with {}", dns::STAMP_URL_PREFIX_WITH_SCHEME);
         case decltype(e)::AE_INVALID_STAMP: return "Invalid stamp";
         case decltype(e)::AE_TOO_SHORT: return "Stamp is too short";
         case decltype(e)::AE_UNSUPPORTED_PROTOCOL: return "Unsupported stamp protocol identifier";
@@ -122,9 +123,9 @@ struct ErrorCodeToString<dns::ServerStamp::FromStringError> {
         case decltype(e)::AE_INVALID_ADDRESS: return "Invalid server address";
         case decltype(e)::AE_INVALID_PORT: return "Invalid server port";
         case decltype(e)::AE_GARBAGE_AFTER_END: return "Invalid stamp (garbage after end)";
-        default: return "Unknown error";
         }
     }
 };
+// clang format on
 
 } // namespace ag

@@ -44,6 +44,7 @@ enum class SocketError {
     AE_TLS_ERROR,
     AE_OUTBOUND_PROXY_ERROR,
     AE_IN_PROGRESS,
+    AE_BIND_TO_IF_ERROR,
 };
 
 class SocketFactory {
@@ -134,7 +135,7 @@ public:
      * @param outbound_interface name or index of the network interface to route traffic through
      * @return some error if failed
      */
-    [[nodiscard]] ErrString prepare_fd(evutil_socket_t fd,
+    [[nodiscard]] Error<SocketError> prepare_fd(evutil_socket_t fd,
                                        const SocketAddress &peer, const IfIdVariant &outbound_interface) const;
 
     /**
@@ -210,7 +211,7 @@ private:
     [[nodiscard]] SocketPtr make_secured_socket(SocketPtr underlying_socket,
                                                 SecureSocketParameters secure_parameters) const;
 
-    static ErrString on_prepare_fd(void *arg, evutil_socket_t fd,
+    static Error<SocketError> on_prepare_fd(void *arg, evutil_socket_t fd,
                                    const SocketAddress &peer, const IfIdVariant &outbound_interface);
 
     [[nodiscard]] OutboundProxy *make_proxy() const;
@@ -319,7 +320,7 @@ protected:
 
     struct PrepareFdCallback {
         /** Raised after the descriptor creation */
-        ErrString (*func)(void *arg, evutil_socket_t fd,
+        Error<SocketError> (*func)(void *arg, evutil_socket_t fd,
                           const SocketAddress &peer, const IfIdVariant &outbound_interface);
 
         /** User context for the callback */
@@ -337,6 +338,7 @@ protected:
 
 } // namespace dns
 
+// clang format off
 template<>
 struct ErrorCodeToString<dns::SocketError> {
     std::string operator()(dns::SocketError e) {
@@ -357,10 +359,11 @@ struct ErrorCodeToString<dns::SocketError> {
         case decltype(e)::AE_TLS_ERROR: return "TLS error";
         case decltype(e)::AE_OUTBOUND_PROXY_ERROR: return "Proxy error";
         case decltype(e)::AE_IN_PROGRESS: return "Async operation in progress";
-        default: return AG_FMT("Unknown error: {}", (int)e);
+        case decltype(e)::AE_BIND_TO_IF_ERROR: return "Failed to bind socket to interface";
         }
     }
 };
+// clang format on
 
 template<>
 struct ErrorCodeToString<uv_errno_t> {

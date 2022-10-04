@@ -20,13 +20,12 @@ namespace dns {
 
 class TlsCodec {
 public:
-    enum OSslError {
+    enum class OSslError {
     };
-    enum TlsError {
+    enum class TlsError {
         AE_INVALID_STATE,
         AE_UNEXPECTED_EOF,
         AE_ALPN_SET_FAILED,
-        AE_SSL_ERROR,
         AE_BUFFER_ERROR,
         AE_WRITE_ERROR,
         AE_READ_ERROR,
@@ -105,6 +104,7 @@ private:
 
 } // namespace dns
 
+// clang format off
 template<>
 struct ErrorCodeToString<dns::TlsCodec::OSslError> {
     std::string operator()(dns::TlsCodec::OSslError e) {
@@ -123,14 +123,13 @@ struct ErrorCodeToString<dns::TlsCodec::TlsError> {
         case decltype(e)::AE_INVALID_STATE: return "Invalid state";
         case decltype(e)::AE_UNEXPECTED_EOF: return "Remote server unexpectedly closed TLS connection";
         case decltype(e)::AE_ALPN_SET_FAILED: return "Failed to set ALPN protocols";
-        case decltype(e)::AE_SSL_ERROR: return "SSL error";
         case decltype(e)::AE_BUFFER_ERROR: return "Failed to get buffered data";
         case decltype(e)::AE_WRITE_ERROR: return "Failed to write received data in crypto buffer";
         case decltype(e)::AE_READ_ERROR: return "Failed to read from TLS connection";
         case decltype(e)::AE_HANDSHAKE_ERROR: return "TLS handshake failed";
-        default: return AG_FMT("Unknown error: {}", int(e));
         }
     }
 };
+// clang format on
 
 } // namespace ag

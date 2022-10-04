@@ -32,7 +32,7 @@ struct CertInfo {
  * Server info contains DNSCrypt server information necessary for decryption/encryption
  */
 struct ServerInfo {
-    enum FetchError {
+    enum class FetchError {
         AE_INVALID_PUBKEY_LENGTH,
         AE_DNS_ERROR,
         AE_NO_USABLE_CERTIFICATE,
@@ -43,7 +43,7 @@ struct ServerInfo {
     };
     using FetchResult = Result<FetchInfo, FetchError>;
 
-    enum EncryptError {
+    enum class EncryptError {
         AE_QUESTION_SECTION_IS_TOO_LARGE,
         AE_PAD_ERROR,
         AE_AEAD_SEAL_ERROR,
@@ -54,7 +54,7 @@ struct ServerInfo {
     };
     using EncryptResult = Result<EncryptInfo, EncryptError>;
 
-    enum DecryptError {
+    enum class DecryptError {
         AE_INVALID_MESSAGE_SIZE_OR_PREFIX,
         AE_UNEXPECTED_NONCE,
         AE_AEAD_OPEN_ERROR,
@@ -98,7 +98,7 @@ struct ServerInfo {
 
 
 private:
-    enum TxtToCertInfoError {
+    enum class TxtToCertInfoError {
         AE_CERTIFICATE_TOO_SHORT,
         AE_INVALID_CERT_MAGIC,
         AE_UNSUPPORTED_CRYPTO_CONSTRUCTION,
@@ -126,6 +126,7 @@ private:
 
 namespace ag {
 
+// clang format off
 template<>
 struct ErrorCodeToString<ag::dns::dnscrypt::ServerInfo::FetchError> {
     std::string operator()(ag::dns::dnscrypt::ServerInfo::FetchError e) {
@@ -133,7 +134,6 @@ struct ErrorCodeToString<ag::dns::dnscrypt::ServerInfo::FetchError> {
         case decltype(e)::AE_INVALID_PUBKEY_LENGTH: return "Invalid public key length";
         case decltype(e)::AE_DNS_ERROR: return "DNS request for server cert info failed";
         case decltype(e)::AE_NO_USABLE_CERTIFICATE: return "No usable certificate found";
-        default: return "Unknown error";
         }
     }
 };
@@ -145,7 +145,6 @@ struct ErrorCodeToString<ag::dns::dnscrypt::ServerInfo::EncryptError> {
         case decltype(e)::AE_QUESTION_SECTION_IS_TOO_LARGE: return "Question too large; cannot be padded";
         case decltype(e)::AE_PAD_ERROR: return "Pad error";
         case decltype(e)::AE_AEAD_SEAL_ERROR: return "AEAD seal error";
-        default: return "Unknown error";
         }
     }
 };
@@ -158,7 +157,6 @@ struct ErrorCodeToString<ag::dns::dnscrypt::ServerInfo::DecryptError> {
         case decltype(e)::AE_UNEXPECTED_NONCE: return "Unexpected nonce";
         case decltype(e)::AE_AEAD_OPEN_ERROR: return "AEAD open error";
         case decltype(e)::AE_UNPAD_ERROR: return "Unpad error";
-        default: return "Unknown error";
         }
     }
 };
@@ -174,9 +172,9 @@ struct ErrorCodeToString<ag::dns::dnscrypt::ServerInfo::TxtToCertInfoError> {
         case decltype(e)::AE_CERTIFICATE_NOT_YET_VALID: return "Certificate is not valid yet";
         case decltype(e)::AE_CERTIFICATE_EXPIRED: return "Certificate is expired";
         case decltype(e)::AE_SHARED_KEY_CALCULATION: return "Error calculating shared key";
-        default: return "Unknown error";
         }
     }
 };
+// clang format on
 
 } // namespace ag

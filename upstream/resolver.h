@@ -20,7 +20,7 @@ class Resolver {
 public:
     static constexpr Millis MIN_TIMEOUT{50};
 
-    enum ResolverError {
+    enum class ResolverError {
         AE_INVALID_ADDRESS,
         AE_UPSTREAM_INIT_FAILED,
         AE_EXCHANGE_FAILED,
@@ -67,6 +67,7 @@ private:
 
 } // namespace dns
 
+// clang format off
 template<>
 struct ErrorCodeToString<dns::Resolver::ResolverError> {
     std::string operator()(dns::Resolver::ResolverError e) {
@@ -76,9 +77,9 @@ struct ErrorCodeToString<dns::Resolver::ResolverError> {
         case decltype(e)::AE_EXCHANGE_FAILED: return "Failed to talk to upstream";
         case decltype(e)::AE_EMPTY_ADDRS: return "No addresses received for host";
         case decltype(e)::AE_SHUTTING_DOWN: return "Shutting down";
-        default: return "Unknown error";
         }
     }
 };
+// clang format on
 
 } // namespace ag

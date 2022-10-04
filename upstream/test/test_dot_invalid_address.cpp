@@ -43,8 +43,8 @@ std::string Bootstrapper::address() const {
     return "";
 }
 
-ErrString Bootstrapper::temporary_disabler_check() {
-    return std::nullopt;
+Error<Bootstrapper::BootstrapperError> Bootstrapper::temporary_disabler_check() {
+    return {};
 }
 
 void Bootstrapper::temporary_disabler_update(bool) {

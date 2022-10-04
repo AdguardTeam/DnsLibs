@@ -19,7 +19,7 @@ namespace ag::dns::dnscrypt {
  */
 class Cipher {
 public:
-    enum CipherError {
+    enum class CipherError {
         AE_CREATE_CIPHER_ERROR,
         AE_SCALARMULT_ERROR,
         AE_HSALSA20_ERROR,
@@ -66,7 +66,7 @@ public:
     virtual OpenResult open(Uint8View ciphertext, const nonce_array &nonce, const KeyArray &key) const = 0;
 };
 
-enum CreateCipherError {
+enum class CreateCipherError {
     AE_UNKNOWN_CIPHER,
 };
 
@@ -102,6 +102,7 @@ static inline Cipher::OpenResult cipher_open(CryptoConstruction cc, Uint8View ci
 
 namespace ag {
 
+// clang format off
 template<>
 struct ErrorCodeToString<ag::dns::dnscrypt::Cipher::CipherError> {
     std::string operator()(ag::dns::dnscrypt::Cipher::CipherError e) {
@@ -113,7 +114,6 @@ struct ErrorCodeToString<ag::dns::dnscrypt::Cipher::CipherError> {
         case decltype(e)::AE_AEAD_SEAL_ERROR: return "AEAD seal error";
         case decltype(e)::AE_AEAD_OPEN_ERROR: return "AEAD open error";
         case decltype(e)::AE_WEAK_PUBKEY: return "Weak public key";
-        default: return "Unknown error";
         }
     }
 };
@@ -123,9 +123,9 @@ struct ErrorCodeToString<ag::dns::dnscrypt::CreateCipherError> {
     std::string operator()(ag::dns::dnscrypt::CreateCipherError e) {
         switch (e) {
         case decltype(e)::AE_UNKNOWN_CIPHER: return "Don't know how to make cipher with value";
-        default: return "Unknown error";
         }
     }
 };
+// clang format on
 
 } // namespace ag

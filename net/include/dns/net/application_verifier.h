@@ -12,7 +12,7 @@ struct CertificateVerificationEvent {
     std::vector<Uint8Vector> chain; /** certificate chain */
 };
 
-using OnCertificateVerificationFn = std::function<ErrString(CertificateVerificationEvent)>;
+using OnCertificateVerificationFn = std::function<std::optional<std::string>(CertificateVerificationEvent)>;
 
 class ApplicationVerifier : public CertificateVerifier {
 public:
@@ -20,7 +20,7 @@ public:
 
     static std::optional<Uint8Vector> serialize_certificate(X509 *cert);
 
-    ErrString verify(X509_STORE_CTX *ctx, std::string_view host) const override;
+    std::optional<std::string> verify(X509_STORE_CTX *ctx, std::string_view host) const override;
 
 private:
     OnCertificateVerificationFn m_on_certificate_verification;

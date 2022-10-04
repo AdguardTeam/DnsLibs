@@ -98,7 +98,7 @@ static CreateResult create_upstream_sdns(
         const UpstreamOptions &local_opts, const UpstreamFactoryConfig &config) {
     auto stamp_res = ServerStamp::from_string(local_opts.address);
     if (stamp_res.has_error()) {
-        return CreateResult{make_error(UpstreamFactory::AE_INVALID_STAMP, stamp_res.error())};
+        return CreateResult{make_error(UpstreamFactory::UpstreamCreateError::AE_INVALID_STAMP, stamp_res.error())};
     }
     auto &stamp = stamp_res.value();
     auto opts = local_opts;
@@ -132,7 +132,8 @@ static CreateResult create_upstream_sdns(
         return create_upstream_doq(opts, config);
     }
     assert(false);
-    return make_error(UpstreamFactory::AE_INVALID_STAMP, AG_FMT("Unknown stamp protocol: {}", stamp.proto));
+    return make_error(
+            UpstreamFactory::UpstreamCreateError::AE_INVALID_STAMP, AG_FMT("Unknown stamp protocol: {}", stamp.proto));
 }
 
 UpstreamFactory::CreateResult UpstreamFactory::Impl::create_upstream(const UpstreamOptions &opts) const {
@@ -168,7 +169,7 @@ UpstreamFactory::CreateResult UpstreamFactory::create_upstream(const UpstreamOpt
     if (result.has_value()) {
         auto init_err = result.value()->init();
         if (init_err) {
-            return make_error(UpstreamFactory::AE_INIT_FAILED, init_err);
+            return make_error(UpstreamFactory::UpstreamCreateError::AE_INIT_FAILED, init_err);
         }
     }
 

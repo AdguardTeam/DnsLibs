@@ -61,12 +61,12 @@ extern "C" JNIEXPORT jstring JNICALL Java_com_adguard_dnslibs_proxy_DnsProxy_tes
     return proxy->test_upstream(env, upstream_settings, ipv6, events_adapter, offline);
 }
 
-extern "C" JNIEXPORT jboolean JNICALL Java_com_adguard_dnslibs_proxy_DnsProxy_init(
+extern "C" JNIEXPORT jobject JNICALL Java_com_adguard_dnslibs_proxy_DnsProxy_init(
         JNIEnv *env, jobject thiz, jlong native_ptr, jobject java_settings, jobject java_events) {
 
     auto *proxy = (AndroidDnsProxy *) native_ptr;
     assert(proxy);
-    return (jboolean) proxy->init(env, java_settings, java_events);
+    return proxy->init(env, java_settings, java_events);
 }
 
 extern "C" JNIEXPORT void JNICALL Java_com_adguard_dnslibs_proxy_DnsProxy_deinit(
@@ -696,7 +696,27 @@ DnsProxyEvents AndroidDnsProxy::marshal_events(JNIEnv *env, jobject java_events)
     return events;
 }
 
-bool AndroidDnsProxy::init(JNIEnv *env, jobject settings, jobject events) {
+jni::LocalRef<jobject> AndroidDnsProxy::marshal_init_result(JNIEnv *env, const DnsProxy::DnsProxyInitResult &init_result) {
+    auto clazz = env->FindClass(FQN_DNSPROXY_RESULT);
+    auto ctor = env->GetMethodID(clazz, "<init>", "()V");
+
+    auto success_field = env->GetFieldID(clazz, "success", "Z");
+    auto code_field = env->GetFieldID(clazz, "code", "L" FQN_DNSPROXY_ERROR_CODE ";");
+    auto description_field = env->GetFieldID(clazz, "description", "Ljava/lang/String;");
+
+    auto java_params = env->NewObject(clazz, ctor);
+
+    if (init_result.second) {
+        env->SetObjectField(java_params, description_field, m_utils.marshal_string(env, init_result.second->str()).get());
+        env->SetObjectField(java_params, code_field, m_dnsproxy_init_result.at((size_t) init_result.second->value()).get());
+    }
+
+    env->SetBooleanField(java_params, success_field, (jboolean) init_result.first);
+
+    return LocalRef(env, java_params);
+}
+
+jobject AndroidDnsProxy::init(JNIEnv *env, jobject settings, jobject events) {
     auto check = m_jni_initialized.load();
     assert(check);
 
@@ -705,8 +725,7 @@ bool AndroidDnsProxy::init(JNIEnv *env, jobject settings, jobject events) {
     auto cpp_settings = marshal_settings(env, settings);
     auto cpp_events = marshal_events(env, events);
 
-    auto [ret, _] = m_actual_proxy.init(cpp_settings, cpp_events);
-    return ret;
+    return env->NewLocalRef(marshal_init_result(env, m_actual_proxy.init(cpp_settings, cpp_events)).get());
 }
 
 void AndroidDnsProxy::deinit(JNIEnv *env) {
@@ -748,7 +767,7 @@ jstring AndroidDnsProxy::test_upstream(
     auto err = ag::dns::test_upstream(marshal_upstream(env, upstream_settings), ipv6,
             marshal_events(env, events_adapter).on_certificate_verification, offline);
     if (err) {
-        return (jstring) env->NewLocalRef(m_utils.marshal_string(env, *err).get());
+        return (jstring) env->NewLocalRef(m_utils.marshal_string(env, err->str()).get());
     }
     return NULL;
 }
@@ -790,6 +809,7 @@ AndroidDnsProxy::AndroidDnsProxy(JavaVM *vm)
     m_listener_protocol_enum_values = m_utils.get_enum_values(env.get(), FQN_LISTENER_PROTOCOL);
     m_proxy_protocol_enum_values = m_utils.get_enum_values(env.get(), FQN_OUTBOUND_PROXY_PROTOCOL);
     m_blocking_mode_values = m_utils.get_enum_values(env.get(), FQN_BLOCKING_MODE);
+    m_dnsproxy_init_result = m_utils.get_enum_values(env.get(), FQN_DNSPROXY_ERROR_CODE);
 
     m_jni_initialized.store(true);
 }

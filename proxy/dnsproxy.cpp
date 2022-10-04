@@ -13,8 +13,6 @@ using namespace std::chrono;
 
 namespace ag::dns {
 
-const ErrString DnsProxy::LISTENER_ERROR = "Listener failure";
-
 static const DnsProxySettings DEFAULT_PROXY_SETTINGS = {
         .upstreams =
                 {
@@ -97,7 +95,7 @@ DnsProxy::DnsProxy()
 
 DnsProxy::~DnsProxy() = default;
 
-std::pair<bool, ErrString> DnsProxy::init(DnsProxySettings settings, DnsProxyEvents events) {
+DnsProxy::DnsProxyInitResult DnsProxy::init(DnsProxySettings settings, DnsProxyEvents events) {
     std::unique_ptr<Impl> &proxy = m_pimpl;
 
     infolog(proxy->log, "Initializing proxy module...");
@@ -110,32 +108,32 @@ std::pair<bool, ErrString> DnsProxy::init(DnsProxySettings settings, DnsProxyEve
     }
 
     proxy->loop = EventLoop::create();
-    auto [result, err_or_warn] = proxy->forwarder.init(proxy->loop, proxy->settings, proxy->events);
-    if (!result) {
+    auto [proxy_forwarder, forwarder_err] = proxy->forwarder.init(proxy->loop, proxy->settings, proxy->events);
+    if (!proxy_forwarder) {
         this->deinit();
-        return {false, err_or_warn};
+        dbglog(proxy->log, "Forwarder init failed: {}", forwarder_err->str());
+        return {false, forwarder_err};
     }
 
     if (!proxy->settings.listeners.empty()) {
         infolog(proxy->log, "Initializing listeners...");
         proxy->listeners.reserve(proxy->settings.listeners.size());
         for (auto &listener_settings : proxy->settings.listeners) {
-            auto [listener, error] = DnsProxyListener::create_and_listen(listener_settings, this, proxy->loop.get());
-            if (error.has_value()) {
-                errlog(proxy->log, "Failed to initialize a listener ({}): {}", listener_settings.str(), error.value());
+            auto create_result = DnsProxyListener::create_and_listen(listener_settings, this, proxy->loop.get());
+            if (create_result.has_error()) {
                 this->deinit();
-                return {false, LISTENER_ERROR};
+                return {false, create_result.error()};
             }
             // In case the port was 0 in settings, save the actual port the listener's bound to.
-            listener_settings.port = listener->get_listen_address().second.port();
-            proxy->listeners.push_back(std::move(listener));
+            listener_settings.port = create_result.value()->get_listen_address().second.port();
+            proxy->listeners.push_back(std::move(create_result.value()));
         }
     }
 
     proxy->loop->start();
 
     infolog(proxy->log, "Proxy module initialized");
-    return {true, std::move(err_or_warn)};
+    return {true, forwarder_err};
 }
 
 void DnsProxy::deinit() {

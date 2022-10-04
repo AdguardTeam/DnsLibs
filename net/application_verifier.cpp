@@ -18,8 +18,8 @@ std::optional<Uint8Vector> ApplicationVerifier::serialize_certificate(X509 *cert
     return out;
 }
 
-ErrString ApplicationVerifier::verify(X509_STORE_CTX *ctx, std::string_view host) const {
-    if (ErrString err = verify_host_name(X509_STORE_CTX_get0_cert(ctx), host); err.has_value()) {
+std::optional<std::string> ApplicationVerifier::verify(X509_STORE_CTX *ctx, std::string_view host) const {
+    if (auto err = verify_host_name(X509_STORE_CTX_get0_cert(ctx), host)) {
         return err;
     }
 

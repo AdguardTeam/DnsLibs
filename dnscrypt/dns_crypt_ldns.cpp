@@ -31,7 +31,7 @@ LdnsEncodeResult create_ldns_buffer(const ldns_pkt &request_pkt) {
     ldns_buffer_ptr result(ldns_buffer_new(REQUEST_BUFFER_INITIAL_CAPACITY));
     ldns_status status = ldns_pkt2buffer_wire(result.get(), &request_pkt);
     if (status != LDNS_STATUS_OK) {
-        return make_error(DE_ENCODE_ERROR, ldns_get_errorstr_by_id(status));
+        return make_error(DnsError::AE_ENCODE_ERROR, ldns_get_errorstr_by_id(status));
     }
     return result;
 }
@@ -41,7 +41,7 @@ LdnsDecodeResult create_ldns_pkt(uint8_t *data, size_t size) {
     ldns_status status = ldns_wire2pkt(&pkt, data, size);
     ldns_pkt_ptr result(pkt);
     if (status != LDNS_STATUS_OK) {
-        return make_error(DE_DECODE_ERROR, ldns_get_errorstr_by_id(status));
+        return make_error(DnsError::AE_DECODE_ERROR, ldns_get_errorstr_by_id(status));
     }
     return result;
 }
@@ -53,21 +53,21 @@ coro::Task<DnsExchangeUnparsedResult> dns_exchange(EventLoop &loop, Millis timeo
 
     AioSocket socket(socket_factory->make_socket(std::move(socket_parameters)));
     if (auto err = co_await socket.connect({&loop, socket_address, timeout})) {
-        co_return {.error = make_error(DE_SOCKET_ERROR, err)};
+        co_return {.error = make_error(DnsError::AE_SOCKET_ERROR, err)};
     }
 
     timeout -= timer.elapsed<decltype(timeout)>();
     if (timeout <= decltype(timeout)(0)) {
-        co_return {.error = make_error(DE_TIMED_OUT)};
+        co_return {.error = make_error(DnsError::AE_TIMED_OUT)};
     }
 
     if (auto err = socket.send_dns_packet({(uint8_t *) ldns_buffer_begin(&buffer), ldns_buffer_position(&buffer)})) {
-        co_return {.error = make_error(DE_SOCKET_ERROR, err)};
+        co_return {.error = make_error(DnsError::AE_SOCKET_ERROR, err)};
     }
 
     auto r = co_await socket.receive_dns_packet(timeout);
     if (r.has_error()) {
-        co_return {.error = make_error(DE_SOCKET_ERROR, r.error())};
+        co_return {.error = make_error(DnsError::AE_SOCKET_ERROR, r.error())};
     }
 
     auto &reply = r.value();
@@ -92,7 +92,7 @@ coro::Task<DnsExchangeResult> dns_exchange_from_ldns_pkt(EventLoop &loop, Millis
         co_return {.error = reply_pkt.error()};
     }
     if (ldns_pkt_tc(reply_pkt->get())) {
-        co_return {.error = make_error(DE_TRUNCATED_RESPONSE)};
+        co_return {.error = make_error(DnsError::AE_TRUNCATED_RESPONSE)};
     }
     co_return {std::move(reply_pkt.value()), rtt, {}};
 }

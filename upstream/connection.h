@@ -55,7 +55,7 @@ public:
 
         ~Request() {
             if (!completed && !reply) {
-                reply = make_error(DE_SHUTTING_DOWN);
+                reply = make_error(DnsError::AE_SHUTTING_DOWN);
             }
             complete();
         }

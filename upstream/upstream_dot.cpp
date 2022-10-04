@@ -45,7 +45,7 @@ public:
         if (result.error) {
             auto &err = *result.error;
             log_conn(m_log, err, this, "Failed to bootstrap: {}", err.str());
-            this->on_close(make_error(DE_BOOTSTRAP_ERROR, result.error));
+            this->on_close(make_error(DnsError::AE_BOOTSTRAP_ERROR, result.error));
         } else {
             m_result = std::move(result);
             assert(!m_result.addresses.empty());
@@ -63,7 +63,7 @@ public:
                         });
                 timeout = upstream->options().timeout;
             } else {
-                on_close(make_error(DE_SHUTTING_DOWN, "Shutting down"));
+                on_close(make_error(DnsError::AE_SHUTTING_DOWN, "Shutting down"));
             }
             dbglog(m_log, "{}", addr.str());
             m_address = addr;
@@ -87,9 +87,8 @@ public:
 
     void finish_request(uint16_t request_id, Reply &&reply) override {
         if (reply.has_error()) {
-            if (reply.error()->value() == DE_SOCKET_ERROR
-                    || reply.error()->value() == DE_TIMED_OUT
-                    || reply.error()->value() == DE_CONNECTION_CLOSED) {
+            if (auto error = reply.error()->value(); error == DnsError::AE_SOCKET_ERROR
+                    || error == DnsError::AE_TIMED_OUT || error == DnsError::AE_CONNECTION_CLOSED) {
                 if (auto pool = m_pool.lock()) {
                     if (auto *upstream = (DotUpstream *) pool->upstream()) {
                         upstream->m_bootstrapper->remove_resolved(m_address);
@@ -121,10 +120,9 @@ static std::optional<std::string> get_resolved_ip(const Logger &log, const IpAdd
 
     if (parsed.valid()) {
         return parsed.str();
-    } else {
-        warnlog(log, "Failed to parse resolved server ip address, upstream may not be able to resolve DNS server address");
-        return std::nullopt;
     }
+    warnlog(log, "Failed to parse resolved server ip address, upstream may not be able to resolve DNS server address");
+    return std::nullopt;
 }
 
 static std::string_view strip_dot_url(std::string_view url) {
@@ -134,11 +132,15 @@ static std::string_view strip_dot_url(std::string_view url) {
     return url;
 }
 
-static std::string_view get_host_name(std::string_view url) {
-    return utils::trim(utils::split_host_port(strip_dot_url(url)).first);
+static Result<std::string_view, Upstream::InitError> get_host_name(std::string_view url) {
+    auto split_result = utils::split_host_port(strip_dot_url(url));
+    if (split_result.has_error()) {
+        return make_error(Upstream::InitError::AE_INVALID_ADDRESS);
+    }
+    return utils::trim(split_result.value().first);
 }
 
-static BootstrapperPtr create_bootstrapper(const Logger &log, const UpstreamOptions &opts,
+static Result<BootstrapperPtr, Upstream::InitError> create_bootstrapper(const Logger &log, const UpstreamOptions &opts,
                                             const UpstreamFactoryConfig &config) {
     std::string_view address;
     int port = 0;
@@ -147,7 +149,11 @@ static BootstrapperPtr create_bootstrapper(const Logger &log, const UpstreamOpti
     if (resolved.has_value()) {
         address = resolved.value();
     } else {
-        auto[host, port_str] = utils::split_host_port(strip_dot_url(opts.address));
+        auto split_result = utils::split_host_port(strip_dot_url(opts.address));
+        if (split_result.has_error()) {
+            return make_error(Upstream::InitError::AE_INVALID_ADDRESS);
+        }
+        auto [host, port_str] = split_result.value();
         address = host;
         if (!port_str.empty()) {
             port = std::strtol(std::string(port_str).c_str(), nullptr, 10);
@@ -161,25 +167,32 @@ static BootstrapperPtr create_bootstrapper(const Logger &log, const UpstreamOpti
 DotUpstream::DotUpstream(const UpstreamOptions &opts, const UpstreamFactoryConfig &config)
         : Upstream(opts, config)
         , m_log("DOT upstream")
-        , m_server_name(get_host_name(opts.address))
         , m_tls_session_cache(opts.address)
-{}
+{
+    if (auto host = get_host_name(opts.address); !host.has_error()) {
+        m_server_name = host.value();
+    }
+}
 
 Error<Upstream::InitError> DotUpstream::init() {
     if (auto hostname = get_host_name(this->m_options.address);
-            hostname.empty()) {
-        return make_error(InitError::AE_EMPTY_SERVER_NAME);
+            hostname.has_error() || hostname->empty()) {
+        return make_error(InitError::AE_INVALID_ADDRESS);
     } else { // NOLINT: clang-tidy is wrong here
         if (this->m_options.bootstrap.empty()
                 && std::holds_alternative<std::monostate>(this->m_options.resolved_server_ip)
-                && !SocketAddress(hostname, 0).valid()) {
+                && !SocketAddress(hostname.value(), 0).valid()) {
             return make_error(InitError::AE_EMPTY_BOOTSTRAP);
         }
     }
 
     m_pool = std::make_shared<ConnectionPool<DotConnection>>(config().loop, shared_from_this(), 10);
 
-    m_bootstrapper = create_bootstrapper(m_log, this->m_options, this->m_config);
+    auto create_result = create_bootstrapper(m_log, this->m_options, this->m_config);
+    if (create_result.has_error()) {
+        return make_error(InitError::AE_BOOTSTRAPPER_INIT_FAILED, create_result.error());
+    }
+    m_bootstrapper = std::move(create_result.value());
     if (auto err = m_bootstrapper->init()) {
         return make_error(InitError::AE_BOOTSTRAPPER_INIT_FAILED, err);
     }
@@ -193,7 +206,7 @@ coro::Task<Upstream::ExchangeResult> DotUpstream::exchange(ldns_pkt *request_pkt
     ldns_buffer_ptr buffer{ldns_buffer_new(REQUEST_BUFFER_INITIAL_CAPACITY)};
     ldns_status status = ldns_pkt2buffer_wire(&*buffer, request_pkt);
     if (status != LDNS_STATUS_OK) {
-        co_return make_error(DE_ENCODE_ERROR, ldns_get_errorstr_by_id(status));
+        co_return make_error(DnsError::AE_ENCODE_ERROR, ldns_get_errorstr_by_id(status));
     }
 
     AllocatedPtr<char> domain;
@@ -213,7 +226,7 @@ coro::Task<Upstream::ExchangeResult> DotUpstream::exchange(ldns_pkt *request_pkt
     ldns_pkt *reply_pkt = nullptr;
     status = ldns_wire2pkt(&reply_pkt, reply.value().data(), reply.value().size());
     if (status != LDNS_STATUS_OK) {
-        co_return make_error(DE_DECODE_ERROR, ldns_get_errorstr_by_id(status));
+        co_return make_error(DnsError::AE_DECODE_ERROR, ldns_get_errorstr_by_id(status));
     }
     co_return ldns_pkt_ptr{reply_pkt};
 }

@@ -227,12 +227,15 @@ Error<Upstream::InitError> DoqUpstream::init() {
     url.remove_prefix(SCHEME.size());
     url = url.substr(0, url.find('/'));
 
-    auto [host, port] = ag::utils::split_host_port(url);
-    m_server_name = ag::utils::trim(host);
+    auto split_result = utils::split_host_port(url);
+    if (split_result.has_error()) {
+        return make_error(InitError::AE_INVALID_ADDRESS, split_result.error());
+    }
+    m_server_name = ag::utils::trim(split_result.value().first);
     if (m_server_name.empty()) {
         return make_error(InitError::AE_EMPTY_SERVER_NAME);
     }
-    m_port = ag::utils::to_integer<uint16_t>(port).value_or(DEFAULT_DOQ_PORT);
+    m_port = ag::utils::to_integer<uint16_t>(split_result.value().second).value_or(DEFAULT_DOQ_PORT);
 
     Bootstrapper::Params bootstrapper_params = {
             .address_string = m_server_name,
@@ -303,7 +306,7 @@ coro::Task<Upstream::ExchangeResult> DoqUpstream::exchange(ldns_pkt *request, co
         Bootstrapper::ResolveResult bootstrapper_res = co_await m_bootstrapper->get();
         if (bootstrapper_res.error) {
             warnlog(m_log, "Bootstrapper hasn't results");
-            co_return make_error(DE_BOOTSTRAP_ERROR, bootstrapper_res.error);
+            co_return make_error(DnsError::AE_BOOTSTRAP_ERROR, bootstrapper_res.error);
         }
 
         m_server_addresses.assign(bootstrapper_res.addresses.begin(), bootstrapper_res.addresses.end());
@@ -313,7 +316,7 @@ coro::Task<Upstream::ExchangeResult> DoqUpstream::exchange(ldns_pkt *request, co
     ldns_status status = ldns_pkt2buffer_wire(buffer, request);
     if (status != LDNS_STATUS_OK) {
         assert(0);
-        co_return make_error(DE_ENCODE_ERROR, ldns_get_errorstr_by_id(status));
+        co_return make_error(DnsError::AE_ENCODE_ERROR, ldns_get_errorstr_by_id(status));
     }
     ldns_buffer_flip(buffer);
 
@@ -364,14 +367,14 @@ coro::Task<Upstream::ExchangeResult> DoqUpstream::exchange(ldns_pkt *request, co
     m_requests.erase(request_id);
 
     if (timeout == std::cv_status::timeout) {
-        co_return make_error(DE_TIMED_OUT);
+        co_return make_error(DnsError::AE_TIMED_OUT);
     }
 
     if (res != nullptr) {
         co_return ldns_pkt_ptr{res};
     }
 
-    co_return err ? err : make_error(DE_RESPONSE_PACKET_TOO_SHORT);
+    co_return err ? err : make_error(DnsError::AE_RESPONSE_PACKET_TOO_SHORT);
 }
 
 void DoqUpstream::on_socket_connected(void *arg) {
@@ -480,7 +483,7 @@ void DoqUpstream::on_socket_close(void *arg, Error<SocketError> error) {
             self->disqualify_server_address(peer);
         }
         if (error->value() == SocketError::AE_CONNECTION_REFUSED) {
-            self->m_fatal_error = make_error(DnsError::DE_SOCKET_ERROR, error);
+            self->m_fatal_error = make_error(DnsError::AE_SOCKET_ERROR, error);
         }
     } else {
         dbglog(self->m_log, "Connection to {} closed", peer.str());
@@ -810,7 +813,7 @@ int DoqUpstream::recv_crypto_data(ngtcp2_conn *conn, ngtcp2_crypto_level crypto_
     if (ngtcp2_crypto_read_write_crypto_data(conn, crypto_level, data, datalen) != 0) {
         if (auto err = ngtcp2_conn_get_tls_error(conn); err) {
             auto doq = static_cast<DoqUpstream *>(user_data);
-            doq->m_fatal_error = make_error(DE_HANDSHAKE_ERROR, SSL_alert_desc_string(err));
+            doq->m_fatal_error = make_error(DnsError::AE_HANDSHAKE_ERROR, SSL_alert_desc_string(err));
         }
         return NGTCP2_ERR_CRYPTO;
     }
@@ -1066,7 +1069,7 @@ void DoqUpstream::disconnect(std::string_view reason) {
     std::vector<int64_t> requests_to_complete;
     for (auto &cur : m_requests) {
         tracelog(m_log, "Completing request, id: {}", cur.first);
-        cur.second.error = m_fatal_error ? m_fatal_error : make_error(DE_CONNECTION_CLOSED);
+        cur.second.error = m_fatal_error ? m_fatal_error : make_error(DnsError::AE_CONNECTION_CLOSED);
         requests_to_complete.push_back(cur.first);
     }
     for (int64_t id : requests_to_complete) {
@@ -1110,8 +1113,8 @@ int DoqUpstream::ssl_verify_callback(X509_STORE_CTX *ctx, void * /*arg*/) {
         return 0;
     }
 
-    if (auto err = verifier->verify(ctx, SSL_get_servername(ssl, SSL_get_servername_type(ssl))); err.has_value()) {
-        dbglog(doq->m_log, "Failed to verify certificate: {}", err.value());
+    if (auto err = verifier->verify(ctx, SSL_get_servername(ssl, SSL_get_servername_type(ssl)))) {
+        dbglog(doq->m_log, "Failed to verify certificate: {}", *err);
         return 0;
     }
 
