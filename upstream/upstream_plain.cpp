@@ -2,6 +2,7 @@
 #include "common/net_utils.h"
 #include "common/utils.h"
 #include "dns/net/aio_socket.h"
+#include "dns/net/utils.h"
 
 #define tracelog_id(l_, pkt_, fmt_, ...) tracelog((l_), "[{}] " fmt_, ldns_pkt_id(pkt_), ##__VA_ARGS__)
 
@@ -70,12 +71,11 @@ coro::Task<Upstream::ExchangeResult> PlainUpstream::exchange(ldns_pkt *request_p
         }
         timer.reset();
 
-        if (auto err = socket.send_dns_packet(
-                    {(uint8_t *) ldns_buffer_begin(buffer.get()), ldns_buffer_position(buffer.get())})) {
+        if (auto err = send_dns_packet(&socket, {(uint8_t *) ldns_buffer_begin(buffer.get()), ldns_buffer_position(buffer.get())})) {
             co_return make_error(DnsError::AE_SOCKET_ERROR, err);
         }
 
-        auto r = co_await socket.receive_dns_packet(timeout);
+        auto r = co_await receive_dns_packet(&socket, timeout);
         if (r.has_error()) {
             co_return (r.error()->value() == SocketError::AE_TIMED_OUT) // To cancel second retry of exchange
                     ? make_error(DnsError::AE_TIMED_OUT, "Timed out while waiting for DNS reply via UDP")

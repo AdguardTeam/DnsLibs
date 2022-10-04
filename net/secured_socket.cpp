@@ -12,7 +12,11 @@ enum SecuredSocket::State : int {
 
 SecuredSocket::SecuredSocket(SocketFactory::SocketPtr underlying_socket, const CertificateVerifier *cert_verifier,
         SocketFactory::SecureSocketParameters secure_parameters)
-        : Socket(__func__, {}, {})
+        : Socket(__func__,
+                {
+                        .proto = underlying_socket->get_protocol(),
+                },
+                {})
         , m_state(SS_IDLE)
         , m_underlying_socket(std::move(underlying_socket))
         , m_codec(cert_verifier, secure_parameters.session_cache)
@@ -52,16 +56,6 @@ Error<SocketError> SecuredSocket::send(Uint8View data) {
     }
 
     return {};
-}
-
-Error<SocketError> SecuredSocket::send_dns_packet(Uint8View data) {
-    uint16_t length = htons(data.size());
-
-    std::vector<uint8_t> buffer(sizeof(length) + data.size());
-    memcpy(buffer.data(), (uint8_t *) &length, sizeof(length));
-    memcpy(buffer.data() + sizeof(length), data.data(), data.size());
-
-    return this->send({buffer.data(), buffer.size()});
 }
 
 bool SecuredSocket::set_timeout(Micros timeout) {

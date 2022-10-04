@@ -35,7 +35,6 @@ private:
     [[nodiscard]] std::optional<evutil_socket_t> get_fd() const override;
     [[nodiscard]] Error<SocketError> connect(ConnectParameters params) override;
     [[nodiscard]] Error<SocketError> send(Uint8View data) override;
-    [[nodiscard]] Error<SocketError> send_dns_packet(Uint8View data) override;
     [[nodiscard]] bool set_timeout(Micros timeout) override;
     [[nodiscard]] Error<SocketError> set_callbacks(Callbacks cbx) override;
 

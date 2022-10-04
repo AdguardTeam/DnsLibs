@@ -107,10 +107,6 @@ Error<SocketError> UdpSocket::send(Uint8View data) {
     return {};
 }
 
-Error<SocketError> UdpSocket::send_dns_packet(Uint8View data) {
-    return this->send(data);
-}
-
 bool UdpSocket::set_timeout(std::chrono::microseconds to) {
     log_sock(this, trace, "{}", to);
 

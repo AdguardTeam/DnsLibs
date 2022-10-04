@@ -31,8 +31,6 @@ public:
         std::optional<Micros> timeout;
     };
 
-    using ReceiveDnsPacketResult = Result<Uint8Vector /* DNS packet */, SocketError>;
-
     explicit AioSocket(SocketFactory::SocketPtr socket);
     ~AioSocket();
 
@@ -67,13 +65,6 @@ public:
     [[nodiscard]] Error<SocketError> send(Uint8View data);
 
     /**
-     * Send DNS packet to the peer
-     * @param data the packet
-     * @return some error if failed
-     */
-    [[nodiscard]] Error<SocketError> send_dns_packet(Uint8View data);
-
-    /**
      * Receive data from the peer.
      * Blocks until either an error happened or interrupted via `on_read_callback` by the caller.
      * @param on_read_handler read events handler
@@ -100,12 +91,9 @@ public:
     }
 
     /**
-     * Receive DNS packet from the peer.
-     * Blocks until either an error happened or the packet is fully received.
-     * @param timeout operation timeout
-     * @return see `receive_dns_packet_result`
+     * Get the underlying socket implementation
      */
-    coro::Task<ReceiveDnsPacketResult> receive_dns_packet(std::optional<Micros> timeout);
+    [[nodiscard]] Socket *get_underlying() const;
 
 private:
     Logger m_log;

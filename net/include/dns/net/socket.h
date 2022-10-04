@@ -295,13 +295,6 @@ public:
     [[nodiscard]] virtual Error<SocketError> send(Uint8View data) = 0;
 
     /**
-     * Send DNS packet to the peer
-     * @param data the packet
-     * @return some error if failed
-     */
-    [[nodiscard]] virtual Error<SocketError> send_dns_packet(Uint8View data) = 0;
-
-    /**
      * Set operation time out
      * @param timeout the time out value
      * @return true if successful

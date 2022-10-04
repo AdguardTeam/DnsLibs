@@ -48,11 +48,6 @@ Error<SocketError> AioSocket::send(Uint8View data) {
     return m_underlying_socket->send(data);
 }
 
-Error<SocketError> AioSocket::send_dns_packet(Uint8View data) {
-    log_sock(this, trace, "{}", data.size());
-    return m_underlying_socket->send_dns_packet(data);
-}
-
 void AioSocket::receive(AioSocket::OnReadCallback on_read_handler, std::optional<Micros> timeout,
                         std::function<void(Error<SocketError>)> handler) {
     log_sock(this, trace, "...");
@@ -76,41 +71,8 @@ void AioSocket::receive(AioSocket::OnReadCallback on_read_handler, std::optional
     m_handler = std::move(handler);
 }
 
-coro::Task<AioSocket::ReceiveDnsPacketResult> AioSocket::receive_dns_packet(std::optional<microseconds> timeout) {
-
-    struct ReadContext {
-        utils::TransportProtocol protocol;
-        TcpDnsBuffer tcp_buffer;
-        Uint8Vector reply;
-    };
-
-    constexpr auto on_read = [](void *arg, Uint8View data) {
-        auto *ctx = (ReadContext *) arg;
-        bool done = false;
-        switch (ctx->protocol) {
-            case utils::TransportProtocol::TP_TCP:
-                ctx->tcp_buffer.store(data);
-                if (auto p = ctx->tcp_buffer.extract_packet(); p.has_value()) {
-                    ctx->reply = std::move(p.value());
-                    done = true;
-                }
-                break;
-            case utils::TransportProtocol::TP_UDP:
-                ctx->reply = {data.begin(), data.end()};
-                done = true;
-                break;
-        }
-        return !done;
-    };
-
-    ReadContext context = {m_underlying_socket->get_protocol()};
-    struct OnReadCallback on_read_handler = {on_read, &context};
-
-    if (auto err = co_await receive(on_read_handler, timeout)) {
-        co_return err;
-    }
-
-    co_return std::move(context.reply);
+[[nodiscard]] Socket *AioSocket::get_underlying() const {
+    return m_underlying_socket.get();
 }
 
 Socket::ConnectParameters AioSocket::make_underlying_connect_parameters(ConnectParameters &params) const {

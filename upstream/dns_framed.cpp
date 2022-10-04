@@ -10,6 +10,7 @@
 #include "common/utils.h"
 #include "dns/net/socket.h"
 #include "dns/net/tcp_dns_buffer.h"
+#include "dns/net/utils.h"
 
 #include "dns_framed.h"
 
@@ -182,7 +183,7 @@ coro::Task<Connection::Reply> DnsFramedConnection::perform_request(Uint8View pac
         co_return request.reply.value();
     }
 
-    auto e = m_stream->send_dns_packet({request_to_send.data(), request_to_send.size()});
+    auto e = send_dns_packet(m_stream.get(), {request_to_send.data(), request_to_send.size()});
     if (e) {
         infolog(m_log, "Error sending :(");
         co_return request.reply.value();

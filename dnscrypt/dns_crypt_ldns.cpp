@@ -7,6 +7,7 @@
 #include "dns/common/net_consts.h"
 #include "dns/dnscrypt/dns_crypt_ldns.h"
 #include "dns/net/aio_socket.h"
+#include "dns/net/utils.h"
 
 namespace ag::dns::dnscrypt {
 
@@ -61,11 +62,12 @@ coro::Task<DnsExchangeUnparsedResult> dns_exchange(EventLoop &loop, Millis timeo
         co_return {.error = make_error(DnsError::AE_TIMED_OUT)};
     }
 
-    if (auto err = socket.send_dns_packet({(uint8_t *) ldns_buffer_begin(&buffer), ldns_buffer_position(&buffer)})) {
+    if (auto err = dns::send_dns_packet(
+                &socket, {(uint8_t *) ldns_buffer_begin(&buffer), ldns_buffer_position(&buffer)})) {
         co_return {.error = make_error(DnsError::AE_SOCKET_ERROR, err)};
     }
 
-    auto r = co_await socket.receive_dns_packet(timeout);
+    auto r = co_await dns::receive_dns_packet(&socket, timeout);
     if (r.has_error()) {
         co_return {.error = make_error(DnsError::AE_SOCKET_ERROR, r.error())};
     }

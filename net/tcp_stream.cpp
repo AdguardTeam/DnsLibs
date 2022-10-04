@@ -117,17 +117,6 @@ Error<SocketError> TcpStream::send(Uint8View data) {
     return {};
 }
 
-Error<SocketError> TcpStream::send_dns_packet(Uint8View data) {
-    log_stream(this, trace, "{}", data.size());
-
-    uint16_t length = htons(data.size());
-    if (auto e = this->send({ (uint8_t *)&length, 2 }); e) {
-        return e;
-    }
-
-    return this->send(data);
-}
-
 void TcpStream::allocate_read(uv_handle_t *handle, size_t size, uv_buf_t *buf) {
     auto *self = (TcpStream *) Uv<uv_tcp_t>::parent_from_data(handle->data);
     if (!self) {

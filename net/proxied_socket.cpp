@@ -58,28 +58,6 @@ Error<SocketError> ProxiedSocket::send(Uint8View data) {
     return m_proxy->send(m_proxy_id.value(), data);
 }
 
-Error<SocketError> ProxiedSocket::send_dns_packet(Uint8View data) {
-    log_sock(this, trace, "{}", data.size());
-
-    Error<SocketError> err;
-
-    switch (this->get_protocol()) {
-    case utils::TP_UDP:
-        err = m_proxy->send(m_proxy_id.value(), data);
-        break;
-    case utils::TP_TCP: {
-        uint16_t length = htons(data.size());
-        err = m_proxy->send(m_proxy_id.value(), {(uint8_t *) &length, 2});
-        if (!err) {
-            err = m_proxy->send(m_proxy_id.value(), data);
-        }
-        break;
-    }
-    }
-
-    return err;
-}
-
 bool ProxiedSocket::set_timeout(Micros timeout) {
     log_sock(this, trace, "{}", timeout);
     if (m_fallback_info != nullptr) {

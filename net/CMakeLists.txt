@@ -25,6 +25,7 @@ set(SRCS
         tls_codec.cpp
         secured_socket.cpp
         aio_socket.cpp
+        utils.cpp
         )
 
 add_library(dnslibs_net STATIC EXCLUDE_FROM_ALL ${SRCS})
