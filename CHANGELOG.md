@@ -1,5 +1,7 @@
 # Changelog
 
+* [Feature] A non-standard `h3://` URL scheme can now be used to force a DoH upstream to use HTTP/3.
+
 * [Feature] Add an option to strip Encrypted Client Hello parameters from responses, effectively blocking ECH.
   See `ag_dnsproxy_settings::block_ech` (C),
   `AGDnsProxyConfig.blockEch` (Apple),

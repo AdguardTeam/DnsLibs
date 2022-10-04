@@ -222,7 +222,9 @@ DohUpstream::QueryHandle::CURL_ptr DohUpstream::QueryHandle::create_curl_handle(
     uint64_t timeout = upstream->m_options.timeout.count();
     this->resolved_addrs = upstream->m_resolved;
     CURL *curl = curl_ptr.get();
-    if (CURLcode e; CURLE_OK != (e = curl_easy_setopt(curl, CURLOPT_URL, upstream->m_options.address.data()))
+    if (CURLcode e;
+            // clang-format off
+               CURLE_OK != (e = curl_easy_setopt(curl, CURLOPT_URL, upstream->m_curlopt_url.c_str()))
             || CURLE_OK != (e = curl_easy_setopt(curl, CURLOPT_NOPROGRESS, true))
             || CURLE_OK != (e = curl_easy_setopt(curl, CURLOPT_TIMEOUT_MS, timeout))
             || CURLE_OK != (e = curl_easy_setopt(curl, CURLOPT_CONNECTTIMEOUT_MS, timeout))
@@ -232,30 +234,25 @@ DohUpstream::QueryHandle::CURL_ptr DohUpstream::QueryHandle::create_curl_handle(
             || CURLE_OK != (e = curl_easy_setopt(curl, CURLOPT_POSTFIELDS, ldns_buffer_at(raw_request, 0)))
             || CURLE_OK != (e = curl_easy_setopt(curl, CURLOPT_POSTFIELDSIZE, ldns_buffer_position(raw_request)))
             || CURLE_OK != (e = curl_easy_setopt(curl, CURLOPT_HTTPHEADER, upstream->m_request_headers.get()))
-            || CURLE_OK != (e = curl_easy_setopt(curl, CURLOPT_HTTP_VERSION, CURL_HTTP_VERSION_2))
+            || CURLE_OK != (e = curl_easy_setopt(curl, CURLOPT_HTTP_VERSION, upstream->m_curlopt_http_ver))
             || CURLE_OK != (e = curl_easy_setopt(curl, CURLOPT_PRIVATE, this))
             || CURLE_OK != (e = curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, true))
             || CURLE_OK != (e = curl_easy_setopt(curl, CURLOPT_PROTOCOLS, CURLPROTO_HTTPS))
             || CURLE_OK != (e = curl_easy_setopt(curl, CURLOPT_REDIR_PROTOCOLS, CURLPROTO_HTTPS))
             || CURLE_OK != (e = curl_easy_setopt(curl, CURLOPT_SSL_CTX_FUNCTION, DohUpstream::ssl_callback))
             || CURLE_OK != (e = curl_easy_setopt(curl, CURLOPT_SSL_CTX_DATA, this))
-            || CURLE_OK
-                    != (e = curl_easy_setopt(curl, CURLOPT_SSL_VERIFYPEER,
-                                false)) // We verify ourselves, see DohUpstream::ssl_callback
-            || CURLE_OK
-                    != (e = curl_easy_setopt(curl, CURLOPT_SSL_VERIFYHOST,
-                                false)) // We verify ourselves, see DohUpstream::ssl_callback
+            || CURLE_OK != (e = curl_easy_setopt(curl, CURLOPT_SSL_VERIFYPEER, false)) // We verify ourselves, see DohUpstream::ssl_callback
+            || CURLE_OK != (e = curl_easy_setopt(curl, CURLOPT_SSL_VERIFYHOST, false)) // We verify ourselves, see DohUpstream::ssl_callback
             || CURLE_OK != (e = curl_easy_setopt(curl, CURLOPT_SSL_ENABLE_ALPN, true))
             || CURLE_OK != (e = curl_easy_setopt(curl, CURLOPT_OPENSOCKETFUNCTION, curl_opensocket))
             || CURLE_OK != (e = curl_easy_setopt(curl, CURLOPT_OPENSOCKETDATA, upstream))
             || CURLE_OK != (e = curl_easy_setopt(curl, CURLOPT_DEBUGFUNCTION, verbose_callback))
             || CURLE_OK != (e = curl_easy_setopt(curl, CURLOPT_DEBUGDATA, this))
-            || CURLE_OK
-                    != (e = curl_easy_setopt(
-                                curl, CURLOPT_VERBOSE, (long) (log->is_enabled(LogLevel::LOG_LEVEL_DEBUG))))
+            || CURLE_OK != (e = curl_easy_setopt(curl, CURLOPT_VERBOSE, (long) (log->is_enabled(LogLevel::LOG_LEVEL_DEBUG))))
             || CURLE_OK != (e = curl_easy_setopt(curl, CURLOPT_SHARE, get_curl_share()))
-            || (upstream->m_resolved != nullptr
-                    && CURLE_OK != (e = curl_easy_setopt(curl, CURLOPT_RESOLVE, this->resolved_addrs.get())))) {
+            || (upstream->m_resolved != nullptr && CURLE_OK != (e = curl_easy_setopt(curl, CURLOPT_RESOLVE, this->resolved_addrs.get())))
+            // clang-format on
+    ) {
         this->error = make_error(
                 DE_CURL_ERROR, AG_FMT("Failed to set options on curl handle: {} (id={})", curl_easy_strerror(e), e));
         return nullptr;
@@ -344,10 +341,15 @@ std::unique_ptr<DohUpstream::QueryHandle> DohUpstream::create_handle(ldns_pkt *r
 }
 
 static std::string_view get_host_port(std::string_view url) {
-    std::string_view host = url;
-    host.remove_prefix(DohUpstream::SCHEME.length());
-    host = host.substr(0, host.find('/'));
-    return host;
+    for (const auto &scheme : {DohUpstream::SCHEME_HTTPS, DohUpstream::SCHEME_H3}) {
+        if (!url.starts_with(scheme)) {
+            continue;
+        }
+        url.remove_prefix(scheme.length());
+        url = url.substr(0, url.find('/'));
+        break;
+    }
+    return url;
 }
 
 static std::string_view get_host_name(std::string_view url) {
@@ -445,6 +447,12 @@ DohUpstream::DohUpstream(const UpstreamOptions &opts, const UpstreamFactoryConfi
 }
 
 Error<Upstream::InitError> DohUpstream::init() {
+    m_curlopt_url = m_options.address;
+    if (m_curlopt_url.starts_with(SCHEME_H3)) {
+        m_curlopt_url.replace(0, SCHEME_H3.size(), SCHEME_HTTPS);
+        m_curlopt_http_ver = CURL_HTTP_VERSION_3;
+    }
+
     m_resolved = create_resolved_hosts_list(m_options.address, m_options.resolved_server_ip);
 
     curl_slist *headers;
@@ -507,6 +515,21 @@ struct DohUpstream::SocketHandle {
 
     void init(curl_socket_t sock, int act, DohUpstream *upstream) {
         int what = ((act & CURL_POLL_IN) ? UV_READABLE : 0) | ((act & CURL_POLL_OUT) ? UV_WRITABLE : 0);
+
+        // clang-format off
+        int socktype;
+        ev_socklen_t socktype_len = sizeof(socktype);
+        if (0 == getsockopt(sock, SOL_SOCKET, SO_TYPE,
+#ifdef _WIN32
+                (char *) &socktype,
+#else
+                &socktype,
+#endif
+                &socktype_len) && socktype == SOCK_DGRAM) {
+            // Don't poll write on UDP sockets. It burns CPU cycles, while cURL doesn't even really need it.
+            what &= ~UV_WRITABLE;
+        }
+        // clang-format on
 
         this->fd = sock;
         this->action = act;

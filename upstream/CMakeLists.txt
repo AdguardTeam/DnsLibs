@@ -73,3 +73,4 @@ add_unit_test(test_upstream "${TEST_DIR}" "${DNSLIBS_DIR}/dnscrypt/src" TRUE FAL
 add_unit_test(test_upstream_utils "${TEST_DIR}" "" TRUE TRUE)
 add_unit_test(test_dot_invalid_address "${TEST_DIR}" "${DNSLIBS_DIR}/upstream/src" TRUE TRUE)
 add_unit_test(test_bootstrapper "${TEST_DIR}" "${DNSLIBS_DIR}/upstream/src" TRUE TRUE)
+add_unit_test(test_curl_features "${TEST_DIR}" "${DNSLIBS_DIR}/upstream/src" TRUE TRUE)

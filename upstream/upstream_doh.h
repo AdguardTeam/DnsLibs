@@ -33,7 +33,8 @@ using event_ptr = UniquePtr<event, &event_free>;
 
 class DohUpstream : public Upstream {
 public:
-    static constexpr std::string_view SCHEME = "https://";
+    static constexpr std::string_view SCHEME_HTTPS = "https://";
+    static constexpr std::string_view SCHEME_H3 = "h3://";
 
     /**
      * @param opts upstream settings
@@ -90,6 +91,9 @@ private:
 
     std::unique_ptr<CheckProxyState> m_check_proxy;
     std::optional<uint32_t> m_reset_bypassed_proxy_connections_subscribe_id;
+
+    std::string m_curlopt_url;
+    int m_curlopt_http_ver = CURL_HTTP_VERSION_2;
 };
 
-}
+}  // namespace ag::dns

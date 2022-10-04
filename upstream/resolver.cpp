@@ -40,19 +40,20 @@ static std::optional<std::string> get_address_from_stamp(const Logger &log, std:
 }
 
 static bool check_ip_address(std::string_view address) {
-    struct as_entry {
+    struct AllowedScheme {
         std::string_view scheme;
         int port;
     };
-    static constexpr as_entry ALLOWED_SCHEMES[] = {
+    static constexpr AllowedScheme ALLOWED_SCHEMES[] = {
             {DotUpstream::SCHEME, DEFAULT_DOT_PORT},
-            {DohUpstream::SCHEME, DEFAULT_DOH_PORT},
+            {DohUpstream::SCHEME_HTTPS, DEFAULT_DOH_PORT},
+            {DohUpstream::SCHEME_H3, DEFAULT_DOH_PORT},
             {PlainUpstream::TCP_SCHEME, DEFAULT_PLAIN_PORT},
     };
 
-    const as_entry *found = nullptr;
+    const AllowedScheme *found = nullptr;
 
-    for (const as_entry &entry : ALLOWED_SCHEMES) {
+    for (const AllowedScheme &entry : ALLOWED_SCHEMES) {
         if (utils::starts_with(address, entry.scheme)) {
             found = &entry;
             break;

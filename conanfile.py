@@ -23,16 +23,16 @@ class DnsLibsConan(ConanFile):
     generators = "cmake"
 
     def requirements(self):
-        self.requires("magic_enum/0.7.3")
-        self.requires("pcre2/10.37@AdguardTeam/NativeLibsCommon")
-        self.requires("libsodium/1.0.18@AdguardTeam/NativeLibsCommon")
-        self.requires("libcurl/7.78.0-adguard2@AdguardTeam/NativeLibsCommon")
+        self.requires("libcurl/7.85.0-adguard4@AdguardTeam/NativeLibsCommon")
         self.requires("libevent/2.1.11@AdguardTeam/NativeLibsCommon")
+        self.requires("libsodium/1.0.18@AdguardTeam/NativeLibsCommon")
         self.requires("libuv/1.41.0@AdguardTeam/NativeLibsCommon")
         self.requires("klib/2021-04-06@AdguardTeam/NativeLibsCommon")
         self.requires("ldns/2021-03-29@AdguardTeam/NativeLibsCommon")
-        self.requires("ngtcp2/0.8.0@AdguardTeam/NativeLibsCommon")
+        self.requires("magic_enum/0.7.3")
         self.requires("native_libs_common/2.0.15@AdguardTeam/NativeLibsCommon")
+        self.requires("ngtcp2/0.9.0@AdguardTeam/NativeLibsCommon")
+        self.requires("pcre2/10.37@AdguardTeam/NativeLibsCommon")
 
     def build_requirements(self):
         self.build_requires("gtest/1.11.0")

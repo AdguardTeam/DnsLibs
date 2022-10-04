@@ -2,6 +2,8 @@
 #include <chrono>
 #include <functional>
 
+#include <magic_enum.hpp>
+
 #include "common/logger.h"
 #include "common/net_utils.h"
 #include "common/route_resolver.h"
@@ -23,17 +25,22 @@ enum class Scheme : size_t {
     TCP,
     TLS,
     HTTPS,
+    H3,
     QUIC,
     UNDEFINED,
-    COUNT,
 };
 
-static constexpr std::string_view SCHEME_WITH_SUFFIX[]{"sdns://", "dns://", "tcp://", "tls://", "https://", "quic://"};
+static constexpr std::string_view SCHEME_WITH_SUFFIX[] = {
+        "sdns://",
+        "dns://",
+        PlainUpstream::TCP_SCHEME,
+        DotUpstream::SCHEME,
+        DohUpstream::SCHEME_HTTPS,
+        DohUpstream::SCHEME_H3,
+        DoqUpstream::SCHEME,
+};
 
-static constexpr auto SCHEME_WITH_SUFFIX_BEGIN = std::begin(SCHEME_WITH_SUFFIX);
-static constexpr auto SCHEME_WITH_SUFFIX_END = std::end(SCHEME_WITH_SUFFIX);
-
-static_assert(std::size(SCHEME_WITH_SUFFIX) + 1 == static_cast<size_t>(Scheme::COUNT),
+static_assert(std::size(SCHEME_WITH_SUFFIX) + 1 == magic_enum::enum_count<Scheme>(),
         "scheme_with_suffix should contain all schemes defined in enum (except UNDEFINED)");
 
 struct UpstreamFactory::Impl {
@@ -49,13 +56,13 @@ struct UpstreamFactory::Impl {
 
 static auto get_address_scheme_iterator(std::string_view address) {
     using namespace std::placeholders;
-    return std::find_if(
-            SCHEME_WITH_SUFFIX_BEGIN, SCHEME_WITH_SUFFIX_END, std::bind(&ag::utils::starts_with, address, _1));
+    return std::find_if(std::begin(SCHEME_WITH_SUFFIX), std::end(SCHEME_WITH_SUFFIX),
+            std::bind(&ag::utils::starts_with, address, _1));
 }
 
 static Scheme get_address_scheme(std::string_view address) {
-    if (auto i = get_address_scheme_iterator(address); i != SCHEME_WITH_SUFFIX_END) {
-        return static_cast<Scheme>(std::distance(SCHEME_WITH_SUFFIX_BEGIN, i));
+    if (auto i = get_address_scheme_iterator(address); i != std::end(SCHEME_WITH_SUFFIX)) {
+        return static_cast<Scheme>(std::distance(std::begin(SCHEME_WITH_SUFFIX), i));
     }
     return Scheme::UNDEFINED;
 }
@@ -115,7 +122,7 @@ static CreateResult create_upstream_sdns(
         opts.address = stamp.server_addr_str;
         return create_upstream_plain(opts, config);
     case StampProtoType::DOH:
-        opts.address = AG_FMT("{}{}{}{}", DohUpstream::SCHEME, stamp.provider_name, port, stamp.path);
+        opts.address = AG_FMT("{}{}{}{}", DohUpstream::SCHEME_HTTPS, stamp.provider_name, port, stamp.path);
         return create_upstream_https(opts, config);
     case StampProtoType::TLS:
         opts.address = AG_FMT("{}{}{}", DotUpstream::SCHEME, stamp.provider_name, port);
@@ -136,10 +143,11 @@ UpstreamFactory::CreateResult UpstreamFactory::Impl::create_upstream(const Upstr
             &create_upstream_plain,
             &create_upstream_tls,
             &create_upstream_https,
+            &create_upstream_https,
             &create_upstream_doq,
             &create_upstream_plain,
     };
-    static_assert(std::size(create_functions) == static_cast<size_t>(Scheme::COUNT),
+    static_assert(std::size(create_functions) == magic_enum::enum_count<Scheme>(),
             "create_functions should contains all create functions for schemes defined in enum");
     auto index = (size_t) get_address_scheme(opts.address);
     return create_functions[index](opts, this->config);
