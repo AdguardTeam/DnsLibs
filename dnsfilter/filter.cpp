@@ -3,12 +3,16 @@
 #include <cinttypes>
 #include <cstdlib>
 #include <khash.h>
+#include <map>
 #include <string_view>
 #include <tuple>
+#include <type_traits>
 
+#include "common/cidr_range.h"
 #include "common/file.h"
 #include "common/logger.h"
 #include "common/regex.h"
+#include "common/socket_address.h"
 #include "common/utils.h"
 #include "dns/common/sys.h"
 #include "dns/dnsfilter/dnsfilter.h"
@@ -23,7 +27,7 @@ namespace ag::dns::dnsfilter {
 // This multiplier is selected so that when only the unique domains table
 // is occupied, memory usage estimate aligns with what is shown by XCode.
 static constexpr double LOAD_FACTOR_MULTIPLIER = 2;
-// These multipliers are selected so that when only the correspoding table
+// These multipliers are selected so that when only the corresponding table
 // is occupied, memory usage estimate aligns with what is shown by XCode.
 static constexpr double DOMAINS_TABLE_MULTIPLIER = 3;
 static constexpr double SHORTCUTS_TABLE_MULTIPLIER = 2.5;
@@ -81,8 +85,7 @@ public:
             : unique_domains_table(kh_init(hash_to_unique_index))
             , domains_table(kh_init(hash_to_indexes))
             , shortcuts_table(kh_init(hash_to_indexes))
-            , badfilter_table(kh_init(hash_to_unique_index))
-            , approx_mem(0) {
+            , badfilter_table(kh_init(hash_to_unique_index)) {
     }
 
     ~Impl() {
@@ -95,7 +98,7 @@ public:
     size_t put_hash_into_tables(uint32_t hash, uint32_t file_idx, kh_hash_to_unique_index_t *unique_table,
             kh_hash_to_indexes_t *multi_table);
 
-    struct load_line_arg {
+    struct LoadLineArg {
         Impl *filter;
         size_t approx_mem; // approximate usage so far
         size_t mem_limit; // maximum allowed usage, 0 means no limit
@@ -108,8 +111,8 @@ public:
     static void match_by_file_position(MatchArg &match, size_t idx);
 
     void search_by_domains(MatchArg &match) const;
-    void search_by_domains(MatchArg &match, std::string_view domain) const;
     void search_by_shortcuts(MatchArg &match) const;
+    void search_in_cidrs(MatchArg &match) const;
     void search_in_leftovers(MatchArg &match) const;
     void search_badfilter_rules(MatchArg &match) const;
 
@@ -131,6 +134,10 @@ public:
     // contains any shortcut
     kh_hash_to_indexes_t *shortcuts_table;
 
+    // Contains indexes of the rules that match IP address ranges using CIDR notation
+    // (e.g. `10.0.0.0/8`)
+    std::map<CidrRange, uint32_t> cidrs_table;
+
     // Contains indexes of the rules that are not fitting to place in domains and shortcuts tables
     // due to they are any of:
     // - a regex rule for which the shortcut at least with length `SHORTCUT_LENGTH` was not found
@@ -145,7 +152,7 @@ public:
     // `badfilter` modifier
     kh_hash_to_unique_index_t *badfilter_table;
 
-    size_t approx_mem;
+    size_t approx_mem = 0;
 };
 
 Filter::Filter()
@@ -169,7 +176,7 @@ size_t Filter::Impl::put_hash_into_tables(
     bool already_exists = false;
     size_t stored_idx = 0;
 
-    int ret;
+    int ret; // NOLINT(cppcoreguidelines-init-variables)
     khiter_t iter = kh_get(hash_to_indexes, multi_table, hash);
     if (iter == kh_end(multi_table)) {
         // there is no such domain in non-unique table
@@ -183,11 +190,10 @@ size_t Filter::Impl::put_hash_into_tables(
             // domain is unique - save index
             kh_value(unique_table, iter) = file_idx;
             return LOAD_FACTOR_MULTIPLIER * (sizeof(hash) + sizeof(file_idx));
-        } else {
-            // we have one record for this domain - remove from unique table
-            stored_idx = kh_value(unique_table, iter);
-            kh_del(hash_to_unique_index, unique_table, iter);
         }
+        // we have one record for this domain - remove from unique table
+        stored_idx = kh_value(unique_table, iter);
+        kh_del(hash_to_unique_index, unique_table, iter);
     }
 
     // create record in non-unique table
@@ -196,7 +202,8 @@ size_t Filter::Impl::put_hash_into_tables(
     if (ret < 0) {
         log_filter(this, err, "Out of memory");
         return 0;
-    } else if (ret > 0) {
+    }
+    if (ret > 0) {
         // the record is a new one
         auto *positions = new (std::nothrow) std::vector<uint32_t>;
         if (positions == nullptr) {
@@ -250,6 +257,9 @@ static bool count_rules(uint32_t, std::string_view line, void *arg) {
     case rule_utils::Rule::MMID_REGEX:
         ++stat->leftover_rules;
         break;
+    case rule_utils::Rule::MMID_CIDR:
+        // do nothing
+        break;
     }
 
     return true;
@@ -275,7 +285,7 @@ bool Filter::Impl::check_filter_outdated(const Filter &filter) {
         }                                                                                                              \
     } while (0)
 bool Filter::Impl::load_line(uint32_t file_idx, std::string_view line, void *arg) {
-    auto *a = (load_line_arg *) arg;
+    auto *a = (LoadLineArg *) arg;
     Filter::Impl *self = a->filter;
     std::optional<rule_utils::Rule> rule = rule_utils::parse(line, &logger);
 
@@ -377,6 +387,17 @@ bool Filter::Impl::load_line(uint32_t file_idx, std::string_view line, void *arg
         log_filter(self, trace, "Rule placed in leftovers table: {}", str);
         goto next_line;
     }
+    case rule_utils::Rule::MMID_CIDR: {
+        constexpr size_t MAP_NODE_OVERHEAD = 2 * sizeof(void *);
+        CHECK_MEM(sizeof(std::remove_reference<decltype(rule->cidr.value())>::type)
+                + rule->cidr->get_address().size() // NOLINT(bugprone-unchecked-optional-access)
+                + sizeof(file_idx)
+                + MAP_NODE_OVERHEAD);
+        self->cidrs_table.emplace(
+                std::move(rule->cidr.value()), file_idx); // NOLINT(bugprone-unchecked-optional-access)
+        log_filter(self, trace, "Rule placed in CIDRs table: {}", str);
+        goto next_line;
+    }
     }
 
 next_line:
@@ -418,11 +439,11 @@ std::pair<Filter::LoadResult, size_t> Filter::load(const DnsFilter::FilterParams
     f->leftovers_table.reserve(stat.leftover_rules);
     kh_resize(hash_to_unique_index, f->badfilter_table, stat.badfilter_rules);
 
-    Filter::Impl::load_line_arg load_line_arg{};
+    Filter::Impl::LoadLineArg load_line_arg{};
     load_line_arg.filter = f;
     load_line_arg.mem_limit = mem_limit;
 
-    int rc;
+    int rc; // NOLINT(cppcoreguidelines-init-variables)
 
     if (file::is_valid(fd)) {
         file::set_position(fd, 0);
@@ -435,7 +456,7 @@ std::pair<Filter::LoadResult, size_t> Filter::load(const DnsFilter::FilterParams
     if (rc == 0) {
         this->params = p;
     }
-    params.mtime = file::get_modification_time(p.data.data());
+    params.mtime = file::get_modification_time(p.data);
     m_pimpl->approx_mem = load_line_arg.approx_mem;
 
     log_filter(m_pimpl, trace, "Last modification time: {}", params.mtime);
@@ -449,6 +470,7 @@ std::pair<Filter::LoadResult, size_t> Filter::load(const DnsFilter::FilterParams
     log_filter(m_pimpl, info, "Unique domains table size: {}", kh_size(f->unique_domains_table));
     log_filter(m_pimpl, info, "Non-unique domains table size: {}", kh_size(f->domains_table));
     log_filter(m_pimpl, info, "Shortcuts table size: {}", kh_size(f->shortcuts_table));
+    log_filter(m_pimpl, info, "CIDR table size: {}", f->cidrs_table.size());
     log_filter(m_pimpl, info, "Leftovers table size: {}", f->leftovers_table.size());
     log_filter(m_pimpl, info, "Badfilter table size: {}", kh_size(f->badfilter_table));
     log_filter(m_pimpl, info, "Approximate memory usage: {}K", (load_line_arg.approx_mem / 1024) + 1);
@@ -456,7 +478,7 @@ std::pair<Filter::LoadResult, size_t> Filter::load(const DnsFilter::FilterParams
     return {load_line_arg.result, load_line_arg.approx_mem};
 }
 
-enum adblock_modifiers_match_status {
+enum AdblockModifiersMatchStatus {
     /** A rule is not matched because of its modifiers */
     AMMS_NOT_MATCHED,
     /** A domain is matched by rule's modifiers, but it should be checked against rule's pattern as well */
@@ -465,7 +487,7 @@ enum adblock_modifiers_match_status {
     AMMS_MATCHED_SURELY,
 };
 
-static adblock_modifiers_match_status match_adblock_modifiers(
+static AdblockModifiersMatchStatus match_adblock_modifiers(
         const rule_utils::Rule &rule, const Filter::MatchContext &ctx) {
     const auto &info = std::get<DnsFilter::AdblockRuleInfo>(rule.public_part.content);
 
@@ -476,25 +498,21 @@ static adblock_modifiers_match_status match_adblock_modifiers(
 
     if (info.props.test(DnsFilter::DARP_DNSTYPE)) {
         // match the request by its type against the $dnstype rule
-        adblock_modifiers_match_status status;
-
         switch (const rule_utils::DnstypeInfo &dnstype = rule.dnstype.value(); dnstype.mode) {
         case rule_utils::DnstypeInfo::DTMM_ENABLE:
             // check if type is enabled by the rule
-            status = dnstype.types.end() != std::find(dnstype.types.begin(), dnstype.types.end(), ctx.rr_type)
+            return dnstype.types.end() != std::find(dnstype.types.begin(), dnstype.types.end(), ctx.rr_type)
                     ? AMMS_MATCH_CANDIDATE
                     : AMMS_NOT_MATCHED;
-            break;
         case rule_utils::DnstypeInfo::DTMM_EXCLUDE:
             // check if type is excluded by the rule
-            status = dnstype.types.end() == std::find(dnstype.types.begin(), dnstype.types.end(), ctx.rr_type)
+            return dnstype.types.end() == std::find(dnstype.types.begin(), dnstype.types.end(), ctx.rr_type)
                     ? AMMS_MATCH_CANDIDATE
                     : AMMS_NOT_MATCHED;
-            break;
         }
+    }
 
-        return status;
-    } else if (info.props.test(DnsFilter::DARP_DNSREWRITE)) {
+    if (info.props.test(DnsFilter::DARP_DNSREWRITE)) {
         // check if the request's type corresponds to the $dnsrewrite rule's type
         std::optional<rule_utils::DnsrewriteInfo> &dnsrewrite = info.params->dnsrewrite;
         if (dnsrewrite.has_value()) {
@@ -524,17 +542,17 @@ static inline bool match_shortcuts(const std::vector<std::string> &shortcuts, st
     return found;
 }
 
-static bool match_pattern(
-        const rule_utils::Rule &rule, std::string_view host, const std::vector<std::string_view> &subdomains) {
+static bool match_pattern(const rule_utils::Rule &rule, const Filter::MatchContext &match_context) {
     bool matched = false;
 
     switch (rule.match_method) {
     case rule_utils::Rule::MMID_EXACT:
-        matched = rule.matching_parts.end() != std::find(rule.matching_parts.begin(), rule.matching_parts.end(), host);
+        matched = rule.matching_parts.end()
+                != std::find(rule.matching_parts.begin(), rule.matching_parts.end(), match_context.host);
         break;
     case rule_utils::Rule::MMID_SUBDOMAINS: {
-        for (auto &part : rule.matching_parts) {
-            for (auto &subdomain : subdomains) { // assert `subdomains` also contains the full host
+        for (const auto &part : rule.matching_parts) {
+            for (const auto &subdomain : match_context.subdomains) { // assert `subdomains` also contains the full host
                 if ((matched = (subdomain == part))) {
                     goto loopexit;
                 }
@@ -544,21 +562,26 @@ static bool match_pattern(
         break;
     }
     case rule_utils::Rule::MMID_SHORTCUTS:
-        matched = match_shortcuts(rule.matching_parts, host);
+        matched = match_shortcuts(rule.matching_parts, match_context.host);
         break;
     case rule_utils::Rule::MMID_SHORTCUTS_AND_REGEX:
         assert(!rule.matching_parts.empty());
-        if (match_shortcuts(rule.matching_parts, host)) {
+        if (match_shortcuts(rule.matching_parts, match_context.host)) {
             Regex re(rule_utils::get_regex(rule));
-            matched = re.match(host);
+            matched = re.match(match_context.host);
         }
         break;
     case rule_utils::Rule::MMID_REGEX: {
         Regex re = Regex(rule_utils::get_regex(rule));
-        matched = subdomains.end()
-                != std::find_if(subdomains.begin(), subdomains.end(), [&re](std::string_view subdomain) {
-                       return re.match(subdomain);
-                   });
+        matched = match_context.subdomains.end()
+                != std::find_if(match_context.subdomains.begin(), match_context.subdomains.end(),
+                        [&re](std::string_view subdomain) {
+                            return re.match(subdomain);
+                        });
+        break;
+    }
+    case rule_utils::Rule::MMID_CIDR: {
+        matched = rule.cidr->contains(match_context.ip_as_cidr.value());
         break;
     }
     }
@@ -588,7 +611,7 @@ bool Filter::Impl::match_against_line(MatchArg &match, std::string_view line) {
         }
     }
 
-    matched = match_pattern(rule.value(), match.ctx.host, match.ctx.subdomains);
+    matched = match_pattern(rule.value(), match.ctx);
 
 exit:
     if (matched) {
@@ -685,6 +708,18 @@ void Filter::Impl::search_by_shortcuts(MatchArg &match) const {
     }
 }
 
+void Filter::Impl::search_in_cidrs(MatchArg &match) const {
+    if (match.outdated) [[unlikely]] {
+        return;
+    }
+
+    CidrRange seek(match.ctx.host);
+    auto last_includes = this->cidrs_table.upper_bound(seek);
+    for (auto iter = this->cidrs_table.begin(); iter != last_includes; ++iter) {
+        match_by_file_position(match, iter->second);
+    }
+}
+
 void Filter::Impl::search_in_leftovers(MatchArg &match) const {
     if (match.outdated) {
         return;
@@ -726,6 +761,9 @@ bool Filter::match(MatchContext &ctx) {
 
     m_pimpl->search_by_domains(m);
     m_pimpl->search_by_shortcuts(m);
+    if (ctx.ip_as_cidr.has_value()) {
+        m_pimpl->search_in_cidrs(m);
+    }
     m_pimpl->search_in_leftovers(m);
     m_pimpl->search_badfilter_rules(m);
 
@@ -754,20 +792,20 @@ void Filter::update(std::atomic_size_t &mem_limit) {
     log_filter(m_pimpl, info, "Update {} successful", params.id);
 }
 
-void Filter::init_match_context(Filter::MatchContext &ctx, DnsFilter::MatchParam param) {
-    ctx = {utils::to_lower(param.domain), {}, {}, param.rr_type, {}};
-
-    size_t n = std::count(ctx.host.begin(), ctx.host.end(), '.');
+Filter::MatchContext::MatchContext(DnsFilter::MatchParam param)
+        : host(utils::to_lower(param.domain))
+        , rr_type(param.rr_type) {
+    size_t n = std::count(this->host.begin(), this->host.end(), '.');
     if (n > 0) {
         // all except tld
         --n;
     }
 
-    ctx.subdomains.reserve(n + 1);
-    ctx.subdomains.emplace_back(ctx.host);
+    this->subdomains.reserve(n + 1);
+    this->subdomains.emplace_back(this->host);
     for (size_t i = 0; i < n; ++i) {
-        std::array<std::string_view, 2> parts = utils::split2_by(ctx.subdomains.back(), '.');
-        ctx.subdomains.emplace_back(parts[1]);
+        std::array<std::string_view, 2> parts = utils::split2_by(this->subdomains.back(), '.');
+        this->subdomains.emplace_back(parts[1]);
     }
 
     static constexpr std::string_view REVERSE_DNS_DOMAIN_SUFFIX
@@ -775,10 +813,16 @@ void Filter::init_match_context(Filter::MatchContext &ctx, DnsFilter::MatchParam
     static constexpr std::string_view REVERSE_IPV6_DNS_DOMAIN_SUFFIX
             = rule_utils::REVERSE_IPV6_DNS_DOMAIN_SUFFIX.substr(
                     0, rule_utils::REVERSE_IPV6_DNS_DOMAIN_SUFFIX.length() - 1);
-    if (ctx.rr_type == LDNS_RR_TYPE_PTR && ctx.host.back() != '.'
-            && (utils::ends_with(ctx.host, REVERSE_DNS_DOMAIN_SUFFIX)
-                    || utils::ends_with(ctx.host, REVERSE_IPV6_DNS_DOMAIN_SUFFIX))) {
-        ctx.reverse_lookup_fqdn = AG_FMT("{}.", ctx.host);
+    if (this->rr_type == LDNS_RR_TYPE_PTR && this->host.back() != '.'
+            && (utils::ends_with(this->host, REVERSE_DNS_DOMAIN_SUFFIX)
+                    || utils::ends_with(this->host, REVERSE_IPV6_DNS_DOMAIN_SUFFIX))) {
+        this->reverse_lookup_fqdn = AG_FMT("{}.", this->host);
+    }
+
+    if (SocketAddress socket_address(this->host, 0); socket_address.valid()) {
+        Uint8View address_bytes = socket_address.addr();
+        this->ip_as_cidr.emplace(address_bytes,
+                address_bytes.size() * 8); // NOLINT(cppcoreguidelines-avoid-magic-numbers,readability-magic-numbers)
     }
 }
 

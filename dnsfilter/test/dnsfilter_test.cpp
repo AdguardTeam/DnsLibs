@@ -44,12 +44,6 @@ protected:
     static std::string file_by_filter_name(std::string filter) {
         return filter + ".txt";
     }
-
-    static void check_rdf(const ldns_rdf *rdf, ldns_rdf_type type, const char *value) {
-        ASSERT_EQ(ldns_rdf_get_type(rdf), type);
-        auto rdf_str = ag::AllocatedPtr<char>(ldns_rdf2str(rdf));
-        ASSERT_STREQ(rdf_str.get(), value);
-    }
 };
 
 TEST_F(DnsfilterTest, SuccessfulRuleParsing) {
@@ -131,6 +125,8 @@ TEST_F(DnsfilterTest, SuccessfulRuleParsing) {
             {"172.16.*.1", {make_rule(), rule_utils::Rule::MMID_SHORTCUTS}},
             {"172.16.*.1:80", {make_rule(), rule_utils::Rule::MMID_SHORTCUTS_AND_REGEX}},
             {"|172.16.*.1:80^", {make_rule(), rule_utils::Rule::MMID_SHORTCUTS_AND_REGEX}},
+            {"1.1.1.0/24", {make_rule(), rule_utils::Rule::MMID_CIDR}},
+            {"@@1.1.1.0/24", {make_rule(1 << DnsFilter::DARP_EXCEPTION), rule_utils::Rule::MMID_CIDR}},
             {"example.org$dnstype=A", {make_rule(1 << DnsFilter::DARP_DNSTYPE), rule_utils::Rule::MMID_SHORTCUTS}},
             {"example.org$dnstype=AAAA", {make_rule(1 << DnsFilter::DARP_DNSTYPE), rule_utils::Rule::MMID_SHORTCUTS}},
             {"example.org$dnstype=~A", {make_rule(1 << DnsFilter::DARP_DNSTYPE), rule_utils::Rule::MMID_SHORTCUTS}},
@@ -1141,5 +1137,127 @@ TEST_F(DnsfilterTest, FileBasedFilterAutoUpdate) {
     std::remove(file_name.c_str());
     filter.destroy(handle);
 }
+
+struct CidrTestSample {
+    static inline size_t next_idx = 0;
+
+    size_t idx = next_idx++;
+    std::string_view ip;
+    std::initializer_list<std::string_view> rules;
+    std::set<std::string_view> expected_match;
+
+    friend std::ostream &operator<<(std::ostream &os, const CidrTestSample &self) {
+        return os << "[" << self.idx << "] ip: " << self.ip;
+    }
+};
+
+
+class Cidr : public ::testing::TestWithParam<CidrTestSample> {
+protected:
+    DnsFilter filter;
+    DnsFilter::Handle filter_handle = nullptr;
+
+    void SetUp() override {
+        const CidrTestSample &sample = GetParam();
+
+        DnsFilter::EngineParams params = {{{
+                .data = ag::utils::join(sample.rules.begin(), sample.rules.end(), "\n"),
+                .in_memory = true,
+        }}};
+        auto [handle, err_or_warn] = filter.create(params);
+        ASSERT_NE(handle, nullptr) << err_or_warn->str();
+        filter_handle = handle;
+    }
+
+    void TearDown() override {
+        filter.destroy(filter_handle);
+    }
+};
+
+TEST_P(Cidr, Match) {
+    const CidrTestSample &sample = GetParam();
+
+    std::vector<DnsFilter::Rule> rules = filter.match(filter_handle,
+            {
+                    .domain = sample.ip,
+            });
+
+    std::set<std::string_view> matched_rules;
+    for (const auto &r : rules) {
+        matched_rules.insert(r.text);
+    }
+
+    ASSERT_EQ(sample.expected_match, matched_rules);
+}
+
+static const CidrTestSample CIDR_TEST_SAMPLES[] = {
+        {
+                .ip = "1.1.1.1",
+                .rules = {"1.1.1.0/24"},
+                .expected_match = {"1.1.1.0/24"},
+        },
+        {
+                .ip = "1.1.1.1",
+                .rules = {"1.1.1.42/24"},
+                .expected_match = {"1.1.1.42/24"},
+        },
+        {
+                .ip = "1.1.1.0",
+                .rules = {"1.1.1.0/24"},
+                .expected_match = {"1.1.1.0/24"},
+        },
+        {
+                .ip = "1.1.1.1",
+                .rules = {"1.1.1.1/32"},
+                .expected_match = {"1.1.1.1/32"},
+        },
+        {
+                .ip = "1.1.1.1",
+                .rules = {"@@1.1.1.1/32", "1.0.0.0/8"},
+                .expected_match = {"@@1.1.1.1/32", "1.0.0.0/8"},
+        },
+        {
+                .ip = "1.1.1.1",
+                .rules = {"1.1.1.1/32", "@@1.0.0.0/8"},
+                .expected_match = {"1.1.1.1/32", "@@1.0.0.0/8"},
+        },
+
+        {
+                .ip = "1.1.2.0",
+                .rules = {"1.1.1.0/24"},
+        },
+        {
+                .ip = "1.1.1.2",
+                .rules = {"1.1.1.1/32"},
+        },
+
+        {
+                .ip = "feed::beef",
+                .rules = {"feed::beef/128"},
+                .expected_match = {"feed::beef/128"},
+        },
+        {
+                .ip = "feed::beef",
+                .rules = {"feed::be00/120"},
+                .expected_match = {"feed::be00/120"},
+        },
+
+        {
+                .ip = "feed::beef",
+                .rules = {"feed::be00/120", "@@feed::bee0/124"},
+                .expected_match = {"feed::be00/120", "@@feed::bee0/124"},
+        },
+
+        {
+                .ip = "feed::feef",
+                .rules = {"feed::be00/120"},
+        },
+        {
+                .ip = "feed::beef",
+                .rules = {"feed::be00/128"},
+        },
+};
+
+INSTANTIATE_TEST_SUITE_P(DnsFilter, Cidr, testing::ValuesIn(CIDR_TEST_SAMPLES));
 
 } // namespace ag::dns::dnsfilter::test

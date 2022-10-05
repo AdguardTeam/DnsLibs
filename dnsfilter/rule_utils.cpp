@@ -60,7 +60,7 @@ static constexpr size_t MAX_DOMAIN_LENGTH = 255;
 // RFC1034 $3.5 Preferred name syntax (https://tools.ietf.org/html/rfc1034#section-3.5)
 static constexpr size_t MAX_LABEL_LENGTH = 63;
 // INET6_ADDRSTRLEN - 1 (they include the trailing null)
-static constexpr size_t MAX_IPADDR_LENTH = 45;
+static constexpr size_t MAX_IPADDR_LENGTH = 45;
 
 static inline bool pattern_exact(int pattern_mode) {
     return pattern_mode == (rule_utils::MPM_LINE_START_ASSERTED | rule_utils::MPM_LINE_END_ASSERTED);
@@ -96,12 +96,17 @@ static inline bool is_valid_domain_pattern(std::string_view domain) {
 }
 
 static inline bool is_valid_ip_pattern(std::string_view str) {
-    if (str.empty() || str.length() > MAX_IPADDR_LENTH) {
+    if (str.empty() || str.length() > MAX_IPADDR_LENGTH) {
         return false;
     }
     return str.cend() == std::find_if(str.cbegin(), str.cend(), [](unsigned char c) {
         return !(std::isxdigit(c) || c == '.' || c == ':' || c == '[' || c == ']' || c == '*');
     });
+}
+
+static inline bool is_valid_cidr_pattern(std::string_view str) {
+    auto [ip, block] = utils::rsplit2_by(str, '/');
+    return is_valid_ip_pattern(ip) && !block.empty() && utils::to_integer<uint8_t>(block).has_value();
 }
 
 static inline bool is_ip(std::string_view str) {
@@ -454,7 +459,8 @@ static std::optional<rule_utils::Rule> parse_adblock_rule(std::string_view str, 
     rule_utils::MatchInfo match_info = extract_match_info(str);
     str = match_info.text;
 
-    if (!match_info.is_regex_rule && !is_valid_domain_pattern(str) && !is_valid_ip_pattern(str)) {
+    if (!match_info.is_regex_rule && !is_valid_domain_pattern(str) && !is_valid_ip_pattern(str)
+            && !is_valid_cidr_pattern(str)) {
         ru_dbglog(log, "Invalid domain name: {}", str);
         return std::nullopt;
     }
@@ -480,10 +486,13 @@ static std::optional<rule_utils::Rule> parse_adblock_rule(std::string_view str, 
 
     bool exact_pattern = pattern_exact(match_info.pattern_mode);
     bool subdomains_pattern = pattern_subdomains(match_info.pattern_mode);
-    SocketAddress addr{match_info.text, 0};
-    if (!match_info.is_regex_rule && exact_pattern && addr.valid()) { // match_info.text is a valid IP address
+    if (SocketAddress addr(str, 0); !match_info.is_regex_rule && exact_pattern && addr.valid()) {
         r.match_method = Rule::MMID_EXACT;
         r.matching_parts.emplace_back(ag::utils::addr_to_str(addr.addr())); // strip port, compress
+    } else if (std::optional<CidrRange> cidr;
+               !match_info.is_regex_rule && !match_info.has_wildcard && !addr.valid() && cidr.emplace(str).valid()) {
+        r.match_method = Rule::MMID_CIDR;
+        r.cidr = std::move(cidr);
     } else if (!match_info.is_regex_rule && !match_info.has_wildcard && (exact_pattern || subdomains_pattern)) {
         r.match_method = exact_pattern ? Rule::MMID_EXACT : Rule::MMID_SUBDOMAINS;
         r.matching_parts.emplace_back(ag::utils::to_lower(str));

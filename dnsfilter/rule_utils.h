@@ -1,14 +1,14 @@
 #pragma once
 
-
-#include <string_view>
-#include <string>
 #include <optional>
-#include <vector>
+#include <string>
+#include <string_view>
 #include <variant>
+#include <vector>
+
+#include "common/cidr_range.h"
 #include "common/logger.h"
 #include "dns/dnsfilter/dnsfilter.h"
-
 
 /**
  *  Set of helper functions to manage the rules
@@ -89,6 +89,7 @@ struct DnsrewriteInfo {
     }
 };
 
+// @todo: replace `MatchMethodId` + specific fields with `std::variant`
 struct Rule {
     enum MatchMethodId {
         /// match by comparing the domain's string repesentation against the rule domain string
@@ -109,6 +110,8 @@ struct Rule {
         /// contains these shortcuts in corresponding order and matches
         /// the regex, it is matched against the rule
         MMID_SHORTCUTS_AND_REGEX,
+        /// the rule matches IP addresses included in the specified CIDR range
+        MMID_CIDR,
     };
 
     // public part of rule structure (see `ag::DnsFilter::Rule`)
@@ -117,6 +120,8 @@ struct Rule {
     MatchMethodId match_method;
     // list of matching parts accordingly to `match_method` value
     std::vector<std::string> matching_parts;
+    // non-nullopt if the `match_method` is `MMID_CIDR`
+    std::optional<CidrRange> cidr;
     // non-nullopt if the rule has `$dnstype` modifier
     std::optional<DnstypeInfo> dnstype;
 };

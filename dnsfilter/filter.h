@@ -1,14 +1,15 @@
 #pragma once
 
-
-#include <string_view>
+#include <atomic>
 #include <memory>
-#include <vector>
-#include <string>
+#include <optional>
 #include <shared_mutex>
+#include <string>
+#include <string_view>
+#include <vector>
+
 #include "dns/dnsfilter/dnsfilter.h"
 #include "rule_utils.h"
-#include <atomic>
 
 namespace ag::dns::dnsfilter {
 
@@ -16,14 +17,22 @@ class Filter {
 public:
     // Context of domain match
     struct MatchContext {
+        explicit MatchContext(DnsFilter::MatchParam param);
+
+        MatchContext(const MatchContext &) = delete;
+        MatchContext &operator=(const MatchContext &) = delete;
+        MatchContext(MatchContext &&) = delete;
+        MatchContext &operator=(MatchContext &&) = delete;
+
         std::string host; // matching domain name
         std::vector<std::string_view> subdomains; // list of subdomains
         std::vector<DnsFilter::Rule> matched_rules; // list of matched rules
         ldns_rr_type rr_type; // query RR type
         std::string reverse_lookup_fqdn; // non-empty if the request is a reverse DNS lookup
+        std::optional<CidrRange> ip_as_cidr; // non-nullopt in case the `host` is an IP address
     };
 
-    static void init_match_context(MatchContext &ctx, DnsFilter::MatchParam param);
+    [[nodiscard]] static MatchContext make_match_context(DnsFilter::MatchParam param);
 
     Filter();
     ~Filter();
