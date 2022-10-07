@@ -49,6 +49,7 @@ project(dnsproxy_framework)
 
 # Ensure that API is compatible with minimum MacOS version
 add_compile_options(-Werror=unguarded-availability)
+link_libraries(-Wl,-application_extension)
 
 set(CMAKE_C_STANDARD   11)
 set(CMAKE_CXX_STANDARD 20)
