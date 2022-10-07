@@ -49,9 +49,6 @@ project(dnsproxy_framework)
 
 # Ensure that API is compatible with minimum MacOS version
 add_compile_options(-Werror=unguarded-availability)
-# todo: Bring back optimizations when Apple will fix its compiler,
-#       otherwise AppleClang crashes when sees our code
-add_compile_options(-O0)
 
 set(CMAKE_C_STANDARD   11)
 set(CMAKE_CXX_STANDARD 20)
@@ -77,7 +74,7 @@ set_property(TARGET AGDnsProxy PROPERTY POSITION_INDEPENDENT_CODE ON)
 set_target_properties(AGDnsProxy PROPERTIES
     FRAMEWORK TRUE
     FRAMEWORK_VERSION A
-    VERSION 2.0.16
+    VERSION 2.0.22
     MACOSX_FRAMEWORK_INFO_PLIST "${INFOPLIST_FILE}"
     MACOSX_FRAMEWORK_IDENTIFIER com.adguard.dnsproxy
     XCODE_ATTRIBUTE_CODE_SIGN_IDENTITY "Developer ID Application: Performiks OOO (N33TQXN8C7)"
