@@ -12,29 +12,8 @@
 
 namespace ag::dns::dnscrypt {
 
-/**
- * Adjusts the maximum payload size advertised in queries sent to upstream servers
- * See https://github.com/jedisct1/dnscrypt-proxy/blob/master/dnscrypt-proxy/plugin_get_set_payload_size.go
- * See here also: https://github.com/jedisct1/dnscrypt-proxy/issues/667
- */
-static void ldns_pkt_adjust_payload_size(ldns_pkt &msg) {
-    size_t original_max_payload_size = LDNS_MIN_BUFLEN - QUERY_OVERHEAD;
-    if (ldns_pkt_edns(&msg) && ldns_pkt_edns_version(&msg) == 0) {
-        original_max_payload_size = std::max(MAX_DNS_UDP_SAFE_PACKET_SIZE - QUERY_OVERHEAD, original_max_payload_size);
-    }
-    size_t max_payload_size = std::min(MAX_DNS_PACKET_SIZE - QUERY_OVERHEAD, original_max_payload_size);
-    if (max_payload_size > LDNS_MIN_BUFLEN) {
-        ldns_pkt_set_edns_udp_size(&msg, max_payload_size);
-    }
-}
-
-Client::Client(bool adjust_payload_size)
-        : Client(DEFAULT_PROTOCOL, adjust_payload_size) {
-}
-
-Client::Client(utils::TransportProtocol protocol, bool adjust_payload_size)
-        : m_protocol(protocol)
-        , m_adjust_payload_size(adjust_payload_size) {
+Client::Client(utils::TransportProtocol protocol)
+        : m_protocol(protocol) {
 }
 
 coro::Task<Client::DialResult> Client::dial(std::string_view stamp_str, EventLoop &loop, Millis timeout,
@@ -82,13 +61,10 @@ coro::Task<Client::DialResult> Client::dial(const ServerStamp &stamp, EventLoop 
     co_return DialInfo{std::move(local_server_info), rtt};
 }
 
-coro::Task<Client::ExchangeResult> Client::exchange(ldns_pkt &message, const ServerInfo &local_server_info, EventLoop &loop,
+coro::Task<Client::ExchangeResult> Client::exchange(const ldns_pkt &message, const ServerInfo &local_server_info, EventLoop &loop,
         Millis timeout, const SocketFactory *socket_factory, SocketFactory::SocketParameters socket_parameters) const {
 
     utils::Timer timer;
-    if (m_adjust_payload_size) {
-        ldns_pkt_adjust_payload_size(message);
-    }
     auto query_res = create_ldns_buffer(message);
     if (query_res.has_error()) {
         co_return query_res.error();

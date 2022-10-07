@@ -31,6 +31,7 @@ std::optional<evutil_socket_t> SecuredSocket::get_fd() const {
 }
 
 Error<SocketError> SecuredSocket::connect(ConnectParameters params) {
+    assert(m_state == SS_IDLE);
     auto err = m_underlying_socket->connect(this->make_underlying_connect_parameters(params));
     if (!err) {
         err = this->set_callbacks(params.callbacks);
@@ -106,7 +107,10 @@ void SecuredSocket::on_read(void *arg, Uint8View data) {
         }
     }
 
-    if (self->m_state == SS_CONNECTING_TLS && self->m_codec.is_connected()) {
+    if (self->m_state == SS_CONNECTING_TLS) {
+        if (!self->m_codec.is_connected()) {
+            return;
+        }
         self->m_state = SS_CONNECTED;
         if (Callbacks cbx = self->get_callbacks(); cbx.on_connected != nullptr) {
             cbx.on_connected(cbx.arg);

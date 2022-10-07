@@ -26,31 +26,12 @@ int main() {
     fallback.id = 43;
     fallback.outboundInterfaceName = nil;
 
-    auto *config = [[AGDnsProxyConfig alloc] init];
+    auto *config = [AGDnsProxyConfig getDefault];
     config.upstreams = @[upstream];
     config.fallbacks = @[fallback];
-    config.fallbackDomains = @[];
-    config.detectSearchDomains = YES;
-    config.filters = @[];
-    config.blockedResponseTtlSecs = 0;
-    config.dns64Settings = nil;
     config.listeners = @[listener];
-    config.outboundProxy = nil;
-    config.ipv6Available = NO;
-    config.blockIpv6 = NO;
-    config.adblockRulesBlockingMode = AGBM_REFUSED;
-    config.hostsRulesBlockingMode = AGBM_ADDRESS;
-    config.customBlockingIpv4 = nil;
-    config.customBlockingIpv6 = nil;
-    config.dnsCacheSize = 0;
-    config.optimisticCache = YES;
-    config.enableDNSSECOK = NO;
-    config.enableRetransmissionHandling = NO;
-    config.enableRouteResolver = NO;
-    config.blockEch = NO;
-    config.helperPath = nil;
 
-    auto *handler = [AGDnsProxyEvents new];
+    auto *handler = [[AGDnsProxyEvents alloc] init];
     NSError *error;
     auto *proxy = [[AGDnsProxy alloc] initWithConfig:config handler:handler error:&error];
     if (error || !proxy) {
@@ -61,5 +42,6 @@ int main() {
     while (getchar() != 's') {
         ;
     }
+    [proxy stop];
     return 0;
 }

@@ -248,6 +248,10 @@ public class DnsProxyTest {
                 new OutboundProxySettings(OutboundProxySettings.Protocol.SOCKS5_UDP, "::", 1234,
                         null, new OutboundProxySettings.AuthInfo("1", "2"), true, false));
 
+        settings.setEnableParallelUpstreamQueries(true);
+        settings.setEnableFallbackOnUpstreamsFailure(true);
+        settings.setEnableServfailOnUpstreamsFailure(true);
+
         try (final DnsProxy proxy = new DnsProxy(context, settings)) {
             assertEquals(settings, proxy.getSettings());
             assertFalse(proxy.getSettings().getListeners().isEmpty());

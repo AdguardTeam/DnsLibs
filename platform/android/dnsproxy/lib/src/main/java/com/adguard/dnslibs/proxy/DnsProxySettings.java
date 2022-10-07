@@ -68,6 +68,9 @@ public class DnsProxySettings {
     private boolean enableDNSSECOK;
     private boolean enableRetransmissionHandling;
     private boolean blockEch;
+    private boolean enableParallelUpstreamQueries;
+    private boolean enableFallbackOnUpstreamsFailure;
+    private boolean enableServfailOnUpstreamsFailure;
 
     /**
      * @return Maximum number of cached responses
@@ -370,6 +373,53 @@ public class DnsProxySettings {
         this.blockEch = blockEch;
     }
 
+    /**
+     * @return whether parallel upstream queriying is enabled.
+     */
+    public boolean isEnableParallelUpstreamQueries() {
+        return enableParallelUpstreamQueries;
+    }
+
+    /**
+     * @param enableParallelUpstreamQueries whether to enable parallel upstream querying.
+     */
+    public void setEnableParallelUpstreamQueries(boolean enableParallelUpstreamQueries) {
+        this.enableParallelUpstreamQueries = enableParallelUpstreamQueries;
+    }
+
+    /**
+     * @return whether switching to fallback upstreams on normal upstreams failure is enabled.
+     */
+    public boolean isEnableFallbackOnUpstreamsFailure() {
+        return enableFallbackOnUpstreamsFailure;
+    }
+
+    /**
+     * @param enableFallbackOnUpstreamsFailure whether to switch to fallback upstreams when normal upstreams fail
+     *                                         to provide a response.
+     */
+    public void setEnableFallbackOnUpstreamsFailure(boolean enableFallbackOnUpstreamsFailure) {
+        this.enableFallbackOnUpstreamsFailure = enableFallbackOnUpstreamsFailure;
+    }
+
+    /**
+     * @return whether generating a SERVFAIL response on upstreams failure is enabled.
+     */
+    public boolean isEnableServfailOnUpstreamsFailure() {
+        return enableServfailOnUpstreamsFailure;
+    }
+
+    /**
+     * @param enableServfailOnUpstreamsFailure whether to enable generating a SERVFAIL response when all upstreams
+     *                                         (including fallback) fail to provide a response. If {@code false},
+     *                                         no response will be sent to the client if no upstreams could provide
+     *                                         a response. In any case, no response is sent to the client if
+     *                                         upstreams fail due to timeout or if the request is retransmitted.
+     */
+    public void setEnableServfailOnUpstreamsFailure(boolean enableServfailOnUpstreamsFailure) {
+        this.enableServfailOnUpstreamsFailure = enableServfailOnUpstreamsFailure;
+    }
+
     @Override
     public boolean equals(Object o) {
         if (this == o) return true;
@@ -394,7 +444,10 @@ public class DnsProxySettings {
                 optimisticCache == that.optimisticCache &&
                 enableDNSSECOK == that.enableDNSSECOK &&
                 enableRetransmissionHandling == that.enableRetransmissionHandling &&
-                blockEch == that.blockEch;
+                blockEch == that.blockEch &&
+                enableParallelUpstreamQueries == that.enableParallelUpstreamQueries &&
+                enableFallbackOnUpstreamsFailure == that.enableFallbackOnUpstreamsFailure &&
+                enableServfailOnUpstreamsFailure == that.enableServfailOnUpstreamsFailure;
     }
 
     @Override
@@ -402,7 +455,8 @@ public class DnsProxySettings {
         return Objects.hash(upstreams, fallbacks, fallbackDomains, detectSearchDomains, dns64, blockedResponseTtlSecs,
                 filterParams, listeners, outboundProxy, ipv6Available, blockIpv6, adblockRulesBlockingMode, hostsRulesBlockingMode,
                 customBlockingIpv4, customBlockingIpv6,
-                dnsCacheSize, optimisticCache, enableDNSSECOK, enableRetransmissionHandling, blockEch);
+                dnsCacheSize, optimisticCache, enableDNSSECOK, enableRetransmissionHandling, blockEch,
+                enableParallelUpstreamQueries, enableFallbackOnUpstreamsFailure, enableServfailOnUpstreamsFailure);
     }
 
     /**

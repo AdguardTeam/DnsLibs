@@ -49,9 +49,9 @@ public:
 
 private:
     Error<InitError> init() override;
-    coro::Task<ExchangeResult> exchange(ldns_pkt *, const DnsMessageInfo *info) override;
+    coro::Task<ExchangeResult> exchange(const ldns_pkt *, const DnsMessageInfo *info) override;
 
-    std::unique_ptr<QueryHandle> create_handle(ldns_pkt *request, Millis timeout) const;
+    std::unique_ptr<QueryHandle> create_handle(const ldns_pkt *request, Millis timeout) const;
     curl_pool_ptr create_pool() const;
     void add_socket(curl_socket_t socket, int action);
     void read_messages();

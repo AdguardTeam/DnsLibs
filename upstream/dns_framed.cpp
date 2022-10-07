@@ -45,11 +45,8 @@ DnsFramedConnection::DnsFramedConnection(
 }
 
 void DnsFramedConnection::connect() {
-    assert(m_state == Connection::Status::PENDING);
-    if (m_stream) {
-        log_conn(m_log, dbg, this, "Connect is already in progress");
-        return;
-    }
+    assert(m_state == Connection::Status::IDLE);
+    m_state = Connection::Status::PENDING;
     Upstream *upstream = m_pool.lock()->upstream();
     assert(upstream != nullptr);
     m_stream = upstream->make_socket(utils::TP_TCP);
@@ -77,7 +74,7 @@ void DnsFramedConnection::on_connected(void *arg) {
         log_conn(self->m_log, trace, self, "Already closed");
         return;
     }
-
+    assert(self->m_state == Status::PENDING);
     self->m_state = Status::ACTIVE;
     if (self->m_idle_timeout.count()) {
         self->m_stream->set_timeout(self->m_idle_timeout);
@@ -101,6 +98,7 @@ void DnsFramedConnection::on_read(void *arg, Uint8View data) {
         log_conn(self->m_log, trace, self, "Already closed");
         return;
     }
+    assert(self->m_state == Status::ACTIVE);
 
     while (!data.empty()) {
         data = self->m_input_buffer.store(data);
@@ -183,10 +181,12 @@ coro::Task<Connection::Reply> DnsFramedConnection::perform_request(Uint8View pac
         co_return request.reply.value();
     }
 
-    auto e = send_dns_packet(m_stream.get(), {request_to_send.data(), request_to_send.size()});
-    if (e) {
+    assert(m_state == Connection::Status::ACTIVE);
+
+    auto socket_error = send_dns_packet(m_stream.get(), {request_to_send.data(), request_to_send.size()});
+    if (socket_error) {
         infolog(m_log, "Error sending :(");
-        co_return request.reply.value();
+        co_return make_error(DnsError::AE_SOCKET_ERROR, std::move(socket_error));
     }
 
     request.timeout = std::max(Millis{0}, timeout - timer.elapsed<Millis>());

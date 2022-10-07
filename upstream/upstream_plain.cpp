@@ -40,7 +40,7 @@ Error<Upstream::InitError> PlainUpstream::init() {
     return {};
 }
 
-coro::Task<Upstream::ExchangeResult> PlainUpstream::exchange(ldns_pkt *request_pkt, const DnsMessageInfo *info) {
+coro::Task<Upstream::ExchangeResult> PlainUpstream::exchange(const ldns_pkt *request_pkt, const DnsMessageInfo *info) {
     ldns_buffer_ptr buffer{ldns_buffer_new(REQUEST_BUFFER_INITIAL_CAPACITY)};
     ldns_status status = ldns_pkt2buffer_wire(&*buffer, request_pkt);
     if (status != LDNS_STATUS_OK) {

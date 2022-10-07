@@ -30,9 +30,10 @@ protected:
     struct ConstructorAccess {};
 public:
     enum class Status {
+        IDLE,
         PENDING,
         ACTIVE,
-        CLOSED
+        CLOSED,
     };
 
     using Reply = Result<std::vector<uint8_t>, DnsError>;
@@ -82,7 +83,7 @@ public:
     Connection(const Connection &) = delete;
     Connection &operator=(const Connection &) = delete;
 
-    Status m_state = Status::PENDING;
+    Status m_state = Status::IDLE;
 protected:
     /** Event loop */
     EventLoop &m_loop;

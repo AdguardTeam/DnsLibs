@@ -22,7 +22,7 @@ namespace Adguard.Dns
         /// <summary>
         /// The current API version hash with which the ProxyServer was tested
         /// </summary>
-        private const string API_VERSION_HASH = "5dbee37b7066e8f4c38875c23b16a5d85090e9beaaf6b76f750ab934ae73fa30";
+        private const string API_VERSION_HASH = "4c98dae34b42ca077db993a24325793bf297e7cd5e08520c74313aa836c9405d";
         #endregion
 
         #region API Functions
@@ -573,6 +573,31 @@ namespace Adguard.Dns
             [MarshalAs(UnmanagedType.I1)]
             [NativeName("block_ech")]
             internal bool BlockEch;
+
+            /// <summary>
+            /// If true, all upstreams are queried in parallel, and the first response is returned.
+            /// </summary>
+            [MarshalAs(UnmanagedType.I1)]
+            [NativeName("enable_parallel_upstream_queries")]
+            internal bool EnableParallelUpstreamQueries;
+
+            /// <summary>
+            /// If true, normal queries will be forwarded to fallback upstreams if all normal upstreams failed.
+            /// Otherwise, fallback upstreams will only be used to resolve domains from `fallback_domains`.
+            /// </summary>
+            [MarshalAs(UnmanagedType.I1)]
+            [NativeName("enable_fallback_on_upstreams_failure")]
+            internal bool EnableFallbackOnUpstreamsFailure;
+
+            /// <summary>
+            /// If true, when all upstreams (including fallback upstreams) fail to provide a response,
+            /// the proxy will respond with a SERVFAIL packet. Otherwise, no response is sent on such a failure.
+            /// In any case, the proxy will never respond with a SERVFAIL packet due to all upstreams timing out,
+            /// nor to a request that has been retransmitted.
+            /// </summary>
+            [MarshalAs(UnmanagedType.I1)]
+            [NativeName("enable_servfail_on_upstreams_failure")]
+            internal bool EnableServfailOnUpstreamsFailure;
         }
 
         /// <summary>

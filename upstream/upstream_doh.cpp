@@ -3,6 +3,7 @@
 #include <cassert>
 #include <cinttypes>
 
+#include "common/clock.h"
 #include "common/defs.h"
 #include "common/time_utils.h"
 #include "common/utils.h"
@@ -57,6 +58,7 @@ struct DohUpstream::QueryHandle {
     std::coroutine_handle<> caller{};
     std::bitset<magic_enum::enum_count<Flag>()> flags;
     std::shared_ptr<curl_slist> resolved_addrs;
+    Millis timeout;
 
     CURL_ptr create_curl_handle();
 
@@ -219,15 +221,15 @@ DohUpstream::QueryHandle::CURL_ptr DohUpstream::QueryHandle::create_curl_handle(
 
     DohUpstream *doh_upstream = this->upstream;
     ldns_buffer *raw_request = this->request.get();
-    uint64_t timeout = doh_upstream->m_options.timeout.count();
+    long timeout_ms = (long) this->timeout.count();
     this->resolved_addrs = doh_upstream->m_resolved;
     CURL *curl = curl_ptr.get();
     if (CURLcode e;
             // clang-format off
                CURLE_OK != (e = curl_easy_setopt(curl, CURLOPT_URL, doh_upstream->m_curlopt_url.c_str()))
             || CURLE_OK != (e = curl_easy_setopt(curl, CURLOPT_NOPROGRESS, true))
-            || CURLE_OK != (e = curl_easy_setopt(curl, CURLOPT_TIMEOUT_MS, timeout))
-            || CURLE_OK != (e = curl_easy_setopt(curl, CURLOPT_CONNECTTIMEOUT_MS, timeout))
+            || CURLE_OK != (e = curl_easy_setopt(curl, CURLOPT_TIMEOUT_MS, timeout_ms))
+            || CURLE_OK != (e = curl_easy_setopt(curl, CURLOPT_CONNECTTIMEOUT_MS, timeout_ms))
             || CURLE_OK != (e = curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, write_callback))
             || CURLE_OK != (e = curl_easy_setopt(curl, CURLOPT_WRITEDATA, this))
             || CURLE_OK != (e = curl_easy_setopt(curl, CURLOPT_USERAGENT, nullptr))
@@ -322,21 +324,21 @@ void DohUpstream::QueryHandle::cleanup_request() {
     }
 }
 
-std::unique_ptr<DohUpstream::QueryHandle> DohUpstream::create_handle(ldns_pkt *request, Millis timeout) const {
+std::unique_ptr<DohUpstream::QueryHandle> DohUpstream::create_handle(const ldns_pkt *request, Millis timeout) const {
     std::unique_ptr<QueryHandle> h = std::make_unique<QueryHandle>();
+    h->timeout = timeout;
     h->log = &m_log;
     h->upstream = (DohUpstream *) this;
     h->request_id = ldns_pkt_id(request);
-    ldns_pkt_set_id(request, 0);
-
     h->request.reset(ldns_buffer_new(REQUEST_BUFFER_INITIAL_CAPACITY));
     ldns_status status = ldns_pkt2buffer_wire(h->request.get(), request);
     if (status != LDNS_STATUS_OK) {
         errlog_id(h, "Failed to serialize packet: {}", ldns_get_errorstr_by_id(status));
-        h->restore_packet_id(request);
         return nullptr;
     }
-
+    // Set the ID of the outgoing packet to zero as per DoH spec.
+    *ldns_buffer_at(h->request.get(), 0) = 0;
+    *ldns_buffer_at(h->request.get(), 1) = 0;
     return h;
 }
 
@@ -789,7 +791,7 @@ void DohUpstream::reset_bypassed_proxy_queries() {
     }
 }
 
-coro::Task<Upstream::ExchangeResult> DohUpstream::exchange(ldns_pkt *request, const DnsMessageInfo *) {
+coro::Task<Upstream::ExchangeResult> DohUpstream::exchange(const ldns_pkt *request, const DnsMessageInfo *) {
 
     Millis timeout = m_options.timeout;
 
@@ -855,7 +857,6 @@ coro::Task<Upstream::ExchangeResult> DohUpstream::exchange(ldns_pkt *request, co
         err = make_error(DnsError::AE_DECODE_ERROR, ldns_get_errorstr_by_id(status));
     }
 
-    handle->restore_packet_id(request);
     if (response != nullptr) {
         handle->restore_packet_id(response);
     }

@@ -301,7 +301,7 @@ Error<Upstream::InitError> DoqUpstream::init() {
     return {};
 }
 
-coro::Task<Upstream::ExchangeResult> DoqUpstream::exchange(ldns_pkt *request, const DnsMessageInfo *) {
+coro::Task<Upstream::ExchangeResult> DoqUpstream::exchange(const ldns_pkt *request, const DnsMessageInfo *) {
     if (m_server_addresses.empty()) {
         Bootstrapper::ResolveResult bootstrapper_res = co_await m_bootstrapper->get();
         if (bootstrapper_res.error) {

@@ -82,6 +82,8 @@ public:
     }
 
     void connect() override {
+        assert(m_state == Connection::Status::IDLE);
+        m_state = Connection::Status::PENDING;
         coro::run_detached(this->co_connect());
     }
 
@@ -202,7 +204,7 @@ Error<Upstream::InitError> DotUpstream::init() {
 
 DotUpstream::~DotUpstream() = default;
 
-coro::Task<Upstream::ExchangeResult> DotUpstream::exchange(ldns_pkt *request_pkt, const DnsMessageInfo *info) {
+coro::Task<Upstream::ExchangeResult> DotUpstream::exchange(const ldns_pkt *request_pkt, const DnsMessageInfo *info) {
     ldns_buffer_ptr buffer{ldns_buffer_new(REQUEST_BUFFER_INITIAL_CAPACITY)};
     ldns_status status = ldns_pkt2buffer_wire(&*buffer, request_pkt);
     if (status != LDNS_STATUS_OK) {

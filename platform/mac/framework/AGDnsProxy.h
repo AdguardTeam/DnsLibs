@@ -384,6 +384,22 @@ typedef NS_ENUM(NSInteger, AGOutboundProxyProtocol) {
  */
 @property(nonatomic) BOOL blockEch;
 /**
+ * If true, all upstreams are queried in parallel, and the first response is returned.
+ */
+@property(nonatomic) BOOL enableParallelUpstreamQueries;
+/**
+ * If true, normal queries will be forwarded to fallback upstreams if all normal upstreams failed.
+ * Otherwise, fallback upstreams will only be used to resolve domains from `fallback_domains`.
+ */
+@property(nonatomic) BOOL enableFallbackOnUpstreamsFailure;
+/**
+ * If true, when all upstreams (including fallback upstreams) fail to provide a response,
+ * the proxy will respond with a SERVFAIL packet. Otherwise, no response is sent on such a failure.
+ * In any case, the proxy will never respond with a SERVFAIL packet due to all upstreams timing out,
+ * nor to a request that has been retransmitted.
+ */
+@property(nonatomic) BOOL enableServfailOnUpstreamsFailure;
+/**
  * Path to adguard-tun-helper (macOS only)
  */
 @property(nonatomic) NSString *helperPath;

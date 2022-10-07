@@ -232,6 +232,20 @@ typedef struct {
     bool enable_retransmission_handling;
     /** If enabled, strip Encrypted Client Hello parameters from responses. */
     bool block_ech;
+    /** If true, all upstreams are queried in parallel, and the first response is returned. */
+    bool enable_parallel_upstream_queries;
+    /**
+     * If true, normal queries will be forwarded to fallback upstreams if all normal upstreams failed.
+     * Otherwise, fallback upstreams will only be used to resolve domains from `fallback_domains`.
+     */
+    bool enable_fallback_on_upstreams_failure;
+    /**
+     * If true, when all upstreams (including fallback upstreams) fail to provide a response,
+     * the proxy will respond with a SERVFAIL packet. Otherwise, no response is sent on such a failure.
+     * In any case, the proxy will never respond with a SERVFAIL packet due to all upstreams timing out,
+     * nor to a request that has been retransmitted.
+     */
+    bool enable_servfail_on_upstreams_failure;
 } ag_dnsproxy_settings;
 
 typedef struct {

@@ -551,6 +551,9 @@ static ServerStamp convert_stamp(AGDnsStamp *stamp) {
     _enableRetransmissionHandling = settings->enable_retransmission_handling;
     _enableRouteResolver = settings->enable_route_resolver;
     _blockEch = settings->block_ech;
+    _enableParallelUpstreamQueries = settings->enable_parallel_upstream_queries;
+    _enableFallbackOnUpstreamsFailure = settings->enable_fallback_on_upstreams_failure;
+    _enableServfailOnUpstreamsFailure = settings->enable_servfail_on_upstreams_failure;
     return self;
 }
 
@@ -581,6 +584,9 @@ static ServerStamp convert_stamp(AGDnsStamp *stamp) {
         _enableRetransmissionHandling = [coder decodeBoolForKey:@"_enableRetransmissionHandling"];
         _enableRouteResolver = [coder decodeBoolForKey:@"_enableRouteResolver"];
         _blockEch = [coder decodeBoolForKey:@"_blockEch"];
+        _enableParallelUpstreamQueries = [coder decodeBoolForKey:@"_enableParallelUpstreamQueries"];
+        _enableFallbackOnUpstreamsFailure = [coder decodeBoolForKey:@"_enableFallbackOnUpstreamsFailure"];
+        _enableServfailOnUpstreamsFailure = [coder decodeBoolForKey:@"_enableServfailOnUpstreamsFailure"];
         _helperPath = [coder decodeObjectForKey:@"_helperPath"];
     }
 
@@ -612,6 +618,9 @@ static ServerStamp convert_stamp(AGDnsStamp *stamp) {
     [coder encodeBool:self.enableRetransmissionHandling forKey:@"_enableRetransmissionHandling"];
     [coder encodeBool:self.enableRouteResolver forKey:@"_enableRouteResolver"];
     [coder encodeBool:self.blockEch forKey:@"_blockEch"];
+    [coder encodeBool:self.enableParallelUpstreamQueries forKey:@"_enableParallelUpstreamQueries"];
+    [coder encodeBool:self.enableFallbackOnUpstreamsFailure forKey:@"_enableFallbackOnUpstreamsFailure"];
+    [coder encodeBool:self.enableServfailOnUpstreamsFailure forKey:@"_enableServfailOnUpstreamsFailure"];
     [coder encodeObject:self.helperPath forKey:@"_helperPath"];
 }
 
@@ -1193,6 +1202,9 @@ static int bindFd(NSString *helperPath, NSString *address, NSNumber *port, AGLis
     settings.enable_retransmission_handling = config.enableRetransmissionHandling;
     settings.enable_route_resolver = config.enableRouteResolver;
     settings.block_ech = config.blockEch;
+    settings.enable_parallel_upstream_queries = config.enableParallelUpstreamQueries;
+    settings.enable_fallback_on_upstreams_failure = config.enableFallbackOnUpstreamsFailure;
+    settings.enable_servfail_on_upstreams_failure = config.enableServfailOnUpstreamsFailure;
 
     auto [ret, err_or_warn] = self->proxy.init(std::move(settings), std::move(native_events));
     if (!ret) {

@@ -175,7 +175,10 @@ namespace Adguard.Dns.TestApp
                 OptimisticCache = false,
                 EnableDNSSECOK = false,
                 EnableRetransmissionHandling = false,
-                BlockEch = false
+                BlockEch = false,
+                EnableParallelUpstreamQueries = true,
+                EnableFallbackOnUpstreamsFailure = true,
+                EnableServfailOnUpstreamsFailure = true
             };
 
             return dnsProxySettings;

@@ -1,5 +1,12 @@
 # Changelog
 
+* [Feature] Added an option to query upstreams in parallel. See 
+  `DnsProxySettings::enable_parallel_upstream_queries` and the corresponding options in platform-specific adapters.
+* [Feature] Added an option to change fallback behaviour. See
+  `DnsProxySettings::enable_fallback_on_upstreams_failure` and the corresponding options in platform-specific adapters.
+* [Feature] Added an option to change the behaviour when upstreams fail to yield a response. See
+  `DnsProxySettings::enable_servfail_on_upstreams_failure` and the corresponding options in platform-specific adapters.
+
 * [Feature] A non-standard `h3://` URL scheme can now be used to force a DoH upstream to use HTTP/3.
 
 * [Feature] Now DnsProxy.init() return more informative error code with description.

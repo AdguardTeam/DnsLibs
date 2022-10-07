@@ -48,7 +48,7 @@ Error<Upstream::InitError> DnscryptUpstream::init() {
 
 DnscryptUpstream::~DnscryptUpstream() = default;
 
-coro::Task<Upstream::ExchangeResult> DnscryptUpstream::exchange(ldns_pkt *request_pkt, const DnsMessageInfo *) {
+coro::Task<Upstream::ExchangeResult> DnscryptUpstream::exchange(const ldns_pkt *request_pkt, const DnsMessageInfo *) {
     tracelog_id(m_log, request_pkt, "Started");
 
     SetupResult result = co_await setup_impl();
@@ -87,7 +87,7 @@ coro::Task<DnscryptUpstream::SetupResult> DnscryptUpstream::setup_impl() {
     co_return {rtt};
 }
 
-coro::Task<Upstream::ExchangeResult> DnscryptUpstream::apply_exchange(ldns_pkt &request_pkt, Millis timeout) {
+coro::Task<Upstream::ExchangeResult> DnscryptUpstream::apply_exchange(const ldns_pkt &request_pkt, Millis timeout) {
     Impl local_upstream;
     local_upstream = *m_impl;
 

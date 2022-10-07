@@ -1,3 +1,4 @@
+#include <algorithm>
 #include <cassert>
 #include <cstring>
 #include <ldns/ldns.h>
@@ -6,6 +7,7 @@
 
 #include "common/cache.h"
 #include "common/error.h"
+#include "common/parallel.h"
 #include "common/utils.h"
 #include "dns/net/application_verifier.h"
 #include "dns/net/default_verifier.h"
@@ -288,7 +290,7 @@ DnsForwarder::~DnsForwarder() = default;
 
 static coro::Task<void> discover_dns64_prefixes(std::vector<UpstreamOptions> uss,
         std::shared_ptr<SocketFactory> socket_factory, dns64::Prefixes prefixes, Logger logger, EventLoop &loop,
-        uint32_t max_tries, Millis wait_time);
+        uint32_t max_tries, Millis wait_time, std::weak_ptr<bool> shutdown_guard);
 
 DnsForwarder::InitResult DnsForwarder::init(
         EventLoopPtr loop, const DnsProxySettings &settings, const DnsProxyEvents &events) {
@@ -386,10 +388,12 @@ DnsForwarder::InitResult DnsForwarder::init(
     if (settings.dns64.has_value()) {
         infolog(m_log, "DNS64 discovery is enabled");
         coro::run_detached(discover_dns64_prefixes(settings.dns64->upstreams, m_socket_factory, m_dns64_prefixes, m_log,
-                *m_loop, settings.dns64->max_tries, settings.dns64->wait_time));
+                *m_loop, settings.dns64->max_tries, settings.dns64->wait_time, m_shutdown_guard));
     }
 
     m_response_cache.set_capacity(m_settings->dns_cache_size);
+
+    m_random_engine.seed(std::random_device{}());
 
     infolog(m_log, "Forwarder initialized");
     return {true, err_or_warn};
@@ -397,12 +401,15 @@ DnsForwarder::InitResult DnsForwarder::init(
 
 static coro::Task<void> discover_dns64_prefixes(std::vector<UpstreamOptions> uss,
         std::shared_ptr<SocketFactory> socket_factory, dns64::Prefixes prefixes, Logger logger, EventLoop &loop,
-        uint32_t max_tries, Millis wait_time) {
-
+        uint32_t max_tries, Millis wait_time, std::weak_ptr<bool> shutdown_guard) {
+    co_await loop.co_submit();
     UpstreamFactory us_factory({.loop = loop, .socket_factory = socket_factory.get()});
     auto i = max_tries;
     while (i--) {
         co_await loop.co_sleep(wait_time);
+        if (shutdown_guard.expired()) {
+            co_return;
+        }
         for (auto &us : uss) {
             auto upstream_result = us_factory.create_upstream(us);
             if (upstream_result.has_error()) {
@@ -411,6 +418,9 @@ static coro::Task<void> discover_dns64_prefixes(std::vector<UpstreamOptions> uss
             }
 
             auto result = co_await dns64::discover_prefixes(upstream_result.value());
+            if (shutdown_guard.expired()) {
+                co_return;
+            }
             if (result.has_error()) {
                 dbglog(logger, "DNS64: error discovering prefixes:\n{}", result.error()->str());
                 continue;
@@ -476,8 +486,7 @@ coro::Task<Uint8Vector> DnsForwarder::handle_message_internal(
     if (status != LDNS_STATUS_OK) {
         dbglog(m_log, "Failed to parse payload: {} ({})", ldns_get_errorstr_by_id(status), status);
         finalize_processed_event(event, nullptr, nullptr, nullptr, std::nullopt,
-                make_error(DnsError::AE_DECODE_ERROR,
-                        AG_FMT("{} ({})", ldns_get_errorstr_by_id(status), status)));
+                make_error(DnsError::AE_DECODE_ERROR, AG_FMT("{} ({})", ldns_get_errorstr_by_id(status), status)));
         ldns_pkt_ptr response{ResponseHelpers::create_formerr_response(pkt_id)};
         log_packet(m_log, response.get(), "Format error response");
         co_return transform_response_to_raw_data(response.get());
@@ -565,22 +574,32 @@ coro::Task<Uint8Vector> DnsForwarder::handle_message_internal(
     bool is_our_do_bit = m_settings->enable_dnssec_ok && DnssecHelpers::set_do_bit(request);
 
     // If this is a retransmitted request, use fallback upstreams only
-    auto [response, selected_upstream] = co_await do_upstream_exchange(normalized_domain, request, fallback_only, info);
+    auto [response, selected_upstream] =
+            co_await do_upstreams_exchange(normalized_domain, request, fallback_only, info);
     if (guard.expired()) {
         co_return {};
     }
 
     if (!response) {
         auto err = response.error();
+        if (err->value() == DnsError::AE_TIMED_OUT) {
+            dbglog_fid(m_log, request, "Not responding due to timeout");
+            co_return {};
+        }
+        if (!m_settings->enable_servfail_on_upstreams_failure) {
+            dbglog_fid(m_log, request, "Not responding due to upstreams exchange failure");
+            co_return {};
+        }
         response = ldns_pkt_ptr{ResponseHelpers::create_servfail_response(request)};
         log_packet(m_log, response->get(), "Server failure response");
         Uint8Vector raw_response = transform_response_to_raw_data(response->get());
         finalize_processed_event(event, request, response->get(), nullptr,
-                std::make_optional(selected_upstream->options().id),
+                selected_upstream ? std::make_optional(selected_upstream->options().id) : std::nullopt,
                 make_error(DnsError::AE_EXCHANGE_ERROR, err));
         co_return raw_response;
     }
 
+    assert(selected_upstream);
     log_packet(m_log, response->get(), AG_FMT("Upstream ({}) response", selected_upstream->options().address).c_str());
 
     event.dnssec = finalize_dnssec_log_logic(response->get(), is_our_do_bit);
@@ -757,7 +776,7 @@ coro::Task<std::optional<Uint8Vector>> DnsForwarder::apply_filter(DnsFilter::Mat
 
         log_packet(m_log, rewritten_request.get(), "Rewritten cname request");
 
-        auto [response, _] = co_await this->do_upstream_exchange(rwr_cname, rewritten_request.get(), fallback_only);
+        auto [response, _] = co_await this->do_upstreams_exchange(rwr_cname, rewritten_request.get(), fallback_only);
         if (!response) {
             dbglog_id(m_log, rewritten_request.get(), "Failed to resolve rewritten cname: {}", response.error()->str());
             co_return std::nullopt;
@@ -789,70 +808,176 @@ coro::Task<std::optional<Uint8Vector>> DnsForwarder::apply_filter(DnsFilter::Mat
 }
 
 coro::Task<UpstreamExchangeResult> DnsForwarder::do_upstream_exchange(
-        std::string_view normalized_domain, ldns_pkt *request, bool fallback_only, const DnsMessageInfo *info) {
-    bool use_only_fallbacks =
-            !m_fallbacks.empty() && (fallback_only || apply_fallback_filter(normalized_domain, request));
-    std::vector<std::vector<UpstreamPtr> *> v;
-    if (!use_only_fallbacks) {
-        v.emplace_back(&m_upstreams);
-    }
-    v.emplace_back(&m_fallbacks);
-
-    assert(m_upstreams.size() + m_fallbacks.size());
-    Upstream *cur_upstream;
-    Error<DnsError> err;
+        Upstream *upstream, const ldns_pkt *request, const DnsMessageInfo *info, Millis error_rtt) {
+    tracelog_id(m_log, request, "Upstream [{}] ({}) exchange starting", upstream->options().id,
+            upstream->options().address);
     std::weak_ptr<bool> guard = m_shutdown_guard;
-    for (auto upstream_vector : v) {
-        std::vector<Upstream *> sorted_upstreams;
-        sorted_upstreams.reserve(upstream_vector->size());
-        for (auto &u : *upstream_vector) {
-            sorted_upstreams.push_back(u.get());
-        }
-        std::sort(sorted_upstreams.begin(), sorted_upstreams.end(), [](Upstream *a, Upstream *b) {
-            return (a->rtt() < b->rtt());
-        });
-
-        for (auto &sorted_upstream : sorted_upstreams) {
-            cur_upstream = sorted_upstream;
-            std::string address = cur_upstream->options().address;
-
-            ag::utils::Timer t;
-            tracelog_id(m_log, request, "Upstream ({}) is starting an exchange", address);
-            Upstream::ExchangeResult result = co_await cur_upstream->exchange(request, info);
-            tracelog_id(m_log, request, "Upstream's ({}) exchanging is done", address);
-            if (guard.expired()) {
-                co_return {make_error(DnsError::AE_SHUTTING_DOWN), nullptr};
-            }
-            cur_upstream->adjust_rtt(t.elapsed<Millis>());
-
-            if (!result.has_error()) {
-                co_return {std::move(result.value()), cur_upstream};
-            } else if (result.error()->value() != DnsError::AE_TIMED_OUT
-                    && result.error()->value() != DnsError::AE_SHUTTING_DOWN) {
-                // https://github.com/AdguardTeam/DnsLibs/issues/86
-                Upstream::ExchangeResult retry_result = co_await cur_upstream->exchange(request, info);
-                if (!retry_result.has_error()) {
-                    co_return {std::move(retry_result.value()), cur_upstream};
-                }
-                err = make_error(DnsError::AE_NESTED_DNS_ERROR,
-                        AG_FMT("Upstream ({}) exchange failed: first reason is:\n{}\nsecond reason is:", address,
-                                result.error()->str()),
-                        retry_result.error());
-                dbglog_id(m_log, request, "{}", err->str());
-            } else {
-                err = make_error(DnsError::AE_NESTED_DNS_ERROR,
-                        AG_FMT("Upstream ({}) exchange failed", address, result.error()->str()));
-                dbglog_id(m_log, request, "{}", err->str());
-            }
-        }
+    ag::utils::Timer timer;
+    auto result = co_await upstream->exchange(request, info);
+    auto elapsed = timer.elapsed<Millis>();
+    if (guard.expired()) {
+        co_return {make_error(DnsError::AE_SHUTTING_DOWN), nullptr};
     }
-    co_return {err, cur_upstream};
+    tracelog_id(
+            m_log, request, "Upstream [{}] ({}) exchange done", upstream->options().id, upstream->options().address);
+
+    // They say it's normal for a server to close connection unexpectedly:
+    // https://github.com/AdguardTeam/DnsLibs/issues/86
+    // Give it one more chance if that is what happened.
+    if (result.has_error()
+            && (result.error()->value() == DnsError::AE_CONNECTION_CLOSED
+                    || result.error()->value() == DnsError::AE_CURL_ERROR)) {
+        tracelog_id(m_log, request, "Upstream [{}] ({}) exchange retry starting", upstream->options().id,
+                upstream->options().address);
+        timer.reset();
+        result = co_await upstream->exchange(request, info);
+        elapsed = timer.elapsed<Millis>();
+        if (guard.expired()) {
+            co_return {make_error(DnsError::AE_SHUTTING_DOWN), nullptr};
+        }
+        tracelog_id(m_log, request, "Upstream [{}] ({}) exchange retry done", upstream->options().id,
+                upstream->options().address);
+    }
+
+    if (result.has_error()) {
+        upstream->update_rtt_estimate(error_rtt);
+    } else {
+        upstream->update_rtt_estimate(elapsed);
+    }
+
+    co_return {std::move(result), upstream};
+}
+
+// Take a shared pointer to a request to prolong its life after the parent function returns after receiving
+// the first succesful exchange result. Because currently there's no way to cancel the other exchanges.
+coro::Task<UpstreamExchangeResult> DnsForwarder::do_upstream_exchange_shared(
+        Upstream *upstream, std::shared_ptr<const ldns_pkt> request, const DnsMessageInfo *info, Millis error_rtt) {
+    co_return co_await do_upstream_exchange(upstream, request.get(), info, error_rtt);
+}
+
+// Do exchanges with all `upstreams` in parallel.
+// If `wait_all` is `false`, return the first non-error exchange result.
+// If `wait_all` is `true`, wait for all exchange results and return the first one that is
+// not an error, and does not contain an error DNS response (SERVFAIL/NXDOMAIN/etc.).
+// In both cases if the aforementioned results are not available, return an error.
+coro::Task<UpstreamExchangeResult> DnsForwarder::do_parallel_exchange(const std::vector<Upstream *> &upstreams,
+        const ldns_pkt *request, const DnsMessageInfo *info, Millis error_rtt, bool wait_all) {
+    std::weak_ptr<bool> guard = m_shutdown_guard;
+    if (wait_all) {
+        auto all_of = parallel::all_of<UpstreamExchangeResult>();
+        for (Upstream *upstream : upstreams) {
+            all_of.add(do_upstream_exchange(upstream, request, info, error_rtt));
+        }
+        std::vector<UpstreamExchangeResult> results = co_await all_of;
+        if (guard.expired()) {
+            co_return {make_error(DnsError::AE_SHUTTING_DOWN), nullptr};
+        }
+        std::sort(results.begin(), results.end(), [](const UpstreamExchangeResult &l, const UpstreamExchangeResult &r) {
+            if (l.result.has_error()) {
+                return false; // Error result never wins.
+            }
+            if (r.result.has_error()) {
+                return true; // A non-error result always wins against an error result.
+            }
+            ldns_pkt_rcode lcode = ldns_pkt_get_rcode(l.result.value().get());
+            ldns_pkt_rcode rcode = ldns_pkt_get_rcode(r.result.value().get());
+            if (lcode == rcode) {
+                if (lcode == LDNS_RCODE_NOERROR) { // If both are NOERROR, the one with more answers wins.
+                    return ldns_pkt_ancount(l.result.value().get()) > ldns_pkt_ancount(r.result.value().get());
+                }
+                return false; // If RCODEs are the same, no one wins.
+            }
+            return lcode == LDNS_RCODE_NOERROR; // If RCODEs are different, NOERROR wins.
+        });
+        co_return std::move(results.front());
+    }
+    UpstreamExchangeResult last_error;
+    auto any_of_cond = parallel::any_of_cond<UpstreamExchangeResult>([&last_error](const UpstreamExchangeResult &r) {
+        if (r.result.has_error()) {
+            last_error = {r.result.error(), r.upstream};
+            return false;
+        }
+        return true;
+    });
+    std::shared_ptr<const ldns_pkt> request_shared{ldns_pkt_clone(request)};
+    for (Upstream *upstream : upstreams) {
+        any_of_cond.add(do_upstream_exchange_shared(upstream, request_shared, info, error_rtt));
+    }
+    std::optional<UpstreamExchangeResult> result = co_await any_of_cond;
+    if (guard.expired()) {
+        co_return {make_error(DnsError::AE_SHUTTING_DOWN), nullptr};
+    }
+    if (!result) {
+        co_return last_error;
+    }
+    co_return std::move(*result);
+}
+
+static std::pair<std::vector<Upstream *>, Millis> collect_upstreams(const std::vector<UpstreamPtr> &src) {
+    Millis max_rtt{0};
+    std::vector<Upstream *> upstreams;
+    upstreams.reserve(src.size());
+    for (const UpstreamPtr &u : src) {
+        max_rtt = std::max(max_rtt, u->rtt_estimate().value_or(Millis{0}));
+        upstreams.push_back(u.get());
+    }
+    return {std::move(upstreams), max_rtt};
+}
+
+coro::Task<UpstreamExchangeResult> DnsForwarder::do_upstreams_exchange(
+        std::string_view normalized_domain, const ldns_pkt *request, bool force_fallback, const DnsMessageInfo *info) {
+    bool fallback = !m_fallbacks.empty() && (force_fallback || apply_fallback_filter(normalized_domain, request));
+    auto [upstreams_to_query, max_rtt] = collect_upstreams(fallback ? m_fallbacks : m_upstreams);
+    // Fallbacks are always queried in parallel with `wait_all` enabled.
+    if (fallback || m_settings->enable_parallel_upstream_queries) {
+        co_return co_await do_parallel_exchange(upstreams_to_query, request, info, 2 * max_rtt, /*wait_all*/ fallback);
+    }
+    // Weighted random load balancing below.
+    UpstreamExchangeResult last_result;
+    std::vector<double> upstream_weights(upstreams_to_query.size(), 1.0);
+    while (!upstreams_to_query.empty()) {
+        std::optional<size_t> selected_idx;
+        for (size_t i = 0; i < upstreams_to_query.size(); ++i) {
+            auto rtt = upstreams_to_query[i]->rtt_estimate();
+            if (rtt == std::nullopt) { // This upstream hasn't been queried yet, select it.
+                selected_idx = i;
+                break;
+            }
+            upstream_weights[i] /= (double) rtt->count();
+        }
+        if (!selected_idx) { // All upstreams have been queried at least once, select an upstream at random.
+            std::discrete_distribution<size_t> distrib(upstream_weights.begin(), upstream_weights.end());
+            selected_idx = distrib(m_random_engine);
+        }
+        std::weak_ptr<bool> guard = m_shutdown_guard;
+        last_result = co_await do_upstream_exchange(upstreams_to_query[*selected_idx], request, info, 2 * max_rtt);
+        if (guard.expired()) {
+            co_return {make_error(DnsError::AE_SHUTTING_DOWN), nullptr};
+        }
+        if (last_result.result.has_value() || last_result.result.error()->value() == DnsError::AE_TIMED_OUT) {
+            // We either got a valid result, or got a timed out error.
+            // In case of a timed out error, it's pointless to continue querying any other upstreams since
+            // the client has probably already timed out itself and isn't waiting for a response anymore.
+            co_return last_result;
+        }
+        // Disqualify the selected upstream and select a new one.
+        std::swap(upstreams_to_query[*selected_idx], upstreams_to_query.back());
+        std::swap(upstream_weights[*selected_idx], upstream_weights.back());
+        upstreams_to_query.pop_back();
+        upstream_weights.pop_back();
+    }
+    assert(last_result.result.has_error());
+    if (m_settings->enable_fallback_on_upstreams_failure && !m_fallbacks.empty()) {
+        auto [fallbacks, fallbacks_max_rtt] = collect_upstreams(m_fallbacks);
+        co_return co_await do_parallel_exchange(fallbacks, request, info, 2 * fallbacks_max_rtt, /*wait_all*/ true);
+    }
+    co_return last_result;
 }
 
 coro::Task<void> DnsForwarder::optimistic_cache_background_resolve(ldns_pkt_ptr req, std::string normalized_domain) {
     dbglog_id(m_log, req.get(), "Starting async upstream exchange for {}", normalized_domain);
     std::weak_ptr<bool> guard = m_shutdown_guard;
-    auto [res, upstream] = co_await do_upstream_exchange(normalized_domain, req.get(), false);
+    auto [res, upstream] = co_await do_upstreams_exchange(normalized_domain, req.get(), false);
     if (guard.expired()) {
         co_return;
     }

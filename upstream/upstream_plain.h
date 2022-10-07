@@ -29,7 +29,7 @@ public:
 
 private:
     Error<InitError> init() override;
-    coro::Task<ExchangeResult> exchange(ldns_pkt *request_pkt, const DnsMessageInfo *info) override;
+    coro::Task<ExchangeResult> exchange(const ldns_pkt *request_pkt, const DnsMessageInfo *info) override;
 
     Logger m_log;
 

@@ -1,7 +1,10 @@
 #pragma once
 
+#include <algorithm>
 #include <chrono>
 #include <memory>
+#include <numeric>
+#include <optional>
 #include <string>
 #include <string_view>
 #include <utility>
@@ -93,7 +96,6 @@ public:
 
     Upstream(UpstreamOptions opts, const UpstreamFactoryConfig &config)
             : m_options(std::move(opts)), m_config(config) {
-        m_rtt = Millis::zero();
         if (!m_options.timeout.count()) {
             m_options.timeout = DEFAULT_TIMEOUT;
         }
@@ -115,7 +117,7 @@ public:
      * @param info (optional) out of band info about the forwarded DNS request message
      * @return DNS response message or an error
      */
-    virtual coro::Task<ExchangeResult> exchange(ldns_pkt *request, const DnsMessageInfo *info = nullptr) = 0;
+    virtual coro::Task<ExchangeResult> exchange(const ldns_pkt *request, const DnsMessageInfo *info = nullptr) = 0;
 
     [[nodiscard]] const UpstreamOptions &options() const { return m_options; }
 
@@ -136,28 +138,59 @@ public:
                 std::move(secure_socket_parameters));
     }
 
-    Millis rtt() {
-        std::lock_guard<std::mutex> lk(m_rtt_guard);
-        return m_rtt;
+    /**
+     * Return the round trip time estimate for this upstream.
+     * Return std::nullopt if no data points have been gathered yet.
+     */
+    std::optional<Millis> rtt_estimate() const {
+        return m_rtt_estimate ? std::make_optional(m_rtt_estimate->get()) : std::nullopt;
     }
 
     /**
-     * Update RTT
-     * @param elapsed spent time in exchange()
+     * Update the round trip time estimate with a new measured value.
      */
-    void adjust_rtt(Millis elapsed) {
-        std::lock_guard<std::mutex> lk(m_rtt_guard);
-        m_rtt = (m_rtt + elapsed) / 2;
+    void update_rtt_estimate(Millis elapsed) {
+        if (!m_rtt_estimate) {
+            m_rtt_estimate.emplace(RTT_AVG_INIT);
+        }
+        m_rtt_estimate->update(elapsed); // NOLINT(bugprone-unchecked-optional-access)
     }
 
 protected:
+    /** Keeps the average of the last N values of type T. */
+    template <typename T, size_t N>
+    class RunningAverage {
+    private:
+        T m_vals[N]{};
+        size_t m_idx = 0;
+
+    public:
+        explicit RunningAverage(T init) {
+            set(init);
+        }
+
+        void update(T new_val) {
+            m_vals[m_idx] = new_val; // NOLINT(cppcoreguidelines-pro-bounds-constant-array-index)
+            m_idx = (m_idx + 1) % N;
+        }
+
+        [[nodiscard]] T get() const {
+            return std::accumulate(std::begin(m_vals), std::end(m_vals), T{}) / N;
+        }
+
+        void set(T value) {
+            std::fill(std::begin(m_vals), std::end(m_vals), value);
+        }
+    };
+
     /** Upstream options */
     UpstreamOptions m_options;
     /** Upstream factory configuration */
     UpstreamFactoryConfig m_config;
-    /** RTT + mutex */
-    Millis m_rtt;
-    std::mutex m_rtt_guard;
+    /** RTT estimate */
+    static constexpr size_t RTT_AVG_WINDOW_SIZE = 10;
+    static constexpr Millis RTT_AVG_INIT{50};
+    std::optional<RunningAverage<Millis, RTT_AVG_WINDOW_SIZE>> m_rtt_estimate;
 };
 
 /**

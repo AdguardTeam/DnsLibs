@@ -8,9 +8,6 @@
 #ifdef _WIN32
 #include <detours.h>
 
-using namespace ag;
-using namespace ag::dns;
-
 /**
  * Deactivated version of SetUnhandledExceptionFilter that does nothing.
  * This is needed because there are many places in runtime where SetUnhandledExceptionFilter is called.
@@ -37,6 +34,9 @@ void ag_enable_SetUnhandledExceptionFilter(void) {
     DetourTransactionCommit();
 }
 #endif // _WIN32
+
+using namespace ag;
+using namespace ag::dns;
 
 static constexpr const char *AGCVR_TO_STRING[] = {
         "ERROR_OK",
@@ -456,6 +456,9 @@ static DnsProxySettings marshal_settings(const ag_dnsproxy_settings *c_settings)
     settings.enable_dnssec_ok = c_settings->enable_dnssec_ok;
     settings.enable_retransmission_handling = c_settings->enable_retransmission_handling;
     settings.block_ech = c_settings->block_ech;
+    settings.enable_parallel_upstream_queries = c_settings->enable_parallel_upstream_queries;
+    settings.enable_fallback_on_upstreams_failure = c_settings->enable_fallback_on_upstreams_failure;
+    settings.enable_servfail_on_upstreams_failure = c_settings->enable_servfail_on_upstreams_failure;
 
     return settings;
 }

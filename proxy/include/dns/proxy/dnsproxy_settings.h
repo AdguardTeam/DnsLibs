@@ -131,7 +131,26 @@ struct DnsProxySettings {
      * This is needed when DnsProxy is used inside network extension and needs to use routes of some VPN.
      * No-op on non-Apple platforms.
      */
-    bool enable_route_resolver = true;
+    bool enable_route_resolver;
+
+    /**
+     * If true, all upstreams are queried in parallel, and the first response is returned.
+     */
+    bool enable_parallel_upstream_queries;
+
+    /**
+     * If true, normal queries will be forwarded to fallback upstreams if all normal upstreams failed.
+     * Otherwise, fallback upstreams will only be used to resolve domains from `fallback_domains`.
+     */
+    bool enable_fallback_on_upstreams_failure;
+
+    /**
+     * If true, when all upstreams (including fallback upstreams) fail to provide a response,
+     * the proxy will respond with a SERVFAIL packet. Otherwise, no response is sent on such a failure.
+     * In any case, the proxy will never respond with a SERVFAIL packet due to all upstreams timing out,
+     * nor to a request that has been retransmitted.
+     */
+    bool enable_servfail_on_upstreams_failure;
 };
 
 }  // namespace ag::dns

@@ -33,7 +33,7 @@ public:
 
 private:
     Error<InitError> init() override;
-    coro::Task<ExchangeResult> exchange(ldns_pkt *request, const DnsMessageInfo *info = nullptr) override;
+    coro::Task<ExchangeResult> exchange(const ldns_pkt *request, const DnsMessageInfo *info = nullptr) override;
 
     Logger m_log;
     /** TLS connection pool */
