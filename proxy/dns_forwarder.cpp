@@ -859,8 +859,10 @@ coro::Task<UpstreamExchangeResult> DnsForwarder::do_upstream_exchange(
                         retry_result.error());
                 dbglog_id(m_log, request, "{}", err->str());
             } else {
+                std::string error_str = result.error()->str();
+                std::string address_copy = address;
                 err = make_error(
-                        DE_NESTED_DNS_ERROR, AG_FMT("Upstream ({}) exchange failed: {}", address, result.error()->str()));
+                        DE_NESTED_DNS_ERROR, AG_FMT("Upstream ({}) exchange failed: {}", address_copy, error_str));
                 dbglog_id(m_log, request, "{}", err->str());
             }
         }
