@@ -805,6 +805,9 @@ coro::Task<std::optional<Uint8Vector>> DnsForwarder::apply_filter(DnsFilter::Mat
     co_return raw_response;
 }
 
+#ifdef ANDROID
+[[clang::optnone]]
+#endif
 coro::Task<UpstreamExchangeResult> DnsForwarder::do_upstream_exchange(
         std::string_view normalized_domain, ldns_pkt *request, bool fallback_only, const DnsMessageInfo *info) {
     bool use_only_fallbacks =
@@ -861,8 +864,8 @@ coro::Task<UpstreamExchangeResult> DnsForwarder::do_upstream_exchange(
             } else {
                 std::string error_str = result.error()->str();
                 std::string address_copy = address;
-                err = make_error(
-                        DE_NESTED_DNS_ERROR, AG_FMT("Upstream ({}) exchange failed: {}", address_copy, error_str));
+                std::string message = AG_FMT("Upstream ({}) exchange failed: {}", address_copy, error_str);
+                err = make_error(DE_NESTED_DNS_ERROR, message);
                 dbglog_id(m_log, request, "{}", err->str());
             }
         }
