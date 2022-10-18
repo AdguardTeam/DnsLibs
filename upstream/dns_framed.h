@@ -78,18 +78,18 @@ public:
             DnsFramedConnection *self;
             Request *req;
             bool await_ready() {
-                if (self->m_state == Connection::Status::PENDING) {
-                    return false;
-                }
                 if (self->m_state == Connection::Status::CLOSED) {
                     req->reply = Reply(make_error(DE_CONNECTION_CLOSED));
+                    return true;
                 }
-                return true;
+                return self->m_state == Connection::Status::ACTIVE;
             }
             void await_suspend(std::coroutine_handle<> h) {
                 self->m_requests[req->request_id] = req;
                 req->caller = h;
-                self->connect();
+                if (self->m_state == Connection::Status::IDLE) {
+                    self->connect();
+                }
             }
             void await_resume() {}
         };

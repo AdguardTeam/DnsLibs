@@ -82,6 +82,8 @@ public:
     }
 
     void connect() override {
+        assert(m_state == Connection::Status::IDLE);
+        m_state = Connection::Status::PENDING;
         coro::run_detached(this->co_connect());
     }
 
