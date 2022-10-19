@@ -325,7 +325,7 @@ std::pair<bool, ErrString> DnsForwarder::init(
     if (settings.outbound_proxy.has_value()) {
         sf_parameters.oproxy = {
                 .settings = &m_settings->outbound_proxy.value(),
-                .bootstrapper = std::make_unique<ProxyBootstrapper>(*m_loop, *m_settings, *m_events),
+                .bootstrapper = std::make_unique<ProxyBootstrapper>(*m_loop, *m_settings, *m_events, m_shutdown_guard),
         };
     }
 
