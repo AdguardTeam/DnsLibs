@@ -16,11 +16,7 @@ namespace ag::dns {
 const ErrString DnsProxy::LISTENER_ERROR = "Listener failure";
 
 static const DnsProxySettings DEFAULT_PROXY_SETTINGS = {
-        .upstreams =
-                {
-                        {.address = "8.8.8.8:53", .id = 1},
-                        {.address = "8.8.4.4:53", .id = 2},
-                },
+        .upstreams = {},
         .fallbacks = {},
         .fallback_domains =
                 {
