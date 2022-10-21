@@ -21,3 +21,5 @@ commit_hash:
     hash: "d3698b3e8626acccbb8082d573a6d2f6110dfa06"
   "2.0.31":
     hash: "049a5f3f2752032b4498c60b8a072a8f6d4053bb"
+  "2.0.32":
+    hash: "566a6843ec184bd19956b65805ecc2c0e63755d3"
