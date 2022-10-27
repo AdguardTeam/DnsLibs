@@ -57,16 +57,18 @@ std::vector<uv_handle_t *> EventLoop::get_active_handles() {
 }
 
 void EventLoop::force_fire_timers() {
-    auto force_fire_timers = [](uv_handle_t *handle, void * /* arg */){
+    auto force_fire_timers = [](uv_handle_t *handle, void *data){
+        auto *self = (EventLoop *) data;
         if (handle->type == UV_TIMER && uv_is_active(handle)) {
             auto *timer = (uv_timer_t *) handle;
             uv_timer_stop(timer);
             if (timer->timer_cb) {
+                dbglog(((EventLoop *)self)->m_log, "Force firing timer {}", (void *)timer);
                 timer->timer_cb(timer);
             }
         }
     };
-    uv_walk(m_handle->raw(), force_fire_timers, nullptr);
+    uv_walk(m_handle->raw(), force_fire_timers, this);
 }
 
 void EventLoop::execute_stopper_iteration() noexcept {

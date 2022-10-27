@@ -177,9 +177,8 @@ void DnsForwarder::finalize_processed_event(DnsRequestProcessedEvent &event, con
 // If we know any DNS64 prefixes, request A RRs from `upstream` and
 // return a synthesized AAAA response or nullptr if synthesis was unsuccessful
 coro::Task<ldns_pkt_ptr> DnsForwarder::try_dns64_aaaa_synthesis(Upstream *upstream, const ldns_pkt_ptr &request) const {
-    std::scoped_lock l(m_dns64_prefixes->mtx);
 
-    if (m_dns64_prefixes->val.empty()) {
+    if (m_dns64_state->prefixes.empty()) {
         // No prefixes
         co_return nullptr;
     }
@@ -228,7 +227,7 @@ coro::Task<ldns_pkt_ptr> DnsForwarder::try_dns64_aaaa_synthesis(Upstream *upstre
 
         const Uint8View ip4{ldns_rdf_data(rdf), ldns_rdf_size(rdf)};
 
-        for (const Uint8Vector &pref : m_dns64_prefixes->val) { // assume `dns64_prefixes->mtx` is held
+        for (const Uint8Vector &pref : m_dns64_state->prefixes) {
             const auto synth_res = dns64::synthesize_ipv4_embedded_ipv6_address({pref.data(), std::size(pref)}, ip4);
             if (synth_res.has_error()) {
                 dbglog_fid(m_log, request.get(), "DNS64: could not synthesize IPv4-embedded IPv6:\n{}",
@@ -286,7 +285,7 @@ DnsForwarder::DnsForwarder() = default;
 DnsForwarder::~DnsForwarder() = default;
 
 static coro::Task<void> discover_dns64_prefixes(std::vector<UpstreamOptions> uss,
-        std::shared_ptr<SocketFactory> socket_factory, dns64::Prefixes prefixes, Logger logger, EventLoop &loop,
+        std::shared_ptr<SocketFactory> socket_factory, dns64::StatePtr state, Logger logger, EventLoop &loop,
         uint32_t max_tries, Millis wait_time, std::weak_ptr<bool> shutdown_guard);
 
 std::pair<bool, ErrString> DnsForwarder::init(
@@ -394,10 +393,10 @@ std::pair<bool, ErrString> DnsForwarder::init(
         m_fallback_filter_handle = handle;
     }
 
-    m_dns64_prefixes = std::make_shared<WithMtx<std::vector<Uint8Vector>>>();
+    m_dns64_state = std::make_shared<dns64::State>();
     if (settings.dns64.has_value()) {
         infolog(m_log, "DNS64 discovery is enabled");
-        coro::run_detached(discover_dns64_prefixes(settings.dns64->upstreams, m_socket_factory, m_dns64_prefixes, m_log,
+        coro::run_detached(discover_dns64_prefixes(settings.dns64->upstreams, m_socket_factory, m_dns64_state, m_log,
                 *m_loop, settings.dns64->max_tries, settings.dns64->wait_time, m_shutdown_guard));
     }
 
@@ -408,7 +407,7 @@ std::pair<bool, ErrString> DnsForwarder::init(
 }
 
 static coro::Task<void> discover_dns64_prefixes(std::vector<UpstreamOptions> uss,
-        std::shared_ptr<SocketFactory> socket_factory, dns64::Prefixes prefixes, Logger logger, EventLoop &loop,
+        std::shared_ptr<SocketFactory> socket_factory, dns64::StatePtr state, Logger logger, EventLoop &loop,
         uint32_t max_tries, Millis wait_time, std::weak_ptr<bool> shutdown_guard) {
     co_await loop.co_submit();
     UpstreamFactory us_factory({.loop = loop, .socket_factory = socket_factory.get()});
@@ -419,16 +418,20 @@ static coro::Task<void> discover_dns64_prefixes(std::vector<UpstreamOptions> uss
             co_return;
         }
         for (auto &us : uss) {
-            auto upstream_result = us_factory.create_upstream(us);
-            if (upstream_result.has_error()) {
-                dbglog(logger, "DNS64: failed to create DNS64 upstream: {}", upstream_result.error()->str());
-                continue;
+            {
+                auto upstream_result = us_factory.create_upstream(us);
+                if (upstream_result.has_error()) {
+                    dbglog(logger, "DNS64: failed to create DNS64 upstream: {}", upstream_result.error()->str());
+                    continue;
+                }
+                state->discovering_upstream = std::move(upstream_result.value());
             }
 
-            auto result = co_await dns64::discover_prefixes(upstream_result.value());
+            auto result = co_await dns64::discover_prefixes(state->discovering_upstream);
             if (shutdown_guard.expired()) {
                 co_return;
             }
+            state->discovering_upstream.reset();
             if (result.has_error()) {
                 dbglog(logger, "DNS64: error discovering prefixes:\n{}", result.error()->str());
                 continue;
@@ -439,10 +442,9 @@ static coro::Task<void> discover_dns64_prefixes(std::vector<UpstreamOptions> uss
                 continue;
             }
 
-            std::scoped_lock l(prefixes->mtx);
-            prefixes->val = std::move(result.value());
+            state->prefixes = std::move(result.value());
 
-            infolog(logger, "DNS64 prefixes discovered: {}", prefixes->val.size());
+            infolog(logger, "DNS64 prefixes discovered: {}", state->prefixes.size());
             co_return;
         }
     }
@@ -462,6 +464,12 @@ void DnsForwarder::deinit() {
 
     infolog(m_log, "Destroying fallback upstreams...");
     m_fallbacks.clear();
+    infolog(m_log, "Done");
+
+    infolog(m_log, "Destroying DNS64 state...");
+    if (m_dns64_state) {
+        m_dns64_state->discovering_upstream.reset();
+    }
     infolog(m_log, "Done");
 
     infolog(m_log, "Destroying DNS filter...");

@@ -87,7 +87,7 @@ private:
     DnsFilter m_filter;
     DnsFilter::Handle m_filter_handle = nullptr;
     DnsFilter::Handle m_fallback_filter_handle = nullptr;
-    dns64::Prefixes m_dns64_prefixes;
+    dns64::StatePtr m_dns64_state = nullptr;
     std::shared_ptr<SocketFactory> m_socket_factory;
     std::shared_ptr<bool> m_shutdown_guard;
 

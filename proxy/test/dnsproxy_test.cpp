@@ -1079,8 +1079,8 @@ TEST_F(DnsProxyTest, FallbacksIgnoreProxySocks) {
 
 TEST_F(DnsProxyTest, FallbacksIgnoreProxyHttp) {
     DnsProxySettings settings = make_dnsproxy_settings();
-    settings.upstreams = {{.address = "tcp://94.140.14.140"}};
-    settings.fallbacks = {{.address = "tcp://94.140.14.140"}};
+    settings.upstreams = {{.address = "tcp://94.140.14.14"}};
+    settings.fallbacks = {{.address = "tcp://94.140.14.14"}};
     // some nonexistent proxy
     settings.outbound_proxy = {{OutboundProxyProtocol::HTTP_CONNECT, "255.255.255.255", 1}};
 
