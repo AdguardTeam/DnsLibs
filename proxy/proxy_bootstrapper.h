@@ -15,11 +15,13 @@ namespace ag::dns {
 
 struct ProxyBootstrapper : public SocketFactory::ProxyBootstrapper {
     SocketFactory socket_factory;
+    std::weak_ptr<bool> shutdown_guard;
     /// Configuration of the upstream factory which creates resolving upstream
     UpstreamFactoryConfig upstream_config;
     Logger log{"Proxy bootstrapper"};
 
-    ProxyBootstrapper(EventLoop &loop, const DnsProxySettings &settings, const DnsProxyEvents &events)
+    ProxyBootstrapper(EventLoop &loop, const DnsProxySettings &settings, const DnsProxyEvents &events,
+            std::weak_ptr<bool> shutdown_guard)
             : socket_factory({
                     .loop = loop,
                     .verifier = (events.on_certificate_verification != nullptr)
@@ -28,6 +30,7 @@ struct ProxyBootstrapper : public SocketFactory::ProxyBootstrapper {
                             : std::unique_ptr<CertificateVerifier>(new DefaultVerifier),
                     .enable_route_resolver = settings.enable_route_resolver,
             })
+            , shutdown_guard(std::move(shutdown_guard))
             , upstream_config(UpstreamFactoryConfig{
                       .loop = loop,
                       .socket_factory = &this->socket_factory,
@@ -57,19 +60,23 @@ struct ProxyBootstrapper : public SocketFactory::ProxyBootstrapper {
             return false;
         }
 
-        coro::run_detached([](Logger log_, Bootstrapper bs, Callback cb) -> coro::Task<void> {
-            Bootstrapper::ResolveResult result = co_await bs.get();
+        coro::run_detached(
+                [](Logger log_, Bootstrapper bs, Callback cb, std::weak_ptr<bool> guard) -> coro::Task<void> {
+                    Bootstrapper::ResolveResult result = co_await bs.get();
+                    if (guard.expired()) {
+                        co_return;
+                    }
 
-            std::optional<SocketAddress> resolved;
-            if (result.error != nullptr) {
-                warnlog(log_, "Bootstrap failure: {}", result.error->str());
-            } else if (result.addresses.empty()) {
-                warnlog(log_, "Bootstrapped to empty list");
-            } else {
-                resolved = std::make_optional(result.addresses.front());
-            }
-            cb(resolved);
-        }(this->log, std::move(bs), std::move(callback)));
+                    std::optional<SocketAddress> resolved;
+                    if (result.error != nullptr) {
+                        warnlog(log_, "Bootstrap failure: {}", result.error->str());
+                    } else if (result.addresses.empty()) {
+                        warnlog(log_, "Bootstrapped to empty list");
+                    } else {
+                        resolved = std::make_optional(result.addresses.front());
+                    }
+                    cb(resolved);
+                }(this->log, std::move(bs), std::move(callback), this->shutdown_guard));
 
         return true;
     }

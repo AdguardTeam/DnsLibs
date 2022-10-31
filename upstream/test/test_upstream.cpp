@@ -325,7 +325,7 @@ static constexpr std::string_view truncated_test_data[]{
         // See the details here: https://github.com/AdguardTeam/AdGuardHome/issues/524
         // AdGuard DNS (DNSCrypt)
         "sdns://"
-        "AQIAAAAAAAAAFDE3Ni4xMDMuMTMwLjEzMDo1NDQzINErR_JS3PLCu_iZEIbq95zkSV2LFsigxDIuUso_"
+        "AQIAAAAAAAAAETk0LjE0MC4xNC4xNDo1NDQzINErR_JS3PLCu_iZEIbq95zkSV2LFsigxDIuUso_"
         "OQhzIjIuZG5zY3J5cHQuZGVmYXVsdC5uczEuYWRndWFyZC5jb20",
 };
 
@@ -365,7 +365,7 @@ static const UpstreamTestData test_upstreams_data[]{
         },
         {// AdGuard DNS (DNSCrypt)
                 "sdns://"
-                "AQIAAAAAAAAAFDE3Ni4xMDMuMTMwLjEzMDo1NDQzINErR_JS3PLCu_iZEIbq95zkSV2LFsigxDIuUso_"
+                "AQIAAAAAAAAAETk0LjE0MC4xNC4xNDo1NDQzINErR_JS3PLCu_iZEIbq95zkSV2LFsigxDIuUso_"
                 "OQhzIjIuZG5zY3J5cHQuZGVmYXVsdC5uczEuYWRndWFyZC5jb20",
                 {}},
         {// AdGuard Family (DNSCrypt)
@@ -445,7 +445,7 @@ static const UpstreamTestData upstream_dot_bootstrap_test_data[]{
         {
                 "tls://one.one.one.one/",
                 {"sdns://"
-                 "AQIAAAAAAAAAFDE3Ni4xMDMuMTMwLjEzMDo1NDQzINErR_JS3PLCu_iZEIbq95zkSV2LFsigxDIuUso_"
+                 "AQIAAAAAAAAAETk0LjE0MC4xNC4xNDo1NDQzINErR_JS3PLCu_iZEIbq95zkSV2LFsigxDIuUso_"
                  "OQhzIjIuZG5zY3J5cHQuZGVmYXVsdC5uczEuYWRndWFyZC5jb20"}, // AdGuard DNS (DNSCrypt)
         },
 };
@@ -577,7 +577,7 @@ INSTANTIATE_TEST_SUITE_P(TcpOnlyProxy, DeadProxySuccess,
 INSTANTIATE_TEST_SUITE_P(TcpUdpProxy, DeadProxySuccess,
         ::testing::Combine(::testing::Values("8.8.8.8",
                                    "sdns://"
-                                   "AQIAAAAAAAAAFDE3Ni4xMDMuMTMwLjEzMDo1NDQzINErR_JS3PLCu_iZEIbq95zkSV2LFsigxDIuUso_"
+                                   "AQIAAAAAAAAAETk0LjE0MC4xNC4xNDo1NDQzINErR_JS3PLCu_iZEIbq95zkSV2LFsigxDIuUso_"
                                    "OQhzIjIuZG5zY3J5cHQuZGVmYXVsdC5uczEuYWRndWFyZC5jb20",
                                    "quic://dns.adguard.com:8853"),
                 ::testing::Values(OutboundProxySettings{
@@ -614,7 +614,7 @@ INSTANTIATE_TEST_SUITE_P(TcpOnlyProxy, DeadProxyFailure,
 INSTANTIATE_TEST_SUITE_P(UdpProxy, DeadProxyFailure,
         ::testing::Combine(::testing::Values("8.8.8.8",
                                    "sdns://"
-                                   "AQIAAAAAAAAAFDE3Ni4xMDMuMTMwLjEzMDo1NDQzINErR_JS3PLCu_iZEIbq95zkSV2LFsigxDIuUso_"
+                                   "AQIAAAAAAAAAETk0LjE0MC4xNC4xNDo1NDQzINErR_JS3PLCu_iZEIbq95zkSV2LFsigxDIuUso_"
                                    "OQhzIjIuZG5zY3J5cHQuZGVmYXVsdC5uczEuYWRndWFyZC5jb20",
                                    "quic://dns.adguard.com:8853"),
                 ::testing::Values(OutboundProxySettings{OutboundProxyProtocol::SOCKS5_UDP, "127.0.0.1", 42})));

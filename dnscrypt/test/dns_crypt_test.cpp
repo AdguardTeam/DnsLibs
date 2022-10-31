@@ -140,7 +140,7 @@ static constexpr ParseStampTestDataType parse_stamp_test_data[]{
                 "sdns://AwAAAAAAAAAAAAAHMS4xLjEuMQ", parse_stamp_test_data_log},
         {// AdGuard DNSCrypt
                 "sdns://"
-                "AQIAAAAAAAAAFDE3Ni4xMDMuMTMwLjEzMDo1NDQzINErR_JS3PLCu_iZEIbq95zkSV2LFsigxDIuUso_"
+                "AQIAAAAAAAAAETk0LjE0MC4xNC4xNDo1NDQzINErR_JS3PLCu_iZEIbq95zkSV2LFsigxDIuUso_"
                 "OQhzIjIuZG5zY3J5cHQuZGVmYXVsdC5uczEuYWRndWFyZC5jb20",
                 [](const char *stamp_str, const ServerStamp &stamp) {
                     parse_stamp_test_data_log(stamp_str, stamp);
@@ -190,7 +190,7 @@ TEST_F(DnscryptTest, TimeoutOnDialExchange) {
     co_await m_loop->co_submit();
     // AdGuard DNS
     static constexpr auto stamp_str = "sdns://"
-                                      "AQIAAAAAAAAAFDE3Ni4xMDMuMTMwLjEzMDo1NDQzINErR_JS3PLCu_iZEIbq95zkSV2LFsigxDIuUso_"
+                                      "AQIAAAAAAAAAETk0LjE0MC4xNC4xNDo1NDQzINErR_JS3PLCu_iZEIbq95zkSV2LFsigxDIuUso_"
                                       "OQhzIjIuZG5zY3J5cHQuZGVmYXVsdC5uczEuYWRndWFyZC5jb20";
     dnscrypt::Client client;
     auto dial_res = co_await client.dial(stamp_str, *m_loop, 1000ms, &m_socket_factory, {});
@@ -208,7 +208,7 @@ TEST_F(DnscryptTest, TimeoutOnDialExchange) {
 static constexpr std::string_view check_dns_crypt_server_test_stamps[]{
         // AdGuard DNS
         "sdns://"
-        "AQIAAAAAAAAAFDE3Ni4xMDMuMTMwLjEzMDo1NDQzINErR_JS3PLCu_iZEIbq95zkSV2LFsigxDIuUso_"
+        "AQIAAAAAAAAAETk0LjE0MC4xNC4xNDo1NDQzINErR_JS3PLCu_iZEIbq95zkSV2LFsigxDIuUso_"
         "OQhzIjIuZG5zY3J5cHQuZGVmYXVsdC5uczEuYWRndWFyZC5jb20",
         // AdGuard DNS Family
         "sdns://"

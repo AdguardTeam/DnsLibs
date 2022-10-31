@@ -186,14 +186,11 @@ void DoqUpstream::send_requests() {
 
         int64_t stream_id = -1;
         if (auto rv = ngtcp2_conn_open_bidi_stream(m_conn, &stream_id, nullptr); rv != 0) {
-            warnlog(m_log, "Can't create new stream: {}", ngtcp2_strerror(rv));
-            if (NGTCP2_ERR_STREAM_ID_BLOCKED == rv) {
+            if (rv == NGTCP2_ERR_STREAM_ID_BLOCKED) {
+                dbglog(m_log, "Max streams exhausted: {}", ngtcp2_strerror(rv));
                 break;
             }
-        }
-
-        if (stream_id == -1) {
-            disconnect("Stream ID is wrong");
+            disconnect(AG_FMT("Failed to open a new stream: {}", ngtcp2_strerror(rv)));
             return;
         }
 
@@ -1011,8 +1008,8 @@ int DoqUpstream::on_close_stream(ngtcp2_conn * /*conn*/, uint32_t /*flags*/, int
         uint64_t /*app_error_code*/, void *user_data, void * /*stream_user_data*/) {
 
     auto doq = static_cast<DoqUpstream *>(user_data);
-
     doq->m_streams.erase(stream_id);
+    doq->send_requests(); // Send requests blocked by max streams reached.
     return 0;
 }
 

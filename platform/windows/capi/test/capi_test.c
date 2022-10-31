@@ -2,6 +2,7 @@
 #include <ldns/ldns.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 
 #define ASSERT(cond) do {                                 \
     if (!(cond)) {                                        \
@@ -54,9 +55,16 @@ static void test_proxy() {
     ASSERT(settings->fallback_domains.size > 0);
     ASSERT(settings->fallback_domains.data);
 
-    const char *ugly_hack = settings->upstreams.data[0].address;
-    settings->upstreams.data[0].address = "tls://1.1.1.1";
-    settings->upstreams.data[0].id = 42;
+    ASSERT(settings->upstreams.data == NULL);
+    ASSERT(settings->upstreams.size == 0);
+
+    ag_upstream_options upstream = {
+            .address = "tls://1.1.1.1",
+            .id = 42,
+    };
+
+    settings->upstreams.data = &upstream;
+    settings->upstreams.size = 1;
 
     ag_dnsproxy_events events = {0};
     events.on_request_processed = on_req;
@@ -74,7 +82,7 @@ static void test_proxy() {
     ASSERT(actual_settings->upstreams.data[0].id == settings->upstreams.data[0].id);
     ag_dnsproxy_settings_free(actual_settings);
 
-    settings->upstreams.data[0].address = ugly_hack;
+    memset(&settings->upstreams, 0, sizeof(settings->upstreams));
     ag_dnsproxy_settings_free(settings);
 
     ldns_pkt *query = ldns_pkt_query_new(ldns_dname_new_frm_str("example.org"),

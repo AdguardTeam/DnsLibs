@@ -1,7 +1,7 @@
 # AdGuard C++ DNS libraries
 
 A DNS proxy library that supports all existing DNS protocols including `DNS-over-TLS`,
-`DNS-over-HTTPS`, `DNSCrypt` and `DNS-over-QUIC` (experimental).
+`DNS-over-HTTPS`, `DNSCrypt` and `DNS-over-QUIC`.
 
 ## Build instructions
 

@@ -13,7 +13,12 @@ enum class Ipv6SynthError {
 
 using DiscoveryResult = Result<std::vector<Uint8Vector>, DnsError>;
 using Ipv6SynthResult = Result<Uint8Array<16>, Ipv6SynthError>;
-using Prefixes = std::shared_ptr<WithMtx<std::vector<ag::Uint8Vector>>>;
+
+struct State {
+    std::vector<ag::Uint8Vector> prefixes;
+    UpstreamPtr discovering_upstream;
+};
+using StatePtr = std::shared_ptr<State>;
 
 /**
  * Discover DNS64 presence.

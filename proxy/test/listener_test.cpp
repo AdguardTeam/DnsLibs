@@ -38,6 +38,7 @@ TEST_P(ListenerTest, ListensAndResponds) {
 
     std::thread t([&]() {
         auto settings = DnsProxySettings::get_default();
+        settings.upstreams = {{"94.140.14.140"}};
         settings.listeners = {listener_settings};
 
         // Since we do an AAAA query, this will prevent the proxy
@@ -166,6 +167,7 @@ TEST(ListenerTest, ShutsDownIfCouldNotInitialize) {
     constexpr auto port = 1;
     DnsProxy proxy;
     auto proxy_settings = DnsProxySettings::get_default();
+    proxy_settings.upstreams = {{"94.140.14.140"}};
     proxy_settings.listeners = {
             {addr, port, ag::utils::TP_UDP},
             {addr, port, ag::utils::TP_TCP},

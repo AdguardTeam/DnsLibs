@@ -93,7 +93,8 @@ DL - Win tests and deploy:
         )
         nuget pack Adguard.Dns -p Configuration=Release -p Platform=AnyCPU || exit /b 1|| exit /b 1
         REM deploy master or release
-        nuget push Adguard.Dns.*.nupkg -source Artifactory || exit /b 1
+        REM we have to extract the credentials in order to push to the special nuget folder "AdGuard.Dns"
+        PowerShell -Command "& {$project = \"AdGuard.Dns\";$packet = \"Adguard.Dns.*.nupkg\"; $nuget_config_body = [xml](Get-Content \"$Env:appdata\NuGet\NuGet.Config\" | Out-String); $nuget_repo_path = ($nuget_config_body.configuration.packageSources.add | Where-Object { $_.key -eq 'Artifactory' }).value; $nuget_setapikey_username = ($nuget_config_body.configuration.packageSourceCredentials.Artifactory.add | Where-Object { $_.key -eq \"Username\" }).value; $nuget_setapikey_password = \"$Env:Artifactory_pass\"; $nuget_setapikey_full = \"$nuget_setapikey_username\" + \":\" + \"$nuget_setapikey_password\"; $source = \"$nuget_repo_path/$project\"; echo \"Deploying $project ($packet) to the artifactory $source\"; & nuget push $packet -source $source -apikey $nuget_setapikey_full;}" || exit /b 1
         REM upload release symbols
         if %bamboo_repository_branch_name%==release (
             call ${bamboo.build.working.directory}\dns-libs\dns-libs-private\platform\windows\Scripts\UploadSyms.bat %bamboo_sentryAuthToken% || exit /b
