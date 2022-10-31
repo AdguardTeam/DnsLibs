@@ -1036,7 +1036,9 @@ void DoqUpstream::process_reply(int64_t request_id, Uint8View reply) {
 
     ldns_pkt *pkt = nullptr;
     // Ignore the 2-byte length prefix. We only need the first reply.
-    reply.remove_prefix(2);
+    if (reply.size() >= 2) {
+        reply.remove_prefix(2);
+    }
     ldns_status r = ldns_wire2pkt(&pkt, reply.data(), reply.size());
     if (r != LDNS_STATUS_OK) {
         dbglog(m_log, "Failed to parse reply for [{}]: {}", request_id, magic_enum::enum_name(r));
