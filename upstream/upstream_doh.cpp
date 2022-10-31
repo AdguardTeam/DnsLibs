@@ -144,7 +144,7 @@ struct DohUpstream::CheckProxyState {
                         self->config().loop.submit([self]() {
                             self->reset_bypassed_proxy_queries();
                         });
-                    }});
+                    }, upstream});
             break;
         }
     }
