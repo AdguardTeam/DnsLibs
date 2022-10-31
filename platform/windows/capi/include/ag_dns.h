@@ -242,8 +242,6 @@ typedef struct {
     /**
      * If true, when all upstreams (including fallback upstreams) fail to provide a response,
      * the proxy will respond with a SERVFAIL packet. Otherwise, no response is sent on such a failure.
-     * In any case, the proxy will never respond with a SERVFAIL packet due to all upstreams timing out,
-     * nor to a request that has been retransmitted.
      */
     bool enable_servfail_on_upstreams_failure;
 } ag_dnsproxy_settings;

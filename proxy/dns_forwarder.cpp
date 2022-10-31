@@ -590,12 +590,8 @@ coro::Task<Uint8Vector> DnsForwarder::handle_message_internal(
 
     if (!response) {
         auto err = response.error();
-        if (err->value() == DnsError::AE_TIMED_OUT) {
-            dbglog_fid(m_log, request, "Not responding due to timeout");
-            co_return {};
-        }
         if (!m_settings->enable_servfail_on_upstreams_failure) {
-            dbglog_fid(m_log, request, "Not responding due to upstreams exchange failure");
+            dbglog_fid(m_log, request, "Not responding, upstreams exchange error: {}", err->str());
             co_return {};
         }
         response = ldns_pkt_ptr{ResponseHelpers::create_servfail_response(request)};

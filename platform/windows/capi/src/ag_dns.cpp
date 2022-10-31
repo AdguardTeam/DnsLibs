@@ -272,6 +272,9 @@ static ag_dnsproxy_settings *marshal_settings(const DnsProxySettings &settings) 
     c_settings->enable_dnssec_ok = settings.enable_dnssec_ok;
     c_settings->enable_retransmission_handling = settings.enable_retransmission_handling;
     c_settings->block_ech = settings.block_ech;
+    c_settings->enable_parallel_upstream_queries = settings.enable_parallel_upstream_queries;
+    c_settings->enable_fallback_on_upstreams_failure = settings.enable_fallback_on_upstreams_failure;
+    c_settings->enable_servfail_on_upstreams_failure = settings.enable_servfail_on_upstreams_failure;
 
     return c_settings;
 }

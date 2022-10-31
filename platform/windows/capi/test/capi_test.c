@@ -40,7 +40,7 @@ static ag_certificate_verification_result on_cert(const ag_certificate_verificat
 
 static void on_log(void *arg, ag_log_level level, const char *message, uint32_t length) {
     ASSERT((uintptr_t) arg == 42);
-    fprintf(stderr, "on_log: (%d) %.*s", (int) level, (int) length, message);
+    fprintf(stderr, "on_log: (%d) %.*s\n", (int) level, (int) length, message);
 }
 
 static void test_proxy() {

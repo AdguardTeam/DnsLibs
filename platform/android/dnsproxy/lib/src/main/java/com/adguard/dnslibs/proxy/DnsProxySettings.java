@@ -413,8 +413,7 @@ public class DnsProxySettings {
      * @param enableServfailOnUpstreamsFailure whether to enable generating a SERVFAIL response when all upstreams
      *                                         (including fallback) fail to provide a response. If {@code false},
      *                                         no response will be sent to the client if no upstreams could provide
-     *                                         a response. In any case, no response is sent to the client if
-     *                                         upstreams fail due to timeout or if the request is retransmitted.
+     *                                         a response.
      */
     public void setEnableServfailOnUpstreamsFailure(boolean enableServfailOnUpstreamsFailure) {
         this.enableServfailOnUpstreamsFailure = enableServfailOnUpstreamsFailure;
