@@ -168,7 +168,7 @@ static uint16_t udp_checksum_v6(const struct iphdr6 *ip6_header,
     return htons(sum);
 }
 
-static NSData *create_response_packet(const struct iphdr *ip_header, const struct udphdr *udp_header,
+static void *create_response_packet(const struct iphdr *ip_header, const struct udphdr *udp_header,
         const std::vector<uint8_t> &payload) {
     struct udphdr reverse_udp_header = {};
     reverse_udp_header.uh_sport = udp_header->uh_dport;
@@ -195,10 +195,10 @@ static NSData *create_response_packet(const struct iphdr *ip_header, const struc
     [reverse_packet appendBytes: &reverse_udp_header length: sizeof(reverse_udp_header)];
     [reverse_packet appendBytes: payload.data() length: payload.size()];
 
-    return reverse_packet;
+    return (__bridge_retained void *) reverse_packet;
 }
 
-static NSData *create_response_packet_v6(const struct iphdr6 *ip6_header,
+static void *create_response_packet_v6(const struct iphdr6 *ip6_header,
                                          const struct udphdr *udp_header,
                                          const std::vector<uint8_t> &payload) {
     struct udphdr resp_udp_header = {};
@@ -220,7 +220,7 @@ static NSData *create_response_packet_v6(const struct iphdr6 *ip6_header,
     [response_packet appendBytes: &resp_udp_header length: sizeof(resp_udp_header)];
     [response_packet appendBytes: payload.data() length: payload.size()];
 
-    return response_packet;
+    return (__bridge_retained void *) response_packet;
 }
 
 static ServerStamp convert_stamp(AGDnsStamp *stamp) {
@@ -1368,7 +1368,7 @@ static int bindFd(NSString *helperPath, NSString *address, NSNumber *port, AGLis
     return self;
 }
 
-static coro::Task<NSData *> handleIPv4Packet(AGDnsProxy *self, NSData *packet)
+static coro::Task<void *> handleIPv4Packet(AGDnsProxy *self, NSData *packet)
 {
     auto *ip_header = (struct iphdr *) packet.bytes;
     // @todo: handle tcp packets also
@@ -1402,7 +1402,7 @@ static coro::Task<NSData *> handleIPv4Packet(AGDnsProxy *self, NSData *packet)
     co_return create_response_packet(ip_header, udp_header, response);
 }
 
-static coro::Task<NSData *> handleIPv6Packet(AGDnsProxy *self, NSData *packet)
+static coro::Task<void *> handleIPv6Packet(AGDnsProxy *self, NSData *packet)
 {
     auto *ip_header = (struct iphdr6 *) packet.bytes;
     // @todo: handle tcp packets also
@@ -1439,16 +1439,18 @@ static coro::Task<NSData *> handleIPv6Packet(AGDnsProxy *self, NSData *packet)
 - (void)handlePacket:(NSData *)packet completionHandler:(void(^)(NSData *)) completionHandler
 {
     coro::run_detached([](AGDnsProxy *self, NSData *packet, void (^completionHandler)(NSData *)) -> coro::Task<void> {
+        auto *ip_header = (const struct iphdr *)packet.bytes;
+        void *reply = nullptr;
+        if (ip_header->ip_v == 4) {
+            reply = co_await handleIPv4Packet(self, packet);
+        } else if (ip_header->ip_v == 6) {
+            reply = co_await handleIPv6Packet(self, packet);
+        } else {
+            dbglog(*self->log, "Wrong IP version: %u", ip_header->ip_v);
+        }
+
         @autoreleasepool {
-            auto *ip_header = (const struct iphdr *)packet.bytes;
-            if (ip_header->ip_v == 4) {
-                completionHandler(co_await handleIPv4Packet(self, packet));
-            } else if (ip_header->ip_v == 6) {
-                completionHandler(co_await handleIPv6Packet(self, packet));
-            } else {
-                dbglog(*self->log, "Wrong IP version: %u", ip_header->ip_v);
-                completionHandler(nil);
-            }
+            completionHandler((__bridge_transfer NSData *) reply);
         }
     }(self, packet, completionHandler));
 }
