@@ -558,7 +558,7 @@ void SocksOProxy::handle_connection_close(Connection *conn, Error<SocketError> e
     }
 
     Callbacks callbacks = this->get_connection_callbacks_locked(conn);
-    if (conn->state == CS_CONNECTING_SOCKET) {
+    if (conn->state == CS_CONNECTING_SOCKET && callbacks.on_proxy_connection_failed != nullptr) {
         callbacks.on_proxy_connection_failed(callbacks.arg, error);
     }
 

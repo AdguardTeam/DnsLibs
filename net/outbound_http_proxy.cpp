@@ -252,7 +252,7 @@ void HttpOProxy::on_close(void *arg, Error<SocketError> error) {
     }
 
     Callbacks callbacks = self->get_connection_callbacks_locked(conn);
-    if (conn->state == CS_CONNECTING_SOCKET) {
+    if (conn->state == CS_CONNECTING_SOCKET && callbacks.on_proxy_connection_failed != nullptr) {
         callbacks.on_proxy_connection_failed(callbacks.arg, error);
     }
 
