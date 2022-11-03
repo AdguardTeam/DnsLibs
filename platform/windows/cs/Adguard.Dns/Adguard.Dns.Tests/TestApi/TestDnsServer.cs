@@ -1,4 +1,5 @@
-﻿using Adguard.Dns.Api.DnsProxyServer.Callbacks;
+﻿using System.Collections.Generic;
+using Adguard.Dns.Api.DnsProxyServer.Callbacks;
 using Adguard.Dns.Api.DnsProxyServer.Configs;
 using Adguard.Dns.DnsProxyServer;
 using Adguard.Dns.Tests.Helpers;
@@ -14,7 +15,7 @@ namespace Adguard.Dns.Tests.TestApi
         {
             Assert.DoesNotThrow(AGDnsApi.ValidateApi);
         }
-        
+
         [Test]
         public void TestDnsProxyServer()
         {
@@ -26,5 +27,22 @@ namespace Adguard.Dns.Tests.TestApi
             });
         }
 
+        [Test]
+        public void TestGetCurrentDnsProxySettings()
+        {
+            DnsProxySettings defaultDnsProxySettings = DnsProxyServer.DnsProxyServer.GetDefaultDnsProxySettings();
+            defaultDnsProxySettings.Upstreams.Add(new UpstreamOptions
+            {
+                Address = "8.8.8.8:53",
+                Id = 1,
+                Bootstrap = new List<string>()
+            });
+            IDnsProxyServerCallbackConfiguration callback = new DnsProxyServerCallbackConfiguration();
+            Assert.DoesNotThrow(() =>
+            {
+                IDnsProxyServer server = new DnsProxyServer.DnsProxyServer(defaultDnsProxySettings, callback);
+                server.Start();
+            });
+        }
     }
 }

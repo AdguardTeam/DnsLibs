@@ -116,6 +116,18 @@ namespace Adguard.Dns.Api.DnsProxyServer.Configs
         /// <summary>
         /// If enabled, retransmitted requests will be answered using the fallback upstreams only.
         /// If a retransmitted request is detected, the original request will NOT be answered at all.
+        ///
+        /// Mostly intended for iOS.
+        /// If enable_retransmission_handling is true,
+        /// retransmitted requests
+        /// (defined as requests with the same id and sent from the same address
+        /// that one of the requests that are currently being handled)
+        /// will be handled only using fallback upstreams, and the answer to the original
+        /// request will not be sent (to prevent possibly sending SERVFAIL,
+        /// b/c iOS may mark the resolver as "bad" in this case and refuse to resolve
+        /// anything from that point).
+        /// Enabling this feature shouldn't break anything on Android and Windows,
+        /// but it should not be enabled if there are otherwise no issues with retransmitted requests.
         /// </summary>
         public bool EnableRetransmissionHandling { get; set; }
 
