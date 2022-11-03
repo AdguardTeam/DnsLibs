@@ -335,7 +335,7 @@
 /* Begin PBXLegacyTarget section */
 		C41BB4092379C19B0068C106 /* AGDnsProxy-ios */ = {
 			isa = PBXLegacyTarget;
-			buildArgumentsString = "$(SRCROOT)/../framework/build_dnsproxy_framework.sh $(ACTION) --os ios";
+			buildArgumentsString = "$(SRCROOT)/../framework/build_dnsproxy_framework.sh $(ACTION) --os ios-arm64 --iosv 13.1";
 			buildConfigurationList = C41BB40C2379C19B0068C106 /* Build configuration list for PBXLegacyTarget "AGDnsProxy-ios" */;
 			buildPhases = (
 			);

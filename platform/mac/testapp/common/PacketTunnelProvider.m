@@ -118,36 +118,18 @@
 
     __block NSMutableArray<AGDnsFilterParams *> *filters = [NSMutableArray arrayWithCapacity:filterFiles.count];
     [filterFiles enumerateObjectsUsingBlock:^(id object, NSUInteger idx, BOOL *stop) {
-        [filters addObject: [[AGDnsFilterParams alloc] initWithId:idx data:object inMemory:NO]];
+        AGDnsFilterParams *filter = [[AGDnsFilterParams alloc] init];
+        filter.id = idx;
+        filter.data = object;
+        filter.inMemory = NO;
+        [filters addObject: filter];
     }];
-    AGDnsProxyConfig *cfg = [[AGDnsProxyConfig alloc]
-        initWithUpstreams: nil
-// for DOH testing
-//        initWithUpstreams:@[[[AGDnsUpstream alloc] initWithAddress:@"https://dns9.quad9.net/dns-query"
-//                                                         bootstrap:@[@"8.8.8.8"]
-//                                                         timeoutMs:10000
-//                                                          serverIp:nil
-//                                                                id:42
-//                                             outboundInterfaceName:nil]]
-        fallbacks: nil
-        fallbackDomains:@[]
-        detectSearchDomains: NO
-        filters: filters
-        blockedResponseTtlSecs: 0
-        dns64Settings: nil
-        listeners: nil
-        outboundProxy: nil
-        ipv6Available: true
-        blockIpv6: false
-        adblockRulesBlockingMode: AGBM_ADDRESS
-        hostsRulesBlockingMode: AGBM_ADDRESS
-        customBlockingIpv4: nil
-        customBlockingIpv6: nil
-        dnsCacheSize: 128
-        optimisticCache: YES
-        enableDNSSECOK: NO
-        enableRetransmissionHandling: NO
-        helperPath: nil];
+    AGDnsProxyConfig *cfg = [AGDnsProxyConfig getDefault];
+    AGDnsUpstream *upstream = [[AGDnsUpstream alloc] init];
+    upstream.address = @"tls://94.140.14.14";
+    upstream.timeoutMs = 10000;
+    upstream.id = 42;
+    cfg.upstreams = @[upstream];
 
     AGDnsProxyEvents *events = [[AGDnsProxyEvents alloc] init];
     events.onRequestProcessed = ^(const AGDnsRequestProcessedEvent *event) {
@@ -188,10 +170,11 @@
     {
         NSLog(@"readPacketsWithCompletionHandler");
         [packets enumerateObjectsUsingBlock:^(NSData *_Nonnull obj, NSUInteger idx, BOOL *_Nonnull stop) {
-            NSData *reply = [self->proxy handlePacket: obj];
-            if (reply != nil) {
-                [self.packetFlow writePackets: @[reply] withProtocols: @[protocols[idx]]];
-            }
+            [self->proxy handlePacket: obj completionHandler:^(NSData *reply) {
+                if (reply != nil) {
+                    [self.packetFlow writePackets: @[reply] withProtocols: @[protocols[idx]]];
+                }
+            }];
         }];
         [self startPacketHandling];
     }];
