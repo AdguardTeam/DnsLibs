@@ -15,43 +15,43 @@
 
 namespace ag::dns {
 
-enum socks_version_number {
+enum SocksVersionNumber {
     SVN_4 = 0x4,
     SVN_5 = 0x5,
 };
 
-enum socks4_command {
+enum Socks4Command {
     S4CMD_CONNECT = 0x1,
     S4CMD_REQUEST_GRANTED = 0x90, // request granted
     // all other codes are errors
 };
 
-enum socks5_auth_method {
+enum Socks5AuthMethod {
     S5AM_NO_AUTHENTICATION_REQUIRED = 0x00,
     S5AM_GSSAPI = 0x01,
     S5AM_USERNAME_PASSWORD = 0x02,
     S5AM_NO_ACCEPTABLE_METHODS = 0xff,
 };
 
-enum socks5_user_pass_auth_version_number {
+enum Socks5UserPassAuthVersionNumber {
     S5UPAVN_1 = 0x01,
 };
 
-enum socks5_user_pass_auth_status {
+enum Socks5UserPassAuthStatus {
     S5UPAS_SUCCESS = 0x00,
 };
 
-enum socks5_command {
+enum Socks5Command {
     S5CMD_CONNECT = 0x01,
     S5CMD_UDP_ASSOCIATE = 0x03,
 };
 
-enum socks5_address_type {
+enum Socks5AddressType {
     S5AT_IPV4 = 0x01, // a version-4 IP address, with a length of 4 octets
     S5AT_IPV6 = 0x04, // a version-6 IP address, with a length of 16 octets
 };
 
-enum socks5_reply_status {
+enum Socks5ReplyStatus {
     S5RS_SUCCEEDED,
 };
 
@@ -117,7 +117,7 @@ struct Socks5UdpHeader {
 
 #pragma pack(pop)
 
-enum connection_state {
+enum ConnectionState {
     CS_IDLE,
     CS_CONNECTING_SOCKET,
     CS_CONNECTING_SOCKS,
@@ -131,7 +131,7 @@ struct SocksOProxy::Connection {
     SocksOProxy *proxy;
     uint32_t id;
     ConnectParameters parameters = {};
-    connection_state state = CS_IDLE;
+    ConnectionState state = CS_IDLE;
     SocketFactory::SocketPtr socket;
     Uint8Vector recv_buffer;
 
@@ -159,18 +159,28 @@ SocksOProxy::SocksOProxy(const OutboundProxySettings *settings, Parameters param
         : OutboundProxy(__func__, settings, std::move(parameters)) {
 }
 
-SocksOProxy::~SocksOProxy() = default;
+SocksOProxy::~SocksOProxy() {
+    std::vector<uint32_t> connections;
+    connections.reserve(m_connections.size());
+    std::transform(m_connections.begin(), m_connections.end(), std::back_inserter(connections),
+            [](const auto &iter) {
+                return iter.first;
+            });
+    for (uint32_t conn_id : connections) {
+        this->SocksOProxy::close_connection_impl(conn_id);
+    }
+
+    assert(m_connections.empty());
+    assert(m_udp_association == nullptr);
+}
 
 OutboundProxy::ProtocolsSet SocksOProxy::get_supported_protocols() const {
     ProtocolsSet protocols = 1 << utils::TP_TCP;
-    if (m_settings->protocol == OutboundProxyProtocol::SOCKS5_UDP) {
-        protocols.set(utils::TP_UDP);
-    }
+    protocols.set(utils::TP_UDP, m_settings->protocol == OutboundProxyProtocol::SOCKS5_UDP);
     return protocols;
 }
 
 std::optional<evutil_socket_t> SocksOProxy::get_fd(uint32_t conn_id) const {
-    std::scoped_lock l(m_guard);
     auto it = m_connections.find(conn_id);
     return (it != m_connections.end() && it->second->socket != nullptr) ? it->second->socket->get_fd() : std::nullopt;
 }
@@ -188,7 +198,6 @@ static size_t get_full_udp_header_size(const Socks5UdpHeader *h) {
 Error<SocketError> SocksOProxy::send(uint32_t conn_id, Uint8View data) {
     log_conn(this, conn_id, trace, "{}", data.size());
 
-    std::scoped_lock l(m_guard);
     auto it = m_connections.find(conn_id);
     if (it == m_connections.end()) {
         return make_error(SocketError::AE_CONNECTION_ID_NOT_FOUND, fmt::to_string(conn_id));
@@ -241,7 +250,6 @@ Error<SocketError> SocksOProxy::send(uint32_t conn_id, Uint8View data) {
 bool SocksOProxy::set_timeout(uint32_t conn_id, Micros timeout) {
     log_conn(this, conn_id, trace, "{}", timeout);
 
-    std::scoped_lock l(m_guard);
     auto it = m_connections.find(conn_id);
     if (it == m_connections.end()) {
         log_conn(this, conn_id, dbg, "Non-existent connection: {}", conn_id);
@@ -254,7 +262,6 @@ bool SocksOProxy::set_timeout(uint32_t conn_id, Micros timeout) {
 Error<SocketError> SocksOProxy::set_callbacks_impl(uint32_t conn_id, Callbacks cbx) {
     log_conn(this, conn_id, trace, "...");
 
-    std::scoped_lock l(m_guard);
     auto it = m_connections.find(conn_id);
     if (it == m_connections.end()) {
         return make_error(SocketError::AE_CONNECTION_ID_NOT_FOUND, fmt::to_string(conn_id));
@@ -273,7 +280,6 @@ Error<SocketError> SocksOProxy::set_callbacks_impl(uint32_t conn_id, Callbacks c
 void SocksOProxy::close_connection_impl(uint32_t conn_id) {
     log_conn(this, conn_id, trace, "...");
 
-    std::scoped_lock l(m_guard);
     auto node = m_connections.extract(conn_id);
     if (node.empty()) {
         log_conn(this, conn_id, dbg, "Connection was not found");
@@ -281,43 +287,28 @@ void SocksOProxy::close_connection_impl(uint32_t conn_id) {
     }
 
     Connection *conn = node.mapped().get();
-    m_closing_connections.insert(std::move(node));
-
     if (conn->state == CS_CONNECTING_SOCKET) {
         conn->parameters.callbacks.on_proxy_connection_failed(conn->parameters.callbacks.arg, {});
     }
     conn->parameters.callbacks = {};
 
-    if (conn->socket != nullptr) {
-        [[maybe_unused]] auto e = conn->socket->set_callbacks({});
-    }
-
-    conn->parameters.loop->submit([this, conn_id]() {
-        std::scoped_lock l(m_guard);
-        auto node = m_closing_connections.extract(conn_id);
-        if (!node.empty()) {
-            this->close_connection(node.mapped().get());
-        }
-    });
+    this->close_connection(conn);
 }
 
 Error<SocketError> SocksOProxy::connect_to_proxy(uint32_t conn_id, const ConnectParameters &parameters) {
     log_conn(this, conn_id, trace, "{} == {}", m_resolved_proxy_address->str(), m_settings->port, parameters.peer.str());
 
     Connection *conn = nullptr;
-    {
-        std::scoped_lock l(m_guard);
-        if (auto &c = m_connections[conn_id]; c == nullptr) {
-            c = std::make_unique<Connection>(Connection{this, conn_id, parameters});
-            conn = c.get();
-        } else {
-            return make_error(SocketError::AE_DUPLICATE_ID, fmt::to_string(conn_id));
-        }
+    if (auto &c = m_connections[conn_id]; c == nullptr) {
+        c = std::make_unique<Connection>(Connection{this, conn_id, parameters});
+        conn = c.get();
+    } else {
+        return make_error(SocketError::AE_DUPLICATE_ID, fmt::to_string(conn_id));
     }
+
 
     auto err = this->connect_to_proxy(conn);
     if (err) {
-        std::unique_lock l(m_guard);
         conn->parameters.callbacks = {}; // do not raise `on_close` callback
         this->close_connection(conn);
         m_connections.erase(conn_id);
@@ -329,7 +320,6 @@ Error<SocketError> SocksOProxy::connect_to_proxy(uint32_t conn_id, const Connect
 Error<SocketError> SocksOProxy::connect_through_proxy(uint32_t conn_id, const ConnectParameters &parameters) {
     log_conn(this, conn_id, trace, "{}:{} == {}", m_settings->address, m_settings->port, parameters.peer.str());
 
-    std::unique_lock l(m_guard);
     auto &conn = m_connections[conn_id];
     if (conn == nullptr) {
         return make_error(SocketError::AE_CONNECTION_ID_NOT_FOUND, fmt::to_string(conn_id));
@@ -343,9 +333,7 @@ Error<SocketError> SocksOProxy::connect_through_proxy(uint32_t conn_id, const Co
     if (conn->parameters.proto == utils::TP_UDP) {
         conn->state = CS_CONNECTED;
         if (conn->parameters.callbacks.on_connected != nullptr) {
-            l.unlock();
             conn->parameters.callbacks.on_connected(conn->parameters.callbacks.arg, conn->id);
-            l.lock();
         }
         return {};
     }
@@ -444,13 +432,10 @@ Error<SocketError> SocksOProxy::connect_to_proxy(Connection *conn) {
     if (proto == utils::TP_UDP) {
         assert(m_settings->protocol == OutboundProxyProtocol::SOCKS5_UDP);
 
-        std::scoped_lock l(m_guard);
-        auto assoc_it = m_udp_associations.find(conn->parameters.loop);
-        bool need_to_start_assoc = assoc_it == m_udp_associations.end();
+        bool need_to_start_assoc = m_udp_association == nullptr;
         if (!need_to_start_assoc) {
-            UdpAssociation *association = assoc_it->second.get();
-            if (auto assoc_conn_it = m_connections.find(association->conn_id); assoc_conn_it == m_connections.end()) {
-                log_conn(this, association->conn_id, dbg, "UDP association exists but related connection not found");
+            if (auto assoc_conn_it = m_connections.find(m_udp_association->conn_id); assoc_conn_it == m_connections.end()) {
+                log_conn(this, m_udp_association->conn_id, dbg, "UDP association exists but related connection not found");
                 assert(0);
                 need_to_start_assoc = true;
             } else if (assoc_conn_it->second->state != CS_CONNECTED) {
@@ -467,15 +452,14 @@ Error<SocketError> SocksOProxy::connect_to_proxy(Connection *conn) {
                                 && i.second->parameters.proto == utils::TP_UDP;
                     }));
 
-            auto &association = m_udp_associations[conn->parameters.loop];
-            association = std::make_unique<UdpAssociation>();
-            association->conn_id = get_next_connection_id();
-            log_conn(this, association->conn_id, dbg, "Starting UDP association");
+            m_udp_association = std::make_unique<UdpAssociation>();
+            m_udp_association->conn_id = get_next_connection_id();
+            log_conn(this, m_udp_association->conn_id, dbg, "Starting UDP association");
 
-            auto &udp_association_conn = m_connections[association->conn_id];
+            auto &udp_association_conn = m_connections[m_udp_association->conn_id];
             udp_association_conn = std::make_unique<Connection>(Connection{
                     this,
-                    association->conn_id,
+                    m_udp_association->conn_id,
                     {
                             conn->parameters.loop,
                             utils::TP_TCP,
@@ -490,7 +474,7 @@ Error<SocketError> SocksOProxy::connect_to_proxy(Connection *conn) {
             conn = udp_association_conn.get();
             dst_addr = conn->parameters.peer;
         } else {
-            dst_addr = assoc_it->second->bound_addr;
+            dst_addr = m_udp_association->bound_addr;
         }
     } else {
         dst_addr = SocketAddress(m_settings->address, m_settings->port);
@@ -527,14 +511,13 @@ void SocksOProxy::close_connection(Connection *conn) {
         return;
     }
 
-    auto assoc_it = m_udp_associations.find(loop);
-    if (assoc_it == m_udp_associations.end()) {
-        log_conn(this, conn_id, dbg, "UDP association is not found");
+    if (m_udp_association == nullptr) {
+        log_conn(this, conn_id, dbg, "UDP association is not started");
         assert(0);
         return;
     }
 
-    auto assoc_conn_it = m_connections.find(assoc_it->second->conn_id);
+    auto assoc_conn_it = m_connections.find(m_udp_association->conn_id);
     if (assoc_conn_it == m_connections.end()) {
         log_conn(this, conn_id, dbg, "TCP connection of UDP association is not found");
         assert(0);
@@ -548,10 +531,7 @@ void SocksOProxy::close_connection(Connection *conn) {
 }
 
 bool SocksOProxy::is_udp_association_connection(uint32_t conn_id) const {
-    std::scoped_lock l(m_guard);
-    return std::any_of(m_udp_associations.begin(), m_udp_associations.end(), [conn_id](const auto &i) {
-        return conn_id == i.second->conn_id;
-    });
+    return m_udp_association != nullptr && m_udp_association->conn_id == conn_id;
 }
 
 void SocksOProxy::handle_connection_close(Connection *conn, Error<SocketError> error) {
@@ -588,12 +568,10 @@ void SocksOProxy::on_udp_association_established(Connection *assoc_conn, SocketA
 
     std::vector<Connection *> udp_connections;
 
-    m_guard.lock();
-    if (auto it = m_udp_associations.find(assoc_conn->parameters.loop); it != m_udp_associations.end()) {
-        it->second->bound_addr = bound_addr;
+    if (m_udp_association != nullptr) {
+        m_udp_association->bound_addr = bound_addr;
     } else {
-        log_conn(this, assoc_conn->id, dbg, "UDP association is not found");
-        m_guard.unlock();
+        log_conn(this, assoc_conn->id, dbg, "UDP association is not active");
         auto error = make_error(SocketError::AE_UDP_ASSOCIATION_NOT_FOUND);
         this->terminate_udp_association(assoc_conn, error);
         return;
@@ -604,7 +582,6 @@ void SocksOProxy::on_udp_association_established(Connection *assoc_conn, SocketA
             udp_connections.emplace_back(conn.get());
         }
     }
-    m_guard.unlock();
 
     for (Connection *conn : udp_connections) {
         auto e = this->connect_to_proxy(conn);
@@ -621,8 +598,6 @@ void SocksOProxy::terminate_udp_association(Connection *assoc_conn, Error<Socket
     log_conn(this, assoc_conn->id, trace, "...");
 
     std::vector<Callbacks> udp_connections_callbacks;
-
-    m_guard.lock();
     for (auto i = m_connections.begin(); i != m_connections.end();) {
         auto &conn = i->second;
         if (assoc_conn->parameters.loop == conn->parameters.loop && conn->parameters.proto == utils::TP_UDP) {
@@ -634,7 +609,6 @@ void SocksOProxy::terminate_udp_association(Connection *assoc_conn, Error<Socket
     }
 
     this->terminate_udp_association_silently(assoc_conn, std::nullopt);
-    m_guard.unlock();
 
     for (auto &cbx : udp_connections_callbacks) {
         if (cbx.on_close != nullptr) {
@@ -651,14 +625,13 @@ void SocksOProxy::terminate_udp_association_silently(
                         && i.second->parameters.proto == utils::TP_UDP;
             }));
 
-    if (auto it = m_udp_associations.find(assoc_conn->parameters.loop); it != m_udp_associations.end()) {
-        m_connections.erase(assoc_conn->id);
-        m_udp_associations.erase(it);
+    if (m_udp_association != nullptr) {
+        m_connections.erase(m_udp_association->conn_id);
+        m_udp_association.reset();
     }
 }
 
 std::optional<SocksOProxy::Callbacks> SocksOProxy::get_connection_callbacks_locked(Connection *conn) {
-    std::scoped_lock l(m_guard);
     return m_connections.contains(conn->id) ? std::make_optional(conn->parameters.callbacks) : std::nullopt;
 }
 

@@ -1,7 +1,7 @@
 #pragma once
 
 
-#include <mutex>
+#include <memory>
 #include <optional>
 
 #include "common/defs.h"
@@ -23,10 +23,8 @@ public:
 private:
     struct Connection;
     struct UdpAssociation;
-    mutable std::mutex m_guard;
     HashMap<uint32_t, std::unique_ptr<Connection>> m_connections;
-    HashMap<EventLoop *, std::unique_ptr<UdpAssociation>> m_udp_associations;
-    HashMap<uint32_t, std::unique_ptr<Connection>> m_closing_connections;
+    std::unique_ptr<UdpAssociation> m_udp_association;
 
     [[nodiscard]] ProtocolsSet get_supported_protocols() const override;
     [[nodiscard]] std::optional<evutil_socket_t> get_fd(uint32_t conn_id) const override;

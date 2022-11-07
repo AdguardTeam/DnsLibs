@@ -112,6 +112,11 @@ public:
     SocketFactory &operator=(const SocketFactory &) = delete;
 
     /**
+     * Deinitialize the factory
+     */
+    void deinit();
+
+    /**
      * Create a socket basing on the factory and provided parameters
      * @param parameters the socket parameters
      * @return the socket

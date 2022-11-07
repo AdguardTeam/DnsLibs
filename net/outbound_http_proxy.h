@@ -2,7 +2,7 @@
 
 
 #include <optional>
-#include <mutex>
+
 #include "common/defs.h"
 #include "dns/net/tls_session_cache.h"
 #include "outbound_proxy.h"
@@ -13,7 +13,7 @@ namespace ag::dns {
 class HttpOProxy : public OutboundProxy {
 public:
     HttpOProxy(const OutboundProxySettings *settings, Parameters parameters);
-    ~HttpOProxy() override = default;
+    ~HttpOProxy() override;
 
     HttpOProxy(HttpOProxy &&) = delete;
     HttpOProxy &operator=(HttpOProxy &&) = delete;
@@ -22,10 +22,8 @@ public:
 
 private:
     struct Connection;
-    mutable std::mutex m_guard;
     HashMap<uint32_t, std::unique_ptr<Connection>> m_connections;
     std::optional<TlsSessionCache> m_tls_session_cache;
-    HashMap<uint32_t, std::unique_ptr<Connection>> m_closing_connections;
 
     [[nodiscard]] ProtocolsSet get_supported_protocols() const override;
     [[nodiscard]] std::optional<evutil_socket_t> get_fd(uint32_t conn_id) const override;

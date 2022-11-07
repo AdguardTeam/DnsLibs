@@ -141,9 +141,7 @@ struct DohUpstream::CheckProxyState {
             upstream->m_reset_bypassed_proxy_connections_subscribe_id =
                     factory->subscribe_to_reset_bypassed_proxy_connections_event({[](void *arg) {
                         auto *self = (DohUpstream *) arg;
-                        self->config().loop.submit([self]() {
-                            self->reset_bypassed_proxy_queries();
-                        });
+                        self->reset_bypassed_proxy_queries();
                     }, upstream});
             break;
         }

@@ -73,7 +73,7 @@ public:
         IfIdVariant outbound_interface;
     };
 
-    virtual ~OutboundProxy() = default;
+    virtual ~OutboundProxy();
 
     /**
      * Connect to the peer via proxy
@@ -160,6 +160,7 @@ protected:
 
 private:
     void on_bootstrap_ready(std::optional<SocketAddress> address);
+    void on_bootstrap_ready(Error<SocketError> address);
 };
 
 } // namespace ag::dns
