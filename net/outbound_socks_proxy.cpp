@@ -371,8 +371,9 @@ void SocksOProxy::on_connected(void *arg) {
     SocksOProxy *self = conn->proxy;
     log_conn(self, conn->id, trace, "...");
 
-    if (Callbacks cbx = self->get_connection_callbacks_locked(conn); cbx.on_successful_proxy_connection != nullptr) {
-        cbx.on_successful_proxy_connection(cbx.arg);
+    if (std::optional<Callbacks> cbx = self->get_connection_callbacks_locked(conn);
+            cbx.has_value() && cbx->on_successful_proxy_connection != nullptr) {
+        cbx->on_successful_proxy_connection(cbx->arg);
     }
 
     if (auto err = self->connect_through_proxy(conn->id, conn->parameters)) {
@@ -404,11 +405,12 @@ void SocksOProxy::on_read(void *arg, Uint8View data) {
             log_conn(self, conn->id, dbg, "Unexpected data ({} bytes) on UDP association connection", data.size());
             auto error = make_error(SocketError::AE_UNEXPECTED_DATA, AG_FMT("Unexpected data ({} bytes) on UDP association connection", data.size()));
             self->terminate_udp_association(conn, error);
-        } else if (Callbacks cbx = self->get_connection_callbacks_locked(conn); cbx.on_read != nullptr) {
+        } else if (std::optional<Callbacks> cbx = self->get_connection_callbacks_locked(conn);
+                cbx.has_value() && cbx->on_read != nullptr) {
             if (conn->parameters.proto == utils::TP_UDP) {
                 data.remove_prefix(get_full_udp_header_size((Socks5UdpHeader *) data.data()));
             }
-            cbx.on_read(cbx.arg, data);
+            cbx->on_read(cbx->arg, data);
         } else {
             log_conn(self, conn->id, dbg, "Dropping packet ({} bytes) as read is turned off", data.size());
         }
@@ -557,9 +559,14 @@ void SocksOProxy::handle_connection_close(Connection *conn, Error<SocketError> e
         log_conn(this, conn->id, dbg, "{}", error->str());
     }
 
-    Callbacks callbacks = this->get_connection_callbacks_locked(conn);
-    if (conn->state == CS_CONNECTING_SOCKET) {
-        callbacks.on_proxy_connection_failed(callbacks.arg, error);
+    std::optional<Callbacks> callbacks = this->get_connection_callbacks_locked(conn);
+    if (!callbacks.has_value()) {
+        log_conn(this, conn->id, dbg, "Skipping event as connection is closing");
+        return;
+    }
+
+    if (conn->state == CS_CONNECTING_SOCKET && callbacks->on_proxy_connection_failed != nullptr) {
+        callbacks->on_proxy_connection_failed(callbacks->arg, error);
     }
 
     if (this->is_udp_association_connection(conn->id)) {
@@ -571,8 +578,8 @@ void SocksOProxy::handle_connection_close(Connection *conn, Error<SocketError> e
 
     conn->state = CS_CLOSING;
 
-    if (callbacks.on_close != nullptr) {
-        callbacks.on_close(callbacks.arg, std::move(error));
+    if (callbacks->on_close != nullptr) {
+        callbacks->on_close(callbacks->arg, std::move(error));
     }
 }
 
@@ -602,8 +609,9 @@ void SocksOProxy::on_udp_association_established(Connection *assoc_conn, SocketA
     for (Connection *conn : udp_connections) {
         auto e = this->connect_to_proxy(conn);
         if (e) {
-            if (Callbacks cbx = this->get_connection_callbacks_locked(conn); cbx.on_close != nullptr) {
-                cbx.on_close(cbx.arg, std::move(e));
+            if (std::optional<Callbacks> cbx = this->get_connection_callbacks_locked(conn);
+                    cbx.has_value() && cbx->on_close != nullptr) {
+                cbx->on_close(cbx->arg, std::move(e));
             }
         }
     }
@@ -649,10 +657,9 @@ void SocksOProxy::terminate_udp_association_silently(
     }
 }
 
-SocksOProxy::Callbacks SocksOProxy::get_connection_callbacks_locked(Connection *conn) {
+std::optional<SocksOProxy::Callbacks> SocksOProxy::get_connection_callbacks_locked(Connection *conn) {
     std::scoped_lock l(m_guard);
-    assert(m_connections.count(conn->id) != 0);
-    return conn->parameters.callbacks;
+    return m_connections.contains(conn->id) ? std::make_optional(conn->parameters.callbacks) : std::nullopt;
 }
 
 #define SEND_S(conn_, data_)                                                                                           \
@@ -708,8 +715,9 @@ void SocksOProxy::on_socks4_reply(Connection *conn, Uint8View data) {
 
     conn->state = CS_CONNECTED;
     conn->recv_buffer.clear();
-    if (Callbacks cbx = this->get_connection_callbacks_locked(conn); cbx.on_connected != nullptr) {
-        cbx.on_connected(cbx.arg, conn->id);
+    if (std::optional<Callbacks> cbx = this->get_connection_callbacks_locked(conn);
+            cbx.has_value() && cbx->on_connected != nullptr) {
+        cbx->on_connected(cbx->arg, conn->id);
     }
 }
 
@@ -909,8 +917,9 @@ void SocksOProxy::on_socks5_connect_response(Connection *conn, Uint8View data) {
         uint16_t port = ntohs(*(uint16_t *) (reply->bnd_addr + addr.size()));
 
         this->on_udp_association_established(conn, SocketAddress(addr, port));
-    } else if (Callbacks cbx = this->get_connection_callbacks_locked(conn); cbx.on_connected != nullptr) {
-        cbx.on_connected(cbx.arg, conn->id);
+    } else if (std::optional<Callbacks> cbx = this->get_connection_callbacks_locked(conn);
+            cbx.has_value() && cbx->on_connected != nullptr) {
+        cbx->on_connected(cbx->arg, conn->id);
     }
 }
 

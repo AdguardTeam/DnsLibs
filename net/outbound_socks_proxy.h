@@ -1,8 +1,9 @@
 #pragma once
 
 
-#include <optional>
 #include <mutex>
+#include <optional>
+
 #include "common/defs.h"
 #include "outbound_proxy.h"
 
@@ -49,7 +50,7 @@ private:
     void on_udp_association_established(Connection *assoc_conn, SocketAddress bound_addr);
     void terminate_udp_association(Connection *assoc_conn, Error<SocketError> error);
     void terminate_udp_association_silently(Connection *assoc_conn, std::optional<uint32_t> initiated_conn_id);
-    Callbacks get_connection_callbacks_locked(Connection *conn);
+    std::optional<Callbacks> get_connection_callbacks_locked(Connection *conn);
 
     [[nodiscard]] Error<SocketError> send_socks4_request(Connection *conn);
     void on_socks4_reply(Connection *conn, Uint8View data);
