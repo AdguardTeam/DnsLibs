@@ -7,6 +7,7 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		1DECADC829197A6400BB60DE /* SystemConfiguration.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 1DECADC729197A6400BB60DE /* SystemConfiguration.framework */; };
 		C4423F7D23794F3200FD1D4C /* NetworkExtension.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = F4D5969A1F7C01BD00538851 /* NetworkExtension.framework */; };
 		C4423F942379559900FD1D4C /* Main.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = C4423F922379559900FD1D4C /* Main.storyboard */; };
 		C4423F962379559D00FD1D4C /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = C4423F952379559D00FD1D4C /* Assets.xcassets */; };
@@ -144,6 +145,8 @@
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
+		1DECADC629196B9700BB60DE /* test-ios.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = "test-ios.entitlements"; sourceTree = "<group>"; };
+		1DECADC729197A6400BB60DE /* SystemConfiguration.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = SystemConfiguration.framework; path = Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS16.0.sdk/System/Library/Frameworks/SystemConfiguration.framework; sourceTree = DEVELOPER_DIR; };
 		C4423F7023794EA900FD1D4C /* ext-ios.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = "ext-ios.appex"; sourceTree = BUILT_PRODUCTS_DIR; };
 		C4423F7523794EA900FD1D4C /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		C4423F7623794EA900FD1D4C /* ext_ios.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = ext_ios.entitlements; sourceTree = "<group>"; };
@@ -188,6 +191,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				C4423F7D23794F3200FD1D4C /* NetworkExtension.framework in Frameworks */,
+				1DECADC829197A6400BB60DE /* SystemConfiguration.framework in Frameworks */,
 				C4AEED16237AC90C0021E53F /* AGDnsProxy.framework in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -236,6 +240,7 @@
 		C4423F882379559900FD1D4C /* test-ios */ = {
 			isa = PBXGroup;
 			children = (
+				1DECADC629196B9700BB60DE /* test-ios.entitlements */,
 				C4423F892379559900FD1D4C /* AppDelegate.h */,
 				C4423F8A2379559900FD1D4C /* AppDelegate.m */,
 				C4423F8C2379559900FD1D4C /* SceneDelegate.h */,
@@ -266,6 +271,7 @@
 		F499C4341F6A6EF100FB55F8 /* Frameworks */ = {
 			isa = PBXGroup;
 			children = (
+				1DECADC729197A6400BB60DE /* SystemConfiguration.framework */,
 				C4AEED14237AC8A10021E53F /* AGDnsProxy.framework */,
 				F4D5969A1F7C01BD00538851 /* NetworkExtension.framework */,
 				F499C4451F6A9D0D00FB55F8 /* Cocoa.framework */,
@@ -848,6 +854,7 @@
 				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
 				CLANG_ENABLE_OBJC_WEAK = YES;
 				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CODE_SIGN_ENTITLEMENTS = "test-ios/test-ios.entitlements";
 				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
 				DEVELOPMENT_TEAM = TC3Q7MAJXF;
@@ -885,6 +892,7 @@
 				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
 				CLANG_ENABLE_OBJC_WEAK = YES;
 				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CODE_SIGN_ENTITLEMENTS = "test-ios/test-ios.entitlements";
 				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
 				DEVELOPMENT_TEAM = TC3Q7MAJXF;

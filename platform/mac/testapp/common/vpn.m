@@ -1,6 +1,7 @@
 #import "vpn.h"
 #import <Foundation/Foundation.h>
 #import <NetworkExtension/NetworkExtension.h>
+#import <TargetConditionals.h>
 
 
 @implementation AGVpn {
@@ -12,16 +13,17 @@
 // Remove VPN configuration with the same name, if it already exists.
 - (void) load
 {
-    [NETunnelProviderManager loadAllFromPreferencesWithCompletionHandler
-        :^(NSArray<NETunnelProviderManager *> * _Nullable managers, NSError * _Nullable e)
-    {
-        if (e != nil) {
+    [NETunnelProviderManager loadAllFromPreferencesWithCompletionHandler:^(
+                                     NSArray<NETunnelProviderManager *> *_Nullable managers, NSError *_Nullable e) {
+      if (e != nil) {
             NSLog(@"load err: %@", e);
             return;
         }
 
+        static NSString *const DESCRIPTION = @"DnsLibs Sample";
+
         for (NETunnelProviderManager *m in managers) {
-            if ([m.localizedDescription isEqual: @"Adguard VPN"]) {
+            if ([m.localizedDescription isEqualToString:DESCRIPTION]) {
                 [m removeFromPreferencesWithCompletionHandler: ^(NSError * _Nullable error) {
                     return;
                 }];
@@ -29,11 +31,15 @@
         }
 
         NETunnelProviderProtocol *p = [[NETunnelProviderProtocol alloc] init];
+#if TARGET_OS_IPHONE
+        p.providerBundleIdentifier = @"com.adguard.dnsproxy-ios2.ext";
+#else
         p.providerBundleIdentifier = @"com.adguard.dnsproxy2.ext";
+#endif
         p.serverAddress = @"127.0.0.1";
 
         NETunnelProviderManager *m = [[NETunnelProviderManager alloc] init];
-        m.localizedDescription = @"Adguard VPN";
+        m.localizedDescription = DESCRIPTION;
         m.protocolConfiguration = p;
         m.enabled = true;
         NSLog(@"VPN status: %li", (long)m.connection.status);
@@ -68,8 +74,7 @@
     NEVPNConnection *con = self->mgr.connection;
     NSMutableDictionary<NSString *,NSObject *> *options = [[NSMutableDictionary alloc] init];
     NSError *error;
-    if (![con startVPNTunnelWithOptions: options andReturnError: &error]
-            || error != nil) {
+    if (![con startVPNTunnelWithOptions: options andReturnError: &error]) {
         NSLog(@"startVPNTunnelWithOptions tunnel start error: %@", error.description);
         return;
     }
@@ -96,7 +101,6 @@ void AGVpnStart(void)
 {
     vpn = [[AGVpn alloc] init];
     [vpn load];
-    [vpn start];
 }
 
 void AGVpnClose(void)

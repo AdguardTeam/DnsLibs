@@ -1,4 +1,5 @@
 #import "AppDelegate.h"
+#import "vpn.h"
 
 @interface AppDelegate ()
 
@@ -6,9 +7,14 @@
 
 @implementation AppDelegate
 
+- (void)applicationWillTerminate:(NSNotification *)aNotification {
+    // Insert code here to tear down your application
+    AGVpnClose();
+}
 
 - (BOOL)application:(UIApplication *)application didFinishLaunchingWithOptions:(NSDictionary *)launchOptions {
     // Override point for customization after application launch.
+    AGVpnStart();
     return YES;
 }
 
