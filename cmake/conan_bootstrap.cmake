@@ -1,6 +1,5 @@
 function(conan_bootstrap)
     cmake_parse_arguments(BS "" "SRCROOT;CONANFILE;SCOPE_NAME" "" ${ARGN})
-    set(CONAN_EXPORTED OFF)
     include("${BS_SRCROOT}/cmake/conan.cmake")
     if (NOT TARGET CONAN_DONE::${BS_SCOPE_NAME})
         # Profile settings
