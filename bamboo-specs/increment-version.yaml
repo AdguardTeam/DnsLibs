@@ -64,7 +64,7 @@ DL - Increment version:
             cd scripts
             ./increment_conan_version.sh ${bamboo_custom_version} || exit 1
 
-            git add conandata.yml
+            git add ../conandata.yml
             git commit -m "skipci: Automatic version increment by Bamboo"
             git push
 
