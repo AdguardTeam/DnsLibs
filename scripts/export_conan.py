@@ -17,7 +17,7 @@ if os.path.exists(conandata_path):
 
 for version in versions:
     if (version == "777"):
-        subprocess.run(["git", "checkout", "master"])
+        subprocess.run(["git", "checkout", "-B", "master", "origin/master"])
     else:
         hash1 = yaml_data["commit_hash"][version]["hash"]
         the_hash = subprocess.run(["git", "log", "--reverse", "--ancestry-path", hash1 + "..master", "--pretty=%h"],
