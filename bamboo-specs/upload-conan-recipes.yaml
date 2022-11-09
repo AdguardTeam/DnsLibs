@@ -9,7 +9,7 @@ stages:
       manual: false
       final: false
       jobs:
-        -  DnsLibs - Upload conan recipes
+        - Default Job
 Default Job:
   key: JOB1
   docker:
@@ -17,7 +17,7 @@ Default Job:
     volumes:
       ${bamboo.git.cache.directory}: ${bamboo.git.cache.directory}
       ${system.HOME}/.ssh: /root/.ssh
-    docker-run-arguments: [ ]
+    docker-run-arguments: []
   tasks:
     - !include docker-clean.yaml
     - checkout:
@@ -55,7 +55,7 @@ Default Job:
     - adg-privileged-docker
   artifact-subscriptions: []
 repositories:
-  - core-libs/native-libs-common:
+  - dns-libs:
       scope: global
 branches:
   create: manually
