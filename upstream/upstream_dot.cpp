@@ -46,39 +46,39 @@ public:
             auto &err = *result.error;
             log_conn(m_log, err, this, "Failed to bootstrap: {}", err.str());
             this->on_close(make_error(DE_BOOTSTRAP_ERROR, result.error));
-        } else {
-            m_result = std::move(result);
-            assert(!m_result.addresses.empty());
-
-            static const std::string DOT_ALPN = "dot";
-
-            SocketAddress &addr = m_result.addresses[0];
-            Millis timeout;
-            if (auto *upstream = (DotUpstream *) m_pool.lock()->upstream()) {
-                m_stream = upstream->make_secured_socket(utils::TP_TCP,
-                        SocketFactory::SecureSocketParameters{
-                                .session_cache = &upstream->m_tls_session_cache,
-                                .server_name = m_result.server_name.empty() ? addr.host_str() : m_result.server_name,
-                                .alpn = {DOT_ALPN},
-                        });
-                timeout = upstream->options().timeout;
-            } else {
-                on_close(make_error(DE_SHUTTING_DOWN, "Shutting down"));
-            }
-            dbglog(m_log, "{}", addr.str());
-            m_address = addr;
-            auto err = m_stream->connect({
-                    &m_loop,
-                    addr,
-                    {on_connected, on_read, on_close, this},
-                    timeout,
-            });
-            if (err) {
-                log_conn(m_log, err, this, "Failed to start connect: {}", err->str());
-                on_close(this, err);
-            }
+            co_return;
         }
-        co_return;
+        m_result = std::move(result);
+        assert(!m_result.addresses.empty());
+
+        static const std::string DOT_ALPN = "dot";
+
+        SocketAddress &addr = m_result.addresses[0];
+        Millis timeout;
+        if (auto *upstream = (DotUpstream *) m_pool.lock()->upstream()) {
+            m_stream = upstream->make_secured_socket(utils::TP_TCP,
+                    SocketFactory::SecureSocketParameters{
+                            .session_cache = &upstream->m_tls_session_cache,
+                            .server_name = m_result.server_name.empty() ? addr.host_str() : m_result.server_name,
+                            .alpn = {DOT_ALPN},
+                    });
+            timeout = upstream->options().timeout;
+        } else {
+            on_close(make_error(DE_SHUTTING_DOWN, "Shutting down"));
+            co_return;
+        }
+        dbglog(m_log, "{}", addr.str());
+        m_address = addr;
+        auto err = m_stream->connect({
+                &m_loop,
+                addr,
+                {on_connected, on_read, on_close, this},
+                timeout,
+        });
+        if (err) {
+            log_conn(m_log, err, this, "Failed to start connect: {}", err->str());
+            on_close(this, err);
+        }
     }
 
     void connect() override {
