@@ -2,6 +2,7 @@
 
 #include <cstring>
 
+#include "dns/dnsfilter/dnsfilter.h"
 #include "dns/proxy/dnsproxy.h"
 #include "dns/upstream/upstream_utils.h"
 
@@ -639,6 +640,10 @@ const char *ag_test_upstream(const ag_upstream_options *c_upstream, bool ipv6_av
     auto events = marshal_events(&c_events);
     auto result = test_upstream(upstream, ipv6_available, events.on_certificate_verification, offline);
     return marshal_str(result.value_or(""));
+}
+
+bool ag_is_valid_dns_rule(const char *str) {
+    return DnsFilter::is_valid_rule(str);
 }
 
 void ag_str_free(const char *str) {

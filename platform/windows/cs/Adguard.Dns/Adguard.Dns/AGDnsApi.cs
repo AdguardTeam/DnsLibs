@@ -22,7 +22,7 @@ namespace Adguard.Dns
         /// <summary>
         /// The current API version hash with which the ProxyServer was tested
         /// </summary>
-        private const string API_VERSION_HASH = "d6cad016242d50dd33b79e34ab944d8a82fd53d32db4bf96889c322cad55434d";
+        private const string API_VERSION_HASH = "9e354bcab6fea09519b905baa129a377ccf54fcd65308c28e7fe3c0de857f49d";
         #endregion
 
         #region API Functions
@@ -114,6 +114,20 @@ namespace Adguard.Dns
             IntPtr pUpstreamOptions, [MarshalAs(UnmanagedType.I1)] bool Ipv6Available,
             [MarshalAs(UnmanagedType.FunctionPtr)] cbd_onCertificateVerification onCertificateVerification,
             [MarshalAs(UnmanagedType.I1)] bool offline);
+
+
+        /// <summary>
+        /// Check if the specified rule is valid
+        /// </summary>
+        /// <param name="ruleText">Rule text</param>
+        /// <returns>True, is specified rule is valid, otherwise false</returns>
+        [DllImport(DnsLibName, CallingConvention = CallingConvention.Cdecl)]
+        [return: MarshalAs(UnmanagedType.I1)]
+        internal static extern bool ag_is_valid_dns_rule(
+            [MarshalAs(
+                UnmanagedType.CustomMarshaler,
+                MarshalTypeRef = typeof(ManualStringToPtrMarshaler))] string ruleText);
+
 
         /// <summary>
         /// Parses a DNS stamp string and returns a instance or an error

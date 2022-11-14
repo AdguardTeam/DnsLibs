@@ -168,6 +168,21 @@ namespace Adguard.Dns.Utils
         }
 
         /// <summary>
+        /// Checks if specified rule is valid
+        /// </summary>
+        /// <param name="ruleText">Rule text</param>
+        /// <returns>True, is specified rule is valid, otherwise false</returns>
+        public static bool IsRuleValid(string ruleText)
+        {
+            if (string.IsNullOrEmpty(ruleText))
+            {
+                return false;
+            }
+
+            return AGDnsApi.ag_is_valid_dns_rule(ruleText);
+        }
+
+        /// <summary>
         /// Checks if upstream is valid and available
         /// </summary>
         /// <param name="upstreamOptions">Upstream options
