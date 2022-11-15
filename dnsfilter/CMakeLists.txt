@@ -14,6 +14,7 @@ set(SRCS
         filter.cpp
         rule_utils.cpp
         dnsrewrite.cpp
+        denyallow.cpp
     )
 
 add_library(dnsfilter STATIC EXCLUDE_FROM_ALL ${SRCS})

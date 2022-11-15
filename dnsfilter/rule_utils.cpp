@@ -53,6 +53,7 @@ static constexpr SupportedModifierDescriptor SUPPORTED_MODIFIERS[] = {
         {"badfilter", DnsFilter::DARP_BADFILTER},
         {"dnstype", DnsFilter::DARP_DNSTYPE, &parse_dnstype_modifier},
         {"dnsrewrite", DnsFilter::DARP_DNSREWRITE, &rule_utils::parse_dnsrewrite_modifier},
+        {"denyallow", DnsFilter::DARP_DENYALLOW, &rule_utils::parse_denyallow_modifier},
 };
 
 // RFC1035 $2.3.4 Size limits (https://tools.ietf.org/html/rfc1035#section-2.3.4)
@@ -242,10 +243,9 @@ static inline bool extract_modifiers(
                 return false;
             }
 
-            if (size_t start_pos
-                    = (modifier.length() > descr.name.length()) ? descr.name.length() + 1 : descr.name.length();
-                    descr.parse_modifier_params != nullptr
-                    && !descr.parse_modifier_params(rule, modifier.substr(start_pos), match_info, log)) {
+            if (size_t start_pos =
+                            (modifier.length() > descr.name.length()) ? descr.name.length() + 1 : descr.name.length();
+                    !descr.parse_modifier_params(rule, modifier.substr(start_pos), match_info, log)) {
                 return false;
             }
 
@@ -437,7 +437,9 @@ static std::vector<std::string_view> extract_regex_shortcuts(std::string_view te
 }
 
 static bool is_too_wide_rule(const DnsFilter::AdblockRuleInfo &rule_info, const rule_utils::MatchInfo &match_info) {
-    return !rule_info.props.test(DnsFilter::DARP_DNSTYPE) && !rule_info.props.test(DnsFilter::DARP_DNSREWRITE)
+    return !rule_info.props.test(DnsFilter::DARP_DNSTYPE)
+            && !rule_info.props.test(DnsFilter::DARP_DNSREWRITE)
+            && !rule_info.props.test(DnsFilter::DARP_DENYALLOW)
             && (match_info.text.length() < 3 || match_info.text.find_first_not_of(".*") == match_info.text.npos);
 }
 
@@ -497,12 +499,13 @@ static std::optional<rule_utils::Rule> parse_adblock_rule(std::string_view str, 
         r.match_method = exact_pattern ? Rule::MMID_EXACT : Rule::MMID_SUBDOMAINS;
         r.matching_parts.emplace_back(ag::utils::to_lower(str));
     } else if (!match_info.is_regex_rule && match_info.pattern_mode == 0) {
-        r.match_method = Rule::MMID_SHORTCUTS;
         std::vector<std::string_view> shortcuts = ag::utils::split_by(str, '*');
         r.matching_parts.reserve(shortcuts.size());
         for (const std::string_view &sc : shortcuts) {
             r.matching_parts.emplace_back(ag::utils::to_lower(sc));
         }
+        // No shortcuts -> rule like "*$modifier1,modifier2,...", switch to shortcuts+regex mode
+        r.match_method = !r.matching_parts.empty() ? Rule::MMID_SHORTCUTS : Rule::MMID_SHORTCUTS_AND_REGEX;
     } else {
         if (str.find('?') != str.npos) {
             r.match_method = Rule::MMID_REGEX;

@@ -565,8 +565,7 @@ static bool match_pattern(const rule_utils::Rule &rule, const Filter::MatchConte
         matched = match_shortcuts(rule.matching_parts, match_context.host);
         break;
     case rule_utils::Rule::MMID_SHORTCUTS_AND_REGEX:
-        assert(!rule.matching_parts.empty());
-        if (match_shortcuts(rule.matching_parts, match_context.host)) {
+        if (rule.matching_parts.empty() || match_shortcuts(rule.matching_parts, match_context.host)) {
             Regex re(rule_utils::get_regex(rule));
             matched = re.match(match_context.host);
         }
@@ -586,6 +585,30 @@ static bool match_pattern(const rule_utils::Rule &rule, const Filter::MatchConte
     }
     }
 
+    if (matched) {
+        // The rule must not match if at least one of the (sub)domains matches at least one of the denyallow domains.
+        if (const auto *content = std::get_if<DnsFilter::AdblockRuleInfo>(&rule.public_part.content);
+                content && content->props.test(ag::dns::DnsFilter::DARP_DENYALLOW)) {
+            // An IP address must never match a $denyallow rule,
+            // otherwise a single rule like `*$denyallow=com|org|...` will block all responses.
+            if (match_context.ip_as_cidr.has_value()) {
+                matched = false;
+                goto exit;
+            }
+            assert(content->params);
+            for (const auto &denyallow : content->params->denyallow_domains) {
+                // assert `subdomains` also contains the full host
+                for (const auto &subdomain : match_context.subdomains) {
+                    if (subdomain == denyallow) {
+                        matched = false;
+                        goto exit;
+                    }
+                }
+            }
+        }
+    }
+
+    exit:
     return matched;
 }
 
@@ -796,10 +819,6 @@ Filter::MatchContext::MatchContext(DnsFilter::MatchParam param)
         : host(utils::to_lower(param.domain))
         , rr_type(param.rr_type) {
     size_t n = std::count(this->host.begin(), this->host.end(), '.');
-    if (n > 0) {
-        // all except tld
-        --n;
-    }
 
     this->subdomains.reserve(n + 1);
     this->subdomains.emplace_back(this->host);

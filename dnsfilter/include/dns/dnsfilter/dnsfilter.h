@@ -45,6 +45,7 @@ public:
         DARP_BADFILTER, // has `$badfilter` modifier
         DARP_DNSTYPE, // has `$dnstype` modifier
         DARP_DNSREWRITE, // has `$dnsrewrite` modifier
+        DARP_DENYALLOW, // has `$denyallow` modifier
     };
 
     // Both https://github.com/AdguardTeam/AdguardHome/wiki/Hosts-Blocklists#adblock-style

@@ -31,11 +31,18 @@ protected:
         std::remove(file_by_filter_name(TEST_FILTER_NAME).data());
     }
 
+    static void clear_filter(std::string_view filter) {
+        ag::file::Handle file = ag::file::open(std::string(filter), ag::file::WRONLY | ag::file::TRUNC);
+        ASSERT_TRUE(ag::file::is_valid(file)) << ag::dns::sys::error_string(ag::dns::sys::error_code());
+        ASSERT_EQ(0, ag::file::get_size(file)) << ag::dns::sys::error_string(ag::dns::sys::error_code());
+        ag::file::close(file);
+    }
+
     static void add_rule_in_filter(std::string_view filter, std::string_view rule) {
         ag::file::Handle file = ag::file::open(std::string(filter), ag::file::WRONLY);
         ASSERT_TRUE(ag::file::is_valid(file)) << ag::dns::sys::error_string(ag::dns::sys::error_code());
-        ASSERT_TRUE(ag::file::get_size(file) >= 0) << ag::dns::sys::error_string(ag::dns::sys::error_code());
-        ag::file::set_position(file, ag::file::get_size(file));
+        ASSERT_GE(ag::file::get_size(file), 0) << ag::dns::sys::error_string(ag::dns::sys::error_code());
+        ASSERT_EQ(ag::file::get_size(file), ag::file::set_position(file, ag::file::get_size(file)));
         EXPECT_EQ(ag::file::write(file, rule.data(), rule.length()), rule.length());
         EXPECT_EQ(ag::file::write(file, "\n", 1), 1);
         ag::file::close(file);
@@ -175,12 +182,12 @@ TEST_F(DnsfilterTest, SuccessfulRuleParsing) {
             {"@@example.org$dnsrewrite",
                     {make_rule((1 << DnsFilter::DARP_DNSREWRITE) | (1 << DnsFilter::DARP_EXCEPTION)),
                             rule_utils::Rule::MMID_SHORTCUTS}},
-            {"*$dnstype=HTTPS", {make_rule(1 << DnsFilter::DARP_DNSTYPE), rule_utils::Rule::MMID_SHORTCUTS}},
-            {"$dnstype=HTTPS", {make_rule(1 << DnsFilter::DARP_DNSTYPE), rule_utils::Rule::MMID_SHORTCUTS}},
+            {"*$dnstype=HTTPS", {make_rule(1 << DnsFilter::DARP_DNSTYPE), rule_utils::Rule::MMID_SHORTCUTS_AND_REGEX}},
+            {"$dnstype=HTTPS", {make_rule(1 << DnsFilter::DARP_DNSTYPE), rule_utils::Rule::MMID_SHORTCUTS_AND_REGEX}},
             {"/.*/$dnstype=HTTPS", {make_rule(1 << DnsFilter::DARP_DNSTYPE), rule_utils::Rule::MMID_REGEX}},
             {"/.*$/$dnstype=HTTPS", {make_rule(1 << DnsFilter::DARP_DNSTYPE), rule_utils::Rule::MMID_REGEX}},
-            {"*$dnsrewrite", {make_rule((1 << DnsFilter::DARP_DNSREWRITE)), rule_utils::Rule::MMID_SHORTCUTS}},
-            {"$dnsrewrite", {make_rule((1 << DnsFilter::DARP_DNSREWRITE)), rule_utils::Rule::MMID_SHORTCUTS}},
+            {"*$dnsrewrite", {make_rule((1 << DnsFilter::DARP_DNSREWRITE)), rule_utils::Rule::MMID_SHORTCUTS_AND_REGEX}},
+            {"$dnsrewrite", {make_rule((1 << DnsFilter::DARP_DNSREWRITE)), rule_utils::Rule::MMID_SHORTCUTS_AND_REGEX}},
             {"/.*/$dnsrewrite", {make_rule((1 << DnsFilter::DARP_DNSREWRITE)), rule_utils::Rule::MMID_REGEX}},
     };
 
@@ -290,6 +297,8 @@ TEST_F(DnsfilterTest, WrongRuleParsing) {
             "*a",
             "a*",
             ".*",
+            "example.org$denyallow",
+            "example.org$denyallow=",
     };
 
     for (const std::string &entry : TEST_DATA) {
@@ -361,7 +370,11 @@ const std::vector<BasicTestData> BASIC_TEST_DATA = {
                 "EXAMPLE9.org",
                 true,
         },
-        {{".example10.org"}, "sub.example10.org", true},
+        {
+                {".example10.org"},
+                "sub.example10.org",
+                true,
+        },
         {
                 {"http://example11.org"},
                 "example11.org",
@@ -524,22 +537,67 @@ const std::vector<BasicTestData> BASIC_TEST_DATA = {
         },
         {
                 {"/.*$/"},
-                "example58.com",
+                "example58-1.com",
                 true,
         },
         {
-                {"/^/"},
-                "example59.com",
-                true,
-        },
-        {
-                {"/$/"},
-                "example60.com",
+                {"/^.*/"},
+                "example58-2.com",
                 true,
         },
         {
                 {"@@||app.adjust.com^|", "||adjust.com^", "@@||app.adjust.com^|$badfilter"},
                 "app.adjust.com",
+                true,
+        },
+        {
+                {"*$denyallow=com|net", "||evil.com^"},
+                "evil.com",
+                true,
+        },
+        {
+                {"*$denyallow=com|net", "||evil.com^"},
+                "example.com",
+                false,
+        },
+        {
+                {"||example.org^$denyallow=sub.example.org"},
+                "example.org",
+                true,
+        },
+        {
+                {"||example.org^$denyallow=sub.example.org"},
+                "sub1.example.org",
+                true,
+        },
+        {
+                {"||example.org^$denyallow=sub.example.org"},
+                "sub.example.org",
+                false,
+        },
+        {
+                {"||example.org^$denyallow=sub.example.org"},
+                "sub.sub.example.org",
+                false,
+        },
+        {
+                {"@@*$denyallow=com|net", "/.*$/"},
+                "example.org",
+                false,
+        },
+        {
+                {"@@*$denyallow=com|net", "/.*$/"},
+                "example.co.uk",
+                false,
+        },
+        {
+                {"@@*$denyallow=com|net", "/.*$/"},
+                "example.com",
+                true,
+        },
+        {
+                {"@@*$denyallow=com|net", "/.*$/"},
+                "example.net",
                 true,
         },
 };
@@ -548,26 +606,31 @@ TEST_F(DnsfilterTest, BasicRulesMatch) {
     for (const auto &entry : BASIC_TEST_DATA) {
         infolog(log, "testing {}", entry.domain);
 
+        std::string file_name = file_by_filter_name(TEST_FILTER_NAME);
+        ASSERT_NO_FATAL_FAILURE(clear_filter(file_name));
         for (const std::string &rule : entry.rules) {
-            ASSERT_NO_FATAL_FAILURE(add_rule_in_filter(file_by_filter_name(TEST_FILTER_NAME), rule));
+            ASSERT_NO_FATAL_FAILURE(add_rule_in_filter(file_name, rule));
         }
 
         DnsFilter::EngineParams params = {{{10, file_by_filter_name(TEST_FILTER_NAME)}}};
         auto [handle, err_or_warn] = filter.create(params);
         ASSERT_TRUE(handle) << err_or_warn->str();
         std::vector<DnsFilter::Rule> rules = filter.match(handle, {entry.domain});
-        ASSERT_GT(rules.size(), 0);
-        for (const DnsFilter::Rule &r : rules) {
-            ASSERT_EQ(r.filter_id, 10);
-        }
-        DnsFilter::EffectiveRules effective_rules = DnsFilter::get_effective_rules(rules);
-        ASSERT_EQ(effective_rules.leftovers.size(), 1);
-        const auto *content = std::get_if<DnsFilter::AdblockRuleInfo>(&effective_rules.leftovers[0]->content);
-        ASSERT_NE(content, nullptr);
-        if (entry.expect_blocked) {
-            ASSERT_FALSE(content->props.test(DnsFilter::DARP_EXCEPTION));
+        if (!rules.empty()) {
+            for (const DnsFilter::Rule &r : rules) {
+                ASSERT_EQ(r.filter_id, 10);
+            }
+            DnsFilter::EffectiveRules effective_rules = DnsFilter::get_effective_rules(rules);
+            ASSERT_EQ(effective_rules.leftovers.size(), 1);
+            const auto *content = std::get_if<DnsFilter::AdblockRuleInfo>(&effective_rules.leftovers[0]->content);
+            ASSERT_NE(content, nullptr);
+            if (entry.expect_blocked) {
+                ASSERT_FALSE(content->props.test(DnsFilter::DARP_EXCEPTION));
+            } else {
+                ASSERT_TRUE(content->props.test(DnsFilter::DARP_EXCEPTION));
+            }
         } else {
-            ASSERT_TRUE(content->props.test(DnsFilter::DARP_EXCEPTION));
+            ASSERT_FALSE(entry.expect_blocked);
         }
 
         filter.destroy(handle);
@@ -579,6 +642,7 @@ TEST_F(DnsfilterTest, BasicRulesMatchInMemory) {
     for (const auto &entry : BASIC_TEST_DATA) {
         infolog(log, "testing {}", entry.domain);
 
+        filter_data.clear();
         for (const auto &rule : entry.rules) {
             filter_data += rule;
             filter_data += "\r\n";
@@ -589,18 +653,21 @@ TEST_F(DnsfilterTest, BasicRulesMatchInMemory) {
         ASSERT_TRUE(handle) << err_or_warn->str();
 
         std::vector<DnsFilter::Rule> rules = filter.match(handle, {entry.domain});
-        ASSERT_GT(rules.size(), 0);
-        for (const DnsFilter::Rule &r : rules) {
-            ASSERT_EQ(r.filter_id, 10);
-        }
-        DnsFilter::EffectiveRules effective_rules = DnsFilter::get_effective_rules(rules);
-        ASSERT_EQ(effective_rules.leftovers.size(), 1);
-        const auto *content = std::get_if<DnsFilter::AdblockRuleInfo>(&effective_rules.leftovers[0]->content);
-        ASSERT_NE(content, nullptr);
-        if (entry.expect_blocked) {
-            ASSERT_FALSE(content->props.test(DnsFilter::DARP_EXCEPTION));
+        if (!rules.empty()) {
+            for (const DnsFilter::Rule &r : rules) {
+                ASSERT_EQ(r.filter_id, 10);
+            }
+            DnsFilter::EffectiveRules effective_rules = DnsFilter::get_effective_rules(rules);
+            ASSERT_EQ(effective_rules.leftovers.size(), 1);
+            const auto *content = std::get_if<DnsFilter::AdblockRuleInfo>(&effective_rules.leftovers[0]->content);
+            ASSERT_NE(content, nullptr);
+            if (entry.expect_blocked) {
+                ASSERT_FALSE(content->props.test(DnsFilter::DARP_EXCEPTION));
+            } else {
+                ASSERT_TRUE(content->props.test(DnsFilter::DARP_EXCEPTION));
+            }
         } else {
-            ASSERT_TRUE(content->props.test(DnsFilter::DARP_EXCEPTION));
+            ASSERT_FALSE(entry.expect_blocked);
         }
 
         filter.destroy(handle);

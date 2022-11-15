@@ -186,6 +186,14 @@ bool parse_dnsrewrite_modifier(rule_utils::Rule &rule, std::string_view params_s
         const MatchInfo &match_info, Logger *log);
 
 /**
+ * Parse the `$denyallow` modifier parameters
+ * https://github.com/AdguardTeam/AdGuardHome/wiki/Hosts-Blocklists#denyallow
+ * @return true if successful
+ */
+bool parse_denyallow_modifier(rule_utils::Rule &rule, std::string_view params_str,
+        const MatchInfo &match_info, Logger *log);
+
+/**
  * Check if the string is a domain name
  */
 bool is_domain_name(std::string_view str);
@@ -197,6 +205,8 @@ namespace ag::dns {
 struct DnsFilter::AdblockRuleInfo::Parameters {
     // non-nullopt if the rule has `$dnsrewrite` modifier
     std::optional<dnsfilter::rule_utils::DnsrewriteInfo> dnsrewrite;
+    // list of denyallow domains (rule must not apply if the domain is a denyallow domain or a subdomain thereof)
+    std::vector<std::string> denyallow_domains;
 };
 
 } // namespace ag::dns

@@ -1145,11 +1145,11 @@ TEST_F(DnsProxyTest, IpBlockingRegress) {
     ASSERT_EQ(LDNS_RCODE_NOERROR, ldns_pkt_get_rcode(res.get()));
 
     ASSERT_NO_FATAL_FAILURE(perform_request(*m_proxy, create_request(IPV4_ONLY_HOST, LDNS_RR_TYPE_A, LDNS_RD), res));
-    ASSERT_EQ(1, last_event.filter_list_ids.size()); // Whitelisted by both domain and CNAME
+    ASSERT_EQ(1, last_event.filter_list_ids.size());
     ASSERT_FALSE(last_event.whitelist);
 
     ASSERT_NO_FATAL_FAILURE(perform_request(*m_proxy, create_request("dns.adguard.com", LDNS_RR_TYPE_AAAA, LDNS_RD), res));
-    ASSERT_EQ(1, last_event.filter_list_ids.size()); // Whitelisted by both domain and CNAME
+    ASSERT_EQ(1, last_event.filter_list_ids.size());
     ASSERT_FALSE(last_event.whitelist);
 }
 
@@ -1479,6 +1479,46 @@ TEST_F(DnsProxyTest, FallbackDomainsGood) {
         m_proxy->deinit();
     }
     m_proxy.reset();
+}
+
+TEST_F(DnsProxyTest, DenyallowRulesDoNotMatchIpAddresses) {
+    DnsProxySettings settings = make_dnsproxy_settings();
+    settings.upstreams = {{.address = "1.1.1.1"}};
+    settings.adblock_rules_blocking_mode = DnsProxyBlockingMode::REFUSED;
+    settings.hosts_rules_blocking_mode = DnsProxyBlockingMode::REFUSED;
+    settings.filter_params.filters = {
+            {
+                    .id = 1,
+                    .data = "192.0.0.170\n"
+                            "192.0.0.171\n"
+                            "*$denyallow=arpa|org\n",
+                    .in_memory = true,
+            },
+    };
+
+    DnsRequestProcessedEvent last_event{};
+    DnsProxyEvents events{.on_request_processed = [&last_event](const DnsRequestProcessedEvent &event) {
+        last_event = event;
+    }};
+
+    auto [ret, err] = m_proxy->init(settings, {});
+    ASSERT_TRUE(ret) << err->str();
+
+    ldns_pkt_ptr response;
+
+    // Blocked by `*$denyallow=arpa|org`
+    perform_request(*m_proxy, create_request("example.com", LDNS_RR_TYPE_A, LDNS_RD), response);
+    ASSERT_EQ(ldns_pkt_get_rcode(response.get()), LDNS_RCODE_REFUSED);
+
+    // Blocked by IP
+    perform_request(*m_proxy, create_request("ipv4only.arpa", LDNS_RR_TYPE_A, LDNS_RD), response);
+    ASSERT_EQ(ldns_pkt_get_rcode(response.get()), LDNS_RCODE_REFUSED);
+
+    // Without a special case that IPs must not match $denyallow rules,
+    // this would be blocked, because example.org's IP is not in denyallow domains.
+    perform_request(*m_proxy, create_request("example.org", LDNS_RR_TYPE_A, LDNS_RD), response);
+    ASSERT_GT(ldns_pkt_ancount(response.get()), 0);
+    ASSERT_EQ(ldns_pkt_get_rcode(response.get()), LDNS_RCODE_NOERROR);
 }
 
 } // namespace ag::dns::proxy::test
