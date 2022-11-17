@@ -81,7 +81,7 @@ const DnsProxySettings &DnsProxySettings::get_default() {
 struct DnsProxy::Impl {
     Logger log{"DNS proxy"};
     EventLoopPtr loop;
-    DnsForwarder forwarder;
+    std::optional<DnsForwarder> forwarder;
     DnsProxySettings settings;
     DnsProxyEvents events;
     std::vector<ListenerPtr> listeners;
@@ -106,8 +106,10 @@ std::pair<bool, ErrString> DnsProxy::init(DnsProxySettings settings, DnsProxyEve
     }
 
     proxy->loop = EventLoop::create();
-    auto [result, err_or_warn] = proxy->forwarder.init(proxy->loop, proxy->settings, proxy->events);
+    proxy->forwarder.emplace();
+    auto [result, err_or_warn] = proxy->forwarder->init(proxy->loop, proxy->settings, proxy->events);
     if (!result) {
+        proxy->forwarder.reset();
         this->deinit();
         return {false, err_or_warn};
     }
@@ -145,7 +147,9 @@ void DnsProxy::deinit() {
         proxy->listeners.clear();
         infolog(proxy->log, "Shutting down listeners done");
 
-        proxy->forwarder.deinit();
+        if (proxy->forwarder) {
+            proxy->forwarder->deinit();
+        }
 
         infolog(proxy->log, "Stopping event loop");
         proxy->loop->stop();
@@ -165,7 +169,7 @@ const DnsProxySettings &DnsProxy::get_settings() const {
 coro::Task<Uint8Vector> DnsProxy::handle_message(Uint8View message, const DnsMessageInfo *info) {
     std::unique_ptr<Impl> &proxy = m_pimpl;
 
-    Uint8Vector response = co_await proxy->forwarder.handle_message(message, info);
+    Uint8Vector response = co_await proxy->forwarder->handle_message(message, info);
 
     co_return response;
 }
