@@ -1,7 +1,13 @@
 #include <algorithm>
 #include <cassert>
 
+#if defined _WIN32 && !defined __clang__
+#pragma optimize( "", off )
+#endif
 #include "common/parallel.h"
+#if defined _WIN32 && !defined __clang__
+#pragma optimize( "", on )
+#endif
 #include "common/utils.h"
 #include "dns/dnsstamp/dns_stamp.h"
 #include "dns/upstream/bootstrapper.h"

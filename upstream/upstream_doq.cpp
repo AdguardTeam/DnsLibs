@@ -12,7 +12,13 @@
 #endif
 
 #include "common/clock.h"
+#if defined _WIN32 && !defined __clang__
+#pragma optimize( "", off )
+#endif
 #include "common/parallel.h"
+#if defined _WIN32 && !defined __clang__
+#pragma optimize( "", on )
+#endif
 #include "common/time_utils.h"
 #include "dns/upstream/upstream.h"
 
