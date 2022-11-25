@@ -22,7 +22,7 @@ namespace Adguard.Dns
         /// <summary>
         /// The current API version hash with which the ProxyServer was tested
         /// </summary>
-        private const string API_VERSION_HASH = "613ba0e6097e673d8b4bba0d2af1664361f5e1c9d71c2352dad7ef05b37c96df";
+        private const string API_VERSION_HASH = "0bcaed944c9e06dac07d7281a05935f8cb4307392d117848ab2695859558857c";
         #endregion
 
         #region API Functions
@@ -612,6 +612,13 @@ namespace Adguard.Dns
             [MarshalAs(UnmanagedType.I1)]
             [NativeName("enable_servfail_on_upstreams_failure")]
             internal bool EnableServfailOnUpstreamsFailure;
+
+            /// <summary>
+            /// Enable HTTP/3 for DNS-over-HTTPS upstreams if it's able to connect quicker.
+            /// </summary>
+            [MarshalAs(UnmanagedType.I1)]
+            [NativeName("enable_http3")]
+            internal bool EnableHttp3;
         }
 
         /// <summary>

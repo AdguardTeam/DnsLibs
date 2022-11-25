@@ -35,6 +35,7 @@ struct ProxyBootstrapper : public SocketFactory::ProxyBootstrapper {
                       .loop = loop,
                       .socket_factory = &this->socket_factory,
                       .ipv6_available = settings.ipv6_available,
+                      .enable_http3 = settings.enable_http3,
               }) {
     }
 

@@ -330,7 +330,7 @@ DnsForwarder::InitResult DnsForwarder::init(
     m_socket_factory = std::make_shared<SocketFactory>(std::move(sf_parameters));
 
     infolog(m_log, "Initializing upstreams...");
-    UpstreamFactory us_factory({*m_loop, m_socket_factory.get(), m_settings->ipv6_available});
+    UpstreamFactory us_factory({*m_loop, m_socket_factory.get(), m_settings->ipv6_available, m_settings->enable_http3});
     m_upstreams.reserve(settings.upstreams.size());
     m_fallbacks.reserve(settings.fallbacks.size());
     for (const UpstreamOptions &options : settings.upstreams) {

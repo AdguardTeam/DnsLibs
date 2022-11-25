@@ -149,6 +149,9 @@ struct DnsProxySettings {
      * the proxy will respond with a SERVFAIL packet. Otherwise, no response is sent on such a failure.
      */
     bool enable_servfail_on_upstreams_failure;
+
+    /** Enable HTTP/3 for DNS-over-HTTPS upstreams if it's able to connect quicker. */
+    bool enable_http3;
 };
 
 }  // namespace ag::dns

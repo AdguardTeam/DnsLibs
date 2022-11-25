@@ -44,6 +44,7 @@ int main() {
     };
     settings.dns_cache_size = 0;
     settings.optimistic_cache = false;
+    settings.enable_http3 = true;
 
     DnsProxy proxy;
     auto [ret, err] = proxy.init(settings, {});

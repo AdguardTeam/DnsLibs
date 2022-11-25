@@ -74,6 +74,7 @@ static const DnsProxySettings DEFAULT_PROXY_SETTINGS = {
         .enable_parallel_upstream_queries = false,
         .enable_fallback_on_upstreams_failure = true,
         .enable_servfail_on_upstreams_failure = true,
+        .enable_http3 = false,
 };
 
 const DnsProxySettings &DnsProxySettings::get_default() {

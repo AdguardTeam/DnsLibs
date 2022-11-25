@@ -49,6 +49,7 @@ struct DohUpstream::QueryHandle {
 
     const Logger *log = nullptr;
     DohUpstream *upstream = nullptr;
+    ConnectionPool *pool = nullptr;
     size_t request_id = 0;
     CURL_ptr curl_handle;
     Error<DnsError> error;
@@ -60,7 +61,9 @@ struct DohUpstream::QueryHandle {
     std::shared_ptr<curl_slist> resolved_addrs;
     Millis timeout;
 
-    CURL_ptr create_curl_handle();
+    bool create_curl_handle(ConnectionPool *pool);
+
+    bool create_probe_curl_handle(ConnectionPool *pool, int curlopt_httpver);
 
     bool set_up_proxy(const OutboundProxySettings *settings);
 
@@ -122,7 +125,7 @@ struct DohUpstream::CheckProxyState {
 
         upstream->m_config.socket_factory->on_successful_proxy_connection();
         upstream->m_check_proxy.reset();
-        upstream->retry_pending_queries_directly();
+        upstream->retry_pending_queries(false);
     }
 
     static void on_close(void *arg, Error<SocketError> error) {
@@ -139,7 +142,7 @@ struct DohUpstream::CheckProxyState {
             upstream->stop_all_with_error(make_error(DnsError::AE_OUTBOUND_PROXY_ERROR));
             break;
         case SocketFactory::SFPCFR_RETRY_DIRECTLY:
-            upstream->retry_pending_queries_directly();
+            upstream->retry_pending_queries(true);
             upstream->m_reset_bypassed_proxy_connections_subscribe_id =
                     factory->subscribe_to_reset_bypassed_proxy_connections_event({[](void *arg) {
                         auto *self = (DohUpstream *) arg;
@@ -212,11 +215,11 @@ static int verbose_callback(CURL *, curl_infotype type, char *data, size_t size,
     return 0;
 }
 
-DohUpstream::QueryHandle::CURL_ptr DohUpstream::QueryHandle::create_curl_handle() {
+bool DohUpstream::QueryHandle::create_curl_handle(ConnectionPool *pool) {
     CURL_ptr curl_ptr{curl_easy_init()};
     if (curl_ptr == nullptr) {
         this->error = make_error(DnsError::AE_CURL_ERROR, "Failed to init curl handle");
-        return nullptr;
+        return false;
     }
 
     DohUpstream *doh_upstream = this->upstream;
@@ -257,10 +260,60 @@ DohUpstream::QueryHandle::CURL_ptr DohUpstream::QueryHandle::create_curl_handle(
     ) {
         this->error = make_error(DnsError::AE_CURL_ERROR,
                 AG_FMT("Failed to set options on curl handle: {} (id={})", curl_easy_strerror(e), e));
-        return nullptr;
+        return false;
     }
 
-    return curl_ptr;
+    cleanup_request();
+    this->pool = pool;
+    this->curl_handle = std::move(curl_ptr);
+    return true;
+}
+
+bool DohUpstream::QueryHandle::create_probe_curl_handle(ConnectionPool *pool, int curlopt_httpver) {
+    CURL_ptr curl_ptr{curl_easy_init()};
+    if (curl_ptr == nullptr) {
+        this->error = make_error(DnsError::AE_CURL_ERROR, "Failed to init curl handle");
+        return false;
+    }
+
+    DohUpstream *doh_upstream = this->upstream;
+    long timeout_ms = (long) this->timeout.count();
+    this->resolved_addrs = doh_upstream->m_resolved;
+    CURL *curl = curl_ptr.get();
+    if (CURLcode e;
+            // clang-format off
+               CURLE_OK != (e = curl_easy_setopt(curl, CURLOPT_URL, doh_upstream->m_curlopt_url.c_str()))
+            || CURLE_OK != (e = curl_easy_setopt(curl, CURLOPT_NOPROGRESS, true))
+            || CURLE_OK != (e = curl_easy_setopt(curl, CURLOPT_TIMEOUT_MS, timeout_ms))
+            || CURLE_OK != (e = curl_easy_setopt(curl, CURLOPT_CONNECTTIMEOUT_MS, timeout_ms))
+            || CURLE_OK != (e = curl_easy_setopt(curl, CURLOPT_HTTP_VERSION, curlopt_httpver))
+            || CURLE_OK != (e = curl_easy_setopt(curl, CURLOPT_PRIVATE, this))
+            || CURLE_OK != (e = curl_easy_setopt(curl, CURLOPT_PROTOCOLS, CURLPROTO_HTTPS))
+            || CURLE_OK != (e = curl_easy_setopt(curl, CURLOPT_SSL_CTX_FUNCTION, DohUpstream::ssl_callback))
+            || CURLE_OK != (e = curl_easy_setopt(curl, CURLOPT_SSL_CTX_DATA, this))
+            || CURLE_OK != (e = curl_easy_setopt(curl, CURLOPT_SSL_VERIFYPEER, false)) // We verify ourselves, see DohUpstream::ssl_callback
+            || CURLE_OK != (e = curl_easy_setopt(curl, CURLOPT_SSL_VERIFYHOST, false)) // We verify ourselves, see DohUpstream::ssl_callback
+            || CURLE_OK != (e = curl_easy_setopt(curl, CURLOPT_SSL_ENABLE_ALPN, true))
+            || CURLE_OK != (e = curl_easy_setopt(curl, CURLOPT_OPENSOCKETFUNCTION, curl_opensocket))
+            || CURLE_OK != (e = curl_easy_setopt(curl, CURLOPT_OPENSOCKETDATA, doh_upstream))
+            || CURLE_OK != (e = curl_easy_setopt(curl, CURLOPT_PREREQFUNCTION, curl_prereq))
+            || CURLE_OK != (e = curl_easy_setopt(curl, CURLOPT_PREREQDATA, this))
+            || CURLE_OK != (e = curl_easy_setopt(curl, CURLOPT_DEBUGFUNCTION, verbose_callback))
+            || CURLE_OK != (e = curl_easy_setopt(curl, CURLOPT_DEBUGDATA, this))
+            || CURLE_OK != (e = curl_easy_setopt(curl, CURLOPT_VERBOSE, (long) (log->is_enabled(LogLevel::LOG_LEVEL_DEBUG))))
+            || CURLE_OK != (e = curl_easy_setopt(curl, CURLOPT_CONNECT_ONLY, (long) true))
+            || CURLE_OK != (e = curl_easy_setopt(curl, CURLOPT_FORBID_REUSE, (long) true))
+            || (doh_upstream->m_resolved != nullptr && CURLE_OK != (e = curl_easy_setopt(curl, CURLOPT_RESOLVE, this->resolved_addrs.get())))
+            // clang-format on
+    ) {
+        this->error = make_error(DnsError::AE_CURL_ERROR,
+                AG_FMT("Failed to set options on curl handle: {} (id={})", curl_easy_strerror(e), e));
+        return false;
+    }
+
+    this->pool = pool;
+    this->curl_handle = std::move(curl_ptr);
+    return true;
 }
 
 bool DohUpstream::QueryHandle::set_up_proxy(const OutboundProxySettings *settings) {
@@ -317,8 +370,10 @@ bool DohUpstream::QueryHandle::set_up_proxy(const OutboundProxySettings *setting
 
 void DohUpstream::QueryHandle::cleanup_request() {
     if (this->curl_handle) {
+        assert(this->pool);
+        assert(this->pool->handle);
         CURLMcode perr [[maybe_unused]] =
-                curl_multi_remove_handle(this->upstream->m_pool.handle.get(), this->curl_handle.get());
+                curl_multi_remove_handle(this->pool->handle.get(), this->curl_handle.get());
         assert(perr == CURLM_OK);
         this->curl_handle.reset();
     }
@@ -401,6 +456,16 @@ CURLcode DohUpstream::ssl_callback(CURL *curl, void *sslctx, void *arg) {
     SSL_CTX *ctx = (SSL_CTX *) sslctx;
     SSL_CTX_set_verify(ctx, SSL_VERIFY_PEER, nullptr);
     SSL_CTX_set_cert_verify_callback(ctx, verify_callback, arg);
+#if 0
+    if (char *ssl_keylog_file = getenv("SSLKEYLOGFILE")) {
+        static UniquePtr<std::FILE, &std::fclose> handle{std::fopen(ssl_keylog_file, "a")};
+        SSL_CTX_set_keylog_callback(ctx,
+                [] (const SSL *, const char *line) {
+                    fprintf(handle.get(), "%s\n", line);
+                    fflush(handle.get());
+                });
+    }
+#endif
     return CURLE_OK;
 }
 
@@ -432,25 +497,6 @@ static Result<curl_slist_ptr, Upstream::InitError> create_resolved_hosts_list(st
     return curl_slist_ptr(curl_slist_append(nullptr, entry.c_str()));
 }
 
-curl_pool_ptr DohUpstream::create_pool() const {
-    CURLM *pool = curl_multi_init();
-    if (pool == nullptr) {
-        return nullptr;
-    }
-    curl_pool_ptr pool_holder = curl_pool_ptr(pool);
-
-    if (CURLMcode e; CURLM_OK != (e = curl_multi_setopt(pool, CURLMOPT_SOCKETFUNCTION, on_socket_update))
-            || CURLM_OK != (e = curl_multi_setopt(pool, CURLMOPT_SOCKETDATA, this))
-            || CURLM_OK != (e = curl_multi_setopt(pool, CURLMOPT_TIMERFUNCTION, on_pool_timer_event))
-            || CURLM_OK != (e = curl_multi_setopt(pool, CURLMOPT_TIMERDATA, this))
-            || CURLM_OK != (e = curl_multi_setopt(pool, CURLMOPT_PIPELINING, CURLPIPE_MULTIPLEX))) {
-        errlog(m_log, "Failed to set options of curl pool: {} (id={})", curl_multi_strerror(e), e);
-        return nullptr;
-    }
-
-    return pool_holder;
-}
-
 DohUpstream::DohUpstream(const UpstreamOptions &opts, const UpstreamFactoryConfig &config)
         : Upstream(opts, config)
         , m_log("DOH upstream") {
@@ -462,6 +508,8 @@ Error<Upstream::InitError> DohUpstream::init() {
     if (m_curlopt_url.starts_with(SCHEME_H3)) {
         m_curlopt_url.replace(0, SCHEME_H3.size(), SCHEME_HTTPS);
         m_curlopt_http_ver = CURL_HTTP_VERSION_3;
+    } else if (!config().enable_http3) {
+        m_curlopt_http_ver = CURL_HTTP_VERSION_2;
     }
 
     auto create_result = create_resolved_hosts_list(m_options.address, m_options.resolved_server_ip);
@@ -477,8 +525,7 @@ Error<Upstream::InitError> DohUpstream::init() {
     }
     m_request_headers.reset(headers);
 
-    m_pool.handle = create_pool();
-    if (m_pool.handle == nullptr) {
+    if (!m_pool.init(this)) {
         return make_error(InitError::AE_CURL_POOL_INIT_FAILED);
     }
 
@@ -509,6 +556,8 @@ DohUpstream::~DohUpstream() {
         m_config.socket_factory->unsubscribe_from_reset_bypassed_proxy_connections_event(id.value());
     }
 
+    cleanup_httpver_probe();
+
     dbglog(m_log, "Stopping queries...");
     this->stop_all_with_error(make_error(DnsError::AE_SHUTTING_DOWN));
     m_pool.timer.reset();
@@ -528,7 +577,7 @@ struct DohUpstream::SocketHandle {
         this->poll_handle.reset();
     }
 
-    void init(curl_socket_t sock, int act, DohUpstream *upstream) {
+    void init(curl_socket_t sock, int act, DohUpstream *upstream, ConnectionPool *pool) {
         int what = ((act & CURL_POLL_IN) ? UV_READABLE : 0) | ((act & CURL_POLL_OUT) ? UV_WRITABLE : 0);
 
         // clang-format off
@@ -548,19 +597,19 @@ struct DohUpstream::SocketHandle {
 
         this->fd = sock;
         this->action = act;
-        this->poll_handle = Uv<uv_poll_t>::create_with_parent(upstream);
+        this->poll_handle = Uv<uv_poll_t>::create_with_parent(pool);
         uv_poll_init_socket(upstream->config().loop.handle(), this->poll_handle->raw(), sock);
         uv_poll_start(this->poll_handle->raw(), what, DohUpstream::on_poll_event);
     }
 };
 
-int DohUpstream::on_pool_timer_event(CURLM *multi, long timeout_ms, DohUpstream *upstream) {
-    tracelog(upstream->m_log, "{}: Setting timeout to {}ms", __func__, timeout_ms);
+int DohUpstream::on_pool_timer_event(CURLM *multi, long timeout_ms, ConnectionPool *pool) {
+    tracelog(pool->parent->m_log, "{}: Setting timeout to {}ms", __func__, timeout_ms);
 
-    UvPtr<uv_timer_t> &timer = upstream->m_pool.timer;
+    UvPtr<uv_timer_t> &timer = pool->timer;
     if (!timer) {
-        timer = Uv<uv_timer_t>::create_with_parent(upstream);
-        uv_timer_init(upstream->config().loop.handle(), timer->raw());
+        timer = Uv<uv_timer_t>::create_with_parent(pool);
+        uv_timer_init(pool->parent->config().loop.handle(), timer->raw());
     }
     if (timeout_ms < 0) {
         uv_timer_stop(timer->raw());
@@ -634,17 +683,17 @@ void DohUpstream::read_messages() {
 }
 
 void DohUpstream::on_poll_event(uv_poll_t *poll_handle, int status, int events) {
-    DohUpstream *upstream = (DohUpstream *) Uv<uv_poll_t>::parent_from_data(poll_handle->data);
-    if (!upstream) {
+    auto *pool = (ConnectionPool *) Uv<uv_poll_t>::parent_from_data(poll_handle->data);
+    if (!pool) {
         return;
     }
-    PoolDescriptor &pool = upstream->m_pool;
+    auto *upstream = pool->parent;
     int action = ((events & UV_READABLE) ? CURL_CSELECT_IN : 0) | ((events & UV_WRITABLE) ? CURL_CSELECT_OUT : 0);
 
     int still_running;
     uv_os_fd_t fd;
     uv_fileno((uv_handle_t *) poll_handle, &fd);
-    CURLMcode err = curl_multi_socket_action(pool.handle.get(), (curl_socket_t) fd, action, &still_running);
+    CURLMcode err = curl_multi_socket_action(pool->handle.get(), (curl_socket_t) fd, action, &still_running);
     if (err != CURLM_OK) {
         upstream->stop_all_with_error(make_error(DnsError::AE_CURL_ERROR, make_error(err)));
         return;
@@ -654,14 +703,14 @@ void DohUpstream::on_poll_event(uv_poll_t *poll_handle, int status, int events) 
 }
 
 void DohUpstream::on_timeout(uv_timer_t *timer) {
-    DohUpstream *upstream = (DohUpstream *) Uv<uv_timer_t>::parent_from_data(timer->data);
-    if (!upstream) {
+    auto *pool = (ConnectionPool *) Uv<uv_timer_t>::parent_from_data(timer->data);
+    if (!pool) {
         return;
     }
-    PoolDescriptor &pool = upstream->m_pool;
+    auto *upstream = pool->parent;
 
     int still_running;
-    CURLMcode err = curl_multi_socket_action(pool.handle.get(), CURL_SOCKET_TIMEOUT, 0, &still_running);
+    CURLMcode err = curl_multi_socket_action(pool->handle.get(), CURL_SOCKET_TIMEOUT, 0, &still_running);
     if (err != CURLM_OK) {
         upstream->stop_all_with_error(make_error(DnsError::AE_CURL_ERROR, make_error(err)));
         return;
@@ -670,30 +719,25 @@ void DohUpstream::on_timeout(uv_timer_t *timer) {
     upstream->read_messages();
 }
 
-void DohUpstream::add_socket(curl_socket_t socket, int action) {
-    SocketHandle *handle = new SocketHandle();
-    handle->init(socket, action, this);
-    curl_multi_assign(m_pool.handle.get(), socket, handle);
-    tracelog(m_log, "New socket: {}", (void *) handle);
-}
-
 int DohUpstream::on_socket_update(
-        CURL *handle, curl_socket_t socket, int what, DohUpstream *upstream, SocketHandle *socket_data) {
+        CURL *handle, curl_socket_t socket, int what, ConnectionPool *pool, SocketHandle *socket_data) {
     static constexpr std::string_view WHAT_STR[] = {"none", "IN", "OUT", "INOUT", "REMOVE"};
-    tracelog(upstream->m_log, "Socket callback: sock={} curl={} sockh={} what={}", socket, handle, (void *) socket_data,
-            WHAT_STR[what]);
-
+    tracelog(pool->parent->m_log, "Socket callback: sock={} curl={} sockh={} what={}", socket, handle,
+            (void *) socket_data, WHAT_STR[what]);
     if (what == CURL_POLL_REMOVE) {
-        tracelog(upstream->m_log, "Removing socket");
+        tracelog(pool->parent->m_log, "Removing socket");
         delete socket_data;
-        curl_multi_assign(upstream->m_pool.handle.get(), socket, nullptr);
+        curl_multi_assign(pool->handle.get(), socket, nullptr);
     } else {
         if (socket_data == nullptr) {
-            tracelog(upstream->m_log, "Adding data: {}", WHAT_STR[what]);
-            upstream->add_socket(socket, what);
+            tracelog(pool->parent->m_log, "Adding data: {}", WHAT_STR[what]);
+            SocketHandle *handle = new SocketHandle();
+            handle->init(socket, what, pool->parent, pool);
+            curl_multi_assign(pool->handle.get(), socket, handle);
+            tracelog(pool->parent->m_log, "New socket: {}", (void *) handle);
         } else {
-            tracelog(upstream->m_log, "Changing action from {} to {}", WHAT_STR[socket_data->action], WHAT_STR[what]);
-            socket_data->init(socket, what, upstream);
+            tracelog(pool->parent->m_log, "Changing action from {} to {}", WHAT_STR[socket_data->action], WHAT_STR[what]);
+            socket_data->init(socket, what, pool->parent, pool);
         }
     }
     return 0;
@@ -721,14 +765,26 @@ auto DohUpstream::submit_request(QueryHandle *handle) {
 };
 
 void DohUpstream::start_request(QueryHandle *handle, bool ignore_proxy) {
-    handle->curl_handle = handle->create_curl_handle();
-    if (handle->curl_handle == nullptr) {
+    if (m_curlopt_http_ver == CURL_HTTP_VERSION_NONE) {
+        assert(config().enable_http3);
+        assert(m_curlopt_http_ver != CURL_HTTP_VERSION_3);
+        // Start a "race" between HTTP/2 and HTTP/3, if not already running.
+        if (m_h2_probe_pool == nullptr) {
+            assert(m_h3_probe_pool == nullptr);
+            start_httpver_probe();
+        }
+        // Connection will be retried after the "race".
+        goto register_handle;
+    }
+
+    if (!handle->create_curl_handle(&m_pool)) {
         // error is already set in `create_curl_handle`
         handle->complete();
         return;
     }
 
-    if (!ignore_proxy && m_config.socket_factory->should_route_through_proxy(utils::TP_TCP)) {
+    if (utils::TransportProtocol proto = (m_curlopt_http_ver == CURL_HTTP_VERSION_3) ? utils::TP_UDP : utils::TP_TCP;
+            !ignore_proxy && m_config.socket_factory->should_route_through_proxy(proto)) {
         if (m_check_proxy != nullptr) {
             // will proceed after the proxy check
             goto register_handle;
@@ -766,13 +822,15 @@ void DohUpstream::stop_all_with_error(Error<DnsError> e) {
     }
 }
 
-void DohUpstream::retry_pending_queries_directly() {
+void DohUpstream::retry_pending_queries(bool ignoreProxy) {
     std::deque<QueryHandle *> queue;
     queue.swap(m_running_queue);
 
     for (QueryHandle *h : queue) {
-        this->start_request(h, true);
-        h->flags.set(QueryHandle::QHF_BYPASSED_PROXY);
+        this->start_request(h, ignoreProxy);
+        if (ignoreProxy) {
+            h->flags.set(QueryHandle::QHF_BYPASSED_PROXY);
+        }
     }
 }
 
@@ -868,6 +926,95 @@ coro::Task<Upstream::ExchangeResult> DohUpstream::exchange(const ldns_pkt *reque
     } else {
         co_return ldns_pkt_ptr{response};
     }
+}
+
+int DohUpstream::curl_prereq(
+        void *clientp, char *conn_primary_ip, char *conn_local_ip, int conn_primary_port, int conn_local_port) {
+    auto *handle = (QueryHandle *) clientp;
+    auto *upstream = handle->upstream;
+    if (upstream->m_curlopt_http_ver != CURL_HTTP_VERSION_NONE) {
+        dbglog(upstream->m_log, "HTTP version already selected");
+        return CURL_PREREQFUNC_ABORT;
+    }
+    upstream->m_curlopt_http_ver =
+            (handle == upstream->m_h3_probe_handle.get()) ? CURL_HTTP_VERSION_3 : CURL_HTTP_VERSION_2;
+    dbglog(upstream->m_log, "HTTP version selected: {}",
+            upstream->m_curlopt_http_ver == CURL_HTTP_VERSION_3 ? "HTTP/3" : "HTTP/2");
+    upstream->m_httpver_probe_cleanup_task = upstream->config().loop.schedule({}, [upstream] {
+        upstream->cleanup_httpver_probe();
+        upstream->retry_pending_queries(false);
+    });
+    return CURL_PREREQFUNC_ABORT;
+}
+
+// Attempt connections over HTTP/2 and HTTP/3 concurrently, choose the HTTP version that connects first.
+void DohUpstream::start_httpver_probe() {
+    dbglog(m_log, "Starting HTTP version probe");
+
+    auto h2_probe_pool = std::make_unique<ConnectionPool>();
+    auto h3_probe_pool = std::make_unique<ConnectionPool>();
+
+    if (!h2_probe_pool->init(this) || !h3_probe_pool->init(this)) {
+        stop_all_with_error(make_error(DnsError::AE_INTERNAL_ERROR, "Failed to initialize probe connection pools"));
+        return;
+    }
+
+    auto h2_probe_handle = std::make_unique<QueryHandle>();
+    h2_probe_handle->upstream = this;
+    h2_probe_handle->timeout = m_options.timeout;
+    h2_probe_handle->log = &m_log;
+    if (!h2_probe_handle->create_probe_curl_handle(h2_probe_pool.get(), CURL_HTTP_VERSION_2)) {
+        stop_all_with_error(std::move(h2_probe_handle->error));
+        return;
+    }
+
+    auto h3_probe_handle = std::make_unique<QueryHandle>();
+    h3_probe_handle->upstream = h2_probe_handle->upstream;
+    h3_probe_handle->timeout = h2_probe_handle->timeout;
+    h3_probe_handle->log = h2_probe_handle->log;
+    if (!h3_probe_handle->create_probe_curl_handle(h3_probe_pool.get(), CURL_HTTP_VERSION_3)) {
+        stop_all_with_error(std::move(h3_probe_handle->error));
+        return;
+    }
+
+    if (CURLM_OK != curl_multi_add_handle(h2_probe_pool->handle.get(), h2_probe_handle->curl_handle.get())
+            || CURLM_OK != curl_multi_add_handle(h3_probe_pool->handle.get(), h3_probe_handle->curl_handle.get())) {
+        stop_all_with_error(make_error(DnsError::AE_INTERNAL_ERROR, "Failed to add probe handles to probe pools"));
+        return;
+    }
+
+    m_h2_probe_pool = std::move(h2_probe_pool);
+    m_h3_probe_pool = std::move(h3_probe_pool);
+    m_h2_probe_handle = std::move(h2_probe_handle);
+    m_h3_probe_handle = std::move(h3_probe_handle);
+}
+
+void DohUpstream::cleanup_httpver_probe() {
+    m_h3_probe_handle.reset();
+    m_h2_probe_handle.reset();
+    m_h3_probe_pool.reset();
+    m_h2_probe_pool.reset();
+    config().loop.cancel(std::exchange(m_httpver_probe_cleanup_task, {}));
+};
+
+bool DohUpstream::ConnectionPool::init(DohUpstream *parent) {
+    this->handle.reset(curl_multi_init());
+    if (this->handle == nullptr) {
+        return false;
+    }
+
+    if (CURLMcode e; CURLM_OK != (e = curl_multi_setopt(this->handle.get(), CURLMOPT_SOCKETFUNCTION, on_socket_update))
+            || CURLM_OK != (e = curl_multi_setopt(this->handle.get(), CURLMOPT_SOCKETDATA, this))
+            || CURLM_OK != (e = curl_multi_setopt(this->handle.get(), CURLMOPT_TIMERFUNCTION, on_pool_timer_event))
+            || CURLM_OK != (e = curl_multi_setopt(this->handle.get(), CURLMOPT_TIMERDATA, this))
+            || CURLM_OK != (e = curl_multi_setopt(this->handle.get(), CURLMOPT_PIPELINING, CURLPIPE_MULTIPLEX))) {
+        errlog(parent->m_log, "Failed to set options of curl pool: {} (id={})", curl_multi_strerror(e), e);
+        this->handle.reset();
+        return false;
+    }
+
+    this->parent = parent;
+    return true;
 }
 
 } // namespace dns

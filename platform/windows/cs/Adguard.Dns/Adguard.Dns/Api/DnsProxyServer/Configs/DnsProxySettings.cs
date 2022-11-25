@@ -152,5 +152,10 @@ namespace Adguard.Dns.Api.DnsProxyServer.Configs
         /// the proxy will respond with a SERVFAIL packet. Otherwise, no response is sent on such a failure.
         /// </summary>
         public bool EnableServfailOnUpstreamsFailure { get; set; }
+
+        /// <summary>
+        /// Enable HTTP/3 for DNS-over-HTTPS upstreams if it's able to connect quicker.
+        /// </summary>
+        public bool EnableHttp3  { get; set; }
     }
 }

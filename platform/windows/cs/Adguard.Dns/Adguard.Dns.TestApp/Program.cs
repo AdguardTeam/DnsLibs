@@ -178,7 +178,8 @@ namespace Adguard.Dns.TestApp
                 BlockEch = false,
                 EnableParallelUpstreamQueries = true,
                 EnableFallbackOnUpstreamsFailure = true,
-                EnableServfailOnUpstreamsFailure = true
+                EnableServfailOnUpstreamsFailure = true,
+                EnableHttp3 = true
             };
 
             return dnsProxySettings;

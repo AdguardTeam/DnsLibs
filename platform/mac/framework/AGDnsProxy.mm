@@ -554,6 +554,7 @@ static ServerStamp convert_stamp(AGDnsStamp *stamp) {
     _enableParallelUpstreamQueries = settings->enable_parallel_upstream_queries;
     _enableFallbackOnUpstreamsFailure = settings->enable_fallback_on_upstreams_failure;
     _enableServfailOnUpstreamsFailure = settings->enable_servfail_on_upstreams_failure;
+    _enableHttp3 = settings->enable_http3;
     return self;
 }
 
@@ -587,6 +588,7 @@ static ServerStamp convert_stamp(AGDnsStamp *stamp) {
         _enableParallelUpstreamQueries = [coder decodeBoolForKey:@"_enableParallelUpstreamQueries"];
         _enableFallbackOnUpstreamsFailure = [coder decodeBoolForKey:@"_enableFallbackOnUpstreamsFailure"];
         _enableServfailOnUpstreamsFailure = [coder decodeBoolForKey:@"_enableServfailOnUpstreamsFailure"];
+        _enableHttp3 = [coder decodeBoolForKey:@"_enableHttp3"];
         _helperPath = [coder decodeObjectForKey:@"_helperPath"];
     }
 
@@ -621,6 +623,7 @@ static ServerStamp convert_stamp(AGDnsStamp *stamp) {
     [coder encodeBool:self.enableParallelUpstreamQueries forKey:@"_enableParallelUpstreamQueries"];
     [coder encodeBool:self.enableFallbackOnUpstreamsFailure forKey:@"_enableFallbackOnUpstreamsFailure"];
     [coder encodeBool:self.enableServfailOnUpstreamsFailure forKey:@"_enableServfailOnUpstreamsFailure"];
+    [coder encodeBool:self.enableHttp3 forKey:@"_enableHttp3"];
     [coder encodeObject:self.helperPath forKey:@"_helperPath"];
 }
 

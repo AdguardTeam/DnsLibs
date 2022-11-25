@@ -398,6 +398,10 @@ typedef NS_ENUM(NSInteger, AGOutboundProxyProtocol) {
  */
 @property(nonatomic) BOOL enableServfailOnUpstreamsFailure;
 /**
+ * Enable HTTP/3 for DNS-over-HTTPS upstreams if it's able to connect quicker.
+ */
+@property(nonatomic) BOOL enableHttp3;
+/**
  * Path to adguard-tun-helper (macOS only)
  */
 @property(nonatomic) NSString *helperPath;

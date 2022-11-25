@@ -71,6 +71,7 @@ public class DnsProxySettings {
     private boolean enableParallelUpstreamQueries;
     private boolean enableFallbackOnUpstreamsFailure;
     private boolean enableServfailOnUpstreamsFailure;
+    private boolean enableHttp3;
 
     /**
      * @return Maximum number of cached responses
@@ -417,6 +418,20 @@ public class DnsProxySettings {
      */
     public void setEnableServfailOnUpstreamsFailure(boolean enableServfailOnUpstreamsFailure) {
         this.enableServfailOnUpstreamsFailure = enableServfailOnUpstreamsFailure;
+    }
+
+    /**
+     * @return Whether HTTP/3 support is enabled DNS-over-HTTPS upstreams.
+     */
+    public boolean isEnableHttp3() {
+        return enableHttp3;
+    }
+
+    /**
+     * @param enableHttp3 Enable HTTP/3 for DNS-over-HTTPS upstreams if it's able to connect quicker.
+     */
+    public void setEnableHttp3(boolean enableHttp3) {
+        this.enableHttp3 = enableHttp3;
     }
 
     @Override

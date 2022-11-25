@@ -48,33 +48,53 @@ public:
     struct CheckProxyState;
 
 private:
+    struct ConnectionPool {
+        DohUpstream *parent = nullptr;
+        curl_pool_ptr handle = nullptr;
+        UvPtr<uv_timer_t> timer = nullptr;
+
+        ConnectionPool() = default;
+        ~ConnectionPool() = default;
+
+        bool init(DohUpstream *parent);
+
+        ConnectionPool(const ConnectionPool &) = delete;
+        ConnectionPool &operator=(const ConnectionPool &) = delete;
+
+        ConnectionPool(ConnectionPool &&) = delete;
+        ConnectionPool &operator=(ConnectionPool &&) = delete;
+    };
+
     Error<InitError> init() override;
     coro::Task<ExchangeResult> exchange(const ldns_pkt *, const DnsMessageInfo *info) override;
 
     std::unique_ptr<QueryHandle> create_handle(const ldns_pkt *request, Millis timeout) const;
-    curl_pool_ptr create_pool() const;
-    void add_socket(curl_socket_t socket, int action);
     void read_messages();
 
     /**
      * Must be called in worker thread
      */
     void stop_all_with_error(Error<DnsError> e);
-    void retry_pending_queries_directly();
+    void retry_pending_queries(bool ignoreProxy);
     void reset_bypassed_proxy_queries();
 
     static CURLcode ssl_callback(CURL *curl, void *sslctx, void *arg);
     static int verify_callback(X509_STORE_CTX *ctx, void *arg);
 
-    static int on_pool_timer_event(CURLM *multi, long timeout_ms, DohUpstream *upstream);
+    static int on_pool_timer_event(CURLM *multi, long timeout_ms, DohUpstream::ConnectionPool *pool);
     static int on_socket_update(CURL *handle, curl_socket_t socket, int what,
-                                DohUpstream *upstream, SocketHandle *socket_data);
+                                DohUpstream::ConnectionPool *pool, SocketHandle *socket_data);
     static void on_timeout(uv_timer_t *);
     static void on_poll_event(uv_poll_t *, int status, int events);
     static curl_socket_t curl_opensocket(void *clientp, curlsocktype purpose, struct curl_sockaddr *address);
+    static int curl_prereq(
+            void *clientp, char *conn_primary_ip, char *conn_local_ip, int conn_primary_port, int conn_local_port);
 
     auto submit_request(QueryHandle *handle);
     void start_request(QueryHandle *handle, bool ignore_proxy);
+
+    void start_httpver_probe();
+    void cleanup_httpver_probe();
 
     Logger m_log;
     std::shared_ptr<curl_slist> m_resolved = nullptr;
@@ -83,17 +103,19 @@ private:
     std::deque<QueryHandle *> m_running_queue;
     std::shared_ptr<bool> m_shutdown_guard;
 
-    struct PoolDescriptor {
-        curl_pool_ptr handle = nullptr;
-        UvPtr<uv_timer_t> timer = nullptr;
-    };
-    PoolDescriptor m_pool;
+    ConnectionPool m_pool;
+
+    std::unique_ptr<ConnectionPool> m_h2_probe_pool;
+    std::unique_ptr<ConnectionPool> m_h3_probe_pool;
+    std::unique_ptr<QueryHandle> m_h2_probe_handle;
+    std::unique_ptr<QueryHandle> m_h3_probe_handle;
+    EventLoop::TaskId m_httpver_probe_cleanup_task;
 
     std::unique_ptr<CheckProxyState> m_check_proxy;
     std::optional<uint32_t> m_reset_bypassed_proxy_connections_subscribe_id;
 
     std::string m_curlopt_url;
-    int m_curlopt_http_ver = CURL_HTTP_VERSION_2;
+    int m_curlopt_http_ver = CURL_HTTP_VERSION_NONE;
 };
 
 }  // namespace ag::dns

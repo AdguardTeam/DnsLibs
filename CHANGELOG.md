@@ -1,5 +1,10 @@
 # Changelog
 
+* [Feature] Added an option to try HTTP/3 for DoH upstream connections.
+  If enabled, HTTP/3 will be used for DoH if it's faster.
+  See `DnsProxySettings::enable_http3`, `AGDnsProxyConfig.enableHttp3`,
+  `com.adguard.dnslibs.proxy.DnsProxySettings#enableHttp3`, `ag_dnsproxy_settings::enable_http3`
+
 * [Feature] Added an option to query upstreams in parallel. See 
   `DnsProxySettings::enable_parallel_upstream_queries` and the corresponding options in platform-specific adapters.
 * [Feature] Added an option to change fallback behaviour. See

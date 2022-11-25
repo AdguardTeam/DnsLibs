@@ -37,6 +37,8 @@ struct UpstreamFactoryConfig {
     EventLoop &loop;
     SocketFactory *socket_factory = nullptr;
     bool ipv6_available = true;
+    /** Enable opportunistic use of HTTP/3 for applicable upstream types */
+    bool enable_http3 = false;
 };
 
 /**

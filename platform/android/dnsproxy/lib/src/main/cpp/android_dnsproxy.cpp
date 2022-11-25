@@ -432,6 +432,7 @@ DnsProxySettings AndroidDnsProxy::marshal_settings(JNIEnv *env, jobject java_dns
     auto parallel_queries_field = env->GetFieldID(clazz, "enableParallelUpstreamQueries", "Z");
     auto fallback_on_failure_field = env->GetFieldID(clazz, "enableFallbackOnUpstreamsFailure", "Z");
     auto servfail_on_failure_field = env->GetFieldID(clazz, "enableServfailOnUpstreamsFailure", "Z");
+    auto enable_http3_field = env->GetFieldID(clazz, "enableHttp3", "Z");
 
     DnsProxySettings settings{};
 
@@ -503,6 +504,7 @@ DnsProxySettings AndroidDnsProxy::marshal_settings(JNIEnv *env, jobject java_dns
     settings.enable_parallel_upstream_queries = env->GetBooleanField(java_dnsproxy_settings, parallel_queries_field);
     settings.enable_fallback_on_upstreams_failure = env->GetBooleanField(java_dnsproxy_settings, fallback_on_failure_field);
     settings.enable_servfail_on_upstreams_failure = env->GetBooleanField(java_dnsproxy_settings, servfail_on_failure_field);
+    settings.enable_http3 = env->GetBooleanField(java_dnsproxy_settings, enable_http3_field);
 
     return settings;
 }
@@ -533,6 +535,7 @@ LocalRef<jobject> AndroidDnsProxy::marshal_settings(JNIEnv *env, const DnsProxyS
     auto parallel_queries_field = env->GetFieldID(clazz, "enableParallelUpstreamQueries", "Z");
     auto fallback_on_failure_field = env->GetFieldID(clazz, "enableFallbackOnUpstreamsFailure", "Z");
     auto servfail_on_failure_field = env->GetFieldID(clazz, "enableServfailOnUpstreamsFailure", "Z");
+    auto enable_http3_field = env->GetFieldID(clazz, "enableHttp3", "Z");
 
     auto java_settings = env->NewObject(clazz, ctor);
 
@@ -596,6 +599,7 @@ LocalRef<jobject> AndroidDnsProxy::marshal_settings(JNIEnv *env, const DnsProxyS
     env->SetBooleanField(java_settings, parallel_queries_field, (jboolean) settings.enable_parallel_upstream_queries);
     env->SetBooleanField(java_settings, fallback_on_failure_field, (jboolean) settings.enable_fallback_on_upstreams_failure);
     env->SetBooleanField(java_settings, servfail_on_failure_field, (jboolean) settings.enable_servfail_on_upstreams_failure);
+    env->SetBooleanField(java_settings, enable_http3_field, (jboolean) settings.enable_http3);
 
     return LocalRef(env, java_settings);
 }
