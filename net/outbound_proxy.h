@@ -75,6 +75,8 @@ public:
 
     virtual ~OutboundProxy();
 
+    void deinit();
+
     /**
      * Connect to the peer via proxy
      * @param parameters the connection parameters
@@ -132,6 +134,8 @@ protected:
     HashMap<uint32_t, ConnectParameters> m_bootstrap_waiters;
 
     OutboundProxy(const std::string &logger_name, const OutboundProxySettings *settings, Parameters parameters);
+
+    virtual void deinit_impl() = 0;
 
     /**
      * Connect to the proxy server

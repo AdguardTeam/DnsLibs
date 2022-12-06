@@ -62,6 +62,16 @@ struct SocketFactory::OutboundProxyState {
         if (this->reset_task.has_value()) {
             this->loop->cancel(std::exchange(this->reset_task, std::nullopt).value());
         }
+
+        if (this->main_proxy != nullptr) {
+            this->main_proxy->deinit();
+            this->main_proxy.reset();
+        }
+
+        if (this->fallback_proxy != nullptr) {
+            this->fallback_proxy->deinit();
+            this->fallback_proxy.reset();
+        }
     }
 };
 

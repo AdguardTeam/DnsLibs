@@ -36,7 +36,9 @@ HttpOProxy::HttpOProxy(const OutboundProxySettings *settings, Parameters paramet
     }
 }
 
-HttpOProxy::~HttpOProxy() {
+HttpOProxy::~HttpOProxy() = default;
+
+void HttpOProxy::deinit_impl() {
     std::vector<uint32_t> connections;
     connections.reserve(m_connections.size());
     std::transform(m_connections.begin(), m_connections.end(), std::back_inserter(connections), [](const auto &iter) {

@@ -27,11 +27,13 @@ OutboundProxy::OutboundProxy(
         , m_parameters(parameters) {
 }
 
-OutboundProxy::~OutboundProxy() {
-    on_bootstrap_ready(make_error(SocketError::AE_OUTBOUND_PROXY_ERROR, "Proxy has been destroyed"));
-    assert(m_bootstrap_waiters.empty());
-}
+OutboundProxy::~OutboundProxy() = default;
 
+void OutboundProxy::deinit() {
+    this->on_bootstrap_ready(make_error(SocketError::AE_OUTBOUND_PROXY_ERROR, "Proxy has been destroyed"));
+    assert(m_bootstrap_waiters.empty());
+    this->deinit_impl();
+}
 
 OutboundProxy::ConnectResult OutboundProxy::connect(ConnectParameters p) {
     uint32_t conn_id = get_next_connection_id();

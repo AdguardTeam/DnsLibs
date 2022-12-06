@@ -159,7 +159,9 @@ SocksOProxy::SocksOProxy(const OutboundProxySettings *settings, Parameters param
         : OutboundProxy(__func__, settings, std::move(parameters)) {
 }
 
-SocksOProxy::~SocksOProxy() {
+SocksOProxy::~SocksOProxy() = default;
+
+void SocksOProxy::deinit_impl() {
     std::vector<uint32_t> connections;
     connections.reserve(m_connections.size());
     std::transform(m_connections.begin(), m_connections.end(), std::back_inserter(connections),

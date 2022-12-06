@@ -17,6 +17,9 @@ void DirectOProxy::reset_connections() {
     }
 }
 
+void DirectOProxy::deinit_impl() {
+}
+
 OutboundProxy::ProtocolsSet DirectOProxy::get_supported_protocols() const {
     return (1u << utils::TP_TCP) | (1u << utils::TP_UDP);
 }
