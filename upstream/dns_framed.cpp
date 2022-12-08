@@ -165,6 +165,7 @@ coro::Task<Connection::Reply> DnsFramedConnection::perform_request(Uint8View pac
         co_return Reply(make_error(DE_REQUEST_PACKET_TOO_SHORT));
     }
 
+    auto guard = weak_from_this();
     Uint8Vector request_to_send{packet.begin(), packet.end()};
     uint16_t request_id = m_next_request_id++;
     Request request{};
@@ -176,6 +177,9 @@ coro::Task<Connection::Reply> DnsFramedConnection::perform_request(Uint8View pac
 
     request.timeout = std::max(Millis{0}, timeout - timer.elapsed<Millis>());
     co_await ensure_connected(&request);
+    if (guard.expired()) {
+        co_return Reply(make_error(DE_SHUTTING_DOWN));
+    }
     if (request.reply) {
         co_return request.reply.value();
     }
@@ -190,6 +194,9 @@ coro::Task<Connection::Reply> DnsFramedConnection::perform_request(Uint8View pac
 
     request.timeout = std::max(Millis{0}, timeout - timer.elapsed<Millis>());
     co_await wait_response(&request);
+    if (guard.expired()) {
+        co_return Reply(make_error(DE_SHUTTING_DOWN));
+    }
 
     Reply &reply = request.reply.value();
 
