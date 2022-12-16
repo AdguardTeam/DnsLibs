@@ -137,7 +137,7 @@ public:
 
     coro::Task<Connection::Reply> perform_request(Uint8View packet, Millis timeout) {
         ConnectionPtr conn = get();
-        co_return co_await conn->perform_request(packet, timeout);
+        return conn->perform_request(packet, timeout);
     }
 
     virtual ConnectionPtr create() = 0;

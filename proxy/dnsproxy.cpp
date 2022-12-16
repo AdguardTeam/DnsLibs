@@ -84,7 +84,7 @@ const DnsProxySettings &DnsProxySettings::get_default() {
 struct DnsProxy::Impl {
     Logger log{"DNS proxy"};
     EventLoopPtr loop;
-    DnsForwarder forwarder;
+    std::optional<DnsForwarder> forwarder;
     DnsProxySettings settings;
     DnsProxyEvents events;
     std::vector<ListenerPtr> listeners;
@@ -109,11 +109,13 @@ DnsProxy::DnsProxyInitResult DnsProxy::init(DnsProxySettings settings, DnsProxyE
     }
 
     proxy->loop = EventLoop::create();
-    auto [proxy_forwarder, forwarder_err] = proxy->forwarder.init(proxy->loop, proxy->settings, proxy->events);
-    if (!proxy_forwarder) {
+    proxy->forwarder.emplace();
+    auto [result, err_or_warn] = proxy->forwarder->init(proxy->loop, proxy->settings, proxy->events);
+    if (!result) {
+        proxy->forwarder.reset();
         this->deinit();
-        dbglog(proxy->log, "Forwarder init failed: {}", forwarder_err->str());
-        return {false, forwarder_err};
+        dbglog(proxy->log, "Forwarder init failed: {}", err_or_warn->str());
+        return {false, err_or_warn};
     }
 
     if (!proxy->settings.listeners.empty()) {
@@ -134,7 +136,7 @@ DnsProxy::DnsProxyInitResult DnsProxy::init(DnsProxySettings settings, DnsProxyE
     proxy->loop->start();
 
     infolog(proxy->log, "Proxy module initialized");
-    return {true, forwarder_err};
+    return {true, err_or_warn};
 }
 
 void DnsProxy::deinit() {
@@ -148,7 +150,9 @@ void DnsProxy::deinit() {
         proxy->listeners.clear();
         infolog(proxy->log, "Shutting down listeners done");
 
-        proxy->forwarder.deinit();
+        if (proxy->forwarder) {
+            proxy->forwarder->deinit();
+        }
 
         infolog(proxy->log, "Stopping event loop");
         proxy->loop->stop();
@@ -168,7 +172,7 @@ const DnsProxySettings &DnsProxy::get_settings() const {
 coro::Task<Uint8Vector> DnsProxy::handle_message(Uint8View message, const DnsMessageInfo *info) {
     std::unique_ptr<Impl> &proxy = m_pimpl;
 
-    Uint8Vector response = co_await proxy->forwarder.handle_message(message, info);
+    Uint8Vector response = co_await proxy->forwarder->handle_message(message, info);
 
     co_return response;
 }

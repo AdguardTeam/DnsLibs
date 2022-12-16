@@ -7,7 +7,13 @@
 #include <event2/bufferevent.h>
 
 #include "common/logger.h"
+#if defined _WIN32 && !defined __clang__
+#pragma optimize( "", off )
+#endif
 #include "common/parallel.h"
+#if defined _WIN32 && !defined __clang__
+#pragma optimize( "", on )
+#endif
 #include "dns/common/event_loop.h"
 #include "dns/net/tcp_dns_buffer.h"
 #include "dns/net/tls_session_cache.h"

@@ -1,3 +1,5 @@
+#include <tuple>
+
 #include "outbound_direct_proxy.h"
 
 namespace ag::dns {
@@ -7,32 +9,15 @@ DirectOProxy::DirectOProxy(Parameters parameters)
 }
 
 void DirectOProxy::reset_connections() {
-    std::scoped_lock l(m_guard);
-
-    for (auto &[conn_id, conn] : m_connections) {
-        [[maybe_unused]] auto e = conn.socket->set_callbacks({});
-        conn.parameters.loop->submit([this, conn_id = conn_id]() {
-            std::optional<Callbacks> cbx;
-
-            {
-                std::scoped_lock l(m_guard);
-                auto it = m_connections.find(conn_id);
-                if (it == m_connections.end()) {
-                    return;
-                }
-
-                cbx = it->second.parameters.callbacks;
-                if (cbx->on_close == nullptr) {
-                    m_connections.erase(it);
-                }
-            }
-
-            if (cbx.has_value() && cbx->on_close != nullptr) {
-                auto err = make_error(SocketError::AE_OUTBOUND_PROXY_ERROR, "Reset re-routed directly connection");
-                cbx->on_close(cbx->arg, err);
-            }
-        });
+    for (auto &[conn_id, conn] : std::exchange(m_connections, {})) {
+        if (conn.parameters.callbacks.on_close != nullptr) {
+            auto err = make_error(SocketError::AE_OUTBOUND_PROXY_ERROR, "Reset re-routed directly connection");
+            conn.parameters.callbacks.on_close(conn.parameters.callbacks.arg, err);
+        }
     }
+}
+
+void DirectOProxy::deinit_impl() {
 }
 
 OutboundProxy::ProtocolsSet DirectOProxy::get_supported_protocols() const {
@@ -40,13 +25,11 @@ OutboundProxy::ProtocolsSet DirectOProxy::get_supported_protocols() const {
 }
 
 std::optional<evutil_socket_t> DirectOProxy::get_fd(uint32_t conn_id) const {
-    std::scoped_lock l(m_guard);
     auto it = m_connections.find(conn_id);
     return (it != m_connections.end()) ? it->second.socket->get_fd() : std::nullopt;
 }
 
 Error<SocketError> DirectOProxy::send(uint32_t conn_id, Uint8View data) {
-    std::scoped_lock l(m_guard);
     auto it = m_connections.find(conn_id);
     return (it != m_connections.end())
             ? it->second.socket->send(data)
@@ -54,15 +37,11 @@ Error<SocketError> DirectOProxy::send(uint32_t conn_id, Uint8View data) {
 }
 
 bool DirectOProxy::set_timeout(uint32_t conn_id, Micros timeout) {
-    std::scoped_lock l(m_guard);
     auto it = m_connections.find(conn_id);
-    return (it != m_connections.end())
-            ? it->second.socket->set_timeout(timeout)
-            : false;
+    return (it != m_connections.end()) && it->second.socket->set_timeout(timeout);
 }
 
 Error<SocketError> DirectOProxy::set_callbacks_impl(uint32_t conn_id, Callbacks cbx) {
-    std::scoped_lock l(m_guard);
     auto it = m_connections.find(conn_id);
     if (it == m_connections.end()) {
         return make_error(SocketError::AE_CONNECTION_ID_NOT_FOUND, fmt::to_string(conn_id));
@@ -79,21 +58,13 @@ Error<SocketError> DirectOProxy::set_callbacks_impl(uint32_t conn_id, Callbacks 
 }
 
 void DirectOProxy::close_connection_impl(uint32_t conn_id) {
-    std::scoped_lock l(m_guard);
     auto node = m_connections.extract(conn_id);
     if (node.empty()) {
         return;
     }
 
     Connection &conn = node.mapped();
-    m_closing_connections.insert(std::move(node));
-
     [[maybe_unused]] auto e = conn.socket->set_callbacks({});
-    conn.parameters.callbacks = {};
-    conn.parameters.loop->submit([this, conn_id]() {
-        std::scoped_lock l(m_guard);
-        m_closing_connections.erase(conn_id);
-    });
 }
 
 Error<SocketError> DirectOProxy::connect_to_proxy(uint32_t conn_id, const ConnectParameters &parameters) {
@@ -102,7 +73,6 @@ Error<SocketError> DirectOProxy::connect_to_proxy(uint32_t conn_id, const Connec
 
 Error<SocketError> DirectOProxy::connect_through_proxy(
         uint32_t conn_id, const ConnectParameters &parameters) {
-    std::scoped_lock l(m_guard);
     Connection &conn = m_connections
                                .emplace(conn_id,
                                        Connection{

@@ -73,7 +73,9 @@ public:
         IfIdVariant outbound_interface;
     };
 
-    virtual ~OutboundProxy() = default;
+    virtual ~OutboundProxy();
+
+    void deinit();
 
     /**
      * Connect to the peer via proxy
@@ -133,6 +135,8 @@ protected:
 
     OutboundProxy(const std::string &logger_name, const OutboundProxySettings *settings, Parameters parameters);
 
+    virtual void deinit_impl() = 0;
+
     /**
      * Connect to the proxy server
      */
@@ -160,6 +164,7 @@ protected:
 
 private:
     void on_bootstrap_ready(std::optional<SocketAddress> address);
+    void on_bootstrap_ready(Error<SocketError> address);
 };
 
 } // namespace ag::dns

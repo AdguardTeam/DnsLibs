@@ -36,12 +36,26 @@ HttpOProxy::HttpOProxy(const OutboundProxySettings *settings, Parameters paramet
     }
 }
 
+HttpOProxy::~HttpOProxy() = default;
+
+void HttpOProxy::deinit_impl() {
+    std::vector<uint32_t> connections;
+    connections.reserve(m_connections.size());
+    std::transform(m_connections.begin(), m_connections.end(), std::back_inserter(connections), [](const auto &iter) {
+        return iter.first;
+    });
+    for (uint32_t conn_id : connections) {
+        this->HttpOProxy::close_connection_impl(conn_id);
+    }
+
+    assert(m_connections.empty());
+}
+
 OutboundProxy::ProtocolsSet HttpOProxy::get_supported_protocols() const {
     return 1 << utils::TP_TCP;
 }
 
 std::optional<evutil_socket_t> HttpOProxy::get_fd(uint32_t conn_id) const {
-    std::scoped_lock l(m_guard);
     auto it = m_connections.find(conn_id);
     return (it != m_connections.end()) ? it->second->socket->get_fd() : std::nullopt;
 }
@@ -49,7 +63,6 @@ std::optional<evutil_socket_t> HttpOProxy::get_fd(uint32_t conn_id) const {
 Error<SocketError> HttpOProxy::send(uint32_t conn_id, Uint8View data) {
     log_conn(this, conn_id, trace, "{}", data.size());
 
-    std::scoped_lock l(m_guard);
     auto it = m_connections.find(conn_id);
     if (it == m_connections.end()) {
         return make_error(SocketError::AE_CONNECTION_ID_NOT_FOUND, fmt::to_string(conn_id));
@@ -67,7 +80,6 @@ Error<SocketError> HttpOProxy::send(uint32_t conn_id, Uint8View data) {
 bool HttpOProxy::set_timeout(uint32_t conn_id, Micros timeout) {
     log_conn(this, conn_id, trace, "{}", timeout);
 
-    std::scoped_lock l(m_guard);
     auto it = m_connections.find(conn_id);
     if (it == m_connections.end()) {
         log_conn(this, conn_id, dbg, "Non-existent connection: {}", conn_id);
@@ -80,7 +92,6 @@ bool HttpOProxy::set_timeout(uint32_t conn_id, Micros timeout) {
 Error<SocketError> HttpOProxy::set_callbacks_impl(uint32_t conn_id, Callbacks cbx) {
     log_conn(this, conn_id, trace, "...");
 
-    std::scoped_lock l(m_guard);
     auto it = m_connections.find(conn_id);
     if (it == m_connections.end()) {
         return make_error(SocketError::AE_CONNECTION_ID_NOT_FOUND, fmt::to_string(conn_id));
@@ -99,7 +110,6 @@ Error<SocketError> HttpOProxy::set_callbacks_impl(uint32_t conn_id, Callbacks cb
 void HttpOProxy::close_connection_impl(uint32_t conn_id) {
     log_conn(this, conn_id, trace, "...");
 
-    std::scoped_lock l(m_guard);
     auto node = m_connections.extract(conn_id);
     if (node.empty()) {
         log_conn(this, conn_id, dbg, "Connection was not found");
@@ -107,26 +117,15 @@ void HttpOProxy::close_connection_impl(uint32_t conn_id) {
     }
 
     Connection *conn = node.mapped().get();
-    m_closing_connections.insert(std::move(node));
-
     if (conn->state == CS_CONNECTING_SOCKET) {
         conn->parameters.callbacks.on_proxy_connection_failed(conn->parameters.callbacks.arg, {});
     }
-    conn->parameters.callbacks = {};
-
-    [[maybe_unused]] auto e = conn->socket->set_callbacks({});
-
-    conn->parameters.loop->submit([this, conn_id]() {
-        std::scoped_lock l(m_guard);
-        m_closing_connections.erase(conn_id);
-    });
 }
 
 Error<SocketError> HttpOProxy::connect_to_proxy(uint32_t conn_id, const ConnectParameters &parameters) {
     log_conn(this, conn_id, trace, "{} == {}", m_resolved_proxy_address->str(), parameters.peer.str());
     assert(parameters.proto == utils::TP_TCP);
 
-    std::scoped_lock l(m_guard);
     auto &conn = m_connections[conn_id];
     if (conn != nullptr) {
         return make_error(SocketError::AE_DUPLICATE_ID, fmt::to_string(conn_id));
@@ -158,7 +157,6 @@ static Uint8View string_to_bytes(std::string_view str) {
 Error<SocketError> HttpOProxy::connect_through_proxy(uint32_t conn_id, const ConnectParameters &parameters) {
     log_conn(this, conn_id, trace, "{}:{} == {}", m_settings->address, m_settings->port, parameters.peer.str());
 
-    std::scoped_lock l(m_guard);
     auto &conn = m_connections[conn_id];
     if (conn == nullptr) {
         return make_error(SocketError::AE_CONNECTION_ID_NOT_FOUND, fmt::to_string(conn_id));
@@ -312,8 +310,7 @@ void HttpOProxy::handle_http_response_chunk(Connection *conn, std::string_view c
 }
 
 HttpOProxy::Callbacks HttpOProxy::get_connection_callbacks_locked(Connection *conn) {
-    std::scoped_lock l(m_guard);
-    assert(m_connections.count(conn->id) != 0);
+    assert(m_connections.contains(conn->id));
     return conn->parameters.callbacks;
 }
 

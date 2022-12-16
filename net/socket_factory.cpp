@@ -25,17 +25,17 @@ enum proxy_availability_status {
 };
 
 struct SocketFactory::OutboundProxyState {
+    EventLoop *loop = nullptr;
     /// The main proxy
     std::unique_ptr<OutboundProxy> main_proxy;
     /// The fallback proxy: used in case of the main one is not available
     std::unique_ptr<OutboundProxy> fallback_proxy;
 
-    std::mutex guard;
     /// Whether the proxy is available. If not, the behavior depends on
     /// `outbound_proxy_settings#ignore_if_unavailable` flag
     ExpiringValue<proxy_availability_status, PAS_UNKNOWN> availability_status;
-    /// Whether the event for resetting bypassed connections is scheduled
-    bool reset_task_scheduled = false;
+    /// Resetting bypassed connections task
+    std::optional<EventLoop::TaskId> reset_task;
     /// The next reset event subscriber ID
     uint32_t next_subscriber_id = 0;
     /// The reset event subscribers
@@ -44,7 +44,7 @@ struct SocketFactory::OutboundProxyState {
     static void on_successful_proxy_connection(void *arg) {
         auto *self = (SocketFactory *) arg;
         ((DirectOProxy *) self->m_proxy->fallback_proxy.get())->reset_connections();
-        self->m_proxy->reset_task_scheduled = false;
+        self->m_proxy->reset_task.reset();
     }
 
     static ProxiedSocket::ProxyConnectionFailedResult on_proxy_connection_failed(void *arg, Error<SocketError> err) {
@@ -58,7 +58,21 @@ struct SocketFactory::OutboundProxyState {
         return ProxiedSocket::CloseConnection{};
     }
 
-    ~OutboundProxyState() {}
+    ~OutboundProxyState() {
+        if (this->reset_task.has_value()) {
+            this->loop->cancel(std::exchange(this->reset_task, std::nullopt).value());
+        }
+
+        if (this->main_proxy != nullptr) {
+            this->main_proxy->deinit();
+            this->main_proxy.reset();
+        }
+
+        if (this->fallback_proxy != nullptr) {
+            this->fallback_proxy->deinit();
+            this->fallback_proxy.reset();
+        }
+    }
 };
 
 SocketFactory::SocketFactory(struct Parameters parameters)
@@ -66,12 +80,17 @@ SocketFactory::SocketFactory(struct Parameters parameters)
         , m_router(parameters.enable_route_resolver ? RouteResolver::create() : RouteResolverPtr{nullptr}) {
     if (m_parameters.oproxy.settings != nullptr) {
         m_proxy = std::make_unique<OutboundProxyState>();
+        m_proxy->loop = &m_parameters.loop;
         m_proxy->main_proxy.reset(this->make_proxy());
         m_proxy->fallback_proxy.reset(this->make_fallback_proxy());
     }
 }
 
 SocketFactory::~SocketFactory() = default;
+
+void SocketFactory::deinit() {
+    m_proxy.reset();
+}
 
 SocketFactory::SocketPtr SocketFactory::make_socket(SocketParameters p) const {
     SocketPtr socket;
@@ -126,7 +145,8 @@ Error<SocketError> SocketFactory::prepare_fd(
     if (const uint32_t *if_index = std::get_if<uint32_t>(&outbound_interface)) {
         return make_error(SocketError::AE_BIND_TO_IF_ERROR,
                 ag::utils::bind_socket_to_if(fd, peer.c_sockaddr()->sa_family, *if_index));
-    } else if (const std::string *if_name = std::get_if<std::string>(&outbound_interface)) {
+    }
+    if (const std::string *if_name = std::get_if<std::string>(&outbound_interface)) {
         return make_error(SocketError::AE_BIND_TO_IF_ERROR,
                 ag::utils::bind_socket_to_if(fd, peer.c_sockaddr()->sa_family, if_name->c_str()));
     }
@@ -167,7 +187,6 @@ bool SocketFactory::should_route_through_proxy(utils::TransportProtocol proto) c
         return false;
     }
 
-    std::scoped_lock l(m_proxy->guard);
     return m_proxy->availability_status.get() != PAS_UNAVAILABLE
             || !this->get_outbound_proxy_settings()->ignore_if_unavailable;
 }
@@ -182,12 +201,10 @@ bool SocketFactory::is_proxy_available() const {
         return true;
     }
 
-    std::scoped_lock l(m_proxy->guard);
     return m_proxy->availability_status.get() != PAS_UNAVAILABLE;
 }
 
 void SocketFactory::on_successful_proxy_connection() {
-    std::scoped_lock l(m_proxy->guard);
     m_proxy->availability_status = {PAS_AVAILABLE, PROXY_AVAILABLE_TIMEOUT};
 }
 
@@ -200,22 +217,16 @@ SocketFactory::ProxyConectionFailedResult SocketFactory::on_proxy_connection_fai
         return SFPCFR_CLOSE_CONNECTION;
     }
 
-    if (std::scoped_lock l(m_proxy->guard); m_proxy->availability_status.get() != PAS_AVAILABLE) {
+    if (m_proxy->availability_status.get() != PAS_AVAILABLE) {
         m_proxy->availability_status = {PAS_UNAVAILABLE, PROXY_UNAVAILABLE_TIMEOUT};
     }
 
-    if (!m_proxy->reset_task_scheduled) {
+    if (!m_proxy->reset_task.has_value()) {
         this->subscribe_to_reset_bypassed_proxy_connections_event({on_reset_bypassed_proxy_connections, this});
 
-        m_parameters.loop.schedule(PROXY_UNAVAILABLE_TIMEOUT, [this]() {
-            decltype(m_proxy->reset_subscribers) subscribers;
-
-            {
-                std::scoped_lock l(m_proxy->guard);
-                m_proxy->reset_task_scheduled = false;
-                subscribers.swap(m_proxy->reset_subscribers);
-            }
-
+        m_proxy->reset_task = m_parameters.loop.schedule(PROXY_UNAVAILABLE_TIMEOUT, [this]() {
+            m_proxy->reset_task.reset();
+            decltype(m_proxy->reset_subscribers) subscribers = std::exchange(m_proxy->reset_subscribers, {});
             for (auto &[_, s] : subscribers) {
                 s.func(s.arg);
             }
@@ -227,12 +238,10 @@ SocketFactory::ProxyConectionFailedResult SocketFactory::on_proxy_connection_fai
 
 uint32_t SocketFactory::subscribe_to_reset_bypassed_proxy_connections_event(
         ResetBypassedProxyConnectionsSubscriber subscriber) {
-    std::scoped_lock l(m_proxy->guard);
     return m_proxy->reset_subscribers.emplace(m_proxy->next_subscriber_id++, subscriber).first->first;
 }
 
 void SocketFactory::unsubscribe_from_reset_bypassed_proxy_connections_event(uint32_t id) {
-    std::scoped_lock l(m_proxy->guard);
     m_proxy->reset_subscribers.erase(id);
 }
 
@@ -284,7 +293,7 @@ SocketFactory::SocketPtr SocketFactory::on_make_proxy_socket(
 
 void SocketFactory::on_reset_bypassed_proxy_connections(void *arg) {
     auto *self = (SocketFactory *) arg;
-    self->m_proxy->reset_task_scheduled = false;
+    self->m_proxy->reset_task.reset();
     ((DirectOProxy *) self->m_proxy->fallback_proxy.get())->reset_connections();
 }
 

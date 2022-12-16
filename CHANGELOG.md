@@ -19,6 +19,8 @@
   * [Apple] See `AGDnsProxyError`
   * [Android] See `ag_dnsproxy_init_result`
 
+## V2.0
+
 * [Feature] Add an option to strip Encrypted Client Hello parameters from responses, effectively blocking ECH.
   * [C API] See `ag_dnsproxy_settings::block_ech`
   * [Apple] See `AGDnsProxyConfig.blockEch`

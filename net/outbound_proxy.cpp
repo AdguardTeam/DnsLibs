@@ -1,4 +1,6 @@
 #include <atomic>
+#include <cassert>
+#include <utility>
 
 #include "outbound_proxy.h"
 
@@ -23,6 +25,14 @@ OutboundProxy::OutboundProxy(
             return addr;
         }(m_settings))
         , m_parameters(parameters) {
+}
+
+OutboundProxy::~OutboundProxy() = default;
+
+void OutboundProxy::deinit() {
+    this->on_bootstrap_ready(make_error(SocketError::AE_OUTBOUND_PROXY_ERROR, "Proxy has been destroyed"));
+    assert(m_bootstrap_waiters.empty());
+    this->deinit_impl();
 }
 
 OutboundProxy::ConnectResult OutboundProxy::connect(ConnectParameters p) {
@@ -71,19 +81,22 @@ uint32_t OutboundProxy::get_next_connection_id() {
 }
 
 void OutboundProxy::on_bootstrap_ready(std::optional<SocketAddress> resolved) {
-    if (resolved.has_value()) {
-        m_resolved_proxy_address = resolved;
-        m_resolved_proxy_address->set_port(m_settings->port);
+    if (!resolved.has_value()) {
+        on_bootstrap_ready(make_error(SocketError::AE_OUTBOUND_PROXY_ERROR, "Bootstrap failure"));
+        return;
     }
 
-    decltype(m_bootstrap_waiters) waiters;
-    std::swap(waiters, m_bootstrap_waiters);
+    m_resolved_proxy_address = resolved;
+    m_resolved_proxy_address->set_port(m_settings->port);
+    on_bootstrap_ready(nullptr);
+}
+
+void OutboundProxy::on_bootstrap_ready(Error<SocketError> bootstrap_error) {
+    decltype(m_bootstrap_waiters) waiters = std::exchange(m_bootstrap_waiters, {});
     for (auto &[conn_id, parameters] : waiters) {
-        Error<SocketError> error;
-        if (m_resolved_proxy_address.has_value()) {
+        Error<SocketError> error = bootstrap_error;
+        if (error == nullptr) {
             error = this->connect_to_proxy(conn_id, parameters);
-        } else {
-            error = make_error(SocketError::AE_OUTBOUND_PROXY_ERROR, "Bootstrap failure");
         }
 
         if (error != nullptr && parameters.callbacks.on_close != nullptr) {

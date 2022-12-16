@@ -3,7 +3,6 @@ from conans import ConanFile, CMake
 
 class DnsLibsConan(ConanFile):
     name = "dns-libs"
-    version = "777"  # use the `commit_hash` option to select the desired library version
     license = "Apache-2.0"
     author = "AdguardTeam"
     url = "https://github.com/AdguardTeam/DnsLibs"
@@ -49,10 +48,14 @@ class DnsLibsConan(ConanFile):
             del self.options.fPIC
 
     def source(self):
-        self.run("git clone https://github.com/AdguardTeam/DnsLibs.git source_subfolder")
+        self.run("git init . && git remote add origin https://github.com/AdguardTeam/DnsLibs.git && git fetch")
 
-        if self.options.commit_hash:
-            self.run("cd source_subfolder && git checkout %s" % self.options.commit_hash)
+        if self.version == "777":
+            if self.options.commit_hash:
+                self.run("git checkout -f %s" % self.options.commit_hash)
+        else:
+            version_hash = self.conan_data["commit_hash"][self.version]["hash"]
+            self.run("git checkout -f %s" % version_hash)
 
     def build(self):
         cmake = CMake(self)
@@ -62,7 +65,7 @@ class DnsLibsConan(ConanFile):
                 cmake.definitions["CMAKE_CXX_FLAGS"] = "-stdlib=%s" % self.settings.compiler.libcxx
             if self.settings.compiler.version:
                 cmake.definitions["CMAKE_CXX_COMPILER_VERSION"] = self.settings.compiler.version
-        cmake.configure(source_folder="source_subfolder/proxy")
+        cmake.configure(source_folder="proxy")
         cmake.build(target="dnsproxy")
 
     def package(self):
@@ -77,7 +80,7 @@ class DnsLibsConan(ConanFile):
         ]
 
         for m in MODULES:
-            self.copy("*.h", dst="include", src="source_subfolder/%s/include" % m)
+            self.copy("*.h", dst="include", src="%s/include" % m)
 
         self.copy("*.lib", dst="lib", keep_path=False)
         self.copy("*.dll", dst="bin", keep_path=False)

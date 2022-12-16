@@ -450,6 +450,12 @@ void DnsForwarder::deinit() {
     m_settings = nullptr;
     m_shutdown_guard.reset();
 
+    infolog(m_log, "Destroying DNS64 state...");
+    if (m_dns64_state) {
+        m_dns64_state->discovering_upstream.reset();
+    }
+    infolog(m_log, "Done");
+
     infolog(m_log, "Destroying upstreams...");
     m_upstreams.clear();
     infolog(m_log, "Done");
@@ -458,9 +464,9 @@ void DnsForwarder::deinit() {
     m_fallbacks.clear();
     infolog(m_log, "Done");
 
-    infolog(m_log, "Destroying DNS64 state...");
-    if (m_dns64_state) {
-        m_dns64_state->discovering_upstream.reset();
+    infolog(m_log, "Deinitilizing socket factory...");
+    if (m_socket_factory != nullptr) {
+        m_socket_factory->deinit();
     }
     infolog(m_log, "Done");
 

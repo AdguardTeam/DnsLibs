@@ -1,47 +1,35 @@
 commit_hash:
-  "2.0.20":
-    hash: "e0ebc461e0441a528a3d3332d7e974f4470d273e"
-  "2.0.21":
-    hash: "bc040d0fa6c8bf9d933bff420a599ea355050234"
-  "2.0.22":
-    hash: "b7fb942e1a7a51153d3439276b014019d1bd27b3"
-  "2.0.23":
-    hash: "cc6a989ff9566d4863f088c8ab23d0ec91e6d580"
-  "2.0.24":
-    hash: "39d916ec922bdc3a1c2412554a69f898e74be0b7"
-  "2.0.25":
-    hash: "484b41433a28eab4ebf6501f53853072256b9986"
-  "2.0.26":
-    hash: "7b32666c18b4876756236547c3060d9f925c504c"
-  "2.0.28":
-    hash: "46aecd61ca4341b37f23c8e0e6c447336865f2d7"
-  "2.0.29":
-    hash: "f8ac9215e5d63006fdd7c1143f7b0acb06d91637"
-  "2.0.30":
-    hash: "d3698b3e8626acccbb8082d573a6d2f6110dfa06"
-  "2.0.31":
-    hash: "049a5f3f2752032b4498c60b8a072a8f6d4053bb"
-  "2.0.32":
-    hash: "566a6843ec184bd19956b65805ecc2c0e63755d3"
-  "2.0.33":
-    hash: "6fe0dd48e6d58e2d4c64dd97563d75cd858aefa5"
-  "2.0.34":
-    hash: "35bbe1dcd366b4ceabaf9327617a8a33f52ae9e7"
-  "2.0.35":
-    hash: "17f5aa90ffdc4d5dac77a1dcd2ccf4d6dad63d10"
-  "2.0.36":
-    hash: "a3531efe50623b77d0d060c3ff85290558da5a02"
-  "2.0.37":
-    hash: "072446cc2fc8cb5a59e5570a74f830c8a9269450"
-  "2.0.38":
-    hash: "1dc211e8b259a27e3c0a8eb94d7488676224f7b9"
-  "2.0.39":
-    hash: "cf5872f821de02c1faaccde0c8bc0ec49ccfe6aa"
-  "2.0.40":
-    hash: "23b55676e684b766563fa6b6937ff5e66704ef77"
-  "2.0.41":
-    hash: "71e3b1eed6d89ff61f29904a96f8891c0e0f9412"
-  "2.0.42":
-    hash: "80da7d6b76d7962d869764afb4b7edf8191fe745"
-  "2.0.43":
-    hash: "8499ee8fd1df7dee796a118d90db091eff29900c"
+  "2.0.50":
+    hash: "84d3dc526067eebb01d9d4030a833e5c466f7d6e"
+  "2.0.51":
+    hash: "fe08b51738e029abc151d3e9e17e8850f4c0d78f"
+  "2.0.52":
+    hash: "a523561ed6482629128c5336ca0744261bc8602f"
+  "2.0.53":
+    hash: "5b54a9143031cd7ae7ac29ed4395ff08af42088d"
+  "2.0.54":
+    hash: "b830de744fe2f3dbaebb7fa05c3676dc01eb4832"
+  "2.0.55":
+    hash: "75662502b9165b074259942e49ffb536fcc80c86"
+  "2.0.56":
+    hash: "dd68d129a2449083e0d99fc06cc040ddf7fd23de"
+  "2.0.57":
+    hash: "fe4097c4b9372d9d30386ca4b84abef93e88e4ac"
+  "2.0.58":
+    hash: "f768655158108551549221d041865dcfd26aec93"
+  "2.0.59":
+    hash: "0e0b97aea8adbc6cc5f28c70818988e17ba9c40a"
+  "2.0.60":
+    hash: "a1448ab3165aaed99f5ffb183988d455e5dc9f26"
+  "2.0.61":
+    hash: "1273e47a36fc338dd517c08a265bec9475763f9b"
+  "2.0.62":
+    hash: "193c9be47355c2e5cd8421e2061ed8f3038a2766"
+  "2.0.63":
+    hash: "df9d906eb4768c0196f9ec6749f7d3574ea74b13"
+  "2.0.64":
+    hash: "c492b594a99d0a774619c97f6051914d3ef37d71"
+  "2.0.65":
+    hash: "0add627ee717867dfdc1f8bdf6f6dc5317d1159b"
+  "2.0.66":
+    hash: "b94494f6f2af4e3cc183a964ca76bbf0f2eecfd0"

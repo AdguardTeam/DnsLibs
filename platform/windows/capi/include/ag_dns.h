@@ -485,6 +485,11 @@ AG_EXPORT const char *ag_test_upstream(const ag_upstream_options *upstream, bool
                                        ag_certificate_verification_cb on_certificate_verification, bool offline);
 
 /**
+ * Check if string is a valid rule
+ */
+AG_EXPORT bool ag_is_valid_dns_rule(const char *str);
+
+/**
  * Return the C API version (hash of this file).
  */
 AG_EXPORT const char *ag_get_capi_version();

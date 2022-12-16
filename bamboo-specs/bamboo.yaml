@@ -8,3 +8,5 @@
 !include 'run-tests.yaml'
 ---
 !include 'increment-version.yaml'
+---
+!include 'upload-conan-recipes.yaml'

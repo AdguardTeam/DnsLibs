@@ -26,7 +26,6 @@ public:
     void reset_connections();
 
 private:
-    mutable std::mutex m_guard;
     struct Connection {
         DirectOProxy *proxy = nullptr;
         uint32_t id = 0;
@@ -35,8 +34,8 @@ private:
     };
 
     HashMap<uint32_t, Connection> m_connections;
-    HashMap<uint32_t, Connection> m_closing_connections;
 
+    void deinit_impl() override;
     [[nodiscard]] ProtocolsSet get_supported_protocols() const override;
     [[nodiscard]] std::optional<evutil_socket_t> get_fd(uint32_t conn_id) const override;
     [[nodiscard]] Error<SocketError> send(uint32_t conn_id, Uint8View data) override;

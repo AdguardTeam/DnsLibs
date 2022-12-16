@@ -1,0 +1,68 @@
+---
+version: 2
+plan:
+  project-key: CL
+  key: DNSUCR
+  name: DnsLibs - Upload conan recipes
+stages:
+  - Default Stage:
+      manual: false
+      final: false
+      jobs:
+        - Default Job
+Default Job:
+  key: JOB1
+  docker:
+    image: adguard/core-libs:1.11
+    volumes:
+      ${bamboo.git.cache.directory}: ${bamboo.git.cache.directory}
+      ${system.HOME}/.ssh: /root/.ssh
+    docker-run-arguments: []
+  tasks:
+    - !include docker-clean.yaml
+    - checkout:
+        force-clean-build: 'true'
+        description: Checkout
+    - script:
+        interpreter: SHELL
+        scripts:
+          - |-
+            # Clean up local cache
+            conan remove -f '*'
+
+            conan remote add -i 0 art ${bamboo.conanRepoUrl} || true
+
+            # Export packages
+            cd scripts
+            python3 -m pip install -r requirements.txt
+            ./export_conan.py
+
+            conan user -p "${bamboo_artifactoryPassword}" -r art "${bamboo_artifactoryUser}" > upload.txt 2>&1
+
+            # Upload packages
+            conan upload -r art --all -c '*' >> upload.txt 2>&1
+            echo conan upload finished with status $?
+  final-tasks:
+    - script:
+        interpreter: SHELL
+        scripts:
+          - |-
+            # Clean up
+            conan remove -f '*'
+            conan remove --locks
+        description: Clean up
+  requirements:
+    - adg-privileged-docker
+  artifact-subscriptions: []
+repositories:
+  - dns-libs:
+      scope: global
+branches:
+  create: manually
+  delete: never
+  link-to-jira: true
+triggers: []
+notifications: []
+labels: []
+other:
+  concurrent-build-plugin: system-default
