@@ -26,6 +26,7 @@ PlainUpstream::PlainUpstream(const UpstreamOptions &opts, const UpstreamFactoryC
         , m_log(AG_FMT("Plain upstream ({})", opts.address))
         , m_prefer_tcp(utils::starts_with(opts.address, TCP_SCHEME))
         , m_address(prepare_address(opts.address))
+        , m_shutdown_guard(std::make_shared<bool>(true))
 {
 
 }
@@ -41,6 +42,8 @@ Error<Upstream::InitError> PlainUpstream::init() {
 }
 
 coro::Task<Upstream::ExchangeResult> PlainUpstream::exchange(const ldns_pkt *request_pkt, const DnsMessageInfo *info) {
+    std::weak_ptr<bool> guard = m_shutdown_guard;
+
     ldns_buffer_ptr buffer{ldns_buffer_new(REQUEST_BUFFER_INITIAL_CAPACITY)};
     ldns_status status = ldns_pkt2buffer_wire(&*buffer, request_pkt);
     if (status != LDNS_STATUS_OK) {
@@ -59,7 +62,11 @@ coro::Task<Upstream::ExchangeResult> PlainUpstream::exchange(const ldns_pkt *req
 
     if (!m_prefer_tcp && !(info && info->proto == utils::TP_TCP)) {
         AioSocket socket(this->make_socket(utils::TP_UDP));
-        if (auto err = co_await socket.connect({&m_config.loop, m_address, timeout})) {
+        auto err = co_await socket.connect({&m_config.loop, m_address, timeout});
+        if (guard.expired()) {
+            co_return make_error(DnsError::AE_SHUTTING_DOWN);
+        }
+        if (err) {
             co_return (err->value() == SocketError::AE_TIMED_OUT) // To cancel second retry of exchange
                             ? make_error(DnsError::AE_TIMED_OUT, "Timed out while connecting to remote host via UDP")
                             : make_error(DnsError::AE_SOCKET_ERROR, err);
@@ -76,6 +83,9 @@ coro::Task<Upstream::ExchangeResult> PlainUpstream::exchange(const ldns_pkt *req
         }
 
         auto r = co_await receive_dns_packet(&socket, timeout);
+        if (guard.expired()) {
+            co_return make_error(DnsError::AE_SHUTTING_DOWN);
+        }
         if (r.has_error()) {
             co_return (r.error()->value() == SocketError::AE_TIMED_OUT) // To cancel second retry of exchange
                     ? make_error(DnsError::AE_TIMED_OUT, "Timed out while waiting for DNS reply via UDP")
@@ -104,6 +114,9 @@ coro::Task<Upstream::ExchangeResult> PlainUpstream::exchange(const ldns_pkt *req
     Uint8View buf{ldns_buffer_begin(buffer.get()), ldns_buffer_position(buffer.get())};
     tracelog_id(m_log, request_pkt, "Sending TCP request for a domain: {}", domain ? domain.get() : "(unknown)");
     auto result = co_await m_pool->perform_request(buf, timeout);
+    if (guard.expired()) {
+        co_return make_error(DnsError::AE_SHUTTING_DOWN);
+    }
     if (result.has_error()) {
         co_return result.error();
     }

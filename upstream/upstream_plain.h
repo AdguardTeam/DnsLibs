@@ -1,6 +1,8 @@
 #pragma once
 
+#include <memory>
 #include <utility>
+
 #include <event2/event.h>
 #include <ldns/net.h>
 
@@ -41,6 +43,8 @@ private:
     ConnectionPoolPtr m_pool;
     /** Socket address */
     SocketAddress m_address;
+    /** Use of deleted *this prevention */
+    std::shared_ptr<bool> m_shutdown_guard;
 };
 
 } // namespace ag::dns
