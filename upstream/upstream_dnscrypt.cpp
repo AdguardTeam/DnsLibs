@@ -38,7 +38,8 @@ DnscryptUpstream::DnscryptUpstream(
         ServerStamp &&stamp, const UpstreamOptions &opts, const UpstreamFactoryConfig &config)
         : Upstream(make_dnscrypt_options(stamp, opts), config)
         , m_log("DNScrypt upstream")
-        , m_stamp(std::move(stamp)) {
+        , m_stamp(std::move(stamp))
+        , m_shutdown_guard(std::make_shared<bool>(true)) {
     static const SodiumInitializer ensure_initialized;
 }
 
@@ -50,8 +51,12 @@ DnscryptUpstream::~DnscryptUpstream() = default;
 
 coro::Task<Upstream::ExchangeResult> DnscryptUpstream::exchange(const ldns_pkt *request_pkt, const DnsMessageInfo *) {
     tracelog_id(m_log, request_pkt, "Started");
+    std::weak_ptr<bool> guard = m_shutdown_guard;
 
     SetupResult result = co_await setup_impl();
+    if (guard.expired()) {
+        co_return make_error(DnsError::AE_SHUTTING_DOWN);
+    }
     if (result.error) {
         co_return result.error;
     }
@@ -59,6 +64,9 @@ coro::Task<Upstream::ExchangeResult> DnscryptUpstream::exchange(const ldns_pkt *
         co_return make_error(DnsError::AE_TIMED_OUT, AG_FMT("Certificate fetch took too much time: {}ms", result.rtt.count()));
     }
     auto reply = co_await apply_exchange(*request_pkt, m_options.timeout - result.rtt);
+    if (guard.expired()) {
+        co_return make_error(DnsError::AE_SHUTTING_DOWN);
+    }
     if (reply.has_error()) {
         co_return reply.error();
     }
@@ -90,13 +98,16 @@ coro::Task<DnscryptUpstream::SetupResult> DnscryptUpstream::setup_impl() {
 coro::Task<Upstream::ExchangeResult> DnscryptUpstream::apply_exchange(const ldns_pkt &request_pkt, Millis timeout) {
     Impl local_upstream;
     local_upstream = *m_impl;
+    std::weak_ptr<bool> guard = m_shutdown_guard;
 
     utils::Timer timer;
 
     auto udp_reply_res = co_await local_upstream.udp_client.exchange(
             request_pkt, local_upstream.server_info, this->config().loop,
             timeout, m_config.socket_factory, this->make_socket_parameters());
-
+    if (guard.expired()) {
+        co_return make_error(DnsError::AE_SHUTTING_DOWN);
+    }
     if (udp_reply_res && ldns_pkt_tc(udp_reply_res->packet.get())) {
         tracelog_id(m_log, &request_pkt, "Truncated message was received, retrying over TCP");
         dnscrypt::Client tcp_client(utils::TP_TCP);
@@ -109,6 +120,9 @@ coro::Task<Upstream::ExchangeResult> DnscryptUpstream::apply_exchange(const ldns
 
         auto tcp_reply_res = co_await tcp_client.exchange(request_pkt, local_upstream.server_info,
                 this->config().loop, timeout, m_config.socket_factory, this->make_socket_parameters());
+        if (guard.expired()) {
+            co_return make_error(DnsError::AE_SHUTTING_DOWN);
+        }
         if (tcp_reply_res) {
             co_return std::move(tcp_reply_res->packet);
         } else {

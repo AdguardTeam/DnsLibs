@@ -39,6 +39,7 @@ private:
     Logger m_log;
     ServerStamp m_stamp;
     ImplPtr m_impl;
+    std::shared_ptr<bool> m_shutdown_guard;
 };
 
 } // namespace ag::dns
