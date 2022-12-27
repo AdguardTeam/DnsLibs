@@ -137,7 +137,7 @@ static std::string_view strip_dot_url(std::string_view url) {
 }
 
 static std::string_view get_host_name(std::string_view url) {
-    return utils::trim(utils::split_host_port(strip_dot_url(url)).first);
+    return utils::trim(dns_utils::split_host_port(strip_dot_url(url)).first);
 }
 
 static BootstrapperPtr create_bootstrapper(const Logger &log, const UpstreamOptions &opts,
@@ -149,7 +149,7 @@ static BootstrapperPtr create_bootstrapper(const Logger &log, const UpstreamOpti
     if (resolved.has_value()) {
         address = resolved.value();
     } else {
-        auto[host, port_str] = utils::split_host_port(strip_dot_url(opts.address));
+        auto[host, port_str] = dns_utils::split_host_port(strip_dot_url(opts.address));
         address = host;
         if (!port_str.empty()) {
             port = std::strtol(std::string(port_str).c_str(), nullptr, 10);

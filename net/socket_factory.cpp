@@ -143,10 +143,12 @@ SocketFactory::SocketPtr SocketFactory::make_secured_socket(
 ErrString SocketFactory::prepare_fd(
         evutil_socket_t fd, const SocketAddress &peer, const IfIdVariant &outbound_interface) const {
     if (const uint32_t *if_index = std::get_if<uint32_t>(&outbound_interface)) {
-        return ag::utils::bind_socket_to_if(fd, peer.c_sockaddr()->sa_family, *if_index);
+        auto e = ag::utils::bind_socket_to_if(fd, peer.c_sockaddr()->sa_family, *if_index);
+        return e ? std::make_optional(e->str()) : std::nullopt;
     }
     if (const std::string *if_name = std::get_if<std::string>(&outbound_interface)) {
-        return ag::utils::bind_socket_to_if(fd, peer.c_sockaddr()->sa_family, if_name->c_str());
+        auto e = ag::utils::bind_socket_to_if(fd, peer.c_sockaddr()->sa_family, if_name->c_str());
+        return e ? std::make_optional(e->str()) : std::nullopt;
     }
     if (m_router == nullptr) {
         return std::nullopt;
@@ -154,14 +156,14 @@ ErrString SocketFactory::prepare_fd(
 
     if (auto idx = m_router->resolve(peer); idx.has_value()) {
         auto err = ag::utils::bind_socket_to_if(fd, peer.c_sockaddr()->sa_family, *idx);
-        if (err.has_value()) {
-            err = std::nullopt;
+        if (err) {
+            err = nullptr;
             m_router->flush_cache();
             if (idx = m_router->resolve(peer); idx.has_value()) {
                 err = ag::utils::bind_socket_to_if(fd, peer.c_sockaddr()->sa_family, *idx);
             }
         }
-        return err;
+        return err->str();
     }
 
     return std::nullopt;

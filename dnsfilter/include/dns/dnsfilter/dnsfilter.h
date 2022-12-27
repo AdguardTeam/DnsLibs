@@ -10,6 +10,7 @@
 #include <magic_enum.hpp>
 #include <ldns/ldns.h>
 #include "common/defs.h"
+#include "dns/common/dns_defs.h"
 
 namespace ag::dns {
 

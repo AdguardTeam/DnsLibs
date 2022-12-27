@@ -138,7 +138,7 @@ static std::vector<ResolverPtr> create_resolvers(const Logger &log, const Bootst
     UpstreamOptions opts{};
     opts.outbound_interface = p.outbound_interface;
     for (const std::string &server : p.bootstrap) {
-        if (!p.upstream_config.ipv6_available && SocketAddress(ag::utils::split_host_port(server).first, 0).is_ipv6()) {
+        if (!p.upstream_config.ipv6_available && SocketAddress(dns_utils::split_host_port(server).first, 0).is_ipv6()) {
             continue;
         }
         opts.address = server;
@@ -161,7 +161,7 @@ Bootstrapper::Bootstrapper(const Params &p)
         : m_log(__func__)
         , m_timeout(p.timeout)
         , m_resolvers(create_resolvers(m_log, p)) {
-    auto [host, port] = utils::split_host_port(p.address_string);
+    auto [host, port] = dns_utils::split_host_port(p.address_string);
     m_server_port = std::strtol(std::string(port).c_str(), nullptr, 10);
     if (m_server_port == 0) {
         m_server_port = p.default_port;

@@ -230,7 +230,7 @@ Error<Upstream::InitError> DoqUpstream::init() {
     url.remove_prefix(SCHEME.size());
     url = url.substr(0, url.find('/'));
 
-    auto [host, port] = ag::utils::split_host_port(url);
+    auto [host, port] = dns_utils::split_host_port(url);
     m_server_name = ag::utils::trim(host);
     if (m_server_name.empty()) {
         return make_error(InitError::AE_EMPTY_SERVER_NAME);

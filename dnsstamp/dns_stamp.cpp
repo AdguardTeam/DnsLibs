@@ -17,6 +17,7 @@
 #include "common/net_utils.h"
 #include "common/socket_address.h"
 #include "common/utils.h"
+#include "dns/common/dns_utils.h"
 #include "dns/common/net_consts.h"
 #include "dns/dnsstamp/dns_stamp.h"
 
@@ -142,7 +143,7 @@ static std::string stamp_string(
 }
 
 static StampError validate_server_addr_str(std::string_view addr_str) {
-    auto [host, port, err] = utils::split_host_port_with_err(addr_str, true, true);
+    auto [host, port, err] = dns_utils::split_host_port_with_err(addr_str, true, true);
     if (err) {
         return make_error(ServerStamp::AE_INVALID_HOST_PORT_FORMAT, *err);
     }
@@ -375,7 +376,7 @@ std::string ServerStamp::pretty_url(bool pretty_dnscrypt) const {
     }
 
     if (proto == StampProtoType::PLAIN) {
-        auto [host, port] = ag::utils::split_host_port(server_addr_str);
+        auto [host, port] = dns_utils::split_host_port(server_addr_str);
         return port.empty() ? std::string{host} : server_addr_str;
     }
 
@@ -404,7 +405,7 @@ std::string ServerStamp::pretty_url(bool pretty_dnscrypt) const {
         if (server_addr_str.front() == ':') {
             port = server_addr_str;
         } else {
-            auto [host, port_view] = ag::utils::split_host_port(server_addr_str);
+            auto [host, port_view] = dns_utils::split_host_port(server_addr_str);
             if (!port_view.empty()) {
                 port = AG_FMT(":{}", port_view);
             }

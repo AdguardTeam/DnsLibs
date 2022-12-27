@@ -349,7 +349,7 @@ static std::string_view get_host_port(std::string_view url) {
 }
 
 static std::string_view get_host_name(std::string_view url) {
-    return utils::split_host_port(get_host_port(url)).first;
+    return dns_utils::split_host_port(get_host_port(url)).first;
 }
 
 int DohUpstream::verify_callback(X509_STORE_CTX *ctx, void *arg) {
@@ -399,7 +399,7 @@ static curl_slist_ptr create_resolved_hosts_list(std::string_view url, const IpA
     }
 
     std::string_view host_port = get_host_port(url);
-    auto [host, port_str] = utils::split_host_port(host_port);
+    auto [host, port_str] = dns_utils::split_host_port(host_port);
     uint16_t port = ag::utils::to_integer<uint16_t>(port_str).value_or(DEFAULT_DOH_PORT);
 
     std::string entry;
@@ -779,7 +779,7 @@ coro::Task<Upstream::ExchangeResult> DohUpstream::exchange(ldns_pkt *request, co
             std::string addr = address.str();
             tracelog(m_log, "Server address: {}", addr);
 
-            auto [ip, port] = utils::split_host_port(addr);
+            auto [ip, port] = dns_utils::split_host_port(addr);
             std::string_view host = get_host_name(m_options.address);
             if (entry.empty()) {
                 entry = AG_FMT("{}:{}:{}", host, port, ip);
