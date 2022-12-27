@@ -11,7 +11,9 @@ import java.security.KeyStore;
 import java.security.cert.CertificateFactory;
 import java.security.cert.X509Certificate;
 import java.util.ArrayList;
+import java.util.EnumSet;
 import java.util.List;
+import java.util.Objects;
 
 import javax.net.ssl.TrustManagerFactory;
 import javax.net.ssl.X509TrustManager;
@@ -326,4 +328,30 @@ public class DnsProxy implements Closeable {
             }
         }
     }
+
+    /**
+     * Suggest an action based on a filtering log event.
+     * @throws NullPointerException if any argument is {@code null}.
+     */
+    public FilteringLogAction filteringLogActionFromEvent(DnsRequestProcessedEvent event) {
+        return filteringLogActionFromEvent(nativePtr, Objects.requireNonNull(event));
+    }
+
+    private native FilteringLogAction filteringLogActionFromEvent(long nativePtr, DnsRequestProcessedEvent event);
+
+    /**
+     * Generate a rule from a template and a corresponding event.
+     * @return A rule or {@code null} on error.
+     * @throws NullPointerException if any argument is {@code null}.
+     */
+    public String generateRuleWithOptions(FilteringLogAction.RuleTemplate template, DnsRequestProcessedEvent event,
+                                                 EnumSet<FilteringLogAction.Option> options) {
+        int opt = 0;
+        for (FilteringLogAction.Option option : options) {
+            opt |= option.value;
+        }
+        return generateRuleFromTemplate(nativePtr, Objects.requireNonNull(template), Objects.requireNonNull(event), opt);
+    }
+
+    private native String generateRuleFromTemplate(long nativePtr, FilteringLogAction.RuleTemplate template, DnsRequestProcessedEvent event, int options);
 }

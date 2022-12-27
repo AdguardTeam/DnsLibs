@@ -303,6 +303,33 @@ static ServerStamp marshal_stamp(const ag_dns_stamp *c_stamp) {
     return stamp;
 }
 
+static DnsRequestProcessedEvent marshal_processed_event(const ag_dns_request_processed_event *c_event) {
+    DnsRequestProcessedEvent event;
+    event.whitelist = c_event->whitelist;
+    event.cache_hit = c_event->cache_hit;
+    event.dnssec = c_event->dnssec;
+    event.type = c_event->type ? c_event->type : "";
+    event.domain = c_event->domain ? c_event->domain : "";
+    event.start_time = c_event->start_time;
+    event.elapsed = c_event->elapsed;
+    event.bytes_received = c_event->bytes_received;
+    event.bytes_sent = c_event->bytes_sent;
+    event.answer = c_event->answer ? c_event->answer : "";
+    event.original_answer = c_event->original_answer ? c_event->original_answer : "";
+    event.error = c_event->error ? c_event->error : "";
+    event.status = c_event->status ? c_event->status : "";
+    event.upstream_id = c_event->upstream_id ? std::make_optional(*c_event->upstream_id) : std::nullopt;
+    for (uint32_t i = 0; i < c_event->filter_list_ids.size; ++i) {
+        event.filter_list_ids.emplace_back(c_event->filter_list_ids.data[i]);
+    }
+    for (uint32_t i = 0; i < c_event->rules.size; ++i) {
+        if (const char *rule = c_event->rules.data[i]) {
+            event.rules.emplace_back(rule);
+        }
+    }
+    return event;
+}
+
 void ag_dnsproxy_settings_free(ag_dnsproxy_settings *settings) {
     if (!settings) {
         return;
@@ -687,4 +714,43 @@ const char *ag_dns_stamp_pretty_url(ag_dns_stamp *c_stamp) {
 const char *ag_dns_stamp_prettier_url(ag_dns_stamp *c_stamp) {
     ServerStamp stamp = marshal_stamp(c_stamp);
     return marshal_str(stamp.pretty_url(true));
+}
+
+ag_dns_filtering_log_action *ag_dns_filtering_log_action_from_event(const ag_dns_request_processed_event *c_event) {
+    auto event = marshal_processed_event(c_event);
+    auto action = DnsFilter::suggest_action(event);
+    if (!action) {
+        return nullptr;
+    }
+    auto **templates = new const char *[action->templates.size()];
+    for (size_t i = 0; i < action->templates.size(); ++i) {
+        templates[i] = strdup(action->templates[i].text.c_str());
+    }
+    return new ag_dns_filtering_log_action{
+            .templates = {
+                    .data = (const ag_dns_rule_template **) templates,
+                    .size = (uint32_t) action->templates.size(),
+            },
+            .allowed_options = action->allowed_options,
+            .required_options = action->required_options,
+            .blocking = action->blocking,
+    };
+}
+
+void ag_dns_filtering_log_action_free(ag_dns_filtering_log_action *action) {
+    if (!action) {
+        return;
+    }
+    for (uint32_t i = 0; i < action->templates.size; ++i) {
+        free((void *) action->templates.data[i]);
+    }
+    delete[] action->templates.data;
+    delete action;
+}
+
+char *ag_dns_generate_rule_with_options(
+        const ag_dns_rule_template *tmplt, const ag_dns_request_processed_event *c_event, uint32_t options) {
+    auto event = marshal_processed_event(c_event);
+    DnsFilter::RuleTemplate rule_template((const char *) tmplt);
+    return strdup(DnsFilter::generate_rule(rule_template, event, options).c_str());
 }

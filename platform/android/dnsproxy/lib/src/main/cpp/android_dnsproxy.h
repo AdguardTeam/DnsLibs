@@ -27,6 +27,8 @@ private:
         jni::GlobalRef<jclass> events_interface;
         jni::GlobalRef<jclass> processed_event;
         jni::GlobalRef<jclass> cert_verify_event;
+        jni::GlobalRef<jclass> filtering_log_action;
+        jni::GlobalRef<jclass> rule_template;
     } m_jclasses{};
 
     struct {
@@ -52,6 +54,18 @@ private:
         jfieldID cache_hit;
         jfieldID dnssec;
     } m_processed_event_fields{};
+
+    struct {
+        jmethodID ctor;
+    } m_filtering_log_action_methods;
+
+    struct {
+        jfieldID text;
+    } m_rule_template_fields;
+
+    struct {
+        jmethodID ctor;
+    } m_rule_template_methods;
 
     struct {
         jmethodID ctor;
@@ -137,6 +151,11 @@ private:
     jni::LocalRef<jobject> marshal_processed_event(JNIEnv *env, const DnsRequestProcessedEvent &event);
 
     /**
+     * Marshal a "DNS request processed" event from Java to C++.
+     */
+    DnsRequestProcessedEvent marshal_processed_event(JNIEnv *env, jobject event);
+
+    /**
      * Marshal a "Certificate verification" event from C++ to Java.
      */
     jni::LocalRef<jobject> marshal_certificate_verification_event(JNIEnv *env, const CertificateVerificationEvent &event);
@@ -150,6 +169,21 @@ private:
      * Marshal DnsProxyInitResult from C++ to Java.
      */
     jni::LocalRef<jobject> marshal_init_result(JNIEnv *env, const DnsProxy::DnsProxyInitResult &init_result);
+
+    /**
+     * Marshal a filtering log action from C++ to Java.
+     */
+    jni::LocalRef<jobject> marshal_filtering_log_action(JNIEnv *env, const DnsFilter::FilteringLogAction &action);
+
+    /**
+     * Marshal a rule template from C++ to Java.
+     */
+    jni::LocalRef<jobject> marshal_rule_template(JNIEnv *env, const DnsFilter::RuleTemplate &tmplt);
+
+    /**
+     * Marshal a rule template from Java to C++.
+     */
+    DnsFilter::RuleTemplate marshal_rule_template(JNIEnv *env, jobject tmplt);
 
 public:
 
@@ -194,6 +228,18 @@ public:
      * @return Null or error string marshalled to Java.
      */
     jstring test_upstream(JNIEnv *env, jobject upstream_settings, jboolean ipv6, jobject events_adapter, jboolean offline);
+
+    /**
+     * Suggest an action for filtering log event.
+     * @return Action or null on error.
+     */
+    jobject filtering_log_action_from_event(JNIEnv *env, jobject event);
+
+    /**
+     * Generate a rule from a template (obtained from a filtering log action) and a corresponding event.
+     * @return Rule or null on error.
+     */
+    jstring generate_rule(JNIEnv *env, jobject tmplt, jobject event, jint options);
 };
 
 }

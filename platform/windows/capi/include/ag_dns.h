@@ -360,6 +360,20 @@ typedef struct {
     ag_server_informal_properties properties;
 } ag_dns_stamp;
 
+typedef void ag_dns_rule_template;
+
+typedef enum {
+    AGRGO_IMPORTANT = 1 << 0, /**< Add $important modifier. */
+    AGRGO_DNSTYPE = 1 << 1, /**< Add $dnstype modifier. */
+} ag_rule_generation_options;
+
+typedef struct {
+    ARRAY_OF(const ag_dns_rule_template *) templates; /**< A set of rule templates. */
+    uint32_t allowed_options;                         /**< Options that are allowed to be passed to `generate_rule`. */
+    uint32_t required_options; /**< Options that are required for the generated rule to be correct. */
+    bool blocking;             /**< Whether something will be blocked or un-blocked as a result of this action. */
+} ag_dns_filtering_log_action;
+
 typedef enum {
     AGDPIR_PROXY_NOT_SET,
     AGDPIR_EVENT_LOOP_NOT_SET,
@@ -516,6 +530,25 @@ AG_EXPORT void ag_disable_SetUnhandledExceptionFilter(void);
  */
 AG_EXPORT void ag_enable_SetUnhandledExceptionFilter(void);
 #endif
+
+/**
+ * Suggest an action based on filtering log event.
+ * @return NULL on error. Action freed with `ag_dns_filtering_log_action_free()` on success.
+ */
+AG_EXPORT ag_dns_filtering_log_action *ag_dns_filtering_log_action_from_event(
+        const ag_dns_request_processed_event *event);
+
+/**
+ * Free an action.
+ */
+AG_EXPORT void ag_dns_filtering_log_action_free(ag_dns_filtering_log_action *action);
+
+/**
+ * Generate a rule from a template (obtained from `ag_dns_filtering_log_action`) and a corresponding event.
+ * @return NULL on error. Rule freed with `ag_str_free()` on success.
+ */
+AG_EXPORT char *ag_dns_generate_rule_with_options(
+        const ag_dns_rule_template *tmplt, const ag_dns_request_processed_event *event, uint32_t options);
 
 #ifdef __cplusplus
 } // extern "C"

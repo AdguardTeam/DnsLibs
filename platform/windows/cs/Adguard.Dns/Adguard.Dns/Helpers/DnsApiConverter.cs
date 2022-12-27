@@ -7,6 +7,7 @@ using System.Runtime.InteropServices;
 using Adguard.Dns.Api.DnsProxyServer.Callbacks;
 using Adguard.Dns.Api.DnsProxyServer.Configs;
 using Adguard.Dns.Api.DnsProxyServer.EventArgs;
+using Adguard.Dns.Api.FilteringLogAction;
 using Adguard.Dns.DnsProxyServer;
 using Adguard.Dns.Utils;
 using AdGuard.Utils.Interop;
@@ -509,6 +510,41 @@ namespace Adguard.Dns.Helpers
             return eventArgs;
         }
 
+        internal static AGDnsApi.ag_dns_request_processed_event ToNativeObject(
+            DnsRequestProcessedEventArgs dnsRequestProcessedEventArgs,
+            Queue<IntPtr> allocatedPointers)
+        {
+            MarshalUtils.ag_list rules = MarshalUtils.ListToAgList(
+                dnsRequestProcessedEventArgs.Rules,
+                MarshalUtils.StringToPtr,
+                allocatedPointers);
+            MarshalUtils.ag_list filterListIds = MarshalUtils.ListToAgList(
+                dnsRequestProcessedEventArgs.FilterListIds,
+                ToNativeObject,
+                allocatedPointers);
+            IntPtr pUpstreamId = dnsRequestProcessedEventArgs.UpstreamId.HasValue 
+                ? ToNativeObject(dnsRequestProcessedEventArgs.UpstreamId.Value, allocatedPointers) 
+                : IntPtr.Zero;
+            AGDnsApi.ag_dns_request_processed_event argsC = new AGDnsApi.ag_dns_request_processed_event
+            {
+                rules = rules,
+                filter_list_ids = filterListIds,
+                pUpstreamId = pUpstreamId
+            };
+
+            MarshalUtils.AllStringsToPtrs(dnsRequestProcessedEventArgs, ref argsC, allocatedPointers);
+            MarshalUtils.CopyPropertiesToFields(dnsRequestProcessedEventArgs, ref argsC);
+            return argsC;
+        }
+
+        private static IntPtr ToNativeObject(int value, Queue<IntPtr> allocatedPointers)
+        {
+            IntPtr ptr = Marshal.AllocHGlobal(sizeof(int));
+            Marshal.WriteInt32(ptr, value);
+            allocatedPointers.Enqueue(ptr);
+            return ptr;
+        }
+
         internal static AGDnsApi.cbd_onCertificateVerification ToNativeObject(
             ICertificateVerificationCallback certificateVerificationCallback)
         {
@@ -592,5 +628,21 @@ namespace Adguard.Dns.Helpers
 
         #endregion
 
+        #region Rules generation
+
+        internal static FilteringLogAction FromNativeObject(AGDnsApi.ag_dns_filtering_log_action actionC)
+        {
+            List<string> ruleTemplates = MarshalUtils.AgListToList<IntPtr, string>(
+                actionC.Templates, MarshalUtils.PtrToString);
+            FilteringLogAction filteringLogAction = new FilteringLogAction
+            {
+                RuleTemplates = ruleTemplates
+            };
+
+            MarshalUtils.CopyFieldsToProperties(actionC, filteringLogAction);
+            return filteringLogAction;
+        }
+
+        #endregion
     }
 }

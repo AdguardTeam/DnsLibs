@@ -50,6 +50,16 @@ public class DnsProxyTest {
     private static final Logger log = LoggerFactory.getLogger(DnsProxyTest.class);
     private final Context context = ApplicationProvider.getApplicationContext();
 
+    // Proxy won't initialize without upstreams, and since recently
+    // there are no upstreams in default settings.
+    private static DnsProxySettings getDefaultSettings() {
+        DnsProxySettings settings = DnsProxySettings.getDefault();
+        UpstreamSettings google = new UpstreamSettings();
+        google.setAddress("8.8.8.8");
+        settings.getUpstreams().add(google);
+        return settings;
+    }
+
     // In case of "permission denied", try uninstalling the test application from the device.
     @Rule
     public GrantPermissionRule rule = GrantPermissionRule.grant(
@@ -60,7 +70,7 @@ public class DnsProxyTest {
 
     @Test
     public void testProxyInit() {
-        final DnsProxySettings defaultSettings = DnsProxySettings.getDefault();
+        final DnsProxySettings defaultSettings = getDefaultSettings();
         try (final DnsProxy proxy = new DnsProxy(context, defaultSettings)) {
             assertEquals(proxy.getSettings(), defaultSettings);
         }
@@ -74,7 +84,7 @@ public class DnsProxyTest {
 
     @Test
     public void testHandleMessage() {
-        try (final DnsProxy proxy = new DnsProxy(context, DnsProxySettings.getDefault())) {
+        try (final DnsProxy proxy = new DnsProxy(context, getDefaultSettings())) {
             final byte[] request = new byte[64];
             ThreadLocalRandom.current().nextBytes(request);
 
@@ -93,7 +103,7 @@ public class DnsProxyTest {
 
     @Test
     public void testEventsMultithreaded() {
-        final DnsProxySettings settings = DnsProxySettings.getDefault();
+        final DnsProxySettings settings = getDefaultSettings();
         settings.getUpstreams().clear();
         settings.getUpstreams().add(new UpstreamSettings(
                 "1.1.1.1", Collections.emptyList(), 10000, new byte[]{}, 42));
@@ -153,7 +163,7 @@ public class DnsProxyTest {
 
     @Test
     public void testListeners() {
-        final DnsProxySettings settings = DnsProxySettings.getDefault();
+        final DnsProxySettings settings = getDefaultSettings();
         final ListenerSettings tcp = new ListenerSettings();
         tcp.setAddress("::");
         tcp.setPort(12345);
@@ -175,7 +185,7 @@ public class DnsProxyTest {
 
     @Test
     public void testSettingsMarshalling() {
-        final DnsProxySettings settings = DnsProxySettings.getDefault();
+        final DnsProxySettings settings = getDefaultSettings();
 
         settings.setBlockedResponseTtlSecs(1234);
 
@@ -282,7 +292,7 @@ public class DnsProxyTest {
         us.setAddress(upstreamAddr);
         us.getBootstrap().add("8.8.8.8");
         us.setTimeoutMs(10000);
-        final DnsProxySettings settings = DnsProxySettings.getDefault();
+        final DnsProxySettings settings = getDefaultSettings();
         settings.getUpstreams().clear();
         settings.getUpstreams().add(us);
         settings.setIpv6Available(false); // DoT times out trying to reach dns.adguard.com over IPv6
@@ -440,6 +450,28 @@ public class DnsProxyTest {
         for (final DnsProxySettings.BlockingMode bm : DnsProxySettings.BlockingMode.values()) {
             final DnsProxySettings.BlockingMode bmFromCode = DnsProxySettings.BlockingMode.fromCode(bm.getCode());
             assertEquals(bm, bmFromCode);
+        }
+    }
+
+    @Test
+    public void testFilteringLogAction() {
+        try (DnsProxy proxy = new DnsProxy(context, getDefaultSettings())) {
+            DnsRequestProcessedEvent event = new DnsRequestProcessedEvent();
+            event.setDomain("example.org");
+            event.setType("TEXT");
+            event.setRules(Arrays.asList("||example.org^$important"));
+            FilteringLogAction action = proxy.filteringLogActionFromEvent(event);
+            assertNotNull(action);
+            assertNotNull(action.getTemplates());
+            assertEquals(1, action.getTemplates().size());
+            assertEquals(EnumSet.of(FilteringLogAction.Option.IMPORTANT), action.getRequiredOptions());
+            assertEquals(EnumSet.of(FilteringLogAction.Option.IMPORTANT, FilteringLogAction.Option.DNSTYPE),
+                    action.getAllowedOptions());
+            assertFalse(action.isBlocking());
+            assertEquals("@@||example.org^$dnstype=TEXT,important",
+                    proxy.generateRuleWithOptions(action.getTemplates().get(0),
+                            event, EnumSet.of(FilteringLogAction.Option.DNSTYPE,
+                                    FilteringLogAction.Option.IMPORTANT)));
         }
     }
 }

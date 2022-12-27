@@ -16,6 +16,8 @@
 #define FQN_DNSPROXY_EVENTS "com/adguard/dnslibs/proxy/DnsProxy$EventsAdapter"
 #define FQN_REQ_PROC_EVENT "com/adguard/dnslibs/proxy/DnsRequestProcessedEvent"
 #define FQN_CERT_VERIFY_EVENT "com/adguard/dnslibs/proxy/CertificateVerificationEvent"
+#define FQN_FILTERING_LOG_ACTION "com/adguard/dnslibs/proxy/FilteringLogAction"
+#define FQN_RULE_TEMPLATE FQN_FILTERING_LOG_ACTION "$RuleTemplate"
 #define FQN_DNSSTAMP "com/adguard/dnslibs/proxy/DnsStamp"
 #define FQN_DNSSTAMP_PROTOTYPE FQN_DNSSTAMP "$ProtoType"
 #define FQN_DNSSTAMP_INFORMAL_PROPERTIES FQN_DNSSTAMP "$InformalProperties"

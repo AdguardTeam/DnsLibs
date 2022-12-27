@@ -126,6 +126,10 @@ public:
         return m_ref;
     }
 
+    T release() {
+        return std::exchange(m_ref, nullptr);
+    }
+
     explicit operator bool() {
         return m_ref;
     }

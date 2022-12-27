@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using AdGuard.Utils.Interop;
 
 namespace Adguard.Dns.Api.DnsProxyServer.EventArgs
 {
@@ -11,11 +12,13 @@ namespace Adguard.Dns.Api.DnsProxyServer.EventArgs
         /// <summary>
         /// Queried domain name
         /// </summary>
+        [ManualMarshalStringToPtr]
         public string Domain { get; set; }
 
         /// <summary>
         /// Query type
         /// </summary>
+        [ManualMarshalStringToPtr]
         public string Type { get; set; }
 
         /// <summary>
@@ -31,16 +34,19 @@ namespace Adguard.Dns.Api.DnsProxyServer.EventArgs
         /// <summary>
         /// DNS answer's status
         /// </summary>
+        [ManualMarshalStringToPtr]
         public string Status { get; set; }
 
         /// <summary>
         /// DNS Answers string representation
         /// </summary>
+        [ManualMarshalStringToPtr]
         public string Answer { get; set; }
 
         /// <summary>
         /// If blocked by CNAME, here will be DNS original answer's string representation
         /// </summary>
+        [ManualMarshalStringToPtr]
         public string OriginalAnswer { get; set; }
 
         /// <summary>
@@ -76,6 +82,7 @@ namespace Adguard.Dns.Api.DnsProxyServer.EventArgs
         /// <summary>
         /// If not {@code null}, contains the error text (occurred while processing the DNS query)
         /// </summary>
+        [ManualMarshalStringToPtr]
         public string Error { get; set; }
 
         /// <summary>

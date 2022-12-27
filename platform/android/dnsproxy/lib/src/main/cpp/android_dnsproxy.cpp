@@ -605,7 +605,6 @@ LocalRef<jobject> AndroidDnsProxy::marshal_settings(JNIEnv *env, const DnsProxyS
 }
 
 LocalRef<jobject> AndroidDnsProxy::marshal_processed_event(JNIEnv *env, const DnsRequestProcessedEvent &event) {
-
     auto check = m_jni_initialized.load();
     assert(check);
 
@@ -642,6 +641,67 @@ LocalRef<jobject> AndroidDnsProxy::marshal_processed_event(JNIEnv *env, const Dn
     }
 
     return LocalRef(env, java_event);
+}
+
+DnsRequestProcessedEvent AndroidDnsProxy::marshal_processed_event(JNIEnv *env, jobject jevent) {
+    auto check = m_jni_initialized.load();
+    assert(check);
+
+    DnsRequestProcessedEvent event;
+
+    if (auto jdomain = (jstring) env->GetObjectField(jevent, m_processed_event_fields.domain);
+            !env->IsSameObject(jdomain, nullptr)) {
+        event.domain = m_utils.marshal_string(env, jdomain);
+    }
+    if (auto jtype = (jstring) env->GetObjectField(jevent, m_processed_event_fields.type);
+            !env->IsSameObject(jtype, nullptr)) {
+        event.type = m_utils.marshal_string(env, jtype);
+    }
+    if (auto jstatus = (jstring) env->GetObjectField(jevent, m_processed_event_fields.status);
+            !env->IsSameObject(jstatus, nullptr)) {
+        event.status = m_utils.marshal_string(env, jstatus);
+    }
+    if (auto janswer = (jstring) env->GetObjectField(jevent, m_processed_event_fields.answer);
+            !env->IsSameObject(janswer, nullptr)) {
+        event.answer = m_utils.marshal_string(env, janswer);
+    }
+    if (auto joriginal_answer = (jstring) env->GetObjectField(jevent, m_processed_event_fields.original_answer);
+            !env->IsSameObject(joriginal_answer, nullptr)) {
+        event.original_answer = m_utils.marshal_string(env, joriginal_answer);
+    }
+    if (auto jerror = (jstring) env->GetObjectField(jevent, m_processed_event_fields.error);
+            !env->IsSameObject(jerror, nullptr)) {
+        event.error = m_utils.marshal_string(env, jerror);
+    }
+    if (auto jupstream_id = (jstring) env->GetObjectField(jevent, m_processed_event_fields.upstream_id);
+            !env->IsSameObject(jupstream_id, nullptr)) {
+        event.upstream_id = m_utils.marshal_integer(env, jupstream_id);
+    }
+    event.start_time = env->GetLongField(jevent, m_processed_event_fields.start_time);
+    event.elapsed = env->GetIntField(jevent, m_processed_event_fields.elapsed);
+    event.bytes_sent = env->GetIntField(jevent, m_processed_event_fields.bytes_sent);
+    event.bytes_received = env->GetIntField(jevent, m_processed_event_fields.bytes_received);
+    event.whitelist = env->GetBooleanField(jevent, m_processed_event_fields.whitelist);
+    event.cache_hit = env->GetBooleanField(jevent, m_processed_event_fields.cache_hit);
+    event.dnssec = env->GetBooleanField(jevent, m_processed_event_fields.dnssec);
+    if (jobject jids = env->GetObjectField(jevent, m_processed_event_fields.filter_list_ids);
+            !env->IsSameObject(jids, nullptr)) {
+        m_utils.iterate(env, jids, [&](const auto &jid) {
+            if (auto id = m_utils.marshal_integer(env, jid.get())) {
+                event.filter_list_ids.emplace_back(*id);
+            }
+        });
+    }
+    if (jobject jrules = env->GetObjectField(jevent, m_processed_event_fields.rules);
+            !env->IsSameObject(jrules, nullptr)) {
+        m_utils.iterate(env, jrules, [&](const auto &jrule) {
+            if (!env->IsSameObject(jrule.get(), nullptr)) {
+                event.rules.emplace_back(m_utils.marshal_string(env, (jstring) jrule.get()));
+            }
+        });
+    }
+
+    return event;
 }
 
 LocalRef<jobject> AndroidDnsProxy::marshal_certificate_verification_event(
@@ -740,7 +800,7 @@ jobject AndroidDnsProxy::init(JNIEnv *env, jobject settings, jobject events) {
     auto cpp_settings = marshal_settings(env, settings);
     auto cpp_events = marshal_events(env, events);
 
-    return env->NewLocalRef(marshal_init_result(env, m_actual_proxy.init(cpp_settings, cpp_events)).get());
+    return marshal_init_result(env, m_actual_proxy.init(cpp_settings, cpp_events)).release();
 }
 
 void AndroidDnsProxy::deinit(JNIEnv *env) {
@@ -767,13 +827,13 @@ jbyteArray AndroidDnsProxy::handle_message(JNIEnv *env, jbyteArray message) {
 jobject AndroidDnsProxy::get_default_settings(JNIEnv *env) {
     auto check = m_jni_initialized.load();
     assert(check);
-    return env->NewLocalRef(marshal_settings(env, DnsProxySettings::get_default()).get());
+    return marshal_settings(env, DnsProxySettings::get_default()).release();
 }
 
 jobject AndroidDnsProxy::get_settings(JNIEnv *env) {
     auto check = m_jni_initialized.load();
     assert(check);
-    return env->NewLocalRef(marshal_settings(env, m_actual_proxy.get_settings()).get());
+    return marshal_settings(env, m_actual_proxy.get_settings()).release();
 }
 
 jstring AndroidDnsProxy::test_upstream(
@@ -782,9 +842,9 @@ jstring AndroidDnsProxy::test_upstream(
     auto err = ag::dns::test_upstream(marshal_upstream(env, upstream_settings), ipv6,
             marshal_events(env, events_adapter).on_certificate_verification, offline);
     if (err) {
-        return (jstring) env->NewLocalRef(m_utils.marshal_string(env, err->str()).get());
+        return m_utils.marshal_string(env, err->str()).release();
     }
-    return NULL;
+    return nullptr;
 }
 
 AndroidDnsProxy::AndroidDnsProxy(JavaVM *vm)
@@ -821,6 +881,13 @@ AndroidDnsProxy::AndroidDnsProxy(JavaVM *vm)
     m_events_interface_methods.on_certificate_verification
             = env->GetMethodID(c, "onCertificateVerification", "(L" FQN_CERT_VERIFY_EVENT ";)Ljava/lang/String;");
 
+    c = (m_jclasses.filtering_log_action = GlobalRef(vm, env->FindClass(FQN_FILTERING_LOG_ACTION))).get();
+    m_filtering_log_action_methods.ctor = env->GetMethodID(c, "<init>", "(Ljava/util/List;IIZ)V");
+
+    c = (m_jclasses.rule_template = GlobalRef(vm, env->FindClass(FQN_RULE_TEMPLATE))).get();
+    m_rule_template_methods.ctor = env->GetMethodID(c, "<init>", "(Ljava/lang/String;)V");
+    m_rule_template_fields.text = env->GetFieldID(c, "text", "Ljava/lang/String;");
+
     m_listener_protocol_enum_values = m_utils.get_enum_values(env.get(), FQN_LISTENER_PROTOCOL);
     m_proxy_protocol_enum_values = m_utils.get_enum_values(env.get(), FQN_OUTBOUND_PROXY_PROTOCOL);
     m_blocking_mode_values = m_utils.get_enum_values(env.get(), FQN_BLOCKING_MODE);
@@ -829,7 +896,66 @@ AndroidDnsProxy::AndroidDnsProxy(JavaVM *vm)
     m_jni_initialized.store(true);
 }
 
+jni::LocalRef<jobject> AndroidDnsProxy::marshal_filtering_log_action(JNIEnv *env, const DnsFilter::FilteringLogAction &action) {
+    jclass list_clazz = env->FindClass("java/util/ArrayList");
+    jmethodID list_ctor = env->GetMethodID(list_clazz, "<init>", "(I)V");
+    LocalRef<jobject> templates = {env, env->NewObject(list_clazz, list_ctor, (jint) action.templates.size())};
+    for (auto &tmplt: action.templates) {
+        m_utils.collection_add(env, templates.get(), marshal_rule_template(env, tmplt).get());
+    }
+    LocalRef<jobject> jaction{env, env->NewObject(m_jclasses.filtering_log_action.get(),
+                                                  m_filtering_log_action_methods.ctor,
+                                                  templates.get(),
+                                                  (jint) action.allowed_options,
+                                                  (jint) action.required_options,
+                                                  (jboolean) action.blocking)};
+    return jaction;
+}
+
+jni::LocalRef<jobject> AndroidDnsProxy::marshal_rule_template(JNIEnv *env, const DnsFilter::RuleTemplate &tmplt) {
+    LocalRef<jobject> jtmplt{env, env->NewObject(m_jclasses.rule_template.get(), m_rule_template_methods.ctor,
+                                                 m_utils.marshal_string(env, tmplt.text).get())};
+    return jtmplt;
+}
+
+DnsFilter::RuleTemplate AndroidDnsProxy::marshal_rule_template(JNIEnv *env, jobject tmplt) {
+    auto text = (jstring) env->GetObjectField(tmplt, m_rule_template_fields.text);
+    return DnsFilter::RuleTemplate(m_utils.marshal_string(env, text));
+}
+
+jstring AndroidDnsProxy::generate_rule(JNIEnv *env, jobject tmplt, jobject event, jint options) {
+    auto ctemplate = marshal_rule_template(env, tmplt);
+    auto cevent = marshal_processed_event(env, event);
+    std::string rule = DnsFilter::generate_rule(ctemplate, cevent, options);
+    return m_utils.marshal_string(env, rule).release();
+}
+
+jobject AndroidDnsProxy::filtering_log_action_from_event(JNIEnv *env, jobject event) {
+    auto cevent = marshal_processed_event(env, event);
+    if (auto action = DnsFilter::suggest_action(cevent)) {
+        return marshal_filtering_log_action(env, *action).release();
+    }
+    return nullptr;
+}
+
 extern "C" JNIEXPORT jstring JNICALL Java_com_adguard_dnslibs_proxy_DnsProxy_version(JNIEnv *env, jclass clazz) {
     (void) clazz;
     return env->NewStringUTF(DnsProxy::version()); // Assume version is already valid UTF-8/CESU-8
+}
+
+extern "C"
+JNIEXPORT jobject JNICALL
+Java_com_adguard_dnslibs_proxy_DnsProxy_filteringLogActionFromEvent(JNIEnv *env, jobject thiz, jlong native_ptr, jobject event) {
+    auto *proxy = (AndroidDnsProxy *) native_ptr;
+    return proxy->filtering_log_action_from_event(env, event);
+}
+
+extern "C"
+JNIEXPORT jstring JNICALL
+Java_com_adguard_dnslibs_proxy_DnsProxy_generateRuleFromTemplate(JNIEnv *env, jobject thiz, jlong native_ptr,
+                                                                 jobject tmplt,
+                                                                 jobject event,
+                                                                 jint options) {
+    auto *proxy = (AndroidDnsProxy *) native_ptr;
+    return proxy->generate_rule(env, tmplt, event, options);
 }

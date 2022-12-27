@@ -1,6 +1,7 @@
 #pragma once
 
 
+#include <optional>
 #include <string>
 #include <vector>
 #include <variant>
@@ -14,6 +15,7 @@
 #include "common/defs.h"
 
 #include "dns/common/dns_defs.h"
+#include "dns/proxy/dnsproxy_events.h"
 
 namespace ag::dns {
 
@@ -147,6 +149,41 @@ public:
      * @return true if string is a valid rule, false otherwise
      */
     static bool is_valid_rule(std::string_view str);
+
+    enum RuleGenerationOptions : uint32_t {
+        RGO_IMPORTANT = 1u << 0, /**< Add an $important modifier. */
+        RGO_DNSTYPE = 1u << 1,   /**< Add a $dnstype modifier. */
+    };
+
+    struct RuleTemplate {
+        std::string text;
+
+        RuleTemplate() = default;
+        explicit RuleTemplate(std::string text);
+
+        RuleTemplate(const RuleTemplate &) = default;
+        RuleTemplate &operator=(const RuleTemplate &) = default;
+
+        RuleTemplate(RuleTemplate &&) = default;
+        RuleTemplate &operator=(RuleTemplate &&) = default;
+    };
+
+    struct FilteringLogAction {
+        std::vector<RuleTemplate> templates; /**< A set of rule templates. */
+        uint32_t allowed_options = 0;        /**< Options that are allowed to be passed to `generate_rule`. */
+        uint32_t required_options = 0;       /**< Options that are required for the generated rule to be correct. */
+        bool blocking = false; /**< Whether something will be blocked or un-blocked as a result of this action. */
+    };
+
+    /** Suggest an action based on filtering event. */
+    static std::optional<FilteringLogAction> suggest_action(const DnsRequestProcessedEvent &event);
+
+    /**
+     * Generate a rule based on a tempalte from `FilteringLogAction`, a set of options,
+     * and the event for which the action was suggested.
+     */
+    static std::string generate_rule(
+            const RuleTemplate &rule_template, const DnsRequestProcessedEvent &event, uint32_t options);
 
     struct ApplyDnsrewriteResult {
         struct RewriteInfo {

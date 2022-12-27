@@ -22,7 +22,7 @@ namespace Adguard.Dns
         /// <summary>
         /// The current API version hash with which the ProxyServer was tested
         /// </summary>
-        private const string API_VERSION_HASH = "2684959d8dfb49e11502ed4ae9e4f2697f449b987e82b0db0304f9ebc6eb538b";
+        private const string API_VERSION_HASH = "f308c902377f8db04963600e6f3551776f01cf8de6ebc2e0e26e3d1decdf648e";
         #endregion
 
         #region API Functions
@@ -46,6 +46,20 @@ namespace Adguard.Dns
             AGDPIR_MEM_LIMIT_REACHED,
             AGDPIR_NON_UNIQUE_FILTER_ID,
             AGDPIR_OK
+        }
+
+        [Flags]
+        public enum ag_rule_generation_options : uint 
+        {
+            /// <summary>
+            /// Add $important modifier.
+            /// </summary>
+            AGRGO_IMPORTANT = 1 << 0,
+
+            /// <summary>
+            /// Add $dnstype modifier.
+            /// </summary>
+            AGRGO_DNSTYPE = 1 << 1,
         }
 
         /// <summary>
@@ -212,6 +226,44 @@ namespace Adguard.Dns
             [MarshalAs(UnmanagedType.FunctionPtr)]
             cbd_logger_callback_t callback,
             IntPtr pAttachment);
+
+        #endregion
+
+        #region Rule generation
+
+        /// <summary>
+        /// Suggest an action based on filtering log event. 
+        /// </summary>
+        /// <param name="pEvent">The pointer to <see cref="ag_dns_request_processed_event"/> instance.</param>
+        /// <returns>
+        /// NULL on error. Pointer to <see cref="ag_dns_filtering_log_action"/> instance
+        /// freed with <see cref="ag_dns_filtering_log_action_free"/> on success.
+        /// </returns>
+        [DllImport(DnsLibName, CallingConvention = CallingConvention.Cdecl)]
+        internal static extern IntPtr ag_dns_filtering_log_action_from_event(IntPtr pEvent);
+
+        /// <summary>
+        /// Free an action.
+        /// </summary>
+        /// <param name="pAction">The pointer to <see cref="ag_dns_filtering_log_action"/>instance.</param>
+        [DllImport(DnsLibName, CallingConvention = CallingConvention.Cdecl)]
+        internal static extern void ag_dns_filtering_log_action_free(IntPtr pAction);
+
+        /// <summary>
+        /// Generate a rule from a template (obtained from `ag_dns_filtering_log_action`) and a corresponding event. 
+        /// </summary>
+        /// <param name="template">The pointer to template.</param>
+        /// <param name="pEvent">The pointer to <see cref="ag_dns_request_processed_event"/> instance.</param>
+        /// <param name="options">The <see cref="ag_rule_generation_options"/></param>
+        /// <returns>NULL on error. Rule freed with <see cref="ag_str_free"/> on success</returns>
+        [DllImport(DnsLibName, CallingConvention = CallingConvention.Cdecl)]
+        internal static extern IntPtr ag_dns_generate_rule_with_options(
+            [MarshalAs(
+                UnmanagedType.CustomMarshaler,
+                MarshalTypeRef = typeof(ManualStringToPtrMarshaler))]
+             string template,
+             IntPtr pEvent,
+             ag_rule_generation_options options);
 
         #endregion
 
@@ -831,7 +883,39 @@ namespace Adguard.Dns
             [MarshalAs(UnmanagedType.I1)]
             [NativeName("dnssec")]
             internal bool DNSSEC;
-        };
+        }
+
+        [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Ansi)]
+        internal struct ag_dns_filtering_log_action
+        {
+            /// <summary>
+            /// A set of rule templates.
+            /// </summary>
+            [NativeName("templates")]
+            [MarshalAs(UnmanagedType.Struct)]
+            internal MarshalUtils.ag_list Templates;
+
+            /// <summary>
+            /// Options that are allowed to be passed to `generate_rule`.
+            /// </summary>
+            [NativeName("allowed_options")]
+            [MarshalAs(UnmanagedType.U4)]
+            internal ag_rule_generation_options AllowedOptions;       
+
+            /// <summary>
+            /// Options that are required for the generated rule to be correct.
+            /// </summary>
+            [NativeName("required_options")]
+            [MarshalAs(UnmanagedType.U4)]
+            internal ag_rule_generation_options RequiredOptions;
+
+            /// <summary>
+            /// Whether something will be blocked or un-blocked as a result of this action.
+            /// </summary>
+            [NativeName("blocking")]
+            [MarshalAs(UnmanagedType.I1)]
+            internal bool IsBlocking;
+        }
 
         #endregion
 

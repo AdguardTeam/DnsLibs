@@ -40,12 +40,6 @@ else()
     target_compile_options(dnslibs_common PRIVATE /EHs-c-)
 endif()
 
-if (MSVC)
-    target_link_libraries(dnslibs_common ws2_32.lib Iphlpapi.lib)
-else ()
-    target_compile_options(dnslibs_common PUBLIC -pthread)
-endif ()
-
 enable_testing()
 include(${CMAKE_CURRENT_SOURCE_DIR}/../cmake/add_unit_test.cmake)
 link_libraries(dnslibs_common)

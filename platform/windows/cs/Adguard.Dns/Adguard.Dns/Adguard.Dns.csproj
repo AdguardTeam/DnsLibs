@@ -82,6 +82,9 @@
     <Compile Include="Api\DnsProxyServer\Configs\ListenerSettings.cs" />
     <Compile Include="Api\DnsProxyServer\EventArgs\CertificateVerificationEventArgs.cs" />
     <Compile Include="Api\DnsProxyServer\EventArgs\DnsRequestProcessedEventArgs.cs" />
+    <Compile Include="Api\FilteringLogAction\FilteringLogAction.cs" />
+    <Compile Include="Api\FilteringLogAction\FilteringLogRuleGenerator.cs" />
+    <Compile Include="Api\FilteringLogAction\IFilteringLogRuleGenerator.cs" />
     <Compile Include="DnsProxyServer\IDnsProxyServer.cs" />
     <Compile Include="DnsProxyServer\DnsProxyServer.cs" />
     <Compile Include="Exceptions\DnsExceptionHandler.cs" />

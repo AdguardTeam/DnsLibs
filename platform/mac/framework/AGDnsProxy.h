@@ -418,6 +418,32 @@ typedef NS_ENUM(NSInteger, AGOutboundProxyProtocol) {
 + (instancetype) getDefault;
 @end
 
+typedef NS_ENUM(NSUInteger, AGRuleGenerationOptions) {
+    AGRGOImportant = 1u << 0, /**< Add an $important modifier. */
+    AGRGODnstype = 1u << 1, /**< Add a $dnstype modifier. */
+};
+
+@interface AGRuleTemplate : NSObject
+- (NSString *)description; /**< String representation. */
+/**
+ * Generate a rule using this template and the specified options.
+ * @param options Union of `AGRuleGenerationOptions` values.
+ * @return The resulting rule or `nil` on error.
+ */
+- (NSString *)generateRuleWithOptions:(NSUInteger)options;
+@end
+
+@interface AGFilteringLogAction : NSObject
+@property(nonatomic) NSArray<AGRuleTemplate *> *templates; /**< A set of rule templates. */
+@property(nonatomic) NSUInteger allowedOptions; /**< Options that are allowed to be passed to `generate_rule`. */
+@property(nonatomic) NSUInteger requiredOptions; /**< Options that are required for the generated rule to be correct. */
+@property(nonatomic) BOOL blocking; /**< Whether something will be blocked or un-blocked as a result of this action. */
+/**
+ * Suggest an action based on filtering event.
+ * @return Action or nil on error.
+ */
++ (instancetype)actionFromEvent:(AGDnsRequestProcessedEvent *)event;
+@end
 
 @interface AGDnsProxy : NSObject
 /**

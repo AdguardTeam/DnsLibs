@@ -37,6 +37,13 @@ static NSString *convert_string(const std::string &str) {
     return @(ag::utf8_to_cesu8(str).c_str());
 }
 
+static std::string convert_string(NSString *str) {
+    if (auto *s = str.UTF8String) {
+        return s;
+    }
+    return "";
+}
+
 NSErrorDomain const AGDnsProxyErrorDomain = @"com.adguard.dnsproxy";
 
 @implementation AGLogger
@@ -691,6 +698,33 @@ static ServerStamp convert_stamp(AGDnsStamp *stamp) {
     _dnssec = event.dnssec;
 
     return self;
+}
+
+- (ag::dns::DnsRequestProcessedEvent)nativeEvent {
+    ag::dns::DnsRequestProcessedEvent event;
+    event.original_answer = convert_string(_originalAnswer);
+    event.answer = convert_string(_answer);
+    event.bytes_received = _bytesReceived;
+    event.bytes_sent = _bytesSent;
+    event.cache_hit = _cacheHit;
+    event.dnssec = _dnssec;
+    event.status = convert_string(_status);
+    event.domain = convert_string(_domain);
+    event.elapsed = _elapsed;
+    event.error = convert_string(_error);
+    for (NSNumber *id in _filterListIds) {
+        event.filter_list_ids.emplace_back(id.intValue);
+    }
+    for (NSString *rule in _rules) {
+        event.rules.emplace_back(convert_string(rule));
+    }
+    event.start_time = _startTime;
+    event.type = convert_string(_type);
+    if (_upstreamId) {
+        event.upstream_id = _upstreamId.intValue;
+    }
+    event.whitelist = _whitelist;
+    return event;
 }
 
 - (instancetype)initWithCoder:(NSCoder *)coder {
@@ -1446,6 +1480,58 @@ static std::optional<std::string> verifyCertificate(CertificateVerificationEvent
         return [NSError errorWithDomain: AGDnsProxyErrorDomain
                                    code: AGDPE_TEST_UPSTREAM_ERROR
                                userInfo: @{NSLocalizedDescriptionKey: convert_string(error->str())}];
+    }
+    return nil;
+}
+
+@end
+
+@implementation AGRuleTemplate {
+    ag::dns::DnsFilter::RuleTemplate _template;
+    ag::dns::DnsRequestProcessedEvent _event;
+}
+
+- (instancetype)initWithTemplate:(ag::dns::DnsFilter::RuleTemplate)t
+                           event:(ag::dns::DnsRequestProcessedEvent)e {
+    self = [super init];
+    if (self) {
+        _template = std::move(t);
+        _event = std::move(e);
+    }
+    return self;
+}
+
+- (NSString *)description {
+    return convert_string(_template.text);
+}
+
+- (NSString *)generateRuleWithOptions:(NSUInteger)options {
+    return convert_string(ag::dns::DnsFilter::generate_rule(_template, _event, options));
+}
+
+@end
+
+@implementation AGFilteringLogAction
+- (instancetype)initWithAction:(const ag::dns::DnsFilter::FilteringLogAction &)action
+                         event:(const ag::dns::DnsRequestProcessedEvent &)event {
+    self = [super init];
+    if (self) {
+        _allowedOptions = (NSUInteger) action.allowed_options;
+        _requiredOptions = (NSUInteger) action.required_options;
+        _blocking = (BOOL) action.blocking;
+        auto *templates = [NSMutableArray arrayWithCapacity:action.templates.size()];
+        for (auto &t: action.templates) {
+            [templates addObject:[[AGRuleTemplate alloc] initWithTemplate:t event:event]];
+        }
+        _templates = templates;
+    }
+    return self;
+}
+
++ (instancetype)actionFromEvent:(AGDnsRequestProcessedEvent *)event {
+    auto cevent = [event nativeEvent];
+    if (auto action = ag::dns::DnsFilter::suggest_action(cevent)) {
+        return [[AGFilteringLogAction alloc] initWithAction:*action event:cevent];
     }
     return nil;
 }

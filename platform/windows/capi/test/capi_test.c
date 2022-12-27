@@ -175,12 +175,33 @@ static void test_utils() {
     free(upstream.bootstrap.data);
 }
 
+static void test_filtering_log_action() {
+    ag_dns_request_processed_event event = {0};
+    event.domain = "example.org";
+    event.type = "TEXT";
+    const char *event_rule = "||example.org^$important";
+    event.rules.size = 1;
+    event.rules.data = &event_rule;
+    ag_dns_filtering_log_action *action = ag_dns_filtering_log_action_from_event(&event);
+    ASSERT(action);
+    ASSERT(action->blocking == false);
+    ASSERT(action->allowed_options == (AGRGO_DNSTYPE | AGRGO_IMPORTANT));
+    ASSERT(action->required_options == (AGRGO_IMPORTANT));
+    ASSERT(action->templates.size == 1);
+    char *rule = ag_dns_generate_rule_with_options(action->templates.data[0], &event, AGRGO_IMPORTANT | AGRGO_DNSTYPE);
+    ASSERT(rule);
+    ASSERT(0 == strcmp("@@||example.org^$dnstype=TEXT,important", rule));
+    ag_str_free(rule);
+    ag_dns_filtering_log_action_free(action);
+}
+
 int main() {
     ag_set_log_level(AGLL_TRACE);
 
     test_proxy();
     test_utils();
     test_dnsstamp();
+    test_filtering_log_action();
 
 #ifdef _WIN32
     // At least check that we don't crash or something

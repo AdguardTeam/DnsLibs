@@ -4,22 +4,22 @@
  * DNS request processed event
  */
 @interface AGDnsRequestProcessedEvent : NSObject<NSCoding>
-@property(nonatomic, readonly) NSString *domain; /**< Queried domain name */
-@property(nonatomic, readonly) NSString *type; /**< Query type */
-@property(nonatomic, readonly) NSInteger startTime; /**< Time when dnsproxy started processing request (epoch in milliseconds) */
-@property(nonatomic, readonly) NSInteger elapsed; /**< Time elapsed on processing (in milliseconds) */
-@property(nonatomic, readonly) NSString *status; /**< DNS answer's status */
-@property(nonatomic, readonly) NSString *answer; /**< DNS Answers string representation */
-@property(nonatomic, readonly) NSString *originalAnswer; /**< If blocked by CNAME, here will be DNS original answer's string representation */
-@property(nonatomic, readonly) NSNumber *upstreamId; /**< ID of the upstream that provided this answer */
-@property(nonatomic, readonly) NSInteger bytesSent; /**< Number of bytes sent to a server */
-@property(nonatomic, readonly) NSInteger bytesReceived; /**< Number of bytes received from a server */
-@property(nonatomic, readonly) NSArray<NSString *> *rules; /**< Filtering rules texts */
-@property(nonatomic, readonly) NSArray<NSNumber *> *filterListIds; /**< Filter lists IDs of corresponding rules */
-@property(nonatomic, readonly) BOOL whitelist; /**< True if filtering rule is whitelist */
-@property(nonatomic, readonly) NSString *error; /**< If not empty, contains the error text (occurred while processing the DNS query) */
-@property(nonatomic, readonly) BOOL cacheHit; /**< True if this response was served from the cache */
-@property(nonatomic, readonly) BOOL dnssec; /**< True if this response has DNSSEC rrsig */
+@property(nonatomic) NSString *domain; /**< Queried domain name */
+@property(nonatomic) NSString *type; /**< Query type */
+@property(nonatomic) NSInteger startTime; /**< Time when dnsproxy started processing request (epoch in milliseconds) */
+@property(nonatomic) NSInteger elapsed; /**< Time elapsed on processing (in milliseconds) */
+@property(nonatomic) NSString *status; /**< DNS answer's status */
+@property(nonatomic) NSString *answer; /**< DNS Answers string representation */
+@property(nonatomic) NSString *originalAnswer; /**< If blocked by CNAME, here will be DNS original answer's string representation */
+@property(nonatomic) NSNumber *upstreamId; /**< ID of the upstream that provided this answer */
+@property(nonatomic) NSInteger bytesSent; /**< Number of bytes sent to a server */
+@property(nonatomic) NSInteger bytesReceived; /**< Number of bytes received from a server */
+@property(nonatomic) NSArray<NSString *> *rules; /**< Filtering rules texts */
+@property(nonatomic) NSArray<NSNumber *> *filterListIds; /**< Filter lists IDs of corresponding rules */
+@property(nonatomic) BOOL whitelist; /**< True if filtering rule is whitelist */
+@property(nonatomic) NSString *error; /**< If not empty, contains the error text (occurred while processing the DNS query) */
+@property(nonatomic) BOOL cacheHit; /**< True if this response was served from the cache */
+@property(nonatomic) BOOL dnssec; /**< True if this response has DNSSEC rrsig */
 
 - (instancetype)initWithCoder:(NSCoder *)coder;
 

@@ -15,6 +15,7 @@ set(SRCS
         rule_utils.cpp
         dnsrewrite.cpp
         denyallow.cpp
+        filtering_log_action.cpp
     )
 
 add_library(dnsfilter STATIC EXCLUDE_FROM_ALL ${SRCS})
@@ -30,9 +31,14 @@ if(NOT TARGET dnslibs_common)
     add_subdirectory(${DNSLIBS_DIR}/common ${CMAKE_BINARY_DIR}/common)
 endif(NOT TARGET dnslibs_common)
 
+if(NOT TARGET dnsproxy)
+    add_subdirectory(${DNSLIBS_DIR}/proxy ${CMAKE_BINARY_DIR}/proxy)
+endif(NOT TARGET dnsproxy)
+
 set_target_properties(dnsfilter PROPERTIES POSITION_INDEPENDENT_CODE ON)
 target_include_directories(dnsfilter PUBLIC ./include)
-target_link_libraries(dnsfilter dnslibs_common CONAN_PKG::ldns CONAN_PKG::klib CONAN_PKG::magic_enum)
+target_link_libraries(dnsfilter dnslibs_common dnsproxy CONAN_PKG::ldns CONAN_PKG::klib CONAN_PKG::magic_enum
+        CONAN_PKG::tldregistry)
 if (NOT MSVC)
     target_compile_options(dnsfilter PRIVATE -Wall -Wextra -Wformat=2 -Wno-unused-parameter)
     target_compile_options(dnsfilter PRIVATE -fno-exceptions)
@@ -61,3 +67,4 @@ set(TEST_DIR ${CMAKE_CURRENT_SOURCE_DIR}/test)
 
 add_unit_test(dnsfilter_test ${TEST_DIR} ${SRC_DIR} TRUE TRUE)
 add_unit_test(dnsrewrite_test ${TEST_DIR} ${SRC_DIR} TRUE TRUE)
+add_unit_test(filtering_log_action_test ${TEST_DIR} ${SRC_DIR} TRUE TRUE)
