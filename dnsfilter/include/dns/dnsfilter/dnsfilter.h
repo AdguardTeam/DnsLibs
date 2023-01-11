@@ -13,7 +13,6 @@
 
 #include "common/error.h"
 #include "common/defs.h"
-#include "dns/common/dns_defs.h"
 
 #include "dns/common/dns_defs.h"
 #include "dns/proxy/dnsproxy_events.h"

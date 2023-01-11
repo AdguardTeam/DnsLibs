@@ -6,8 +6,6 @@
 namespace ag {
 namespace dns {
 
-using ErrString = std::optional<std::string>;
-
 /**
  * Enum for errors than can happen during DNS exchange
  */

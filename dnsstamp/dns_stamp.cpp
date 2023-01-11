@@ -17,7 +17,6 @@
 #include "common/net_utils.h"
 #include "common/socket_address.h"
 #include "common/utils.h"
-#include "dns/common/dns_utils.h"
 #include "dns/common/net_consts.h"
 #include "dns/dnsstamp/dns_stamp.h"
 
