@@ -9,6 +9,8 @@
 
 namespace ag::dns {
 
+using ErrString = std::optional<std::string>;
+
 /**
  * An abstract verifier which encapsulates the SSL/TLS certificate verification procedure.
  * It's used in the DNS-over-HTTPS and DNS-over-TLS upstreams, for example.

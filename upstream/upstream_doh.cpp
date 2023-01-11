@@ -413,7 +413,6 @@ static Result<std::string_view, Upstream::InitError> get_host_name(std::string_v
         return make_error(Upstream::InitError::AE_INVALID_ADDRESS);
     }
     return split_result.value().first;
-}
 
 int DohUpstream::verify_callback(X509_STORE_CTX *ctx, void *arg) {
     DohUpstream::QueryHandle *handle = (DohUpstream::QueryHandle *) arg;
