@@ -104,7 +104,12 @@ public:
             ldns_pkt *response = create_response_by_request(request);
             ldns_pkt_set_rcode(response, rewritten_info->rcode);
             for (auto &rr : rewritten_info->rrs) {
-                ldns_rr_set_owner(rr.get(), ldns_rdf_clone(ldns_rr_owner(question)));
+                // If this is a CNAME rewrite, then we shouldn't replace the owner
+                // of non-CNAME records for the rewritten name.
+                if (!rewritten_info->cname.has_value() || ldns_rr_get_type(rr.get()) == LDNS_RR_TYPE_CNAME) {
+                    ldns_rdf_deep_free(ldns_rr_owner(rr.get()));
+                    ldns_rr_set_owner(rr.get(), ldns_rdf_clone(ldns_rr_owner(question)));
+                }
                 ldns_rr_set_ttl(rr.get(), settings->blocked_response_ttl_secs);
                 ldns_pkt_push_rr(response, LDNS_SECTION_ANSWER, rr.release());
             }
