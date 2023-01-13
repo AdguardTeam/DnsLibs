@@ -81,7 +81,8 @@ DoqUpstream::DoqUpstream(const UpstreamOptions &opts, const UpstreamFactoryConfi
         , m_handshake_timer(Uv<uv_timer_t>::create_with_parent(this))
         , m_retransmit_timer(Uv<uv_timer_t>::create_with_parent(this))
         , m_static_secret{0}
-        , m_tls_session_cache(opts.address) {
+        , m_tls_session_cache(opts.address)
+        , m_shutdown_guard{std::make_shared<bool>(true)} {
     uv_timer_init(config.loop.handle(), m_req_idle_timer->raw());
     uv_timer_init(config.loop.handle(), m_handshake_timer->raw());
     uv_timer_init(config.loop.handle(), m_retransmit_timer->raw());
@@ -296,8 +297,6 @@ Error<Upstream::InitError> DoqUpstream::init() {
         return make_error(InitError::AE_SSL_CONTEXT_INIT_FAILED);
     }
 
-    m_shutdown_guard = std::make_shared<bool>(true);
-
     return {};
 }
 
@@ -355,11 +354,14 @@ coro::Task<Upstream::ExchangeResult> DoqUpstream::exchange(ldns_pkt *request, co
         co_await loop.co_sleep(timeout);
         co_return std::cv_status::timeout;
     };
+    std::weak_ptr<bool> guard = m_shutdown_guard;
     auto timeout = co_await parallel::any_of<std::cv_status>(
             await_result(req),
             await_timeout(config().loop, m_options.timeout)
     );
-
+    if (guard.expired()) {
+        co_return make_error(DnsError::DE_SHUTTING_DOWN);
+    }
     ldns_pkt *res = req.reply_pkt.release();
     auto err = req.error;
     tracelog_id(m_log, request, "Erase request, id: {}, connection state: {}", request_id,
@@ -1002,8 +1004,6 @@ int DoqUpstream::reinit() {
         return -1;
     }
 
-    m_shutdown_guard = std::make_shared<bool>(true);
-
     return 0;
 }
 
@@ -1059,7 +1059,6 @@ void DoqUpstream::disconnect(std::string_view reason) {
 
     dbglog(m_log, "Disconnect reason: {}", reason);
     ngtcp2_conn_del(std::exchange(m_conn, nullptr));
-    m_shutdown_guard.reset();
     uv_timer_stop(m_handshake_timer->raw());
     uv_timer_stop(m_req_idle_timer->raw());
     uv_timer_stop(m_retransmit_timer->raw());

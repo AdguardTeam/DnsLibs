@@ -161,9 +161,11 @@ ErrString SocketFactory::prepare_fd(
             m_router->flush_cache();
             if (idx = m_router->resolve(peer); idx.has_value()) {
                 err = ag::utils::bind_socket_to_if(fd, peer.c_sockaddr()->sa_family, *idx);
+                if (err) {
+                    return err->str();
+                }
             }
         }
-        return err->str();
     }
 
     return std::nullopt;
