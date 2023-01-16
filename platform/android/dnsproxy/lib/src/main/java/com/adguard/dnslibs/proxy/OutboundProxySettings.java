@@ -1,5 +1,8 @@
 package com.adguard.dnslibs.proxy;
 
+import org.jetbrains.annotations.NotNull;
+import org.jetbrains.annotations.Nullable;
+
 import java.net.InetSocketAddress;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -26,9 +29,9 @@ public class OutboundProxySettings {
         private final String username;
         private final String password;
 
-        public AuthInfo(String username, String password) {
-            this.username = username;
-            this.password = password;
+        public AuthInfo(@NotNull String username, @NotNull String password) {
+            this.username = Objects.requireNonNull(username, "username");
+            this.password = Objects.requireNonNull(password, "password");
         }
 
         public String getUsername() {
@@ -66,9 +69,9 @@ public class OutboundProxySettings {
      * @param protocol The proxy protocol
      * @param address The proxy server address
      */
-    public OutboundProxySettings(Protocol protocol, InetSocketAddress address) {
-        this.protocol = protocol;
-        this.address = address.getAddress().toString();
+    public OutboundProxySettings(@NotNull Protocol protocol, @NotNull InetSocketAddress address) {
+        this.protocol = Objects.requireNonNull(protocol, "protocol");
+        this.address = Objects.requireNonNull(address, "address").getAddress().toString();
         this.port = address.getPort();
         this.bootstrap = new ArrayList<>();
         this.authInfo = null;
@@ -84,16 +87,16 @@ public class OutboundProxySettings {
      *                  The URLs MUST contain the resolved server addresses, not hostnames.
      *                  E.g. `https://94.140.14.14` is correct, while `dns.adguard.com:53` is not.
      *                  MUST NOT be empty in case the `address` is a hostname.
-     * @param authInfo The authentication information
+     * @param authInfo (optional) The authentication information
      * @param trustAnyCertificate If true and the proxy connection is secure, the certificate won't be verified
      * @param ignoreIfUnavailable Whether the DNS proxy should ignore the outbound proxy and route
      *                            queries directly to target hosts even if it's determined as unavailable
      */
-    public OutboundProxySettings(Protocol protocol, String address, int port,
-                                 List<String> bootstrap, AuthInfo authInfo,
+    public OutboundProxySettings(@NotNull Protocol protocol, @NotNull String address, int port,
+                                 @Nullable List<String> bootstrap, @Nullable AuthInfo authInfo,
                                  boolean trustAnyCertificate, boolean ignoreIfUnavailable) {
-        this.protocol = protocol;
-        this.address = address;
+        this.protocol = Objects.requireNonNull(protocol, "protocol");
+        this.address = Objects.requireNonNull(address, "address");
         this.port = port;
         if (null == bootstrap) {
             this.bootstrap = new ArrayList<>();
