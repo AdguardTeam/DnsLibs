@@ -796,8 +796,6 @@ coro::Task<std::optional<Uint8Vector>> DnsForwarder::apply_filter(DnsFilter::Mat
         for (size_t i = 0; i < ldns_pkt_ancount(response->get()); ++i) {
             ldns_rr *rr = ldns_rr_list_rr(ldns_pkt_answer(response->get()), i);
             if (ldns_rr_get_type(rr) == ldns_rr_get_type(question)) {
-                ldns_rdf_deep_free(ldns_rr_owner(rr));
-                ldns_rr_set_owner(rr, nullptr);
                 rewrite_info->rrs.emplace_back(ldns_rr_clone(rr));
             }
         }
