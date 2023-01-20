@@ -49,21 +49,7 @@ DL - Android build and deploy:
             current_branch=${bamboo_customRevision}
         fi
 
-        case "${current_branch}" in
-        master|stable-*)
-            cat > properties.additional.gradle \
-        << EOF
-            ext {
-                adguardArtifactoryUsername = '${bamboo.artifactoryUser}'
-                adguardArtifactoryPassword = '${bamboo.artifactoryPassword}'
-            }
-        EOF
-            ./gradlew :lib:publishRelease
-            ;;
-        *)
-            ./gradlew :lib:assembleRelease
-            ;;
-        esac
+        ./gradlew :lib:assembleRelease
 
         if [ "${current_branch}" = "master" ]; then
             conan export ../../.. /777@AdguardTeam/NativeLibsCommon
