@@ -112,5 +112,6 @@ class DnsLibsConan(ConanFile):
             "klib::klib",
             "ldns::ldns",
             "ngtcp2::ngtcp2",
-            "native_libs_common::native_libs_common"
+            "native_libs_common::native_libs_common",
+            "tldregistry::tldregistry",
         ]

@@ -107,7 +107,7 @@ TEST_F(DnsProxyTest, TestDns64) {
 
 TEST_F(DnsProxyTest, DISABLED_BootstrapOutboundProxy) {
     DnsProxySettings settings = make_dnsproxy_settings();
-    settings.upstreams = {{.address = "tls://dns.adguard.com", .bootstrap = {"1.1.1.1"}}};
+    settings.upstreams = {{.address = "tls://dns.adguard-dns.com", .bootstrap = {"1.1.1.1"}}};
     settings.outbound_proxy = OutboundProxySettings{
             .protocol = OutboundProxyProtocol::HTTP_CONNECT,
             .address = "localhost",

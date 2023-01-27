@@ -259,7 +259,7 @@ TEST_F(UpstreamTest, UseUpstreamWithWrongOptions) {
             // non existent domain, valid bootstrap
             {"https://qwer.zxcv.asdf.", {"8.8.8.8"}},
             // existent domain, invalid bootstrap
-            {"https://dns.adguard.com/dnsquery", {"4.3.2.1"}},
+            {"https://dns.adguard-dns.com/dnsquery", {"4.3.2.1"}},
             // DoT
             {"tls://one.one.two.asdf.", {"8.8.8.8"}}, // invalid/valid
             {"tls://one.one.one.one", {"4.3.2.1"}}, // valid/invalid
@@ -335,7 +335,7 @@ TEST_P(DnsTruncatedTest, TestDnsTruncated) {
     auto upstream_res = create_upstream({std::string(address), {}, Secs(5)});
     ASSERT_FALSE(upstream_res.has_error()) << "Error while creating an upstream: " << upstream_res.error()->str();
     auto request = dnscrypt::create_request_ldns_pkt(
-            LDNS_RR_TYPE_TXT, LDNS_RR_CLASS_IN, LDNS_RD, "unit-test2.dns.adguard.com.", std::nullopt);
+            LDNS_RR_TYPE_TXT, LDNS_RR_CLASS_IN, LDNS_RD, "unit-test2.dns.adguard-dns.com.", std::nullopt);
     ldns_pkt_set_random_id(request.get());
     auto res = co_await upstream_res.value()->exchange(request.get());
     ASSERT_FALSE(res.has_error()) << "Error while making a request: " << res.error()->str();
@@ -387,9 +387,9 @@ static const UpstreamTestData test_upstreams_data[]{
         {// Cloudflare DNS
                 "https://1.1.1.1/dns-query", {}},
         {// AdGuard DNS (DNS-over-QUIC)
-                "quic://dns.adguard.com", {"8.8.8.8:53"}},
+                "quic://dns.adguard-dns.com", {"8.8.8.8:53"}},
         {// AdGuard DNS (DNS-over-QUIC) custom port
-                "quic://dns.adguard.com:8853", {"8.8.8.8:53"}},
+                "quic://dns.adguard-dns.com:8853", {"8.8.8.8:53"}},
         {// AdGuard DNS (DNS-over-QUIC) stamp with only the port specified in server address field
                 "sdns://BAAAAAAAAAAABDo3ODQAD2Rucy5hZGd1YXJkLmNvbQ", {"8.8.8.8:53"}},
 };
@@ -475,11 +475,11 @@ INSTANTIATE_TEST_SUITE_P(
 
 static const UpstreamTestData test_upstreams_invalid_bootstrap_data[]{
         {
-                "tls://dns.adguard.com",
+                "tls://dns.adguard-dns.com",
                 {"1.1.1.1:555", "8.8.8.8:53"},
         },
         {
-                "tls://dns.adguard.com:853",
+                "tls://dns.adguard-dns.com:853",
                 {"1.0.0.1", "8.8.8.8:535"},
         },
         {
@@ -515,13 +515,13 @@ struct UpstreamsWithServerIpTest : UpstreamParamTest<UpstreamTestData> {};
 static const std::initializer_list<std::string> invalid_bootstrap{"1.2.3.4:55"};
 
 static const UpstreamTestData test_upstreams_with_server_ip_data[]{
-        {"tls://dns.adguard.com", invalid_bootstrap, Ipv4Address{94, 140, 14, 14}},
-        {"https://dns.adguard.com/dns-query", invalid_bootstrap, Ipv4Address{94, 140, 14, 14}},
+        {"tls://dns.adguard-dns.com", invalid_bootstrap, Ipv4Address{94, 140, 14, 14}},
+        {"https://dns.adguard-dns.com/dns-query", invalid_bootstrap, Ipv4Address{94, 140, 14, 14}},
         {// AdGuard DNS DOH with the IP address specified
-                "sdns://AgcAAAAAAAAADDk0LjE0MC4xNC4xNAAPZG5zLmFkZ3VhcmQuY29tCi9kbnMtcXVlcnk", invalid_bootstrap,
+                "sdns://AgcAAAAAAAAADDk0LjE0MC4xNC4xNAATZG5zLmFkZ3VhcmQtZG5zLmNvbQovZG5zLXF1ZXJ5", invalid_bootstrap,
                 {}},
         {// AdGuard DNS DOT with the IP address specified
-                "sdns://AwAAAAAAAAAAEDk0LjE0MC4xNC4xNDo4NTMAD2Rucy5hZGd1YXJkLmNvbQ", invalid_bootstrap, {}},
+                "sdns://AwAAAAAAAAAAEDk0LjE0MC4xNC4xNDo4NTMAE2Rucy5hZGd1YXJkLWRucy5jb20", invalid_bootstrap, {}},
 };
 
 TEST_F(UpstreamTest, TestUpstreamsWithServerIp) {
@@ -547,7 +547,7 @@ TEST_P(DeadProxySuccess, test) {
 
 INSTANTIATE_TEST_SUITE_P(TcpOnlyProxy, DeadProxySuccess,
         ::testing::Combine(
-                ::testing::Values("tcp://8.8.8.8", "tls://dns.adguard.com", "https://dns.adguard.com/dns-query"),
+                ::testing::Values("tcp://8.8.8.8", "tls://dns.adguard-dns.com", "https://dns.adguard-dns.com/dns-query"),
                 ::testing::Values(
                         OutboundProxySettings{
                                 .protocol = OutboundProxyProtocol::HTTP_CONNECT,
@@ -579,7 +579,7 @@ INSTANTIATE_TEST_SUITE_P(TcpUdpProxy, DeadProxySuccess,
                                    "sdns://"
                                    "AQIAAAAAAAAAETk0LjE0MC4xNC4xNDo1NDQzINErR_JS3PLCu_iZEIbq95zkSV2LFsigxDIuUso_"
                                    "OQhzIjIuZG5zY3J5cHQuZGVmYXVsdC5uczEuYWRndWFyZC5jb20",
-                                   "quic://dns.adguard.com:8853"),
+                                   "quic://dns.adguard-dns.com:8853"),
                 ::testing::Values(OutboundProxySettings{
                         .protocol = OutboundProxyProtocol::SOCKS5_UDP,
                         .address = "127.0.0.1",
@@ -605,7 +605,7 @@ TEST_P(DeadProxyFailure, FailedExchange) {
 
 INSTANTIATE_TEST_SUITE_P(TcpOnlyProxy, DeadProxyFailure,
         ::testing::Combine(
-                ::testing::Values("tcp://8.8.8.8", "tls://dns.adguard.com", "https://dns.adguard.com/dns-query"),
+                ::testing::Values("tcp://8.8.8.8", "tls://dns.adguard-dns.com", "https://dns.adguard-dns.com/dns-query"),
                 ::testing::Values(OutboundProxySettings{OutboundProxyProtocol::HTTP_CONNECT, "127.0.0.1", 42},
                         OutboundProxySettings{OutboundProxyProtocol::HTTPS_CONNECT, "127.0.0.1", 42},
                         OutboundProxySettings{OutboundProxyProtocol::SOCKS4, "127.0.0.1", 42},
@@ -616,7 +616,7 @@ INSTANTIATE_TEST_SUITE_P(UdpProxy, DeadProxyFailure,
                                    "sdns://"
                                    "AQIAAAAAAAAAETk0LjE0MC4xNC4xNDo1NDQzINErR_JS3PLCu_iZEIbq95zkSV2LFsigxDIuUso_"
                                    "OQhzIjIuZG5zY3J5cHQuZGVmYXVsdC5uczEuYWRndWFyZC5jb20",
-                                   "quic://dns.adguard.com:8853"),
+                                   "quic://dns.adguard-dns.com:8853"),
                 ::testing::Values(OutboundProxySettings{OutboundProxyProtocol::SOCKS5_UDP, "127.0.0.1", 42})));
 
 TEST_F(UpstreamTest, DISABLED_ConcurrentRequests) {
@@ -627,7 +627,7 @@ TEST_F(UpstreamTest, DISABLED_ConcurrentRequests) {
     static constexpr size_t WORKERS_NUM = 16;
     static const UpstreamOptions opts{
             .address = "https://dns.cloudflare.com/dns-query",
-            //        .address = "quic://dns.adguard.com:8853", // Uncomment for test DOQ upstream
+            //        .address = "quic://dns.adguard-dns.com:8853", // Uncomment for test DOQ upstream
             .bootstrap = {"8.8.8.8", "1.1.1.1"},
             .timeout = 5s,
             //        .resolved_server_ip = IPV4_ADDRESS_SIZE{104, 19, 199, 29}, // Uncomment for test this server IP
@@ -661,7 +661,7 @@ TEST_F(UpstreamTest, DISABLED_doq_easy_test) {
         using namespace std::chrono_literals;
         using namespace concat_err_string;
         static const UpstreamOptions opts{
-                .address = "quic://dns.adguard.com:8853", .bootstrap = {"8.8.8.8"}, .timeout = 5s};
+                .address = "quic://dns.adguard-dns.com:8853", .bootstrap = {"8.8.8.8"}, .timeout = 5s};
         auto upstream_res = create_upstream(opts);
         ASSERT_FALSE(upstream_res.has_error()) << upstream_res.error()->str();
 
