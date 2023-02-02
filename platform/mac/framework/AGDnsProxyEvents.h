@@ -1,9 +1,11 @@
 #import <Foundation/Foundation.h>
 
+#import "AGDnsXPCObject.h"
+
 /**
  * DNS request processed event
  */
-@interface AGDnsRequestProcessedEvent : NSObject<NSCoding>
+@interface AGDnsRequestProcessedEvent : AGDnsXPCObject<NSSecureCoding>
 @property(nonatomic) NSString *domain; /**< Queried domain name */
 @property(nonatomic) NSString *type; /**< Query type */
 @property(nonatomic) NSInteger startTime; /**< Time when dnsproxy started processing request (epoch in milliseconds) */

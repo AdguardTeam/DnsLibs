@@ -100,7 +100,7 @@ typedef void (^logCallback)(AGLogLevel level, const char *msg, int length);
 @end
 
 
-@interface AGDnsUpstream : NSObject<NSCoding>
+@interface AGDnsUpstream : AGDnsXPCObject <NSSecureCoding>
 /**
  * A DNS server address:
  *      8.8.8.8:53 -- plain DNS
@@ -142,7 +142,7 @@ typedef void (^logCallback)(AGLogLevel level, const char *msg, int length);
 
 @end
 
-@interface AGDns64Settings : NSObject<NSCoding>
+@interface AGDns64Settings : AGDnsXPCObject <NSSecureCoding>
 
 /**
  * The upstream to use for discovery of DNS64 prefixes
@@ -167,7 +167,7 @@ typedef void (^logCallback)(AGLogLevel level, const char *msg, int length);
 
 @end
 
-@interface AGListenerSettings : NSObject<NSCoding>
+@interface AGListenerSettings : AGDnsXPCObject <NSSecureCoding>
 
 /**
  * The address to listen on
@@ -213,7 +213,7 @@ typedef NS_ENUM(NSInteger, AGOutboundProxyProtocol) {
     AGOPP_SOCKS5_UDP, // Socks5 proxy with UDP support
 };
 
-@interface AGOutboundProxyAuthInfo : NSObject<NSCoding>
+@interface AGOutboundProxyAuthInfo : AGDnsXPCObject <NSSecureCoding>
 /** User name for authentication */
 @property(nonatomic) NSString *username;
 /** Password for authentication */
@@ -229,7 +229,7 @@ typedef NS_ENUM(NSInteger, AGOutboundProxyProtocol) {
 
 @end
 
-@interface AGOutboundProxySettings : NSObject<NSCoding>
+@interface AGOutboundProxySettings : AGDnsXPCObject <NSSecureCoding>
 /** The proxy protocol */
 @property(nonatomic) AGOutboundProxyProtocol protocol;
 /** The proxy server IP address or hostname */
@@ -258,7 +258,7 @@ typedef NS_ENUM(NSInteger, AGOutboundProxyProtocol) {
 
 @end
 
-@interface AGDnsFilterParams : NSObject<NSCoding>
+@interface AGDnsFilterParams : AGDnsXPCObject <NSSecureCoding>
 /**
  * Filter identifier
  */
@@ -281,7 +281,7 @@ typedef NS_ENUM(NSInteger, AGOutboundProxyProtocol) {
 
 @end
 
-@interface AGDnsProxyConfig : NSObject<NSCoding>
+@interface AGDnsProxyConfig : AGDnsXPCObject <NSSecureCoding>
 /**
  * Upstreams settings
  */
@@ -483,6 +483,7 @@ typedef NS_ENUM(NSUInteger, AGRuleGenerationOptions) {
  * Return the DNS proxy library version.
  */
 + (NSString *) libraryVersion;
+
 @end
 
 typedef NS_ENUM(NSInteger, AGStampProtoType) {
@@ -498,7 +499,7 @@ typedef NS_ENUM(NSInteger, AGStampProtoType) {
     AGSPT_DOQ,
 };
 
-@interface AGDnsStamp : NSObject<NSCoding>
+@interface AGDnsStamp : AGDnsXPCObject <NSSecureCoding>
 /**
  * Protocol.
  */

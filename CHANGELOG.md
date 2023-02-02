@@ -1,5 +1,10 @@
 # Changelog
 
+* [Feature] Made the API more XPC-friendly (without breaking changes) and added
+            some boilerplate to help setup the DNS proxy as an XPC endpoint.
+
+## V2.1
+
 * [Feature] Added an option to try HTTP/3 for DoH upstream connections.
   If enabled, HTTP/3 will be used for DoH if it's faster.
   See `DnsProxySettings::enable_http3`, `AGDnsProxyConfig.enableHttp3`,

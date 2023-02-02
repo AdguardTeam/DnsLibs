@@ -4,20 +4,22 @@
 #import "NSTask+AGTimeout.h"
 #endif
 
-#include <sys/socket.h>
-#include <netinet/in.h>
-#include <arpa/inet.h>
-#include <resolv.h>
-#include <poll.h>
-#include <cassert>
-#include <optional>
-#include <string>
+#import <sys/socket.h>
+#import <netinet/in.h>
+#import <arpa/inet.h>
+#import <resolv.h>
+#import <poll.h>
+#import <cassert>
+#import <optional>
+#import <string>
 
-#include "common/cesu8.h"
-#include "common/error.h"
-#include "common/logger.h"
-#include "dns/proxy/dnsproxy.h"
-#include "dns/upstream/upstream_utils.h"
+#import "common/cesu8.h"
+#import "common/error.h"
+#import "common/logger.h"
+#import "dns/proxy/dnsproxy.h"
+#import "dns/upstream/upstream_utils.h"
+
+#import "AGDnsXPCObject.h"
 
 using namespace ag;
 using namespace ag::dns;
@@ -266,6 +268,11 @@ static ServerStamp convert_stamp(AGDnsStamp *stamp) {
 }
 
 @implementation AGDnsUpstream
+
++ (BOOL)supportsSecureCoding {
+    return YES;
+}
+
 - (instancetype) initWithNative: (const UpstreamOptions *) settings
 {
     self = [super init];
@@ -316,6 +323,11 @@ static ServerStamp convert_stamp(AGDnsStamp *stamp) {
 @end
 
 @implementation AGDns64Settings
+
++ (BOOL)supportsSecureCoding {
+    return YES;
+}
+
 - (instancetype) initWithNative: (const Dns64Settings *) settings
 {
     self = [super init];
@@ -355,6 +367,11 @@ static ServerStamp convert_stamp(AGDnsStamp *stamp) {
 @end
 
 @implementation AGListenerSettings
+
++ (BOOL)supportsSecureCoding {
+    return YES;
+}
+
 - (instancetype)initWithNative:(const ListenerSettings *)settings
 {
     self = [super init];
@@ -396,6 +413,11 @@ static ServerStamp convert_stamp(AGDnsStamp *stamp) {
 @end
 
 @implementation AGOutboundProxyAuthInfo
+
++ (BOOL)supportsSecureCoding {
+    return YES;
+}
+
 - (instancetype) initWithNative: (const OutboundProxyAuthInfo *)info
 {
     self = [super init];
@@ -429,6 +451,11 @@ static ServerStamp convert_stamp(AGDnsStamp *stamp) {
 @end
 
 @implementation AGOutboundProxySettings
+
++ (BOOL)supportsSecureCoding {
+    return YES;
+}
+
 - (instancetype) initWithNative: (const OutboundProxySettings *)settings
 {
     self = [super init];
@@ -483,6 +510,11 @@ static ServerStamp convert_stamp(AGDnsStamp *stamp) {
 @end
 
 @implementation AGDnsFilterParams
+
++ (BOOL)supportsSecureCoding {
+    return YES;
+}
+
 - (instancetype)initWithCoder:(NSCoder *)coder {
     self = [super init];
     if (self) {
@@ -507,6 +539,10 @@ static ServerStamp convert_stamp(AGDnsStamp *stamp) {
 @end
 
 @implementation AGDnsProxyConfig
+
++ (BOOL)supportsSecureCoding {
+    return YES;
+}
 
 - (instancetype) initWithNative: (const DnsProxySettings *) settings
 {
@@ -666,6 +702,11 @@ static ServerStamp convert_stamp(AGDnsStamp *stamp) {
 @end
 
 @implementation AGDnsRequestProcessedEvent
+
++ (BOOL)supportsSecureCoding {
+    return YES;
+}
+
 - (instancetype) init: (const DnsRequestProcessedEvent &)event
 {
     _domain = convert_string(event.domain);

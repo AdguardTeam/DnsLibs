@@ -62,9 +62,10 @@ add_compile_options(-fno-strict-aliasing -fno-exceptions -fobjc-abi-version=2)
 add_definitions(-DFMT_EXCEPTIONS=0)
 
 add_library(AGDnsProxy SHARED
-    AGDnsProxy.h
     AGDnsProxyEvents.h
-    AGDnsProxy.mm
+    AGDnsProxy.h AGDnsProxy.mm
+    AGDnsProxyXPC.h AGDnsProxyXPC.mm
+    AGDnsXPCObject.h AGDnsXPCObject.m
     module.modulemap
 )
 if("${TARGET_OS}" STREQUAL "macos")
@@ -86,6 +87,8 @@ set_target_properties(AGDnsProxy PROPERTIES
 set_property(TARGET AGDnsProxy PROPERTY PUBLIC_HEADER
     AGDnsProxy.h
     AGDnsProxyEvents.h
+    AGDnsProxyXPC.h
+    AGDnsXPCObject.h
 )
 set_property(SOURCE module.modulemap
         PROPERTY MACOSX_PACKAGE_LOCATION "Modules")
@@ -173,4 +176,15 @@ if("${TARGET_OS}" STREQUAL "macos")
     add_dependencies(test_AGFilteringLogAction AGDnsProxy)
     add_dependencies(tests test_AGFilteringLogAction)
     add_test(AGDnsProxyListenerFailsInitTest test_AGFilteringLogAction)
+
+    add_executable(test_AGDnsProxyXPC EXCLUDE_FROM_ALL test_AGDnsProxyXPC.mm)
+    target_compile_options(test_AGDnsProxyXPC PRIVATE "-fobjc-arc")
+    target_compile_options(test_AGDnsProxyXPC PRIVATE -F${CMAKE_CURRENT_BINARY_DIR})
+    target_link_libraries(test_AGDnsProxyXPC
+            "-F${CMAKE_CURRENT_BINARY_DIR}"
+            "-Wl,-rpath,${CMAKE_CURRENT_BINARY_DIR}"
+            "-framework AGDnsProxy -framework Foundation")
+    add_dependencies(test_AGDnsProxyXPC AGDnsProxy)
+    add_dependencies(tests test_AGDnsProxyXPC)
+    add_test(AGDnsProxyListenerFailsInitTest test_AGDnsProxyXPC)
 endif()
