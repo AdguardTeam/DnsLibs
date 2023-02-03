@@ -567,6 +567,9 @@ coro::Task<Uint8Vector> DnsForwarder::handle_message_internal(
                         .rr_type = question_rr_type(request),
                 },
                 request, nullptr, event, effective_rules, fallback_only, false, &rc);
+        if (guard.expired()) {
+            co_return {};
+        }
         if (!raw_blocking_response || rc == LDNS_RCODE_NOERROR) {
             dbglog_fid(m_log, request, "AAAA DNS query blocked because IPv6 blocking is enabled");
             ldns_pkt_ptr response{ResponseHelpers::create_soa_response(request, m_settings, SOA_RETRY_IPV6_BLOCK)};
@@ -576,12 +579,16 @@ coro::Task<Uint8Vector> DnsForwarder::handle_message_internal(
         co_return *raw_blocking_response;
     }
 
-    if (auto raw_blocking_response = co_await apply_filter(
-                {
-                        .domain = normalized_domain,
-                        .rr_type = question_rr_type(request),
-                },
-                request, nullptr, event, effective_rules, fallback_only)) {
+    auto raw_blocking_response = co_await apply_filter(
+            {
+                    .domain = normalized_domain,
+                    .rr_type = question_rr_type(request),
+            },
+            request, nullptr, event, effective_rules, fallback_only);
+    if (guard.expired()) {
+        co_return {};
+    }
+    if (raw_blocking_response) {
         co_return *raw_blocking_response;
     }
 
@@ -626,12 +633,18 @@ coro::Task<Uint8Vector> DnsForwarder::handle_message_internal(
                             rr, request, response->get(), event, effective_rules, fallback_only)) {
                     co_return *raw_response;
                 }
+                if (guard.expired()) {
+                    co_return {};
+                }
             }
             // IP response blocking
             if (ldns_rr_get_type(rr) == LDNS_RR_TYPE_A || ldns_rr_get_type(rr) == LDNS_RR_TYPE_AAAA) {
                 if (auto raw_response = co_await apply_ip_filter(
                             rr, request, response->get(), event, effective_rules, fallback_only)) {
                     co_return *raw_response;
+                }
+                if (guard.expired()) {
+                    co_return {};
                 }
             }
         }
@@ -649,6 +662,9 @@ coro::Task<Uint8Vector> DnsForwarder::handle_message_internal(
                 if (auto synth_response = co_await try_dns64_aaaa_synthesis(selected_upstream, req_holder)) {
                     response = std::move(synth_response);
                     log_packet(m_log, response->get(), "DNS64 synthesized response");
+                }
+                if (guard.expired()) {
+                    co_return {};
                 }
             }
         }
