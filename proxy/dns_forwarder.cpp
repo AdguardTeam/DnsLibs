@@ -288,8 +288,8 @@ DnsForwarder::DnsForwarder() = default;
 DnsForwarder::~DnsForwarder() = default;
 
 static coro::Task<void> discover_dns64_prefixes(std::vector<UpstreamOptions> uss,
-        std::shared_ptr<SocketFactory> socket_factory, dns64::StatePtr state, Logger logger, EventLoop &loop,
-        uint32_t max_tries, Millis wait_time, std::weak_ptr<bool> shutdown_guard);
+        std::shared_ptr<SocketFactory> socket_factory, dns64::StatePtr state, EventLoop &loop, uint32_t max_tries,
+        Millis wait_time, std::weak_ptr<bool> shutdown_guard);
 
 DnsForwarder::InitResult DnsForwarder::init(
         EventLoopPtr loop, const DnsProxySettings &settings, const DnsProxyEvents &events) {
@@ -386,8 +386,8 @@ DnsForwarder::InitResult DnsForwarder::init(
     m_dns64_state = std::make_shared<dns64::State>();
     if (settings.dns64.has_value()) {
         infolog(m_log, "DNS64 discovery is enabled");
-        coro::run_detached(discover_dns64_prefixes(settings.dns64->upstreams, m_socket_factory, m_dns64_state, m_log,
-                *m_loop, settings.dns64->max_tries, settings.dns64->wait_time, m_shutdown_guard));
+        coro::run_detached(discover_dns64_prefixes(settings.dns64->upstreams, m_socket_factory, m_dns64_state, *m_loop,
+                settings.dns64->max_tries, settings.dns64->wait_time, m_shutdown_guard));
     }
 
     m_response_cache.set_capacity(m_settings->dns_cache_size);
@@ -399,8 +399,9 @@ DnsForwarder::InitResult DnsForwarder::init(
 }
 
 static coro::Task<void> discover_dns64_prefixes(std::vector<UpstreamOptions> uss,
-        std::shared_ptr<SocketFactory> socket_factory, dns64::StatePtr state, Logger logger, EventLoop &loop,
-        uint32_t max_tries, Millis wait_time, std::weak_ptr<bool> shutdown_guard) {
+        std::shared_ptr<SocketFactory> socket_factory, dns64::StatePtr state, EventLoop &loop, uint32_t max_tries,
+        Millis wait_time, std::weak_ptr<bool> shutdown_guard) {
+    static ag::Logger logger{"DNS64"};
     co_await loop.co_submit();
     UpstreamFactory us_factory({.loop = loop, .socket_factory = socket_factory.get()});
     auto i = max_tries;
@@ -413,7 +414,7 @@ static coro::Task<void> discover_dns64_prefixes(std::vector<UpstreamOptions> uss
             {
                 auto upstream_result = us_factory.create_upstream(us);
                 if (upstream_result.has_error()) {
-                    dbglog(logger, "DNS64: failed to create DNS64 upstream: {}", upstream_result.error()->str());
+                    dbglog(logger, "Failed to create DNS64 upstream: {}", upstream_result.error()->str());
                     continue;
                 }
                 state->discovering_upstream = std::move(upstream_result.value());
@@ -425,23 +426,23 @@ static coro::Task<void> discover_dns64_prefixes(std::vector<UpstreamOptions> uss
             }
             state->discovering_upstream.reset();
             if (result.has_error()) {
-                dbglog(logger, "DNS64: error discovering prefixes:\n{}", result.error()->str());
+                dbglog(logger, "Error discovering prefixes:\n{}", result.error()->str());
                 continue;
             }
 
             if (result->empty()) {
-                dbglog(logger, "DNS64: no prefixes discovered, retrying");
+                dbglog(logger, "No prefixes discovered, retrying");
                 continue;
             }
 
             state->prefixes = std::move(result.value());
 
-            infolog(logger, "DNS64 prefixes discovered: {}", state->prefixes.size());
+            infolog(logger, "Prefixes discovered: {}", state->prefixes.size());
             co_return;
         }
     }
 
-    dbglog(logger, "DNS64: failed to discover any prefixes");
+    dbglog(logger, "Failed to discover any prefixes");
 }
 
 void DnsForwarder::deinit() {
