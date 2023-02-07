@@ -438,7 +438,7 @@ public class DnsProxyTest {
             ArrayList<String> bootstrap = new ArrayList<>();
             bootstrap.add("1.2.3.4");
             bootstrap.add("8.8.8.8");
-            DnsProxy.testUpstream(new UpstreamSettings("tls://dns.adguard-dns", bootstrap, 10 * timeout, null, 42),
+            DnsProxy.testUpstream(new UpstreamSettings("tls://dns.adguard-dns.com", bootstrap, 10 * timeout, null, 42),
                 false, false);
         } catch (IllegalArgumentException e) {
             fail(e.toString());

@@ -1,5 +1,8 @@
 # Changelog
 
+* [Feature] Changed the signature of `com.adguard.dnslibs.proxy.DnsProxy` constructor: now throws a
+  `com.adguard.dnslibs.proxy.DnsProxyInitException` on failure, containing the same info as the native error.
+
 * [Feature] Added an option to try HTTP/3 for DoH upstream connections.
   If enabled, HTTP/3 will be used for DoH if it's faster.
   See `DnsProxySettings::enable_http3`, `AGDnsProxyConfig.enableHttp3`,
