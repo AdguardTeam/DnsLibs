@@ -209,6 +209,8 @@ private:
     static void on_rand(uint8_t *dest, size_t destlen, const ngtcp2_rand_ctx *rand_ctx);
 
     int connect_to_peers(const std::vector<ag::SocketAddress> &current_addresses);
+    static void log_quic_packets(void *user_data, const char *format, ...);
+    int64_t peek_stream_data(struct evbuffer_iovec *vec_out, int *n_vec_out, bool *eof_out);
 
     ConnectionState m_conn_state;
     std::atomic<State> m_state{STOP};
