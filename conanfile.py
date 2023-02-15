@@ -29,7 +29,7 @@ class DnsLibsConan(ConanFile):
         self.requires("klib/2021-04-06@AdguardTeam/NativeLibsCommon")
         self.requires("ldns/2021-03-29@AdguardTeam/NativeLibsCommon")
         self.requires("magic_enum/0.7.3")
-        self.requires("native_libs_common/2.0.45@AdguardTeam/NativeLibsCommon")
+        self.requires("native_libs_common/2.0.47@AdguardTeam/NativeLibsCommon")
         self.requires("ngtcp2/0.9.0@AdguardTeam/NativeLibsCommon")
         self.requires("pcre2/10.37@AdguardTeam/NativeLibsCommon")
         self.requires("tldregistry/2022-12-26@AdguardTeam/NativeLibsCommon")
