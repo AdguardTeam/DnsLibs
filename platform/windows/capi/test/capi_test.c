@@ -158,7 +158,7 @@ static void test_dnsstamp() {
 static void test_utils() {
     // test_upstream
     ag_upstream_options upstream = {0};
-    upstream.address = "https://dns.adguard.com/dns-query";
+    upstream.address = "https://dns.adguard-dns.com/dns-query";
     upstream.bootstrap.size = 1;
     upstream.bootstrap.data = malloc(sizeof(const char *));
     upstream.bootstrap.data[0] = "8.8.8.8";
