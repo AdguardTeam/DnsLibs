@@ -101,3 +101,5 @@ commit_hash:
     hash: "0420ca3d7d019e7a460c2e13be99f29c3d298eb2"
   "2.1.21":
     hash: "5a639a4cfea7aac5c07cef3815ea7661c00314a7"
+  "2.1.22":
+    hash: "f1c990654c0f12adcbfbd1b86242f0b62f458140"
