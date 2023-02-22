@@ -724,6 +724,10 @@ int DohUpstream::on_socket_update(
     static constexpr std::string_view WHAT_STR[] = {"none", "IN", "OUT", "INOUT", "REMOVE"};
     tracelog(pool->parent->m_log, "Socket callback: sock={} curl={} sockh={} what={}", socket, handle,
             (void *) socket_data, WHAT_STR[what]);
+    if (socket <= 0) {
+        // Newer CURL calls this on connection failure with socket == 0 for some reason.
+        return 0;
+    }
     if (what == CURL_POLL_REMOVE) {
         tracelog(pool->parent->m_log, "Removing socket");
         delete socket_data;
