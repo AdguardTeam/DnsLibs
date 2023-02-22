@@ -243,7 +243,7 @@ bool DohUpstream::QueryHandle::create_curl_handle(ConnectionPool *pool) {
             || CURLE_OK != (e = curl_easy_setopt(curl, CURLOPT_PROTOCOLS, CURLPROTO_HTTPS))
             || CURLE_OK != (e = curl_easy_setopt(curl, CURLOPT_REDIR_PROTOCOLS, CURLPROTO_HTTPS))
             || CURLE_OK != (e = curl_easy_setopt(curl, CURLOPT_SSL_CTX_FUNCTION, DohUpstream::ssl_callback))
-            || CURLE_OK != (e = curl_easy_setopt(curl, CURLOPT_SSL_CTX_DATA, this))
+            || CURLE_OK != (e = curl_easy_setopt(curl, CURLOPT_SSL_CTX_DATA, this->upstream))
             || CURLE_OK != (e = curl_easy_setopt(curl, CURLOPT_SSL_VERIFYPEER, false)) // We verify ourselves, see DohUpstream::ssl_callback
             || CURLE_OK != (e = curl_easy_setopt(curl, CURLOPT_SSL_VERIFYHOST, false)) // We verify ourselves, see DohUpstream::ssl_callback
             || CURLE_OK != (e = curl_easy_setopt(curl, CURLOPT_SSL_ENABLE_ALPN, true))
@@ -288,7 +288,7 @@ bool DohUpstream::QueryHandle::create_probe_curl_handle(ConnectionPool *pool, in
             || CURLE_OK != (e = curl_easy_setopt(curl, CURLOPT_PRIVATE, this))
             || CURLE_OK != (e = curl_easy_setopt(curl, CURLOPT_PROTOCOLS, CURLPROTO_HTTPS))
             || CURLE_OK != (e = curl_easy_setopt(curl, CURLOPT_SSL_CTX_FUNCTION, DohUpstream::ssl_callback))
-            || CURLE_OK != (e = curl_easy_setopt(curl, CURLOPT_SSL_CTX_DATA, this))
+            || CURLE_OK != (e = curl_easy_setopt(curl, CURLOPT_SSL_CTX_DATA, this->upstream))
             || CURLE_OK != (e = curl_easy_setopt(curl, CURLOPT_SSL_VERIFYPEER, false)) // We verify ourselves, see DohUpstream::ssl_callback
             || CURLE_OK != (e = curl_easy_setopt(curl, CURLOPT_SSL_VERIFYHOST, false)) // We verify ourselves, see DohUpstream::ssl_callback
             || CURLE_OK != (e = curl_easy_setopt(curl, CURLOPT_SSL_ENABLE_ALPN, true))
@@ -416,41 +416,37 @@ static Result<std::string_view, Upstream::InitError> get_host_name(std::string_v
 }
 
 int DohUpstream::verify_callback(X509_STORE_CTX *ctx, void *arg) {
-    DohUpstream::QueryHandle *handle = (DohUpstream::QueryHandle *) arg;
-    DohUpstream *upstream = handle->upstream;
+    DohUpstream *upstream = (DohUpstream *) arg;
 
     SSL *ssl = (SSL *) X509_STORE_CTX_get_ex_data(ctx, SSL_get_ex_data_X509_STORE_CTX_idx());
     const char *sni = SSL_get_servername(ssl, TLSEXT_NAMETYPE_host_name);
-    tracelog_id(handle, "{}(): SNI={}", __func__, (sni == nullptr) ? "null" : sni);
+    tracelog(upstream->m_log, "{}(): SNI={}", __func__, (sni == nullptr) ? "null" : sni);
 
     auto host = get_host_name(upstream->m_options.address);
 
     if (const OutboundProxySettings *proxy_settings = upstream->m_config.socket_factory->get_outbound_proxy_settings();
             proxy_settings != nullptr && proxy_settings->protocol == OutboundProxyProtocol::HTTPS_CONNECT
             && proxy_settings->trust_any_certificate && !host.has_error() && (sni == nullptr || sni != host.value())) {
-        tracelog_id(handle, "Trusting any proxy certificate as specified in settings");
+        tracelog(upstream->m_log, "Trusting any proxy certificate as specified in settings");
         return 1;
     }
 
     const CertificateVerifier *verifier = upstream->m_config.socket_factory->get_certificate_verifier();
     if (verifier == nullptr) {
-        std::string err = "Cannot verify certificate due to verifier is not set";
-        dbglog_id(handle, "{}", err);
-        handle->error = make_error(DnsError::AE_HANDSHAKE_ERROR, err);
+        dbglog(upstream->m_log, "Cannot verify certificate due to verifier is not set");
         return 0;
     }
 
     if (auto err = verifier->verify(ctx, host.value())) {
-        dbglog_id(handle, "Failed to verify certificate: {}", *err);
-        handle->error = make_error(DnsError::AE_HANDSHAKE_ERROR, *err);
+        dbglog(upstream->m_log, "Failed to verify certificate: {}", *err);
         return 0;
     }
 
-    tracelog_id(handle, "Verified successfully");
+    tracelog(upstream->m_log, "Verified successfully");
     return 1;
 }
 
-CURLcode DohUpstream::ssl_callback(CURL *curl, void *sslctx, void *arg) {
+CURLcode DohUpstream::ssl_callback(CURL *, void *sslctx, void *arg) {
     SSL_CTX *ctx = (SSL_CTX *) sslctx;
     SSL_CTX_set_verify(ctx, SSL_VERIFY_PEER, nullptr);
     SSL_CTX_set_cert_verify_callback(ctx, verify_callback, arg);
@@ -664,10 +660,16 @@ void DohUpstream::read_messages() {
             }
 
             auto curl_err = make_error(message->data.result);
-            if (message->data.result == CURLE_OPERATION_TIMEDOUT) {
+            switch (message->data.result) {
+            case CURLE_PEER_FAILED_VERIFICATION:
+                handle->error = make_error(DnsError::AE_HANDSHAKE_ERROR, curl_err);
+                break;
+            case CURLE_OPERATION_TIMEDOUT:
                 handle->error = make_error(DnsError::AE_TIMED_OUT, curl_err);
-            } else {
+                break;
+            default:
                 handle->error = make_error(DnsError::AE_CURL_ERROR, curl_err);
+                break;
             }
         }
 
