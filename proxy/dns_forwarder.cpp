@@ -353,7 +353,7 @@ DnsForwarder::InitResult DnsForwarder::init(
             infolog(m_log, "Fallback upstream created successfully");
         }
     }
-    if (m_upstreams.empty() && m_fallbacks.empty()) {
+    if (m_upstreams.empty() && (m_fallbacks.empty() || !settings.enable_fallback_on_upstreams_failure)) {
         this->deinit();
         return {false, make_error(DnsProxyInitError::AE_UPSTREAM_INIT_ERROR)};
     }
