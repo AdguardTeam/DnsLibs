@@ -38,13 +38,13 @@ struct CurlInitializer {
 };
 
 struct DohUpstream::QueryHandle {
-    using CURL_ptr = UniquePtr<CURL, &curl_easy_cleanup>;
-
     enum Flag {
         /// The query uses the proxy
         QHF_PROXIED,
         /// A connection through the proxy has failed and the query was re-routed directly
         QHF_BYPASSED_PROXY,
+        /// Request was actually responded (as opposed to CURL error)
+        QHF_RESPONDED,
     };
 
     const Logger *log = nullptr;
@@ -234,8 +234,8 @@ bool DohUpstream::QueryHandle::create_curl_handle(ConnectionPool *pool) {
             || CURLE_OK != (e = curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, write_callback))
             || CURLE_OK != (e = curl_easy_setopt(curl, CURLOPT_WRITEDATA, this))
             || CURLE_OK != (e = curl_easy_setopt(curl, CURLOPT_USERAGENT, nullptr))
-            || CURLE_OK != (e = curl_easy_setopt(curl, CURLOPT_POSTFIELDS, ldns_buffer_at(raw_request, 0)))
             || CURLE_OK != (e = curl_easy_setopt(curl, CURLOPT_POSTFIELDSIZE, ldns_buffer_position(raw_request)))
+            || CURLE_OK != (e = curl_easy_setopt(curl, CURLOPT_COPYPOSTFIELDS, ldns_buffer_at(raw_request, 0)))
             || CURLE_OK != (e = curl_easy_setopt(curl, CURLOPT_HTTPHEADER, doh_upstream->m_request_headers.get()))
             || CURLE_OK != (e = curl_easy_setopt(curl, CURLOPT_HTTP_VERSION, doh_upstream->m_curlopt_http_ver))
             || CURLE_OK != (e = curl_easy_setopt(curl, CURLOPT_PRIVATE, this))
@@ -373,6 +373,19 @@ void DohUpstream::QueryHandle::cleanup_request() {
         CURLMcode perr [[maybe_unused]] =
                 curl_multi_remove_handle(this->pool->handle.get(), this->curl_handle.get());
         assert(perr == CURLM_OK);
+
+        // FIXME-66691: CURL has an issue where after `curl_multi_remove_handle`
+        // ngtcp2/nghttp3 will retain a pinter to Curl_easy, which becomes dangling after `curl_easy_cleanup`.
+        // If we got here without the HTTP exchange completing normally, then BOOM!
+        // Instead, let's just leak a little memory until the upstream is destroyed.
+        // (CURL should not "send" another message for already completed handle).
+        // This works in conjunction with the CURL patch with nullchecks
+        // (`curl_multi_remove_handle` sets some pointers in Curl_easy which are used in nghttp3 callbacks to NULL).
+        if (this->upstream->m_curlopt_http_ver == CURL_HTTP_VERSION_3 && !this->flags.test(QHF_RESPONDED)) {
+            this->upstream->m_curl_easy_graveyard.emplace_back(std::move(this->curl_handle));
+            return;
+        }
+
         this->curl_handle.reset();
     }
 }
@@ -630,6 +643,8 @@ void DohUpstream::read_messages() {
 
         if (message->data.result == CURLE_OK) {
             tracelog_id(handle, "Got response {}", (void *) message->easy_handle);
+
+            handle->flags.set(QueryHandle::QHF_RESPONDED);
 
             long response_code;
             curl_easy_getinfo(message->easy_handle, CURLINFO_RESPONSE_CODE, &response_code);
