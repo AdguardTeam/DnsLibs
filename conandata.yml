@@ -111,3 +111,5 @@ commit_hash:
     hash: "12ecccffac585351045cf0be3da3c7e1e153d07c"
   "2.1.26":
     hash: "bf617f428dd9bd6c2d287285c418292838fc3f8e"
+  "2.1.27":
+    hash: "73ae93cf94799494ba3ab366f7cabd9a71fefafd"
