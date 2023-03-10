@@ -919,7 +919,7 @@ coro::Task<UpstreamExchangeResult> DnsForwarder::do_parallel_exchange(const std:
         });
         co_return std::move(results.front());
     }
-    UpstreamExchangeResult last_error;
+    std::optional<UpstreamExchangeResult> last_error;
     auto any_of_cond = parallel::any_of_cond<UpstreamExchangeResult>([&last_error](const UpstreamExchangeResult &r) {
         if (r.result.has_error()) {
             last_error = {r.result.error(), r.upstream};
@@ -936,7 +936,11 @@ coro::Task<UpstreamExchangeResult> DnsForwarder::do_parallel_exchange(const std:
         co_return {make_error(DnsError::AE_SHUTTING_DOWN), nullptr};
     }
     if (!result) {
-        co_return last_error;
+        if (last_error) {
+            co_return std::move(*last_error);
+        } else {
+            co_return UpstreamExchangeResult{.result = make_error(DnsError::AE_INTERNAL_ERROR, "No upstreams have been asked")};
+        }
     }
     co_return std::move(*result);
 }
@@ -961,7 +965,7 @@ coro::Task<UpstreamExchangeResult> DnsForwarder::do_upstreams_exchange(
         co_return co_await do_parallel_exchange(upstreams_to_query, request, info, 2 * max_rtt, /*wait_all*/ fallback);
     }
     // Weighted random load balancing below.
-    UpstreamExchangeResult last_result;
+    std::optional<UpstreamExchangeResult> last_result;
     std::vector<double> upstream_weights(upstreams_to_query.size(), 1.0);
     while (!upstreams_to_query.empty()) {
         std::optional<size_t> selected_idx;
@@ -982,11 +986,11 @@ coro::Task<UpstreamExchangeResult> DnsForwarder::do_upstreams_exchange(
         if (guard.expired()) {
             co_return {make_error(DnsError::AE_SHUTTING_DOWN), nullptr};
         }
-        if (last_result.result.has_value() || last_result.result.error()->value() == DnsError::AE_TIMED_OUT) {
+        if (last_result->result.has_value() || last_result->result.error()->value() == DnsError::AE_TIMED_OUT) {
             // We either got a valid result, or got a timed out error.
             // In case of a timed out error, it's pointless to continue querying any other upstreams since
             // the client has probably already timed out itself and isn't waiting for a response anymore.
-            co_return last_result;
+            co_return std::move(*last_result);
         }
         // Disqualify the selected upstream and select a new one.
         std::swap(upstreams_to_query[*selected_idx], upstreams_to_query.back());
@@ -994,12 +998,16 @@ coro::Task<UpstreamExchangeResult> DnsForwarder::do_upstreams_exchange(
         upstreams_to_query.pop_back();
         upstream_weights.pop_back();
     }
-    assert(last_result.result.has_error());
     if (m_settings->enable_fallback_on_upstreams_failure && !m_fallbacks.empty()) {
         auto [fallbacks, fallbacks_max_rtt] = collect_upstreams(m_fallbacks);
         co_return co_await do_parallel_exchange(fallbacks, request, info, 2 * fallbacks_max_rtt, /*wait_all*/ true);
     }
-    co_return last_result;
+    if (last_result) {
+        assert(last_result->result.has_error());
+        co_return std::move(*last_result);
+    } else {
+        co_return UpstreamExchangeResult{.result = make_error(DnsError::AE_INTERNAL_ERROR, "No upstreams have been asked")};
+    }
 }
 
 coro::Task<void> DnsForwarder::optimistic_cache_background_resolve(ldns_pkt_ptr req, std::string normalized_domain) {
