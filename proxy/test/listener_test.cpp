@@ -176,6 +176,102 @@ TEST(ListenerTest, ShutsDownIfCouldNotInitialize) {
     ASSERT_FALSE(ret);
 }
 
+TEST(ListenerTest, DISABLED_ManyRequestsPending) {
+    Logger::set_log_level(LogLevel::LOG_LEVEL_TRACE);
+    FILE *logfile = fopen("adguard.log", "w");
+    ASSERT_TRUE(logfile) << "Failed to open adguard.log for writing: " << strerror(errno);
+    Logger::LogToFile l(logfile);
+    Logger::set_callback(l);
+    bool proxy_init_result = false;
+    std::mutex mtx;
+    std::condition_variable proxy_cond;
+    bool proxy_initialized = false;
+
+    constexpr auto address = "::";
+    constexpr auto port = 5321;
+    DnsProxy proxy;
+    std::thread proxy_thread([&]() {
+        auto proxy_settings = DnsProxySettings::get_default();
+
+        proxy_settings.listeners = {{address, port, ag::utils::TP_UDP}};
+        proxy_settings.upstreams = {{.address = "quic://dns.adguard-dns.com", .bootstrap = {"1.1.1.1"}, .timeout = 3s}};
+        proxy_settings.enable_http3 = true;
+        proxy_settings.dns_cache_size = 0;
+        proxy_settings.optimistic_cache = false;
+
+        auto [ret, err] = proxy.init(proxy_settings, {});
+        proxy_init_result = ret;
+        proxy_initialized = true;
+
+        ldns_pkt_ptr reqpkt(
+                ldns_pkt_query_new(ldns_dname_new_frm_str("youtube.com"), LDNS_RR_TYPE_A, LDNS_RR_CLASS_IN, LDNS_RD));
+
+        ldns_buffer_ptr buffer{ldns_buffer_new(REQUEST_BUFFER_INITIAL_CAPACITY)};
+        ldns_pkt2buffer_wire(buffer.get(), reqpkt.get());
+
+        ag::coro::run_detached([&buffer](DnsProxy &proxy) -> ag::coro::Task<void> {
+            co_await proxy.handle_message({ldns_buffer_at(buffer.get(), 0), ldns_buffer_position(buffer.get())}, nullptr);
+        }(proxy));
+
+        ldns_pkt_ptr reqpkt2(
+                ldns_pkt_query_new(ldns_dname_new_frm_str("vk.com"), LDNS_RR_TYPE_A, LDNS_RR_CLASS_IN, LDNS_RD));
+
+        buffer.reset(ldns_buffer_new(REQUEST_BUFFER_INITIAL_CAPACITY));
+        ldns_pkt2buffer_wire(buffer.get(), reqpkt2.get());
+
+        ag::coro::run_detached([&buffer](DnsProxy &proxy) -> ag::coro::Task<void> {
+            co_await proxy.handle_message({ldns_buffer_at(buffer.get(), 0), ldns_buffer_position(buffer.get())}, nullptr);
+        }(proxy));
+
+        // Wait until stopped
+        {
+            std::unique_lock<std::mutex> l(mtx);
+            proxy_cond.wait(l, [&]() {
+                return !proxy_initialized;
+            });
+        }
+    });
+
+    std::this_thread::sleep_for(2s);
+    ASSERT_TRUE(proxy_init_result);
+    ldns_pkt_ptr reqpkt(
+            ldns_pkt_query_new(ldns_dname_new_frm_str("g.co"), LDNS_RR_TYPE_A, LDNS_RR_CLASS_IN, LDNS_RD));
+    ldns_buffer_ptr buffer{ldns_buffer_new(REQUEST_BUFFER_INITIAL_CAPACITY)};
+    ldns_pkt2buffer_wire(buffer.get(), reqpkt.get());
+
+    for (int i = 0; i < 10000; i++) {
+        coro::run_detached([&buffer](auto &proxy) -> coro::Task<void> {
+            co_await proxy.handle_message({ldns_buffer_at(buffer.get(), 0), ldns_buffer_position(buffer.get())}, nullptr);
+        }(proxy));
+    }
+    std::this_thread::sleep_for(10s);
+
+    // send new request after requests storm
+    ldns_pkt_ptr reqpkt2(
+            ldns_pkt_query_new(ldns_dname_new_frm_str("google.com"), LDNS_RR_TYPE_A, LDNS_RR_CLASS_IN, LDNS_RD));
+
+    buffer.reset(ldns_buffer_new(REQUEST_BUFFER_INITIAL_CAPACITY));
+    ldns_pkt2buffer_wire(buffer.get(), reqpkt2.get());
+
+    Uint8Vector last_reply_res{};
+    ag::coro::run_detached([&buffer](DnsProxy &proxy, Uint8Vector &reply_res) -> ag::coro::Task<void> {
+        reply_res = co_await proxy.handle_message({ldns_buffer_at(buffer.get(), 0), ldns_buffer_position(buffer.get())}, nullptr);
+    }(proxy, last_reply_res));
+    std::this_thread::sleep_for(3s);
+
+    // check if last request got correct response
+    ASSERT_FALSE(last_reply_res.empty());
+    ldns_pkt *reply_pkt = nullptr;
+    auto status = ldns_wire2pkt(&reply_pkt, last_reply_res.data(), last_reply_res.size());
+    ASSERT_EQ(LDNS_STATUS_OK, status) << ldns_get_errorstr_by_id(status);
+    ldns_pkt_free(reply_pkt);
+
+    proxy_initialized = false;
+    proxy_cond.notify_one();
+    proxy.deinit();
+    proxy_thread.join();
+}
+
 INSTANTIATE_TEST_SUITE_P(ListenerLogic, ListenerTest,
         ::testing::Values(TestParams{ListenerSettings{.address = "::1", .port = 1234, .protocol = ag::utils::TP_UDP}},
                 TestParams{ListenerSettings{

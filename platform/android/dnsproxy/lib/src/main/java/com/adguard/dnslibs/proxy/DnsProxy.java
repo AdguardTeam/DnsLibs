@@ -2,6 +2,7 @@ package com.adguard.dnslibs.proxy;
 
 import android.content.Context;
 
+import org.jetbrains.annotations.NotNull;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -20,7 +21,7 @@ import javax.net.ssl.X509TrustManager;
 
 public class DnsProxy implements Closeable {
 
-    public enum DnsProxyInitErrorCode {
+    public enum InitErrorCode {
         PROXY_NOT_SET,
         EVENT_LOOP_NOT_SET,
         INVALID_ADDRESS,
@@ -45,9 +46,9 @@ public class DnsProxy implements Closeable {
      * `description`
      * 3) if success = false -> `code` and `description` contains error code and description for error
      */
-    public class DnsProxyInitResult {
+    static class InitResult {
         public boolean success;
-        public DnsProxyInitErrorCode code = DnsProxyInitErrorCode.OK;
+        public InitErrorCode code = InitErrorCode.OK;
         public String description = "";
     }
 
@@ -79,10 +80,11 @@ public class DnsProxy implements Closeable {
      * Initializes the DNS proxy.
      * @param context app context.
      * @param settings the settings. Not {@code null}.
-     * @throws NullPointerException if {@code settings == null}.
-     * @throws RuntimeException     if the proxy could not initialize.
+     * @throws NullPointerException if any of the arguments is {@code null}.
+     * @throws DnsProxyInitException  If the proxy fails to initialize.
      */
-    public DnsProxy(Context context, DnsProxySettings settings) {
+    public DnsProxy(@NotNull Context context, @NotNull DnsProxySettings settings)
+            throws DnsProxyInitException, NullPointerException {
         this(context, settings, null);
     }
 
@@ -91,42 +93,35 @@ public class DnsProxy implements Closeable {
      * @param context  app context.
      * @param settings the settings. Not {@code null}.
      * @param events   the event callback. May be {@code null}.
-     * @throws NullPointerException if {@code settings == null}.
-     * @throws RuntimeException     if the proxy could not initialize.
+     * @throws NullPointerException if any of the required arguments is {@code null}.
+     * @throws DnsProxyInitException  If the proxy fails to initialize.
      */
-    public DnsProxy(Context context, DnsProxySettings settings, DnsProxyEvents events) throws RuntimeException {
+    public DnsProxy(@NotNull Context context, @NotNull DnsProxySettings settings, DnsProxyEvents events)
+            throws DnsProxyInitException, NullPointerException {
         this();
-        try {
-            if (settings == null) {
-                throw new NullPointerException("settings");
-            }
-
-            if (settings.isDetectSearchDomains()) {
-                List<String> searchDomains = DnsNetworkUtils.getDNSSearchDomains(context);
-                if (searchDomains != null) {
-                    for (String domain : searchDomains) {
-                        if (!domain.isEmpty() && domain.startsWith(".")) {
-                            domain = domain.substring(1);
-                        }
-                        if (!domain.isEmpty() && domain.endsWith(".")) {
-                            domain = domain.substring(0, domain.length() - 1);
-                        }
-                        if (!domain.isEmpty()) {
-                            settings.getFallbackDomains().add(String.format("*.%s", domain));
-                        }
+        Objects.requireNonNull(settings);
+        if (settings.isDetectSearchDomains()) {
+            List<String> searchDomains = DnsNetworkUtils.getDNSSearchDomains(context);
+            if (searchDomains != null) {
+                for (String domain : searchDomains) {
+                    if (!domain.isEmpty() && domain.startsWith(".")) {
+                        domain = domain.substring(1);
+                    }
+                    if (!domain.isEmpty() && domain.endsWith(".")) {
+                        domain = domain.substring(0, domain.length() - 1);
+                    }
+                    if (!domain.isEmpty()) {
+                        settings.getFallbackDomains().add(String.format("*.%s", domain));
                     }
                 }
             }
-
-            DnsProxyInitResult result = init(nativePtr, settings, new EventsAdapter(events));
-            if (!result.success) {
-                throw new RuntimeException(result.description);
-            }
-            state = State.INITIALIZED;
-        } catch (RuntimeException e) {
-            close();
-            throw e;
         }
+        InitResult result = init(nativePtr, settings, new EventsAdapter(events));
+        if (!result.success) {
+            close();
+            throw new DnsProxyInitException(result);
+        }
+        state = State.INITIALIZED;
     }
 
     /**
@@ -185,7 +180,7 @@ public class DnsProxy implements Closeable {
 
     private native long create();
 
-    private native DnsProxyInitResult init(long nativePtr, DnsProxySettings settings, EventsAdapter events);
+    private native InitResult init(long nativePtr, DnsProxySettings settings, EventsAdapter events);
 
     private native void deinit(long nativePtr);
 
@@ -333,7 +328,7 @@ public class DnsProxy implements Closeable {
      * Suggest an action based on a filtering log event.
      * @throws NullPointerException if any argument is {@code null}.
      */
-    public FilteringLogAction filteringLogActionFromEvent(DnsRequestProcessedEvent event) {
+    public FilteringLogAction filteringLogActionFromEvent(@NotNull DnsRequestProcessedEvent event) {
         return filteringLogActionFromEvent(nativePtr, Objects.requireNonNull(event));
     }
 
@@ -344,8 +339,9 @@ public class DnsProxy implements Closeable {
      * @return A rule or {@code null} on error.
      * @throws NullPointerException if any argument is {@code null}.
      */
-    public String generateRuleWithOptions(FilteringLogAction.RuleTemplate template, DnsRequestProcessedEvent event,
-                                                 EnumSet<FilteringLogAction.Option> options) {
+    public String generateRuleWithOptions(@NotNull FilteringLogAction.RuleTemplate template,
+                                          @NotNull DnsRequestProcessedEvent event,
+                                          @NotNull EnumSet<FilteringLogAction.Option> options) {
         int opt = 0;
         for (FilteringLogAction.Option option : options) {
             opt |= option.value;

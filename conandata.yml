@@ -73,3 +73,43 @@ commit_hash:
     hash: "7ef0b2e83d435ed4c8bf415efb53d4b04eaeec4c"
   "2.1.7":
     hash: "12ae10627c38ffb0a97f10dc9416694211bfd084"
+  "2.1.8":
+    hash: "90c4db9be08a6b20b322de62c25e34a1e25d8009"
+  "2.1.9":
+    hash: "f317e985b3a4b127b8540949b95e85f18c038039"
+  "2.1.10":
+    hash: "406bd04f1c9a4f6a6d911720266da06bc77a343b"
+  "2.1.11":
+    hash: "4be20d22ee4a5a8900bdee1066365f838a604f21"
+  "2.1.12":
+    hash: "58393a940c7202ba5c2b928651732e4fd0ee1e9e"
+  "2.1.13":
+    hash: "581fbd35db4f77f4b6d8c63a46ea10c4309ae9af"
+  "2.1.14":
+    hash: "666e60a3c83b65d482dae8a4b30b683cd5dcc220"
+  "2.1.15":
+    hash: "257fc7329fa2c9c44a1dfe2f79a0d0811093fc40"
+  "2.1.16":
+    hash: "1507ae04102dda94692b4a0720c7a31872d7919f"
+  "2.1.17":
+    hash: "98689554463a14ffa9e9d4647d94a3a9e221786d"
+  "2.1.18":
+    hash: "6746ca0c79758841d05bdd0f19e9cb1d1c099c13"
+  "2.1.19":
+    hash: "2e6d13551031cdbe177c5c229387044c86ea3554"
+  "2.1.20":
+    hash: "0420ca3d7d019e7a460c2e13be99f29c3d298eb2"
+  "2.1.21":
+    hash: "5a639a4cfea7aac5c07cef3815ea7661c00314a7"
+  "2.1.22":
+    hash: "f1c990654c0f12adcbfbd1b86242f0b62f458140"
+  "2.1.23":
+    hash: "fcb385478a3757404d745c6a4912a04ce9b800d0"
+  "2.1.24":
+    hash: "39f62bb4cf5d73d94da76df097a947c2ba5f7b5d"
+  "2.1.25":
+    hash: "12ecccffac585351045cf0be3da3c7e1e153d07c"
+  "2.1.26":
+    hash: "bf617f428dd9bd6c2d287285c418292838fc3f8e"
+  "2.1.27":
+    hash: "73ae93cf94799494ba3ab366f7cabd9a71fefafd"

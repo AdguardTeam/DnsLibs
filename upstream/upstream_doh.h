@@ -48,6 +48,8 @@ public:
     struct CheckProxyState;
 
 private:
+    using CURL_ptr = UniquePtr<CURL, &curl_easy_cleanup>;
+
     struct ConnectionPool {
         DohUpstream *parent = nullptr;
         curl_pool_ptr handle = nullptr;
@@ -116,6 +118,9 @@ private:
 
     std::string m_curlopt_url;
     int m_curlopt_http_ver = CURL_HTTP_VERSION_NONE;
+
+    // See FIXME-66691.
+    std::vector<CURL_ptr> m_curl_easy_graveyard;
 };
 
 }  // namespace ag::dns

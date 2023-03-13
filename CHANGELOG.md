@@ -1,5 +1,8 @@
 # Changelog
 
+* [Feature] Changed the signature of `com.adguard.dnslibs.proxy.DnsProxy` constructor: now throws a
+  `com.adguard.dnslibs.proxy.DnsProxyInitException` on failure, containing the same info as the native error.
+
 * [Feature] Made the API more XPC-friendly (without breaking changes) and added
             some boilerplate to help setup the DNS proxy as an XPC endpoint.
 

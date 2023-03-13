@@ -32,6 +32,7 @@ static constexpr std::string_view DQ_ALPNS[] = {DoqUpstream::RFC9250_ALPN};
 static constexpr int KEEPALIVE_INTERVAL_SEC = 30;
 static constexpr int LOCAL_IDLE_TIMEOUT_SEC = 180;
 static constexpr int MAX_PKTLEN_IPV6 = 1232;
+static constexpr size_t QUIC_PACKET_TRACE_BUFSIZE = 2048;
 
 #undef NEVER
 #define NEVER (UINT64_MAX / 2)
@@ -524,32 +525,68 @@ int DoqUpstream::on_write() {
     return 0;
 }
 
+static int ag_evbuffer_peek_exact(struct evbuffer *buffer, ev_ssize_t len,
+                                  struct evbuffer_ptr *start_at,
+                                  struct evbuffer_iovec *vec_out, int n_vec) {
+    int vec_cnt = evbuffer_peek(buffer, len, start_at, vec_out, n_vec);
+    if (vec_cnt < 0) {
+        return vec_cnt;
+    }
+    int idx = 0;
+    size_t remaining = len;
+    while (idx < vec_cnt && remaining) {
+        if (remaining < vec_out[idx].iov_len) {
+            vec_out[idx].iov_len = remaining;
+        }
+        remaining -= vec_out[idx].iov_len;
+        idx += 1;
+    }
+    return idx;
+}
+
+/**
+ * Peeks first stream data from outbound queue and returns stream id to write this data.
+ * @param vec_out Output iovec
+ * @param[in,out] n_vec_out Size of output iovec. Modified after call to number of actually used chunks
+ * @param eof_out Output variable for eof flag
+ */
+int64_t DoqUpstream::peek_stream_data(struct evbuffer_iovec *vec_out, int *n_vec_out, bool *eof_out) {
+    while (!m_stream_send_queue.empty() && ngtcp2_conn_get_max_data_left(m_conn)) {
+        int64_t stream_id = m_stream_send_queue.front();
+        auto it = m_streams.find(stream_id);
+        if (it == m_streams.end()) {
+            m_stream_send_queue.pop_front();
+            continue;
+        }
+        Stream &st = it->second;
+        evbuffer *buf = st.send_info.buf.get();
+        if (evbuffer_get_length(buf) - st.send_info.read_position == 0) {
+            m_stream_send_queue.pop_front();
+            continue;
+        }
+        evbuffer_ptr position = {};
+        evbuffer_ptr_set(buf, &position, st.send_info.read_position, EVBUFFER_PTR_SET);
+        *n_vec_out = ag_evbuffer_peek_exact(buf, evbuffer_get_length(buf), &position, vec_out, *n_vec_out);
+        if (eof_out) {
+            *eof_out = true;
+        }
+        return stream_id;
+    }
+    return -1;
+}
+
 int DoqUpstream::write_streams() {
     ngtcp2_vec vec[2];
 
     for (;;) {
-        int64_t stream_id = -1;
-        size_t vcnt = 0;
         uint32_t flags = NGTCP2_WRITE_STREAM_FLAG_MORE;
 
-        while (!m_stream_send_queue.empty() && ngtcp2_conn_get_max_data_left(m_conn)) {
-            stream_id = m_stream_send_queue.front();
-            auto it = m_streams.find(stream_id);
-            if (it == m_streams.end()) {
-                m_stream_send_queue.pop_front();
-                continue;
-            }
-            Stream &st = it->second;
-            evbuffer *buf = st.send_info.buf.get();
-            if (evbuffer_get_length(buf) - st.send_info.read_position == 0) {
-                m_stream_send_queue.pop_front();
-                continue;
-            }
-            evbuffer_ptr position = {};
-            evbuffer_ptr_set(buf, &position, st.send_info.read_position, EVBUFFER_PTR_SET);
-            vcnt = evbuffer_peek(buf, evbuffer_get_length(buf), &position, (evbuffer_iovec *) vec, std::size(vec));
+        int vcnt = std::size(vec);
+        bool eof = false;
+        int64_t stream_id = peek_stream_data((evbuffer_iovec *) vec, &vcnt, &eof);
+
+        if (eof) {
             flags |= NGTCP2_WRITE_STREAM_FLAG_FIN;
-            break;
         }
 
         ngtcp2_ssize ndatalen;
@@ -568,12 +605,13 @@ int DoqUpstream::write_streams() {
             case NGTCP2_ERR_STREAM_SHUT_WR:
                 assert(ndatalen == -1);
                 warnlog(m_log, "Can't write stream {} because: {}", stream_id, ngtcp2_strerror(nwrite));
-                m_stream_send_queue.pop_front();
+                if (!m_stream_send_queue.empty()) {
+                    m_stream_send_queue.pop_front();
+                }
                 continue;
             case NGTCP2_ERR_WRITE_MORE:
                 assert(ndatalen > 0);
                 m_streams[stream_id].send_info.read_position += ndatalen;
-                m_stream_send_queue.pop_front();
                 continue;
             }
             errlog(m_log, "ngtcp2_conn_write_stream: {}", ngtcp2_strerror(nwrite));
@@ -582,6 +620,10 @@ int DoqUpstream::write_streams() {
 
         if (nwrite == 0) {
             return 0;
+        }
+
+        if (ndatalen > 0) {
+            m_streams[stream_id].send_info.read_position += ndatalen;
         }
 
         m_send_buf.push(nwrite);
@@ -600,6 +642,7 @@ int DoqUpstream::write_streams() {
 
 int DoqUpstream::send_packet(Socket *active_socket, Uint8View data) {
     tracelog(m_log, "Sending {} bytes to {}", data.size(), active_socket->get_peer().str());
+    assert(!data.empty());
     auto e = active_socket->send(data);
     if (e) {
         dbglog(m_log, "Failed to send packet: {}", e->str());
@@ -656,6 +699,16 @@ int DoqUpstream::connect_to_peers(const std::vector<SocketAddress> &current_addr
     return NETWORK_ERR_OK;
 }
 
+void DoqUpstream::log_quic_packets(void *user_data, const char *format, ...) {
+    char buffer[QUIC_PACKET_TRACE_BUFSIZE];
+    va_list args;
+    va_start(args, format);
+    vsnprintf(buffer, QUIC_PACKET_TRACE_BUFSIZE, format, args);
+    va_end(args);
+    auto *doq = (DoqUpstream *) user_data;
+    tracelog(doq->m_log, "{}", buffer);
+}
+
 int DoqUpstream::init_quic_conn(const Socket *connected_socket) {
     // as for now we don't support the QUIC connection migration it does not matter
     // which address we are using in the path, so just pick the first connected one as the local address
@@ -674,6 +727,11 @@ int DoqUpstream::init_quic_conn(const Socket *connected_socket) {
 
     ngtcp2_settings settings;
     ngtcp2_settings_default(&settings);
+#if 0
+    if (ag::Logger::get_log_level() == LOG_LEVEL_TRACE) {
+        settings.log_printf = log_quic_packets;
+    }
+#endif
 
     ngtcp2_transport_params txparams;
     ngtcp2_transport_params_default(&txparams);
@@ -1028,6 +1086,9 @@ int DoqUpstream::acked_stream_data_offset(ngtcp2_conn * /*conn*/, int64_t stream
         evbuffer *buf = stream.send_info.buf.get();
         evbuffer_drain(buf, datalen);
         stream.send_info.read_position -= datalen;
+        if (stream.send_info.read_position < 0) {
+            errlog(doq->m_log, "read_position={} datalen={}", stream.send_info.read_position, datalen);
+        }
         assert(stream.send_info.read_position >= 0);
     }
 

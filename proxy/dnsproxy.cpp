@@ -58,6 +58,8 @@ static const DnsProxySettings DEFAULT_PROXY_SETTINGS = {
                         "myrepeater.net",
                         "mywifi.net",
                         "setup.pix-link.net",
+                        "tplinkdeco.net",
+                        "tplinkextender.net",
                 },
         .dns64 = std::nullopt,
         .blocked_response_ttl_secs = 3600,

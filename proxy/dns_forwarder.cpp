@@ -288,8 +288,8 @@ DnsForwarder::DnsForwarder() = default;
 DnsForwarder::~DnsForwarder() = default;
 
 static coro::Task<void> discover_dns64_prefixes(std::vector<UpstreamOptions> uss,
-        std::shared_ptr<SocketFactory> socket_factory, dns64::StatePtr state, Logger logger, EventLoop &loop,
-        uint32_t max_tries, Millis wait_time, std::weak_ptr<bool> shutdown_guard);
+        std::shared_ptr<SocketFactory> socket_factory, dns64::StatePtr state, EventLoop &loop, uint32_t max_tries,
+        Millis wait_time, std::weak_ptr<bool> shutdown_guard);
 
 DnsForwarder::InitResult DnsForwarder::init(
         EventLoopPtr loop, const DnsProxySettings &settings, const DnsProxyEvents &events) {
@@ -353,7 +353,7 @@ DnsForwarder::InitResult DnsForwarder::init(
             infolog(m_log, "Fallback upstream created successfully");
         }
     }
-    if (m_upstreams.empty() && m_fallbacks.empty()) {
+    if (m_upstreams.empty() && (m_fallbacks.empty() || !settings.enable_fallback_on_upstreams_failure)) {
         this->deinit();
         return {false, make_error(DnsProxyInitError::AE_UPSTREAM_INIT_ERROR)};
     }
@@ -386,8 +386,8 @@ DnsForwarder::InitResult DnsForwarder::init(
     m_dns64_state = std::make_shared<dns64::State>();
     if (settings.dns64.has_value()) {
         infolog(m_log, "DNS64 discovery is enabled");
-        coro::run_detached(discover_dns64_prefixes(settings.dns64->upstreams, m_socket_factory, m_dns64_state, m_log,
-                *m_loop, settings.dns64->max_tries, settings.dns64->wait_time, m_shutdown_guard));
+        coro::run_detached(discover_dns64_prefixes(settings.dns64->upstreams, m_socket_factory, m_dns64_state, *m_loop,
+                settings.dns64->max_tries, settings.dns64->wait_time, m_shutdown_guard));
     }
 
     m_response_cache.set_capacity(m_settings->dns_cache_size);
@@ -399,8 +399,9 @@ DnsForwarder::InitResult DnsForwarder::init(
 }
 
 static coro::Task<void> discover_dns64_prefixes(std::vector<UpstreamOptions> uss,
-        std::shared_ptr<SocketFactory> socket_factory, dns64::StatePtr state, Logger logger, EventLoop &loop,
-        uint32_t max_tries, Millis wait_time, std::weak_ptr<bool> shutdown_guard) {
+        std::shared_ptr<SocketFactory> socket_factory, dns64::StatePtr state, EventLoop &loop, uint32_t max_tries,
+        Millis wait_time, std::weak_ptr<bool> shutdown_guard) {
+    static ag::Logger logger{"DNS64"};
     co_await loop.co_submit();
     UpstreamFactory us_factory({.loop = loop, .socket_factory = socket_factory.get()});
     auto i = max_tries;
@@ -413,7 +414,7 @@ static coro::Task<void> discover_dns64_prefixes(std::vector<UpstreamOptions> uss
             {
                 auto upstream_result = us_factory.create_upstream(us);
                 if (upstream_result.has_error()) {
-                    dbglog(logger, "DNS64: failed to create DNS64 upstream: {}", upstream_result.error()->str());
+                    dbglog(logger, "Failed to create DNS64 upstream: {}", upstream_result.error()->str());
                     continue;
                 }
                 state->discovering_upstream = std::move(upstream_result.value());
@@ -425,23 +426,23 @@ static coro::Task<void> discover_dns64_prefixes(std::vector<UpstreamOptions> uss
             }
             state->discovering_upstream.reset();
             if (result.has_error()) {
-                dbglog(logger, "DNS64: error discovering prefixes:\n{}", result.error()->str());
+                dbglog(logger, "Error discovering prefixes:\n{}", result.error()->str());
                 continue;
             }
 
             if (result->empty()) {
-                dbglog(logger, "DNS64: no prefixes discovered, retrying");
+                dbglog(logger, "No prefixes discovered, retrying");
                 continue;
             }
 
             state->prefixes = std::move(result.value());
 
-            infolog(logger, "DNS64 prefixes discovered: {}", state->prefixes.size());
+            infolog(logger, "Prefixes discovered: {}", state->prefixes.size());
             co_return;
         }
     }
 
-    dbglog(logger, "DNS64: failed to discover any prefixes");
+    dbglog(logger, "Failed to discover any prefixes");
 }
 
 void DnsForwarder::deinit() {
@@ -567,6 +568,9 @@ coro::Task<Uint8Vector> DnsForwarder::handle_message_internal(
                         .rr_type = question_rr_type(request),
                 },
                 request, nullptr, event, effective_rules, fallback_only, false, &rc);
+        if (guard.expired()) {
+            co_return {};
+        }
         if (!raw_blocking_response || rc == LDNS_RCODE_NOERROR) {
             dbglog_fid(m_log, request, "AAAA DNS query blocked because IPv6 blocking is enabled");
             ldns_pkt_ptr response{ResponseHelpers::create_soa_response(request, m_settings, SOA_RETRY_IPV6_BLOCK)};
@@ -576,12 +580,16 @@ coro::Task<Uint8Vector> DnsForwarder::handle_message_internal(
         co_return *raw_blocking_response;
     }
 
-    if (auto raw_blocking_response = co_await apply_filter(
-                {
-                        .domain = normalized_domain,
-                        .rr_type = question_rr_type(request),
-                },
-                request, nullptr, event, effective_rules, fallback_only)) {
+    auto raw_blocking_response = co_await apply_filter(
+            {
+                    .domain = normalized_domain,
+                    .rr_type = question_rr_type(request),
+            },
+            request, nullptr, event, effective_rules, fallback_only);
+    if (guard.expired()) {
+        co_return {};
+    }
+    if (raw_blocking_response) {
         co_return *raw_blocking_response;
     }
 
@@ -626,12 +634,18 @@ coro::Task<Uint8Vector> DnsForwarder::handle_message_internal(
                             rr, request, response->get(), event, effective_rules, fallback_only)) {
                     co_return *raw_response;
                 }
+                if (guard.expired()) {
+                    co_return {};
+                }
             }
             // IP response blocking
             if (ldns_rr_get_type(rr) == LDNS_RR_TYPE_A || ldns_rr_get_type(rr) == LDNS_RR_TYPE_AAAA) {
                 if (auto raw_response = co_await apply_ip_filter(
                             rr, request, response->get(), event, effective_rules, fallback_only)) {
                     co_return *raw_response;
+                }
+                if (guard.expired()) {
+                    co_return {};
                 }
             }
         }
@@ -649,6 +663,9 @@ coro::Task<Uint8Vector> DnsForwarder::handle_message_internal(
                 if (auto synth_response = co_await try_dns64_aaaa_synthesis(selected_upstream, req_holder)) {
                     response = std::move(synth_response);
                     log_packet(m_log, response->get(), "DNS64 synthesized response");
+                }
+                if (guard.expired()) {
+                    co_return {};
                 }
             }
         }
@@ -902,7 +919,7 @@ coro::Task<UpstreamExchangeResult> DnsForwarder::do_parallel_exchange(const std:
         });
         co_return std::move(results.front());
     }
-    UpstreamExchangeResult last_error;
+    std::optional<UpstreamExchangeResult> last_error;
     auto any_of_cond = parallel::any_of_cond<UpstreamExchangeResult>([&last_error](const UpstreamExchangeResult &r) {
         if (r.result.has_error()) {
             last_error = {r.result.error(), r.upstream};
@@ -919,7 +936,11 @@ coro::Task<UpstreamExchangeResult> DnsForwarder::do_parallel_exchange(const std:
         co_return {make_error(DnsError::AE_SHUTTING_DOWN), nullptr};
     }
     if (!result) {
-        co_return last_error;
+        if (last_error) {
+            co_return std::move(*last_error);
+        } else {
+            co_return UpstreamExchangeResult{.result = make_error(DnsError::AE_INTERNAL_ERROR, "No upstreams have been asked")};
+        }
     }
     co_return std::move(*result);
 }
@@ -944,7 +965,7 @@ coro::Task<UpstreamExchangeResult> DnsForwarder::do_upstreams_exchange(
         co_return co_await do_parallel_exchange(upstreams_to_query, request, info, 2 * max_rtt, /*wait_all*/ fallback);
     }
     // Weighted random load balancing below.
-    UpstreamExchangeResult last_result;
+    std::optional<UpstreamExchangeResult> last_result;
     std::vector<double> upstream_weights(upstreams_to_query.size(), 1.0);
     while (!upstreams_to_query.empty()) {
         std::optional<size_t> selected_idx;
@@ -965,11 +986,11 @@ coro::Task<UpstreamExchangeResult> DnsForwarder::do_upstreams_exchange(
         if (guard.expired()) {
             co_return {make_error(DnsError::AE_SHUTTING_DOWN), nullptr};
         }
-        if (last_result.result.has_value() || last_result.result.error()->value() == DnsError::AE_TIMED_OUT) {
+        if (last_result->result.has_value() || last_result->result.error()->value() == DnsError::AE_TIMED_OUT) {
             // We either got a valid result, or got a timed out error.
             // In case of a timed out error, it's pointless to continue querying any other upstreams since
             // the client has probably already timed out itself and isn't waiting for a response anymore.
-            co_return last_result;
+            co_return std::move(*last_result);
         }
         // Disqualify the selected upstream and select a new one.
         std::swap(upstreams_to_query[*selected_idx], upstreams_to_query.back());
@@ -977,12 +998,16 @@ coro::Task<UpstreamExchangeResult> DnsForwarder::do_upstreams_exchange(
         upstreams_to_query.pop_back();
         upstream_weights.pop_back();
     }
-    assert(last_result.result.has_error());
     if (m_settings->enable_fallback_on_upstreams_failure && !m_fallbacks.empty()) {
         auto [fallbacks, fallbacks_max_rtt] = collect_upstreams(m_fallbacks);
         co_return co_await do_parallel_exchange(fallbacks, request, info, 2 * fallbacks_max_rtt, /*wait_all*/ true);
     }
-    co_return last_result;
+    if (last_result) {
+        assert(last_result->result.has_error());
+        co_return std::move(*last_result);
+    } else {
+        co_return UpstreamExchangeResult{.result = make_error(DnsError::AE_INTERNAL_ERROR, "No upstreams have been asked")};
+    }
 }
 
 coro::Task<void> DnsForwarder::optimistic_cache_background_resolve(ldns_pkt_ptr req, std::string normalized_domain) {

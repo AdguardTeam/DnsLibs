@@ -38,13 +38,13 @@ struct CurlInitializer {
 };
 
 struct DohUpstream::QueryHandle {
-    using CURL_ptr = UniquePtr<CURL, &curl_easy_cleanup>;
-
     enum Flag {
         /// The query uses the proxy
         QHF_PROXIED,
         /// A connection through the proxy has failed and the query was re-routed directly
         QHF_BYPASSED_PROXY,
+        /// Request was actually responded (as opposed to CURL error)
+        QHF_RESPONDED,
     };
 
     const Logger *log = nullptr;
@@ -234,8 +234,8 @@ bool DohUpstream::QueryHandle::create_curl_handle(ConnectionPool *pool) {
             || CURLE_OK != (e = curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, write_callback))
             || CURLE_OK != (e = curl_easy_setopt(curl, CURLOPT_WRITEDATA, this))
             || CURLE_OK != (e = curl_easy_setopt(curl, CURLOPT_USERAGENT, nullptr))
-            || CURLE_OK != (e = curl_easy_setopt(curl, CURLOPT_POSTFIELDS, ldns_buffer_at(raw_request, 0)))
             || CURLE_OK != (e = curl_easy_setopt(curl, CURLOPT_POSTFIELDSIZE, ldns_buffer_position(raw_request)))
+            || CURLE_OK != (e = curl_easy_setopt(curl, CURLOPT_COPYPOSTFIELDS, ldns_buffer_at(raw_request, 0)))
             || CURLE_OK != (e = curl_easy_setopt(curl, CURLOPT_HTTPHEADER, doh_upstream->m_request_headers.get()))
             || CURLE_OK != (e = curl_easy_setopt(curl, CURLOPT_HTTP_VERSION, doh_upstream->m_curlopt_http_ver))
             || CURLE_OK != (e = curl_easy_setopt(curl, CURLOPT_PRIVATE, this))
@@ -243,7 +243,7 @@ bool DohUpstream::QueryHandle::create_curl_handle(ConnectionPool *pool) {
             || CURLE_OK != (e = curl_easy_setopt(curl, CURLOPT_PROTOCOLS, CURLPROTO_HTTPS))
             || CURLE_OK != (e = curl_easy_setopt(curl, CURLOPT_REDIR_PROTOCOLS, CURLPROTO_HTTPS))
             || CURLE_OK != (e = curl_easy_setopt(curl, CURLOPT_SSL_CTX_FUNCTION, DohUpstream::ssl_callback))
-            || CURLE_OK != (e = curl_easy_setopt(curl, CURLOPT_SSL_CTX_DATA, this))
+            || CURLE_OK != (e = curl_easy_setopt(curl, CURLOPT_SSL_CTX_DATA, this->upstream))
             || CURLE_OK != (e = curl_easy_setopt(curl, CURLOPT_SSL_VERIFYPEER, false)) // We verify ourselves, see DohUpstream::ssl_callback
             || CURLE_OK != (e = curl_easy_setopt(curl, CURLOPT_SSL_VERIFYHOST, false)) // We verify ourselves, see DohUpstream::ssl_callback
             || CURLE_OK != (e = curl_easy_setopt(curl, CURLOPT_SSL_ENABLE_ALPN, true))
@@ -288,7 +288,7 @@ bool DohUpstream::QueryHandle::create_probe_curl_handle(ConnectionPool *pool, in
             || CURLE_OK != (e = curl_easy_setopt(curl, CURLOPT_PRIVATE, this))
             || CURLE_OK != (e = curl_easy_setopt(curl, CURLOPT_PROTOCOLS, CURLPROTO_HTTPS))
             || CURLE_OK != (e = curl_easy_setopt(curl, CURLOPT_SSL_CTX_FUNCTION, DohUpstream::ssl_callback))
-            || CURLE_OK != (e = curl_easy_setopt(curl, CURLOPT_SSL_CTX_DATA, this))
+            || CURLE_OK != (e = curl_easy_setopt(curl, CURLOPT_SSL_CTX_DATA, this->upstream))
             || CURLE_OK != (e = curl_easy_setopt(curl, CURLOPT_SSL_VERIFYPEER, false)) // We verify ourselves, see DohUpstream::ssl_callback
             || CURLE_OK != (e = curl_easy_setopt(curl, CURLOPT_SSL_VERIFYHOST, false)) // We verify ourselves, see DohUpstream::ssl_callback
             || CURLE_OK != (e = curl_easy_setopt(curl, CURLOPT_SSL_ENABLE_ALPN, true))
@@ -373,6 +373,19 @@ void DohUpstream::QueryHandle::cleanup_request() {
         CURLMcode perr [[maybe_unused]] =
                 curl_multi_remove_handle(this->pool->handle.get(), this->curl_handle.get());
         assert(perr == CURLM_OK);
+
+        // FIXME-66691: CURL has an issue where after `curl_multi_remove_handle`
+        // ngtcp2/nghttp3 will retain a pinter to Curl_easy, which becomes dangling after `curl_easy_cleanup`.
+        // If we got here without the HTTP exchange completing normally, then BOOM!
+        // Instead, let's just leak a little memory until the upstream is destroyed.
+        // (CURL should not "send" another message for already completed handle).
+        // This works in conjunction with the CURL patch with nullchecks
+        // (`curl_multi_remove_handle` sets some pointers in Curl_easy which are used in nghttp3 callbacks to NULL).
+        if (this->upstream->m_curlopt_http_ver == CURL_HTTP_VERSION_3 && !this->flags.test(QHF_RESPONDED)) {
+            this->upstream->m_curl_easy_graveyard.emplace_back(std::move(this->curl_handle));
+            return;
+        }
+
         this->curl_handle.reset();
     }
 }
@@ -416,41 +429,37 @@ static Result<std::string_view, Upstream::InitError> get_host_name(std::string_v
 }
 
 int DohUpstream::verify_callback(X509_STORE_CTX *ctx, void *arg) {
-    DohUpstream::QueryHandle *handle = (DohUpstream::QueryHandle *) arg;
-    DohUpstream *upstream = handle->upstream;
+    DohUpstream *upstream = (DohUpstream *) arg;
 
     SSL *ssl = (SSL *) X509_STORE_CTX_get_ex_data(ctx, SSL_get_ex_data_X509_STORE_CTX_idx());
     const char *sni = SSL_get_servername(ssl, TLSEXT_NAMETYPE_host_name);
-    tracelog_id(handle, "{}(): SNI={}", __func__, (sni == nullptr) ? "null" : sni);
+    tracelog(upstream->m_log, "{}(): SNI={}", __func__, (sni == nullptr) ? "null" : sni);
 
     auto host = get_host_name(upstream->m_options.address);
 
     if (const OutboundProxySettings *proxy_settings = upstream->m_config.socket_factory->get_outbound_proxy_settings();
             proxy_settings != nullptr && proxy_settings->protocol == OutboundProxyProtocol::HTTPS_CONNECT
             && proxy_settings->trust_any_certificate && !host.has_error() && (sni == nullptr || sni != host.value())) {
-        tracelog_id(handle, "Trusting any proxy certificate as specified in settings");
+        tracelog(upstream->m_log, "Trusting any proxy certificate as specified in settings");
         return 1;
     }
 
     const CertificateVerifier *verifier = upstream->m_config.socket_factory->get_certificate_verifier();
     if (verifier == nullptr) {
-        std::string err = "Cannot verify certificate due to verifier is not set";
-        dbglog_id(handle, "{}", err);
-        handle->error = make_error(DnsError::AE_HANDSHAKE_ERROR, err);
+        dbglog(upstream->m_log, "Cannot verify certificate due to verifier is not set");
         return 0;
     }
 
     if (auto err = verifier->verify(ctx, host.value())) {
-        dbglog_id(handle, "Failed to verify certificate: {}", *err);
-        handle->error = make_error(DnsError::AE_HANDSHAKE_ERROR, *err);
+        dbglog(upstream->m_log, "Failed to verify certificate: {}", *err);
         return 0;
     }
 
-    tracelog_id(handle, "Verified successfully");
+    tracelog(upstream->m_log, "Verified successfully");
     return 1;
 }
 
-CURLcode DohUpstream::ssl_callback(CURL *curl, void *sslctx, void *arg) {
+CURLcode DohUpstream::ssl_callback(CURL *, void *sslctx, void *arg) {
     SSL_CTX *ctx = (SSL_CTX *) sslctx;
     SSL_CTX_set_verify(ctx, SSL_VERIFY_PEER, nullptr);
     SSL_CTX_set_cert_verify_callback(ctx, verify_callback, arg);
@@ -635,6 +644,8 @@ void DohUpstream::read_messages() {
         if (message->data.result == CURLE_OK) {
             tracelog_id(handle, "Got response {}", (void *) message->easy_handle);
 
+            handle->flags.set(QueryHandle::QHF_RESPONDED);
+
             long response_code;
             curl_easy_getinfo(message->easy_handle, CURLINFO_RESPONSE_CODE, &response_code);
             if (response_code < 200 || response_code >= 300) {
@@ -664,10 +675,16 @@ void DohUpstream::read_messages() {
             }
 
             auto curl_err = make_error(message->data.result);
-            if (message->data.result == CURLE_OPERATION_TIMEDOUT) {
+            switch (message->data.result) {
+            case CURLE_PEER_FAILED_VERIFICATION:
+                handle->error = make_error(DnsError::AE_HANDSHAKE_ERROR, curl_err);
+                break;
+            case CURLE_OPERATION_TIMEDOUT:
                 handle->error = make_error(DnsError::AE_TIMED_OUT, curl_err);
-            } else {
+                break;
+            default:
                 handle->error = make_error(DnsError::AE_CURL_ERROR, curl_err);
+                break;
             }
         }
 
@@ -722,6 +739,10 @@ int DohUpstream::on_socket_update(
     static constexpr std::string_view WHAT_STR[] = {"none", "IN", "OUT", "INOUT", "REMOVE"};
     tracelog(pool->parent->m_log, "Socket callback: sock={} curl={} sockh={} what={}", socket, handle,
             (void *) socket_data, WHAT_STR[what]);
+    if (socket <= 0) {
+        // Newer CURL calls this on connection failure with socket == 0 for some reason.
+        return 0;
+    }
     if (what == CURL_POLL_REMOVE) {
         tracelog(pool->parent->m_log, "Removing socket");
         delete socket_data;
