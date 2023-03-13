@@ -491,6 +491,10 @@ static const UpstreamTestData test_upstreams_invalid_bootstrap_data[]{
                 {"1.2.3.4:79", "8.8.8.8:53"},
         },
         {
+                "quic://dns.adguard-dns.com",
+                {"1.1.1.1:555", "8.8.8.8:53"},
+        },
+        {
                 // Cloudflare DNS (DoH)
                 "sdns://"
                 "AgcAAAAAAAAABzEuMC4wLjGgENk8mGSlIfMGXMOlIlCcKvq7AVgcrZxtjon911-ep0cg63Ul-I8NlFj4GplQGb_"
@@ -517,6 +521,7 @@ static const std::initializer_list<std::string> invalid_bootstrap{"1.2.3.4:55"};
 static const UpstreamTestData test_upstreams_with_server_ip_data[]{
         {"tls://dns.adguard-dns.com", invalid_bootstrap, Ipv4Address{94, 140, 14, 14}},
         {"https://dns.adguard-dns.com/dns-query", invalid_bootstrap, Ipv4Address{94, 140, 14, 14}},
+        {"quic://dns.adguard-dns.com/dns-query", invalid_bootstrap, Ipv4Address{94, 140, 14, 14}},
         {// AdGuard DNS DOH with the IP address specified
                 "sdns://AgcAAAAAAAAADDk0LjE0MC4xNC4xNAATZG5zLmFkZ3VhcmQtZG5zLmNvbQovZG5zLXF1ZXJ5", invalid_bootstrap,
                 {}},

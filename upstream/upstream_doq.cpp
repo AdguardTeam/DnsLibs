@@ -242,17 +242,26 @@ Error<Upstream::InitError> DoqUpstream::init() {
     }
     m_port = ag::utils::to_integer<uint16_t>(split_result.value().second).value_or(DEFAULT_DOQ_PORT);
 
-    Bootstrapper::Params bootstrapper_params = {
-            .address_string = m_server_name,
-            .default_port = m_port,
-            .bootstrap = m_options.bootstrap,
-            .timeout = m_options.timeout,
-            .upstream_config = m_config,
-            .outbound_interface = m_options.outbound_interface,
-    };
-    m_bootstrapper = std::make_unique<Bootstrapper>(bootstrapper_params);
-    if (auto err = m_bootstrapper->init()) {
-        return make_error(InitError::AE_BOOTSTRAPPER_INIT_FAILED, err);
+    if (!std::holds_alternative<std::monostate>(m_options.resolved_server_ip)) {
+        m_server_addresses.emplace_back(SocketAddress(m_options.resolved_server_ip, DEFAULT_DOQ_PORT));
+    }
+
+    if (m_server_addresses.empty()) {
+        if (m_options.bootstrap.empty() && !SocketAddress(m_server_name, 0).valid()) {
+            return make_error(InitError::AE_EMPTY_BOOTSTRAP);
+        }
+        Bootstrapper::Params bootstrapper_params = {
+                .address_string = m_server_name,
+                .default_port = m_port,
+                .bootstrap = m_options.bootstrap,
+                .timeout = m_options.timeout,
+                .upstream_config = m_config,
+                .outbound_interface = m_options.outbound_interface,
+        };
+        m_bootstrapper = std::make_unique<Bootstrapper>(bootstrapper_params);
+        if (auto err = m_bootstrapper->init()) {
+            return make_error(InitError::AE_BOOTSTRAPPER_INIT_FAILED, err);
+        }
     }
 
     m_callbacks = ngtcp2_callbacks{

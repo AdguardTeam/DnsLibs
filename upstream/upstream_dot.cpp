@@ -104,29 +104,6 @@ public:
     Bootstrapper::ResolveResult m_result;
 };
 
-static std::optional<std::string> get_resolved_ip(const Logger &log, const IpAddress &addr) {
-    if (std::holds_alternative<std::monostate>(addr)) {
-        return std::nullopt;
-    }
-
-    SocketAddress parsed;
-    if (const Ipv4Address *ipv4 = std::get_if<Ipv4Address>(&addr); ipv4 != nullptr) {
-        parsed = SocketAddress({ipv4->data(), ipv4->size()}, DEFAULT_DOT_PORT);
-    } else if (const Ipv6Address *ipv6 = std::get_if<Ipv6Address>(&addr); ipv6 != nullptr) {
-        parsed = SocketAddress({ipv6->data(), ipv6->size()}, DEFAULT_DOT_PORT);
-    } else {
-        errlog(log, "Wrong resolved server ip address");
-        assert(0);
-        return std::nullopt;
-    }
-
-    if (parsed.valid()) {
-        return parsed.str();
-    }
-    warnlog(log, "Failed to parse resolved server ip address, upstream may not be able to resolve DNS server address");
-    return std::nullopt;
-}
-
 static std::string_view strip_dot_url(std::string_view url) {
     assert(utils::starts_with(url, DotUpstream::SCHEME));
     url.remove_prefix(DotUpstream::SCHEME.length());
@@ -142,14 +119,13 @@ static Result<std::string_view, Upstream::InitError> get_host_name(std::string_v
     return utils::trim(split_result.value().first);
 }
 
-static Result<BootstrapperPtr, Upstream::InitError> create_bootstrapper(const Logger &log, const UpstreamOptions &opts,
-                                            const UpstreamFactoryConfig &config) {
+static Result<BootstrapperPtr, Upstream::InitError> create_bootstrapper(
+        const UpstreamOptions &opts, const UpstreamFactoryConfig &config) {
     std::string_view address;
     int port = 0;
 
-    std::optional<std::string> resolved = get_resolved_ip(log, opts.resolved_server_ip);
-    if (resolved.has_value()) {
-        address = resolved.value();
+    if (auto resolved = SocketAddress(opts.resolved_server_ip, DEFAULT_DOT_PORT); resolved.valid()) {
+        address = resolved.str();
     } else {
         auto split_result = utils::split_host_port(strip_dot_url(opts.address));
         if (split_result.has_error()) {
@@ -190,7 +166,7 @@ Error<Upstream::InitError> DotUpstream::init() {
 
     m_pool = std::make_shared<ConnectionPool<DotConnection>>(config().loop, shared_from_this(), 10);
 
-    auto create_result = create_bootstrapper(m_log, this->m_options, this->m_config);
+    auto create_result = create_bootstrapper(this->m_options, this->m_config);
     if (create_result.has_error()) {
         return make_error(InitError::AE_BOOTSTRAPPER_INIT_FAILED, create_result.error());
     }

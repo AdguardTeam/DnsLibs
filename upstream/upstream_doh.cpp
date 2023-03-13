@@ -489,18 +489,7 @@ static Result<curl_slist_ptr, Upstream::InitError> create_resolved_hosts_list(st
     auto [host, port_str] = split_result.value();
     uint16_t port = ag::utils::to_integer<uint16_t>(port_str).value_or(DEFAULT_DOH_PORT);
 
-    std::string entry;
-    if (const auto *ipv4 = std::get_if<Uint8Array<4>>(&addr); ipv4 != nullptr) {
-        const auto &ip = *ipv4;
-        entry = AG_FMT("{}:{}:{}.{}.{}.{}", host, port, ip[0], ip[1], ip[2], ip[3]);
-    } else {
-        const auto &ip = std::get<Uint8Array<16>>(addr);
-        entry = AG_FMT("{}:{}:[{:02x}{:02x}:{:02x}{:02x}:{:02x}{:02x}:{:02x}{:02x}:{:02x}{:02x}:{:02x}{:02x}:{:02x}{:"
-                       "02x}:{:02x}{:02x}]",
-                host, port, ip[0], ip[1], ip[2], ip[3], ip[4], ip[5], ip[6], ip[7], ip[8], ip[9], ip[10], ip[11],
-                ip[12], ip[13], ip[14], ip[15]);
-    }
-
+    std::string entry = AG_FMT("{}:{}:{}", host, port, SocketAddress(addr, DEFAULT_DOH_PORT).host_str());
     return curl_slist_ptr(curl_slist_append(nullptr, entry.c_str()));
 }
 
