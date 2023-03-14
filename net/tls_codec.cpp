@@ -1,6 +1,9 @@
-#include "tls_codec.h"
 #include <cstring>
 #include <numeric>
+
+#include "common/socket_address.h"
+
+#include "tls_codec.h"
 
 namespace ag::dns {
 
@@ -35,8 +38,9 @@ Error<TlsCodec::TlsError> TlsCodec::connect(const std::string &sni, std::vector<
     TlsSessionCache::prepare_ssl_ctx(ctx.get());
 
     m_ssl.reset(SSL_new(ctx.get()));
+    m_server_name = sni;
 
-    if (!sni.empty()) {
+    if (!m_server_name.empty() && !SocketAddress(m_server_name, 0).valid()) {
         SSL_set_tlsext_host_name(m_ssl.get(), sni.c_str());
     }
 
@@ -156,7 +160,6 @@ TlsCodec::WriteDecryptedResult TlsCodec::write_decrypted(Uint8View buffer) {
 }
 
 int TlsCodec::ssl_verify_callback(X509_STORE_CTX *ctx, void *arg) {
-    SSL *ssl = (SSL *) X509_STORE_CTX_get_ex_data(ctx, SSL_get_ex_data_X509_STORE_CTX_idx());
     auto *self = (TlsCodec *) arg;
 
     if (self->m_cert_verifier == nullptr) {
@@ -164,7 +167,7 @@ int TlsCodec::ssl_verify_callback(X509_STORE_CTX *ctx, void *arg) {
         return 0;
     }
 
-    if (auto err = self->m_cert_verifier->verify(ctx, SSL_get_servername(ssl, SSL_get_servername_type(ssl)))) {
+    if (auto err = self->m_cert_verifier->verify(ctx, self->m_server_name)) {
         dbglog(self->m_log, "Failed to verify certificate: {}", *err);
         return 0;
     }

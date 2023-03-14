@@ -794,7 +794,9 @@ int DoqUpstream::init_ssl() {
         return 1;
     }
     SSL_set_app_data(m_ssl.get(), this);
-    SSL_set_tlsext_host_name(m_ssl.get(), m_server_name.c_str());
+    if (!m_server_name.empty() && !SocketAddress(m_server_name, 0).valid()) {
+        SSL_set_tlsext_host_name(m_ssl.get(), m_server_name.c_str());
+    }
     SSL_set_connect_state(m_ssl.get());
     SSL_set_quic_use_legacy_codepoint(m_ssl.get(), m_quic_version != NGTCP2_PROTO_VER_V1);
 
@@ -1187,7 +1189,7 @@ int DoqUpstream::ssl_verify_callback(X509_STORE_CTX *ctx, void * /*arg*/) {
         return 0;
     }
 
-    if (auto err = verifier->verify(ctx, SSL_get_servername(ssl, SSL_get_servername_type(ssl)))) {
+    if (auto err = verifier->verify(ctx, doq->m_server_name)) {
         dbglog(doq->m_log, "Failed to verify certificate: {}", *err);
         return 0;
     }
