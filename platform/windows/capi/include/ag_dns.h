@@ -58,6 +58,12 @@ typedef struct {
 
     /** Index of the network interface to route traffic through, 0 is default */
     uint32_t outbound_interface_index;
+
+    /**
+     * (Optional) List of upstreams base64 encoded SPKI fingerprints to verify. If at least one of them is matched in the
+     * certificate chain, the verification will be successful
+     */
+    ARRAY_OF(const char *) fingerprints;
 } ag_upstream_options;
 
 typedef struct {

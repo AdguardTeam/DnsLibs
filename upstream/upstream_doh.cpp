@@ -450,7 +450,7 @@ int DohUpstream::verify_callback(X509_STORE_CTX *ctx, void *arg) {
         return 0;
     }
 
-    if (auto err = verifier->verify(ctx, host.value())) {
+    if (auto err = verifier->verify(ctx, host.value(), upstream->m_fingerprints)) {
         dbglog(upstream->m_log, "Failed to verify certificate: {}", *err);
         return 0;
     }
@@ -493,9 +493,11 @@ static Result<curl_slist_ptr, Upstream::InitError> create_resolved_hosts_list(st
     return curl_slist_ptr(curl_slist_append(nullptr, entry.c_str()));
 }
 
-DohUpstream::DohUpstream(const UpstreamOptions &opts, const UpstreamFactoryConfig &config)
+DohUpstream::DohUpstream(const UpstreamOptions &opts, const UpstreamFactoryConfig &config,
+        std::vector<CertFingerprint> fingerprints)
         : Upstream(opts, config)
-        , m_log("DOH upstream") {
+        , m_log("DOH upstream")
+        , m_fingerprints(std::move(fingerprints)) {
     static const CurlInitializer ensure_initialized;
 }
 

@@ -47,5 +47,11 @@ namespace Adguard.Dns.Api.DnsProxyServer.Configs
         /// Index of the network interface to route traffic through, 0 is default
         /// </summary>
         public uint OutboundInterfaceIndex { get; set; }
+        
+        /// <summary>
+        /// (Optional) List of upstreams base64 encoded SPKI fingerprints to verify. If at least one of them is matched in the
+        /// certificate chain, the verification will be successful
+        /// </summary>
+        public List<string> Fingerprints { get; set; }
     }
 }

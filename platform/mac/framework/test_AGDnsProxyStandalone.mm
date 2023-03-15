@@ -5,18 +5,19 @@ int main() {
     [AGLogger setLevel:AGLL_TRACE];
     auto *listener = [[AGListenerSettings alloc] init];
     listener.address = @"::";
-    listener.port = 53;
+    listener.port = 5321;
     listener.proto = AGLP_UDP;
     listener.persistent = NO;
     listener.idleTimeoutMs = 10;
 
     auto *upstream = [[AGDnsUpstream alloc] init];
-    upstream.address = @"tls://94.140.14.14";
+    upstream.address = @"tls://dns.adguard-dns.com";
     upstream.bootstrap = @[@"1.1.1.1"];
     upstream.timeoutMs = 1000;
     upstream.serverIp = nil;
     upstream.id = 42;
     upstream.outboundInterfaceName = nil;
+    upstream.fingerprints = @[@"Eg+H87YhlVD9X1phBlRsmfDwqWnPcccfgIQKVfaEPyY="]; // dns.adguard-dns.com public key fingerprint
 
     auto *fallback = [[AGDnsUpstream alloc] init];
     fallback.address = @"1.1.1.1";

@@ -19,7 +19,7 @@ SecuredSocket::SecuredSocket(SocketFactory::SocketPtr underlying_socket, const C
                 {})
         , m_state(SS_IDLE)
         , m_underlying_socket(std::move(underlying_socket))
-        , m_codec(cert_verifier, secure_parameters.session_cache)
+        , m_codec(cert_verifier, secure_parameters.session_cache, std::move(secure_parameters.fingerprints))
         , m_sni(std::move(secure_parameters.server_name))
         , m_alpn(std::move(secure_parameters.alpn))
         , m_log(__func__) {

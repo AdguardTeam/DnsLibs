@@ -38,7 +38,6 @@ private:
     static void on_connected(void *arg);
     static void on_read(void *arg, Uint8View data);
     static void on_close(void *arg, Error<SocketError> error);
-    static int ssl_verify_callback(X509_STORE_CTX *ctx, void *arg);
 
     void handle_http_response_chunk(Connection *conn, std::string_view chunk);
 

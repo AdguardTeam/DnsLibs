@@ -35,7 +35,8 @@ namespace Adguard.Dns.Tests.TestApi
             {
                 Address = "8.8.8.8:53",
                 Id = 1,
-                Bootstrap = new List<string>()
+                Bootstrap = new List<string>(),
+                Fingerprints = new List<string>()
             });
             IDnsProxyServerCallbackConfiguration callback = new DnsProxyServerCallbackConfiguration();
             Assert.DoesNotThrow(() =>

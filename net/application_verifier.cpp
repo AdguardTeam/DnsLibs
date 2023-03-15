@@ -18,7 +18,8 @@ std::optional<Uint8Vector> ApplicationVerifier::serialize_certificate(X509 *cert
     return out;
 }
 
-std::optional<std::string> ApplicationVerifier::verify(X509_STORE_CTX *ctx, std::string_view host) const {
+std::optional<std::string> ApplicationVerifier::verify(
+        X509_STORE_CTX *ctx, std::string_view host, std::span<CertFingerprint> fingerprints) const {
     if (auto err = verify_host_name(X509_STORE_CTX_get0_cert(ctx), host)) {
         return err;
     }
@@ -44,6 +45,9 @@ std::optional<std::string> ApplicationVerifier::verify(X509_STORE_CTX *ctx, std:
         }
     }
 
+    if (auto err = verify_fingerprints(chain, fingerprints)) {
+        return err;
+    }
     return m_on_certificate_verification(std::move(event));
 }
 

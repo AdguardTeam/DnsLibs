@@ -102,7 +102,7 @@ DefaultVerifier &DefaultVerifier::operator=(DefaultVerifier &&other) noexcept {
 }
 
 std::optional<std::string> DefaultVerifier::verify(
-        X509_STORE_CTX *ctx_template, std::string_view host_name) const {
+        X509_STORE_CTX *ctx_template, std::string_view host_name, std::span<CertFingerprint> fingerprints) const {
     if (m_ca_store == nullptr) {
         return "CA store is not set";
     }
@@ -126,6 +126,9 @@ std::optional<std::string> DefaultVerifier::verify(
         return X509_verify_cert_error_string(X509_STORE_CTX_get_error(ctx));
     }
 
+    if (auto err = verify_fingerprints(X509_STORE_CTX_get0_untrusted(ctx), fingerprints)) {
+        return err;
+    }
     return std::nullopt;
 }
 

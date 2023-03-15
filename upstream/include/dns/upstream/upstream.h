@@ -75,6 +75,12 @@ struct UpstreamOptions {
     /** (Optional) name or index of the network interface to route traffic through */
     IfIdVariant outbound_interface;
 
+    /**
+     * (Optional) List of upstreams base64 encoded SPKI fingerprints to verify. If at least one of them is matched in the
+     * certificate chain, the verification will be successful
+     */
+    std::vector<std::string> fingerprints;
+
     /** If set to true, an outbound proxy won't be used for the upstream's network connections */
     bool ignore_proxy_settings; // @todo: expose this flag in the public API if it's needed
 };
@@ -203,6 +209,7 @@ public:
     enum class UpstreamCreateError {
         AE_INVALID_URL,
         AE_INVALID_STAMP,
+        AE_INVALID_FINGERPRINT,
         AE_INIT_FAILED,
     };
     using CreateResult = Result<UpstreamPtr, UpstreamCreateError>;
@@ -232,6 +239,7 @@ struct ErrorCodeToString<dns::UpstreamFactory::UpstreamCreateError> {
         switch (e) {
         case decltype(e)::AE_INVALID_URL: return "Invalid URL";
         case decltype(e)::AE_INVALID_STAMP: return "Invalid DNS stamp";
+        case decltype(e)::AE_INVALID_FINGERPRINT: return "Passed fingerprint is not valid";
         case decltype(e)::AE_INIT_FAILED: return "Error initializing upstream";
         }
     }

@@ -134,6 +134,12 @@ typedef void (^logCallback)(AGLogLevel level, const char *msg, int length);
  */
 @property(nonatomic) NSString *outboundInterfaceName;
 
+/**
+ * (Optional) List of upstreams base64 encoded SPKI fingerprints to verify. If at least one of them is matched in the
+ * certificate chain, the verification will be successful
+ */
+@property(nonatomic) NSArray<NSString *> *fingerprints;
+
 - (instancetype)initWithCoder:(NSCoder *)coder;
 
 - (void)encodeWithCoder:(NSCoder *)coder;

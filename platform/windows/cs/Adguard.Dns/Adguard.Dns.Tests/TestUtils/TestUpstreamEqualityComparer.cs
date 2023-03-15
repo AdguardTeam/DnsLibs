@@ -10,6 +10,7 @@ namespace Adguard.Dns.Tests.TestUtils
         {
             return Equals(x.Address, y.Address) &&
                    CollectionUtils.CollectionsEquals(x.Bootstrap, y.Bootstrap) &&
+                   CollectionUtils.CollectionsEquals(x.Fingerprints, y.Fingerprints) &&
                    x.TimeoutMs == y.TimeoutMs &&
                    Equals(x.ResolvedIpAddress, y.ResolvedIpAddress) &&
                    x.Id == y.Id &&
@@ -22,6 +23,7 @@ namespace Adguard.Dns.Tests.TestUtils
             {
                 int hashCode = (obj.Address != null ? obj.Address.GetHashCode() : 0);
                 hashCode = (hashCode * 397) ^ (obj.Bootstrap != null ? obj.Bootstrap.Count : 0);
+                hashCode = (hashCode * 397) ^ (obj.Fingerprints != null ? obj.Fingerprints.Count : 0);
                 hashCode = (hashCode * 397) ^ obj.TimeoutMs.GetHashCode();
                 hashCode = (hashCode * 397) ^ (obj.ResolvedIpAddress != null ? obj.ResolvedIpAddress.GetHashCode() : 0);
                 hashCode = (hashCode * 397) ^ obj.Id.GetHashCode();

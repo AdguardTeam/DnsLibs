@@ -39,8 +39,10 @@ public:
     /**
      * @param opts upstream settings
      * @param config factory configuration
+     * @param fingerprints list of SPKI fingerprints to verify
      */
-    DohUpstream(const UpstreamOptions &opts, const UpstreamFactoryConfig &config);
+    DohUpstream(const UpstreamOptions &opts, const UpstreamFactoryConfig &config,
+            std::vector<CertFingerprint> fingerprints);
     ~DohUpstream() override;
 
     struct QueryHandle;
@@ -115,6 +117,7 @@ private:
 
     std::unique_ptr<CheckProxyState> m_check_proxy;
     std::optional<uint32_t> m_reset_bypassed_proxy_connections_subscribe_id;
+    std::vector<CertFingerprint> m_fingerprints;
 
     std::string m_curlopt_url;
     int m_curlopt_http_ver = CURL_HTTP_VERSION_NONE;

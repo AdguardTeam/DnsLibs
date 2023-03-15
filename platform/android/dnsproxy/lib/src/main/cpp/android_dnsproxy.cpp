@@ -108,6 +108,7 @@ UpstreamOptions AndroidDnsProxy::marshal_upstream(JNIEnv *env, jobject java_upst
     auto server_ip_field = env->GetFieldID(clazz, "serverIp", "[B");
     auto id_field = env->GetFieldID(clazz, "id", "I");
     auto if_field = env->GetFieldID(clazz, "outboundInterfaceName", "Ljava/lang/String;");
+    auto fp_field = env->GetFieldID(clazz, "fingerprints", "Ljava/util/List;");
 
     UpstreamOptions upstream{};
     upstream.id = env->GetIntField(java_upstream_settings, id_field);
@@ -149,6 +150,14 @@ UpstreamOptions AndroidDnsProxy::marshal_upstream(JNIEnv *env, jobject java_upst
         upstream.outbound_interface = m_utils.marshal_string(env, if_name.get());
     }
 
+    if (LocalRef fingerprint{env, env->GetObjectField(java_upstream_settings, fp_field)}) {
+        m_utils.iterate(env, fingerprint.get(), [&](LocalRef<jobject> &&java_str) {
+            m_utils.visit_string(env, java_str.get(), [&](const char *str, jsize len) {
+                upstream.fingerprints.emplace_back(str, len); // Copy
+            });
+        });
+    }
+
     return upstream;
 }
 
@@ -161,6 +170,7 @@ LocalRef<jobject> AndroidDnsProxy::marshal_upstream(JNIEnv *env, const UpstreamO
     auto server_ip_field = env->GetFieldID(clazz, "serverIp", "[B");
     auto id_field = env->GetFieldID(clazz, "id", "I");
     auto if_field = env->GetFieldID(clazz, "outboundInterfaceName", "Ljava/lang/String;");
+    auto fp_field = env->GetFieldID(clazz, "fingerprints", "Ljava/util/List;");
 
     auto java_upstream = env->NewObject(clazz, ctor);
 
@@ -186,6 +196,12 @@ LocalRef<jobject> AndroidDnsProxy::marshal_upstream(JNIEnv *env, const UpstreamO
 
     if (const std::string *name = std::get_if<std::string>(&settings.outbound_interface)) {
         env->SetObjectField(java_upstream, if_field, m_utils.marshal_string(env, *name).get());
+    }
+
+    if (LocalRef fingerprint{env, env->GetObjectField(java_upstream, fp_field)}) {
+        for (auto &fp: settings.fingerprints) {
+            m_utils.collection_add(env, fingerprint.get(), m_utils.marshal_string(env, fp).get());
+        }
     }
 
     return LocalRef(env, java_upstream);

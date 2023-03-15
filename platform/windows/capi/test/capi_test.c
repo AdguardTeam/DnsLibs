@@ -155,6 +155,78 @@ static void test_dnsstamp() {
     ASSERT(0 == strcmp(ag_dns_stamp_to_str(stamp), "sdns://AQQAAAAAAAAADDk0LjE0MC4xNC4xNAjK_rq-3q2-7xcyLmRuc2NyeXB0LWNlcnQuYWRndWFyZA"));
 }
 
+static void test_cert_fingerprint() {
+    const char *version = ag_get_capi_version();
+    ASSERT(version);
+    ASSERT(strlen(version));
+
+    ag_set_log_callback(on_log, (void *) (uintptr_t) 42);
+
+    ag_dnsproxy_settings *settings = ag_dnsproxy_settings_get_default();
+
+    ASSERT(settings->fallback_domains.size > 0);
+    ASSERT(settings->fallback_domains.data);
+
+    ASSERT(settings->upstreams.data == NULL);
+    ASSERT(settings->upstreams.size == 0);
+
+    const char *fingerprint = "Eg+H87YhlVD9X1phBlRsmfDwqWnPcccfgIQKVfaEPyY=";
+    const char *bootstrap = "1.1.1.1";
+    ag_upstream_options upstream = {
+            .address = "tls://dns.adguard-dns.com",
+            .id = 42,
+    };
+    upstream.bootstrap.data = &bootstrap;
+    upstream.bootstrap.size = 1;
+    upstream.fingerprints.data = &fingerprint;
+    upstream.fingerprints.size = 1;
+
+    settings->upstreams.data = &upstream;
+    settings->upstreams.size = 1;
+
+    ag_dnsproxy_events events = {0};
+    events.on_request_processed = on_req;
+    events.on_certificate_verification = on_cert;
+
+    ag_dnsproxy_init_result result;
+    const char *message = NULL;
+    ag_dnsproxy *proxy = ag_dnsproxy_init(settings, &events, &result, &message);
+    ASSERT(proxy);
+    ASSERT(result == AGDPIR_OK);
+    ASSERT(message == NULL);
+
+    ag_dnsproxy_settings *actual_settings = ag_dnsproxy_get_settings(proxy);
+    ASSERT(actual_settings);
+    ASSERT(actual_settings->upstreams.data[0].id == settings->upstreams.data[0].id);
+    ag_dnsproxy_settings_free(actual_settings);
+
+    memset(&settings->upstreams, 0, sizeof(settings->upstreams));
+    ag_dnsproxy_settings_free(settings);
+
+    ldns_pkt *query = ldns_pkt_query_new(ldns_dname_new_frm_str("example.org"),
+                                         LDNS_RR_TYPE_A, LDNS_RR_CLASS_IN, LDNS_RD);
+    ag_buffer msg = {0};
+    size_t out_size;
+    ldns_pkt2wire(&msg.data, query, &out_size);
+    msg.size = out_size;
+
+    ag_buffer res = ag_dnsproxy_handle_message(proxy, msg);
+    ASSERT(on_req_called);
+    ASSERT(on_cert_called);
+
+    ldns_pkt *response = NULL;
+    ASSERT(LDNS_STATUS_OK == ldns_wire2pkt(&response, res.data, res.size));
+    ASSERT(LDNS_RCODE_NOERROR == ldns_pkt_get_rcode(response));
+    ASSERT(ldns_pkt_ancount(response) > 0);
+
+    ag_dnsproxy_deinit(proxy);
+
+    ldns_pkt_free(query);
+    ldns_pkt_free(response);
+    ag_buffer_free(res);
+    LDNS_FREE(msg.data);
+}
+
 static void test_utils() {
     // test_upstream
     ag_upstream_options upstream = {0};
@@ -200,6 +272,7 @@ int main() {
 
     test_proxy();
     test_utils();
+    test_cert_fingerprint();
     test_dnsstamp();
     test_filtering_log_action();
 

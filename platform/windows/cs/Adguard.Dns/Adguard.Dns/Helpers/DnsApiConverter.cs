@@ -243,6 +243,11 @@ namespace Adguard.Dns.Helpers
                 MarshalUtils.StringToPtr,
                 allocatedPointers);
 
+            MarshalUtils.ag_list fingerprintsC = MarshalUtils.ListToAgList(
+                upstreamOptions.Fingerprints,
+                MarshalUtils.StringToPtr,
+                allocatedPointers);
+
             byte[] addressBytes = null;
             if (upstreamOptions.ResolvedIpAddress!= null)
             {
@@ -254,7 +259,8 @@ namespace Adguard.Dns.Helpers
             AGDnsApi.ag_upstream_options upstreamOptionsC = new AGDnsApi.ag_upstream_options
             {
                 bootstrap = bootstrapC,
-                resolved_ip_address = addressC
+                resolved_ip_address = addressC,
+                fingerprints = fingerprintsC
             };
 
             MarshalUtils.CopyPropertiesToFields(upstreamOptions, ref upstreamOptionsC);
@@ -434,11 +440,16 @@ namespace Adguard.Dns.Helpers
             List<string> bootstrap = MarshalUtils.AgListToList<IntPtr, string>(
                 upstreamOptionsC.bootstrap,
                 MarshalUtils.PtrToString);
+            
+            List<string> fingerprints = MarshalUtils.AgListToList<IntPtr, string>(
+                upstreamOptionsC.fingerprints,
+                MarshalUtils.PtrToString);
 
             IPAddress serverAddress = CreateIpAddress(upstreamOptionsC.resolved_ip_address);
             UpstreamOptions upstreamOptions = new UpstreamOptions
             {
                 Bootstrap = bootstrap,
+                Fingerprints = fingerprints,
                 ResolvedIpAddress = serverAddress
             };
 

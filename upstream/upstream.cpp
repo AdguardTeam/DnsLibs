@@ -4,6 +4,7 @@
 
 #include <magic_enum.hpp>
 
+#include "common/base64.h"
 #include "common/logger.h"
 #include "common/net_utils.h"
 #include "common/route_resolver.h"
@@ -67,35 +68,52 @@ static Scheme get_address_scheme(std::string_view address) {
     return Scheme::UNDEFINED;
 }
 
+static Result<std::vector<CertFingerprint>, UpstreamFactory::UpstreamCreateError> parse_fingerprints(
+        const UpstreamOptions &opts) {
+    std::vector<CertFingerprint> result;
+    result.reserve(opts.fingerprints.size());
+    for (auto &fp : opts.fingerprints) {
+        auto fingerprint_decoded = decode_base64(fp, false);
+        if (fingerprint_decoded.has_value()) {
+            SpkiSha256Digest &spki = result.emplace_back().emplace<SpkiSha256Digest>();
+            std::copy_n(fingerprint_decoded.value().begin(), fingerprint_decoded.value().size(), spki.data.begin());
+        } else {
+            return make_error(UpstreamFactory::UpstreamCreateError::AE_INVALID_FINGERPRINT,
+                    AG_FMT("Invalid fingerprint: {}", fp));
+        }
+    }
+    return result;
+}
+
 using CreateResult = UpstreamFactory::CreateResult;
 
 static CreateResult create_upstream_tls(
-        const UpstreamOptions &opts, const UpstreamFactoryConfig &config) {
-    return CreateResult{std::make_unique<DotUpstream>(opts, config)};
+        const UpstreamOptions &opts, const UpstreamFactoryConfig &config, std::vector<CertFingerprint> fingerprints) {
+    return CreateResult{std::make_unique<DotUpstream>(opts, config, std::move(fingerprints))};
 }
 
 static CreateResult create_upstream_doq(
-        const UpstreamOptions &opts, const UpstreamFactoryConfig &config) {
-    return CreateResult{std::make_unique<DoqUpstream>(opts, config)};
+        const UpstreamOptions &opts, const UpstreamFactoryConfig &config, std::vector<CertFingerprint> fingerprints) {
+    return CreateResult{std::make_unique<DoqUpstream>(opts, config, std::move(fingerprints))};
 }
 
 static UpstreamFactory::CreateResult create_upstream_https(
-        const UpstreamOptions &opts, const UpstreamFactoryConfig &config) {
-    return CreateResult{std::make_unique<DohUpstream>(opts, config)};
+        const UpstreamOptions &opts, const UpstreamFactoryConfig &config, std::vector<CertFingerprint> fingerprints) {
+    return CreateResult{std::make_unique<DohUpstream>(opts, config, std::move(fingerprints))};
 }
 
 static CreateResult create_upstream_plain(
-        const UpstreamOptions &opts, const UpstreamFactoryConfig &config) {
+        const UpstreamOptions &opts, const UpstreamFactoryConfig &config, std::vector<CertFingerprint>) {
     return CreateResult{std::make_unique<PlainUpstream>(opts, config)};
 }
 
-static CreateResult create_upstream_dnscrypt(
-        ServerStamp &&stamp, const UpstreamOptions &opts, const UpstreamFactoryConfig &config) {
+static CreateResult create_upstream_dnscrypt(ServerStamp &&stamp, const UpstreamOptions &opts,
+        const UpstreamFactoryConfig &config, std::vector<CertFingerprint>) {
     return CreateResult{std::make_unique<DnscryptUpstream>(std::move(stamp), opts, config)};
 }
 
-static CreateResult create_upstream_sdns(
-        const UpstreamOptions &local_opts, const UpstreamFactoryConfig &config) {
+static CreateResult create_upstream_sdns(const UpstreamOptions &local_opts, const UpstreamFactoryConfig &config,
+        std::vector<CertFingerprint> fingerprints) {
     auto stamp_res = ServerStamp::from_string(local_opts.address);
     if (stamp_res.has_error()) {
         return CreateResult{make_error(UpstreamFactory::UpstreamCreateError::AE_INVALID_STAMP, stamp_res.error())};
@@ -115,21 +133,26 @@ static CreateResult create_upstream_sdns(
         }
     }
 
+    for (auto &hash : stamp.hashes) {
+        CertSha256Digest &cert_digest = fingerprints.emplace_back().emplace<CertSha256Digest>();
+        std::copy_n(hash.begin(), SHA256_DIGEST_LENGTH, cert_digest.data.begin());
+    }
+
     switch (stamp.proto) {
     case StampProtoType::DNSCRYPT:
-        return create_upstream_dnscrypt(std::move(stamp), opts, config);
+        return create_upstream_dnscrypt(std::move(stamp), opts, config, std::move(fingerprints));
     case StampProtoType::PLAIN:
         opts.address = stamp.server_addr_str;
-        return create_upstream_plain(opts, config);
+        return create_upstream_plain(opts, config, std::move(fingerprints));
     case StampProtoType::DOH:
         opts.address = AG_FMT("{}{}{}{}", DohUpstream::SCHEME_HTTPS, stamp.provider_name, port, stamp.path);
-        return create_upstream_https(opts, config);
+        return create_upstream_https(opts, config, std::move(fingerprints));
     case StampProtoType::TLS:
         opts.address = AG_FMT("{}{}{}", DotUpstream::SCHEME, stamp.provider_name, port);
-        return create_upstream_tls(opts, config);
+        return create_upstream_tls(opts, config, std::move(fingerprints));
     case StampProtoType::DOQ:
         opts.address = AG_FMT("{}{}{}", DoqUpstream::SCHEME, stamp.provider_name, port);
-        return create_upstream_doq(opts, config);
+        return create_upstream_doq(opts, config, std::move(fingerprints));
     }
     assert(false);
     return make_error(
@@ -137,7 +160,8 @@ static CreateResult create_upstream_sdns(
 }
 
 UpstreamFactory::CreateResult UpstreamFactory::Impl::create_upstream(const UpstreamOptions &opts) const {
-    using CreateFunction = UpstreamFactory::CreateResult (*)(const UpstreamOptions &, const UpstreamFactoryConfig &);
+    using CreateFunction = UpstreamFactory::CreateResult (*)(
+            const UpstreamOptions &, const UpstreamFactoryConfig &, std::vector<CertFingerprint>);
     static constexpr CreateFunction create_functions[]{
             &create_upstream_sdns,
             &create_upstream_plain,
@@ -151,7 +175,11 @@ UpstreamFactory::CreateResult UpstreamFactory::Impl::create_upstream(const Upstr
     static_assert(std::size(create_functions) == magic_enum::enum_count<Scheme>(),
             "create_functions should contains all create functions for schemes defined in enum");
     auto index = (size_t) get_address_scheme(opts.address);
-    return create_functions[index](opts, this->config);
+    auto fingerprints = parse_fingerprints(opts);
+    if (fingerprints.has_error()) {
+        return fingerprints.error();
+    }
+    return create_functions[index](opts, this->config, std::move(fingerprints.value()));
 }
 
 UpstreamFactory::UpstreamFactory(UpstreamFactoryConfig cfg)
@@ -164,7 +192,7 @@ UpstreamFactory::CreateResult UpstreamFactory::create_upstream(const UpstreamOpt
     bool have_scheme = (opts.address.find("://") != std::string_view::npos);
     CreateResult result = have_scheme
             ? m_factory->create_upstream(opts)
-            : create_upstream_plain(opts, m_factory->config);
+            : create_upstream_plain(opts, m_factory->config, std::vector<CertFingerprint>());
 
     if (result.has_value()) {
         auto init_err = result.value()->init();

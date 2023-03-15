@@ -98,6 +98,8 @@ public:
         std::string server_name;
         /** Application layer protocols */
         std::vector<std::string> alpn;
+        /** Fingerprints */
+        std::vector<CertFingerprint> fingerprints;
     };
 
     explicit SocketFactory(Parameters parameters);

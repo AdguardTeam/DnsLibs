@@ -73,7 +73,8 @@ std::unique_ptr<DoqUpstream::SocketContext> DoqUpstream::ConnectionState::extrac
     return out;
 }
 
-DoqUpstream::DoqUpstream(const UpstreamOptions &opts, const UpstreamFactoryConfig &config)
+DoqUpstream::DoqUpstream(const UpstreamOptions &opts, const UpstreamFactoryConfig &config,
+        std::vector<CertFingerprint> fingerprints)
         : Upstream(opts, config)
         , m_max_pktlen{MAX_PKTLEN_IPV6}
         , m_quic_version{NGTCP2_PROTO_VER_V1}
@@ -83,7 +84,8 @@ DoqUpstream::DoqUpstream(const UpstreamOptions &opts, const UpstreamFactoryConfi
         , m_retransmit_timer(Uv<uv_timer_t>::create_with_parent(this))
         , m_static_secret{0}
         , m_tls_session_cache(opts.address)
-        , m_shutdown_guard{std::make_shared<bool>(true)} {
+        , m_shutdown_guard{std::make_shared<bool>(true)}
+        , m_fingerprints(std::move(fingerprints)) {
     uv_timer_init(config.loop.handle(), m_req_idle_timer->raw());
     uv_timer_init(config.loop.handle(), m_handshake_timer->raw());
     uv_timer_init(config.loop.handle(), m_retransmit_timer->raw());
@@ -1189,7 +1191,7 @@ int DoqUpstream::ssl_verify_callback(X509_STORE_CTX *ctx, void * /*arg*/) {
         return 0;
     }
 
-    if (auto err = verifier->verify(ctx, doq->m_server_name)) {
+    if (auto err = verifier->verify(ctx, doq->m_server_name, doq->m_fingerprints)) {
         dbglog(doq->m_log, "Failed to verify certificate: {}", *err);
         return 0;
     }

@@ -1,5 +1,16 @@
 # Changelog
 
+* [Feature] Implement fingerprints verification for two types of fingerprints for encrypted DNS protocols.
+    1) SPKI fingerprint, set separately in the upstream options, it compared with the sha256 hash of the `SubjectPublicKeyInfo` certificate part. It is possible to transfer several such fingerprints, they will try to get matched with one of the certificates in the chain.
+    2) The fingerprint of the certificate in full, which is passed as one of the DNS Stamp fields. Compared with sha256 hashes of the entire certificate.
+    * [C API] See `ag_upstream_options.fingerprints`
+    * [Apple] See `AGDnsUpstream.fingerprints`
+    * [Android] See `UpstreamSettings.fingerprints`
+
+  How it is used:
+  Computes the Fingerprints (for the public keys/ for full certificate) found in the server’s certificate chain
+  If a computed fingerprint exactly matches one of the configured pins the chain is successfully verified.
+
 * [Feature] Changed the signature of `com.adguard.dnslibs.proxy.DnsProxy` constructor: now throws a
   `com.adguard.dnslibs.proxy.DnsProxyInitException` on failure, containing the same info as the native error.
 

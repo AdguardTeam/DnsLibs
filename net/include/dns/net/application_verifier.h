@@ -1,5 +1,8 @@
 #pragma once
 
+#include <optional>
+#include <span>
+
 #include "dns/net/certificate_verifier.h"
 
 namespace ag::dns {
@@ -20,7 +23,8 @@ public:
 
     static std::optional<Uint8Vector> serialize_certificate(X509 *cert);
 
-    std::optional<std::string> verify(X509_STORE_CTX *ctx, std::string_view host) const override;
+    std::optional<std::string> verify(
+            X509_STORE_CTX *ctx, std::string_view host, std::span<CertFingerprint> fingerprints) const override;
 
 private:
     OnCertificateVerificationFn m_on_certificate_verification;

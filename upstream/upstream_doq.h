@@ -41,8 +41,10 @@ public:
     /**
      * @param opts upstream settings
      * @param config factory configuration
+     * @param fingerprints list of SPKI fingerprints to verify
      */
-    DoqUpstream(const UpstreamOptions &opts, const UpstreamFactoryConfig &config);
+    DoqUpstream(const UpstreamOptions &opts, const UpstreamFactoryConfig &config,
+            std::vector<CertFingerprint> fingerprints);
     ~DoqUpstream() override;
 
 #if BORINGSSL_API_VERSION < 10
@@ -239,6 +241,7 @@ private:
     TlsSessionCache m_tls_session_cache;
     Error<DnsError> m_fatal_error;
     std::shared_ptr<bool> m_shutdown_guard;
+    std::vector<CertFingerprint> m_fingerprints;
 };
 
 } // ag

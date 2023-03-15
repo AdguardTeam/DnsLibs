@@ -59,8 +59,9 @@ public:
             m_stream = upstream->make_secured_socket(utils::TP_TCP,
                     SocketFactory::SecureSocketParameters{
                             .session_cache = &upstream->m_tls_session_cache,
-                            .server_name = m_result.server_name.empty() ? addr.host_str() : m_result.server_name,
+                            .server_name = upstream->m_server_name.empty() ? addr.host_str() : upstream->m_server_name,
                             .alpn = {DOT_ALPN},
+                            .fingerprints = upstream->m_fingerprints,
                     });
             timeout = upstream->options().timeout;
         } else {
@@ -121,11 +122,11 @@ static Result<std::string_view, Upstream::InitError> get_host_name(std::string_v
 
 static Result<BootstrapperPtr, Upstream::InitError> create_bootstrapper(
         const UpstreamOptions &opts, const UpstreamFactoryConfig &config) {
-    std::string_view address;
+    std::string address;
     int port = 0;
 
     if (auto resolved = SocketAddress(opts.resolved_server_ip, DEFAULT_DOT_PORT); resolved.valid()) {
-        address = resolved.str();
+        address = resolved.host_str();
     } else {
         auto split_result = utils::split_host_port(strip_dot_url(opts.address));
         if (split_result.has_error()) {
@@ -142,10 +143,12 @@ static Result<BootstrapperPtr, Upstream::InitError> create_bootstrapper(
             opts.bootstrap, opts.timeout, config, opts.outbound_interface});
 }
 
-DotUpstream::DotUpstream(const UpstreamOptions &opts, const UpstreamFactoryConfig &config)
+DotUpstream::DotUpstream(const UpstreamOptions &opts, const UpstreamFactoryConfig &config,
+        std::vector<CertFingerprint> fingerprints)
         : Upstream(opts, config)
         , m_log("DOT upstream")
         , m_tls_session_cache(opts.address)
+        , m_fingerprints(std::move(fingerprints))
 {
     if (auto host = get_host_name(opts.address); !host.has_error()) {
         m_server_name = host.value();

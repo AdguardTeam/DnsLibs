@@ -124,6 +124,9 @@ static ag_upstream_options marshal_upstream(const UpstreamOptions &upstream) {
         c_upstream.outbound_interface_index = *idx;
     }
 
+    c_upstream.fingerprints.size = upstream.fingerprints.size();
+    c_upstream.fingerprints.data = marshal_strs(upstream.fingerprints);
+
     return c_upstream;
 }
 
@@ -370,6 +373,9 @@ static UpstreamOptions marshal_upstream(const ag_upstream_options &c_upstream) {
     }
     if (c_upstream.outbound_interface_index != 0) {
         upstream.outbound_interface = c_upstream.outbound_interface_index;
+    }
+    for (size_t i = 0; i < c_upstream.fingerprints.size; ++i) {
+        upstream.fingerprints.emplace_back(c_upstream.fingerprints.data[i]);
     }
     return upstream;
 }

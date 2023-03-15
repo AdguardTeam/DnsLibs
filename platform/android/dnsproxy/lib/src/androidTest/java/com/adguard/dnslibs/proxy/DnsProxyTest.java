@@ -335,6 +335,54 @@ public class DnsProxyTest {
         assertTrue(DnsProxy.isValidRule("||example"));
     }
 
+    private void testCertificateVerificationWithFingerprint(String upstreamAddr, String certFingerprint, boolean isSuccessExpected) {
+        final UpstreamSettings us = new UpstreamSettings();
+        us.setAddress(upstreamAddr);
+        us.getBootstrap().add("8.8.8.8");
+        us.setTimeoutMs(10000);
+        us.getFingerprints().add(certFingerprint);
+        final DnsProxySettings settings = getDefaultSettings();
+        settings.getUpstreams().clear();
+        settings.getUpstreams().add(us);
+        settings.setIpv6Available(false); // DoT times out trying to reach dns.adguard.com over IPv6
+
+        final DnsProxyEvents events = new DnsProxyEvents() {
+            @Override
+            public void onRequestProcessed(DnsRequestProcessedEvent event) {
+                log.info("DNS request processed event: {}", event.toString());
+            }
+        };
+
+        try (final DnsProxy proxy = new DnsProxy(context, settings, events)) {
+            assertEquals(settings, proxy.getSettings());
+
+            final Message req = Message.newQuery(Record.newRecord(Name.fromString("google.com."), Type.A, DClass.IN));
+            final Message res = new Message(proxy.handleMessage(req.toWire()));
+
+            if (isSuccessExpected) {
+                assertEquals(Rcode.NOERROR, res.getRcode());
+            } else {
+                assertEquals(Rcode.SERVFAIL, res.getRcode());
+            }
+        } catch (IOException e) {
+            fail(e.toString());
+        }
+    }
+
+    @Test
+    public void testFingerprint() {
+        String f = "Eg+H87YhlVD9X1phBlRsmfDwqWnPcccfgIQKVfaEPyY=";
+        testCertificateVerificationWithFingerprint("tls://dns.adguard-dns.com", f, true);
+        f = "R3hcMOAGw0WFztuG2skTodoHp8IGid3Qg63Cn7YUYoM=";
+        testCertificateVerificationWithFingerprint("tls://dns.adguard-dns.com", f, true);
+    }
+
+    @Test
+    public void testWrongFingerprint() {
+        String f = "SOMEWRONGFINGERPRINT";
+        testCertificateVerificationWithFingerprint("tls://dns.adguard-dns.com", f, false);
+    }
+
     private static byte[] toByteArray(String str) {
         byte [] key = new BigInteger(str, 16).toByteArray();
         while (key.length > 0 && key[0] == 0) {

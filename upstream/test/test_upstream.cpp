@@ -374,9 +374,7 @@ static const UpstreamTestData test_upstreams_data[]{
                 "FtaWx5Lm5zMS5hZGd1YXJkLmNvbQ",
                 {"8.8.8.8"}},
         {// Cloudflare DNS (DoH)
-                "sdns://"
-                "AgcAAAAAAAAABzEuMC4wLjGgENk8mGSlIfMGXMOlIlCcKvq7AVgcrZxtjon911-ep0cg63Ul-I8NlFj4GplQGb_"
-                "TTLiczclX57DvMV8Q-JdjgRgSZG5zLmNsb3VkZmxhcmUuY29tCi9kbnMtcXVlcnk",
+                "sdns://AgcAAAAAAAAABzEuMC4wLjEAEmRucy5jbG91ZGZsYXJlLmNvbQovZG5zLXF1ZXJ5",
                 {"8.8.8.8:53"}},
         {// Google (Plain)
                 "sdns://AAcAAAAAAAAABzguOC44Ljg", {}},
@@ -496,9 +494,7 @@ static const UpstreamTestData test_upstreams_invalid_bootstrap_data[]{
         },
         {
                 // Cloudflare DNS (DoH)
-                "sdns://"
-                "AgcAAAAAAAAABzEuMC4wLjGgENk8mGSlIfMGXMOlIlCcKvq7AVgcrZxtjon911-ep0cg63Ul-I8NlFj4GplQGb_"
-                "TTLiczclX57DvMV8Q-JdjgRgSZG5zLmNsb3VkZmxhcmUuY29tCi9kbnMtcXVlcnk",
+                "sdns://AgcAAAAAAAAABzEuMC4wLjEAEmRucy5jbG91ZGZsYXJlLmNvbQovZG5zLXF1ZXJ5",
                 {"8.8.8.8:53", "8.8.8.1:53"},
         },
         {
@@ -677,5 +673,37 @@ TEST_F(UpstreamTest, DISABLED_doq_easy_test) {
         ASSERT_NE(reply_res.value(), nullptr);
     }
 }
+
+struct UpstreamIvalidFingerprintTest : UpstreamParamTest<UpstreamOptions> {};
+
+static const UpstreamOptions test_options_with_invalid_fingerprint_data[]{
+        {
+                .address = "tls://dns.adguard-dns.com",
+                .bootstrap = {"8.8.8.8"},
+                .fingerprints = {"INVALIDFINGERPRINT!"},
+        },
+        {
+                .address = "https://dns.adguard-dns.com",
+                .bootstrap = {"8.8.8.8"},
+                .fingerprints = {"INVALIDFINGERPRINT!"},
+        },
+        {
+                .address = "quic://dns.adguard-dns.com",
+                .bootstrap = {"8.8.8.8"},
+                .fingerprints = {"INVALIDFINGERPRINT!"},
+        },
+};
+
+TEST_P(UpstreamIvalidFingerprintTest, TestUpstreamIvalidFingerprint) {
+    co_await m_loop->co_submit();
+    const auto &op = GetParam();
+    auto upstream_res = create_upstream(op);
+    ASSERT_TRUE(upstream_res.has_error()) << "Expected that create_upstream return error";
+}
+
+INSTANTIATE_TEST_SUITE_P(
+        UpstreamIvalidFingerprintTest, UpstreamIvalidFingerprintTest, testing::ValuesIn(test_options_with_invalid_fingerprint_data));
+
+
 
 } // namespace ag::dns::upstream::test

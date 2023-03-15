@@ -29,12 +29,14 @@ namespace Adguard.Dns.Tests.Helpers
                     new UpstreamOptions
                     {
                         Id = 1,
-                        Bootstrap = new List<string>()
+                        Bootstrap = new List<string>(),
+                        Fingerprints = new List<string>()
                     },
                     new UpstreamOptions
                     {
                         Id = 2,
-                        Bootstrap = new List<string>()
+                        Bootstrap = new List<string>(),
+                        Fingerprints = new List<string>()
                     },
                     new UpstreamOptions
                     {
@@ -43,7 +45,12 @@ namespace Adguard.Dns.Tests.Helpers
                         {
                             "bootStrapBegin",
                             "bootStrapEnd"
-                        }
+                        },
+                        Fingerprints = new List<string>()
+                        {
+                            "fingerprintsBegin",
+                            "fingerprintsEnd"
+                        },
                     }
                 },
                 Fallbacks = new List<UpstreamOptions>()
@@ -55,7 +62,8 @@ namespace Adguard.Dns.Tests.Helpers
                             "1.1.1.1",
                             "8.8.8.8",
                             "9.9.9.9"
-                        }
+                        },
+                        Fingerprints = new List<string>()
                     }
                 },
                 BlockedResponseTtlSec = 64,
@@ -70,7 +78,8 @@ namespace Adguard.Dns.Tests.Helpers
                                 "1.1.1.1",
                                 "8.8.8.8",
                                 "9.9.9.9"
-                            }
+                            },
+                            Fingerprints = new List<string>()
                         }
                     }
                 },
@@ -146,6 +155,7 @@ namespace Adguard.Dns.Tests.Helpers
                 dnsSettingsConverted.Upstreams,
                 dnsSettings.Upstreams,
                 upstreamEqualityComparer);
+            Assert.IsTrue(isUpstreamsEqual);
             bool isFallbacksEqual = CollectionUtils.CollectionsEquals(
                 dnsSettingsConverted.Fallbacks,
                 dnsSettings.Fallbacks,

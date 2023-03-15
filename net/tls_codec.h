@@ -44,7 +44,8 @@ public:
     };
     using WriteDecryptedResult = Result<DecryptedBytesWritten, TlsError>;
 
-    TlsCodec(const CertificateVerifier *cert_verifier, TlsSessionCache *session_cache);
+    TlsCodec(const CertificateVerifier *cert_verifier, TlsSessionCache *session_cache,
+            std::vector<CertFingerprint> fingerprint);
 
     ~TlsCodec() = default;
 
@@ -96,6 +97,7 @@ private:
     TlsSessionCache *m_session_cache = nullptr;
     bssl::UniquePtr<SSL> m_ssl;
     Logger m_log;
+    std::vector<CertFingerprint> m_fingerprints;
     std::string m_server_name;
 
     static int ssl_verify_callback(X509_STORE_CTX *ctx, void *arg);

@@ -288,6 +288,12 @@ static ServerStamp convert_stamp(AGDnsStamp *stamp) {
     if (const std::string *name = std::get_if<std::string>(&settings->outbound_interface)) {
         _outboundInterfaceName = convert_string(*name);
     }
+    NSMutableArray<NSString *> *fingerprints =
+            [[NSMutableArray alloc] initWithCapacity: settings->fingerprints.size()];
+    for (const std::string &fp : settings->fingerprints) {
+        [fingerprints addObject: convert_string(fp)];
+    }
+    _fingerprints = fingerprints;
     return self;
 }
 
@@ -300,6 +306,7 @@ static ServerStamp convert_stamp(AGDnsStamp *stamp) {
         _serverIp = [coder decodeObjectForKey:@"_serverIp"];
         _id = [coder decodeInt64ForKey:@"_id"];
         _outboundInterfaceName = [coder decodeObjectForKey:@"_outboundInterfaceName"];
+        _fingerprints = [coder decodeObjectForKey:@"_fingerprints"];
     }
 
     return self;
@@ -312,6 +319,7 @@ static ServerStamp convert_stamp(AGDnsStamp *stamp) {
     [coder encodeObject:self.serverIp forKey:@"_serverIp"];
     [coder encodeInt64:self.id forKey:@"_id"];
     [coder encodeObject:self.outboundInterfaceName forKey:@"_outboundInterfaceName"];
+    [coder encodeObject:self.fingerprints forKey:@"_fingerprints"];
 }
 
 - (NSString*)description {
@@ -950,6 +958,7 @@ using AGUniqueCFRef = UniquePtr<std::remove_pointer_t<T>, &CFRelease>;
 
 static UpstreamOptions convert_upstream(AGDnsUpstream *upstream) {
     std::vector<std::string> bootstrap;
+    std::vector<std::string> fingerprints;
     if (upstream.bootstrap != nil) {
         bootstrap.reserve([upstream.bootstrap count]);
         for (NSString *server in upstream.bootstrap) {
@@ -970,12 +979,20 @@ static UpstreamOptions convert_upstream(AGDnsUpstream *upstream) {
     if (upstream.outboundInterfaceName != nil) {
         iface.emplace<std::string>(upstream.outboundInterfaceName.UTF8String);
     }
-    return UpstreamOptions{[upstream.address UTF8String],
-                                std::move(bootstrap),
-                                std::chrono::milliseconds(upstream.timeoutMs),
-                                std::move(addr),
-                                (int32_t) upstream.id,
-                                std::move(iface)};
+    if (upstream.fingerprints != nil) {
+        fingerprints.reserve([upstream.fingerprints count]);
+        for (NSString *fp in upstream.fingerprints) {
+            fingerprints.emplace_back([fp UTF8String]);
+        }
+    }
+    return UpstreamOptions{
+            .address = [upstream.address UTF8String],
+            .bootstrap = std::move(bootstrap),
+            .timeout = std::chrono::milliseconds(upstream.timeoutMs),
+            .resolved_server_ip = std::move(addr),
+            .id = (int32_t) upstream.id,
+            .outbound_interface = std::move(iface),
+            .fingerprints = std::move(fingerprints)};
 }
 
 static std::vector<UpstreamOptions> convert_upstreams(NSArray<AGDnsUpstream *> *upstreams) {

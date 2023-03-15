@@ -26,8 +26,10 @@ public:
      * Create DNS-over-TLS upstream
      * @param opts Upstream settings
      * @param config Factory configuration
+     * @param fingerprints list of SPKI fingerprints to verify
      */
-    DotUpstream(const UpstreamOptions &opts, const UpstreamFactoryConfig &config);
+    DotUpstream(const UpstreamOptions &opts, const UpstreamFactoryConfig &config,
+            std::vector<CertFingerprint> fingerprints);
 
     ~DotUpstream() override;
 
@@ -44,6 +46,8 @@ private:
     TlsSessionCache m_tls_session_cache;
     /** Bootstrapper */
     BootstrapperPtr m_bootstrapper;
+    /** Fingerprints */
+    std::vector<CertFingerprint> m_fingerprints;
 
     friend class DotConnection;
 };

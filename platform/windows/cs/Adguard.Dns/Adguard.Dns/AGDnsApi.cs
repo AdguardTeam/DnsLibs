@@ -22,7 +22,7 @@ namespace Adguard.Dns
         /// <summary>
         /// The current API version hash with which the ProxyServer was tested
         /// </summary>
-        private const string API_VERSION_HASH = "f308c902377f8db04963600e6f3551776f01cf8de6ebc2e0e26e3d1decdf648e";
+        private const string API_VERSION_HASH = "887360085c6c4de6b18b3cab72e303602ddfeb35e87acaa4024299da16365c67";
         #endregion
 
         #region API Functions
@@ -463,6 +463,13 @@ namespace Adguard.Dns
             [MarshalAs(UnmanagedType.U4)]
             [NativeName("outbound_interface_index")]
             internal UInt32 OutboundInterfaceIndex;
+            
+            /// <summary>
+            /// (Optional) List of upstreams base64 encoded SPKI fingerprints to verify. If at least one of them is matched in the
+            /// certificate chain, the verification will be successful
+            /// </summary>
+            [MarshalAs(UnmanagedType.Struct)]
+            internal MarshalUtils.ag_list fingerprints;
         }
 
         [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Ansi)]

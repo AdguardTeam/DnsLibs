@@ -12,6 +12,7 @@ public class UpstreamSettings {
     private byte[] serverIp;
     private int id;
     private String outboundInterfaceName;
+    private List<String> fingerprints = new ArrayList<>();
 
     public UpstreamSettings() {}
 
@@ -124,6 +125,14 @@ public class UpstreamSettings {
         this.outboundInterfaceName = outboundInterfaceName;
     }
 
+    public List<String> getFingerprints() {
+        return fingerprints;
+    }
+
+    public void setFingerprints(List<String> certFingerprints) {
+        this.fingerprints = certFingerprints;
+    }
+
     @Override
     public boolean equals(Object o) {
         if (this == o) return true;
@@ -134,11 +143,12 @@ public class UpstreamSettings {
                 Objects.equals(address, that.address) &&
                 bootstrap.equals(that.bootstrap) &&
                 Arrays.equals(serverIp, that.serverIp) &&
-                Objects.equals(outboundInterfaceName, that.outboundInterfaceName);
+                Objects.equals(outboundInterfaceName, that.outboundInterfaceName) &&
+                fingerprints.equals(that.fingerprints);
     }
 
     @Override
     public int hashCode() {
-        return Objects.hash(timeoutMs, id, address, bootstrap, serverIp, outboundInterfaceName);
+        return Objects.hash(timeoutMs, id, address, bootstrap, serverIp, outboundInterfaceName, fingerprints);
     }
 }

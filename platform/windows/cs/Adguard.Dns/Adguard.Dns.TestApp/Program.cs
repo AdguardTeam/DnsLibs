@@ -91,6 +91,7 @@ namespace Adguard.Dns.TestApp
             {
                 Address = "94.140.14.14",
                 Bootstrap = new List<string>(),
+                Fingerprints = new List<string>(),
                 TimeoutMs = 5000,
                 Id = 42,
                 OutboundInterfaceIndex = 0

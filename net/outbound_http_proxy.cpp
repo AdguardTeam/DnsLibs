@@ -261,25 +261,6 @@ void HttpOProxy::on_close(void *arg, Error<SocketError> error) {
     }
 }
 
-int HttpOProxy::ssl_verify_callback(X509_STORE_CTX *ctx, void *arg) {
-    SSL *ssl = (SSL *) X509_STORE_CTX_get_ex_data(ctx, SSL_get_ex_data_X509_STORE_CTX_idx());
-    auto *self = (HttpOProxy *) arg;
-
-    if (self->m_settings->trust_any_certificate) {
-        log_proxy(self, trace, "Trusting any proxy certificate as specified in settings");
-        return 1;
-    }
-
-    if (auto err = self->m_parameters.verifier->verify(ctx, SSL_get_servername(ssl, SSL_get_servername_type(ssl)))) {
-        log_proxy(self, dbg, "Failed to verify certificate: {}", *err);
-        return 0;
-    }
-
-    log_proxy(self, trace, "Verified successfully");
-
-    return 1;
-}
-
 void HttpOProxy::handle_http_response_chunk(Connection *conn, std::string_view chunk) {
     std::string_view seek;
 

@@ -1,3 +1,4 @@
+#include "tls_codec.h"
 #include <cstring>
 #include <numeric>
 
@@ -25,10 +26,12 @@ static Uint8Vector make_alpn(const std::vector<std::string> &protos) {
     return alpn;
 }
 
-TlsCodec::TlsCodec(const CertificateVerifier *cert_verifier, TlsSessionCache *session_cache)
+TlsCodec::TlsCodec(const CertificateVerifier *cert_verifier, TlsSessionCache *session_cache,
+        std::vector<CertFingerprint> fingerprint)
         : m_cert_verifier(cert_verifier)
         , m_session_cache(session_cache)
-        , m_log(__func__) {
+        , m_log(__func__)
+        , m_fingerprints(std::move(fingerprint)) {
 }
 
 Error<TlsCodec::TlsError> TlsCodec::connect(const std::string &sni, std::vector<std::string> alpn) {
@@ -167,7 +170,7 @@ int TlsCodec::ssl_verify_callback(X509_STORE_CTX *ctx, void *arg) {
         return 0;
     }
 
-    if (auto err = self->m_cert_verifier->verify(ctx, self->m_server_name)) {
+    if (auto err = self->m_cert_verifier->verify(ctx, self->m_server_name, self->m_fingerprints)) {
         dbglog(self->m_log, "Failed to verify certificate: {}", *err);
         return 0;
     }

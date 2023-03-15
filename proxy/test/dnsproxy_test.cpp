@@ -18,6 +18,12 @@
 
 namespace ag::dns::proxy::test {
 
+// Generated with:
+// echo | openssl s_client -connect 94.140.14.14:853 -servername dns.adguard-dns.com 2>/dev/null | openssl x509 -pubkey -noout | openssl pkey -pubin -outform der | openssl dgst -sha256 -binary | openssl enc -base64
+static constexpr auto OLD_ADGUARD_DNS_SPKI = "IJao6ZpG2Gq6OZxkPzKbSZSlbKO0tF7krya1jYKboJs=";
+static constexpr auto ADGUARD_DNS_SPKI = "Eg+H87YhlVD9X1phBlRsmfDwqWnPcccfgIQKVfaEPyY=";
+static constexpr auto ZEROSSL_SPKI = "R3hcMOAGw0WFztuG2skTodoHp8IGid3Qg63Cn7YUYoM=";
+
 static constexpr auto DNS64_SERVER_ADDR = "2001:4860:4860::6464";
 static constexpr auto IPV4_ONLY_HOST = "ipv4only.arpa.";
 static constexpr auto CNAME_BLOCKING_HOST = "test2.meshkov.info";
@@ -103,6 +109,132 @@ TEST_F(DnsProxyTest, TestDns64) {
     ASSERT_NO_FATAL_FAILURE(perform_request(*m_proxy, pkt, response));
 
     ASSERT_GT(ldns_pkt_ancount(response.get()), 0);
+}
+
+TEST_F(DnsProxyTest, TestResolvedIp) {
+    using namespace std::chrono_literals;
+    DnsProxySettings settings = make_dnsproxy_settings();
+    settings.upstreams = {{
+            .address = "tls://dns.adguard-dns.com",
+            .timeout = 5000ms,
+            .resolved_server_ip = Ipv4Address{94, 140, 14, 14},
+    }};
+    settings.ipv6_available = false;
+
+    DnsProxyEvents events{.on_certificate_verification = [](CertificateVerificationEvent event) {
+                return std::nullopt;
+    }};
+
+    auto [ret, err] = m_proxy->init(settings, events);
+    ASSERT_TRUE(ret) << err->str();
+
+    ldns_pkt_ptr response;
+    ASSERT_NO_FATAL_FAILURE(
+            perform_request(*m_proxy, create_request("example.com", LDNS_RR_TYPE_A, LDNS_RD), response));
+    ASSERT_EQ(ldns_pkt_ancount(response.get()), 1);
+    ASSERT_EQ(ldns_pkt_get_rcode(response.get()), LDNS_RCODE_NOERROR);
+}
+
+TEST_F(DnsProxyTest, TestSPKI) {
+    using namespace std::chrono_literals;
+    DnsProxySettings settings = make_dnsproxy_settings();
+    settings.upstreams = {{
+        .address = "tls://dns.adguard-dns.com",
+        .bootstrap = {"1.1.1.1"},
+        .timeout = 5000ms,
+        .resolved_server_ip = Ipv4Address{94, 140, 14, 14},
+        .fingerprints = {ADGUARD_DNS_SPKI},
+    }};
+    settings.ipv6_available = false;
+
+    DnsProxyEvents events{.on_certificate_verification = [](CertificateVerificationEvent event) {
+        return std::nullopt;
+    }};
+
+    auto [ret, err] = m_proxy->init(settings, events);
+    ASSERT_TRUE(ret) << err->str();
+
+    ldns_pkt_ptr response;
+    ASSERT_NO_FATAL_FAILURE(
+            perform_request(*m_proxy, create_request("example.com", LDNS_RR_TYPE_A, LDNS_RD), response));
+    ASSERT_EQ(ldns_pkt_ancount(response.get()), 1);
+    ASSERT_EQ(ldns_pkt_get_rcode(response.get()), LDNS_RCODE_NOERROR);
+}
+
+TEST_F(DnsProxyTest, MatchSecondFingerprintInChain) {
+    using namespace std::chrono_literals;
+    DnsProxySettings settings = make_dnsproxy_settings();
+    settings.upstreams = {{
+            .address = "tls://dns.adguard-dns.com",
+            .bootstrap = {"1.1.1.1"},
+            .timeout = 5000ms,
+            .resolved_server_ip = Ipv4Address{94, 140, 14, 14},
+            .fingerprints = {ZEROSSL_SPKI},
+    }};
+    settings.ipv6_available = false;
+
+    DnsProxyEvents events{.on_certificate_verification = [](CertificateVerificationEvent event) {
+        return std::nullopt;
+    }};
+
+    auto [ret, err] = m_proxy->init(settings, events);
+    ASSERT_TRUE(ret) << err->str();
+
+    ldns_pkt_ptr response;
+    ASSERT_NO_FATAL_FAILURE(
+            perform_request(*m_proxy, create_request("example.com", LDNS_RR_TYPE_A, LDNS_RD), response));
+    ASSERT_EQ(ldns_pkt_ancount(response.get()), 1);
+    ASSERT_EQ(ldns_pkt_get_rcode(response.get()), LDNS_RCODE_NOERROR);
+}
+
+TEST_F(DnsProxyTest, TestWrongSPKI) {
+    using namespace std::chrono_literals;
+    DnsProxySettings settings = make_dnsproxy_settings();
+    settings.upstreams = {{
+            .address = "tls://dns.adguard-dns.com",
+            .bootstrap = {"1.1.1.1"},
+            .timeout = 5000ms,
+            .resolved_server_ip = Ipv4Address{94, 140, 14, 14},
+            .fingerprints = {OLD_ADGUARD_DNS_SPKI},
+    }};
+    settings.ipv6_available = false;
+
+    DnsProxyEvents events{.on_certificate_verification = [](CertificateVerificationEvent event) {
+        return std::nullopt;
+    }};
+
+    auto [ret, err] = m_proxy->init(settings, events);
+    ASSERT_TRUE(ret) << err->str();
+
+    ldns_pkt_ptr response;
+    ASSERT_NO_FATAL_FAILURE(
+            perform_request(*m_proxy, create_request("example.com", LDNS_RR_TYPE_A, LDNS_RD), response));
+    ASSERT_EQ(ldns_pkt_ancount(response.get()), 0);
+    ASSERT_EQ(ldns_pkt_get_rcode(response.get()), LDNS_RCODE_SERVFAIL);
+}
+
+TEST_F(DnsProxyTest, DnsStampWithHash) {
+    using namespace std::chrono_literals;
+    DnsProxySettings settings = make_dnsproxy_settings();
+    settings.upstreams = {{
+            .address = "sdns://AwAAAAAAAAAAEDk0LjE0MC4xNC4xNDo4NTMgEC5qicPhfxas6MksSWkAYMU35VRw0Qa4yyxgYqtlwJATZG5zLmFkZ3VhcmQtZG5zLmNvbQ",
+            .bootstrap = {"1.1.1.1"},
+            .timeout = 5000ms,
+    }};
+    settings.ipv6_available = false;
+
+    DnsProxyEvents events{.on_certificate_verification = [](CertificateVerificationEvent event) {
+        return std::nullopt;
+    }};
+
+    auto [ret, err] = m_proxy->init(settings, events);
+    ASSERT_TRUE(ret) << err->str();
+
+    ldns_pkt_ptr response;
+    ASSERT_NO_FATAL_FAILURE(
+            perform_request(*m_proxy, create_request("example.com", LDNS_RR_TYPE_A, LDNS_RD), response));
+    ASSERT_EQ(ldns_pkt_ancount(response.get()), 1);
+    ASSERT_EQ(ldns_pkt_get_rcode(response.get()), LDNS_RCODE_NOERROR);
 }
 
 TEST_F(DnsProxyTest, DISABLED_BootstrapOutboundProxy) {
