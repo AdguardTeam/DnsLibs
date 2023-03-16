@@ -58,7 +58,7 @@ coro::Task<Upstream::ExchangeResult> PlainUpstream::exchange(const ldns_pkt *req
     }
 
     utils::Timer timer;
-    Millis timeout = m_options.timeout;
+    Millis timeout = m_config.timeout;
 
     if (!m_prefer_tcp && !(info && info->proto == utils::TP_TCP)) {
         AioSocket socket(this->make_socket(utils::TP_UDP));

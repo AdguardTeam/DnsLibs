@@ -63,7 +63,7 @@ public:
                             .alpn = {DOT_ALPN},
                             .fingerprints = upstream->m_fingerprints,
                     });
-            timeout = upstream->options().timeout;
+            timeout = upstream->m_config.timeout;
         } else {
             on_close(make_error(DnsError::AE_SHUTTING_DOWN, "Shutting down"));
             co_return;
@@ -140,7 +140,7 @@ static Result<BootstrapperPtr, Upstream::InitError> create_bootstrapper(
     }
 
     return std::make_unique<Bootstrapper>(Bootstrapper::Params{address, (port == 0) ? DEFAULT_DOT_PORT : port,
-            opts.bootstrap, opts.timeout, config, opts.outbound_interface});
+            opts.bootstrap, config.timeout, config, opts.outbound_interface});
 }
 
 DotUpstream::DotUpstream(const UpstreamOptions &opts, const UpstreamFactoryConfig &config,
@@ -196,7 +196,7 @@ coro::Task<Upstream::ExchangeResult> DotUpstream::exchange(const ldns_pkt *reque
         tracelog_id(m_log, request_pkt, "Querying for a domain: {}", domain.get());
     }
 
-    milliseconds timeout = m_options.timeout;
+    milliseconds timeout = m_config.timeout;
 
     Uint8View buf{ ldns_buffer_begin(buffer.get()), ldns_buffer_position(buffer.get()) };
     tracelog_id(m_log, request_pkt, "Sending request for a domain: {}", domain ? domain.get() : "(unknown)");

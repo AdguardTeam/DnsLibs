@@ -22,7 +22,7 @@ namespace Adguard.Dns
         /// <summary>
         /// The current API version hash with which the ProxyServer was tested
         /// </summary>
-        private const string API_VERSION_HASH = "887360085c6c4de6b18b3cab72e303602ddfeb35e87acaa4024299da16365c67";
+        private const string API_VERSION_HASH = "f127a691bbe12214f54ef335baaf7fc83732b04b1125a8eddb13eae982a86929";
         #endregion
 
         #region API Functions
@@ -127,6 +127,7 @@ namespace Adguard.Dns
         /// </summary>
         /// <param name="pUpstreamOptions">Pointer to the
         /// <see cref="ag_upstream_options"/> object</param>
+        /// <param name="timeout_ms">Maximum amount of time allowed for upstream exchange (in milliseconds)</param>
         /// <param name="ipv6Available">Whether IPv6 is available (i.e., bootstrapper is allowed to make AAAA queries)</param>
         /// <param name="onCertificateVerification">Certificate verification callback
         /// as a <see cref="cbd_onCertificateVerification"/> object</param>
@@ -135,7 +136,9 @@ namespace Adguard.Dns
         /// Otherwise this method returns an error with an explanation</returns>
         [DllImport(DnsLibName, CallingConvention = CallingConvention.Cdecl)]
         internal static extern IntPtr ag_test_upstream(
-            IntPtr pUpstreamOptions, [MarshalAs(UnmanagedType.I1)] bool Ipv6Available,
+            IntPtr pUpstreamOptions, 
+            [MarshalAs(UnmanagedType.U4)] UInt32 timeout_ms,
+            [MarshalAs(UnmanagedType.I1)] bool ipv6Available,
             [MarshalAs(UnmanagedType.FunctionPtr)] cbd_onCertificateVerification onCertificateVerification,
             [MarshalAs(UnmanagedType.I1)] bool offline);
 
@@ -434,14 +437,6 @@ namespace Adguard.Dns
             internal MarshalUtils.ag_list bootstrap;
 
             /// <summary>
-            /// Default upstream timeout. Also, it is used as a timeout for bootstrap DNS requests.
-            /// timeout = 0 means default.
-            /// </summary>
-            [MarshalAs(UnmanagedType.U4)]
-            [NativeName("timeout_ms")]
-            internal UInt32 TimeoutMs;
-
-            /// <summary>
             /// Resolver's IP address.
             /// In the case if it's specified, bootstrap DNS servers won't be used at all.
             /// (<seealso cref="MarshalUtils.ag_buffer"/>)
@@ -617,6 +612,13 @@ namespace Adguard.Dns
             [MarshalAs(UnmanagedType.U4)]
             [NativeName("dns_cache_size")]
             internal UInt32 DnsCacheSize;
+
+            /// <summary>
+            /// Maximum amount of time, in milliseconds, allowed for upstream exchange (0 means default)
+            /// </summary>
+            [MarshalAs(UnmanagedType.U4)]
+            [NativeName("upstream_timeout_ms")]
+            internal UInt32 UpstreamTimeoutMs;
 
             /// <summary>
             /// Enable optimistic DNS caching

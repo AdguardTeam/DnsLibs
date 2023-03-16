@@ -22,7 +22,8 @@ static ldns_pkt_ptr create_message() {
 }
 
 static coro::Task<Error<UpstreamUtilsError>> test_upstream_internal(EventLoop &loop, const UpstreamOptions &opts,
-        bool ipv6_available, const OnCertificateVerificationFn &on_certificate_verification, bool offline) {
+        Millis timeout, bool ipv6_available, const OnCertificateVerificationFn &on_certificate_verification,
+        bool offline) {
     co_await loop.co_submit();
 
     std::unique_ptr<CertificateVerifier> cert_verifier;
@@ -35,7 +36,7 @@ static coro::Task<Error<UpstreamUtilsError>> test_upstream_internal(EventLoop &l
             .loop = loop,
             .verifier = std::move(cert_verifier),
     });
-    UpstreamFactory upstream_factory({loop, &socket_factory, ipv6_available});
+    UpstreamFactory upstream_factory({loop, &socket_factory, ipv6_available, false, timeout});
     auto upstream_result = upstream_factory.create_upstream(opts);
     if (upstream_result.has_error()) {
         co_return make_error(UpstreamUtilsError::AE_FACTORY_ERROR, upstream_result.error());
@@ -56,13 +57,13 @@ static coro::Task<Error<UpstreamUtilsError>> test_upstream_internal(EventLoop &l
     co_return {};
 }
 
-Error<UpstreamUtilsError> test_upstream(const UpstreamOptions &opts, bool ipv6_available,
+Error<UpstreamUtilsError> test_upstream(const UpstreamOptions &opts, Millis timeout, bool ipv6_available,
         const OnCertificateVerificationFn &on_certificate_verification, bool offline) {
     EventLoopPtr loop = EventLoop::create();
     loop->start();
-    auto ret =
-            coro::to_future(test_upstream_internal(*loop, opts, ipv6_available, on_certificate_verification, offline))
-                    .get();
+    auto ret = coro::to_future(
+            test_upstream_internal(*loop, opts, timeout, ipv6_available, on_certificate_verification, offline))
+                       .get();
     loop->stop();
     loop->join();
     return ret;

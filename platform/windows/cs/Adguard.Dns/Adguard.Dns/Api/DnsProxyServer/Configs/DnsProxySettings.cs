@@ -99,6 +99,11 @@ namespace Adguard.Dns.Api.DnsProxyServer.Configs
         /// Maximum number of cached responses
         /// </summary>
         public uint DnsCacheSize { get; set; }
+        
+        /// <summary>
+        /// Maximum amount of time, in milliseconds, allowed for upstream exchange (0 means default)
+        /// </summary>
+        public uint UpstreamTimeoutMs { get; set; }
 
         /// <summary>
         /// Enable optimistic DNS caching

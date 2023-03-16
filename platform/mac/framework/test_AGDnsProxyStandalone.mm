@@ -13,7 +13,6 @@ int main() {
     auto *upstream = [[AGDnsUpstream alloc] init];
     upstream.address = @"tls://dns.adguard-dns.com";
     upstream.bootstrap = @[@"1.1.1.1"];
-    upstream.timeoutMs = 1000;
     upstream.serverIp = nil;
     upstream.id = 42;
     upstream.outboundInterfaceName = nil;
@@ -22,7 +21,6 @@ int main() {
     auto *fallback = [[AGDnsUpstream alloc] init];
     fallback.address = @"1.1.1.1";
     fallback.bootstrap = nil;
-    fallback.timeoutMs = 1000;
     fallback.serverIp = nil;
     fallback.id = 43;
     fallback.outboundInterfaceName = nil;
@@ -31,6 +29,7 @@ int main() {
     config.upstreams = @[upstream];
     config.fallbacks = @[fallback];
     config.listeners = @[listener];
+    config.upstreamTimeoutMs = 1000;
 
     auto *handler = [[AGDnsProxyEvents alloc] init];
     NSError *error;

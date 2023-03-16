@@ -109,7 +109,6 @@ static ag_upstream_options marshal_upstream(const UpstreamOptions &upstream) {
 
     c_upstream.address = marshal_str(upstream.address);
     c_upstream.id = upstream.id;
-    c_upstream.timeout_ms = upstream.timeout.count();
 
     if (const Ipv4Address *arr4 = std::get_if<Ipv4Address>(&upstream.resolved_server_ip)) {
         c_upstream.resolved_ip_address = marshal_buffer({arr4->data(), arr4->size()});
@@ -256,6 +255,7 @@ static ag_dnsproxy_settings *marshal_settings(const DnsProxySettings &settings) 
     c_settings->block_ipv6 = settings.block_ipv6;
     c_settings->ipv6_available = settings.ipv6_available;
     c_settings->dns_cache_size = settings.dns_cache_size;
+    c_settings->upstream_timeout_ms = settings.upstream_timeout.count();
     c_settings->blocked_response_ttl_secs = settings.blocked_response_ttl_secs;
     c_settings->adblock_rules_blocking_mode = (ag_dnsproxy_blocking_mode) settings.adblock_rules_blocking_mode;
     c_settings->hosts_rules_blocking_mode = (ag_dnsproxy_blocking_mode) settings.hosts_rules_blocking_mode;
@@ -358,7 +358,6 @@ static UpstreamOptions marshal_upstream(const ag_upstream_options &c_upstream) {
         upstream.address.assign(c_upstream.address);
     }
     upstream.id = c_upstream.id;
-    upstream.timeout = Millis{c_upstream.timeout_ms};
     if (c_upstream.resolved_ip_address.size == IPV4_ADDRESS_SIZE) {
         Ipv4Address arr4;
         std::memcpy(arr4.data(), c_upstream.resolved_ip_address.data, arr4.size());
@@ -463,6 +462,7 @@ static DnsProxySettings marshal_settings(const ag_dnsproxy_settings *c_settings)
     settings.block_ipv6 = c_settings->block_ipv6;
     settings.ipv6_available = c_settings->ipv6_available;
     settings.dns_cache_size = c_settings->dns_cache_size;
+    settings.upstream_timeout = Millis{c_settings->upstream_timeout_ms};
     settings.blocked_response_ttl_secs = c_settings->blocked_response_ttl_secs;
     settings.adblock_rules_blocking_mode = (DnsProxyBlockingMode) c_settings->adblock_rules_blocking_mode;
     settings.hosts_rules_blocking_mode = (DnsProxyBlockingMode) c_settings->hosts_rules_blocking_mode;
@@ -669,13 +669,14 @@ void ag_dns_stamp_free(ag_dns_stamp *stamp) {
     std::free(stamp);
 }
 
-const char *ag_test_upstream(const ag_upstream_options *c_upstream, bool ipv6_available,
+const char *ag_test_upstream(const ag_upstream_options *c_upstream, uint32_t timeout_ms, bool ipv6_available,
         ag_certificate_verification_cb on_certificate_verification, bool offline) {
     auto upstream = marshal_upstream(*c_upstream);
     ag_dnsproxy_events c_events{};
     c_events.on_certificate_verification = on_certificate_verification;
     auto events = marshal_events(&c_events);
-    auto result = test_upstream(upstream, ipv6_available, events.on_certificate_verification, offline);
+    auto result =
+            test_upstream(upstream, Millis{timeout_ms}, ipv6_available, events.on_certificate_verification, offline);
     return result ? marshal_str(result->str()) : marshal_str("");
 }
 

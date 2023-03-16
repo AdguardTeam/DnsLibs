@@ -11,11 +11,15 @@ static ag::coro::Task<bool> co_test_ipv6_connectivity(ag::dns::EventLoop &loop) 
                     LDNS_RR_TYPE_A, LDNS_RR_CLASS_IN, LDNS_RD)};
 
     ag::dns::SocketFactory socket_factory({loop});
-    ag::dns::UpstreamFactory upstream_factory({loop, &socket_factory});
+    ag::dns::UpstreamFactory upstream_factory({
+            .loop = loop,
+            .socket_factory = &socket_factory,
+            .timeout = ag::Secs{1},
+    });
 
     // Google public DNS
     for (auto &addr : {"2001:4860:4860::8888", "2001:4860:4860::8844"}) {
-        auto r = upstream_factory.create_upstream({ addr, {}, ag::Secs{1}, {} });
+        auto r = upstream_factory.create_upstream({ addr, {}, {} });
         if (r.has_error()) {
             co_return false;
         }

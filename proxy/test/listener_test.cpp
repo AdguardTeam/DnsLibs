@@ -114,12 +114,9 @@ TEST_P(ListenerTest, ListensAndResponds) {
                                 EventLoopPtr loop) -> coro::Task<void> {
             Logger logger{fmt::format("test_coro_{}", i)};
             SocketFactory socket_factory({*loop});
-            UpstreamFactory upstream_factory({*loop, &socket_factory});
+            UpstreamFactory upstream_factory({*loop, &socket_factory, false, false, 1s});
 
-            auto upstream_res = upstream_factory.create_upstream({
-                    .address = address,
-                    .timeout = 1000ms,
-            });
+            auto upstream_res = upstream_factory.create_upstream({.address = address});
 
             if (upstream_res.has_error()) {
                 errlog(logger, "Upstream create: {}", upstream_res.error()->str());
@@ -194,7 +191,8 @@ TEST(ListenerTest, DISABLED_ManyRequestsPending) {
         auto proxy_settings = DnsProxySettings::get_default();
 
         proxy_settings.listeners = {{address, port, ag::utils::TP_UDP}};
-        proxy_settings.upstreams = {{.address = "quic://dns.adguard-dns.com", .bootstrap = {"1.1.1.1"}, .timeout = 3s}};
+        proxy_settings.upstreams = {{.address = "quic://dns.adguard-dns.com", .bootstrap = {"1.1.1.1"}}};
+        proxy_settings.upstream_timeout = 3s;
         proxy_settings.enable_http3 = true;
         proxy_settings.dns_cache_size = 0;
         proxy_settings.optimistic_cache = false;

@@ -92,9 +92,9 @@ static std::string get_server_address(const Logger &log, std::string_view addres
     return result;
 }
 
-Resolver::Resolver(UpstreamOptions options, const UpstreamFactoryConfig &upstream_config)
+Resolver::Resolver(UpstreamOptions options, UpstreamFactoryConfig upstream_factory_config)
         : m_log(AG_FMT("Resolver {}", options.address))
-        , m_upstream_factory(upstream_config)
+        , m_upstream_factory_config(std::move(upstream_factory_config))
         , m_upstream_options(std::move(options)) {
     m_upstream_options.address = get_server_address(m_log, m_upstream_options.address);
     m_shutdown_guard = std::make_shared<bool>(true);
@@ -152,10 +152,11 @@ coro::Task<Resolver::Result> Resolver::resolve(std::string_view host, int port, 
     Error<ResolverError> error;
     ldns_pkt_ptr a_req = create_req(host, LDNS_RR_TYPE_A);
 
-    UpstreamOptions opts = m_upstream_options;
-    opts.timeout = timeout;
-    const std::string &resolver_address = opts.address;
-    UpstreamFactory::CreateResult factory_result = m_upstream_factory.create_upstream(opts);
+    UpstreamFactoryConfig config = m_upstream_factory_config;
+    config.timeout = timeout;
+    const std::string &resolver_address = m_upstream_options.address;
+    UpstreamFactory upstream_factory{m_upstream_factory_config};
+    UpstreamFactory::CreateResult factory_result = upstream_factory.create_upstream(m_upstream_options);
     if (factory_result.has_error()) {
         std::string err = AG_FMT("Failed to create upstream: {}", factory_result.error()->str());
         log_ip(m_log, dbg, resolver_address, "{}", factory_result.error()->str());

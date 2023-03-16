@@ -116,11 +116,6 @@ typedef void (^logCallback)(AGLogLevel level, const char *msg, int length);
  */
 @property(nonatomic) NSArray<NSString *> *bootstrap;
 /**
- * Default upstream timeout in milliseconds. Also used as a timeout for bootstrap DNS requests.
- * timeout = 0 means infinite timeout.
- */
-@property(nonatomic) NSInteger timeoutMs;
-/**
  * Resolver's IP address. In the case if it's specified,
  * bootstrap DNS servers won't be used at all.
  */
@@ -366,6 +361,11 @@ typedef NS_ENUM(NSInteger, AGOutboundProxyProtocol) {
  */
 @property(nonatomic) NSUInteger dnsCacheSize;
 /**
+ * Maximum amount of time, in milliseconds, allowed for upstream exchange.
+ * A timeout of 0 means "default".
+ */
+@property(nonatomic) NSUInteger upstreamTimeoutMs;
+/**
  * Enable optimistic DNS caching
  */
 @property(nonatomic) BOOL optimisticCache;
@@ -416,7 +416,7 @@ typedef NS_ENUM(NSInteger, AGOutboundProxyProtocol) {
 
 - (void)encodeWithCoder:(NSCoder *)coder;
 
-- (NSString*)description;
+- (NSString *)description;
 
 /**
  * @brief Get default DNS proxy settings
@@ -575,10 +575,14 @@ typedef NS_ENUM(NSInteger, AGStampProtoType) {
 /**
  * Checks if upstream is valid and available
  * @param opts Upstream options
+ * @param timeoutMs Upstream exchange timeout
  * @param ipv6Available Whether IPv6 is available (if true, bootstrapper is allowed to make AAAA queries)
  * @param offline Don't perform online upstream check
  * @return If it is, no error is returned. Otherwise this method returns an error with an explanation.
  */
-+ (NSError *) testUpstream: (AGDnsUpstream *) opts ipv6Available: (BOOL) ipv6Available offline: (BOOL) offline;
++ (NSError *)testUpstream:(AGDnsUpstream *)opts
+                timeoutMs:(NSUInteger)timeoutMs
+            ipv6Available:(BOOL)ipv6Available
+                  offline:(BOOL)offline;
 
 @end

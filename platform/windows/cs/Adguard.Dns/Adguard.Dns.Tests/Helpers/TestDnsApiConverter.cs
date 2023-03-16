@@ -105,6 +105,7 @@ namespace Adguard.Dns.Tests.Helpers
                 CustomBlockingIpv4 = "1.2.3.4",
                 CustomBlockingIpv6 = "::AA",
                 DnsCacheSize = 23,
+                UpstreamTimeoutMs = 42,
                 OptimisticCache = true,
                 OutboundProxySettings = new OutboundProxySettings
                 {
@@ -141,6 +142,7 @@ namespace Adguard.Dns.Tests.Helpers
             Assert.AreEqual(MarshalUtils.PtrToString(nativeDnsSettings.CustomBlockingIpv4), dnsSettings.CustomBlockingIpv4);
             Assert.AreEqual(MarshalUtils.PtrToString(nativeDnsSettings.CustomBlockingIpv6), dnsSettings.CustomBlockingIpv6);
             Assert.AreEqual(nativeDnsSettings.DnsCacheSize, dnsSettings.DnsCacheSize);
+            Assert.AreEqual(nativeDnsSettings.UpstreamTimeoutMs, dnsSettings.UpstreamTimeoutMs);
             Assert.AreEqual(nativeDnsSettings.OptimisticCache, dnsSettings.OptimisticCache);
 
             DnsProxySettings dnsSettingsConverted =  DnsApiConverter.FromNativeObject(nativeDnsSettings);

@@ -37,8 +37,8 @@ struct UpstreamFactoryConfig {
     EventLoop &loop;
     SocketFactory *socket_factory = nullptr;
     bool ipv6_available = true;
-    /** Enable opportunistic use of HTTP/3 for applicable upstream types */
-    bool enable_http3 = false;
+    bool enable_http3 = false; /**< Enable opportunistic use of HTTP/3 for applicable upstream types */
+    Millis timeout{};
 };
 
 /**
@@ -62,9 +62,6 @@ struct UpstreamOptions {
      * E.g. `https://94.140.14.14` is correct, while `dns.adguard.com:53` is not.
      */
     std::vector<std::string> bootstrap;
-
-    /** Upstream timeout. 0 means "default". */
-    Millis timeout;
 
     /** Upstream's IP address. If specified, the bootstrapper is NOT used */
     IpAddress resolved_server_ip;
@@ -90,8 +87,6 @@ struct UpstreamOptions {
  */
 class Upstream : public std::enable_shared_from_this<Upstream> {
 public:
-    static constexpr Millis DEFAULT_TIMEOUT{5000};
-
     enum class InitError {
         AE_EMPTY_SERVER_NAME,
         AE_EMPTY_BOOTSTRAP,
@@ -102,12 +97,8 @@ public:
         AE_CURL_POOL_INIT_FAILED,
     };
 
-    Upstream(UpstreamOptions opts, const UpstreamFactoryConfig &config)
-            : m_options(std::move(opts)), m_config(config) {
-        if (!m_options.timeout.count()) {
-            m_options.timeout = DEFAULT_TIMEOUT;
-        }
-    }
+    Upstream(UpstreamOptions opts, UpstreamFactoryConfig config)
+            : m_options(std::move(opts)), m_config(std::move(config)) {}
 
     virtual ~Upstream() = default;
 
@@ -206,6 +197,8 @@ protected:
  */
 class UpstreamFactory {
 public:
+    static constexpr auto DEFAULT_TIMEOUT = Millis{5000};
+
     enum class UpstreamCreateError {
         AE_INVALID_URL,
         AE_INVALID_STAMP,

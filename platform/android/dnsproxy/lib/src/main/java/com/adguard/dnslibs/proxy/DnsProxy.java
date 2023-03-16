@@ -242,24 +242,26 @@ public class DnsProxy implements Closeable {
     /**
      * Checks if upstream is valid and available
      * @param upstreamSettings Upstream settings
+     * @param timeoutMs Maximum amount of time, in milliseconds, allowed for upstream exchange
      * @param ipv6Available Whether IPv6 is available (bootstrapper is allowed to make AAAA queries)
      * @param offline Don't perform online upstream check
      * @throws IllegalArgumentException with an explanation if check failed
      */
-    public static void testUpstream(UpstreamSettings upstreamSettings, boolean ipv6Available,
-                                    boolean offline) throws IllegalArgumentException {
+    public static void testUpstream(UpstreamSettings upstreamSettings,
+                                    int timeoutMs, boolean ipv6Available, boolean offline)
+            throws IllegalArgumentException {
         String error;
         try (final DnsProxy proxy = new DnsProxy()) {
-            error = testUpstreamNative(proxy.nativePtr, upstreamSettings, ipv6Available,
-                    new EventsAdapter(null), false);
+            error = testUpstreamNative(proxy.nativePtr, upstreamSettings, timeoutMs, ipv6Available,
+                    new EventsAdapter(null), offline);
         }
         if (error != null) {
             throw new IllegalArgumentException(error);
         }
     }
 
-    private static native String testUpstreamNative(long nativePtr, Object upstreamSettings, boolean ipv6,
-        Object eventsAdapter, boolean offline);
+    private static native String testUpstreamNative(long nativePtr, Object upstreamSettings, int timeoutMs,
+        boolean ipv6, Object eventsAdapter, boolean offline);
 
     /**
      * Events adapter implementation.

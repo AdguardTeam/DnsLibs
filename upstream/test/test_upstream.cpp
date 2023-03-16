@@ -138,7 +138,6 @@ class UpstreamTest : public ::testing::Test {
 protected:
     EventLoopPtr m_loop;
     std::unique_ptr<SocketFactory> m_socket_factory;
-    std::unique_ptr<UpstreamFactory> m_upstream_factory;
 
     void SetUp() override {
 #if 0
@@ -175,14 +174,12 @@ protected:
 #endif
 
         m_socket_factory = std::make_unique<SocketFactory>(std::move(sf_parameters));
-
-        static bool ipv6_available = test_ipv6_connectivity();
-        m_upstream_factory = std::make_unique<UpstreamFactory>(
-                UpstreamFactoryConfig{*m_loop, m_socket_factory.get(), ipv6_available});
     }
 
-    UpstreamFactory::CreateResult create_upstream(const UpstreamOptions &opts) {
-        return m_upstream_factory->create_upstream(opts);
+    UpstreamFactory::CreateResult create_upstream(const UpstreamOptions &opts, Millis timeout = DEFAULT_TIMEOUT) {
+        static bool ipv6_available = test_ipv6_connectivity();
+        UpstreamFactory factory({*m_loop, m_socket_factory.get(), ipv6_available, false, timeout});
+        return factory.create_upstream(opts);
     }
 
     coro::Task<TestError> check_upstream_internal(UpstreamPtr upstream, std::string addr) {
@@ -196,7 +193,7 @@ protected:
         for (const UpstreamTestData &data : test_data) {
             infolog(logger, "Testing upstream: {}", data.address);
             std::this_thread::sleep_for(DELAY_BETWEEN_REQUESTS);
-            auto upstream_res = create_upstream({data.address, data.bootstrap, DEFAULT_TIMEOUT, data.server_ip});
+            auto upstream_res = create_upstream({data.address, data.bootstrap, data.server_ip});
             ASSERT_FALSE(upstream_res.has_error()) << AG_FMT(
                     "Failed to generate upstream from address {}: {}", data.address, upstream_res.error()->str());
             auto error = coro::to_future(check_upstream_internal(std::move(upstream_res.value()), data.address)).get();
@@ -285,7 +282,7 @@ TEST_F(UpstreamTest, TestBootstrapTimeout) {
     auto errs = co_await parallel_run_n(*m_loop, count, [&](size_t index) -> coro::Task<TestError> {
         infolog(logger, "Start {}", index);
         // Specifying some wrong port instead so that bootstrap DNS timed out for sure
-        auto upstream_res = create_upstream({"tls://one.one.one.one", {"8.8.8.8:555"}, timeout});
+        auto upstream_res = create_upstream({"tls://one.one.one.one", {"8.8.8.8:555"}}, timeout);
         if (upstream_res.has_error()) {
             co_return AG_FMT("Failed to create upstream: {}", upstream_res.error()->str());
         }
@@ -332,7 +329,7 @@ static constexpr std::string_view truncated_test_data[]{
 TEST_P(DnsTruncatedTest, TestDnsTruncated) {
     co_await m_loop->co_submit();
     const auto &address = GetParam();
-    auto upstream_res = create_upstream({std::string(address), {}, Secs(5)});
+    auto upstream_res = create_upstream({std::string(address), {}}, Secs(5));
     ASSERT_FALSE(upstream_res.has_error()) << "Error while creating an upstream: " << upstream_res.error()->str();
     auto request = dnscrypt::create_request_ldns_pkt(
             LDNS_RR_TYPE_TXT, LDNS_RR_CLASS_IN, LDNS_RD, "unit-test2.dns.adguard-dns.com.", std::nullopt);
@@ -462,7 +459,7 @@ static const std::string test_upstream_default_options_data[]{
 TEST_P(UpstreamDefaultOptionsTest, TestUpstreamDefaultOptions) {
     co_await m_loop->co_submit();
     const auto &address = GetParam();
-    auto upstream_res = create_upstream({address, {}, DEFAULT_TIMEOUT});
+    auto upstream_res = create_upstream({address, {}});
     ASSERT_FALSE(upstream_res.has_error()) << "Failed to generate upstream from address " << address << ": " << upstream_res.error()->str();
     auto err = co_await check_upstream(*upstream_res.value(), address);
     ASSERT_FALSE(err) << *err;
@@ -540,7 +537,7 @@ TEST_P(DeadProxySuccess, test) {
     co_await m_loop->co_submit();
     auto oproxy = std::make_unique<OutboundProxySettings>(std::get<1>(GetParam()));
     make_upstream_factory(oproxy.get());
-    auto upstream_res = create_upstream({std::get<0>(GetParam()), {"8.8.8.8"}, DEFAULT_TIMEOUT});
+    auto upstream_res = create_upstream({std::get<0>(GetParam()), {"8.8.8.8"}});
     ASSERT_FALSE(upstream_res.has_error()) << upstream_res.error()->str();
     auto err = co_await check_upstream(*upstream_res.value(), std::get<0>(GetParam()));
     ASSERT_FALSE(err.has_value()) << err.value();
@@ -598,7 +595,7 @@ TEST_P(DeadProxyFailure, FailedExchange) {
     co_await m_loop->co_submit();
     auto oproxy = std::make_unique<OutboundProxySettings>(std::get<1>(GetParam()));
     make_upstream_factory(oproxy.get());
-    auto upstream_res = create_upstream({std::get<0>(GetParam()), {"8.8.8.8"}, DEFAULT_TIMEOUT});
+    auto upstream_res = create_upstream({std::get<0>(GetParam()), {"8.8.8.8"}});
     ASSERT_FALSE(upstream_res.has_error()) << upstream_res.error()->str();
     auto err = co_await check_upstream(*upstream_res.value(), std::get<0>(GetParam()));
     ASSERT_TRUE(err.has_value());
@@ -630,12 +627,11 @@ TEST_F(UpstreamTest, DISABLED_ConcurrentRequests) {
             .address = "https://dns.cloudflare.com/dns-query",
             //        .address = "quic://dns.adguard-dns.com:8853", // Uncomment for test DOQ upstream
             .bootstrap = {"8.8.8.8", "1.1.1.1"},
-            .timeout = 5s,
             //        .resolved_server_ip = IPV4_ADDRESS_SIZE{104, 19, 199, 29}, // Uncomment for test this server IP
             //        .resolved_server_ip = IPV6_ADDRESS_SIZE{0x26, 0x06, 0x47, 0x00, 0x30, 0x0a, 0x00, 0x00, 0x00,
             //        0x00, 0x00, 0x00, 0x68, 0x13, 0xc7, 0x1d},  // Uncomment for test this server IP
     };
-    auto upstream_res = create_upstream(opts);
+    auto upstream_res = create_upstream(opts, 5s);
     ASSERT_FALSE(upstream_res.has_error()) << upstream_res.error()->str();
     co_await parallel_test_basic_n(*m_loop, WORKERS_NUM, [upstream = upstream_res->get()](size_t i) -> coro::Task<TestError> {
         TestError result_err;
@@ -662,8 +658,8 @@ TEST_F(UpstreamTest, DISABLED_doq_easy_test) {
         using namespace std::chrono_literals;
         using namespace concat_err_string;
         static const UpstreamOptions opts{
-                .address = "quic://dns.adguard-dns.com:8853", .bootstrap = {"8.8.8.8"}, .timeout = 5s};
-        auto upstream_res = create_upstream(opts);
+                .address = "quic://dns.adguard-dns.com:8853", .bootstrap = {"8.8.8.8"}};
+        auto upstream_res = create_upstream(opts, 5s);
         ASSERT_FALSE(upstream_res.has_error()) << upstream_res.error()->str();
 
         ldns_pkt_ptr pkt = create_test_message();

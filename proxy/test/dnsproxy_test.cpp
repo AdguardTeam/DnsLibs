@@ -87,7 +87,6 @@ TEST_F(DnsProxyTest, TestDns64) {
     settings.dns64 = Dns64Settings{
             .upstreams = {{
                     .address = DNS64_SERVER_ADDR,
-                    .timeout = 5000ms,
             }},
             .max_tries = 5,
             .wait_time = 1s,
@@ -116,9 +115,9 @@ TEST_F(DnsProxyTest, TestResolvedIp) {
     DnsProxySettings settings = make_dnsproxy_settings();
     settings.upstreams = {{
             .address = "tls://dns.adguard-dns.com",
-            .timeout = 5000ms,
             .resolved_server_ip = Ipv4Address{94, 140, 14, 14},
     }};
+    settings.upstream_timeout = 5000ms;
     settings.ipv6_available = false;
 
     DnsProxyEvents events{.on_certificate_verification = [](CertificateVerificationEvent event) {
@@ -141,10 +140,10 @@ TEST_F(DnsProxyTest, TestSPKI) {
     settings.upstreams = {{
         .address = "tls://dns.adguard-dns.com",
         .bootstrap = {"1.1.1.1"},
-        .timeout = 5000ms,
         .resolved_server_ip = Ipv4Address{94, 140, 14, 14},
         .fingerprints = {ADGUARD_DNS_SPKI},
     }};
+    settings.upstream_timeout = 5000ms;
     settings.ipv6_available = false;
 
     DnsProxyEvents events{.on_certificate_verification = [](CertificateVerificationEvent event) {
@@ -167,10 +166,10 @@ TEST_F(DnsProxyTest, MatchSecondFingerprintInChain) {
     settings.upstreams = {{
             .address = "tls://dns.adguard-dns.com",
             .bootstrap = {"1.1.1.1"},
-            .timeout = 5000ms,
             .resolved_server_ip = Ipv4Address{94, 140, 14, 14},
             .fingerprints = {ZEROSSL_SPKI},
     }};
+    settings.upstream_timeout = 5000ms;
     settings.ipv6_available = false;
 
     DnsProxyEvents events{.on_certificate_verification = [](CertificateVerificationEvent event) {
@@ -193,10 +192,10 @@ TEST_F(DnsProxyTest, TestWrongSPKI) {
     settings.upstreams = {{
             .address = "tls://dns.adguard-dns.com",
             .bootstrap = {"1.1.1.1"},
-            .timeout = 5000ms,
             .resolved_server_ip = Ipv4Address{94, 140, 14, 14},
             .fingerprints = {OLD_ADGUARD_DNS_SPKI},
     }};
+    settings.upstream_timeout = 5000ms,
     settings.ipv6_available = false;
 
     DnsProxyEvents events{.on_certificate_verification = [](CertificateVerificationEvent event) {
@@ -219,8 +218,8 @@ TEST_F(DnsProxyTest, DnsStampWithHash) {
     settings.upstreams = {{
             .address = "sdns://AwAAAAAAAAAAEDk0LjE0MC4xNC4xNDo4NTMgEC5qicPhfxas6MksSWkAYMU35VRw0Qa4yyxgYqtlwJATZG5zLmFkZ3VhcmQtZG5zLmNvbQ",
             .bootstrap = {"1.1.1.1"},
-            .timeout = 5000ms,
     }};
+    settings.upstream_timeout = 5000ms;
     settings.ipv6_available = false;
 
     DnsProxyEvents events{.on_certificate_verification = [](CertificateVerificationEvent event) {

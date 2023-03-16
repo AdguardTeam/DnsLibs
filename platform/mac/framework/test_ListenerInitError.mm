@@ -21,7 +21,6 @@ int main() {
     auto *upstream = [[AGDnsUpstream alloc] init];
     upstream.address = @"94.140.14.14";
     upstream.bootstrap = nil;
-    upstream.timeoutMs = 1000;
     upstream.serverIp = nil;
     upstream.id = 42;
     upstream.outboundInterfaceName = nil;
@@ -29,6 +28,7 @@ int main() {
     auto *config = [AGDnsProxyConfig getDefault];
     config.upstreams = @[upstream];
     config.listeners = listeners;
+    config.upstreamTimeoutMs = 1000;
 
     auto *handler = [AGDnsProxyEvents new];
     NSError *error;

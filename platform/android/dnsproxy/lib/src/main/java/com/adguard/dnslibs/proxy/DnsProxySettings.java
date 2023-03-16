@@ -72,6 +72,7 @@ public class DnsProxySettings {
     private boolean enableFallbackOnUpstreamsFailure;
     private boolean enableServfailOnUpstreamsFailure;
     private boolean enableHttp3;
+    private int upstreamTimeoutMs;
 
     /**
      * @return Maximum number of cached responses
@@ -434,6 +435,20 @@ public class DnsProxySettings {
         this.enableHttp3 = enableHttp3;
     }
 
+    /**
+     * @return Maximum amount of time, in milliseconds, allowed for upstream exchange.
+     */
+    public int getUpstreamTimeoutMs() {
+        return upstreamTimeoutMs;
+    }
+
+    /**
+     * @param upstreamTimeoutMs Maximum amount of time, in milliseconds, allowed for upstream exchange.
+     */
+    public void setUpstreamTimeoutMs(int upstreamTimeoutMs) {
+        this.upstreamTimeoutMs = upstreamTimeoutMs;
+    }
+
     @Override
     public boolean equals(Object o) {
         if (this == o) return true;
@@ -461,7 +476,8 @@ public class DnsProxySettings {
                 blockEch == that.blockEch &&
                 enableParallelUpstreamQueries == that.enableParallelUpstreamQueries &&
                 enableFallbackOnUpstreamsFailure == that.enableFallbackOnUpstreamsFailure &&
-                enableServfailOnUpstreamsFailure == that.enableServfailOnUpstreamsFailure;
+                enableServfailOnUpstreamsFailure == that.enableServfailOnUpstreamsFailure &&
+                upstreamTimeoutMs == that.upstreamTimeoutMs;
     }
 
     @Override
@@ -470,7 +486,8 @@ public class DnsProxySettings {
                 filterParams, listeners, outboundProxy, ipv6Available, blockIpv6, adblockRulesBlockingMode, hostsRulesBlockingMode,
                 customBlockingIpv4, customBlockingIpv6,
                 dnsCacheSize, optimisticCache, enableDNSSECOK, enableRetransmissionHandling, blockEch,
-                enableParallelUpstreamQueries, enableFallbackOnUpstreamsFailure, enableServfailOnUpstreamsFailure);
+                enableParallelUpstreamQueries, enableFallbackOnUpstreamsFailure, enableServfailOnUpstreamsFailure,
+                upstreamTimeoutMs);
     }
 
     /**

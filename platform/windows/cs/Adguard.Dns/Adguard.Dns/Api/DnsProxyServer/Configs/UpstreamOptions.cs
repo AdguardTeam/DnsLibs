@@ -28,12 +28,6 @@ namespace Adguard.Dns.Api.DnsProxyServer.Configs
         public List<string> Bootstrap { get; set; }
 
         /// <summary>
-        /// Default upstream timeout in milliseconds. Also, it is used as a timeout for bootstrap DNS requests.
-        /// <code>timeout = 0</code>"/> means infinite timeout.
-        /// </summary>
-        public uint TimeoutMs { get; set; }
-
-        /// <summary>
         /// Resolver's IP address. In the case if it's specified, bootstrap DNS servers won't be used at all.
         /// </summary>
         public IPAddress ResolvedIpAddress { get; set; }

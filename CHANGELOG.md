@@ -1,5 +1,14 @@
 # Changelog
 
+* [Feature] Upstream exchange timeout is now specified separately from the upstream options.
+            The signature of some functions is changed as a result.
+  * [Android] See `com.adguard.dnslibs.proxy.DnsProxySettings#setUpstreamTimeoutMs`/`com.adguard.dnslibs.proxy.DnsProxySettings#getUpstreamTimeoutMs`
+              See `com.adguard.dnslibs.proxy.DnsProxy#testUpstream`.
+  * [Apple] See `AGDnsProxyConfig.upstreamTimeoutMs`.
+            See `[AGDnsUtils testUpstream:]`.
+  * [C API] See `ag_dnsproxy_settings::upstream_timeout_ms`.
+            See `ag_test_upstream`.
+
 * [Feature] Implement fingerprints verification for two types of fingerprints for encrypted DNS protocols.
     1) SPKI fingerprint, set separately in the upstream options, it compared with the sha256 hash of the `SubjectPublicKeyInfo` certificate part. It is possible to transfer several such fingerprints, they will try to get matched with one of the certificates in the chain.
     2) The fingerprint of the certificate in full, which is passed as one of the DNS Stamp fields. Compared with sha256 hashes of the entire certificate.

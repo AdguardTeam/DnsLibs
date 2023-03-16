@@ -60,10 +60,10 @@ coro::Task<Upstream::ExchangeResult> DnscryptUpstream::exchange(const ldns_pkt *
     if (result.error) {
         co_return result.error;
     }
-    if (m_options.timeout < result.rtt) {
+    if (m_config.timeout < result.rtt) {
         co_return make_error(DnsError::AE_TIMED_OUT, AG_FMT("Certificate fetch took too much time: {}ms", result.rtt.count()));
     }
-    auto reply = co_await apply_exchange(*request_pkt, m_options.timeout - result.rtt);
+    auto reply = co_await apply_exchange(*request_pkt, m_config.timeout - result.rtt);
     if (guard.expired()) {
         co_return make_error(DnsError::AE_SHUTTING_DOWN);
     }
@@ -83,7 +83,7 @@ coro::Task<DnscryptUpstream::SetupResult> DnscryptUpstream::setup_impl() {
     if (!m_impl || m_impl->server_info.get_server_cert().not_after < now) {
         dnscrypt::Client client;
         auto dial_res
-                = co_await client.dial(m_stamp, this->config().loop, m_options.timeout, m_config.socket_factory, this->make_socket_parameters());
+                = co_await client.dial(m_stamp, this->config().loop, m_config.timeout, m_config.socket_factory, this->make_socket_parameters());
         if (dial_res.has_error()) {
             co_return {rtt, make_error(DnsError::AE_HANDSHAKE_ERROR,
                     AG_FMT("Failed to fetch certificate info from {}", m_options.address), dial_res.error())};

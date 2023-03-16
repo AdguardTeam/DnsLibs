@@ -35,7 +35,7 @@ public:
      * @param options Plain DNS upstream options
      * @param upstream_config Upstream factory configuration for resolving upstreams creation
      */
-    Resolver(UpstreamOptions options, const UpstreamFactoryConfig &upstream_config);
+    Resolver(UpstreamOptions options, UpstreamFactoryConfig upstream_config);
 
     ~Resolver();
 
@@ -57,8 +57,8 @@ public:
 private:
     /** Logger */
     Logger m_log;
-    /** Upstream factory */
-    UpstreamFactory m_upstream_factory;
+    /** Upstream factory config */
+    UpstreamFactoryConfig m_upstream_factory_config;
     /** Upstream options */
     UpstreamOptions m_upstream_options;
     /** Shutdown guard */

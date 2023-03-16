@@ -187,9 +187,14 @@ namespace Adguard.Dns.Utils
         /// </summary>
         /// <param name="upstreamOptions">Upstream options
         /// (<seealso cref="UpstreamOptions"/>)</param>
+        /// <param name="timeoutMs">Maximum amount of time allowed for upstream exchange (in milliseconds)</param>
         /// <param name="ipv6Available">Whether IPv6 is available (i.e., bootstrapper is allowed to make AAAA queries)</param>
         /// <param name="offline">Don't perform online upstream check</param>
-        public static bool TestUpstream(UpstreamOptions upstreamOptions, bool ipv6Available, bool offline)
+        public static bool TestUpstream(
+            UpstreamOptions upstreamOptions, 
+            uint timeoutMs,
+            bool ipv6Available, 
+            bool offline)
         {
             IntPtr pUpstreamOptionsC = IntPtr.Zero;
             Queue<IntPtr> allocatedPointers = new Queue<IntPtr>();
@@ -203,7 +208,12 @@ namespace Adguard.Dns.Utils
                 AGDnsApi.cbd_onCertificateVerification testUpstreamCallbackC =
                     DnsApiConverter.ToNativeObject(certificateVerificationCallback);
                 pUpstreamOptionsC = MarshalUtils.StructureToPtr(upstreamOptionsC);
-                pError = AGDnsApi.ag_test_upstream(pUpstreamOptionsC, ipv6Available, testUpstreamCallbackC, offline);
+                pError = AGDnsApi.ag_test_upstream(
+                    pUpstreamOptionsC, 
+                    timeoutMs,
+                    ipv6Available, 
+                    testUpstreamCallbackC, 
+                    offline);
                 string error = MarshalUtils.PtrToString(pError);
                 if (string.IsNullOrEmpty(error))
                 {

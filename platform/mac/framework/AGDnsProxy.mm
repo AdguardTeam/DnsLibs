@@ -284,7 +284,6 @@ static ServerStamp convert_stamp(AGDnsStamp *stamp) {
         [bootstrap addObject: convert_string(server)];
     }
     _bootstrap = bootstrap;
-    _timeoutMs = settings->timeout.count();
     if (const std::string *name = std::get_if<std::string>(&settings->outbound_interface)) {
         _outboundInterfaceName = convert_string(*name);
     }
@@ -302,7 +301,6 @@ static ServerStamp convert_stamp(AGDnsStamp *stamp) {
     if (self) {
         _address = [coder decodeObjectForKey:@"_address"];
         _bootstrap = [coder decodeObjectForKey:@"_bootstrap"];
-        _timeoutMs = [coder decodeInt64ForKey:@"_timeoutMs"];
         _serverIp = [coder decodeObjectForKey:@"_serverIp"];
         _id = [coder decodeInt64ForKey:@"_id"];
         _outboundInterfaceName = [coder decodeObjectForKey:@"_outboundInterfaceName"];
@@ -315,7 +313,6 @@ static ServerStamp convert_stamp(AGDnsStamp *stamp) {
 - (void)encodeWithCoder:(NSCoder *)coder {
     [coder encodeObject:self.address forKey:@"_address"];
     [coder encodeObject:self.bootstrap forKey:@"_bootstrap"];
-    [coder encodeInt64:self.timeoutMs forKey:@"_timeoutMs"];
     [coder encodeObject:self.serverIp forKey:@"_serverIp"];
     [coder encodeInt64:self.id forKey:@"_id"];
     [coder encodeObject:self.outboundInterfaceName forKey:@"_outboundInterfaceName"];
@@ -324,8 +321,8 @@ static ServerStamp convert_stamp(AGDnsStamp *stamp) {
 
 - (NSString*)description {
     return [NSString stringWithFormat:
-            @"[(%p)AGDnsUpstream: address=%@, bootstrap=(%@), timeoutMs=%ld, serverIp=%@, id=%ld]",
-            self, _address, [_bootstrap componentsJoinedByString:@", "], _timeoutMs, [[NSString alloc] initWithData:_serverIp encoding:NSUTF8StringEncoding], _id];
+            @"[(%p)AGDnsUpstream: address=%@, bootstrap=(%@), serverIp=%@, id=%ld]",
+            self, _address, [_bootstrap componentsJoinedByString:@", "], [[NSString alloc] initWithData:_serverIp encoding:NSUTF8StringEncoding], _id];
 }
 
 @end
@@ -597,6 +594,7 @@ static ServerStamp convert_stamp(AGDnsStamp *stamp) {
     _customBlockingIpv4 = convert_string(settings->custom_blocking_ipv4);
     _customBlockingIpv6 = convert_string(settings->custom_blocking_ipv6);
     _dnsCacheSize = settings->dns_cache_size;
+    _upstreamTimeoutMs = settings->upstream_timeout.count();
     _optimisticCache = settings->optimistic_cache;
     _enableDNSSECOK = settings->enable_dnssec_ok;
     _enableRetransmissionHandling = settings->enable_retransmission_handling;
@@ -631,6 +629,7 @@ static ServerStamp convert_stamp(AGDnsStamp *stamp) {
         _customBlockingIpv4 = [coder decodeObjectForKey:@"_customBlockingIpv4"];
         _customBlockingIpv6 = [coder decodeObjectForKey:@"_customBlockingIpv6"];
         _dnsCacheSize = [coder decodeInt64ForKey:@"_dnsCacheSize"];
+        _upstreamTimeoutMs = [coder decodeInt64ForKey:@"_upstreamTimeoutMs"];
         _optimisticCache = [coder decodeBoolForKey:@"_optimisticCache"];
         _enableDNSSECOK = [coder decodeBoolForKey:@"_enableDNSSECOK"];
         _enableRetransmissionHandling = [coder decodeBoolForKey:@"_enableRetransmissionHandling"];
@@ -666,6 +665,7 @@ static ServerStamp convert_stamp(AGDnsStamp *stamp) {
     [coder encodeObject:self.customBlockingIpv4 forKey:@"_customBlockingIpv4"];
     [coder encodeObject:self.customBlockingIpv6 forKey:@"_customBlockingIpv6"];
     [coder encodeInt64:self.dnsCacheSize forKey:@"_dnsCacheSize"];
+    [coder encodeInt64:self.upstreamTimeoutMs forKey:@"_upstreamTimeoutMs"];
     [coder encodeBool:self.optimisticCache forKey:@"_optimisticCache"];
     [coder encodeBool:self.enableDNSSECOK forKey:@"_enableDNSSECOK"];
     [coder encodeBool:self.enableRetransmissionHandling forKey:@"_enableRetransmissionHandling"];
@@ -678,28 +678,37 @@ static ServerStamp convert_stamp(AGDnsStamp *stamp) {
     [coder encodeObject:self.helperPath forKey:@"_helperPath"];
 }
 
-- (NSString*)description {
-    return [NSString stringWithFormat:@"[(%p)AGDnsProxyConfig:\n"
-            "ipv6Available=%@,\n"
-            "blockIpv6=%@,\n"
-            "adblockRulesBlockingMode=%ld,\n"
-            "hostsRulesBlockingMode=%ld,\n"
-            "customBlockingIpv4=%@,\n"
-            "customBlockingIpv6=%@,\n"
-            "enableDNSSECOK=%@,\n"
-            "enableRetransmissionHandling=%@,\n"
-            "blockEch=%@,\n"
-            "detectSearchDomains=%@,\n"
-            "outboundProxy=%@,\n"
-            "upstreams=%@,\n"
-            "fallbacks=%@,\n"
-            "fallbackDomains=%@,\n"
-            "filters=%@,\n"
-            "dns64Settings=%@,\n"
-            "listeners=%@]",
-            self, _ipv6Available ? @"YES" : @"NO", _blockIpv6 ? @"YES" : @"NO", _adblockRulesBlockingMode, _hostsRulesBlockingMode, _customBlockingIpv4,
-            _customBlockingIpv6, _enableDNSSECOK ? @"YES" : @"NO", _enableRetransmissionHandling ? @"YES" : @"NO", _blockEch ? @"YES" : @"NO",
-            _detectSearchDomains ? @"YES" : @"NO", _outboundProxy, _upstreams, _fallbacks, _fallbackDomains, _filters, _dns64Settings, _listeners];
+- (NSString *)description {
+    NSMutableString *description = [NSMutableString stringWithFormat:@"<%@: ", NSStringFromClass([self class])];
+    [description appendFormat:@"self.upstreams=%@", self.upstreams];
+    [description appendFormat:@", self.fallbacks=%@", self.fallbacks];
+    [description appendFormat:@", self.fallbackDomains=%@", self.fallbackDomains];
+    [description appendFormat:@", self.detectSearchDomains=%d", self.detectSearchDomains];
+    [description appendFormat:@", self.filters=%@", self.filters];
+    [description appendFormat:@", self.blockedResponseTtlSecs=%li", self.blockedResponseTtlSecs];
+    [description appendFormat:@", self.dns64Settings=%@", self.dns64Settings];
+    [description appendFormat:@", self.listeners=%@", self.listeners];
+    [description appendFormat:@", self.outboundProxy=%@", self.outboundProxy];
+    [description appendFormat:@", self.ipv6Available=%d", self.ipv6Available];
+    [description appendFormat:@", self.blockIpv6=%d", self.blockIpv6];
+    [description appendFormat:@", self.adblockRulesBlockingMode=%d", self.adblockRulesBlockingMode];
+    [description appendFormat:@", self.hostsRulesBlockingMode=%d", self.hostsRulesBlockingMode];
+    [description appendFormat:@", self.customBlockingIpv4=%@", self.customBlockingIpv4];
+    [description appendFormat:@", self.customBlockingIpv6=%@", self.customBlockingIpv6];
+    [description appendFormat:@", self.dnsCacheSize=%lu", self.dnsCacheSize];
+    [description appendFormat:@", self.upstreamTimeoutMs=%lu", self.upstreamTimeoutMs];
+    [description appendFormat:@", self.optimisticCache=%d", self.optimisticCache];
+    [description appendFormat:@", self.enableDNSSECOK=%d", self.enableDNSSECOK];
+    [description appendFormat:@", self.enableRetransmissionHandling=%d", self.enableRetransmissionHandling];
+    [description appendFormat:@", self.enableRouteResolver=%d", self.enableRouteResolver];
+    [description appendFormat:@", self.blockEch=%d", self.blockEch];
+    [description appendFormat:@", self.enableParallelUpstreamQueries=%d", self.enableParallelUpstreamQueries];
+    [description appendFormat:@", self.enableFallbackOnUpstreamsFailure=%d", self.enableFallbackOnUpstreamsFailure];
+    [description appendFormat:@", self.enableServfailOnUpstreamsFailure=%d", self.enableServfailOnUpstreamsFailure];
+    [description appendFormat:@", self.enableHttp3=%d", self.enableHttp3];
+    [description appendFormat:@", self.helperPath=%@", self.helperPath];
+    [description appendString:@">"];
+    return description;
 }
 
 + (instancetype) getDefault
@@ -988,7 +997,6 @@ static UpstreamOptions convert_upstream(AGDnsUpstream *upstream) {
     return UpstreamOptions{
             .address = [upstream.address UTF8String],
             .bootstrap = std::move(bootstrap),
-            .timeout = std::chrono::milliseconds(upstream.timeoutMs),
             .resolved_server_ip = std::move(addr),
             .id = (int32_t) upstream.id,
             .outbound_interface = std::move(iface),
@@ -1529,11 +1537,12 @@ static std::optional<std::string> verifyCertificate(CertificateVerificationEvent
     return [AGDnsProxy verifyCertificate: &event log: dnsUtilsLogger];
 }
 
-+ (NSError *) testUpstream: (AGDnsUpstream *) opts
-             ipv6Available: (BOOL) ipv6Available
-                   offline: (BOOL) offline
++ (NSError *)testUpstream:(AGDnsUpstream *)opts
+                timeoutMs:(NSUInteger)timeoutMs
+            ipv6Available:(BOOL)ipv6Available
+                  offline:(BOOL)offline
 {
-    auto error = ag::dns::test_upstream(convert_upstream(opts), ipv6Available, verifyCertificate, offline);
+    auto error = ag::dns::test_upstream(convert_upstream(opts), Millis{timeoutMs}, ipv6Available, verifyCertificate, offline);
     if (error) {
         return [NSError errorWithDomain: AGDnsProxyErrorDomain
                                    code: AGDPE_TEST_UPSTREAM_ERROR

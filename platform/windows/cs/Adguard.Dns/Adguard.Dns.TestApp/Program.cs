@@ -92,7 +92,6 @@ namespace Adguard.Dns.TestApp
                 Address = "94.140.14.14",
                 Bootstrap = new List<string>(),
                 Fingerprints = new List<string>(),
-                TimeoutMs = 5000,
                 Id = 42,
                 OutboundInterfaceIndex = 0
             };
@@ -139,6 +138,7 @@ namespace Adguard.Dns.TestApp
                 CustomBlockingIpv4 = null,
                 CustomBlockingIpv6 = null,
                 DnsCacheSize = 128,
+                UpstreamTimeoutMs = 4200,
                 EngineParams = new EngineParams
                 {
                     FilterParams = new List<FilterParams>

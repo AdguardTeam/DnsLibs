@@ -47,9 +47,6 @@ typedef struct {
     /** List of plain DNS servers to be used to resolve the hostname in upstreams's address. */
     ARRAY_OF(const char *) bootstrap;
 
-    /** Timeout, 0 means "default" */
-    uint32_t timeout_ms;
-
     /** Upstream's IP address. If specified, the bootstrapper is NOT used. */
     ag_buffer resolved_ip_address;
 
@@ -225,6 +222,8 @@ typedef struct {
     const char *custom_blocking_ipv6;
     /** Maximum number of cached responses (may be 0) */
     uint32_t dns_cache_size;
+    /** Maximum amount of time, in milliseconds, allowed for upstream exchange (0 means default) */
+    uint32_t upstream_timeout_ms;
     /** Enable optimistic DNS caching */
     bool optimistic_cache;
     /**
@@ -497,12 +496,13 @@ AG_EXPORT const char *ag_dns_stamp_prettier_url(ag_dns_stamp *stamp);
  * Check if an upstream is valid and working.
  * The caller is responsible for freeing the result with `ag_str_free()`.
  * @param ipv6_available whether IPv6 is available, if true, bootstrapper is allowed to make AAAA queries
+ * @param timeout_ms Maximum amount of time allowed for upstream exchange (in milliseconds)
  * @param offline Don't perform online upstream check
  * @return NULL if everything is ok, or
  *         an error message.
  */
-AG_EXPORT const char *ag_test_upstream(const ag_upstream_options *upstream, bool ipv6_available,
-                                       ag_certificate_verification_cb on_certificate_verification, bool offline);
+AG_EXPORT const char *ag_test_upstream(const ag_upstream_options *upstream, uint32_t timeout_ms, bool ipv6_available,
+        ag_certificate_verification_cb on_certificate_verification, bool offline);
 
 /**
  * Check if string is a valid rule

@@ -8,7 +8,6 @@ import java.util.Objects;
 public class UpstreamSettings {
     private String address;
     private List<String> bootstrap = new ArrayList<>();
-    private long timeoutMs;
     private byte[] serverIp;
     private int id;
     private String outboundInterfaceName;
@@ -20,16 +19,12 @@ public class UpstreamSettings {
      * Creates UpstreamSettings
      * @param address   The DNS server's address.
      * @param bootstrap List of plain DNS servers to be used to resolve DOH/DOT hostnames (if any).
-     * @param timeoutMs Default upstream timeout in milliseconds. Also, it is used as a timeout for bootstrap DNS requests.
-     *                  {@code timeout = 0} means infinite timeout.
      * @param serverIp  Resolver's IP address. In the case if it's specified, bootstrap DNS servers won't be used at all.
      * @param id        User-provided ID
      */
-    public UpstreamSettings(String address, List<String> bootstrap,
-                            long timeoutMs, byte[] serverIp, int id) {
+    public UpstreamSettings(String address, List<String> bootstrap, byte[] serverIp, int id) {
         setAddress(address);
         setBootstrap(bootstrap);
-        setTimeoutMs(timeoutMs);
         setServerIp(serverIp);
         setId(id);
     }
@@ -64,22 +59,6 @@ public class UpstreamSettings {
             return;
         }
         this.bootstrap = new ArrayList<>(bootstrap);
-    }
-
-    /**
-     * @return Default upstream timeout in milliseconds. Also, it is used as a timeout for bootstrap DNS requests.
-     * {@code timeout = 0} means infinite timeout.
-     */
-    public long getTimeoutMs() {
-        return timeoutMs;
-    }
-
-    /**
-     * @param timeoutMs Default upstream timeout in milliseconds. Also, it is used as a timeout for bootstrap DNS requests.
-     *                  {@code timeout = 0} means infinite timeout.
-     */
-    public void setTimeoutMs(long timeoutMs) {
-        this.timeoutMs = timeoutMs;
     }
 
     /**
@@ -138,8 +117,7 @@ public class UpstreamSettings {
         if (this == o) return true;
         if (o == null || getClass() != o.getClass()) return false;
         UpstreamSettings that = (UpstreamSettings) o;
-        return timeoutMs == that.timeoutMs &&
-                id == that.id &&
+        return id == that.id &&
                 Objects.equals(address, that.address) &&
                 bootstrap.equals(that.bootstrap) &&
                 Arrays.equals(serverIp, that.serverIp) &&
@@ -149,6 +127,6 @@ public class UpstreamSettings {
 
     @Override
     public int hashCode() {
-        return Objects.hash(timeoutMs, id, address, bootstrap, serverIp, outboundInterfaceName, fingerprints);
+        return Objects.hash(id, address, bootstrap, Arrays.hashCode(serverIp), outboundInterfaceName, fingerprints);
     }
 }

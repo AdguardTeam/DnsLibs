@@ -207,7 +207,7 @@ void DoqUpstream::send_requests() {
         Stream &stream = m_streams[stream_id];
         stream.request_id = req.request_id;
         stream.send_info.buf.reset(evbuffer_new());
-        uint16_t length_prefix = ldns_buffer_remaining(req.request_buffer.get());
+        auto length_prefix = (uint16_t) ldns_buffer_remaining(req.request_buffer.get());
         length_prefix = htons(length_prefix);
         evbuffer_add(stream.send_info.buf.get(), &length_prefix, sizeof(length_prefix));
         evbuffer_add(stream.send_info.buf.get(), ldns_buffer_current(req.request_buffer.get()),
@@ -256,7 +256,7 @@ Error<Upstream::InitError> DoqUpstream::init() {
                 .address_string = m_server_name,
                 .default_port = m_port,
                 .bootstrap = m_options.bootstrap,
-                .timeout = m_options.timeout,
+                .timeout = m_config.timeout,
                 .upstream_config = m_config,
                 .outbound_interface = m_options.outbound_interface,
         };
@@ -372,7 +372,7 @@ coro::Task<Upstream::ExchangeResult> DoqUpstream::exchange(const ldns_pkt *reque
     std::weak_ptr<bool> guard = m_shutdown_guard;
     auto timeout = co_await parallel::any_of<std::cv_status>(
             await_result(req),
-            await_timeout(config().loop, m_options.timeout)
+            await_timeout(config().loop, m_config.timeout)
     );
     if (guard.expired()) {
         co_return make_error(DnsError::AE_SHUTTING_DOWN);
@@ -705,7 +705,7 @@ int DoqUpstream::connect_to_peers(const std::vector<SocketAddress> &current_addr
 
     uint64_t pending_ms = uv_timer_get_due_in(m_handshake_timer->raw());
     if (pending_ms == 0) {
-        uv_timer_start(m_handshake_timer->raw(), handshake_timer_cb, to_millis(m_options.timeout).count(), 0);
+        uv_timer_start(m_handshake_timer->raw(), handshake_timer_cb, to_millis(m_config.timeout).count(), 0);
     }
     return NETWORK_ERR_OK;
 }
@@ -1242,7 +1242,7 @@ void DoqUpstream::update_req_idle_timer() {
         tracelog(m_log, "Short timeout timer already running");
         return;
     }
-    Millis value = m_options.timeout * 2;
+    Millis value = m_config.timeout * 2;
     uv_timer_start(m_req_idle_timer->raw(), short_timeout_timer_cb, value.count(), 0);
     dbglog(m_log, "Short timeout timer set to {}", value);
 }

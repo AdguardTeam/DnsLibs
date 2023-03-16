@@ -14,7 +14,6 @@ static int regressTestListenerFailsInit() {
     auto *upstream = [[AGDnsUpstream alloc] init];
     upstream.address = @"1.1.1.1";
     upstream.bootstrap = nil;
-    upstream.timeoutMs = 1000;
     upstream.serverIp = nil;
     upstream.id = 42;
     upstream.outboundInterfaceName = nil;
@@ -22,6 +21,7 @@ static int regressTestListenerFailsInit() {
     auto *config = [AGDnsProxyConfig getDefault];
     config.upstreams = @[upstream];
     config.listeners = @[listener];
+    config.upstreamTimeoutMs = 1000;
 
     auto *handler = [[AGDnsProxyEvents alloc] init];
     NSError *error;

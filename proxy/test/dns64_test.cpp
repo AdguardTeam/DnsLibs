@@ -22,8 +22,8 @@ TEST(Dns64Test, TestDns64Discovery) {
     EventLoopPtr loop = EventLoop::create();
     loop->start();
     SocketFactory socket_factory({*loop});
-    UpstreamFactory upstream_factory({*loop, &socket_factory});
-    const auto upstream_res = upstream_factory.create_upstream({.address = DNS64_SERVER_ADDR, .timeout = 5000ms});
+    UpstreamFactory upstream_factory({.loop = *loop, .socket_factory = &socket_factory, .timeout = 5000ms});
+    const auto upstream_res = upstream_factory.create_upstream({.address = DNS64_SERVER_ADDR});
     ASSERT_FALSE(upstream_res.has_error()) << upstream_res.error()->str();
     auto &upstream = upstream_res.value();
 

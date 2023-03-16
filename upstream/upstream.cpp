@@ -50,6 +50,9 @@ struct UpstreamFactory::Impl {
 
     Impl(UpstreamFactoryConfig cfg)
             : config(std::move(cfg)) {
+        if (config.timeout.count() == 0) {
+            config.timeout = DEFAULT_TIMEOUT;
+        }
     }
 
     UpstreamFactory::CreateResult create_upstream(const UpstreamOptions &opts) const;

@@ -106,7 +106,8 @@ public class DnsProxyTest {
         final DnsProxySettings settings = getDefaultSettings();
         settings.getUpstreams().clear();
         settings.getUpstreams().add(new UpstreamSettings(
-                "1.1.1.1", Collections.emptyList(), 10000, new byte[]{}, 42));
+                "1.1.1.1", Collections.emptyList(), new byte[]{}, 42));
+        settings.setUpstreamTimeoutMs(10000);
 
         final List<DnsRequestProcessedEvent> eventList =
                 Collections.synchronizedList(new ArrayList<DnsRequestProcessedEvent>());
@@ -218,7 +219,6 @@ public class DnsProxyTest {
         dot.setAddress("tls://dns.adguard.com");
         dot.getBootstrap().add("8.8.8.8");
         dot.setServerIp(new byte[]{8, 8, 8, 8});
-        dot.setTimeoutMs(10000);
         dot.setId(42);
         dot.setOutboundInterfaceName("whtvr0");
         settings.getUpstreams().add(dot);
@@ -251,8 +251,9 @@ public class DnsProxyTest {
         fallbackUpstream.setAddress("https://fall.back/up/stream");
         fallbackUpstream.setBootstrap(Collections.singletonList("1.1.1.1"));
         fallbackUpstream.setServerIp(new byte[]{8, 8, 8, 8});
-        fallbackUpstream.setTimeoutMs(4200);
         settings.getFallbacks().add(fallbackUpstream);
+
+        settings.setUpstreamTimeoutMs(4200);
 
         settings.setOutboundProxy(
                 new OutboundProxySettings(OutboundProxySettings.Protocol.SOCKS5_UDP, "::", 1234,
@@ -291,10 +292,10 @@ public class DnsProxyTest {
         final UpstreamSettings us = new UpstreamSettings();
         us.setAddress(upstreamAddr);
         us.getBootstrap().add("8.8.8.8");
-        us.setTimeoutMs(10000);
         final DnsProxySettings settings = getDefaultSettings();
         settings.getUpstreams().clear();
         settings.getUpstreams().add(us);
+        settings.setUpstreamTimeoutMs(10000);
         settings.setIpv6Available(false); // DoT times out trying to reach dns.adguard.com over IPv6
 
         final DnsProxyEvents events = new DnsProxyEvents() {
@@ -339,11 +340,11 @@ public class DnsProxyTest {
         final UpstreamSettings us = new UpstreamSettings();
         us.setAddress(upstreamAddr);
         us.getBootstrap().add("8.8.8.8");
-        us.setTimeoutMs(10000);
         us.getFingerprints().add(certFingerprint);
         final DnsProxySettings settings = getDefaultSettings();
         settings.getUpstreams().clear();
         settings.getUpstreams().add(us);
+        settings.setUpstreamTimeoutMs(10000);
         settings.setIpv6Available(false); // DoT times out trying to reach dns.adguard.com over IPv6
 
         final DnsProxyEvents events = new DnsProxyEvents() {
@@ -467,18 +468,18 @@ public class DnsProxyTest {
 
     @Test
     public void testTestUpstream() {
-        final long timeout = 500; // ms
+        final int timeout = 500; // ms
         IllegalArgumentException e0 = null;
         try {
-            DnsProxy.testUpstream(new UpstreamSettings("123.12.32.1:1493", new ArrayList<String>(), timeout, null, 42),
-                false, false);
+            DnsProxy.testUpstream(new UpstreamSettings("123.12.32.1:1493", new ArrayList<String>(), null, 42),
+                    timeout, false, false);
         } catch (IllegalArgumentException e) {
             e0 = e;
         }
         assertNotNull(e0);
         try {
-            DnsProxy.testUpstream(new UpstreamSettings("8.8.8.8:53", new ArrayList<String>(), 10 * timeout, null, 42),
-                false, false);
+            DnsProxy.testUpstream(new UpstreamSettings("8.8.8.8:53", new ArrayList<String>(), null, 42),
+                    10 * timeout, false, false);
         } catch (IllegalArgumentException e) {
             fail(e.toString());
         }
@@ -486,8 +487,8 @@ public class DnsProxyTest {
             ArrayList<String> bootstrap = new ArrayList<>();
             bootstrap.add("1.2.3.4");
             bootstrap.add("8.8.8.8");
-            DnsProxy.testUpstream(new UpstreamSettings("tls://dns.adguard-dns.com", bootstrap, 10 * timeout, null, 42),
-                false, false);
+            DnsProxy.testUpstream(new UpstreamSettings("tls://dns.adguard-dns.com", bootstrap, null, 42),
+                    10 * timeout, false, false);
         } catch (IllegalArgumentException e) {
             fail(e.toString());
         }

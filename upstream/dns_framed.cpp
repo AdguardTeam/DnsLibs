@@ -54,7 +54,7 @@ void DnsFramedConnection::connect() {
                                          &m_loop,
                                          prepare_address(upstream->options().address),
                                          { on_connected, on_read, on_close, this },
-                                         upstream->options().timeout,
+                                         upstream->config().timeout,
                                  });
     if (err) {
         log_conn(m_log, err, this, "Failed to start connect: {}", err->str());

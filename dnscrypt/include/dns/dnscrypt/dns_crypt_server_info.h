@@ -107,7 +107,7 @@ private:
         AE_CERTIFICATE_EXPIRED,
         AE_SHARED_KEY_CALCULATION,
     };
-    friend class ag::ErrorCodeToString<TxtToCertInfoError>;
+    friend struct ag::ErrorCodeToString<TxtToCertInfoError>;
     using TxtToCertInfoResult = Result<CertInfo, TxtToCertInfoError>;
 
     TxtToCertInfoResult txt_to_cert_info(const ldns_rr &answer_rr) const;

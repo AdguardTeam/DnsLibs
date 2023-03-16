@@ -50,7 +50,7 @@ struct DohUpstream::QueryHandle {
     const Logger *log = nullptr;
     DohUpstream *upstream = nullptr;
     ConnectionPool *pool = nullptr;
-    size_t request_id = 0;
+    uint16_t request_id = 0;
     CURL_ptr curl_handle;
     Error<DnsError> error;
     ldns_buffer_ptr request = nullptr;
@@ -531,7 +531,7 @@ Error<Upstream::InitError> DohUpstream::init() {
         if (!m_options.bootstrap.empty() || SocketAddress(get_host_name(m_options.address).value(), 0).valid()) {
             BootstrapperPtr bootstrapper = std::make_unique<Bootstrapper>(
                     Bootstrapper::Params{get_host_port(m_options.address), DEFAULT_DOH_PORT, m_options.bootstrap,
-                            m_options.timeout, m_config, m_options.outbound_interface});
+                            m_config.timeout, m_config, m_options.outbound_interface});
             if (auto err = bootstrapper->init(); !err) {
                 m_bootstrapper = std::move(bootstrapper);
             } else {
@@ -658,7 +658,7 @@ void DohUpstream::read_messages() {
                 if (m_check_proxy != nullptr) {
                     continue;
                 }
-                m_check_proxy = CheckProxyState::start(this, m_options.timeout);
+                m_check_proxy = CheckProxyState::start(this, m_config.timeout);
                 if (m_check_proxy != nullptr) {
                     dbglog_id(handle, "Failed to connect through proxy, checking connectivity with proxy server");
                     continue;
@@ -861,7 +861,7 @@ void DohUpstream::reset_bypassed_proxy_queries() {
 
 coro::Task<Upstream::ExchangeResult> DohUpstream::exchange(const ldns_pkt *request, const DnsMessageInfo *) {
 
-    Millis timeout = m_options.timeout;
+    Millis timeout = m_config.timeout;
 
     std::weak_ptr<bool> guard = m_shutdown_guard;
     if (m_resolved == nullptr) {
@@ -875,11 +875,11 @@ coro::Task<Upstream::ExchangeResult> DohUpstream::exchange(const ldns_pkt *reque
         assert(!resolve_result.addresses.empty());
 
         Millis resolve_time = duration_cast<Millis>(resolve_result.time_elapsed);
-        if (m_options.timeout < resolve_time) {
+        if (m_config.timeout < resolve_time) {
             co_return make_error(DnsError::AE_TIMED_OUT,
                     AG_FMT("DNS server name resolving took too much time: {}us", resolve_result.time_elapsed.count()));
         }
-        timeout = m_options.timeout - resolve_time;
+        timeout = m_config.timeout - resolve_time;
 
         std::string entry;
         for (const SocketAddress &address : resolve_result.addresses) {
@@ -971,7 +971,7 @@ void DohUpstream::start_httpver_probe() {
 
     auto h2_probe_handle = std::make_unique<QueryHandle>();
     h2_probe_handle->upstream = this;
-    h2_probe_handle->timeout = m_options.timeout;
+    h2_probe_handle->timeout = m_config.timeout;
     h2_probe_handle->log = &m_log;
     if (!h2_probe_handle->create_probe_curl_handle(h2_probe_pool.get(), CURL_HTTP_VERSION_2)) {
         stop_all_with_error(std::move(h2_probe_handle->error));

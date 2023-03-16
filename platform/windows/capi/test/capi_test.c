@@ -234,14 +234,13 @@ static void test_utils() {
     upstream.bootstrap.size = 1;
     upstream.bootstrap.data = malloc(sizeof(const char *));
     upstream.bootstrap.data[0] = "8.8.8.8";
-    upstream.timeout_ms = 5000;
-    const char *error = ag_test_upstream(&upstream, false, on_cert, false);
+    const char *error = ag_test_upstream(&upstream, 5000, false, on_cert, false);
     ASSERT(error == NULL);
     upstream.address = "1.2.3.4.5.6";
-    error = ag_test_upstream(&upstream, false, NULL, false);
+    error = ag_test_upstream(&upstream, 5000, false, NULL, false);
     ASSERT(error);
     upstream.address = "https://asdf.asdf.asdf/asdfdnsqueryasdf";
-    error = ag_test_upstream(&upstream, false, NULL, false);
+    error = ag_test_upstream(&upstream, 5000, false, NULL, false);
     ASSERT(error);
     ag_str_free(error);
     free(upstream.bootstrap.data);

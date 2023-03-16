@@ -18,6 +18,7 @@ struct Dns64Settings {
     std::vector<UpstreamOptions> upstreams; // The upstreams to use for discovery of DNS64 prefixes
     uint32_t max_tries; // How many times, at most, to try DNS64 prefixes discovery before giving up
     Millis wait_time; // How long to wait before a dns64 prefixes discovery attempt
+    Millis timeout; // Single discovery try timeout
 };
 
 /**
@@ -102,6 +103,8 @@ struct DnsProxySettings {
     std::string custom_blocking_ipv6; // Custom IPv6 address to return for filtered requests
 
     size_t dns_cache_size; // Maximum number of cached responses
+
+    Millis upstream_timeout; // Maximum amount of time allowed for upstream exchange (if 0, the default is used)
 
     /**
      * Enable optimistic cache mode.
