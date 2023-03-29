@@ -15,7 +15,7 @@ static constexpr int MODIFIERS_DELIMITER = ',';
 static constexpr std::string_view EXCEPTION_MARKER = "@@";
 static constexpr std::string_view SKIPPABLE_PREFIXES[]
         = {"https://", "http://", "http*://", "ws://", "wss://", "ws*://", "://", "//", "*://"};
-static constexpr std::string_view SPECIAL_SUFFIXES[] = {"|", "^", "/", "$all", "$~third-party", "$1p", "$first-party", "/*};
+static constexpr std::string_view SPECIAL_SUFFIXES[] = {"|", "^", "/", "$all", "$~third-party", "$1p", "$first-party", "$network", "/*"};
 static constexpr std::string_view SPECIAL_REGEX_CHARACTERS = "\\^$*+?.()|[]{}";
 
 static const Regex SHORTCUT_REGEXES[] = {
