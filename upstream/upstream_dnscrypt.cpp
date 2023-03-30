@@ -81,9 +81,13 @@ coro::Task<DnscryptUpstream::SetupResult> DnscryptUpstream::setup_impl() {
     Millis rtt(0);
     auto now = duration_cast<Millis>(SteadyClock::now().time_since_epoch()).count();
     if (!m_impl || m_impl->server_info.get_server_cert().not_after < now) {
+        std::weak_ptr<bool> guard = m_shutdown_guard;
         dnscrypt::Client client;
         auto dial_res
                 = co_await client.dial(m_stamp, this->config().loop, m_options.timeout, m_config.socket_factory, this->make_socket_parameters());
+        if (guard.expired()) {
+            co_return {rtt, make_error(DnsError::AE_SHUTTING_DOWN)};
+        }
         if (dial_res.has_error()) {
             co_return {rtt, make_error(DnsError::AE_HANDSHAKE_ERROR,
                     AG_FMT("Failed to fetch certificate info from {}", m_options.address), dial_res.error())};
