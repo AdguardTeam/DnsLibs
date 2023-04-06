@@ -5,8 +5,8 @@ using Adguard.Dns.Api.DnsProxyServer.Callbacks;
 using Adguard.Dns.Api.DnsProxyServer.Configs;
 using Adguard.Dns.Exceptions;
 using Adguard.Dns.Helpers;
-using AdGuard.Utils.Interop;
-using AdGuard.Utils.Logging;
+using AdGuard.Utils.Adapters.Interop;
+using AdGuard.Utils.Adapters.Logging;
 
 namespace Adguard.Dns.DnsProxyServer
 {

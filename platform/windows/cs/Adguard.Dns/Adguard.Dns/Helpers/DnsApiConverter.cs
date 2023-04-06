@@ -10,7 +10,7 @@ using Adguard.Dns.Api.DnsProxyServer.EventArgs;
 using Adguard.Dns.Api.FilteringLogAction;
 using Adguard.Dns.DnsProxyServer;
 using Adguard.Dns.Utils;
-using AdGuard.Utils.Interop;
+using AdGuard.Utils.Adapters.Interop;
 
 namespace Adguard.Dns.Helpers
 {
