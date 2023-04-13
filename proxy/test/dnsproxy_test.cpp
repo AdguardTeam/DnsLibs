@@ -134,23 +134,47 @@ TEST_F(DnsProxyTest, TestResolvedIp) {
     ASSERT_EQ(ldns_pkt_get_rcode(response.get()), LDNS_RCODE_NOERROR);
 }
 
-TEST_F(DnsProxyTest, TestSPKI) {
-    using namespace std::chrono_literals;
-    DnsProxySettings settings = make_dnsproxy_settings();
-    settings.upstreams = {{
-        .address = "tls://dns.adguard-dns.com",
+
+class SPKITest : public ::testing::TestWithParam<std::string> {
+protected:
+    std::unique_ptr<DnsProxy> m_proxy;
+    DnsProxySettings m_settings = make_dnsproxy_settings();
+    Logger m_log{"DnsProxyTest"};
+
+    void SetUp() override {
+        using namespace std::chrono_literals;
+        m_proxy = std::make_unique<DnsProxy>();
+        Logger::set_log_level(LogLevel::LOG_LEVEL_TRACE);
+        m_settings.upstream_timeout = 5000ms;
+        m_settings.ipv6_available = false;
+    }
+
+    void TearDown() override {
+        if (m_proxy) {
+            m_proxy->deinit();
+        }
+    }
+};
+
+static const std::string encrypted_upstreams[] = {
+        "quic://dns.adguard-dns.com",
+        "tls://dns.adguard-dns.com",
+        "https://dns.adguard-dns.com/dns-query"
+};
+
+TEST_P(SPKITest, TestSPKI) {
+    m_settings.upstreams = {{
+        .address = GetParam(),
         .bootstrap = {"1.1.1.1"},
         .resolved_server_ip = Ipv4Address{94, 140, 14, 14},
         .fingerprints = {ADGUARD_DNS_SPKI},
     }};
-    settings.upstream_timeout = 5000ms;
-    settings.ipv6_available = false;
 
     DnsProxyEvents events{.on_certificate_verification = [](CertificateVerificationEvent event) {
         return std::nullopt;
     }};
 
-    auto [ret, err] = m_proxy->init(settings, events);
+    auto [ret, err] = m_proxy->init(m_settings, events);
     ASSERT_TRUE(ret) << err->str();
 
     ldns_pkt_ptr response;
@@ -160,23 +184,19 @@ TEST_F(DnsProxyTest, TestSPKI) {
     ASSERT_EQ(ldns_pkt_get_rcode(response.get()), LDNS_RCODE_NOERROR);
 }
 
-TEST_F(DnsProxyTest, MatchSecondFingerprintInChain) {
-    using namespace std::chrono_literals;
-    DnsProxySettings settings = make_dnsproxy_settings();
-    settings.upstreams = {{
-            .address = "tls://dns.adguard-dns.com",
+TEST_P(SPKITest, MatchSecondFingerprintInChain) {
+    m_settings.upstreams = {{
+            .address = GetParam(),
             .bootstrap = {"1.1.1.1"},
             .resolved_server_ip = Ipv4Address{94, 140, 14, 14},
             .fingerprints = {ZEROSSL_SPKI},
     }};
-    settings.upstream_timeout = 5000ms;
-    settings.ipv6_available = false;
 
     DnsProxyEvents events{.on_certificate_verification = [](CertificateVerificationEvent event) {
         return std::nullopt;
     }};
 
-    auto [ret, err] = m_proxy->init(settings, events);
+    auto [ret, err] = m_proxy->init(m_settings, events);
     ASSERT_TRUE(ret) << err->str();
 
     ldns_pkt_ptr response;
@@ -185,15 +205,17 @@ TEST_F(DnsProxyTest, MatchSecondFingerprintInChain) {
     ASSERT_EQ(ldns_pkt_ancount(response.get()), 1);
     ASSERT_EQ(ldns_pkt_get_rcode(response.get()), LDNS_RCODE_NOERROR);
 }
+
+INSTANTIATE_TEST_SUITE_P(SPKITest, SPKITest, testing::ValuesIn(encrypted_upstreams));
 
 TEST_F(DnsProxyTest, TestWrongSPKI) {
     using namespace std::chrono_literals;
     DnsProxySettings settings = make_dnsproxy_settings();
     settings.upstreams = {{
-            .address = "tls://dns.adguard-dns.com",
+            .address = "https://cloudflare-dns.com/dns-query",
             .bootstrap = {"1.1.1.1"},
             .resolved_server_ip = Ipv4Address{94, 140, 14, 14},
-            .fingerprints = {OLD_ADGUARD_DNS_SPKI},
+            .fingerprints = {ADGUARD_DNS_SPKI},
     }};
     settings.upstream_timeout = 5000ms,
     settings.ipv6_available = false;

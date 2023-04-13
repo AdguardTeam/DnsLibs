@@ -679,7 +679,7 @@ static const UpstreamOptions test_options_with_invalid_fingerprint_data[]{
                 .fingerprints = {"INVALIDFINGERPRINT!"},
         },
         {
-                .address = "https://dns.adguard-dns.com",
+                .address = "https://dns.adguard-dns.com/dns-query",
                 .bootstrap = {"8.8.8.8"},
                 .fingerprints = {"INVALIDFINGERPRINT!"},
         },
