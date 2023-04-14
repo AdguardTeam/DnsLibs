@@ -1,5 +1,8 @@
 #pragma once
 
+#include <memory>
+#include <optional>
+
 #include "common/net_utils.h"
 
 namespace ag::dns {
@@ -11,5 +14,14 @@ struct DnsMessageInfo {
     /** Socket address of the peer from which the message was received */
     SocketAddress peername;
 };
+
+/** Return `nullptr` if `opt.has_value() == false`, or `std::addressof(opt.value())` if `opt.has_value() == true`. */
+template <typename T>
+T *opt_as_ptr(std::optional<T> &opt) {
+    if (opt.has_value()) {
+        return std::addressof(*opt);
+    }
+    return nullptr;
+}
 
 } // namespace ag::dns

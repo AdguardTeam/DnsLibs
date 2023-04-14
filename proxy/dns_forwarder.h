@@ -39,10 +39,19 @@ public:
     coro::Task<Uint8Vector> handle_message(Uint8View message, const DnsMessageInfo *info);
 
 private:
+    struct HandleMessageResult {
+        Uint8Vector response_wire;
+        DnsRequestProcessedEvent event;
+        bool timed_out;
+    };
+
     void truncate_response(ldns_pkt *response, const ldns_pkt *request, const DnsMessageInfo *info);
 
-    coro::Task<Uint8Vector> handle_message_internal(
-            Uint8View message, const DnsMessageInfo *info, bool fallback_only, uint16_t pkt_id);
+    coro::Task<Uint8Vector> handle_message_with_timeout(
+            ldns_pkt_ptr request, std::optional<DnsMessageInfo> info, bool fallback_only);
+
+    coro::Task<HandleMessageResult> handle_message_internal(
+            ldns_pkt_ptr request, std::optional<DnsMessageInfo> info, bool fallback_only);
 
     coro::Task<UpstreamExchangeResult> do_upstreams_exchange(std::string_view normalized_domain,
             const ldns_pkt *request, bool force_fallback, const DnsMessageInfo *info = nullptr);
@@ -58,23 +67,20 @@ private:
 
     bool apply_fallback_filter(std::string_view hostname, const ldns_pkt *request);
 
-    coro::Task<std::optional<Uint8Vector>> apply_filter(DnsFilter::MatchParam match, const ldns_pkt *request,
-            const ldns_pkt *original_response, DnsRequestProcessedEvent &event,
-            std::vector<DnsFilter::Rule> &last_effective_rules, bool fallback_only, bool fire_event = true,
-            ldns_pkt_rcode *out_rcode = nullptr);
+    coro::Task<ldns_pkt_ptr> apply_filter(DnsFilter::MatchParam match, const ldns_pkt *request,
+            DnsRequestProcessedEvent &event, std::vector<DnsFilter::Rule> &last_effective_rules, bool fallback_only);
 
-    coro::Task<std::optional<Uint8Vector>> apply_cname_filter(const ldns_rr *cname_rr, const ldns_pkt *request,
-            const ldns_pkt *response, DnsRequestProcessedEvent &event,
-            std::vector<DnsFilter::Rule> &last_effective_rules, bool fallback_only);
+    coro::Task<ldns_pkt_ptr> apply_cname_filter(const ldns_rr *cname_rr, const ldns_pkt *request,
+            DnsRequestProcessedEvent &event, std::vector<DnsFilter::Rule> &last_effective_rules, bool fallback_only);
 
-    coro::Task<std::optional<Uint8Vector>> apply_ip_filter(const ldns_rr *rr, const ldns_pkt *request,
-            const ldns_pkt *response, DnsRequestProcessedEvent &event,
-            std::vector<DnsFilter::Rule> &last_effective_rules, bool fallback_only);
+    coro::Task<ldns_pkt_ptr> apply_ip_filter(const ldns_rr *rr, const ldns_pkt *request,
+            DnsRequestProcessedEvent &event, std::vector<DnsFilter::Rule> &last_effective_rules, bool fallback_only);
 
     coro::Task<ldns_pkt_ptr> try_dns64_aaaa_synthesis(Upstream *upstream, const ldns_pkt_ptr &request) const;
 
-    void finalize_processed_event(DnsRequestProcessedEvent &event, const ldns_pkt *request, const ldns_pkt *response,
-            const ldns_pkt *original_response, std::optional<int32_t> upstream_id, Error<DnsError> error) const;
+    void finalize_processed_event(DnsRequestProcessedEvent &event, const ldns_pkt *request,
+            const ldns_pkt *response, const ldns_pkt *original_response, std::optional<int32_t> upstream_id,
+            Error<DnsError> error = nullptr) const;
 
     bool finalize_dnssec_log_logic(ldns_pkt *response, bool is_our_do_bit);
 

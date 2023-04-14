@@ -135,9 +135,9 @@ static void event_append_rules(
     event.whitelist = content != nullptr && content->props.test(DnsFilter::DARP_EXCEPTION);
 }
 
-void DnsForwarder::finalize_processed_event(DnsRequestProcessedEvent &event, const ldns_pkt *request,
-        const ldns_pkt *response, const ldns_pkt *original_response, std::optional<int32_t> upstream_id,
-        Error<DnsError> error) const {
+void DnsForwarder::finalize_processed_event(DnsRequestProcessedEvent &event,
+        const ldns_pkt *request, const ldns_pkt *response, const ldns_pkt *original_response,
+        std::optional<int32_t> upstream_id, Error<DnsError> error) const {
     if (request != nullptr) {
         const ldns_rr *question = ldns_rr_list_rr(ldns_pkt_question(request), 0);
         char *type = ldns_rr_type2str(ldns_rr_get_type(question));
@@ -172,9 +172,6 @@ void DnsForwarder::finalize_processed_event(DnsRequestProcessedEvent &event, con
     }
 
     event.elapsed = duration_cast<Millis>(SystemClock::now().time_since_epoch()).count() - event.start_time;
-    if (m_events->on_request_processed != nullptr) {
-        m_events->on_request_processed(event);
-    }
 }
 
 // If we know any DNS64 prefixes, request A RRs from `upstream` and
@@ -409,6 +406,9 @@ static coro::Task<void> discover_dns64_prefixes(std::vector<UpstreamOptions> uss
         Millis wait_time, std::weak_ptr<bool> shutdown_guard) {
     static ag::Logger logger{"DNS64"};
     co_await loop.co_submit();
+    if (shutdown_guard.expired()) {
+        co_return;
+    }
     UpstreamFactory us_factory({.loop = loop, .socket_factory = socket_factory.get(), .timeout = timeout});
     auto i = max_tries;
     while (i--) {
@@ -496,34 +496,22 @@ static ldns_rr_type question_rr_type(const ldns_pkt *request) {
     return ldns_rr_get_type(ldns_rr_list_rr(ldns_pkt_question(request), 0));
 }
 
-coro::Task<Uint8Vector> DnsForwarder::handle_message_internal(
-        Uint8View message, const DnsMessageInfo *info, bool fallback_only, uint16_t pkt_id) {
+coro::Task<DnsForwarder::HandleMessageResult> DnsForwarder::handle_message_internal(
+        ldns_pkt_ptr request, std::optional<DnsMessageInfo> info, bool fallback_only) {
     std::weak_ptr<bool> guard = m_shutdown_guard;
     DnsRequestProcessedEvent event = {};
     event.start_time = duration_cast<Millis>(SystemClock::now().time_since_epoch()).count();
 
-    ldns_pkt *request;
-    ldns_status status = ldns_wire2pkt(&request, message.data(), message.length());
-    if (status != LDNS_STATUS_OK) {
-        dbglog(m_log, "Failed to parse payload: {} ({})", ldns_get_errorstr_by_id(status), status);
-        finalize_processed_event(event, nullptr, nullptr, nullptr, std::nullopt,
-                make_error(DnsError::AE_DECODE_ERROR, AG_FMT("{} ({})", ldns_get_errorstr_by_id(status), status)));
-        ldns_pkt_ptr response{ResponseHelpers::create_formerr_response(pkt_id)};
-        log_packet(m_log, response.get(), "Format error response");
-        co_return transform_response_to_raw_data(response.get());
-    }
+    log_packet(m_log, request.get(), "Client request", opt_as_ptr(info));
 
-    ldns_pkt_ptr req_holder = ldns_pkt_ptr(request);
-    log_packet(m_log, request, "Client request", info);
-
-    const ldns_rr *question = ldns_rr_list_rr(ldns_pkt_question(request), 0);
+    const ldns_rr *question = ldns_rr_list_rr(ldns_pkt_question(request.get()), 0);
     if (question == nullptr) {
-        ldns_pkt_ptr response{ResponseHelpers::create_servfail_response(request)};
+        ldns_pkt_ptr response{ResponseHelpers::create_servfail_response(request.get())};
         log_packet(m_log, response.get(), "Server failure response");
         finalize_processed_event(
                 event, nullptr, response.get(), nullptr, std::nullopt, make_error(DnsError::AE_DECODE_ERROR));
         Uint8Vector raw_response = transform_response_to_raw_data(response.get());
-        co_return raw_response;
+        co_return {std::move(raw_response), std::move(event)};
     }
 
     auto domain = AllocatedPtr<char>(ldns_rdf2str(ldns_rr_owner(question)));
@@ -534,76 +522,69 @@ coro::Task<Uint8Vector> DnsForwarder::handle_message_internal(
         normalized_domain.remove_suffix(1); // drop trailing dot
     }
 
-    ResponseCache::Result cached = m_response_cache.get(request);
+    ResponseCache::Result cached = m_response_cache.get(request.get());
 
     if (cached.response && (!cached.expired || m_settings->optimistic_cache)) {
         log_packet(m_log, cached.response.get(), "Cached response");
         event.cache_hit = true;
-        truncate_response(cached.response.get(), request, info);
-        finalize_processed_event(event, request, cached.response.get(), nullptr, cached.upstream_id, {});
+        truncate_response(cached.response.get(), request.get(), opt_as_ptr(info));
+        finalize_processed_event(event,  request.get(), cached.response.get(), nullptr, cached.upstream_id, {});
         Uint8Vector raw_response = transform_response_to_raw_data(cached.response.get());
         if (cached.expired) {
             assert(m_settings->optimistic_cache);
-            this->optimistic_cache_background_resolve(std::move(req_holder), std::string{normalized_domain})
+            this->optimistic_cache_background_resolve(std::move(request), std::string{normalized_domain})
                     .run_detached();
         }
-        co_return raw_response;
+        co_return {std::move(raw_response), std::move(event)};
     }
 
     const ldns_rr_type type = ldns_rr_get_type(question);
 
     // disable Mozilla DoH
     if ((type == LDNS_RR_TYPE_A || type == LDNS_RR_TYPE_AAAA) && 0 == strcmp(domain.get(), MOZILLA_DOH_HOST.data())) {
-        ldns_pkt_ptr response{ResponseHelpers::create_nxdomain_response(request, m_settings)};
+        ldns_pkt_ptr response{ResponseHelpers::create_nxdomain_response(request.get(), m_settings)};
         log_packet(m_log, response.get(), "Mozilla DOH blocking response");
         Uint8Vector raw_response = transform_response_to_raw_data(response.get());
-        finalize_processed_event(event, request, response.get(), nullptr, std::nullopt, {});
-        co_return raw_response;
+        finalize_processed_event(event, request.get(), response.get(), nullptr, std::nullopt, {});
+        co_return {std::move(raw_response), std::move(event)};
     }
 
-    tracelog_fid(m_log, request, "Query domain: {}", normalized_domain);
+    tracelog_fid(m_log, request.get(), "Query domain: {}", normalized_domain);
 
     std::vector<DnsFilter::Rule> effective_rules;
 
-    // IPv6 blocking
-    if (m_settings->block_ipv6 && LDNS_RR_TYPE_AAAA == type) {
-        ldns_pkt_rcode rc = LDNS_RCODE_NOERROR;
-        auto raw_blocking_response = co_await apply_filter(
+    {
+        auto filter_response = co_await apply_filter(
                 {
                         .domain = normalized_domain,
-                        .rr_type = question_rr_type(request),
+                        .rr_type = question_rr_type(request.get()),
                 },
-                request, nullptr, event, effective_rules, fallback_only, false, &rc);
+                request.get(), event, effective_rules, fallback_only);
         if (guard.expired()) {
             co_return {};
         }
-        if (!raw_blocking_response || rc == LDNS_RCODE_NOERROR) {
-            dbglog_fid(m_log, request, "AAAA DNS query blocked because IPv6 blocking is enabled");
-            ldns_pkt_ptr response{ResponseHelpers::create_soa_response(request, m_settings, SOA_RETRY_IPV6_BLOCK)};
+
+        // IPv6 blocking
+        if (m_settings->block_ipv6 && LDNS_RR_TYPE_AAAA == type
+                && (!filter_response || ldns_pkt_get_rcode(filter_response.get()) == LDNS_RCODE_NOERROR)) {
+            dbglog_fid(m_log, request.get(), "AAAA DNS query blocked because IPv6 blocking is enabled");
+            ldns_pkt_ptr response{ResponseHelpers::create_soa_response(request.get(), m_settings, SOA_RETRY_IPV6_BLOCK)};
             log_packet(m_log, response.get(), "IPv6 blocking response");
-            co_return transform_response_to_raw_data(response.get());
+            finalize_processed_event(event, request.get(), response.get(), nullptr, std::nullopt);
+            co_return {transform_response_to_raw_data(response.get()), std::move(event)};
         }
-        co_return *raw_blocking_response;
+
+        if (filter_response) {
+            finalize_processed_event(event, request.get(), filter_response.get(), nullptr, std::nullopt);
+            co_return {transform_response_to_raw_data(filter_response.get()), std::move(event)};
+        }
     }
 
-    auto raw_blocking_response = co_await apply_filter(
-            {
-                    .domain = normalized_domain,
-                    .rr_type = question_rr_type(request),
-            },
-            request, nullptr, event, effective_rules, fallback_only);
-    if (guard.expired()) {
-        co_return {};
-    }
-    if (raw_blocking_response) {
-        co_return *raw_blocking_response;
-    }
-
-    bool is_our_do_bit = m_settings->enable_dnssec_ok && DnssecHelpers::set_do_bit(request);
+    bool is_our_do_bit = m_settings->enable_dnssec_ok && DnssecHelpers::set_do_bit(request.get());
 
     // If this is a retransmitted request, use fallback upstreams only
     auto [response, selected_upstream] =
-            co_await do_upstreams_exchange(normalized_domain, request, fallback_only, info);
+            co_await do_upstreams_exchange(normalized_domain, request.get(), fallback_only, opt_as_ptr(info));
     if (guard.expired()) {
         co_return {};
     }
@@ -611,20 +592,22 @@ coro::Task<Uint8Vector> DnsForwarder::handle_message_internal(
     if (!response) {
         auto err = response.error();
         if (!m_settings->enable_servfail_on_upstreams_failure) {
-            dbglog_fid(m_log, request, "Not responding, upstreams exchange error: {}", err->str());
+            dbglog_fid(m_log, request.get(), "Not responding, upstreams exchange error: {}", err->str());
             co_return {};
         }
-        response = ldns_pkt_ptr{ResponseHelpers::create_servfail_response(request)};
+        response = ldns_pkt_ptr{ResponseHelpers::create_servfail_response(request.get())};
         log_packet(m_log, response->get(), "Server failure response");
-        Uint8Vector raw_response = transform_response_to_raw_data(response->get());
-        finalize_processed_event(event, request, response->get(), nullptr,
+        finalize_processed_event(event, request.get(), response->get(), nullptr,
                 selected_upstream ? std::make_optional(selected_upstream->options().id) : std::nullopt,
                 make_error(DnsError::AE_EXCHANGE_ERROR, err));
-        co_return raw_response;
+        co_return {transform_response_to_raw_data(response->get()), std::move(event)};
     }
 
     assert(selected_upstream);
     log_packet(m_log, response->get(), AG_FMT("Upstream ({}) response", selected_upstream->options().address).c_str());
+
+    event.bytes_sent = ldns_pkt_size(request.get());
+    event.bytes_received = ldns_pkt_size(response->get());
 
     event.dnssec = finalize_dnssec_log_logic(response->get(), is_our_do_bit);
 
@@ -636,22 +619,28 @@ coro::Task<Uint8Vector> DnsForwarder::handle_message_internal(
             // CNAME response blocking
             auto rr = ldns_rr_list_rr(ldns_pkt_answer(response->get()), i);
             if (ldns_rr_get_type(rr) == LDNS_RR_TYPE_CNAME) {
-                if (auto raw_response = co_await apply_cname_filter(
-                            rr, request, response->get(), event, effective_rules, fallback_only)) {
-                    co_return *raw_response;
-                }
+                auto filter_response = co_await apply_cname_filter(
+                        rr, request.get(), event, effective_rules, fallback_only);
                 if (guard.expired()) {
                     co_return {};
+                }
+                if (filter_response) {
+                    finalize_processed_event(event, request.get(), filter_response.get(), response->get(),
+                            selected_upstream->options().id, nullptr);
+                    co_return {transform_response_to_raw_data(filter_response.get()), std::move(event)};
                 }
             }
             // IP response blocking
             if (ldns_rr_get_type(rr) == LDNS_RR_TYPE_A || ldns_rr_get_type(rr) == LDNS_RR_TYPE_AAAA) {
-                if (auto raw_response = co_await apply_ip_filter(
-                            rr, request, response->get(), event, effective_rules, fallback_only)) {
-                    co_return *raw_response;
-                }
+                auto filter_response = co_await apply_ip_filter(
+                        rr, request.get(), event, effective_rules, fallback_only);
                 if (guard.expired()) {
                     co_return {};
+                }
+                if (filter_response) {
+                    finalize_processed_event(event, request.get(), filter_response.get(), response->get(),
+                            selected_upstream->options().id, nullptr);
+                    co_return {transform_response_to_raw_data(filter_response.get()), std::move(event)};
                 }
             }
         }
@@ -666,12 +655,13 @@ coro::Task<Uint8Vector> DnsForwarder::handle_message_internal(
                 }
             }
             if (!has_aaaa) {
-                if (auto synth_response = co_await try_dns64_aaaa_synthesis(selected_upstream, req_holder)) {
-                    response = std::move(synth_response);
-                    log_packet(m_log, response->get(), "DNS64 synthesized response");
-                }
+                auto synth_response = co_await try_dns64_aaaa_synthesis(selected_upstream, request);
                 if (guard.expired()) {
                     co_return {};
+                }
+                if (synth_response) {
+                    response = std::move(synth_response);
+                    log_packet(m_log, response->get(), "DNS64 synthesized response");
                 }
             }
         }
@@ -683,29 +673,26 @@ coro::Task<Uint8Vector> DnsForwarder::handle_message_internal(
         }
     }
 
-    truncate_response(response->get(), request, info);
-    Uint8Vector raw_response = transform_response_to_raw_data(response->get());
-    event.bytes_sent = message.size();
-    event.bytes_received = raw_response.size();
-    finalize_processed_event(event, request, response->get(), nullptr, selected_upstream->options().id, {});
-    m_response_cache.put(req_holder.get(), std::move(response.value()), selected_upstream->options().id);
-    co_return raw_response;
+    truncate_response(response->get(), request.get(), opt_as_ptr(info));
+    finalize_processed_event(event, request.get(), response->get(), nullptr, selected_upstream->options().id);
+    auto response_wire = transform_response_to_raw_data(response->get());
+    m_response_cache.put(request.get(), std::move(response.value()), selected_upstream->options().id);
+    co_return {std::move(response_wire), std::move(event)};
 }
 
-coro::Task<std::optional<Uint8Vector>> DnsForwarder::apply_cname_filter(const ldns_rr *cname_rr,
-        const ldns_pkt *request, const ldns_pkt *response, DnsRequestProcessedEvent &event,
-        std::vector<DnsFilter::Rule> &last_effective_rules, bool fallback_only) {
+coro::Task<ldns_pkt_ptr> DnsForwarder::apply_cname_filter(const ldns_rr *cname_rr, const ldns_pkt *request,
+        DnsRequestProcessedEvent &event, std::vector<DnsFilter::Rule> &last_effective_rules, bool fallback_only) {
 
     assert(ldns_rr_get_type(cname_rr) == LDNS_RR_TYPE_CNAME);
 
     auto rdf = ldns_rr_rdf(cname_rr, 0);
     if (!rdf) {
-        co_return std::nullopt;
+        co_return nullptr;
     }
 
     AllocatedPtr<char> cname_ptr(ldns_rdf2str(rdf));
     if (!cname_ptr) {
-        co_return std::nullopt;
+        co_return nullptr;
     }
 
     std::string_view cname = cname_ptr.get();
@@ -713,38 +700,35 @@ coro::Task<std::optional<Uint8Vector>> DnsForwarder::apply_cname_filter(const ld
         cname.remove_suffix(1); // drop trailing dot
     }
 
-    tracelog_fid(m_log, response, "Response CNAME: {}", cname);
+    tracelog_fid(m_log, request, "Response CNAME: {}", cname);
 
     co_return co_await apply_filter(
             {
                     .domain = cname,
                     .rr_type = LDNS_RR_TYPE_CNAME,
             },
-            request, response, event, last_effective_rules, fallback_only);
+            request, event, last_effective_rules, fallback_only);
 }
 
-coro::Task<std::optional<Uint8Vector>> DnsForwarder::apply_ip_filter(const ldns_rr *rr, const ldns_pkt *request,
-        const ldns_pkt *response, DnsRequestProcessedEvent &event, std::vector<DnsFilter::Rule> &last_effective_rules,
-        bool fallback_only) {
+coro::Task<ldns_pkt_ptr> DnsForwarder::apply_ip_filter(const ldns_rr *rr, const ldns_pkt *request,
+        DnsRequestProcessedEvent &event, std::vector<DnsFilter::Rule> &last_effective_rules, bool fallback_only) {
     assert(ldns_rr_get_type(rr) == LDNS_RR_TYPE_A || ldns_rr_get_type(rr) == LDNS_RR_TYPE_AAAA);
 
     auto rdf = ldns_rr_rdf(rr, 0);
     if (!rdf || (ldns_rdf_size(rdf) != IPV4_ADDRESS_SIZE && ldns_rdf_size(rdf) != IPV6_ADDRESS_SIZE)) {
-        co_return std::nullopt;
+        co_return nullptr;
     }
     Uint8View addr{ldns_rdf_data(rdf), ldns_rdf_size(rdf)};
     std::string addr_str = ag::utils::addr_to_str(addr);
 
-    tracelog_fid(m_log, response, "Response IP: {}", addr_str);
+    tracelog_fid(m_log, request, "Response IP: {}", addr_str);
 
-    co_return co_await apply_filter({.domain = addr_str, .rr_type = ldns_rr_get_type(rr)}, request, response, event,
-            last_effective_rules, fallback_only);
+    co_return co_await apply_filter(
+            {.domain = addr_str, .rr_type = ldns_rr_get_type(rr)}, request, event, last_effective_rules, fallback_only);
 }
 
-coro::Task<std::optional<Uint8Vector>> DnsForwarder::apply_filter(DnsFilter::MatchParam match, const ldns_pkt *request,
-        const ldns_pkt *original_response, DnsRequestProcessedEvent &event,
-        std::vector<DnsFilter::Rule> &last_effective_rules, bool fallback_only, bool fire_event,
-        ldns_pkt_rcode *out_rcode) {
+coro::Task<ldns_pkt_ptr> DnsForwarder::apply_filter(DnsFilter::MatchParam match, const ldns_pkt *request,
+        DnsRequestProcessedEvent &event, std::vector<DnsFilter::Rule> &last_effective_rules, bool fallback_only) {
 
     auto rules = m_filter.match(m_filter_handle, match);
     for (const DnsFilter::Rule &rule : rules) {
@@ -787,7 +771,7 @@ coro::Task<std::optional<Uint8Vector>> DnsForwarder::apply_filter(DnsFilter::Mat
                                     != (content = std::get_if<DnsFilter::AdblockRuleInfo>(
                                                 &effective_rules.leftovers[0]->content))
                             && content->props.test(DnsFilter::DARP_EXCEPTION)))) {
-        co_return std::nullopt;
+        co_return nullptr;
     }
 
     if (effective_rules.dnsrewrite.empty()) {
@@ -812,7 +796,7 @@ coro::Task<std::optional<Uint8Vector>> DnsForwarder::apply_filter(DnsFilter::Mat
         auto [response, _] = co_await this->do_upstreams_exchange(rwr_cname, rewritten_request.get(), fallback_only);
         if (!response) {
             dbglog_id(m_log, rewritten_request.get(), "Failed to resolve rewritten cname: {}", response.error()->str());
-            co_return std::nullopt;
+            co_return nullptr;
         }
 
         log_packet(m_log, rewritten_request.get(), "Rewritten cname response");
@@ -827,15 +811,7 @@ coro::Task<std::optional<Uint8Vector>> DnsForwarder::apply_filter(DnsFilter::Mat
     ldns_pkt_ptr response{ResponseHelpers::create_blocking_response(
             request, m_settings, effective_rules.leftovers, std::move(rewrite_info))};
     log_packet(m_log, response.get(), "Rule blocked response");
-    if (out_rcode) {
-        *out_rcode = ldns_pkt_get_rcode(response.get());
-    }
-    Uint8Vector raw_response = transform_response_to_raw_data(response.get());
-    if (fire_event) {
-        finalize_processed_event(event, request, response.get(), original_response, std::nullopt, {});
-    }
-
-    co_return raw_response;
+    co_return response;
 }
 
 #ifdef ANDROID
@@ -1077,6 +1053,19 @@ coro::Task<Uint8Vector> DnsForwarder::handle_message(Uint8View message, const Dn
 
     uint16_t pkt_id = read_uint16_be(message);
 
+    DnsRequestProcessedEvent event{};
+    ldns_pkt *request_naked;
+    ldns_status status = ldns_wire2pkt(&request_naked, message.data(), message.size());
+    if (status != LDNS_STATUS_OK) {
+        dbglog(m_log, "Failed to parse payload: {} ({})", ldns_get_errorstr_by_id(status), status);
+        finalize_processed_event(event, nullptr, nullptr, nullptr, std::nullopt,
+                make_error(DnsError::AE_DECODE_ERROR, AG_FMT("{} ({})", ldns_get_errorstr_by_id(status), status)));
+        ldns_pkt_ptr response{ResponseHelpers::create_formerr_response(pkt_id)};
+        log_packet(m_log, response.get(), "Format error response");
+        co_return transform_response_to_raw_data(response.get());
+    }
+    ldns_pkt_ptr request{std::exchange(request_naked, nullptr)};
+
     // If there's enough info, register this request
     bool retransmitted = false;
     bool retransmission_handling = m_settings->enable_retransmission_handling && info && info->proto == utils::TP_UDP;
@@ -1087,7 +1076,8 @@ coro::Task<Uint8Vector> DnsForwarder::handle_message(Uint8View message, const Dn
         }
     }
 
-    Uint8Vector result = co_await this->handle_message_internal(message, info, retransmitted, pkt_id);
+    Uint8Vector result = co_await this->handle_message_with_timeout(
+            std::move(request), info ? std::make_optional(*info) : std::nullopt, retransmitted);
     if (guard.expired()) {
         co_return {};
     }
@@ -1097,6 +1087,41 @@ coro::Task<Uint8Vector> DnsForwarder::handle_message(Uint8View message, const Dn
     }
 
     co_return result;
+}
+
+coro::Task<Uint8Vector> DnsForwarder::handle_message_with_timeout(
+        ldns_pkt_ptr request, std::optional<DnsMessageInfo> info, bool fallback_only) {
+    DnsRequestProcessedEvent servfail_event;
+    ldns_pkt_ptr servfail_response;
+    if (m_settings->enable_servfail_on_upstreams_failure) {
+        servfail_response.reset(ResponseHelpers::create_servfail_response(request.get()));
+        finalize_processed_event(servfail_event, request.get(), servfail_response.get(), nullptr, std::nullopt);
+    }
+    auto handle_message_aw = handle_message_internal(std::move(request), std::move(info), fallback_only);
+    auto timeout_aw = [](EventLoop &loop, Millis timeout) -> coro::Task<HandleMessageResult> {
+        co_await loop.co_sleep(timeout.count() > 0 ? timeout : UpstreamFactory::DEFAULT_TIMEOUT);
+        co_return {.timed_out = true};
+    }(*m_loop, m_settings->upstream_timeout);
+    std::weak_ptr<bool> guard = m_shutdown_guard;
+    auto result = co_await parallel::any_of<HandleMessageResult>(handle_message_aw, timeout_aw);
+    if (guard.expired()) {
+        co_return {};
+    }
+    if (result.timed_out) {
+        dbglog(m_log, "Timed out waiting for `handle_message_internal`");
+        if (m_settings->enable_servfail_on_upstreams_failure) {
+            log_packet(m_log, servfail_response.get(), "Server failure response");
+            if (m_events->on_request_processed) {
+                m_events->on_request_processed(servfail_event);
+            }
+            co_return transform_response_to_raw_data(servfail_response.get());
+        }
+        co_return {};
+    }
+    if (m_events->on_request_processed) {
+        m_events->on_request_processed(result.event);
+    }
+    co_return std::move(result.response_wire);
 }
 
 // Truncate response, if needed
