@@ -1,13 +1,13 @@
 using System;
 using System.Collections.Generic;
 using Adguard.Dns.Exceptions;
-using AdGuard.Utils.Interop;
-using AdGuard.Utils.Logging;
+using AdGuard.Utils.Adapters.Interop;
+using AdGuard.Utils.Adapters.Logging;
 
 namespace Adguard.Dns.Logging
 {
     /// <summary>
-    /// Listens to logging messages of the CoreLibs and logs it with <see cref="AdGuard.Utils.Logging.Logger"/> (with
+    /// Listens to logging messages of the CoreLibs and logs it with <see cref="Logger"/> (with
     /// </summary>
     public static class DnsLoggerAdapter
     {

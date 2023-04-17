@@ -2,8 +2,8 @@
 using System.Collections.Generic;
 using Adguard.Dns.Api.DnsProxyServer.EventArgs;
 using Adguard.Dns.Helpers;
-using AdGuard.Utils.Interop;
-using AdGuard.Utils.Logging;
+using AdGuard.Utils.Adapters.Interop;
+using AdGuard.Utils.Adapters.Logging;
 
 namespace Adguard.Dns.Api.FilteringLogAction
 {

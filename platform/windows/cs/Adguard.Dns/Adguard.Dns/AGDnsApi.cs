@@ -1,6 +1,6 @@
 ﻿using System;
 using System.Runtime.InteropServices;
-using AdGuard.Utils.Interop;
+using AdGuard.Utils.Adapters.Interop;
 
 // ReSharper disable InconsistentNaming
 // ReSharper disable UnusedMember.Global
