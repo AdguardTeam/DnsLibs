@@ -1,3 +1,8 @@
+/**
+ * @file test_AGDnsProxyStandalone.mm
+ * @brief Usage example
+ */
+
 #include <AGDnsProxy/AGDnsProxy.h>
 #include <Foundation/Foundation.h>
 

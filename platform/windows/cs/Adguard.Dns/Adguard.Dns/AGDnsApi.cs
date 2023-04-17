@@ -22,7 +22,7 @@ namespace Adguard.Dns
         /// <summary>
         /// The current API version hash with which the ProxyServer was tested
         /// </summary>
-        private const string API_VERSION_HASH = "f308c902377f8db04963600e6f3551776f01cf8de6ebc2e0e26e3d1decdf648e";
+        private const string API_VERSION_HASH = "3d4cdc44fcb6a6901c918fe3c2cff261e6103a34123950f529c5591ac77fdf37";
         #endregion
 
         #region API Functions
@@ -49,7 +49,7 @@ namespace Adguard.Dns
         }
 
         [Flags]
-        public enum ag_rule_generation_options : uint 
+        public enum ag_rule_generation_options : uint
         {
             /// <summary>
             /// Add $important modifier.
@@ -232,7 +232,7 @@ namespace Adguard.Dns
         #region Rule generation
 
         /// <summary>
-        /// Suggest an action based on filtering log event. 
+        /// Suggest an action based on filtering log event.
         /// </summary>
         /// <param name="pEvent">The pointer to <see cref="ag_dns_request_processed_event"/> instance.</param>
         /// <returns>
@@ -250,7 +250,7 @@ namespace Adguard.Dns
         internal static extern void ag_dns_filtering_log_action_free(IntPtr pAction);
 
         /// <summary>
-        /// Generate a rule from a template (obtained from `ag_dns_filtering_log_action`) and a corresponding event. 
+        /// Generate a rule from a template (obtained from `ag_dns_filtering_log_action`) and a corresponding event.
         /// </summary>
         /// <param name="template">The pointer to template.</param>
         /// <param name="pEvent">The pointer to <see cref="ag_dns_request_processed_event"/> instance.</param>
@@ -900,7 +900,7 @@ namespace Adguard.Dns
             /// </summary>
             [NativeName("allowed_options")]
             [MarshalAs(UnmanagedType.U4)]
-            internal ag_rule_generation_options AllowedOptions;       
+            internal ag_rule_generation_options AllowedOptions;
 
             /// <summary>
             /// Options that are required for the generated rule to be correct.

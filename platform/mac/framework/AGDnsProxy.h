@@ -3,55 +3,95 @@
 #import "AGDnsProxyEvents.h"
 
 /**
+ * @defgroup enums
+ */
+
+/**
  * DNS proxy error domain
  */
 extern NSErrorDomain const AGDnsProxyErrorDomain;
 
 /**
- * DNS error codes
+ * @ingroup enums
+ * DNS error codes.
+ *
+ * This enumeration defines the different DNS error codes used in the application
  */
 typedef NS_ENUM(NSInteger, AGDnsProxyInitError) {
+    /** The DNS proxy is not set */
     AGDPE_PROXY_NOT_SET,
+    /** The event loop is not set */
     AGDPE_EVENT_LOOP_NOT_SET,
+    /** The provided address is invalid */
     AGDPE_INVALID_ADDRESS,
+    /** The proxy is empty */
     AGDPE_EMPTY_PROXY,
+    /** There is an error in the protocol */
     AGDPE_PROTOCOL_ERROR,
+    /** Failed to initialize the listener */
     AGDPE_LISTENER_INIT_ERROR,
+    /** The provided IPv4 address is invalid */
     AGDPE_INVALID_IPV4,
+    /** The provided IPv6 address is invalid */
     AGDPE_INVALID_IPV6,
+    /** Failed to initialize the upstream */
     AGDPE_UPSTREAM_INIT_ERROR,
+    /** Failed to initialize the fallback filter */
     AGDPE_FALLBACK_FILTER_INIT_ERROR,
+    /** Failed to load the filter */
     AGDPE_FILTER_LOAD_ERROR,
+    /** The memory limit has been reached */
     AGDPE_MEM_LIMIT_REACHED,
+    /** The filter ID is not unique */
     AGDPE_NON_UNIQUE_FILTER_ID,
 
+    /** Failed to test the upstream */
     AGDPE_TEST_UPSTREAM_ERROR,
+    /** Failed to initialize the proxy */
     AGDPE_PROXY_INIT_ERROR,
+    /** Failed to initialize the listener during proxy initialization */
     AGDPE_PROXY_INIT_LISTENER_ERROR,
+    /** Failed to initialize the helper during proxy initialization */
     AGDPE_PROXY_INIT_HELPER_ERROR,
+    /** Failed to bind the helper during proxy initialization */
     AGDPE_PROXY_INIT_HELPER_BIND_ERROR,
 };
 
 /**
- * Logging levels
+ * @ingroup enums
+ * Logging levels.
+ *
+ * This enumeration defines the different logging levels used in the application.
  */
 typedef NS_ENUM(NSInteger, AGLogLevel) {
+    /** Error: Indicates an error that requires immediate attention */
     AGLL_ERR,
+    /** Warning: Indicates a potential issue that may cause problems */
     AGLL_WARN,
+    /** Information: Provides general information about the application state */
     AGLL_INFO,
+    /** Debug: Contains detailed debugging information for developers */
     AGLL_DEBUG,
+    /** Trace: Contains low-level tracing information for developers */
     AGLL_TRACE,
 };
 
+
 /**
- * Listener protocols
+ * @ingroup enums
+ * Listener protocols.
+ *
+ * This enumeration defines the different listener protocols used in the application.
  */
 typedef NS_ENUM(NSInteger, AGListenerProtocol) {
+    /** User Datagram Protocol (UDP) */
     AGLP_UDP,
+    /** Transmission Control Protocol (TCP) */
     AGLP_TCP,
 };
 
 /**
+ * @ingroup enums
  * Specifies how to respond to blocked requests.
  *
  * A request is blocked if it matches a blocking AdBlock-style rule,
@@ -75,6 +115,13 @@ typedef NS_ENUM(NSInteger, AGBlockingMode) {
     AGBM_ADDRESS,
 };
 
+/**
+ * @interface AGLogger
+ * Class for configuring logging for DNS library.
+ *
+ * It provides a way to configure logging for the DNS library.
+ * The logging level and the logging function can be set using the provided methods.
+ */
 @interface AGLogger : NSObject
 
 /**
@@ -86,7 +133,13 @@ typedef NS_ENUM(NSInteger, AGBlockingMode) {
 
 /**
  * A function that outputs a log message.
+ *
+ * This block is called when a log message needs to be output.
  * The message is already formatted, including the line terminator.
+ *
+ * @param level The log level of the message.
+ * @param msg The formatted log message.
+ * @param length The length of the log message.
  */
 typedef void (^logCallback)(AGLogLevel level, const char *msg, int length);
 
@@ -99,7 +152,11 @@ typedef void (^logCallback)(AGLogLevel level, const char *msg, int length);
 
 @end
 
-
+/**
+ * @interface AGDnsUpstream
+ *
+ * Represents a DNS upstream server.
+ */
 @interface AGDnsUpstream : NSObject<NSCoding>
 /**
  * A DNS server address:
@@ -142,6 +199,10 @@ typedef void (^logCallback)(AGLogLevel level, const char *msg, int length);
 
 @end
 
+/**
+ * @interface AGDns64Settings
+ * Represents DNS64 settings for the DNS proxy.
+ */
 @interface AGDns64Settings : NSObject<NSCoding>
 
 /**
@@ -167,6 +228,10 @@ typedef void (^logCallback)(AGLogLevel level, const char *msg, int length);
 
 @end
 
+/**
+ * @interface AGListenerSettings
+ * Settings for a DNS proxy listener.
+ */
 @interface AGListenerSettings : NSObject<NSCoding>
 
 /**
@@ -203,16 +268,28 @@ typedef void (^logCallback)(AGLogLevel level, const char *msg, int length);
 @end
 
 /**
- * Outbound proxy protocols
+ * @ingroup enums
+ * Outbound proxy protocols.
+ *
+ * This enumeration defines the different outbound proxy protocols used in the application.
  */
 typedef NS_ENUM(NSInteger, AGOutboundProxyProtocol) {
-    AGOPP_HTTP_CONNECT, // Plain HTTP proxy
-    AGOPP_HTTPS_CONNECT, // HTTPs proxy
-    AGOPP_SOCKS4, // Socks4 proxy
-    AGOPP_SOCKS5, // Socks5 proxy without UDP support
-    AGOPP_SOCKS5_UDP, // Socks5 proxy with UDP support
+    /** Plain HTTP proxy */
+    AGOPP_HTTP_CONNECT,
+    /** HTTPS proxy */
+    AGOPP_HTTPS_CONNECT,
+    /** SOCKS4 proxy */
+    AGOPP_SOCKS4,
+    /** SOCKS5 proxy without UDP support */
+    AGOPP_SOCKS5,
+    /** SOCKS5 proxy with UDP support */
+    AGOPP_SOCKS5_UDP,
 };
 
+/**
+ * @interface AGOutboundProxyAuthInfo
+ * Represents authentication information for an outbound proxy.
+ */
 @interface AGOutboundProxyAuthInfo : NSObject<NSCoding>
 /** User name for authentication */
 @property(nonatomic) NSString *username;
@@ -229,6 +306,10 @@ typedef NS_ENUM(NSInteger, AGOutboundProxyProtocol) {
 
 @end
 
+/**
+ * @interface AGOutboundProxySettings
+ * Represents settings for an outbound proxy.
+ */
 @interface AGOutboundProxySettings : NSObject<NSCoding>
 /** The proxy protocol */
 @property(nonatomic) AGOutboundProxyProtocol protocol;
@@ -258,6 +339,10 @@ typedef NS_ENUM(NSInteger, AGOutboundProxyProtocol) {
 
 @end
 
+/**
+ * @interface AGDnsFilterParams
+ * Represents the parameters for an individual filter used in the filter engine.
+ */
 @interface AGDnsFilterParams : NSObject<NSCoding>
 /**
  * Filter identifier
@@ -281,6 +366,13 @@ typedef NS_ENUM(NSInteger, AGOutboundProxyProtocol) {
 
 @end
 
+
+/**
+ * @interface AGDnsProxyConfig
+ * Represents settings for the DNS proxy.
+ *
+ * Defines the various configuration options that can be used to specify the DNS proxy settings.
+ */
 @interface AGDnsProxyConfig : NSObject<NSCoding>
 /**
  * Upstreams settings
@@ -332,7 +424,7 @@ typedef NS_ENUM(NSInteger, AGOutboundProxyProtocol) {
  */
 @property(nonatomic) AGOutboundProxySettings *outboundProxy;
 /**
- * If false, bootstrappers will fetch only A records.
+ * If false, bootstrappers will fetch only A records
  */
 @property(nonatomic) BOOL ipv6Available;
 /**
@@ -413,16 +505,28 @@ typedef NS_ENUM(NSInteger, AGOutboundProxyProtocol) {
 - (NSString*)description;
 
 /**
- * @brief Get default DNS proxy settings
+ * Get default DNS proxy settings
  */
 + (instancetype) getDefault;
 @end
 
+/**
+ * @ingroup enums
+ * Rule generation options.
+ *
+ * This enumeration defines the different rule generation options used in the application.
+ */
 typedef NS_ENUM(NSUInteger, AGRuleGenerationOptions) {
-    AGRGOImportant = 1u << 0, /**< Add an $important modifier. */
-    AGRGODnstype = 1u << 1, /**< Add a $dnstype modifier. */
+    /** Add an $important modifier */
+    AGRGOImportant = 1u << 0,
+    /** Add a $dnstype modifier */
+    AGRGODnstype = 1u << 1,
 };
 
+/**
+ * @interface AGRuleTemplate
+ * An object representing a template for generating DNS rules.
+ */
 @interface AGRuleTemplate : NSObject
 - (NSString *)description; /**< String representation. */
 /**
@@ -433,11 +537,15 @@ typedef NS_ENUM(NSUInteger, AGRuleGenerationOptions) {
 - (NSString *)generateRuleWithOptions:(NSUInteger)options;
 @end
 
+/**
+ * @interface AGFilteringLogAction
+ * Provides a way to suggest rules based on filtering event.
+ */
 @interface AGFilteringLogAction : NSObject
-@property(nonatomic) NSArray<AGRuleTemplate *> *templates; /**< A set of rule templates. */
-@property(nonatomic) NSUInteger allowedOptions; /**< Options that are allowed to be passed to `generate_rule`. */
-@property(nonatomic) NSUInteger requiredOptions; /**< Options that are required for the generated rule to be correct. */
-@property(nonatomic) BOOL blocking; /**< Whether something will be blocked or un-blocked as a result of this action. */
+@property(nonatomic) NSArray<AGRuleTemplate *> *templates; /**< A set of rule templates */
+@property(nonatomic) NSUInteger allowedOptions; /**< Options that are allowed to be passed to `generate_rule` */
+@property(nonatomic) NSUInteger requiredOptions; /**< Options that are required for the generated rule to be correct */
+@property(nonatomic) BOOL blocking; /**< Whether something will be blocked or un-blocked as a result of this action */
 /**
  * Suggest an action based on filtering event.
  * @return Action or nil on error.
@@ -445,9 +553,15 @@ typedef NS_ENUM(NSUInteger, AGRuleGenerationOptions) {
 + (instancetype)actionFromEvent:(AGDnsRequestProcessedEvent *)event;
 @end
 
+/**
+ * @interface AGDnsProxy
+ * Represents a DNS proxy.
+ *
+ * This class provides methods for provides management and interaction with proxy server.
+ */
 @interface AGDnsProxy : NSObject
 /**
- * @brief Initialize DNS proxy with the given configuration
+ * Initialize DNS proxy with the given configuration.
  *
  * @param config proxy configuration
  * @param events proxy events handler
@@ -458,12 +572,12 @@ typedef NS_ENUM(NSUInteger, AGRuleGenerationOptions) {
                           error: (NSError **) error NS_SWIFT_NOTHROW;
 
 /**
- * @brief Process UDP/TCP packet payload
+ * Process UDP/TCP packet payload.
  *
  * @param Packet data to process
  * @param completionHandler Completion handler
  * @return Response packet payload, or
- *         nil if nothing shoud be sent in response
+ *        nil if nothing shoud be sent in response
  */
 - (void) handlePacket: (NSData *) packet completionHandler: (void (^)(NSData *)) completionHandler;
 
@@ -485,19 +599,29 @@ typedef NS_ENUM(NSUInteger, AGRuleGenerationOptions) {
 + (NSString *) libraryVersion;
 @end
 
+/**
+ * @ingroup enums
+ * Stamp protocol types.
+ *
+ * This enumeration defines the different stamp protocol types used in the application.
+ */
 typedef NS_ENUM(NSInteger, AGStampProtoType) {
-    /** plain is plain DNS */
+    /** Plain DNS */
     AGSPT_PLAIN,
-    /** dnscrypt is DNSCrypt */
+    /** DNSCrypt */
     AGSPT_DNSCRYPT,
-    /** doh is DNS-over-HTTPS */
+    /** DNS-over-HTTPS */
     AGSPT_DOH,
-    /** tls is DNS-over-TLS */
+    /** DNS-over-TLS */
     AGSPT_TLS,
-    /** doq is DNS-over-QUIC */
+    /** DNS-over-QUIC */
     AGSPT_DOQ,
 };
 
+/**
+ * @interface AGDnsStamp
+ * Represents a DNS stamp.
+ */
 @interface AGDnsStamp : NSObject<NSCoding>
 /**
  * Protocol.
@@ -563,6 +687,10 @@ typedef NS_ENUM(NSInteger, AGStampProtoType) {
 
 @end
 
+/**
+ * @interface AGDnsUtils
+ * Represents  DNS utils
+ */
 @interface AGDnsUtils : NSObject
 
 /**
@@ -570,7 +698,7 @@ typedef NS_ENUM(NSInteger, AGStampProtoType) {
  * @param opts Upstream options
  * @param ipv6Available Whether IPv6 is available (if true, bootstrapper is allowed to make AAAA queries)
  * @param offline Don't perform online upstream check
- * @return If it is, no error is returned. Otherwise this method returns an error with an explanation.
+ * @return If it is, no error is returned. Otherwise this method returns an error with an explanation
  */
 + (NSError *) testUpstream: (AGDnsUpstream *) opts ipv6Available: (BOOL) ipv6Available offline: (BOOL) offline;
 
