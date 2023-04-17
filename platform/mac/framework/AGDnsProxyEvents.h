@@ -3,7 +3,8 @@
 #import "AGDnsXPCObject.h"
 
 /**
- * DNS request processed event
+ * @interface AGDnsRequestProcessedEvent
+ * DNS request processed event.
  */
 @interface AGDnsRequestProcessedEvent : AGDnsXPCObject<NSSecureCoding>
 @property(nonatomic) NSString *domain; /**< Queried domain name */
@@ -32,7 +33,8 @@
 @end
 
 /**
- * Set of DNS proxy events
+ * @interface AGDnsProxyEvents
+ * Set of DNS proxy events.
  */
 @interface AGDnsProxyEvents : NSObject
 /**
@@ -40,7 +42,7 @@
  * Notes:
  *  - if there are several upstreams in proxy configuration, the proxy tries each one
  *    consequently until it gets successful status, so in this case each failed upstream
- *    fires the event - i.e., several events will be raised for the request
+ *    fires the event - i.e., several events will be raised for the request.
  */
 @property (nonatomic, copy) void (^onRequestProcessed)(const AGDnsRequestProcessedEvent *event);
 @end
