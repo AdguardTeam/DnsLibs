@@ -142,10 +142,10 @@ public:
 
     /**
      * Return the round trip time estimate for this upstream.
-     * Return std::nullopt if no data points have been gathered yet.
+     * Return std::nullopt if not enough data points have been gathered yet.
      */
     std::optional<Millis> rtt_estimate() const {
-        return m_rtt_estimate ? std::make_optional(m_rtt_estimate->get()) : std::nullopt;
+        return m_rtt_estimate ? m_rtt_estimate->get() : std::nullopt;
     }
 
     /**
@@ -157,6 +157,8 @@ public:
         }
         m_rtt_estimate->update(elapsed); // NOLINT(bugprone-unchecked-optional-access)
     }
+
+    static constexpr Millis RTT_CUTOFF{1000};
 
 protected:
     /** Keeps the average of the last N values of type T. */
@@ -172,12 +174,16 @@ protected:
         }
 
         void update(T new_val) {
-            m_vals[m_idx] = new_val; // NOLINT(cppcoreguidelines-pro-bounds-constant-array-index)
-            m_idx = (m_idx + 1) % N;
+            m_vals[m_idx % N] = new_val; // NOLINT(cppcoreguidelines-pro-bounds-constant-array-index)
+            m_idx += 1;
         }
 
-        [[nodiscard]] T get() const {
+        [[nodiscard]] T get_forced() const {
             return std::accumulate(std::begin(m_vals), std::end(m_vals), T{}) / N;
+        }
+
+        [[nodiscard]] std::optional<T> get() const {
+            return m_idx < N ? std::nullopt : std::make_optional(get_forced());
         }
 
         void set(T value) {
