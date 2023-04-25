@@ -158,8 +158,6 @@ public:
         m_rtt_estimate->update(elapsed); // NOLINT(bugprone-unchecked-optional-access)
     }
 
-    static constexpr Millis RTT_CUTOFF{1000};
-
 protected:
     /** Keeps the average of the last N values of type T. */
     template <typename T, size_t N>

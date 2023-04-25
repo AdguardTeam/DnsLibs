@@ -961,15 +961,13 @@ static std::tuple<std::vector<Upstream *>, Millis, bool> collect_upstreams(const
         min_rtt = std::min(min_rtt, src_rtts[i]);
     }
 
-    // Cut off slowest upstreams
+    // Build upstream list
     std::vector<Upstream *> upstreams;
     upstreams.reserve(src.size());
     for (size_t i = 0; i != src.size(); i++) {
         auto rtt = src_rtts[i];
-        if (fallback || rtt < min_rtt + Upstream::RTT_CUTOFF) {
-            max_rtt = std::max(max_rtt, rtt);
-            upstreams.push_back(src[i].get());
-        }
+        max_rtt = std::max(max_rtt, rtt);
+        upstreams.push_back(src[i].get());
     }
     return {std::move(upstreams), max_rtt, has_unestimated};
 }
