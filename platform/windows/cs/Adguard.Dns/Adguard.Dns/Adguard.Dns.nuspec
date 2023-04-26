@@ -16,9 +16,10 @@
     <!-- Signed files -->
     <file src="../DnsLibs/Adguard.Dns.dll" target="lib/net45"/>
     <file src="../DnsLibs/Adguard.Dns.pdb" target="lib/net45"/>
+    <file src="../DnsLibs/Adguard.Dns.xml" target="lib/net45"/>
     <file src="../DnsLibs/AdguardDns.dll" target="build"/>
     <file src="../DnsLibs/AdguardDns.pdb" target="build"/>
-	<file src="..\DnsLibs\Adguard.Dns*.nrmap" target="nrmap"/>
+    <file src="../DnsLibs\Adguard.Dns*.nrmap" target="nrmap"/>
     <!-- Targets -->
     <file src="Properties/Adguard.Dns.targets" target="build"/>
   </files>
