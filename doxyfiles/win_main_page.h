@@ -9,7 +9,7 @@ Here is a quick start guide on how to use this class:
 
 - Create an instance of @ref Adguard.Dns.Api.DnsProxyServer.Configs.DnsProxySettings "DnsProxySettings" with the desired settings for your DNS proxy server.
 
-- Create an instance of @ref Adguard.Dns.Api.DnsProxyServer.Callbacks.IDnsProxyServerCallbackConfiguration "IDnsProxyServerCallbackConfiguration" to configure the callbacks for your DNS proxy server.
+- Construct a class that inherits from @ref Adguard.Dns.Api.DnsProxyServer.Callbacks.IDnsProxyServerCallbackConfiguration "IDnsProxyServerCallbackConfiguration" and define a callback method to be triggered when the request is completed.
 
 - Create an instance of @ref Adguard.Dns.DnsProxyServer.DnsProxyServer "DnsProxyServer" with the @ref Adguard.Dns.Api.DnsProxyServer.Configs.DnsProxySettings "DnsProxySettings"
 and @ref Adguard.Dns.Api.DnsProxyServer.Callbacks.IDnsProxyServerCallbackConfiguration "IDnsProxyServerCallbackConfiguration" instances as parameters.

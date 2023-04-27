@@ -4,8 +4,8 @@ using Adguard.Dns.Utils;
 namespace Adguard.Dns.Api.DnsProxyServer.Configs
 {
     /// <summary>
-    /// DNS Stamp
-    /// (a managed mirror of <see cref="AGDnsApi.ag_dns_stamp"/>)
+    /// Defines the various fields of a DNS stamp.
+    /// (A managed mirror of <see cref="AGDnsApi.ag_dns_stamp"/>)
     /// </summary>
     public class DnsStamp
     {
@@ -15,17 +15,21 @@ namespace Adguard.Dns.Api.DnsProxyServer.Configs
         public AGDnsApi.ag_stamp_proto_type ProtoType { get; set; }
 
         /// <summary>
-        /// Server address
+        /// IP address and/or port
         /// </summary>
         public string ServerAddress { get; set; }
 
         /// <summary>
         /// Provider name
+        /// Provider means different things depending on the stamp type
+        /// DNSCrypt: the DNSCrypt provider name
+        /// DOH and DOT: server's hostname
+        /// Plain DNS: not specified
         /// </summary>
         public string ProviderName { get; set; }
 
         /// <summary>
-        /// Path (for DOH)
+        /// (For DoH) absolute URI path, such as /dns-query
         /// </summary>
         public string DoHPath { get; set; }
 

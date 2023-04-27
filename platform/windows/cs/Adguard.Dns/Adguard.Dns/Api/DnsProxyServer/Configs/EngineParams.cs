@@ -3,8 +3,10 @@
 namespace Adguard.Dns.Api.DnsProxyServer.Configs
 {
     /// <summary>
-    /// Filter engine parameters.
-    /// Managed mirror of <see cref="AGDnsApi.ag_filter_engine_params"/>
+    /// Represents the filter engine parameters.
+    /// The filters field contains an array of ag_filter_params structures,
+    /// which define the parameters for individual filters used in the filter engine.
+    /// (A managed mirror of <see cref="AGDnsApi.ag_filter_engine_params"/>)
     /// </summary>
     public class EngineParams
     {

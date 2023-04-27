@@ -4,19 +4,24 @@ using AdGuard.Utils.Adapters.Interop;
 namespace Adguard.Dns.Api.DnsProxyServer.Configs
 {
     /// <summary>
-    /// DNS proxy settings,
-    /// Managed mirror of <see cref="AGDnsApi.ag_dnsproxy_settings"/>
+    /// Represents settings for the AdGuard DNS proxy.
+    /// Defines the various configuration options that can be
+    /// used to specify the AdGuard DNS proxy settings.
+    /// (A managed mirror of <see cref="AGDnsApi.ag_dnsproxy_settings"/>)
     /// </summary>
     public class DnsProxySettings
     {
         /// <summary>
-        /// DNS upstreams settings list
+        /// List of upstreams representing the list of primary upstream DNS servers.
+        /// The DNS proxy server will send queries to these servers.
         /// (<seealso cref="UpstreamOptions"/>)
         /// </summary>
         public List<UpstreamOptions> Upstreams { get; set; }
 
         /// <summary>
-        /// Fallback DNS upstreams settings list
+        /// List of fallback upstreams, representing the list of fallback upstream DNS servers.
+        /// DNS proxy server will send queries to these servers
+        /// if none of the primary upstreams respond.
         /// (<seealso cref="UpstreamOptions"/>)
         /// </summary>
         public List<UpstreamOptions> Fallbacks { get; set; }
@@ -148,8 +153,8 @@ namespace Adguard.Dns.Api.DnsProxyServer.Configs
         public bool EnableFallbackOnUpstreamsFailure { get; set; }
 
         /// <summary>
-        /// If true, when all upstreams (including fallback upstreams) fail to provide a response,
-        /// the proxy will respond with a SERVFAIL packet. Otherwise, no response is sent on such a failure.
+        /// If true, when all upstreams (including fallback upstreams) fail to provide a response.
+        /// The proxy will respond with a SERVFAIL packet. Otherwise, no response is sent on such a failure.
         /// </summary>
         public bool EnableServfailOnUpstreamsFailure { get; set; }
 

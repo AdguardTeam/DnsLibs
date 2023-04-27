@@ -3,7 +3,8 @@
 namespace Adguard.Dns.Api.DnsProxyServer.Configs
 {
     /// <summary>
-    /// A managed mirror of <see cref="AGDnsApi.ag_outbound_proxy_auth_info"/>
+    /// Defines the fields for the authentication information used with an outbound proxy.
+    /// (A managed mirror of <see cref="AGDnsApi.ag_outbound_proxy_auth_info"/>)
     /// </summary>
     public class OutboundProxyAuthInfo
     {

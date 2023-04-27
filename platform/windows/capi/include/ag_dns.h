@@ -19,10 +19,27 @@
  * @defgroup enums Enumerations
  */
 
+/** @def NAMED_ARRAY_OF(T, N)
+ *  Defines a named array structure for a specific data type. It takes two arguments: the data type T and a name N.
+ *  This macro creates a structure with the provided name N, containing a pointer to the data type T called data and
+ *  a 32-bit unsigned integer called size representing the number of elements in the array. This macro can be used
+ *  to create custom array structures with a specific name and data type for easier and more readable code.
+ *
+ *  @internal This type of macro is used to make the macro look better in the generated documentation.
+ *  Usage example:
+ *  @code{.c}
+ *  struct Config {
+ *      ARRAY_OF(ag_buffer, buffers_s) buffers;
+ *  }
+ *  @endcode
+ *  @ingroup defines
+ */
+#define NAMED_ARRAY_OF(T, N) struct N { T *data; uint32_t size; }
+
 /** @def ARRAY_OF(T)
  *  A macro that defines a typed array structure with a pointer to the data and its size.
  *
- *  This macro generates a structure containing a pointer to an array of type `T` and a `uint32_t` size variable.
+ *  Macro generates a structure containing a pointer to an array of type `T` and a `uint32_t` size variable.
  *  You can use it to create typed array structures for any data type.
  *
  *  Usage example:
@@ -41,7 +58,7 @@ extern "C" {
  * @ingroup enums
  * Log levels for the logging system.
  *
- * This enumeration defines the available log levels for the logging system.
+ * Aavailables log levels for the logging system.
  */
 typedef enum {
     /** Error level: Critical errors that require immediate attention */
@@ -59,7 +76,7 @@ typedef enum {
 /**
  *  A typedef for an array of `uint8_t` elements.
  *
- *  This typedef uses the ARRAY_OF macro to create a typed array structure for `uint8_t` elements.
+ *  Uses the ARRAY_OF macro to create a typed array structure for `uint8_t` elements.
  *  It contains a pointer to the `uint8_t` data array and a `uint32_t` size variable.
  *
  *  Usage example:
@@ -82,27 +99,44 @@ typedef ARRAY_OF(const char *) ag_string_array;
  * @struct ag_upstream_options
  * Represents options for configuring an upstream DNS server.
  *
- * This structure defines the various configuration options that can be used to specify an upstream DNS server.
+ * Defines the various configuration options that can be used to specify an upstream DNS server.
+ * By adjusting the values of these fields, users can fine-tune the behavior of the DNS proxy
+ * server when sending DNS queries to upstream servers.
  */
 typedef struct {
     /**
-     * Server address, one of the following kinds:
-     *     8.8.8.8:53 -- plain DNS (must specify IP address, not hostname)
-     *     tcp://8.8.8.8:53 -- plain DNS over TCP (must specify IP address, not hostname)
-     *     tls://dns.adguard.com -- DNS-over-TLS
-     *     https://dns.adguard.com/dns-query -- DNS-over-HTTPS
-     *     sdns://... -- DNS stamp (see https://dnscrypt.info/stamps-specifications)
-     *     quic://dns.adguard.com:853 -- DNS-over-QUIC
+     * Server address.
+     * One of the following kinds:
+     * * `8.8.8.8:53` -- plain DNS (must specify IP address, not hostname)
+     * * `tcp://8.8.8.8:53` -- plain DNS over TCP (must specify IP address, not hostname)
+     * * `tls://dns.adguard.com` -- DNS-over-TLS
+     * * `https://dns.adguard.com/dns-query` -- DNS-over-HTTPS
+     * * `sdns://...` -- DNS stamp (see https://dnscrypt.info/stamps-specifications)
+     * * `quic://dns.adguard.com:853` -- DNS-over-QUIC
+     * * `h3://` -- DNS-over-HTTP/3
      */
     const char *address;
 
-    /** List of plain DNS servers to be used to resolve the hostname in upstreams's address. */
+    /**
+     * List of plain DNS servers.
+     * List used to resolve the hostname in the upstream's address when necessary.
+     * These servers will help establish the initial connection to the upstream DNS server
+     * if its address is specified as a hostname.
+     */
     ag_string_array bootstrap;
 
-    /** Timeout, 0 means "default" */
+    /**
+     * Timeout.
+     * Representing the upstream server timeout in milliseconds.
+     * If set to 0, the default timeout value will be used.
+     */
     uint32_t timeout_ms;
 
-    /** Upstream's IP address. If specified, the bootstrapper is NOT used. */
+    /**
+     * Upstream's IP address.
+     * Pre-resolved IP address for the upstream server. If this field is specified, the @ref bootstrap
+     * DNS servers won't be used for resolving the upstream's address.
+     */
     ag_buffer resolved_ip_address;
 
     /** User-provided ID for this upstream */
@@ -116,11 +150,11 @@ typedef struct {
  * @struct ag_dns64_settings
  * Represents settings for DNS64 prefix discovery.
  *
- * This structure defines the various configuration options that can be used to specify DNS64 prefix discovery settings.
+ * Defines the various configuration options that can be used to specify DNS64 prefix discovery settings.
  */
 typedef struct {
     /** The upstreams to use for discovery of DNS64 prefixes (usually the system DNS servers) */
-    ARRAY_OF(ag_upstream_options) upstreams;
+    NAMED_ARRAY_OF(ag_upstream_options, dns64_upstreams_s) upstreams;
 
     /** How many times, at most, to try DNS64 prefixes discovery before giving up */
     uint32_t max_tries;
@@ -132,8 +166,6 @@ typedef struct {
 /**
  * @ingroup enums
  * Listener protocols for the networking system.
- *
- * This enumeration defines the available listener protocols for the networking system.
  */
 typedef enum {
     /** UDP protocol */
@@ -170,20 +202,29 @@ typedef enum {
 
 /**
  * @struct ag_listener_settings
- * Represents settings for an AdGuard DNS listener.
- *
- * This structure defines the various configuration options that can be used to specify an AdGuard DNS listener.
+ * Defines the various configuration options that can be used to specify DNS listener.
  */
 typedef struct {
     /** The address to listen on */
     const char *address;
-    /** The port to listen on */
+    /**
+     * The port to listen on.
+     * This is the port on which the listener will wait for incoming DNS queries.
+     */
     uint16_t port;
     /** The protocol to listen for */
     ag_listener_protocol protocol;
-    /** If true, don't close the TCP connection after sending the first response */
+    /**
+     * Whether the listener should keep the TCP connection open after sending the first response.
+     * If set to true, the connection will not be closed immediately,
+     * allowing for multiple requests and responses over the same connection.
+     */
     bool persistent;
-    /** Close the TCP connection this long after the last request received */
+    /**
+     * Idle timeout.
+     * Duration (in milliseconds) after which the listener should close the TCP connection if no
+     * requests have been received. This setting helps to prevent idle connections from consuming resources.
+     */
     uint32_t idle_timeout_ms;
 } ag_listener_settings;
 
@@ -194,25 +235,19 @@ typedef struct {
 typedef enum {
     /** Plain HTTP proxy */
     AGOPP_HTTP_CONNECT,
-
     /** HTTPs proxy */
     AGOPP_HTTPS_CONNECT,
-
     /** SOCKS4 proxy */
     AGOPP_SOCKS4,
-
     /** SOCKS5 proxy without UDP support */
     AGOPP_SOCKS5,
-
     /** SOCKS5 proxy with UDP support */
     AGOPP_SOCKS5_UDP,
 } ag_outbound_proxy_protocol;
 
 /**
  * @struct ag_outbound_proxy_auth_info
- * Represents authentication information for an outbound proxy.
- *
- * This structure defines the fields for the authentication information used with an outbound proxy.
+ * Defines the fields for the authentication information used with an outbound proxy.
  */
 typedef struct {
     const char *username;
@@ -221,9 +256,7 @@ typedef struct {
 
 /**
  * @struct ag_outbound_proxy_settings
- * Represents settings for an outbound proxy.
- *
- * This structure defines the various configuration options that can be used to specify an outbound proxy.
+ * Defines the various configuration options that can be used to specify an outbound proxy.
  */
 typedef struct {
     /** The proxy protocol */
@@ -259,8 +292,6 @@ typedef struct {
 /**
  * @struct ag_filter_params
  * Represents the parameters for an individual filter used in the filter engine.
- *
- * This structure defines the various fields of the parameters for an individual filter used in the filter engine.
  */
 typedef struct {
     /** Filter ID */
@@ -279,7 +310,7 @@ typedef struct {
  * which define the parameters for individual filters used in the filter engine.
  */
 typedef struct {
-    ARRAY_OF(ag_filter_params) filters;
+    NAMED_ARRAY_OF(ag_filter_params, filters_s) filters;
 } ag_filter_engine_params;
 
 
@@ -287,13 +318,19 @@ typedef struct {
  * @struct ag_dnsproxy_settings
  * Represents settings for the AdGuard DNS proxy.
  *
- * This structure defines the various configuration options that can be used to specify the AdGuard DNS proxy settings.
+ * Defines the various configuration options that can be used to specify the AdGuard DNS proxy settings.
  */
 typedef struct {
-    /** List of upstreams */
-    ARRAY_OF(ag_upstream_options) upstreams;
-    /** List of fallback upstreams, which will be used if none of the usual upstreams respond */
-    ARRAY_OF(ag_upstream_options) fallbacks;
+    /**
+     * List of upstreams representing the list of primary upstream DNS servers.
+     * The DNS proxy server will send queries to these servers.
+     */
+    NAMED_ARRAY_OF(ag_upstream_options, upstreams_s) upstreams; /** List of upstreams */
+    /**
+     * List of fallback upstreams, representing the list of fallback upstream DNS servers.
+     * DNS proxy server will send queries to these servers if none of the primary upstreams respond.
+     */
+    NAMED_ARRAY_OF(ag_upstream_options, fallbacks_s) fallbacks; /** List of fallbacks */
     /**
      * Requests for these domains will be forwarded directly to the fallback upstreams, if there are any.
      * A wildcard character, `*`, which stands for any number of characters, is allowed to appear multiple
@@ -308,7 +345,7 @@ typedef struct {
     /** Filtering engine parameters */
     ag_filter_engine_params filter_params;
     /** List of listener parameters */
-    ARRAY_OF(ag_listener_settings) listeners;
+    NAMED_ARRAY_OF(ag_listener_settings, listeners_s) listeners;
     /** Outbound proxy settings */
     ag_outbound_proxy_settings *outbound_proxy;
     /** If true, all AAAA requests will be blocked */
@@ -331,7 +368,7 @@ typedef struct {
      * Enable DNSSEC OK extension.
      * This options tells server that we want to receive DNSSEC records along with normal queries.
      * If they exist, request processed event will have DNSSEC flag on.
-     * WARNING: may increase data usage and probability of TCP fallbacks.
+     * @warning may increase data usage and probability of TCP fallbacks.
      */
     bool enable_dnssec_ok;
     /** If enabled, detect retransmitted requests and handle them using fallback upstreams only */
@@ -346,8 +383,8 @@ typedef struct {
      */
     bool enable_fallback_on_upstreams_failure;
     /**
-     * If true, when all upstreams (including fallback upstreams) fail to provide a response,
-     * the proxy will respond with a SERVFAIL packet. Otherwise, no response is sent on such a failure.
+     * If true, when all upstreams (including fallback upstreams) fail to provide a response.
+     * The proxy will respond with a SERVFAIL packet. Otherwise, no response is sent on such a failure.
      */
     bool enable_servfail_on_upstreams_failure;
     /** Enable HTTP/3 for DNS-over-HTTPS upstreams if it's able to connect quicker */
@@ -358,7 +395,7 @@ typedef struct {
  * @struct ag_dns_request_processed_event
  * Represents a DNS request processed event.
  *
- * This structure defines the various fields of a DNS request processed event.
+ * Defines the various fields of a DNS request processed event.
  */
 typedef struct {
     /** Queried domain name */
@@ -384,7 +421,7 @@ typedef struct {
     /** List of matched rules (full rule text) */
     ag_string_array rules;
     /** Corresponding filter ID for each matched rule */
-    ARRAY_OF(const int32_t) filter_list_ids;
+    NAMED_ARRAY_OF(const int32_t, filters_list_ids_s) filter_list_ids;
     /** True if the matched rule is a whitelist rule */
     bool whitelist;
     /** If not NULL, contains the error description */
@@ -403,7 +440,7 @@ typedef struct {
     /** Leaf certificate */
     ag_buffer certificate;
     /** Certificate chain */
-    ARRAY_OF(ag_buffer) chain;
+    NAMED_ARRAY_OF(ag_buffer, chain_s) chain;
 } ag_certificate_verification_event;
 
 /**
@@ -420,7 +457,7 @@ typedef void (*ag_dns_request_processed_cb)(const ag_dns_request_processed_event
  * @ingroup enums
  * Certificate verification results.
  *
- * This enumeration defines the possible results of certificate verification.
+ * Defines the possible results of certificate verification.
  */
 typedef enum {
     /** OK: Certificate verification was successful */
@@ -442,8 +479,8 @@ typedef enum {
  * This function is called synchronously when a certificate needs to be verified.
  *
  * @param event Pointer to the ag_certificate_verification_event structure
- *              containing information about the certificate to be verified.
- * @return ag_certificate_verification_result indicating the result of the certificate verification.
+ *              containing information about the certificate to be verified
+ * @return ag_certificate_verification_result The result of the certificate verification
  */
 typedef ag_certificate_verification_result (*ag_certificate_verification_cb)(const ag_certificate_verification_event *);
 
@@ -464,7 +501,7 @@ typedef void (*ag_log_cb)(void *attachment, ag_log_level level, const char *mess
  * @struct ag_dnsproxy_events
  * Represents the events that can be subscribed to in the DNS proxy.
  *
- * This structure defines the various callback functions that can be subscribed to in the DNS proxy.
+ * Defines the various callback functions that can be subscribed to in the DNS proxy.
  */
 typedef struct {
     ag_dns_request_processed_cb on_request_processed;
@@ -474,7 +511,7 @@ typedef struct {
 /**
  * @ingroup enums
  * Supported protocol types for server stamps.
- * This enumeration defines the supported protocol types for server stamps.
+ * Defines the supported protocol types for server stamps.
  */
 typedef enum {
     /** Standard DNS protocol */
@@ -506,7 +543,7 @@ typedef enum {
  * @struct ag_dns_stamp
  * Represents a DNS stamp.
  *
- * This structure defines the various fields of a DNS stamp.
+ * Defines the various fields of a DNS stamp.
  */
 typedef struct {
     /** Protocol */
@@ -529,7 +566,7 @@ typedef struct {
      * the certificate used to sign the resolver’s certificate. Multiple hashes can be provided for seamless
      * rotations.
      */
-    ARRAY_OF(ag_buffer) hashes;
+    NAMED_ARRAY_OF(ag_buffer, hashes_s) hashes;
     /** Server properties */
     ag_server_informal_properties properties;
 } ag_dns_stamp;
@@ -555,11 +592,11 @@ typedef enum {
  * @struct ag_dns_filtering_log_action
  * Represents an action that can be taken as a result of applying a DNS filter rule.
  *
- * This structure defines the various fields of an action that can be taken as a result of applying a DNS filter rule.
+ * Defines the various fields of an action that can be taken as a result of applying a DNS filter rule.
  */
 typedef struct {
     /** A set of rule templates */
-    ARRAY_OF(const ag_dns_rule_template *) templates;
+    NAMED_ARRAY_OF(const ag_dns_rule_template *, templates_s) templates;
     /** Options that are allowed to be passed to `generate_rule` */
     uint32_t allowed_options;
     /** Options that are required for the generated rule to be correct */
@@ -572,7 +609,7 @@ typedef struct {
  * @ingroup enums
  * Dnsproxy init result.
  *
- * This enumeration defines the possible results of DNS proxy initialization.
+ * Defines the possible results of DNS proxy initialization.
  */
 typedef enum {
     /** The DNS proxy is not set */
@@ -613,14 +650,37 @@ typedef void ag_dnsproxy;
 
 /**
  * @defgroup api API functions
+ * This collection of functions enables interaction with a proxy server and related objects,
+ * including logging capabilities and more.
+ *
+ * Usage example:
+ * @code{.c}
+ * int main() {
+ *     ag_dnsproxy_settings *settings = ag_dnsproxy_settings_get_default();
+ *     ag_upstream_options upstream = {
+ *         .address = "tls://1.1.1.1",
+ *         .id = 42,
+ *     };
+ *     settings->upstreams.data = &upstream;
+ *     settings->upstreams.size = 1;
+ *
+ *     ag_dnsproxy_init_result result;
+ *     ag_dnsproxy_events events = {0};
+ *     const char *message = NULL;
+ *     ag_dnsproxy *proxy = ag_dnsproxy_init(settings, &events, &result, &message);
+ *
+ *     ...
+ *     ag_dnsproxy_deinit(proxy);
+ * }
+ * @endcode
  */
 
 /**
  * @ingroup api
- * Initialize and start a proxy.
+ * Initialize and starts a DNS proxy server based on the provided settings and events.
  * @param out_result upon return, contains the result of the operation
  * @param out_message upon return, contains the error or warning message, or is unchanged
- * @return a proxy handle, or NULL in case of an error
+ * @return The proxy handle, or NULL in case of an error
  */
 AG_EXPORT ag_dnsproxy *ag_dnsproxy_init(const ag_dnsproxy_settings *settings, const ag_dnsproxy_events *events,
                                         ag_dnsproxy_init_result *out_result, const char **out_message);
@@ -635,32 +695,32 @@ AG_EXPORT void ag_dnsproxy_deinit(ag_dnsproxy *proxy);
 /**
  * @ingroup api
  * Process a DNS message and return the response.
- * The caller is responsible for freeing both buffers with `ag_buffer_free()`.
  * @param message a DNS request in wire format
- * @return a DNS response in wire format
+ * @return The DNS response in wire format
+ * @note The caller is responsible for freeing both buffers with `ag_buffer_free()`
  */
 AG_EXPORT ag_buffer ag_dnsproxy_handle_message(ag_dnsproxy *proxy, ag_buffer message);
 
 /**
- * @ingroup api
- * Return the current proxy settings. The caller is responsible for freeing
- * the returned pointer with `ag_dnsproxy_settings_free()`.
- * @return the current proxy settings
+ * @ingroup api1
+ * Get current proxy settings.
+ * @return The current proxy settings
+ * @note The caller is responsible for freeing the returned pointer with `ag_dnsproxy_settings_free()`
  */
 AG_EXPORT ag_dnsproxy_settings *ag_dnsproxy_get_settings(ag_dnsproxy *proxy);
 
 /**
  * @ingroup api
- * Return the default proxy settings. The caller is responsible for freeing
+ * Get default proxy settings. The caller is responsible for freeing
  * the returned pointer with `ag_dnsproxy_settings_free()`.
- * @return the default proxy settings
+ * @return The default proxy settings
  */
 AG_EXPORT ag_dnsproxy_settings *ag_dnsproxy_settings_get_default();
 
 /**
  * @ingroup api
  * This function frees the memory occupied by the given DNS proxy settings pointer.
- * @param settings Pointer to a DNS proxy settings structure.
+ * @param settings Pointer to a DNS proxy settings structure
  */
 AG_EXPORT void ag_dnsproxy_settings_free(ag_dnsproxy_settings *settings);
 
@@ -690,19 +750,22 @@ AG_EXPORT void ag_set_log_callback(ag_log_cb callback, void *attachment);
  * the result with `ag_parse_dns_stamp_result_free()`.
  * @param stamp_str "sdns://..." string
  * @param error on output, if an error occurred, contains the error description (free with `ag_str_free()`)
- * @return a parsed stamp, or NULL if an error occurred
+ * @return The parsed stamp, or NULL if an error occurred
  */
 AG_EXPORT ag_dns_stamp *ag_dns_stamp_from_str(const char *stamp_str, const char **error);
 
 /**
  * @ingroup api
  * Free a ag_parse_dns_stamp_result pointer.
+ * @param stamp DNS stamp
  */
 AG_EXPORT void ag_dns_stamp_free(ag_dns_stamp *stamp);
 
 /**
  * @ingroup api
  * Convert a DNS stamp to "sdns://..." string.
+ * @param stamp DNS stamp
+ * @return DNS Stamp as string
  * @note Free the string with `ag_str_free()`
  */
 AG_EXPORT const char *ag_dns_stamp_to_str(ag_dns_stamp *stamp);
@@ -710,6 +773,8 @@ AG_EXPORT const char *ag_dns_stamp_to_str(ag_dns_stamp *stamp);
 /**
  * @ingroup api
  * Convert a DNS stamp to string that can be used as an upstream URL.
+ * @param stamp DNS stamp
+ * @return DNS Stamp as string
  * @note Free the string with `ag_str_free()`
  */
 AG_EXPORT const char *ag_dns_stamp_pretty_url(ag_dns_stamp *stamp);
@@ -717,6 +782,8 @@ AG_EXPORT const char *ag_dns_stamp_pretty_url(ag_dns_stamp *stamp);
 /**
  * @ingroup api
  * Convert a DNS stamp to string that can NOT be used as an upstream URL, but may be prettier.
+ * @param stamp DNS stamp
+ * @return DNS Stamp as string
  * @note Free the string with `ag_str_free()`
  */
 AG_EXPORT const char *ag_dns_stamp_prettier_url(ag_dns_stamp *stamp);
@@ -725,8 +792,8 @@ AG_EXPORT const char *ag_dns_stamp_prettier_url(ag_dns_stamp *stamp);
  * @ingroup api
  * Check if an upstream is valid and working.
  * The caller is responsible for freeing the result with `ag_str_free()`.
- * @param ipv6_available whether IPv6 is available, if true, bootstrapper is allowed to make AAAA queries
- * @param offline Don't perform online upstream check
+ * @param ipv6_available If true, bootstrapper is allowed to make AAAA queries (if IPv6 is available)
+ * @param offline If true, don't perform online upstream check
  * @return NULL if everything is ok, or
  *         an error message.
  */
@@ -736,12 +803,14 @@ AG_EXPORT const char *ag_test_upstream(const ag_upstream_options *upstream, bool
 /**
  * @ingroup api
  * Check if string is a valid rule.
+ * @return TRUE if rule is valid, false otherwise
  */
 AG_EXPORT bool ag_is_valid_dns_rule(const char *str);
 
 /**
  * @ingroup api
- * Return the C API version (hash of this file).
+ * Get C APi version.
+ * @return the C API version (hash of this file)
  */
 AG_EXPORT const char *ag_get_capi_version();
 
@@ -773,7 +842,7 @@ AG_EXPORT void ag_enable_SetUnhandledExceptionFilter(void);
 /**
  * @ingroup api
  * Suggest rules based on filtering log event.
- * @return NULL on error. Action freed with `ag_dns_filtering_log_action_free()` on success
+ * @return The action freed with `ag_dns_filtering_log_action_free()` on success. NULL on error
  */
 AG_EXPORT ag_dns_filtering_log_action *ag_dns_filtering_log_action_from_event(
         const ag_dns_request_processed_event *event);
@@ -787,7 +856,7 @@ AG_EXPORT void ag_dns_filtering_log_action_free(ag_dns_filtering_log_action *act
 /**
  * @ingroup api
  * Generate a rule from a template (obtained from `ag_dns_filtering_log_action`) and a corresponding event.
- * @return NULL on error. Rule freed with `ag_str_free()` on success
+ * @return The rule freed with `ag_str_free()` on success, NULL on error
  */
 AG_EXPORT char *ag_dns_generate_rule_with_options(
         const ag_dns_rule_template *tmplt, const ag_dns_request_processed_event *event, uint32_t options);

@@ -15,7 +15,7 @@ extern NSErrorDomain const AGDnsProxyErrorDomain;
  * @ingroup enums
  * DNS error codes.
  *
- * This enumeration defines the different DNS error codes used in the application
+ * Defines the different DNS error codes used in the application
  */
 typedef NS_ENUM(NSInteger, AGDnsProxyInitError) {
     /** The DNS proxy is not set */
@@ -61,7 +61,7 @@ typedef NS_ENUM(NSInteger, AGDnsProxyInitError) {
  * @ingroup enums
  * Logging levels.
  *
- * This enumeration defines the different logging levels used in the application.
+ * Defines the different logging levels used in the application.
  */
 typedef NS_ENUM(NSInteger, AGLogLevel) {
     /** Error: Indicates an error that requires immediate attention */
@@ -81,7 +81,7 @@ typedef NS_ENUM(NSInteger, AGLogLevel) {
  * @ingroup enums
  * Listener protocols.
  *
- * This enumeration defines the different listener protocols used in the application.
+ * Defines the different listener protocols used in the application.
  */
 typedef NS_ENUM(NSInteger, AGListenerProtocol) {
     /** User Datagram Protocol (UDP) */
@@ -119,7 +119,7 @@ typedef NS_ENUM(NSInteger, AGBlockingMode) {
  * @interface AGLogger
  * Class for configuring logging for DNS library.
  *
- * It provides a way to configure logging for the DNS library.
+ * Provides a way to configure logging for the DNS library.
  * The logging level and the logging function can be set using the provided methods.
  */
 @interface AGLogger : NSObject
@@ -137,9 +137,9 @@ typedef NS_ENUM(NSInteger, AGBlockingMode) {
  * This block is called when a log message needs to be output.
  * The message is already formatted, including the line terminator.
  *
- * @param level The log level of the message.
- * @param msg The formatted log message.
- * @param length The length of the log message.
+ * @param level The log level of the message
+ * @param msg The formatted log message
+ * @param length The length of the log message
  */
 typedef void (^logCallback)(AGLogLevel level, const char *msg, int length);
 
@@ -159,17 +159,22 @@ typedef void (^logCallback)(AGLogLevel level, const char *msg, int length);
  */
 @interface AGDnsUpstream : NSObject<NSCoding>
 /**
- * A DNS server address:
- *      8.8.8.8:53 -- plain DNS
- *      tcp://8.8.8.8:53 -- plain DNS over TCP
- *      tls://1.1.1.1 -- DNS-over-TLS
- *      https://dns.adguard.com/dns-query -- DNS-over-HTTPS
- *      sdns://... -- DNS stamp (see https://dnscrypt.info/stamps-specifications)
- *      quic://dns.adguard.com:853 -- DNS-over-QUIC
+ * Server address.
+ * One of the following kinds:
+ * * `8.8.8.8:53` -- plain DNS (must specify IP address, not hostname)
+ * * `tcp://8.8.8.8:53` -- plain DNS over TCP (must specify IP address, not hostname)
+ * * `tls://dns.adguard.com` -- DNS-over-TLS
+ * * `https://dns.adguard.com/dns-query` -- DNS-over-HTTPS
+ * * `sdns://...` -- DNS stamp (see https://dnscrypt.info/stamps-specifications)
+ * * `quic://dns.adguard.com:853` -- DNS-over-QUIC
+ * * `h3://` -- DNS-over-HTTP/3
  */
 @property(nonatomic) NSString *address;
 /**
- * List of plain DNS servers to be used to resolve DOH/DOT hostnames (if any)
+ * List of plain DNS servers.
+ * List used to resolve the hostname in the upstream's address when necessary.
+ * These servers will help establish the initial connection to the upstream DNS server
+ * if its address is specified as a hostname.
  */
 @property(nonatomic) NSArray<NSString *> *bootstrap;
 /**
@@ -178,8 +183,9 @@ typedef void (^logCallback)(AGLogLevel level, const char *msg, int length);
  */
 @property(nonatomic) NSInteger timeoutMs;
 /**
- * Resolver's IP address. In the case if it's specified,
- * bootstrap DNS servers won't be used at all.
+ * Upstream's IP address.
+ * Pre-resolved IP address for the upstream server. If this field is specified, the @ref bootstrap
+ * DNS servers won't be used for resolving the upstream's address.
  */
 @property(nonatomic) NSData *serverIp;
 /**
@@ -235,12 +241,14 @@ typedef void (^logCallback)(AGLogLevel level, const char *msg, int length);
 @interface AGListenerSettings : NSObject<NSCoding>
 
 /**
- * The address to listen on
+ * The port to listen on
+ * This is the address on which the listener will wait for incoming DNS queries.
  */
 @property(nonatomic) NSString *address;
 
 /**
- * The port to listen on
+ * The port to listen on.
+ * This is the port on which the listener will wait for incoming DNS queries.
  */
 @property(nonatomic) NSInteger port;
 
@@ -250,12 +258,16 @@ typedef void (^logCallback)(AGLogLevel level, const char *msg, int length);
 @property(nonatomic) AGListenerProtocol proto;
 
 /**
- * Don't close the TCP connection after sending the first response
+ * Whether the listener should keep the TCP connection open after sending the first response.
+ * If set to true, the connection will not be closed immediately,
+ * allowing for multiple requests and responses over the same connection.
  */
 @property(nonatomic) BOOL persistent;
 
 /**
- * Close the TCP connection this long after the last request received, in milliseconds
+ * Idle timeout.
+ * Duration (in milliseconds) after which the listener should close the TCP connection if no
+ * requests have been received. This setting helps to prevent idle connections from consuming resources.
  */
 @property(nonatomic) NSInteger idleTimeoutMs;
 
@@ -271,7 +283,7 @@ typedef void (^logCallback)(AGLogLevel level, const char *msg, int length);
  * @ingroup enums
  * Outbound proxy protocols.
  *
- * This enumeration defines the different outbound proxy protocols used in the application.
+ * Defines the different outbound proxy protocols used in the application.
  */
 typedef NS_ENUM(NSInteger, AGOutboundProxyProtocol) {
     /** Plain HTTP proxy */
@@ -424,7 +436,7 @@ typedef NS_ENUM(NSInteger, AGOutboundProxyProtocol) {
  */
 @property(nonatomic) AGOutboundProxySettings *outboundProxy;
 /**
- * If false, bootstrappers will fetch only A records
+ * If true, bootstrappers will fetch AAAA records
  */
 @property(nonatomic) BOOL ipv6Available;
 /**
@@ -514,7 +526,7 @@ typedef NS_ENUM(NSInteger, AGOutboundProxyProtocol) {
  * @ingroup enums
  * Rule generation options.
  *
- * This enumeration defines the different rule generation options used in the application.
+ * Defines the different rule generation options used in the application.
  */
 typedef NS_ENUM(NSUInteger, AGRuleGenerationOptions) {
     /** Add an $important modifier */
@@ -531,8 +543,8 @@ typedef NS_ENUM(NSUInteger, AGRuleGenerationOptions) {
 - (NSString *)description; /**< String representation. */
 /**
  * Generate a rule using this template and the specified options.
- * @param options Union of `AGRuleGenerationOptions` values.
- * @return The resulting rule or `nil` on error.
+ * @param options Union of `AGRuleGenerationOptions` values
+ * @return The resulting rule or `nil` on error
  */
 - (NSString *)generateRuleWithOptions:(NSUInteger)options;
 @end
@@ -548,7 +560,8 @@ typedef NS_ENUM(NSUInteger, AGRuleGenerationOptions) {
 @property(nonatomic) BOOL blocking; /**< Whether something will be blocked or un-blocked as a result of this action */
 /**
  * Suggest an action based on filtering event.
- * @return Action or nil on error.
+ * @param event Processed event
+ * @return The action or nil on error
  */
 + (instancetype)actionFromEvent:(AGDnsRequestProcessedEvent *)event;
 @end
@@ -557,7 +570,24 @@ typedef NS_ENUM(NSUInteger, AGRuleGenerationOptions) {
  * @interface AGDnsProxy
  * Represents a DNS proxy.
  *
- * This class provides methods for provides management and interaction with proxy server.
+ * Provides methods for provides management and interaction with proxy server.
+ *
+ * Usage example:
+ * @code{.mm}
+ * int main() {
+ *     auto *listener = [[AGListenerSettings alloc] init];
+ *     auto *handler = [[AGDnsProxyEvents alloc] init];
+ *     NSError *error;
+ *     auto *proxy = [[AGDnsProxy alloc] initWithConfig:config handler:handler error:&error];
+ *     if (error || !proxy) {
+ *         [proxy stop];
+ *         return 1;
+ *     }
+ *     ...
+ *     [proxy stop];
+ *     return 0;
+ * }
+ * @endcode
  */
 @interface AGDnsProxy : NSObject
 /**
@@ -576,25 +606,26 @@ typedef NS_ENUM(NSUInteger, AGRuleGenerationOptions) {
  *
  * @param Packet data to process
  * @param completionHandler Completion handler
- * @return Response packet payload, or
- *        nil if nothing shoud be sent in response
+ * @return The response packet payload, or nil if nothing shoud be sent in response
  */
 - (void) handlePacket: (NSData *) packet completionHandler: (void (^)(NSData *)) completionHandler;
 
 /**
- * Stop DnsProxy. Should be called before dealloc.
+ * Stop DnsProxy.
+ * @note Should be called before dealloc
  */
 - (void) stop;
 
 /**
 * Check if string is a valid rule
 * @param str string to check
-* @return true if string is a valid rule, false otherwise
+* @return True if string is a valid rule, false otherwise
 */
 + (BOOL) isValidRule: (NSString *) str;
 
 /**
- * Return the DNS proxy library version.
+ * Gets the library version
+ * @return The DNS proxy library version
  */
 + (NSString *) libraryVersion;
 @end
@@ -603,7 +634,7 @@ typedef NS_ENUM(NSUInteger, AGRuleGenerationOptions) {
  * @ingroup enums
  * Stamp protocol types.
  *
- * This enumeration defines the different stamp protocol types used in the application.
+ * Defines the different stamp protocol types used in the application.
  */
 typedef NS_ENUM(NSInteger, AGStampProtoType) {
     /** Plain DNS */
@@ -696,8 +727,8 @@ typedef NS_ENUM(NSInteger, AGStampProtoType) {
 /**
  * Checks if upstream is valid and available
  * @param opts Upstream options
- * @param ipv6Available Whether IPv6 is available (if true, bootstrapper is allowed to make AAAA queries)
- * @param offline Don't perform online upstream check
+ * @param ipv6Available If true, bootstrapper is allowed to make AAAA queries (Whether IPv6 is available)
+ * @param offline If true, don't perform online upstream check
  * @return If it is, no error is returned. Otherwise this method returns an error with an explanation
  */
 + (NSError *) testUpstream: (AGDnsUpstream *) opts ipv6Available: (BOOL) ipv6Available offline: (BOOL) offline;
