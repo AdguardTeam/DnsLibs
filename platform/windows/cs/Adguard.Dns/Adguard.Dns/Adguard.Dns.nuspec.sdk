@@ -1,0 +1,26 @@
+<?xml version="1.0"?>
+<package >
+  <metadata>
+    <id>$id$</id>
+    <version>$version$-sdk</version>
+    <title>$title$</title>
+    <authors>$author$</authors>
+    <owners>$author$</owners>
+    <requireLicenseAcceptance>false</requireLicenseAcceptance>
+    <description>$description$</description>
+    <licenseUrl>https://adguard.com/en/eula.html</licenseUrl>
+    <projectUrl>https://github.com/AdguardTeam/DnsLibs</projectUrl>
+    <iconUrl>https://avatars3.githubusercontent.com/u/8361145</iconUrl>
+  </metadata>
+  <files>
+    <!-- Signed files -->
+    <file src="../DnsLibs/Adguard.Dns.dll" target="lib/net45"/>
+    <file src="../DnsLibs/Adguard.Dns.pdb" target="lib/net45"/>
+    <file src="../DnsLibs/Adguard.Dns.xml" target="lib/net45"/>
+    <file src="../DnsLibs/AdguardDns.dll" target="build"/>
+    <file src="../DnsLibs/AdguardDns.pdb" target="build"/>
+	  <file src="../DnsLibs/Adguard.Dns*.nrmap" target="nrmap"/>
+    <!-- Targets -->
+    <file src="Properties/Adguard.Dns.targets" target="build"/>
+  </files>
+</package>
