@@ -3,8 +3,11 @@
 namespace Adguard.Dns.Api.DnsProxyServer.Configs
 {
     /// <summary>
-    /// Dns 64 settings,
-    /// Managed mirror of <see cref="AGDnsApi.ag_dns64_settings"/>
+    /// Represents settings for DNS64 prefix discovery.
+    /// This structure defines the various configuration options that can be used to specify
+    /// DNS64 prefix discovery settings.
+    /// Defines the various configuration options that can be used to specify DNS64 prefix discovery settings.
+    /// (A managed mirror of <see cref="AGDnsApi.ag_dns64_settings"/>)
     /// </summary>
     public class Dns64Settings
     {

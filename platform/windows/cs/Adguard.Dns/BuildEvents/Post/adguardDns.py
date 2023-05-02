@@ -5,6 +5,7 @@ OUTPUT_DIR_NAME = "DnsLibs"
 COPIED_FILES = [
     "Adguard.Dns.dll",
     "Adguard.Dns.pdb",
+    "Adguard.Dns.xml",
     "AdguardDns.dll",
     "AdguardDns.pdb"
 ]

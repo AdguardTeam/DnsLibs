@@ -5,30 +5,38 @@ using AdGuard.Utils.Adapters.Interop;
 namespace Adguard.Dns.Api.DnsProxyServer.Configs
 {
     /// <summary>
-    /// Upstream options.
-    /// Managed mirror of <see cref="AGDnsApi.ag_upstream_options"/>
+    /// Represents options for configuring an upstream DNS server.
+    /// Defines the various configuration options that can be used to specify an upstream DNS server.
+    /// By adjusting the values of these fields, users can fine-tune the behavior of the DNS proxy
+    /// server when sending DNS queries to upstream servers.
+    /// (A managed mirror of <see cref="AGDnsApi.ag_upstream_options"/>)
     /// </summary>
     public class UpstreamOptions
     {
         /// <summary>
-        /// Server address, one of the following kinds:
-        /// 8.8.8.8:53 -- plain DNS
-        /// tcp://8.8.8.8:53 -- plain DNS over TCP
-        /// tls://1.1.1.1 -- DNS-over-TLS
-        /// https://dns.adguard.com/dns-query -- DNS-over-HTTPS
-        /// sdns://... -- DNS stamp (see https://dnscrypt.info/stamps-specifications)
-        /// quic://dns.adguard.com:853 -- DNS-over-QUIC
+        /// Server address.
+        /// One of the following kinds:
+        ///  `8.8.8.8:53` -- plain DNS (must specify IP address, not hostname)
+        ///  `tcp://8.8.8.8:53` -- plain DNS over TCP (must specify IP address, not hostname)
+        ///  `tls://dns.adguard.com` -- DNS-over-TLS-HTTPS
+        ///  `https://dns.adguard.com/dns-query` -- DNS-over-HTTPS.info/stamps-specifications)
+        ///  `sdns://...` -- DNS stamp (see https://dnscrypt.info/stamps-specifications)
         /// </summary>
         [ManualMarshalStringToPtr]
         public string Address { get; set; }
 
         /// <summary>
-        /// List of plain DNS servers to be used to resolve DOH/DOT hostnames (if any)
+        /// List of plain DNS servers.
+        /// List used to resolve the hostname in the upstream's address when necessary.
+        /// These servers will help establish the initial connection to the upstream DNS server
+        /// if its address is specified as a hostname.
         /// </summary>
         public List<string> Bootstrap { get; set; }
 
         /// <summary>
-        /// Resolver's IP address. In the case if it's specified, bootstrap DNS servers won't be used at all.
+        /// Upstream's IP address.
+        /// Pre-resolved IP address for the upstream server. If this field is specified, the @ref bootstrap
+        /// DNS servers won't be used for resolving the upstream's address.
         /// </summary>
         public IPAddress ResolvedIpAddress { get; set; }
 

@@ -22,7 +22,7 @@ namespace Adguard.Dns
         /// <summary>
         /// The current API version hash with which the ProxyServer was tested
         /// </summary>
-        private const string API_VERSION_HASH = "8a711146e0ebd45b3aea744e1ac0fba4cde7fa8dc8d96d6d7d1ab397ac888a2c";
+        private const string API_VERSION_HASH = "1b74b4843e0ca03fb3ccb6ec9228f46d40b956ed26d2d48ac396b5b57ca3ca1c";
         #endregion
 
         #region API Functions
@@ -32,20 +32,75 @@ namespace Adguard.Dns
         /// </summary>
         public enum ag_dnsproxy_init_result
         {
+            /// <summary>
+            /// The DNS proxy is not set
+            /// </summary>
             AGDPIR_PROXY_NOT_SET,
+
+            /// <summary>
+            /// The event loop is not set
+            /// </summary>
             AGDPIR_EVENT_LOOP_NOT_SET,
+
+            /// <summary>
+            /// The provided address is invalid
+            /// </summary>
             AGDPIR_INVALID_ADDRESS,
+
+            /// <summary>
+            /// The proxy is empty
+            /// </summary>
             AGDPIR_EMPTY_PROXY,
+
+            /// <summary>
+            /// There is an error in the protocol
+            /// </summary>
             AGDPIR_PROTOCOL_ERROR,
+
+            /// <summary>
+            /// Failed to initialize the listener
+            /// </summary>
             AGDPIR_LISTENER_INIT_ERROR,
+
+            /// <summary>
+            /// The provided IPv4 address is invalid
+            /// </summary>
             AGDPIR_INVALID_IPV4,
+
+            /// <summary>
+            /// The provided IPv6 address is invalid
+            /// </summary>
             AGDPIR_INVALID_IPV6,
+
+            /// <summary>
+            /// Failed to initialize the upstream
+            /// </summary>
             AGDPIR_UPSTREAM_INIT_ERROR,
+
+            /// <summary>
+            /// Failed to initialize the fallback filter
+            /// </summary>
             AGDPIR_FALLBACK_FILTER_INIT_ERROR,
+
+            /// <summary>
+            /// Failed to load the filter
+            /// </summary>
             AGDPIR_FILTER_LOAD_ERROR,
+
+            /// <summary>
+            /// The memory limit has been reached
+            /// </summary>
             AGDPIR_MEM_LIMIT_REACHED,
+
+            /// <summary>
+            /// The filter ID is not unique
+            /// </summary>
             AGDPIR_NON_UNIQUE_FILTER_ID,
-            AGDPIR_OK
+
+            /// <summary>
+            /// DNS proxy initialization was successful
+            /// </summary>
+            AGDPIR_OK,
         }
 
         [Flags]
@@ -1017,9 +1072,19 @@ namespace Adguard.Dns
             AGBM_ADDRESS
         }
 
+        /// <summary>
+        /// Listener protocols for the networking system.
+        /// </summary>
         public enum ag_listener_protocol
         {
+            /// <summary>
+            /// UDP protocol
+            /// </summary>
             AGLP_UDP,
+
+            /// <summary>
+            /// TCP protocol
+            /// </summary>
             AGLP_TCP
         }
 
@@ -1073,14 +1138,34 @@ namespace Adguard.Dns
             AGSIP_NO_FILTER = 1 << 2
         }
 
+        /// <summary>
+        /// Defines the possible results of certificate verification.
+        /// </summary>
         public enum ag_certificate_verification_result
         {
+            /// <summary>
+            /// OK: Certificate verification was successful
+            /// </summary>
             AGCVR_OK,
 
+            /// <summary>
+            /// Error: Failed to create a certificate object
+            /// </summary>
             AGCVR_ERROR_CREATE_CERT,
+
+            /// <summary>
+            /// Error: Failed to access the certificate store
+            /// </summary>
             AGCVR_ERROR_ACCESS_TO_STORE,
+
+            /// <summary>
+            /// Error: Certificate verification failed
+            /// </summary>
             AGCVR_ERROR_CERT_VERIFICATION,
 
+            /// <summary>
+            /// Count: The total number of enumeration values
+            /// </summary>
             AGCVR_COUNT
         }
 

@@ -5,7 +5,8 @@ using AdGuard.Utils.Adapters.Interop;
 namespace Adguard.Dns.Api.DnsProxyServer.Configs
 {
     /// <summary>
-    /// A managed mirror of <see cref="AGDnsApi.ag_outbound_proxy_settings"/>
+    /// Defines the various configuration options that can be used to specify an outbound proxy.
+    /// (A managed mirror of <see cref="AGDnsApi.ag_outbound_proxy_settings"/>)
     /// </summary>
     public class OutboundProxySettings
     {

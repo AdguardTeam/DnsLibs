@@ -125,3 +125,17 @@ commit_hash:
     hash: "6b33d2ecb12008eb4b0a0605283fdbee065833a8"
   "2.1.33":
     hash: "e01de587eb5a9ebfd5760faa9b849bbe7988be49"
+  "2.1.34":
+    hash: "ff6dcc9466d4879dc73ee760fdecbf2948907846"
+  "2.1.35":
+    hash: "4f4c438c2227b5fdfac1fec6d2f8c348ae9f5fc6"
+  "2.1.36":
+    hash: "7d39823be5c6d63454f1f8d87334477b7e7e8c09"
+  "2.1.37":
+    hash: "36a5ced07766e81262b613b42ad23cfd2b8587f2"
+  "2.1.38":
+    hash: "4b7ecf83239055c402bd5a85deb7ee6c294b3e91"
+  "2.1.39":
+    hash: "7daf382fdd1040eddb7fbc7cf498a014ccd652da"
+  "2.1.40":
+    hash: "38b83f55a6d77adb3fe0207e011d204f1471bbab"

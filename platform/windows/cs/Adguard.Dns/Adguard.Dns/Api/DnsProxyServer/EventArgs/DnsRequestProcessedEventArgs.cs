@@ -1,12 +1,14 @@
 using System.Collections.Generic;
+using Adguard.Dns.Api.DnsProxyServer.Callbacks;
 using AdGuard.Utils.Adapters.Interop;
 
 namespace Adguard.Dns.Api.DnsProxyServer.EventArgs
 {
     /// <summary>
-    /// On request processed event data
+    /// <see cref="IDnsProxyServerCallbackConfiguration.OnDnsRequestProcessed"/> event data
+    /// Defines the various fields of a DNS request processed event.
+    /// (A managed mirror of <see cref="AGDnsApi.ag_dns_request_processed_event"/>)
     /// </summary>
-    /// <see cref="AGDnsApi.ag_dns_request_processed_event"/>
     public class DnsRequestProcessedEventArgs
     {
         /// <summary>
@@ -22,7 +24,7 @@ namespace Adguard.Dns.Api.DnsProxyServer.EventArgs
         public string Type { get; set; }
 
         /// <summary>
-        /// Time when dnsproxy started processing request (epoch in milliseconds)
+        /// Processing start time, in milliseconds since UNIX epoch
         /// </summary>
         public long StartTime { get; set; }
 
@@ -38,13 +40,13 @@ namespace Adguard.Dns.Api.DnsProxyServer.EventArgs
         public string Status { get; set; }
 
         /// <summary>
-        /// DNS Answers string representation
+        /// A string representation of the DNS reply sent
         /// </summary>
         [ManualMarshalStringToPtr]
         public string Answer { get; set; }
 
         /// <summary>
-        /// If blocked by CNAME, here will be DNS original answer's string representation
+        /// A string representation of the original upstream's DNS reply (present when blocked by CNAME)
         /// </summary>
         [ManualMarshalStringToPtr]
         public string OriginalAnswer { get; set; }
@@ -80,7 +82,7 @@ namespace Adguard.Dns.Api.DnsProxyServer.EventArgs
         public bool Whitelist { get; set; }
 
         /// <summary>
-        /// If not {@code null}, contains the error text (occurred while processing the DNS query)
+        /// If not null, contains the error text (occurred while processing the DNS query)
         /// </summary>
         [ManualMarshalStringToPtr]
         public string Error { get; set; }

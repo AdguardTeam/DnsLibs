@@ -14,7 +14,7 @@ namespace Adguard.Dns.Api.DnsProxyServer.Callbacks
         /// <param name="sender">Sender</param>
         /// <param name="args">Event data
         /// (<seealso cref="CertificateVerificationEventArgs"/>)</param>
-        /// <returns>Certificate verification result
+        /// <returns>The result of the certificate verification
         /// (<seealso cref="AGDnsApi.ag_certificate_verification_result"/>)</returns>
         AGDnsApi.ag_certificate_verification_result 
             OnCertificateVerification(object sender, CertificateVerificationEventArgs args);
