@@ -271,6 +271,12 @@ static void test_filtering_log_action() {
     ag_dns_filtering_log_action_free(action);
 }
 
+static void test_is_valid_rule() {
+    ASSERT(ag_is_valid_dns_rule("$denyallow=com|net"));
+    ASSERT(ag_is_valid_dns_rule("$denyallow=example.org"));
+    ASSERT(!ag_is_valid_dns_rule("/.*/"));
+}
+
 int main() {
     ag_set_log_level(AGLL_TRACE);
 
@@ -279,6 +285,7 @@ int main() {
     test_cert_fingerprint();
     test_dnsstamp();
     test_filtering_log_action();
+    test_is_valid_rule();
 
 #ifdef _WIN32
     // At least check that we don't crash or something
