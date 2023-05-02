@@ -850,7 +850,7 @@ coro::Task<UpstreamExchangeResult> DnsForwarder::do_upstream_exchange(
     }
 
     if (result.has_error()) {
-        upstream->update_rtt_estimate(error_rtt);
+        upstream->update_rtt_estimate(error_rtt + elapsed);
     } else {
         upstream->update_rtt_estimate(elapsed);
     }
@@ -927,61 +927,81 @@ coro::Task<UpstreamExchangeResult> DnsForwarder::do_parallel_exchange(const std:
     co_return std::move(*result);
 }
 
-static std::pair<std::vector<Upstream *>, Millis> collect_upstreams(const std::vector<UpstreamPtr> &src) {
+static std::tuple<std::vector<Upstream *>, Millis, bool> collect_upstreams(const std::vector<UpstreamPtr> &src, bool fallback) {
     Millis max_rtt{0};
+    Millis min_rtt = Millis::max();
+    bool has_unestimated = false;
+    std::vector<Millis> src_rtts{src.size(), Millis{0}};
+    // Calculate min estimate
+    for (size_t i = 0; i != src.size(); i++) {
+        auto rtt_estimate = src[i]->rtt_estimate();
+        if (rtt_estimate) {
+            src_rtts[i] = *rtt_estimate;
+        } else {
+            has_unestimated = true;
+        }
+        min_rtt = std::min(min_rtt, src_rtts[i]);
+    }
+
+    // Build upstream list
     std::vector<Upstream *> upstreams;
     upstreams.reserve(src.size());
-    for (const UpstreamPtr &u : src) {
-        max_rtt = std::max(max_rtt, u->rtt_estimate().value_or(Millis{0}));
-        upstreams.push_back(u.get());
+    for (size_t i = 0; i != src.size(); i++) {
+        auto rtt = src_rtts[i];
+        max_rtt = std::max(max_rtt, rtt);
+        upstreams.push_back(src[i].get());
     }
-    return {std::move(upstreams), max_rtt};
+    return {std::move(upstreams), max_rtt, has_unestimated};
 }
 
 coro::Task<UpstreamExchangeResult> DnsForwarder::do_upstreams_exchange(
         std::string_view normalized_domain, const ldns_pkt *request, bool force_fallback, const DnsMessageInfo *info) {
     bool fallback = !m_fallbacks.empty() && (force_fallback || apply_fallback_filter(normalized_domain, request));
-    auto [upstreams_to_query, max_rtt] = collect_upstreams(fallback ? m_fallbacks : m_upstreams);
-    // Fallbacks are always queried in parallel with `wait_all` enabled.
-    if (fallback || m_settings->enable_parallel_upstream_queries) {
-        co_return co_await do_parallel_exchange(upstreams_to_query, request, info, 2 * max_rtt, /*wait_all*/ fallback);
-    }
-    // Weighted random load balancing below.
     std::optional<UpstreamExchangeResult> last_result;
-    std::vector<double> upstream_weights(upstreams_to_query.size(), 1.0);
-    while (!upstreams_to_query.empty()) {
-        std::optional<size_t> selected_idx;
-        for (size_t i = 0; i < upstreams_to_query.size(); ++i) {
-            auto rtt = upstreams_to_query[i]->rtt_estimate();
-            if (rtt == std::nullopt) { // This upstream hasn't been queried yet, select it.
-                selected_idx = i;
-                break;
-            }
-            upstream_weights[i] /= (double) rtt->count();
-        }
-        if (!selected_idx) { // All upstreams have been queried at least once, select an upstream at random.
-            std::discrete_distribution<size_t> distrib(upstream_weights.begin(), upstream_weights.end());
-            selected_idx = distrib(m_random_engine);
-        }
+    if (!fallback) {
+        auto [upstreams_to_query, max_rtt, has_unestimated] = collect_upstreams(m_upstreams, false);
+        // Fallbacks are always queried in parallel with `wait_all` enabled.
         std::weak_ptr<bool> guard = m_shutdown_guard;
-        last_result = co_await do_upstream_exchange(upstreams_to_query[*selected_idx], request, info, 2 * max_rtt);
-        if (guard.expired()) {
-            co_return {make_error(DnsError::AE_SHUTTING_DOWN), nullptr};
+        if (has_unestimated || m_settings->enable_parallel_upstream_queries) {
+            last_result = co_await do_parallel_exchange(upstreams_to_query, request, info, 2 * max_rtt, /*wait_all*/ false);
+            if (guard.expired()) {
+                co_return {make_error(DnsError::AE_SHUTTING_DOWN), nullptr};
+            }
+            if (last_result->result.has_value() || last_result->result.error()->value() == DnsError::AE_TIMED_OUT) {
+                co_return std::move(*last_result);
+            }
+        } else {
+            // Weighted random load balancing below.
+            std::vector<double> upstream_weights(upstreams_to_query.size(), 1.0);
+            while (!upstreams_to_query.empty()) {
+                for (size_t i = 0; i < upstreams_to_query.size(); ++i) {
+                    auto rtt = upstreams_to_query[i]->rtt_estimate();
+                    if (rtt.has_value()) {
+                        upstream_weights[i] /= (double) rtt->count();
+                    }
+                }
+                std::discrete_distribution<size_t> distrib(upstream_weights.begin(), upstream_weights.end());
+                size_t selected_idx = distrib(m_random_engine);
+                last_result = co_await do_upstream_exchange(upstreams_to_query[selected_idx], request, info, 2 * max_rtt);
+                if (guard.expired()) {
+                    co_return {make_error(DnsError::AE_SHUTTING_DOWN), nullptr};
+                }
+                if (last_result->result.has_value() || last_result->result.error()->value() == DnsError::AE_TIMED_OUT) {
+                    // We either got a valid result, or got a timed out error.
+                    // In case of a timed out error, it's pointless to continue querying any other upstreams since
+                    // the client has probably already timed out itself and isn't waiting for a response anymore.
+                    co_return std::move(*last_result);
+                }
+                // Disqualify the selected upstream and select a new one.
+                std::swap(upstreams_to_query[selected_idx], upstreams_to_query.back());
+                std::swap(upstream_weights[selected_idx], upstream_weights.back());
+                upstreams_to_query.pop_back();
+                upstream_weights.pop_back();
+            }
         }
-        if (last_result->result.has_value() || last_result->result.error()->value() == DnsError::AE_TIMED_OUT) {
-            // We either got a valid result, or got a timed out error.
-            // In case of a timed out error, it's pointless to continue querying any other upstreams since
-            // the client has probably already timed out itself and isn't waiting for a response anymore.
-            co_return std::move(*last_result);
-        }
-        // Disqualify the selected upstream and select a new one.
-        std::swap(upstreams_to_query[*selected_idx], upstreams_to_query.back());
-        std::swap(upstream_weights[*selected_idx], upstream_weights.back());
-        upstreams_to_query.pop_back();
-        upstream_weights.pop_back();
     }
     if (m_settings->enable_fallback_on_upstreams_failure && !m_fallbacks.empty()) {
-        auto [fallbacks, fallbacks_max_rtt] = collect_upstreams(m_fallbacks);
+        auto [fallbacks, fallbacks_max_rtt, _] = collect_upstreams(m_fallbacks, true);
         co_return co_await do_parallel_exchange(fallbacks, request, info, 2 * fallbacks_max_rtt, /*wait_all*/ true);
     }
     if (last_result) {

@@ -1,8 +1,3 @@
-/**
- * @file capi_test.c
- * @brief Usage example
- */
-
 #include <ag_dns.h>
 #include <ldns/ldns.h>
 #include <stdio.h>

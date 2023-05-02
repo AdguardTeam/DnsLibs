@@ -4,7 +4,8 @@ namespace Adguard.Dns.Api.FilteringLogAction
 {
     /// <summary>
     /// The filtering log action.
-    /// Managed mirror of <see cref="AGDnsApi.ag_dns_filtering_log_action"/>
+    /// Defines the various fields of an action that can be taken as a result of applying a DNS filter rule.
+    /// (A managed mirror of <see cref="AGDnsApi.ag_dns_filtering_log_action"/>)
     /// </summary>
     public class FilteringLogAction
     {

@@ -1,11 +1,13 @@
 using System.Collections.Generic;
+using Adguard.Dns.Api.DnsProxyServer.Callbacks;
 
 namespace Adguard.Dns.Api.DnsProxyServer.EventArgs
 {
     /// <summary>
-    /// onBeforeRequest event data
+    /// <see cref="ICertificateVerificationCallback.OnCertificateVerification"/> event data
+    /// Represents an event generated during certificate verification.
+    /// (A managed mirror of <see cref="AGDnsApi.ag_certificate_verification_event"/>)
     /// </summary>
-    /// <see cref="AGDnsApi.ag_certificate_verification_event"/>
     public class CertificateVerificationEventArgs
     {
         /// <summary>

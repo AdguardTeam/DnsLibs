@@ -10,3 +10,5 @@
 !include 'increment-version.yaml'
 ---
 !include 'upload-conan-recipes.yaml'
+---
+!include 'generate-docs.yaml'

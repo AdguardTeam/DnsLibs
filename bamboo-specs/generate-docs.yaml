@@ -1,0 +1,76 @@
+---
+version: 2
+plan:
+  project-key: CL
+  key: DGD
+  name: DnsLibs - Generate documents
+stages:
+  - Default Stage:
+      manual: false
+      final: false
+      jobs:
+        - Generate documents
+Generate documents:
+  key: JOB1
+  docker:
+    image: grumaxxx/docker_doxygen:0.3
+    volumes:
+      ${bamboo.working.directory}: ${bamboo.working.directory}
+      ${bamboo.tmp.directory}: ${bamboo.tmp.directory}
+      ${bamboo.git.cache.directory}: ${bamboo.git.cache.directory}
+      ${system.HOME}/.ssh: /root/.ssh
+    docker-run-arguments: [ ]
+  tasks:
+    - !include docker-clean.yaml
+    - checkout:
+        repository: dns-libs
+        path: dns-libs
+        force-clean-build: 'true'
+        description: Checkout dns-libs
+    - script:
+        interpreter: SHELL
+        scripts:
+          - |-
+            #!/bin/bash
+
+            set -x -e
+
+            case "${bamboo_repository_branch_name}" in 
+              master|stable-*)
+                ;;
+              *)
+                git remote set-url origin ${bamboo_planRepository_repositoryUrl}
+                git fetch origin
+                git checkout ${bamboo_repository_pr_sourceBranch}
+                ;;
+            esac
+
+            mkdir doc && cd doc
+            mkdir capi && mkdir mac && mkdir win
+
+            cd ../scripts
+            ./generate_docs.sh
+        description: generate docs for dns-libs
+        working-dir: dns-libs
+  requirements:
+    - adg-privileged-docker
+  artifacts:
+    - name: Generated Dns-Libs documents
+      location: dns-libs/doc
+      pattern: '**/*'
+      shared: false
+  artifact-subscriptions: []
+repositories:
+  - dns-libs:
+      scope: global
+branches:
+  create: for-pull-request
+  delete:
+    after-deleted-days: 4
+    after-inactive-days: 30
+  link-to-jira: true
+triggers: []
+notifications: []
+labels: []
+other:
+  concurrent-build-plugin: system-default

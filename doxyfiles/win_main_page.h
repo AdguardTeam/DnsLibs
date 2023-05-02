@@ -2,23 +2,21 @@
 
 @mainpage AdGuard DNS Proxy C# Adapter Documentation
 
-@section intro_sec Introduction
-
 @section features_sec Quick start
 
-This code defines a C# class @ref Adguard.Dns.DnsProxyServer.DnsProxyServer "DnsProxySettings" that provides a way to start and stop a DNS proxy server.
+This code defines a C# class @ref Adguard.Dns.DnsProxyServer.DnsProxyServer "DnsProxyServer" that provides a way to start and stop a DNS proxy server.
 Here is a quick start guide on how to use this class:
 
-Create an instance of @ref Adguard.Dns.Api.DnsProxyServer.Configs.DnsProxySettings "DnsProxySettings" with the desired settings for your DNS proxy server.
+- Create an instance of @ref Adguard.Dns.Api.DnsProxyServer.Configs.DnsProxySettings "DnsProxySettings" with the desired settings for your DNS proxy server.
 
-Create an instance of @ref Adguard.Dns.Api.DnsProxyServer.Callbacks.IDnsProxyServerCallbackConfiguration "IDnsProxyServerCallbackConfiguration" to configure the callbacks for your DNS proxy server.
+- Construct a class that inherits from @ref Adguard.Dns.Api.DnsProxyServer.Callbacks.IDnsProxyServerCallbackConfiguration "IDnsProxyServerCallbackConfiguration" and define a callback method to be triggered when the request is completed.
 
-Create an instance of @ref Adguard.Dns.DnsProxyServer.DnsProxyServer "DnsProxyServer" with the @ref Adguard.Dns.Api.DnsProxyServer.Configs.DnsProxySettings "DnsProxySettings"
+- Create an instance of @ref Adguard.Dns.DnsProxyServer.DnsProxyServer "DnsProxyServer" with the @ref Adguard.Dns.Api.DnsProxyServer.Configs.DnsProxySettings "DnsProxySettings"
 and @ref Adguard.Dns.Api.DnsProxyServer.Callbacks.IDnsProxyServerCallbackConfiguration "IDnsProxyServerCallbackConfiguration" instances as parameters.
 
-Call the Start() method on the @ref Adguard.Dns.DnsProxyServer.DnsProxyServer "DnsProxySettings" instance to start the server.
+- Call the Start() method on the @ref Adguard.Dns.DnsProxyServer.DnsProxyServer "DnsProxyServer" instance to start the server.
 
-Call the Stop() method on the @ref Adguard.Dns.DnsProxyServer.DnsProxyServer "DnsProxySettings" instance to stop the server.
+- Call the Stop() method on the @ref Adguard.Dns.DnsProxyServer.DnsProxyServer "DnsProxyServer" instance to stop the server.
 
 @section func Useful functions
 
