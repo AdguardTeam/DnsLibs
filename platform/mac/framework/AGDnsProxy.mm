@@ -691,8 +691,8 @@ static ServerStamp convert_stamp(AGDnsStamp *stamp) {
     [description appendFormat:@", self.outboundProxy=%@", self.outboundProxy];
     [description appendFormat:@", self.ipv6Available=%d", self.ipv6Available];
     [description appendFormat:@", self.blockIpv6=%d", self.blockIpv6];
-    [description appendFormat:@", self.adblockRulesBlockingMode=%d", self.adblockRulesBlockingMode];
-    [description appendFormat:@", self.hostsRulesBlockingMode=%d", self.hostsRulesBlockingMode];
+    [description appendFormat:@", self.adblockRulesBlockingMode=%ld", (long) self.adblockRulesBlockingMode];
+    [description appendFormat:@", self.hostsRulesBlockingMode=%ld", (long) self.hostsRulesBlockingMode];
     [description appendFormat:@", self.customBlockingIpv4=%@", self.customBlockingIpv4];
     [description appendFormat:@", self.customBlockingIpv6=%@", self.customBlockingIpv6];
     [description appendFormat:@", self.dnsCacheSize=%lu", self.dnsCacheSize];
@@ -1525,6 +1525,10 @@ static coro::Task<void *> handleIPv6Packet(AGDnsProxy *self, NSData *packet)
 - (NSString *)stringValue {
     ServerStamp stamp = convert_stamp(self);
     return convert_string(stamp.str());
+}
+
++ (BOOL)supportsSecureCoding {
+    return YES;
 }
 
 @end
