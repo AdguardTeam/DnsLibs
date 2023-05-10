@@ -316,8 +316,12 @@ Error<Upstream::InitError> DoqUpstream::init() {
 }
 
 coro::Task<Upstream::ExchangeResult> DoqUpstream::exchange(const ldns_pkt *request, const DnsMessageInfo *) {
+    std::weak_ptr<bool> guard = m_shutdown_guard;
     if (m_server_addresses.empty()) {
         Bootstrapper::ResolveResult bootstrapper_res = co_await m_bootstrapper->get();
+        if (guard.expired()) {
+            co_return make_error(DnsError::AE_SHUTTING_DOWN);
+        }
         if (bootstrapper_res.error) {
             warnlog(m_log, "Bootstrapper hasn't results");
             co_return make_error(DnsError::AE_BOOTSTRAP_ERROR, bootstrapper_res.error);
@@ -369,7 +373,6 @@ coro::Task<Upstream::ExchangeResult> DoqUpstream::exchange(const ldns_pkt *reque
         co_await loop.co_sleep(timeout);
         co_return std::cv_status::timeout;
     };
-    std::weak_ptr<bool> guard = m_shutdown_guard;
     auto timeout = co_await parallel::any_of<std::cv_status>(
             await_result(req),
             await_timeout(config().loop, m_config.timeout)
