@@ -19,16 +19,8 @@ static ag::Logger gLogger{"AGDnsProxyXPCImpl"};
 
 + (NSXPCInterface *)xpcInterface {
     auto *callbacksIface = [NSXPCInterface interfaceWithProtocol:@protocol(AGDnsProxyEventsXPC)];
-    [callbacksIface setClasses:AGDnsXPCObject.allowedClasses
-                   forSelector:@selector(onRequestProcessed:)
-                 argumentIndex:0
-                       ofReply:NO];
 
     auto *iface = [NSXPCInterface interfaceWithProtocol:@protocol(AGDnsProxyXPC)];
-    [iface setClasses:AGDnsXPCObject.allowedClasses
-          forSelector:@selector(initWithConfig:eventsHandler:completionHandler:)
-        argumentIndex:0
-              ofReply:NO];
     [iface setInterface:callbacksIface
             forSelector:@selector(initWithConfig:eventsHandler:completionHandler:)
           argumentIndex:1

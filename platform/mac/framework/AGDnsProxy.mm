@@ -299,12 +299,12 @@ static ServerStamp convert_stamp(AGDnsStamp *stamp) {
 - (instancetype)initWithCoder:(NSCoder *)coder {
     self = [super init];
     if (self) {
-        _address = [coder decodeObjectForKey:@"_address"];
-        _bootstrap = [coder decodeObjectForKey:@"_bootstrap"];
-        _serverIp = [coder decodeObjectForKey:@"_serverIp"];
+        _address = [coder decodeObjectOfClass:NSString.class forKey:@"_address"];
+        _bootstrap = [coder decodeObjectOfClasses:[[NSSet alloc] initWithObjects:NSArray.class, NSString.class, nil] forKey:@"_bootstrap"];
+        _serverIp = [coder decodeObjectOfClass:NSData.class forKey:@"_serverIp"];
         _id = [coder decodeInt64ForKey:@"_id"];
-        _outboundInterfaceName = [coder decodeObjectForKey:@"_outboundInterfaceName"];
-        _fingerprints = [coder decodeObjectForKey:@"_fingerprints"];
+        _outboundInterfaceName = [coder decodeObjectOfClass:NSString.class forKey:@"_outboundInterfaceName"];
+        _fingerprints = [coder decodeObjectOfClasses:[[NSSet alloc] initWithObjects:NSArray.class, NSString.class, nil] forKey:@"_fingerprints"];
     }
 
     return self;
@@ -349,7 +349,7 @@ static ServerStamp convert_stamp(AGDnsStamp *stamp) {
 - (instancetype)initWithCoder:(NSCoder *)coder {
     self = [super init];
     if (self) {
-        _upstreams = [coder decodeObjectForKey:@"_upstreams"];
+        _upstreams = [coder decodeObjectOfClasses:[[NSSet alloc] initWithObjects:NSArray.class, AGDnsUpstream.class, nil] forKey:@"_upstreams"];
         _maxTries = [coder decodeInt64ForKey:@"_maxTries"];
         _waitTimeMs = [coder decodeInt64ForKey:@"_waitTimeMs"];
     }
@@ -391,7 +391,7 @@ static ServerStamp convert_stamp(AGDnsStamp *stamp) {
 - (instancetype)initWithCoder:(NSCoder *)coder {
     self = [super init];
     if (self) {
-        _address = [coder decodeObjectForKey:@"_address"];
+        _address = [coder decodeObjectOfClass:NSString.class forKey:@"_address"];
         _port = [coder decodeInt64ForKey:@"_port"];
         _proto = (AGListenerProtocol) [coder decodeIntForKey:@"_proto"];
         _persistent = [coder decodeBoolForKey:@"_persistent"];
@@ -437,8 +437,8 @@ static ServerStamp convert_stamp(AGDnsStamp *stamp) {
 {
     self = [super init];
     if (self) {
-        _username = [coder decodeObjectForKey:@"_username"];
-        _password = [coder decodeObjectForKey:@"_password"];
+        _username = [coder decodeObjectOfClass:NSString.class forKey:@"_username"];
+        _password = [coder decodeObjectOfClass:NSString.class forKey:@"_password"];
     }
     return self;
 }
@@ -487,10 +487,10 @@ static ServerStamp convert_stamp(AGDnsStamp *stamp) {
     self = [super init];
     if (self) {
         _protocol = (AGOutboundProxyProtocol)[coder decodeIntForKey:@"_protocol"];
-        _address = [coder decodeObjectForKey:@"_address"];
+        _address = [coder decodeObjectOfClass:NSString.class forKey:@"_address"];
         _port = [coder decodeInt64ForKey:@"_port"];
-        _bootstrap = [coder decodeObjectForKey:@"_bootstrap"];
-        _authInfo = [coder decodeObjectForKey:@"_authInfo"];
+        _bootstrap = [coder decodeObjectOfClasses:[[NSSet alloc] initWithObjects:NSArray.class, NSString.class, nil] forKey:@"_bootstrap"];
+        _authInfo = [coder decodeObjectOfClass:AGOutboundProxyAuthInfo.class forKey:@"_authInfo"];
         _trustAnyCertificate = [coder decodeBoolForKey:@"_trustAnyCertificate"];
     }
     return self;
@@ -524,7 +524,7 @@ static ServerStamp convert_stamp(AGDnsStamp *stamp) {
     self = [super init];
     if (self) {
         _id = [coder decodeInt64ForKey:@"_id"];
-        _data = [coder decodeObjectForKey:@"_data"];
+        _data = [coder decodeObjectOfClass:NSString.class forKey:@"_data"];
         _inMemory = [coder decodeBoolForKey:@"_inMemory"];
     }
 
@@ -610,24 +610,24 @@ static ServerStamp convert_stamp(AGDnsStamp *stamp) {
 - (instancetype)initWithCoder:(NSCoder *)coder {
     self = [super init];
     if (self) {
-        _upstreams = [coder decodeObjectForKey:@"_upstreams"];
-        _fallbacks = [coder decodeObjectForKey:@"_fallbacks"];
-        _fallbackDomains = [coder decodeObjectForKey:@"_fallbackDomains"];
+        _upstreams = [coder decodeObjectOfClasses:[[NSSet alloc] initWithObjects:NSArray.class, AGDnsUpstream.class, nil] forKey:@"_upstreams"];
+        _fallbacks = [coder decodeObjectOfClasses:[[NSSet alloc] initWithObjects:NSArray.class, AGDnsUpstream.class, nil] forKey:@"_fallbacks"];
+        _fallbackDomains = [coder decodeObjectOfClasses:[[NSSet alloc] initWithObjects:NSArray.class, NSString.class, nil] forKey:@"_fallbackDomains"];
         _detectSearchDomains = [coder decodeBoolForKey:@"_detectSearchDomains"];
-        _filters = [coder decodeObjectForKey:@"_filters"];
+        _filters = [coder decodeObjectOfClasses:[[NSSet alloc] initWithObjects:NSArray.class, AGDnsFilterParams.class, nil] forKey:@"_filters"];
 #if TARGET_OS_IPHONE
         _filtersMemoryLimitBytes = [coder decodeInt64ForKey:@"_filtersMemoryLimitBytes"];
 #endif // TARGET_OS_IPHONE
         _blockedResponseTtlSecs = [coder decodeInt64ForKey:@"_blockedResponseTtlSecs"];
-        _dns64Settings = [coder decodeObjectForKey:@"_dns64Settings"];
-        _listeners = [coder decodeObjectForKey:@"_listeners"];
-        _outboundProxy = [coder decodeObjectForKey:@"_outboundProxy"];
+        _dns64Settings = [coder decodeObjectOfClass:AGDns64Settings.class forKey:@"_dns64Settings"];
+        _listeners = [coder decodeObjectOfClasses:[[NSSet alloc] initWithObjects:NSArray.class, AGListenerSettings.class, nil] forKey:@"_listeners"];
+        _outboundProxy = [coder decodeObjectOfClass:AGOutboundProxySettings.class forKey:@"_outboundProxy"];
         _ipv6Available = [coder decodeBoolForKey:@"_ipv6Available"];
         _blockIpv6 = [coder decodeBoolForKey:@"_blockIpv6"];
         _adblockRulesBlockingMode = (AGBlockingMode) [coder decodeIntForKey:@"_adblockRulesBlockingMode"];
         _hostsRulesBlockingMode = (AGBlockingMode) [coder decodeIntForKey:@"_hostsRulesBlockingMode"];
-        _customBlockingIpv4 = [coder decodeObjectForKey:@"_customBlockingIpv4"];
-        _customBlockingIpv6 = [coder decodeObjectForKey:@"_customBlockingIpv6"];
+        _customBlockingIpv4 = [coder decodeObjectOfClass:NSString.class forKey:@"_customBlockingIpv4"];
+        _customBlockingIpv6 = [coder decodeObjectOfClass:NSString.class forKey:@"_customBlockingIpv6"];
         _dnsCacheSize = [coder decodeInt64ForKey:@"_dnsCacheSize"];
         _upstreamTimeoutMs = [coder decodeInt64ForKey:@"_upstreamTimeoutMs"];
         _optimisticCache = [coder decodeBoolForKey:@"_optimisticCache"];
@@ -639,7 +639,7 @@ static ServerStamp convert_stamp(AGDnsStamp *stamp) {
         _enableFallbackOnUpstreamsFailure = [coder decodeBoolForKey:@"_enableFallbackOnUpstreamsFailure"];
         _enableServfailOnUpstreamsFailure = [coder decodeBoolForKey:@"_enableServfailOnUpstreamsFailure"];
         _enableHttp3 = [coder decodeBoolForKey:@"_enableHttp3"];
-        _helperPath = [coder decodeObjectForKey:@"_helperPath"];
+        _helperPath = [coder decodeObjectOfClass:NSString.class forKey:@"_helperPath"];
     }
 
     return self;
@@ -788,20 +788,20 @@ static ServerStamp convert_stamp(AGDnsStamp *stamp) {
 - (instancetype)initWithCoder:(NSCoder *)coder {
     self = [super init];
     if (self) {
-        _domain = [coder decodeObjectForKey:@"_domain"];
-        _type = [coder decodeObjectForKey:@"_type"];
+        _domain = [coder decodeObjectOfClass:NSString.class forKey:@"_domain"];
+        _type = [coder decodeObjectOfClass:NSString.class forKey:@"_type"];
         _startTime = [coder decodeInt64ForKey:@"_startTime"];
         _elapsed = [coder decodeInt64ForKey:@"_elapsed"];
-        _status = [coder decodeObjectForKey:@"_status"];
-        _answer = [coder decodeObjectForKey:@"_answer"];
-        _originalAnswer = [coder decodeObjectForKey:@"_originalAnswer"];
-        _upstreamId = [coder decodeObjectForKey:@"_upstreamId"];
+        _status = [coder decodeObjectOfClass:NSString.class forKey:@"_status"];
+        _answer = [coder decodeObjectOfClass:NSString.class forKey:@"_answer"];
+        _originalAnswer = [coder decodeObjectOfClass:NSString.class forKey:@"_originalAnswer"];
+        _upstreamId = [coder decodeObjectOfClass:NSNumber.class forKey:@"_upstreamId"];
         _bytesSent = [coder decodeInt64ForKey:@"_bytesSent"];
         _bytesReceived = [coder decodeInt64ForKey:@"_bytesReceived"];
-        _rules = [coder decodeObjectForKey:@"_rules"];
-        _filterListIds = [coder decodeObjectForKey:@"_filterListIds"];
+        _rules = [coder decodeObjectOfClasses:[[NSSet alloc] initWithObjects:NSArray.class, NSString.class, nil] forKey:@"_rules"];
+        _filterListIds = [coder decodeObjectOfClasses:[[NSSet alloc] initWithObjects:NSArray.class, NSNumber.class, nil] forKey:@"_filterListIds"];
         _whitelist = [coder decodeBoolForKey:@"_whitelist"];
-        _error = [coder decodeObjectForKey:@"_error"];
+        _error = [coder decodeObjectOfClass:NSString.class forKey:@"_error"];
         _cacheHit = [coder decodeBoolForKey:@"_cacheHit"];
         _dnssec = [coder decodeBoolForKey:@"_dnssec"];
     }
@@ -1468,11 +1468,11 @@ static coro::Task<void *> handleIPv6Packet(AGDnsProxy *self, NSData *packet)
     self = [super init];
     if (self) {
         _proto = (AGStampProtoType) [coder decodeIntForKey:@"_proto"];
-        _serverAddr = [coder decodeObjectForKey:@"_serverAddr"];
-        _providerName = [coder decodeObjectForKey:@"_providerName"];
-        _path = [coder decodeObjectForKey:@"_path"];
-        _serverPublicKey = [coder decodeObjectForKey:@"_serverPublicKey"];
-        _hashes = [coder decodeObjectForKey:@"_hashes"];
+        _serverAddr = [coder decodeObjectOfClass:NSString.class forKey:@"_serverAddr"];
+        _providerName = [coder decodeObjectOfClass:NSString.class forKey:@"_providerName"];
+        _path = [coder decodeObjectOfClass:NSString.class forKey:@"_path"];
+        _serverPublicKey = [coder decodeObjectOfClass:NSData.class forKey:@"_serverPublicKey"];
+        _hashes = [coder decodeObjectOfClasses:[[NSSet alloc] initWithObjects:NSArray.class, NSData.class, nil] forKey:@"_hashes"];
         _dnssec = [coder decodeBoolForKey:@"_dnssec"];
         _noLog = [coder decodeBoolForKey:@"_noLog"];
         _noFilter = [coder decodeBoolForKey:@"_noFilter"];
