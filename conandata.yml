@@ -151,3 +151,5 @@ commit_hash:
     hash: "2739c4f24a300a2889130779741b5c7dac7f6660"
   "2.2.4":
     hash: "672ac7ff4150eb3b278a4816d5f78e90db55fe9b"
+  "2.2.5":
+    hash: "437bbaa6c9c37a3d68750f3c11a7ba0bd78b26df"
