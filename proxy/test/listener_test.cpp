@@ -208,7 +208,8 @@ TEST(ListenerTest, DISABLED_ManyRequestsPending) {
         ldns_pkt2buffer_wire(buffer.get(), reqpkt.get());
 
         ag::coro::run_detached([&buffer](DnsProxy &proxy) -> ag::coro::Task<void> {
-            co_await proxy.handle_message({ldns_buffer_at(buffer.get(), 0), ldns_buffer_position(buffer.get())}, nullptr);
+            co_await proxy.handle_message(
+                    {ldns_buffer_at(buffer.get(), 0), ldns_buffer_position(buffer.get())}, nullptr);
         }(proxy));
 
         ldns_pkt_ptr reqpkt2(
@@ -218,7 +219,8 @@ TEST(ListenerTest, DISABLED_ManyRequestsPending) {
         ldns_pkt2buffer_wire(buffer.get(), reqpkt2.get());
 
         ag::coro::run_detached([&buffer](DnsProxy &proxy) -> ag::coro::Task<void> {
-            co_await proxy.handle_message({ldns_buffer_at(buffer.get(), 0), ldns_buffer_position(buffer.get())}, nullptr);
+            co_await proxy.handle_message(
+                    {ldns_buffer_at(buffer.get(), 0), ldns_buffer_position(buffer.get())}, nullptr);
         }(proxy));
 
         // Wait until stopped
@@ -239,7 +241,8 @@ TEST(ListenerTest, DISABLED_ManyRequestsPending) {
 
     for (int i = 0; i < 10000; i++) {
         coro::run_detached([&buffer](auto &proxy) -> coro::Task<void> {
-            co_await proxy.handle_message({ldns_buffer_at(buffer.get(), 0), ldns_buffer_position(buffer.get())}, nullptr);
+            co_await proxy.handle_message(
+                    {ldns_buffer_at(buffer.get(), 0), ldns_buffer_position(buffer.get())}, nullptr);
         }(proxy));
     }
     std::this_thread::sleep_for(10s);
@@ -253,7 +256,8 @@ TEST(ListenerTest, DISABLED_ManyRequestsPending) {
 
     Uint8Vector last_reply_res{};
     ag::coro::run_detached([&buffer](DnsProxy &proxy, Uint8Vector &reply_res) -> ag::coro::Task<void> {
-        reply_res = co_await proxy.handle_message({ldns_buffer_at(buffer.get(), 0), ldns_buffer_position(buffer.get())}, nullptr);
+        reply_res = co_await proxy.handle_message(
+                {ldns_buffer_at(buffer.get(), 0), ldns_buffer_position(buffer.get())}, nullptr);
     }(proxy, last_reply_res));
     std::this_thread::sleep_for(3s);
 

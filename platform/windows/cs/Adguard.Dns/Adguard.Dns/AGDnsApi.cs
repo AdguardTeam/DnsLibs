@@ -22,7 +22,7 @@ namespace Adguard.Dns
         /// <summary>
         /// The current API version hash with which the ProxyServer was tested
         /// </summary>
-        private const string API_VERSION_HASH = "1b74b4843e0ca03fb3ccb6ec9228f46d40b956ed26d2d48ac396b5b57ca3ca1c";
+        private const string API_VERSION_HASH = "c834ef27b92fbac4c90e86f5d188b71a49e3eb237bf5fc0d6e1cbbae190e7df2";
         #endregion
 
         #region API Functions
@@ -352,6 +352,19 @@ namespace Adguard.Dns
             [NativeName("wait_time_ms")]
             internal UInt32 WaitTimeMs;
         }
+        
+        /// <summary>
+        /// The subset of <see cref="ag_dnsproxy_settings"/>
+        /// available for overriding on a specific listener.
+        /// </summary>
+        [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Ansi)]
+        internal struct ag_proxy_settings_overrides 
+        {
+            /// <summary>
+            /// Overrides <see cref="ag_dnsproxy_settings.BlockEch"/> if not null
+            /// </summary>
+            internal IntPtr pBlock_ech;
+        } ;
 
         [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Ansi)]
         internal struct ag_listener_settings
@@ -387,6 +400,13 @@ namespace Adguard.Dns
             [MarshalAs(UnmanagedType.U4)]
             [NativeName("idle_timeout_ms")]
             internal UInt32 IdleTimeoutMs;
+            
+            /// <summary>
+            /// Overridden settings
+            /// </summary>
+            [MarshalAs(UnmanagedType.Struct)]
+            [NativeName("settings_overrides")]
+            internal ag_proxy_settings_overrides settings_overrides;
         }
 
         public enum ag_outbound_proxy_protocol

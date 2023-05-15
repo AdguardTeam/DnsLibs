@@ -10,8 +10,8 @@
 #include "dnsproxy_listener.h"
 
 #define log_listener(l_, lvl_, fmt_, ...)                                                                              \
-    lvl_##log((l_)->m_log, "[{} {}] " fmt_, magic_enum::enum_name((l_)->m_settings.protocol),                    \
-            (l_)->m_address.str(), ##__VA_ARGS__)
+    lvl_##log((l_)->m_log, "[{} {}] " fmt_, magic_enum::enum_name((l_)->m_settings.protocol), (l_)->m_address.str(),   \
+            ##__VA_ARGS__)
 #define log_id(l_, lvl_, id_, fmt_, ...) lvl_##log(l_, "[{}] " fmt_, id_, ##__VA_ARGS__)
 
 namespace ag::dns {
@@ -19,9 +19,15 @@ namespace ag::dns {
 // For TCP this could be arbitrarily small, but we would prefer to catch the whole request in one buffer.
 static constexpr size_t TCP_RECV_BUF_SIZE = UDP_RECV_BUF_SIZE + 2; // + 2 for payload length
 
-static void udp_alloc_cb(uv_handle_t *handle, size_t suggested_size, uv_buf_t *buf) {
+static void udp_alloc_cb(uv_handle_t *, size_t, uv_buf_t *buf) {
     buf->base = new char[UDP_RECV_BUF_SIZE];
     buf->len = UDP_RECV_BUF_SIZE;
+}
+
+static DnsMessageInfo::ProxySettingsOverrides listener_to_message_overrides(const ProxySettingsOverrides &x) {
+    return {
+            .block_ech = x.block_ech,
+    };
 }
 
 // Abstract base for listeners, does uv initialization/stopping
@@ -29,7 +35,7 @@ class ListenerBase : public DnsProxyListener {
 protected:
     Logger m_log{"listener"};
     DnsProxy *m_proxy{nullptr};
-    EventLoop *m_loop;
+    EventLoop *m_loop{nullptr};
     SocketAddress m_address;
     ListenerSettings m_settings;
     std::shared_ptr<bool> m_shutdown_guard;
@@ -41,6 +47,13 @@ protected:
     virtual Error<DnsProxyInitError> before_run() = 0;
 
 public:
+    ListenerBase() = default;
+
+    ListenerBase(const ListenerBase &) = delete;
+    ListenerBase &operator=(const ListenerBase &) = delete;
+    ListenerBase(ListenerBase &&) = delete;
+    ListenerBase &operator=(ListenerBase &&) = delete;
+
     /**
      * @return std::nullopt if ok, error string otherwise
      */
@@ -121,7 +134,11 @@ private:
 
     coro::Task<void> process_request(uv_buf_t request, const sockaddr *addr) {
         std::unique_ptr<char[]> ptr{request.base};
-        DnsMessageInfo info{.proto = utils::TP_UDP, .peername = SocketAddress{addr}};
+        DnsMessageInfo info{
+                .proto = utils::TP_UDP,
+                .peername = SocketAddress{addr},
+                .settings_overrides = listener_to_message_overrides(m_settings.settings_overrides),
+        };
         std::weak_ptr<bool> guard = m_shutdown_guard;
         Uint8Vector result = co_await m_proxy->handle_message(Uint8View{(uint8_t *) request.base, request.len}, &info);
         if (guard.expired()) {
@@ -205,15 +222,12 @@ protected:
 class TcpDnsPayloadParser {
 private:
     enum class State { RD_SIZE, RD_PAYLOAD };
-    State m_state;
-    uint16_t m_size;
+    State m_state = State::RD_SIZE;
+    uint16_t m_size = 0;
     Uint8Vector m_data;
 
 public:
-    TcpDnsPayloadParser()
-            : m_state{State::RD_SIZE}
-            , m_size{0} {
-    }
+    TcpDnsPayloadParser() = default;
 
     // Push more data to this parser
     void push_data(Uint8View data) {
@@ -223,21 +237,23 @@ public:
     // Initialize `out` to contain the next parsed payload
     // Return true if successful or false if more data is needed (in which case `out` won't be modified)
     bool next_payload(Uint8Vector &out) {
-        if (m_state == State::RD_SIZE) {
+        switch (m_state) {
+        case State::RD_SIZE:
             if (m_data.size() < 2) {
                 return false; // Need more data
             }
             m_size = *(uint16_t *) m_data.data();
             m_size = ntohs(m_size);
             m_state = State::RD_PAYLOAD;
-        }
-        if (m_state == State::RD_PAYLOAD) {
+            [[fallthrough]];
+        case State::RD_PAYLOAD:
             if (m_data.size() < (size_t) 2 + m_size) {
                 return false; // Need more data
             }
             out = Uint8Vector(m_data.begin() + 2, m_data.begin() + 2 + m_size);
             m_data.erase(m_data.begin(), m_data.begin() + 2 + m_size);
             m_state = State::RD_SIZE;
+            break;
         }
         return true;
     }
@@ -245,9 +261,10 @@ public:
 
 class TcpDnsConnection {
 public:
-    explicit TcpDnsConnection(uint64_t id)
+    TcpDnsConnection(uint64_t id, ProxySettingsOverrides settings_overrides)
             : m_id{id}
-            , m_log(__func__) {
+            , m_log(__func__)
+            , m_settings_overrides(settings_overrides) {
         m_tcp = Uv<uv_tcp_t>::create_with_parent(this);
     }
 
@@ -275,7 +292,7 @@ public:
         do_close();
     }
 
-    uint64_t id() {
+    [[nodiscard]] uint64_t id() const {
         return m_id;
     }
 
@@ -286,7 +303,7 @@ public:
 private:
     static constexpr Millis DEFAULT_IDLE_TIMEOUT{30000};
 
-    const uint64_t m_id;
+    uint64_t m_id;
     Logger m_log;
     DnsProxy *m_proxy{};
     bool m_persistent{false};
@@ -298,8 +315,9 @@ private:
     bool m_closed{false};
     TcpDnsPayloadParser m_parser;
     std::shared_ptr<bool> m_shutdown_guard;
+    ProxySettingsOverrides m_settings_overrides;
 
-    static void alloc_cb(uv_handle_t *handle, size_t suggested_size, uv_buf_t *buf) {
+    static void alloc_cb(uv_handle_t *handle, size_t, uv_buf_t *buf) {
         auto *c = (TcpDnsConnection *) Uv<uv_tcp_t>::parent_from_data(handle->data);
         buf->base = (char *) c->m_incoming_buf;
         buf->len = sizeof(c->m_incoming_buf);
@@ -308,7 +326,7 @@ private:
     auto send_reply(uv_buf_t reply) {
         struct Awaitable {
             uv_stream_t *m_handle{};
-            uv_buf_t m_reply;
+            uv_buf_t m_reply{};
             uint16_t m_reply_size_buf_data{};
             uv_buf_t m_bufs[2]{};
             uv_write_t m_req{};
@@ -337,8 +355,7 @@ private:
         return Awaitable{.m_handle = (uv_stream_t *) m_tcp->raw(), .m_reply = reply};
     }
 
-    coro::Task<void> process_request(Uint8Vector &&payload) {
-        Uint8Vector packet_data = std::move(payload);
+    coro::Task<void> process_request(Uint8Vector packet_data) {
         uv_buf_t request = uv_buf_init((char *) packet_data.data(), packet_data.size());
 
         sockaddr_storage ss{};
@@ -346,7 +363,11 @@ private:
         uv_tcp_getpeername(m_tcp->raw(), (sockaddr *) &ss, &namelen);
         auto *addr = (sockaddr *) &ss;
 
-        DnsMessageInfo info{.proto = ag::utils::TP_TCP, .peername = SocketAddress{addr}};
+        DnsMessageInfo info{
+                .proto = ag::utils::TP_TCP,
+                .peername = SocketAddress{addr},
+                .settings_overrides = listener_to_message_overrides(m_settings_overrides),
+        };
         std::weak_ptr<bool> guard = m_shutdown_guard;
         auto result = co_await m_proxy->handle_message({(const uint8_t *) request.base, request.len}, &info);
         if (guard.expired()) {
@@ -437,7 +458,7 @@ private:
             return;
         }
 
-        auto conn = std::make_unique<TcpDnsConnection>(self->m_id_counter++);
+        auto conn = std::make_unique<TcpDnsConnection>(self->m_id_counter++, self->m_settings.settings_overrides);
 
         int err = uv_tcp_init(self->m_loop->handle(), conn->handle());
         if (err < 0) {

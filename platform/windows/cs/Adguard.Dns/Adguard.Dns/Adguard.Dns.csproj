@@ -67,6 +67,7 @@
     <Compile Include="AGDnsApi.cs" />
     <Compile Include="Api\DnsProxyServer\Callbacks\IDnsProxyServerCallbackConfiguration.cs" />
     <Compile Include="Api\DnsProxyServer\Callbacks\ICertificateVerificationCallback.cs" />
+    <Compile Include="Api\DnsProxyServer\Configs\ProxySettingsOverrides.cs" />
     <Compile Include="Api\DnsProxyServer\Configs\Dns64Settings.cs" />
     <Compile Include="Api\DnsProxyServer\Configs\DnsApiConfiguration.cs" />
     <Compile Include="Api\DnsProxyServer\Configs\DnsProxySettings.cs" />
@@ -89,6 +90,7 @@
     <Compile Include="Exceptions\IUnhandledExceptionConfiguration.cs" />
     <Compile Include="Exceptions\UnhandledExceptionCallbackAdapter.cs" />
     <Compile Include="Helpers\DnsApiConverter.cs" />
+    <Compile Include="Helpers\LocalMarshalUtils.cs" />
     <Compile Include="Helpers\TestUpstreamCallbacksAdapter.cs" />
     <Compile Include="Helpers\ProxyServerCallbacksAdapter.cs" />
     <Compile Include="Logging\DnsLoggerAdapter.cs" />

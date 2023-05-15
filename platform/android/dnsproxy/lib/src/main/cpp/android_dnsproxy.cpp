@@ -233,8 +233,8 @@ LocalRef<jobject> AndroidDnsProxy::marshal_dns64(JNIEnv *env, const Dns64Setting
 
     auto java_dns64 = env->NewObject(clazz, ctor);
 
-    env->SetLongField(java_dns64, max_tries_field, settings.max_tries);
-    env->SetLongField(java_dns64, wait_time_field, settings.wait_time.count());
+    env->SetLongField(java_dns64, max_tries_field, jlong(settings.max_tries));
+    env->SetLongField(java_dns64, wait_time_field, jlong(settings.wait_time.count()));
 
     if (auto upstreams = env->GetObjectField(java_dns64, upstreams_field)) {
         for (auto &us : settings.upstreams) {
@@ -243,6 +243,47 @@ LocalRef<jobject> AndroidDnsProxy::marshal_dns64(JNIEnv *env, const Dns64Setting
     }
 
     return LocalRef(env, java_dns64);
+}
+
+ProxySettingsOverrides AndroidDnsProxy::marshal_settings_overrides(JNIEnv *env, jobject x) {
+    auto *clazz = env->FindClass(FQN_SETTINGS_OVERRIDES);
+    assert(env->IsInstanceOf(x, clazz));
+
+    auto *block_ech_field = env->GetFieldID(clazz, "blockEch", "Ljava/lang/Boolean;");
+
+    ProxySettingsOverrides ret = {};
+
+    if (env->IsSameObject(x, nullptr)) {
+        return ret;
+    }
+
+    if (LocalRef block_ech{env, env->GetObjectField(x, block_ech_field)}) {
+        auto *bool_clazz = env->FindClass("java/lang/Boolean");
+        auto *boolean_value = env->GetMethodID(bool_clazz, "booleanValue", "()Z");
+        ret.block_ech = env->CallBooleanMethod(block_ech.get(), boolean_value);
+    }
+
+    return ret;
+}
+
+jni::LocalRef<jobject>
+AndroidDnsProxy::marshal_settings_overrides(JNIEnv *env, const ProxySettingsOverrides &x) {
+    auto *clazz = env->FindClass(FQN_SETTINGS_OVERRIDES);
+    auto *ctor = env->GetMethodID(clazz, "<init>", "()V");
+
+    LocalRef ret{env, env->NewObject(clazz, ctor)};
+
+    if (x.block_ech.has_value()) {
+        auto *bool_clazz = env->FindClass("java/lang/Boolean");
+        auto *value_of = env->GetStaticMethodID(bool_clazz, "valueOf", "(Z)Ljava/lang/Boolean;");
+        LocalRef block_ech{env, env->CallStaticObjectMethod(bool_clazz, value_of,
+                                                            jboolean(x.block_ech.value()))};
+
+        auto *block_ech_field = env->GetFieldID(clazz, "blockEch", "Ljava/lang/Boolean;");
+        env->SetObjectField(ret.get(), block_ech_field, block_ech.get());
+    }
+
+    return ret;
 }
 
 ListenerSettings AndroidDnsProxy::marshal_listener(JNIEnv *env, jobject java_listener_settings) {
@@ -254,6 +295,7 @@ ListenerSettings AndroidDnsProxy::marshal_listener(JNIEnv *env, jobject java_lis
     auto protocol_field = env->GetFieldID(clazz, "protocol", "L" FQN_LISTENER_PROTOCOL ";");
     auto persistent_field = env->GetFieldID(clazz, "persistent", "Z");
     auto idle_timeout_field = env->GetFieldID(clazz, "idleTimeoutMs", "J");
+    auto settings_overrides_field = env->GetFieldID(clazz, "settingsOverrides", "L" FQN_SETTINGS_OVERRIDES ";");
 
     ListenerSettings settings;
 
@@ -270,6 +312,8 @@ ListenerSettings AndroidDnsProxy::marshal_listener(JNIEnv *env, jobject java_lis
 
     settings.persistent = env->GetBooleanField(java_listener_settings, persistent_field);
     settings.idle_timeout = std::chrono::milliseconds(env->GetLongField(java_listener_settings, idle_timeout_field));
+    settings.settings_overrides = marshal_settings_overrides(env, LocalRef{env, env->GetObjectField(
+            java_listener_settings, settings_overrides_field)}.get());
 
     return settings;
 }
@@ -282,6 +326,7 @@ LocalRef<jobject> AndroidDnsProxy::marshal_listener(JNIEnv *env, const ListenerS
     auto protocol_field = env->GetFieldID(clazz, "protocol", "L" FQN_LISTENER_PROTOCOL ";");
     auto persistent_field = env->GetFieldID(clazz, "persistent", "Z");
     auto idle_timeout_field = env->GetFieldID(clazz, "idleTimeoutMs", "J");
+    auto settings_overrides_field = env->GetFieldID(clazz, "settingsOverrides", "L" FQN_SETTINGS_OVERRIDES ";");
 
     auto java_listener = env->NewObject(clazz, ctor);
 
@@ -291,6 +336,9 @@ LocalRef<jobject> AndroidDnsProxy::marshal_listener(JNIEnv *env, const ListenerS
             java_listener, protocol_field, m_listener_protocol_enum_values.at((size_t) settings.protocol).get());
     env->SetBooleanField(java_listener, persistent_field, settings.persistent);
     env->SetLongField(java_listener, idle_timeout_field, settings.idle_timeout.count());
+    env->SetObjectField(
+            java_listener, settings_overrides_field,
+            marshal_settings_overrides(env, settings.settings_overrides).get());
 
     return LocalRef(env, java_listener);
 }

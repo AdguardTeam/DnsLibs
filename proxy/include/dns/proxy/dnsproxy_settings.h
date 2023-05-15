@@ -45,12 +45,21 @@ enum class DnsProxyBlockingMode {
     ADDRESS,
 };
 
+/**
+ * The subset of \ref DnsProxySettings available for overriding on a specific listener
+ */
+struct ProxySettingsOverrides {
+    /** \ref DnsProxySettings.block_ech, has no effect if `nullopt` */
+    std::optional<bool> block_ech;
+};
+
 struct ListenerSettings {
     std::string address; // The address to listen on
     uint16_t port = 0; // The port to listen on
     utils::TransportProtocol protocol = utils::TP_UDP; // The protocol to listen for
     bool persistent = false; // If true, don't close the TCP connection after sending the first response
     Millis idle_timeout{}; // Close the TCP connection this long after the last request received
+    ProxySettingsOverrides settings_overrides; // Overridden settings
 
     /// If not -1, listen on this file descriptor, which must already be bound.
     /// The ownership is not transferred (caller must close the fd).

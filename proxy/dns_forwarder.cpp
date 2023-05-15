@@ -3,7 +3,6 @@
 #include <cstring>
 #include <ldns/ldns.h>
 #include <string>
-#include <thread>
 
 #include "common/cache.h"
 #include "common/error.h"
@@ -22,7 +21,6 @@
 #include "proxy_bootstrapper.h"
 #include "response_cache.h"
 #include "response_helpers.h"
-#include "retransmission_detector.h"
 
 #define errlog_id(l_, pkt_, fmt_, ...) errlog((l_), "[{}] " fmt_, ldns_pkt_id(pkt_), ##__VA_ARGS__)
 #define errlog_fid(l_, pkt_, fmt_, ...) errlog((l_), "[{}] " fmt_, ldns_pkt_id(pkt_), ##__VA_ARGS__)
@@ -135,9 +133,9 @@ static void event_append_rules(
     event.whitelist = content != nullptr && content->props.test(DnsFilter::DARP_EXCEPTION);
 }
 
-void DnsForwarder::finalize_processed_event(DnsRequestProcessedEvent &event,
-        const ldns_pkt *request, const ldns_pkt *response, const ldns_pkt *original_response,
-        std::optional<int32_t> upstream_id, Error<DnsError> error) const {
+void DnsForwarder::finalize_processed_event(DnsRequestProcessedEvent &event, const ldns_pkt *request,
+        const ldns_pkt *response, const ldns_pkt *original_response, std::optional<int32_t> upstream_id,
+        Error<DnsError> error) const {
     if (request != nullptr) {
         const ldns_rr *question = ldns_rr_list_rr(ldns_pkt_question(request), 0);
         char *type = ldns_rr_type2str(ldns_rr_get_type(question));
@@ -528,7 +526,7 @@ coro::Task<DnsForwarder::HandleMessageResult> DnsForwarder::handle_message_inter
         log_packet(m_log, cached.response.get(), "Cached response");
         event.cache_hit = true;
         truncate_response(cached.response.get(), request.get(), opt_as_ptr(info));
-        finalize_processed_event(event,  request.get(), cached.response.get(), nullptr, cached.upstream_id, {});
+        finalize_processed_event(event, request.get(), cached.response.get(), nullptr, cached.upstream_id, {});
         Uint8Vector raw_response = transform_response_to_raw_data(cached.response.get());
         if (cached.expired) {
             assert(m_settings->optimistic_cache);
@@ -568,7 +566,8 @@ coro::Task<DnsForwarder::HandleMessageResult> DnsForwarder::handle_message_inter
         if (m_settings->block_ipv6 && LDNS_RR_TYPE_AAAA == type
                 && (!filter_response || ldns_pkt_get_rcode(filter_response.get()) == LDNS_RCODE_NOERROR)) {
             dbglog_fid(m_log, request.get(), "AAAA DNS query blocked because IPv6 blocking is enabled");
-            ldns_pkt_ptr response{ResponseHelpers::create_soa_response(request.get(), m_settings, SOA_RETRY_IPV6_BLOCK)};
+            ldns_pkt_ptr response{
+                    ResponseHelpers::create_soa_response(request.get(), m_settings, SOA_RETRY_IPV6_BLOCK)};
             log_packet(m_log, response.get(), "IPv6 blocking response");
             finalize_processed_event(event, request.get(), response.get(), nullptr, std::nullopt);
             co_return {transform_response_to_raw_data(response.get()), std::move(event)};
@@ -619,8 +618,8 @@ coro::Task<DnsForwarder::HandleMessageResult> DnsForwarder::handle_message_inter
             // CNAME response blocking
             auto rr = ldns_rr_list_rr(ldns_pkt_answer(response->get()), i);
             if (ldns_rr_get_type(rr) == LDNS_RR_TYPE_CNAME) {
-                auto filter_response = co_await apply_cname_filter(
-                        rr, request.get(), event, effective_rules, fallback_only);
+                auto filter_response =
+                        co_await apply_cname_filter(rr, request.get(), event, effective_rules, fallback_only);
                 if (guard.expired()) {
                     co_return {};
                 }
@@ -632,8 +631,8 @@ coro::Task<DnsForwarder::HandleMessageResult> DnsForwarder::handle_message_inter
             }
             // IP response blocking
             if (ldns_rr_get_type(rr) == LDNS_RR_TYPE_A || ldns_rr_get_type(rr) == LDNS_RR_TYPE_AAAA) {
-                auto filter_response = co_await apply_ip_filter(
-                        rr, request.get(), event, effective_rules, fallback_only);
+                auto filter_response =
+                        co_await apply_ip_filter(rr, request.get(), event, effective_rules, fallback_only);
                 if (guard.expired()) {
                     co_return {};
                 }
@@ -666,7 +665,8 @@ coro::Task<DnsForwarder::HandleMessageResult> DnsForwarder::handle_message_inter
             }
         }
 
-        if (m_settings->block_ech) {
+        if (std::optional override = info.has_value() ? info->settings_overrides.block_ech : std::nullopt;
+                override.value_or(m_settings->block_ech)) {
             if (EchHelpers::remove_ech_svcparam(response->get())) {
                 dbglog_fid(m_log, response->get(), "Removed ECH parameters from SVCB/HTTPS RR");
             }
@@ -685,7 +685,7 @@ coro::Task<ldns_pkt_ptr> DnsForwarder::apply_cname_filter(const ldns_rr *cname_r
 
     assert(ldns_rr_get_type(cname_rr) == LDNS_RR_TYPE_CNAME);
 
-    auto rdf = ldns_rr_rdf(cname_rr, 0);
+    const auto *rdf = ldns_rr_rdf(cname_rr, 0);
     if (!rdf) {
         co_return nullptr;
     }
@@ -817,7 +817,8 @@ coro::Task<ldns_pkt_ptr> DnsForwarder::apply_filter(DnsFilter::MatchParam match,
 #ifdef ANDROID
 [[clang::optnone]]
 #endif
-coro::Task<UpstreamExchangeResult> DnsForwarder::do_upstream_exchange(
+coro::Task<UpstreamExchangeResult>
+DnsForwarder::do_upstream_exchange(
         Upstream *upstream, const ldns_pkt *request, const DnsMessageInfo *info, Millis error_rtt) {
     tracelog_id(m_log, request, "Upstream [{}] ({}) exchange starting", upstream->options().id,
             upstream->options().address);
@@ -921,7 +922,9 @@ coro::Task<UpstreamExchangeResult> DnsForwarder::do_parallel_exchange(const std:
         if (last_error) {
             co_return std::move(*last_error);
         } else {
-            co_return UpstreamExchangeResult{.result = make_error(DnsError::AE_INTERNAL_ERROR, "No upstreams have been asked")};
+            co_return UpstreamExchangeResult{
+                    .result = make_error(DnsError::AE_INTERNAL_ERROR, "No upstreams have been asked"),
+            };
         }
     }
     co_return std::move(*result);
@@ -1008,7 +1011,9 @@ coro::Task<UpstreamExchangeResult> DnsForwarder::do_upstreams_exchange(
         assert(last_result->result.has_error());
         co_return std::move(*last_result);
     } else {
-        co_return UpstreamExchangeResult{.result = make_error(DnsError::AE_INTERNAL_ERROR, "No upstreams have been asked")};
+        co_return UpstreamExchangeResult{
+                .result = make_error(DnsError::AE_INTERNAL_ERROR, "No upstreams have been asked"),
+        };
     }
 }
 

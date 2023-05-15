@@ -236,6 +236,23 @@ typedef void (^logCallback)(AGLogLevel level, const char *msg, int length);
 @end
 
 /**
+ * @interface AGDnsProxySettingsOverrides
+ * The subset of AGDnsProxyConfig available for overriding on a specific listener.
+ */
+@interface AGDnsProxySettingsOverrides : AGDnsXPCObject <NSSecureCoding>
+
+/** Overrides AGDnsProxyConfig.block_ech if not nil */
+@property(nonatomic) NSNumber *blockEch;
+
+- (instancetype)initWithCoder:(NSCoder *)coder;
+
+- (void)encodeWithCoder:(NSCoder *)coder;
+
+- (NSString*)description;
+
+@end
+
+/**
  * @interface AGListenerSettings
  * Settings for a DNS proxy listener.
  */
@@ -271,6 +288,11 @@ typedef void (^logCallback)(AGLogLevel level, const char *msg, int length);
  * requests have been received. This setting helps to prevent idle connections from consuming resources.
  */
 @property(nonatomic) NSInteger idleTimeoutMs;
+
+/**
+ * Overridden settings
+ */
+@property(nonatomic) AGDnsProxySettingsOverrides *settingsOverrides;
 
 - (instancetype)initWithCoder:(NSCoder *)coder;
 

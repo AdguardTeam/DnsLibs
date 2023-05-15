@@ -14,6 +14,7 @@ public class ListenerSettings {
     private Protocol protocol = Protocol.UDP;
     private boolean persistent = false;
     private long idleTimeoutMs = 3000;
+    private ProxySettingsOverrides settingsOverrides = new ProxySettingsOverrides();
 
     /**
      * @return The address to listen on.
@@ -85,6 +86,20 @@ public class ListenerSettings {
         this.idleTimeoutMs = idleTimeoutMs;
     }
 
+    /**
+     * @param x The proxy settings overrides
+     */
+    public void setSettingsOverrides(ProxySettingsOverrides x) {
+        this.settingsOverrides = (x == null) ? new ProxySettingsOverrides() : x;
+    }
+
+    /**
+     * @return The proxy settings overrides
+     */
+    public ProxySettingsOverrides getSettingsOverrides() {
+        return this.settingsOverrides;
+    }
+
     @Override
     public boolean equals(Object o) {
         if (this == o) return true;
@@ -94,11 +109,12 @@ public class ListenerSettings {
                 persistent == that.persistent &&
                 idleTimeoutMs == that.idleTimeoutMs &&
                 Objects.equals(address, that.address) &&
-                protocol == that.protocol;
+                protocol == that.protocol &&
+                Objects.equals(settingsOverrides, that.settingsOverrides);
     }
 
     @Override
     public int hashCode() {
-        return Objects.hash(address, port, protocol, persistent, idleTimeoutMs);
+        return Objects.hash(address, port, protocol, persistent, idleTimeoutMs, settingsOverrides);
     }
 }

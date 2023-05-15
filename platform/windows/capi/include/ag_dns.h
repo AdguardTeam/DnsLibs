@@ -200,6 +200,15 @@ typedef enum {
 } ag_dnsproxy_blocking_mode;
 
 /**
+ * @struct ag_proxy_settings_overrides
+ * The subset of ag_dnsproxy_settings available for overriding on a specific listener.
+ */
+typedef struct {
+    /** Overrides ag_dnsproxy_settings.block_ech if not null */
+    bool *block_ech;
+} ag_proxy_settings_overrides;
+
+/**
  * @struct ag_listener_settings
  * Defines the various configuration options that can be used to specify DNS listener.
  */
@@ -225,6 +234,8 @@ typedef struct {
      * requests have been received. This setting helps to prevent idle connections from consuming resources.
      */
     uint32_t idle_timeout_ms;
+    /** Overridden settings */
+    ag_proxy_settings_overrides settings_overrides;
 } ag_listener_settings;
 
 /**

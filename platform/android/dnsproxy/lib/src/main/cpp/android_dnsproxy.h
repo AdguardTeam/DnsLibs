@@ -106,6 +106,16 @@ private:
     jni::LocalRef<jobject> marshal_dns64(JNIEnv *env, const Dns64Settings &settings);
 
     /**
+     * Marshal settings overrides from Java to C++.
+     */
+    ProxySettingsOverrides marshal_settings_overrides(JNIEnv *env, jobject x);
+
+    /**
+     * Marshal settings overrides settings from C++ to Java.
+     */
+    jni::LocalRef<jobject> marshal_settings_overrides(JNIEnv *env, const ProxySettingsOverrides &x);
+
+    /**
      * Marshal listener settings from Java to C++.
      */
     ListenerSettings marshal_listener(JNIEnv *env, jobject java_listener_settings);

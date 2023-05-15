@@ -1,5 +1,4 @@
 ﻿using System;
-using System.Collections;
 using System.Collections.Generic;
 using System.Net;
 using Adguard.Dns.Api.DnsProxyServer.Callbacks;
@@ -91,7 +90,11 @@ namespace Adguard.Dns.Tests.Helpers
                 {
                     new ListenerSettings
                     {
-                        EndPoint = new IPEndPoint(1234567, 9898)
+                        EndPoint = new IPEndPoint(1234567, 9898),
+                        ProxySettingsOverrides = new ProxySettingsOverrides
+                        {
+                            BlockEch = true
+                        }
                     }
                 },
                 FallbackDomains = new List<string>
@@ -193,6 +196,11 @@ namespace Adguard.Dns.Tests.Helpers
             Assert.AreEqual(
                 dnsSettings.OutboundProxySettings.IgnoreIfUnavailable,
                 dnsSettingsConverted.OutboundProxySettings.IgnoreIfUnavailable);
+            
+            Assert.AreEqual(dnsSettings.Listeners.Count, dnsSettingsConverted.Listeners.Count);
+            Assert.AreEqual(dnsSettings.Listeners[0].EndPoint, dnsSettingsConverted.Listeners[0].EndPoint);
+            Assert.AreEqual(dnsSettings.Listeners[0].ProxySettingsOverrides.BlockEch, 
+                dnsSettingsConverted.Listeners[0].ProxySettingsOverrides.BlockEch);
 
         }
 

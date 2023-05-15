@@ -214,14 +214,36 @@ namespace Adguard.Dns.Helpers
             IntPtr address = MarshalUtils.StringToPtr(
                 listenerSettings.EndPoint.Address.ToString(),
                 allocatedPointers);
+            AGDnsApi.ag_proxy_settings_overrides settingsOverridesC =
+                ToNativeObject(
+                    listenerSettings.ProxySettingsOverrides,
+                    allocatedPointers);
             AGDnsApi.ag_listener_settings listenerSettingsC = new AGDnsApi.ag_listener_settings
             {
                 address = address,
-                port = port
+                port = port,
+                settings_overrides = settingsOverridesC
             };
 
             MarshalUtils.CopyPropertiesToFields(listenerSettings, ref listenerSettingsC);
             return listenerSettingsC;
+        }
+
+        private static AGDnsApi.ag_proxy_settings_overrides ToNativeObject(
+            ProxySettingsOverrides proxySettingsOverrides,
+            Queue<IntPtr> allocatedPointers)
+        {
+            AGDnsApi.ag_proxy_settings_overrides proxySettingsOverridesC = 
+                new AGDnsApi.ag_proxy_settings_overrides();
+            if (proxySettingsOverrides.BlockEch.HasValue)
+            {
+                IntPtr pBlockEch = LocalMarshalUtils.WriteBoolToPtr(
+                    proxySettingsOverrides.BlockEch.Value,
+                    allocatedPointers);
+                proxySettingsOverridesC.pBlock_ech = pBlockEch;
+            }
+            
+            return proxySettingsOverridesC;
         }
 
         private static AGDnsApi.ag_filter_params ToNativeObject(
@@ -403,13 +425,29 @@ namespace Adguard.Dns.Helpers
             IPAddress address = CreateIpAddress(listenerSettingsC.address);
             int port = listenerSettingsC.port;
             IPEndPoint endPoint = CreateEndPoint(address, port);
+            ProxySettingsOverrides proxySettingsOverrides = 
+                FromNativeObject(listenerSettingsC.settings_overrides);
             ListenerSettings listenerSettings = new ListenerSettings
             {
-                EndPoint = endPoint
+                EndPoint = endPoint,
+                ProxySettingsOverrides = proxySettingsOverrides
             };
 
             MarshalUtils.CopyFieldsToProperties(listenerSettingsC, listenerSettings);
             return listenerSettings;
+        }
+        
+        private static ProxySettingsOverrides FromNativeObject(
+            AGDnsApi.ag_proxy_settings_overrides proxySettingsOverridesC)
+        {
+            ProxySettingsOverrides proxySettingsOverrides = new ProxySettingsOverrides();
+            if (proxySettingsOverridesC.pBlock_ech != IntPtr.Zero)
+            {
+                bool blockEch = LocalMarshalUtils.ReadBoolFromPtr(proxySettingsOverridesC.pBlock_ech);
+                proxySettingsOverrides.BlockEch = blockEch;
+            }
+            
+            return proxySettingsOverrides;
         }
 
         private static EngineParams FromNativeObject(AGDnsApi.ag_filter_engine_params filterEngineParamsC)

@@ -5,8 +5,8 @@
 #include "common/defs.h"
 #include "common/error.h"
 
-#include "dns/proxy/dnsproxy_settings.h"
 #include "dns/proxy/dnsproxy_events.h"
+#include "dns/proxy/dnsproxy_settings.h"
 
 namespace ag::dns {
 

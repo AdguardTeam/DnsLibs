@@ -7,6 +7,7 @@
 #define FQN_BLOCKING_MODE FQN_DNSPROXY_SETTINGS "$BlockingMode"
 #define FQN_FILTER_PARAMS "com/adguard/dnslibs/proxy/FilterParams"
 #define FQN_UPSTREAM_SETTINGS "com/adguard/dnslibs/proxy/UpstreamSettings"
+#define FQN_SETTINGS_OVERRIDES "com/adguard/dnslibs/proxy/ProxySettingsOverrides"
 #define FQN_LISTENER_SETTINGS "com/adguard/dnslibs/proxy/ListenerSettings"
 #define FQN_LISTENER_PROTOCOL FQN_LISTENER_SETTINGS "$Protocol"
 #define FQN_DNS64_SETTINGS "com/adguard/dnslibs/proxy/Dns64Settings"

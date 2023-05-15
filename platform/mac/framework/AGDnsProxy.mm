@@ -371,6 +371,38 @@ static ServerStamp convert_stamp(AGDnsStamp *stamp) {
 
 @end
 
+@implementation AGDnsProxySettingsOverrides
+
++ (BOOL)supportsSecureCoding {
+    return YES;
+}
+
+- (instancetype)initWithNative:(const ProxySettingsOverrides *)settings {
+    self = [super init];
+    if (settings->block_ech.has_value()) {
+        _blockEch = [NSNumber numberWithBool:settings->block_ech.value()];
+    }
+    return self;
+}
+
+- (instancetype)initWithCoder:(NSCoder *)coder {
+    self = [super init];
+    if (self) {
+        _blockEch = [coder decodeObjectForKey:@"_blockEch"];
+    }
+    return self;
+}
+
+- (void)encodeWithCoder:(NSCoder *)coder {
+    [coder encodeObject:self.blockEch forKey:@"_blockEch"];
+}
+
+- (NSString *)description {
+    return [NSString stringWithFormat:@"[(%p)AGDnsProxySettingsOverrides: blockEch=%@]", self, _blockEch];
+}
+
+@end
+
 @implementation AGListenerSettings
 
 + (BOOL)supportsSecureCoding {
@@ -385,6 +417,7 @@ static ServerStamp convert_stamp(AGDnsStamp *stamp) {
     _proto = (AGListenerProtocol) settings->protocol;
     _persistent = settings->persistent;
     _idleTimeoutMs = settings->idle_timeout.count();
+    _settingsOverrides = [[AGDnsProxySettingsOverrides alloc] initWithNative:&settings->settings_overrides];
     return self;
 }
 
@@ -396,6 +429,7 @@ static ServerStamp convert_stamp(AGDnsStamp *stamp) {
         _proto = (AGListenerProtocol) [coder decodeIntForKey:@"_proto"];
         _persistent = [coder decodeBoolForKey:@"_persistent"];
         _idleTimeoutMs = [coder decodeInt64ForKey:@"_idleTimeoutMs"];
+        _settingsOverrides = [coder decodeObjectForKey:@"_settingsOverrides"];
     }
 
     return self;
@@ -407,12 +441,13 @@ static ServerStamp convert_stamp(AGDnsStamp *stamp) {
     [coder encodeInt:self.proto forKey:@"_proto"];
     [coder encodeBool:self.persistent forKey:@"_persistent"];
     [coder encodeInt64:self.idleTimeoutMs forKey:@"_idleTimeoutMs"];
+    [coder encodeObject:self.settingsOverrides forKey:@"_settingsOverrides"];
 }
 
 - (NSString*)description {
     return [NSString stringWithFormat:
-            @"[(%p)AGListenerSettings: address=%@, port=%ld, proto=%ld]",
-            self, _address, _port, _proto];
+            @"[(%p)AGListenerSettings: address=%@, port=%ld, proto=%ld, settingsOverrides=[%@]]",
+            self, _address, _port, _proto, (_settingsOverrides == nil) ? @"nil" : [_settingsOverrides description]];
 }
 
 @end
@@ -1172,6 +1207,14 @@ static int bindFd(NSString *helperPath, NSString *address, NSNumber *port, AGLis
 
 #endif // !TARGET_OS_IPHONE
 
+static ProxySettingsOverrides convertProxySettingsOverrides(const AGDnsProxySettingsOverrides *x) {
+    ProxySettingsOverrides ret = {};
+    if (x != nil) {
+        ret.block_ech = (x.blockEch == nil) ? std::nullopt : std::make_optional<bool>([x.blockEch boolValue]);
+    }
+    return ret;
+}
+
 - (instancetype) initWithConfig: (AGDnsProxyConfig *) config
                         handler: (AGDnsProxyEvents *) handler
                           error: (NSError **) error
@@ -1282,6 +1325,7 @@ static int bindFd(NSString *helperPath, NSString *address, NSNumber *port, AGLis
                 .protocol = (ag::utils::TransportProtocol) listener.proto,
                 .persistent = (bool) listener.persistent,
                 .idle_timeout = std::chrono::milliseconds(listener.idleTimeoutMs),
+                .settings_overrides = convertProxySettingsOverrides(listener.settingsOverrides),
                 .fd = listenerFd,
             });
         }

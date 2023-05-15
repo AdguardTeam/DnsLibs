@@ -245,7 +245,7 @@ Error<Upstream::InitError> DoqUpstream::init() {
     m_port = ag::utils::to_integer<uint16_t>(split_result.value().second).value_or(DEFAULT_DOQ_PORT);
 
     if (!std::holds_alternative<std::monostate>(m_options.resolved_server_ip)) {
-        m_server_addresses.emplace_back(SocketAddress(m_options.resolved_server_ip, DEFAULT_DOQ_PORT));
+        m_server_addresses.emplace_back(m_options.resolved_server_ip, DEFAULT_DOQ_PORT);
     }
 
     if (m_server_addresses.empty()) {

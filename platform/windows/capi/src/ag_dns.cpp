@@ -59,9 +59,14 @@ static void free_upstreams(ag_upstream_options *upstreams, size_t n) {
     std::free(upstreams);
 }
 
+static void free_settings_overrides(ag_proxy_settings_overrides *x) {
+    delete x->block_ech;
+}
+
 static void free_listeners(ag_listener_settings *listeners, size_t n) {
     for (size_t i = 0; i < n; ++i) {
         ag_listener_settings &o = listeners[i];
+        free_settings_overrides(&o.settings_overrides);
         std::free((void *) o.address);
     }
     std::free(listeners);
@@ -185,6 +190,14 @@ static ag_filter_engine_params marshal_engine_params(const DnsFilter::EnginePara
     return c_params;
 }
 
+static ag_proxy_settings_overrides marshal_settings_overrides(const ProxySettingsOverrides &x) {
+    ag_proxy_settings_overrides ret = {};
+    if (x.block_ech.has_value()) {
+        ret.block_ech = new bool(x.block_ech.value());
+    }
+    return ret;
+}
+
 static ag_listener_settings marshal_listener(const ListenerSettings &listener) {
     ag_listener_settings c_listener{};
     c_listener.address = marshal_str(listener.address);
@@ -192,6 +205,7 @@ static ag_listener_settings marshal_listener(const ListenerSettings &listener) {
     c_listener.protocol = (ag_listener_protocol) listener.protocol;
     c_listener.persistent = listener.persistent;
     c_listener.idle_timeout_ms = listener.idle_timeout.count();
+    c_listener.settings_overrides = marshal_settings_overrides(listener.settings_overrides);
     return c_listener;
 }
 
@@ -388,6 +402,14 @@ static std::vector<UpstreamOptions> marshal_upstreams(const ag_upstream_options 
     return upstreams;
 }
 
+static ProxySettingsOverrides marshal_settings_overrides(const ag_proxy_settings_overrides &x) {
+    ProxySettingsOverrides ret = {};
+    if (x.block_ech != nullptr) {
+        ret.block_ech = *x.block_ech;
+    }
+    return ret;
+}
+
 static ListenerSettings marshal_listener(const ag_listener_settings &c_listener) {
     ListenerSettings listener{};
     if (c_listener.address) {
@@ -397,6 +419,7 @@ static ListenerSettings marshal_listener(const ag_listener_settings &c_listener)
     listener.protocol = (utils::TransportProtocol) c_listener.protocol;
     listener.persistent = c_listener.persistent;
     listener.idle_timeout = Millis{c_listener.idle_timeout_ms};
+    listener.settings_overrides = marshal_settings_overrides(c_listener.settings_overrides);
     return listener;
 }
 

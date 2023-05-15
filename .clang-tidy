@@ -40,12 +40,15 @@ Checks: '
   -cppcoreguidelines-owning-memory,
   -modernize-avoid-c-arrays,
   -hicpp-named-parameter,
+  -hicpp-no-array-decay,
   -readability-named-parameter,
   -cppcoreguidelines-pro-bounds-pointer-arithmetic,
   -readability-implicit-bool-conversion,
   -cppcoreguidelines-pro-bounds-array-to-pointer-decay,
   -cppcoreguidelines-non-private-member-variables-in-classes,
   -misc-non-private-member-variables-in-classes,
+  -misc-const-correctness,
+  -misc-use-anonymous-namespace,
   '
 
 WarningsAsErrors: '*'

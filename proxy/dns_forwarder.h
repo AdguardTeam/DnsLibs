@@ -78,8 +78,8 @@ private:
 
     coro::Task<ldns_pkt_ptr> try_dns64_aaaa_synthesis(Upstream *upstream, const ldns_pkt_ptr &request) const;
 
-    void finalize_processed_event(DnsRequestProcessedEvent &event, const ldns_pkt *request,
-            const ldns_pkt *response, const ldns_pkt *original_response, std::optional<int32_t> upstream_id,
+    void finalize_processed_event(DnsRequestProcessedEvent &event, const ldns_pkt *request, const ldns_pkt *response,
+            const ldns_pkt *original_response, std::optional<int32_t> upstream_id,
             Error<DnsError> error = nullptr) const;
 
     bool finalize_dnssec_log_logic(ldns_pkt *response, bool is_our_do_bit);

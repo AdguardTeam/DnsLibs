@@ -2,7 +2,6 @@
 
 #include "common/logger.h"
 #include "dns/common/version.h"
-#include "dns/net/default_verifier.h"
 #include "dns/proxy/dnsproxy.h"
 
 #include "dns64.h"
@@ -147,7 +146,7 @@ DnsProxy::DnsProxyInitResult DnsProxy::init(DnsProxySettings settings, DnsProxyE
 void DnsProxy::deinit() {
     std::unique_ptr<Impl> &proxy = m_pimpl;
     proxy->loop->start();
-    proxy->loop->submit([this]{
+    proxy->loop->submit([this] {
         std::unique_ptr<Impl> &proxy = m_pimpl;
         infolog(proxy->log, "Deinitializing proxy module...");
 

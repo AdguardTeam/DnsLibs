@@ -1,5 +1,13 @@
 # Changelog
 
+* [Feature] Added a workaround for incompatibility between ECH features of CoreLibs and DnsLibs.
+            The correct set-up expects an application creates an additional TCP listener with
+            settings overrides with `blockEch` set to `false`, if "block ECH" feature
+            in DnsLibs and "enable ECH" feature in CoreLibs are enabled simultaneously.
+  * [Android] See `ListenerSettings.setSettingsOverrides()`/`getSettingsOverrides()`.
+  * [Apple] See `AGListenerSettings.settingsOverrides`.
+  * [C API] See `ag_listener_settings.settings_overrides`.
+
 * [Feature] Upstream exchange timeout is now specified separately from the upstream options.
             The signature of some functions is changed as a result.
   * [Android] See `com.adguard.dnslibs.proxy.DnsProxySettings#setUpstreamTimeoutMs`/`com.adguard.dnslibs.proxy.DnsProxySettings#getUpstreamTimeoutMs`

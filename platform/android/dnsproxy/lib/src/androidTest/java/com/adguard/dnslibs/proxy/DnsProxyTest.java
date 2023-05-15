@@ -171,16 +171,23 @@ public class DnsProxyTest {
         tcp.setProtocol(ListenerSettings.Protocol.TCP);
         tcp.setPersistent(true);
         tcp.setIdleTimeoutMs(5000);
+        ProxySettingsOverrides overrides = new ProxySettingsOverrides();
+        overrides.setBlockEch(Boolean.TRUE);
+        tcp.setSettingsOverrides(overrides);
         settings.getListeners().add(tcp);
 
         final ListenerSettings udp = new ListenerSettings();
         udp.setAddress("::");
         udp.setPort(12345);
         udp.setProtocol(ListenerSettings.Protocol.UDP);
+        overrides = new ProxySettingsOverrides();
+        overrides.setBlockEch(Boolean.FALSE);
+        udp.setSettingsOverrides(overrides);
         settings.getListeners().add(udp);
 
         try (final DnsProxy proxy = new DnsProxy(context, settings)) {
             assertEquals(proxy.getSettings(), settings);
+            assertEquals(proxy.getSettings().hashCode(), settings.hashCode());
         }
     }
 

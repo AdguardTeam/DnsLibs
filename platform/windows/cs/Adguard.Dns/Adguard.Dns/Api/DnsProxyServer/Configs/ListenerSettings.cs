@@ -33,5 +33,10 @@ namespace Adguard.Dns.Api.DnsProxyServer.Configs
         /// requests have been received. This setting helps to prevent idle connections from consuming resources.
         /// </summary>
         public uint IdleTimeoutMs { get; set; }
+        
+        /// <summary>
+        /// Overridden settings
+        /// </summary>
+        public ProxySettingsOverrides ProxySettingsOverrides { get; set; }
     }
 }
