@@ -1,4 +1,4 @@
-from conans import ConanFile, CMake
+from conans import ConanFile, CMake, tools
 
 
 class DnsLibsConan(ConanFile):
@@ -6,6 +6,7 @@ class DnsLibsConan(ConanFile):
     license = "Apache-2.0"
     author = "AdguardTeam"
     url = "https://github.com/AdguardTeam/DnsLibs"
+    vcs_url = "https://github.com/AdguardTeam/DnsLibs.git"
     description = "A DNS proxy library that supports all existing DNS protocols"
     topics = ("dns", "proxy", "security", "adblock", "privacy")
     settings = "os", "compiler", "build_type", "arch"
@@ -20,6 +21,11 @@ class DnsLibsConan(ConanFile):
         "commit_hash": None,  # None means `master`
     }
     generators = "cmake"
+    # A list of paths to patches. The paths must be relative to the conanfile directory.
+    # They are applied in case of the version equals 777 and mostly intended to be used
+    # for testing.
+    patch_files = []
+    exports_sources = patch_files
 
     def requirements(self):
         self.requires("libcurl/7.85.0-adguard5@AdguardTeam/NativeLibsCommon")
@@ -29,7 +35,7 @@ class DnsLibsConan(ConanFile):
         self.requires("klib/2021-04-06@AdguardTeam/NativeLibsCommon")
         self.requires("ldns/2021-03-29@AdguardTeam/NativeLibsCommon")
         self.requires("magic_enum/0.7.3")
-        self.requires("native_libs_common/2.0.54@AdguardTeam/NativeLibsCommon")
+        self.requires("native_libs_common/2.0.60@AdguardTeam/NativeLibsCommon")
         self.requires("ngtcp2/0.9.0@AdguardTeam/NativeLibsCommon")
         self.requires("pcre2/10.37@AdguardTeam/NativeLibsCommon")
         self.requires("tldregistry/2022-12-26@AdguardTeam/NativeLibsCommon")
@@ -49,11 +55,16 @@ class DnsLibsConan(ConanFile):
             del self.options.fPIC
 
     def source(self):
-        self.run("git init . && git remote add origin https://github.com/AdguardTeam/DnsLibs.git && git fetch")
+        self.run(f"git init . && git remote add origin {self.vcs_url} && git fetch")
 
         if self.version == "777":
             if self.options.commit_hash:
                 self.run("git checkout -f %s" % self.options.commit_hash)
+            else:
+                self.run("git checkout -f master")
+
+            for p in self.patch_files:
+                tools.patch(patch_file=p)
         else:
             version_hash = self.conan_data["commit_hash"][self.version]["hash"]
             self.run("git checkout -f %s" % version_hash)

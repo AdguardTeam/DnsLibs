@@ -142,6 +142,9 @@ SocketFactory::SocketPtr SocketFactory::make_secured_socket(
 
 Error<SocketError> SocketFactory::prepare_fd(
         evutil_socket_t fd, const SocketAddress &peer, const IfIdVariant &outbound_interface) const {
+    if (peer.is_loopback()) {
+        return {};
+    }
     if (const uint32_t *if_index = std::get_if<uint32_t>(&outbound_interface)) {
         auto err = ag::utils::bind_socket_to_if(fd, peer.c_sockaddr()->sa_family, *if_index);
         return (err == nullptr) ? nullptr : make_error(SocketError::AE_BIND_TO_IF_ERROR, err);
