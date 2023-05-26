@@ -356,6 +356,7 @@ static const UpstreamTestData test_upstreams_data[]{
         {"tls://one.one.one.one", {"1.0.0.1"}},
         {"https://dns9.quad9.net:443/dns-query", {"8.8.8.8"}},
         {"https://dns.cloudflare.com/dns-query", {"8.8.8.8:53"}},
+        {"h3://cloudflare-dns.com/dns-query", {"8.8.8.8"}},
         {"https://dns.google/dns-query", {"8.8.8.8"}},
         {// Cisco OpenDNS DNS (DNSCrypt) (no port in stamp, default port test)
             "sdns://AQEAAAAAAAAADjIwOC42Ny4yMjAuMTIzILc1EUAgbyJdPivYItf9aR6hwzzI1maNDL4Ev6vKQ_t5GzIuZG5zY3J5cHQtY2VydC5vcGVuZG5zLmNvbQ"

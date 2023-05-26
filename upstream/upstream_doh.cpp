@@ -381,7 +381,7 @@ void DohUpstream::QueryHandle::cleanup_request() {
         // (CURL should not "send" another message for already completed handle).
         // This works in conjunction with the CURL patch with nullchecks
         // (`curl_multi_remove_handle` sets some pointers in Curl_easy which are used in nghttp3 callbacks to NULL).
-        if (this->upstream->m_curlopt_http_ver == CURL_HTTP_VERSION_3 && !this->flags.test(QHF_RESPONDED)) {
+        if (this->upstream->m_curlopt_http_ver == CURL_HTTP_VERSION_3ONLY && !this->flags.test(QHF_RESPONDED)) {
             this->upstream->m_curl_easy_graveyard.emplace_back(std::move(this->curl_handle));
             return;
         }
@@ -505,7 +505,7 @@ Error<Upstream::InitError> DohUpstream::init() {
     m_curlopt_url = m_options.address;
     if (m_curlopt_url.starts_with(SCHEME_H3)) {
         m_curlopt_url.replace(0, SCHEME_H3.size(), SCHEME_HTTPS);
-        m_curlopt_http_ver = CURL_HTTP_VERSION_3;
+        m_curlopt_http_ver = CURL_HTTP_VERSION_3ONLY;
     } else if (!config().enable_http3) {
         m_curlopt_http_ver = CURL_HTTP_VERSION_2;
     }
@@ -777,7 +777,7 @@ auto DohUpstream::submit_request(QueryHandle *handle) {
 void DohUpstream::start_request(QueryHandle *handle, bool ignore_proxy) {
     if (m_curlopt_http_ver == CURL_HTTP_VERSION_NONE) {
         assert(config().enable_http3);
-        assert(m_curlopt_http_ver != CURL_HTTP_VERSION_3);
+        assert(m_curlopt_http_ver != CURL_HTTP_VERSION_3ONLY);
         // Start a "race" between HTTP/2 and HTTP/3, if not already running.
         if (m_h2_probe_pool == nullptr) {
             assert(m_h3_probe_pool == nullptr);
@@ -793,7 +793,7 @@ void DohUpstream::start_request(QueryHandle *handle, bool ignore_proxy) {
         return;
     }
 
-    if (utils::TransportProtocol proto = (m_curlopt_http_ver == CURL_HTTP_VERSION_3) ? utils::TP_UDP : utils::TP_TCP;
+    if (utils::TransportProtocol proto = (m_curlopt_http_ver == CURL_HTTP_VERSION_3ONLY) ? utils::TP_UDP : utils::TP_TCP;
             !ignore_proxy && m_config.socket_factory->should_route_through_proxy(proto)) {
         if (m_check_proxy != nullptr) {
             // will proceed after the proxy check
@@ -947,9 +947,9 @@ int DohUpstream::curl_prereq(
         return CURL_PREREQFUNC_ABORT;
     }
     upstream->m_curlopt_http_ver =
-            (handle == upstream->m_h3_probe_handle.get()) ? CURL_HTTP_VERSION_3 : CURL_HTTP_VERSION_2;
+            (handle == upstream->m_h3_probe_handle.get()) ? CURL_HTTP_VERSION_3ONLY : CURL_HTTP_VERSION_2;
     dbglog(upstream->m_log, "HTTP version selected: {}",
-            upstream->m_curlopt_http_ver == CURL_HTTP_VERSION_3 ? "HTTP/3" : "HTTP/2");
+            upstream->m_curlopt_http_ver == CURL_HTTP_VERSION_3ONLY ? "HTTP/3" : "HTTP/2");
     upstream->m_httpver_probe_cleanup_task = upstream->config().loop.schedule({}, [upstream] {
         upstream->cleanup_httpver_probe();
         upstream->retry_pending_queries(false);
@@ -982,7 +982,7 @@ void DohUpstream::start_httpver_probe() {
     h3_probe_handle->upstream = h2_probe_handle->upstream;
     h3_probe_handle->timeout = h2_probe_handle->timeout;
     h3_probe_handle->log = h2_probe_handle->log;
-    if (!h3_probe_handle->create_probe_curl_handle(h3_probe_pool.get(), CURL_HTTP_VERSION_3)) {
+    if (!h3_probe_handle->create_probe_curl_handle(h3_probe_pool.get(), CURL_HTTP_VERSION_3ONLY)) {
         stop_all_with_error(std::move(h3_probe_handle->error));
         return;
     }

@@ -1028,7 +1028,7 @@ int DoqUpstream::handshake_confirmed(ngtcp2_conn * /*conn*/, void *data) {
 }
 
 void DoqUpstream::ag_ngtcp2_settings_default(ngtcp2_settings &settings, ngtcp2_transport_params &params) const {
-    settings.max_udp_payload_size = m_max_pktlen;
+    settings.max_tx_udp_payload_size = m_max_pktlen;
     settings.cc_algo = NGTCP2_CC_ALGO_CUBIC;
     settings.initial_ts = get_tstamp();
     settings.initial_rtt = NGTCP2_DEFAULT_INITIAL_RTT / 2;

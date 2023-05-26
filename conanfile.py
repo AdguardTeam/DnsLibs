@@ -28,7 +28,7 @@ class DnsLibsConan(ConanFile):
     exports_sources = patch_files
 
     def requirements(self):
-        self.requires("libcurl/7.85.0-adguard5@AdguardTeam/NativeLibsCommon")
+        self.requires("libcurl/8.1.1-adguard3@AdguardTeam/NativeLibsCommon")
         self.requires("libevent/2.1.11@AdguardTeam/NativeLibsCommon")
         self.requires("libsodium/1.0.18@AdguardTeam/NativeLibsCommon")
         self.requires("libuv/1.41.0@AdguardTeam/NativeLibsCommon")
@@ -36,7 +36,7 @@ class DnsLibsConan(ConanFile):
         self.requires("ldns/2021-03-29@AdguardTeam/NativeLibsCommon")
         self.requires("magic_enum/0.7.3")
         self.requires("native_libs_common/2.0.60@AdguardTeam/NativeLibsCommon")
-        self.requires("ngtcp2/0.9.0@AdguardTeam/NativeLibsCommon")
+        self.requires("ngtcp2/0.15.0@AdguardTeam/NativeLibsCommon")
         self.requires("pcre2/10.37@AdguardTeam/NativeLibsCommon")
         self.requires("tldregistry/2022-12-26@AdguardTeam/NativeLibsCommon")
 
