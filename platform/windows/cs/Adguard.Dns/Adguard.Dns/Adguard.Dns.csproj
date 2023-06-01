@@ -40,7 +40,8 @@
   </PropertyGroup>
   <ItemGroup>
     <Reference Include="AdGuard.Utils.Adapters, Version=1.0.0.0, Culture=neutral, PublicKeyToken=cc321ba03e90d705, processorArchitecture=MSIL">
-      <HintPath>..\packages\Adguard.Utils.Adapters.1.0.9\lib\net45\AdGuard.Utils.Adapters.dll</HintPath>
+      <HintPath>..\packages\Adguard.Utils.Adapters.1.0.13\lib\net45\AdGuard.Utils.Adapters.dll</HintPath>
+	    <Private>True</Private>
     </Reference>
     <Reference Include="Microsoft.CSharp" />
     <Reference Include="Newtonsoft.Json, Version=11.0.0.0, Culture=neutral, PublicKeyToken=30ad4fe6b2a6aeed">
