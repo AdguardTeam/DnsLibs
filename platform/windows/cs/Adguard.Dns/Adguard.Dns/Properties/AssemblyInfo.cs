@@ -1,4 +1,5 @@
-﻿using System.Runtime.CompilerServices;
+﻿using System.Reflection;
+using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 
 // The following GUID is for the ID of the typelib if this project is exposed to COM
@@ -7,3 +8,5 @@ using System.Runtime.InteropServices;
         "dfe840cea454ecce6993ce3b65de8c3c70448a3a52582fdc9a2245f4a3a75b87c4bbe167affe380343150c52d" +
     "231b0ea2ed3c8e959e702a0ac0176eafdd36892e749f935c908f3f0e161681be69ac4ff5e72268b3fe4086d03" +
     "bda8ebc8a5ac5a72686e31506407594329d3215c64183d1f8bc3ea095658cf7ef255bc983096")]
+[assembly: AssemblyTitle("Adguard Dns for Windows")]
+[assembly: AssemblyProduct("Adguard Dns libraries for Windows")]
