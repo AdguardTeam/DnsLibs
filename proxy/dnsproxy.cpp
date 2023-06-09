@@ -59,6 +59,7 @@ static const DnsProxySettings DEFAULT_PROXY_SETTINGS = {
                         "setup.pix-link.net",
                         "tplinkdeco.net",
                         "tplinkextender.net",
+                        "www.asusrouter.com",
                 },
         .dns64 = std::nullopt,
         .blocked_response_ttl_secs = 3600,
