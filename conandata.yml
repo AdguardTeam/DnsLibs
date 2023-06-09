@@ -161,3 +161,5 @@ commit_hash:
     hash: "e42cd5eb53dd6e61114fca2ecd607cd036cfebd2"
   "2.2.9":
     hash: "d021e1c0cff9d89141e3dcc2ccad101a3c0dd6d6"
+  "2.2.10":
+    hash: "4b5b10ddfb2d4b249ae41db7be541be554cba4f7"
