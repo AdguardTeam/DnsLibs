@@ -20,8 +20,7 @@ namespace ag::dns::proxy::test {
 
 // Generated with:
 // echo | openssl s_client -connect 94.140.14.14:853 -servername dns.adguard-dns.com 2>/dev/null | openssl x509 -pubkey -noout | openssl pkey -pubin -outform der | openssl dgst -sha256 -binary | openssl enc -base64
-static constexpr auto OLD_ADGUARD_DNS_SPKI = "IJao6ZpG2Gq6OZxkPzKbSZSlbKO0tF7krya1jYKboJs=";
-static constexpr auto ADGUARD_DNS_SPKI = "Eg+H87YhlVD9X1phBlRsmfDwqWnPcccfgIQKVfaEPyY=";
+static constexpr auto ADGUARD_DNS_SPKI = "pUZw/ajtE73tCpUV810KK+2TfhAKpignA8s7hyggVew=";
 static constexpr auto ZEROSSL_SPKI = "R3hcMOAGw0WFztuG2skTodoHp8IGid3Qg63Cn7YUYoM=";
 
 static constexpr auto DNS64_SERVER_ADDR = "2001:4860:4860::6464";
@@ -238,7 +237,7 @@ TEST_F(DnsProxyTest, DnsStampWithHash) {
     using namespace std::chrono_literals;
     DnsProxySettings settings = make_dnsproxy_settings();
     settings.upstreams = {{
-            .address = "sdns://AwAAAAAAAAAAEDk0LjE0MC4xNC4xNDo4NTMgEC5qicPhfxas6MksSWkAYMU35VRw0Qa4yyxgYqtlwJATZG5zLmFkZ3VhcmQtZG5zLmNvbQ",
+            .address = "sdns://AwAAAAAAAAAAEDk0LjE0MC4xNC4xNDo4NTMgprXNZKIZPIOc7qQO6ShY9Umt7a5LGk10RbqMOV1sKRkTZG5zLmFkZ3VhcmQtZG5zLmNvbQ",
             .bootstrap = {"1.1.1.1"},
     }};
     settings.upstream_timeout = 5000ms;

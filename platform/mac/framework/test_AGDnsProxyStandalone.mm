@@ -21,7 +21,7 @@ int main() {
     upstream.serverIp = nil;
     upstream.id = 42;
     upstream.outboundInterfaceName = nil;
-    upstream.fingerprints = @[@"Eg+H87YhlVD9X1phBlRsmfDwqWnPcccfgIQKVfaEPyY="]; // dns.adguard-dns.com public key fingerprint
+    upstream.fingerprints = @[@"pUZw/ajtE73tCpUV810KK+2TfhAKpignA8s7hyggVew="]; // dns.adguard-dns.com public key fingerprint
 
     auto *fallback = [[AGDnsUpstream alloc] init];
     fallback.address = @"1.1.1.1";

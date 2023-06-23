@@ -379,7 +379,7 @@ public class DnsProxyTest {
 
     @Test
     public void testFingerprint() {
-        String f = "Eg+H87YhlVD9X1phBlRsmfDwqWnPcccfgIQKVfaEPyY=";
+        String f = "pUZw/ajtE73tCpUV810KK+2TfhAKpignA8s7hyggVew=";
         testCertificateVerificationWithFingerprint("tls://dns.adguard-dns.com", f, true);
         f = "R3hcMOAGw0WFztuG2skTodoHp8IGid3Qg63Cn7YUYoM=";
         testCertificateVerificationWithFingerprint("tls://dns.adguard-dns.com", f, true);

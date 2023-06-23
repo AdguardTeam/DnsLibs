@@ -970,7 +970,7 @@ coro::Task<UpstreamExchangeResult> DnsForwarder::do_upstreams_exchange(
             if (guard.expired()) {
                 co_return {make_error(DnsError::AE_SHUTTING_DOWN), nullptr};
             }
-            if (last_result->result.has_value() || last_result->result.error()->value() == DnsError::AE_TIMED_OUT) {
+            if (last_result->result.has_value()) {
                 co_return std::move(*last_result);
             }
         } else {
@@ -989,11 +989,12 @@ coro::Task<UpstreamExchangeResult> DnsForwarder::do_upstreams_exchange(
                 if (guard.expired()) {
                     co_return {make_error(DnsError::AE_SHUTTING_DOWN), nullptr};
                 }
-                if (last_result->result.has_value() || last_result->result.error()->value() == DnsError::AE_TIMED_OUT) {
-                    // We either got a valid result, or got a timed out error.
-                    // In case of a timed out error, it's pointless to continue querying any other upstreams since
-                    // the client has probably already timed out itself and isn't waiting for a response anymore.
+                if (last_result->result.has_value()) {
                     co_return std::move(*last_result);
+                }
+                if (last_result->result.error()->value() == DnsError::AE_TIMED_OUT) {
+                    // If timed out, do not try all upstreams but give a chance to fallbacks.
+                    break;
                 }
                 // Disqualify the selected upstream and select a new one.
                 std::swap(upstreams_to_query[selected_idx], upstreams_to_query.back());
