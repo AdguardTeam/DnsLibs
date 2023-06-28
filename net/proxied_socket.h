@@ -11,20 +11,22 @@ namespace ag::dns {
 
 class ProxiedSocket : public Socket {
 public:
-    struct CloseConnection {};
+    enum OnConnectionFailedAction {
+        OCFA_CLOSE_CONNECTION,
+        OCFA_RETRY_DIRECTLY,
+    };
     struct Fallback {
         OutboundProxy *proxy;
     };
-    using ProxyConnectionFailedResult = std::variant<
-            CloseConnection,
-            Fallback
-    >;
+
 
     struct Callbacks {
         /** Raised after the connection to the proxy server succeeded */
         void (* on_successful_proxy_connection)(void *arg);
         /** Raised after an error on the connection to the proxy server */
-        ProxyConnectionFailedResult (* on_proxy_connection_failed)(void *arg, Error<SocketError> err);
+        OnConnectionFailedAction (* on_proxy_connection_failed)(void *arg, Error<SocketError> err);
+        /** Callback to fetch the fallback proxy when the main proxy is unavailable */
+        Fallback (* get_fallback_proxy)(void *arg);
         /** User context for the callback */
         void *arg;
     };

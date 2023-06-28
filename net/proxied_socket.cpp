@@ -30,6 +30,24 @@ Error<SocketError> ProxiedSocket::connect(ConnectParameters params) {
         return err;
     }
 
+    if (params.peer.is_loopback()) {
+        log_sock(this, dbg, "Don't direct localhost into proxy. Falling back to direct connection");
+        m_proxy = m_proxied_callbacks.get_fallback_proxy(m_proxied_callbacks.arg).proxy;
+        auto connect_result = m_proxy->connect(
+                {
+                        .loop = params.loop,
+                        .proto = this->get_protocol(),
+                        .peer = params.peer,
+                        .callbacks = {nullptr, nullptr, on_connected, on_read, on_close, this},
+                        .timeout = params.timeout,
+                });
+        if (connect_result.has_error()) {
+            return connect_result.error();
+        }
+        m_proxy_id = connect_result.value();
+        return {};
+    }
+
     auto r = m_proxy->connect({
             .loop = params.loop,
             .proto = this->get_protocol(),
@@ -103,13 +121,13 @@ void ProxiedSocket::on_successful_proxy_connection(void *arg) {
 void ProxiedSocket::on_proxy_connection_failed(void *arg, Error<SocketError> err) {
     auto *self = (ProxiedSocket *) arg;
 
-    ProxyConnectionFailedResult r
-            = self->m_proxied_callbacks.on_proxy_connection_failed(self->m_proxied_callbacks.arg, std::move(err));
-    if (std::holds_alternative<CloseConnection>(r)) {
+    OnConnectionFailedAction action = self->m_proxied_callbacks.on_proxy_connection_failed(
+            self->m_proxied_callbacks.arg, std::move(err));
+    if (action == OCFA_CLOSE_CONNECTION) {
         return;
     }
 
-    self->m_fallback_info->proxy = std::get<Fallback>(r).proxy;
+    self->m_fallback_info->proxy = self->m_proxied_callbacks.get_fallback_proxy(self->m_proxied_callbacks.arg).proxy;
 }
 
 void ProxiedSocket::on_connected(void *arg, uint32_t) {

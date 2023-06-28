@@ -47,15 +47,20 @@ struct SocketFactory::OutboundProxyState {
         self->m_proxy->reset_task.reset();
     }
 
-    static ProxiedSocket::ProxyConnectionFailedResult on_proxy_connection_failed(void *arg, Error<SocketError> err) {
+    static ProxiedSocket::Fallback get_fallback_proxy(void *arg) {
+        auto *self = (SocketFactory *) arg;
+        return ProxiedSocket::Fallback{self->m_proxy->fallback_proxy.get()};
+    }
+
+    static ProxiedSocket::OnConnectionFailedAction on_proxy_connection_failed(void *arg, Error<SocketError> err) {
         auto *self = (SocketFactory *) arg;
         switch (self->on_proxy_connection_failed(std::move(err))) {
         case SFPCFR_CLOSE_CONNECTION:
             break;
         case SFPCFR_RETRY_DIRECTLY:
-            return ProxiedSocket::Fallback{self->m_proxy->fallback_proxy.get()};
+            return ProxiedSocket::OCFA_RETRY_DIRECTLY;
         }
-        return ProxiedSocket::CloseConnection{};
+        return ProxiedSocket::OCFA_CLOSE_CONNECTION;
     }
 
     ~OutboundProxyState() {
@@ -104,6 +109,7 @@ SocketFactory::SocketPtr SocketFactory::make_socket(SocketParameters p) const {
                 {
                         OutboundProxyState::on_successful_proxy_connection,
                         OutboundProxyState::on_proxy_connection_failed,
+                        OutboundProxyState::get_fallback_proxy,
                         (void *) this,
                 },
         });
