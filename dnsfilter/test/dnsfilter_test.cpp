@@ -219,6 +219,8 @@ TEST_F(DnsfilterTest, SuccessfulHostsRuleParsing) {
                     {{.content = DnsFilter::HostsRuleInfo{"::FFFF:1.1.1.1"}}, rule_utils::Rule::MMID_SUBDOMAINS}},
             {"0.0.0.0 example.org #comment",
                     {{.content = DnsFilter::HostsRuleInfo{"0.0.0.0"}}, rule_utils::Rule::MMID_SUBDOMAINS}},
+            {"0.0.0.0 example.org   #comment",
+                    {{.content = DnsFilter::HostsRuleInfo{"0.0.0.0"}}, rule_utils::Rule::MMID_SUBDOMAINS}},
     };
 
     for (const TestData &entry : TEST_DATA) {
@@ -229,6 +231,28 @@ TEST_F(DnsfilterTest, SuccessfulHostsRuleParsing) {
         ASSERT_NE(content, nullptr);
         ASSERT_EQ(content->ip, std::get<DnsFilter::HostsRuleInfo>(entry.expected_rule.public_part.content).ip);
         ASSERT_EQ(rule->match_method, entry.expected_rule.match_method);
+    }
+}
+
+TEST_F(DnsfilterTest, SuccessfulExactDomainRuleParsing) {
+    struct TestData {
+        std::string text;
+        std::string expected_matching_parts;
+    };
+
+    const TestData TEST_DATA[] = {
+            {"example.org", "example.org" },
+            {"example.org # Comment", "example.org" },
+            {"example.org # Comment.", "example.org" },
+            {"example.org #Comment", "example.org" },
+            {"example.org #Comment.", "example.org" },
+    };
+
+    for (const TestData &entry : TEST_DATA) {
+        infolog(log, "testing {}", entry.text);
+        std::optional<rule_utils::Rule> rule = rule_utils::parse(entry.text, &log);
+        ASSERT_TRUE(rule.has_value());
+        ASSERT_EQ(rule->matching_parts[0], entry.expected_matching_parts);
     }
 }
 
@@ -1428,6 +1452,14 @@ TEST(RuleValidator, IsValidRule) {
     ASSERT_TRUE(ag::dns::DnsFilter::is_valid_rule("/.*/$dnsrewrite"));
     ASSERT_TRUE(ag::dns::DnsFilter::is_valid_rule("$denyallow=com|net"));
     ASSERT_TRUE(ag::dns::DnsFilter::is_valid_rule("$denyallow=example.org"));
+    ASSERT_TRUE(ag::dns::DnsFilter::is_valid_rule("example.com # This is a comment"));
+    ASSERT_TRUE(ag::dns::DnsFilter::is_valid_rule("example.com # This is a comment."));
+    ASSERT_TRUE(ag::dns::DnsFilter::is_valid_rule("example.com #This is a comment."));
+    ASSERT_TRUE(ag::dns::DnsFilter::is_valid_rule("example.com#This is a comment"));
+    ASSERT_TRUE(ag::dns::DnsFilter::is_valid_rule("example.com#This is a comment."));
+    ASSERT_FALSE(ag::dns::DnsFilter::is_valid_rule("example.com This is not a comment # This is a comment"));
+    ASSERT_FALSE(ag::dns::DnsFilter::is_valid_rule("@@example.com #This is a comment."));
+    ASSERT_FALSE(ag::dns::DnsFilter::is_valid_rule("|example.com #This is a comment."));
     ASSERT_FALSE(ag::dns::DnsFilter::is_valid_rule(""));
     ASSERT_FALSE(ag::dns::DnsFilter::is_valid_rule("!example.com"));
     ASSERT_FALSE(ag::dns::DnsFilter::is_valid_rule("#example.com"));

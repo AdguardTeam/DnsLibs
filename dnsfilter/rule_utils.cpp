@@ -122,6 +122,11 @@ bool rule_utils::is_domain_name(std::string_view str) {
             && str.npos == str.find('*'); // '*' is our special char for pattern matching
 }
 
+static bool is_domain_rule(std::string_view str) {
+    auto [head, _] = ag::utils::split2_by(str, '#');
+    return rule_utils::is_domain_name(utils::rtrim(head));
+}
+
 // https://github.com/AdguardTeam/AdguardHome/wiki/Hosts-Blocklists#-etchosts-syntax
 static std::optional<rule_utils::Rule> parse_host_file_rule(std::string_view str, Logger *log) {
     str = ag::utils::rtrim(str.substr(0, str.find('#')));
@@ -369,16 +374,17 @@ static rule_utils::MatchInfo extract_match_info(std::string_view rule) {
 }
 
 static inline bool is_host_rule(std::string_view str) {
-    std::vector<std::string_view> parts = ag::utils::split_by_any_of(str, " \t");
-    return parts.size() > 1 && (ag::utils::is_valid_ip4(parts[0]) || ag::utils::is_valid_ip6(parts[0]));
+    auto [head, tail] = ag::utils::split2_by_any_of(str, " \t");
+    return !tail.empty() && (ag::utils::is_valid_ip4(head) || ag::utils::is_valid_ip6(head));
 }
 
 // https://github.com/AdguardTeam/AdguardHome/wiki/Hosts-Blocklists#domains-only
-static inline rule_utils::Rule make_exact_domain_name_rule(std::string_view name) {
+static inline rule_utils::Rule make_exact_domain_name_rule(std::string_view str) {
+    str = utils::rtrim(str.substr(0, str.find('#')));
     rule_utils::Rule r = {.public_part = {.content = DnsFilter::AdblockRuleInfo{}}};
-    r.public_part.text = std::string{name};
+    r.public_part.text = std::string{str};
     r.match_method = rule_utils::Rule::MMID_EXACT;
-    r.matching_parts = {ag::utils::to_lower(name)};
+    r.matching_parts = {ag::utils::to_lower(str)};
     return r;
 }
 
@@ -551,7 +557,7 @@ std::optional<rule_utils::Rule> rule_utils::parse(std::string_view str, Logger *
         return std::nullopt;
     }
 
-    if (is_domain_name(str)) {
+    if (is_domain_rule(str)) {
         return make_exact_domain_name_rule(str);
     }
 
