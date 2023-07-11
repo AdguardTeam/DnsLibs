@@ -55,7 +55,7 @@ extern "C" JNIEXPORT jboolean JNICALL Java_com_adguard_dnslibs_proxy_DnsProxy_is
 }
 
 extern "C" JNIEXPORT jstring JNICALL Java_com_adguard_dnslibs_proxy_DnsProxy_testUpstreamNative(JNIEnv *env,
-        jclass clazz, jlong native_ptr, jobject upstream_settings, jint timeout_ms,
+        jclass clazz, jlong native_ptr, jobject upstream_settings, jlong timeout_ms,
         jboolean ipv6, jobject events_adapter, jboolean offline) {
     auto *proxy = (AndroidDnsProxy *) native_ptr;
     return proxy->test_upstream(env, upstream_settings, timeout_ms, ipv6, events_adapter, offline);
@@ -492,7 +492,7 @@ DnsProxySettings AndroidDnsProxy::marshal_settings(JNIEnv *env, jobject java_dns
     auto fallback_on_failure_field = env->GetFieldID(clazz, "enableFallbackOnUpstreamsFailure", "Z");
     auto servfail_on_failure_field = env->GetFieldID(clazz, "enableServfailOnUpstreamsFailure", "Z");
     auto enable_http3_field = env->GetFieldID(clazz, "enableHttp3", "Z");
-    auto timeout_field = env->GetFieldID(clazz, "upstreamTimeoutMs", "I");
+    auto timeout_field = env->GetFieldID(clazz, "upstreamTimeoutMs", "J");
 
     DnsProxySettings settings{};
 
@@ -565,7 +565,7 @@ DnsProxySettings AndroidDnsProxy::marshal_settings(JNIEnv *env, jobject java_dns
     settings.enable_fallback_on_upstreams_failure = env->GetBooleanField(java_dnsproxy_settings, fallback_on_failure_field);
     settings.enable_servfail_on_upstreams_failure = env->GetBooleanField(java_dnsproxy_settings, servfail_on_failure_field);
     settings.enable_http3 = env->GetBooleanField(java_dnsproxy_settings, enable_http3_field);
-    settings.upstream_timeout = Millis{env->GetIntField(java_dnsproxy_settings, timeout_field)};
+    settings.upstream_timeout = Millis{env->GetLongField(java_dnsproxy_settings, timeout_field)};
 
     return settings;
 }
@@ -597,7 +597,7 @@ LocalRef<jobject> AndroidDnsProxy::marshal_settings(JNIEnv *env, const DnsProxyS
     auto fallback_on_failure_field = env->GetFieldID(clazz, "enableFallbackOnUpstreamsFailure", "Z");
     auto servfail_on_failure_field = env->GetFieldID(clazz, "enableServfailOnUpstreamsFailure", "Z");
     auto enable_http3_field = env->GetFieldID(clazz, "enableHttp3", "Z");
-    auto timeout_field = env->GetFieldID(clazz, "upstreamTimeoutMs", "I");
+    auto timeout_field = env->GetFieldID(clazz, "upstreamTimeoutMs", "J");
 
     auto java_settings = env->NewObject(clazz, ctor);
 
@@ -662,7 +662,7 @@ LocalRef<jobject> AndroidDnsProxy::marshal_settings(JNIEnv *env, const DnsProxyS
     env->SetBooleanField(java_settings, fallback_on_failure_field, (jboolean) settings.enable_fallback_on_upstreams_failure);
     env->SetBooleanField(java_settings, servfail_on_failure_field, (jboolean) settings.enable_servfail_on_upstreams_failure);
     env->SetBooleanField(java_settings, enable_http3_field, (jboolean) settings.enable_http3);
-    env->SetIntField(java_settings, timeout_field, (jint) settings.upstream_timeout.count());
+    env->SetLongField(java_settings, timeout_field, (jlong) settings.upstream_timeout.count());
 
     return LocalRef(env, java_settings);
 }
@@ -900,7 +900,7 @@ jobject AndroidDnsProxy::get_settings(JNIEnv *env) {
 }
 
 jstring AndroidDnsProxy::test_upstream(
-        JNIEnv *env, jobject upstream_settings, jint timeout_ms, jboolean ipv6, jobject events_adapter, jboolean offline) {
+        JNIEnv *env, jobject upstream_settings, jlong timeout_ms, jboolean ipv6, jobject events_adapter, jboolean offline) {
     m_events = GlobalRef(get_vm(env), events_adapter);
     auto err = ag::dns::test_upstream(marshal_upstream(env, upstream_settings), Millis{timeout_ms}, ipv6,
             marshal_events(env, events_adapter).on_certificate_verification, offline);

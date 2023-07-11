@@ -475,7 +475,7 @@ public class DnsProxyTest {
 
     @Test
     public void testTestUpstream() {
-        final int timeout = 500; // ms
+        final long timeout = 500; // ms
         IllegalArgumentException e0 = null;
         try {
             DnsProxy.testUpstream(new UpstreamSettings("123.12.32.1:1493", new ArrayList<String>(), null, 42),

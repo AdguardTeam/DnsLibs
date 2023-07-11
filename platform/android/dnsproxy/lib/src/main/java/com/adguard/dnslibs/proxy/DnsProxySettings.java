@@ -72,7 +72,7 @@ public class DnsProxySettings {
     private boolean enableFallbackOnUpstreamsFailure;
     private boolean enableServfailOnUpstreamsFailure;
     private boolean enableHttp3;
-    private int upstreamTimeoutMs;
+    private long upstreamTimeoutMs;
 
     /**
      * @return Maximum number of cached responses
@@ -438,14 +438,14 @@ public class DnsProxySettings {
     /**
      * @return Maximum amount of time, in milliseconds, allowed for upstream exchange.
      */
-    public int getUpstreamTimeoutMs() {
+    public long getUpstreamTimeoutMs() {
         return upstreamTimeoutMs;
     }
 
     /**
      * @param upstreamTimeoutMs Maximum amount of time, in milliseconds, allowed for upstream exchange.
      */
-    public void setUpstreamTimeoutMs(int upstreamTimeoutMs) {
+    public void setUpstreamTimeoutMs(long upstreamTimeoutMs) {
         this.upstreamTimeoutMs = upstreamTimeoutMs;
     }
 
