@@ -89,6 +89,7 @@ private:
     static int on_socket_update(CURL *handle, curl_socket_t socket, int what,
                                 DohUpstream::ConnectionPool *pool, SocketHandle *socket_data);
     static void on_timeout(uv_timer_t *);
+    static void on_read_timeout(uv_timer_t *timer);
     static void on_poll_event(uv_poll_t *, int status, int events);
     static curl_socket_t curl_opensocket(void *clientp, curlsocktype purpose, struct curl_sockaddr *address);
     static int curl_prereq(
@@ -124,6 +125,8 @@ private:
 
     // See FIXME-66691.
     std::vector<CURL_ptr> m_curl_easy_graveyard;
+
+    UvPtr<uv_timer_t> m_read_timer = nullptr;
 };
 
 }  // namespace ag::dns
