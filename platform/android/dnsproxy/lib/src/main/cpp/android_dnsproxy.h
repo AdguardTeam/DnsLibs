@@ -237,7 +237,7 @@ public:
      * Checks if upstream is valid and available.
      * @return Null or error string marshalled to Java.
      */
-    jstring test_upstream(JNIEnv *env, jobject upstream_settings, jint timeout_ms, jboolean ipv6, jobject events_adapter, jboolean offline);
+    jstring test_upstream(JNIEnv *env, jobject upstream_settings, jlong timeout_ms, jboolean ipv6, jobject events_adapter, jboolean offline);
 
     /**
      * Suggest an action for filtering log event.

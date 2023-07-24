@@ -117,6 +117,8 @@
       <ErrorText>This project references NuGet package(s) that are missing on this computer. Use NuGet Package Restore to download them.  For more information, see http://go.microsoft.com/fwlink/?LinkID=322105. The missing file is {0}.</ErrorText>
     </PropertyGroup>
     <Error Condition="!Exists('..\packages\System.Data.SQLite.Core.1.0.106.0\build\net45\System.Data.SQLite.Core.targets')" Text="$([System.String]::Format('$(ErrorText)', '..\packages\System.Data.SQLite.Core.1.0.106.0\build\net45\System.Data.SQLite.Core.targets'))" />
+    <Error Condition="!Exists('..\packages\Microsoft.NETFramework.ReferenceAssemblies.net45.1.0.3\build\Microsoft.NETFramework.ReferenceAssemblies.net45.targets')" Text="$([System.String]::Format('$(ErrorText)', '..\packages\Microsoft.NETFramework.ReferenceAssemblies.net45.1.0.3\build\Microsoft.NETFramework.ReferenceAssemblies.net45.targets'))" />
   </Target>
   <Import Project="..\packages\Adguard.Utils.Adapters.1.0.9\build\Adguard.Utils.targets" Condition="Exists('..\packages\Adguard.Utils.Adapters.1.0.9\build\Adguard.Utils.Adapters.targets')" />
+  <Import Project="..\packages\Microsoft.NETFramework.ReferenceAssemblies.net45.1.0.3\build\Microsoft.NETFramework.ReferenceAssemblies.net45.targets" Condition="Exists('..\packages\Microsoft.NETFramework.ReferenceAssemblies.net45.1.0.3\build\Microsoft.NETFramework.ReferenceAssemblies.net45.targets')" />
 </Project>

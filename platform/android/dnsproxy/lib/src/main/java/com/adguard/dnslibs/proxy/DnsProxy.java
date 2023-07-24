@@ -248,7 +248,7 @@ public class DnsProxy implements Closeable {
      * @throws IllegalArgumentException with an explanation if check failed
      */
     public static void testUpstream(UpstreamSettings upstreamSettings,
-                                    int timeoutMs, boolean ipv6Available, boolean offline)
+                                    long timeoutMs, boolean ipv6Available, boolean offline)
             throws IllegalArgumentException {
         String error;
         try (final DnsProxy proxy = new DnsProxy()) {
@@ -260,7 +260,7 @@ public class DnsProxy implements Closeable {
         }
     }
 
-    private static native String testUpstreamNative(long nativePtr, Object upstreamSettings, int timeoutMs,
+    private static native String testUpstreamNative(long nativePtr, Object upstreamSettings, long timeoutMs,
         boolean ipv6, Object eventsAdapter, boolean offline);
 
     /**
