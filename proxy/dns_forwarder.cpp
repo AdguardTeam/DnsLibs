@@ -910,7 +910,7 @@ coro::Task<UpstreamExchangeResult> DnsForwarder::do_parallel_exchange(const std:
         }
         return true;
     });
-    std::shared_ptr<const ldns_pkt> request_shared{ldns_pkt_clone(request)};
+    std::shared_ptr<const ldns_pkt> request_shared{ldns_pkt_clone(request), &ldns_pkt_free};
     for (Upstream *upstream : upstreams) {
         any_of_cond.add(do_upstream_exchange_shared(upstream, request_shared, info, error_rtt));
     }
