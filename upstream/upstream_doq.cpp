@@ -68,6 +68,10 @@ std::unique_ptr<DoqUpstream::SocketContext> DoqUpstream::ConnectionState::extrac
         return nullptr;
     }
 
+    if (initial_info->last_connected_socket == ctx) {
+        initial_info->last_connected_socket = nullptr;
+    }
+
     auto out = std::move(*it);
     initial_info->sockets.erase(it);
     return out;
