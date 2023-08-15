@@ -138,9 +138,8 @@ void DnsForwarder::finalize_processed_event(DnsRequestProcessedEvent &event, con
         Error<DnsError> error) const {
     if (request != nullptr) {
         const ldns_rr *question = ldns_rr_list_rr(ldns_pkt_question(request), 0);
-        char *type = ldns_rr_type2str(ldns_rr_get_type(question));
-        event.type = type;
-        free(type);
+        AllocatedPtr<char> type{ldns_rr_type2str(ldns_rr_get_type(question))};
+        event.type = type.get();
     } else {
         event.type.clear();
     }
@@ -497,8 +496,7 @@ static ldns_rr_type question_rr_type(const ldns_pkt *request) {
 coro::Task<DnsForwarder::HandleMessageResult> DnsForwarder::handle_message_internal(
         ldns_pkt_ptr request, std::optional<DnsMessageInfo> info, bool fallback_only) {
     std::weak_ptr<bool> guard = m_shutdown_guard;
-    DnsRequestProcessedEvent event = {};
-    event.start_time = duration_cast<Millis>(SystemClock::now().time_since_epoch()).count();
+    DnsRequestProcessedEvent event;
 
     log_packet(m_log, request.get(), "Client request", opt_as_ptr(info));
 
@@ -1079,7 +1077,7 @@ coro::Task<Uint8Vector> DnsForwarder::handle_message(Uint8View message, const Dn
 
     uint16_t pkt_id = read_uint16_be(message);
 
-    DnsRequestProcessedEvent event{};
+    DnsRequestProcessedEvent event;
     ldns_pkt *request_naked;
     ldns_status status = ldns_wire2pkt(&request_naked, message.data(), message.size());
     if (status != LDNS_STATUS_OK) {
@@ -1123,11 +1121,13 @@ coro::Task<Uint8Vector> DnsForwarder::handle_message_with_timeout(
         servfail_response.reset(ResponseHelpers::create_servfail_response(request.get()));
         finalize_processed_event(servfail_event, request.get(), servfail_response.get(), nullptr, std::nullopt);
     }
+    Millis timeout = m_settings->upstream_timeout.count() > 0
+                     ? m_settings->upstream_timeout : UpstreamFactory::DEFAULT_TIMEOUT;
     auto handle_message_aw = handle_message_internal(std::move(request), std::move(info), fallback_only);
     auto timeout_aw = [](EventLoop &loop, Millis timeout) -> coro::Task<HandleMessageResult> {
-        co_await loop.co_sleep(timeout.count() > 0 ? timeout : UpstreamFactory::DEFAULT_TIMEOUT);
+        co_await loop.co_sleep(timeout);
         co_return {.timed_out = true};
-    }(*m_loop, m_settings->upstream_timeout);
+    }(*m_loop, timeout);
     std::weak_ptr<bool> guard = m_shutdown_guard;
     auto result = co_await parallel::any_of<HandleMessageResult>(handle_message_aw, timeout_aw);
     if (guard.expired()) {
@@ -1138,6 +1138,7 @@ coro::Task<Uint8Vector> DnsForwarder::handle_message_with_timeout(
         if (m_settings->enable_servfail_on_upstreams_failure) {
             log_packet(m_log, servfail_response.get(), "Server failure response");
             if (m_events->on_request_processed) {
+                servfail_event.elapsed = timeout.count();
                 m_events->on_request_processed(servfail_event);
             }
             co_return transform_response_to_raw_data(servfail_response.get());
