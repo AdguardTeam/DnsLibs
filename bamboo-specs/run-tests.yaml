@@ -36,8 +36,6 @@ Run C++ tests:
         set -e
         set -x
 
-        conan remote add -i 0 art ${bamboo.conanRepoUrl} || true
-
         export CMAKE=cmake
         export CTEST=ctest
         export CMAKE_MAKE_PROGRAM=ninja
@@ -52,13 +50,14 @@ Run C++ tests:
             -DCMAKE_CXX_COMPILER=clang++ \
             -DCMAKE_C_FLAGS='' -DCMAKE_CXX_FLAGS='-stdlib=libc++' \
             -DCMAKE_MAKE_PROGRAM=${CMAKE_MAKE_PROGRAM} -G "${CMAKE_GENERATOR}" \
+            -DSANITIZE=yes \
             ${SRC_ROOT}
 
         # build and run tests
         ${CMAKE_MAKE_PROGRAM} clean
         ${CMAKE_MAKE_PROGRAM} tests
         ${CTEST} -D ExperimentalTest --no-compress-output
-      description: Compile and run tests
+      description: Compile and run tests with sanitizer
   final-tasks:
   - any-task:
       plugin-key: fr.cstb.bamboo.plugins.ctest.bamboo-ctest-plugin:test

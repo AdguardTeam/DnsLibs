@@ -17,10 +17,10 @@
 #include "dns_forwarder_utils.h"
 #include "dns_truncate.h"
 #include "dnssec_ok.h"
-#include "ech.h"
 #include "proxy_bootstrapper.h"
 #include "response_cache.h"
 #include "response_helpers.h"
+#include "svcb.h"
 
 #define errlog_id(l_, pkt_, fmt_, ...) errlog((l_), "[{}] " fmt_, ldns_pkt_id(pkt_), ##__VA_ARGS__)
 #define errlog_fid(l_, pkt_, fmt_, ...) errlog((l_), "[{}] " fmt_, ldns_pkt_id(pkt_), ##__VA_ARGS__)
@@ -551,13 +551,18 @@ coro::Task<DnsForwarder::HandleMessageResult> DnsForwarder::handle_message_inter
 
     std::vector<DnsFilter::Rule> effective_rules;
 
+    ldns_pkt_ptr ctx_response;
+    FilterContext ctx {
+        .match = {.domain = normalized_domain, .rr_type = question_rr_type(request.get())},
+        .request = request,
+        .response = ctx_response,
+        .event = event,
+        .last_effective_rules = effective_rules,
+        .fallback_only = fallback_only,
+    };
+
     {
-        auto filter_response = co_await apply_filter(
-                {
-                        .domain = normalized_domain,
-                        .rr_type = question_rr_type(request.get()),
-                },
-                request.get(), event, effective_rules, fallback_only);
+        auto filter_response = co_await apply_filter_to_request(ctx);
         if (guard.expired()) {
             co_return {};
         }
@@ -565,25 +570,25 @@ coro::Task<DnsForwarder::HandleMessageResult> DnsForwarder::handle_message_inter
         // IPv6 blocking
         if (m_settings->block_ipv6 && LDNS_RR_TYPE_AAAA == type
                 && (!filter_response || ldns_pkt_get_rcode(filter_response.get()) == LDNS_RCODE_NOERROR)) {
-            dbglog_fid(m_log, request.get(), "AAAA DNS query blocked because IPv6 blocking is enabled");
-            ldns_pkt_ptr response{
-                    ResponseHelpers::create_soa_response(request.get(), m_settings, SOA_RETRY_IPV6_BLOCK)};
-            log_packet(m_log, response.get(), "IPv6 blocking response");
-            finalize_processed_event(event, request.get(), response.get(), nullptr, std::nullopt);
-            co_return {transform_response_to_raw_data(response.get()), std::move(event)};
+            dbglog_fid(m_log, ctx.request.get(), "AAAA DNS query blocked because IPv6 blocking is enabled");
+            ldns_pkt_ptr soa_response{
+                    ResponseHelpers::create_soa_response(ctx.request.get(), m_settings, SOA_RETRY_IPV6_BLOCK)};
+            log_packet(m_log, soa_response.get(), "IPv6 blocking response");
+            finalize_processed_event(event, ctx.request.get(), soa_response.get(), nullptr, std::nullopt);
+            co_return {transform_response_to_raw_data(soa_response.get()), std::move(event)};
         }
 
         if (filter_response) {
-            finalize_processed_event(event, request.get(), filter_response.get(), nullptr, std::nullopt);
+            finalize_processed_event(event, ctx.request.get(), filter_response.get(), nullptr, std::nullopt);
             co_return {transform_response_to_raw_data(filter_response.get()), std::move(event)};
         }
     }
 
-    bool is_our_do_bit = m_settings->enable_dnssec_ok && DnssecHelpers::set_do_bit(request.get());
+    bool is_our_do_bit = m_settings->enable_dnssec_ok && DnssecHelpers::set_do_bit(ctx.request.get());
 
     // If this is a retransmitted request, use fallback upstreams only
     auto [response, selected_upstream] =
-            co_await do_upstreams_exchange(normalized_domain, request.get(), fallback_only, opt_as_ptr(info));
+            co_await do_upstreams_exchange(normalized_domain, ctx.request.get(), ctx.fallback_only, opt_as_ptr(info));
     if (guard.expired()) {
         co_return {};
     }
@@ -591,98 +596,44 @@ coro::Task<DnsForwarder::HandleMessageResult> DnsForwarder::handle_message_inter
     if (!response) {
         auto err = response.error();
         if (!m_settings->enable_servfail_on_upstreams_failure) {
-            dbglog_fid(m_log, request.get(), "Not responding, upstreams exchange error: {}", err->str());
+            dbglog_fid(m_log, ctx.request.get(), "Not responding, upstreams exchange error: {}", err->str());
             co_return {};
         }
-        response = ldns_pkt_ptr{ResponseHelpers::create_servfail_response(request.get())};
+        response = ldns_pkt_ptr{ResponseHelpers::create_servfail_response(ctx.request.get())};
         log_packet(m_log, response->get(), "Server failure response");
-        finalize_processed_event(event, request.get(), response->get(), nullptr,
+        finalize_processed_event(event, ctx.request.get(), response->get(), nullptr,
                 selected_upstream ? std::make_optional(selected_upstream->options().id) : std::nullopt,
                 make_error(DnsError::AE_EXCHANGE_ERROR, err));
         co_return {transform_response_to_raw_data(response->get()), std::move(event)};
     }
 
     assert(selected_upstream);
-    log_packet(m_log, response->get(), AG_FMT("Upstream ({}) response", selected_upstream->options().address).c_str());
+    ctx.response = std::move(response.value());
+    log_packet(m_log, ctx.response.get(), AG_FMT("Upstream ({}) response", selected_upstream->options().address).c_str());
 
-    event.bytes_sent = ldns_pkt_size(request.get());
-    event.bytes_received = ldns_pkt_size(response->get());
+    event.bytes_sent = ldns_pkt_size(ctx.request.get());
+    event.bytes_received = ldns_pkt_size(ctx.response.get());
+    event.dnssec = finalize_dnssec_log_logic(ctx.response.get(), is_our_do_bit);
 
-    event.dnssec = finalize_dnssec_log_logic(response->get(), is_our_do_bit);
-
-    const auto ancount = ldns_pkt_ancount(response->get());
-    const auto rcode = ldns_pkt_get_rcode(response->get());
-
-    if (LDNS_RCODE_NOERROR == rcode) {
-        for (size_t i = 0; i < ancount; ++i) {
-            // CNAME response blocking
-            auto rr = ldns_rr_list_rr(ldns_pkt_answer(response->get()), i);
-            if (ldns_rr_get_type(rr) == LDNS_RR_TYPE_CNAME) {
-                auto filter_response =
-                        co_await apply_cname_filter(rr, request.get(), event, effective_rules, fallback_only);
-                if (guard.expired()) {
-                    co_return {};
-                }
-                if (filter_response) {
-                    finalize_processed_event(event, request.get(), filter_response.get(), response->get(),
-                            selected_upstream->options().id, nullptr);
-                    co_return {transform_response_to_raw_data(filter_response.get()), std::move(event)};
-                }
-            }
-            // IP response blocking
-            if (ldns_rr_get_type(rr) == LDNS_RR_TYPE_A || ldns_rr_get_type(rr) == LDNS_RR_TYPE_AAAA) {
-                auto filter_response =
-                        co_await apply_ip_filter(rr, request.get(), event, effective_rules, fallback_only);
-                if (guard.expired()) {
-                    co_return {};
-                }
-                if (filter_response) {
-                    finalize_processed_event(event, request.get(), filter_response.get(), response->get(),
-                            selected_upstream->options().id, nullptr);
-                    co_return {transform_response_to_raw_data(filter_response.get()), std::move(event)};
-                }
-            }
+    if (LDNS_RCODE_NOERROR == ldns_pkt_get_rcode(ctx.response.get())) {
+        auto filter_response =
+                co_await handle_response(ctx, selected_upstream, normalized_domain, type, opt_as_ptr(info));
+        if (guard.expired()) {
+            co_return {};
         }
-
-        // DNS64 synthesis
-        if (m_settings->dns64.has_value() && LDNS_RR_TYPE_AAAA == type) {
-            bool has_aaaa = false;
-            for (size_t i = 0; i < ancount; ++i) {
-                auto rr = ldns_rr_list_rr(ldns_pkt_answer(response->get()), i);
-                if (ldns_rr_get_type(rr) == LDNS_RR_TYPE_AAAA) {
-                    has_aaaa = true;
-                }
-            }
-            if (!has_aaaa) {
-                auto synth_response = co_await try_dns64_aaaa_synthesis(selected_upstream, request);
-                if (guard.expired()) {
-                    co_return {};
-                }
-                if (synth_response) {
-                    response = std::move(synth_response);
-                    log_packet(m_log, response->get(), "DNS64 synthesized response");
-                }
-            }
-        }
-
-        if (std::optional override = info.has_value() ? info->settings_overrides.block_ech : std::nullopt;
-                override.value_or(m_settings->block_ech)) {
-            if (EchHelpers::remove_ech_svcparam(response->get())) {
-                dbglog_fid(m_log, response->get(), "Removed ECH parameters from SVCB/HTTPS RR");
-            }
+        if (filter_response) {
+            co_return {transform_response_to_raw_data(filter_response.get()), std::move(event)};
         }
     }
 
-    truncate_response(response->get(), request.get(), opt_as_ptr(info));
-    finalize_processed_event(event, request.get(), response->get(), nullptr, selected_upstream->options().id);
-    auto response_wire = transform_response_to_raw_data(response->get());
-    m_response_cache.put(request.get(), std::move(response.value()), selected_upstream->options().id);
+    truncate_response(ctx.response.get(), ctx.request.get(), opt_as_ptr(info));
+    finalize_processed_event(event, ctx.request.get(), ctx.response.get(), nullptr, selected_upstream->options().id);
+    auto response_wire = transform_response_to_raw_data(ctx.response.get());
+    m_response_cache.put(ctx.request.get(), std::move(ctx.response), selected_upstream->options().id);
     co_return {std::move(response_wire), std::move(event)};
 }
 
-coro::Task<ldns_pkt_ptr> DnsForwarder::apply_cname_filter(const ldns_rr *cname_rr, const ldns_pkt *request,
-        DnsRequestProcessedEvent &event, std::vector<DnsFilter::Rule> &last_effective_rules, bool fallback_only) {
-
+coro::Task<ldns_pkt_ptr> DnsForwarder::apply_cname_filter(FilterContext &ctx, const ldns_rr *cname_rr) {
     assert(ldns_rr_get_type(cname_rr) == LDNS_RR_TYPE_CNAME);
 
     const auto *rdf = ldns_rr_rdf(cname_rr, 0);
@@ -700,18 +651,46 @@ coro::Task<ldns_pkt_ptr> DnsForwarder::apply_cname_filter(const ldns_rr *cname_r
         cname.remove_suffix(1); // drop trailing dot
     }
 
-    tracelog_fid(m_log, request, "Response CNAME: {}", cname);
+    tracelog_fid(m_log, ctx.request.get(), "Response CNAME: {}", cname);
 
-    co_return co_await apply_filter(
-            {
-                    .domain = cname,
-                    .rr_type = LDNS_RR_TYPE_CNAME,
-            },
-            request, event, last_effective_rules, fallback_only);
+    ctx.match = {
+            .domain = cname,
+            .rr_type = LDNS_RR_TYPE_CNAME,
+    };
+    co_return co_await apply_filter_to_response(ctx);
 }
 
-coro::Task<ldns_pkt_ptr> DnsForwarder::apply_ip_filter(const ldns_rr *rr, const ldns_pkt *request,
-        DnsRequestProcessedEvent &event, std::vector<DnsFilter::Rule> &last_effective_rules, bool fallback_only) {
+coro::Task<ldns_pkt_ptr> DnsForwarder::apply_https_filter(
+        FilterContext &ctx, const ldns_rr *rr, std::string_view domain) {
+    assert(ldns_rr_get_type(rr) == LDNS_RR_TYPE_HTTPS);
+    std::weak_ptr<bool> guard = m_shutdown_guard;
+
+    ctx.match = {.domain = domain, .rr_type = ldns_rr_get_type(rr)};
+    auto filter_response = co_await apply_filter_to_response(ctx);
+    if (guard.expired()) {
+        co_return nullptr;
+    }
+    if (filter_response) {
+        co_return filter_response;
+    }
+
+    auto hints = SvcbHttpsHelpers::get_ip_hints_from_response(ctx.response.get());
+    for (auto &ip : hints) {
+        tracelog_fid(m_log, ctx.request.get(), "Response IP: {}", ip);
+        ctx.match = {.domain = ip, .rr_type = ldns_rr_get_type(rr)};
+        filter_response = co_await apply_filter_to_response(ctx);
+        if (guard.expired()) {
+            co_return nullptr;
+        }
+        if (filter_response) {
+            co_return filter_response;
+        }
+    }
+
+    co_return nullptr;
+}
+
+coro::Task<ldns_pkt_ptr> DnsForwarder::apply_ip_filter(FilterContext &ctx, const ldns_rr *rr) {
     assert(ldns_rr_get_type(rr) == LDNS_RR_TYPE_A || ldns_rr_get_type(rr) == LDNS_RR_TYPE_AAAA);
 
     auto rdf = ldns_rr_rdf(rr, 0);
@@ -721,22 +700,113 @@ coro::Task<ldns_pkt_ptr> DnsForwarder::apply_ip_filter(const ldns_rr *rr, const 
     Uint8View addr{ldns_rdf_data(rdf), ldns_rdf_size(rdf)};
     std::string addr_str = ag::utils::addr_to_str(addr);
 
-    tracelog_fid(m_log, request, "Response IP: {}", addr_str);
+    tracelog_fid(m_log, ctx.request.get(), "Response IP: {}", addr_str);
 
-    co_return co_await apply_filter(
-            {.domain = addr_str, .rr_type = ldns_rr_get_type(rr)}, request, event, last_effective_rules, fallback_only);
+    ctx.match = {.domain = addr_str, .rr_type = ldns_rr_get_type(rr)};
+    co_return co_await apply_filter_to_response(ctx);
 }
 
-coro::Task<ldns_pkt_ptr> DnsForwarder::apply_filter(DnsFilter::MatchParam match, const ldns_pkt *request,
-        DnsRequestProcessedEvent &event, std::vector<DnsFilter::Rule> &last_effective_rules, bool fallback_only) {
-
-    auto rules = m_filter.match(m_filter_handle, match);
-    for (const DnsFilter::Rule &rule : rules) {
-        tracelog_fid(m_log, request, "Matched rule: {}", rule.text);
+coro::Task<ldns_pkt_ptr> DnsForwarder::apply_filter_to_request(FilterContext &ctx) {
+    ldns_rr *question = ldns_rr_list_rr(ldns_pkt_question(ctx.request.get()), 0);
+    if (ldns_rr_get_type(question) == LDNS_RR_TYPE_HTTPS
+            && m_settings->adblock_rules_blocking_mode == DnsProxyBlockingMode::ADDRESS) {
+        tracelog_fid(m_log, ctx.request.get(), "Wait HTTPS response to apply filter again");
+        co_return nullptr;
     }
-    rules.insert(rules.end(), std::make_move_iterator(last_effective_rules.begin()),
-            std::make_move_iterator(last_effective_rules.end()));
-    last_effective_rules.clear();
+    co_return co_await apply_filter(ctx);
+}
+
+coro::Task<ldns_pkt_ptr> DnsForwarder::apply_filter_to_response(FilterContext &ctx) {
+    co_return co_await apply_filter(ctx);
+}
+
+coro::Task<ldns_pkt_ptr> DnsForwarder::handle_response(FilterContext &ctx, Upstream *upstream,
+        std::string_view normalized_domain, const ldns_rr_type type, const DnsMessageInfo *info) {
+    std::weak_ptr<bool> guard = m_shutdown_guard;
+    const auto ancount = ldns_pkt_ancount(ctx.response.get());
+    for (size_t i = 0; i < ancount; ++i) {
+        // CNAME response blocking
+        auto rr = ldns_rr_list_rr(ldns_pkt_answer(ctx.response.get()), i);
+        if (ldns_rr_get_type(rr) == LDNS_RR_TYPE_CNAME) {
+            auto filter_response = co_await apply_cname_filter(ctx, rr);
+            if (guard.expired()) {
+                co_return {};
+            }
+            if (filter_response) {
+                finalize_processed_event(
+                        ctx.event, ctx.request.get(), filter_response.get(), ctx.response.get(), upstream->options().id, nullptr);
+                co_return filter_response;
+            }
+        }
+        // IP response blocking
+        if (ldns_rr_get_type(rr) == LDNS_RR_TYPE_A || ldns_rr_get_type(rr) == LDNS_RR_TYPE_AAAA) {
+            auto filter_response = co_await apply_ip_filter(ctx, rr);
+            if (guard.expired()) {
+                co_return {};
+            }
+            if (filter_response) {
+                finalize_processed_event(
+                        ctx.event, ctx.request.get(), filter_response.get(), ctx.response.get(), upstream->options().id, nullptr);
+                co_return filter_response;
+            }
+        }
+        // HTTPS response blocking
+        if (ldns_rr_get_type(rr) == LDNS_RR_TYPE_HTTPS) {
+            auto filter_response = co_await apply_https_filter(ctx, rr, normalized_domain);
+            if (guard.expired()) {
+                co_return {};
+            }
+            if (filter_response) {
+                if (std::optional override = info != nullptr ? info->settings_overrides.block_ech : std::nullopt;
+                        override.value_or(m_settings->block_ech)) {
+                    if (SvcbHttpsHelpers::remove_ech_svcparam(filter_response.get())) {
+                        dbglog_fid(m_log, filter_response.get(), "Removed ECH parameters from SVCB/HTTPS RR");
+                    }
+                }
+                finalize_processed_event(ctx.event, ctx.request.get(), filter_response.get(), ctx.response.get(),
+                        upstream->options().id, nullptr);
+                co_return filter_response;
+            }
+        }
+    }
+    // DNS64 synthesis
+    if (m_settings->dns64.has_value() && LDNS_RR_TYPE_AAAA == type) {
+        bool has_aaaa = false;
+        for (size_t i = 0; i < ancount; ++i) {
+            auto rr = ldns_rr_list_rr(ldns_pkt_answer(ctx.response.get()), i);
+            if (ldns_rr_get_type(rr) == LDNS_RR_TYPE_AAAA) {
+                has_aaaa = true;
+            }
+        }
+        if (!has_aaaa) {
+            auto synth_response = co_await try_dns64_aaaa_synthesis(upstream, ctx.request);
+            if (guard.expired()) {
+                co_return {};
+            }
+            if (synth_response) {
+                ctx.response = std::move(synth_response);
+                log_packet(m_log, ctx.response.get(), "DNS64 synthesized response");
+            }
+        }
+    }
+    if (std::optional override = info != nullptr ? info->settings_overrides.block_ech : std::nullopt;
+            override.value_or(m_settings->block_ech)) {
+        if (SvcbHttpsHelpers::remove_ech_svcparam(ctx.response.get())) {
+            dbglog_fid(m_log, ctx.response.get(), "Removed ECH parameters from SVCB/HTTPS RR");
+        }
+    }
+    co_return {};
+}
+
+coro::Task<ldns_pkt_ptr> DnsForwarder::apply_filter(FilterContext &ctx) {
+
+    auto rules = m_filter.match(m_filter_handle, ctx.match);
+    for (const DnsFilter::Rule &rule : rules) {
+        tracelog_fid(m_log, ctx.request.get(), "Matched rule: {}", rule.text);
+    }
+    rules.insert(rules.end(), std::make_move_iterator(ctx.last_effective_rules.begin()),
+            std::make_move_iterator(ctx.last_effective_rules.end()));
+    ctx.last_effective_rules.clear();
 
     auto effective_rules = DnsFilter::get_effective_rules(rules);
 
@@ -744,25 +814,25 @@ coro::Task<ldns_pkt_ptr> DnsForwarder::apply_filter(DnsFilter::MatchParam match,
     if (!effective_rules.dnsrewrite.empty()) {
         auto rewrite_result = DnsFilter::apply_dnsrewrite_rules(effective_rules.dnsrewrite);
         for (const DnsFilter::Rule *rule : rewrite_result.rules) {
-            tracelog_fid(m_log, request, "Applied $dnsrewrite: {}", rule->text);
+            tracelog_fid(m_log, ctx.request.get(), "Applied $dnsrewrite: {}", rule->text);
         }
         effective_rules.dnsrewrite = std::move(rewrite_result.rules);
         rewrite_info = std::move(rewrite_result.rewritten_info);
     }
 
-    last_effective_rules.reserve(effective_rules.dnsrewrite.size() + effective_rules.leftovers.size());
+    ctx.last_effective_rules.reserve(effective_rules.dnsrewrite.size() + effective_rules.leftovers.size());
     std::transform(effective_rules.dnsrewrite.begin(), effective_rules.dnsrewrite.end(),
-            std::back_inserter(last_effective_rules), [](const DnsFilter::Rule *r) {
+            std::back_inserter(ctx.last_effective_rules), [](const DnsFilter::Rule *r) {
                 return *r;
             });
     std::transform(effective_rules.leftovers.begin(), effective_rules.leftovers.end(),
-            std::back_inserter(last_effective_rules), [](const DnsFilter::Rule *r) {
+            std::back_inserter(ctx.last_effective_rules), [](const DnsFilter::Rule *r) {
                 return *r;
             });
 
-    event_append_rules(event, effective_rules.dnsrewrite);
+    event_append_rules(ctx.event, effective_rules.dnsrewrite);
     if (!rewrite_info.has_value()) {
-        event_append_rules(event, effective_rules.leftovers);
+        event_append_rules(ctx.event, effective_rules.leftovers);
     }
 
     if (const DnsFilter::AdblockRuleInfo * content; !rewrite_info.has_value()
@@ -775,14 +845,14 @@ coro::Task<ldns_pkt_ptr> DnsForwarder::apply_filter(DnsFilter::MatchParam match,
     }
 
     if (effective_rules.dnsrewrite.empty()) {
-        dbglog_fid(m_log, request, "DNS query blocked by rule: {}", effective_rules.leftovers[0]->text);
+        dbglog_fid(m_log, ctx.request.get(), "DNS query blocked by rule: {}", effective_rules.leftovers[0]->text);
     } else {
-        dbglog_fid(
-                m_log, request, "DNS query blocked by $dnsrewrite rule(s): num={}", effective_rules.dnsrewrite.size());
+        dbglog_fid(m_log, ctx.request.get(), "DNS query blocked by $dnsrewrite rule(s): num={}",
+                effective_rules.dnsrewrite.size());
     }
 
     if (rewrite_info.has_value() && rewrite_info->cname.has_value()) {
-        ldns_pkt_ptr rewritten_request{ldns_pkt_clone(request)};
+        ldns_pkt_ptr rewritten_request{ldns_pkt_clone(ctx.request.get())};
         ldns_rr *question = ldns_rr_list_rr(ldns_pkt_question(rewritten_request.get()), 0);
         ldns_rdf_deep_free(ldns_rr_owner(question));
         ldns_rr_set_owner(question, ldns_dname_new_frm_str(rewrite_info->cname->c_str()));
@@ -793,7 +863,8 @@ coro::Task<ldns_pkt_ptr> DnsForwarder::apply_filter(DnsFilter::MatchParam match,
 
         log_packet(m_log, rewritten_request.get(), "Rewritten cname request");
 
-        auto [response, _] = co_await this->do_upstreams_exchange(rwr_cname, rewritten_request.get(), fallback_only);
+        auto [response, _] =
+                co_await this->do_upstreams_exchange(rwr_cname, rewritten_request.get(), ctx.fallback_only);
         if (!response) {
             dbglog_id(m_log, rewritten_request.get(), "Failed to resolve rewritten cname: {}", response.error()->str());
             co_return nullptr;
@@ -809,7 +880,7 @@ coro::Task<ldns_pkt_ptr> DnsForwarder::apply_filter(DnsFilter::MatchParam match,
     }
 
     ldns_pkt_ptr response{ResponseHelpers::create_blocking_response(
-            request, m_settings, effective_rules.leftovers, std::move(rewrite_info))};
+            ctx.request.get(), ctx.response.get(), m_settings, effective_rules.leftovers, std::move(rewrite_info))};
     log_packet(m_log, response.get(), "Rule blocked response");
     co_return response;
 }
@@ -910,7 +981,7 @@ coro::Task<UpstreamExchangeResult> DnsForwarder::do_parallel_exchange(const std:
         }
         return true;
     });
-    std::shared_ptr<const ldns_pkt> request_shared{ldns_pkt_clone(request)};
+    std::shared_ptr<const ldns_pkt> request_shared{ldns_pkt_clone(request), &ldns_pkt_free};
     for (Upstream *upstream : upstreams) {
         any_of_cond.add(do_upstream_exchange_shared(upstream, request_shared, info, error_rtt));
     }

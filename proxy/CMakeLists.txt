@@ -8,6 +8,11 @@ set(CMAKE_CXX_STANDARD 20)
 set(DNSLIBS_DIR ..)
 set(TEST_DIR test)
 
+if(SANITIZE)
+    add_compile_options("-fsanitize=address")
+    link_libraries("-fsanitize=address")
+endif(SANITIZE)
+
 set(SRCS
         dnsproxy.cpp
         dns64.cpp

@@ -67,14 +67,29 @@ private:
 
     bool apply_fallback_filter(std::string_view hostname, const ldns_pkt *request);
 
-    coro::Task<ldns_pkt_ptr> apply_filter(DnsFilter::MatchParam match, const ldns_pkt *request,
-            DnsRequestProcessedEvent &event, std::vector<DnsFilter::Rule> &last_effective_rules, bool fallback_only);
+    struct FilterContext {
+        DnsFilter::MatchParam match;
+        ldns_pkt_ptr &request;
+        ldns_pkt_ptr &response;
+        DnsRequestProcessedEvent &event;
+        std::vector<DnsFilter::Rule> &last_effective_rules;
+        bool fallback_only;
+    };
 
-    coro::Task<ldns_pkt_ptr> apply_cname_filter(const ldns_rr *cname_rr, const ldns_pkt *request,
-            DnsRequestProcessedEvent &event, std::vector<DnsFilter::Rule> &last_effective_rules, bool fallback_only);
+    coro::Task<ldns_pkt_ptr> handle_response(FilterContext &ctx, Upstream *upstream, std::string_view normalized_domain,
+            const ldns_rr_type type, const DnsMessageInfo *info);
 
-    coro::Task<ldns_pkt_ptr> apply_ip_filter(const ldns_rr *rr, const ldns_pkt *request,
-            DnsRequestProcessedEvent &event, std::vector<DnsFilter::Rule> &last_effective_rules, bool fallback_only);
+    coro::Task<ldns_pkt_ptr> apply_filter(FilterContext &ctx);
+
+    coro::Task<ldns_pkt_ptr> apply_filter_to_request(FilterContext &ctx);
+
+    coro::Task<ldns_pkt_ptr> apply_filter_to_response(FilterContext &ctx);
+
+    coro::Task<ldns_pkt_ptr> apply_cname_filter(FilterContext &ctx, const ldns_rr *cname_rr);
+
+    coro::Task<ldns_pkt_ptr> apply_ip_filter(FilterContext &ctx, const ldns_rr *rr);
+
+    coro::Task<ldns_pkt_ptr> apply_https_filter(FilterContext &ctx, const ldns_rr *rr, std::string_view domain);
 
     coro::Task<ldns_pkt_ptr> try_dns64_aaaa_synthesis(Upstream *upstream, const ldns_pkt_ptr &request) const;
 

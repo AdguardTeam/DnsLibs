@@ -15,6 +15,7 @@
 #include "../../upstream/test/test_utils.h"
 #include "../dns_forwarder.h"
 #include "../dns_forwarder_utils.h"
+#include "../svcb.h"
 
 namespace ag::dns::proxy::test {
 
@@ -49,6 +50,20 @@ static DnsProxySettings make_dnsproxy_settings() {
     auto settings = DnsProxySettings::get_default();
     settings.upstreams = {{.address = "8.8.8.8"}};
     return settings;
+}
+
+static std::string get_concat_rdfs_as_str(ldns_pkt *pkt) {
+    std::string result;
+    ldns_rr *rr = ldns_rr_list_rr(ldns_pkt_answer(pkt), 0);
+    for (size_t i = 0; i < ldns_rr_rd_count(rr); i++) {
+        auto rdf1 = ldns_rr_rdf(rr, i);
+        auto rdf_cstr = AllocatedPtr<char>(ldns_rdf2str(rdf1));
+        if (i != 0) {
+            result += " ";
+        }
+        result += rdf_cstr.get();
+    }
+    return result;
 }
 
 static ldns_pkt_ptr create_request(
@@ -107,6 +122,24 @@ TEST_F(DnsProxyTest, TestDns64) {
     ASSERT_NO_FATAL_FAILURE(perform_request(*m_proxy, pkt, response));
 
     ASSERT_GT(ldns_pkt_ancount(response.get()), 0);
+}
+
+TEST_F(DnsProxyTest, TestHttpsRR) {
+    DnsProxySettings settings = make_dnsproxy_settings();
+    settings.filter_params = {{{1, "104.18.164.229\n"
+                                   "2606:4700::6810:85e5\n", true}}};
+
+    auto [ret, err] = m_proxy->init(settings, {});
+    ASSERT_TRUE(ret) << err->str();
+
+    ldns_pkt_ptr response;
+    ASSERT_NO_FATAL_FAILURE(
+            perform_request(*m_proxy, create_request("adguard.com", LDNS_RR_TYPE_HTTPS, LDNS_RD), response));
+    ASSERT_EQ(ldns_pkt_get_rcode(response.get()), LDNS_RCODE_REFUSED);
+
+    ASSERT_NO_FATAL_FAILURE(
+            perform_request(*m_proxy, create_request("cloudflare.com", LDNS_RR_TYPE_HTTPS, LDNS_RD), response));
+    ASSERT_EQ(ldns_pkt_get_rcode(response.get()), LDNS_RCODE_REFUSED);
 }
 
 TEST_F(DnsProxyTest, TestResolvedIp) {
@@ -624,15 +657,6 @@ TEST_F(DnsProxyTest, BlockingModeDefault) {
     ASSERT_NO_FATAL_FAILURE(perform_request(*m_proxy, create_request("adb-style.com", LDNS_RR_TYPE_AAAA, LDNS_RD), res));
     ASSERT_EQ(LDNS_RCODE_REFUSED, ldns_pkt_get_rcode(res.get()));
 
-    // Check weird qtype
-    ASSERT_NO_FATAL_FAILURE(
-            perform_request(*m_proxy, create_request("privacy-policy.truste.com", (ldns_rr_type) 65, LDNS_RD), res));
-    ASSERT_EQ(LDNS_RCODE_REFUSED, ldns_pkt_get_rcode(res.get()));
-    ASSERT_NO_FATAL_FAILURE(
-            perform_request(*m_proxy, create_request("hosts-style.truste.com", (ldns_rr_type) 65, LDNS_RD), res));
-    ASSERT_EQ(LDNS_RCODE_NOERROR, ldns_pkt_get_rcode(res.get()));
-    ASSERT_EQ(1, ldns_pkt_nscount(res.get()));
-
     ASSERT_NO_FATAL_FAILURE(
             perform_request(*m_proxy, create_request("hosts-style-unspec.com", LDNS_RR_TYPE_A, LDNS_RD), res));
     ASSERT_EQ(LDNS_RCODE_NOERROR, ldns_pkt_get_rcode(res.get()));
@@ -909,13 +933,6 @@ TEST_F(DnsProxyTest, BlockingModeCustomAddress) {
 
     ldns_pkt_ptr res;
 
-    // Check weird qtype
-    ASSERT_NO_FATAL_FAILURE(
-            perform_request(*m_proxy, create_request("privacy-policy.truste.com", (ldns_rr_type) 65, LDNS_RD), res));
-    ASSERT_EQ(LDNS_RCODE_NOERROR, ldns_pkt_get_rcode(res.get()));
-    ASSERT_EQ(0, ldns_pkt_ancount(res.get()));
-    ASSERT_EQ(1, ldns_pkt_nscount(res.get()));
-
     ASSERT_NO_FATAL_FAILURE(perform_request(*m_proxy, create_request("adb-style.com", LDNS_RR_TYPE_A, LDNS_RD), res));
     ASSERT_EQ(LDNS_RCODE_NOERROR, ldns_pkt_get_rcode(res.get()));
     ASSERT_STREQ("4.3.2.1", make_rr_answer_string(res.get()).get());
@@ -971,6 +988,139 @@ TEST_F(DnsProxyTest, BlockingModeCustomAddress) {
     ASSERT_STREQ("45::67", make_rr_answer_string(res.get()).get());
 }
 
+TEST_F(DnsProxyTest, HttpsBlockingModeCustomAddress) {
+    DnsProxySettings settings = make_dnsproxy_settings();
+        settings.filter_params = {{{1, "adguard.com", true}}};
+    settings.adblock_rules_blocking_mode = DnsProxyBlockingMode::ADDRESS;
+    settings.hosts_rules_blocking_mode = DnsProxyBlockingMode::ADDRESS;
+    settings.custom_blocking_ipv4 = "4.3.2.1";
+    settings.custom_blocking_ipv6 = "43::21";
+
+    auto [ret, err] = m_proxy->init(settings, {});
+    ASSERT_TRUE(ret) << err->str();
+
+    ldns_pkt_ptr res;
+
+    ASSERT_NO_FATAL_FAILURE(
+            perform_request(*m_proxy, create_request("adguard.com", LDNS_RR_TYPE_HTTPS, LDNS_RD),res));
+    ASSERT_EQ(LDNS_RCODE_NOERROR, ldns_pkt_get_rcode(res.get()));
+    ASSERT_EQ(1, ldns_pkt_ancount(res.get()));
+    auto hints = SvcbHttpsHelpers::get_ip_hints_from_response(res.get());
+    ASSERT_EQ(hints.at(0), settings.custom_blocking_ipv4);
+    ASSERT_EQ(hints.at(1), settings.custom_blocking_ipv6);
+}
+
+TEST_F(DnsProxyTest, RemoveEchIfBlocked) {
+    DnsProxySettings settings = make_dnsproxy_settings();
+    settings.block_ech = true;
+
+    auto [ret, err] = m_proxy->init(settings, {});
+    ASSERT_TRUE(ret) << err->str();
+
+    ldns_pkt_ptr res;
+
+    ASSERT_NO_FATAL_FAILURE(
+            perform_request(*m_proxy, create_request("crypto.cloudflare.com", LDNS_RR_TYPE_HTTPS, LDNS_RD),res));
+    ASSERT_EQ(LDNS_RCODE_NOERROR, ldns_pkt_get_rcode(res.get()));
+    ASSERT_EQ(1, ldns_pkt_ancount(res.get()));
+
+    std::string response_str = get_concat_rdfs_as_str(res.get());
+    std::cout << response_str << std::endl;
+    ASSERT_EQ(response_str.find("echconfig"), std::string::npos);
+    ASSERT_NE(response_str.find("hint"), std::string::npos);
+}
+
+TEST_F(DnsProxyTest, HttpsBlockingModeCustomAddressBlockEch) {
+    DnsProxySettings settings = make_dnsproxy_settings();
+    settings.filter_params = {{{1, "crypto.cloudflare.com", true}}};
+    settings.adblock_rules_blocking_mode = DnsProxyBlockingMode::ADDRESS;
+    settings.hosts_rules_blocking_mode = DnsProxyBlockingMode::ADDRESS;
+    settings.custom_blocking_ipv4 = "4.3.2.1";
+    settings.custom_blocking_ipv6 = "43::21";
+    settings.block_ech = true;
+
+    auto [ret, err] = m_proxy->init(settings, {});
+    ASSERT_TRUE(ret) << err->str();
+
+    ldns_pkt_ptr res;
+
+    ASSERT_NO_FATAL_FAILURE(
+            perform_request(*m_proxy, create_request("crypto.cloudflare.com", LDNS_RR_TYPE_HTTPS, LDNS_RD),res));
+    ASSERT_EQ(LDNS_RCODE_NOERROR, ldns_pkt_get_rcode(res.get()));
+    ASSERT_EQ(1, ldns_pkt_ancount(res.get()));
+    auto rdfs = get_concat_rdfs_as_str(res.get());
+    auto hints = SvcbHttpsHelpers::get_ip_hints_from_response(res.get());
+    ASSERT_EQ(hints.at(0), settings.custom_blocking_ipv4);
+    ASSERT_EQ(hints.at(1), settings.custom_blocking_ipv6);
+    ASSERT_EQ(rdfs.find("echconfig"), std::string::npos);
+}
+
+TEST_F(DnsProxyTest, HttpsBlockingModeCustomAddressDoesntAffectOtherFields) {
+    DnsProxySettings settings = make_dnsproxy_settings();
+    settings.filter_params = {{{1, "crypto.cloudflare.com", true}}};
+    settings.adblock_rules_blocking_mode = DnsProxyBlockingMode::ADDRESS;
+    settings.hosts_rules_blocking_mode = DnsProxyBlockingMode::ADDRESS;
+    settings.custom_blocking_ipv4 = "4.3.2.1";
+    settings.custom_blocking_ipv6 = "43::21";
+
+    auto [ret, err] = m_proxy->init(settings, {});
+    ASSERT_TRUE(ret) << err->str();
+
+    ldns_pkt_ptr res;
+
+    ASSERT_NO_FATAL_FAILURE(
+            perform_request(*m_proxy, create_request("crypto.cloudflare.com", LDNS_RR_TYPE_HTTPS, LDNS_RD),res));
+    ASSERT_EQ(LDNS_RCODE_NOERROR, ldns_pkt_get_rcode(res.get()));
+    ASSERT_EQ(1, ldns_pkt_ancount(res.get()));
+    auto rdfs = get_concat_rdfs_as_str(res.get());
+    auto hints = SvcbHttpsHelpers::get_ip_hints_from_response(res.get());
+    ASSERT_EQ(hints.at(0), settings.custom_blocking_ipv4);
+    ASSERT_EQ(hints.at(1), settings.custom_blocking_ipv6);
+    ASSERT_NE(rdfs.find("echconfig"), std::string::npos);
+}
+
+TEST_F(DnsProxyTest, HttpsBlockingModeCustomAddressIpv4Only) {
+    DnsProxySettings settings = make_dnsproxy_settings();
+    settings.filter_params = {{{1, "adguard.com", true}}};
+    settings.adblock_rules_blocking_mode = DnsProxyBlockingMode::ADDRESS;
+    settings.hosts_rules_blocking_mode = DnsProxyBlockingMode::ADDRESS;
+    settings.custom_blocking_ipv4 = "4.3.2.1";
+
+    auto [ret, err] = m_proxy->init(settings, {});
+    ASSERT_TRUE(ret) << err->str();
+
+    ldns_pkt_ptr res;
+
+    ASSERT_NO_FATAL_FAILURE(
+            perform_request(*m_proxy, create_request("adguard.com", LDNS_RR_TYPE_HTTPS, LDNS_RD),res));
+    ASSERT_EQ(LDNS_RCODE_NOERROR, ldns_pkt_get_rcode(res.get()));
+    ASSERT_EQ(1, ldns_pkt_ancount(res.get()));
+    auto hints = SvcbHttpsHelpers::get_ip_hints_from_response(res.get());
+    ASSERT_TRUE(hints.size() == 1);
+    ASSERT_EQ(hints.at(0), settings.custom_blocking_ipv4);
+}
+
+TEST_F(DnsProxyTest, HttpsBlockingModeCustomAddressIpv6Only) {
+    DnsProxySettings settings = make_dnsproxy_settings();
+    settings.filter_params = {{{1, "adguard.com", true}}};
+    settings.adblock_rules_blocking_mode = DnsProxyBlockingMode::ADDRESS;
+    settings.hosts_rules_blocking_mode = DnsProxyBlockingMode::ADDRESS;
+    settings.custom_blocking_ipv6 = "43::21";
+
+    auto [ret, err] = m_proxy->init(settings, {});
+    ASSERT_TRUE(ret) << err->str();
+
+    ldns_pkt_ptr res;
+
+    ASSERT_NO_FATAL_FAILURE(
+            perform_request(*m_proxy, create_request("adguard.com", LDNS_RR_TYPE_HTTPS, LDNS_RD),res));
+    ASSERT_EQ(LDNS_RCODE_NOERROR, ldns_pkt_get_rcode(res.get()));
+    ASSERT_EQ(1, ldns_pkt_ancount(res.get()));
+    auto hints = SvcbHttpsHelpers::get_ip_hints_from_response(res.get());
+    ASSERT_TRUE(hints.size() == 1);
+    ASSERT_EQ(hints.at(0), settings.custom_blocking_ipv6);
+}
+
 TEST_F(DnsProxyTest, BlockingModeCustomAddressIpv4Only) {
     DnsProxySettings settings = make_dnsproxy_settings();
     settings.filter_params = {{{1, "blocking_modes_test_filter.txt"}}};
@@ -982,13 +1132,6 @@ TEST_F(DnsProxyTest, BlockingModeCustomAddressIpv4Only) {
     ASSERT_TRUE(ret) << err->str();
 
     ldns_pkt_ptr res;
-
-    // Check weird qtype
-    ASSERT_NO_FATAL_FAILURE(
-            perform_request(*m_proxy, create_request("privacy-policy.truste.com", (ldns_rr_type) 65, LDNS_RD), res));
-    ASSERT_EQ(LDNS_RCODE_NOERROR, ldns_pkt_get_rcode(res.get()));
-    ASSERT_EQ(0, ldns_pkt_ancount(res.get()));
-    ASSERT_EQ(1, ldns_pkt_nscount(res.get()));
 
     ASSERT_NO_FATAL_FAILURE(perform_request(*m_proxy, create_request("adb-style.com", LDNS_RR_TYPE_A, LDNS_RD), res));
     ASSERT_EQ(LDNS_RCODE_NOERROR, ldns_pkt_get_rcode(res.get()));
@@ -1059,13 +1202,6 @@ TEST_F(DnsProxyTest, BlockingModeCustomAddressIpv6Only) {
     ASSERT_TRUE(ret) << err->str();
 
     ldns_pkt_ptr res;
-
-    // Check weird qtype
-    ASSERT_NO_FATAL_FAILURE(
-            perform_request(*m_proxy, create_request("privacy-policy.truste.com", (ldns_rr_type) 65, LDNS_RD), res));
-    ASSERT_EQ(LDNS_RCODE_NOERROR, ldns_pkt_get_rcode(res.get()));
-    ASSERT_EQ(0, ldns_pkt_ancount(res.get()));
-    ASSERT_EQ(1, ldns_pkt_nscount(res.get()));
 
     ASSERT_NO_FATAL_FAILURE(perform_request(*m_proxy, create_request("adb-style.com", LDNS_RR_TYPE_A, LDNS_RD), res));
     ASSERT_EQ(LDNS_RCODE_NOERROR, ldns_pkt_get_rcode(res.get()));

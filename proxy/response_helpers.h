@@ -3,6 +3,7 @@
 #include <ldns/ldns.h>
 
 #include "dns/proxy/dnsproxy_settings.h"
+#include "svcb.h"
 
 namespace ag::dns {
 
@@ -11,6 +12,7 @@ namespace ag::dns {
  */
 class ResponseHelpers {
 public:
+    using ldns_rdf_ptr = UniquePtr<ldns_rdf, &ldns_rdf_deep_free>;
     static constexpr uint32_t SOA_RETRY_DEFAULT = 900;
 
     static ldns_pkt *create_soa_response(
@@ -95,14 +97,14 @@ public:
      * If rule is Adblock-style or Hosts-rule with "blocking IP", then blocking mode is applied.
      * Otherwise, `create_response_with_ips()` is called.
      */
-    static ldns_pkt *create_blocking_response(const ldns_pkt *request, const DnsProxySettings *settings,
-            const std::vector<const DnsFilter::Rule *> &rules,
+    static ldns_pkt *create_blocking_response(const ldns_pkt *request, const  ldns_pkt *original_response,
+            const DnsProxySettings *settings, const std::vector<const DnsFilter::Rule *> &rules,
             std::optional<DnsFilter::ApplyDnsrewriteResult::RewriteInfo> rewritten_info) {
         const ldns_rr *question = ldns_rr_list_rr(ldns_pkt_question(request), 0);
 
         if (rewritten_info.has_value()) {
-            ldns_pkt *response = create_response_by_request(request);
-            ldns_pkt_set_rcode(response, rewritten_info->rcode);
+            ldns_pkt *result = create_response_by_request(request);
+            ldns_pkt_set_rcode(result, rewritten_info->rcode);
             for (auto &rr : rewritten_info->rrs) {
                 // If this is a CNAME rewrite, then we shouldn't replace the owner
                 // of non-CNAME records for the rewritten name.
@@ -111,9 +113,9 @@ public:
                     ldns_rr_set_owner(rr.get(), ldns_rdf_clone(ldns_rr_owner(question)));
                 }
                 ldns_rr_set_ttl(rr.get(), settings->blocked_response_ttl_secs);
-                ldns_pkt_push_rr(response, LDNS_SECTION_ANSWER, rr.release());
+                ldns_pkt_push_rr(result, LDNS_SECTION_ANSWER, rr.release());
             }
-            return response;
+            return result;
         }
         DnsProxyBlockingMode mode;
         const DnsFilter::Rule *effective_rule = rules.front();
@@ -124,19 +126,19 @@ public:
         } else { // hosts-style IP rule
             return create_response_with_ips(request, settings, rules);
         }
-        ldns_pkt *response;
+        ldns_pkt *result;
         switch (mode) {
         case DnsProxyBlockingMode::REFUSED:
-            response = create_refused_response(request, settings);
+            result = create_refused_response(request, settings);
             break;
         case DnsProxyBlockingMode::NXDOMAIN:
-            response = create_nxdomain_response(request, settings);
+            result = create_nxdomain_response(request, settings);
             break;
         case DnsProxyBlockingMode::ADDRESS:
-            response = create_address_or_soa_response(request, settings);
+            result = create_address_or_soa_response(request, original_response, settings);
             break;
         }
-        return response;
+        return result;
     }
 
 private:
@@ -169,7 +171,6 @@ private:
     }
 
     static ldns_rdf *make_mbox(const ldns_pkt *request) {
-        using ldns_rdf_ptr = UniquePtr<ldns_rdf, &ldns_rdf_deep_free>;
         const ldns_rr *question = ldns_rr_list_rr(ldns_pkt_question(request), 0);
 
         ldns_rdf *owner = ldns_rr_owner(question);
@@ -268,19 +269,20 @@ private:
         });
     }
 
-    // Return empty SOA response if question type is not A or AAAA
-    static ldns_pkt *create_address_or_soa_response(const ldns_pkt *request, const DnsProxySettings *settings) {
+    // Return empty SOA response if question type is not A, AAAA or HTTPS
+    static ldns_pkt *create_address_or_soa_response(
+            const ldns_pkt *request, const ldns_pkt *original_response, const DnsProxySettings *settings) {
         ldns_rr *question = ldns_rr_list_rr(ldns_pkt_question(request), 0);
         ldns_rr_type type = ldns_rr_get_type(question);
 
-        ldns_rdf *rdf;
+        ldns_rdf_ptr rdf;
         switch (type) {
         case LDNS_RR_TYPE_A: {
             if (!settings->custom_blocking_ipv4.empty()) {
                 assert(utils::is_valid_ip4(settings->custom_blocking_ipv4));
-                rdf = ldns_rdf_new_frm_str(LDNS_RDF_TYPE_A, settings->custom_blocking_ipv4.c_str());
+                rdf.reset(ldns_rdf_new_frm_str(LDNS_RDF_TYPE_A, settings->custom_blocking_ipv4.c_str()));
             } else if (settings->custom_blocking_ipv6.empty() || is_blocking_ip(settings->custom_blocking_ipv6)) {
-                rdf = ldns_rdf_new_frm_str(LDNS_RDF_TYPE_A, "0.0.0.0");
+                rdf.reset(ldns_rdf_new_frm_str(LDNS_RDF_TYPE_A, "0.0.0.0"));
             } else {
                 return create_soa_response(request, settings, SOA_RETRY_DEFAULT);
             }
@@ -289,9 +291,17 @@ private:
         case LDNS_RR_TYPE_AAAA: {
             if (!settings->custom_blocking_ipv6.empty()) {
                 assert(utils::is_valid_ip6(settings->custom_blocking_ipv6));
-                rdf = ldns_rdf_new_frm_str(LDNS_RDF_TYPE_AAAA, settings->custom_blocking_ipv6.c_str());
+                rdf.reset(ldns_rdf_new_frm_str(LDNS_RDF_TYPE_AAAA, settings->custom_blocking_ipv6.c_str()));
             } else if (settings->custom_blocking_ipv4.empty() || is_blocking_ip(settings->custom_blocking_ipv6)) {
-                rdf = ldns_rdf_new_frm_str(LDNS_RDF_TYPE_AAAA, "::");
+                rdf.reset(ldns_rdf_new_frm_str(LDNS_RDF_TYPE_AAAA, "::"));
+            } else {
+                return create_soa_response(request, settings, SOA_RETRY_DEFAULT);
+            }
+            break;
+        }
+        case LDNS_RR_TYPE_HTTPS: {
+            if (!settings->custom_blocking_ipv4.empty() || !settings->custom_blocking_ipv6.empty()) {
+                return SvcbHttpsHelpers::modify_response(ldns_pkt_clone(original_response), settings);
             } else {
                 return create_soa_response(request, settings, SOA_RETRY_DEFAULT);
             }
@@ -306,7 +316,7 @@ private:
         ldns_rr_set_ttl(rr, settings->blocked_response_ttl_secs);
         ldns_rr_set_type(rr, type);
         ldns_rr_set_class(rr, ldns_rr_get_class(question));
-        ldns_rr_push_rdf(rr, rdf);
+        ldns_rr_push_rdf(rr, rdf.release());
 
         ldns_pkt *response = create_response_by_request(request);
         ldns_pkt_push_rr(response, LDNS_SECTION_ANSWER, rr);
