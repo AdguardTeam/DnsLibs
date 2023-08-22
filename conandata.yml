@@ -181,3 +181,5 @@ commit_hash:
     hash: "5f83fd1dfa3e1d05248065da00f21e110fac7149"
   "2.2.19":
     hash: "8e7ecca03b0c6bb9c6fe2beec2d882a8d4f6ec5a"
+  "2.2.20":
+    hash: "dafd51cad3e3a603e59eb54d6b55d23c06c5cd20"
