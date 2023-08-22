@@ -170,7 +170,7 @@ static void test_cert_fingerprint() {
     ASSERT(settings->upstreams.data == NULL);
     ASSERT(settings->upstreams.size == 0);
 
-    const char *fingerprint = "pUZw/ajtE73tCpUV810KK+2TfhAKpignA8s7hyggVew=";
+    const char *fingerprint = "WvW6JgoU6qMJyW6uF2yF86r/Mi8hnp9ZxYdqiUDUYZo=";
     const char *bootstrap = "1.1.1.1";
     ag_upstream_options upstream = {
             .address = "tls://dns.adguard-dns.com",

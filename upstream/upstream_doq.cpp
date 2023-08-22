@@ -335,12 +335,14 @@ coro::Task<Upstream::ExchangeResult> DoqUpstream::exchange(const ldns_pkt *reque
     }
 
     ldns_buffer *buffer = ldns_buffer_new(REQUEST_BUFFER_INITIAL_CAPACITY);
+    uint16_t original_req_id = ldns_pkt_id(request);
     ldns_status status = ldns_pkt2buffer_wire(buffer, request);
     if (status != LDNS_STATUS_OK) {
         assert(0);
         co_return make_error(DnsError::AE_ENCODE_ERROR, ldns_get_errorstr_by_id(status));
     }
     ldns_buffer_flip(buffer);
+    memset(ldns_buffer_current(buffer), '\0', sizeof(original_req_id));
 
     int64_t request_id = m_next_request_id++;
     Request &req = m_requests[request_id];
@@ -395,6 +397,7 @@ coro::Task<Upstream::ExchangeResult> DoqUpstream::exchange(const ldns_pkt *reque
     }
 
     if (res != nullptr) {
+        ldns_pkt_set_id(res, original_req_id);
         co_return ldns_pkt_ptr{res};
     }
 
