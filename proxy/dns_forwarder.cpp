@@ -140,6 +140,8 @@ void DnsForwarder::finalize_processed_event(DnsRequestProcessedEvent &event, con
         const ldns_rr *question = ldns_rr_list_rr(ldns_pkt_question(request), 0);
         AllocatedPtr<char> type{ldns_rr_type2str(ldns_rr_get_type(question))};
         event.type = type.get();
+        AllocatedPtr<char> domain{ldns_rdf2str(ldns_rr_owner(question))};
+        event.domain = domain.get();
     } else {
         event.type.clear();
     }
@@ -511,7 +513,6 @@ coro::Task<DnsForwarder::HandleMessageResult> DnsForwarder::handle_message_inter
     }
 
     auto domain = AllocatedPtr<char>(ldns_rdf2str(ldns_rr_owner(question)));
-    event.domain = domain.get();
 
     std::string_view normalized_domain = domain.get();
     if (ldns_dname_str_absolute(domain.get())) {
