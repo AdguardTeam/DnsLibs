@@ -23,7 +23,7 @@ static std::optional<Uint8Array<SHA256_DIGEST_LENGTH>> get_cert_hash(X509 *certi
         pkey = X509_get_pubkey(certificate);
         buf_len = i2d_PUBKEY(pkey, nullptr);
     } else {
-        buf_len = i2d_X509(certificate, nullptr);
+        buf_len = i2d_X509_tbs(certificate, nullptr);
     }
     if (buf_len <= 0) {
         return std::nullopt;
@@ -35,7 +35,7 @@ static std::optional<Uint8Array<SHA256_DIGEST_LENGTH>> get_cert_hash(X509 *certi
         i2d_PUBKEY(pkey, (unsigned char **) &buffer);
         EVP_PKEY_free(pkey);
     } else {
-        i2d_X509(certificate, (unsigned char **) &buffer);
+        i2d_X509_tbs(certificate, (unsigned char **) &buffer);
     }
 
     std::array<uint8_t, SHA256_DIGEST_LENGTH> hash;
@@ -48,7 +48,7 @@ static std::optional<Uint8Array<SHA256_DIGEST_LENGTH>> get_cert_hash(X509 *certi
 }
 
 static bool is_cert_find_in_fingerprints(X509 *certificate, std::span<CertFingerprint> fingerprints) {
-    std::optional<Uint8Array<SHA256_DIGEST_LENGTH>> spki, full;
+    std::optional<Uint8Array<SHA256_DIGEST_LENGTH>> spki, tbs;
     return std::any_of(fingerprints.begin(), fingerprints.end(), [&](CertFingerprint f) {
         if (auto *spki_digest = std::get_if<SpkiSha256Digest>(&f)) {
             if (!spki.has_value()) {
@@ -56,11 +56,11 @@ static bool is_cert_find_in_fingerprints(X509 *certificate, std::span<CertFinger
             }
             return spki.has_value() ? std::equal(spki_digest->data.begin(), spki_digest->data.end(), spki->data())
                                     : false;
-        } else if (auto *cert_digest = std::get_if<CertSha256Digest>(&f)) {
-            if (!full.has_value()) {
-                full = get_cert_hash(certificate, false);
+        } else if (auto *tbs_digest = std::get_if<TbsCertSha256Digest>(&f)) {
+            if (!tbs.has_value()) {
+                tbs = get_cert_hash(certificate, false);
             }
-            return full.has_value() ? std::equal(cert_digest->data.begin(), cert_digest->data.end(), full->data())
+            return tbs.has_value() ? std::equal(tbs_digest->data.begin(), tbs_digest->data.end(), tbs->data())
                                     : false;
         }
         return false;

@@ -237,7 +237,7 @@ TEST_F(DnsProxyTest, DnsStampWithHash) {
     using namespace std::chrono_literals;
     DnsProxySettings settings = make_dnsproxy_settings();
     settings.upstreams = {{
-            .address = "sdns://AwAAAAAAAAAAEDk0LjE0MC4xNC4xNDo4NTMgeQMRUTX9Re-JJL2gR-EgSFkHty0m7DHl1-NS2mrCgVoTZG5zLmFkZ3VhcmQtZG5zLmNvbQ",
+            .address = "sdns://AwAAAAAAAAAAEDk0LjE0MC4xNC4xNDo4NTMgHr6paF1XowY8QnrE8Jg_NOc8EpsG5-dwVkDKzUDDccgTZG5zLmFkZ3VhcmQtZG5zLmNvbQ",
             .bootstrap = {"1.1.1.1"},
     }};
     settings.upstream_timeout = 5000ms;
