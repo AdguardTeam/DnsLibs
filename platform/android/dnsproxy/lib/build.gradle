@@ -1,6 +1,6 @@
 apply plugin: 'com.android.library'
 
-version = [name: '2.2.21', code: 452]
+version = [name: '2.2.22', code: 453]
 
 android {
     ndkVersion "24.0.8215888"
