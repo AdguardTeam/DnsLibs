@@ -375,7 +375,7 @@ void DohUpstream::QueryHandle::cleanup_request() {
         assert(perr == CURLM_OK);
 
         // FIXME-66691: CURL has an issue where after `curl_multi_remove_handle`
-        // ngtcp2/nghttp3 will retain a pinter to Curl_easy, which becomes dangling after `curl_easy_cleanup`.
+        // ngtcp2/nghttp3 will retain a pointer to Curl_easy, which becomes dangling after `curl_easy_cleanup`.
         // If we got here without the HTTP exchange completing normally, then BOOM!
         // Instead, let's just leak a little memory until the upstream is destroyed.
         // (CURL should not "send" another message for already completed handle).
@@ -544,6 +544,9 @@ Error<Upstream::InitError> DohUpstream::init() {
 
     m_shutdown_guard = std::make_shared<bool>(true);
 
+    m_read_timer = Uv<uv_timer_t>::create_with_parent(this);
+    uv_timer_init(m_config.loop.handle(), m_read_timer->raw());
+
     return {};
 }
 
@@ -562,6 +565,8 @@ DohUpstream::~DohUpstream() {
     dbglog(m_log, "Done");
 
     m_check_proxy.reset();
+
+    m_read_timer.reset();
 
     dbglog(m_log, "Destroyed");
 }
@@ -739,6 +744,15 @@ int DohUpstream::on_socket_update(
         delete socket_data;
         curl_multi_assign(pool->handle.get(), socket, nullptr);
     } else {
+        auto *upstream = pool->parent;
+        if (what == CURL_POLL_IN) {
+            if (!upstream->m_running_queue.empty()) {
+                Millis read_timeout{upstream->m_config.timeout * 2};
+                uv_timer_start(upstream->m_read_timer->raw(), on_read_timeout, read_timeout.count(), 0);
+            } else {
+                uv_timer_stop(upstream->m_read_timer->raw());
+            }
+        }
         if (socket_data == nullptr) {
             tracelog(pool->parent->m_log, "Adding data: {}", WHAT_STR[what]);
             SocketHandle *handle = new SocketHandle();
@@ -859,6 +873,20 @@ void DohUpstream::reset_bypassed_proxy_queries() {
     }
 }
 
+void DohUpstream::on_read_timeout(uv_timer_t *timer) {
+    /**
+     * This timeout is needed to reset stall connection (so curl can't reuse it)
+     * see: https://github.com/AdguardTeam/DnsLibs/issues/200
+     */
+    auto *upstream = (DohUpstream *)Uv<uv_timer_t>::parent_from_data(timer->data);
+    if (!upstream) {
+        return;
+    }
+    upstream->stop_all_with_error(make_error(DnsError::AE_TIMED_OUT, "Stale connection timeout"));
+    upstream->m_pool.init(upstream);
+    dbglog(upstream->m_log, "Stale curl connection was restarted");
+}
+
 coro::Task<Upstream::ExchangeResult> DohUpstream::exchange(const ldns_pkt *request, const DnsMessageInfo *) {
 
     Millis timeout = m_config.timeout;
@@ -911,6 +939,10 @@ coro::Task<Upstream::ExchangeResult> DohUpstream::exchange(const ldns_pkt *reque
 
     tracelog_id(handle, "Started");
 
+    if (!uv_is_active((uv_handle_t *) m_read_timer->raw())) {
+        Millis read_timeout{m_config.timeout * 2};
+        uv_timer_start(m_read_timer->raw(), on_read_timeout, read_timeout.count(), 0);
+    }
     Error<DnsError> err;
     ldns_pkt *response = nullptr;
     co_await handle->upstream->submit_request(handle.get());
@@ -930,6 +962,12 @@ coro::Task<Upstream::ExchangeResult> DohUpstream::exchange(const ldns_pkt *reque
     }
 
     tracelog_id(handle, "Completed");
+
+    // If timeout error was returned we shouldn't stop timer responsible for detecting a stale connection
+    bool timeout_error = err && err->value() == DnsError::AE_TIMED_OUT;
+    if (m_running_queue.empty() && !timeout_error) {
+        uv_timer_stop(m_read_timer->raw());
+    }
 
     if (err) {
         co_return err;
@@ -1005,7 +1043,7 @@ void DohUpstream::cleanup_httpver_probe() {
     m_h3_probe_pool.reset();
     m_h2_probe_pool.reset();
     config().loop.cancel(std::exchange(m_httpver_probe_cleanup_task, {}));
-};
+}
 
 bool DohUpstream::ConnectionPool::init(DohUpstream *parent) {
     this->handle.reset(curl_multi_init());
