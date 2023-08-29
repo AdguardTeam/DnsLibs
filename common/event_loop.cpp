@@ -123,7 +123,9 @@ void EventLoop::start() {
 #ifndef _WIN32
             signal(SIGPIPE, SIG_IGN);
 #ifdef __APPLE__
+# if !TARGET_OS_IPHONE
             pthread_set_qos_class_self_np(QOS_CLASS_USER_INITIATED, 0);
+# endif // !TARGET_OS_IPHONE
 #endif
 #endif
             uv_run(m_handle->raw(), UV_RUN_DEFAULT);
