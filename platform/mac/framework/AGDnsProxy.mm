@@ -388,7 +388,7 @@ static ServerStamp convert_stamp(AGDnsStamp *stamp) {
 - (instancetype)initWithCoder:(NSCoder *)coder {
     self = [super init];
     if (self) {
-        _blockEch = [coder decodeObjectForKey:@"_blockEch"];
+        _blockEch = [coder decodeObjectOfClass:NSNumber.class forKey:@"_blockEch"];
     }
     return self;
 }
@@ -429,7 +429,7 @@ static ServerStamp convert_stamp(AGDnsStamp *stamp) {
         _proto = (AGListenerProtocol) [coder decodeIntForKey:@"_proto"];
         _persistent = [coder decodeBoolForKey:@"_persistent"];
         _idleTimeoutMs = [coder decodeInt64ForKey:@"_idleTimeoutMs"];
-        _settingsOverrides = [coder decodeObjectForKey:@"_settingsOverrides"];
+        _settingsOverrides = [coder decodeObjectOfClass:AGDnsProxySettingsOverrides.class forKey:@"_settingsOverrides"];
     }
 
     return self;

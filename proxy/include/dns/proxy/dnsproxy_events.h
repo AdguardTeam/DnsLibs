@@ -17,20 +17,21 @@ namespace ag::dns {
 struct DnsRequestProcessedEvent {
     std::string domain; /**< Queried domain name */
     std::string type; /**< Query type */
-    int64_t start_time; /**< Time when dnsproxy started processing request (epoch in milliseconds) */
-    int32_t elapsed; /**< Time elapsed on processing (in milliseconds) */
+    /** Time when dnsproxy started processing request (epoch in milliseconds) */
+    int64_t start_time = duration_cast<Millis>(SystemClock::now().time_since_epoch()).count();
+    int32_t elapsed = 0; /**< Time elapsed on processing (in milliseconds) */
     std::string status; /**< DNS answer's status */
     std::string answer; /**< DNS Answers string representation */
     std::string original_answer; /**< If blocked by CNAME, here will be DNS original answer's string representation */
     std::optional<int32_t> upstream_id; /** ID of the upstream that provided this answer */
-    int32_t bytes_sent; /**< Number of bytes sent to a server */
-    int32_t bytes_received; /**< Number of bytes received from a server */
+    int32_t bytes_sent = 0; /**< Number of bytes sent to a server */
+    int32_t bytes_received = 0; /**< Number of bytes received from a server */
     std::vector<std::string> rules; /**< Filtering rules texts */
     std::vector<int32_t> filter_list_ids; /**< Filter lists IDs of corresponding rules */
-    bool whitelist; /**< True if filtering rule is whitelist */
+    bool whitelist = false; /**< True if filtering rule is whitelist */
     std::string error; /**< If not empty, contains the error text (occurred while processing the DNS query) */
-    bool cache_hit; /**< True if this response was served from the cache */
-    bool dnssec; /**< True if this response has DNSSEC rrsig */
+    bool cache_hit = false; /**< True if this response was served from the cache */
+    bool dnssec = false; /**< True if this response has DNSSEC rrsig */
 };
 
 /**

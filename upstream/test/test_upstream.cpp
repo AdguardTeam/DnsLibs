@@ -387,7 +387,7 @@ static const UpstreamTestData test_upstreams_data[]{
         {// AdGuard DNS (DNS-over-QUIC) custom port
                 "quic://dns.adguard-dns.com:8853", {"8.8.8.8:53"}},
         {// AdGuard DNS (DNS-over-QUIC) stamp with only the port specified in server address field
-                "sdns://BAAAAAAAAAAABDo3ODQAD2Rucy5hZGd1YXJkLmNvbQ", {"8.8.8.8:53"}},
+                "sdns://BAAAAAAAAAAABDo4NTMAE2Rucy5hZGd1YXJkLWRucy5jb20", {"8.8.8.8:53"}},
 };
 
 #ifdef __linux__

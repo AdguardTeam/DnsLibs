@@ -15,11 +15,11 @@ struct SpkiSha256Digest {
     Uint8Array<SHA256_DIGEST_LENGTH> data;
 };
 
-struct CertSha256Digest {
+struct TbsCertSha256Digest {
     Uint8Array<SHA256_DIGEST_LENGTH> data;
 };
 
-using CertFingerprint = std::variant<SpkiSha256Digest, CertSha256Digest>;
+using CertFingerprint = std::variant<SpkiSha256Digest, TbsCertSha256Digest>;
 
 /**
  * An abstract verifier which encapsulates the SSL/TLS certificate verification procedure.

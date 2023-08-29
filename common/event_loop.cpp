@@ -122,6 +122,9 @@ void EventLoop::start() {
         m_thread = std::thread([this]{
 #ifndef _WIN32
             signal(SIGPIPE, SIG_IGN);
+#ifdef __APPLE__
+            pthread_set_qos_class_self_np(QOS_CLASS_USER_INITIATED, 0);
+#endif
 #endif
             uv_run(m_handle->raw(), UV_RUN_DEFAULT);
             m_running = false;

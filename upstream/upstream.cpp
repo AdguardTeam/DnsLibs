@@ -137,7 +137,7 @@ static CreateResult create_upstream_sdns(const UpstreamOptions &local_opts, cons
     }
 
     for (auto &hash : stamp.hashes) {
-        CertSha256Digest &cert_digest = fingerprints.emplace_back().emplace<CertSha256Digest>();
+        TbsCertSha256Digest &cert_digest = fingerprints.emplace_back().emplace<TbsCertSha256Digest>();
         std::copy_n(hash.begin(), SHA256_DIGEST_LENGTH, cert_digest.data.begin());
     }
 
