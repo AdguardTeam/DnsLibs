@@ -148,6 +148,8 @@ public:
         return Awaitable{.time = time, .loop = this};
     }
 
+    [[nodiscard]] bool valid() { return m_handle != nullptr; }
+
 private:
     ag::Logger m_log;
     UvPtr<uv_loop_t> m_handle;

@@ -7,7 +7,11 @@ namespace ag::dns {
 static constexpr int MAX_STOPPER_ITERATIONS = 10;
 
 EventLoopPtr EventLoop::create() {
-    return std::make_shared<EventLoop>(ConstructorAccess{});
+    auto loop = std::make_shared<EventLoop>(ConstructorAccess{});
+    if (!loop->valid()) {
+        loop.reset();
+    }
+    return loop;
 }
 
 EventLoop::EventLoop(const EventLoop::ConstructorAccess & /* access */)
