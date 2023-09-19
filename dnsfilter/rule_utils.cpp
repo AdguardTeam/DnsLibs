@@ -133,7 +133,7 @@ static std::optional<rule_utils::Rule> parse_host_file_rule(std::string_view str
         return std::nullopt;
     }
     rule_utils::Rule r = {.public_part = {.content = DnsFilter::HostsRuleInfo{}}};
-    r.match_method = rule_utils::Rule::MMID_SUBDOMAINS;
+    r.match_method = rule_utils::Rule::MMID_EXACT;
     r.matching_parts.reserve(parts.size() - 1);
     for (size_t i = 1; i < parts.size(); ++i) {
         const std::string_view &domain = parts[i];
