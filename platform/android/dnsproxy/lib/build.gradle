@@ -3,7 +3,8 @@ apply plugin: 'com.android.library'
 version = [name: '2.2.31', code: 462]
 
 android {
-    ndkVersion "24.0.8215888"
+    namespace = "com.adguard.dnslibs"
+    ndkVersion "25.2.9519653"
     compileSdkVersion 29
 
     defaultConfig {
@@ -39,7 +40,7 @@ android {
     externalNativeBuild {
         cmake {
             path "CMakeLists.txt"
-            version "3.18.1"
+            version "3.22.1"
         }
     }
 
