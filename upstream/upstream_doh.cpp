@@ -1,1095 +1,1169 @@
-#include <algorithm>
-#include <bitset>
-#include <cassert>
-#include <cinttypes>
+#include <array>
+#include <atomic>
+#include <chrono>
 
-#include "common/clock.h"
-#include "common/defs.h"
-#include "common/time_utils.h"
+#include <magic_enum.hpp>
+#include <ngtcp2/ngtcp2_crypto_boringssl.h>
+
+#include "common/base64.h"
+#include "common/http/http2.h"
+#include "common/http/http3.h"
+#include "common/logger.h"
+#include "common/parallel.h"
 #include "common/utils.h"
-#include "dns/net/socket.h"
 #include "upstream_doh.h"
 
-#include <openssl/err.h>
-#include <openssl/ssl.h>
-
-#include <ldns/ldns.h>
-#include <magic_enum.hpp>
-
-#define errlog_id(q_, fmt_, ...) errlog(*((q_)->log), "[{}] " fmt_, (q_)->request_id, ##__VA_ARGS__)
-#define infolog_id(q_, fmt_, ...) infolog(*((q_)->log), "[{}] " fmt_, (q_)->request_id, ##__VA_ARGS__)
-#define warnlog_id(q_, fmt_, ...) warnlog(*((q_)->log), "[{}] " fmt_, (q_)->request_id, ##__VA_ARGS__)
-#define dbglog_id(q_, fmt_, ...) dbglog(*((q_)->log), "[{}] " fmt_, (q_)->request_id, ##__VA_ARGS__)
-#define tracelog_id(q_, fmt_, ...) tracelog(*((q_)->log), "[{}] " fmt_, (q_)->request_id, ##__VA_ARGS__)
-
-using namespace std::chrono;
-
-namespace ag {
-namespace dns {
-
-struct CurlInitializer {
-    CurlInitializer() {
-        curl_global_init(CURL_GLOBAL_ALL);
-    }
-
-    ~CurlInitializer() {
-        curl_global_cleanup();
-    }
+enum class ag::dns::DohUpstream::ConnectionState : int {
+    IDLE,
+    CONNECTING,
+    CONNECTED,
 };
 
-struct DohUpstream::QueryHandle {
-    enum Flag {
-        /// The query uses the proxy
-        QHF_PROXIED,
-        /// A connection through the proxy has failed and the query was re-routed directly
-        QHF_BYPASSED_PROXY,
-        /// Request was actually responded (as opposed to CURL error)
-        QHF_RESPONDED,
+struct ag::dns::DohUpstream::HttpAwaitable {
+    enum State {
+        WAITING_RESPONSE_HEADERS,
+        WAITING_RESPONSE_BODY,
+        DONE,
     };
 
-    const Logger *log = nullptr;
-    DohUpstream *upstream = nullptr;
-    ConnectionPool *pool = nullptr;
-    uint16_t request_id = 0;
-    CURL_ptr curl_handle;
+    State state{};
+    std::coroutine_handle<> handle;
+    uint16_t query_id;
+    std::optional<http::Response> response;
+    std::vector<uint8_t> reply_buffer;
+    ldns_pkt_ptr reply;
     Error<DnsError> error;
-    ldns_buffer_ptr request = nullptr;
-    Uint8Vector response;
-    bool completed = false;
-    std::coroutine_handle<> caller{};
-    std::bitset<magic_enum::enum_count<Flag>()> flags;
-    std::shared_ptr<curl_slist> resolved_addrs;
-    Millis timeout;
 
-    bool create_curl_handle(ConnectionPool *pool);
+    // monostate is needed to make it default-constructible (`ag::Result`'s restriction)
+    using Result = Result<std::variant<std::monostate, http::Response, ldns_pkt_ptr>, DnsError>;
 
-    bool create_probe_curl_handle(ConnectionPool *pool, int curlopt_httpver);
+    explicit HttpAwaitable(uint16_t query_id);
+    ~HttpAwaitable() = default;
+    HttpAwaitable() = delete;
+    HttpAwaitable(const HttpAwaitable &) = delete;
+    HttpAwaitable &operator=(const HttpAwaitable &) = delete;
+    HttpAwaitable(HttpAwaitable &&) = delete;
+    HttpAwaitable &operator=(HttpAwaitable &&) = delete;
 
-    bool set_up_proxy(const OutboundProxySettings *settings);
+    bool await_ready();
+    void await_suspend(std::coroutine_handle<> h);
+    Result await_resume();
+    void notify_response(http::Response r);
+    void notify_reply(ldns_pkt_ptr r);
+    void notify_error(Error<DnsError> e);
+};
 
-    void cleanup_request();
+struct ag::dns::DohUpstream::ConnectAwaitable {
+    std::coroutine_handle<> handle;
+    Error<DnsError> error;
 
-    void restore_packet_id(ldns_pkt *packet) const {
-        ldns_pkt_set_id(packet, this->request_id);
+    ~ConnectAwaitable() = default;
+
+    bool await_ready() {
+        return false;
     }
-
-    void complete() {
-        completed = true;
-        if (caller) {
-            std::exchange(caller, nullptr).resume();
-        }
+    void await_suspend(std::coroutine_handle<> h) {
+        handle = h;
     }
-
-    ~QueryHandle() {
-        if (!completed && response.empty()) {
-            error = make_error(DnsError::AE_SHUTTING_DOWN);
-        }
-        complete();
+    Error<DnsError> await_resume() {
+        return error;
+    }
+    void notify_result(Error<DnsError> e) {
+        error = std::move(e);
+        handle.resume();
     }
 };
 
-struct DohUpstream::CheckProxyState {
-    DohUpstream *upstream = nullptr;
-    std::unique_ptr<Socket> socket;
-
-    static std::unique_ptr<CheckProxyState> start(DohUpstream *upstream, microseconds timeout) {
-        SocketFactory *socket_factory = upstream->m_config.socket_factory;
-
-        auto self = std::make_unique<CheckProxyState>();
-        self->upstream = upstream;
-        self->socket = socket_factory->make_socket({
-                utils::TP_TCP,
-                upstream->m_options.outbound_interface,
-                true,
-        });
-
-        const OutboundProxySettings *oproxy_settings = socket_factory->get_outbound_proxy_settings();
-        Error<SocketError> error = self->socket->connect({
-                &upstream->config().loop,
-                SocketAddress(oproxy_settings->address, oproxy_settings->port),
-                {on_connected, nullptr, on_close, self.get()},
-                timeout,
-        });
-
-        if (error) {
-            dbglog(upstream->m_log, "Failed to check connectivity with proxy: {}", error->str());
-            self.reset();
-        }
-
-        return self;
+struct ag::dns::DohUpstream::HttpConnection { // NOLINT(*-special-member-functions)
+    explicit HttpConnection(DohUpstream *parent)
+            : shutdown_guard(parent->m_shutdown_guard)
+            , parent(parent) {
     }
 
-    static void on_connected(void *arg) {
-        auto *self = (CheckProxyState *) arg;
-        DohUpstream *upstream = self->upstream;
+    HttpConnection() = delete;
+    HttpConnection(const HttpConnection &) = delete;
+    HttpConnection &operator=(const HttpConnection &) = delete;
+    HttpConnection(HttpConnection &&) = delete;
+    HttpConnection &operator=(HttpConnection &&) = delete;
 
-        upstream->m_config.socket_factory->on_successful_proxy_connection();
-        upstream->m_check_proxy.reset();
-        upstream->retry_pending_queries(false);
-    }
+    virtual ~HttpConnection() = default;
+    [[nodiscard]] virtual http::Version version() const = 0;
+    [[nodiscard]] virtual coro::Task<Error<DnsError>> establish(std::string hostname, SocketAddress peer) = 0;
+    [[nodiscard]] virtual Result<uint64_t, DnsError> submit_request(const http::Request &request) = 0;
+    virtual Error<DnsError> reset_stream(uint64_t stream_id) = 0;
+    [[nodiscard]] virtual Error<DnsError> flush() = 0;
+    [[nodiscard]] virtual coro::Task<Error<DnsError>> drive_io() = 0;
 
-    static void on_close(void *arg, Error<SocketError> error) {
-        auto *self = (CheckProxyState *) arg;
-        DohUpstream *upstream = self->upstream;
+    static void on_response(void *arg, uint64_t stream_id, http::Response response);
+    static void on_body(void *arg, uint64_t stream_id, Uint8View chunk);
+    static void on_stream_read_finished(void *arg, uint64_t stream_id);
+    static void on_stream_closed(void *arg, uint64_t stream_id, Error<DnsError> error);
+    static void on_close(void *arg, Error<DnsError> error);
+    static void on_output(void *arg, Uint8View chunk);
 
-        SocketFactory *factory = upstream->m_config.socket_factory;
-        SocketFactory::ProxyConectionFailedResult result = factory->on_proxy_connection_failed(error);
-
-        upstream->m_check_proxy.reset();
-
-        switch (result) {
-        case SocketFactory::SFPCFR_CLOSE_CONNECTION:
-            upstream->stop_all_with_error(make_error(DnsError::AE_OUTBOUND_PROXY_ERROR));
-            break;
-        case SocketFactory::SFPCFR_RETRY_DIRECTLY:
-            upstream->retry_pending_queries(true);
-            upstream->m_reset_bypassed_proxy_connections_subscribe_id =
-                    factory->subscribe_to_reset_bypassed_proxy_connections_event({[](void *arg) {
-                        auto *self = (DohUpstream *) arg;
-                        self->reset_bypassed_proxy_queries();
-                    }, upstream});
-            break;
-        }
-    }
+    std::weak_ptr<bool> shutdown_guard;
+    DohUpstream *parent;
+    std::optional<AioSocket> io;
+    static inline uint32_t next_id = 0; // NOLINT(*-identifier-naming)
+    uint32_t id = next_id++;
 };
 
-static size_t write_callback(void *contents, size_t size, size_t nmemb, void *arg) {
-    DohUpstream::QueryHandle *h = (DohUpstream::QueryHandle *) arg;
-    size_t full_size = size * nmemb;
-    h->response.insert(h->response.end(), (uint8_t *) contents, (uint8_t *) contents + full_size);
-    return full_size;
-}
-
-curl_socket_t DohUpstream::curl_opensocket(void *clientp, curlsocktype, struct curl_sockaddr *address) {
-    auto *self = (DohUpstream *) clientp;
-    curl_socket_t curlfd = ::socket(address->family, address->socktype, address->protocol);
-    if (curlfd == CURL_SOCKET_BAD) {
-        return CURL_SOCKET_BAD;
+struct ag::dns::DohUpstream::Http2Connection : public ag::dns::DohUpstream::HttpConnection {
+    explicit Http2Connection(DohUpstream *parent)
+            : HttpConnection(parent) {
     }
-    SocketAddress addr{&address->addr};
-    if (auto error = self->m_config.socket_factory->prepare_fd(curlfd, addr, self->m_options.outbound_interface)) {
-        warnlog(self->m_log, "Failed to bind socket to interface: {}", error->str());
-        evutil_closesocket(curlfd);
-        return CURL_SOCKET_BAD;
-    }
-    return curlfd;
-}
+    ~Http2Connection() override = default;
+    Http2Connection(const Http2Connection &) = delete;
+    Http2Connection &operator=(const Http2Connection &) = delete;
+    Http2Connection(Http2Connection &&) = delete;
+    Http2Connection &operator=(Http2Connection &&) = delete;
 
-static void curl_share_lockfunc(CURL *, curl_lock_data data, curl_lock_access, void *userptr) {
-    auto *m = (std::mutex *) userptr;
-    m[data].lock();
-}
+    [[nodiscard]] http::Version version() const override;
+    [[nodiscard]] coro::Task<Error<DnsError>> establish(std::string hostname, SocketAddress peer) override;
+    [[nodiscard]] Result<uint64_t, DnsError> submit_request(const http::Request &request) override;
+    Error<DnsError> reset_stream(uint64_t stream_id) override;
+    [[nodiscard]] Error<DnsError> flush() override;
+    [[nodiscard]] coro::Task<Error<DnsError>> drive_io() override;
 
-static void curl_share_unlockfunc(CURL *, curl_lock_data data, void *userptr) {
-    auto *m = (std::mutex *) userptr;
-    m[data].unlock();
-}
+    [[nodiscard]] coro::Task<Error<DnsError>> connect_socket(std::string hostname, SocketAddress peer);
 
-// Must be called only once!
-static CURLSH *init_curl_share() {
-    static std::mutex mtx[CURL_LOCK_DATA_LAST];
-    CURLSH *share = curl_share_init();
-    curl_share_setopt(share, CURLSHOPT_SHARE, CURL_LOCK_DATA_SSL_SESSION);
-    curl_share_setopt(share, CURLSHOPT_USERDATA, &mtx[0]);
-    curl_share_setopt(share, CURLSHOPT_LOCKFUNC, curl_share_lockfunc);
-    curl_share_setopt(share, CURLSHOPT_UNLOCKFUNC, curl_share_unlockfunc);
-    return share;
-}
+    std::unique_ptr<http::Http2Client> session;
+    Error<DnsError> session_error;
+};
 
-static CURLSH *get_curl_share() {
-    static UniquePtr<CURLSH, &curl_share_cleanup> curl_share(init_curl_share());
-    return curl_share.get();
-}
-
-static int verbose_callback(CURL *, curl_infotype type, char *data, size_t size, void *arg) {
-    auto *h = (DohUpstream::QueryHandle *) arg;
-    if (type == CURLINFO_TEXT) {
-        dbglog_id(h, "CURL: {}", ag::utils::trim(std::string_view{data, size}));
-    } else if (type == CURLINFO_HEADER_IN) {
-        dbglog_id(h, "CURL: < {}", ag::utils::trim(std::string_view{data, size}));
-    } else if (type == CURLINFO_HEADER_OUT) {
-        dbglog_id(h, "CURL: > {}", ag::utils::trim(std::string_view{data, size}));
-    }
-    return 0;
-}
-
-bool DohUpstream::QueryHandle::create_curl_handle(ConnectionPool *pool) {
-    CURL_ptr curl_ptr{curl_easy_init()};
-    if (curl_ptr == nullptr) {
-        this->error = make_error(DnsError::AE_CURL_ERROR, "Failed to init curl handle");
-        return false;
-    }
-
-    DohUpstream *doh_upstream = this->upstream;
-    ldns_buffer *raw_request = this->request.get();
-    long timeout_ms = (long) this->timeout.count();
-    this->resolved_addrs = doh_upstream->m_resolved;
-    CURL *curl = curl_ptr.get();
-    if (CURLcode e;
-            // clang-format off
-               CURLE_OK != (e = curl_easy_setopt(curl, CURLOPT_URL, doh_upstream->m_curlopt_url.c_str()))
-            || CURLE_OK != (e = curl_easy_setopt(curl, CURLOPT_NOPROGRESS, true))
-            || CURLE_OK != (e = curl_easy_setopt(curl, CURLOPT_TIMEOUT_MS, timeout_ms))
-            || CURLE_OK != (e = curl_easy_setopt(curl, CURLOPT_CONNECTTIMEOUT_MS, timeout_ms))
-            || CURLE_OK != (e = curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, write_callback))
-            || CURLE_OK != (e = curl_easy_setopt(curl, CURLOPT_WRITEDATA, this))
-            || CURLE_OK != (e = curl_easy_setopt(curl, CURLOPT_USERAGENT, nullptr))
-            || CURLE_OK != (e = curl_easy_setopt(curl, CURLOPT_POSTFIELDSIZE, ldns_buffer_position(raw_request)))
-            || CURLE_OK != (e = curl_easy_setopt(curl, CURLOPT_COPYPOSTFIELDS, ldns_buffer_at(raw_request, 0)))
-            || CURLE_OK != (e = curl_easy_setopt(curl, CURLOPT_HTTPHEADER, doh_upstream->m_request_headers.get()))
-            || CURLE_OK != (e = curl_easy_setopt(curl, CURLOPT_HTTP_VERSION, doh_upstream->m_curlopt_http_ver))
-            || CURLE_OK != (e = curl_easy_setopt(curl, CURLOPT_PRIVATE, this))
-            || CURLE_OK != (e = curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, true))
-            || CURLE_OK != (e = curl_easy_setopt(curl, CURLOPT_PROTOCOLS, CURLPROTO_HTTPS))
-            || CURLE_OK != (e = curl_easy_setopt(curl, CURLOPT_REDIR_PROTOCOLS, CURLPROTO_HTTPS))
-            || CURLE_OK != (e = curl_easy_setopt(curl, CURLOPT_SSL_CTX_FUNCTION, DohUpstream::ssl_callback))
-            || CURLE_OK != (e = curl_easy_setopt(curl, CURLOPT_SSL_CTX_DATA, this->upstream))
-            || CURLE_OK != (e = curl_easy_setopt(curl, CURLOPT_SSL_VERIFYPEER, false)) // We verify ourselves, see DohUpstream::ssl_callback
-            || CURLE_OK != (e = curl_easy_setopt(curl, CURLOPT_SSL_VERIFYHOST, false)) // We verify ourselves, see DohUpstream::ssl_callback
-            || CURLE_OK != (e = curl_easy_setopt(curl, CURLOPT_SSL_ENABLE_ALPN, true))
-            || CURLE_OK != (e = curl_easy_setopt(curl, CURLOPT_OPENSOCKETFUNCTION, curl_opensocket))
-            || CURLE_OK != (e = curl_easy_setopt(curl, CURLOPT_OPENSOCKETDATA, doh_upstream))
-            || CURLE_OK != (e = curl_easy_setopt(curl, CURLOPT_DEBUGFUNCTION, verbose_callback))
-            || CURLE_OK != (e = curl_easy_setopt(curl, CURLOPT_DEBUGDATA, this))
-            || CURLE_OK != (e = curl_easy_setopt(curl, CURLOPT_VERBOSE, (long) (log->is_enabled(LogLevel::LOG_LEVEL_DEBUG))))
-            || CURLE_OK != (e = curl_easy_setopt(curl, CURLOPT_SHARE, get_curl_share()))
-            || (doh_upstream->m_resolved != nullptr && CURLE_OK != (e = curl_easy_setopt(curl, CURLOPT_RESOLVE, this->resolved_addrs.get())))
-            // clang-format on
-    ) {
-        this->error = make_error(DnsError::AE_CURL_ERROR,
-                AG_FMT("Failed to set options on curl handle: {} (id={})", curl_easy_strerror(e), e));
-        return false;
-    }
-
-    cleanup_request();
-    this->pool = pool;
-    this->curl_handle = std::move(curl_ptr);
-    return true;
-}
-
-bool DohUpstream::QueryHandle::create_probe_curl_handle(ConnectionPool *pool, int curlopt_httpver) {
-    CURL_ptr curl_ptr{curl_easy_init()};
-    if (curl_ptr == nullptr) {
-        this->error = make_error(DnsError::AE_CURL_ERROR, "Failed to init curl handle");
-        return false;
-    }
-
-    DohUpstream *doh_upstream = this->upstream;
-    long timeout_ms = (long) this->timeout.count();
-    this->resolved_addrs = doh_upstream->m_resolved;
-    CURL *curl = curl_ptr.get();
-    if (CURLcode e;
-            // clang-format off
-               CURLE_OK != (e = curl_easy_setopt(curl, CURLOPT_URL, doh_upstream->m_curlopt_url.c_str()))
-            || CURLE_OK != (e = curl_easy_setopt(curl, CURLOPT_NOPROGRESS, true))
-            || CURLE_OK != (e = curl_easy_setopt(curl, CURLOPT_TIMEOUT_MS, timeout_ms))
-            || CURLE_OK != (e = curl_easy_setopt(curl, CURLOPT_CONNECTTIMEOUT_MS, timeout_ms))
-            || CURLE_OK != (e = curl_easy_setopt(curl, CURLOPT_HTTP_VERSION, curlopt_httpver))
-            || CURLE_OK != (e = curl_easy_setopt(curl, CURLOPT_PRIVATE, this))
-            || CURLE_OK != (e = curl_easy_setopt(curl, CURLOPT_PROTOCOLS, CURLPROTO_HTTPS))
-            || CURLE_OK != (e = curl_easy_setopt(curl, CURLOPT_SSL_CTX_FUNCTION, DohUpstream::ssl_callback))
-            || CURLE_OK != (e = curl_easy_setopt(curl, CURLOPT_SSL_CTX_DATA, this->upstream))
-            || CURLE_OK != (e = curl_easy_setopt(curl, CURLOPT_SSL_VERIFYPEER, false)) // We verify ourselves, see DohUpstream::ssl_callback
-            || CURLE_OK != (e = curl_easy_setopt(curl, CURLOPT_SSL_VERIFYHOST, false)) // We verify ourselves, see DohUpstream::ssl_callback
-            || CURLE_OK != (e = curl_easy_setopt(curl, CURLOPT_SSL_ENABLE_ALPN, true))
-            || CURLE_OK != (e = curl_easy_setopt(curl, CURLOPT_OPENSOCKETFUNCTION, curl_opensocket))
-            || CURLE_OK != (e = curl_easy_setopt(curl, CURLOPT_OPENSOCKETDATA, doh_upstream))
-            || CURLE_OK != (e = curl_easy_setopt(curl, CURLOPT_PREREQFUNCTION, curl_prereq))
-            || CURLE_OK != (e = curl_easy_setopt(curl, CURLOPT_PREREQDATA, this))
-            || CURLE_OK != (e = curl_easy_setopt(curl, CURLOPT_DEBUGFUNCTION, verbose_callback))
-            || CURLE_OK != (e = curl_easy_setopt(curl, CURLOPT_DEBUGDATA, this))
-            || CURLE_OK != (e = curl_easy_setopt(curl, CURLOPT_VERBOSE, (long) (log->is_enabled(LogLevel::LOG_LEVEL_DEBUG))))
-            || CURLE_OK != (e = curl_easy_setopt(curl, CURLOPT_CONNECT_ONLY, (long) true))
-            || CURLE_OK != (e = curl_easy_setopt(curl, CURLOPT_FORBID_REUSE, (long) true))
-            || (doh_upstream->m_resolved != nullptr && CURLE_OK != (e = curl_easy_setopt(curl, CURLOPT_RESOLVE, this->resolved_addrs.get())))
-            // clang-format on
-    ) {
-        this->error = make_error(DnsError::AE_CURL_ERROR,
-                AG_FMT("Failed to set options on curl handle: {} (id={})", curl_easy_strerror(e), e));
-        return false;
-    }
-
-    this->pool = pool;
-    this->curl_handle = std::move(curl_ptr);
-    return true;
-}
-
-bool DohUpstream::QueryHandle::set_up_proxy(const OutboundProxySettings *settings) {
-    static constexpr curl_proxytype AG_TO_CURL_PROXY_PROTOCOL[magic_enum::enum_count<OutboundProxyProtocol>()] = {
-#ifndef _WIN32
-            [(int) OutboundProxyProtocol::HTTP_CONNECT] =
-#endif
-                    CURLPROXY_HTTP,
-#ifndef _WIN32
-            [(int) OutboundProxyProtocol::HTTPS_CONNECT] =
-#endif
-                    CURLPROXY_HTTPS,
-#ifndef _WIN32
-            [(int) OutboundProxyProtocol::SOCKS4] =
-#endif
-                    CURLPROXY_SOCKS4,
-#ifndef _WIN32
-            [(int) OutboundProxyProtocol::SOCKS5] =
-#endif
-                    CURLPROXY_SOCKS5,
-#ifndef _WIN32
-            [(int) OutboundProxyProtocol::SOCKS5_UDP] =
-#endif
-                    CURLPROXY_SOCKS5,
+struct ag::dns::DohUpstream::Http3Connection : public ag::dns::DohUpstream::HttpConnection {
+    enum class State {
+        IDLE,
+        HANDSHAKING,
+        CONNECTED,
     };
 
-    CURL *curl = this->curl_handle.get();
-
-#define SETOPT_S(curl_, opt_, val_)                                                                                    \
-    do {                                                                                                               \
-        if (CURLcode e = curl_easy_setopt((curl_), (opt_), (val_)); e != CURLE_OK) {                                   \
-            this->error = make_error(                                                                                  \
-                    DnsError::AE_CURL_ERROR, make_error(e, AG_FMT("Failed to set option {} on curl handle", opt_)));   \
-            return false;                                                                                              \
-        }                                                                                                              \
-    } while (0)
-
-    SETOPT_S(curl, CURLOPT_PROXYTYPE, AG_TO_CURL_PROXY_PROTOCOL[(int) settings->protocol]);
-    SETOPT_S(curl, CURLOPT_PROXY, settings->address.c_str());
-    SETOPT_S(curl, CURLOPT_PROXYPORT, settings->port);
-
-    if (const auto &auth_info = settings->auth_info; auth_info.has_value()) {
-        SETOPT_S(curl, CURLOPT_PROXYUSERNAME, auth_info->username.c_str());
-        SETOPT_S(curl, CURLOPT_PROXYPASSWORD, auth_info->password.c_str());
+    explicit Http3Connection(DohUpstream *parent)
+            : HttpConnection(parent) {
     }
-
-    SETOPT_S(curl, CURLOPT_PROXY_SSL_VERIFYPEER, false); // We verify ourselves, see DohUpstream::ssl_callback
-    SETOPT_S(curl, CURLOPT_PROXY_SSL_VERIFYHOST, false); // We verify ourselves, see DohUpstream::ssl_callback
-
-#undef SETOPT_S
-
-    return true;
-}
-
-void DohUpstream::QueryHandle::cleanup_request() {
-    if (this->curl_handle) {
-        assert(this->pool);
-        assert(this->pool->handle);
-        CURLMcode perr [[maybe_unused]] =
-                curl_multi_remove_handle(this->pool->handle.get(), this->curl_handle.get());
-        assert(perr == CURLM_OK);
-
-        // FIXME-66691: CURL has an issue where after `curl_multi_remove_handle`
-        // ngtcp2/nghttp3 will retain a pointer to Curl_easy, which becomes dangling after `curl_easy_cleanup`.
-        // If we got here without the HTTP exchange completing normally, then BOOM!
-        // Instead, let's just leak a little memory until the upstream is destroyed.
-        // (CURL should not "send" another message for already completed handle).
-        // This works in conjunction with the CURL patch with nullchecks
-        // (`curl_multi_remove_handle` sets some pointers in Curl_easy which are used in nghttp3 callbacks to NULL).
-        if (this->upstream->m_curlopt_http_ver == CURL_HTTP_VERSION_3ONLY && !this->flags.test(QHF_RESPONDED)) {
-            this->upstream->m_curl_easy_graveyard.emplace_back(std::move(this->curl_handle));
+    ~Http3Connection() override {
+        if (shutdown_guard.expired()) {
             return;
         }
 
-        this->curl_handle.reset();
+        if (std::optional task = std::exchange(expiry_task, std::nullopt); task.has_value()) {
+            parent->m_config.loop.cancel(task.value());
+        }
     }
-}
 
-std::unique_ptr<DohUpstream::QueryHandle> DohUpstream::create_handle(const ldns_pkt *request, Millis timeout) const {
-    std::unique_ptr<QueryHandle> h = std::make_unique<QueryHandle>();
-    h->timeout = timeout;
-    h->log = &m_log;
-    h->upstream = (DohUpstream *) this;
-    h->request_id = ldns_pkt_id(request);
-    h->request.reset(ldns_buffer_new(REQUEST_BUFFER_INITIAL_CAPACITY));
-    ldns_status status = ldns_pkt2buffer_wire(h->request.get(), request);
-    if (status != LDNS_STATUS_OK) {
-        errlog_id(h, "Failed to serialize packet: {}", ldns_get_errorstr_by_id(status));
-        return nullptr;
-    }
-    // Set the ID of the outgoing packet to zero as per DoH spec.
-    *ldns_buffer_at(h->request.get(), 0) = 0;
-    *ldns_buffer_at(h->request.get(), 1) = 0;
-    return h;
-}
+    Http3Connection(const Http3Connection &) = delete;
+    Http3Connection &operator=(const Http3Connection &) = delete;
+    Http3Connection(Http3Connection &&) = delete;
+    Http3Connection &operator=(Http3Connection &&) = delete;
 
-static std::string_view get_host_port(std::string_view url) {
-    for (const auto &scheme : {DohUpstream::SCHEME_HTTPS, DohUpstream::SCHEME_H3}) {
+    [[nodiscard]] http::Version version() const override;
+    [[nodiscard]] coro::Task<Error<DnsError>> establish(std::string hostname, SocketAddress peer) override;
+    [[nodiscard]] Result<uint64_t, DnsError> submit_request(const http::Request &request) override;
+    Error<DnsError> reset_stream(uint64_t stream_id) override;
+    [[nodiscard]] Error<DnsError> flush() override;
+    [[nodiscard]] coro::Task<Error<DnsError>> drive_io() override;
+
+    [[nodiscard]] coro::Task<Error<DnsError>> connect_socket(std::string hostname, SocketAddress peer);
+    static void on_handshake_completed(void *arg);
+    static void on_expiry_update(void *arg, ag::Nanos period);
+    static int on_certificate_verify(X509_STORE_CTX *ctx, void *arg);
+
+    std::unique_ptr<http::Http3Client> session;
+    SocketAddress local{"0.0.0.0:0"};
+    SocketAddress remote;
+    std::optional<EventLoop::TaskId> expiry_task;
+    State state = State::IDLE;
+    Error<DnsError> session_error;
+};
+
+struct DecomposedUrl {
+    std::string_view authority;
+    uint16_t port;
+    std::string_view path;
+};
+
+using std::chrono::duration_cast;
+
+#define log_upstream(lvl_, self_, fmt_, ...) lvl_##log(g_logger, "[{}] " fmt_, (self_)->m_id, ##__VA_ARGS__)
+#define log_hconn(lvl_, self_, fmt_, ...)                                                                              \
+    lvl_##log(g_logger, "[{}] [{}-{}] " fmt_, (self_)->parent->m_id, (self_)->id,                                      \
+            ((self_)->version() == http::HTTP_2_0) ? "h2" : "h3", ##__VA_ARGS__)
+#define log_query(lvl_, hconn_, qid_, fmt_, ...)                                                                       \
+    lvl_##log(g_logger, "[{}] [{}-{}] [{}] " fmt_, (hconn_)->parent->m_id, (hconn_)->id,                               \
+            ((hconn_)->version() == http::HTTP_2_0) ? "h2" : "h3", qid_, ##__VA_ARGS__)
+
+static const ag::Logger g_logger("DOH upstream");
+static std::atomic<uint32_t> g_next_id = 0; // NOLINT(*-avoid-non-const-global-variables)
+
+static ag::Result<DecomposedUrl, ag::dns::Upstream::InitError> decompose_url(std::string_view url) {
+    std::string_view path;
+    for (const auto &scheme : {ag::dns::DohUpstream::SCHEME_HTTPS, ag::dns::DohUpstream::SCHEME_H3}) {
         if (!url.starts_with(scheme)) {
             continue;
         }
-        url.remove_prefix(scheme.length());
-        url = url.substr(0, url.find('/'));
+        auto split = ag::utils::split2_by(url.substr(scheme.length()), '/');
+        path = url.substr(scheme.length() + split[0].length());
+        url = split[0];
         break;
     }
-    return url;
+
+    path = path.empty() ? "/" : path;
+
+    ag::Result split = ag::utils::split_host_port(url);
+    if (split.has_error()) {
+        return make_error(ag::dns::Upstream::InitError::AE_INVALID_ADDRESS, split.error());
+    }
+
+    auto [host, port] = split.value();
+    if (host.empty()) {
+        return make_error(ag::dns::Upstream::InitError::AE_INVALID_ADDRESS, "Empty authority in URL");
+    }
+    if (port.empty()) {
+        return DecomposedUrl{
+                .authority = host,
+                .port = ag::dns::DEFAULT_DOH_PORT,
+                .path = path,
+        };
+    }
+
+    if (std::optional x = ag::utils::to_integer<uint16_t>(port); x.has_value()) {
+        return DecomposedUrl{
+                .authority = host,
+                .port = x.value(),
+                .path = path,
+        };
+    }
+
+    return make_error(ag::dns::Upstream::InitError::AE_INVALID_ADDRESS, AG_FMT("Invalid port number: {}", port));
 }
 
-static Result<std::string_view, Upstream::InitError> get_host_name(std::string_view url) {
-    auto split_result = utils::split_host_port(get_host_port(url));
-    if (split_result.has_error()) {
-        return make_error(Upstream::InitError::AE_INVALID_ADDRESS);
-    }
-    return split_result.value().first;
-}
+// NOLINTNEXTLINE(*-avoid-reference-coroutine-parameters)
+static ag::coro::Task<ag::Error<ag::dns::DnsError>> wait_timeout(ag::dns::EventLoop &loop, ag::Millis timeout) {
+    co_await loop.co_sleep(timeout);
+    co_return make_error(ag::dns::DnsError::AE_TIMED_OUT);
+};
 
-int DohUpstream::verify_callback(X509_STORE_CTX *ctx, void *arg) {
-    DohUpstream *upstream = (DohUpstream *) arg;
-
-    SSL *ssl = (SSL *) X509_STORE_CTX_get_ex_data(ctx, SSL_get_ex_data_X509_STORE_CTX_idx());
-    const char *sni = SSL_get_servername(ssl, TLSEXT_NAMETYPE_host_name);
-    tracelog(upstream->m_log, "{}(): SNI={}", __func__, (sni == nullptr) ? "null" : sni);
-
-    auto host = get_host_name(upstream->m_options.address);
-
-    if (const OutboundProxySettings *proxy_settings = upstream->m_config.socket_factory->get_outbound_proxy_settings();
-            proxy_settings != nullptr && proxy_settings->protocol == OutboundProxyProtocol::HTTPS_CONNECT
-            && proxy_settings->trust_any_certificate && !host.has_error() && (sni == nullptr || sni != host.value())) {
-        tracelog(upstream->m_log, "Trusting any proxy certificate as specified in settings");
-        return 1;
-    }
-
-    const CertificateVerifier *verifier = upstream->m_config.socket_factory->get_certificate_verifier();
-    if (verifier == nullptr) {
-        dbglog(upstream->m_log, "Cannot verify certificate due to verifier is not set");
-        return 0;
-    }
-
-    if (auto err = verifier->verify(ctx, host.value(), upstream->m_fingerprints)) {
-        dbglog(upstream->m_log, "Failed to verify certificate: {}", *err);
-        return 0;
-    }
-
-    tracelog(upstream->m_log, "Verified successfully");
-    return 1;
-}
-
-CURLcode DohUpstream::ssl_callback(CURL *, void *sslctx, void *arg) {
-    SSL_CTX *ctx = (SSL_CTX *) sslctx;
-    SSL_CTX_set_verify(ctx, SSL_VERIFY_PEER, nullptr);
-    SSL_CTX_set_cert_verify_callback(ctx, verify_callback, arg);
-#if 0
-    if (char *ssl_keylog_file = getenv("SSLKEYLOGFILE")) {
-        static UniquePtr<std::FILE, &std::fclose> handle{std::fopen(ssl_keylog_file, "a")};
-        SSL_CTX_set_keylog_callback(ctx,
-                [] (const SSL *, const char *line) {
-                    fprintf(handle.get(), "%s\n", line);
-                    fflush(handle.get());
-                });
-    }
-#endif
-    return CURLE_OK;
-}
-
-static Result<curl_slist_ptr, Upstream::InitError> create_resolved_hosts_list(std::string_view url, const IpAddress &addr) {
-    if (std::holds_alternative<std::monostate>(addr)) {
-        return (curl_slist_ptr)nullptr;
-    }
-
-    std::string_view host_port = get_host_port(url);
-    auto split_result = utils::split_host_port(host_port);
-    if (split_result.has_error()) {
-        make_error(Upstream::InitError::AE_INVALID_ADDRESS);
-    }
-    auto [host, port_str] = split_result.value();
-    uint16_t port = ag::utils::to_integer<uint16_t>(port_str).value_or(DEFAULT_DOH_PORT);
-
-    std::string entry = AG_FMT("{}:{}:{}", host, port, SocketAddress(addr, DEFAULT_DOH_PORT).host_str());
-    return curl_slist_ptr(curl_slist_append(nullptr, entry.c_str()));
-}
-
-DohUpstream::DohUpstream(const UpstreamOptions &opts, const UpstreamFactoryConfig &config,
-        std::vector<CertFingerprint> fingerprints)
+ag::dns::DohUpstream::DohUpstream(
+        const UpstreamOptions &opts, const UpstreamFactoryConfig &config, std::vector<CertFingerprint> fingerprints)
         : Upstream(opts, config)
-        , m_log("DOH upstream")
+        , m_id(g_next_id.fetch_add(1, std::memory_order_relaxed))
+        , m_request_template(http::HTTP_2_0, "GET")
+        , m_tls_session_cache(opts.address)
         , m_fingerprints(std::move(fingerprints)) {
-    static const CurlInitializer ensure_initialized;
+    m_request_template.scheme("https");
+    m_request_template.headers().put("accept", "application/dns-message");
 }
 
-Error<Upstream::InitError> DohUpstream::init() {
-    m_curlopt_url = m_options.address;
-    if (m_curlopt_url.starts_with(SCHEME_H3)) {
-        m_curlopt_url.replace(0, SCHEME_H3.size(), SCHEME_HTTPS);
-        m_curlopt_http_ver = CURL_HTTP_VERSION_3ONLY;
-    } else if (!config().enable_http3) {
-        m_curlopt_http_ver = CURL_HTTP_VERSION_2;
+ag::dns::DohUpstream::~DohUpstream() {
+    m_shutdown_guard.reset();
+}
+
+ag::Error<ag::dns::Upstream::InitError> ag::dns::DohUpstream::init() {
+    Result decomposed_url = decompose_url(m_options.address);
+    if (decomposed_url.has_error()) {
+        return decomposed_url.error();
     }
 
-    auto create_result = create_resolved_hosts_list(m_options.address, m_options.resolved_server_ip);
-    if (create_result.has_error()) {
-        return make_error(InitError::AE_INVALID_ADDRESS);
-    }
-    m_resolved = std::move(create_result.value());
+    auto &[hostname, port, path] = decomposed_url.value();
 
-    curl_slist *headers;
-    if (nullptr == (headers = curl_slist_append(nullptr, "Content-Type: application/dns-message"))
-            || nullptr == (headers = curl_slist_append(headers, "Accept: application/dns-message"))) {
-        return make_error(InitError::AE_CURL_HEADERS_INIT_FAILED);
-    }
-    m_request_headers.reset(headers);
-
-    if (!m_pool.init(this)) {
-        return make_error(InitError::AE_CURL_POOL_INIT_FAILED);
+    if (this->m_options.bootstrap.empty() && std::holds_alternative<std::monostate>(this->m_options.resolved_server_ip)
+            && !SocketAddress(hostname, port).valid()) {
+        return make_error(InitError::AE_EMPTY_BOOTSTRAP);
     }
 
-    if (m_resolved == nullptr) {
-        if (!m_options.bootstrap.empty() || SocketAddress(get_host_name(m_options.address).value(), 0).valid()) {
-            BootstrapperPtr bootstrapper = std::make_unique<Bootstrapper>(
-                    Bootstrapper::Params{get_host_port(m_options.address), DEFAULT_DOH_PORT, m_options.bootstrap,
-                            m_config.timeout, m_config, m_options.outbound_interface});
-            if (auto err = bootstrapper->init(); !err) {
-                m_bootstrapper = std::move(bootstrapper);
-            } else {
-                return make_error(InitError::AE_BOOTSTRAPPER_INIT_FAILED, err);
-            }
-        } else {
-            return make_error(InitError::AE_EMPTY_BOOTSTRAP);
-        }
+    std::string address;
+    if (auto resolved = ag::SocketAddress(m_options.resolved_server_ip, DEFAULT_DOH_PORT); resolved.valid()) {
+        address = resolved.host_str();
+    } else {
+        address = hostname;
     }
 
-    m_shutdown_guard = std::make_shared<bool>(true);
+    Bootstrapper &bootstrapper = m_bootstrapper.emplace(Bootstrapper::Params{
+            .address_string = address,
+            .default_port = port,
+            .bootstrap = m_options.bootstrap,
+            .timeout = m_config.timeout,
+            .upstream_config = m_config,
+            .outbound_interface = m_options.outbound_interface,
+    });
 
-    m_read_timer = Uv<uv_timer_t>::create_with_parent(this);
-    uv_timer_init(m_config.loop.handle(), m_read_timer->raw());
+    if (Error<Bootstrapper::BootstrapperError> err = bootstrapper.init()) {
+        return make_error(InitError::AE_EMPTY_BOOTSTRAP, std::move(err));
+    }
+
+    m_request_template.authority(std::string(hostname));
+    m_path = path;
+    log_upstream(dbg, this, "Prepared request template: {}", m_request_template);
+
+    if (m_options.address.starts_with(DohUpstream::SCHEME_H3)) {
+        m_http_version = http::HTTP_3_0;
+    } else if (!m_config.enable_http3) {
+        m_http_version = http::HTTP_2_0;
+    }
 
     return {};
 }
 
-DohUpstream::~DohUpstream() {
-    dbglog(m_log, "Destroying...");
-
-    if (auto id = m_reset_bypassed_proxy_connections_subscribe_id; id.has_value()) {
-        m_config.socket_factory->unsubscribe_from_reset_bypassed_proxy_connections_event(id.value());
-    }
-
-    cleanup_httpver_probe();
-
-    dbglog(m_log, "Stopping queries...");
-    this->stop_all_with_error(make_error(DnsError::AE_SHUTTING_DOWN));
-    m_pool.timer.reset();
-    dbglog(m_log, "Done");
-
-    m_check_proxy.reset();
-
-    m_read_timer.reset();
-
-    dbglog(m_log, "Destroyed");
-}
-
-struct DohUpstream::SocketHandle {
-    curl_socket_t fd = CURLM_BAD_SOCKET;
-    int action = 0;
-    UvPtr<uv_poll_t> poll_handle = nullptr;
-
-    ~SocketHandle() {
-        this->poll_handle.reset();
-    }
-
-    void init(curl_socket_t sock, int act, DohUpstream *upstream, ConnectionPool *pool) {
-        int what = ((act & CURL_POLL_IN) ? UV_READABLE : 0) | ((act & CURL_POLL_OUT) ? UV_WRITABLE : 0);
-
-        // clang-format off
-        int socktype;
-        ev_socklen_t socktype_len = sizeof(socktype);
-        if (0 == getsockopt(sock, SOL_SOCKET, SO_TYPE,
-#ifdef _WIN32
-                (char *) &socktype,
-#else
-                &socktype,
-#endif
-                &socktype_len) && socktype == SOCK_DGRAM) {
-            // Don't poll write on UDP sockets. It burns CPU cycles, while cURL doesn't even really need it.
-            what &= ~UV_WRITABLE;
-        }
-        // clang-format on
-
-        this->fd = sock;
-        this->action = act;
-        this->poll_handle = Uv<uv_poll_t>::create_with_parent(pool);
-        uv_poll_init_socket(upstream->config().loop.handle(), this->poll_handle->raw(), sock);
-        uv_poll_start(this->poll_handle->raw(), what, DohUpstream::on_poll_event);
-    }
-};
-
-int DohUpstream::on_pool_timer_event(CURLM *multi, long timeout_ms, ConnectionPool *pool) {
-    tracelog(pool->parent->m_log, "{}: Setting timeout to {}ms", __func__, timeout_ms);
-
-    UvPtr<uv_timer_t> &timer = pool->timer;
-    if (!timer) {
-        timer = Uv<uv_timer_t>::create_with_parent(pool);
-        uv_timer_init(pool->parent->config().loop.handle(), timer->raw());
-    }
-    if (timeout_ms < 0) {
-        uv_timer_stop(timer->raw());
-    } else {
-        uv_timer_start(timer->raw(), on_timeout, timeout_ms, 0);
-    }
-    return 0;
-}
-
-void DohUpstream::read_messages() {
-    CURLM *pool = m_pool.handle.get();
-    int queued;
-    CURLMsg *message;
-
-    std::weak_ptr<bool> guard = m_shutdown_guard;
-    while (!guard.expired() && nullptr != (message = curl_multi_info_read(pool, &queued))) {
-        if (message->msg != CURLMSG_DONE) {
-            continue;
-        }
-
-        QueryHandle *handle;
-        curl_easy_getinfo(message->easy_handle, CURLINFO_PRIVATE, &handle);
-        assert(message->easy_handle == handle->curl_handle.get());
-
-        if (message->data.result == CURLE_OK) {
-            tracelog_id(handle, "Got response {}", (void *) message->easy_handle);
-
-            handle->flags.set(QueryHandle::QHF_RESPONDED);
-
-            long response_code;
-            curl_easy_getinfo(message->easy_handle, CURLINFO_RESPONSE_CODE, &response_code);
-            if (response_code < 200 || response_code >= 300) {
-                handle->error =
-                        make_error(DnsError::AE_BAD_RESPONSE, AG_FMT("Got bad response status: {}", response_code));
-            }
-            char *content_type = nullptr;
-            curl_easy_getinfo(message->easy_handle, CURLINFO_CONTENT_TYPE, &content_type);
-            if (content_type == nullptr || 0 != strcmp(content_type, "application/dns-message")) {
-                handle->error = make_error(DnsError::AE_BAD_RESPONSE,
-                        AG_FMT("Got bad response content_type: {}", content_type ? content_type : "(null)"));
-            }
-            if (handle->response.empty()) {
-                handle->error = make_error(DnsError::AE_RESPONSE_PACKET_TOO_SHORT);
-            }
-        } else {
-            if (handle->flags.test(QueryHandle::QHF_PROXIED) && message->data.result == CURLE_COULDNT_CONNECT
-                    && m_config.socket_factory->is_proxy_available()) {
-                if (m_check_proxy != nullptr) {
-                    continue;
-                }
-                m_check_proxy = CheckProxyState::start(this, m_config.timeout);
-                if (m_check_proxy != nullptr) {
-                    dbglog_id(handle, "Failed to connect through proxy, checking connectivity with proxy server");
-                    continue;
-                }
-            }
-
-            auto curl_err = make_error(message->data.result);
-            switch (message->data.result) {
-            case CURLE_PEER_FAILED_VERIFICATION:
-                handle->error = make_error(DnsError::AE_HANDSHAKE_ERROR, curl_err);
-                break;
-            case CURLE_OPERATION_TIMEDOUT:
-                handle->error = make_error(DnsError::AE_TIMED_OUT, curl_err);
-                break;
-            default:
-                handle->error = make_error(DnsError::AE_CURL_ERROR, curl_err);
-                break;
-            }
-        }
-
-        handle->cleanup_request();
-
-        m_running_queue.erase(
-                std::remove(m_running_queue.begin(), m_running_queue.end(), handle), m_running_queue.end());
-
-        handle->complete();
-    }
-}
-
-void DohUpstream::on_poll_event(uv_poll_t *poll_handle, int status, int events) {
-    auto *pool = (ConnectionPool *) Uv<uv_poll_t>::parent_from_data(poll_handle->data);
-    if (!pool) {
-        return;
-    }
-    auto *upstream = pool->parent;
-    int action = ((events & UV_READABLE) ? CURL_CSELECT_IN : 0) | ((events & UV_WRITABLE) ? CURL_CSELECT_OUT : 0);
-
-    int still_running;
-    uv_os_fd_t fd;
-    uv_fileno((uv_handle_t *) poll_handle, &fd);
-    CURLMcode err = curl_multi_socket_action(pool->handle.get(), (curl_socket_t) fd, action, &still_running);
-    if (err != CURLM_OK) {
-        upstream->stop_all_with_error(make_error(DnsError::AE_CURL_ERROR, make_error(err)));
-        return;
-    }
-
-    upstream->read_messages();
-}
-
-void DohUpstream::on_timeout(uv_timer_t *timer) {
-    auto *pool = (ConnectionPool *) Uv<uv_timer_t>::parent_from_data(timer->data);
-    if (!pool) {
-        return;
-    }
-    auto *upstream = pool->parent;
-
-    int still_running;
-    CURLMcode err = curl_multi_socket_action(pool->handle.get(), CURL_SOCKET_TIMEOUT, 0, &still_running);
-    if (err != CURLM_OK) {
-        upstream->stop_all_with_error(make_error(DnsError::AE_CURL_ERROR, make_error(err)));
-        return;
-    }
-
-    upstream->read_messages();
-}
-
-int DohUpstream::on_socket_update(
-        CURL *handle, curl_socket_t socket, int what, ConnectionPool *pool, SocketHandle *socket_data) {
-    static constexpr std::string_view WHAT_STR[] = {"none", "IN", "OUT", "INOUT", "REMOVE"};
-    tracelog(pool->parent->m_log, "Socket callback: sock={} curl={} sockh={} what={}", socket, handle,
-            (void *) socket_data, WHAT_STR[what]);
-    if (socket <= 0) {
-        // Newer CURL calls this on connection failure with socket == 0 for some reason.
-        return 0;
-    }
-    if (what == CURL_POLL_REMOVE) {
-        tracelog(pool->parent->m_log, "Removing socket");
-        delete socket_data;
-        curl_multi_assign(pool->handle.get(), socket, nullptr);
-    } else {
-        auto *upstream = pool->parent;
-        if (what == CURL_POLL_IN) {
-            if (!upstream->m_running_queue.empty()) {
-                Millis read_timeout{upstream->m_config.timeout * 2};
-                uv_timer_start(upstream->m_read_timer->raw(), on_read_timeout, read_timeout.count(), 0);
-            } else {
-                uv_timer_stop(upstream->m_read_timer->raw());
-            }
-        }
-        if (socket_data == nullptr) {
-            tracelog(pool->parent->m_log, "Adding data: {}", WHAT_STR[what]);
-            SocketHandle *handle = new SocketHandle();
-            handle->init(socket, what, pool->parent, pool);
-            curl_multi_assign(pool->handle.get(), socket, handle);
-            tracelog(pool->parent->m_log, "New socket: {}", (void *) handle);
-        } else {
-            tracelog(pool->parent->m_log, "Changing action from {} to {}", WHAT_STR[socket_data->action], WHAT_STR[what]);
-            socket_data->init(socket, what, pool->parent, pool);
-        }
-    }
-    return 0;
-}
-
-auto DohUpstream::submit_request(QueryHandle *handle) {
-    struct Awaitable {
-        DohUpstream *self;
-        QueryHandle *handle;
-
-        bool await_ready() {
-            self->start_request(handle, false);
-            return handle->completed;
-        }
-
-        void await_suspend(std::coroutine_handle<> h) {
-            handle->caller = h;
-        }
-
-        void await_resume() {
-        }
-    };
-    tracelog_id(handle, "Submitting request");
-    return Awaitable{.self = this, .handle = handle};
-};
-
-void DohUpstream::start_request(QueryHandle *handle, bool ignore_proxy) {
-    if (m_curlopt_http_ver == CURL_HTTP_VERSION_NONE) {
-        assert(config().enable_http3);
-        assert(m_curlopt_http_ver != CURL_HTTP_VERSION_3ONLY);
-        // Start a "race" between HTTP/2 and HTTP/3, if not already running.
-        if (m_h2_probe_pool == nullptr) {
-            assert(m_h3_probe_pool == nullptr);
-            start_httpver_probe();
-        }
-        // Connection will be retried after the "race".
-        goto register_handle;
-    }
-
-    if (!handle->create_curl_handle(&m_pool)) {
-        // error is already set in `create_curl_handle`
-        handle->complete();
-        return;
-    }
-
-    if (utils::TransportProtocol proto = (m_curlopt_http_ver == CURL_HTTP_VERSION_3ONLY) ? utils::TP_UDP : utils::TP_TCP;
-            !ignore_proxy && m_config.socket_factory->should_route_through_proxy(proto)) {
-        if (m_check_proxy != nullptr) {
-            // will proceed after the proxy check
-            goto register_handle;
-        }
-
-        if (!handle->set_up_proxy(m_config.socket_factory->get_outbound_proxy_settings())) {
-            // error is already set in `set_up_proxy`
-            handle->complete();
-            return;
-        }
-        handle->flags.set(QueryHandle::QHF_PROXIED);
-    } else {
-        handle->flags.reset(QueryHandle::QHF_PROXIED);
-    }
-
-    if (CURLMcode e = curl_multi_add_handle(m_pool.handle.get(), handle->curl_handle.get()); e != CURLM_OK) {
-        handle->error = make_error(DnsError::AE_CURL_ERROR, "Failed to add request in pool", make_error(e));
-        handle->complete();
-        return;
-    }
-
-register_handle:
-    m_running_queue.emplace_back(handle);
-}
-
-void DohUpstream::stop_all_with_error(Error<DnsError> e) {
-    std::deque<QueryHandle *> queue;
-    std::swap(queue, m_running_queue);
-    for (auto i = queue.begin(); i != queue.end();) {
-        QueryHandle *handle = *i;
-        handle->error = e;
-        handle->cleanup_request();
-        i = queue.erase(i);
-        handle->complete();
-    }
-}
-
-void DohUpstream::retry_pending_queries(bool ignoreProxy) {
-    std::deque<QueryHandle *> queue;
-    queue.swap(m_running_queue);
-
-    for (QueryHandle *h : queue) {
-        this->start_request(h, ignoreProxy);
-        if (ignoreProxy) {
-            h->flags.set(QueryHandle::QHF_BYPASSED_PROXY);
-        }
-    }
-}
-
-void DohUpstream::reset_bypassed_proxy_queries() {
-    for (auto i = m_running_queue.begin(); i != m_running_queue.end();) {
-        QueryHandle *handle = *i;
-        if (!handle->flags.test(QueryHandle::QHF_BYPASSED_PROXY)) {
-            ++i;
-            continue;
-        }
-
-        handle->error = make_error(DnsError::AE_OUTBOUND_PROXY_ERROR, "Reset re-routed directly connection");
-        handle->cleanup_request();
-        i = m_running_queue.erase(i);
-        handle->complete();
-    }
-}
-
-void DohUpstream::on_read_timeout(uv_timer_t *timer) {
-    /**
-     * This timeout is needed to reset stall connection (so curl can't reuse it)
-     * see: https://github.com/AdguardTeam/DnsLibs/issues/200
-     */
-    auto *upstream = (DohUpstream *)Uv<uv_timer_t>::parent_from_data(timer->data);
-    if (!upstream) {
-        return;
-    }
-    upstream->stop_all_with_error(make_error(DnsError::AE_TIMED_OUT, "Stale connection timeout"));
-    upstream->m_pool.init(upstream);
-    dbglog(upstream->m_log, "Stale curl connection was restarted");
-}
-
-coro::Task<Upstream::ExchangeResult> DohUpstream::exchange(const ldns_pkt *request, const DnsMessageInfo *) {
-
+ag::coro::Task<ag::dns::Upstream::ExchangeResult> ag::dns::DohUpstream::exchange(
+        const ldns_pkt *request, const DnsMessageInfo *info) {
+    std::weak_ptr<bool> shutdown_guard = m_shutdown_guard;
     Millis timeout = m_config.timeout;
+    SteadyClock::time_point start_ts = SteadyClock::now();
+    uint32_t query_id = m_next_query_id++;
 
-    std::weak_ptr<bool> guard = m_shutdown_guard;
-    if (m_resolved == nullptr) {
-        Bootstrapper::ResolveResult resolve_result = co_await m_bootstrapper->get();
-        if (guard.expired()) {
+    ExchangeResult result;
+    while (true) {
+        switch (m_connection_state) {
+        case ConnectionState::IDLE: {
+            m_connection_state = ConnectionState::CONNECTING;
+
+            coro::run_detached([](std::weak_ptr<bool> shutdown_guard, DohUpstream *self,
+                                       SteadyClock::time_point start_ts) -> coro::Task<void> {
+                if (!shutdown_guard.expired()) {
+                    co_await self->drive_connection(
+                            self->m_config.timeout - duration_cast<Millis>(SteadyClock::now() - start_ts));
+                }
+                co_return;
+            }(shutdown_guard, this, start_ts));
+            break;
+        }
+        case ConnectionState::CONNECTING: {
+            ConnectAwaitable &awaitable =
+                    *m_connect_waiters.emplace(query_id, std::make_unique<ConnectAwaitable>()).first->second.get();
+            // NOLINTNEXTLINE(*-avoid-reference-coroutine-parameters)
+            auto task = [](ConnectAwaitable &awaitable) -> coro::Task<Error<DnsError>> {
+                auto x = co_await awaitable;
+                co_return std::move(x);
+            }(awaitable);
+            timeout = timeout - duration_cast<Millis>(SteadyClock::now() - start_ts);
+            auto error = co_await parallel::any_of<Error<DnsError>>(task, wait_timeout(m_config.loop, timeout));
+            if (shutdown_guard.expired()) {
+                result = make_error(DnsError::AE_SHUTTING_DOWN);
+                goto loop_exit;
+            }
+            m_connect_waiters.erase(query_id);
+            if (error != nullptr) {
+                result = std::move(error);
+                goto loop_exit;
+            }
+            break;
+        }
+        case ConnectionState::CONNECTED: {
+            timeout = timeout - duration_cast<Millis>(SteadyClock::now() - start_ts);
+            result = co_await exchange(timeout, request);
+            goto loop_exit;
+        }
+        }
+    }
+
+loop_exit:
+    if (shutdown_guard.expired()) {
+        co_return result;
+    }
+
+    co_await m_config.loop.co_submit();
+    if (shutdown_guard.expired()) {
+        co_return make_error(DnsError::AE_SHUTTING_DOWN);
+    }
+
+    co_return result;
+}
+
+ag::coro::Task<void> ag::dns::DohUpstream::drive_connection(Millis timeout) {
+    if (m_connection_state != ConnectionState::CONNECTING) {
+        ConnectionState state = std::exchange(m_connection_state, ConnectionState::IDLE);
+        close_connection(
+                make_error(DnsError::AE_INTERNAL_ERROR, AG_FMT("Unexpected state: {}", magic_enum::enum_name(state))));
+        co_return;
+    }
+
+    if (m_http_conn != nullptr) {
+        close_connection(make_error(DnsError::AE_INTERNAL_ERROR, "Unreachable"));
+        co_return;
+    }
+
+    std::array<std::unique_ptr<HttpConnection>, 2> connections;
+    coro::Task<Result<HttpConnection *, DnsError>> connector;
+    if (m_http_version == http::HTTP_3_0) {
+        connections[0] = std::make_unique<Http3Connection>(this);
+        connector = establish_connection(connections[0].get());
+    } else if (m_http_version == http::HTTP_2_0) {
+        connections[0] = std::make_unique<Http2Connection>(this);
+        connector = establish_connection(connections[0].get());
+    } else {
+        connections[0] = std::make_unique<Http2Connection>(this);
+        connections[1] = std::make_unique<Http3Connection>(this);
+        connector = establish_any_of_connections(connections[0].get(), connections[1].get());
+    }
+
+    std::weak_ptr<bool> shutdown_guard = m_shutdown_guard;
+    auto http_conn = co_await parallel::any_of<Result<HttpConnection *, DnsError>>(
+            connector, wait_timeout(m_config.loop, timeout));
+    if (shutdown_guard.expired()) {
+        co_return;
+    }
+
+    if (http_conn.has_error()) {
+        co_await m_config.loop.co_submit();
+        if (!shutdown_guard.expired()) {
+            close_connection(http_conn.error());
+        }
+        co_return;
+    }
+
+    m_connection_state = ConnectionState::CONNECTED;
+    m_http_conn = (connections[0].get() == http_conn.value()) ? std::move(connections[0]) : std::move(connections[1]);
+    m_request_template.version(m_http_conn->version());
+
+    for (auto &[_, waiter] : std::exchange(m_connect_waiters, {})) {
+        waiter->notify_result(nullptr);
+    }
+
+    Error<DnsError> error = co_await m_http_conn->drive_io();
+    if (shutdown_guard.expired()) {
+        co_return;
+    }
+
+    co_await m_config.loop.co_submit();
+    if (shutdown_guard.expired()) {
+        co_return;
+    }
+
+    close_connection(error);
+    co_return;
+}
+
+ag::coro::Task<ag::Result<ag::dns::DohUpstream::HttpConnection *, ag::dns::DnsError>>
+ag::dns::DohUpstream::establish_connection(HttpConnection *http_conn) {
+    std::weak_ptr<bool> shutdown_guard = m_shutdown_guard;
+    log_hconn(trace, http_conn, "Bootstrapping...");
+    Bootstrapper::ResolveResult resolved = co_await m_bootstrapper->get(); // NOLINT(*-unchecked-optional-access)
+    if (resolved.error) {
+        co_return make_error(DnsError::AE_BOOTSTRAP_ERROR, resolved.error);
+    }
+    if (resolved.addresses.empty()) {
+        co_return make_error(DnsError::AE_BOOTSTRAP_ERROR, "Empty address list");
+    }
+    if (shutdown_guard.expired()) {
+        co_return make_error(DnsError::AE_SHUTTING_DOWN);
+    }
+    log_hconn(trace, http_conn, "Bootstrapped");
+
+    const SocketAddress &peer = resolved.addresses.at(0);
+    log_hconn(trace, http_conn, "Connecting to {}...", peer.str());
+    std::string_view hostname =
+            decompose_url(m_options.address).value().authority; // was validated during initialization
+    Error<DnsError> error = co_await http_conn->establish(std::string(hostname), peer);
+    if (shutdown_guard.expired()) {
+        co_return make_error(DnsError::AE_SHUTTING_DOWN);
+    }
+
+    co_await m_config.loop.co_submit();
+    if (shutdown_guard.expired()) {
+        co_return make_error(DnsError::AE_SHUTTING_DOWN);
+    }
+
+    if (error != nullptr) {
+        if (error->value() == DnsError::AE_SOCKET_ERROR) {
+            m_bootstrapper->remove_resolved(peer); // NOLINT(*-unchecked-optional-access)
+        }
+        co_return error;
+    }
+    log_hconn(trace, http_conn, "Connected");
+    co_return http_conn;
+}
+
+ag::coro::Task<ag::Result<ag::dns::DohUpstream::HttpConnection *, ag::dns::DnsError>>
+ag::dns::DohUpstream::establish_any_of_connections(HttpConnection *left, HttpConnection *right) {
+    std::array<Error<DnsError>, 2> errors;
+
+    std::optional http_conn = co_await parallel::any_of_cond<Result<HttpConnection *, DnsError>>(
+            // NOLINTNEXTLINE(*-avoid-reference-coroutine-parameters)
+            [&](const Result<HttpConnection *, DnsError> &result) {
+                if (result.has_error()) {
+                    // NOLINTNEXTLINE(*-pro-bounds-constant-array-index)
+                    errors[(errors[0] == nullptr) ? 0 : 1] = result.error();
+                    return false;
+                }
+                return true;
+            },
+            establish_connection(left), establish_connection(right));
+
+    if (!http_conn.has_value()) {
+        co_return make_error(DnsError::AE_HANDSHAKE_ERROR,
+                AG_FMT("None of the protocols have connected successfully.\nFirst error: '{}'\nSecond error: '{}'",
+                        (errors[0] != nullptr) ? errors[0]->str() : "(null)",
+                        (errors[1] != nullptr) ? errors[1]->str() : "(null)"));
+    }
+
+    log_hconn(dbg, **http_conn, "Selected protocol");
+
+    co_return http_conn.value();
+}
+
+ag::coro::Task<ag::dns::Upstream::ExchangeResult> ag::dns::DohUpstream::exchange(
+        Millis timeout, const ldns_pkt *request) {
+    std::weak_ptr<bool> shutdown_guard = m_shutdown_guard;
+
+    Result stream_id = send_request(request);
+    if (stream_id.has_error()) {
+        co_return stream_id.error();
+    }
+
+    uint16_t query_id = ldns_pkt_id(request);
+    log_query(dbg, m_http_conn, query_id, "Assigned stream id: {}", stream_id.value());
+
+    auto result = co_await parallel::any_of<ExchangeResult>(
+            wait_for_reply(stream_id.value(), query_id), wait_timeout(m_config.loop, timeout));
+    if (shutdown_guard.expired()) {
+        co_return make_error(DnsError::AE_SHUTTING_DOWN);
+    }
+
+    if (result.has_error() && result.error()->value() == DnsError::AE_TIMED_OUT && m_http_conn != nullptr) {
+        m_http_conn->reset_stream(stream_id.value());
+    }
+
+    m_streams.erase(stream_id.value());
+    co_return result;
+}
+
+ag::coro::Task<ag::dns::Upstream::ExchangeResult> ag::dns::DohUpstream::wait_for_reply(
+        uint64_t stream_id, uint16_t query_id) {
+    std::weak_ptr<bool> shutdown_guard = m_shutdown_guard;
+    HttpAwaitable *awaitable =
+            m_streams.emplace(stream_id, std::make_unique<HttpAwaitable>(query_id)).first->second.get();
+
+    ExchangeResult exchange_result;
+    while (true) {
+        HttpAwaitable::Result await_result = co_await *awaitable;
+        if (shutdown_guard.expired()) {
             co_return make_error(DnsError::AE_SHUTTING_DOWN);
         }
-        if (resolve_result.error) {
-            co_return make_error(DnsError::AE_BOOTSTRAP_ERROR, resolve_result.error);
-        }
-        assert(!resolve_result.addresses.empty());
-
-        Millis resolve_time = duration_cast<Millis>(resolve_result.time_elapsed);
-        if (m_config.timeout < resolve_time) {
-            co_return make_error(DnsError::AE_TIMED_OUT,
-                    AG_FMT("DNS server name resolving took too much time: {}us", resolve_result.time_elapsed.count()));
-        }
-        timeout = m_config.timeout - resolve_time;
-
-        std::string entry;
-        for (const SocketAddress &address : resolve_result.addresses) {
-            assert(address.valid());
-
-            std::string addr = address.str();
-            tracelog(m_log, "Server address: {}", addr);
-
-            auto split_result = utils::split_host_port(addr);
-            if (split_result.has_error()) {
-                co_return make_error(DnsError::AE_INTERNAL_ERROR, split_result.error());
+        if (await_result.has_error()) {
+            if (auto node = m_streams.extract(stream_id); !node.empty()) {
+                m_http_conn->reset_stream(stream_id);
             }
-            auto [ip, port] = split_result.value();
-            std::string_view host = get_host_name(m_options.address).value();
-            if (entry.empty()) {
-                entry = AG_FMT("{}:{}:{}", host, port, ip);
-            } else {
-                entry = AG_FMT("{},{}", entry, ip);
-            }
+            exchange_result = make_error(DnsError::AE_EXCHANGE_ERROR, await_result.error());
+            goto loop_exit;
         }
-        m_resolved = curl_slist_ptr(curl_slist_append(nullptr, entry.c_str()));
-        tracelog(m_log, "Resolved server for curl: {}", entry);
+
+        if (auto *response = std::get_if<http::Response>(&await_result.value()); response != nullptr) {
+            int status = response->status_code();
+            if (status == 200) { // NOLINT(*-magic-numbers)
+                continue;
+            }
+            if (auto node = m_streams.extract(stream_id); !node.empty()) {
+                m_http_conn->reset_stream(stream_id);
+            }
+            exchange_result = make_error(DnsError::AE_EXCHANGE_ERROR, AG_FMT("Bad response status: {}", status));
+            goto loop_exit;
+        }
+
+        auto reply = std::move(std::get<ldns_pkt_ptr>(await_result.value()));
+        ldns_pkt_set_id(reply.get(), query_id);
+        exchange_result = std::move(reply);
+        goto loop_exit;
     }
 
-    std::unique_ptr<QueryHandle> handle = create_handle(request, timeout);
-    if (handle == nullptr) {
-        co_return make_error(DnsError::AE_INTERNAL_ERROR, "Failed to create request handle");
+loop_exit:
+    co_await m_config.loop.co_submit();
+    if (shutdown_guard.expired()) {
+        co_return make_error(DnsError::AE_SHUTTING_DOWN);
     }
 
-    tracelog_id(handle, "Started");
+    co_return exchange_result;
+}
 
-    if (!uv_is_active((uv_handle_t *) m_read_timer->raw())) {
-        Millis read_timeout{m_config.timeout * 2};
-        uv_timer_start(m_read_timer->raw(), on_read_timeout, read_timeout.count(), 0);
+ag::Result<uint64_t, ag::dns::DnsError> ag::dns::DohUpstream::send_request(const ldns_pkt *query) {
+    ldns_buffer_ptr buffer{ldns_buffer_new(REQUEST_BUFFER_INITIAL_CAPACITY)};
+    if (ldns_status status = ldns_pkt2buffer_wire(buffer.get(), query); status != LDNS_STATUS_OK) {
+        return make_error(DnsError::AE_ENCODE_ERROR, AG_FMT("{} ({})", ldns_get_errorstr_by_id(status), status));
     }
-    Error<DnsError> err;
-    ldns_pkt *response = nullptr;
-    co_await handle->upstream->submit_request(handle.get());
+
+    // https://datatracker.ietf.org/doc/html/rfc8484#section-4.1
+    // In order to maximize HTTP cache friendliness, DoH clients using media
+    // formats that include the ID field from the DNS message header, such
+    // as "application/dns-message", SHOULD use a DNS ID of 0 in every DNS
+    // request.
+    *ldns_buffer_at(buffer.get(), 0) = 0;
+    *ldns_buffer_at(buffer.get(), 1) = 0;
+
+    http::Request request = m_request_template;
+    request.path(AG_FMT("{}?dns={}", m_path,
+            encode_to_base64(
+                    {ldns_buffer_at(buffer.get(), 0), ldns_buffer_position(buffer.get())}, /*url_safe*/ true)));
+
+    log_query(trace, m_http_conn, ldns_pkt_id(query), "Sending request: {}", request);
+
+    Result stream_id = m_http_conn->submit_request(request);
+    if (stream_id.has_error()) {
+        return make_error(DnsError::AE_INTERNAL_ERROR, stream_id.error());
+    }
+
+    if (m_connect_waiters.empty()) {
+        if (Error<DnsError> error = m_http_conn->flush(); error != nullptr) {
+            m_http_conn->reset_stream(stream_id.value());
+            return make_error(DnsError::AE_INTERNAL_ERROR, std::move(error));
+        }
+    }
+
+    return stream_id;
+}
+
+void ag::dns::DohUpstream::close_connection(const Error<DnsError> &error) {
+    m_connection_state = ConnectionState::IDLE;
+    m_http_conn.reset();
+    cancel_all(error);
+}
+
+void ag::dns::DohUpstream::cancel_all(const Error<DnsError> &error) {
+    auto conn_waiters = std::exchange(m_connect_waiters, {});
+    auto http_streams = std::exchange(m_streams, {});
+
+    for (auto &[_, waiter] : conn_waiters) {
+        waiter->notify_result(error);
+    }
+
+    for (auto &[_, waiter] : http_streams) {
+        waiter->notify_error(error);
+    }
+}
+
+void ag::dns::DohUpstream::HttpConnection::on_response(void *arg, uint64_t stream_id, http::Response response) {
+    auto *self = (HttpConnection *) arg;
+    DohUpstream *upstream = self->parent;
+
+    auto iter = upstream->m_streams.find(stream_id);
+    if (iter == upstream->m_streams.end()) {
+        log_hconn(dbg, self, "Stream not found: {}", stream_id);
+        upstream->m_http_conn->reset_stream(stream_id);
+        return;
+    }
+
+    HttpAwaitable *awaitable = iter->second.get();
+    log_query(dbg, self, awaitable->query_id, "Received response: {}", response);
+
+    awaitable->notify_response(std::move(response));
+}
+
+void ag::dns::DohUpstream::HttpConnection::on_body(void *arg, uint64_t stream_id, Uint8View chunk) {
+    auto *self = (HttpConnection *) arg;
+    DohUpstream *upstream = self->parent;
+
+    auto iter = upstream->m_streams.find(stream_id);
+    if (iter == upstream->m_streams.end()) {
+        log_hconn(dbg, self, "Stream not found: {}", stream_id);
+        self->reset_stream(stream_id);
+        return;
+    }
+
+    HttpAwaitable *awaitable = iter->second.get();
+    log_query(dbg, self, awaitable->query_id, "Received response body: {} bytes", chunk.length());
+
+    awaitable->reply_buffer.insert(awaitable->reply_buffer.end(), chunk.begin(), chunk.end());
+}
+
+void ag::dns::DohUpstream::HttpConnection::on_stream_read_finished(void *arg, uint64_t stream_id) {
+    auto *self = (HttpConnection *) arg;
+    DohUpstream *upstream = self->parent;
+
+    auto iter = upstream->m_streams.find(stream_id);
+    if (iter == upstream->m_streams.end()) {
+        log_hconn(dbg, self, "Stream not found: {}", stream_id);
+        upstream->m_http_conn->reset_stream(stream_id);
+        return;
+    }
+
+    HttpAwaitable *awaitable = iter->second.get();
+    log_query(dbg, self, awaitable->query_id, "Received fin");
+
+    ldns_pkt *reply = nullptr;
+    if (ldns_status status = ldns_wire2pkt(&reply, awaitable->reply_buffer.data(), awaitable->reply_buffer.size());
+            status != LDNS_STATUS_OK) {
+        constexpr size_t MAX_LOG_DUMP_LENGTH = 256;
+        log_query(dbg, self, awaitable->query_id, "Failed to decode response: {}{}",
+                utils::encode_to_hex({awaitable->reply_buffer.data(),
+                        std::min(MAX_LOG_DUMP_LENGTH, awaitable->reply_buffer.size())}),
+                (MAX_LOG_DUMP_LENGTH < awaitable->reply_buffer.size()) ? "...<truncated>..." : "");
+        awaitable->notify_error(make_error(DnsError::AE_DECODE_ERROR, ldns_get_errorstr_by_id(status)));
+        return;
+    }
+
+    awaitable->notify_reply(ldns_pkt_ptr{reply});
+}
+
+void ag::dns::DohUpstream::HttpConnection::on_stream_closed(void *arg, uint64_t stream_id, Error<DnsError> error) {
+    auto *self = (HttpConnection *) arg;
+    DohUpstream *upstream = self->parent;
+
+    auto iter = upstream->m_streams.find(stream_id);
+    if (iter == upstream->m_streams.end()) {
+        log_hconn(dbg, self, "Stream not found: {}", stream_id);
+        self->reset_stream(stream_id);
+        return;
+    }
+
+    HttpAwaitable *awaitable = iter->second.get();
+    awaitable->notify_error(std::move(error));
+}
+
+void ag::dns::DohUpstream::HttpConnection::on_close(void *arg, Error<DnsError> error) {
+    auto *self = (HttpConnection *) arg;
+    DohUpstream *upstream = self->parent;
+
+    std::weak_ptr<bool> shutdown_guard = self->shutdown_guard;
+    upstream->m_config.loop.submit(
+            [upstream, error = std::move(error), shutdown_guard = std::move(shutdown_guard)]() mutable {
+                if (!shutdown_guard.expired()) {
+                    upstream->close_connection(error);
+                }
+            });
+}
+
+void ag::dns::DohUpstream::HttpConnection::on_output(void *arg, Uint8View chunk) {
+    auto *self = (HttpConnection *) arg;
+    DohUpstream *upstream = self->parent;
+
+    if (Error<SocketError> error = self->io->send(chunk); // NOLINT(*-unchecked-optional-access)
+            error != nullptr && upstream->m_connection_state != ConnectionState::IDLE) {
+        std::weak_ptr<bool> shutdown_guard = self->shutdown_guard;
+        upstream->m_config.loop.submit([upstream, e = std::move(error), shutdown_guard = std::move(shutdown_guard)]() {
+            if (!shutdown_guard.expired()) {
+                upstream->close_connection(make_error(DnsError::AE_EXCHANGE_ERROR, e));
+            }
+        });
+    }
+}
+
+ag::dns::DohUpstream::HttpAwaitable::HttpAwaitable(uint16_t query_id)
+        : query_id(query_id) {
+}
+
+bool ag::dns::DohUpstream::HttpAwaitable::await_ready() {
+    return response.has_value() || reply != nullptr || error != nullptr;
+}
+
+void ag::dns::DohUpstream::HttpAwaitable::await_suspend(std::coroutine_handle<> h) {
+    handle = h;
+}
+
+ag::dns::DohUpstream::HttpAwaitable::Result ag::dns::DohUpstream::HttpAwaitable::await_resume() {
+    if (error != nullptr) {
+        return std::exchange(error, nullptr);
+    }
+    if (response.has_value()) {
+        return std::exchange(response, std::nullopt).value(); // NOLINT(*-unchecked-optional-access)
+    }
+    if (reply != nullptr) {
+        return std::exchange(reply, nullptr);
+    }
+    return error;
+}
+
+void ag::dns::DohUpstream::HttpAwaitable::notify_response(http::Response r) {
+    assert(state == WAITING_RESPONSE_HEADERS);
+
+    if (r.status_code() == 200) { // NOLINT(*-magic-numbers)
+        state = WAITING_RESPONSE_BODY;
+    } else {
+        state = DONE;
+    }
+
+    response.emplace(std::move(r));
+    handle.resume();
+}
+
+void ag::dns::DohUpstream::HttpAwaitable::notify_reply(ldns_pkt_ptr r) {
+    if (std::exchange(state, DONE) != WAITING_RESPONSE_BODY) {
+        return;
+    }
+
+    reply = std::move(r);
+    handle.resume();
+}
+
+void ag::dns::DohUpstream::HttpAwaitable::notify_error(Error<DnsError> e) {
+    if (std::exchange(state, DONE) != DONE) {
+        error = std::move(e);
+        handle.resume();
+    }
+}
+
+ag::http::Version ag::dns::DohUpstream::Http2Connection::version() const {
+    return http::HTTP_2_0;
+}
+
+ag::coro::Task<ag::Error<ag::dns::DnsError>> ag::dns::DohUpstream::Http2Connection::establish(
+        std::string hostname, SocketAddress peer) {
+    if (io.has_value() || session != nullptr) {
+        co_return make_error(DnsError::AE_INTERNAL_ERROR, "Unreachable");
+    }
+
+    Error<DnsError> error = co_await connect_socket(std::move(hostname), peer);
+    if (error != nullptr) {
+        co_return error;
+    }
+
+    Result client = http::Http2Client::make(http::Http2Settings{},
+            http::Http2Client::Callbacks{
+                    .arg = this,
+                    .on_response =
+                            [](void *arg, uint32_t stream_id, http::Response response) {
+                                on_response(arg, stream_id, std::move(response));
+                            },
+                    .on_body =
+                            [](void *arg, uint32_t stream_id, Uint8View chunk) {
+                                on_body(arg, stream_id, chunk);
+                            },
+                    .on_stream_read_finished =
+                            [](void *arg, uint32_t stream_id) {
+                                on_stream_read_finished(arg, stream_id);
+                            },
+                    .on_stream_closed =
+                            [](void *arg, uint32_t stream_id, nghttp2_error_code error_code) {
+                                on_stream_closed(arg, stream_id,
+                                        make_error(DnsError::AE_EXCHANGE_ERROR, nghttp2_strerror(error_code)));
+                            },
+                    .on_close =
+                            [](void *arg, nghttp2_error_code error_code) {
+                                on_close(arg, make_error(DnsError::AE_EXCHANGE_ERROR, nghttp2_strerror(error_code)));
+                            },
+                    .on_output = on_output,
+                    .on_data_sent =
+                            [](void *arg, uint32_t stream_id, size_t n) {
+                                auto *self = (Http2Connection *) arg;
+                                self->session->consume_stream(stream_id, n);
+                            },
+            });
+    if (client.has_error()) {
+        co_return make_error(DnsError::AE_INTERNAL_ERROR, client.error());
+    }
+
+    session = std::move(client.value());
+    co_return {};
+}
+
+ag::Result<uint64_t, ag::dns::DnsError> ag::dns::DohUpstream::Http2Connection::submit_request(
+        const http::Request &request) {
+    Result stream_id = session->submit_request(request, /*eof=*/true);
+    if (stream_id.has_error()) {
+        return make_error(DnsError::AE_INTERNAL_ERROR, stream_id.error());
+    }
+    return stream_id.value();
+}
+
+ag::Error<ag::dns::DnsError> ag::dns::DohUpstream::Http2Connection::reset_stream(uint64_t stream_id) {
+    if (Error<http::Http2Error> error = session->reset_stream(stream_id, NGHTTP2_CANCEL); error != nullptr) {
+        return make_error(DnsError::AE_INTERNAL_ERROR, std::move(error));
+    }
+    return {};
+}
+
+ag::Error<ag::dns::DnsError> ag::dns::DohUpstream::Http2Connection::flush() {
+    if (Error<http::Http2Error> error = session->flush(); error != nullptr) {
+        return make_error(DnsError::AE_INTERNAL_ERROR, std::move(error));
+    }
+    return {};
+}
+
+ag::coro::Task<ag::Error<ag::dns::DnsError>> ag::dns::DohUpstream::Http2Connection::drive_io() {
+    std::weak_ptr<bool> guard = shutdown_guard;
+    Error<SocketError> error = co_await io->receive( // NOLINT(*-unchecked-optional-access)
+            AioSocket::OnReadCallback{
+                    .func = [](void *arg, Uint8View data) -> bool {
+                        auto *self = (Http2Connection *) arg;
+                        if (Result r = self->session->input(data); r.has_error()) {
+                            self->session_error = make_error(DnsError::AE_INTERNAL_ERROR, r.error());
+                            return false;
+                        }
+                        if (Error<http::Http2Error> error = self->session->flush(); error != nullptr) {
+                            self->session_error = make_error(DnsError::AE_INTERNAL_ERROR, std::move(error));
+                            return false;
+                        }
+                        return true;
+                    },
+                    .arg = this,
+            },
+            std::nullopt);
+    if (guard.expired()) {
+        co_return make_error(DnsError::AE_SHUTTING_DOWN);
+    }
+    if (session_error != nullptr) {
+        co_return make_error(DnsError::AE_EXCHANGE_ERROR, std::exchange(session_error, nullptr));
+    }
+    if (error != nullptr) {
+        co_return make_error(DnsError::AE_SOCKET_ERROR, std::move(error));
+    }
+
+    co_return make_error(DnsError::AE_INTERNAL_ERROR, "Unreachable");
+}
+
+ag::coro::Task<ag::Error<ag::dns::DnsError>> ag::dns::DohUpstream::Http2Connection::connect_socket(
+        std::string hostname, SocketAddress peer) {
+    AioSocket &socket = io.emplace(parent->make_secured_socket(utils::TP_TCP,
+            SocketFactory::SecureSocketParameters{
+                    .session_cache = &parent->m_tls_session_cache,
+                    .server_name = std::move(hostname),
+                    .alpn = {&NGHTTP2_PROTO_ALPN[1]},
+                    .fingerprints = parent->m_fingerprints,
+            }));
+
+    log_hconn(dbg, this, "{}", peer.str());
+    std::weak_ptr<bool> guard = shutdown_guard;
+    Error<SocketError> err = co_await socket.connect(AioSocket::ConnectParameters{
+            .loop = &parent->m_config.loop,
+            .peer = peer,
+    });
+    if (guard.expired()) {
+        co_return make_error(DnsError::AE_SHUTTING_DOWN);
+    }
+    if (err != nullptr) {
+        io.reset();
+        co_return make_error(DnsError::AE_SOCKET_ERROR, err);
+    }
+
+    co_return {};
+}
+
+ag::http::Version ag::dns::DohUpstream::Http3Connection::version() const {
+    return http::HTTP_3_0;
+}
+
+ag::coro::Task<ag::Error<ag::dns::DnsError>> ag::dns::DohUpstream::Http3Connection::establish(
+        std::string hostname, SocketAddress peer) {
+    if (io.has_value() || session != nullptr) {
+        co_return make_error(DnsError::AE_INTERNAL_ERROR, "Unreachable");
+    }
+
+    bssl::UniquePtr<SSL_CTX> ssl_ctx{SSL_CTX_new(TLS_client_method())};
+    if (ssl_ctx == nullptr) {
+        co_return make_error(DnsError::AE_INTERNAL_ERROR, ERR_error_string(ERR_get_error(), nullptr));
+    }
+    SSL_CTX_set_min_proto_version(ssl_ctx.get(), TLS1_3_VERSION);
+    SSL_CTX_set_max_proto_version(ssl_ctx.get(), TLS1_3_VERSION);
+    SSL_CTX_set_verify(ssl_ctx.get(), SSL_VERIFY_NONE, nullptr);
+    SSL_CTX_set_cert_verify_callback(ssl_ctx.get(), on_certificate_verify, this);
+    TlsSessionCache::prepare_ssl_ctx(ssl_ctx.get());
+    if (0 != ngtcp2_crypto_boringssl_configure_client_context(ssl_ctx.get())) {
+        co_return make_error(DnsError::AE_INTERNAL_ERROR, "Couldn't configure SSL object for QUIC");
+    }
+
+    UniquePtr<SSL, &SSL_free> ssl(SSL_new(ssl_ctx.get()));
+    static constexpr std::string_view ALPN = NGHTTP3_ALPN_H3;
+    if (0 != SSL_set_alpn_protos(ssl.get(), (uint8_t *) ALPN.data(), ALPN.size())) {
+        co_return make_error(DnsError::AE_INTERNAL_ERROR, "Couldn't configure ALPN");
+    }
+
+    SSL_set_tlsext_host_name(ssl.get(), hostname.c_str());
+    SSL_set_connect_state(ssl.get());
+
+    if (Error<DnsError> error = co_await connect_socket(std::move(hostname), peer); error != nullptr) {
+        co_return error;
+    }
+
+    Result client = http::Http3Client::make(http::Http3Settings{},
+            http::Http3Client::Callbacks{
+                    .arg = this,
+                    .on_handshake_completed = on_handshake_completed,
+                    .on_response = on_response,
+                    .on_body = on_body,
+                    .on_stream_read_finished = on_stream_read_finished,
+                    .on_stream_closed =
+                            [](void *arg, uint64_t stream_id, int err) {
+                                on_stream_closed(arg, stream_id,
+                                        make_error(DnsError::AE_EXCHANGE_ERROR, AG_FMT("Stream closed: 0x{:x}", err)));
+                            },
+                    .on_close =
+                            [](void *arg, uint64_t err) {
+                                on_close(arg,
+                                        make_error(DnsError::AE_EXCHANGE_ERROR, AG_FMT("Session closed: 0x{:x}", err)));
+                            },
+                    .on_output =
+                            [](void *arg, const http::QuicNetworkPath &, Uint8View chunk) {
+                                on_output(arg, chunk);
+                            },
+                    .on_data_sent =
+                            [](void *arg, uint64_t stream_id, size_t n) {
+                                auto *self = (Http3Connection *) arg;
+                                self->session->consume_stream(stream_id, n);
+                            },
+                    .on_expiry_update = on_expiry_update,
+            },
+            http::QuicNetworkPath{
+                    .local = local.c_sockaddr(),
+                    .local_len = local.c_socklen(),
+                    .remote = remote.c_sockaddr(),
+                    .remote_len = remote.c_socklen(),
+            },
+            std::move(ssl));
+    if (client.has_error()) {
+        co_return make_error(DnsError::AE_INTERNAL_ERROR, client.error());
+    }
+    session = std::move(client.value());
+    state = State::HANDSHAKING;
+
+    if (Error<http::Http3Error> error = session->flush(); error != nullptr) {
+        co_return make_error(DnsError::AE_INTERNAL_ERROR, std::move(error));
+    }
+
+    std::weak_ptr<bool> guard = shutdown_guard;
+    if (Error<DnsError> error = co_await drive_io(); error != nullptr) {
+        co_return make_error(DnsError::AE_HANDSHAKE_ERROR, std::move(error));
+    }
     if (guard.expired()) {
         co_return make_error(DnsError::AE_SHUTTING_DOWN);
     }
 
-    if (handle->error) {
-        err = handle->error;
-    } else if (ldns_status status = ldns_wire2pkt(&response, handle->response.data(), handle->response.size());
-               status != LDNS_STATUS_OK) {
-        err = make_error(DnsError::AE_DECODE_ERROR, ldns_get_errorstr_by_id(status));
-    }
-
-    if (response != nullptr) {
-        handle->restore_packet_id(response);
-    }
-
-    tracelog_id(handle, "Completed");
-
-    // If timeout error was returned we shouldn't stop timer responsible for detecting a stale connection
-    bool timeout_error = err && err->value() == DnsError::AE_TIMED_OUT;
-    if (m_running_queue.empty() && !timeout_error) {
-        uv_timer_stop(m_read_timer->raw());
-    }
-
-    if (err) {
-        co_return err;
-    } else {
-        co_return ldns_pkt_ptr{response};
-    }
+    co_return {};
 }
 
-int DohUpstream::curl_prereq(
-        void *clientp, char *conn_primary_ip, char *conn_local_ip, int conn_primary_port, int conn_local_port) {
-    auto *handle = (QueryHandle *) clientp;
-    auto *upstream = handle->upstream;
-    if (upstream->m_curlopt_http_ver != CURL_HTTP_VERSION_NONE) {
-        dbglog(upstream->m_log, "HTTP version already selected");
-        return CURL_PREREQFUNC_ABORT;
+ag::Result<uint64_t, ag::dns::DnsError> ag::dns::DohUpstream::Http3Connection::submit_request(
+        const http::Request &request) {
+    Result stream_id = session->submit_request(request, /*eof=*/true);
+    if (stream_id.has_error()) {
+        return make_error(DnsError::AE_INTERNAL_ERROR, stream_id.error());
     }
-    upstream->m_curlopt_http_ver =
-            (handle == upstream->m_h3_probe_handle.get()) ? CURL_HTTP_VERSION_3ONLY : CURL_HTTP_VERSION_2;
-    dbglog(upstream->m_log, "HTTP version selected: {}",
-            upstream->m_curlopt_http_ver == CURL_HTTP_VERSION_3ONLY ? "HTTP/3" : "HTTP/2");
-    upstream->m_httpver_probe_cleanup_task = upstream->config().loop.schedule({}, [upstream] {
-        upstream->cleanup_httpver_probe();
-        upstream->retry_pending_queries(false);
+    return stream_id.value();
+}
+
+ag::Error<ag::dns::DnsError> ag::dns::DohUpstream::Http3Connection::reset_stream(uint64_t stream_id) {
+    if (Error<http::Http3Error> error = session->reset_stream(stream_id, NGHTTP3_H3_REQUEST_CANCELLED);
+            error != nullptr) {
+        return make_error(DnsError::AE_INTERNAL_ERROR, std::move(error));
+    }
+    return {};
+}
+
+ag::Error<ag::dns::DnsError> ag::dns::DohUpstream::Http3Connection::flush() {
+    if (Error<http::Http3Error> error = session->flush(); error != nullptr) {
+        return make_error(DnsError::AE_INTERNAL_ERROR, std::move(error));
+    }
+    return {};
+}
+
+ag::coro::Task<ag::Error<ag::dns::DnsError>> ag::dns::DohUpstream::Http3Connection::drive_io() {
+    std::weak_ptr<bool> guard = shutdown_guard;
+
+    State last_state = state;
+    Error<SocketError> error = co_await io->receive( // NOLINT(*-unchecked-optional-access)
+            AioSocket::OnReadCallback{
+                    .func = [](void *arg, Uint8View data) -> bool {
+                        auto *self = (Http3Connection *) arg;
+                        State last_state = self->state;
+                        if (Error<http::Http3Error> error = self->session->input(
+                                    http::QuicNetworkPath{
+                                            .local = self->local.c_sockaddr(),
+                                            .local_len = self->local.c_socklen(),
+                                            .remote = self->remote.c_sockaddr(),
+                                            .remote_len = self->remote.c_socklen(),
+                                    },
+                                    data);
+                                error != nullptr) {
+                            self->session_error = make_error(DnsError::AE_INTERNAL_ERROR, std::move(error));
+                            return false;
+                        }
+                        if (Error<http::Http3Error> error = self->session->flush(); error != nullptr) {
+                            self->session_error = make_error(DnsError::AE_INTERNAL_ERROR, std::move(error));
+                            return false;
+                        }
+                        return last_state != State::HANDSHAKING || self->state != State::CONNECTED;
+                    },
+                    .arg = this,
+            },
+            std::nullopt);
+
+    if (guard.expired()) {
+        co_return make_error(DnsError::AE_SHUTTING_DOWN);
+    }
+    if (session_error != nullptr) {
+        co_return make_error(DnsError::AE_EXCHANGE_ERROR, std::exchange(session_error, nullptr));
+    }
+    if (error != nullptr) {
+        co_return make_error(DnsError::AE_SOCKET_ERROR, std::move(error));
+    }
+
+    if (last_state == State::HANDSHAKING && state == State::CONNECTED) {
+        co_return {};
+    }
+
+    co_return make_error(DnsError::AE_INTERNAL_ERROR, "Unreachable");
+}
+
+ag::coro::Task<ag::Error<ag::dns::DnsError>> ag::dns::DohUpstream::Http3Connection::connect_socket(
+        std::string, SocketAddress peer) {
+    AioSocket &socket = io.emplace(parent->make_socket(utils::TP_UDP));
+
+    log_hconn(dbg, this, "{}", peer.str());
+    std::weak_ptr<bool> guard = shutdown_guard;
+    Error<SocketError> err = co_await socket.connect(AioSocket::ConnectParameters{
+            .loop = &parent->m_config.loop,
+            .peer = peer,
     });
-    return CURL_PREREQFUNC_ABORT;
+    if (guard.expired()) {
+        co_return make_error(DnsError::AE_SHUTTING_DOWN);
+    }
+    if (err != nullptr) {
+        io.reset();
+        co_return make_error(DnsError::AE_SOCKET_ERROR, err);
+    }
+
+    // NOLINTNEXTLINE(*-unchecked-optional-access)
+    if (std::optional bound_addr = utils::get_local_address(socket.get_underlying()->get_fd().value());
+            bound_addr.has_value()) {
+        local = bound_addr.value();
+    }
+    remote = peer;
+    log_hconn(trace, this, "Network path: {} -> {}", local.str(), remote.str());
+
+    co_return {};
 }
 
-// Attempt connections over HTTP/2 and HTTP/3 concurrently, choose the HTTP version that connects first.
-void DohUpstream::start_httpver_probe() {
-    dbglog(m_log, "Starting HTTP version probe");
+void ag::dns::DohUpstream::Http3Connection::on_handshake_completed(void *arg) {
+    auto *self = (Http3Connection *) arg;
+    self->state = State::CONNECTED;
+}
 
-    auto h2_probe_pool = std::make_unique<ConnectionPool>();
-    auto h3_probe_pool = std::make_unique<ConnectionPool>();
-
-    if (!h2_probe_pool->init(this) || !h3_probe_pool->init(this)) {
-        stop_all_with_error(make_error(DnsError::AE_INTERNAL_ERROR, "Failed to initialize probe connection pools"));
+void ag::dns::DohUpstream::Http3Connection::on_expiry_update(void *arg, ag::Nanos period) {
+    auto *self = (Http3Connection *) arg;
+    std::weak_ptr<bool> guard = self->shutdown_guard;
+    if (guard.expired()) {
         return;
     }
 
-    auto h2_probe_handle = std::make_unique<QueryHandle>();
-    h2_probe_handle->upstream = this;
-    h2_probe_handle->timeout = m_config.timeout;
-    h2_probe_handle->log = &m_log;
-    if (!h2_probe_handle->create_probe_curl_handle(h2_probe_pool.get(), CURL_HTTP_VERSION_2)) {
-        stop_all_with_error(std::move(h2_probe_handle->error));
-        return;
+    DohUpstream *upstream = self->parent;
+    log_hconn(trace, self, "{}", period);
+
+    if (self->expiry_task.has_value()) {
+        upstream->m_config.loop.cancel(self->expiry_task.value());
     }
 
-    auto h3_probe_handle = std::make_unique<QueryHandle>();
-    h3_probe_handle->upstream = h2_probe_handle->upstream;
-    h3_probe_handle->timeout = h2_probe_handle->timeout;
-    h3_probe_handle->log = h2_probe_handle->log;
-    if (!h3_probe_handle->create_probe_curl_handle(h3_probe_pool.get(), CURL_HTTP_VERSION_3ONLY)) {
-        stop_all_with_error(std::move(h3_probe_handle->error));
-        return;
-    }
-
-    if (CURLM_OK != curl_multi_add_handle(h2_probe_pool->handle.get(), h2_probe_handle->curl_handle.get())
-            || CURLM_OK != curl_multi_add_handle(h3_probe_pool->handle.get(), h3_probe_handle->curl_handle.get())) {
-        stop_all_with_error(make_error(DnsError::AE_INTERNAL_ERROR, "Failed to add probe handles to probe pools"));
-        return;
-    }
-
-    m_h2_probe_pool = std::move(h2_probe_pool);
-    m_h3_probe_pool = std::move(h3_probe_pool);
-    m_h2_probe_handle = std::move(h2_probe_handle);
-    m_h3_probe_handle = std::move(h3_probe_handle);
+    self->expiry_task =
+            upstream->m_config.loop.schedule(duration_cast<Micros>(period), [self, guard = std::move(guard)]() {
+                if (!guard.expired()) {
+                    log_hconn(dbg, self, "Expired");
+                    self->session->handle_expiry();
+                }
+            });
 }
 
-void DohUpstream::cleanup_httpver_probe() {
-    m_h3_probe_handle.reset();
-    m_h2_probe_handle.reset();
-    m_h3_probe_pool.reset();
-    m_h2_probe_pool.reset();
-    config().loop.cancel(std::exchange(m_httpver_probe_cleanup_task, {}));
+int ag::dns::DohUpstream::Http3Connection::on_certificate_verify(X509_STORE_CTX *ctx, void *arg) {
+    auto *self = (Http3Connection *) arg;
+    DohUpstream *upstream = self->parent;
+
+    const CertificateVerifier *verifier = upstream->m_config.socket_factory->get_certificate_verifier();
+    if (verifier == nullptr) {
+        log_hconn(dbg, self, "Cannot verify certificate due to verifier is not set");
+        return 0;
+    }
+
+    std::string_view hostname =
+            decompose_url(upstream->m_options.address).value().authority; // was validated during initialization
+    if (auto err = verifier->verify(ctx, hostname, upstream->m_fingerprints)) {
+        log_hconn(dbg, self, "Failed to verify certificate: {}", *err);
+        return 0;
+    }
+
+    log_hconn(trace, self, "Verified successfully");
+
+    return 1;
 }
-
-bool DohUpstream::ConnectionPool::init(DohUpstream *parent) {
-    this->handle.reset(curl_multi_init());
-    if (this->handle == nullptr) {
-        return false;
-    }
-
-    if (CURLMcode e; CURLM_OK != (e = curl_multi_setopt(this->handle.get(), CURLMOPT_SOCKETFUNCTION, on_socket_update))
-            || CURLM_OK != (e = curl_multi_setopt(this->handle.get(), CURLMOPT_SOCKETDATA, this))
-            || CURLM_OK != (e = curl_multi_setopt(this->handle.get(), CURLMOPT_TIMERFUNCTION, on_pool_timer_event))
-            || CURLM_OK != (e = curl_multi_setopt(this->handle.get(), CURLMOPT_TIMERDATA, this))
-            || CURLM_OK != (e = curl_multi_setopt(this->handle.get(), CURLMOPT_PIPELINING, CURLPIPE_MULTIPLEX))) {
-        errlog(parent->m_log, "Failed to set options of curl pool: {} (id={})", curl_multi_strerror(e), e);
-        this->handle.reset();
-        return false;
-    }
-
-    this->parent = parent;
-    return true;
-}
-
-} // namespace dns
-
-// clang format off
-template <>
-struct ErrorCodeToString<CURLcode> {
-    std::string operator()(CURLcode e) {
-        const char *msg = curl_easy_strerror(e);
-        return msg ? msg : AG_FMT("Unknown error: {}", (int) e);
-    }
-};
-
-template <>
-struct ErrorCodeToString<CURLMcode> {
-    std::string operator()(CURLMcode e) {
-        const char *msg = curl_multi_strerror(e);
-        return msg ? msg : AG_FMT("Unknown error: {}", (int) e);
-    }
-};
-template <>
-struct ErrorCodeToString<CURLSHcode> {
-    std::string operator()(CURLSHcode e) {
-        const char *msg = curl_share_strerror(e);
-        return msg ? msg : AG_FMT("Unknown error: {}", (int) e);
-    }
-};
-// clang format on
-
-} // namespace ag

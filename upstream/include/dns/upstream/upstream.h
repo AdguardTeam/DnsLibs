@@ -93,8 +93,6 @@ public:
         AE_BOOTSTRAPPER_INIT_FAILED,
         AE_INVALID_ADDRESS,
         AE_SSL_CONTEXT_INIT_FAILED,
-        AE_CURL_HEADERS_INIT_FAILED,
-        AE_CURL_POOL_INIT_FAILED,
     };
 
     Upstream(UpstreamOptions opts, UpstreamFactoryConfig config)
@@ -251,8 +249,6 @@ struct ErrorCodeToString<dns::Upstream::InitError> {
         case decltype(e)::AE_BOOTSTRAPPER_INIT_FAILED: return "Failed to create bootstrapper";
         case decltype(e)::AE_INVALID_ADDRESS: return "Passed server address is not valid";
         case decltype(e)::AE_SSL_CONTEXT_INIT_FAILED: return "Failed to initialize SSL context";
-        case decltype(e)::AE_CURL_HEADERS_INIT_FAILED: return "Failed to initialize CURL headers";
-        case decltype(e)::AE_CURL_POOL_INIT_FAILED: return "Failed to initialize CURL connection pool";
         }
     }
 };

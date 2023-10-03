@@ -148,7 +148,7 @@ private:
     static int version_negotiation(ngtcp2_conn *conn, const ngtcp2_pkt_hd *hd,
         const uint32_t *sv, size_t nsv, void *user_data);
 
-    static int recv_crypto_data(ngtcp2_conn *conn, ngtcp2_crypto_level crypto_level,
+    static int recv_crypto_data(ngtcp2_conn *conn, ngtcp2_encryption_level crypto_level,
                                 uint64_t offset, const uint8_t *data, size_t datalen,
                                 void *user_data);
 
@@ -201,12 +201,11 @@ private:
     void disconnect(std::string_view reason);
     void schedule_retransmit();
     static ngtcp2_tstamp get_tstamp();
-    ngtcp2_crypto_level from_ossl_level(enum ssl_encryption_level_t ossl_level) const;
     void disqualify_server_address(const ag::SocketAddress &server_address);
     void update_req_idle_timer();
 
-    void write_client_handshake(ngtcp2_crypto_level level, const uint8_t *data, size_t datalen);
-    int on_key(ngtcp2_crypto_level level, const uint8_t *rx_secret,
+    void write_client_handshake(ngtcp2_encryption_level level, const uint8_t *data, size_t datalen);
+    int on_key(ngtcp2_encryption_level level, const uint8_t *rx_secret,
                const uint8_t *tx_secret, size_t secretlen);
     static void on_rand(uint8_t *dest, size_t destlen, const ngtcp2_rand_ctx *rand_ctx);
 

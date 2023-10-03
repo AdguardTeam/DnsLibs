@@ -11,3 +11,5 @@ os.api_level=21
 [options]
 [env]
 CONAN_CMAKE_TOOLCHAIN_FILE={{ os.path.join(profile_dir, "android.toolchain.cmake") }}
+[conf]
+tools.android:ndk_path={{ os.environ['ANDROID_NDK_HOME'] }}
