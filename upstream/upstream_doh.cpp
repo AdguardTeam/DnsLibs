@@ -126,6 +126,7 @@ struct ag::dns::DohUpstream::Http2Connection : public ag::dns::DohUpstream::Http
     [[nodiscard]] coro::Task<Error<DnsError>> drive_io() override;
 
     [[nodiscard]] coro::Task<Error<DnsError>> connect_socket(std::string hostname, SocketAddress peer);
+    static bool on_socket_read(void *arg, Uint8View data);
 
     std::unique_ptr<http::Http2Client> session;
     Error<DnsError> session_error;
@@ -167,6 +168,7 @@ struct ag::dns::DohUpstream::Http3Connection : public ag::dns::DohUpstream::Http
     static void on_handshake_completed(void *arg);
     static void on_expiry_update(void *arg, ag::Nanos period);
     static int on_certificate_verify(X509_STORE_CTX *ctx, void *arg);
+    static bool on_socket_read(void *arg, Uint8View data);
 
     std::unique_ptr<http::Http3Client> session;
     SocketAddress local{"0.0.0.0:0"};
@@ -256,6 +258,7 @@ ag::dns::DohUpstream::DohUpstream(
 
 ag::dns::DohUpstream::~DohUpstream() {
     m_shutdown_guard.reset();
+    close_connection(make_error(DnsError::AE_SHUTTING_DOWN));
 }
 
 ag::Error<ag::dns::Upstream::InitError> ag::dns::DohUpstream::init() {
@@ -309,7 +312,13 @@ ag::coro::Task<ag::dns::Upstream::ExchangeResult> ag::dns::DohUpstream::exchange
     std::weak_ptr<bool> shutdown_guard = m_shutdown_guard;
     Millis timeout = m_config.timeout;
     SteadyClock::time_point start_ts = SteadyClock::now();
-    uint32_t query_id = m_next_query_id++;
+    size_t query_id = m_next_query_id++;
+
+    if (m_pending_queries_counter++ == 0) {
+        refresh_read_timer();
+    }
+
+    m_pending_queries_counter += 1;
 
     ExchangeResult result;
     while (true) {
@@ -329,7 +338,7 @@ ag::coro::Task<ag::dns::Upstream::ExchangeResult> ag::dns::DohUpstream::exchange
         }
         case ConnectionState::CONNECTING: {
             ConnectAwaitable &awaitable =
-                    *m_connect_waiters.emplace(query_id, std::make_unique<ConnectAwaitable>()).first->second.get();
+                    *m_connect_waiters.emplace(query_id, std::make_unique<ConnectAwaitable>()).first->second;
             // NOLINTNEXTLINE(*-avoid-reference-coroutine-parameters)
             auto task = [](ConnectAwaitable &awaitable) -> coro::Task<Error<DnsError>> {
                 auto x = co_await awaitable;
@@ -359,6 +368,10 @@ ag::coro::Task<ag::dns::Upstream::ExchangeResult> ag::dns::DohUpstream::exchange
 loop_exit:
     if (shutdown_guard.expired()) {
         co_return result;
+    }
+
+    if (--m_pending_queries_counter == 0 && (result.has_value() || result.error()->value() != DnsError::AE_TIMED_OUT)) {
+        cancel_read_timer();
     }
 
     co_await m_config.loop.co_submit();
@@ -614,6 +627,7 @@ void ag::dns::DohUpstream::close_connection(const Error<DnsError> &error) {
     m_connection_state = ConnectionState::IDLE;
     m_http_conn.reset();
     cancel_all(error);
+    cancel_read_timer();
 }
 
 void ag::dns::DohUpstream::cancel_all(const Error<DnsError> &error) {
@@ -627,6 +641,28 @@ void ag::dns::DohUpstream::cancel_all(const Error<DnsError> &error) {
     for (auto &[_, waiter] : http_streams) {
         waiter->notify_error(error);
     }
+}
+
+void ag::dns::DohUpstream::cancel_read_timer() {
+    if (std::optional task = std::exchange(m_read_timer_task, std::nullopt); task.has_value()) {
+        m_config.loop.cancel(task.value());
+    }
+}
+
+void ag::dns::DohUpstream::refresh_read_timer() {
+    cancel_read_timer();
+
+    std::weak_ptr<bool> shutdown_guard = m_shutdown_guard;
+    m_read_timer_task = m_config.loop.schedule(duration_cast<Micros>(2 * m_config.timeout), [this, shutdown_guard]() {
+        if (shutdown_guard.expired()) {
+            return;
+        }
+
+        log_upstream(dbg, this, "Resetting stale connection");
+        assert(0);
+        m_read_timer_task.reset();
+        close_connection(make_error(DnsError::AE_TIMED_OUT));
+    });
 }
 
 void ag::dns::DohUpstream::HttpConnection::on_response(void *arg, uint64_t stream_id, http::Response response) {
@@ -694,6 +730,10 @@ void ag::dns::DohUpstream::HttpConnection::on_stream_read_finished(void *arg, ui
 
 void ag::dns::DohUpstream::HttpConnection::on_stream_closed(void *arg, uint64_t stream_id, Error<DnsError> error) {
     auto *self = (HttpConnection *) arg;
+    if (self->shutdown_guard.expired()) {
+        return;
+    }
+
     DohUpstream *upstream = self->parent;
 
     auto iter = upstream->m_streams.find(stream_id);
@@ -870,18 +910,7 @@ ag::coro::Task<ag::Error<ag::dns::DnsError>> ag::dns::DohUpstream::Http2Connecti
     std::weak_ptr<bool> guard = shutdown_guard;
     Error<SocketError> error = co_await io->receive( // NOLINT(*-unchecked-optional-access)
             AioSocket::OnReadCallback{
-                    .func = [](void *arg, Uint8View data) -> bool {
-                        auto *self = (Http2Connection *) arg;
-                        if (Result r = self->session->input(data); r.has_error()) {
-                            self->session_error = make_error(DnsError::AE_INTERNAL_ERROR, r.error());
-                            return false;
-                        }
-                        if (Error<http::Http2Error> error = self->session->flush(); error != nullptr) {
-                            self->session_error = make_error(DnsError::AE_INTERNAL_ERROR, std::move(error));
-                            return false;
-                        }
-                        return true;
-                    },
+                    .func = on_socket_read,
                     .arg = this,
             },
             std::nullopt);
@@ -923,6 +952,25 @@ ag::coro::Task<ag::Error<ag::dns::DnsError>> ag::dns::DohUpstream::Http2Connecti
     }
 
     co_return {};
+}
+
+bool ag::dns::DohUpstream::Http2Connection::on_socket_read(void *arg, Uint8View data) {
+    auto *self = (Http2Connection *) arg;
+    DohUpstream *upstream = self->parent;
+
+    if (upstream->m_read_timer_task.has_value()) {
+        upstream->refresh_read_timer();
+    }
+
+    if (Result r = self->session->input(data); r.has_error()) {
+        self->session_error = make_error(DnsError::AE_INTERNAL_ERROR, r.error());
+        return false;
+    }
+    if (Error<http::Http2Error> error = self->session->flush(); error != nullptr) {
+        self->session_error = make_error(DnsError::AE_INTERNAL_ERROR, std::move(error));
+        return false;
+    }
+    return true;
 }
 
 ag::http::Version ag::dns::DohUpstream::Http3Connection::version() const {
@@ -1047,27 +1095,7 @@ ag::coro::Task<ag::Error<ag::dns::DnsError>> ag::dns::DohUpstream::Http3Connecti
     State last_state = state;
     Error<SocketError> error = co_await io->receive( // NOLINT(*-unchecked-optional-access)
             AioSocket::OnReadCallback{
-                    .func = [](void *arg, Uint8View data) -> bool {
-                        auto *self = (Http3Connection *) arg;
-                        State last_state = self->state;
-                        if (Error<http::Http3Error> error = self->session->input(
-                                    http::QuicNetworkPath{
-                                            .local = self->local.c_sockaddr(),
-                                            .local_len = self->local.c_socklen(),
-                                            .remote = self->remote.c_sockaddr(),
-                                            .remote_len = self->remote.c_socklen(),
-                                    },
-                                    data);
-                                error != nullptr) {
-                            self->session_error = make_error(DnsError::AE_INTERNAL_ERROR, std::move(error));
-                            return false;
-                        }
-                        if (Error<http::Http3Error> error = self->session->flush(); error != nullptr) {
-                            self->session_error = make_error(DnsError::AE_INTERNAL_ERROR, std::move(error));
-                            return false;
-                        }
-                        return last_state != State::HANDSHAKING || self->state != State::CONNECTED;
-                    },
+                    .func = on_socket_read,
                     .arg = this,
             },
             std::nullopt);
@@ -1139,9 +1167,14 @@ void ag::dns::DohUpstream::Http3Connection::on_expiry_update(void *arg, ag::Nano
 
     self->expiry_task =
             upstream->m_config.loop.schedule(duration_cast<Micros>(period), [self, guard = std::move(guard)]() {
-                if (!guard.expired()) {
-                    log_hconn(dbg, self, "Expired");
-                    self->session->handle_expiry();
+                if (guard.expired()) {
+                    return;
+                }
+
+                log_hconn(dbg, self, "Expired");
+                self->session->handle_expiry();
+                if (Error<DnsError> error = self->flush(); error != nullptr) {
+                    self->parent->close_connection(error);
                 }
             });
 }
@@ -1166,4 +1199,32 @@ int ag::dns::DohUpstream::Http3Connection::on_certificate_verify(X509_STORE_CTX 
     log_hconn(trace, self, "Verified successfully");
 
     return 1;
+}
+
+bool ag::dns::DohUpstream::Http3Connection::on_socket_read(void *arg, Uint8View data) {
+    auto *self = (Http3Connection *) arg;
+    DohUpstream *upstream = self->parent;
+
+    if (upstream->m_read_timer_task.has_value()) {
+        upstream->refresh_read_timer();
+    }
+
+    State last_state = self->state;
+    if (Error<http::Http3Error> error = self->session->input(
+                http::QuicNetworkPath{
+                        .local = self->local.c_sockaddr(),
+                        .local_len = self->local.c_socklen(),
+                        .remote = self->remote.c_sockaddr(),
+                        .remote_len = self->remote.c_socklen(),
+                },
+                data);
+            error != nullptr) {
+        self->session_error = make_error(DnsError::AE_INTERNAL_ERROR, std::move(error));
+        return false;
+    }
+    if (Error<http::Http3Error> error = self->session->flush(); error != nullptr) {
+        self->session_error = make_error(DnsError::AE_INTERNAL_ERROR, std::move(error));
+        return false;
+    }
+    return last_state != State::HANDSHAKING || self->state != State::CONNECTED;
 }

@@ -67,13 +67,17 @@ private:
     Result<uint64_t, DnsError> send_request(const ldns_pkt *request);
     void close_connection(const Error<DnsError> &error);
     void cancel_all(const Error<DnsError> &error);
+    void cancel_read_timer();
+    void refresh_read_timer();
 
     uint32_t m_id;
     ConnectionState m_connection_state{};
     std::unique_ptr<HttpConnection> m_http_conn;
     std::unordered_map<uint64_t, std::unique_ptr<HttpAwaitable>> m_streams;
-    uint32_t m_next_query_id = 0;
-    std::unordered_map<uint32_t, std::unique_ptr<ConnectAwaitable>> m_connect_waiters;
+    size_t m_next_query_id = 0;
+    std::unordered_map<size_t, std::unique_ptr<ConnectAwaitable>> m_connect_waiters;
+    size_t m_pending_queries_counter = 0;
+    std::optional<EventLoop::TaskId> m_read_timer_task;
     std::optional<Bootstrapper> m_bootstrapper;
     http::Request m_request_template;
     std::string m_path;
