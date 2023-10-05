@@ -58,7 +58,6 @@ public:
     }
 
     [[nodiscard]] UvT *raw() {
-        m_requested = true;
         return m_handle;
     }
 
@@ -70,29 +69,28 @@ public:
         dbglog(m_log, "Closing {} handle {}", (void *) this, (void *) m_handle);
         delete weak_from_data(m_handle->data);
         m_handle->data = nullptr;
-        if (!m_requested) {
-            delete m_handle;
-            return;
-        }
         if constexpr (std::is_same_v<std::remove_cvref_t<UvT>, uv_loop_t>) {
-            uv_loop_close((uv_loop_t *) m_handle);
+            if (((uv_loop_t *) m_handle)->time != 0) {
+                uv_loop_close((uv_loop_t *) m_handle);
+            }
             delete m_handle;
-            return;
+        } else {
+            if (m_handle->type == UV_UNKNOWN_HANDLE) {
+                delete m_handle;
+                return;
+            }
+            uv_close((uv_handle_t *) m_handle, Uv::on_close);
         }
-        uv_close((uv_handle_t *) m_handle, Uv::on_close);
     }
 
     static void on_close(uv_handle_t *handle) {
-        auto *ptr = (std::weak_ptr<Uv> *) handle->data;
         Logger log(logger_name());
         dbglog(log, "Destroyed handle {}", (void *)handle);
-        delete ptr;
         delete (UvT *) handle;
     }
 
 private:
     Logger m_log;
-    bool m_requested = false;
     UvT *m_handle;
     void *m_parent;
 };

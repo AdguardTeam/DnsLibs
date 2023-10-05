@@ -40,7 +40,7 @@ public:
      * @return some error if failed
      */
     template <typename Ret = Error<SocketError>>
-    auto connect(ConnectParameters params) {
+    [[nodiscard]] auto connect(ConnectParameters params) {
         struct Awaitable {
             Ret result;
             ConnectParameters params;
@@ -72,7 +72,7 @@ public:
      * @return some error if failed
      */
     template <typename Ret = Error<SocketError>>
-    auto receive(OnReadCallback on_read_handler, std::optional<Micros> timeout) {
+    [[nodiscard]] auto receive(OnReadCallback on_read_handler, std::optional<Micros> timeout) {
         struct Awaitable {
             Ret result;
             OnReadCallback on_read_handler;

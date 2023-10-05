@@ -178,7 +178,13 @@ protected:
 
     UpstreamFactory::CreateResult create_upstream(const UpstreamOptions &opts, Millis timeout = DEFAULT_TIMEOUT) {
         static bool ipv6_available = test_ipv6_connectivity();
-        UpstreamFactory factory({*m_loop, m_socket_factory.get(), ipv6_available, false, timeout});
+        UpstreamFactory factory({
+                .loop = *m_loop,
+                .socket_factory = m_socket_factory.get(),
+                .ipv6_available = ipv6_available,
+                .enable_http3 = false,
+                .timeout = timeout,
+        });
         return factory.create_upstream(opts);
     }
 

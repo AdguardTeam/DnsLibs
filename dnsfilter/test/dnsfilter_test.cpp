@@ -210,17 +210,15 @@ TEST_F(DnsfilterTest, SuccessfulHostsRuleParsing) {
 
     const TestData TEST_DATA[] = {
             {"0.0.0.0 example.org",
-                    {{.content = DnsFilter::HostsRuleInfo{"0.0.0.0"}}, rule_utils::Rule::MMID_SUBDOMAINS}},
-            {"1:1:: example.org", {{.content = DnsFilter::HostsRuleInfo{"1:1::"}}, rule_utils::Rule::MMID_SUBDOMAINS}},
+                    {{.content = DnsFilter::HostsRuleInfo{"0.0.0.0"}}, rule_utils::Rule::MMID_EXACT}},
+            {"1:1:: example.org", {{.content = DnsFilter::HostsRuleInfo{"1:1::"}}, rule_utils::Rule::MMID_EXACT}},
             {"1:1:1:1:1:1:1:1 example.org",
-                    {{.content = DnsFilter::HostsRuleInfo{"1:1:1:1:1:1:1:1"}}, rule_utils::Rule::MMID_SUBDOMAINS}},
-            {"::1:1 example.org", {{.content = DnsFilter::HostsRuleInfo{"::1:1"}}, rule_utils::Rule::MMID_SUBDOMAINS}},
+                    {{.content = DnsFilter::HostsRuleInfo{"1:1:1:1:1:1:1:1"}}, rule_utils::Rule::MMID_EXACT}},
+            {"::1:1 example.org", {{.content = DnsFilter::HostsRuleInfo{"::1:1"}}, rule_utils::Rule::MMID_EXACT}},
             {"::FFFF:1.1.1.1 example.org",
-                    {{.content = DnsFilter::HostsRuleInfo{"::FFFF:1.1.1.1"}}, rule_utils::Rule::MMID_SUBDOMAINS}},
+                    {{.content = DnsFilter::HostsRuleInfo{"::FFFF:1.1.1.1"}}, rule_utils::Rule::MMID_EXACT}},
             {"0.0.0.0 example.org #comment",
-                    {{.content = DnsFilter::HostsRuleInfo{"0.0.0.0"}}, rule_utils::Rule::MMID_SUBDOMAINS}},
-            {"0.0.0.0 example.org   #comment",
-                    {{.content = DnsFilter::HostsRuleInfo{"0.0.0.0"}}, rule_utils::Rule::MMID_SUBDOMAINS}},
+                    {{.content = DnsFilter::HostsRuleInfo{"0.0.0.0"}}, rule_utils::Rule::MMID_EXACT}},
     };
 
     for (const TestData &entry : TEST_DATA) {
@@ -926,6 +924,7 @@ TEST_F(DnsfilterTest, HostsFileSyntax) {
     struct TestData {
         std::string rule;
         std::vector<std::string> blocked_domains;
+        std::vector<std::string> not_blocked_domains;
         std::string expected_rule;
     };
 
@@ -934,14 +933,22 @@ TEST_F(DnsfilterTest, HostsFileSyntax) {
                     {
                             "example11.org",
                             "example12.org",
+                            "example13.org",
+                    },
+                    {
                             "sub.example13.org",
-                    }},
+                    },
+            },
             {":: example21.org example22.org example23.org",
                     {
-                            "sub.sub.example21.org",
+                            "example21.org",
                             "example22.org",
                             "example23.org",
-                    }},
+                    },
+                    {
+                            "sub.sub.example21.org",
+                    },
+            },
             {"::1.1.1.1 example31.org example32.org example33.org",
                     {
                             "example31.org",
@@ -951,19 +958,30 @@ TEST_F(DnsfilterTest, HostsFileSyntax) {
             {"1:1:1:1:1:1:1:1 example41.org example42.org example43.org",
                     {
                             "example41.org",
-                            "sub.example42.org",
+                            "example42.org",
                             "example43.org",
-                    }},
+                    },
+                    {
+                            "sub.example42.org",
+                    },
+            },
             {"1:: example51.org example52.org example53.org",
                     {
                             "example51.org",
-                            "sub.example52.org",
+                            "example52.org",
                             "example53.org",
-                    }},
+                    },
+                    {
+                            "sub.example52.org",
+                    },
+            },
             {"1.1.1.1 example61.org example62.org example63.org #comment",
                     {
                             "example61.org",
                             "example62.org",
+                            "example63.org",
+                    },
+                    {
                             "sub.example63.org",
                     },
                     {"1.1.1.1 example61.org example62.org example63.org"}},
@@ -988,6 +1006,11 @@ TEST_F(DnsfilterTest, HostsFileSyntax) {
                 ASSERT_EQ(rules[0].text, entry.expected_rule);
             }
             ASSERT_NE(std::get_if<DnsFilter::HostsRuleInfo>(&rules[0].content), nullptr);
+        }
+        for (const std::string &d : entry.not_blocked_domains) {
+            infolog(log, "testing {}", d);
+            std::vector<DnsFilter::Rule> rules = filter.match(handle, {d});
+            ASSERT_EQ(rules.size(), 0);
         }
     }
 

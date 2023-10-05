@@ -148,6 +148,10 @@ DnsProxy::DnsProxyInitResult DnsProxy::init(DnsProxySettings settings, DnsProxyE
 
 void DnsProxy::deinit() {
     std::unique_ptr<Impl> &proxy = m_pimpl;
+    if (proxy->loop == nullptr) {
+        infolog(proxy->log, "Proxy module is not initialized, deinitialization is not needed");
+        return;
+    }
     proxy->loop->start();
     proxy->loop->submit([this] {
         std::unique_ptr<Impl> &proxy = m_pimpl;

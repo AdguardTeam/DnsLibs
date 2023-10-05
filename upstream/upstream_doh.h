@@ -1,35 +1,28 @@
 #pragma once
 
-
+#include <list>
+#include <memory>
+#include <optional>
 #include <string>
 #include <string_view>
-#include <memory>
-#include <mutex>
-#include <thread>
-#include <atomic>
-#include <future>
-#include <deque>
-#include <list>
+#include <unordered_map>
+#include <variant>
+#include <vector>
 
-#include "common/logger.h"
+#include <ldns/ldns.h>
+#include <nghttp2/nghttp2.h>
+
+#include "common/coro.h"
 #include "common/defs.h"
-#include "dns/upstream/upstream.h"
+#include "common/http/headers.h"
 #include "common/socket_address.h"
 #include "dns/common/event_loop.h"
+#include "dns/net/aio_socket.h"
+#include "dns/net/socket.h"
 #include "dns/upstream/bootstrapper.h"
-
-#include <ldns/packet.h>
-#include <curl/curl.h>
-#include <curl/multi.h>
-#include <event2/event.h>
-#include <event2/event_struct.h>
-
+#include "dns/upstream/upstream.h"
 
 namespace ag::dns {
-
-using curl_slist_ptr = UniquePtr<curl_slist, &curl_slist_free_all>;
-using curl_pool_ptr = UniquePtr<CURLM, &curl_multi_cleanup>;
-using event_ptr = UniquePtr<event, &event_free>;
 
 class DohUpstream : public Upstream {
 public:
@@ -45,88 +38,53 @@ public:
             std::vector<CertFingerprint> fingerprints);
     ~DohUpstream() override;
 
-    struct QueryHandle;
-    struct SocketHandle;
-    struct CheckProxyState;
+    DohUpstream() = delete;
+    DohUpstream(const DohUpstream &) = delete;
+    DohUpstream &operator=(const DohUpstream &) = delete;
+    DohUpstream(DohUpstream &&) = delete;
+    DohUpstream &operator=(DohUpstream &&) = delete;
 
 private:
-    using CURL_ptr = UniquePtr<CURL, &curl_easy_cleanup>;
+    enum class ConnectionState : int;
+    struct HttpAwaitable;
+    struct ConnectAwaitable;
 
-    struct ConnectionPool {
-        DohUpstream *parent = nullptr;
-        curl_pool_ptr handle = nullptr;
-        UvPtr<uv_timer_t> timer = nullptr;
-
-        ConnectionPool() = default;
-        ~ConnectionPool() = default;
-
-        bool init(DohUpstream *parent);
-
-        ConnectionPool(const ConnectionPool &) = delete;
-        ConnectionPool &operator=(const ConnectionPool &) = delete;
-
-        ConnectionPool(ConnectionPool &&) = delete;
-        ConnectionPool &operator=(ConnectionPool &&) = delete;
-    };
+    struct HttpConnection;
+    struct Http2Connection;
+    friend struct Http2Connection;
+    struct Http3Connection;
+    friend struct Http3Connection;
 
     Error<InitError> init() override;
     coro::Task<ExchangeResult> exchange(const ldns_pkt *, const DnsMessageInfo *info) override;
 
-    std::unique_ptr<QueryHandle> create_handle(const ldns_pkt *request, Millis timeout) const;
-    void read_messages();
+    coro::Task<void> drive_connection(Millis timeout);
+    coro::Task<Result<HttpConnection *, DnsError>> establish_connection(HttpConnection *http_conn);
+    coro::Task<Result<HttpConnection *, DnsError>> establish_any_of_connections(
+            HttpConnection *left, HttpConnection *right);
+    coro::Task<ExchangeResult> exchange(Millis timeout, const ldns_pkt *request);
+    coro::Task<ExchangeResult> wait_for_reply(uint64_t stream_id, uint16_t query_id);
+    Result<uint64_t, DnsError> send_request(const ldns_pkt *request);
+    void close_connection(const Error<DnsError> &error);
+    void cancel_all(const Error<DnsError> &error);
+    void cancel_read_timer();
+    void refresh_read_timer();
 
-    /**
-     * Must be called in worker thread
-     */
-    void stop_all_with_error(Error<DnsError> e);
-    void retry_pending_queries(bool ignoreProxy);
-    void reset_bypassed_proxy_queries();
-
-    static CURLcode ssl_callback(CURL *curl, void *sslctx, void *arg);
-    static int verify_callback(X509_STORE_CTX *ctx, void *arg);
-
-    static int on_pool_timer_event(CURLM *multi, long timeout_ms, DohUpstream::ConnectionPool *pool);
-    static int on_socket_update(CURL *handle, curl_socket_t socket, int what,
-                                DohUpstream::ConnectionPool *pool, SocketHandle *socket_data);
-    static void on_timeout(uv_timer_t *);
-    static void on_read_timeout(uv_timer_t *timer);
-    static void on_poll_event(uv_poll_t *, int status, int events);
-    static curl_socket_t curl_opensocket(void *clientp, curlsocktype purpose, struct curl_sockaddr *address);
-    static int curl_prereq(
-            void *clientp, char *conn_primary_ip, char *conn_local_ip, int conn_primary_port, int conn_local_port);
-
-    auto submit_request(QueryHandle *handle);
-    void start_request(QueryHandle *handle, bool ignore_proxy);
-
-    void start_httpver_probe();
-    void cleanup_httpver_probe();
-
-    Logger m_log;
-    std::shared_ptr<curl_slist> m_resolved = nullptr;
-    curl_slist_ptr m_request_headers = nullptr;
-    BootstrapperPtr m_bootstrapper;
-    std::deque<QueryHandle *> m_running_queue;
-    std::shared_ptr<bool> m_shutdown_guard;
-
-    ConnectionPool m_pool;
-
-    std::unique_ptr<ConnectionPool> m_h2_probe_pool;
-    std::unique_ptr<ConnectionPool> m_h3_probe_pool;
-    std::unique_ptr<QueryHandle> m_h2_probe_handle;
-    std::unique_ptr<QueryHandle> m_h3_probe_handle;
-    EventLoop::TaskId m_httpver_probe_cleanup_task;
-
-    std::unique_ptr<CheckProxyState> m_check_proxy;
-    std::optional<uint32_t> m_reset_bypassed_proxy_connections_subscribe_id;
+    uint32_t m_id;
+    ConnectionState m_connection_state{};
+    std::unique_ptr<HttpConnection> m_http_conn;
+    std::unordered_map<uint64_t, std::unique_ptr<HttpAwaitable>> m_streams;
+    size_t m_next_query_id = 0;
+    std::unordered_map<size_t, std::unique_ptr<ConnectAwaitable>> m_connect_waiters;
+    size_t m_pending_queries_counter = 0;
+    std::optional<EventLoop::TaskId> m_read_timer_task;
+    std::optional<Bootstrapper> m_bootstrapper;
+    http::Request m_request_template;
+    std::string m_path;
+    std::optional<http::Version> m_http_version;
+    TlsSessionCache m_tls_session_cache;
     std::vector<CertFingerprint> m_fingerprints;
-
-    std::string m_curlopt_url;
-    int m_curlopt_http_ver = CURL_HTTP_VERSION_NONE;
-
-    // See FIXME-66691.
-    std::vector<CURL_ptr> m_curl_easy_graveyard;
-
-    UvPtr<uv_timer_t> m_read_timer = nullptr;
+    std::shared_ptr<bool> m_shutdown_guard = std::make_shared<bool>(true);
 };
 
-}  // namespace ag::dns
+} // namespace ag::dns

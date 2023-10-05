@@ -1130,13 +1130,21 @@ static int bindFd(NSString *helperPath, NSString *address, NSNumber *port, AGLis
     task.standardInput = nullDevice;
     task.standardOutput = [[NSFileHandle alloc] initWithFileDescriptor:fdPair.theirFd closeOnDealloc:NO];
     task.standardError = nullDevice;
-    [task launch];
+    NSError *taskError;
+    BOOL result = [task launchAndReturnError:&taskError];
     close(fdPair.theirFd);
+    if (!result) {
+        NSString *description = taskError.localizedDescription;
+        *error = [NSError errorWithDomain:AGDnsProxyErrorDomain
+                                     code:AGDPE_PROXY_INIT_ERROR
+                                 userInfo:@{NSLocalizedDescriptionKey: [NSString stringWithFormat:@"Error starting tun helper: %@", description]}];
+        return -1;
+    }
 
     evutil_make_socket_nonblocking(fdPair.ourFd);
 
     pollfd pfd[] = {{.fd = fdPair.ourFd, .events = POLLIN}};
-    ssize_t r = poll(pfd, 1, 30 * 1000);
+    ssize_t r = poll(pfd, 1, BINDFD_WAIT_MS);
     if (r != 1) {
         if (r == 0) {
             *error = [NSError errorWithDomain:AGDnsProxyErrorDomain
@@ -1175,7 +1183,9 @@ static int bindFd(NSString *helperPath, NSString *address, NSNumber *port, AGLis
         [task interrupt];
         return -1;
     }
-    close(fdPair.ourFd);
+    dispatch_async(dispatch_get_global_queue(0, 0), ^{
+        close(fdPair.ourFd);
+    });
     // Error will be handled after.
     [task waitUntilExitOrInterruptAfterTimeoutMs:BINDFD_WAIT_MS];
 
@@ -1306,12 +1316,19 @@ static ProxySettingsOverrides convertProxySettingsOverrides(const AGDnsProxySett
         closefds.reserve(config.listeners.count);
         settings.listeners.clear();
         settings.listeners.reserve(config.listeners.count);
+        dbglog(*self->log, "Creating listener fds if needed");
         for (AGListenerSettings *listener in config.listeners) {
             int listenerFd = -1;
 #if !TARGET_OS_IPHONE
-            if (config.helperPath) {
+            if (config.helperPath && listener.port > 0 && listener.port < 1024) {
+                dbglog(*self->log, "Creating listener fd for proto={} address={} port={}",
+                       (listener.proto == AGLP_TCP) ? "tcp" : "udp",
+                       listener.address.UTF8String ? listener.address.UTF8String : "(null)",
+                       listener.port);
                 listenerFd = bindFd(config.helperPath, listener.address, @(listener.port), listener.proto, error);
                 if (listenerFd == -1) {
+                    NSString *description = [(NSError *) *error localizedDescription];
+                    dbglog(*self->log, "Error creating listener fd: {}", description.UTF8String ? description.UTF8String : "(null)");
                     return nil;
                 }
                 closefds.emplace_back(nullptr, [listenerFd](void *p) {
@@ -1319,6 +1336,11 @@ static ProxySettingsOverrides convertProxySettingsOverrides(const AGDnsProxySett
                 }); // Close on return (listener does dup())
             }
 #endif
+            dbglog(*self->log, "Adding listener (fd={}) for proto={} address={} port={}",
+                   listenerFd,
+                   (listener.proto == AGLP_TCP) ? "tcp" : "udp",
+                   listener.address.UTF8String ? listener.address.UTF8String : "(null)",
+                   listener.port);
             settings.listeners.emplace_back((ListenerSettings) {
                 .address = listener.address.UTF8String,
                 .port = (uint16_t) listener.port,
@@ -1329,6 +1351,7 @@ static ProxySettingsOverrides convertProxySettingsOverrides(const AGDnsProxySett
                 .fd = listenerFd,
             });
         }
+        dbglog(*self->log, "Finished creating listener fds if needed, {} pending to close", closefds.size());
     }
 
     settings.ipv6_available = config.ipv6Available;

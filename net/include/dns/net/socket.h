@@ -156,22 +156,8 @@ public:
      */
     [[nodiscard]] const CertificateVerifier *get_certificate_verifier() const;
 
-    /**
-     * Check whether a connection should be routed through proxy
-     * @param proto the connection protocol
-     * @return true if it should be proxied, false otherwise
-     */
-    [[nodiscard]] bool should_route_through_proxy(utils::TransportProtocol proto) const;
-
-    /**
-     * Check whether the proxy server is available
-     */
-    [[nodiscard]] bool is_proxy_available() const;
-
-    /**
-     * Register a successful connection to the proxy server
-     */
-    void on_successful_proxy_connection();
+private:
+    struct OutboundProxyState;
 
     enum ProxyConectionFailedResult {
         /// Close a connection
@@ -179,35 +165,6 @@ public:
         /// Re-route a connection directly to the target
         SFPCFR_RETRY_DIRECTLY,
     };
-
-    /**
-     * Register the proxy server connection failure
-     * @param err error code, if some
-     */
-    [[nodiscard]] ProxyConectionFailedResult on_proxy_connection_failed(Error<SocketError> err);
-
-    struct ResetBypassedProxyConnectionsSubscriber {
-        void (*func)(void *arg);
-
-        void *arg;
-    };
-
-    /**
-     * Subscribe to postponed event a handler of which should reset the connections which were
-     * re-routed directly to the host after `SFPCFR_RETRY_DIRECTLY`
-     * @param subscriber the subscriber
-     * @return subscriber ID
-     */
-    uint32_t subscribe_to_reset_bypassed_proxy_connections_event(ResetBypassedProxyConnectionsSubscriber subscriber);
-
-    /**
-     * Unsubscribe from the reset event
-     * @param id the subscriber ID
-     */
-    void unsubscribe_from_reset_bypassed_proxy_connections_event(uint32_t id);
-
-private:
-    struct OutboundProxyState;
 
     Parameters m_parameters;
     RouteResolverPtr m_router;
@@ -228,7 +185,9 @@ private:
     static SocketFactory::SocketPtr on_make_proxy_socket(void *arg, utils::TransportProtocol proto,
                                                          std::optional<SecureSocketParameters> secure_parameters);
 
-    static void on_reset_bypassed_proxy_connections(void *arg);
+    [[nodiscard]] bool should_route_through_proxy(utils::TransportProtocol proto) const;
+
+    [[nodiscard]] ProxyConectionFailedResult on_proxy_connection_failed(Error<SocketError> err);
 };
 
 class Socket {

@@ -4,6 +4,7 @@ using System.Net;
 using Adguard.Dns.Api.DnsProxyServer.Callbacks;
 using Adguard.Dns.Api.DnsProxyServer.Configs;
 using Adguard.Dns.Api.DnsProxyServer.EventArgs;
+using Adguard.Dns.Api.FilteringLogAction;
 using Adguard.Dns.DnsProxyServer;
 using Adguard.Dns.Helpers;
 using Adguard.Dns.Tests.TestUtils;
@@ -129,8 +130,8 @@ namespace Adguard.Dns.Tests.Helpers
                     IgnoreIfUnavailable = true
                 }
             };
-            Queue<IntPtr> allocatedPointers = new Queue<IntPtr>();
 
+            Queue<IntPtr> allocatedPointers = new Queue<IntPtr>();
             AGDnsApi.ag_dnsproxy_settings nativeDnsSettings =
                 DnsApiConverter.ToNativeObject(dnsSettings, allocatedPointers);
             Assert.AreNotEqual(IntPtr.Zero, nativeDnsSettings.fallbacks.entries);
@@ -196,16 +197,17 @@ namespace Adguard.Dns.Tests.Helpers
             Assert.AreEqual(
                 dnsSettings.OutboundProxySettings.IgnoreIfUnavailable,
                 dnsSettingsConverted.OutboundProxySettings.IgnoreIfUnavailable);
-            
-            Assert.AreEqual(dnsSettings.Listeners.Count, dnsSettingsConverted.Listeners.Count);
-            Assert.AreEqual(dnsSettings.Listeners[0].EndPoint, dnsSettingsConverted.Listeners[0].EndPoint);
+            Assert.AreEqual(dnsSettings.Listeners.Count,
+	            dnsSettingsConverted.Listeners.Count);
+            Assert.AreEqual(dnsSettings.Listeners[0].EndPoint,
+	            dnsSettingsConverted.Listeners[0].EndPoint);
             Assert.AreEqual(dnsSettings.Listeners[0].ProxySettingsOverrides.BlockEch, 
                 dnsSettingsConverted.Listeners[0].ProxySettingsOverrides.BlockEch);
 
         }
 
         [Test]
-        public void TestUpstreamOptionsConverter()
+        public void TestDnsProxyServerConverter()
         {
             IDnsProxyServerCallbackConfiguration dnsCallback = new DnsProxyServerCallbackConfiguration();
             DnsProxySettings currentDnsProxySettings = new DnsProxySettings();
@@ -252,7 +254,7 @@ namespace Adguard.Dns.Tests.Helpers
         {
             AGDnsApi.ag_dns_request_processed_event dnsRequestNative = new AGDnsApi.ag_dns_request_processed_event();
             DnsRequestProcessedEventArgs dnsRequest = DnsApiConverter.FromNativeObject(dnsRequestNative);
-            Assert.IsNotNull(dnsRequest);
+            Assert.NotNull(dnsRequest);
         }
 
         [Test]
@@ -269,7 +271,50 @@ namespace Adguard.Dns.Tests.Helpers
         {
             AGDnsApi.ag_certificate_verification_event coreArgsС = new AGDnsApi.ag_certificate_verification_event();
             CertificateVerificationEventArgs certificate = DnsApiConverter.FromNativeObject(coreArgsС);
-            Assert.IsNotNull(certificate);
+            Assert.NotNull(certificate);
+        }
+
+        [Test]
+        public void TestUpstreamOptionsConverter()
+        {
+	        Queue<IntPtr> allocatedPointers = null;
+	        try
+	        {
+		        allocatedPointers = new Queue<IntPtr>();
+		        UpstreamOptions upstreamOptions = new UpstreamOptions
+		        {
+			        Bootstrap = new List<string>(),
+			        Fingerprints = new List<string>(),
+			        Address = "8.8.8.8:53",
+		        };
+
+		        AGDnsApi.ag_upstream_options upstreamOptionsC = DnsApiConverter.ToNativeObject(upstreamOptions, allocatedPointers);
+                Assert.NotNull(upstreamOptionsC);
+                Assert.AreEqual(upstreamOptions.Address, 
+	                MarshalUtils.PtrToString(upstreamOptionsC.Address));
+	        }
+	        finally
+	        {
+		        MarshalUtils.SafeFreeHGlobal(allocatedPointers);
+	        }
+        }
+
+        [Test]
+        public void TestFilteringLogActionConverter()
+        {
+	        AGDnsApi.ag_dns_filtering_log_action actionC = new AGDnsApi.ag_dns_filtering_log_action
+	        {
+		        AllowedOptions = AGDnsApi.ag_rule_generation_options.AGRGO_IMPORTANT,
+		        RequiredOptions = AGDnsApi.ag_rule_generation_options.AGRGO_IMPORTANT,
+                IsBlocking = false,
+                Templates = new AdGuard.Utils.Adapters.Interop.MarshalUtils.ag_list()
+            };
+
+	        FilteringLogAction filteringLog = DnsApiConverter.FromNativeObject(actionC);
+            Assert.NotNull(filteringLog);
+            Assert.AreEqual(actionC.AllowedOptions, filteringLog.AllowedOptions);
+            Assert.AreEqual(actionC.RequiredOptions, filteringLog.RequiredOptions);
+            Assert.AreEqual(actionC.IsBlocking, filteringLog.IsBlocking);
         }
     }
 }

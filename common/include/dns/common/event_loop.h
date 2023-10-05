@@ -127,7 +127,7 @@ public:
     /**
      * Co-routine helper used for invoking code after suspension point inside the event loop.
      */
-    auto co_submit() {
+    [[nodiscard]] auto co_submit() {
         struct Awaitable : public std::suspend_always {
             EventLoop *loop;
             void await_suspend(std::coroutine_handle<> h) {
@@ -137,7 +137,7 @@ public:
         return Awaitable{.loop = this};
     }
 
-    auto co_sleep(Micros time) {
+    [[nodiscard]] auto co_sleep(Micros time) {
         struct Awaitable : public std::suspend_always {
             Micros time;
             EventLoop *loop;
@@ -147,6 +147,8 @@ public:
         };
         return Awaitable{.time = time, .loop = this};
     }
+
+    [[nodiscard]] bool valid() { return m_handle != nullptr; }
 
 private:
     ag::Logger m_log;

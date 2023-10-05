@@ -62,7 +62,7 @@ target_include_directories(upstream PUBLIC include)
 target_include_directories(upstream PRIVATE ${OPENSSL_INCLUDE_DIR})
 target_link_libraries(upstream dnslibs_common dnsstamp dnscrypt dnslibs_net)
 target_link_libraries(upstream CONAN_PKG::magic_enum CONAN_PKG::libevent CONAN_PKG::ldns)
-target_link_libraries(upstream CONAN_PKG::libcurl CONAN_PKG::ngtcp2)
+target_link_libraries(upstream CONAN_PKG::ngtcp2)
 
 enable_testing()
 include(${CMAKE_CURRENT_SOURCE_DIR}/../cmake/add_unit_test.cmake)
@@ -73,4 +73,3 @@ add_unit_test(test_upstream "${TEST_DIR}" "${DNSLIBS_DIR}/dnscrypt/src" TRUE FAL
 add_unit_test(test_upstream_utils "${TEST_DIR}" "" TRUE TRUE)
 add_unit_test(test_dot_invalid_address "${TEST_DIR}" "${DNSLIBS_DIR}/upstream/src" TRUE TRUE)
 add_unit_test(test_bootstrapper "${TEST_DIR}" "${DNSLIBS_DIR}/upstream/src" TRUE TRUE)
-add_unit_test(test_curl_features "${TEST_DIR}" "${DNSLIBS_DIR}/upstream/src" TRUE TRUE)

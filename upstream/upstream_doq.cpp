@@ -103,7 +103,9 @@ DoqUpstream::~DoqUpstream() {
 int dns_over_quic::set_encryption_secrets(SSL *ssl, enum ssl_encryption_level_t ossl_level, const uint8_t *read_secret,
         const uint8_t *write_secret, size_t secret_len) {
     auto doq = static_cast<dns_over_quic *>(SSL_get_app_data(ssl));
-    if (doq->on_key(doq->from_ossl_level(ossl_level), read_secret, write_secret, secret_len) != 0) {
+    if (0
+            != doq->on_key(ngtcp2_crypto_boringssl_from_ssl_encryption_level(ossl_level), read_secret, write_secret,
+                    secret_len)) {
         return 0;
     }
     return 1;
@@ -112,7 +114,8 @@ int dns_over_quic::set_encryption_secrets(SSL *ssl, enum ssl_encryption_level_t 
 int DoqUpstream::set_rx_secret(SSL *ssl, enum ssl_encryption_level_t ossl_level, const SSL_CIPHER *cipher,
         const uint8_t *read_secret, size_t secret_len) {
     auto doq = static_cast<DoqUpstream *>(SSL_get_app_data(ssl));
-    if (doq->on_key(doq->from_ossl_level(ossl_level), read_secret, nullptr, secret_len) != 0) {
+    if (0 != doq->on_key(
+                    ngtcp2_crypto_boringssl_from_ssl_encryption_level(ossl_level), read_secret, nullptr, secret_len)) {
         return 0;
     }
     return 1;
@@ -120,7 +123,9 @@ int DoqUpstream::set_rx_secret(SSL *ssl, enum ssl_encryption_level_t ossl_level,
 int DoqUpstream::set_tx_secret(SSL *ssl, enum ssl_encryption_level_t ossl_level, const SSL_CIPHER *cipher,
         const uint8_t *write_secret, size_t secret_len) {
     auto doq = static_cast<DoqUpstream *>(SSL_get_app_data(ssl));
-    if (doq->on_key(doq->from_ossl_level(ossl_level), nullptr, write_secret, secret_len) != 0) {
+    if (0
+            != doq->on_key(
+                    ngtcp2_crypto_boringssl_from_ssl_encryption_level(ossl_level), nullptr, write_secret, secret_len)) {
         return 0;
     }
     return 1;
@@ -129,7 +134,7 @@ int DoqUpstream::set_tx_secret(SSL *ssl, enum ssl_encryption_level_t ossl_level,
 
 int DoqUpstream::add_handshake_data(SSL *ssl, enum ssl_encryption_level_t ossl_level, const uint8_t *data, size_t len) {
     auto doq = static_cast<DoqUpstream *>(SSL_get_app_data(ssl));
-    doq->write_client_handshake(doq->from_ossl_level(ossl_level), data, len);
+    doq->write_client_handshake(ngtcp2_crypto_boringssl_from_ssl_encryption_level(ossl_level), data, len);
     return 1;
 }
 
@@ -834,7 +839,7 @@ int DoqUpstream::init_ssl() {
     return 0;
 }
 
-void DoqUpstream::write_client_handshake(ngtcp2_crypto_level level, const uint8_t *data, size_t datalen) {
+void DoqUpstream::write_client_handshake(ngtcp2_encryption_level level, const uint8_t *data, size_t datalen) {
     auto &crypto = m_crypto[level];
     crypto.data.emplace_back(data, datalen);
     auto &buf = crypto.data.back();
@@ -865,22 +870,15 @@ int DoqUpstream::version_negotiation(
     uint32_t version = 0;
     bool selected = false;
     for (size_t i = 0; i < nsv; i++) {
-        if (sv[i] == NGTCP2_PROTO_VER_V1
-                || (sv[i] >= NGTCP2_PROTO_VER_DRAFT_MIN && sv[i] <= NGTCP2_PROTO_VER_DRAFT_MAX)) {
+        if (NGTCP2_PROTO_VER_MIN <= sv[i] && sv[i] <= NGTCP2_PROTO_VER_MAX) {
             selected = true;
             version = std::max(version, sv[i]);
         }
     }
-    if (doq->m_log.is_enabled(LogLevel::LOG_LEVEL_DEBUG)) {
-        std::string list;
-        for (size_t i = 0; i < nsv; i++) {
-            list += (i ? ", " : "") + AG_FMT("{:#x}", sv[i]);
-        }
-        dbglog(doq->m_log,
-                "Version negotiation. Client supported versions: {:#x}, drafts {:#x} to {:#x}, server supported "
-                "versions: {}",
-                NGTCP2_PROTO_VER_V1, NGTCP2_PROTO_VER_DRAFT_MIN, NGTCP2_PROTO_VER_DRAFT_MAX, list);
-    }
+    dbglog(doq->m_log,
+            "Version negotiation. Client supported versions: {:#x} to {:#x}, server supported "
+            "versions: {}",
+            NGTCP2_PROTO_VER_MIN, NGTCP2_PROTO_VER_MAX, std::span<const uint32_t>{sv, sv + nsv});
 
     if (selected) {
         dbglog(doq->m_log, "Switching from QUIC version {:#x} to negotiated QUIC version {:#x}", doq->m_quic_version,
@@ -893,7 +891,7 @@ int DoqUpstream::version_negotiation(
     return -1;
 }
 
-int DoqUpstream::recv_crypto_data(ngtcp2_conn *conn, ngtcp2_crypto_level crypto_level, uint64_t /*offset*/,
+int DoqUpstream::recv_crypto_data(ngtcp2_conn *conn, ngtcp2_encryption_level crypto_level, uint64_t /*offset*/,
         const uint8_t *data, size_t datalen, void *user_data) {
 
     if (ngtcp2_crypto_read_write_crypto_data(conn, crypto_level, data, datalen) != 0) {
@@ -908,7 +906,7 @@ int DoqUpstream::recv_crypto_data(ngtcp2_conn *conn, ngtcp2_crypto_level crypto_
 }
 
 int DoqUpstream::on_key(
-        ngtcp2_crypto_level level, const uint8_t *rx_secret, const uint8_t *tx_secret, size_t secretlen) {
+        ngtcp2_encryption_level level, const uint8_t *rx_secret, const uint8_t *tx_secret, size_t secretlen) {
     std::array<uint8_t, 64> rx_key{}, rx_iv{}, rx_hp_key{}, tx_key{}, tx_iv{}, tx_hp_key{};
 
     std::string direction;
@@ -930,20 +928,7 @@ int DoqUpstream::on_key(
         }
     }
 
-    switch (level) {
-    case NGTCP2_CRYPTO_LEVEL_EARLY:
-        dbglog(m_log, "Crypto {} level: EARLY", direction);
-        break;
-    case NGTCP2_CRYPTO_LEVEL_HANDSHAKE:
-        dbglog(m_log, "Crypto {} level: HANDSHAKE", direction);
-        break;
-    case NGTCP2_CRYPTO_LEVEL_APPLICATION:
-        dbglog(m_log, "Crypto {} level: APP", direction);
-        break;
-    default:
-        dbglog(m_log, "Crypto {} level: UNKNOWN", direction);
-        assert(0);
-    }
+    dbglog(m_log, "Crypto {} level: {}", direction, magic_enum::enum_name(level));
 
     return 0;
 }
@@ -1218,22 +1203,6 @@ void DoqUpstream::disqualify_server_address(const SocketAddress &server_address)
             m_server_addresses.splice(m_server_addresses.end(), m_server_addresses, it_serv);
             break;
         }
-    }
-}
-
-ngtcp2_crypto_level DoqUpstream::from_ossl_level(enum ssl_encryption_level_t ossl_level) const {
-    switch (ossl_level) {
-    case ssl_encryption_initial:
-        return NGTCP2_CRYPTO_LEVEL_INITIAL;
-    case ssl_encryption_early_data:
-        return NGTCP2_CRYPTO_LEVEL_EARLY;
-    case ssl_encryption_handshake:
-        return NGTCP2_CRYPTO_LEVEL_HANDSHAKE;
-    case ssl_encryption_application:
-        return NGTCP2_CRYPTO_LEVEL_APPLICATION;
-    default:
-        warnlog(m_log, "Unknown encryption level");
-        assert(0);
     }
 }
 
