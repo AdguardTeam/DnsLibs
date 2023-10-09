@@ -11,11 +11,11 @@ std::unordered_map<std::string, std::list<SslSessionPtr>> TlsSessionCache::m_cac
 static int get_ex_data_idx();
 const int TlsSessionCache::SSL_EX_DATA_IDX = get_ex_data_idx();
 
-void TlsSessionCache::save_session(SSL *ssl, SSL_SESSION *session) {
+int TlsSessionCache::save_session(SSL *ssl, SSL_SESSION *session) {
     auto *cache = (TlsSessionCache *) SSL_get_ex_data(ssl, SSL_EX_DATA_IDX);
     if (!cache) {
         dbglog(m_log, "SSL object is not associated with a cache");
-        return;
+        return 0; // Return 0 not to take ownership of session
     }
     std::scoped_lock l(m_mtx);
     auto &sessions = m_caches_by_url[cache->m_url]; // Create if not exists
@@ -25,6 +25,7 @@ void TlsSessionCache::save_session(SSL *ssl, SSL_SESSION *session) {
     }
     sessions.emplace_back(session);
     dbglog(m_log, "Session saved, {} sessions available for {}", sessions.size(), cache->m_url);
+    return 1; // Return 1 to take ownership of session
 }
 
 SslSessionPtr TlsSessionCache::get_session() {
@@ -46,8 +47,7 @@ int TlsSessionCache::session_new_cb(SSL *ssl, SSL_SESSION *session) {
         dbglog(m_log, "SSL or SSL_SESSION is nullptr");
         return 0;
     }
-    save_session(ssl, session);
-    return 1; // Return 1 to take ownership of session
+    return save_session(ssl, session);
 }
 
 void TlsSessionCache::prepare_ssl_ctx(SSL_CTX *ctx) {

@@ -46,8 +46,10 @@ public:
 
 private:
     enum class ConnectionState : int;
-    struct HttpAwaitable;
+    struct ConnectWaiter;
     struct ConnectAwaitable;
+    struct ReplyWaiter;
+    struct ReplyAwaitable;
 
     struct HttpConnection;
     struct Http2Connection;
@@ -59,9 +61,9 @@ private:
     coro::Task<ExchangeResult> exchange(const ldns_pkt *, const DnsMessageInfo *info) override;
 
     coro::Task<void> drive_connection(Millis timeout);
-    coro::Task<Result<HttpConnection *, DnsError>> establish_connection(HttpConnection *http_conn);
+    coro::Task<Result<HttpConnection *, DnsError>> establish_connection(HttpConnection *http_conn, SocketAddress peer);
     coro::Task<Result<HttpConnection *, DnsError>> establish_any_of_connections(
-            HttpConnection *left, HttpConnection *right);
+            HttpConnection *left, HttpConnection *right, SocketAddress peer);
     coro::Task<ExchangeResult> exchange(Millis timeout, const ldns_pkt *request);
     coro::Task<ExchangeResult> wait_for_reply(uint64_t stream_id, uint16_t query_id);
     Result<uint64_t, DnsError> send_request(const ldns_pkt *request);
@@ -73,15 +75,16 @@ private:
     uint32_t m_id;
     ConnectionState m_connection_state{};
     std::unique_ptr<HttpConnection> m_http_conn;
-    std::unordered_map<uint64_t, std::unique_ptr<HttpAwaitable>> m_streams;
+    std::unordered_map<uint64_t, std::unique_ptr<ReplyWaiter>> m_streams;
     size_t m_next_query_id = 0;
-    std::unordered_map<size_t, std::unique_ptr<ConnectAwaitable>> m_connect_waiters;
+    std::unordered_map<size_t, std::unique_ptr<ConnectWaiter>> m_connect_waiters;
     size_t m_pending_queries_counter = 0;
     std::optional<EventLoop::TaskId> m_read_timer_task;
     std::optional<Bootstrapper> m_bootstrapper;
     http::Request m_request_template;
     std::string m_path;
     std::optional<http::Version> m_http_version;
+    bool m_retry_connection = false;
     TlsSessionCache m_tls_session_cache;
     std::vector<CertFingerprint> m_fingerprints;
     std::shared_ptr<bool> m_shutdown_guard = std::make_shared<bool>(true);

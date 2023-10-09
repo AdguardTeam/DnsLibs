@@ -27,7 +27,7 @@ private:
     static constexpr size_t MAX_SIZE_PER_URL = 5;
     static const int SSL_EX_DATA_IDX;
 
-    static void save_session(SSL *ssl, SSL_SESSION *session);
+    static int save_session(SSL *ssl, SSL_SESSION *session);
     static int session_new_cb(SSL *ssl, SSL_SESSION *session);
 
 public:

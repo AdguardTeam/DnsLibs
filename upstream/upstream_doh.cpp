@@ -1,5 +1,6 @@
 #include <array>
 #include <atomic>
+#include <cassert>
 #include <chrono>
 
 #include <magic_enum.hpp>
@@ -19,7 +20,47 @@ enum class ag::dns::DohUpstream::ConnectionState : int {
     CONNECTED,
 };
 
-struct ag::dns::DohUpstream::HttpAwaitable {
+struct ag::dns::DohUpstream::ConnectWaiter {
+    std::coroutine_handle<> handle;
+    Error<DnsError> error;
+    bool complete = false;
+
+    ~ConnectWaiter() {
+        if (!complete && handle != nullptr) {
+            if (error == nullptr) {
+                error = make_error(DnsError::AE_SHUTTING_DOWN);
+            }
+            std::exchange(handle, nullptr).resume();
+        }
+    }
+
+    void notify_result(Error<DnsError> e) {
+        error = std::move(e);
+        assert(!complete);
+        complete = true;
+        std::exchange(handle, nullptr).resume();
+    }
+};
+
+struct ag::dns::DohUpstream::ConnectAwaitable {
+    ConnectWaiter &waiter;
+
+    explicit ConnectAwaitable(ConnectWaiter &waiter)
+            : waiter(waiter) {
+    }
+
+    [[nodiscard]] bool await_ready() const {
+        return waiter.complete;
+    }
+    void await_suspend(std::coroutine_handle<> h) {
+        waiter.handle = std::move(h);
+    }
+    Error<DnsError> await_resume() {
+        return waiter.error;
+    }
+};
+
+struct ag::dns::DohUpstream::ReplyWaiter {
     enum State {
         WAITING_RESPONSE_HEADERS,
         WAITING_RESPONSE_BODY,
@@ -37,46 +78,49 @@ struct ag::dns::DohUpstream::HttpAwaitable {
     // monostate is needed to make it default-constructible (`ag::Result`'s restriction)
     using Result = Result<std::variant<std::monostate, http::Response, ldns_pkt_ptr>, DnsError>;
 
-    explicit HttpAwaitable(uint16_t query_id);
-    ~HttpAwaitable() = default;
-    HttpAwaitable() = delete;
-    HttpAwaitable(const HttpAwaitable &) = delete;
-    HttpAwaitable &operator=(const HttpAwaitable &) = delete;
-    HttpAwaitable(HttpAwaitable &&) = delete;
-    HttpAwaitable &operator=(HttpAwaitable &&) = delete;
+    explicit ReplyWaiter(uint16_t query_id);
+    ~ReplyWaiter();
+    ReplyWaiter() = delete;
+    ReplyWaiter(const ReplyWaiter &) = delete;
+    ReplyWaiter &operator=(const ReplyWaiter &) = delete;
+    ReplyWaiter(ReplyWaiter &&) = delete;
+    ReplyWaiter &operator=(ReplyWaiter &&) = delete;
 
-    bool await_ready();
-    void await_suspend(std::coroutine_handle<> h);
-    Result await_resume();
     void notify_response(http::Response r);
     void notify_reply(ldns_pkt_ptr r);
     void notify_error(Error<DnsError> e);
 };
 
-struct ag::dns::DohUpstream::ConnectAwaitable {
-    std::coroutine_handle<> handle;
-    Error<DnsError> error;
+struct ag::dns::DohUpstream::ReplyAwaitable {
+    ReplyWaiter &waiter;
 
-    ~ConnectAwaitable() = default;
+    explicit ReplyAwaitable(ReplyWaiter &waiter)
+            : waiter(waiter) {
+    }
 
-    bool await_ready() {
-        return false;
+    [[nodiscard]] bool await_ready() const {
+        return waiter.response.has_value() || waiter.reply != nullptr || waiter.error != nullptr;
     }
     void await_suspend(std::coroutine_handle<> h) {
-        handle = h;
+        waiter.handle = h;
     }
-    Error<DnsError> await_resume() {
-        return error;
-    }
-    void notify_result(Error<DnsError> e) {
-        error = std::move(e);
-        handle.resume();
+    ReplyWaiter::Result await_resume() {
+        if (waiter.error != nullptr) {
+            return std::exchange(waiter.error, nullptr);
+        }
+        if (waiter.response.has_value()) {
+            return std::exchange(waiter.response, std::nullopt).value(); // NOLINT(*-unchecked-optional-access)
+        }
+        if (waiter.reply != nullptr) {
+            return std::exchange(waiter.reply, nullptr);
+        }
+        return waiter.error;
     }
 };
 
 struct ag::dns::DohUpstream::HttpConnection { // NOLINT(*-special-member-functions)
     explicit HttpConnection(DohUpstream *parent)
-            : shutdown_guard(parent->m_shutdown_guard)
+            : parent_shutdown_guard(parent->m_shutdown_guard)
             , parent(parent) {
     }
 
@@ -86,7 +130,9 @@ struct ag::dns::DohUpstream::HttpConnection { // NOLINT(*-special-member-functio
     HttpConnection(HttpConnection &&) = delete;
     HttpConnection &operator=(HttpConnection &&) = delete;
 
-    virtual ~HttpConnection() = default;
+    virtual ~HttpConnection() {
+        shutdown_guard.reset();
+    }
     [[nodiscard]] virtual http::Version version() const = 0;
     [[nodiscard]] virtual coro::Task<Error<DnsError>> establish(std::string hostname, SocketAddress peer) = 0;
     [[nodiscard]] virtual Result<uint64_t, DnsError> submit_request(const http::Request &request) = 0;
@@ -101,7 +147,8 @@ struct ag::dns::DohUpstream::HttpConnection { // NOLINT(*-special-member-functio
     static void on_close(void *arg, Error<DnsError> error);
     static void on_output(void *arg, Uint8View chunk);
 
-    std::weak_ptr<bool> shutdown_guard;
+    std::shared_ptr<bool> shutdown_guard = std::make_shared<bool>();
+    std::weak_ptr<bool> parent_shutdown_guard;
     DohUpstream *parent;
     std::optional<AioSocket> io;
     static inline uint32_t next_id = 0; // NOLINT(*-identifier-naming)
@@ -112,7 +159,9 @@ struct ag::dns::DohUpstream::Http2Connection : public ag::dns::DohUpstream::Http
     explicit Http2Connection(DohUpstream *parent)
             : HttpConnection(parent) {
     }
-    ~Http2Connection() override = default;
+    ~Http2Connection() override {
+        shutdown_guard.reset();
+    }
     Http2Connection(const Http2Connection &) = delete;
     Http2Connection &operator=(const Http2Connection &) = delete;
     Http2Connection(Http2Connection &&) = delete;
@@ -143,7 +192,9 @@ struct ag::dns::DohUpstream::Http3Connection : public ag::dns::DohUpstream::Http
             : HttpConnection(parent) {
     }
     ~Http3Connection() override {
-        if (shutdown_guard.expired()) {
+        shutdown_guard.reset();
+
+        if (parent_shutdown_guard.expired()) {
             return;
         }
 
@@ -318,8 +369,6 @@ ag::coro::Task<ag::dns::Upstream::ExchangeResult> ag::dns::DohUpstream::exchange
         refresh_read_timer();
     }
 
-    m_pending_queries_counter += 1;
-
     ExchangeResult result;
     while (true) {
         switch (m_connection_state) {
@@ -337,15 +386,11 @@ ag::coro::Task<ag::dns::Upstream::ExchangeResult> ag::dns::DohUpstream::exchange
             break;
         }
         case ConnectionState::CONNECTING: {
-            ConnectAwaitable &awaitable =
-                    *m_connect_waiters.emplace(query_id, std::make_unique<ConnectAwaitable>()).first->second;
-            // NOLINTNEXTLINE(*-avoid-reference-coroutine-parameters)
-            auto task = [](ConnectAwaitable &awaitable) -> coro::Task<Error<DnsError>> {
-                auto x = co_await awaitable;
-                co_return std::move(x);
-            }(awaitable);
+            ConnectWaiter &waiter =
+                    *m_connect_waiters.emplace(query_id, std::make_unique<ConnectWaiter>()).first->second;
             timeout = timeout - duration_cast<Millis>(SteadyClock::now() - start_ts);
-            auto error = co_await parallel::any_of<Error<DnsError>>(task, wait_timeout(m_config.loop, timeout));
+            auto error = co_await parallel::any_of<Error<DnsError>>(
+                    ConnectAwaitable(waiter), wait_timeout(m_config.loop, timeout));
             if (shutdown_guard.expired()) {
                 result = make_error(DnsError::AE_SHUTTING_DOWN);
                 goto loop_exit;
@@ -382,7 +427,9 @@ loop_exit:
     co_return result;
 }
 
-ag::coro::Task<void> ag::dns::DohUpstream::drive_connection(Millis timeout) {
+ag::coro::Task<void> ag::dns::DohUpstream::drive_connection(Millis handshake_timeout) {
+    SteadyClock::time_point start_ts = SteadyClock::now();
+
     if (m_connection_state != ConnectionState::CONNECTING) {
         ConnectionState state = std::exchange(m_connection_state, ConnectionState::IDLE);
         close_connection(
@@ -395,32 +442,57 @@ ag::coro::Task<void> ag::dns::DohUpstream::drive_connection(Millis timeout) {
         co_return;
     }
 
+    std::weak_ptr<bool> shutdown_guard = m_shutdown_guard;
+    log_upstream(trace, this, "Bootstrapping...");
+    Bootstrapper::ResolveResult resolved = co_await m_bootstrapper->get(); // NOLINT(*-unchecked-optional-access)
+    if (resolved.error) {
+        close_connection(make_error(DnsError::AE_BOOTSTRAP_ERROR, resolved.error));
+        co_return;
+    }
+    if (resolved.addresses.empty()) {
+        close_connection(make_error(DnsError::AE_BOOTSTRAP_ERROR, "Empty address list"));
+        co_return;
+    }
+    if (shutdown_guard.expired()) {
+        co_return;
+    }
+    log_upstream(trace, this, "Bootstrapped");
+
     std::array<std::unique_ptr<HttpConnection>, 2> connections;
     coro::Task<Result<HttpConnection *, DnsError>> connector;
     if (m_http_version == http::HTTP_3_0) {
         connections[0] = std::make_unique<Http3Connection>(this);
-        connector = establish_connection(connections[0].get());
+        connector = establish_connection(connections[0].get(), resolved.addresses.at(0));
     } else if (m_http_version == http::HTTP_2_0) {
         connections[0] = std::make_unique<Http2Connection>(this);
-        connector = establish_connection(connections[0].get());
+        connector = establish_connection(connections[0].get(), resolved.addresses.at(0));
     } else {
         connections[0] = std::make_unique<Http2Connection>(this);
         connections[1] = std::make_unique<Http3Connection>(this);
-        connector = establish_any_of_connections(connections[0].get(), connections[1].get());
+        connector = establish_any_of_connections(connections[0].get(), connections[1].get(), resolved.addresses.at(0));
     }
 
-    std::weak_ptr<bool> shutdown_guard = m_shutdown_guard;
     auto http_conn = co_await parallel::any_of<Result<HttpConnection *, DnsError>>(
-            connector, wait_timeout(m_config.loop, timeout));
+            connector, wait_timeout(m_config.loop, handshake_timeout));
     if (shutdown_guard.expired()) {
         co_return;
     }
 
+    co_await m_config.loop.co_submit();
+    if (shutdown_guard.expired()) {
+        co_return;
+    }
+
+    if (std::exchange(m_retry_connection, false) && 1 < resolved.addresses.size()) {
+        log_upstream(dbg, this, "Retrying connection");
+        m_http_conn.reset();
+        cancel_read_timer();
+        assert(m_connection_state == ConnectionState::CONNECTING);
+        co_return co_await drive_connection(handshake_timeout - duration_cast<Millis>(SteadyClock::now() - start_ts));
+    }
+
     if (http_conn.has_error()) {
-        co_await m_config.loop.co_submit();
-        if (!shutdown_guard.expired()) {
-            close_connection(http_conn.error());
-        }
+        close_connection(http_conn.error());
         co_return;
     }
 
@@ -447,22 +519,9 @@ ag::coro::Task<void> ag::dns::DohUpstream::drive_connection(Millis timeout) {
 }
 
 ag::coro::Task<ag::Result<ag::dns::DohUpstream::HttpConnection *, ag::dns::DnsError>>
-ag::dns::DohUpstream::establish_connection(HttpConnection *http_conn) {
-    std::weak_ptr<bool> shutdown_guard = m_shutdown_guard;
-    log_hconn(trace, http_conn, "Bootstrapping...");
-    Bootstrapper::ResolveResult resolved = co_await m_bootstrapper->get(); // NOLINT(*-unchecked-optional-access)
-    if (resolved.error) {
-        co_return make_error(DnsError::AE_BOOTSTRAP_ERROR, resolved.error);
-    }
-    if (resolved.addresses.empty()) {
-        co_return make_error(DnsError::AE_BOOTSTRAP_ERROR, "Empty address list");
-    }
-    if (shutdown_guard.expired()) {
-        co_return make_error(DnsError::AE_SHUTTING_DOWN);
-    }
-    log_hconn(trace, http_conn, "Bootstrapped");
+ag::dns::DohUpstream::establish_connection(HttpConnection *http_conn, SocketAddress peer) {
+    std::weak_ptr<bool> shutdown_guard = http_conn->shutdown_guard;
 
-    const SocketAddress &peer = resolved.addresses.at(0);
     log_hconn(trace, http_conn, "Connecting to {}...", peer.str());
     std::string_view hostname =
             decompose_url(m_options.address).value().authority; // was validated during initialization
@@ -471,13 +530,9 @@ ag::dns::DohUpstream::establish_connection(HttpConnection *http_conn) {
         co_return make_error(DnsError::AE_SHUTTING_DOWN);
     }
 
-    co_await m_config.loop.co_submit();
-    if (shutdown_guard.expired()) {
-        co_return make_error(DnsError::AE_SHUTTING_DOWN);
-    }
-
     if (error != nullptr) {
         if (error->value() == DnsError::AE_SOCKET_ERROR) {
+            m_retry_connection = true;
             m_bootstrapper->remove_resolved(peer); // NOLINT(*-unchecked-optional-access)
         }
         co_return error;
@@ -487,7 +542,7 @@ ag::dns::DohUpstream::establish_connection(HttpConnection *http_conn) {
 }
 
 ag::coro::Task<ag::Result<ag::dns::DohUpstream::HttpConnection *, ag::dns::DnsError>>
-ag::dns::DohUpstream::establish_any_of_connections(HttpConnection *left, HttpConnection *right) {
+ag::dns::DohUpstream::establish_any_of_connections(HttpConnection *left, HttpConnection *right, SocketAddress peer) {
     std::array<Error<DnsError>, 2> errors;
 
     std::optional http_conn = co_await parallel::any_of_cond<Result<HttpConnection *, DnsError>>(
@@ -500,16 +555,25 @@ ag::dns::DohUpstream::establish_any_of_connections(HttpConnection *left, HttpCon
                 }
                 return true;
             },
-            establish_connection(left), establish_connection(right));
+            establish_connection(left, peer), establish_connection(right, peer));
 
     if (!http_conn.has_value()) {
+        m_retry_connection = (errors[0] != nullptr && errors[0]->value() == DnsError::AE_SOCKET_ERROR)
+                || (errors[1] != nullptr && errors[1]->value() == DnsError::AE_SOCKET_ERROR);
         co_return make_error(DnsError::AE_HANDSHAKE_ERROR,
                 AG_FMT("None of the protocols have connected successfully.\nFirst error: '{}'\nSecond error: '{}'",
                         (errors[0] != nullptr) ? errors[0]->str() : "(null)",
                         (errors[1] != nullptr) ? errors[1]->str() : "(null)"));
     }
 
+    m_retry_connection = false;
+
     log_hconn(dbg, **http_conn, "Selected protocol");
+    if (errors[0] != nullptr || errors[1] != nullptr) {
+        assert((errors[0] == nullptr) != (errors[1] == nullptr));
+        log_hconn(dbg, (**http_conn == left) ? right : left, "Couldn't connect: {}",
+                (errors[0] != nullptr) ? errors[0]->str() : errors[1]->str());
+    }
 
     co_return http_conn.value();
 }
@@ -543,17 +607,16 @@ ag::coro::Task<ag::dns::Upstream::ExchangeResult> ag::dns::DohUpstream::exchange
 ag::coro::Task<ag::dns::Upstream::ExchangeResult> ag::dns::DohUpstream::wait_for_reply(
         uint64_t stream_id, uint16_t query_id) {
     std::weak_ptr<bool> shutdown_guard = m_shutdown_guard;
-    HttpAwaitable *awaitable =
-            m_streams.emplace(stream_id, std::make_unique<HttpAwaitable>(query_id)).first->second.get();
+    ReplyWaiter &waiter = *m_streams.emplace(stream_id, std::make_unique<ReplyWaiter>(query_id)).first->second;
 
     ExchangeResult exchange_result;
     while (true) {
-        HttpAwaitable::Result await_result = co_await *awaitable;
+        ReplyWaiter::Result await_result = co_await ReplyAwaitable(waiter);
         if (shutdown_guard.expired()) {
             co_return make_error(DnsError::AE_SHUTTING_DOWN);
         }
         if (await_result.has_error()) {
-            if (auto node = m_streams.extract(stream_id); !node.empty()) {
+            if (auto node = m_streams.extract(stream_id); !node.empty() && m_http_conn != nullptr) {
                 m_http_conn->reset_stream(stream_id);
             }
             exchange_result = make_error(DnsError::AE_EXCHANGE_ERROR, await_result.error());
@@ -626,6 +689,7 @@ ag::Result<uint64_t, ag::dns::DnsError> ag::dns::DohUpstream::send_request(const
 void ag::dns::DohUpstream::close_connection(const Error<DnsError> &error) {
     m_connection_state = ConnectionState::IDLE;
     m_http_conn.reset();
+    m_retry_connection = false;
     cancel_all(error);
     cancel_read_timer();
 }
@@ -653,16 +717,16 @@ void ag::dns::DohUpstream::refresh_read_timer() {
     cancel_read_timer();
 
     std::weak_ptr<bool> shutdown_guard = m_shutdown_guard;
-    m_read_timer_task = m_config.loop.schedule(duration_cast<Micros>(2 * m_config.timeout), [this, shutdown_guard]() {
-        if (shutdown_guard.expired()) {
-            return;
-        }
+    m_read_timer_task = m_config.loop.schedule(
+            duration_cast<Micros>(2 * m_config.timeout), [this, shutdown_guard = std::move(shutdown_guard)]() {
+                if (shutdown_guard.expired()) {
+                    return;
+                }
 
-        log_upstream(dbg, this, "Resetting stale connection");
-        assert(0);
-        m_read_timer_task.reset();
-        close_connection(make_error(DnsError::AE_TIMED_OUT));
-    });
+                log_upstream(dbg, this, "Resetting stale connection");
+                m_read_timer_task.reset();
+                close_connection(make_error(DnsError::AE_TIMED_OUT));
+            });
 }
 
 void ag::dns::DohUpstream::HttpConnection::on_response(void *arg, uint64_t stream_id, http::Response response) {
@@ -676,7 +740,7 @@ void ag::dns::DohUpstream::HttpConnection::on_response(void *arg, uint64_t strea
         return;
     }
 
-    HttpAwaitable *awaitable = iter->second.get();
+    ReplyWaiter *awaitable = iter->second.get();
     log_query(dbg, self, awaitable->query_id, "Received response: {}", response);
 
     awaitable->notify_response(std::move(response));
@@ -693,7 +757,7 @@ void ag::dns::DohUpstream::HttpConnection::on_body(void *arg, uint64_t stream_id
         return;
     }
 
-    HttpAwaitable *awaitable = iter->second.get();
+    ReplyWaiter *awaitable = iter->second.get();
     log_query(dbg, self, awaitable->query_id, "Received response body: {} bytes", chunk.length());
 
     awaitable->reply_buffer.insert(awaitable->reply_buffer.end(), chunk.begin(), chunk.end());
@@ -710,7 +774,7 @@ void ag::dns::DohUpstream::HttpConnection::on_stream_read_finished(void *arg, ui
         return;
     }
 
-    HttpAwaitable *awaitable = iter->second.get();
+    ReplyWaiter *awaitable = iter->second.get();
     log_query(dbg, self, awaitable->query_id, "Received fin");
 
     ldns_pkt *reply = nullptr;
@@ -730,7 +794,7 @@ void ag::dns::DohUpstream::HttpConnection::on_stream_read_finished(void *arg, ui
 
 void ag::dns::DohUpstream::HttpConnection::on_stream_closed(void *arg, uint64_t stream_id, Error<DnsError> error) {
     auto *self = (HttpConnection *) arg;
-    if (self->shutdown_guard.expired()) {
+    if (self->parent_shutdown_guard.expired() || self->parent->m_http_conn == nullptr) {
         return;
     }
 
@@ -743,7 +807,7 @@ void ag::dns::DohUpstream::HttpConnection::on_stream_closed(void *arg, uint64_t 
         return;
     }
 
-    HttpAwaitable *awaitable = iter->second.get();
+    ReplyWaiter *awaitable = iter->second.get();
     awaitable->notify_error(std::move(error));
 }
 
@@ -775,32 +839,22 @@ void ag::dns::DohUpstream::HttpConnection::on_output(void *arg, Uint8View chunk)
     }
 }
 
-ag::dns::DohUpstream::HttpAwaitable::HttpAwaitable(uint16_t query_id)
+ag::dns::DohUpstream::ReplyWaiter::ReplyWaiter(uint16_t query_id)
         : query_id(query_id) {
 }
 
-bool ag::dns::DohUpstream::HttpAwaitable::await_ready() {
-    return response.has_value() || reply != nullptr || error != nullptr;
+ag::dns::DohUpstream::ReplyWaiter::~ReplyWaiter() {
+    if (state != DONE && handle != nullptr) {
+        response.reset();
+        reply.reset();
+        if (error == nullptr) {
+            error = make_error(DnsError::AE_SHUTTING_DOWN);
+        }
+        std::exchange(handle, nullptr).resume();
+    }
 }
 
-void ag::dns::DohUpstream::HttpAwaitable::await_suspend(std::coroutine_handle<> h) {
-    handle = h;
-}
-
-ag::dns::DohUpstream::HttpAwaitable::Result ag::dns::DohUpstream::HttpAwaitable::await_resume() {
-    if (error != nullptr) {
-        return std::exchange(error, nullptr);
-    }
-    if (response.has_value()) {
-        return std::exchange(response, std::nullopt).value(); // NOLINT(*-unchecked-optional-access)
-    }
-    if (reply != nullptr) {
-        return std::exchange(reply, nullptr);
-    }
-    return error;
-}
-
-void ag::dns::DohUpstream::HttpAwaitable::notify_response(http::Response r) {
+void ag::dns::DohUpstream::ReplyWaiter::notify_response(http::Response r) {
     assert(state == WAITING_RESPONSE_HEADERS);
 
     if (r.status_code() == 200) { // NOLINT(*-magic-numbers)
@@ -813,7 +867,7 @@ void ag::dns::DohUpstream::HttpAwaitable::notify_response(http::Response r) {
     handle.resume();
 }
 
-void ag::dns::DohUpstream::HttpAwaitable::notify_reply(ldns_pkt_ptr r) {
+void ag::dns::DohUpstream::ReplyWaiter::notify_reply(ldns_pkt_ptr r) {
     if (std::exchange(state, DONE) != WAITING_RESPONSE_BODY) {
         return;
     }
@@ -822,7 +876,7 @@ void ag::dns::DohUpstream::HttpAwaitable::notify_reply(ldns_pkt_ptr r) {
     handle.resume();
 }
 
-void ag::dns::DohUpstream::HttpAwaitable::notify_error(Error<DnsError> e) {
+void ag::dns::DohUpstream::ReplyWaiter::notify_error(Error<DnsError> e) {
     if (std::exchange(state, DONE) != DONE) {
         error = std::move(e);
         handle.resume();
@@ -996,13 +1050,20 @@ ag::coro::Task<ag::Error<ag::dns::DnsError>> ag::dns::DohUpstream::Http3Connecti
         co_return make_error(DnsError::AE_INTERNAL_ERROR, "Couldn't configure SSL object for QUIC");
     }
 
-    UniquePtr<SSL, &SSL_free> ssl(SSL_new(ssl_ctx.get()));
+    bssl::UniquePtr<SSL> ssl(SSL_new(ssl_ctx.get()));
     static constexpr std::string_view ALPN = NGHTTP3_ALPN_H3;
     if (0 != SSL_set_alpn_protos(ssl.get(), (uint8_t *) ALPN.data(), ALPN.size())) {
         co_return make_error(DnsError::AE_INTERNAL_ERROR, "Couldn't configure ALPN");
     }
 
     SSL_set_tlsext_host_name(ssl.get(), hostname.c_str());
+    parent->m_tls_session_cache.prepare_ssl(ssl.get());
+    if (SslSessionPtr session = parent->m_tls_session_cache.get_session()) {
+        log_hconn(dbg, this, "Using a cached TLS session");
+        SSL_set_session(ssl.get(), session.get()); // UpRefs the session
+    } else {
+        log_hconn(trace, this, "No cached TLS sessions available");
+    }
     SSL_set_connect_state(ssl.get());
 
     if (Error<DnsError> error = co_await connect_socket(std::move(hostname), peer); error != nullptr) {
