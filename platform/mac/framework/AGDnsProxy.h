@@ -188,7 +188,9 @@ typedef void (^logCallback)(AGLogLevel level, const char *msg, int length);
  */
 @property(nonatomic) NSInteger id;
 /**
- * Name of the network interface to route traffic through, nil is default
+ * Name of the network interface to route traffic through.
+ * Optional on macOS, nil is default.
+ * Required on iOS.
  */
 @property(nonatomic) NSString *outboundInterfaceName;
 

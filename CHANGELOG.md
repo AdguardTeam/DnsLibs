@@ -1,5 +1,10 @@
 # Changelog
 
+* [Changed] Outbound network interface name is now a required property on iOS.
+  * [Apple/iOS] See `AGDnsUpstream.outboundInterfaceName`.
+
+## V2.2
+
 * [Feature] Added a workaround for incompatibility between ECH features of CoreLibs and DnsLibs.
             The correct set-up expects an application creates an additional TCP listener with
             settings overrides with `blockEch` set to `false`, if "block ECH" feature
