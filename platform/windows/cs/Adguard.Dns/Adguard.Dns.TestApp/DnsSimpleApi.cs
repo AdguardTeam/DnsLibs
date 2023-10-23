@@ -5,9 +5,9 @@ using System.Net.NetworkInformation;
 using Adguard.Dns.Api.DnsProxyServer.Configs;
 using Adguard.Dns.DnsProxyServer;
 using Adguard.Dns.Logging;
+using AdGuard.Utils.Base.Logging;
+using AdGuard.Utils.Base.Logging.TraceListeners;
 using AdGuard.Utils.Html;
-using AdGuard.Utils.Logging;
-using AdGuard.Utils.Logging.TraceListeners;
 using Microsoft.Win32;
 
 namespace Adguard.Dns.TestApp

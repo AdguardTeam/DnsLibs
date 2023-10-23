@@ -1,8 +1,8 @@
 ﻿using Adguard.Dns.Api.DnsProxyServer.Callbacks;
 using Adguard.Dns.Api.DnsProxyServer.EventArgs;
 using Adguard.Dns.Api.FilteringLogAction;
-using AdGuard.Utils.Logging;
-using AdGuard.Utils.Threading;
+using AdGuard.Utils.Base.Logging;
+using AdGuard.Utils.Base.Threading;
 using Newtonsoft.Json;
 
 namespace Adguard.Dns.TestApp

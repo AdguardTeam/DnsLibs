@@ -9,8 +9,8 @@ using Adguard.Dns.DnsProxyServer;
 using Adguard.Dns.Helpers;
 using Adguard.Dns.Tests.TestUtils;
 using Adguard.Dns.Utils;
-using AdGuard.Utils.Collections;
-using AdGuard.Utils.Interop;
+using AdGuard.Utils.Base.Collections;
+using AdGuard.Utils.Base.Interop;
 using NUnit.Framework;
 
 namespace Adguard.Dns.Tests.Helpers
@@ -307,7 +307,7 @@ namespace Adguard.Dns.Tests.Helpers
 		        AllowedOptions = AGDnsApi.ag_rule_generation_options.AGRGO_IMPORTANT,
 		        RequiredOptions = AGDnsApi.ag_rule_generation_options.AGRGO_IMPORTANT,
                 IsBlocking = false,
-                Templates = new AdGuard.Utils.Adapters.Interop.MarshalUtils.ag_list()
+                Templates = new MarshalUtils.ag_list()
             };
 
 	        FilteringLogAction filteringLog = DnsApiConverter.FromNativeObject(actionC);

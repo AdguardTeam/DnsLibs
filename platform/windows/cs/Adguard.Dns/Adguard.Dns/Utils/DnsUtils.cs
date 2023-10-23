@@ -3,8 +3,8 @@ using System.Collections.Generic;
 using System.Runtime.InteropServices;
 using Adguard.Dns.Api.DnsProxyServer.Configs;
 using Adguard.Dns.Helpers;
-using AdGuard.Utils.Adapters.Interop;
-using AdGuard.Utils.Adapters.Logging;
+using AdGuard.Utils.Base.Interop;
+using AdGuard.Utils.Base.Logging;
 
 namespace Adguard.Dns.Utils
 {

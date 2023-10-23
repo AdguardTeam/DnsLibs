@@ -1,6 +1,6 @@
 ﻿using System.Collections.Generic;
 using Adguard.Dns.Api.DnsProxyServer.Configs;
-using AdGuard.Utils.Collections;
+using AdGuard.Utils.Base.Collections;
 
 namespace Adguard.Dns.Tests.TestUtils
 {

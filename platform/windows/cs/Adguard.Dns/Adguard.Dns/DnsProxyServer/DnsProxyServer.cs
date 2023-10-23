@@ -5,8 +5,8 @@ using Adguard.Dns.Api.DnsProxyServer.Callbacks;
 using Adguard.Dns.Api.DnsProxyServer.Configs;
 using Adguard.Dns.Exceptions;
 using Adguard.Dns.Helpers;
-using AdGuard.Utils.Adapters.Interop;
-using AdGuard.Utils.Adapters.Logging;
+using AdGuard.Utils.Base.Interop;
+using AdGuard.Utils.Base.Logging;
 
 namespace Adguard.Dns.DnsProxyServer
 {
@@ -86,7 +86,7 @@ namespace Adguard.Dns.DnsProxyServer
                     AGDnsApi.ag_dnsproxy_init_result outResultEnum = AGDnsApi.ag_dnsproxy_init_result.AGDPIR_OK;
                     if (m_pProxyServer == IntPtr.Zero)
                     {
-                        int? outResult = MarshalUtils.PtrToNullableInt(pOutResult);
+                        long? outResult = MarshalUtils.ReadNullableInt(pOutResult);
                         if (outResult.HasValue)
                         {
                             outResultEnum = (AGDnsApi.ag_dnsproxy_init_result)outResult.Value;

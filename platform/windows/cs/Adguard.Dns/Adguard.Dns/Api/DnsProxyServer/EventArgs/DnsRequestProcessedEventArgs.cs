@@ -1,6 +1,6 @@
 using System.Collections.Generic;
 using Adguard.Dns.Api.DnsProxyServer.Callbacks;
-using AdGuard.Utils.Adapters.Interop;
+using AdGuard.Utils.Base.Interop;
 
 namespace Adguard.Dns.Api.DnsProxyServer.EventArgs
 {
