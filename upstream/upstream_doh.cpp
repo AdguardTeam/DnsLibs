@@ -229,10 +229,18 @@ struct ag::dns::DohUpstream::Http3Connection : public ag::dns::DohUpstream::Http
     Error<DnsError> session_error;
 };
 
+struct DecomposedCreds {
+    std::string_view url;
+    std::string_view username;
+    std::string_view password;
+};
+
 struct DecomposedUrl {
     std::string_view authority;
     uint16_t port;
     std::string_view path;
+    std::string_view username;
+    std::string_view password;
 };
 
 using std::chrono::duration_cast;
@@ -248,6 +256,21 @@ using std::chrono::duration_cast;
 static const ag::Logger g_logger("DOH upstream");
 static std::atomic<uint32_t> g_next_id = 0; // NOLINT(*-avoid-non-const-global-variables)
 
+ag::Result<DecomposedCreds, ag::dns::Upstream::InitError> decompose_creds_from_url(std::string_view url) {
+    auto at_pos = url.find('@');
+    if (at_pos == std::string_view::npos) {
+        return DecomposedCreds{.url = url};
+    }
+    auto [credentials_part, url_part] = ag::utils::split2_by(url, '@');
+    auto [username, password] = ag::utils::split2_by(credentials_part, ':');
+    if (username.empty() || password.empty()) {
+        return make_error(
+                ag::dns::Upstream::InitError::AE_INVALID_ADDRESS, "Can't parse username and password from auth data");
+    }
+
+    return DecomposedCreds{.url = url_part, .username = username, .password = password};
+}
+
 static ag::Result<DecomposedUrl, ag::dns::Upstream::InitError> decompose_url(std::string_view url) {
     std::string_view path;
     for (const auto &scheme : {ag::dns::DohUpstream::SCHEME_HTTPS, ag::dns::DohUpstream::SCHEME_H3}) {
@@ -260,6 +283,11 @@ static ag::Result<DecomposedUrl, ag::dns::Upstream::InitError> decompose_url(std
         break;
     }
 
+    auto creds = decompose_creds_from_url(url);
+    if (creds.has_error()) {
+        return creds.error();
+    }
+    url = creds->url;
     path = path.empty() ? "/" : path;
 
     ag::Result split = ag::utils::split_host_port(url);
@@ -276,6 +304,8 @@ static ag::Result<DecomposedUrl, ag::dns::Upstream::InitError> decompose_url(std
                 .authority = host,
                 .port = ag::dns::DEFAULT_DOH_PORT,
                 .path = path,
+                .username = creds->username,
+                .password = creds->password,
         };
     }
 
@@ -284,6 +314,8 @@ static ag::Result<DecomposedUrl, ag::dns::Upstream::InitError> decompose_url(std
                 .authority = host,
                 .port = x.value(),
                 .path = path,
+                .username = creds->username,
+                .password = creds->password,
         };
     }
 
@@ -318,7 +350,7 @@ ag::Error<ag::dns::Upstream::InitError> ag::dns::DohUpstream::init() {
         return decomposed_url.error();
     }
 
-    auto &[hostname, port, path] = decomposed_url.value();
+    auto &[hostname, port, path, username, password] = decomposed_url.value();
 
     if (this->m_options.bootstrap.empty() && std::holds_alternative<std::monostate>(this->m_options.resolved_server_ip)
             && !SocketAddress(hostname, port).valid()) {
@@ -346,6 +378,11 @@ ag::Error<ag::dns::Upstream::InitError> ag::dns::DohUpstream::init() {
     }
 
     m_request_template.authority(std::string(hostname));
+    if (!username.empty() && !password.empty()) {
+        auto creds_fmt = AG_FMT("{}:{}", username, password);
+        auto creds_base64 = ag::encode_to_base64(Uint8View((uint8_t *) creds_fmt.data(), creds_fmt.size()), false);
+        m_request_template.headers().put("Authorization", AG_FMT("Basic {}", creds_base64));
+    }
     m_path = path;
     log_upstream(dbg, this, "Prepared request template: {}", m_request_template);
 

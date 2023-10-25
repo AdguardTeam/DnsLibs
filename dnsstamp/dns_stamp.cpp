@@ -343,6 +343,9 @@ ServerStamp::FromStringResult ServerStamp::from_string(std::string_view url) {
     }
     std::string_view encoded(url);
     encoded.remove_prefix(std::string_view(STAMP_URL_PREFIX_WITH_SCHEME).size());
+    if (auto pos = encoded.find('@'); pos != std::string_view::npos) {
+        encoded.remove_prefix(pos + 1);
+    }
     auto decoded_optional = decode_base64(encoded, true);
     if (!decoded_optional) {
         return make_error(FromStringError::AE_INVALID_STAMP);

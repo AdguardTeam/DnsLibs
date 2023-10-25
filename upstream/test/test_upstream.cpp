@@ -248,6 +248,16 @@ TEST_F(UpstreamTest, CreateUpstreamWithWrongOptions) {
             {"https://   ", {}},
             {"https:///", {}},
             {"https://   /", {}},
+
+            // wrong basic authentication parameters
+            {"https://usernamepassword@dns.google/dns-query", {"8.8.8.8"}},
+            {"https://@dns.google/dns-query", {"8.8.8.8"}},
+            {"https://:pass@dns.google/dns-query", {"8.8.8.8"}},
+            {"https://:@dns.google/dns-query", {"8.8.8.8"}},
+            {"sdns://usernamepassword@AgcAAAAAAAAABzEuMC4wLjEAEmRucy5jbG91ZGZsYXJlLmNvbQovZG5zLXF1ZXJ5", {}},
+            {"sdns://@AgcAAAAAAAAABzEuMC4wLjEAEmRucy5jbG91ZGZsYXJlLmNvbQovZG5zLXF1ZXJ5", {}},
+            {"sdns://:pass@AgcAAAAAAAAABzEuMC4wLjEAEmRucy5jbG91ZGZsYXJlLmNvbQovZG5zLXF1ZXJ5", {}},
+            {"sdns://:@AgcAAAAAAAAABzEuMC4wLjEAEmRucy5jbG91ZGZsYXJlLmNvbQovZG5zLXF1ZXJ5", {}},
     };
 
     for (const UpstreamOptions &options : OPTIONS) {
@@ -364,6 +374,8 @@ static const UpstreamTestData test_upstreams_data[]{
         {"https://dns.cloudflare.com/dns-query", {"8.8.8.8:53"}},
         {"h3://cloudflare-dns.com/dns-query", {"8.8.8.8"}},
         {"https://dns.google/dns-query", {"8.8.8.8"}},
+        {"https://username:password@dns.google/dns-query", {"8.8.8.8"}},
+        {"sdns://username:password@AgcAAAAAAAAABzEuMC4wLjEAEmRucy5jbG91ZGZsYXJlLmNvbQovZG5zLXF1ZXJ5", {}},
         {// Cisco OpenDNS DNS (DNSCrypt) (no port in stamp, default port test)
             "sdns://AQEAAAAAAAAADjIwOC42Ny4yMjAuMTIzILc1EUAgbyJdPivYItf9aR6hwzzI1maNDL4Ev6vKQ_t5GzIuZG5zY3J5cHQtY2VydC5vcGVuZG5zLmNvbQ"
         },

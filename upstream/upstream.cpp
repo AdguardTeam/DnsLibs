@@ -141,6 +141,7 @@ static CreateResult create_upstream_sdns(const UpstreamOptions &local_opts, cons
         std::copy_n(hash.begin(), SHA256_DIGEST_LENGTH, cert_digest.data.begin());
     }
 
+    std::string_view creds;
     switch (stamp.proto) {
     case StampProtoType::DNSCRYPT:
         return create_upstream_dnscrypt(std::move(stamp), opts, config, std::move(fingerprints));
@@ -148,7 +149,12 @@ static CreateResult create_upstream_sdns(const UpstreamOptions &local_opts, cons
         opts.address = stamp.server_addr_str;
         return create_upstream_plain(opts, config, std::move(fingerprints));
     case StampProtoType::DOH:
-        opts.address = AG_FMT("{}{}{}{}", DohUpstream::SCHEME_HTTPS, stamp.provider_name, port, stamp.path);
+        if (auto pos = opts.address.find('@'); pos != std::string::npos) {
+            creds = opts.address;
+            creds.remove_suffix(creds.size() - pos - 1);
+            creds.remove_prefix(SCHEME_WITH_SUFFIX[(int) Scheme::SDNS].size());
+        }
+        opts.address = AG_FMT("{}{}{}{}{}", DohUpstream::SCHEME_HTTPS, creds, stamp.provider_name, port, stamp.path);
         return create_upstream_https(opts, config, std::move(fingerprints));
     case StampProtoType::TLS:
         opts.address = AG_FMT("{}{}{}", DotUpstream::SCHEME, stamp.provider_name, port);
