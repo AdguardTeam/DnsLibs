@@ -1,5 +1,16 @@
 # Changelog
 
+## V2.4
+
+* [Feature] Support for Basic Authentication in DNS-over-HTTPS.
+Username and password can now be passed directly in the address.
+Compatible with both HTTPS URLs and DNS Stamps.
+Example configurations:  
+  * `https://username:password@dns.google/dns-query`
+  * `sdns://username:password@AgcAAAAAAAAABzEuMC4wLjEAEmRucy5jbG91ZGZsYXJlLmNvbQovZG5zLXF1ZXJ5`
+
+## V2.3
+
 * [Changed] Outbound network interface name is now a required property on iOS.
   * [Apple/iOS] See `AGDnsUpstream.outboundInterfaceName`.
 
