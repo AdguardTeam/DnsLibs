@@ -1,3 +1,4 @@
+#include <cassert>
 #include <openssl/x509v3.h>
 
 #include "common/logger.h"
