@@ -2,6 +2,10 @@
 
 ## V2.4
 
+* [Feature] Improved DNS Fallback Mechanism.
+Added logic to retry DNS queries over TCP if initial UDP attempts are unsuccessful or return 
+incomplete data. 
+
 * [Feature] Support for Basic Authentication in DNS-over-HTTPS.
 Username and password can now be passed directly in the address.
 Compatible with both HTTPS URLs and DNS Stamps.

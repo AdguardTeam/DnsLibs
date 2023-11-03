@@ -41,6 +41,24 @@ Error<Upstream::InitError> PlainUpstream::init() {
     return {};
 }
 
+static bool should_try_tcp(const ldns_pkt *request, const ldns_pkt *reply, const ldns_status status) {
+    if (status != LDNS_STATUS_OK) {
+        return true;
+    }
+
+    auto orig_id = ldns_pkt_id(request);
+    auto reply_id = ldns_pkt_id(reply);
+    if (reply_id != orig_id) {
+        return true;
+    }
+
+    if (ldns_pkt_tc(reply)) {
+        return true;
+    }
+
+    return false;
+}
+
 coro::Task<Upstream::ExchangeResult> PlainUpstream::exchange(const ldns_pkt *request_pkt, const DnsMessageInfo *info) {
     std::weak_ptr<bool> guard = m_shutdown_guard;
 
@@ -95,13 +113,10 @@ coro::Task<Upstream::ExchangeResult> PlainUpstream::exchange(const ldns_pkt *req
         auto &reply = r.value();
         ldns_pkt *reply_pkt = nullptr;
         status = ldns_wire2pkt(&reply_pkt, reply.data(), reply.size());
-        if (status != LDNS_STATUS_OK) {
-            co_return make_error(DnsError::AE_DECODE_ERROR, ldns_get_errorstr_by_id(status));
-        }
-        // If not truncated, return result. Otherwise, try TCP.
-        if (!ldns_pkt_tc(reply_pkt)) {
+        if (!should_try_tcp(request_pkt, reply_pkt, status)) {
             co_return ldns_pkt_ptr{reply_pkt};
         }
+        tracelog_id(m_log, request_pkt, "Trying TCP request after UDP failure");
         ldns_pkt_free(reply_pkt);
     }
 
