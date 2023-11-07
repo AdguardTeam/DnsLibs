@@ -4,7 +4,7 @@ using System.Linq;
 using System.Security.Cryptography.X509Certificates;
 using Adguard.Dns.Api.DnsProxyServer.Callbacks;
 using Adguard.Dns.Api.DnsProxyServer.EventArgs;
-using AdGuard.Utils.Adapters.Logging;
+using AdGuard.Utils.Base.Logging;
 
 namespace Adguard.Dns.Utils
 {

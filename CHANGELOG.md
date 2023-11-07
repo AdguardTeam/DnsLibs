@@ -15,6 +15,15 @@ Example configurations:
 
 ## V2.3
 
+* [Fixed] Localhost upstreams are now can be used even if outbound proxy is set.
+
+* [Feature] Added filtering of IP hints in HTTPS RR type DNS records
+  * IP hints in HTTPS RR type DNS records can now be filtered like it is done for A and AAAA records.
+
+* [Feature] DNS-over-HTTPS upstream has been fully rewritten from libcurl to NativeLibsCommon HTTP module.
+  * Stability improved in HTTP/3 mode
+  * HTTP/3 mode now support connecting via outbound proxy
+
 * [Changed] Outbound network interface name is now a required property on iOS.
   * [Apple/iOS] See `AGDnsUpstream.outboundInterfaceName`.
 

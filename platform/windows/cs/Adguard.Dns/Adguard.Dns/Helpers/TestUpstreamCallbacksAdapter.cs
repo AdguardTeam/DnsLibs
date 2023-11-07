@@ -2,7 +2,7 @@ using System;
 using Adguard.Dns.Api.DnsProxyServer.Callbacks;
 using Adguard.Dns.Api.DnsProxyServer.EventArgs;
 using Adguard.Dns.Exceptions;
-using AdGuard.Utils.Adapters.Interop;
+using AdGuard.Utils.Base.Interop;
 
 namespace Adguard.Dns.Helpers
 {

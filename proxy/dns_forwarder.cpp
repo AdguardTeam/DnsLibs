@@ -602,6 +602,9 @@ coro::Task<DnsForwarder::HandleMessageResult> DnsForwarder::handle_message_inter
 
     if (!response) {
         auto err = response.error();
+        if (err->value() == DnsError::AE_TIMED_OUT) {
+            co_return {.timed_out = true};
+        }
         if (!m_settings->enable_servfail_on_upstreams_failure) {
             dbglog_fid(m_log, ctx.request.get(), "Not responding, upstreams exchange error: {}", err->str());
             co_return {};
@@ -1225,7 +1228,7 @@ coro::Task<Uint8Vector> DnsForwarder::handle_message_with_timeout(
         }
         co_return {};
     }
-    if (m_events->on_request_processed) {
+    if (m_events->on_request_processed && !result.response_wire.empty()) {
         m_events->on_request_processed(result.event);
     }
     co_return std::move(result.response_wire);

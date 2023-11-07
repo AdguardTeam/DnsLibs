@@ -10,7 +10,7 @@ using Adguard.Dns.Api.DnsProxyServer.EventArgs;
 using Adguard.Dns.Api.FilteringLogAction;
 using Adguard.Dns.DnsProxyServer;
 using Adguard.Dns.Utils;
-using AdGuard.Utils.Adapters.Interop;
+using AdGuard.Utils.Base.Interop;
 
 namespace Adguard.Dns.Helpers
 {
@@ -546,10 +546,10 @@ namespace Adguard.Dns.Helpers
                 filterId =>
                     (int) filterId);
 
-            int? upstreamId = MarshalUtils.PtrToNullableInt(coreArgsС.pUpstreamId);
+            long? upstreamId = MarshalUtils.ReadNullableInt(coreArgsС.pUpstreamId);
             DnsRequestProcessedEventArgs eventArgs = new DnsRequestProcessedEventArgs
             {
-                UpstreamId = upstreamId,
+                UpstreamId = upstreamId.HasValue ? (int?)upstreamId.Value : null,
                 Rules = rules,
                 FilterListIds = filterListIds
             };

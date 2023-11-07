@@ -1,8 +1,8 @@
 using System;
 using System.Collections.Generic;
 using Adguard.Dns.Exceptions;
-using AdGuard.Utils.Adapters.Interop;
-using AdGuard.Utils.Adapters.Logging;
+using AdGuard.Utils.Base.Interop;
+using AdGuard.Utils.Base.Logging;
 
 namespace Adguard.Dns.Logging
 {

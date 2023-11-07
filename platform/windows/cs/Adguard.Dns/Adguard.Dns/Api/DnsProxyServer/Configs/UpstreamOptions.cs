@@ -1,6 +1,6 @@
 ﻿using System.Collections.Generic;
 using System.Net;
-using AdGuard.Utils.Adapters.Interop;
+using AdGuard.Utils.Base.Interop;
 
 namespace Adguard.Dns.Api.DnsProxyServer.Configs
 {
