@@ -4,6 +4,8 @@
 
 namespace ag::dns {
 
+static constexpr auto DEFAULT_TIMEOUT = Secs{60};
+
 ProxiedSocket::ProxiedSocket(Parameters p)
         : Socket(__func__, std::move(p.socket_parameters), p.prepare_fd)
         , m_proxy(&p.outbound_proxy)
@@ -48,12 +50,17 @@ Error<SocketError> ProxiedSocket::connect(ConnectParameters params) {
         return {};
     }
 
+    // If fallback is possible, we might take more than `params.timeout` time to reach a result.
+    // And if `params.timeout` is `std::nullopt`, then the fallback connection won't even have a chance to happen.
+    // Guard against that.
+    auto half_timeout = params.timeout.value_or(DEFAULT_TIMEOUT) / 2;
+
     auto r = m_proxy->connect({
             .loop = params.loop,
             .proto = this->get_protocol(),
             .peer = params.peer,
             .callbacks = {on_successful_proxy_connection, on_proxy_connection_failed, on_connected, on_read, on_close, this},
-            .timeout = params.timeout,
+            .timeout = half_timeout,
             .outbound_interface = m_parameters.outbound_interface,
     });
     if (r.has_error()) {
@@ -66,7 +73,7 @@ Error<SocketError> ProxiedSocket::connect(ConnectParameters params) {
     m_fallback_info->loop = params.loop;
     m_fallback_info->peer = params.peer;
     m_fallback_info->connect_timestamp = SteadyClock::now();
-    m_fallback_info->timeout = params.timeout;
+    m_fallback_info->timeout = half_timeout;
 
     return {};
 }
