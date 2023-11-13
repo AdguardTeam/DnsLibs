@@ -596,6 +596,18 @@ typedef NS_ENUM(NSUInteger, AGRuleGenerationOptions) {
 + (instancetype)actionFromEvent:(AGDnsRequestProcessedEvent *)event;
 @end
 
+/** Out-of-band information about the DNS message or how to process it. */
+@interface AGDnsMessageInfo : NSObject
+/**
+ * If `true`, the proxy will handle the message transparently: queries are returned to the caller
+ * instead of being forwarded to the upstream by the proxy, responses are processed as if they were received
+ * from an upstream, and the processed response is returned to the caller. The proxy may return a response
+ * when transparently handling a query if the query is blocked. The proxy may still perform an upstream
+ * query when handling a message transparently, for example, to process CNAME-rewrites.
+ */
+@property(nonatomic) BOOL transparent;
+@end
+
 /**
  * @interface AGDnsProxy
  * Represents a DNS proxy.
@@ -639,6 +651,16 @@ typedef NS_ENUM(NSUInteger, AGRuleGenerationOptions) {
  * @return The response packet payload, or nil if nothing shoud be sent in response
  */
 - (void) handlePacket: (NSData *) packet completionHandler: (void (^)(NSData *)) completionHandler;
+
+/**
+ * Process a DNS message (query or response).
+ * @param message A complete DNS message in wire format.
+ * @param info Additional parameters.
+ * @param handler Completion handler. Will be called on an unspecified thread with the result message.
+ */
+- (void)handleMessage:(NSData *)message
+             withInfo:(AGDnsMessageInfo *)info
+withCompletionHandler:(void (^)(NSData *))handler;
 
 /**
  * Stop DnsProxy.

@@ -22,7 +22,7 @@ namespace Adguard.Dns
         /// <summary>
         /// The current API version hash with which the ProxyServer was tested
         /// </summary>
-        private const string API_VERSION_HASH = "c834ef27b92fbac4c90e86f5d188b71a49e3eb237bf5fc0d6e1cbbae190e7df2";
+        private const string API_VERSION_HASH = "6fedfaf50a6d05334b8bcf3c54febb1944d9e336987f23c0aeeecea5b4f6e872";
         #endregion
 
         #region API Functions
@@ -101,9 +101,35 @@ namespace Adguard.Dns
             /// DNS proxy initialization was successful
             /// </summary>
             AGDPIR_OK,
-        }
+		}
 
-        [Flags]
+		/// <summary>
+		/// Holds out-of-band information about a DNS message or how to process it.
+		/// </summary>
+		[StructLayout(LayoutKind.Sequential, CharSet = CharSet.Ansi)]
+		internal struct ag_dns_message_info
+		{
+			/// <summary>
+			/// If <c>true</c>, the proxy will handle the message transparently: queries are returned to the caller
+			/// instead of being forwarded to the upstream by the proxy, responses are processed as if they were received
+			/// from an upstream, and the processed response is returned to the caller.The proxy may return a response
+			/// when transparently handling a query if the query is blocked.The proxy may still perform an upstream
+			/// query when handling a message transparently, for example, to process CNAME-rewrites.
+			/// </summary>
+			[MarshalAs(UnmanagedType.I1)]
+			internal bool transparent;
+		}
+
+		/// <summary>
+		/// Callback function for asynchronous message processing.
+		/// This function is called on an unspecified thread when a result of `handle_message_async` is ready.
+		/// </summary>
+		[UnmanagedFunctionPointer(CallingConvention.Cdecl)]
+		[return: MarshalAs(UnmanagedType.I4)]
+		public delegate void
+			ag_handle_message_async_cb(IntPtr pEvent);
+
+		[Flags]
         public enum ag_rule_generation_options : uint
         {
             /// <summary>
@@ -139,16 +165,38 @@ namespace Adguard.Dns
         /// Deinitializes the DNS proxy
         /// </summary>
         [DllImport(DnsLibName, CallingConvention = CallingConvention.Cdecl)]
-        internal static extern void ag_dnsproxy_deinit(IntPtr pDnsProxyServer);
+        internal static extern void ag_dnsproxy_deinit(IntPtr proxy);
 
-        /// <summary>
-        /// Returns the current proxy settings.
-        /// The caller is responsible for freeing
-        /// the returned pointer with <see cref="ag_dnsproxy_settings_free"/>
-        /// </summary>
-        /// <returns>Pointer to the<see cref="ag_dnsproxy_settings"/> object,
-        /// which contains the current DNS proxy settings</returns>
-        [DllImport(DnsLibName, CallingConvention = CallingConvention.Cdecl)]
+		/// <summary>
+		/// Process a DNS message and return the response.
+		/// </summary>
+		/// <param name="pDnsProxyServer">Proxy server </param>
+		/// <param name="message">A DNS message in wire format </param>
+		/// <param name="info">Additional parameters</param>
+		/// <returns>The DNS response in wire format</returns>
+		/// <remarks> The caller is responsible for freeing both buffers with `ag_buffer_free()`</remarks>
+		[DllImport(DnsLibName, CallingConvention = CallingConvention.Cdecl)]
+        internal static extern MarshalUtils.ag_buffer ag_dnsproxy_handle_message(IntPtr pDnsProxyServer, MarshalUtils.ag_buffer message, IntPtr info);
+
+		/// <summary>
+		/// Process a DNS message and call `handler` on an unspecified thread with the response.
+		/// </summary>
+		/// <param name="pDnsProxyServer">Proxy server </param>
+		/// <param name="message">A DNS message in wire format </param>
+		/// <param name="info">Additional parameters</param>
+		/// <param name="handler">Callback function for asynchronous message processing.</param>
+		/// <remarks> The caller is responsible for freeing  message buffer, but you shouldn't free buffer that will be passed to handler</remarks>
+		[DllImport(DnsLibName, CallingConvention = CallingConvention.Cdecl)]
+		internal static extern void ag_dnsproxy_handle_message_async(IntPtr pDnsProxyServer, MarshalUtils.ag_buffer message, IntPtr info, ag_handle_message_async_cb handler);
+
+		/// <summary>
+		/// Returns the current proxy settings.
+		/// The caller is responsible for freeing
+		/// the returned pointer with <see cref="ag_dnsproxy_settings_free"/>
+		/// </summary>
+		/// <returns>Pointer to the<see cref="ag_dnsproxy_settings"/> object,
+		/// which contains the current DNS proxy settings</returns>
+		[DllImport(DnsLibName, CallingConvention = CallingConvention.Cdecl)]
         internal static extern IntPtr ag_dnsproxy_get_settings(IntPtr pDnsProxyServer);
 
         /// <summary>

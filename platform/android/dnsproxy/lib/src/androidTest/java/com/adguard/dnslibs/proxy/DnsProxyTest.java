@@ -18,6 +18,7 @@ import org.xbill.DNS.Message;
 import org.xbill.DNS.Name;
 import org.xbill.DNS.Rcode;
 import org.xbill.DNS.Record;
+import org.xbill.DNS.TextParseException;
 import org.xbill.DNS.Type;
 
 import java.io.IOException;
@@ -29,7 +30,10 @@ import java.util.Arrays;
 import java.util.Collections;
 import java.util.EnumSet;
 import java.util.List;
+import java.util.concurrent.Semaphore;
 import java.util.concurrent.ThreadLocalRandom;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicReference;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
@@ -88,14 +92,14 @@ public class DnsProxyTest {
             final byte[] request = new byte[64];
             ThreadLocalRandom.current().nextBytes(request);
 
-            byte[] response = proxy.handleMessage(request);
+            byte[] response = proxy.handleMessage(request, null);
             assertNotNull(response);
             assertEquals(12, response.length);
             assertEquals(request[0], response[0]);
             assertEquals(request[1], response[1]);
             assertEquals(1, response[3] & 0xf); // FORMERR
 
-            response = proxy.handleMessage(new byte[0]);
+            response = proxy.handleMessage(new byte[0], null);
             assertNotNull(response);
             assertEquals(0, response.length);
         }
@@ -128,7 +132,7 @@ public class DnsProxyTest {
                     public void run() {
                         try {
                             final Message req = Message.newQuery(Record.newRecord(Name.fromString("google.com."), Type.A, DClass.IN));
-                            final Message res = new Message(proxy.handleMessage(req.toWire()));
+                            final Message res = new Message(proxy.handleMessage(req.toWire(), null));
                             assertEquals(Rcode.NOERROR, res.getRcode());
                         } catch (IOException e) {
                             throw new UncheckedIOException(e);
@@ -316,7 +320,7 @@ public class DnsProxyTest {
             assertEquals(settings, proxy.getSettings());
 
             final Message req = Message.newQuery(Record.newRecord(Name.fromString("google.com."), Type.A, DClass.IN));
-            final Message res = new Message(proxy.handleMessage(req.toWire()));
+            final Message res = new Message(proxy.handleMessage(req.toWire(), null));
 
             assertEquals(Rcode.NOERROR, res.getRcode());
         } catch (IOException e) {
@@ -365,7 +369,7 @@ public class DnsProxyTest {
             assertEquals(settings, proxy.getSettings());
 
             final Message req = Message.newQuery(Record.newRecord(Name.fromString("google.com."), Type.A, DClass.IN));
-            final Message res = new Message(proxy.handleMessage(req.toWire()));
+            final Message res = new Message(proxy.handleMessage(req.toWire(), null));
 
             if (isSuccessExpected) {
                 assertEquals(Rcode.NOERROR, res.getRcode());
@@ -379,9 +383,7 @@ public class DnsProxyTest {
 
     @Test
     public void testFingerprint() {
-        String f = "pUZw/ajtE73tCpUV810KK+2TfhAKpignA8s7hyggVew=";
-        testCertificateVerificationWithFingerprint("tls://dns.adguard-dns.com", f, true);
-        f = "R3hcMOAGw0WFztuG2skTodoHp8IGid3Qg63Cn7YUYoM=";
+        String f = "2EeRHV2g0BhpRnuu8GBcpH/nGo4xv76wlP1vRCG428Y=";
         testCertificateVerificationWithFingerprint("tls://dns.adguard-dns.com", f, true);
     }
 
@@ -528,6 +530,32 @@ public class DnsProxyTest {
                     proxy.generateRuleWithOptions(action.getTemplates().get(0),
                             event, EnumSet.of(FilteringLogAction.Option.DNSTYPE,
                                     FilteringLogAction.Option.IMPORTANT)));
+        }
+    }
+
+    @Test
+    public void testHandleMessageAsyncTransparent() {
+        DnsProxySettings settings = DnsProxySettings.getDefault();
+        UpstreamSettings blackhole = new UpstreamSettings("1.2.3.4", null, null, 42);
+        settings.setUpstreams(Arrays.asList(blackhole));
+        try (DnsProxy proxy = new DnsProxy(context, settings)) {
+            DnsMessageInfo info = new DnsMessageInfo();
+            info.transparent = true;
+            Message req = Message.newQuery(Record.newRecord(Name.fromString("google.com."), Type.A, DClass.IN));
+            Semaphore sem = new Semaphore(0);
+            AtomicReference<Message> resp = new AtomicReference<>();
+            proxy.handleMessageAsync(req.toWire(), info, (byte[] respWire) -> {
+                try {
+                    resp.set(new Message(respWire));
+                    sem.release();
+                } catch (IOException e) {
+                    throw new RuntimeException(e);
+                }
+            });
+            assertTrue(sem.tryAcquire(10, TimeUnit.SECONDS));
+            assertNotNull(resp);
+        } catch (IOException | InterruptedException e) {
+            fail();
         }
     }
 }

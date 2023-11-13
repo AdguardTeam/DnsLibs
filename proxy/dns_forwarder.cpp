@@ -508,7 +508,7 @@ coro::Task<DnsForwarder::HandleMessageResult> DnsForwarder::handle_message_inter
     std::weak_ptr<bool> guard = m_shutdown_guard;
     DnsRequestProcessedEvent event;
 
-    log_packet(m_log, request.get(), "Client request", opt_as_ptr(info));
+    log_packet(m_log, request.get(), "Handling message", opt_as_ptr(info));
 
     const ldns_rr *question = ldns_rr_list_rr(ldns_pkt_question(request.get()), 0);
     if (question == nullptr) {
@@ -527,7 +527,12 @@ coro::Task<DnsForwarder::HandleMessageResult> DnsForwarder::handle_message_inter
         normalized_domain.remove_suffix(1); // drop trailing dot
     }
 
-    ResponseCache::Result cached = m_response_cache.get(request.get());
+    ResponseCache::Result cached;
+
+    // Skip caching for transparent filtering
+    if (!info || !info->transparent) {
+        cached = m_response_cache.get(request.get());
+    }
 
     if (cached.response && (!cached.expired || m_settings->optimistic_cache)) {
         log_packet(m_log, cached.response.get(), "Cached response");
@@ -568,7 +573,7 @@ coro::Task<DnsForwarder::HandleMessageResult> DnsForwarder::handle_message_inter
         .fallback_only = fallback_only,
     };
 
-    {
+    if (!ldns_pkt_qr(ctx.request.get())) {
         auto filter_response = co_await apply_filter_to_request(ctx);
         if (guard.expired()) {
             co_return {};
@@ -593,9 +598,24 @@ coro::Task<DnsForwarder::HandleMessageResult> DnsForwarder::handle_message_inter
 
     bool is_our_do_bit = m_settings->enable_dnssec_ok && DnssecHelpers::set_do_bit(ctx.request.get());
 
-    // If this is a retransmitted request, use fallback upstreams only
-    auto [response, selected_upstream] =
-            co_await do_upstreams_exchange(normalized_domain, ctx.request.get(), ctx.fallback_only, opt_as_ptr(info));
+    UpstreamExchangeResult exchange_result;
+
+    // Don't do upstream exchange for transparent filtering
+    if (info && info->transparent) {
+        if (!ldns_pkt_qr(ctx.request.get())) {
+            // This is a query. Return the modified request to the caller.
+            dbglog_fid(m_log, ctx.request.get(), "Returning processed request (transparent filtering)");
+            co_return {transform_response_to_raw_data(ctx.request.get()), std::move(event)};
+        }
+        // This is a response. Treat it as if it came from the upstream.
+        exchange_result.result = ldns_pkt_ptr{ldns_pkt_clone(ctx.request.get())};
+    } else {
+        // If this is a retransmitted request, use fallback upstreams only
+        exchange_result =
+                co_await do_upstreams_exchange(normalized_domain, ctx.request.get(), ctx.fallback_only, opt_as_ptr(info));
+    }
+
+    auto &[response, selected_upstream] = exchange_result;
     if (guard.expired()) {
         co_return {};
     }
@@ -617,9 +637,10 @@ coro::Task<DnsForwarder::HandleMessageResult> DnsForwarder::handle_message_inter
         co_return {transform_response_to_raw_data(response->get()), std::move(event)};
     }
 
-    assert(selected_upstream);
     ctx.response = std::move(response.value());
-    log_packet(m_log, ctx.response.get(), AG_FMT("Upstream ({}) response", selected_upstream->options().address).c_str());
+    log_packet(m_log, ctx.response.get(),
+            AG_FMT("Upstream ({}) response", selected_upstream ? selected_upstream->options().address : "<transparent>")
+                    .c_str());
 
     event.bytes_sent = ldns_pkt_size(ctx.request.get());
     event.bytes_received = ldns_pkt_size(ctx.response.get());
@@ -637,9 +658,13 @@ coro::Task<DnsForwarder::HandleMessageResult> DnsForwarder::handle_message_inter
     }
 
     truncate_response(ctx.response.get(), ctx.request.get(), opt_as_ptr(info));
-    finalize_processed_event(event, ctx.request.get(), ctx.response.get(), nullptr, selected_upstream->options().id);
+    finalize_processed_event(event, ctx.request.get(), ctx.response.get(), nullptr,
+            selected_upstream ? std::make_optional(selected_upstream->options().id) : std::nullopt);
     auto response_wire = transform_response_to_raw_data(ctx.response.get());
-    m_response_cache.put(ctx.request.get(), std::move(ctx.response), selected_upstream->options().id);
+    if (!info || !info->transparent) {
+        assert(selected_upstream);
+        m_response_cache.put(ctx.request.get(), std::move(ctx.response), selected_upstream->options().id);
+    }
     co_return {std::move(response_wire), std::move(event)};
 }
 
@@ -743,8 +768,8 @@ coro::Task<ldns_pkt_ptr> DnsForwarder::handle_response(FilterContext &ctx, Upstr
                 co_return {};
             }
             if (filter_response) {
-                finalize_processed_event(
-                        ctx.event, ctx.request.get(), filter_response.get(), ctx.response.get(), upstream->options().id, nullptr);
+                finalize_processed_event(ctx.event, ctx.request.get(), filter_response.get(), ctx.response.get(),
+                        upstream ? std::make_optional(upstream->options().id) : std::nullopt, nullptr);
                 co_return filter_response;
             }
         }
@@ -755,8 +780,8 @@ coro::Task<ldns_pkt_ptr> DnsForwarder::handle_response(FilterContext &ctx, Upstr
                 co_return {};
             }
             if (filter_response) {
-                finalize_processed_event(
-                        ctx.event, ctx.request.get(), filter_response.get(), ctx.response.get(), upstream->options().id, nullptr);
+                finalize_processed_event(ctx.event, ctx.request.get(), filter_response.get(), ctx.response.get(),
+                        upstream ? std::make_optional(upstream->options().id) : std::nullopt, nullptr);
                 co_return filter_response;
             }
         }
@@ -774,13 +799,13 @@ coro::Task<ldns_pkt_ptr> DnsForwarder::handle_response(FilterContext &ctx, Upstr
                     }
                 }
                 finalize_processed_event(ctx.event, ctx.request.get(), filter_response.get(), ctx.response.get(),
-                        upstream->options().id, nullptr);
+                        upstream ? std::make_optional(upstream->options().id) : std::nullopt, nullptr);
                 co_return filter_response;
             }
         }
     }
-    // DNS64 synthesis
-    if (m_settings->dns64.has_value() && LDNS_RR_TYPE_AAAA == type) {
+    // DNS64 synthesis. Don't do it when filtering transparently.
+    if (m_settings->dns64.has_value() && LDNS_RR_TYPE_AAAA == type && (!info || !info->transparent)) {
         bool has_aaaa = false;
         for (size_t i = 0; i < ancount; ++i) {
             auto rr = ldns_rr_list_rr(ldns_pkt_answer(ctx.response.get()), i);
@@ -789,6 +814,7 @@ coro::Task<ldns_pkt_ptr> DnsForwarder::handle_response(FilterContext &ctx, Upstr
             }
         }
         if (!has_aaaa) {
+            assert(upstream);
             auto synth_response = co_await try_dns64_aaaa_synthesis(upstream, ctx.request);
             if (guard.expired()) {
                 co_return {};
@@ -1175,7 +1201,8 @@ coro::Task<Uint8Vector> DnsForwarder::handle_message(Uint8View message, const Dn
 
     // If there's enough info, register this request
     bool retransmitted = false;
-    bool retransmission_handling = m_settings->enable_retransmission_handling && info && info->proto == utils::TP_UDP;
+    bool retransmission_handling =
+            m_settings->enable_retransmission_handling && info && !info->transparent && info->proto == utils::TP_UDP;
     if (retransmission_handling) {
         if (m_retransmission_detector.register_packet(pkt_id, info->peername) > 1) {
             dbglog(m_log, "Detected retransmitted request [{}] from {}", pkt_id, info->peername.str());
@@ -1228,7 +1255,8 @@ coro::Task<Uint8Vector> DnsForwarder::handle_message_with_timeout(
         }
         co_return {};
     }
-    if (m_events->on_request_processed && !result.response_wire.empty()) {
+    if (m_events->on_request_processed
+            && ag::dns::is_response({result.response_wire.data(), result.response_wire.size()})) {
         m_events->on_request_processed(result.event);
     }
     co_return std::move(result.response_wire);

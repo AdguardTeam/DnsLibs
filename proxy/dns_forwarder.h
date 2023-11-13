@@ -23,7 +23,7 @@ namespace ag::dns {
 
 struct UpstreamExchangeResult {
     Result<ldns_pkt_ptr, DnsError> result;
-    Upstream *upstream;
+    Upstream *upstream = nullptr;
 };
 
 class DnsForwarder {

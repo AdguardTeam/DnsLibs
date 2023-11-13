@@ -15,6 +15,7 @@ import java.util.ArrayList;
 import java.util.EnumSet;
 import java.util.List;
 import java.util.Objects;
+import java.util.function.Consumer;
 
 import javax.net.ssl.TrustManagerFactory;
 import javax.net.ssl.X509TrustManager;
@@ -130,16 +131,28 @@ public class DnsProxy implements Closeable {
      * It is safe to call this method from different threads once the proxy has been initialized
      * and properly shared. Other methods of this class are NOT thread-safe.
      * @param message a message from client.
+     * @param info    additional information about the message or how to process it.
      * @return a blocked DNS message if the message was blocked,
      * a DNS resolver response if the message passed,
      * an empty array in case of an error.
      * @throws IllegalStateException if the proxy is closed.
      */
-    public byte[] handleMessage(byte[] message) throws IllegalStateException {
+    public byte[] handleMessage(byte[] message, DnsMessageInfo info) throws IllegalStateException {
         if (state != State.INITIALIZED) {
             throw new IllegalStateException("Closed");
         }
-        return handleMessage(nativePtr, message);
+        return handleMessage(nativePtr, message, info);
+    }
+
+    /**
+     * Same as {@link #handleMessage(byte[], DnsMessageInfo)}, but the result is communicated
+     * asynchronously by invoking `callback` on an unspecified thread.
+     */
+    public void handleMessageAsync(byte[] message, DnsMessageInfo info, Consumer<byte[]> callback) {
+        if (state != State.INITIALIZED) {
+            throw new IllegalStateException("Closed");
+        }
+        handleMessageAsync(nativePtr, message, info, callback);
     }
 
     @Override
@@ -186,7 +199,9 @@ public class DnsProxy implements Closeable {
 
     private native void delete(long nativePtr);
 
-    private native byte[] handleMessage(long nativePtr, byte[] message);
+    private native byte[] handleMessage(long nativePtr, byte[] message, DnsMessageInfo info);
+
+    private native void handleMessageAsync(long nativePtr, byte[] message, DnsMessageInfo info, Consumer<byte[]> callback);
 
     @SuppressWarnings("unused") // Called from native code
     private static void log(int level, String message) {

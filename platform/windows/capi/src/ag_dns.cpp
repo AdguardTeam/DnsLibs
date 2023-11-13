@@ -535,7 +535,8 @@ static DnsProxyEvents marshal_events(const ag_dnsproxy_events *c_events) {
         return events;
     }
     if (c_events->on_request_processed) {
-        events.on_request_processed = [cb = c_events->on_request_processed](const DnsRequestProcessedEvent &event) {
+        events.on_request_processed = [cb = c_events->on_request_processed](
+                                              const DnsRequestProcessedEvent &event) {
             ag_dns_request_processed_event e{};
 
             e.whitelist = event.whitelist;
@@ -635,15 +636,39 @@ void ag_dnsproxy_deinit(ag_dnsproxy *handle) {
     delete proxy;
 }
 
-ag_buffer ag_dnsproxy_handle_message(ag_dnsproxy *handle, ag_buffer message) {
-    auto proxy = (DnsProxy *) handle;
-    Uint8Vector res = proxy->handle_message_sync({message.data, message.size}, nullptr);
+static std::optional<DnsMessageInfo> marshal_dns_message_info(const ag_dns_message_info *c_info) {
+    if (!c_info) {
+        return std::nullopt;
+    }
+    DnsMessageInfo info;
+    info.transparent = c_info->transparent;
+    return info;
+}
+
+ag_buffer ag_dnsproxy_handle_message(ag_dnsproxy *handle, ag_buffer message, const ag_dns_message_info *c_info) {
+    auto *proxy = (DnsProxy *) handle;
+    auto info = marshal_dns_message_info(c_info);
+    Uint8Vector res = proxy->handle_message_sync({message.data, message.size}, opt_as_ptr(info));
     ag_buffer res_buf = marshal_buffer({res.data(), res.size()});
     return res_buf;
 }
 
+void ag_dnsproxy_handle_message_async(ag_dnsproxy *handle, ag_buffer c_message, const ag_dns_message_info *c_info,
+        ag_handle_message_async_cb handler) {
+    auto *proxy = (DnsProxy *) handle;
+    auto info = marshal_dns_message_info(c_info);
+    Uint8Vector message;
+    message.assign(c_message.data, c_message.data + c_message.size);
+    coro::run_detached([](DnsProxy *proxy, Uint8Vector message, std::optional<DnsMessageInfo> info,
+                               ag_handle_message_async_cb handler) -> coro::Task<void> {
+        auto result = co_await proxy->handle_message({message.data(), message.size()}, opt_as_ptr(info));
+        ag_buffer result_buffer{.data = result.data(), .size = result.size()};
+        handler(&result_buffer);
+    }(proxy, std::move(message), std::move(info), handler));
+}
+
 ag_dnsproxy_settings *ag_dnsproxy_get_settings(ag_dnsproxy *handle) {
-    auto proxy = (DnsProxy *) handle;
+    auto *proxy = (DnsProxy *) handle;
     ag_dnsproxy_settings *settings = marshal_settings(proxy->get_settings());
     return settings;
 }

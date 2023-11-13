@@ -29,6 +29,8 @@ private:
         jni::GlobalRef<jclass> cert_verify_event;
         jni::GlobalRef<jclass> filtering_log_action;
         jni::GlobalRef<jclass> rule_template;
+        jni::GlobalRef<jclass> message_info;
+        jni::GlobalRef<jclass> async_callback;
     } m_jclasses{};
 
     struct {
@@ -79,6 +81,14 @@ private:
     struct {
         jmethodID ctor;
     } m_cert_verify_event_methods{};
+
+    struct {
+        jfieldID transparent;
+    } m_message_info_fields;
+
+    struct {
+        jmethodID accept;
+    } m_consumer_methods;
 
     std::vector<jni::GlobalRef<jobject>> m_listener_protocol_enum_values;
     std::vector<jni::GlobalRef<jobject>> m_proxy_protocol_enum_values;
@@ -195,6 +205,11 @@ private:
      */
     DnsFilter::RuleTemplate marshal_rule_template(JNIEnv *env, jobject tmplt);
 
+    /**
+     * Marshal a DnsMessageInfo from Java to C++.
+     */
+    std::optional<DnsMessageInfo> marshal_message_info(JNIEnv *env, jobject jinfo);
+
 public:
 
     /**
@@ -217,11 +232,20 @@ public:
     void deinit(JNIEnv *env);
 
     /**
-     * Process a DNS request.
-     * @param message The DNS request, from Java.
+     * Process a DNS message.
+     * @param message The DNS message, in wire format.
+     * @param info Additional parameters, see `com.adguard.dnslibs.proxy.DnsMessageInfo`.
      * @return The response, marshalled to Java.
      */
-    jbyteArray handle_message(JNIEnv *env, jbyteArray message);
+    jbyteArray handle_message(JNIEnv *env, jbyteArray message, jobject info);
+
+    /**
+     * Process a DNS message asynchronously.
+     * @param message A DNS message (request or response) in wire format.
+     * @param info Additional parameters, `com.adguard.dnslibs.proxy.DnsMessageInfo`.
+     * @param callback Result callback, called on an unspecified thread, `com.adguard.dnslibs.proxy.DnsProxy.HandleMessageAsyncCallback`.
+     */
+    void handle_message_async(JNIEnv *env, jbyteArray message, jobject info, jobject callback);
 
     /**
      * @return The default proxy settings, marshalled to Java.

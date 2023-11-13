@@ -7,6 +7,7 @@ using Adguard.Dns.Exceptions;
 using Adguard.Dns.Helpers;
 using AdGuard.Utils.Base.Interop;
 using AdGuard.Utils.Base.Logging;
+using static Adguard.Dns.AGDnsApi;
 
 namespace Adguard.Dns.DnsProxyServer
 {
@@ -24,15 +25,19 @@ namespace Adguard.Dns.DnsProxyServer
         private readonly DnsProxySettings m_DnsProxySettings;
         private readonly IDnsProxyServerCallbackConfiguration m_CallbackConfiguration;
 
-        /// <summary>
-        /// Initializes the new instance of the DnsProxyServer
-        /// </summary>
-        /// <param name="dnsProxySettings">Dns proxy settings
-        /// (<seealso cref="DnsProxySettings"/>)</param>
-        /// <param name="callbackConfiguration">Callback config configuration
-        /// (<seealso cref="IDnsProxyServerCallbackConfiguration"/>)</param>
-        /// <exception cref="NotSupportedException">Thrown if current API version is not supported</exception>
-        public DnsProxyServer(
+        private uint m_DnsMessageHandlerNextId = 0;
+        private readonly Dictionary<uint, ag_handle_message_async_cb> m_DnsMessageHandlers =
+	        new Dictionary<uint, ag_handle_message_async_cb>();
+
+		/// <summary>
+		/// Initializes the new instance of the DnsProxyServer
+		/// </summary>
+		/// <param name="dnsProxySettings">Dns proxy settings
+		/// (<seealso cref="DnsProxySettings"/>)</param>
+		/// <param name="callbackConfiguration">Callback config configuration
+		/// (<seealso cref="IDnsProxyServerCallbackConfiguration"/>)</param>
+		/// <exception cref="NotSupportedException">Thrown if current API version is not supported</exception>
+		public DnsProxyServer(
             DnsProxySettings dnsProxySettings,
             IDnsProxyServerCallbackConfiguration callbackConfiguration)
         {
@@ -237,9 +242,65 @@ namespace Adguard.Dns.DnsProxyServer
             }
         }
 
-        #endregion
+        /// <summary>
+        /// Process a DNS message and return the response.
+        /// </summary>
+        /// <param name="message">A DNS message in wire format </param>
+        /// <param name="info">Additional parameters</param>
+        /// <returns>The DNS response in wire format</returns>
+		public byte[] HandleDnsMessage(byte[] message, DnsMessageInfo info)
+        {
+	        MarshalUtils.ag_buffer messageBuffer = MarshalUtils.BytesToAgBuffer(message);
+	        ag_dns_message_info nativeDnsMessageInfo = DnsApiConverter.ToNativeObject(info);
+	        IntPtr pNativeDnsMessageInfo = MarshalUtils.StructureToPtr(nativeDnsMessageInfo);
+			MarshalUtils.ag_buffer dnsMessageResult =
+				AGDnsApi.ag_dnsproxy_handle_message(m_pProxyServer, messageBuffer, pNativeDnsMessageInfo);
+			byte[] dnsMessageResultBytes = MarshalUtils.AgBufferToBytes(dnsMessageResult);
+			AGDnsApi.ag_buffer_free(dnsMessageResult);
+			return dnsMessageResultBytes;
+        }
 
-        public void Dispose()
+		/// <summary>
+		/// Process a DNS message and call `handler` on an unspecified thread with the response.
+		/// </summary>
+		/// <param name="message">A DNS message in wire format</param>
+		/// <param name="info">Additional parameters</param>
+		/// <param name="handler">Callback function for asynchronous message processing.</param>
+		public void HandleDnsMessageAsync(byte[] message, DnsMessageInfo info, Action<byte[]> handler)
+        {
+			// Here, a local function would use a closure and could not be a static instance.
+			// In theory, it would be collected by the GC before the request is finished,
+			// or there would be a memory leak for each request.
+			// So, we instantiate each delegate and save it until manual execution.
+			uint handlerId = m_DnsMessageHandlerNextId++;
+	        ag_handle_message_async_cb nativeMessageHandler = (IntPtr pBuffer) =>
+			{
+				byte[] bufferBytes = MarshalUtils.AgBufferPtrToBytes(pBuffer);
+				handler(bufferBytes);
+				lock (m_DnsMessageHandlers)
+				{
+					m_DnsMessageHandlers.Remove(handlerId);
+				}
+			};
+
+	        lock (m_DnsMessageHandlers)
+	        {
+		        m_DnsMessageHandlers[handlerId] = nativeMessageHandler;
+	        }
+
+			MarshalUtils.ag_buffer messageBuffer = MarshalUtils.BytesToAgBuffer(message);
+			ag_dns_message_info nativeDnsMessageInfo = DnsApiConverter.ToNativeObject(info);
+			IntPtr pNativeDnsMessageInfo = MarshalUtils.StructureToPtr(nativeDnsMessageInfo);
+			AGDnsApi.ag_dnsproxy_handle_message_async(
+				m_pProxyServer,
+				messageBuffer,
+				pNativeDnsMessageInfo,
+				nativeMessageHandler);
+        }
+
+		#endregion
+
+		public void Dispose()
         {
             lock (m_SyncRoot)
             {

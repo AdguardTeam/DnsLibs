@@ -21,7 +21,7 @@ namespace ag::dns::proxy::test {
 
 // Generated with:
 // echo | openssl s_client -connect 94.140.14.14:853 -servername dns.adguard-dns.com 2>/dev/null | openssl x509 -pubkey -noout | openssl pkey -pubin -outform der | openssl dgst -sha256 -binary | openssl enc -base64
-static constexpr auto ADGUARD_DNS_SPKI = "WvW6JgoU6qMJyW6uF2yF86r/Mi8hnp9ZxYdqiUDUYZo=";
+static constexpr auto ADGUARD_DNS_SPKI = "2EeRHV2g0BhpRnuu8GBcpH/nGo4xv76wlP1vRCG428Y=";
 static constexpr auto ZEROSSL_SPKI = "3fLLVjRIWnCqDqIETU2OcnMP7EzmN/Z3Q/jQ8cIaAoc=";
 
 static constexpr auto DNS64_SERVER_ADDR = "2001:4860:4860::6464";
@@ -269,9 +269,10 @@ TEST_F(DnsProxyTest, TestWrongSPKI) {
 TEST_F(DnsProxyTest, DnsStampWithHash) {
     using namespace std::chrono_literals;
     DnsProxySettings settings = make_dnsproxy_settings();
+    // Stamp's "hashes" field takes another form of hash, generated with:
+    // echo | openssl s_client -connect 94.140.14.14:853 -servername dns.adguard-dns.com 2>/dev/null | openssl x509 -outform der | openssl asn1parse -inform der -strparse 4 -noout -out - | openssl dgst -sha256
     settings.upstreams = {{
-            .address = "sdns://AwAAAAAAAAAAEDk0LjE0MC4xNC4xNDo4NTMgHr6paF1XowY8QnrE8Jg_NOc8EpsG5-dwVkDKzUDDccgTZG5zLmFkZ3VhcmQtZG5zLmNvbQ",
-            .bootstrap = {"1.1.1.1"},
+            .address = "sdns://AwAAAAAAAAAAEDk0LjE0MC4xNC4xNDo4NTMgaTm_6Takf28ZNV5oX3LQ2Pl0qW7ZqDwrz-CFtNb7wZITZG5zLmFkZ3VhcmQtZG5zLmNvbQ",
     }};
     settings.upstream_timeout = 5000ms;
     settings.ipv6_available = false;
@@ -1807,6 +1808,54 @@ TEST_F(DnsProxyTest, DenyallowRulesDoNotMatchIpAddresses) {
     perform_request(*m_proxy, create_request("example.org", LDNS_RR_TYPE_A, LDNS_RD), response);
     ASSERT_GT(ldns_pkt_ancount(response.get()), 0);
     ASSERT_EQ(ldns_pkt_get_rcode(response.get()), LDNS_RCODE_NOERROR);
+}
+
+TEST_F(DnsProxyTest, TransparentRequest) {
+    auto settings = make_dnsproxy_settings();
+    std::optional<DnsRequestProcessedEvent> last_event{};
+    DnsProxyEvents events{.on_request_processed = [&last_event](const DnsRequestProcessedEvent &event) {
+        last_event = event;
+    }};
+    auto [ret, err] = m_proxy->init(settings, events);
+    ASSERT_TRUE(ret) << err->str();
+
+    auto req = create_request("example.org", LDNS_RR_TYPE_A, LDNS_RD);
+    DnsMessageInfo info{.transparent = true};
+
+    uint8_t *msg_data;
+    size_t msg_size;
+    ASSERT_EQ(LDNS_STATUS_OK, ldns_pkt2wire(&msg_data, req.get(), &msg_size));
+    ag::AllocatedPtr<uint8_t> msg_guard{msg_data};
+
+    auto hmsg_result = m_proxy->handle_message_sync({msg_data, msg_size}, &info);
+
+    ASSERT_FALSE(last_event.has_value());
+
+    ldns_pkt *result_pkt;
+    ASSERT_EQ(LDNS_STATUS_OK, ldns_wire2pkt(&result_pkt, hmsg_result.data(), hmsg_result.size()));
+    ag::UniquePtr<ldns_pkt, &ldns_pkt_free> result_guard{result_pkt};
+
+    ASSERT_FALSE(ldns_pkt_qr(result_pkt));
+
+    result_guard = create_request("example.org", LDNS_RR_TYPE_A, LDNS_RD);
+    result_pkt = result_guard.get();
+
+    ldns_pkt_set_qr(result_pkt, true);
+
+    ldns_rr *rr_a;
+    ASSERT_EQ(LDNS_STATUS_OK, ldns_rr_new_frm_str(&rr_a, "example.org.            6241    IN      A       93.184.216.34", 100, nullptr, nullptr));
+    ldns_pkt_push_rr(result_pkt, LDNS_SECTION_ANSWER, rr_a);
+    ASSERT_EQ(LDNS_STATUS_OK, ldns_pkt2wire(&msg_data, result_pkt, &msg_size));
+    msg_guard.reset(msg_data);
+
+    hmsg_result = m_proxy->handle_message_sync({msg_data, msg_size}, &info);
+
+    ASSERT_TRUE(last_event.has_value());
+    ASSERT_EQ(LDNS_STATUS_OK, ldns_wire2pkt(&result_pkt, hmsg_result.data(), hmsg_result.size()));
+    result_guard.reset(result_pkt);
+
+    ASSERT_TRUE(ldns_pkt_qr(result_pkt));
+    ASSERT_EQ(1, ldns_pkt_ancount(result_pkt));
 }
 
 } // namespace ag::dns::proxy::test

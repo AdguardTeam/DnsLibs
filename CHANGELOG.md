@@ -2,6 +2,13 @@
 
 ## V2.4
 
+* [Feature] Added an option to do transparent filtering. See `ag::dns::DnsMessageInfo::transparent` for details.
+
+* [Feature] Added an async (callback-based) message-handling interface to adapters.
+    * [Android] See `com.adguard.dnslibs.proxy.DnsProxy#handleMessageAsync`.
+    * [Apple] See `-[AGDnsProxy handleMessage:withInfo:withCompletionHandler:]`.
+    * [C API] See `ag_dnsproxy_handle_message_async`.
+
 * [Feature] Improved DNS Fallback Mechanism.
 Added logic to retry DNS queries over TCP if initial UDP attempts are unsuccessful or return 
 incomplete data. 

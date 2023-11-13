@@ -91,10 +91,18 @@ extern "C" JNIEXPORT jobject JNICALL Java_com_adguard_dnslibs_proxy_DnsProxy_get
 }
 
 extern "C" JNIEXPORT jbyteArray JNICALL Java_com_adguard_dnslibs_proxy_DnsProxy_handleMessage(
-        JNIEnv *env, jobject thiz, jlong native_ptr, jbyteArray message) {
+        JNIEnv *env, jobject thiz, jlong native_ptr, jbyteArray message, jobject info) {
     auto *proxy = (AndroidDnsProxy *) native_ptr;
     assert(proxy);
-    return proxy->handle_message(env, message);
+    return proxy->handle_message(env, message, info);
+}
+
+extern "C" JNIEXPORT void JNICALL Java_com_adguard_dnslibs_proxy_DnsProxy_handleMessageAsync(
+        JNIEnv *env, jobject thiz, jlong native_ptr, jbyteArray message,
+        jobject info, jobject callback) {
+    auto *proxy = (AndroidDnsProxy *) native_ptr;
+    assert(proxy);
+    proxy->handle_message_async(env, message, info, callback);
 }
 
 UpstreamOptions AndroidDnsProxy::marshal_upstream(JNIEnv *env, jobject java_upstream_settings) {
@@ -872,11 +880,11 @@ void AndroidDnsProxy::deinit(JNIEnv *env) {
     m_actual_proxy.deinit();
 }
 
-jbyteArray AndroidDnsProxy::handle_message(JNIEnv *env, jbyteArray message) {
+jbyteArray AndroidDnsProxy::handle_message(JNIEnv *env, jbyteArray message, jobject info) {
     auto elements = env->GetByteArrayElements(message, nullptr); // May copy, must call ReleaseByteArrayElements
     auto size = env->GetArrayLength(message);
-
-    auto result = m_actual_proxy.handle_message_sync({(uint8_t *) elements, (size_t) size}, nullptr);
+    auto cinfo = marshal_message_info(env, info);
+    auto result = m_actual_proxy.handle_message_sync({(uint8_t *) elements, (size_t) size}, opt_as_ptr(cinfo));
 
     // Free the buffer without copying back the possible changes
     env->ReleaseByteArrayElements(message, elements, JNI_ABORT);
@@ -885,6 +893,32 @@ jbyteArray AndroidDnsProxy::handle_message(JNIEnv *env, jbyteArray message) {
     env->SetByteArrayRegion(result_array, 0, result.size(), (jbyte *) result.data());
 
     return result_array;
+}
+
+void AndroidDnsProxy::handle_message_async(JNIEnv *env, jbyteArray message, jobject info, jobject callback) {
+    JavaVM *vm = ag::jni::get_vm(env);
+    coro::run_detached([](AndroidDnsProxy *proxy, JavaVM *vm, ag::jni::GlobalRef<jbyteArray> message,
+                          ag::jni::GlobalRef<jobject> info, ag::jni::GlobalRef<jobject> callback) -> coro::Task<void> {
+        std::vector<uint8_t> result;
+        jbyte *msg_data;
+        jsize msg_size;
+        std::optional<DnsMessageInfo> cinfo;
+        {
+            ag::jni::ScopedJniEnv env(vm, 16);
+            msg_data = env->GetByteArrayElements(message.get(), nullptr);
+            msg_size = env->GetArrayLength(message.get());
+            cinfo = proxy->marshal_message_info(env.get(), info.get());
+        }
+        result = co_await proxy->m_actual_proxy.handle_message({(uint8_t *) msg_data, (size_t) msg_size}, opt_as_ptr(cinfo));
+        // Switched threads during `handle_message`.
+        {
+            ag::jni::ScopedJniEnv env(vm, 16);
+            env->ReleaseByteArrayElements(message.get(), msg_data, JNI_ABORT);
+            auto *result_array = env->NewByteArray(result.size());
+            env->SetByteArrayRegion(result_array, 0, result.size(), (jbyte *) result.data());
+            env->CallVoidMethod(callback.get(), proxy->m_consumer_methods.accept, result_array);
+        }
+    }(this, vm, ag::jni::GlobalRef(vm, message), ag::jni::GlobalRef(vm, info), ag::jni::GlobalRef(vm, callback)));
 }
 
 jobject AndroidDnsProxy::get_default_settings(JNIEnv *env) {
@@ -956,6 +990,12 @@ AndroidDnsProxy::AndroidDnsProxy(JavaVM *vm)
     m_blocking_mode_values = m_utils.get_enum_values(env.get(), FQN_BLOCKING_MODE);
     m_dnsproxy_init_result = m_utils.get_enum_values(env.get(), FQN_DNSPROXY_ERROR_CODE);
 
+    c = (m_jclasses.message_info = GlobalRef(vm, env->FindClass(FQN_DNS_MESSAGE_INFO))).get();
+    m_message_info_fields.transparent = env->GetFieldID(c, "transparent", "Z");
+
+    c = (m_jclasses.async_callback = GlobalRef(vm, env->FindClass("java/util/function/Consumer"))).get();
+    m_consumer_methods.accept = env->GetMethodID(c, "accept", "(Ljava/lang/Object;)V");
+
     m_jni_initialized.store(true);
 }
 
@@ -984,6 +1024,20 @@ jni::LocalRef<jobject> AndroidDnsProxy::marshal_rule_template(JNIEnv *env, const
 DnsFilter::RuleTemplate AndroidDnsProxy::marshal_rule_template(JNIEnv *env, jobject tmplt) {
     auto text = (jstring) env->GetObjectField(tmplt, m_rule_template_fields.text);
     return DnsFilter::RuleTemplate(m_utils.marshal_string(env, text));
+}
+
+std::optional<ag::dns::DnsMessageInfo> AndroidDnsProxy::marshal_message_info(JNIEnv *env, jobject jinfo) {
+    if (env->IsSameObject(nullptr, jinfo)) {
+        return std::nullopt;
+    }
+
+    auto check = m_jni_initialized.load();
+    assert(check);
+
+    DnsMessageInfo info;
+    info.transparent = env->GetBooleanField(jinfo, m_message_info_fields.transparent);
+
+    return info;
 }
 
 jstring AndroidDnsProxy::generate_rule(JNIEnv *env, jobject tmplt, jobject event, jint options) {

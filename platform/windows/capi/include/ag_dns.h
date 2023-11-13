@@ -488,7 +488,7 @@ typedef enum {
  * @ingroup defines
  * Callback function for certificate verification.
  *
- * This function is called synchronously when a certificate needs to be verified.
+ * This function is called on an unspecified thread when a certificate needs to be verified.
  *
  * @param event Pointer to the ag_certificate_verification_event structure
  *              containing information about the certificate to be verified
@@ -655,6 +655,28 @@ typedef enum {
 } ag_dnsproxy_init_result;
 
 /**
+ * @struct ag_dns_message_info
+ * Holds out-of-band information about a DNS message or how to process it.
+ */
+typedef struct {
+    /**
+     * If `true`, the proxy will handle the message transparently: queries are returned to the caller
+     * instead of being forwarded to the upstream by the proxy, responses are processed as if they were received
+     * from an upstream, and the processed response is returned to the caller. The proxy may return a response
+     * when transparently handling a query if the query is blocked. The proxy may still perform an upstream
+     * query when handling a message transparently, for example, to process CNAME-rewrites.
+     */
+    bool transparent;
+} ag_dns_message_info;
+
+/**
+ * @ingroup defines
+ * Callback function for asynchronous message processing.
+ * This function is called on an unspecified thread when a result of `handle_message_async` is ready.
+ */
+typedef void (*ag_handle_message_async_cb)(const ag_buffer *result);
+
+/**
  * @ingroup defines
  * An opaque data type representing a DNS Proxy.
  */
@@ -707,11 +729,22 @@ AG_EXPORT void ag_dnsproxy_deinit(ag_dnsproxy *proxy);
 /**
  * @ingroup api
  * Process a DNS message and return the response.
- * @param message a DNS request in wire format
+ * @param message a DNS message in wire format
+ * @param info additional parameters
  * @return The DNS response in wire format
  * @note The caller is responsible for freeing both buffers with `ag_buffer_free()`
  */
-AG_EXPORT ag_buffer ag_dnsproxy_handle_message(ag_dnsproxy *proxy, ag_buffer message);
+AG_EXPORT ag_buffer ag_dnsproxy_handle_message(ag_dnsproxy *proxy, ag_buffer message, const ag_dns_message_info *info);
+
+/**
+ * @ingroup api
+ * Process a DNS message and call `handler` on an unspecified thread with the response.
+ * @param message a DNS message in wire format
+ * @param info additional parameters
+ * @note The caller is responsible for freeing `message` with `ag_buffer_free()`
+ */
+AG_EXPORT void ag_dnsproxy_handle_message_async(ag_dnsproxy *proxy, ag_buffer message, const ag_dns_message_info *info,
+        ag_handle_message_async_cb handler);
 
 /**
  * @ingroup api1

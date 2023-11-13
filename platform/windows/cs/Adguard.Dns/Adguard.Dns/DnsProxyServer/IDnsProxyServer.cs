@@ -37,5 +37,21 @@ namespace Adguard.Dns.DnsProxyServer
         /// Determines, whether the current instance of the DnsProxyServer is started
         /// </summary>
         bool IsStarted { get; }
+
+		/// <summary>
+		/// Process a DNS message and return the response.
+		/// </summary>
+		/// <param name="message">A DNS message in wire format </param>
+		/// <param name="info">Additional parameters</param>
+		/// <returns>The DNS response in wire format</returns>
+		byte[] HandleDnsMessage(byte[] message, DnsMessageInfo info);
+
+		/// <summary>
+		/// Process a DNS message and call `handler` on an unspecified thread with the response.
+		/// </summary>
+		/// <param name="message">A DNS message in wire format </param>
+		/// <param name="info">Additional parameters</param>
+		/// <param name="handler">Callback function for asynchronous message processing</param>
+		void HandleDnsMessageAsync(byte[] message, DnsMessageInfo info, Action<byte[]> handler);
     }
 }

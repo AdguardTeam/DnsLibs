@@ -1487,6 +1487,24 @@ static coro::Task<void *> handleIPv6Packet(AGDnsProxy *self, NSData *packet)
     }(self, packet, completionHandler));
 }
 
+- (void)handleMessage:(NSData *)message
+             withInfo:(AGDnsMessageInfo *)info
+withCompletionHandler:(void (^)(NSData *))handler {
+    coro::run_detached([](AGDnsProxy *self, NSData *message, AGDnsMessageInfo *info,
+            void (^handler)(NSData *)) -> coro::Task<void> {
+        std::optional<DnsMessageInfo> cpp_info;
+        if (info) {
+            cpp_info.emplace();
+            cpp_info->transparent = info.transparent;
+        }
+        auto result = co_await self->proxy.handle_message({(uint8_t *) message.bytes, (size_t) message.length},
+                                                          opt_as_ptr(cpp_info));
+        @autoreleasepool {
+            handler([NSData dataWithBytes:result.data() length:result.size()]);
+        }
+    }(self, message, info, handler));
+}
+
 + (BOOL) isValidRule: (NSString *) str
 {
     return DnsFilter::is_valid_rule([str UTF8String]);
@@ -1674,4 +1692,7 @@ static std::optional<std::string> verifyCertificate(CertificateVerificationEvent
     return nil;
 }
 
+@end
+
+@implementation AGDnsMessageInfo
 @end

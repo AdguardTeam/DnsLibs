@@ -1,5 +1,12 @@
+#ifdef _WIN32
+#include <windows.h>
+#endif
+
 #include <ag_dns.h>
+
 #include <ldns/ldns.h>
+
+#include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -89,10 +96,10 @@ static void test_proxy() {
                                          LDNS_RR_TYPE_A, LDNS_RR_CLASS_IN, LDNS_RD);
     ag_buffer msg = {0};
     size_t out_size;
-    ldns_pkt2wire(&msg.data, query, &out_size);
+    ASSERT(LDNS_STATUS_OK == ldns_pkt2wire(&msg.data, query, &out_size));
     msg.size = out_size;
 
-    ag_buffer res = ag_dnsproxy_handle_message(proxy, msg);
+    ag_buffer res = ag_dnsproxy_handle_message(proxy, msg, NULL);
     ASSERT(on_req_called);
     ASSERT(on_cert_called);
 
@@ -170,7 +177,7 @@ static void test_cert_fingerprint() {
     ASSERT(settings->upstreams.data == NULL);
     ASSERT(settings->upstreams.size == 0);
 
-    const char *fingerprint = "WvW6JgoU6qMJyW6uF2yF86r/Mi8hnp9ZxYdqiUDUYZo=";
+    const char *ADGUARD_DNS_SPKI = "2EeRHV2g0BhpRnuu8GBcpH/nGo4xv76wlP1vRCG428Y=";
     const char *bootstrap = "1.1.1.1";
     ag_upstream_options upstream = {
             .address = "tls://dns.adguard-dns.com",
@@ -178,7 +185,7 @@ static void test_cert_fingerprint() {
     };
     upstream.bootstrap.data = &bootstrap;
     upstream.bootstrap.size = 1;
-    upstream.fingerprints.data = &fingerprint;
+    upstream.fingerprints.data = &ADGUARD_DNS_SPKI;
     upstream.fingerprints.size = 1;
 
     settings->upstreams.data = &upstream;
@@ -210,7 +217,7 @@ static void test_cert_fingerprint() {
     ldns_pkt2wire(&msg.data, query, &out_size);
     msg.size = out_size;
 
-    ag_buffer res = ag_dnsproxy_handle_message(proxy, msg);
+    ag_buffer res = ag_dnsproxy_handle_message(proxy, msg, NULL);
     ASSERT(on_req_called);
     ASSERT(on_cert_called);
 
@@ -272,6 +279,53 @@ static void test_is_valid_rule() {
     ASSERT(!ag_is_valid_dns_rule("/.*/"));
 }
 
+#ifdef _WIN32
+struct async_ctx_t {
+    __int64 ok;
+    HANDLE sem;
+};
+
+static struct async_ctx_t g_ctx;
+
+static void async_cb(const ag_buffer *result) {
+    g_ctx.ok = result->data && result->size > 0;
+    ReleaseSemaphore(g_ctx.sem, 1, NULL);
+}
+
+static void test_async_transparent() {
+    ag_dnsproxy_settings *settings = ag_dnsproxy_settings_get_default();
+    ASSERT(settings);
+    ag_upstream_options upstream = {
+            .address = "1.2.3.4", // blackhole, intentional
+            .id = 42,
+    };
+    settings->upstreams.data = &upstream;
+    settings->upstreams.size = 1;
+    ag_dnsproxy_init_result result;
+    const char *message = NULL;
+    ag_dnsproxy *proxy = ag_dnsproxy_init(settings, NULL, &result, &message);
+    ASSERT(proxy);
+    ldns_pkt *query = ldns_pkt_query_new(ldns_dname_new_frm_str("example.org"),
+            LDNS_RR_TYPE_A, LDNS_RR_CLASS_IN, LDNS_RD);
+    ag_buffer msg = {0};
+    size_t out_size;
+    ASSERT(LDNS_STATUS_OK == ldns_pkt2wire(&msg.data, query, &out_size));
+    msg.size = out_size;
+    ag_dns_message_info info = {.transparent = true};
+    g_ctx.sem = CreateSemaphore(NULL, 0, 1, NULL);
+    ag_dnsproxy_handle_message_async(proxy, msg, &info, async_cb);
+    ASSERT(WAIT_OBJECT_0 == WaitForSingleObject(g_ctx.sem, 10000));
+    ASSERT(g_ctx.ok);
+    CloseHandle(g_ctx.sem);
+    free(msg.data);
+    ldns_pkt_free(query);
+    ag_dnsproxy_deinit(proxy);
+    settings->upstreams.data = NULL;
+    settings->upstreams.size = 0;
+    ag_dnsproxy_settings_free(settings);
+}
+#endif
+
 int main() {
     ag_set_log_level(AGLL_TRACE);
 
@@ -286,6 +340,7 @@ int main() {
     // At least check that we don't crash or something
     ag_disable_SetUnhandledExceptionFilter();
     ag_enable_SetUnhandledExceptionFilter();
+    test_async_transparent();
 #endif
 
     return 0;

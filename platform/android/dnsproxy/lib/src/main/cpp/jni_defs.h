@@ -22,3 +22,4 @@
 #define FQN_DNSSTAMP "com/adguard/dnslibs/proxy/DnsStamp"
 #define FQN_DNSSTAMP_PROTOTYPE FQN_DNSSTAMP "$ProtoType"
 #define FQN_DNSSTAMP_INFORMAL_PROPERTIES FQN_DNSSTAMP "$InformalProperties"
+#define FQN_DNS_MESSAGE_INFO "com/adguard/dnslibs/proxy/DnsMessageInfo"

@@ -602,19 +602,29 @@ namespace Adguard.Dns.Helpers
             return testUpstreamCallbacksAdapter.OnTestUpstreamCallback;
         }
 
-        #endregion
+        internal static AGDnsApi.ag_dns_message_info ToNativeObject(DnsMessageInfo dnsMessageInfo)
+        {
+	        AGDnsApi.ag_dns_message_info converted = new AGDnsApi.ag_dns_message_info
+	        {
+		        transparent = dnsMessageInfo.Transparent
+	        };
 
-        #region Helper methods
+	        return converted;
+        }
 
-        /// <summary>
-        /// Creates the <see cref="IPAddress"/> object from the specified pointer to address byte array,
-        /// addressLength
-        /// </summary>
-        /// <param name="agAddress">The <see cref="MarshalUtils.ag_buffer"/> instance</param>
-        /// <exception cref="ArgumentException">Thrown,
-        /// if passed <see cref="MarshalUtils.ag_buffer.size"/> is not acceptable</exception>
-        /// <returns><see cref="IPAddress"/> object or null if the pointer is null or addressLength is zero</returns>
-        private static IPAddress CreateIpAddress(MarshalUtils.ag_buffer agAddress)
+		#endregion
+
+		#region Helper methods
+
+		/// <summary>
+		/// Creates the <see cref="IPAddress"/> object from the specified pointer to address byte array,
+		/// addressLength
+		/// </summary>
+		/// <param name="agAddress">The <see cref="MarshalUtils.ag_buffer"/> instance</param>
+		/// <exception cref="ArgumentException">Thrown,
+		/// if passed <see cref="MarshalUtils.ag_buffer.size"/> is not acceptable</exception>
+		/// <returns><see cref="IPAddress"/> object or null if the pointer is null or addressLength is zero</returns>
+		private static IPAddress CreateIpAddress(MarshalUtils.ag_buffer agAddress)
         {
             if (agAddress.data == IntPtr.Zero ||
                 agAddress.size == 0)
