@@ -1264,7 +1264,7 @@ coro::Task<Uint8Vector> DnsForwarder::handle_message_with_timeout(
 
 // Truncate response, if needed
 void DnsForwarder::truncate_response(ldns_pkt *response, const ldns_pkt *request, const DnsMessageInfo *info) {
-    if (info && info->proto == utils::TP_UDP) {
+    if (info && info->proto == utils::TP_UDP && !info->transparent) {
         size_t max_size = ldns_pkt_edns(request) ? ldns_pkt_edns_udp_size(request) : 512;
         bool truncated = dns::ldns_pkt_truncate(response, max_size);
         if (truncated && m_log.is_enabled(ag::LogLevel::LOG_LEVEL_DEBUG)) {
