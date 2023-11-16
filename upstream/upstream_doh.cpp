@@ -778,7 +778,11 @@ void ag::dns::DohUpstream::HttpConnection::on_response(void *arg, uint64_t strea
     }
 
     ReplyWaiter *awaitable = iter->second.get();
-    log_query(dbg, self, awaitable->query_id, "Received response: {}", response);
+    if (g_logger.is_enabled(LOG_LEVEL_TRACE)) {
+        log_query(trace, self, awaitable->query_id, "Received response: {}", response);
+    } else if (response.status_code() != 200) {
+        log_query(dbg, self, awaitable->query_id, "Received non-200 response: {} {}", response.version(), response.status_code());
+    }
 
     awaitable->notify_response(std::move(response));
 }
@@ -795,7 +799,7 @@ void ag::dns::DohUpstream::HttpConnection::on_body(void *arg, uint64_t stream_id
     }
 
     ReplyWaiter *awaitable = iter->second.get();
-    log_query(dbg, self, awaitable->query_id, "Received response body: {} bytes", chunk.length());
+    log_query(trace, self, awaitable->query_id, "Received response body: {} bytes", chunk.length());
 
     awaitable->reply_buffer.insert(awaitable->reply_buffer.end(), chunk.begin(), chunk.end());
 }
@@ -812,7 +816,7 @@ void ag::dns::DohUpstream::HttpConnection::on_stream_read_finished(void *arg, ui
     }
 
     ReplyWaiter *awaitable = iter->second.get();
-    log_query(dbg, self, awaitable->query_id, "Received fin");
+    log_query(trace, self, awaitable->query_id, "Received fin");
 
     ldns_pkt *reply = nullptr;
     if (ldns_status status = ldns_wire2pkt(&reply, awaitable->reply_buffer.data(), awaitable->reply_buffer.size());

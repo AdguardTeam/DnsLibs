@@ -19,7 +19,7 @@ public:
             : m_log(logger_name()),
               m_handle(new UvT{}),
               m_parent(parent) {
-        dbglog(m_log, "Created {}, handle {}", (void *) this, (void *) m_handle);
+        tracelog(m_log, "Created {}, handle {}", (void *) this, (void *) m_handle);
     }
 
     static std::string logger_name() {
@@ -66,7 +66,7 @@ public:
     }
 
     ~Uv() {
-        dbglog(m_log, "Closing {} handle {}", (void *) this, (void *) m_handle);
+        tracelog(m_log, "Closing {} handle {}", (void *) this, (void *) m_handle);
         delete weak_from_data(m_handle->data);
         m_handle->data = nullptr;
         if constexpr (std::is_same_v<std::remove_cvref_t<UvT>, uv_loop_t>) {
@@ -85,7 +85,7 @@ public:
 
     static void on_close(uv_handle_t *handle) {
         Logger log(logger_name());
-        dbglog(log, "Destroyed handle {}", (void *)handle);
+        tracelog(log, "Destroyed handle {}", (void *)handle);
         delete (UvT *) handle;
     }
 

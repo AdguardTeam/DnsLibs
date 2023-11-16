@@ -142,14 +142,15 @@ void SecuredSocket::on_read(void *arg, Uint8View data) {
         }
 
         if (Callbacks cbx = self->get_callbacks(); cbx.on_read != nullptr) {
-            if (!decrypted_chunk.data.empty()) {
-                // @todo: buffer and re-raise it later if needed
-                dbglog(self->m_log, "{} bytes were dropped", decrypted_chunk.data.size());
-            }
             std::weak_ptr<bool> shutdown_guard = self->m_shutdown_guard;
             cbx.on_read(cbx.arg, {decrypted_chunk.data.data(), decrypted_chunk.data.size()});
             if (shutdown_guard.expired()) {
                 return;
+            }
+        } else {
+            if (!decrypted_chunk.data.empty()) {
+                // @todo: buffer and re-raise it later if needed
+                dbglog(self->m_log, "{} bytes were dropped", decrypted_chunk.data.size());
             }
         }
     }

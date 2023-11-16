@@ -83,6 +83,7 @@ static DnsFilter::EngineParams make_fallback_filter_params(
 }
 
 // info not nullptr when logging incoming packet, nullptr for outgoing packets
+#if !TARGET_OS_IPHONE
 static void log_packet(
         const Logger &log, const ldns_pkt *packet, std::string_view pkt_name, const DnsMessageInfo *info = nullptr) {
     if (!log.is_enabled(LogLevel::LOG_LEVEL_DEBUG)) {
@@ -101,6 +102,39 @@ static void log_packet(
     }
     ldns_buffer_free(str_dns);
 }
+#else
+static void log_packet(
+        const Logger &log, const ldns_pkt *packet, std::string_view pkt_name, const DnsMessageInfo *info = nullptr) {
+    if (!log.is_enabled(LogLevel::LOG_LEVEL_DEBUG)) {
+        return;
+    }
+
+    std::string str_dns;
+    ldns_status status = [&] {
+        const ldns_rr *question = ldns_rr_list_rr(ldns_pkt_question(packet), 0);
+        if (!question) {
+            return LDNS_STATUS_ERR;
+        }
+        AllocatedPtr<char> type{ldns_rr_type2str(ldns_rr_get_type(question))};
+        AllocatedPtr<char> domain{ldns_rdf2str(ldns_rr_owner(question))};
+        AllocatedPtr<char> rcode{ldns_pkt_rcode2str(ldns_pkt_get_rcode(packet))};
+        str_dns = fmt::format("{} {} rcode: {}\n{}",
+                              domain.get() ? domain.get() : "(null)",
+                              type.get() ? type.get() : "(null)",
+                              rcode.get() ? rcode.get() : "(null)",
+                              DnsForwarderUtils::rr_list_to_string(ldns_pkt_answer(packet)));
+        return LDNS_STATUS_OK;
+    }();
+    if (status != LDNS_STATUS_OK) {
+        dbglog_id(log, packet, "Failed to print {}: {} ({})", pkt_name, ldns_get_errorstr_by_id(status), status);
+    } else if (info) {
+        dbglog_id(log, packet, "{} from {} over {}: {}", pkt_name, info->peername.str(),
+                  magic_enum::enum_name<utils::TransportProtocol>(info->proto), str_dns);
+    } else {
+        dbglog_id(log, packet, "{}: {}", pkt_name, str_dns);
+    }
+}
+#endif
 
 static uint16_t read_uint16_be(Uint8View pkt) {
     assert(pkt.size() >= 2);
