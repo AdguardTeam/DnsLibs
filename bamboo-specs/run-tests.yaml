@@ -45,6 +45,7 @@ Run C++ tests:
         mkdir -p build
         cd build
         rm -f CMakeCache.txt
+        export LDFLAGS=-fuse-ld=lld
         ${CMAKE} -DCMAKE_BUILD_TYPE=Debug \
             -DCMAKE_C_COMPILER=clang \
             -DCMAKE_CXX_COMPILER=clang++ \

@@ -1107,7 +1107,7 @@ ag::coro::Task<ag::Error<ag::dns::DnsError>> ag::dns::DohUpstream::Http3Connecti
         co_return error;
     }
 
-    Result client = http::Http3Client::make(http::Http3Settings{},
+    Result client = http::Http3Client::connect(http::Http3Settings{},
             http::Http3Client::Callbacks{
                     .arg = this,
                     .on_handshake_completed = on_handshake_completed,
