@@ -482,15 +482,15 @@ ag::coro::Task<void> ag::dns::DohUpstream::drive_connection(Millis handshake_tim
     std::weak_ptr<bool> shutdown_guard = m_shutdown_guard;
     log_upstream(trace, this, "Bootstrapping...");
     Bootstrapper::ResolveResult resolved = co_await m_bootstrapper->get(); // NOLINT(*-unchecked-optional-access)
+    if (shutdown_guard.expired()) {
+        co_return;
+    }
     if (resolved.error) {
         close_connection(make_error(DnsError::AE_BOOTSTRAP_ERROR, resolved.error));
         co_return;
     }
     if (resolved.addresses.empty()) {
         close_connection(make_error(DnsError::AE_BOOTSTRAP_ERROR, "Empty address list"));
-        co_return;
-    }
-    if (shutdown_guard.expired()) {
         co_return;
     }
     log_upstream(trace, this, "Bootstrapped");
