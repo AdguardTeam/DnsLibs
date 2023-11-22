@@ -38,7 +38,7 @@ class DnsLibsConan(ConanFile):
         self.requires("ngtcp2/0.19.1@AdguardTeam/NativeLibsCommon")
         self.requires("pcre2/10.37@AdguardTeam/NativeLibsCommon")
         self.requires("tldregistry/2022-12-26@AdguardTeam/NativeLibsCommon")
-        self.requires("openssl/boring-2023-09-01@AdguardTeam/NativeLibsCommon", override=True)
+        self.requires("openssl/boring-2023-05-17@AdguardTeam/NativeLibsCommon", override=True)
 
     def build_requirements(self):
         self.build_requires("gtest/1.11.0")

@@ -13,3 +13,5 @@ build_type=RelWithDebInfo
 CONAN_CMAKE_TOOLCHAIN_FILE={{ os.path.join(profile_dir, "windows.toolchain.cmake") }}
 CONAN_MAKE_PROGRAM=ninja
 CONAN_CMAKE_GENERATOR=Ninja
+[conf]
+tools.cmake.cmaketoolchain:generator=Ninja
