@@ -63,6 +63,14 @@ void DnsFramedConnection::connect() {
 }
 
 DnsFramedConnection::~DnsFramedConnection() {
+    m_stream.reset();
+    std::vector<uint16_t> request_ids;
+    for (auto node : m_requests) {
+        request_ids.push_back(node.first);
+    }
+    for (auto request_id : request_ids) {
+        this->finish_request(request_id, make_error(DnsError::AE_SHUTTING_DOWN));
+    }
 }
 
 void DnsFramedConnection::on_connected(void *arg) {

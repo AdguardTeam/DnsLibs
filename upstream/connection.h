@@ -136,8 +136,9 @@ public:
     }
 
     coro::Task<Connection::Reply> perform_request(Uint8View packet, Millis timeout) {
-        ConnectionPtr conn = get();
-        return conn->perform_request(packet, timeout);
+        // Connection must not outlive the pool, don't keep an extra ref during the lifetime of the coroutine.
+        Connection *conn = get().get();
+        co_return co_await conn->perform_request(packet, timeout);
     }
 
     virtual ConnectionPtr create() = 0;

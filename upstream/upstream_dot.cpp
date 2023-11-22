@@ -200,7 +200,11 @@ coro::Task<Upstream::ExchangeResult> DotUpstream::exchange(const ldns_pkt *reque
 
     Uint8View buf{ ldns_buffer_begin(buffer.get()), ldns_buffer_position(buffer.get()) };
     tracelog_id(m_log, request_pkt, "Sending request for a domain: {}", domain ? domain.get() : "(unknown)");
+    std::weak_ptr<ConnectionPoolBase> guard = m_pool;
     Connection::Reply reply = co_await m_pool->perform_request(buf, timeout);
+    if (guard.expired()) {
+        co_return make_error(DnsError::AE_SHUTTING_DOWN);
+    }
     if (reply.has_error()) {
         co_return reply.error();
     }
