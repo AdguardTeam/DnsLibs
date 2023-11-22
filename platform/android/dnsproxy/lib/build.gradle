@@ -1,6 +1,6 @@
 apply plugin: 'com.android.library'
 
-version = [name: '2.4.11', code: 488]
+version = [name: '2.4.12', code: 489]
 
 android {
     namespace = "com.adguard.dnslibs"
