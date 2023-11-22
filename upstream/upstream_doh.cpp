@@ -497,16 +497,17 @@ ag::coro::Task<void> ag::dns::DohUpstream::drive_connection(Millis handshake_tim
 
     std::array<std::unique_ptr<HttpConnection>, 2> connections;
     coro::Task<Result<HttpConnection *, DnsError>> connector;
+    SocketAddress peer = resolved.addresses.at(0);
     if (m_http_version == http::HTTP_3_0) {
         connections[0] = std::make_unique<Http3Connection>(this);
-        connector = establish_connection(connections[0].get(), resolved.addresses.at(0));
+        connector = establish_connection(connections[0].get(), peer);
     } else if (m_http_version == http::HTTP_2_0) {
         connections[0] = std::make_unique<Http2Connection>(this);
-        connector = establish_connection(connections[0].get(), resolved.addresses.at(0));
+        connector = establish_connection(connections[0].get(), peer);
     } else {
         connections[0] = std::make_unique<Http2Connection>(this);
         connections[1] = std::make_unique<Http3Connection>(this);
-        connector = establish_any_of_connections(connections[0].get(), connections[1].get(), resolved.addresses.at(0));
+        connector = establish_any_of_connections(connections[0].get(), connections[1].get(), peer);
     }
 
     auto http_conn = co_await parallel::any_of<Result<HttpConnection *, DnsError>>(
@@ -529,6 +530,9 @@ ag::coro::Task<void> ag::dns::DohUpstream::drive_connection(Millis handshake_tim
     }
 
     if (http_conn.has_error()) {
+        if (http_conn.error()->value() == DnsError::AE_TIMED_OUT) {
+            m_bootstrapper->remove_resolved(peer); // NOLINT(*-unchecked-optional-access)
+        }
         close_connection(http_conn.error());
         co_return;
     }
@@ -1037,6 +1041,7 @@ ag::coro::Task<ag::Error<ag::dns::DnsError>> ag::dns::DohUpstream::Http2Connecti
     Error<SocketError> err = co_await socket.connect(AioSocket::ConnectParameters{
             .loop = &parent->m_config.loop,
             .peer = peer,
+            .timeout = parent->m_config.timeout,
     });
     if (guard.expired()) {
         co_return make_error(DnsError::AE_SHUTTING_DOWN);
@@ -1274,8 +1279,18 @@ void ag::dns::DohUpstream::Http3Connection::on_expiry_update(void *arg, ag::Nano
                 }
 
                 log_hconn(dbg, self, "Expired");
-                self->session->handle_expiry();
+                if (Error<http::Http3Error> error = self->session->handle_expiry(); error != nullptr) {
+                    if ((int) error->value() == NGTCP2_ERR_IDLE_CLOSE || error->str().find("IDLE_CLOSE") != std::string::npos) {
+                        log_hconn(dbg, self, "Closing idle connection");
+                        self->parent->close_connection(make_error(DnsError::AE_TIMED_OUT));
+                    } else {
+                        log_hconn(dbg, self, "Connection timer handling error: {}", error->str());
+                        self->parent->close_connection(make_error(DnsError::AE_SOCKET_ERROR, error));
+                    }
+                    return;
+                }
                 if (Error<DnsError> error = self->flush(); error != nullptr) {
+                    log_hconn(dbg, self, "Connection timer handling error: {}", error->str());
                     self->parent->close_connection(error);
                 }
             });

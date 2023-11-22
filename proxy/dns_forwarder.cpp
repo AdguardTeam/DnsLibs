@@ -991,6 +991,12 @@ DnsForwarder::do_upstream_exchange(
                 upstream->options().address);
     }
 
+    if (result.has_error()
+            && (result.error()->value() == DnsError::AE_TIMED_OUT)) {
+        dbglog_id(m_log, request, "Upstream [{}] ({}) exchange timed out", upstream->options().id,
+                    upstream->options().address);
+    }
+
     if (result.has_error()) {
         upstream->update_rtt_estimate(error_rtt + elapsed);
     } else {
@@ -1261,6 +1267,7 @@ coro::Task<Uint8Vector> DnsForwarder::handle_message_with_timeout(
         ldns_pkt_ptr request, std::optional<DnsMessageInfo> info, bool fallback_only) {
     DnsRequestProcessedEvent servfail_event;
     ldns_pkt_ptr servfail_response;
+    uint16_t packet_id = ldns_pkt_id(request.get());
     if (m_settings->enable_servfail_on_upstreams_failure) {
         servfail_response.reset(ResponseHelpers::create_servfail_response(request.get()));
         finalize_processed_event(servfail_event, request.get(), servfail_response.get(), nullptr, std::nullopt);
@@ -1278,7 +1285,7 @@ coro::Task<Uint8Vector> DnsForwarder::handle_message_with_timeout(
         co_return {};
     }
     if (result.timed_out) {
-        dbglog(m_log, "Timed out waiting for `handle_message_internal`");
+        dbglog(m_log, "[{}] Request timed out", packet_id);
         if (m_settings->enable_servfail_on_upstreams_failure) {
             log_packet(m_log, servfail_response.get(), "Server failure response");
             if (m_events->on_request_processed) {
