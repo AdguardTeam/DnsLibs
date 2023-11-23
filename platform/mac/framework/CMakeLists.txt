@@ -50,6 +50,10 @@ project(dnsproxy_framework)
 # Ensure that API is compatible with minimum MacOS version
 add_compile_options(-Werror=unguarded-availability)
 link_libraries(-Wl,-application_extension)
+# TODO: Remove this workaround after updating to XCode 15.1: https://developer.apple.com/documentation/xcode-release-notes/xcode-15-release-notes#Linking
+if (CMAKE_CXX_COMPILER_ID MATCHES "AppleClang" AND CMAKE_C_COMPILER_VERSION VERSION_GREATER_EQUAL "15.0.0")
+    add_link_options(-Wl,-ld_classic)
+endif()
 
 set(CMAKE_C_STANDARD   11)
 set(CMAKE_CXX_STANDARD 20)
@@ -98,6 +102,7 @@ add_custom_command(TARGET AGDnsProxy POST_BUILD
         ${CMAKE_COMMAND} -E create_symlink "Versions/Current/Modules" "${CMAKE_BINARY_DIR}/AGDnsProxy.framework/Modules")
 endif()
 
+add_definitions(-D_BUILDING_DNSPROXY_FRAMEWORK=1)
 if (NOT TARGET dnsproxy)
     add_subdirectory(${DNS_LIBS_DIR}/proxy ${CMAKE_BINARY_DIR}/proxy)
 endif ()

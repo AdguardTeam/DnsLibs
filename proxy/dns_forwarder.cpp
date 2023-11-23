@@ -372,7 +372,7 @@ DnsForwarder::InitResult DnsForwarder::init(
     for (const UpstreamOptions &options : settings.upstreams) {
         infolog(m_log, "Initializing upstream {}...", options.address);
 #ifdef __APPLE__
-#if TARGET_OS_IPHONE
+#if TARGET_OS_IPHONE && defined _BUILDING_DNSPROXY_FRAMEWORK
         if (std::holds_alternative<std::monostate>(options.outbound_interface)) {
             errlog(m_log, "Failed to create upstream: outbound network interface isn't specified");
             continue;
