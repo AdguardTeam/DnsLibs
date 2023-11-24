@@ -1278,9 +1278,9 @@ void ag::dns::DohUpstream::Http3Connection::on_expiry_update(void *arg, ag::Nano
                     return;
                 }
 
-                log_hconn(dbg, self, "Expired");
+                log_hconn(trace, self, "Handling expiry timer");
                 if (Error<http::Http3Error> error = self->session->handle_expiry(); error != nullptr) {
-                    if ((int) error->value() == NGTCP2_ERR_IDLE_CLOSE || error->str().find("IDLE_CLOSE") != std::string::npos) {
+                    if ((int) error->value() == NGTCP2_ERR_IDLE_CLOSE) {
                         log_hconn(dbg, self, "Closing idle connection");
                         self->parent->close_connection(make_error(DnsError::AE_TIMED_OUT));
                     } else {
