@@ -8,6 +8,7 @@ using System.IO;
 using System.Net;
 using Adguard.Dns.Api.DnsProxyServer.Callbacks;
 using Adguard.Dns.Api.DnsProxyServer.Configs;
+using Adguard.Dns.Provider;
 
 namespace Adguard.Dns.TestApp
 {
@@ -25,6 +26,7 @@ namespace Adguard.Dns.TestApp
             string redirectorAppExecutablePath = Path.Combine(
                 AppDomain.CurrentDomain.BaseDirectory,
                 REDIRECTOR_EXECUTABLE_RELATIVE_PATH);
+            DnsLibsDllProvider dnsLibsDllProvider = (DnsLibsDllProvider)DnsLibsDllProvider.Instance;
             bool isRedirectorExist = File.Exists(redirectorAppExecutablePath);
             try
             {
@@ -111,7 +113,8 @@ namespace Adguard.Dns.TestApp
                     EndPoint = new IPEndPoint(listenerAddress, DNS_PROXY_PORT),
                     Protocol = protocol,
                     IsPersistent = true,
-                    IdleTimeoutMs = 3000
+                    IdleTimeoutMs = 3000,
+                    ProxySettingsOverrides = new ProxySettingsOverrides()
                 };
 
                 listeners.Add(listener);

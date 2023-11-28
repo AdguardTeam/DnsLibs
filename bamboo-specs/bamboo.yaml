@@ -12,3 +12,5 @@
 !include 'upload-conan-recipes.yaml'
 ---
 !include 'generate-docs.yaml'
+---
+!include 'tag-release.yaml'

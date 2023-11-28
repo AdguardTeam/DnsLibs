@@ -57,13 +57,18 @@ Run C++ tests:
         # build and run tests
         ${CMAKE_MAKE_PROGRAM} clean
         ${CMAKE_MAKE_PROGRAM} tests
-        ${CTEST} -D ExperimentalTest --no-compress-output
       description: Compile and run tests with sanitizer
+  - script:
+      interpreter: SHELL
+      scripts:
+      - |-
+        VER=$(sed -ne '/version =/s/.* '\''\(.*\)'\'',.*/\1/p' platform/android/dnsproxy/lib/build.gradle)
+        echo dnslibs.version=$VER > inject.txt
+  - inject-variables:
+      file: inject.txt
+      scope: RESULT
+      namespace: inject
   final-tasks:
-  - any-task:
-      plugin-key: fr.cstb.bamboo.plugins.ctest.bamboo-ctest-plugin:test
-      configuration:
-        testFilePathPattern: '**/Testing/*/*.xml'
   - script:
       interpreter: SHELL
       scripts:

@@ -19,7 +19,7 @@ namespace Adguard.Dns.Utils
         /// <returns></returns>
         public static string GetDnsProxyVersion()
         {
-            IntPtr pDnsProxyVersion = AGDnsApi.ag_dnsproxy_version();
+	        IntPtr pDnsProxyVersion = AGDnsApi.ag_dnsproxy_version();
             string dnsProxyVersion = MarshalUtils.PtrToString(pDnsProxyVersion);
             return dnsProxyVersion;
         }
@@ -64,8 +64,8 @@ namespace Adguard.Dns.Utils
             }
             finally
             {
-                AGDnsApi.ag_dns_stamp_free(pDnsStampResult);
-                AGDnsApi.ag_str_free(pError);
+				AGDnsApi.ag_dns_stamp_free(pDnsStampResult);
+				AGDnsApi.ag_str_free(pError);
                 MarshalUtils.SafeFreeHGlobal(ppError);
             }
         }
@@ -97,7 +97,7 @@ namespace Adguard.Dns.Utils
             finally
             {
                 MarshalUtils.SafeFreeHGlobal(allocatedPointers);
-                AGDnsApi.ag_str_free(pPrettyUrl);
+				AGDnsApi.ag_str_free(pPrettyUrl);
             }
         }
 
@@ -128,7 +128,7 @@ namespace Adguard.Dns.Utils
             finally
             {
                 MarshalUtils.SafeFreeHGlobal(allocatedPointers);
-                AGDnsApi.ag_str_free(pDnsStampPrettierUrl);
+				AGDnsApi.ag_str_free(pDnsStampPrettierUrl);
             }
         }
 
@@ -163,9 +163,9 @@ namespace Adguard.Dns.Utils
             finally
             {
                 MarshalUtils.SafeFreeHGlobal(allocatedPointers);
-                AGDnsApi.ag_str_free(pDnsStampString);
-            }
-        }
+				AGDnsApi.ag_str_free(pDnsStampString);
+			}
+		}
 
         /// <summary>
         /// Checks if specified rule is valid

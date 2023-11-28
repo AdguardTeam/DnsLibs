@@ -84,10 +84,10 @@ namespace Adguard.Dns.DnsProxyServer
                     pOutResult = Marshal.AllocHGlobal(Marshal.SizeOf(typeof(IntPtr)));
                     ppOutMessage = Marshal.AllocHGlobal(Marshal.SizeOf(typeof(IntPtr)));
                     m_pProxyServer = AGDnsApi.ag_dnsproxy_init(
-                        pDnsProxySettingsC,
-                        m_pCallbackConfigurationC,
-                        pOutResult,
-                        ppOutMessage);
+	                    pDnsProxySettingsC,
+	                    m_pCallbackConfigurationC,
+	                    pOutResult,
+	                    ppOutMessage);
                     AGDnsApi.ag_dnsproxy_init_result outResultEnum = AGDnsApi.ag_dnsproxy_init_result.AGDPIR_OK;
                     if (m_pProxyServer == IntPtr.Zero)
                     {
@@ -120,7 +120,7 @@ namespace Adguard.Dns.DnsProxyServer
                 finally
                 {
                     MarshalUtils.SafeFreeHGlobal(allocatedPointers);
-                    AGDnsApi.ag_str_free(pOutMessage);
+					AGDnsApi.ag_str_free(pOutMessage);
                     MarshalUtils.SafeFreeHGlobal(ppOutMessage);
                     MarshalUtils.SafeFreeHGlobal(pOutResult);
                 }
@@ -146,7 +146,8 @@ namespace Adguard.Dns.DnsProxyServer
                         return;
                     }
 
-                    AGDnsApi.ag_dnsproxy_deinit(m_pProxyServer);
+					AGDnsApi.ag_dnsproxy_deinit( 
+						m_pProxyServer);
                     m_IsStarted = false;
                     Logger.Info("Finished stopping the DnsProxyServer");
                 }
@@ -179,7 +180,8 @@ namespace Adguard.Dns.DnsProxyServer
                     return null;
                 }
 
-                IntPtr pSettings = AGDnsApi.ag_dnsproxy_get_settings(m_pProxyServer);
+                IntPtr pSettings = AGDnsApi.ag_dnsproxy_get_settings( 
+	                m_pProxyServer);
                 DnsProxySettings currentDnsProxySettings =
                     GetDnsProxySettings(pSettings);
                 return currentDnsProxySettings;
@@ -254,9 +256,9 @@ namespace Adguard.Dns.DnsProxyServer
 	        ag_dns_message_info nativeDnsMessageInfo = DnsApiConverter.ToNativeObject(info);
 	        IntPtr pNativeDnsMessageInfo = MarshalUtils.StructureToPtr(nativeDnsMessageInfo);
 			MarshalUtils.ag_buffer dnsMessageResult =
-				AGDnsApi.ag_dnsproxy_handle_message(m_pProxyServer, messageBuffer, pNativeDnsMessageInfo);
+				ag_dnsproxy_handle_message(m_pProxyServer, messageBuffer, pNativeDnsMessageInfo);
 			byte[] dnsMessageResultBytes = MarshalUtils.AgBufferToBytes(dnsMessageResult);
-			AGDnsApi.ag_buffer_free(dnsMessageResult);
+			ag_buffer_free(dnsMessageResult);
 			return dnsMessageResultBytes;
         }
 
@@ -291,7 +293,7 @@ namespace Adguard.Dns.DnsProxyServer
 			MarshalUtils.ag_buffer messageBuffer = MarshalUtils.BytesToAgBuffer(message);
 			ag_dns_message_info nativeDnsMessageInfo = DnsApiConverter.ToNativeObject(info);
 			IntPtr pNativeDnsMessageInfo = MarshalUtils.StructureToPtr(nativeDnsMessageInfo);
-			AGDnsApi.ag_dnsproxy_handle_message_async(
+			ag_dnsproxy_handle_message_async(
 				m_pProxyServer,
 				messageBuffer,
 				pNativeDnsMessageInfo,

@@ -1,10 +1,7 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
+﻿using System.Collections.Generic;
 using Adguard.Dns.Api.DnsProxyServer.Callbacks;
 using Adguard.Dns.Api.DnsProxyServer.EventArgs;
+using Adguard.Dns.Provider;
 using Adguard.Dns.Utils;
 using NUnit.Framework;
 
@@ -13,7 +10,21 @@ namespace Adguard.Dns.Tests.TestUtils
     [TestFixture]
     class TestCertificateVerificationCallback
     {
-        [Test]
+	    private DnsLibsDllProvider m_DnsLibsDllProvider;
+
+		[OneTimeSetUp]
+	    public void SetUp()
+	    {
+			m_DnsLibsDllProvider = (DnsLibsDllProvider)DnsLibsDllProvider.Instance;
+		}
+
+	    [OneTimeTearDown]
+	    public void TearDown()
+	    {
+		    m_DnsLibsDllProvider.Dispose();
+	    }
+
+		[Test]
         public void TestCertificateVerification()
         {
             byte[] certBytes = Properties.Resources.ExampleTestCertificate;

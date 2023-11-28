@@ -22,7 +22,7 @@ DL - Win tests and deploy:
       interpreter: BINSH_OR_CMDEXE
       scripts:
       - |-
-        call vcvars32
+        call vcvarsamd64_x86
         conan remove -f "*"
         set CMAKE=cmake
         set CTEST=ctest
@@ -53,8 +53,40 @@ DL - Win tests and deploy:
   - script:
       interpreter: BINSH_OR_CMDEXE
       scripts:
+        - |-
+          call vcvars64
+          conan remove -f "*"
+          set CMAKE=cmake
+          set CTEST=ctest
+          set CMAKE_MAKE_PROGRAM=ninja
+          set CMAKE_MAKE_FLAGS=""
+          set CMAKE_GENERATOR="Ninja"
+          set CL_GIT_ROOT=%cd%
+          cd %bamboo_winProjectDir%/capi
+          set CL_ROOT=%cd%
+          
+          if exist build64\ rmdir /s /q build64 || exit /b 1
+          mkdir build64 || exit /b 1
+          cd build64 || exit /b 1
+          
+          %CMAKE% -DCMAKE_BUILD_TYPE=%bamboo_cmakeBuildProfile% ^
+              -DCMAKE_USE_OPENSSL=ON ^
+              -DCMAKE_C_COMPILER="cl.exe" ^
+              -DCMAKE_CXX_COMPILER="cl.exe" ^
+              -DCMAKE_MAKE_PROGRAM=%CMAKE_MAKE_PROGRAM% ^
+              -G "%CMAKE_GENERATOR%" ^
+              ..
+          
+          rem Target "tests" depends on everything, so this will also build AdguardDns64.dll
+          %CMAKE_MAKE_PROGRAM% tests || exit /b 1
+          %CTEST% -D ExperimentalTest --no-compress-output || exit /b 1
+      working-dir: dns-libs
+      description: Compile and run tests (x64)
+  - script:
+      interpreter: BINSH_OR_CMDEXE
+      scripts:
       - |-
-        call vcvars32
+        call vcvarsamd64_x86
         set CL_GIT_ROOT=%cd%
         cd %bamboo_winProjectDir%
         set CL_ROOT=%cd%

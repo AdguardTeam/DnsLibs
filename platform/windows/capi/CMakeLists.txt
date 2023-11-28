@@ -87,32 +87,41 @@ set(SOURCE_FILES
 set(RES_FILES
         src/ag_dns.rc)
 
-add_library(AdguardDns SHARED ${SOURCE_FILES} ${RES_FILES})
-target_include_directories(AdguardDns PUBLIC include)
-set_target_properties(AdguardDns PROPERTIES POSITION_INDEPENDENT_CODE ON)
 
-target_link_libraries(AdguardDns dnsproxy)
+if (CMAKE_SIZEOF_VOID_P EQUAL 8)
+    set (LIBRARY_NAME AdguardDns64)
+    set (OUTPUT_DLL_FOLDER x64)
+else ()
+    set (LIBRARY_NAME AdguardDns)
+    set (OUTPUT_DLL_FOLDER x86)
+endif ()
+
+add_library(${LIBRARY_NAME} SHARED ${SOURCE_FILES} ${RES_FILES})
+target_include_directories(${LIBRARY_NAME} PUBLIC include)
+set_target_properties(${LIBRARY_NAME} PROPERTIES POSITION_INDEPENDENT_CODE ON)
+
+target_link_libraries(${LIBRARY_NAME} dnsproxy)
 
 if (WIN32)
-    target_link_libraries(AdguardDns CONAN_PKG::detours)
+    target_link_libraries(${LIBRARY_NAME} CONAN_PKG::detours)
 endif()
 
 add_custom_target(generate_api_hash)
 add_custom_command(TARGET generate_api_hash COMMAND ${CMAKE_CURRENT_SOURCE_DIR}/generate_api_hash.py)
-add_dependencies(AdguardDns generate_api_hash)
+add_dependencies(${LIBRARY_NAME} generate_api_hash)
 
 set(OUTPUT_LIB_DIR ${CMAKE_CURRENT_SOURCE_DIR}/../cs/Adguard.Dns/Adguard.Dns)
-if (TARGET AdguardDns)
+if (TARGET ${LIBRARY_NAME})
     if (MSVC)
-        add_custom_command(TARGET AdguardDns
+        add_custom_command(TARGET ${LIBRARY_NAME}
                 POST_BUILD
-                COMMAND "${CMAKE_COMMAND}" -E copy $<TARGET_FILE:AdguardDns> ${OUTPUT_LIB_DIR}
-                COMMAND "${CMAKE_COMMAND}" -E copy $<TARGET_PDB_FILE:AdguardDns> ${OUTPUT_LIB_DIR}
+                COMMAND "${CMAKE_COMMAND}" -E copy $<TARGET_FILE:${LIBRARY_NAME}> ${OUTPUT_LIB_DIR}/${OUTPUT_DLL_FOLDER}/AdguardDns.dll
+                COMMAND "${CMAKE_COMMAND}" -E copy $<TARGET_PDB_FILE:${LIBRARY_NAME}> ${OUTPUT_LIB_DIR}/${OUTPUT_DLL_FOLDER}/AdguardDns.pdb
                 COMMENT "Copying to output directory")
     else ()
-        add_custom_command(TARGET AdguardDns
+        add_custom_command(TARGET ${LIBRARY_NAME}
                 POST_BUILD
-                COMMAND "${CMAKE_COMMAND}" -E copy $<TARGET_FILE:AdguardDns> ${OUTPUT_LIB_DIR}
+                COMMAND "${CMAKE_COMMAND}" -E copy $<TARGET_FILE:${LIBRARY_NAME}> ${OUTPUT_LIB_DIR}/${OUTPUT_DLL_FOLDER}/AdguardDns.dll
                 COMMENT "Copying to output directory")
     endif ()
 endif ()
@@ -123,11 +132,11 @@ if (NOT TARGET tests)
     add_custom_target(tests)
 endif ()
 
-link_libraries(AdguardDns)
+link_libraries(${LIBRARY_NAME})
 
 add_executable(capi_test EXCLUDE_FROM_ALL test/capi_test.c)
 add_test(capi_test capi_test)
 add_dependencies(tests capi_test)
 
-add_dependencies(tests AdguardDns)
+add_dependencies(tests ${LIBRARY_NAME})
 add_test(uncommitted_api_hash git diff --quiet ${CMAKE_CURRENT_SOURCE_DIR}/src/ag_dns_h_hash.inc)

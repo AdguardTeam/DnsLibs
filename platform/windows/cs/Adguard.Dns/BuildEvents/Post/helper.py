@@ -34,7 +34,8 @@ def copy_to_output(args, copied_files, output_dir_name):
         os.mkdir(output_dir)
 
     for copied_file in copied_files:
+        pure_copied_file = os.path.basename(copied_file)
         shutil.copy(
             os.path.join(args.target_dir, copied_file),
-            os.path.join(output_dir, copied_file))
+            os.path.join(output_dir, pure_copied_file))
         print(f"File {copied_file} has been successfully copied to the {output_dir}")

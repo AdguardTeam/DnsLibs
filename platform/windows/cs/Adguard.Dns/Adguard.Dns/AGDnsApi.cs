@@ -11,18 +11,19 @@ namespace Adguard.Dns
     // ReSharper disable once InconsistentNaming
     public static class AGDnsApi
     {
-        #region Constants
+		#region Constants
 
-        /// <summary>
-        /// The DnsLibs dll name.
-        /// The entry point to the AdGuard native world
-        /// </summary>
-        private const string DnsLibName = "AdguardDns.dll";
+		/// <summary>
+		/// The DnsLibs dll name.
+		/// The entry point to the AdGuard native world
+		/// </summary>
+		private const string DnsLibName = "AdguardDns";
 
-        /// <summary>
-        /// The current API version hash with which the ProxyServer was tested
-        /// </summary>
-        private const string API_VERSION_HASH = "6fedfaf50a6d05334b8bcf3c54febb1944d9e336987f23c0aeeecea5b4f6e872";
+		/// <summary>
+		/// The current API version hash with which the ProxyServer was tested
+		/// </summary>
+		private const string API_VERSION_HASH = "6fedfaf50a6d05334b8bcf3c54febb1944d9e336987f23c0aeeecea5b4f6e872";
+
         #endregion
 
         #region API Functions
@@ -156,16 +157,16 @@ namespace Adguard.Dns
         /// <returns>Pointer to the proxy, or <see cref="IntPtr.Zero"/> in case of an error</returns>
         [DllImport(DnsLibName, CallingConvention = CallingConvention.Cdecl)]
         internal static extern IntPtr ag_dnsproxy_init(
-            IntPtr pDnsProxySettings,
-            IntPtr pDnsProxyCallbacks,
-            IntPtr pOutResult,
-            IntPtr ppOutMessage);
+	        IntPtr pDnsProxySettings,
+	        IntPtr pDnsProxyCallbacks,
+	        IntPtr pOutResult,
+	        IntPtr ppOutMessage);
 
-        /// <summary>
-        /// Deinitializes the DNS proxy
-        /// </summary>
-        [DllImport(DnsLibName, CallingConvention = CallingConvention.Cdecl)]
-        internal static extern void ag_dnsproxy_deinit(IntPtr proxy);
+		/// <summary>
+		/// Deinitializes the DNS proxy
+		/// </summary>
+		[DllImport(DnsLibName, CallingConvention = CallingConvention.Cdecl)]
+		internal static extern void ag_dnsproxy_deinit(IntPtr proxy);
 
 		/// <summary>
 		/// Process a DNS message and return the response.
@@ -176,7 +177,8 @@ namespace Adguard.Dns
 		/// <returns>The DNS response in wire format</returns>
 		/// <remarks> The caller is responsible for freeing both buffers with `ag_buffer_free()`</remarks>
 		[DllImport(DnsLibName, CallingConvention = CallingConvention.Cdecl)]
-        internal static extern MarshalUtils.ag_buffer ag_dnsproxy_handle_message(IntPtr pDnsProxyServer, MarshalUtils.ag_buffer message, IntPtr info);
+		internal static extern MarshalUtils.ag_buffer ag_dnsproxy_handle_message(IntPtr pDnsProxyServer,
+			MarshalUtils.ag_buffer message, IntPtr info);
 
 		/// <summary>
 		/// Process a DNS message and call `handler` on an unspecified thread with the response.
@@ -187,7 +189,9 @@ namespace Adguard.Dns
 		/// <param name="handler">Callback function for asynchronous message processing.</param>
 		/// <remarks> The caller is responsible for freeing  message buffer, but you shouldn't free buffer that will be passed to handler</remarks>
 		[DllImport(DnsLibName, CallingConvention = CallingConvention.Cdecl)]
-		internal static extern void ag_dnsproxy_handle_message_async(IntPtr pDnsProxyServer, MarshalUtils.ag_buffer message, IntPtr info, ag_handle_message_async_cb handler);
+		internal static extern void ag_dnsproxy_handle_message_async(IntPtr pDnsProxyServer,
+			MarshalUtils.ag_buffer message,
+			IntPtr info, ag_handle_message_async_cb handler);
 
 		/// <summary>
 		/// Returns the current proxy settings.
@@ -197,179 +201,177 @@ namespace Adguard.Dns
 		/// <returns>Pointer to the<see cref="ag_dnsproxy_settings"/> object,
 		/// which contains the current DNS proxy settings</returns>
 		[DllImport(DnsLibName, CallingConvention = CallingConvention.Cdecl)]
-        internal static extern IntPtr ag_dnsproxy_get_settings(IntPtr pDnsProxyServer);
+		internal static extern IntPtr ag_dnsproxy_get_settings(IntPtr pDnsProxyServer);
 
-        /// <summary>
-        /// Returns the default proxy settings.
-        /// The caller is responsible for freeing
-        /// the returned pointer with <see cref="ag_dnsproxy_settings_free"/>
-        /// </summary>
-        /// <returns>Pointer to the<see cref="ag_dnsproxy_settings"/> object,
-        /// which contains the default DNS proxy settings</returns>
-        [DllImport(DnsLibName, CallingConvention = CallingConvention.Cdecl)]
-        internal static extern IntPtr ag_dnsproxy_settings_get_default();
+		/// <summary>
+		/// Returns the default proxy settings.
+		/// The caller is responsible for freeing
+		/// the returned pointer with <see cref="ag_dnsproxy_settings_free"/>
+		/// </summary>
+		/// <returns>Pointer to the<see cref="ag_dnsproxy_settings"/> object,
+		/// which contains the default DNS proxy settings</returns>
+		[DllImport(DnsLibName, CallingConvention = CallingConvention.Cdecl)]
+		internal static extern IntPtr ag_dnsproxy_settings_get_default();
 
-        /// <summary>
-        /// Free passed <see cref="pDnsProxySettings"/> pointer.
-        /// </summary>
-        /// <param name="pDnsProxySettings">Pointer to the <see cref="ag_dnsproxy_settings"/>
-        /// structure ot free</param>
-        [DllImport(DnsLibName, CallingConvention = CallingConvention.Cdecl)]
-        internal static extern void ag_dnsproxy_settings_free(IntPtr pDnsProxySettings);
+		/// <summary>
+		/// Free passed <see cref="pDnsProxySettings"/> pointer.
+		/// </summary>
+		/// <param name="pDnsProxySettings">Pointer to the <see cref="ag_dnsproxy_settings"/>
+		/// structure ot free</param>
+		[DllImport(DnsLibName, CallingConvention = CallingConvention.Cdecl)]
+		internal static extern void ag_dnsproxy_settings_free(IntPtr pDnsProxySettings);
 
-        /// <summary>
-        /// Free a specified <see cref="MarshalUtils.ag_buffer"/> instance.
-        /// </summary>
-        /// <param name="buf"><see cref="MarshalUtils.ag_buffer"/> instance to free</param>
-        [DllImport(DnsLibName, CallingConvention = CallingConvention.Cdecl)]
-        internal static extern void ag_buffer_free([MarshalAs(UnmanagedType.Struct)] MarshalUtils.ag_buffer buf);
+		/// <summary>
+		/// Free a specified <see cref="MarshalUtils.ag_buffer"/> instance.
+		/// </summary>
+		/// <param name="buf"><see cref="MarshalUtils.ag_buffer"/> instance to free</param>
+		[DllImport(DnsLibName, CallingConvention = CallingConvention.Cdecl)]
+		internal static extern void ag_buffer_free([MarshalAs(UnmanagedType.Struct)] MarshalUtils.ag_buffer buf);
 
-        /// <summary>
-        /// Checks if upstream is valid and available
-        /// The caller is responsible for freeing the result with <see cref="ag_str_free"/>
-        /// </summary>
-        /// <param name="pUpstreamOptions">Pointer to the
-        /// <see cref="ag_upstream_options"/> object</param>
-        /// <param name="timeout_ms">Maximum amount of time allowed for upstream exchange (in milliseconds)</param>
-        /// <param name="ipv6Available">Whether IPv6 is available (i.e., bootstrapper is allowed to make AAAA queries)</param>
-        /// <param name="onCertificateVerification">Certificate verification callback
-        /// as a <see cref="cbd_onCertificateVerification"/> object</param>
-        /// <param name="offline">Don't perform online upstream check</param>
-        /// <returns>If it is, no error is returned.
-        /// Otherwise this method returns an error with an explanation</returns>
-        [DllImport(DnsLibName, CallingConvention = CallingConvention.Cdecl)]
-        internal static extern IntPtr ag_test_upstream(
-            IntPtr pUpstreamOptions, 
-            [MarshalAs(UnmanagedType.U4)] UInt32 timeout_ms,
-            [MarshalAs(UnmanagedType.I1)] bool ipv6Available,
-            [MarshalAs(UnmanagedType.FunctionPtr)] cbd_onCertificateVerification onCertificateVerification,
-            [MarshalAs(UnmanagedType.I1)] bool offline);
+		/// <summary>
+		/// Checks if upstream is valid and available
+		/// The caller is responsible for freeing the result with <see cref="ag_str_free"/>
+		/// </summary>
+		/// <param name="pUpstreamOptions">Pointer to the
+		/// <see cref="ag_upstream_options"/> object</param>
+		/// <param name="timeout_ms">Maximum amount of time allowed for upstream exchange (in milliseconds)</param>
+		/// <param name="ipv6Available">Whether IPv6 is available (i.e., bootstrapper is allowed to make AAAA queries)</param>
+		/// <param name="onCertificateVerification">Certificate verification callback
+		/// as a <see cref="cbd_onCertificateVerification"/> object</param>
+		/// <param name="offline">Don't perform online upstream check</param>
+		/// <returns>If it is, no error is returned.
+		/// Otherwise this method returns an error with an explanation</returns>
+		[DllImport(DnsLibName, CallingConvention = CallingConvention.Cdecl)]
+		internal static extern IntPtr ag_test_upstream(
+			IntPtr pUpstreamOptions,
+			[MarshalAs(UnmanagedType.U4)] UInt32 timeout_ms,
+			[MarshalAs(UnmanagedType.I1)] bool ipv6Available,
+			[MarshalAs(UnmanagedType.FunctionPtr)] cbd_onCertificateVerification onCertificateVerification,
+			[MarshalAs(UnmanagedType.I1)] bool offline);
 
+		/// <summary>
+		/// Check if the specified rule is valid
+		/// </summary>
+		/// <param name="ruleText">Rule text</param>
+		/// <returns>True, is specified rule is valid, otherwise false</returns>
+		[DllImport(DnsLibName, CallingConvention = CallingConvention.Cdecl)]
+		[return: MarshalAs(UnmanagedType.I1)]
+		internal static extern bool ag_is_valid_dns_rule(
+			[MarshalAs(
+				UnmanagedType.CustomMarshaler,
+				MarshalTypeRef = typeof(ManualStringToPtrMarshaler))]
+			string ruleText);
 
-        /// <summary>
-        /// Check if the specified rule is valid
-        /// </summary>
-        /// <param name="ruleText">Rule text</param>
-        /// <returns>True, is specified rule is valid, otherwise false</returns>
-        [DllImport(DnsLibName, CallingConvention = CallingConvention.Cdecl)]
-        [return: MarshalAs(UnmanagedType.I1)]
-        internal static extern bool ag_is_valid_dns_rule(
-            [MarshalAs(
-                UnmanagedType.CustomMarshaler,
-                MarshalTypeRef = typeof(ManualStringToPtrMarshaler))] string ruleText);
+		/// <summary>
+		/// Parses a DNS stamp string and returns a instance or an error
+		/// The caller is responsible for freeing
+		/// the result with <see cref="ag_dns_stamp_free"/>
+		/// </summary>
+		/// <param name="stampStr">DNS stamp string ("sdns://..." string)</param>
+		/// <param name="ppEerror">error on output, if an error occurred, contains the error description
+		/// (free with <see cref="ag_str_free"/>)</param>
+		/// <returns>Pointer to the stamp instance or NULL if an error occurred
+		/// (<seealso cref="ag_dns_stamp"/>)</returns>
+		[DllImport(DnsLibName, CallingConvention = CallingConvention.Cdecl)]
+		internal static extern IntPtr ag_dns_stamp_from_str(
+			[MarshalAs(
+				UnmanagedType.CustomMarshaler,
+				MarshalTypeRef = typeof(ManualStringToPtrMarshaler))]
+			string stampStr,
+			IntPtr ppEerror);
 
+		/// <summary>
+		/// Free a pointer to the <see cref="ag_dns_stamp"/> instance.
+		/// </summary>
+		[DllImport(DnsLibName, CallingConvention = CallingConvention.Cdecl)]
+		internal static extern void ag_dns_stamp_free(IntPtr pStamp);
 
-        /// <summary>
-        /// Parses a DNS stamp string and returns a instance or an error
-        /// The caller is responsible for freeing
-        /// the result with <see cref="ag_dns_stamp_free"/>
-        /// </summary>
-        /// <param name="stampStr">DNS stamp string ("sdns://..." string)</param>
-        /// <param name="ppEerror">error on output, if an error occurred, contains the error description
-        /// (free with <see cref="ag_str_free"/>)</param>
-        /// <returns>Pointer to the stamp instance or NULL if an error occurred
-        /// (<seealso cref="ag_dns_stamp"/>)</returns>
-        [DllImport(DnsLibName, CallingConvention = CallingConvention.Cdecl)]
-        internal static extern IntPtr ag_dns_stamp_from_str(
-            [MarshalAs(
-                UnmanagedType.CustomMarshaler,
-                MarshalTypeRef = typeof(ManualStringToPtrMarshaler))]
-            string stampStr,
-            IntPtr ppEerror);
+		/// <summary>
+		/// Convert a DNS stamp to "sdns://..." string.
+		/// Free the string with <see cref="ag_str_free"/>
+		/// </summary>
+		/// <param name="pStamp">Pointer to the stamp instance
+		/// (<seealso cref="ag_dns_stamp"/>)</param>
+		/// <returns>Pointer to "sdns://..." string.</returns>
+		[DllImport(DnsLibName, CallingConvention = CallingConvention.Cdecl)]
+		internal static extern IntPtr ag_dns_stamp_to_str(IntPtr pStamp);
 
-        /// <summary>
-        /// Free a pointer to the <see cref="ag_dns_stamp"/> instance.
-        /// </summary>
-        [DllImport(DnsLibName, CallingConvention = CallingConvention.Cdecl)]
-        internal static extern void ag_dns_stamp_free(IntPtr pStamp);
+		/// <summary>
+		/// Convert a DNS stamp to string that can be used as an upstream URL.
+		/// Free the string with <see cref="ag_str_free"/>
+		/// </summary>
+		/// <param name="pStamp">Pointer to the stamp instance
+		/// (<seealso cref="ag_dns_stamp"/>)</param>
+		/// <returns>Pointer to "sdns://..." string.</returns>
+		[DllImport(DnsLibName, CallingConvention = CallingConvention.Cdecl)]
+		internal static extern IntPtr ag_dns_stamp_pretty_url(IntPtr pStamp);
 
-        /// <summary>
-        /// Convert a DNS stamp to "sdns://..." string.
-        /// Free the string with <see cref="ag_str_free"/>
-        /// </summary>
-        /// <param name="pStamp">Pointer to the stamp instance
-        /// (<seealso cref="ag_dns_stamp"/>)</param>
-        /// <returns>Pointer to "sdns://..." string.</returns>
-        [DllImport(DnsLibName, CallingConvention = CallingConvention.Cdecl)]
-        internal static extern IntPtr ag_dns_stamp_to_str(IntPtr pStamp);
+		/// <summary>
+		///  Convert a DNS stamp to string that can NOT be used as an upstream URL, but may be prettier.
+		/// Free the string with <see cref="ag_str_free"/>
+		/// </summary>
+		/// <param name="pStamp">Pointer to the stamp instance
+		/// (<seealso cref="ag_dns_stamp"/>)</param>
+		/// <returns>Pointer to "sdns://..." string.</returns>
+		[DllImport(DnsLibName, CallingConvention = CallingConvention.Cdecl)]
+		internal static extern IntPtr ag_dns_stamp_prettier_url(IntPtr pStamp);
 
-        /// <summary>
-        /// Convert a DNS stamp to string that can be used as an upstream URL.
-        /// Free the string with <see cref="ag_str_free"/>
-        /// </summary>
-        /// <param name="pStamp">Pointer to the stamp instance
-        /// (<seealso cref="ag_dns_stamp"/>)</param>
-        /// <returns>Pointer to "sdns://..." string.</returns>
-        [DllImport(DnsLibName, CallingConvention = CallingConvention.Cdecl)]
-        internal static extern IntPtr ag_dns_stamp_pretty_url(IntPtr pStamp);
+		/// <summary>
+		/// Sets the log verbosity level.
+		/// </summary>
+		/// <param name="level">Verbosity level
+		/// (<seealso cref="ag_log_level"/>)</param>
+		[DllImport(DnsLibName, CallingConvention = CallingConvention.Cdecl)]
+		internal static extern void ag_set_log_level(ag_log_level level);
 
-        /// <summary>
-        ///  Convert a DNS stamp to string that can NOT be used as an upstream URL, but may be prettier.
-        /// Free the string with <see cref="ag_str_free"/>
-        /// </summary>
-        /// <param name="pStamp">Pointer to the stamp instance
-        /// (<seealso cref="ag_dns_stamp"/>)</param>
-        /// <returns>Pointer to "sdns://..." string.</returns>
-        [DllImport(DnsLibName, CallingConvention = CallingConvention.Cdecl)]
-        internal static extern IntPtr ag_dns_stamp_prettier_url(IntPtr pStamp);
+		/// <summary>
+		/// Sets the default callback for logger
+		/// </summary>
+		/// <param name="callback">Logger default callback
+		/// (<seealso cref="cbd_logger_callback_t"/>)</param>
+		/// <param name="pAttachment">Attachment of this callback</param>
+		[DllImport(DnsLibName, CallingConvention = CallingConvention.Cdecl)]
+		internal static extern void ag_set_log_callback(
+			[MarshalAs(UnmanagedType.FunctionPtr)] cbd_logger_callback_t callback,
+			IntPtr pAttachment);
 
-        /// <summary>
-        /// Sets the log verbosity level.
-        /// </summary>
-        /// <param name="level">Verbosity level
-        /// (<seealso cref="ag_log_level"/>)</param>
-        [DllImport(DnsLibName, CallingConvention = CallingConvention.Cdecl)]
-        internal static extern void ag_set_log_level(ag_log_level level);
+		#endregion
 
-        /// <summary>
-        /// Sets the default callback for logger
-        /// </summary>
-        /// <param name="callback">Logger default callback
-        /// (<seealso cref="cbd_logger_callback_t"/>)</param>
-        /// <param name="pAttachment">Attachment of this callback</param>
-        [DllImport(DnsLibName, CallingConvention = CallingConvention.Cdecl)]
-        internal static extern void ag_set_log_callback(
-            [MarshalAs(UnmanagedType.FunctionPtr)]
-            cbd_logger_callback_t callback,
-            IntPtr pAttachment);
+		#region Rule generation
 
-        #endregion
+		/// <summary>
+		/// Suggest an action based on filtering log event.
+		/// </summary>
+		/// <param name="pEvent">The pointer to <see cref="ag_dns_request_processed_event"/> instance.</param>
+		/// <returns>
+		/// NULL on error. Pointer to <see cref="ag_dns_filtering_log_action"/> instance
+		/// freed with <see cref="ag_dns_filtering_log_action_free"/> on success.
+		/// </returns>
+		[DllImport(DnsLibName, CallingConvention = CallingConvention.Cdecl)]
+		internal static extern IntPtr ag_dns_filtering_log_action_from_event(IntPtr pEvent);
 
-        #region Rule generation
+		/// <summary>
+		/// Free an action.
+		/// </summary>
+		/// <param name="pAction">The pointer to <see cref="ag_dns_filtering_log_action"/>instance.</param>
+		[DllImport(DnsLibName, CallingConvention = CallingConvention.Cdecl)]
+		internal static extern void ag_dns_filtering_log_action_free(IntPtr pAction);
 
-        /// <summary>
-        /// Suggest an action based on filtering log event.
-        /// </summary>
-        /// <param name="pEvent">The pointer to <see cref="ag_dns_request_processed_event"/> instance.</param>
-        /// <returns>
-        /// NULL on error. Pointer to <see cref="ag_dns_filtering_log_action"/> instance
-        /// freed with <see cref="ag_dns_filtering_log_action_free"/> on success.
-        /// </returns>
-        [DllImport(DnsLibName, CallingConvention = CallingConvention.Cdecl)]
-        internal static extern IntPtr ag_dns_filtering_log_action_from_event(IntPtr pEvent);
-
-        /// <summary>
-        /// Free an action.
-        /// </summary>
-        /// <param name="pAction">The pointer to <see cref="ag_dns_filtering_log_action"/>instance.</param>
-        [DllImport(DnsLibName, CallingConvention = CallingConvention.Cdecl)]
-        internal static extern void ag_dns_filtering_log_action_free(IntPtr pAction);
-
-        /// <summary>
-        /// Generate a rule from a template (obtained from `ag_dns_filtering_log_action`) and a corresponding event.
-        /// </summary>
-        /// <param name="template">The pointer to template.</param>
-        /// <param name="pEvent">The pointer to <see cref="ag_dns_request_processed_event"/> instance.</param>
-        /// <param name="options">The <see cref="ag_rule_generation_options"/></param>
-        /// <returns>NULL on error. Rule freed with <see cref="ag_str_free"/> on success</returns>
-        [DllImport(DnsLibName, CallingConvention = CallingConvention.Cdecl)]
-        internal static extern IntPtr ag_dns_generate_rule_with_options(
-            [MarshalAs(
-                UnmanagedType.CustomMarshaler,
-                MarshalTypeRef = typeof(ManualStringToPtrMarshaler))]
-             string template,
-             IntPtr pEvent,
-             ag_rule_generation_options options);
+		/// <summary>
+		/// Generate a rule from a template (obtained from `ag_dns_filtering_log_action`) and a corresponding event.
+		/// </summary>
+		/// <param name="template">The pointer to template.</param>
+		/// <param name="pEvent">The pointer to <see cref="ag_dns_request_processed_event"/> instance.</param>
+		/// <param name="options">The <see cref="ag_rule_generation_options"/></param>
+		/// <returns>NULL on error. Rule freed with <see cref="ag_str_free"/> on success</returns>
+		[DllImport(DnsLibName, CallingConvention = CallingConvention.Cdecl)]
+		internal static extern IntPtr ag_dns_generate_rule_with_options(
+			[MarshalAs(
+				UnmanagedType.CustomMarshaler,
+				MarshalTypeRef = typeof(ManualStringToPtrMarshaler))]
+			string template,
+			IntPtr pEvent,
+			ag_rule_generation_options options);
 
         #endregion
 
@@ -412,7 +414,7 @@ namespace Adguard.Dns
             /// Overrides <see cref="ag_dnsproxy_settings.BlockEch"/> if not null
             /// </summary>
             internal IntPtr pBlock_ech;
-        } ;
+        }
 
         [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Ansi)]
         internal struct ag_listener_settings
@@ -1237,32 +1239,32 @@ namespace Adguard.Dns
             AGCVR_COUNT
         }
 
-        #endregion
+		#endregion
 
-        #region Validation
+		#region Validation
 
-        /// <summary>
-        /// Gets a CAPI version (number of commits in this file history)
-        /// NOTE: The value is stored in ..\\platform/windows/capi/src/ag_dns_h_hash.inc
-        /// Return the C API version (hash of this file).
-        /// </summary>
-        /// <returns>Pointer to the API version hash</returns>
-        [DllImport(DnsLibName, CallingConvention = CallingConvention.Cdecl)]
-        private static extern IntPtr ag_get_capi_version();
+		/// <summary>
+		/// Gets a CAPI version (number of commits in this file history)
+		/// NOTE: The value is stored in ..\\platform/windows/capi/src/ag_dns_h_hash.inc
+		/// Return the C API version (hash of this file).
+		/// </summary>
+		/// <returns>Pointer to the API version hash</returns>
+		[DllImport(DnsLibName, CallingConvention = CallingConvention.Cdecl)]
+		private static extern IntPtr ag_get_capi_version();
 
-        /// <summary>
-        /// Return the DNS proxy library version.
-        /// Do NOT free the returned string.
-        /// </summary>
-        /// <returns>Pointer to the API version hash</returns>
-        [DllImport(DnsLibName, CallingConvention = CallingConvention.Cdecl)]
-        internal static extern IntPtr ag_dnsproxy_version();
+		/// <summary>
+		/// Return the DNS proxy library version.
+		/// Do NOT free the returned string.
+		/// </summary>
+		/// <returns>Pointer to the API version hash</returns>
+		[DllImport(DnsLibName, CallingConvention = CallingConvention.Cdecl)]
+		internal static extern IntPtr ag_dnsproxy_version();
 
-        /// <summary>
-        /// Free a string, specified by a passed <see cref="pStr"/>
-        /// </summary>
-        [DllImport(DnsLibName, CallingConvention = CallingConvention.Cdecl)]
-        internal static extern void ag_str_free(IntPtr pStr);
+		/// <summary>
+		/// Free a string, specified by a passed <see cref="pStr"/>
+		/// </summary>
+		[DllImport(DnsLibName, CallingConvention = CallingConvention.Cdecl)]
+		internal static extern void ag_str_free(IntPtr pStr);
 
         /// <summary>
         /// Validates API version hash against the supported API version hash,
@@ -1272,7 +1274,7 @@ namespace Adguard.Dns
         /// if the API version hash is not supported</exception>
         internal static void ValidateApi()
         {
-            IntPtr pCapiVersion = ag_get_capi_version();
+	        IntPtr pCapiVersion = ag_get_capi_version();
             string currentApiVersionHash = MarshalUtils.PtrToString(pCapiVersion);
             if (currentApiVersionHash == API_VERSION_HASH)
             {
@@ -1287,22 +1289,22 @@ namespace Adguard.Dns
             throw new NotSupportedException(message);
         }
 
-        #endregion
+		#endregion
 
-        #region Crash reporting
+		#region Crash reporting
 
-        /// <summary>
-        /// Disables the SetUnhandledExceptionFilter function.
-        /// </summary>
-        [DllImport(DnsLibName, CallingConvention = CallingConvention.Cdecl)]
-        internal static extern void ag_disable_SetUnhandledExceptionFilter();
+		/// <summary>
+		/// Disables the SetUnhandledExceptionFilter function.
+		/// </summary>
+		[DllImport(DnsLibName, CallingConvention = CallingConvention.Cdecl)]
+		internal static extern void ag_disable_SetUnhandledExceptionFilter();
 
-        /// <summary>
-        /// Enables the SetUnhandledExceptionFilter function.
-        /// </summary>
-        [DllImport(DnsLibName, CallingConvention = CallingConvention.Cdecl)]
-        internal static extern void ag_enable_SetUnhandledExceptionFilter();
+		/// <summary>
+		/// Enables the SetUnhandledExceptionFilter function.
+		/// </summary>
+		[DllImport(DnsLibName, CallingConvention = CallingConvention.Cdecl)]
+		internal static extern void ag_enable_SetUnhandledExceptionFilter();
 
-        #endregion
+		#endregion
     }
 }

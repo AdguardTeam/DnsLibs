@@ -77,7 +77,10 @@ namespace Adguard.Dns.Api.FilteringLogAction
                 throw new ArgumentException(nameof(ruleTemplate));
             }
 
-            IntPtr pResult = AGDnsApi.ag_dns_generate_rule_with_options(ruleTemplate, m_PEventArgs, generationOptions);
+            IntPtr pResult = AGDnsApi.ag_dns_generate_rule_with_options(
+	            ruleTemplate,
+	            m_PEventArgs,
+	            generationOptions);
             if (pResult == IntPtr.Zero)
             {
                 throw new InvalidOperationException("Cannot generate rule");

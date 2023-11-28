@@ -540,11 +540,9 @@ namespace Adguard.Dns.Helpers
             List<string> rules = MarshalUtils.AgListToList<IntPtr, string>(
                 coreArgsС.rules,
                 MarshalUtils.PtrToString);
-
-            List<int> filterListIds = MarshalUtils.AgListToList<IntPtr, int>(
+            List<int> filterListIds = MarshalUtils.AgListToList<int, int>(
                 coreArgsС.filter_list_ids,
-                filterId =>
-                    (int) filterId);
+                filterId => filterId);
 
             long? upstreamId = MarshalUtils.ReadNullableInt(coreArgsС.pUpstreamId);
             DnsRequestProcessedEventArgs eventArgs = new DnsRequestProcessedEventArgs

@@ -21,32 +21,33 @@
     <TargetFrameworkVersion>v4.5</TargetFrameworkVersion>
     <FileAlignment>512</FileAlignment>
     <LangVersion>7.3</LangVersion>
+    <Prefer32Bit>false</Prefer32Bit>
   </PropertyGroup>
   <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Debug|AnyCPU' ">
-    <PlatformTarget>x86</PlatformTarget>
     <DebugSymbols>true</DebugSymbols>
     <DebugType>full</DebugType>
     <Optimize>false</Optimize>
     <DefineConstants>DEBUG;TRACE</DefineConstants>
     <ErrorReport>prompt</ErrorReport>
     <WarningLevel>4</WarningLevel>
+    <Prefer32Bit>false</Prefer32Bit>
   </PropertyGroup>
   <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Release|AnyCPU' ">
-    <PlatformTarget>x86</PlatformTarget>
     <DebugType>pdbonly</DebugType>
     <Optimize>true</Optimize>
     <DefineConstants>TRACE</DefineConstants>
     <ErrorReport>prompt</ErrorReport>
     <WarningLevel>4</WarningLevel>
+    <Prefer32Bit>false</Prefer32Bit>
   </PropertyGroup>
   <ItemGroup>
     <Reference Include="AdGuard.Utils, Version=2.4.0.0, Culture=neutral, PublicKeyToken=cc321ba03e90d705, processorArchitecture=MSIL">
       <HintPath>..\packages\Adguard.Utils.2.4.119\lib\net45\AdGuard.Utils.dll</HintPath>
-	    <Private>True</Private>
+      <Private>True</Private>
     </Reference>
     <Reference Include="AdGuard.Utils.Base, Version=1.0.0.0, Culture=neutral, PublicKeyToken=cc321ba03e90d705, processorArchitecture=MSIL">
-      <HintPath>..\packages\Adguard.Utils.Base.1.0.30\lib\net45\AdGuard.Utils.Base.dll</HintPath>
-	    <Private>True</Private>
+      <HintPath>..\packages\Adguard.Utils.Base.1.0.32\lib\net45\AdGuard.Utils.Base.dll</HintPath>
+      <Private>True</Private>
     </Reference>
     <Reference Include="Microsoft.CSharp" />
     <Reference Include="Newtonsoft.Json, Version=11.0.0.0, Culture=neutral, PublicKeyToken=30ad4fe6b2a6aeed, processorArchitecture=MSIL">

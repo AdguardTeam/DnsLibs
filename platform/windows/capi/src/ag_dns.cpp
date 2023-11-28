@@ -662,7 +662,7 @@ void ag_dnsproxy_handle_message_async(ag_dnsproxy *handle, ag_buffer c_message, 
     coro::run_detached([](DnsProxy *proxy, Uint8Vector message, std::optional<DnsMessageInfo> info,
                                ag_handle_message_async_cb handler) -> coro::Task<void> {
         auto result = co_await proxy->handle_message({message.data(), message.size()}, opt_as_ptr(info));
-        ag_buffer result_buffer{.data = result.data(), .size = result.size()};
+        ag_buffer result_buffer{.data = result.data(), .size = (uint32_t) result.size()};
         handler(&result_buffer);
     }(proxy, std::move(message), std::move(info), handler));
 }

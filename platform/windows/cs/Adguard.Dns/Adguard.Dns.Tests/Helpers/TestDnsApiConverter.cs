@@ -7,6 +7,7 @@ using Adguard.Dns.Api.DnsProxyServer.EventArgs;
 using Adguard.Dns.Api.FilteringLogAction;
 using Adguard.Dns.DnsProxyServer;
 using Adguard.Dns.Helpers;
+using Adguard.Dns.Provider;
 using Adguard.Dns.Tests.TestUtils;
 using Adguard.Dns.Utils;
 using AdGuard.Utils.Base.Collections;
@@ -18,8 +19,22 @@ namespace Adguard.Dns.Tests.Helpers
     [TestFixture]
     class TestDnsApiConverter
     {
-        // Initialized properties without which working is impossible
-        [Test]
+	    private DnsLibsDllProvider m_DnsLibsDllProvider;
+
+		[OneTimeSetUp]
+	    public void SetUp()
+	    {
+		    m_DnsLibsDllProvider = (DnsLibsDllProvider)DnsLibsDllProvider.Instance;
+	    }
+
+        [OneTimeTearDown]
+	    public void TearDown()
+	    {
+            m_DnsLibsDllProvider.Dispose();
+	    }
+
+		// Initialized properties without which working is impossible
+		[Test]
         public void TestDnsProxySettingsConverter()
         {
             DnsProxySettings dnsSettings = new DnsProxySettings

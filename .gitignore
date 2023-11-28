@@ -32,6 +32,6 @@ xcuserdata/
 third-party/boringssl/boringssl/go.mod
 
 # Win libs
-AdguardDns.dll
-AdguardDns.pdb
+x64/
+x86/
 signtool.log

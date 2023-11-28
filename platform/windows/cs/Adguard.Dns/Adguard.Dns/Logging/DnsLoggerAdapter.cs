@@ -57,14 +57,17 @@ namespace Adguard.Dns.Logging
             lock (SYNC_ROOT)
             {
 
-                AGDnsApi.ag_set_log_level(m_LoggerLogLevel);
+				AGDnsApi.ag_set_log_level(
+					m_LoggerLogLevel);
                 if (m_LoggerCallback == null)
                 {
                     Logger.Warn("Logger callback hasn't been initialized before");
                     return;
                 }
 
-                AGDnsApi.ag_set_log_callback(m_LoggerCallback, IntPtr.Zero);
+                AGDnsApi.ag_set_log_callback(
+	                m_LoggerCallback,
+	                IntPtr.Zero);
                 Logger.Info("Logger callback has been set successfully");
             }
         }

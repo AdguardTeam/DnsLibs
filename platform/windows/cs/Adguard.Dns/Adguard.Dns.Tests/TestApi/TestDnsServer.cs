@@ -2,6 +2,7 @@
 using Adguard.Dns.Api.DnsProxyServer.Callbacks;
 using Adguard.Dns.Api.DnsProxyServer.Configs;
 using Adguard.Dns.DnsProxyServer;
+using Adguard.Dns.Provider;
 using Adguard.Dns.Tests.Helpers;
 using NUnit.Framework;
 
@@ -10,7 +11,21 @@ namespace Adguard.Dns.Tests.TestApi
     [TestFixture]
     public class TestDnsServer
     {
-        [Test]
+	    private DnsLibsDllProvider m_DnsLibsDllProvider;
+
+		[OneTimeSetUp]
+	    public void SetUp()
+	    {
+		    m_DnsLibsDllProvider = (DnsLibsDllProvider)DnsLibsDllProvider.Instance;
+	    }
+
+	    [OneTimeTearDown]
+	    public void TearDown()
+	    {
+		    m_DnsLibsDllProvider.Dispose();
+	    }
+
+		[Test]
         public void TestSupportApiVersion()
         {
             Assert.DoesNotThrow(AGDnsApi.ValidateApi);

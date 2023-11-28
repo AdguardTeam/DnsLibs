@@ -1,0 +1,63 @@
+---
+version: 2
+plan:
+  project-key: CL
+  key: DTR
+  name: DnsLibs - Tag release
+stages:
+- Default Stage:
+    manual: false
+    final: false
+    jobs:
+    - Tag release
+Tag release:
+  key: JOB1
+  docker:
+    image: adguard/core-libs:1.11
+    volumes:
+      ${bamboo.working.directory}: ${bamboo.working.directory}
+      ${bamboo.tmp.directory}: ${bamboo.tmp.directory}
+      ${system.HOME}/.ssh: /root/.ssh
+      ${bamboo.git.cache.directory}: ${bamboo.git.cache.directory}
+    docker-run-arguments: []
+  tasks:
+  - script:
+      interpreter: SHELL
+      scripts:
+      - |-
+        rm -rf *
+        if [ -O "${bamboo.git.cache.directory}" ]; then chmod 0777 "${bamboo.git.cache.directory}"; fi
+  - checkout:
+      force-clean-build: 'false'
+      description: Checkout Default Repository
+  - script:
+      interpreter: SHELL
+      scripts:
+      - |-
+        case "${bamboo_repository_branch_name}" in
+        master|stable-*)
+            git remote set-url origin ${bamboo_planRepository_repositoryUrl}
+            VER=$(sed -ne '/version =/s/.* '\''\(.*\)'\'',.*/\1/p' platform/android/dnsproxy/lib/build.gradle)
+            git tag v$VER || true
+            git push origin v$VER
+            echo dnslibs.version=$VER > inject.txt
+        esac
+  - inject-variables:
+      file: inject.txt
+      scope: RESULT
+      namespace: inject
+  requirements:
+  - adg-privileged-docker
+  artifact-subscriptions: []
+repositories:
+- dns-libs:
+    scope: global
+triggers: []
+branches:
+  create: manually
+  delete: never
+  link-to-jira: true
+notifications: []
+labels: []
+other:
+  concurrent-build-plugin: system-default

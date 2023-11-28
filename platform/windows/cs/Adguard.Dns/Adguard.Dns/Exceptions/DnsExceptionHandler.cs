@@ -55,8 +55,8 @@ namespace Adguard.Dns.Exceptions
         {
             lock (SYNC_ROOT)
             {
-                AGDnsApi.ag_enable_SetUnhandledExceptionFilter();
-                SetUnhandledExceptionFilter(m_UnhandledNativeExceptionFilterCallback);
+	            AGDnsApi.ag_enable_SetUnhandledExceptionFilter();
+				SetUnhandledExceptionFilter(m_UnhandledNativeExceptionFilterCallback);
                 AGDnsApi.ag_disable_SetUnhandledExceptionFilter();
             }
         }
