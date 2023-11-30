@@ -1,7 +1,7 @@
 #import "AGDnsProxy.h"
 #import <TargetConditionals.h>
 #if !TARGET_OS_IPHONE
-#import "NSTask+AGTimeout.h"
+#import "NSTask+AGUtils.h"
 #endif
 
 #import <sys/socket.h>
@@ -1097,17 +1097,51 @@ static fd_pair_t makeFdPairForTask() {
     return (fd_pair_t) {-1, -1};
 }
 
+static NSString *getProtoString(AGListenerProtocol proto) {
+    switch (proto) {
+        case AGLP_UDP:
+            return @"udp";
+            break;
+        case AGLP_TCP:
+            return @"tcp";
+            break;
+    }
+    return nil;
+}
+
+static int receiveFd(int ourFd, NSError **error) {
+    char buf[1]{};
+    char cmsgspace[CMSG_SPACE(sizeof(int))]{};
+    iovec vec{
+            .iov_base = buf,
+            .iov_len = sizeof(buf)};
+    msghdr msg{
+            .msg_iov = &vec,
+            .msg_iovlen = 1,
+            .msg_control = &cmsgspace,
+            .msg_controllen = CMSG_LEN(sizeof(int))};
+
+    int r = recvmsg(ourFd, &msg, 0);
+    if (r < 0) {
+        *error = [NSError errorWithDomain:AGDnsProxyErrorDomain
+                                     code:AGDPE_PROXY_INIT_ERROR
+                                 userInfo:@{NSLocalizedDescriptionKey:
+                                            [NSString stringWithFormat:@"Failed to receive fd: %s", strerror(errno)]}];
+        return -1;
+    }
+
+    for (cmsghdr *cmsg = CMSG_FIRSTHDR(&msg); cmsg; cmsg = CMSG_NXTHDR(&msg, cmsg)) {
+        if (cmsg->cmsg_level == SOL_SOCKET && cmsg->cmsg_type == SCM_RIGHTS) {
+            return *(int *) CMSG_DATA(cmsg);
+        }
+    }
+
+    return -1;
+}
+
 // Bind an fd using adguard-tun-helper
 static int bindFd(NSString *helperPath, NSString *address, NSNumber *port, AGListenerProtocol proto, NSError **error) {
-    NSString *protoString = nil;
-    switch (proto) {
-    case AGLP_UDP:
-        protoString = @"udp";
-        break;
-    case AGLP_TCP:
-        protoString = @"tcp";
-        break;
-    }
+    NSString *protoString = getProtoString(proto);
     if (protoString == nil) {
         *error = [NSError errorWithDomain:AGDnsProxyErrorDomain
                                      code:AGDPE_PROXY_INIT_ERROR
@@ -1122,7 +1156,9 @@ static int bindFd(NSString *helperPath, NSString *address, NSNumber *port, AGLis
                                  userInfo:@{NSLocalizedDescriptionKey: @"Failed to make an fd pair"}];
         return -1;
     }
+    evutil_make_socket_nonblocking(fdPair.ourFd);
 
+    // Setup task
     auto *task = [[NSTask alloc] init];
     task.launchPath = helperPath;
     task.arguments = @[@"--bind", address, port.stringValue, protoString];
@@ -1130,88 +1166,68 @@ static int bindFd(NSString *helperPath, NSString *address, NSNumber *port, AGLis
     task.standardInput = nullDevice;
     task.standardOutput = [[NSFileHandle alloc] initWithFileDescriptor:fdPair.theirFd closeOnDealloc:NO];
     task.standardError = nullDevice;
+
+    // Start task
     NSError *taskError;
-    BOOL result = [task launchAndReturnError:&taskError];
+    dispatch_group_t taskGroup = [task launchWithGroupAndReturnError:&taskError];
     close(fdPair.theirFd);
-    if (!result) {
+    if (!taskGroup) {
         NSString *description = taskError.localizedDescription;
         *error = [NSError errorWithDomain:AGDnsProxyErrorDomain
                                      code:AGDPE_PROXY_INIT_ERROR
                                  userInfo:@{NSLocalizedDescriptionKey: [NSString stringWithFormat:@"Error starting tun helper: %@", description]}];
-        return -1;
-    }
-
-    evutil_make_socket_nonblocking(fdPair.ourFd);
-
-    pollfd pfd[] = {{.fd = fdPair.ourFd, .events = POLLIN}};
-    ssize_t r = poll(pfd, 1, BINDFD_WAIT_MS);
-    if (r != 1) {
-        if (r == 0) {
-            *error = [NSError errorWithDomain:AGDnsProxyErrorDomain
-                                         code:AGDPE_PROXY_INIT_ERROR
-                                     userInfo:@{NSLocalizedDescriptionKey: @"Poll timed out"}];
-        } else {
-            *error = [NSError errorWithDomain:AGDnsProxyErrorDomain
-                                         code:AGDPE_PROXY_INIT_ERROR
-                                     userInfo:@{NSLocalizedDescriptionKey:
-                                                [NSString stringWithFormat:
-                                                        @"Poll failed: %d (%s)", errno, strerror(errno)]}];
-        }
         close(fdPair.ourFd);
-        [task interrupt];
         return -1;
     }
 
-    char buf[1]{};
-    char cmsgspace[CMSG_SPACE(sizeof(int))]{};
-    iovec vec{
-            .iov_base = buf,
-            .iov_len = sizeof(buf)};
-    msghdr msg{
-            .msg_iov = &vec,
-            .msg_iovlen = 1,
-            .msg_control = &cmsgspace,
-            .msg_controllen = CMSG_LEN(sizeof(int))};
-
-    r = recvmsg(fdPair.ourFd, &msg, 0);
-    if (r < 0) {
-        *error = [NSError errorWithDomain:AGDnsProxyErrorDomain
-                                     code:AGDPE_PROXY_INIT_ERROR
-                                 userInfo:@{NSLocalizedDescriptionKey:
-                                            [NSString stringWithFormat:@"Failed to receive fd: %s", strerror(errno)]}];
-        close(fdPair.ourFd);
-        [task interrupt];
-        return -1;
-    }
-    dispatch_async(dispatch_get_global_queue(0, 0), ^{
+    // Read fd from helper
+    __block int receivedFd = -1;
+    __block NSError *receiveError = nil;
+    dispatch_source_t read = dispatch_source_create(DISPATCH_SOURCE_TYPE_READ, fdPair.ourFd, 0, 0);
+    dispatch_source_set_event_handler(read, ^{
+        receivedFd = receiveFd(fdPair.ourFd, &receiveError);
+        dispatch_source_cancel(read);
+    });
+    dispatch_source_set_cancel_handler(read, ^{
         close(fdPair.ourFd);
     });
-    // Error will be handled after.
-    [task waitUntilExitOrInterruptAfterTimeoutMs:BINDFD_WAIT_MS];
+    dispatch_resume(read);
 
-    for (cmsghdr *cmsg = CMSG_FIRSTHDR(&msg); cmsg; cmsg = CMSG_NXTHDR(&msg, cmsg)) {
-        if (cmsg->cmsg_level == SOL_SOCKET && cmsg->cmsg_type == SCM_RIGHTS) {
-            int receivedFd = *(int *) CMSG_DATA(cmsg);
-            return receivedFd;
-        }
-    }
-    switch (task.terminationStatus) {
-    case 0:
-        *error = [NSError errorWithDomain:AGDnsProxyErrorDomain
-                                     code:AGDPE_PROXY_INIT_ERROR
-                                 userInfo:@{NSLocalizedDescriptionKey: @"Failed to receive fd: control message not found"}];
-        break;
-    case ERR_BIND_IN_USE:
-        *error = [NSError errorWithDomain:AGDnsProxyErrorDomain
-                                     code:AGDPE_PROXY_INIT_HELPER_BIND_ERROR
-                                 userInfo:@{NSLocalizedDescriptionKey: @"Failed to receive fd: can't bind"}];
-        break;
-    default:
-        NSString *description = [NSString stringWithFormat: @"Failed to receive fd: helper return %d", task.terminationStatus];
+    // Close and wait for exit or timeout
+    if (0 != dispatch_group_wait(taskGroup, dispatch_time(DISPATCH_TIME_NOW, BINDFD_WAIT_MS * NSEC_PER_MSEC))) {
+        NSString *description = [NSString stringWithFormat: @"Failed to receive fd: helper timed out"];
         *error = [NSError errorWithDomain:AGDnsProxyErrorDomain
                                      code:AGDPE_PROXY_INIT_HELPER_ERROR
                                  userInfo:@{NSLocalizedDescriptionKey: description}];
+        [task interrupt];
+        dispatch_source_cancel(read);
+        return -1;
     }
+
+    switch (task.terminationStatus) {
+        case 0:
+            if (receivedFd != -1) {
+                return receivedFd;
+            }
+            *error = receiveError
+                     ? receiveError
+                     : [NSError errorWithDomain:AGDnsProxyErrorDomain
+                                           code:AGDPE_PROXY_INIT_ERROR
+                                       userInfo:@{NSLocalizedDescriptionKey: @"Failed to receive fd: control message not found"}];
+            break;
+        case ERR_BIND_IN_USE:
+            *error = [NSError errorWithDomain:AGDnsProxyErrorDomain
+                                         code:AGDPE_PROXY_INIT_HELPER_BIND_ERROR
+                                     userInfo:@{NSLocalizedDescriptionKey: @"Failed to receive fd: can't bind"}];
+            break;
+        default:
+            NSString *description = [NSString stringWithFormat: @"Failed to receive fd: helper return %d", task.terminationStatus];
+            *error = [NSError errorWithDomain:AGDnsProxyErrorDomain
+                                         code:AGDPE_PROXY_INIT_HELPER_ERROR
+                                     userInfo:@{NSLocalizedDescriptionKey: description}];
+            break;
+    }
+
     return -1;
 }
 

@@ -73,7 +73,7 @@ add_library(AGDnsProxy SHARED
     module.modulemap
 )
 if("${TARGET_OS}" STREQUAL "macos")
-    target_sources(AGDnsProxy PRIVATE NSTask+AGTimeout.mm)
+    target_sources(AGDnsProxy PRIVATE NSTask+AGUtils.mm)
 endif()
 set_property(TARGET AGDnsProxy PROPERTY POSITION_INDEPENDENT_CODE ON)
 
