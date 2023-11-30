@@ -43,7 +43,7 @@
   </PropertyGroup>
   <ItemGroup>
     <Reference Include="AdGuard.Utils.Base, Version=1.0.0.0, Culture=neutral, PublicKeyToken=cc321ba03e90d705, processorArchitecture=MSIL">
-      <HintPath>..\packages\Adguard.Utils.Base.1.0.32\lib\net45\AdGuard.Utils.Base.dll</HintPath>
+      <HintPath>..\packages\Adguard.Utils.Base.1.0.40\lib\net45\AdGuard.Utils.Base.dll</HintPath>
       <Private>True</Private>
     </Reference>
     <Reference Include="Microsoft.CSharp" />
@@ -101,13 +101,12 @@
     <Compile Include="Logging\DnsLoggerAdapter.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
     <Compile Include="Provider\DnsLibsDllProvider.cs" />
-    <Compile Include="Provider\IDnsLibsDllProvider.cs" />
     <Compile Include="Utils\DnsUtils.cs" />
     <Compile Include="Utils\CertificateVerificationCallback.cs" />
   </ItemGroup>
   <ItemGroup>
-	<None Include="x86\**" CopyToOutputDirectory="Always" />
-	<None Include="x64\**" CopyToOutputDirectory="Always" />
+    <None Include="x86\**" CopyToOutputDirectory="Always" />
+    <None Include="x64\**" CopyToOutputDirectory="Always" />
     <None Include="packages.config" />
   </ItemGroup>
   <!-- Post build script -->
