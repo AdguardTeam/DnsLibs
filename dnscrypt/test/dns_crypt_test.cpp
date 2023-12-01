@@ -1,6 +1,6 @@
 #include <algorithm>
 #include <chrono>
-#include <magic_enum.hpp>
+#include <magic_enum/magic_enum.hpp>
 #include <sodium.h>
 
 #include "common/defs.h"
@@ -128,7 +128,7 @@ using ParseStampTestDataType = std::tuple<const char *, void (*)(const char *, c
 
 static void parse_stamp_test_data_log(const char *stamp_str, const ServerStamp &stamp) {
     infolog(logger, "{}", stamp_str);
-    infolog(logger, "Protocol={}", stamp.proto);
+    infolog(logger, "Protocol={}", magic_enum::enum_name(stamp.proto));
     infolog(logger, "ProviderName={}", stamp.provider_name);
     infolog(logger, "Path={}", stamp.path);
 }

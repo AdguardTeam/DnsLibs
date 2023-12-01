@@ -1,7 +1,5 @@
-cmake_minimum_required(VERSION 3.6)
+cmake_minimum_required(VERSION 3.24)
 project(agdns_upstream C CXX)
-include(../cmake/conan_bootstrap.cmake)
-conan_bootstrap(SRCROOT ".." CONANFILE "../conanfile.py" SCOPE_NAME agdns)
 
 set(CMAKE_CXX_STANDARD 20)
 
@@ -58,11 +56,16 @@ if(NOT TARGET dnslibs_net)
     add_subdirectory(${DNSLIBS_DIR}/net ${CMAKE_BINARY_DIR}/net)
 endif(NOT TARGET dnslibs_net)
 
+find_package(libevent REQUIRED)
+find_package(ldns REQUIRED)
+find_package(magic_enum REQUIRED)
+find_package(ngtcp2 REQUIRED)
+
 target_include_directories(upstream PUBLIC include)
 target_include_directories(upstream PRIVATE ${OPENSSL_INCLUDE_DIR})
 target_link_libraries(upstream dnslibs_common dnsstamp dnscrypt dnslibs_net)
-target_link_libraries(upstream CONAN_PKG::magic_enum CONAN_PKG::libevent CONAN_PKG::ldns)
-target_link_libraries(upstream CONAN_PKG::ngtcp2)
+target_link_libraries(upstream magic_enum::magic_enum libevent::libevent ldns::ldns)
+target_link_libraries(upstream ngtcp2::ngtcp2)
 
 enable_testing()
 include(${CMAKE_CURRENT_SOURCE_DIR}/../cmake/add_unit_test.cmake)

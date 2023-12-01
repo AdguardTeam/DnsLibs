@@ -93,7 +93,8 @@ static void log_packet(
     ldns_buffer *str_dns = ldns_buffer_new(LDNS_MAX_PACKETLEN);
     ldns_status status = ldns_pkt2buffer_str(str_dns, packet);
     if (status != LDNS_STATUS_OK) {
-        dbglog_id(log, packet, "Failed to print {}: {} ({})", pkt_name, ldns_get_errorstr_by_id(status), status);
+        dbglog_id(log, packet, "Failed to print {}: {} ({})", pkt_name, ldns_get_errorstr_by_id(status),
+                magic_enum::enum_name(status));
     } else if (info) {
         dbglog_id(log, packet, "{} from {} over {}:\n{}", pkt_name, info->peername.str(),
                 magic_enum::enum_name<utils::TransportProtocol>(info->proto), (char *) ldns_buffer_begin(str_dns));
@@ -126,7 +127,8 @@ static void log_packet(
         return LDNS_STATUS_OK;
     }();
     if (status != LDNS_STATUS_OK) {
-        dbglog_id(log, packet, "Failed to print {}: {} ({})", pkt_name, ldns_get_errorstr_by_id(status), status);
+        dbglog_id(log, packet, "Failed to print {}: {} ({})", pkt_name, ldns_get_errorstr_by_id(status),
+                magic_enum::enum_name(status));
     } else if (info) {
         dbglog_id(log, packet, "{} from {} over {}: {}", pkt_name, info->peername.str(),
                   magic_enum::enum_name<utils::TransportProtocol>(info->proto), str_dns);
@@ -1230,9 +1232,11 @@ coro::Task<Uint8Vector> DnsForwarder::handle_message(Uint8View message, const Dn
     ldns_pkt *request_naked;
     ldns_status status = ldns_wire2pkt(&request_naked, message.data(), message.size());
     if (status != LDNS_STATUS_OK) {
-        dbglog(m_log, "Failed to parse payload: {} ({})", ldns_get_errorstr_by_id(status), status);
+        dbglog(m_log, "Failed to parse payload: {} ({})", ldns_get_errorstr_by_id(status),
+                magic_enum::enum_name(status));
         finalize_processed_event(event, nullptr, nullptr, nullptr, std::nullopt,
-                make_error(DnsError::AE_DECODE_ERROR, AG_FMT("{} ({})", ldns_get_errorstr_by_id(status), status)));
+                make_error(DnsError::AE_DECODE_ERROR,
+                        AG_FMT("{} ({})", ldns_get_errorstr_by_id(status), magic_enum::enum_name(status))));
         ldns_pkt_ptr response{ResponseHelpers::create_formerr_response(pkt_id)};
         log_packet(m_log, response.get(), "Format error response");
         co_return transform_response_to_raw_data(response.get());

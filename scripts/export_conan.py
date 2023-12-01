@@ -1,38 +1,51 @@
 #!/usr/bin/env python3
 
+"""
+This script exports the dns-libs package to the local Conan cache.
+
+By default, without any arguments, it exports the latest version from `conandata.yml`.
+
+Pass `all` as an argument to export all versions (e.g., `export_conan.py all`).
+
+Pass a version number as an argument to export only that specific version
+(e.g., `export_conan.py 1.0.0`).
+
+Pass 'local' as an argument to export current version of libs with hash of the last commit as version.
+(e.g., `export_conan.py local`).
+"""
+
 import os
 import subprocess
 import sys
+import re
 
 import yaml
 
 work_dir = os.path.dirname(os.path.realpath(__file__))
 project_dir = os.path.dirname(work_dir)
-commit_hash_version = "777"
 
 with open(os.path.join(project_dir, "conandata.yml"), "r") as file:
     yaml_data = yaml.safe_load(file)
 
 versions = []
-checkout_original_branch = False
-if len(sys.argv) > 1:
-    checkout_original_branch = True
-    versions.append(sys.argv[1])
-else:
-    versions.append(commit_hash_version)
+if len(sys.argv) == 1:
+    if len(yaml_data["commit_hash"]) > 0:
+        versions.append(list(yaml_data["commit_hash"].keys())[-1])
+elif sys.argv[1] == "all":
     for version in yaml_data["commit_hash"]:
         versions.append(version)
+elif sys.argv[1] == "local":
+    result = subprocess.run(["git", "rev-parse", "--short","HEAD"], check=True, capture_output=True)
+    last_commit_hash = result.stdout.decode().splitlines()[0]
+    versions.append(last_commit_hash)
 
 for version in versions:
-    if version == commit_hash_version:
-        subprocess.run(["git", "checkout", "-B", "master", "origin/master"], check=True)
-    else:
+    if re.match(r'\d+\.\d+\.\d+', version) is not None:
         hash1 = yaml_data["commit_hash"][version]["hash"]
-        the_hash = subprocess.run(["git", "log", "--reverse", "--ancestry-path", hash1 + "..master", "--pretty=%h"],
-                                  check=True, capture_output=True, text=True).stdout.splitlines()[0]
+        result = subprocess.run(["git", "log", "--reverse", "--ancestry-path", hash1 + "..master", "--pretty=%h"],
+                                check=True, capture_output=True)
+        the_hash = result.stdout.decode().splitlines()[0]
         print("HASH is ", the_hash)
         subprocess.run(["git", "checkout", the_hash], check=True)
-    subprocess.run(["conan", "export", project_dir, "dns-libs/" + version + "@AdguardTeam/NativeLibsCommon"],
-                   check=True)
-    if checkout_original_branch:
-        subprocess.run(["git", "checkout", "-"], check=True)
+
+    subprocess.run(["conan", "export", project_dir, "--user", "adguard_team", "--channel", "native_libs_common", "--version", version])

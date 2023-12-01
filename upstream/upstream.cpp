@@ -2,7 +2,7 @@
 #include <chrono>
 #include <functional>
 
-#include <magic_enum.hpp>
+#include <magic_enum/magic_enum.hpp>
 
 #include "common/base64.h"
 #include "common/logger.h"
@@ -164,8 +164,8 @@ static CreateResult create_upstream_sdns(const UpstreamOptions &local_opts, cons
         return create_upstream_doq(opts, config, std::move(fingerprints));
     }
     assert(false);
-    return make_error(
-            UpstreamFactory::UpstreamCreateError::AE_INVALID_STAMP, AG_FMT("Unknown stamp protocol: {}", stamp.proto));
+    return make_error(UpstreamFactory::UpstreamCreateError::AE_INVALID_STAMP,
+            AG_FMT("Unknown stamp protocol: {}", magic_enum::enum_name(stamp.proto)));
 }
 
 UpstreamFactory::CreateResult UpstreamFactory::Impl::create_upstream(const UpstreamOptions &opts) const {

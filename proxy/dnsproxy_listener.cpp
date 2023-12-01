@@ -1,6 +1,6 @@
 #include <algorithm>
 #include <cassert>
-#include <magic_enum.hpp>
+#include <magic_enum/magic_enum.hpp>
 #include <uv.h>
 
 #include "common/error.h"

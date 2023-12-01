@@ -1,4 +1,5 @@
 #include <ldns/ldns.h>
+#include <magic_enum/magic_enum.hpp>
 
 #include "common/net_utils.h"
 #include "dns/dnsstamp/dns_stamp.h"
@@ -34,7 +35,7 @@ static std::optional<std::string> get_address_from_stamp(const Logger &log, std:
             return stamp->provider_name;
         }
     }
-    warnlog(log, "Unknown stamp protocol type: {}", stamp->proto);
+    warnlog(log, "Unknown stamp protocol type: {}", magic_enum::enum_name(stamp->proto));
     assert(0);
     return std::nullopt;
 }

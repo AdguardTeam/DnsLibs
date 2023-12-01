@@ -8,7 +8,7 @@
 #include <bitset>
 #include <tuple>
 #include <memory>
-#include <magic_enum.hpp>
+#include <magic_enum/magic_enum.hpp>
 #include <ldns/ldns.h>
 
 #include "common/error.h"

@@ -3,7 +3,7 @@
 #include <cassert>
 #include <chrono>
 
-#include <magic_enum.hpp>
+#include <magic_enum/magic_enum.hpp>
 #include <ngtcp2/ngtcp2_crypto_boringssl.h>
 
 #include "common/base64.h"
@@ -694,7 +694,8 @@ loop_exit:
 ag::Result<uint64_t, ag::dns::DnsError> ag::dns::DohUpstream::send_request(const ldns_pkt *query) {
     ldns_buffer_ptr buffer{ldns_buffer_new(REQUEST_BUFFER_INITIAL_CAPACITY)};
     if (ldns_status status = ldns_pkt2buffer_wire(buffer.get(), query); status != LDNS_STATUS_OK) {
-        return make_error(DnsError::AE_ENCODE_ERROR, AG_FMT("{} ({})", ldns_get_errorstr_by_id(status), status));
+        return make_error(DnsError::AE_ENCODE_ERROR,
+                AG_FMT("{} ({})", ldns_get_errorstr_by_id(status), magic_enum::enum_name(status)));
     }
 
     // https://datatracker.ietf.org/doc/html/rfc8484#section-4.1

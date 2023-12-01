@@ -2,7 +2,7 @@
 #include <condition_variable>
 #include <gtest/gtest.h>
 #include <ldns/ldns.h>
-#include <magic_enum.hpp>
+#include <magic_enum/magic_enum.hpp>
 #include <thread>
 
 #include "dns/proxy/dnsproxy.h"

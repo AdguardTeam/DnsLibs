@@ -1,7 +1,5 @@
-cmake_minimum_required(VERSION 3.1)
+cmake_minimum_required(VERSION 3.24)
 project(dnsfilter)
-include(../cmake/conan_bootstrap.cmake)
-conan_bootstrap(SRCROOT ".." CONANFILE "../conanfile.py" SCOPE_NAME agdns)
 
 set(CMAKE_CXX_STANDARD 20)
 
@@ -35,10 +33,15 @@ if(NOT TARGET dnsproxy)
     add_subdirectory(${DNSLIBS_DIR}/proxy ${CMAKE_BINARY_DIR}/proxy)
 endif(NOT TARGET dnsproxy)
 
+find_package(ldns REQUIRED)
+find_package(klib REQUIRED)
+find_package(magic_enum REQUIRED)
+find_package(tldregistry REQUIRED)
+
 set_target_properties(dnsfilter PROPERTIES POSITION_INDEPENDENT_CODE ON)
 target_include_directories(dnsfilter PUBLIC ./include)
-target_link_libraries(dnsfilter dnslibs_common dnsproxy CONAN_PKG::ldns CONAN_PKG::klib CONAN_PKG::magic_enum
-        CONAN_PKG::tldregistry)
+target_link_libraries(dnsfilter dnslibs_common dnsproxy ldns::ldns klib::klib magic_enum::magic_enum
+        tldregistry::tldregistry)
 if (NOT MSVC)
     target_compile_options(dnsfilter PRIVATE -Wall -Wextra -Wformat=2 -Wno-unused-parameter)
     target_compile_options(dnsfilter PRIVATE -fno-exceptions)

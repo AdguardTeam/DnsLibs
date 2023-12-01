@@ -4,6 +4,7 @@
 #import "NSTask+AGUtils.h"
 #endif
 
+#pragma visibility push(hidden)
 #import <sys/socket.h>
 #import <netinet/in.h>
 #import <arpa/inet.h>
@@ -12,12 +13,14 @@
 #import <cassert>
 #import <optional>
 #import <string>
+#import <magic_enum/magic_enum.hpp>
 
 #import "common/cesu8.h"
 #import "common/error.h"
 #import "common/logger.h"
 #import "dns/proxy/dnsproxy.h"
 #import "dns/upstream/upstream_utils.h"
+#pragma visibility pop
 
 #import "AGDnsXPCObject.h"
 
@@ -992,7 +995,7 @@ using AGUniqueCFRef = UniquePtr<std::remove_pointer_t<T>, &CFRelease>;
         errStr = "An indication of an invalid setting or result";
         break;
     default:
-        errStr = AG_FMT("Unknown error code: {}", trustResult);
+        errStr = AG_FMT("Unknown error code: {}", magic_enum::enum_name(trustResult));
         break;
     }
 

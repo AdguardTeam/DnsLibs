@@ -1,7 +1,5 @@
-cmake_minimum_required(VERSION 3.1)
+cmake_minimum_required(VERSION 3.24)
 project(dnsproxy)
-include(../cmake/conan_bootstrap.cmake)
-conan_bootstrap(SRCROOT ".." CONANFILE "../conanfile.py" SCOPE_NAME agdns)
 
 set(CMAKE_CXX_STANDARD 20)
 
@@ -48,9 +46,12 @@ if(NOT TARGET dnslibs_net)
     add_subdirectory(${DNSLIBS_DIR}/net ${CMAKE_BINARY_DIR}/net)
 endif(NOT TARGET dnslibs_net)
 
+find_package(libuv REQUIRED)
+find_package(ldns REQUIRED)
+
 set_target_properties(dnsproxy PROPERTIES POSITION_INDEPENDENT_CODE ON)
 target_include_directories(dnsproxy PUBLIC ./include)
-target_link_libraries(dnsproxy dnslibs_common dnsfilter upstream dnslibs_net CONAN_PKG::ldns CONAN_PKG::libuv)
+target_link_libraries(dnsproxy dnslibs_common dnsfilter upstream dnslibs_net ldns::ldns libuv::libuv)
 
 if (NOT MSVC)
     target_compile_options(dnsproxy PRIVATE -Wall -Wextra -Wformat=2 -Wno-unused-parameter -Wno-unused-variable -Wno-ignored-qualifiers -Wno-missing-field-initializers)

@@ -1,7 +1,5 @@
-cmake_minimum_required(VERSION 3.6)
+cmake_minimum_required(VERSION 3.24)
 project(agdns_dnscrypt C CXX)
-include(../cmake/conan_bootstrap.cmake)
-conan_bootstrap(SRCROOT ".." CONANFILE "../conanfile.py" SCOPE_NAME agdns)
 
 set(CMAKE_CXX_STANDARD 20)
 
@@ -31,9 +29,12 @@ add_library(dnscrypt EXCLUDE_FROM_ALL
         dns_crypt_utils.cpp
         )
 
+find_package(libsodium REQUIRED)
+find_package(ldns REQUIRED)
+
 set_target_properties(dnscrypt PROPERTIES POSITION_INDEPENDENT_CODE ON)
 target_include_directories(dnscrypt PUBLIC include)
-target_link_libraries(dnscrypt dnsstamp dnslibs_net CONAN_PKG::ldns CONAN_PKG::libsodium)
+target_link_libraries(dnscrypt dnsstamp dnslibs_net ldns::ldns libsodium::libsodium)
 
 enable_testing()
 include(${CMAKE_CURRENT_SOURCE_DIR}/../cmake/add_unit_test.cmake)

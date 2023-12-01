@@ -5,7 +5,7 @@
 #include <arpa/inet.h>
 #endif
 #include <ldns/net.h>
-#include <magic_enum.hpp>
+#include <magic_enum/magic_enum.hpp>
 #include <sodium.h>
 
 #include "common/logger.h"
@@ -220,7 +220,7 @@ ServerInfo::TxtToCertInfoResult ServerInfo::txt_to_cert_info(const ldns_rr &answ
         local_cert_info.encryption_algorithm = es_version;
         break;
     default:
-        return make_error(TxtToCertInfoError::AE_UNSUPPORTED_CRYPTO_CONSTRUCTION, fmt::to_string(es_version));
+        return make_error(TxtToCertInfoError::AE_UNSUPPORTED_CRYPTO_CONSTRUCTION, magic_enum::enum_name(es_version));
     }
     // Verify the server public key
     Uint8View signature(&bin_cert[SIGNATURE_FIELD.offset], SIGNATURE_FIELD.size);

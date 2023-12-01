@@ -20,17 +20,23 @@ DL - Mac tests and deploy:
       interpreter: SHELL
       scripts:
       - |-
-        git submodule update --init --force
+        python3 -m venv venv
+        source ./venv/bin/activate
+        python3 -m pip install conan
 
+        export DNS_LIBS_DIR="${PWD}"
         cd platform/mac
         mkdir -p build
         cd build
 
+
         export SRCROOT="${PWD}"
 
-        conan remove -f '*'
+        conan remove -c "*"
+        conan remote add --index 0 art ${bamboo.conanRepoUrl} || true
 
-        ../framework/build_dnsproxy_framework.sh --os all --iosv 11.2
+        ../framework/build_dnsproxy_framework.sh --os all
+        deactivate
       description: Build
   - checkout:
       repository: podspecs
@@ -51,13 +57,21 @@ DL - Mac tests and deploy:
       interpreter: SHELL
       scripts:
       - |-
-        conan upload -r art --all -c '*' > upload.txt 2>&1
+        source ./venv/bin/activate
+        conan upload -r art -c '*' >> upload.txt 2>&1
         echo conan upload finished with status $?
-        conan remove -f '*'
-        conan remove --locks
+        conan remove -c "*"
+        deactivate
+        rm -rf venv
       description: Conan upload and cleanup
   requirements:
   - macOS 11.0 or later
+  artifacts:
+    -
+      name: Upload Log
+      location: .
+      pattern: 'upload.txt'
+      shared: false
   artifact-subscriptions: []
 repositories:
 - dns-libs:

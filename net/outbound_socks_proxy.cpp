@@ -2,7 +2,7 @@
 #include "common/net_utils.h"
 #include "common/utils.h"
 #include <cassert>
-#include <magic_enum.hpp>
+#include <magic_enum/magic_enum.hpp>
 
 #ifdef _WIN32
 #include <ws2ipdef.h>

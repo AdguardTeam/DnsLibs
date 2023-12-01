@@ -1,7 +1,5 @@
-cmake_minimum_required(VERSION 3.6)
+cmake_minimum_required(VERSION 3.24)
 project(agdns_dnsstamp C CXX)
-include(../cmake/conan_bootstrap.cmake)
-conan_bootstrap(SRCROOT ".." CONANFILE "../conanfile.py" SCOPE_NAME agdns)
 
 set(CMAKE_CXX_STANDARD 20)
 
@@ -15,9 +13,11 @@ add_library(dnsstamp EXCLUDE_FROM_ALL
         include/dns/dnsstamp/dns_stamp.h
         dns_stamp.cpp)
 
+find_package(libevent REQUIRED)
+
 set_target_properties(dnsstamp PROPERTIES POSITION_INDEPENDENT_CODE ON)
 target_include_directories(dnsstamp PUBLIC include)
-target_link_libraries(dnsstamp CONAN_PKG::libevent dnslibs_common)
+target_link_libraries(dnsstamp libevent::libevent dnslibs_common)
 
 enable_testing()
 include(${CMAKE_CURRENT_SOURCE_DIR}/../cmake/add_unit_test.cmake)

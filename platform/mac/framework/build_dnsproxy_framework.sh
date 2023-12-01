@@ -1,11 +1,13 @@
 #!/bin/sh
 
+set -e
+set -x
+
 HELP_MSG="
 Usage: build_dnsproxy_framework.sh [options...|clean]
     --os       Target os (valid values: macos-{x86_64,arm64}, ios, iphonesimulator-{x86_64,arm64}, all)
                'all' - by default
     --tn       Target framework name
-    --iosv     iOS SDK version (devided by dot: e.g., 13.0)
     --bp       Build directory path
     --fwp      Framework cmake project path
     --debug    Build with debug configuration
@@ -64,17 +66,6 @@ do
         fi
         shift
         ;;
-    --iosv)
-        shift
-        if [[ $# -gt 0 ]]; then
-            IOS_SDK_VERSION=$1
-        else
-            echo "ios version is not specified"
-            echo "${HELP_MSG}"
-            exit 1
-        fi
-        shift
-        ;;
     --bp)
         shift
         if [[ $# -gt 0 ]]; then
@@ -123,15 +114,11 @@ function build_target() {
     cd "${build_dir}"
     pwd
 
-    if [ "${target_os}" == "ios" ] && [ -z ${IPHONEOS_DEPLOYMENT_TARGET+x} ]; then
-        if [ -z ${IOS_SDK_VERSION+x} ]; then
-            echo "iOS SDK version should be set"
-            exit 1
-        fi
-        export IPHONEOS_DEPLOYMENT_TARGET="${IOS_SDK_VERSION}"
-    elif [ "${target_os}" == "iphonesimulator" ]; then
-        export EFFECTIVE_PLATFORM_NAME="-iphonesimulator"
-    fi
+    case ${target_os} in
+    ios)
+        target_arch=arm64
+        ;;
+    esac
 
     target_name=${target_name%-*}
     echo "target_name=${target_name}"
@@ -139,7 +126,18 @@ function build_target() {
 
     cmake_opt="-DCMAKE_BUILD_TYPE=${BUILD_TYPE} -GNinja"
     cmake_opt="${cmake_opt} -DCMAKE_XCODE_ATTRIBUTE_DEBUG_INFORMATION_FORMAT=\"dwarf-with-dsym\""
+    cmake_opt="${cmake_opt} -DCMAKE_CXX_FLAGS=\"-stdlib=libc++\""
+    cmake_opt="${cmake_opt} -DCONAN_HOST_PROFILE=${DNS_LIBS_DIR}/conan/profiles/apple.jinja;auto-cmake"
     cmake_opt="${cmake_opt} -DTARGET_OS:STRING=${target_os} -DCMAKE_OSX_ARCHITECTURES=${target_arch}"
+
+    case ${target_os} in
+    ios)
+        cmake_opt="${cmake_opt} -DCMAKE_SYSTEM_NAME=iOS -DCMAKE_OSX_SYSROOT=iphoneos"
+        ;;
+    iphonesimulator)
+        cmake_opt="${cmake_opt} -DCMAKE_SYSTEM_NAME=iOS -DCMAKE_OSX_SYSROOT=iphonesimulator"
+        ;;
+    esac
 
     cmake ${cmake_opt} ${FRAMEWORK_DIR}
     if [ $? != 0 ]; then

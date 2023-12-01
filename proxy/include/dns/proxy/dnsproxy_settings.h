@@ -2,7 +2,7 @@
 
 #include <string>
 #include <vector>
-#include <magic_enum.hpp>
+#include <magic_enum/magic_enum.hpp>
 
 #include "common/logger.h"
 #include "common/net_utils.h"

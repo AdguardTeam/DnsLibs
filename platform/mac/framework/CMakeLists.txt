@@ -1,4 +1,7 @@
-cmake_minimum_required(VERSION 3.0)
+cmake_minimum_required(VERSION 3.24)
+if(NOT CMAKE_INSTALL_PREFIX MATCHES "conan2")
+set(CMAKE_PROJECT_TOP_LEVEL_INCLUDES "../../../cmake/conan_provider.cmake")
+endif()
 
 set(TARGET_OS "macos" CACHE STRING "Target OS")
 
@@ -7,49 +10,34 @@ string(TOLOWER "${TARGET_OS}" TARGET_OS)
 message(STATUS "EFFECTIVE_PLATFORM_NAME=$ENV{EFFECTIVE_PLATFORM_NAME}")
 set(EFFECTIVE_PLATFORM $ENV{EFFECTIVE_PLATFORM_NAME})
 
-if (EFFECTIVE_PLATFORM STREQUAL "-iphonesimulator")
-    set(CMAKE_OSX_SYSROOT iphonesimulator)
-    foreach(arch ${CMAKE_OSX_ARCHITECTURES})
-        set(CMAKE_ASM_FLAGS "${CMAKE_ASM_FLAGS} -arch ${arch}")
-    endforeach()
 
+if (CMAKE_OSX_SYSROOT STREQUAL "iphonesimulator")
+    set(CMAKE_OSX_DEPLOYMENT_TARGET "12.0" CACHE STRING "Minimum iOS deployment version")
     set(INFOPLIST_FILE "${CMAKE_CURRENT_SOURCE_DIR}/Info.plist.ios")
 elseif ("${TARGET_OS}" STREQUAL "macos")
-    set(CMAKE_OSX_DEPLOYMENT_TARGET "10.13" CACHE STRING "Minimum macOS deployment version")
-    set(CMAKE_ASM_FLAGS "-mmacosx-version-min=10.13")
-    foreach(arch ${CMAKE_OSX_ARCHITECTURES})
-        set(CMAKE_ASM_FLAGS "${CMAKE_ASM_FLAGS} -arch ${arch}")
-    endforeach()
-
+    set(CMAKE_OSX_DEPLOYMENT_TARGET "10.15" CACHE STRING "Minimum macOS deployment version")
     set(INFOPLIST_FILE "${CMAKE_CURRENT_SOURCE_DIR}/Info.plist.macos")
 elseif ("${TARGET_OS}" STREQUAL "ios")
-    set(CMAKE_SYSTEM_PROCESSOR "arm64")
-    set(CMAKE_OSX_ARCHITECTURES "arm64")
-    set(CMAKE_SYSTEM_NAME "Darwin")
-    set(CMAKE_OSX_SYSROOT iphoneos)
-    set(CMAKE_C_COMPILER_ARG1 "-arch ${CMAKE_SYSTEM_PROCESSOR}")
-    set(CMAKE_CXX_COMPILER_ARG1 "-arch ${CMAKE_SYSTEM_PROCESSOR}")
+    set(CMAKE_OSX_DEPLOYMENT_TARGET "12.0" CACHE STRING "Minimum iOS deployment version")
     set(CMAKE_XCODE_ATTRIBUTE_BITCODE_GENERATION_MODE bitcode CACHE INTERNAL "")
-    set(SDK_NAME_VERSION_FLAGS "-mios-version-min=$ENV{IPHONEOS_DEPLOYMENT_TARGET}")
-    add_compile_options(-arch ${CMAKE_SYSTEM_PROCESSOR} -fembed-bitcode)
-
-    string(REPLACE "." ";" VERSION_LIST $ENV{IPHONEOS_DEPLOYMENT_TARGET})
-    list(GET VERSION_LIST 0 IOS_VERSION_MAJOR)
-    list(GET VERSION_LIST 1 IOS_VERSION_MINOR)
-    add_definitions(-DIOS_VERSION_MAJOR=${IOS_VERSION_MAJOR})
-    add_definitions(-DIOS_VERSION_MINOR=${IOS_VERSION_MINOR})
-
+    add_compile_options(-fembed-bitcode)
     set(INFOPLIST_FILE "${CMAKE_CURRENT_SOURCE_DIR}/Info.plist.ios")
 else ()
     message(FATAL_ERROR "unknown os: ${TARGET_OS}")
 endif ()
 
+set(CMAKE_POLICY_DEFAULT_CMP0063 NEW) # allows visibility=hidden for static targets for subprojects
+cmake_policy(SET CMP0063 NEW) # allows visibility=hidden for static targets for this project
+set(CMAKE_C_VISIBILITY_PRESET hidden)
+set(CMAKE_CXX_VISIBILITY_PRESET hidden)
+set(CMAKE_OBJC_VISIBILITY_PRESET default)
+set(CMAKE_OBJCXX_VISIBILITY_PRESET default)
 
-project(dnsproxy_framework)
+project(dnsproxy_framework C CXX OBJC OBJCXX)
 
 # Ensure that API is compatible with minimum MacOS version
 add_compile_options(-Werror=unguarded-availability)
-link_libraries(-Wl,-application_extension)
+link_libraries(-Wl,-application_extension -Wl,-x)
 # TODO: Remove this workaround after updating to XCode 15.1: https://developer.apple.com/documentation/xcode-release-notes/xcode-15-release-notes#Linking
 if (CMAKE_CXX_COMPILER_ID MATCHES "AppleClang" AND CMAKE_C_COMPILER_VERSION VERSION_GREATER_EQUAL "15.0.0")
     add_link_options(-Wl,-ld_classic)
@@ -107,7 +95,8 @@ if (NOT TARGET dnsproxy)
     add_subdirectory(${DNS_LIBS_DIR}/proxy ${CMAKE_BINARY_DIR}/proxy)
 endif ()
 
-target_link_libraries(AGDnsProxy dnsproxy resolv)
+find_package(native_libs_common REQUIRED)
+target_link_libraries(AGDnsProxy dnsproxy resolv native_libs_common::native_libs_common)
 
 if (APPLE)
     target_link_libraries(AGDnsProxy "-framework Foundation" "-framework CoreFoundation" "-framework NetworkExtension")
@@ -117,6 +106,19 @@ enable_testing()
 if (NOT TARGET tests)
     add_custom_target(tests)
 endif ()
+
+function(add_test_target TARGET_NAME SOURCE_FILE)
+    add_executable(${TARGET_NAME} EXCLUDE_FROM_ALL ${SOURCE_FILE})
+    target_compile_options(${TARGET_NAME} PRIVATE "-fobjc-arc")
+    target_compile_options(${TARGET_NAME} PRIVATE -F${CMAKE_CURRENT_BINARY_DIR})
+    target_link_libraries(${TARGET_NAME}
+            "-F${CMAKE_CURRENT_BINARY_DIR}"
+            "-Wl,-rpath,${CMAKE_CURRENT_BINARY_DIR}"
+            "-framework AGDnsProxy -framework Foundation")
+    add_dependencies(${TARGET_NAME} AGDnsProxy)
+    add_dependencies(tests ${TARGET_NAME})
+    add_test(NAME ${TARGET_NAME}Test COMMAND ${TARGET_NAME})
+endfunction()
 
 if("${TARGET_OS}" STREQUAL "macos")
     add_executable(test_AGDnsProxyListenerFailsInit EXCLUDE_FROM_ALL test_AGDnsProxyListenerFailsInit.mm)
@@ -182,26 +184,4 @@ if("${TARGET_OS}" STREQUAL "macos")
             "-framework AGDnsProxy -framework Foundation")
     add_dependencies(test_AGDnsProxyStandalone AGDnsProxy)
     add_dependencies(tests test_AGDnsProxyStandalone)
-
-    add_executable(test_AGFilteringLogAction EXCLUDE_FROM_ALL test_AGFilteringLogAction.mm)
-    target_compile_options(test_AGFilteringLogAction PRIVATE "-fobjc-arc")
-    target_compile_options(test_AGFilteringLogAction PRIVATE -F${CMAKE_CURRENT_BINARY_DIR})
-    target_link_libraries(test_AGFilteringLogAction
-            "-F${CMAKE_CURRENT_BINARY_DIR}"
-            "-Wl,-rpath,${CMAKE_CURRENT_BINARY_DIR}"
-            "-framework AGDnsProxy -framework Foundation")
-    add_dependencies(test_AGFilteringLogAction AGDnsProxy)
-    add_dependencies(tests test_AGFilteringLogAction)
-    add_test(AGFilteringLogActionTest test_AGFilteringLogAction)
-
-    add_executable(test_AGDnsProxyXPC EXCLUDE_FROM_ALL test_AGDnsProxyXPC.mm)
-    target_compile_options(test_AGDnsProxyXPC PRIVATE "-fobjc-arc")
-    target_compile_options(test_AGDnsProxyXPC PRIVATE -F${CMAKE_CURRENT_BINARY_DIR})
-    target_link_libraries(test_AGDnsProxyXPC
-            "-F${CMAKE_CURRENT_BINARY_DIR}"
-            "-Wl,-rpath,${CMAKE_CURRENT_BINARY_DIR}"
-            "-framework AGDnsProxy -framework Foundation")
-    add_dependencies(test_AGDnsProxyXPC AGDnsProxy)
-    add_dependencies(tests test_AGDnsProxyXPC)
-    add_test(AGDnsProxyXPCTest test_AGDnsProxyXPC)
 endif()

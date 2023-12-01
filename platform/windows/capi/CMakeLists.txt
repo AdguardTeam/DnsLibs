@@ -1,12 +1,8 @@
-cmake_minimum_required(VERSION 3.1)
+cmake_minimum_required(VERSION 3.24)
+if(NOT CMAKE_INSTALL_PREFIX MATCHES "conan2")
+    set(CMAKE_PROJECT_TOP_LEVEL_INCLUDES "../../../cmake/conan_provider.cmake")
+endif()
 project(AdguardDns C CXX)
-include(../../../cmake/conan_bootstrap.cmake)
-
-if (WIN32)
-    conan_bootstrap(SRCROOT "../../.." CONANFILE "conanfile_windows.txt" SCOPE_NAME capi)
-else ()
-    conan_bootstrap(SRCROOT "../../.." CONANFILE "conanfile.txt" SCOPE_NAME capi)
-endif ()
 
 set(CMAKE_POLICY_DEFAULT_CMP0063 NEW) # allows visibility=hidden for static targets for subprojects
 cmake_policy(SET CMP0063 NEW) # allows visibility=hidden for static targets for this project
@@ -16,6 +12,7 @@ set(CMAKE_CXX_VISIBILITY_PRESET hidden)
 
 set(CMAKE_C_STANDARD 11)
 set(CMAKE_CXX_STANDARD 20)
+set(CMAKE_MSVC_RUNTIME_LIBRARY MultiThreaded)
 
 if (MSVC)
     set(LinkerFlags
@@ -103,7 +100,8 @@ set_target_properties(${LIBRARY_NAME} PROPERTIES POSITION_INDEPENDENT_CODE ON)
 target_link_libraries(${LIBRARY_NAME} dnsproxy)
 
 if (WIN32)
-    target_link_libraries(${LIBRARY_NAME} CONAN_PKG::detours)
+    find_package(detours REQUIRED)
+    target_link_libraries(${LIBRARY_NAME} detours::detours)
 endif()
 
 add_custom_target(generate_api_hash)

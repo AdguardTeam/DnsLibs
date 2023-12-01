@@ -2,8 +2,7 @@
 
 
 #include <bitset>
-#include <magic_enum.hpp>
-#include <memory>
+#include <magic_enum/magic_enum.hpp>
 #include <optional>
 #include <variant>
 

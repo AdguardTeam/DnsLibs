@@ -1,7 +1,5 @@
-cmake_minimum_required(VERSION 3.1)
+cmake_minimum_required(VERSION 3.24)
 project(dnslibs_net)
-include(../cmake/conan_bootstrap.cmake)
-conan_bootstrap(SRCROOT ".." CONANFILE "../conanfile.py" SCOPE_NAME agdns)
 
 set(CMAKE_CXX_STANDARD 20)
 
@@ -44,9 +42,13 @@ if (NOT TARGET dnslibs_common)
     add_subdirectory(${DNSLIBS_DIR}/common ${CMAKE_BINARY_DIR}/common)
 endif ()
 
+find_package(libevent REQUIRED)
+find_package(magic_enum REQUIRED)
+find_package(OpenSSL REQUIRED)
+
 target_include_directories(dnslibs_net PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/include")
 target_include_directories(dnslibs_net PRIVATE ${OPENSSL_INCLUDE_DIR})
-target_link_libraries(dnslibs_net dnslibs_common CONAN_PKG::libevent CONAN_PKG::openssl CONAN_PKG::magic_enum)
+target_link_libraries(dnslibs_net dnslibs_common libevent::libevent openssl::openssl magic_enum::magic_enum)
 
 if (APPLE)
     target_link_libraries(dnslibs_net "-framework CoreFoundation" "-framework Security")

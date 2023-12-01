@@ -191,8 +191,8 @@ private:
     static std::string get_cache_key(const ldns_pkt *request) {
         const auto *question = ldns_rr_list_rr(ldns_pkt_question(request), 0);
         std::string key = fmt::format("{}|{}|{}{}|", // '|' is to avoid collisions
-                ldns_rr_get_type(question), ldns_rr_get_class(question), ldns_pkt_edns_do(request) ? "1" : "0",
-                ldns_pkt_cd(request) ? "1" : "0");
+                (int) ldns_rr_get_type(question), (int) ldns_rr_get_class(question),
+                ldns_pkt_edns_do(request) ? "1" : "0", ldns_pkt_cd(request) ? "1" : "0");
 
         // Compute the domain name, in lower case for case-insensitivity
         const auto *owner = ldns_rr_owner(question);

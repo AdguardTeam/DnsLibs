@@ -1,5 +1,6 @@
 #include <sodium.h>
 #include <utility>
+#include <magic_enum/magic_enum.hpp>
 
 #include "common/utils.h"
 #include "dns/dnscrypt/dns_crypt_cipher.h"
@@ -118,7 +119,7 @@ CreateCipherResult create_cipher(CryptoConstruction value) {
         return (Cipher *) &result;
     }
     default:
-        return make_error(CreateCipherError::AE_UNKNOWN_CIPHER, fmt::to_string(value));
+        return make_error(CreateCipherError::AE_UNKNOWN_CIPHER, magic_enum::enum_name(value));
     }
 }
 
