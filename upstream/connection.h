@@ -108,9 +108,7 @@ public:
         tracelog(m_log, "{} Created", m_address_str);
     };
     virtual ~ConnectionPoolBase() {
-        if (auto *upstream = m_upstream.lock().get()) {
-            tracelog(m_log, "{} Destroyed", m_address_str);
-        }
+        tracelog(m_log, "{} Destroyed", m_address_str);
     }
 
     /**

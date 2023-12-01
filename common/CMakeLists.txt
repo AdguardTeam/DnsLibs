@@ -37,7 +37,11 @@ target_link_libraries(dnslibs_common magic_enum::magic_enum native_libs_common::
 if (NOT MSVC)
     target_compile_options(dnslibs_common PRIVATE -Wall -Wextra)
     target_compile_options(dnslibs_common PUBLIC -Wno-format-nonliteral) # for fmt's chrono build
-    target_compile_options(dnslibs_common PUBLIC -Wno-unknown-warning-option -Wno-deprecated-experimental-coroutine)
+    if (CMAKE_C_COMPILER_ID MATCHES ".*Clang")
+        target_compile_options(dnslibs_common PUBLIC -Wno-unknown-warning-option -Wno-deprecated-experimental-coroutine)
+    else()
+        target_compile_options(dnslibs_common PUBLIC -Wno-return-type -Wno-missing-field-initializers -Wno-redundant-move -Wno-array-bounds -Wno-changes-meaning)
+    endif()
     target_compile_options(dnslibs_common PRIVATE -fno-exceptions)
 else()
     target_compile_options(dnslibs_common PRIVATE /W3)

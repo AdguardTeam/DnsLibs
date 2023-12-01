@@ -1,6 +1,7 @@
 #include "dns/net/tcp_dns_buffer.h"
 #include <cassert>
 #include <cstring>
+#include <utility>
 
 #ifndef _WIN32
 #include <netinet/in.h>

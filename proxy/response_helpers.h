@@ -126,7 +126,7 @@ public:
         } else { // hosts-style IP rule
             return create_response_with_ips(request, settings, rules);
         }
-        ldns_pkt *result;
+        ldns_pkt *result = nullptr;
         switch (mode) {
         case DnsProxyBlockingMode::REFUSED:
             result = create_refused_response(request, settings);
