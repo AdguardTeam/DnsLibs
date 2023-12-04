@@ -1,6 +1,8 @@
 #import "AGDnsProxyXPC.h"
 
+#pragma GCC visibility push(hidden)
 #import "common/logger.h"
+#pragma GCC visibility pop
 
 static ag::Logger gLogger{"AGDnsProxyXPCImpl"};
 

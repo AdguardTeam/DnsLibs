@@ -4,7 +4,7 @@
 #import "NSTask+AGUtils.h"
 #endif
 
-#pragma visibility push(hidden)
+#pragma GCC visibility push(hidden)
 #import <sys/socket.h>
 #import <netinet/in.h>
 #import <arpa/inet.h>
@@ -20,7 +20,7 @@
 #import "common/logger.h"
 #import "dns/proxy/dnsproxy.h"
 #import "dns/upstream/upstream_utils.h"
-#pragma visibility pop
+#pragma GCC visibility pop
 
 #import "AGDnsXPCObject.h"
 
