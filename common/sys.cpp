@@ -4,10 +4,18 @@
 #include "common/utils.h"
 #include "dns/common/sys.h"
 
+#if defined(__linux__) || defined(__LINUX__) || defined(__MACH__)
+#include <sys/resource.h>
+#elif defined(_WIN32)
+#include <windows.h>
+#include <errno.h>
+#include <psapi.h>
+#include <stdio.h>
+#endif
+
 namespace ag::dns::sys {
 
 #if defined(__linux__) || defined(__LINUX__) || defined(__MACH__)
-#include <sys/resource.h>
 
 int error_code() {
     return errno;
@@ -28,11 +36,6 @@ size_t current_rss() {
 }
 
 #elif defined(_WIN32)
-#include <windows.h>
-
-#include <errno.h>
-#include <psapi.h>
-#include <stdio.h>
 
 int error_code() {
     int err;
