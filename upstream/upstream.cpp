@@ -60,8 +60,9 @@ struct UpstreamFactory::Impl {
 
 static auto get_address_scheme_iterator(std::string_view address) {
     using namespace std::placeholders;
-    return std::find_if(std::begin(SCHEME_WITH_SUFFIX), std::end(SCHEME_WITH_SUFFIX),
-            std::bind(&ag::utils::starts_with, address, _1));
+    return std::find_if(std::begin(SCHEME_WITH_SUFFIX), std::end(SCHEME_WITH_SUFFIX), [&](auto scheme) {
+        return address.starts_with(scheme);
+    });
 }
 
 static Scheme get_address_scheme(std::string_view address) {
@@ -199,9 +200,8 @@ UpstreamFactory::~UpstreamFactory() = default;
 
 UpstreamFactory::CreateResult UpstreamFactory::create_upstream(const UpstreamOptions &opts) const {
     bool have_scheme = (opts.address.find("://") != std::string_view::npos);
-    CreateResult result = have_scheme
-            ? m_factory->create_upstream(opts)
-            : create_upstream_plain(opts, m_factory->config, std::vector<CertFingerprint>());
+    CreateResult result = have_scheme ? m_factory->create_upstream(opts)
+                                      : create_upstream_plain(opts, m_factory->config, std::vector<CertFingerprint>());
 
     if (result.has_value()) {
         auto init_err = result.value()->init();

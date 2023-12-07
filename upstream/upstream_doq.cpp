@@ -239,7 +239,7 @@ void DoqUpstream::send_requests() {
 Error<Upstream::InitError> DoqUpstream::init() {
     std::string_view url = m_options.address;
 
-    assert(ag::utils::starts_with(url, SCHEME));
+    assert(url.starts_with(SCHEME));
     url.remove_prefix(SCHEME.size());
     url = url.substr(0, url.find('/'));
 

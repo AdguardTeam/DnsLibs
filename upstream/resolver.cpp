@@ -55,7 +55,7 @@ static bool check_ip_address(std::string_view address) {
     const AllowedScheme *found = nullptr;
 
     for (const AllowedScheme &entry : ALLOWED_SCHEMES) {
-        if (utils::starts_with(address, entry.scheme)) {
+        if (address.starts_with(entry.scheme)) {
             found = &entry;
             break;
         }
@@ -74,7 +74,7 @@ static bool check_ip_address(std::string_view address) {
 
 static std::string get_server_address(const Logger &log, std::string_view address) {
     std::string result(address);
-    if (ag::utils::starts_with(result, STAMP_URL_PREFIX_WITH_SCHEME)) {
+    if (result.starts_with(STAMP_URL_PREFIX_WITH_SCHEME)) {
         std::optional<std::string> decoded = get_address_from_stamp(log, result);
         if (decoded.has_value()) {
             dbglog(log, "Stamp '{}' decoded into '{}'", address, decoded.value());

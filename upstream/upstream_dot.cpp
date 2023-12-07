@@ -106,7 +106,7 @@ public:
 };
 
 static std::string_view strip_dot_url(std::string_view url) {
-    assert(utils::starts_with(url, DotUpstream::SCHEME));
+    assert(url.starts_with(DotUpstream::SCHEME));
     url.remove_prefix(DotUpstream::SCHEME.length());
     url = url.substr(0, url.find('/'));
     return url;

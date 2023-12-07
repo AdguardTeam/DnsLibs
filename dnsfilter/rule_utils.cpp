@@ -226,7 +226,7 @@ static inline bool extract_modifiers(
     for (const std::string_view &modifier : modifiers) {
         const SupportedModifierDescriptor *found = nullptr;
         for (const SupportedModifierDescriptor &descr : SUPPORTED_MODIFIERS) {
-            if (!ag::utils::starts_with(modifier, descr.name)) {
+            if (!modifier.starts_with(descr.name)) {
                 continue;
             }
             if (modifier.length() > descr.name.length()) {
@@ -280,7 +280,7 @@ static inline bool check_regex(std::string_view str) {
 
 static int remove_skippable_prefixes(std::string_view &rule) {
     for (std::string_view prefix : SKIPPABLE_PREFIXES) {
-        if (ag::utils::starts_with(rule, prefix)) {
+        if (rule.starts_with(prefix)) {
             rule.remove_prefix(prefix.length());
             return rule_utils::MPM_DOMAIN_START_ASSERTED;
         }
@@ -289,7 +289,7 @@ static int remove_skippable_prefixes(std::string_view &rule) {
 }
 
 static inline int remove_special_prefixes(std::string_view &rule) {
-    if (ag::utils::starts_with(rule, "||")) {
+    if (rule.starts_with("||")) {
         rule.remove_prefix(2);
         return rule_utils::MPM_DOMAIN_START_ASSERTED;
     }
@@ -310,7 +310,7 @@ static inline int remove_special_suffixes(std::string_view &rule) {
     while (suffixes_to_remove.end()
             != (iter = std::find_if(
                         suffixes_to_remove.begin(), suffixes_to_remove.end(), [&rule](std::string_view suffix) {
-                            return ag::utils::ends_with(rule, suffix);
+                            return rule.ends_with(suffix);
                         }))) {
         rule.remove_suffix(iter->length());
         r = rule_utils::MPM_LINE_END_ASSERTED;
@@ -417,7 +417,7 @@ static std::string_view skip_special_chars(std::string_view str) {
 
     std::string_view seq;
     for (std::string_view i : SPEC_SEQS) {
-        if (ag::utils::starts_with(str, i)) {
+        if (str.starts_with(i)) {
             seq = i;
             break;
         }
@@ -453,7 +453,7 @@ static std::optional<rule_utils::Rule> parse_adblock_rule(std::string_view str, 
     using Rule = rule_utils::Rule;
 
     std::string_view orig_str = str;
-    bool is_exception = ag::utils::starts_with(str, EXCEPTION_MARKER);
+    bool is_exception = str.starts_with(EXCEPTION_MARKER);
     if (is_exception) {
         str.remove_prefix(EXCEPTION_MARKER.length());
     }
@@ -572,7 +572,7 @@ std::string rule_utils::get_regex(const Rule &r) {
     assert(r.match_method == Rule::MMID_REGEX || r.match_method == Rule::MMID_SHORTCUTS_AND_REGEX);
 
     std::string_view text = r.public_part.text;
-    if (ag::utils::starts_with(text, EXCEPTION_MARKER)) {
+    if (text.starts_with(EXCEPTION_MARKER)) {
         text.remove_prefix(EXCEPTION_MARKER.length());
     }
 

@@ -116,8 +116,8 @@ static std::pair<bool, std::optional<rule_utils::DnsrewriteInfo>> parse_paramete
     static constexpr size_t SHORTHAND_PARTS_NUM = 1;
     static constexpr size_t FULLY_QUALIFIED_PARTS_NUM = magic_enum::enum_count<part_idx>();
 
-    std::vector parts
-            = !params.empty() ? ag::utils::split_by(params, PARTS_DELIM, true) : std::vector<std::string_view>{};
+    std::vector parts =
+            !params.empty() ? ag::utils::split_by(params, PARTS_DELIM, true) : std::vector<std::string_view>{};
     if (!parts.empty() && parts.size() != SHORTHAND_PARTS_NUM && parts.size() != FULLY_QUALIFIED_PARTS_NUM) {
         ru_dbglog(log, "Wrong number of parts: {}", parts.size());
         return {false, std::nullopt};
@@ -198,8 +198,8 @@ static bool parse_value_by_rrtype(
                 && (match_info.pattern_mode
                         & (rule_utils::MPM_LINE_START_ASSERTED | rule_utils::MPM_DOMAIN_START_ASSERTED))
                 && (match_info.pattern_mode & rule_utils::MPM_LINE_END_ASSERTED)
-                && (ag::utils::ends_with(match_info.text, rule_utils::REVERSE_DNS_DOMAIN_SUFFIX)
-                        || ag::utils::ends_with(match_info.text, rule_utils::REVERSE_IPV6_DNS_DOMAIN_SUFFIX));
+                && (match_info.text.ends_with(rule_utils::REVERSE_DNS_DOMAIN_SUFFIX)
+                        || match_info.text.ends_with(rule_utils::REVERSE_IPV6_DNS_DOMAIN_SUFFIX));
         if (!is_valid_pattern) {
             ru_dbglog(log, "Invalid rule pattern for such kind of RR type");
             return false;
@@ -348,8 +348,8 @@ static ApplicableDnsrewriteRules get_applicable_rules(const std::vector<const Dn
     std::sort(applicable_rules.blocking.begin(), applicable_rules.blocking.end(), has_higher_priority);
 
     if (applicable_rules.blocking.size() > 1) {
-        const auto &info = std::get<DnsFilter::AdblockRuleInfo>(applicable_rules.blocking[0]->content)
-                                   .params->dnsrewrite.value();
+        const auto &info =
+                std::get<DnsFilter::AdblockRuleInfo>(applicable_rules.blocking[0]->content).params->dnsrewrite.value();
         if (info.rcode != LDNS_RCODE_NOERROR || info.rrtype == LDNS_RR_TYPE_CNAME) {
             applicable_rules.blocking.resize(1);
         }

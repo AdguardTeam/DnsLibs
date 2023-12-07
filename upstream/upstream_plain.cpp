@@ -11,7 +11,7 @@ using std::chrono::duration_cast;
 namespace ag::dns {
 
 static SocketAddress prepare_address(std::string_view address_string) {
-    if (utils::starts_with(address_string, PlainUpstream::TCP_SCHEME)) {
+    if (address_string.starts_with(PlainUpstream::TCP_SCHEME)) {
         address_string.remove_prefix(PlainUpstream::TCP_SCHEME.size());
     }
     auto address = ag::utils::str_to_socket_address(address_string);
@@ -24,7 +24,7 @@ static SocketAddress prepare_address(std::string_view address_string) {
 PlainUpstream::PlainUpstream(const UpstreamOptions &opts, const UpstreamFactoryConfig &config)
         : Upstream(opts, config)
         , m_log(AG_FMT("Plain upstream ({})", opts.address))
-        , m_prefer_tcp(utils::starts_with(opts.address, TCP_SCHEME))
+        , m_prefer_tcp(opts.address.starts_with(TCP_SCHEME))
         , m_address(prepare_address(opts.address))
         , m_shutdown_guard(std::make_shared<bool>(true))
 {

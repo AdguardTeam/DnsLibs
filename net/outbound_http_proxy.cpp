@@ -264,11 +264,11 @@ void HttpOProxy::on_close(void *arg, Error<SocketError> error) {
 void HttpOProxy::handle_http_response_chunk(Connection *conn, std::string_view chunk) {
     std::string_view seek;
 
-    if (conn->recv_buffer.empty() && utils::ends_with(chunk, "\r\n\r\n")) {
+    if (conn->recv_buffer.empty() && chunk.ends_with("\r\n\r\n")) {
         seek = chunk;
     } else {
         conn->recv_buffer.append(chunk);
-        if (!utils::ends_with(conn->recv_buffer, "\r\n\r\n")) {
+        if (!conn->recv_buffer.ends_with("\r\n\r\n")) {
             return;
         }
 
@@ -277,8 +277,8 @@ void HttpOProxy::handle_http_response_chunk(Connection *conn, std::string_view c
 
     log_conn(this, conn->id, dbg, "{}", seek);
 
-    if (!utils::starts_with(seek, "HTTP/1.1 200 Connection established\r\n")
-            && !utils::starts_with(seek, "HTTP/1.1 200 OK\r\n")) {
+    if (!seek.starts_with("HTTP/1.1 200 Connection established\r\n")
+            && !seek.starts_with("HTTP/1.1 200 OK\r\n")) {
         on_close(conn, make_error(SocketError::AE_BAD_PROXY_REPLY));
         return;
     }

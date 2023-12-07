@@ -338,7 +338,7 @@ std::string ServerStamp::str() const {
 }
 
 ServerStamp::FromStringResult ServerStamp::from_string(std::string_view url) {
-    if (!utils::starts_with(url, STAMP_URL_PREFIX_WITH_SCHEME)) {
+    if (!url.starts_with(STAMP_URL_PREFIX_WITH_SCHEME)) {
         return make_error(FromStringError::AE_NO_STAMP_PREFIX);
     }
     std::string_view encoded(url);

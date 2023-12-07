@@ -833,8 +833,8 @@ Filter::MatchContext::MatchContext(DnsFilter::MatchParam param)
             = rule_utils::REVERSE_IPV6_DNS_DOMAIN_SUFFIX.substr(
                     0, rule_utils::REVERSE_IPV6_DNS_DOMAIN_SUFFIX.length() - 1);
     if (this->rr_type == LDNS_RR_TYPE_PTR && this->host.back() != '.'
-            && (utils::ends_with(this->host, REVERSE_DNS_DOMAIN_SUFFIX)
-                    || utils::ends_with(this->host, REVERSE_IPV6_DNS_DOMAIN_SUFFIX))) {
+            && (this->host.ends_with(REVERSE_DNS_DOMAIN_SUFFIX)
+                    || this->host.ends_with(REVERSE_IPV6_DNS_DOMAIN_SUFFIX))) {
         this->reverse_lookup_fqdn = AG_FMT("{}.", this->host);
     }
 

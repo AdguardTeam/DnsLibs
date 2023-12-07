@@ -27,7 +27,7 @@ static const std::string TCP_SCHEME = "tcp://";
 std::atomic<uint16_t> DnsFramedConnection::m_next_request_id;
 
 static SocketAddress prepare_address(std::string_view address_string) {
-    if (utils::starts_with(address_string, TCP_SCHEME)) {
+    if (address_string.starts_with(TCP_SCHEME)) {
         address_string.remove_prefix(TCP_SCHEME.size());
     }
     auto address = ag::utils::str_to_socket_address(address_string);
