@@ -27,7 +27,7 @@ public:
     DotConnection(const ConstructorAccess &access, EventLoop &loop, const ConnectionPoolPtr &pool,
             const std::string &address_str)
             : DnsFramedConnection(access, loop, pool, address_str) {
-        this->m_idle_timeout = DOT_IDLE_TIMEOUT;
+        m_idle_timeout = DOT_IDLE_TIMEOUT;
     }
 
     static DotConnectionPtr create(EventLoop &loop, const ConnectionPoolPtr &pool, const std::string &address_str) {
@@ -148,14 +148,14 @@ DotUpstream::DotUpstream(const UpstreamOptions &opts, const UpstreamFactoryConfi
 }
 
 Error<Upstream::InitError> DotUpstream::init() {
-    auto error = this->init_url_port(false, false, DEFAULT_DOT_PORT);
+    auto error = this->init_url_port(/*allow_creds*/ false, /*allow_path*/ false, DEFAULT_DOT_PORT);
     if (error) {
         return error;
     }
 
-    if (this->m_options.bootstrap.empty()
-        && std::holds_alternative<std::monostate>(this->m_options.resolved_server_ip)
-        && !SocketAddress(m_url.get_hostname(), m_port).valid()) {
+    if (m_options.bootstrap.empty()
+            && std::holds_alternative<std::monostate>(m_options.resolved_server_ip)
+            && !SocketAddress(m_url.get_hostname(), m_port).valid()) {
         return make_error(InitError::AE_EMPTY_BOOTSTRAP);
     }
 
