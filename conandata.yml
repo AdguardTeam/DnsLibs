@@ -283,3 +283,5 @@ commit_hash:
     hash: "32a50683f4b198102ec338682f228faafccc14fe"
   "2.4.24":
     hash: "21717eb4e8d722e5ed814c84ddc08727f4839c59"
+  "2.4.25":
+    hash: "b090b0916d52ee3561e40554451efd6fa71409af"
