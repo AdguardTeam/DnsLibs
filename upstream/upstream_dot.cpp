@@ -121,25 +121,17 @@ static Result<std::string_view, Upstream::InitError> get_host_name(std::string_v
 }
 
 static Result<BootstrapperPtr, Upstream::InitError> create_bootstrapper(
-        const UpstreamOptions &opts, const UpstreamFactoryConfig &config) {
+        const UpstreamOptions &opts, const UpstreamFactoryConfig &config,
+        const ada::url_aggregator url, uint16_t port) {
     std::string address;
-    int port = 0;
 
     if (auto resolved = SocketAddress(opts.resolved_server_ip, DEFAULT_DOT_PORT); resolved.valid()) {
         address = resolved.host_str();
     } else {
-        auto split_result = utils::split_host_port(strip_dot_url(opts.address));
-        if (split_result.has_error()) {
-            return make_error(Upstream::InitError::AE_INVALID_ADDRESS);
-        }
-        auto [host, port_str] = split_result.value();
-        address = host;
-        if (!port_str.empty()) {
-            port = std::strtol(std::string(port_str).c_str(), nullptr, 10);
-        }
+        address = url.get_hostname();
     }
 
-    return std::make_unique<Bootstrapper>(Bootstrapper::Params{address, (port == 0) ? DEFAULT_DOT_PORT : port,
+    return std::make_unique<Bootstrapper>(Bootstrapper::Params{address, port,
             opts.bootstrap, config.timeout, config, opts.outbound_interface});
 }
 
@@ -156,20 +148,20 @@ DotUpstream::DotUpstream(const UpstreamOptions &opts, const UpstreamFactoryConfi
 }
 
 Error<Upstream::InitError> DotUpstream::init() {
-    if (auto hostname = get_host_name(this->m_options.address);
-            hostname.has_error() || hostname->empty()) {
-        return make_error(InitError::AE_INVALID_ADDRESS);
-    } else { // NOLINT: clang-tidy is wrong here
-        if (this->m_options.bootstrap.empty()
-                && std::holds_alternative<std::monostate>(this->m_options.resolved_server_ip)
-                && !SocketAddress(hostname.value(), 0).valid()) {
-            return make_error(InitError::AE_EMPTY_BOOTSTRAP);
-        }
+    auto error = this->init_url_port(false, false, DEFAULT_DOT_PORT);
+    if (error) {
+        return error;
+    }
+
+    if (this->m_options.bootstrap.empty()
+        && std::holds_alternative<std::monostate>(this->m_options.resolved_server_ip)
+        && !SocketAddress(m_url.get_hostname(), m_port).valid()) {
+        return make_error(InitError::AE_EMPTY_BOOTSTRAP);
     }
 
     m_pool = std::make_shared<ConnectionPool<DotConnection>>(config().loop, shared_from_this(), 10);
 
-    auto create_result = create_bootstrapper(this->m_options, this->m_config);
+    auto create_result = create_bootstrapper(m_options, m_config, m_url, m_port);
     if (create_result.has_error()) {
         return make_error(InitError::AE_BOOTSTRAPPER_INIT_FAILED, create_result.error());
     }

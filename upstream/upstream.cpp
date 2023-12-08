@@ -2,6 +2,7 @@
 #include <chrono>
 #include <functional>
 
+#include <ada.h>
 #include <magic_enum/magic_enum.hpp>
 
 #include "common/base64.h"
@@ -202,15 +203,41 @@ UpstreamFactory::CreateResult UpstreamFactory::create_upstream(const UpstreamOpt
     bool have_scheme = (opts.address.find("://") != std::string_view::npos);
     CreateResult result = have_scheme ? m_factory->create_upstream(opts)
                                       : create_upstream_plain(opts, m_factory->config, std::vector<CertFingerprint>());
-
     if (result.has_value()) {
         auto init_err = result.value()->init();
         if (init_err) {
             return make_error(UpstreamFactory::UpstreamCreateError::AE_INIT_FAILED, init_err);
         }
     }
-
     return result;
+}
+
+Error<Upstream::InitError> Upstream::init_url_port(bool allow_creds, bool allow_path, uint16_t default_port) {
+    auto url = ada::parse<ada::url_aggregator>(m_options.address, nullptr);
+    if (!url) {
+        return make_error(InitError::AE_INVALID_ADDRESS, "Invalid URL");
+    }
+    if (url->get_hostname().empty()) {
+        return make_error(InitError::AE_INVALID_ADDRESS, "Host cannot be empty");
+    }
+    if (allow_creds && url->get_username().empty() != url->get_password().empty()) {
+        return make_error(InitError::AE_INVALID_ADDRESS, "Both username and password should be specified");
+    }
+    if (!allow_creds && (!url->get_username().empty() || !url->get_password().empty())) {
+        return make_error(InitError::AE_INVALID_ADDRESS, "Unexpected credentials");
+    }
+    if (!allow_path && !url->get_pathname().empty() && url->get_pathname() != "/") {
+        return make_error(InitError::AE_INVALID_ADDRESS, "Unexpected path");
+    }
+    if (allow_path && url->get_pathname().empty()) {
+        url->set_pathname("/");
+    }
+    uint16_t port = url->get_port().empty()
+                    ? default_port
+                    : ag::utils::to_integer<uint16_t>(url->get_port()).value(); // NOLINT(*-unchecked-optional-access)
+    m_url = std::move(url.value());
+    m_port = port;
+    return {};
 }
 
 } // namespace ag::dns

@@ -40,6 +40,7 @@ class DnsLibsConan(ConanFile):
         self.requires("pcre2/10.37@adguard_team/native_libs_common", transitive_headers=True)
         self.requires("tldregistry/2022-12-26@adguard_team/native_libs_common", transitive_headers=True)
         self.requires("openssl/boring-2023-05-17@adguard_team/native_libs_common", transitive_headers=True)
+        self.requires("ada/2.7.4", transitive_headers=True)
         if self.settings.os == "Windows":
             self.requires("detours/2021-04-14@adguard_team/native_libs_common", transitive_headers=True)
 
@@ -125,6 +126,7 @@ class DnsLibsConan(ConanFile):
             "native_libs_common::native_libs_common",
             "tldregistry::tldregistry",
             "openssl::openssl",
+            "add::ada",
         ]
         if self.settings.os == "Windows":
             self.cpp_info.requires.append("detours::detours")

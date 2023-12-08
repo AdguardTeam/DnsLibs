@@ -237,32 +237,21 @@ void DoqUpstream::send_requests() {
 }
 
 Error<Upstream::InitError> DoqUpstream::init() {
-    std::string_view url = m_options.address;
-
-    assert(url.starts_with(SCHEME));
-    url.remove_prefix(SCHEME.size());
-    url = url.substr(0, url.find('/'));
-
-    auto split_result = utils::split_host_port(url);
-    if (split_result.has_error()) {
-        return make_error(InitError::AE_INVALID_ADDRESS, split_result.error());
+    auto error = this->init_url_port(false, false, DEFAULT_DOQ_PORT);
+    if (error) {
+        return error;
     }
-    m_server_name = ag::utils::trim(split_result.value().first);
-    if (m_server_name.empty()) {
-        return make_error(InitError::AE_EMPTY_SERVER_NAME);
-    }
-    m_port = ag::utils::to_integer<uint16_t>(split_result.value().second).value_or(DEFAULT_DOQ_PORT);
 
     if (!std::holds_alternative<std::monostate>(m_options.resolved_server_ip)) {
         m_server_addresses.emplace_back(m_options.resolved_server_ip, DEFAULT_DOQ_PORT);
     }
 
     if (m_server_addresses.empty()) {
-        if (m_options.bootstrap.empty() && !SocketAddress(m_server_name, 0).valid()) {
+        if (m_options.bootstrap.empty() && !SocketAddress(m_url.get_hostname(), m_port).valid()) {
             return make_error(InitError::AE_EMPTY_BOOTSTRAP);
         }
         Bootstrapper::Params bootstrapper_params = {
-                .address_string = m_server_name,
+                .address_string = m_url.get_hostname(),
                 .default_port = m_port,
                 .bootstrap = m_options.bootstrap,
                 .timeout = m_config.timeout,
@@ -811,8 +800,8 @@ int DoqUpstream::init_ssl() {
         return 1;
     }
     SSL_set_app_data(m_ssl.get(), this);
-    if (!m_server_name.empty() && !SocketAddress(m_server_name, 0).valid()) {
-        SSL_set_tlsext_host_name(m_ssl.get(), m_server_name.c_str());
+    if (!SocketAddress(m_url.get_hostname(), 0).valid()) {
+        SSL_set_tlsext_host_name(m_ssl.get(), std::string{m_url.get_hostname()}.c_str());
     }
     SSL_set_connect_state(m_ssl.get());
     SSL_set_quic_use_legacy_codepoint(m_ssl.get(), m_quic_version != NGTCP2_PROTO_VER_V1);
@@ -1186,7 +1175,7 @@ int DoqUpstream::ssl_verify_callback(X509_STORE_CTX *ctx, void * /*arg*/) {
         return 0;
     }
 
-    if (auto err = verifier->verify(ctx, doq->m_server_name, doq->m_fingerprints)) {
+    if (auto err = verifier->verify(ctx, doq->m_url.get_hostname(), doq->m_fingerprints)) {
         dbglog(doq->m_log, "Failed to verify certificate: {}", *err);
         return 0;
     }

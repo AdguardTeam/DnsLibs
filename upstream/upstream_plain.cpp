@@ -10,28 +10,34 @@ using std::chrono::duration_cast;
 
 namespace ag::dns {
 
-static SocketAddress prepare_address(std::string_view address_string) {
-    if (address_string.starts_with(PlainUpstream::TCP_SCHEME)) {
-        address_string.remove_prefix(PlainUpstream::TCP_SCHEME.size());
-    }
-    auto address = ag::utils::str_to_socket_address(address_string);
-    if (address.port() == 0) {
-        return SocketAddress(address.addr(), DEFAULT_PLAIN_PORT);
-    }
-    return address;
-}
-
 PlainUpstream::PlainUpstream(const UpstreamOptions &opts, const UpstreamFactoryConfig &config)
         : Upstream(opts, config)
         , m_log(AG_FMT("Plain upstream ({})", opts.address))
-        , m_prefer_tcp(opts.address.starts_with(TCP_SCHEME))
-        , m_address(prepare_address(opts.address))
-        , m_shutdown_guard(std::make_shared<bool>(true))
-{
-
+        , m_prefer_tcp{}
+        , m_address{}
+        , m_shutdown_guard(std::make_shared<bool>(true)) {
 }
 
 Error<Upstream::InitError> PlainUpstream::init() {
+    if (m_options.address.find("://") != std::string::npos) {
+        auto error = this->init_url_port(false, false, DEFAULT_PLAIN_PORT);
+        if (error) {
+            return error;
+        }
+        m_address = ag::utils::str_to_socket_address(m_url.get_host());
+
+        if (m_url.get_protocol() == "tcp:") {
+            m_prefer_tcp = true;
+        } else {
+            return make_error(InitError::AE_INVALID_ADDRESS, AG_FMT("Invalid URL scheme: {}", m_url.get_protocol()));
+        }
+    } else {
+        m_address = ag::utils::str_to_socket_address(m_options.address);
+    }
+
+    if (m_address.port() == 0) {
+        m_address = SocketAddress(m_address.addr(), DEFAULT_PLAIN_PORT);
+    }
     if (!m_address.valid()) {
         return make_error(InitError::AE_INVALID_ADDRESS, m_options.address);
     }
@@ -86,8 +92,8 @@ coro::Task<Upstream::ExchangeResult> PlainUpstream::exchange(const ldns_pkt *req
         }
         if (err) {
             co_return (err->value() == SocketError::AE_TIMED_OUT) // To cancel second retry of exchange
-                            ? make_error(DnsError::AE_TIMED_OUT, "Timed out while connecting to remote host via UDP")
-                            : make_error(DnsError::AE_SOCKET_ERROR, err);
+                    ? make_error(DnsError::AE_TIMED_OUT, "Timed out while connecting to remote host via UDP")
+                    : make_error(DnsError::AE_SOCKET_ERROR, err);
         }
 
         timeout -= timer.elapsed<decltype(timeout)>();
@@ -96,7 +102,8 @@ coro::Task<Upstream::ExchangeResult> PlainUpstream::exchange(const ldns_pkt *req
         }
         timer.reset();
 
-        if (auto err = send_dns_packet(&socket, {(uint8_t *) ldns_buffer_begin(buffer.get()), ldns_buffer_position(buffer.get())})) {
+        if (auto err = send_dns_packet(
+                    &socket, {(uint8_t *) ldns_buffer_begin(buffer.get()), ldns_buffer_position(buffer.get())})) {
             co_return make_error(DnsError::AE_SOCKET_ERROR, err);
         }
 

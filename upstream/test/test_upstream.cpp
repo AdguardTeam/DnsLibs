@@ -220,6 +220,8 @@ TEST_F(UpstreamTest, CreateUpstreamWithWrongOptions) {
             {"8.8.8.8:-1"},
             {"[::1::]"},
             {"tcp://8..8.8:53"},
+            {"tcp://1.1.1.1,8.8.8.8"},
+            {"1.1.1.1,8.8.8.8"},
 
             // no bootstrapper and resolved server address
             {"https://example.com"},
@@ -251,13 +253,9 @@ TEST_F(UpstreamTest, CreateUpstreamWithWrongOptions) {
 
             // wrong basic authentication parameters
             {"https://usernamepassword@dns.google/dns-query", {"8.8.8.8"}},
-            {"https://@dns.google/dns-query", {"8.8.8.8"}},
             {"https://:pass@dns.google/dns-query", {"8.8.8.8"}},
-            {"https://:@dns.google/dns-query", {"8.8.8.8"}},
             {"sdns://usernamepassword@AgcAAAAAAAAABzEuMC4wLjEAEmRucy5jbG91ZGZsYXJlLmNvbQovZG5zLXF1ZXJ5", {}},
-            {"sdns://@AgcAAAAAAAAABzEuMC4wLjEAEmRucy5jbG91ZGZsYXJlLmNvbQovZG5zLXF1ZXJ5", {}},
             {"sdns://:pass@AgcAAAAAAAAABzEuMC4wLjEAEmRucy5jbG91ZGZsYXJlLmNvbQovZG5zLXF1ZXJ5", {}},
-            {"sdns://:@AgcAAAAAAAAABzEuMC4wLjEAEmRucy5jbG91ZGZsYXJlLmNvbQovZG5zLXF1ZXJ5", {}},
     };
 
     for (const UpstreamOptions &options : OPTIONS) {
@@ -533,7 +531,7 @@ static const std::initializer_list<std::string> invalid_bootstrap{"1.2.3.4:55"};
 static const UpstreamTestData test_upstreams_with_server_ip_data[]{
         {"tls://dns.adguard-dns.com", invalid_bootstrap, Ipv4Address{94, 140, 14, 14}},
         {"https://dns.adguard-dns.com/dns-query", invalid_bootstrap, Ipv4Address{94, 140, 14, 14}},
-        {"quic://dns.adguard-dns.com/dns-query", invalid_bootstrap, Ipv4Address{94, 140, 14, 14}},
+        {"quic://dns.adguard-dns.com", invalid_bootstrap, Ipv4Address{94, 140, 14, 14}},
         {// AdGuard DNS DOH with the IP address specified
                 "sdns://AgcAAAAAAAAADDk0LjE0MC4xNC4xNAATZG5zLmFkZ3VhcmQtZG5zLmNvbQovZG5zLXF1ZXJ5", invalid_bootstrap,
                 {}},

@@ -64,6 +64,7 @@ Run C++ tests:
         # build and run tests
         ${CMAKE_MAKE_PROGRAM} clean
         ${CMAKE_MAKE_PROGRAM} tests
+        ${CTEST} -D ExperimentalTest --no-compress-output
       description: Compile and run tests with sanitizer
   - script:
       interpreter: SHELL
@@ -76,6 +77,10 @@ Run C++ tests:
       scope: RESULT
       namespace: inject
   final-tasks:
+  - any-task:
+      plugin-key: fr.cstb.bamboo.plugins.ctest.bamboo-ctest-plugin:test
+      configuration:
+        testFilePathPattern: '**/Testing/*/*.xml'
   - script:
       interpreter: SHELL
       scripts:

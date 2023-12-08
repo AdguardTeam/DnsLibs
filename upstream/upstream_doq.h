@@ -215,8 +215,6 @@ private:
 
     ConnectionState m_conn_state;
     std::atomic<State> m_state{STOP};
-    std::string m_server_name;
-    int m_port{0};
     ag::Logger m_log{"DOQ upstream"};
     BootstrapperPtr m_bootstrapper;
     ag::SocketAddress m_remote_addr_empty, m_local_addr;

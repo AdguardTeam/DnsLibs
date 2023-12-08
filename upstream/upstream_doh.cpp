@@ -3,6 +3,8 @@
 #include <cassert>
 #include <chrono>
 
+#include <ada.h>
+#include <ada/url.h>
 #include <magic_enum/magic_enum.hpp>
 #include <ngtcp2/ngtcp2_crypto_boringssl.h>
 
@@ -229,20 +231,6 @@ struct ag::dns::DohUpstream::Http3Connection : public ag::dns::DohUpstream::Http
     Error<DnsError> session_error;
 };
 
-struct DecomposedCreds {
-    std::string_view url;
-    std::string_view username;
-    std::string_view password;
-};
-
-struct DecomposedUrl {
-    std::string_view authority;
-    uint16_t port;
-    std::string_view path;
-    std::string_view username;
-    std::string_view password;
-};
-
 using std::chrono::duration_cast;
 
 #define log_upstream(lvl_, self_, fmt_, ...) lvl_##log(g_logger, "[{}] " fmt_, (self_)->m_id, ##__VA_ARGS__)
@@ -255,72 +243,6 @@ using std::chrono::duration_cast;
 
 static const ag::Logger g_logger("DOH upstream");
 static std::atomic<uint32_t> g_next_id = 0; // NOLINT(*-avoid-non-const-global-variables)
-
-ag::Result<DecomposedCreds, ag::dns::Upstream::InitError> decompose_creds_from_url(std::string_view url) {
-    auto at_pos = url.find('@');
-    if (at_pos == std::string_view::npos) {
-        return DecomposedCreds{.url = url};
-    }
-    auto [credentials_part, url_part] = ag::utils::split2_by(url, '@');
-    auto [username, password] = ag::utils::split2_by(credentials_part, ':');
-    if (username.empty() || password.empty()) {
-        return make_error(
-                ag::dns::Upstream::InitError::AE_INVALID_ADDRESS, "Can't parse username and password from auth data");
-    }
-
-    return DecomposedCreds{.url = url_part, .username = username, .password = password};
-}
-
-static ag::Result<DecomposedUrl, ag::dns::Upstream::InitError> decompose_url(std::string_view url) {
-    std::string_view path;
-    for (const auto &scheme : {ag::dns::DohUpstream::SCHEME_HTTPS, ag::dns::DohUpstream::SCHEME_H3}) {
-        if (!url.starts_with(scheme)) {
-            continue;
-        }
-        auto split = ag::utils::split2_by(url.substr(scheme.length()), '/');
-        path = url.substr(scheme.length() + split[0].length());
-        url = split[0];
-        break;
-    }
-
-    auto creds = decompose_creds_from_url(url);
-    if (creds.has_error()) {
-        return creds.error();
-    }
-    url = creds->url;
-    path = path.empty() ? "/" : path;
-
-    ag::Result split = ag::utils::split_host_port(url);
-    if (split.has_error()) {
-        return make_error(ag::dns::Upstream::InitError::AE_INVALID_ADDRESS, split.error());
-    }
-
-    auto [host, port] = split.value();
-    if (host.empty()) {
-        return make_error(ag::dns::Upstream::InitError::AE_INVALID_ADDRESS, "Empty authority in URL");
-    }
-    if (port.empty()) {
-        return DecomposedUrl{
-                .authority = host,
-                .port = ag::dns::DEFAULT_DOH_PORT,
-                .path = path,
-                .username = creds->username,
-                .password = creds->password,
-        };
-    }
-
-    if (std::optional x = ag::utils::to_integer<uint16_t>(port); x.has_value()) {
-        return DecomposedUrl{
-                .authority = host,
-                .port = x.value(),
-                .path = path,
-                .username = creds->username,
-                .password = creds->password,
-        };
-    }
-
-    return make_error(ag::dns::Upstream::InitError::AE_INVALID_ADDRESS, AG_FMT("Invalid port number: {}", port));
-}
 
 // NOLINTNEXTLINE(*-avoid-reference-coroutine-parameters)
 static ag::coro::Task<ag::Error<ag::dns::DnsError>> wait_timeout(ag::dns::EventLoop &loop, ag::Millis timeout) {
@@ -345,15 +267,13 @@ ag::dns::DohUpstream::~DohUpstream() {
 }
 
 ag::Error<ag::dns::Upstream::InitError> ag::dns::DohUpstream::init() {
-    Result decomposed_url = decompose_url(m_options.address);
-    if (decomposed_url.has_error()) {
-        return decomposed_url.error();
+    auto error = this->init_url_port(true, true, DEFAULT_DOH_PORT);
+    if (error) {
+        return error;
     }
 
-    auto &[hostname, port, path, username, password] = decomposed_url.value();
-
     if (this->m_options.bootstrap.empty() && std::holds_alternative<std::monostate>(this->m_options.resolved_server_ip)
-            && !SocketAddress(hostname, port).valid()) {
+            && !SocketAddress(m_url.get_hostname(), m_port).valid()) {
         return make_error(InitError::AE_EMPTY_BOOTSTRAP);
     }
 
@@ -361,12 +281,12 @@ ag::Error<ag::dns::Upstream::InitError> ag::dns::DohUpstream::init() {
     if (auto resolved = ag::SocketAddress(m_options.resolved_server_ip, DEFAULT_DOH_PORT); resolved.valid()) {
         address = resolved.host_str();
     } else {
-        address = hostname;
+        address = m_url.get_hostname();
     }
 
     Bootstrapper &bootstrapper = m_bootstrapper.emplace(Bootstrapper::Params{
             .address_string = address,
-            .default_port = port,
+            .default_port = m_port,
             .bootstrap = m_options.bootstrap,
             .timeout = m_config.timeout,
             .upstream_config = m_config,
@@ -377,13 +297,13 @@ ag::Error<ag::dns::Upstream::InitError> ag::dns::DohUpstream::init() {
         return make_error(InitError::AE_EMPTY_BOOTSTRAP, std::move(err));
     }
 
-    m_request_template.authority(std::string(hostname));
-    if (!username.empty() && !password.empty()) {
-        auto creds_fmt = AG_FMT("{}:{}", username, password);
+    m_request_template.authority(std::string(m_url.get_hostname()));
+    if (!m_url.get_username().empty() && !m_url.get_password().empty()) {
+        auto creds_fmt = AG_FMT("{}:{}", m_url.get_username(), m_url.get_password());
         auto creds_base64 = ag::encode_to_base64(Uint8View((uint8_t *) creds_fmt.data(), creds_fmt.size()), false);
         m_request_template.headers().put("Authorization", AG_FMT("Basic {}", creds_base64));
     }
-    m_path = path;
+    m_path = m_url.get_pathname();
     log_upstream(dbg, this, "Prepared request template: {}", m_request_template);
 
     if (m_options.address.starts_with(DohUpstream::SCHEME_H3)) {
@@ -564,8 +484,7 @@ ag::dns::DohUpstream::establish_connection(HttpConnection *http_conn, SocketAddr
     std::weak_ptr<bool> shutdown_guard = http_conn->shutdown_guard;
 
     log_hconn(trace, http_conn, "Connecting to {}...", peer.str());
-    std::string_view hostname =
-            decompose_url(m_options.address).value().authority; // was validated during initialization
+    std::string_view hostname = m_url.get_hostname(); // was validated during initialization
     Error<DnsError> error = co_await http_conn->establish(std::string(hostname), peer);
     if (shutdown_guard.expired()) {
         co_return make_error(DnsError::AE_SHUTTING_DOWN);
@@ -786,7 +705,8 @@ void ag::dns::DohUpstream::HttpConnection::on_response(void *arg, uint64_t strea
     if (g_logger.is_enabled(LOG_LEVEL_TRACE)) {
         log_query(trace, self, awaitable->query_id, "Received response: {}", response);
     } else if (response.status_code() != 200) {
-        log_query(dbg, self, awaitable->query_id, "Received non-200 response: {} {}", response.version(), response.status_code());
+        log_query(dbg, self, awaitable->query_id, "Received non-200 response: {} {}", response.version(),
+                response.status_code());
     }
 
     awaitable->notify_response(std::move(response));
@@ -1105,9 +1025,9 @@ ag::coro::Task<ag::Error<ag::dns::DnsError>> ag::dns::DohUpstream::Http3Connecti
 
     SSL_set_tlsext_host_name(ssl.get(), hostname.c_str());
     parent->m_tls_session_cache.prepare_ssl(ssl.get());
-    if (SslSessionPtr session = parent->m_tls_session_cache.get_session()) {
+    if (SslSessionPtr ssl_session = parent->m_tls_session_cache.get_session()) {
         log_hconn(dbg, this, "Using a cached TLS session");
-        SSL_set_session(ssl.get(), session.get()); // UpRefs the session
+        SSL_set_session(ssl.get(), ssl_session.get()); // UpRefs the session
     } else {
         log_hconn(trace, this, "No cached TLS sessions available");
     }
@@ -1307,8 +1227,7 @@ int ag::dns::DohUpstream::Http3Connection::on_certificate_verify(X509_STORE_CTX 
         return 0;
     }
 
-    std::string_view hostname =
-            decompose_url(upstream->m_options.address).value().authority; // was validated during initialization
+    std::string_view hostname = upstream->m_url.get_hostname(); // was validated during initialization
     if (auto err = verifier->verify(ctx, hostname, upstream->m_fingerprints)) {
         log_hconn(dbg, self, "Failed to verify certificate: {}", *err);
         return 0;

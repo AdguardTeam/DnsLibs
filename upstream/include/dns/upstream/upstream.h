@@ -1,5 +1,6 @@
 #pragma once
 
+#include <ada.h>
 #include <algorithm>
 #include <chrono>
 #include <memory>
@@ -184,8 +185,14 @@ protected:
         }
     };
 
+    Error<InitError> init_url_port(bool allow_creds, bool allow_path, uint16_t default_port);
+
     /** Upstream options */
     UpstreamOptions m_options;
+    /** Upstream url */
+    ada::url_aggregator m_url;
+    /** Upstream port */
+    uint16_t m_port = 0;
     /** Upstream factory configuration */
     UpstreamFactoryConfig m_config;
     /** RTT estimate */
