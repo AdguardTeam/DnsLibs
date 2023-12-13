@@ -780,7 +780,8 @@ coro::Task<ldns_pkt_ptr> DnsForwarder::apply_ip_filter(FilterContext &ctx, const
 coro::Task<ldns_pkt_ptr> DnsForwarder::apply_filter_to_request(FilterContext &ctx) {
     ldns_rr *question = ldns_rr_list_rr(ldns_pkt_question(ctx.request.get()), 0);
     if (ldns_rr_get_type(question) == LDNS_RR_TYPE_HTTPS
-            && m_settings->adblock_rules_blocking_mode == DnsProxyBlockingMode::ADDRESS) {
+            && (m_settings->adblock_rules_blocking_mode == DnsProxyBlockingMode::ADDRESS
+                    || m_settings->hosts_rules_blocking_mode == DnsProxyBlockingMode::ADDRESS)) {
         tracelog_fid(m_log, ctx.request.get(), "Wait HTTPS response to apply filter again");
         co_return nullptr;
     }
