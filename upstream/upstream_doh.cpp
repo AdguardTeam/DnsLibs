@@ -123,7 +123,9 @@ struct ag::dns::DohUpstream::ReplyAwaitable {
 struct ag::dns::DohUpstream::HttpConnection { // NOLINT(*-special-member-functions)
     explicit HttpConnection(DohUpstream *parent)
             : parent_shutdown_guard(parent->m_shutdown_guard)
-            , parent(parent) {
+            , parent(parent)
+            , loop(parent->m_config.loop)
+    {
     }
 
     HttpConnection() = delete;
@@ -152,6 +154,7 @@ struct ag::dns::DohUpstream::HttpConnection { // NOLINT(*-special-member-functio
     std::shared_ptr<bool> shutdown_guard = std::make_shared<bool>();
     std::weak_ptr<bool> parent_shutdown_guard;
     DohUpstream *parent;
+    EventLoop &loop;
     std::optional<AioSocket> io;
     static inline uint32_t next_id = 0; // NOLINT(*-identifier-naming)
     uint32_t id = next_id++;
@@ -196,12 +199,8 @@ struct ag::dns::DohUpstream::Http3Connection : public ag::dns::DohUpstream::Http
     ~Http3Connection() override {
         shutdown_guard.reset();
 
-        if (parent_shutdown_guard.expired()) {
-            return;
-        }
-
-        if (std::optional task = std::exchange(expiry_task, std::nullopt); task.has_value()) {
-            parent->m_config.loop.cancel(task.value());
+        if (auto task = std::exchange(expiry_task, std::nullopt); task.has_value()) {
+            loop.cancel(task.value());
         }
     }
 
@@ -216,8 +215,9 @@ struct ag::dns::DohUpstream::Http3Connection : public ag::dns::DohUpstream::Http
     Error<DnsError> reset_stream(uint64_t stream_id) override;
     [[nodiscard]] Error<DnsError> flush() override;
     [[nodiscard]] coro::Task<Error<DnsError>> drive_io() override;
-
     [[nodiscard]] coro::Task<Error<DnsError>> connect_socket(std::string hostname, SocketAddress peer);
+    [[nodiscard]] Error<DnsError> handle_expiry();
+
     static void on_handshake_completed(void *arg);
     static void on_expiry_update(void *arg, ag::Nanos period);
     static int on_certificate_verify(X509_STORE_CTX *ctx, void *arg);
@@ -1182,37 +1182,23 @@ void ag::dns::DohUpstream::Http3Connection::on_handshake_completed(void *arg) {
 void ag::dns::DohUpstream::Http3Connection::on_expiry_update(void *arg, ag::Nanos period) {
     auto *self = (Http3Connection *) arg;
     std::weak_ptr<bool> guard = self->shutdown_guard;
-    if (guard.expired()) {
-        return;
-    }
+    assert(!guard.expired());
 
-    DohUpstream *upstream = self->parent;
     log_hconn(trace, self, "{}", period);
 
     if (self->expiry_task.has_value()) {
-        upstream->m_config.loop.cancel(self->expiry_task.value());
+        self->loop.cancel(self->expiry_task.value());
     }
 
     self->expiry_task =
-            upstream->m_config.loop.schedule(duration_cast<Micros>(period), [self, guard = std::move(guard)]() {
+            self->loop.schedule(duration_cast<Micros>(period), [self, guard]() {
                 if (guard.expired()) {
                     return;
                 }
-
-                log_hconn(trace, self, "Handling expiry timer");
-                if (Error<http::Http3Error> error = self->session->handle_expiry(); error != nullptr) {
-                    if ((int) error->value() == NGTCP2_ERR_IDLE_CLOSE) {
-                        log_hconn(dbg, self, "Closing idle connection");
-                        self->parent->close_connection(make_error(DnsError::AE_TIMED_OUT));
-                    } else {
-                        log_hconn(dbg, self, "Connection timer handling error: {}", error->str());
-                        self->parent->close_connection(make_error(DnsError::AE_SOCKET_ERROR, error));
+                if (auto error = self->handle_expiry()) {
+                    if (!self->parent_shutdown_guard.expired() && self->parent->m_http_conn.get() == self) {
+                        self->parent->close_connection(error);
                     }
-                    return;
-                }
-                if (Error<DnsError> error = self->flush(); error != nullptr) {
-                    log_hconn(dbg, self, "Connection timer handling error: {}", error->str());
-                    self->parent->close_connection(error);
                 }
             });
 }
@@ -1264,4 +1250,20 @@ bool ag::dns::DohUpstream::Http3Connection::on_socket_read(void *arg, Uint8View 
         return false;
     }
     return last_state != State::HANDSHAKING || self->state != State::CONNECTED;
+}
+ag::Error<ag::dns::DnsError> ag::dns::DohUpstream::Http3Connection::handle_expiry() {
+    log_hconn(trace, this, "Handling expiry timer");
+    if (Error<http::Http3Error> error = this->session->handle_expiry(); error != nullptr) {
+        if ((int) error->value() == NGTCP2_ERR_IDLE_CLOSE) {
+            log_hconn(dbg, this, "Closing idle connection");
+            return make_error(DnsError::AE_TIMED_OUT);
+        }
+        log_hconn(dbg, this, "Connection timer handling error: {}", error->str());
+        return make_error(DnsError::AE_SOCKET_ERROR, error);
+    }
+    if (Error<DnsError> error = this->flush(); error != nullptr) {
+        log_hconn(dbg, this, "Connection timer handling error: {}", error->str());
+        return error;
+    }
+    return {};
 }
