@@ -19,7 +19,8 @@ class PlainUpstream;
  */
 class PlainUpstream : public Upstream {
 public:
-    static constexpr std::string_view TCP_SCHEME = "tcp://";
+    static constexpr std::string_view TCP_SCHEME = "tcp:";
+    static constexpr std::string_view UDP_SCHEME = "udp:";
 
     /**
      * Create plain DNS upstream
@@ -39,6 +40,8 @@ private:
 
     /** Prefer TCP */
     bool m_prefer_tcp;
+    /** Prefer UDP */
+    bool m_prefer_udp;
     /** TCP connection pool */
     ConnectionPoolPtr m_pool;
     /** Socket address */

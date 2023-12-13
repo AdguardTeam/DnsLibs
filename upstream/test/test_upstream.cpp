@@ -356,6 +356,7 @@ TEST_P(DnsTruncatedTest, TestDnsTruncated) {
 INSTANTIATE_TEST_SUITE_P(DnsTruncatedTest, DnsTruncatedTest, testing::ValuesIn(truncated_test_data));
 
 static const UpstreamTestData test_upstreams_data[]{
+        {"udp://1.1.1.1:53", {}},
         {"tcp://8.8.8.8", {}},
         {"8.8.8.8:53", {"8.8.8.8:53"}},
         {"1.0.0.1", {}},
