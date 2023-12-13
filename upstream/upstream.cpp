@@ -25,7 +25,6 @@ enum class Scheme : size_t {
     SDNS,
     DNS,
     TCP,
-    UDP,
     TLS,
     HTTPS,
     H3,
@@ -37,7 +36,6 @@ static constexpr std::string_view SCHEME_WITH_SUFFIX[] = {
         "sdns://",
         "dns://",
         PlainUpstream::TCP_SCHEME,
-        PlainUpstream::UDP_SCHEME,
         DotUpstream::SCHEME,
         DohUpstream::SCHEME_HTTPS,
         DohUpstream::SCHEME_H3,
@@ -177,7 +175,6 @@ UpstreamFactory::CreateResult UpstreamFactory::Impl::create_upstream(const Upstr
             const UpstreamOptions &, const UpstreamFactoryConfig &, std::vector<CertFingerprint>);
     static constexpr CreateFunction create_functions[]{
             &create_upstream_sdns,
-            &create_upstream_plain,
             &create_upstream_plain,
             &create_upstream_plain,
             &create_upstream_tls,

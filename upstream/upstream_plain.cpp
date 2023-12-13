@@ -26,9 +26,7 @@ Error<Upstream::InitError> PlainUpstream::init() {
         }
         m_address = ag::utils::str_to_socket_address(m_url.get_host());
 
-        if (m_url.get_protocol() == UDP_SCHEME) {
-            m_prefer_udp = true;
-        } else if (m_url.get_protocol() == TCP_SCHEME) {
+        if (m_url.get_protocol() == "tcp:") {
             m_prefer_tcp = true;
         } else {
             return make_error(InitError::AE_INVALID_ADDRESS, AG_FMT("Invalid URL scheme: {}", m_url.get_protocol()));
@@ -122,7 +120,7 @@ coro::Task<Upstream::ExchangeResult> PlainUpstream::exchange(const ldns_pkt *req
         auto &reply = r.value();
         ldns_pkt *reply_pkt = nullptr;
         status = ldns_wire2pkt(&reply_pkt, reply.data(), reply.size());
-        if (m_prefer_udp || !should_try_tcp(request_pkt, reply_pkt, status)) {
+        if (!should_try_tcp(request_pkt, reply_pkt, status)) {
             co_return ldns_pkt_ptr{reply_pkt};
         }
         tracelog_id(m_log, request_pkt, "Trying TCP request after UDP failure");
