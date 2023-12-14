@@ -548,7 +548,7 @@ coro::Task<DnsForwarder::HandleMessageResult> DnsForwarder::handle_message_inter
 
     const ldns_rr *question = ldns_rr_list_rr(ldns_pkt_question(request.get()), 0);
     if (question == nullptr) {
-        ldns_pkt_ptr response{ResponseHelpers::create_servfail_response(request.get())};
+        auto response = std::get<ldns_pkt_ptr>(ResponseHelpers::create_servfail_response(request.get()));
         log_packet(m_log, response.get(), "Server failure response");
         finalize_processed_event(
                 event, nullptr, response.get(), nullptr, std::nullopt, make_error(DnsError::AE_DECODE_ERROR));
@@ -588,7 +588,7 @@ coro::Task<DnsForwarder::HandleMessageResult> DnsForwarder::handle_message_inter
 
     // disable Mozilla DoH
     if ((type == LDNS_RR_TYPE_A || type == LDNS_RR_TYPE_AAAA) && 0 == strcmp(domain.get(), MOZILLA_DOH_HOST.data())) {
-        ldns_pkt_ptr response{ResponseHelpers::create_nxdomain_response(request.get(), m_settings)};
+        auto response = std::get<ldns_pkt_ptr>(ResponseHelpers::create_nxdomain_response(request.get(), m_settings));
         log_packet(m_log, response.get(), "Mozilla DOH blocking response");
         Uint8Vector raw_response = transform_response_to_raw_data(response.get());
         finalize_processed_event(event, request.get(), response.get(), nullptr, std::nullopt, {});
@@ -619,8 +619,8 @@ coro::Task<DnsForwarder::HandleMessageResult> DnsForwarder::handle_message_inter
         if (m_settings->block_ipv6 && LDNS_RR_TYPE_AAAA == type
                 && (!filter_response || ldns_pkt_get_rcode(filter_response.get()) == LDNS_RCODE_NOERROR)) {
             dbglog_fid(m_log, ctx.request.get(), "AAAA DNS query blocked because IPv6 blocking is enabled");
-            ldns_pkt_ptr soa_response{
-                    ResponseHelpers::create_soa_response(ctx.request.get(), m_settings, SOA_RETRY_IPV6_BLOCK)};
+            auto soa_response = std::get<ldns_pkt_ptr>(
+                    ResponseHelpers::create_soa_response(ctx.request.get(), m_settings, SOA_RETRY_IPV6_BLOCK));
             log_packet(m_log, soa_response.get(), "IPv6 blocking response");
             finalize_processed_event(event, ctx.request.get(), soa_response.get(), nullptr, std::nullopt);
             co_return {transform_response_to_raw_data(soa_response.get()), std::move(event)};
@@ -665,7 +665,7 @@ coro::Task<DnsForwarder::HandleMessageResult> DnsForwarder::handle_message_inter
             dbglog_fid(m_log, ctx.request.get(), "Not responding, upstreams exchange error: {}", err->str());
             co_return {};
         }
-        response = ldns_pkt_ptr{ResponseHelpers::create_servfail_response(ctx.request.get())};
+        response = std::get<ldns_pkt_ptr>(ResponseHelpers::create_servfail_response(ctx.request.get()));
         log_packet(m_log, response->get(), "Server failure response");
         finalize_processed_event(event, ctx.request.get(), response->get(), nullptr,
                 selected_upstream ? std::make_optional(selected_upstream->options().id) : std::nullopt,
@@ -778,12 +778,6 @@ coro::Task<ldns_pkt_ptr> DnsForwarder::apply_ip_filter(FilterContext &ctx, const
 }
 
 coro::Task<ldns_pkt_ptr> DnsForwarder::apply_filter_to_request(FilterContext &ctx) {
-    ldns_rr *question = ldns_rr_list_rr(ldns_pkt_question(ctx.request.get()), 0);
-    if (ldns_rr_get_type(question) == LDNS_RR_TYPE_HTTPS
-            && m_settings->adblock_rules_blocking_mode == DnsProxyBlockingMode::ADDRESS) {
-        tracelog_fid(m_log, ctx.request.get(), "Wait HTTPS response to apply filter again");
-        co_return nullptr;
-    }
     co_return co_await apply_filter(ctx);
 }
 
@@ -907,13 +901,15 @@ coro::Task<ldns_pkt_ptr> DnsForwarder::apply_filter(FilterContext &ctx) {
         event_append_rules(ctx.event, effective_rules.leftovers);
     }
 
-    if (const DnsFilter::AdblockRuleInfo * content; !rewrite_info.has_value()
-            && (effective_rules.leftovers.empty()
-                    || (nullptr
-                                    != (content = std::get_if<DnsFilter::AdblockRuleInfo>(
-                                                &effective_rules.leftovers[0]->content))
-                            && content->props.test(DnsFilter::DARP_EXCEPTION)))) {
-        co_return nullptr;
+    if (!rewrite_info.has_value()) {
+        if (effective_rules.leftovers.empty()) {
+            co_return nullptr;
+        }
+        if (auto content = std::get_if<DnsFilter::AdblockRuleInfo>(&effective_rules.leftovers[0]->content)) {
+            if (content->props.test(DnsFilter::DARP_EXCEPTION)) {
+                co_return nullptr;
+            }
+        }
     }
 
     if (effective_rules.dnsrewrite.empty()) {
@@ -951,8 +947,14 @@ coro::Task<ldns_pkt_ptr> DnsForwarder::apply_filter(FilterContext &ctx) {
         }
     }
 
-    ldns_pkt_ptr response{ResponseHelpers::create_blocking_response(
-            ctx.request.get(), ctx.response.get(), m_settings, effective_rules.leftovers, std::move(rewrite_info))};
+    auto result = ResponseHelpers::create_blocking_response(
+            ctx.request.get(), ctx.response.get(), m_settings, effective_rules.leftovers, std::move(rewrite_info));
+    if (std::holds_alternative<ResponseHelpers::NeedsResponse>(result)) {
+        tracelog_fid(m_log, ctx.request.get(), "DNS query blocking method needs response, waiting response to apply filter again");
+        ctx.last_effective_rules.clear();
+        co_return nullptr;
+    }
+    auto response = std::move(std::get<ldns_pkt_ptr>(result));
     log_packet(m_log, response.get(), "Rule blocked response");
     co_return response;
 }
@@ -1237,7 +1239,7 @@ coro::Task<Uint8Vector> DnsForwarder::handle_message(Uint8View message, const Dn
         finalize_processed_event(event, nullptr, nullptr, nullptr, std::nullopt,
                 make_error(DnsError::AE_DECODE_ERROR,
                         AG_FMT("{} ({})", ldns_get_errorstr_by_id(status), magic_enum::enum_name(status))));
-        ldns_pkt_ptr response{ResponseHelpers::create_formerr_response(pkt_id)};
+        auto response = std::get<ldns_pkt_ptr>(ResponseHelpers::create_formerr_response(pkt_id));
         log_packet(m_log, response.get(), "Format error response");
         co_return transform_response_to_raw_data(response.get());
     }
@@ -1273,7 +1275,7 @@ coro::Task<Uint8Vector> DnsForwarder::handle_message_with_timeout(
     ldns_pkt_ptr servfail_response;
     uint16_t packet_id = ldns_pkt_id(request.get());
     if (m_settings->enable_servfail_on_upstreams_failure) {
-        servfail_response.reset(ResponseHelpers::create_servfail_response(request.get()));
+        servfail_response = std::get<ldns_pkt_ptr>(ResponseHelpers::create_servfail_response(request.get()));
         finalize_processed_event(servfail_event, request.get(), servfail_response.get(), nullptr, std::nullopt);
     }
     Millis timeout = m_settings->upstream_timeout.count() > 0

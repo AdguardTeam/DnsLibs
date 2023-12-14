@@ -812,14 +812,30 @@ TEST_F(DnsProxyTest, BlockingModeRefused) {
             perform_request(*m_proxy, create_request("hosts-style-loopback-6.com", LDNS_RR_TYPE_AAAA, LDNS_RD), res));
     ASSERT_EQ(LDNS_RCODE_REFUSED, ldns_pkt_get_rcode(res.get()));
 
+    // Check HTTPS rrtype
+    ASSERT_NO_FATAL_FAILURE(
+            perform_request(*m_proxy, create_request("privacy-policy.truste.com", LDNS_RR_TYPE_HTTPS, LDNS_RD), res));
+    ASSERT_EQ(LDNS_RCODE_REFUSED, ldns_pkt_get_rcode(res.get()));
+
+    // Check HTTPS rrtype (hosts-style rule with blocking ip)
+    ASSERT_NO_FATAL_FAILURE(
+            perform_request(*m_proxy, create_request("hosts-style-unspec.com", LDNS_RR_TYPE_HTTPS, LDNS_RD), res));
+    ASSERT_EQ(LDNS_RCODE_REFUSED, ldns_pkt_get_rcode(res.get()));
+
+    // Check HTTPS rrtype (hosts-style rule) - request should be bypassed since response processing is triggered
+    ASSERT_NO_FATAL_FAILURE(
+            perform_request(*m_proxy, create_request("cloudflare.com", LDNS_RR_TYPE_HTTPS, LDNS_RD), res));
+    ASSERT_EQ(LDNS_RCODE_NOERROR, ldns_pkt_get_rcode(res.get()));
+    ASSERT_EQ(1, ldns_pkt_ancount(res.get()));
+
     // Check weird qtype
     ASSERT_NO_FATAL_FAILURE(
-            perform_request(*m_proxy, create_request("privacy-policy.truste.com", (ldns_rr_type) 65, LDNS_RD), res));
+            perform_request(*m_proxy, create_request("privacy-policy.truste.com", (ldns_rr_type) 67, LDNS_RD), res));
     ASSERT_EQ(LDNS_RCODE_REFUSED, ldns_pkt_get_rcode(res.get()));
 
     // Check weird qtype (hosts-style rule)
     ASSERT_NO_FATAL_FAILURE(
-            perform_request(*m_proxy, create_request("hosts-style-custom.com", (ldns_rr_type) 65, LDNS_RD), res));
+            perform_request(*m_proxy, create_request("hosts-style-custom.com", (ldns_rr_type) 67, LDNS_RD), res));
     ASSERT_EQ(LDNS_RCODE_NOERROR, ldns_pkt_get_rcode(res.get()));
     ASSERT_EQ(0, ldns_pkt_ancount(res.get()));
     ASSERT_EQ(1, ldns_pkt_nscount(res.get()));
@@ -874,15 +890,32 @@ TEST_F(DnsProxyTest, BlockingModeUnspecifiedAddress) {
     ASSERT_EQ(LDNS_RCODE_NOERROR, ldns_pkt_get_rcode(res.get()));
     ASSERT_STREQ("::", make_rr_answer_string(res.get()).get());
 
+    // HTTPS request is NOERROR-blocked because there are no non-blocking IPs to put in response
+    ASSERT_NO_FATAL_FAILURE(perform_request(*m_proxy, create_request("adb-style.com", LDNS_RR_TYPE_HTTPS, LDNS_RD), res));
+    ASSERT_EQ(LDNS_RCODE_NOERROR, ldns_pkt_get_rcode(res.get()));
+    ASSERT_EQ(1, ldns_pkt_nscount(res.get()));
+
     ASSERT_NO_FATAL_FAILURE(
             perform_request(*m_proxy, create_request("hosts-style-unspec.com", LDNS_RR_TYPE_A, LDNS_RD), res));
     ASSERT_EQ(LDNS_RCODE_NOERROR, ldns_pkt_get_rcode(res.get()));
     ASSERT_STREQ("0.0.0.0", make_rr_answer_string(res.get()).get());
 
+    // HTTPS request is NOERROR-blocked because there are no non-blocking IPs to put in response
+    ASSERT_NO_FATAL_FAILURE(
+            perform_request(*m_proxy, create_request("hosts-style-unspec.com", LDNS_RR_TYPE_HTTPS, LDNS_RD), res));
+    ASSERT_EQ(LDNS_RCODE_NOERROR, ldns_pkt_get_rcode(res.get()));
+    ASSERT_EQ(1, ldns_pkt_nscount(res.get()));
+
     ASSERT_NO_FATAL_FAILURE(
             perform_request(*m_proxy, create_request("hosts-style-unspec-6.com", LDNS_RR_TYPE_AAAA, LDNS_RD), res));
     ASSERT_EQ(LDNS_RCODE_NOERROR, ldns_pkt_get_rcode(res.get()));
     ASSERT_STREQ("::", make_rr_answer_string(res.get()).get());
+
+    // HTTPS request is NOERROR-blocked because there are no non-blocking IPs to put in response
+    ASSERT_NO_FATAL_FAILURE(
+            perform_request(*m_proxy, create_request("hosts-style-unspec-6.com", LDNS_RR_TYPE_HTTPS, LDNS_RD), res));
+    ASSERT_EQ(LDNS_RCODE_NOERROR, ldns_pkt_get_rcode(res.get()));
+    ASSERT_EQ(1, ldns_pkt_nscount(res.get()));
 
     // Check loopback is equivalent to unspec
     ASSERT_NO_FATAL_FAILURE(
@@ -890,11 +923,23 @@ TEST_F(DnsProxyTest, BlockingModeUnspecifiedAddress) {
     ASSERT_EQ(LDNS_RCODE_NOERROR, ldns_pkt_get_rcode(res.get()));
     ASSERT_STREQ("0.0.0.0", make_rr_answer_string(res.get()).get());
 
+    // HTTPS request is NOERROR-blocked because there are no non-blocking IPs to put in response
+    ASSERT_NO_FATAL_FAILURE(
+            perform_request(*m_proxy, create_request("hosts-style-loopback.com", LDNS_RR_TYPE_HTTPS, LDNS_RD), res));
+    ASSERT_EQ(LDNS_RCODE_NOERROR, ldns_pkt_get_rcode(res.get()));
+    ASSERT_EQ(1, ldns_pkt_nscount(res.get()));
+
     // Check loopback is equivalent to unspec for IPv6
     ASSERT_NO_FATAL_FAILURE(
             perform_request(*m_proxy, create_request("hosts-style-loopback-6.com", LDNS_RR_TYPE_AAAA, LDNS_RD), res));
     ASSERT_EQ(LDNS_RCODE_NOERROR, ldns_pkt_get_rcode(res.get()));
     ASSERT_STREQ("::", make_rr_answer_string(res.get()).get());
+
+    // HTTPS request is NOERROR-blocked because there are no non-blocking IPs to put in response
+    ASSERT_NO_FATAL_FAILURE(
+            perform_request(*m_proxy, create_request("hosts-style-loopback-6.com", LDNS_RR_TYPE_HTTPS, LDNS_RD), res));
+    ASSERT_EQ(LDNS_RCODE_NOERROR, ldns_pkt_get_rcode(res.get()));
+    ASSERT_EQ(1, ldns_pkt_nscount(res.get()));
 
     // Check custom IP works
     ASSERT_NO_FATAL_FAILURE(
@@ -902,11 +947,21 @@ TEST_F(DnsProxyTest, BlockingModeUnspecifiedAddress) {
     ASSERT_EQ(LDNS_RCODE_NOERROR, ldns_pkt_get_rcode(res.get()));
     ASSERT_STREQ("1.2.3.4", make_rr_answer_string(res.get()).get());
 
+    // Allowed request (to patch response) but non-existent domain
+    ASSERT_NO_FATAL_FAILURE(
+            perform_request(*m_proxy, create_request("hosts-style-custom.com", LDNS_RR_TYPE_HTTPS, LDNS_RD), res));
+    ASSERT_EQ(LDNS_RCODE_NXDOMAIN, ldns_pkt_get_rcode(res.get()));
+
     // Check custom IP works for IPv6
     ASSERT_NO_FATAL_FAILURE(
             perform_request(*m_proxy, create_request("hosts-style-custom-6.com", LDNS_RR_TYPE_AAAA, LDNS_RD), res));
     ASSERT_EQ(LDNS_RCODE_NOERROR, ldns_pkt_get_rcode(res.get()));
     ASSERT_STREQ("12::34", make_rr_answer_string(res.get()).get());
+
+    // Allowed request (to patch response) but non-existent domain
+    ASSERT_NO_FATAL_FAILURE(
+            perform_request(*m_proxy, create_request("hosts-style-custom-6.com", LDNS_RR_TYPE_HTTPS, LDNS_RD), res));
+    ASSERT_EQ(LDNS_RCODE_NXDOMAIN, ldns_pkt_get_rcode(res.get()));
 
     // Check custom (from rule!) IP works
     ASSERT_NO_FATAL_FAILURE(
@@ -919,6 +974,20 @@ TEST_F(DnsProxyTest, BlockingModeUnspecifiedAddress) {
             perform_request(*m_proxy, create_request("hosts-style-4-and-6.com", LDNS_RR_TYPE_AAAA, LDNS_RD), res));
     ASSERT_EQ(LDNS_RCODE_NOERROR, ldns_pkt_get_rcode(res.get()));
     ASSERT_STREQ("45::67", make_rr_answer_string(res.get()).get());
+
+    // Allowed request (to patch response) but non-existent domain
+    ASSERT_NO_FATAL_FAILURE(
+            perform_request(*m_proxy, create_request("hosts-style-4-and-6.com", LDNS_RR_TYPE_HTTPS, LDNS_RD), res));
+    ASSERT_EQ(LDNS_RCODE_NXDOMAIN, ldns_pkt_get_rcode(res.get()));
+
+    // Check HTTPS rrtype (hosts-style rule) - request should be bypassed since response processing is triggered
+    ASSERT_NO_FATAL_FAILURE(
+            perform_request(*m_proxy, create_request("cloudflare.com", LDNS_RR_TYPE_HTTPS, LDNS_RD), res));
+    ASSERT_EQ(LDNS_RCODE_NOERROR, ldns_pkt_get_rcode(res.get()));
+    ASSERT_EQ(1, ldns_pkt_ancount(res.get()));
+    auto hints = SvcbHttpsHelpers::get_ip_hints_from_response(res.get());
+    ASSERT_EQ(hints.at(0), "1.3.5.7");
+    ASSERT_EQ(hints.at(1), "13::57");
 }
 
 TEST_F(DnsProxyTest, BlockingModeCustomAddress) {
@@ -942,15 +1011,27 @@ TEST_F(DnsProxyTest, BlockingModeCustomAddress) {
     ASSERT_EQ(LDNS_RCODE_NOERROR, ldns_pkt_get_rcode(res.get()));
     ASSERT_STREQ("43::21", make_rr_answer_string(res.get()).get());
 
+    // Allowed request (to patch response) but non-existent domain
+    ASSERT_NO_FATAL_FAILURE(perform_request(*m_proxy, create_request("adb-style.com", LDNS_RR_TYPE_HTTPS, LDNS_RD), res));
+    ASSERT_EQ(LDNS_RCODE_NXDOMAIN, ldns_pkt_get_rcode(res.get()));
+
     ASSERT_NO_FATAL_FAILURE(
             perform_request(*m_proxy, create_request("hosts-style-unspec.com", LDNS_RR_TYPE_A, LDNS_RD), res));
     ASSERT_EQ(LDNS_RCODE_NOERROR, ldns_pkt_get_rcode(res.get()));
     ASSERT_STREQ("4.3.2.1", make_rr_answer_string(res.get()).get());
 
+    // Allowed request (to patch response) but non-existent domain
+    ASSERT_NO_FATAL_FAILURE(perform_request(*m_proxy, create_request("hosts-style-unspec.com", LDNS_RR_TYPE_HTTPS, LDNS_RD), res));
+    ASSERT_EQ(LDNS_RCODE_NXDOMAIN, ldns_pkt_get_rcode(res.get()));
+
     ASSERT_NO_FATAL_FAILURE(
             perform_request(*m_proxy, create_request("hosts-style-unspec-6.com", LDNS_RR_TYPE_AAAA, LDNS_RD), res));
     ASSERT_EQ(LDNS_RCODE_NOERROR, ldns_pkt_get_rcode(res.get()));
     ASSERT_STREQ("43::21", make_rr_answer_string(res.get()).get());
+
+    // Allowed request (to patch response) but non-existent domain
+    ASSERT_NO_FATAL_FAILURE(perform_request(*m_proxy, create_request("hosts-style-unspec-6.com", LDNS_RR_TYPE_HTTPS, LDNS_RD), res));
+    ASSERT_EQ(LDNS_RCODE_NXDOMAIN, ldns_pkt_get_rcode(res.get()));
 
     // Check loopback is equivalent to unspec
     ASSERT_NO_FATAL_FAILURE(
@@ -958,11 +1039,19 @@ TEST_F(DnsProxyTest, BlockingModeCustomAddress) {
     ASSERT_EQ(LDNS_RCODE_NOERROR, ldns_pkt_get_rcode(res.get()));
     ASSERT_STREQ("4.3.2.1", make_rr_answer_string(res.get()).get());
 
+    // Allowed request (to patch response) but non-existent domain
+    ASSERT_NO_FATAL_FAILURE(perform_request(*m_proxy, create_request("hosts-style-loopback.com", LDNS_RR_TYPE_HTTPS, LDNS_RD), res));
+    ASSERT_EQ(LDNS_RCODE_NXDOMAIN, ldns_pkt_get_rcode(res.get()));
+
     // Check loopback is equivalent to unspec for IPv6
     ASSERT_NO_FATAL_FAILURE(
             perform_request(*m_proxy, create_request("hosts-style-loopback-6.com", LDNS_RR_TYPE_AAAA, LDNS_RD), res));
     ASSERT_EQ(LDNS_RCODE_NOERROR, ldns_pkt_get_rcode(res.get()));
     ASSERT_STREQ("43::21", make_rr_answer_string(res.get()).get());
+
+    // Allowed request (to patch response) but non-existent domain
+    ASSERT_NO_FATAL_FAILURE(perform_request(*m_proxy, create_request("hosts-style-loopback-6.com", LDNS_RR_TYPE_HTTPS, LDNS_RD), res));
+    ASSERT_EQ(LDNS_RCODE_NXDOMAIN, ldns_pkt_get_rcode(res.get()));
 
     // Check custom (from rule!) IP works
     ASSERT_NO_FATAL_FAILURE(
@@ -970,11 +1059,19 @@ TEST_F(DnsProxyTest, BlockingModeCustomAddress) {
     ASSERT_EQ(LDNS_RCODE_NOERROR, ldns_pkt_get_rcode(res.get()));
     ASSERT_STREQ("1.2.3.4", make_rr_answer_string(res.get()).get());
 
+    // Allowed request (to patch response) but non-existent domain
+    ASSERT_NO_FATAL_FAILURE(perform_request(*m_proxy, create_request("hosts-style-custom.com", LDNS_RR_TYPE_HTTPS, LDNS_RD), res));
+    ASSERT_EQ(LDNS_RCODE_NXDOMAIN, ldns_pkt_get_rcode(res.get()));
+
     // Check custom (from rule!) IP works for IPv6
     ASSERT_NO_FATAL_FAILURE(
             perform_request(*m_proxy, create_request("hosts-style-custom-6.com", LDNS_RR_TYPE_AAAA, LDNS_RD), res));
     ASSERT_EQ(LDNS_RCODE_NOERROR, ldns_pkt_get_rcode(res.get()));
     ASSERT_STREQ("12::34", make_rr_answer_string(res.get()).get());
+
+    // Allowed request (to patch response) but non-existent domain
+    ASSERT_NO_FATAL_FAILURE(perform_request(*m_proxy, create_request("hosts-style-custom-6.com", LDNS_RR_TYPE_HTTPS, LDNS_RD), res));
+    ASSERT_EQ(LDNS_RCODE_NXDOMAIN, ldns_pkt_get_rcode(res.get()));
 
     // Check custom (from rule!) IP works
     ASSERT_NO_FATAL_FAILURE(
@@ -987,6 +1084,17 @@ TEST_F(DnsProxyTest, BlockingModeCustomAddress) {
             perform_request(*m_proxy, create_request("hosts-style-4-and-6.com", LDNS_RR_TYPE_AAAA, LDNS_RD), res));
     ASSERT_EQ(LDNS_RCODE_NOERROR, ldns_pkt_get_rcode(res.get()));
     ASSERT_STREQ("45::67", make_rr_answer_string(res.get()).get());
+
+    // Allowed request (to patch response) but non-existent domain
+    ASSERT_NO_FATAL_FAILURE(perform_request(*m_proxy, create_request("hosts-style-4-and-6.com", LDNS_RR_TYPE_HTTPS, LDNS_RD), res));
+    ASSERT_EQ(LDNS_RCODE_NXDOMAIN, ldns_pkt_get_rcode(res.get()));
+
+    // Allowed request (to patch response) but non-existent domain
+    ASSERT_NO_FATAL_FAILURE(perform_request(*m_proxy, create_request("crypto.cloudflare.com", LDNS_RR_TYPE_HTTPS, LDNS_RD), res));
+    ASSERT_EQ(LDNS_RCODE_NOERROR, ldns_pkt_get_rcode(res.get()));
+    auto hints = SvcbHttpsHelpers::get_ip_hints_from_response(res.get());
+    ASSERT_EQ(hints.at(0), settings.custom_blocking_ipv4);
+    ASSERT_EQ(hints.at(1), settings.custom_blocking_ipv6);
 }
 
 TEST_F(DnsProxyTest, HttpsBlockingModeCustomAddress) {

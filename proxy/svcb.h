@@ -34,10 +34,11 @@ public:
      * Apply custom IPv4 and IPv6 addresses to SVCB/HTTPS records in `response` according to `settings`.
      * @return Modified response with applied changes.
      */
-    static ldns_pkt * modify_response(ldns_pkt *response, const DnsProxySettings *settings) {
-        GetCustomResponseAction action(settings);
-        process_rr(response, &action);
-        return response;
+    static ldns_pkt_ptr modify_response(const ldns_pkt *response, const std::vector<const char *> &ips) {
+        ldns_pkt_ptr clone{ldns_pkt_clone(response)};
+        GetCustomResponseAction action(ips);
+        process_rr(clone.get(), &action);
+        return clone;
     }
 
 private:
@@ -95,8 +96,8 @@ private:
 
     class GetCustomResponseAction : public SvcbHttpsAction {
     public:
-        explicit GetCustomResponseAction(const DnsProxySettings *settings)
-                : settings(settings)
+        explicit GetCustomResponseAction(const std::vector<const char *> &ips)
+                : ips(ips)
                 , buffer(nullptr) {
         }
         void beforeProcessing(ProcessingContext &context) override {
@@ -104,9 +105,9 @@ private:
         }
         void duringProcessing(ProcessingContext &context) override {
             if (context.key == LDNS_SVCPARAM_KEY_IPV4HINT) {
-                insert_custom_ip_hint_to_buffer(buffer.get(), settings->custom_blocking_ipv4);
+                insert_custom_ip_hint_to_buffer(buffer.get(), LDNS_SVCPARAM_KEY_IPV4HINT, ips);
             } else if (context.key == LDNS_SVCPARAM_KEY_IPV6HINT) {
-                insert_custom_ip_hint_to_buffer(buffer.get(), settings->custom_blocking_ipv6);
+                insert_custom_ip_hint_to_buffer(buffer.get(), LDNS_SVCPARAM_KEY_IPV6HINT, ips);
             } else {
                 insert_data_to_buffer(context, buffer.get());
             }
@@ -119,7 +120,7 @@ private:
         }
 
     private:
-        const DnsProxySettings *settings;
+        const std::vector<const char *> &ips;
         ldns_buffer_ptr buffer;
     };
 
@@ -180,13 +181,26 @@ private:
         ldns_buffer_write(buffer, context.param_start, context.len + sizeof(context.key) + sizeof(context.key));
     }
 
-    static void insert_custom_ip_hint_to_buffer(ldns_buffer *buffer, std::string_view custom_ip_str) {
-        auto custom_ip = utils::str_to_socket_address(custom_ip_str);
-        uint16_t addr_size = custom_ip.addr().size();
-        uint16_t hint_key = addr_size == IPV4_ADDRESS_SIZE ? LDNS_SVCPARAM_KEY_IPV4HINT : LDNS_SVCPARAM_KEY_IPV6HINT;
-        ldns_buffer_write_u16(buffer, hint_key);
-        ldns_buffer_write_u16(buffer, addr_size);
-        ldns_buffer_write(buffer, custom_ip.addr().data(), custom_ip.addr().size());
+    static void insert_custom_ip_hint_to_buffer(ldns_buffer *buffer, ldns_enum_svcparam_key key, std::vector<const char *> ips) {
+        size_t key_pos = ldns_buffer_position(buffer);
+        ldns_buffer_write_u16(buffer, key);
+        size_t len_pos = ldns_buffer_position(buffer);
+        uint16_t len = 0;
+        ldns_buffer_write_u16(buffer, len);
+        for (auto *ip : ips) {
+            auto custom_ip = utils::str_to_socket_address(ip);
+            uint16_t addr_size = custom_ip.addr().size();
+            if ((key == LDNS_SVCPARAM_KEY_IPV4HINT && addr_size == IPV4_ADDRESS_SIZE)
+                    || (key == LDNS_SVCPARAM_KEY_IPV6HINT && addr_size == IPV6_ADDRESS_SIZE)) {
+                ldns_buffer_write(buffer, custom_ip.addr().data(), addr_size);
+                len += addr_size;
+            }
+        }
+        if (len > 0) {
+            ldns_buffer_write_u16_at(buffer, len_pos, len);
+        } else {
+            ldns_buffer_set_position(buffer, key_pos);
+        }
     }
 
     static void parse_ip_addr_from_raw_data(std::vector<std::string> &result, const ProcessingContext &context) {

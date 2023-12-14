@@ -14,3 +14,8 @@
 
 ||truste.com^
 0.0.0.0 hosts-style.truste.com
+
+1.3.5.7 cloudflare.com
+13::57 cloudflare.com
+
+0.0.0.0 crypto.cloudflare.com
