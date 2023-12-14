@@ -10,8 +10,6 @@
 
 namespace ag::dns {
 
-using ldns_pkt_ptr = UniquePtr<ldns_pkt, &ldns_pkt_free>;
-
 /**
  * Response cache
  *

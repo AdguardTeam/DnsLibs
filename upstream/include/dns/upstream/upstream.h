@@ -28,8 +28,6 @@ namespace dns {
 class Upstream;
 
 using UpstreamPtr = std::shared_ptr<Upstream>;
-using ldns_pkt_ptr = UniquePtr<ldns_pkt, &ldns_pkt_free>; // NOLINT(readability-identifier-naming)
-using ldns_buffer_ptr = UniquePtr<ldns_buffer, &ldns_buffer_free>; // NOLINT(readability-identifier-naming)
 
 /**
  * Upstream factory configuration

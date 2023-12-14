@@ -1,9 +1,12 @@
 #ifndef _WIN32
+#include <ldns/net.h>
 #include <netinet/in.h>
+
 #else
 #include <Winsock2.h>
 #endif
 
+#include "dns/common/dns_defs.h"
 #include "dns/net/tcp_dns_buffer.h"
 #include "dns/net/utils.h"
 
@@ -72,6 +75,45 @@ coro::Task<Result<Uint8Vector, dns::SocketError>> dns::receive_dns_packet(
     }
 
     co_return std::move(context.reply);
+}
+
+struct ReadContext {
+    utils::TransportProtocol protocol;
+    dns::TcpDnsBuffer tcp_buffer;
+    dns::ldns_pkt_ptr reply_pkt;
+    std::function<dns::ldns_pkt_ptr(Uint8Vector)> check_and_decode;
+};
+
+static bool on_read(void *arg, Uint8View data) {
+    auto *ctx = (ReadContext *) arg;
+    bool done = false;
+    switch (ctx->protocol) {
+    case utils::TransportProtocol::TP_TCP:
+        ctx->tcp_buffer.store(data);
+        if (auto p = ctx->tcp_buffer.extract_packet(); p.has_value()) {
+            ctx->reply_pkt = ctx->check_and_decode(std::move(p.value()));
+            done = ctx->reply_pkt != nullptr;
+        }
+        break;
+    case utils::TransportProtocol::TP_UDP:
+        ctx->reply_pkt = ctx->check_and_decode({data.begin(), data.end()});
+        done = ctx->reply_pkt != nullptr;
+        break;
+    }
+    return !done;
+}
+
+coro::Task<Result<dns::ldns_pkt_ptr, dns::SocketError>> dns::receive_and_decode_dns_packet(
+        AioSocket *self, std::optional<Micros> timeout, std::function<ldns_pkt_ptr(Uint8Vector)> check_and_decode) {
+
+    ReadContext context = {.protocol = self->get_underlying()->get_protocol(), .check_and_decode = check_and_decode};
+    auto on_read_handler = AioSocket::OnReadCallback{on_read, &context};
+
+    if (auto err = co_await self->receive(on_read_handler, timeout)) {
+        co_return err;
+    }
+
+    co_return std::move(context.reply_pkt);
 }
 
 } // namespace ag

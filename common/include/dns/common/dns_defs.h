@@ -1,10 +1,16 @@
 #pragma once
 
+#include <ldns/packet.h>
+
+#include "common/defs.h"
 #include "common/error.h"
 #include "common/utils.h"
 
 namespace ag {
 namespace dns {
+
+using ldns_pkt_ptr = UniquePtr<ldns_pkt, &ldns_pkt_free>;          // NOLINT(readability-identifier-naming)
+using ldns_buffer_ptr = UniquePtr<ldns_buffer, &ldns_buffer_free>; // NOLINT(readability-identifier-naming)
 
 /**
  * Enum for errors than can happen during DNS exchange

@@ -26,7 +26,9 @@ Error<Upstream::InitError> PlainUpstream::init() {
         }
         m_address = ag::utils::str_to_socket_address(m_url.get_host());
 
-        if (m_url.get_protocol() == "tcp:") {
+        if (m_url.get_protocol() == UDP_SCHEME) {
+            m_prefer_udp = true;
+        } else if (m_url.get_protocol() == TCP_SCHEME) {
             m_prefer_tcp = true;
         } else {
             return make_error(InitError::AE_INVALID_ADDRESS, AG_FMT("Invalid URL scheme: {}", m_url.get_protocol()));
@@ -45,24 +47,6 @@ Error<Upstream::InitError> PlainUpstream::init() {
     m_pool = std::make_shared<ConnectionPool<DnsFramedConnection>>(config().loop, shared_from_this(), 10);
 
     return {};
-}
-
-static bool should_try_tcp(const ldns_pkt *request, const ldns_pkt *reply, const ldns_status status) {
-    if (status != LDNS_STATUS_OK) {
-        return true;
-    }
-
-    auto orig_id = ldns_pkt_id(request);
-    auto reply_id = ldns_pkt_id(reply);
-    if (reply_id != orig_id) {
-        return true;
-    }
-
-    if (ldns_pkt_tc(reply)) {
-        return true;
-    }
-
-    return false;
 }
 
 coro::Task<Upstream::ExchangeResult> PlainUpstream::exchange(const ldns_pkt *request_pkt, const DnsMessageInfo *info) {
@@ -107,7 +91,17 @@ coro::Task<Upstream::ExchangeResult> PlainUpstream::exchange(const ldns_pkt *req
             co_return make_error(DnsError::AE_SOCKET_ERROR, err);
         }
 
-        auto r = co_await receive_dns_packet(&socket, timeout);
+        auto r = co_await receive_and_decode_dns_packet(
+                &socket, timeout, [id = ldns_pkt_id(request_pkt)](Uint8Vector buf) {
+                    ldns_pkt *reply_pkt = nullptr;
+                    auto status = ldns_wire2pkt(&reply_pkt, buf.data(), buf.size());
+                    // Skip incorrect packets or packets with invalid id
+                    if (status != LDNS_STATUS_OK || ldns_pkt_id(reply_pkt) != id) {
+                        return ldns_pkt_ptr{nullptr}; // Return nullptr wrapped in ldns_pkt_ptr
+                    }
+                    return ldns_pkt_ptr{reply_pkt};
+                });
+
         if (guard.expired()) {
             co_return make_error(DnsError::AE_SHUTTING_DOWN);
         }
@@ -117,14 +111,11 @@ coro::Task<Upstream::ExchangeResult> PlainUpstream::exchange(const ldns_pkt *req
                     : make_error(DnsError::AE_SOCKET_ERROR, r.error());
         }
 
-        auto &reply = r.value();
-        ldns_pkt *reply_pkt = nullptr;
-        status = ldns_wire2pkt(&reply_pkt, reply.data(), reply.size());
-        if (!should_try_tcp(request_pkt, reply_pkt, status)) {
-            co_return ldns_pkt_ptr{reply_pkt};
+        auto &reply_pkt = r.value();
+        if (m_prefer_udp || !ldns_pkt_tc(reply_pkt.get())) {
+            co_return std::move(reply_pkt);
         }
         tracelog_id(m_log, request_pkt, "Trying TCP request after UDP failure");
-        ldns_pkt_free(reply_pkt);
     }
 
     timeout -= timer.elapsed<decltype(timeout)>();
