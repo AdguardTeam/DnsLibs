@@ -122,8 +122,22 @@ bool rule_utils::is_domain_name(std::string_view str) {
             && str.npos == str.find('*'); // '*' is our special char for pattern matching
 }
 
+static constexpr std::string_view rule_type_mask[] = {
+        "##", "#@#", "#?#", "#@?#",
+        "#$#", "#@$#", "#?$#", "#@?$#",
+        "#%#", "#@%#",
+};
+
 static bool is_domain_rule(std::string_view str) {
-    auto [head, _] = ag::utils::split2_by(str, '#');
+    auto [head, tail] = ag::utils::split2_by(str, '#');
+    if (rule_utils::is_domain_name(head) /* not trimmed */) {
+        for (auto mask : rule_type_mask) {
+            if (tail.starts_with(mask.substr(1))) {
+                return false;
+            }
+        }
+        return true;
+    }
     return rule_utils::is_domain_name(utils::rtrim(head));
 }
 
