@@ -1097,10 +1097,32 @@ TEST_F(DnsProxyTest, BlockingModeCustomAddress) {
     ASSERT_EQ(hints.at(1), settings.custom_blocking_ipv6);
 }
 
-TEST_F(DnsProxyTest, HttpsBlockingModeCustomAddress) {
+TEST_F(DnsProxyTest, HttpsBlockingModeCustomAddressAdblockRule) {
     DnsProxySettings settings = make_dnsproxy_settings();
         settings.filter_params = {{{1, "adguard.com", true}}};
     settings.adblock_rules_blocking_mode = DnsProxyBlockingMode::ADDRESS;
+    settings.hosts_rules_blocking_mode = DnsProxyBlockingMode::NXDOMAIN;
+    settings.custom_blocking_ipv4 = "4.3.2.1";
+    settings.custom_blocking_ipv6 = "43::21";
+
+    auto [ret, err] = m_proxy->init(settings, {});
+    ASSERT_TRUE(ret) << err->str();
+
+    ldns_pkt_ptr res;
+
+    ASSERT_NO_FATAL_FAILURE(
+            perform_request(*m_proxy, create_request("adguard.com", LDNS_RR_TYPE_HTTPS, LDNS_RD),res));
+    ASSERT_EQ(LDNS_RCODE_NOERROR, ldns_pkt_get_rcode(res.get()));
+    ASSERT_EQ(1, ldns_pkt_ancount(res.get()));
+    auto hints = SvcbHttpsHelpers::get_ip_hints_from_response(res.get());
+    ASSERT_EQ(hints.at(0), settings.custom_blocking_ipv4);
+    ASSERT_EQ(hints.at(1), settings.custom_blocking_ipv6);
+}
+
+TEST_F(DnsProxyTest, HttpsBlockingModeCustomAddressHostsRule) {
+    DnsProxySettings settings = make_dnsproxy_settings();
+    settings.filter_params = {{{1, "0.0.0.0 adguard.com", true}}};
+    settings.adblock_rules_blocking_mode = DnsProxyBlockingMode::NXDOMAIN;
     settings.hosts_rules_blocking_mode = DnsProxyBlockingMode::ADDRESS;
     settings.custom_blocking_ipv4 = "4.3.2.1";
     settings.custom_blocking_ipv6 = "43::21";
