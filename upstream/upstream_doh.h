@@ -63,7 +63,7 @@ private:
     coro::Task<void> drive_connection(Millis timeout);
     coro::Task<Result<HttpConnection *, DnsError>> establish_connection(HttpConnection *http_conn, SocketAddress peer);
     coro::Task<Result<HttpConnection *, DnsError>> establish_any_of_connections(
-            const std::vector<std::unique_ptr<HttpConnection>> &connections, SocketAddress peer);
+            HttpConnection *left, HttpConnection *right, SocketAddress peer);
     coro::Task<ExchangeResult> exchange(Millis timeout, const ldns_pkt *request);
     coro::Task<ExchangeResult> wait_for_reply(uint64_t stream_id, uint16_t query_id);
     Result<uint64_t, DnsError> send_request(const ldns_pkt *request);
@@ -75,7 +75,6 @@ private:
     uint32_t m_id;
     ConnectionState m_connection_state{};
     std::unique_ptr<HttpConnection> m_http_conn;
-    std::shared_ptr<std::vector<std::unique_ptr<HttpConnection>>> m_pending_connections;
     std::unordered_map<uint64_t, std::unique_ptr<ReplyWaiter>> m_streams;
     size_t m_next_query_id = 0;
     std::unordered_map<size_t, std::unique_ptr<ConnectWaiter>> m_connect_waiters;

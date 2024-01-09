@@ -244,8 +244,6 @@ TEST_F(DnsfilterTest, SuccessfulExactDomainRuleParsing) {
             {"example.org # Comment.", "example.org" },
             {"example.org #Comment", "example.org" },
             {"example.org #Comment.", "example.org" },
-            {"example.org ##Comment.", "example.org" }, // contains CSS mask but also space, so it is not valid CSS rule
-
     };
 
     for (const TestData &entry : TEST_DATA) {
@@ -323,7 +321,6 @@ TEST_F(DnsfilterTest, WrongRuleParsing) {
             ".*",
             "example.org$denyallow",
             "example.org$denyallow=",
-            "example.org##Comment",
     };
 
     for (const std::string &entry : TEST_DATA) {
