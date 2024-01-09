@@ -162,13 +162,23 @@ SocksOProxy::SocksOProxy(const OutboundProxySettings *settings, Parameters param
 SocksOProxy::~SocksOProxy() = default;
 
 void SocksOProxy::deinit_impl() {
-    std::vector<uint32_t> connections;
-    connections.reserve(m_connections.size());
-    std::transform(m_connections.begin(), m_connections.end(), std::back_inserter(connections),
-            [](const auto &iter) {
-                return iter.first;
-            });
-    for (uint32_t conn_id : connections) {
+    std::vector<uint32_t> udp_connections, tcp_connections;
+    udp_connections.reserve(m_connections.size());
+    tcp_connections.reserve(m_connections.size());
+    for (auto &[conn_id, conn] : m_connections) {
+        if (conn->parameters.proto == utils::TP_UDP) {
+            udp_connections.push_back(conn_id);
+        } else {
+            tcp_connections.push_back(conn_id);
+        }
+    }
+    // We close UDP connections first, because flow of closing UDP connection here assumes that
+    // in pair of UDP connection and its UDP association TCP connection,
+    // UDP connection is destroyed first, then TCP connection.
+    for (uint32_t conn_id : udp_connections) {
+        this->SocksOProxy::close_connection_impl(conn_id);
+    }
+    for (uint32_t conn_id : tcp_connections) {
         this->SocksOProxy::close_connection_impl(conn_id);
     }
 

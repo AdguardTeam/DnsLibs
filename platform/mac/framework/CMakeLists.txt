@@ -37,7 +37,8 @@ project(dnsproxy_framework C CXX OBJC OBJCXX)
 
 # Ensure that API is compatible with minimum MacOS version
 add_compile_options(-Werror=unguarded-availability)
-link_libraries(-Wl,-application_extension -Wl,-x)
+# Allow framework to be linked into application extension
+link_libraries(-Wl,-application_extension)
 # TODO: Remove this workaround after updating to XCode 15.1: https://developer.apple.com/documentation/xcode-release-notes/xcode-15-release-notes#Linking
 if (CMAKE_CXX_COMPILER_ID MATCHES "AppleClang" AND CMAKE_C_COMPILER_VERSION VERSION_GREATER_EQUAL "15.0.0")
     add_link_options(-Wl,-ld_classic)
@@ -68,7 +69,7 @@ set_property(TARGET AGDnsProxy PROPERTY POSITION_INDEPENDENT_CODE ON)
 set_target_properties(AGDnsProxy PROPERTIES
     FRAMEWORK TRUE
     FRAMEWORK_VERSION A
-    VERSION 2.4.31
+    VERSION 2.4.37
     MACOSX_FRAMEWORK_INFO_PLIST "${INFOPLIST_FILE}"
     MACOSX_FRAMEWORK_IDENTIFIER com.adguard.dnsproxy
     XCODE_ATTRIBUTE_CODE_SIGN_IDENTITY "Developer ID Application: Performiks OOO (N33TQXN8C7)"

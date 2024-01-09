@@ -12,6 +12,7 @@ namespace ag::dns {
 using namespace std::chrono;
 
 static std::atomic_size_t next_id = {0};
+static constexpr auto AIO_SOCKET_IDLE_TIMEOUT = Secs{3600 * 24 * 7};
 
 AioSocket::AioSocket(SocketFactory::SocketPtr socket)
         : m_log(__func__)
@@ -87,6 +88,8 @@ Socket::ConnectParameters AioSocket::make_underlying_connect_parameters(ConnectP
 void AioSocket::on_connected(void *arg) {
     auto *self = (AioSocket *) arg;
     log_sock(self, trace, "...");
+    // AIO operations have timeouts themselves.
+    self->m_underlying_socket->set_timeout(ag::Secs{AIO_SOCKET_IDLE_TIMEOUT});
     if (auto handler = std::exchange(self->m_handler, nullptr)) {
         handler(std::exchange(self->m_pending_error, nullptr));
     }

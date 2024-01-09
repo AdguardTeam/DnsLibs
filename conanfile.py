@@ -126,7 +126,7 @@ class DnsLibsConan(ConanFile):
             "native_libs_common::native_libs_common",
             "tldregistry::tldregistry",
             "openssl::openssl",
-            "add::ada",
+            "ada::ada",
         ]
         if self.settings.os == "Windows":
             self.cpp_info.requires.append("detours::detours")
