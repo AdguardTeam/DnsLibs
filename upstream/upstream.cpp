@@ -11,13 +11,15 @@
 #include "common/route_resolver.h"
 #include "common/utils.h"
 #include "dns/dnsstamp/dns_stamp.h"
+#include "dns/upstream/upstream.h"
 #include "upstream_dnscrypt.h"
 #include "upstream_doh.h"
 #include "upstream_doq.h"
 #include "upstream_dot.h"
 #include "upstream_plain.h"
-
-#include "dns/upstream/upstream.h"
+#ifdef __APPLE__
+#include "upstream_system.h"
+#endif //_APPLE
 
 namespace ag::dns {
 
@@ -30,6 +32,7 @@ enum class Scheme : size_t {
     HTTPS,
     H3,
     QUIC,
+    SYSTEM,
     UNDEFINED,
 };
 
@@ -42,6 +45,7 @@ static constexpr std::string_view SCHEME_WITH_SUFFIX[] = {
         DohUpstream::SCHEME_HTTPS,
         DohUpstream::SCHEME_H3,
         DoqUpstream::SCHEME,
+        "system://",
 };
 
 static_assert(std::size(SCHEME_WITH_SUFFIX) + 1 == magic_enum::enum_count<Scheme>(),
@@ -57,7 +61,6 @@ struct UpstreamFactory::Impl {
             config.timeout = DEFAULT_TIMEOUT;
         }
     }
-
     UpstreamFactory::CreateResult create_upstream(const UpstreamOptions &opts) const;
 };
 
@@ -93,6 +96,15 @@ static Result<std::vector<CertFingerprint>, UpstreamFactory::UpstreamCreateError
 }
 
 using CreateResult = UpstreamFactory::CreateResult;
+
+static CreateResult create_upstream_system(
+        const UpstreamOptions &opts, const UpstreamFactoryConfig &config, std::vector<CertFingerprint>/*fingerprints*/ ) {
+#ifdef __APPLE__
+    return CreateResult{std::make_unique<SystemUpstream>(opts, config)};
+#else
+    return make_error(UpstreamFactory::UpstreamCreateError::AE_NOT_SUPPORTED, "");
+#endif
+}
 
 static CreateResult create_upstream_tls(
         const UpstreamOptions &opts, const UpstreamFactoryConfig &config, std::vector<CertFingerprint> fingerprints) {
@@ -184,7 +196,8 @@ UpstreamFactory::CreateResult UpstreamFactory::Impl::create_upstream(const Upstr
             &create_upstream_https,
             &create_upstream_https,
             &create_upstream_doq,
-            &create_upstream_plain,
+            &create_upstream_system,
+            &create_upstream_plain, // Undefined
     };
     static_assert(std::size(create_functions) == magic_enum::enum_count<Scheme>(),
             "create_functions should contains all create functions for schemes defined in enum");
@@ -236,8 +249,8 @@ Error<Upstream::InitError> Upstream::init_url_port(bool allow_creds, bool allow_
         url->set_pathname("/");
     }
     uint16_t port = url->get_port().empty()
-                    ? default_port
-                    : ag::utils::to_integer<uint16_t>(url->get_port()).value(); // NOLINT(*-unchecked-optional-access)
+            ? default_port
+            : ag::utils::to_integer<uint16_t>(url->get_port()).value(); // NOLINT(*-unchecked-optional-access)
     m_url = std::move(url.value());
     m_port = port;
     return {};

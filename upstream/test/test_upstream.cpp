@@ -1,17 +1,17 @@
 #include <csignal>
-#include <fmt/chrono.h>
-#include <functional>
 #include <future>
-#include <ldns/ldns.h>
 #include <span>
 #include <thread>
+#include <functional>
+
+#include <fmt/chrono.h>
+#include <ldns/ldns.h>
 
 #include "common/gtest_coro.h"
 #include "common/logger.h"
 #include "common/parallel.h"
 #include "common/utils.h"
 #include "dns/dnscrypt/dns_crypt_ldns.h"
-#include "dns/net/application_verifier.h"
 #include "dns/net/default_verifier.h"
 #include "dns/upstream/upstream.h"
 #include "dns/upstream/upstream_utils.h"
@@ -222,7 +222,9 @@ TEST_F(UpstreamTest, CreateUpstreamWithWrongOptions) {
             {"tcp://8..8.8:53"},
             {"tcp://1.1.1.1,8.8.8.8"},
             {"1.1.1.1,8.8.8.8"},
-
+#ifdef __APPLE__
+            {"system://enqwerty"},
+#endif // __APPLE__
             // no bootstrapper and resolved server address
             {"https://example.com"},
             {"tls://one.one.one.one"},
@@ -358,6 +360,9 @@ INSTANTIATE_TEST_SUITE_P(DnsTruncatedTest, DnsTruncatedTest, testing::ValuesIn(t
 static const UpstreamTestData test_upstreams_data[]{
         {"udp://1.1.1.1:53", {}},
         {"tcp://8.8.8.8", {}},
+#ifdef __APPLE__
+        {"system://en0", {}},
+#endif
         {"8.8.8.8:53", {"8.8.8.8:53"}},
         {"1.0.0.1", {}},
         {"1.1.1.1", {"1.0.0.1"}},
@@ -715,9 +720,7 @@ TEST_P(UpstreamIvalidFingerprintTest, TestUpstreamIvalidFingerprint) {
     ASSERT_TRUE(upstream_res.has_error()) << "Expected that create_upstream return error";
 }
 
-INSTANTIATE_TEST_SUITE_P(
-        UpstreamIvalidFingerprintTest, UpstreamIvalidFingerprintTest, testing::ValuesIn(test_options_with_invalid_fingerprint_data));
-
-
+INSTANTIATE_TEST_SUITE_P(UpstreamIvalidFingerprintTest, UpstreamIvalidFingerprintTest,
+        testing::ValuesIn(test_options_with_invalid_fingerprint_data));
 
 } // namespace ag::dns::upstream::test

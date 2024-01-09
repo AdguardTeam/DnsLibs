@@ -92,6 +92,7 @@ public:
         AE_BOOTSTRAPPER_INIT_FAILED,
         AE_INVALID_ADDRESS,
         AE_SSL_CONTEXT_INIT_FAILED,
+        AE_SYSTEMRESOLVER_INIT_FAILED,
     };
 
     Upstream(UpstreamOptions opts, UpstreamFactoryConfig config)
@@ -211,6 +212,7 @@ public:
         AE_INVALID_STAMP,
         AE_INVALID_FINGERPRINT,
         AE_INIT_FAILED,
+        AE_NOT_SUPPORTED,
     };
     using CreateResult = Result<UpstreamPtr, UpstreamCreateError>;
 
@@ -241,11 +243,12 @@ struct ErrorCodeToString<dns::UpstreamFactory::UpstreamCreateError> {
         case decltype(e)::AE_INVALID_STAMP: return "Invalid DNS stamp";
         case decltype(e)::AE_INVALID_FINGERPRINT: return "Passed fingerprint is not valid";
         case decltype(e)::AE_INIT_FAILED: return "Error initializing upstream";
+        case decltype(e)::AE_NOT_SUPPORTED: return "SystemUpstream is only supported on Apple platforms";
         }
     }
 };
 
-template<>
+template <>
 struct ErrorCodeToString<dns::Upstream::InitError> {
     std::string operator()(dns::Upstream::InitError e) {
         switch (e) {
@@ -254,6 +257,7 @@ struct ErrorCodeToString<dns::Upstream::InitError> {
         case decltype(e)::AE_BOOTSTRAPPER_INIT_FAILED: return "Failed to create bootstrapper";
         case decltype(e)::AE_INVALID_ADDRESS: return "Passed server address is not valid";
         case decltype(e)::AE_SSL_CONTEXT_INIT_FAILED: return "Failed to initialize SSL context";
+        case decltype(e)::AE_SYSTEMRESOLVER_INIT_FAILED: return "Failed to initialize system resolver";
         }
     }
 };
