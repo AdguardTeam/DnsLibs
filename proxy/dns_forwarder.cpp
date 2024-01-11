@@ -1154,7 +1154,7 @@ coro::Task<UpstreamExchangeResult> DnsForwarder::do_upstreams_exchange(
             }
         }
     }
-    if (m_settings->enable_fallback_on_upstreams_failure && !m_fallbacks.empty()) {
+    if (!m_fallbacks.empty() && (m_settings->enable_fallback_on_upstreams_failure || fallback)) {
         auto [fallbacks, fallbacks_max_rtt, _] = collect_upstreams(m_fallbacks, true);
         co_return co_await do_parallel_exchange(fallbacks, request, info, 2 * fallbacks_max_rtt, /*wait_all*/ true);
     }

@@ -1880,4 +1880,20 @@ TEST_F(DnsProxyTest, TransparentRequest) {
     ASSERT_EQ(1, ldns_pkt_ancount(result_pkt));
 }
 
+TEST_F(DnsProxyTest, FallbackDomainWorksWhenFallbackOnUpstreamsFailureDisabled) {
+    DnsProxySettings settings = make_dnsproxy_settings();
+    settings.upstreams = {{.address = "1.2.3.4"}};
+    settings.fallbacks = {{.address = "8.8.8.8"}};
+    settings.fallback_domains = {"*.example.org"};
+    settings.enable_fallback_on_upstreams_failure = false;
+    DnsProxy proxy;
+    auto [ret, err] = proxy.init(settings, {});
+    ASSERT_TRUE(ret);
+    ldns_pkt_ptr request = create_request("www.example.org", LDNS_RR_TYPE_A, LDNS_RD);
+    ldns_pkt_ptr response;
+    perform_request(proxy, request, response);
+
+    ASSERT_EQ(LDNS_RCODE_NOERROR, ldns_pkt_get_rcode(response.get()));
+    proxy.deinit();
+}
 } // namespace ag::dns::proxy::test
