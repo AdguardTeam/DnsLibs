@@ -138,7 +138,7 @@ static std::string stamp_string(
     for (const auto &f : fs) {
         f(bin, stamp);
     }
-    return STAMP_URL_PREFIX_WITH_SCHEME + encode_to_base64(Uint8View(bin.data(), bin.size()), true);
+    return STAMP_URL_PREFIX_WITH_SCHEME + encode_to_base64(ag::as_u8v(bin), true);
 }
 
 static StampError validate_server_addr_str(std::string_view addr_str) {

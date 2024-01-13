@@ -300,7 +300,7 @@ ag::Error<ag::dns::Upstream::InitError> ag::dns::DohUpstream::init() {
     m_request_template.authority(std::string(m_url.get_hostname()));
     if (!m_url.get_username().empty() && !m_url.get_password().empty()) {
         auto creds_fmt = AG_FMT("{}:{}", m_url.get_username(), m_url.get_password());
-        auto creds_base64 = ag::encode_to_base64(Uint8View((uint8_t *) creds_fmt.data(), creds_fmt.size()), false);
+        auto creds_base64 = ag::encode_to_base64(as_u8v(creds_fmt), false);
         m_request_template.headers().put("Authorization", AG_FMT("Basic {}", creds_base64));
     }
     m_path = m_url.get_pathname();
