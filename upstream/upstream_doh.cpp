@@ -267,7 +267,7 @@ ag::dns::DohUpstream::~DohUpstream() {
 }
 
 ag::Error<ag::dns::Upstream::InitError> ag::dns::DohUpstream::init() {
-    auto error = this->init_url_port(/*allow_creds*/ true, /*allow_path*/ true, DEFAULT_DOH_PORT);
+    auto error = this->init_url_port(/*allow_creds*/ true, /*allow_path*/ true, DEFAULT_DOH_PORT, /*host_to_lowercase*/ true);
     if (error) {
         return error;
     }
@@ -306,7 +306,7 @@ ag::Error<ag::dns::Upstream::InitError> ag::dns::DohUpstream::init() {
     m_path = m_url.get_pathname();
     log_upstream(dbg, this, "Prepared request template: {}", m_request_template);
 
-    if (m_options.address.starts_with(DohUpstream::SCHEME_H3)) {
+    if (utils::istarts_with(m_options.address, DohUpstream::SCHEME_H3)) {
         m_http_version = http::HTTP_3_0;
     } else if (!m_config.enable_http3) {
         m_http_version = http::HTTP_2_0;

@@ -184,7 +184,7 @@ protected:
         }
     };
 
-    Error<InitError> init_url_port(bool allow_creds, bool allow_path, uint16_t default_port);
+    Error<InitError> init_url_port(bool allow_creds, bool allow_path, uint16_t default_port, bool host_to_lowercase);
 
     /** Upstream options */
     UpstreamOptions m_options;

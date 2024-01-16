@@ -46,4 +46,9 @@ TEST_F(UpstreamUtilsTest, InvalidUpstreamOfflineUnknownScheme) {
     ASSERT_TRUE(err) << "Cannot be successful";
 }
 
+TEST_F(UpstreamUtilsTest, ValidUpstreamMixedCase) {
+    auto err = dns::test_upstream({"Https://dns.Adguard-Dns.com/dns-query", {"8.8.8.8"}}, timeout, false, nullptr, true);
+    ASSERT_FALSE(err) << "Cannot fail: " << err->str();
+}
+
 } // namespace ag::dns::upstream::test

@@ -59,7 +59,7 @@ public:
             m_stream = upstream->make_secured_socket(utils::TP_TCP,
                     SocketFactory::SecureSocketParameters{
                             .session_cache = &upstream->m_tls_session_cache,
-                            .server_name = upstream->m_server_name.empty() ? addr.host_str() : upstream->m_server_name,
+                            .server_name{upstream->m_url.get_hostname()},
                             .alpn = {DOT_ALPN},
                             .fingerprints = upstream->m_fingerprints,
                     });
@@ -105,21 +105,6 @@ public:
     Bootstrapper::ResolveResult m_result;
 };
 
-static std::string_view strip_dot_url(std::string_view url) {
-    assert(url.starts_with(DotUpstream::SCHEME));
-    url.remove_prefix(DotUpstream::SCHEME.length());
-    url = url.substr(0, url.find('/'));
-    return url;
-}
-
-static Result<std::string_view, Upstream::InitError> get_host_name(std::string_view url) {
-    auto split_result = utils::split_host_port(strip_dot_url(url));
-    if (split_result.has_error()) {
-        return make_error(Upstream::InitError::AE_INVALID_ADDRESS);
-    }
-    return utils::trim(split_result.value().first);
-}
-
 static Result<BootstrapperPtr, Upstream::InitError> create_bootstrapper(
         const UpstreamOptions &opts, const UpstreamFactoryConfig &config,
         const ada::url_aggregator url, uint16_t port) {
@@ -142,13 +127,10 @@ DotUpstream::DotUpstream(const UpstreamOptions &opts, const UpstreamFactoryConfi
         , m_tls_session_cache(opts.address)
         , m_fingerprints(std::move(fingerprints))
 {
-    if (auto host = get_host_name(opts.address); !host.has_error()) {
-        m_server_name = host.value();
-    }
 }
 
 Error<Upstream::InitError> DotUpstream::init() {
-    auto error = this->init_url_port(/*allow_creds*/ false, /*allow_path*/ false, DEFAULT_DOT_PORT);
+    auto error = this->init_url_port(/*allow_creds*/ false, /*allow_path*/ false, DEFAULT_DOT_PORT, /*host_to_lowercase*/ true);
     if (error) {
         return error;
     }

@@ -40,8 +40,6 @@ private:
     Logger m_log;
     /** TLS connection pool */
     ConnectionPoolPtr m_pool;
-    /** DNS server name */
-    std::string m_server_name;
     /** TLS sessions cache */
     TlsSessionCache m_tls_session_cache;
     /** Bootstrapper */

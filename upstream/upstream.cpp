@@ -67,7 +67,7 @@ struct UpstreamFactory::Impl {
 static auto get_address_scheme_iterator(std::string_view address) {
     using namespace std::placeholders;
     return std::find_if(std::begin(SCHEME_WITH_SUFFIX), std::end(SCHEME_WITH_SUFFIX), [&](auto scheme) {
-        return address.starts_with(scheme);
+        return utils::istarts_with(address, scheme);
     });
 }
 
@@ -228,7 +228,7 @@ UpstreamFactory::CreateResult UpstreamFactory::create_upstream(const UpstreamOpt
     return result;
 }
 
-Error<Upstream::InitError> Upstream::init_url_port(bool allow_creds, bool allow_path, uint16_t default_port) {
+Error<Upstream::InitError> Upstream::init_url_port(bool allow_creds, bool allow_path, uint16_t default_port, bool host_to_lowercase) {
     auto url = ada::parse<ada::url_aggregator>(m_options.address, nullptr);
     if (!url) {
         return make_error(InitError::AE_INVALID_ADDRESS, "Invalid URL");
@@ -245,8 +245,13 @@ Error<Upstream::InitError> Upstream::init_url_port(bool allow_creds, bool allow_
     if (!allow_path && !url->get_pathname().empty() && url->get_pathname() != "/") {
         return make_error(InitError::AE_INVALID_ADDRESS, "Unexpected path");
     }
-    if (allow_path && url->get_pathname().empty()) {
-        url->set_pathname("/");
+    if (!url->is_special()) {
+        if (allow_path && url->get_pathname().empty()) {
+            url->set_pathname("/");
+        }
+    }
+    if (host_to_lowercase) {
+        url->set_host(utils::to_lower(url->get_host()));
     }
     uint16_t port = url->get_port().empty()
             ? default_port
