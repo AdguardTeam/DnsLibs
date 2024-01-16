@@ -279,7 +279,7 @@ ag::Error<ag::dns::Upstream::InitError> ag::dns::DohUpstream::init() {
 
     std::string address;
     if (auto resolved = ag::SocketAddress(m_options.resolved_server_ip, DEFAULT_DOH_PORT); resolved.valid()) {
-        address = resolved.host_str();
+        address = resolved.host_str(/*ipv6_brackets*/ true);
     } else {
         address = m_url.get_hostname();
     }
