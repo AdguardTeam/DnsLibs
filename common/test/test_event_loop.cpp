@@ -33,10 +33,10 @@ TEST(EventLoop, Coro) {
         }
         infolog(log, "co_sleep test done");
         infolog(log, "any_of_void test, 1.5s and 4s");
-        co_await parallel::any_of(loop.co_sleep(1500ms), loop.co_sleep(4s));
+        co_await parallel::any_of<void>(loop.co_sleep(1500ms), loop.co_sleep(4s));
         infolog(log, "any_of_void test done");
         infolog(log, "all_of_void test, 1.5s and 4s");
-        co_await parallel::all_of(loop.co_sleep(1500ms), loop.co_sleep(4s));
+        co_await parallel::all_of<void>(loop.co_sleep(1500ms), loop.co_sleep(4s));
         infolog(log, "all_of_void test done");
         loop.stop();
         co_return 42;
