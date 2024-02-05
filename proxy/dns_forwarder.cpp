@@ -172,14 +172,15 @@ static void event_append_rules(
 void DnsForwarder::finalize_processed_event(DnsRequestProcessedEvent &event, const ldns_pkt *request,
         const ldns_pkt *response, const ldns_pkt *original_response, std::optional<int32_t> upstream_id,
         Error<DnsError> error) const {
+
+    event.type.clear();
     if (request != nullptr) {
-        const ldns_rr *question = ldns_rr_list_rr(ldns_pkt_question(request), 0);
-        AllocatedPtr<char> type{ldns_rr_type2str(ldns_rr_get_type(question))};
-        event.type = type.get();
-        AllocatedPtr<char> domain{ldns_rdf2str(ldns_rr_owner(question))};
-        event.domain = domain.get();
-    } else {
-        event.type.clear();
+        if (const ldns_rr *question = ldns_rr_list_rr(ldns_pkt_question(request), 0)) {
+            AllocatedPtr<char> type{ldns_rr_type2str(ldns_rr_get_type(question))};
+            event.type = type.get();
+            AllocatedPtr<char> domain{ldns_rdf2str(ldns_rr_owner(question))};
+            event.domain = domain.get();
+        }
     }
 
     if (response != nullptr) {
