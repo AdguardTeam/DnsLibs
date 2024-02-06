@@ -21,7 +21,7 @@ namespace ag::dns::proxy::test {
 
 // Generated with:
 // echo | openssl s_client -connect 94.140.14.14:853 -servername dns.adguard-dns.com 2>/dev/null | openssl x509 -pubkey -noout | openssl pkey -pubin -outform der | openssl dgst -sha256 -binary | openssl enc -base64
-static constexpr auto ADGUARD_DNS_SPKI = "2EeRHV2g0BhpRnuu8GBcpH/nGo4xv76wlP1vRCG428Y=";
+static constexpr auto ADGUARD_DNS_SPKI = "gX+tmLZzEdlwVKPNCeIY/DGV0VIHGpdPb25KjJ4OZjU=";
 static constexpr auto ZEROSSL_SPKI = "3fLLVjRIWnCqDqIETU2OcnMP7EzmN/Z3Q/jQ8cIaAoc=";
 
 static constexpr auto DNS64_SERVER_ADDR = "2001:4860:4860::6464";
@@ -272,7 +272,7 @@ TEST_F(DnsProxyTest, DnsStampWithHash) {
     // Stamp's "hashes" field takes another form of hash, generated with:
     // echo | openssl s_client -connect 94.140.14.14:853 -servername dns.adguard-dns.com 2>/dev/null | openssl x509 -outform der | openssl asn1parse -inform der -strparse 4 -noout -out - | openssl dgst -sha256
     settings.upstreams = {{
-            .address = "sdns://AwAAAAAAAAAAEDk0LjE0MC4xNC4xNDo4NTMgaTm_6Takf28ZNV5oX3LQ2Pl0qW7ZqDwrz-CFtNb7wZITZG5zLmFkZ3VhcmQtZG5zLmNvbQ",
+            .address = "sdns://AwAAAAAAAAAAEDk0LjE0MC4xNC4xNDo4NTMg0PnTRd3hkxAOGDJDTTOxx97I-pkHgdMnEOapOXu7SNATZG5zLmFkZ3VhcmQtZG5zLmNvbQ",
     }};
     settings.upstream_timeout = 5000ms;
     settings.ipv6_available = false;
