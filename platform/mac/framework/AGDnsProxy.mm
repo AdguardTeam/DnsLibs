@@ -51,8 +51,8 @@ static std::string convert_string(NSString *str) {
 
 NSErrorDomain const AGDnsProxyErrorDomain = @"com.adguard.dnsproxy";
 
-@implementation AGLogger
-+ (void) setLevel: (AGLogLevel) level
+@implementation AGDnsLogger
++ (void) setLevel: (AGDnsLogLevel) level
 {
     Logger::set_log_level((LogLevel)level);
 }
@@ -61,7 +61,7 @@ NSErrorDomain const AGDnsProxyErrorDomain = @"com.adguard.dnsproxy";
 {
     if (func) {
         Logger::set_callback([func](LogLevel level, std::string_view message) mutable {
-            func((AGLogLevel) level, message.data(), message.size());
+            func((AGDnsLogLevel) level, message.data(), message.size());
         });
     } else {
         Logger::set_callback(nullptr);
@@ -406,7 +406,7 @@ static ServerStamp convert_stamp(AGDnsStamp *stamp) {
 
 @end
 
-@implementation AGListenerSettings
+@implementation AGDnsListenerSettings
 
 + (BOOL)supportsSecureCoding {
     return YES;
@@ -417,7 +417,7 @@ static ServerStamp convert_stamp(AGDnsStamp *stamp) {
     self = [super init];
     _address = convert_string(settings->address);
     _port = settings->port;
-    _proto = (AGListenerProtocol) settings->protocol;
+    _proto = (AGDnsListenerProtocol) settings->protocol;
     _persistent = settings->persistent;
     _idleTimeoutMs = settings->idle_timeout.count();
     _settingsOverrides = [[AGDnsProxySettingsOverrides alloc] initWithNative:&settings->settings_overrides];
@@ -429,7 +429,7 @@ static ServerStamp convert_stamp(AGDnsStamp *stamp) {
     if (self) {
         _address = [coder decodeObjectOfClass:NSString.class forKey:@"_address"];
         _port = [coder decodeInt64ForKey:@"_port"];
-        _proto = (AGListenerProtocol) [coder decodeIntForKey:@"_proto"];
+        _proto = (AGDnsListenerProtocol) [coder decodeIntForKey:@"_proto"];
         _persistent = [coder decodeBoolForKey:@"_persistent"];
         _idleTimeoutMs = [coder decodeInt64ForKey:@"_idleTimeoutMs"];
         _settingsOverrides = [coder decodeObjectOfClass:AGDnsProxySettingsOverrides.class forKey:@"_settingsOverrides"];
@@ -455,7 +455,7 @@ static ServerStamp convert_stamp(AGDnsStamp *stamp) {
 
 @end
 
-@implementation AGOutboundProxyAuthInfo
+@implementation AGDnsOutboundProxyAuthInfo
 
 + (BOOL)supportsSecureCoding {
     return YES;
@@ -493,7 +493,7 @@ static ServerStamp convert_stamp(AGDnsStamp *stamp) {
 
 @end
 
-@implementation AGOutboundProxySettings
+@implementation AGDnsOutboundProxySettings
 
 + (BOOL)supportsSecureCoding {
     return YES;
@@ -503,7 +503,7 @@ static ServerStamp convert_stamp(AGDnsStamp *stamp) {
 {
     self = [super init];
     if (self) {
-        _protocol = (AGOutboundProxyProtocol)settings->protocol;
+        _protocol = (AGDnsOutboundProxyProtocol)settings->protocol;
         _address = convert_string(settings->address);
         _port = settings->port;
         NSMutableArray<NSString *> *bootstrap =
@@ -513,7 +513,7 @@ static ServerStamp convert_stamp(AGDnsStamp *stamp) {
         }
         _bootstrap = bootstrap;
         if (settings->auth_info.has_value()) {
-            _authInfo = [[AGOutboundProxyAuthInfo alloc] initWithNative: &settings->auth_info.value()];
+            _authInfo = [[AGDnsOutboundProxyAuthInfo alloc] initWithNative: &settings->auth_info.value()];
         }
         _trustAnyCertificate = settings->trust_any_certificate;
     }
@@ -524,11 +524,11 @@ static ServerStamp convert_stamp(AGDnsStamp *stamp) {
 {
     self = [super init];
     if (self) {
-        _protocol = (AGOutboundProxyProtocol)[coder decodeIntForKey:@"_protocol"];
+        _protocol = (AGDnsOutboundProxyProtocol)[coder decodeIntForKey:@"_protocol"];
         _address = [coder decodeObjectOfClass:NSString.class forKey:@"_address"];
         _port = [coder decodeInt64ForKey:@"_port"];
         _bootstrap = [coder decodeObjectOfClasses:[[NSSet alloc] initWithObjects:NSArray.class, NSString.class, nil] forKey:@"_bootstrap"];
-        _authInfo = [coder decodeObjectOfClass:AGOutboundProxyAuthInfo.class forKey:@"_authInfo"];
+        _authInfo = [coder decodeObjectOfClass:AGDnsOutboundProxyAuthInfo.class forKey:@"_authInfo"];
         _trustAnyCertificate = [coder decodeBoolForKey:@"_trustAnyCertificate"];
     }
     return self;
@@ -616,19 +616,19 @@ static ServerStamp convert_stamp(AGDnsStamp *stamp) {
     if (settings->dns64.has_value()) {
         _dns64Settings = [[AGDns64Settings alloc] initWithNative: &settings->dns64.value()];
     }
-    NSMutableArray<AGListenerSettings *> *listeners =
+    NSMutableArray<AGDnsListenerSettings *> *listeners =
             [[NSMutableArray alloc] initWithCapacity: settings->listeners.size()];
     for (const ListenerSettings &ls : settings->listeners) {
-        [listeners addObject: [[AGListenerSettings alloc] initWithNative: &ls]];
+        [listeners addObject: [[AGDnsListenerSettings alloc] initWithNative: &ls]];
     }
     _listeners = listeners;
     if (settings->outbound_proxy.has_value()) {
-        _outboundProxy = [[AGOutboundProxySettings alloc] initWithNative: &settings->outbound_proxy.value()];
+        _outboundProxy = [[AGDnsOutboundProxySettings alloc] initWithNative: &settings->outbound_proxy.value()];
     }
     _ipv6Available = settings->ipv6_available;
     _blockIpv6 = settings->block_ipv6;
-    _adblockRulesBlockingMode = (AGBlockingMode) settings->adblock_rules_blocking_mode;
-    _hostsRulesBlockingMode = (AGBlockingMode) settings->hosts_rules_blocking_mode;
+    _adblockRulesBlockingMode = (AGDnsBlockingMode) settings->adblock_rules_blocking_mode;
+    _hostsRulesBlockingMode = (AGDnsBlockingMode) settings->hosts_rules_blocking_mode;
     _customBlockingIpv4 = convert_string(settings->custom_blocking_ipv4);
     _customBlockingIpv6 = convert_string(settings->custom_blocking_ipv6);
     _dnsCacheSize = settings->dns_cache_size;
@@ -658,12 +658,12 @@ static ServerStamp convert_stamp(AGDnsStamp *stamp) {
 #endif // TARGET_OS_IPHONE
         _blockedResponseTtlSecs = [coder decodeInt64ForKey:@"_blockedResponseTtlSecs"];
         _dns64Settings = [coder decodeObjectOfClass:AGDns64Settings.class forKey:@"_dns64Settings"];
-        _listeners = [coder decodeObjectOfClasses:[[NSSet alloc] initWithObjects:NSArray.class, AGListenerSettings.class, nil] forKey:@"_listeners"];
-        _outboundProxy = [coder decodeObjectOfClass:AGOutboundProxySettings.class forKey:@"_outboundProxy"];
+        _listeners = [coder decodeObjectOfClasses:[[NSSet alloc] initWithObjects:NSArray.class, AGDnsListenerSettings.class, nil] forKey:@"_listeners"];
+        _outboundProxy = [coder decodeObjectOfClass:AGDnsOutboundProxySettings.class forKey:@"_outboundProxy"];
         _ipv6Available = [coder decodeBoolForKey:@"_ipv6Available"];
         _blockIpv6 = [coder decodeBoolForKey:@"_blockIpv6"];
-        _adblockRulesBlockingMode = (AGBlockingMode) [coder decodeIntForKey:@"_adblockRulesBlockingMode"];
-        _hostsRulesBlockingMode = (AGBlockingMode) [coder decodeIntForKey:@"_hostsRulesBlockingMode"];
+        _adblockRulesBlockingMode = (AGDnsBlockingMode) [coder decodeIntForKey:@"_adblockRulesBlockingMode"];
+        _hostsRulesBlockingMode = (AGDnsBlockingMode) [coder decodeIntForKey:@"_hostsRulesBlockingMode"];
         _customBlockingIpv4 = [coder decodeObjectOfClass:NSString.class forKey:@"_customBlockingIpv4"];
         _customBlockingIpv6 = [coder decodeObjectOfClass:NSString.class forKey:@"_customBlockingIpv6"];
         _dnsCacheSize = [coder decodeInt64ForKey:@"_dnsCacheSize"];
@@ -1100,7 +1100,7 @@ static fd_pair_t makeFdPairForTask() {
     return (fd_pair_t) {-1, -1};
 }
 
-static NSString *getProtoString(AGListenerProtocol proto) {
+static NSString *getProtoString(AGDnsListenerProtocol proto) {
     switch (proto) {
         case AGLP_UDP:
             return @"udp";
@@ -1143,7 +1143,7 @@ static int receiveFd(int ourFd, NSError **error) {
 }
 
 // Bind an fd using adguard-tun-helper
-static int bindFd(NSString *helperPath, NSString *address, NSNumber *port, AGListenerProtocol proto, NSError **error) {
+static int bindFd(NSString *helperPath, NSString *address, NSNumber *port, AGDnsListenerProtocol proto, NSError **error) {
     NSString *protoString = getProtoString(proto);
     if (protoString == nil) {
         *error = [NSError errorWithDomain:AGDnsProxyErrorDomain
@@ -1336,7 +1336,7 @@ static ProxySettingsOverrides convertProxySettingsOverrides(const AGDnsProxySett
         settings.listeners.clear();
         settings.listeners.reserve(config.listeners.count);
         dbglog(*self->log, "Creating listener fds if needed");
-        for (AGListenerSettings *listener in config.listeners) {
+        for (AGDnsListenerSettings *listener in config.listeners) {
             int listenerFd = -1;
 #if !TARGET_OS_IPHONE
             if (config.helperPath && listener.port > 0 && listener.port < 1024) {
@@ -1661,7 +1661,7 @@ static std::optional<std::string> verifyCertificate(CertificateVerificationEvent
 
 @end
 
-@implementation AGRuleTemplate {
+@implementation AGDnsRuleTemplate {
     ag::dns::DnsFilter::RuleTemplate _template;
     ag::dns::DnsRequestProcessedEvent _event;
 }
@@ -1686,7 +1686,7 @@ static std::optional<std::string> verifyCertificate(CertificateVerificationEvent
 
 @end
 
-@implementation AGFilteringLogAction
+@implementation AGDnsFilteringLogAction
 - (instancetype)initWithAction:(const ag::dns::DnsFilter::FilteringLogAction &)action
                          event:(const ag::dns::DnsRequestProcessedEvent &)event {
     self = [super init];
@@ -1696,7 +1696,7 @@ static std::optional<std::string> verifyCertificate(CertificateVerificationEvent
         _blocking = (BOOL) action.blocking;
         auto *templates = [NSMutableArray arrayWithCapacity:action.templates.size()];
         for (auto &t: action.templates) {
-            [templates addObject:[[AGRuleTemplate alloc] initWithTemplate:t event:event]];
+            [templates addObject:[[AGDnsRuleTemplate alloc] initWithTemplate:t event:event]];
         }
         _templates = templates;
     }
@@ -1706,7 +1706,7 @@ static std::optional<std::string> verifyCertificate(CertificateVerificationEvent
 + (instancetype)actionFromEvent:(AGDnsRequestProcessedEvent *)event {
     auto cevent = [event nativeEvent];
     if (auto action = ag::dns::DnsFilter::suggest_action(cevent)) {
-        return [[AGFilteringLogAction alloc] initWithAction:*action event:cevent];
+        return [[AGDnsFilteringLogAction alloc] initWithAction:*action event:cevent];
     }
     return nil;
 }
