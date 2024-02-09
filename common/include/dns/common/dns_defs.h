@@ -17,6 +17,7 @@ enum class DnsError {
 
     AE_BOOTSTRAP_ERROR,
     AE_HANDSHAKE_ERROR,
+    AE_RETRY_CONNECTION,
 
     AE_REPLY_PACKET_ID_MISMATCH,
     AE_REQUEST_PACKET_TOO_SHORT,
@@ -82,6 +83,7 @@ struct ErrorCodeToString<dns::DnsError> {
         case decltype(e)::AE_TIMED_OUT: return "Timed out";
         case decltype(e)::AE_SHUTTING_DOWN: return "Shutting down";
         case decltype(e)::AE_EXCHANGE_ERROR: return "Upstream exchange error";
+        case decltype(e)::AE_RETRY_CONNECTION: return "Connection should be retried";
         }
     };
 };
