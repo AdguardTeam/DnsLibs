@@ -63,17 +63,17 @@ typedef NS_ENUM(NSInteger, AGDnsProxyInitError) {
  *
  * Defines the different logging levels used in the application.
  */
-typedef NS_ENUM(NSInteger, AGLogLevel) {
+typedef NS_ENUM(NSInteger, AGDnsLogLevel) {
     /** Error: Indicates an error that requires immediate attention */
-    AGLL_ERR,
+    AGDLLErr,
     /** Warning: Indicates a potential issue that may cause problems */
-    AGLL_WARN,
+    AGDLLWarn,
     /** Information: Provides general information about the application state */
-    AGLL_INFO,
+    AGDLLInfo,
     /** Debug: Contains detailed debugging information for developers */
-    AGLL_DEBUG,
+    AGDLLDebug,
     /** Trace: Contains low-level tracing information for developers */
-    AGLL_TRACE,
+    AGDLLTrace,
 };
 
 
@@ -83,7 +83,7 @@ typedef NS_ENUM(NSInteger, AGLogLevel) {
  *
  * Defines the different listener protocols used in the application.
  */
-typedef NS_ENUM(NSInteger, AGListenerProtocol) {
+typedef NS_ENUM(NSInteger, AGDnsListenerProtocol) {
     /** User Datagram Protocol (UDP) */
     AGLP_UDP,
     /** Transmission Control Protocol (TCP) */
@@ -102,7 +102,7 @@ typedef NS_ENUM(NSInteger, AGListenerProtocol) {
  * neither loopback nor all-zeroes are always responded
  * with the address specified by the rule.
  */
-typedef NS_ENUM(NSInteger, AGBlockingMode) {
+typedef NS_ENUM(NSInteger, AGDnsBlockingMode) {
     /** Respond with REFUSED response code */
     AGBM_REFUSED,
     /** Respond with NXDOMAIN response code */
@@ -122,14 +122,14 @@ typedef NS_ENUM(NSInteger, AGBlockingMode) {
  * Provides a way to configure logging for the DNS library.
  * The logging level and the logging function can be set using the provided methods.
  */
-@interface AGLogger : NSObject
+@interface AGDnsLogger : NSObject
 
 /**
  * Set the default logging level
  *
  * @param level logging level to be set
  */
-+ (void) setLevel: (AGLogLevel) level;
++ (void) setLevel: (AGDnsLogLevel) level;
 
 /**
  * A function that outputs a log message.
@@ -141,7 +141,7 @@ typedef NS_ENUM(NSInteger, AGBlockingMode) {
  * @param msg The formatted log message
  * @param length The length of the log message
  */
-typedef void (^logCallback)(AGLogLevel level, const char *msg, int length);
+typedef void (^logCallback)(AGDnsLogLevel level, const char *msg, int length);
 
 /**
  * Set log callback
@@ -258,7 +258,7 @@ typedef void (^logCallback)(AGLogLevel level, const char *msg, int length);
  * @interface AGListenerSettings
  * Settings for a DNS proxy listener.
  */
-@interface AGListenerSettings : AGDnsXPCObject <NSSecureCoding>
+@interface AGDnsListenerSettings : AGDnsXPCObject <NSSecureCoding>
 
 /**
  * The port to listen on
@@ -275,7 +275,7 @@ typedef void (^logCallback)(AGLogLevel level, const char *msg, int length);
 /**
  * The protocol to listen for
  */
-@property(nonatomic) AGListenerProtocol proto;
+@property(nonatomic) AGDnsListenerProtocol proto;
 
 /**
  * Whether the listener should keep the TCP connection open after sending the first response.
@@ -310,7 +310,7 @@ typedef void (^logCallback)(AGLogLevel level, const char *msg, int length);
  *
  * Defines the different outbound proxy protocols used in the application.
  */
-typedef NS_ENUM(NSInteger, AGOutboundProxyProtocol) {
+typedef NS_ENUM(NSInteger, AGDnsOutboundProxyProtocol) {
     /** Plain HTTP proxy */
     AGOPP_HTTP_CONNECT,
     /** HTTPS proxy */
@@ -327,7 +327,7 @@ typedef NS_ENUM(NSInteger, AGOutboundProxyProtocol) {
  * @interface AGOutboundProxyAuthInfo
  * Represents authentication information for an outbound proxy.
  */
-@interface AGOutboundProxyAuthInfo : AGDnsXPCObject <NSSecureCoding>
+@interface AGDnsOutboundProxyAuthInfo : AGDnsXPCObject <NSSecureCoding>
 /** User name for authentication */
 @property(nonatomic) NSString *username;
 /** Password for authentication */
@@ -347,9 +347,9 @@ typedef NS_ENUM(NSInteger, AGOutboundProxyProtocol) {
  * @interface AGOutboundProxySettings
  * Represents settings for an outbound proxy.
  */
-@interface AGOutboundProxySettings : AGDnsXPCObject <NSSecureCoding>
+@interface AGDnsOutboundProxySettings : AGDnsXPCObject <NSSecureCoding>
 /** The proxy protocol */
-@property(nonatomic) AGOutboundProxyProtocol protocol;
+@property(nonatomic) AGDnsOutboundProxyProtocol protocol;
 /** The proxy server IP address or hostname */
 @property(nonatomic) NSString *address;
 /** The proxy server port */
@@ -362,7 +362,7 @@ typedef NS_ENUM(NSInteger, AGOutboundProxyProtocol) {
  */
 @property(nonatomic) NSArray<NSString *> *bootstrap;
 /** The authentication information (if nil, authentication is not performed) */
-@property(nonatomic) AGOutboundProxyAuthInfo *authInfo;
+@property(nonatomic) AGDnsOutboundProxyAuthInfo *authInfo;
 /** If true and the proxy connection is secure, the certificate won't be verified */
 @property(nonatomic) BOOL trustAnyCertificate;
 
@@ -455,11 +455,11 @@ typedef NS_ENUM(NSInteger, AGOutboundProxyProtocol) {
 /**
  * List of addresses/ports/protocols/etc... to listen on
  */
-@property(nonatomic) NSArray<AGListenerSettings *> *listeners;
+@property(nonatomic) NSArray<AGDnsListenerSettings *> *listeners;
 /**
  * Outbound proxy settings
  */
-@property(nonatomic) AGOutboundProxySettings *outboundProxy;
+@property(nonatomic) AGDnsOutboundProxySettings *outboundProxy;
 /**
  * If true, bootstrappers will fetch AAAA records
  */
@@ -471,11 +471,11 @@ typedef NS_ENUM(NSInteger, AGOutboundProxyProtocol) {
 /**
  * How to respond to requests blocked by AdBlock-style rules
  */
-@property(nonatomic) AGBlockingMode adblockRulesBlockingMode;
+@property(nonatomic) AGDnsBlockingMode adblockRulesBlockingMode;
 /**
  * How to respond to requests blocked by hosts-style rules
  */
-@property(nonatomic) AGBlockingMode hostsRulesBlockingMode;
+@property(nonatomic) AGDnsBlockingMode hostsRulesBlockingMode;
 /**
  * Custom IPv4 address to return for filtered requests
  */
@@ -558,7 +558,7 @@ typedef NS_ENUM(NSInteger, AGOutboundProxyProtocol) {
  *
  * Defines the different rule generation options used in the application.
  */
-typedef NS_ENUM(NSUInteger, AGRuleGenerationOptions) {
+typedef NS_ENUM(NSUInteger, AGDnsRuleGenerationOptions) {
     /** Add an $important modifier */
     AGRGOImportant = 1u << 0,
     /** Add a $dnstype modifier */
@@ -569,7 +569,7 @@ typedef NS_ENUM(NSUInteger, AGRuleGenerationOptions) {
  * @interface AGRuleTemplate
  * An object representing a template for generating DNS rules.
  */
-@interface AGRuleTemplate : NSObject
+@interface AGDnsRuleTemplate : NSObject
 - (NSString *)description; /**< String representation. */
 /**
  * Generate a rule using this template and the specified options.
@@ -583,8 +583,8 @@ typedef NS_ENUM(NSUInteger, AGRuleGenerationOptions) {
  * @interface AGFilteringLogAction
  * Provides a way to suggest rules based on filtering event.
  */
-@interface AGFilteringLogAction : NSObject
-@property(nonatomic) NSArray<AGRuleTemplate *> *templates; /**< A set of rule templates */
+@interface AGDnsFilteringLogAction : NSObject
+@property(nonatomic) NSArray<AGDnsRuleTemplate *> *templates; /**< A set of rule templates */
 @property(nonatomic) NSUInteger allowedOptions; /**< Options that are allowed to be passed to `generate_rule` */
 @property(nonatomic) NSUInteger requiredOptions; /**< Options that are required for the generated rule to be correct */
 @property(nonatomic) BOOL blocking; /**< Whether something will be blocked or un-blocked as a result of this action */

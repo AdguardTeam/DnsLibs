@@ -105,7 +105,7 @@ public:
                 self->finish_request(request_id, Reply{make_error(DnsError::AE_TIMED_OUT)});
             }
         };
-        return parallel::any_of_void(
+        return parallel::any_of<void>(
                 Awaitable{.self = this, .req = request},
                 wait_timeout(m_loop, weak_from_this(), request->timeout, request->request_id)
         );
@@ -131,7 +131,7 @@ public:
                 self->finish_request(request_id, Reply{make_error(DnsError::AE_TIMED_OUT)});
             }
         };
-        return parallel::any_of_void(
+        return parallel::any_of<void>(
                 Awaitable{.self = this, .req = request},
                 wait_timeout(m_loop, weak_from_this(), request->timeout, request->request_id)
         );

@@ -21,7 +21,7 @@ namespace ag::dns::proxy::test {
 
 // Generated with:
 // echo | openssl s_client -connect 94.140.14.14:853 -servername dns.adguard-dns.com 2>/dev/null | openssl x509 -pubkey -noout | openssl pkey -pubin -outform der | openssl dgst -sha256 -binary | openssl enc -base64
-static constexpr auto ADGUARD_DNS_SPKI = "2EeRHV2g0BhpRnuu8GBcpH/nGo4xv76wlP1vRCG428Y=";
+static constexpr auto ADGUARD_DNS_SPKI = "gX+tmLZzEdlwVKPNCeIY/DGV0VIHGpdPb25KjJ4OZjU=";
 static constexpr auto ZEROSSL_SPKI = "3fLLVjRIWnCqDqIETU2OcnMP7EzmN/Z3Q/jQ8cIaAoc=";
 
 static constexpr auto DNS64_SERVER_ADDR = "2001:4860:4860::6464";
@@ -272,7 +272,7 @@ TEST_F(DnsProxyTest, DnsStampWithHash) {
     // Stamp's "hashes" field takes another form of hash, generated with:
     // echo | openssl s_client -connect 94.140.14.14:853 -servername dns.adguard-dns.com 2>/dev/null | openssl x509 -outform der | openssl asn1parse -inform der -strparse 4 -noout -out - | openssl dgst -sha256
     settings.upstreams = {{
-            .address = "sdns://AwAAAAAAAAAAEDk0LjE0MC4xNC4xNDo4NTMgaTm_6Takf28ZNV5oX3LQ2Pl0qW7ZqDwrz-CFtNb7wZITZG5zLmFkZ3VhcmQtZG5zLmNvbQ",
+            .address = "sdns://AwAAAAAAAAAAEDk0LjE0MC4xNC4xNDo4NTMg0PnTRd3hkxAOGDJDTTOxx97I-pkHgdMnEOapOXu7SNATZG5zLmFkZ3VhcmQtZG5zLmNvbQ",
     }};
     settings.upstream_timeout = 5000ms;
     settings.ipv6_available = false;
@@ -1986,6 +1986,40 @@ TEST_F(DnsProxyTest, TransparentRequest) {
 
     ASSERT_TRUE(ldns_pkt_qr(result_pkt));
     ASSERT_EQ(1, ldns_pkt_ancount(result_pkt));
+}
+
+TEST_F(DnsProxyTest, FallbackDomainWorksWhenFallbackOnUpstreamsFailureDisabled) {
+    DnsProxySettings settings = make_dnsproxy_settings();
+    settings.upstreams = {{.address = "1.2.3.4"}};
+    settings.fallbacks = {{.address = "8.8.8.8"}};
+    settings.fallback_domains = {"*.example.org"};
+    settings.enable_fallback_on_upstreams_failure = false;
+    DnsProxy proxy;
+    auto [ret, err] = proxy.init(settings, {});
+    ASSERT_TRUE(ret);
+    ldns_pkt_ptr request = create_request("www.example.org", LDNS_RR_TYPE_A, LDNS_RD);
+    ldns_pkt_ptr response;
+    perform_request(proxy, request, response);
+
+    ASSERT_EQ(LDNS_RCODE_NOERROR, ldns_pkt_get_rcode(response.get()));
+    proxy.deinit();
+}
+
+TEST_F(DnsProxyTest, DoNotCrashOnPacketWithoutQuestion) {
+    DnsProxySettings settings = make_dnsproxy_settings();
+    settings.upstreams = {{.address = "1.2.3.4"}};
+    settings.fallbacks = {{.address = "8.8.8.8"}};
+    settings.fallback_domains = {"*.example.org"};
+    settings.enable_fallback_on_upstreams_failure = false;
+    DnsProxy proxy;
+    auto [ret, err] = proxy.init(settings, {});
+    ASSERT_TRUE(ret);
+    ldns_pkt_ptr request{ldns_pkt_new()};
+    ldns_pkt_ptr response;
+    perform_request(proxy, request, response);
+
+    ASSERT_EQ(LDNS_RCODE_SERVFAIL, ldns_pkt_get_rcode(response.get()));
+    proxy.deinit();
 }
 
 } // namespace ag::dns::proxy::test

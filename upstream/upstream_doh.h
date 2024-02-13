@@ -8,6 +8,7 @@
 #include <unordered_map>
 #include <variant>
 #include <vector>
+#include <utility>
 
 #include <ldns/ldns.h>
 #include <nghttp2/nghttp2.h>
@@ -63,7 +64,7 @@ private:
     coro::Task<void> drive_connection(Millis timeout);
     coro::Task<Result<HttpConnection *, DnsError>> establish_connection(HttpConnection *http_conn, SocketAddress peer);
     coro::Task<Result<HttpConnection *, DnsError>> establish_any_of_connections(
-            const std::vector<std::unique_ptr<HttpConnection>> &connections, SocketAddress peer);
+            const std::vector<std::pair<std::unique_ptr<HttpConnection>, SocketAddress>> &connections);
     coro::Task<ExchangeResult> exchange(Millis timeout, const ldns_pkt *request);
     coro::Task<ExchangeResult> wait_for_reply(uint64_t stream_id, uint16_t query_id);
     Result<uint64_t, DnsError> send_request(const ldns_pkt *request);
@@ -75,7 +76,7 @@ private:
     uint32_t m_id;
     ConnectionState m_connection_state{};
     std::unique_ptr<HttpConnection> m_http_conn;
-    std::shared_ptr<std::vector<std::unique_ptr<HttpConnection>>> m_pending_connections;
+    std::shared_ptr<std::vector<std::pair<std::unique_ptr<HttpConnection>, SocketAddress>>> m_pending_connections;
     std::unordered_map<uint64_t, std::unique_ptr<ReplyWaiter>> m_streams;
     size_t m_next_query_id = 0;
     std::unordered_map<size_t, std::unique_ptr<ConnectWaiter>> m_connect_waiters;
@@ -85,7 +86,6 @@ private:
     http::Request m_request_template;
     std::string m_path;
     std::optional<http::Version> m_http_version;
-    bool m_retry_connection = false;
     TlsSessionCache m_tls_session_cache;
     std::vector<CertFingerprint> m_fingerprints;
     std::shared_ptr<bool> m_shutdown_guard = std::make_shared<bool>(true);

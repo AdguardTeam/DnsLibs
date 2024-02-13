@@ -111,7 +111,7 @@ static Result<BootstrapperPtr, Upstream::InitError> create_bootstrapper(
     std::string address;
 
     if (auto resolved = SocketAddress(opts.resolved_server_ip, DEFAULT_DOT_PORT); resolved.valid()) {
-        address = resolved.host_str();
+        address = resolved.host_str(/*ipv6_brackets*/ true);
     } else {
         address = url.get_hostname();
     }

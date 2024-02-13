@@ -177,7 +177,7 @@ static void test_cert_fingerprint() {
     ASSERT(settings->upstreams.data == NULL);
     ASSERT(settings->upstreams.size == 0);
 
-    const char *ADGUARD_DNS_SPKI = "2EeRHV2g0BhpRnuu8GBcpH/nGo4xv76wlP1vRCG428Y=";
+    const char *ADGUARD_DNS_SPKI = "gX+tmLZzEdlwVKPNCeIY/DGV0VIHGpdPb25KjJ4OZjU=";
     const char *bootstrap = "1.1.1.1";
     ag_upstream_options upstream = {
             .address = "tls://dns.adguard-dns.com",

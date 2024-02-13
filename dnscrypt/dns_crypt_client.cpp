@@ -40,7 +40,7 @@ coro::Task<Client::DialResult> Client::dial(const ServerStamp &stamp, EventLoop 
     local_server_info.m_server_public_key = stamp.server_pk;
     local_server_info.m_server_address = stamp.server_addr_str;
     if (SocketAddress addr = utils::str_to_socket_address(local_server_info.m_server_address); addr.port() == 0) {
-        local_server_info.m_server_address = AG_FMT("{}:{}", addr.host_str(), DEFAULT_DNSCRYPT_PORT);
+        local_server_info.m_server_address = AG_FMT("{}:{}", addr.host_str(/*ipv6_brackets*/ true), DEFAULT_DNSCRYPT_PORT);
     }
     local_server_info.m_provider_name = stamp.provider_name;
     if (local_server_info.m_provider_name.empty()) {
@@ -90,8 +90,8 @@ coro::Task<Client::ExchangeResult> Client::exchange(const ldns_pkt &message, con
     // In case if the server local_server_info is not valid anymore (for instance, certificate was rotated)
     // the read operation will most likely time out.
     // This might be a signal to re-dial for the server certificate.
-    auto decrypt_res = local_server_info.decrypt(Uint8View(encrypted_response.data(), encrypted_response.size()),
-            Uint8View(client_nonce.data(), client_nonce.size()));
+    auto decrypt_res = local_server_info.decrypt(ag::as_u8v(encrypted_response),
+            ag::as_u8v(client_nonce));
     if (decrypt_res.has_error()) {
         co_return make_error(DnsError::AE_DECRYPT_ERROR, decrypt_res.error());
     }

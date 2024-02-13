@@ -4,7 +4,7 @@
 /// Test that we don't crash when `[AGDnsProxy initWithConfig]` fails because listeners couldn't be initialized
 static int regressTestListenerFailsInit() {
     // This listener MUST cause initialization to fail
-    auto *listener = [[AGListenerSettings alloc] init];
+    auto *listener = [[AGDnsListenerSettings alloc] init];
     listener.address = @"asdf";
     listener.port = 0;
     listener.proto = AGLP_UDP;

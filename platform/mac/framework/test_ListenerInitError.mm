@@ -2,14 +2,14 @@
 #include <Foundation/Foundation.h>
 
 int main() {
-    auto *good_listener = [[AGListenerSettings alloc] init];
+    auto *good_listener = [[AGDnsListenerSettings alloc] init];
     good_listener.address = @"::";
     good_listener.port = 53;
     good_listener.proto = AGLP_UDP;
     good_listener.persistent = NO;
     good_listener.idleTimeoutMs = 0;
 
-    auto *bad_listener = [[AGListenerSettings alloc] init];
+    auto *bad_listener = [[AGDnsListenerSettings alloc] init];
     bad_listener.address = @"127.0.0.1";
     bad_listener.port = 53;
     bad_listener.proto = AGLP_TCP;

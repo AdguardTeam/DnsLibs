@@ -7,8 +7,8 @@
 #include <Foundation/Foundation.h>
 
 int main() {
-    [AGLogger setLevel:AGLL_TRACE];
-    auto *listener = [[AGListenerSettings alloc] init];
+    [AGDnsLogger setLevel:AGDLLTrace];
+    auto *listener = [[AGDnsListenerSettings alloc] init];
     listener.address = @"::";
     listener.port = 5321;
     listener.proto = AGLP_UDP;

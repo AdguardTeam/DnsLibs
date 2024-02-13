@@ -42,7 +42,7 @@ static Uint8Vector find_pref64(Uint8View ip6, const Uint8View wka) {
     auto vec = ag::utils::concat<Uint8Vector>(Uint8View(ip6.data(), 8), Uint8View(ip6.data() + 9, 7));
 
     // Replace view
-    ip6 = Uint8View(vec.data(), vec.size());
+    ip6 = ag::as_u8v(vec);
 
     first_occur = ip6.find(wka);
     auto last_occur = ip6.rfind(wka);

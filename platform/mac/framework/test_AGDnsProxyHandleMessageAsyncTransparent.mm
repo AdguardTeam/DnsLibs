@@ -16,7 +16,7 @@ static constexpr uint8_t QUERY[] = {
 };
 
 int main() {
-    [AGLogger setLevel:AGLL_TRACE];
+    [AGDnsLogger setLevel:AGDLLTrace];
 
     auto *upstream = [[AGDnsUpstream alloc] init];
     upstream.address = @"1.2.3.4"; // blackhole, intentional

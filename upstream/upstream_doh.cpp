@@ -279,7 +279,7 @@ ag::Error<ag::dns::Upstream::InitError> ag::dns::DohUpstream::init() {
 
     std::string address;
     if (auto resolved = ag::SocketAddress(m_options.resolved_server_ip, DEFAULT_DOH_PORT); resolved.valid()) {
-        address = resolved.host_str();
+        address = resolved.host_str(/*ipv6_brackets*/ true);
     } else {
         address = m_url.get_hostname();
     }
@@ -300,7 +300,7 @@ ag::Error<ag::dns::Upstream::InitError> ag::dns::DohUpstream::init() {
     m_request_template.authority(std::string(m_url.get_hostname()));
     if (!m_url.get_username().empty() && !m_url.get_password().empty()) {
         auto creds_fmt = AG_FMT("{}:{}", m_url.get_username(), m_url.get_password());
-        auto creds_base64 = ag::encode_to_base64(Uint8View((uint8_t *) creds_fmt.data(), creds_fmt.size()), false);
+        auto creds_base64 = ag::encode_to_base64(as_u8v(creds_fmt), false);
         m_request_template.headers().put("Authorization", AG_FMT("Basic {}", creds_base64));
     }
     m_path = m_url.get_pathname();
@@ -415,22 +415,30 @@ ag::coro::Task<void> ag::dns::DohUpstream::drive_connection(Millis handshake_tim
     }
     log_upstream(trace, this, "Bootstrapped");
 
-    m_pending_connections = std::make_shared<std::vector<std::unique_ptr<HttpConnection>>>();
-    auto connections_guard = std::weak_ptr<std::vector<std::unique_ptr<HttpConnection>>>(m_pending_connections);
-    coro::Task<Result<HttpConnection *, DnsError>> connector;
-    SocketAddress peer = resolved.addresses.at(0);
-    if (m_http_version == http::HTTP_3_0) {
-        m_pending_connections->push_back(std::make_unique<Http3Connection>(this));
-        connector = establish_connection(m_pending_connections->back().get(), peer);
-    } else if (m_http_version == http::HTTP_2_0) {
-        m_pending_connections->emplace_back(std::make_unique<Http2Connection>(this));
-        connector = establish_connection(m_pending_connections->back().get(), peer);
-    } else {
-        m_pending_connections->emplace_back(std::make_unique<Http3Connection>(this));
-        m_pending_connections->emplace_back(std::make_unique<Http2Connection>(this));
-        connector = establish_any_of_connections(*m_pending_connections, peer);
+    m_pending_connections = std::make_shared<decltype(m_pending_connections)::element_type>();
+    decltype(m_pending_connections)::weak_type connections_guard = m_pending_connections;
+    bool found_ipv4 = false;
+    bool found_ipv6 = false;
+    for (const SocketAddress &peer : resolved.addresses) {
+        if (found_ipv4 && found_ipv6) {
+            break;
+        }
+        if (peer.is_ipv4() && std::exchange(found_ipv4, true)) {
+            continue;
+        }
+        if (peer.is_ipv6() && std::exchange(found_ipv6, true)) {
+            continue;
+        }
+        if (m_http_version == http::HTTP_3_0) {
+            m_pending_connections->emplace_back(std::make_unique<Http3Connection>(this), peer);
+        } else if (m_http_version == http::HTTP_2_0) {
+            m_pending_connections->emplace_back(std::make_unique<Http2Connection>(this), peer);
+        } else {
+            m_pending_connections->emplace_back(std::make_unique<Http3Connection>(this), peer);
+            m_pending_connections->emplace_back(std::make_unique<Http2Connection>(this), peer);
+        }
     }
-
+    auto connector = establish_any_of_connections(*m_pending_connections);
     auto http_conn = co_await parallel::any_of<Result<HttpConnection *, DnsError>>(
             connector, wait_timeout(m_config.loop, handshake_timeout));
     if (shutdown_guard.expired()) {
@@ -445,27 +453,27 @@ ag::coro::Task<void> ag::dns::DohUpstream::drive_connection(Millis handshake_tim
         co_return;
     }
 
-    if (std::exchange(m_retry_connection, false) && 1 < resolved.addresses.size()) {
-        log_upstream(dbg, this, "Retrying connection");
-        m_http_conn.reset();
-        m_pending_connections.reset();
-        cancel_read_timer();
-        assert(m_connection_state == ConnectionState::CONNECTING);
-        co_return co_await drive_connection(handshake_timeout - duration_cast<Millis>(SteadyClock::now() - start_ts));
-    }
-
     if (http_conn.has_error()) {
-        if (http_conn.error()->value() == DnsError::AE_TIMED_OUT) {
-            m_bootstrapper->remove_resolved(peer); // NOLINT(*-unchecked-optional-access)
+        if (http_conn.error()->value() == DnsError::AE_RETRY_CONNECTION) {
+            log_upstream(dbg, this, "Retrying connection");
+            m_http_conn.reset();
+            m_pending_connections.reset();
+            cancel_read_timer();
+            assert(m_connection_state == ConnectionState::CONNECTING);
+            co_return co_await drive_connection(handshake_timeout - duration_cast<Millis>(SteadyClock::now() - start_ts));
         }
-        m_pending_connections.reset();
+        if (http_conn.error()->value() == DnsError::AE_TIMED_OUT) {
+            for (const auto &conn : *m_pending_connections) {
+                m_bootstrapper->remove_resolved(conn.second);
+            }
+        }
         close_connection(http_conn.error());
         co_return;
     }
 
     m_connection_state = ConnectionState::CONNECTED;
-    m_http_conn = std::move(*std::find_if(m_pending_connections->begin(), m_pending_connections->end(),
-            [&](auto &conn){ return conn.get() == http_conn.value(); }));
+    m_http_conn = std::move(std::find_if(m_pending_connections->begin(), m_pending_connections->end(),
+            [&](const auto &conn){ return conn.first.get() == http_conn.value(); })->first);
     m_request_template.version(m_http_conn->version());
     m_pending_connections.reset();
 
@@ -500,7 +508,6 @@ ag::dns::DohUpstream::establish_connection(HttpConnection *http_conn, SocketAddr
 
     if (error != nullptr) {
         if (error->value() == DnsError::AE_SOCKET_ERROR) {
-            m_retry_connection = true;
             m_bootstrapper->remove_resolved(peer); // NOLINT(*-unchecked-optional-access)
         }
         co_return error;
@@ -510,7 +517,8 @@ ag::dns::DohUpstream::establish_connection(HttpConnection *http_conn, SocketAddr
 }
 
 ag::coro::Task<ag::Result<ag::dns::DohUpstream::HttpConnection *, ag::dns::DnsError>>
-ag::dns::DohUpstream::establish_any_of_connections(const std::vector<std::unique_ptr<HttpConnection>> &connections, SocketAddress peer) {
+ag::dns::DohUpstream::establish_any_of_connections(
+        const std::vector<std::pair<std::unique_ptr<HttpConnection>, SocketAddress>> &connections) {
     std::vector<Error<DnsError>> errors;
 
     auto op = parallel::any_of_cond<Result<HttpConnection *, DnsError>>(
@@ -524,23 +532,25 @@ ag::dns::DohUpstream::establish_any_of_connections(const std::vector<std::unique
                 return true;
             });
     for (const auto &connection : connections) {
-        op.add(establish_connection(connection.get(), peer));
+        op.add(establish_connection(connection.first.get(), connection.second));
     }
     std::optional http_conn = co_await op;
 
     if (!http_conn.has_value()) {
-        m_retry_connection = std::find_if(errors.begin(), errors.end(), [](auto &error){
-            return (error != nullptr && error->value() == DnsError::AE_SOCKET_ERROR);
-        }) != errors.end();
+        DnsError error_code = (std::find_if(errors.begin(), errors.end(),
+                                       [](auto &error) {
+                                           return (error != nullptr && error->value() == DnsError::AE_SOCKET_ERROR);
+                                       })
+                                      != errors.end())
+                ? DnsError::AE_RETRY_CONNECTION
+                : DnsError::AE_HANDSHAKE_ERROR;
         std::string message = "None of the protocols have connected successfully. Errors: ";
         for (auto &error : errors) {
             message += "\n";
             message += error->str();
         }
-        co_return make_error(DnsError::AE_HANDSHAKE_ERROR, message);
+        co_return make_error(error_code, message);
     }
-
-    m_retry_connection = false;
 
     log_hconn(dbg, **http_conn, "Selected protocol");
     co_return http_conn.value();
@@ -656,9 +666,9 @@ ag::Result<uint64_t, ag::dns::DnsError> ag::dns::DohUpstream::send_request(const
 }
 
 void ag::dns::DohUpstream::close_connection(const Error<DnsError> &error) {
+    m_pending_connections.reset();
     m_connection_state = ConnectionState::IDLE;
     m_http_conn.reset();
-    m_retry_connection = false;
     cancel_all(error);
     cancel_read_timer();
 }

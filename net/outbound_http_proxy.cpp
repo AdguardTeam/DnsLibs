@@ -178,7 +178,7 @@ Error<SocketError> HttpOProxy::connect_through_proxy(uint32_t conn_id, const Con
     SEND_S(conn, "CONNECT ");
     SEND_S(conn, parameters.peer.str());
     SEND_S(conn, " HTTP/1.1\r\nHost: ");
-    SEND_S(conn, parameters.peer.host_str());
+    SEND_S(conn, parameters.peer.host_str(/*ipv6_brackets*/ true));
     SEND_S(conn, "\r\n");
     if (m_settings->auth_info.has_value()) {
         std::string auth_key = AG_FMT("{}:{}", m_settings->auth_info->username, m_settings->auth_info->password);
