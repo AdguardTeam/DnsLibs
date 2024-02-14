@@ -26,6 +26,10 @@ SecuredSocket::SecuredSocket(SocketFactory::SocketPtr underlying_socket, const C
     m_shutdown_guard = std::make_shared<bool>(true);
 }
 
+std::optional<std::string> SecuredSocket::get_alpn() const {
+    return m_codec.get_alpn_selected();
+}
+
 std::optional<evutil_socket_t> SecuredSocket::get_fd() const {
     return m_underlying_socket->get_fd();
 }

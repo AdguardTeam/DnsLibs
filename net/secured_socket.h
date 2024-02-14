@@ -2,8 +2,10 @@
 
 
 #include <mutex>
-#include <vector>
+#include <optional>
 #include <string>
+#include <vector>
+
 #include "common/defs.h"
 #include "dns/net/socket.h"
 #include "common/logger.h"
@@ -32,6 +34,7 @@ private:
     Logger m_log;
     std::shared_ptr<bool> m_shutdown_guard;
 
+    [[nodiscard]] std::optional<std::string> get_alpn() const override;
     [[nodiscard]] std::optional<evutil_socket_t> get_fd() const override;
     [[nodiscard]] Error<SocketError> connect(ConnectParameters params) override;
     [[nodiscard]] Error<SocketError> send(Uint8View data) override;

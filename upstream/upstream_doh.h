@@ -53,8 +53,8 @@ private:
     struct ReplyAwaitable;
 
     struct HttpConnection;
-    struct Http2Connection;
-    friend struct Http2Connection;
+    struct Http1Or2Connection;
+    friend struct Http1Or2Connection;
     struct Http3Connection;
     friend struct Http3Connection;
 
@@ -85,7 +85,7 @@ private:
     std::optional<Bootstrapper> m_bootstrapper;
     http::Request m_request_template;
     std::string m_path;
-    std::optional<http::Version> m_http_version;
+    std::optional<http::Version> m_http_version; // `HTTP_2_0` means HTTP/2 or HTTP/1.1
     TlsSessionCache m_tls_session_cache;
     std::vector<CertFingerprint> m_fingerprints;
     std::shared_ptr<bool> m_shutdown_guard = std::make_shared<bool>(true);

@@ -237,6 +237,11 @@ public:
     [[nodiscard]] utils::TransportProtocol get_protocol() const;
 
     /**
+     * Get the selected ALPN protocol. `std::nullopt` if ALPN has not been selected.
+     */
+    [[nodiscard]] virtual std::optional<std::string> get_alpn() const;
+
+    /**
      * Get underlying file descriptor
      */
     [[nodiscard]] virtual std::optional<evutil_socket_t> get_fd() const = 0;

@@ -2,8 +2,11 @@
 
 
 #include <memory>
-#include <variant>
 #include <optional>
+#include <string>
+#include <variant>
+
+
 #include <openssl/ssl.h>
 #include <openssl/bio.h>
 
@@ -91,6 +94,11 @@ public:
      * Encrypt and send a data chunk
      */
     WriteDecryptedResult write_decrypted(Uint8View buffer);
+
+    /**
+     * Return the selected ALPN protocol, if any, `std::nullopt` otherwise.
+     */
+    [[nodiscard]] std::optional<std::string> get_alpn_selected() const;
 
 private:
     const CertificateVerifier *m_cert_verifier = nullptr;

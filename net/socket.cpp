@@ -16,6 +16,10 @@ utils::TransportProtocol Socket::get_protocol() const {
     return m_parameters.proto;
 }
 
+std::optional<std::string> Socket::get_alpn() const {
+    return std::nullopt;
+}
+
 SocketAddress Socket::get_peer() const {
     std::optional<evutil_socket_t> fd = this->get_fd();
     if (!fd.has_value()) {

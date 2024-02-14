@@ -2,19 +2,27 @@
 #include <atomic>
 #include <cassert>
 #include <chrono>
+#include <memory>
+#include <string>
+#include <variant>
 
 #include <ada.h>
 #include <ada/url.h>
+#include <fmt/std.h>
 #include <magic_enum/magic_enum.hpp>
 #include <ngtcp2/ngtcp2_crypto_boringssl.h>
 
 #include "common/base64.h"
+#include "common/http/http1.h"
 #include "common/http/http2.h"
 #include "common/http/http3.h"
 #include "common/logger.h"
 #include "common/parallel.h"
 #include "common/utils.h"
 #include "upstream_doh.h"
+
+static constexpr std::string_view ALPN_HTTP_2 = "h2";
+static constexpr std::string_view ALPN_HTTP_1_1 = "http/1.1";
 
 enum class ag::dns::DohUpstream::ConnectionState : int {
     IDLE,
@@ -138,6 +146,7 @@ struct ag::dns::DohUpstream::HttpConnection { // NOLINT(*-special-member-functio
         shutdown_guard.reset();
     }
     [[nodiscard]] virtual http::Version version() const = 0;
+    [[nodiscard]] virtual std::string_view version_str() const = 0;
     [[nodiscard]] virtual coro::Task<Error<DnsError>> establish(std::string hostname, SocketAddress peer) = 0;
     [[nodiscard]] virtual Result<uint64_t, DnsError> submit_request(const http::Request &request) = 0;
     virtual Error<DnsError> reset_stream(uint64_t stream_id) = 0;
@@ -160,29 +169,29 @@ struct ag::dns::DohUpstream::HttpConnection { // NOLINT(*-special-member-functio
     uint32_t id = next_id++;
 };
 
-struct ag::dns::DohUpstream::Http2Connection : public ag::dns::DohUpstream::HttpConnection {
-    explicit Http2Connection(DohUpstream *parent)
+struct ag::dns::DohUpstream::Http1Or2Connection : public ag::dns::DohUpstream::HttpConnection {
+    explicit Http1Or2Connection(DohUpstream *parent)
             : HttpConnection(parent) {
     }
-    ~Http2Connection() override {
+    ~Http1Or2Connection() override {
         shutdown_guard.reset();
     }
-    Http2Connection(const Http2Connection &) = delete;
-    Http2Connection &operator=(const Http2Connection &) = delete;
-    Http2Connection(Http2Connection &&) = delete;
-    Http2Connection &operator=(Http2Connection &&) = delete;
+    Http1Or2Connection(const Http1Or2Connection &) = delete;
+    Http1Or2Connection &operator=(const Http1Or2Connection &) = delete;
+    Http1Or2Connection(Http1Or2Connection &&) = delete;
+    Http1Or2Connection &operator=(Http1Or2Connection &&) = delete;
 
     [[nodiscard]] http::Version version() const override;
+    [[nodiscard]] std::string_view version_str() const override;
     [[nodiscard]] coro::Task<Error<DnsError>> establish(std::string hostname, SocketAddress peer) override;
     [[nodiscard]] Result<uint64_t, DnsError> submit_request(const http::Request &request) override;
     Error<DnsError> reset_stream(uint64_t stream_id) override;
     [[nodiscard]] Error<DnsError> flush() override;
     [[nodiscard]] coro::Task<Error<DnsError>> drive_io() override;
 
-    [[nodiscard]] coro::Task<Error<DnsError>> connect_socket(std::string hostname, SocketAddress peer);
     static bool on_socket_read(void *arg, Uint8View data);
 
-    std::unique_ptr<http::Http2Client> session;
+    std::variant<std::monostate, std::unique_ptr<http::Http2Client>, std::unique_ptr<http::Http1Client>> session;
     Error<DnsError> session_error;
 };
 
@@ -210,6 +219,7 @@ struct ag::dns::DohUpstream::Http3Connection : public ag::dns::DohUpstream::Http
     Http3Connection &operator=(Http3Connection &&) = delete;
 
     [[nodiscard]] http::Version version() const override;
+    [[nodiscard]] std::string_view version_str() const override;
     [[nodiscard]] coro::Task<Error<DnsError>> establish(std::string hostname, SocketAddress peer) override;
     [[nodiscard]] Result<uint64_t, DnsError> submit_request(const http::Request &request) override;
     Error<DnsError> reset_stream(uint64_t stream_id) override;
@@ -236,10 +246,10 @@ using std::chrono::duration_cast;
 #define log_upstream(lvl_, self_, fmt_, ...) lvl_##log(g_logger, "[{}] " fmt_, (self_)->m_id, ##__VA_ARGS__)
 #define log_hconn(lvl_, self_, fmt_, ...)                                                                              \
     lvl_##log(g_logger, "[{}] [{}-{}] " fmt_, (self_)->parent->m_id, (self_)->id,                                      \
-            ((self_)->version() == http::HTTP_2_0) ? "h2" : "h3", ##__VA_ARGS__)
+            (self_)->version_str(), ##__VA_ARGS__)
 #define log_query(lvl_, hconn_, qid_, fmt_, ...)                                                                       \
     lvl_##log(g_logger, "[{}] [{}-{}] [{}] " fmt_, (hconn_)->parent->m_id, (hconn_)->id,                               \
-            ((hconn_)->version() == http::HTTP_2_0) ? "h2" : "h3", qid_, ##__VA_ARGS__)
+            (hconn_)->version_str(), qid_, ##__VA_ARGS__)
 
 static const ag::Logger g_logger("DOH upstream");
 static std::atomic<uint32_t> g_next_id = 0; // NOLINT(*-avoid-non-const-global-variables)
@@ -432,10 +442,10 @@ ag::coro::Task<void> ag::dns::DohUpstream::drive_connection(Millis handshake_tim
         if (m_http_version == http::HTTP_3_0) {
             m_pending_connections->emplace_back(std::make_unique<Http3Connection>(this), peer);
         } else if (m_http_version == http::HTTP_2_0) {
-            m_pending_connections->emplace_back(std::make_unique<Http2Connection>(this), peer);
+            m_pending_connections->emplace_back(std::make_unique<Http1Or2Connection>(this), peer);
         } else {
             m_pending_connections->emplace_back(std::make_unique<Http3Connection>(this), peer);
-            m_pending_connections->emplace_back(std::make_unique<Http2Connection>(this), peer);
+            m_pending_connections->emplace_back(std::make_unique<Http1Or2Connection>(this), peer);
         }
     }
     auto connector = establish_any_of_connections(*m_pending_connections);
@@ -867,22 +877,56 @@ void ag::dns::DohUpstream::ReplyWaiter::notify_error(Error<DnsError> e) {
     }
 }
 
-ag::http::Version ag::dns::DohUpstream::Http2Connection::version() const {
+ag::http::Version ag::dns::DohUpstream::Http1Or2Connection::version() const {
+    if (std::holds_alternative<std::unique_ptr<http::Http1Client>>(session)) {
+        return http::HTTP_1_1;
+    }
     return http::HTTP_2_0;
 }
 
-ag::coro::Task<ag::Error<ag::dns::DnsError>> ag::dns::DohUpstream::Http2Connection::establish(
+std::string_view ag::dns::DohUpstream::Http1Or2Connection::version_str() const {
+    if (std::holds_alternative<std::unique_ptr<http::Http1Client>>(session)) {
+        return ALPN_HTTP_1_1;
+    }
+    if (std::holds_alternative<std::unique_ptr<http::Http2Client>>(session)) {
+        return ALPN_HTTP_2;
+    }
+    return "h?";
+}
+
+ag::coro::Task<ag::Error<ag::dns::DnsError>> ag::dns::DohUpstream::Http1Or2Connection::establish(
         std::string hostname, SocketAddress peer) {
-    if (io.has_value() || session != nullptr) {
+    if (io.has_value() || !std::holds_alternative<std::monostate>(session)) {
         co_return make_error(DnsError::AE_INTERNAL_ERROR, "Unreachable");
     }
 
-    Error<DnsError> error = co_await connect_socket(std::move(hostname), peer);
-    if (error != nullptr) {
-        co_return error;
+    AioSocket &socket = io.emplace(parent->make_secured_socket(utils::TP_TCP,
+            SocketFactory::SecureSocketParameters{
+                    .session_cache = &parent->m_tls_session_cache,
+                    .server_name = std::move(hostname),
+                    .alpn = {std::string(ALPN_HTTP_2), std::string(ALPN_HTTP_1_1)},
+                    .fingerprints = parent->m_fingerprints,
+            }));
+
+    std::weak_ptr<bool> guard = shutdown_guard;
+    Error<SocketError> err = co_await socket.connect(AioSocket::ConnectParameters{
+            .loop = &parent->m_config.loop,
+            .peer = peer,
+            .timeout = parent->m_config.timeout,
+    });
+    if (guard.expired()) {
+        co_return make_error(DnsError::AE_SHUTTING_DOWN);
+    }
+    if (err != nullptr) {
+        io.reset();
+        co_return make_error(DnsError::AE_SOCKET_ERROR, err);
     }
 
-    Result client = http::Http2Client::make(http::Http2Settings{},
+    std::optional<std::string> alpn = io->get_underlying()->get_alpn();
+    log_hconn(dbg, this, "ALPN selected: {}", alpn);
+
+    if (alpn == ALPN_HTTP_2) {
+        auto client = http::Http2Client::make(http::Http2Settings{},
             http::Http2Client::Callbacks{
                     .arg = this,
                     .on_response =
@@ -909,42 +953,87 @@ ag::coro::Task<ag::Error<ag::dns::DnsError>> ag::dns::DohUpstream::Http2Connecti
                     .on_output = on_output,
                     .on_data_sent =
                             [](void *arg, uint32_t stream_id, size_t n) {
-                                auto *self = (Http2Connection *) arg;
-                                self->session->consume_stream(stream_id, n);
+                                auto *self = (Http1Or2Connection *) arg;
+                                auto *h2_client = std::get_if<std::unique_ptr<http::Http2Client>>(&self->session);
+                                assert(h2_client);
+                                (*h2_client)->consume_stream(stream_id, n);
                             },
             });
-    if (client.has_error()) {
-        co_return make_error(DnsError::AE_INTERNAL_ERROR, client.error());
+        if (client.has_error()) {
+            co_return make_error(DnsError::AE_INTERNAL_ERROR, client.error());
+        }
+        session = std::move(client.value());
+    } else if (alpn == ALPN_HTTP_1_1 || !alpn.has_value()) {
+        auto client = std::make_unique<ag::http::Http1Client>(ag::http::Http1Client::Callbacks{
+                .arg = this,
+                .on_response =
+                        [](void *arg, uint64_t stream_id, http::Response response) {
+                            on_response(arg, stream_id, std::move(response));
+                        },
+                .on_body =
+                        [](void *arg, uint64_t stream_id, Uint8View chunk) {
+                            on_body(arg, stream_id, chunk);
+                        },
+                .on_body_finished =
+                        [](void *arg, uint64_t stream_id) {
+                            on_stream_read_finished(arg, stream_id);
+                        },
+                .on_stream_finished =
+                        [](void *arg, uint64_t stream_id, int error_code) {
+                            if (error_code != 0) {
+                                on_stream_closed(arg, stream_id,
+                                        make_error(DnsError::AE_EXCHANGE_ERROR,
+                                                AG_FMT("on_stream_finished: {}", error_code)));
+                            }
+                        },
+                .on_output = on_output,
+        });
+        session = std::move(client);
+    } else {
+        co_return make_error(DnsError::AE_INTERNAL_ERROR, AG_FMT("Unexpected ALPN: {}", alpn));
     }
 
-    session = std::move(client.value());
     co_return {};
 }
 
-ag::Result<uint64_t, ag::dns::DnsError> ag::dns::DohUpstream::Http2Connection::submit_request(
+ag::Result<uint64_t, ag::dns::DnsError> ag::dns::DohUpstream::Http1Or2Connection::submit_request(
         const http::Request &request) {
-    Result stream_id = session->submit_request(request, /*eof=*/true);
-    if (stream_id.has_error()) {
-        return make_error(DnsError::AE_INTERNAL_ERROR, stream_id.error());
+    if (auto *h2_client = std::get_if<std::unique_ptr<http::Http2Client>>(&session)) {
+        auto ret = (*h2_client)->submit_request(request, /*eof=*/true);
+        if (ret.has_error()) {
+            return make_error(DnsError::AE_INTERNAL_ERROR, ret.error());
+        }
+        return ret.value();
     }
-    return stream_id.value();
+    if (auto *h1_client = std::get_if<std::unique_ptr<http::Http1Client>>(&session)) {
+        auto ret = (*h1_client)->send_request(request);
+        if (ret.has_error()) {
+            return make_error(DnsError::AE_INTERNAL_ERROR, ret.error());
+        }
+        return ret.value();
+    }
+    return make_error(DnsError::AE_INTERNAL_ERROR, "No HTTP client available");
 }
 
-ag::Error<ag::dns::DnsError> ag::dns::DohUpstream::Http2Connection::reset_stream(uint64_t stream_id) {
-    if (Error<http::Http2Error> error = session->reset_stream(stream_id, NGHTTP2_CANCEL); error != nullptr) {
-        return make_error(DnsError::AE_INTERNAL_ERROR, std::move(error));
+ag::Error<ag::dns::DnsError> ag::dns::DohUpstream::Http1Or2Connection::reset_stream(uint64_t stream_id) {
+    if (auto *h2_client = std::get_if<std::unique_ptr<http::Http2Client>>(&session)) {
+        if (Error<http::Http2Error> error = (*h2_client)->reset_stream(stream_id, NGHTTP2_CANCEL); error != nullptr) {
+            return make_error(DnsError::AE_INTERNAL_ERROR, std::move(error));
+        }
     }
     return {};
 }
 
-ag::Error<ag::dns::DnsError> ag::dns::DohUpstream::Http2Connection::flush() {
-    if (Error<http::Http2Error> error = session->flush(); error != nullptr) {
-        return make_error(DnsError::AE_INTERNAL_ERROR, std::move(error));
+ag::Error<ag::dns::DnsError> ag::dns::DohUpstream::Http1Or2Connection::flush() {
+    if (auto *h2_client = std::get_if<std::unique_ptr<http::Http2Client>>(&session)) {
+        if (Error<http::Http2Error> error = (*h2_client)->flush(); error != nullptr) {
+            return make_error(DnsError::AE_INTERNAL_ERROR, std::move(error));
+        }
     }
     return {};
 }
 
-ag::coro::Task<ag::Error<ag::dns::DnsError>> ag::dns::DohUpstream::Http2Connection::drive_io() {
+ag::coro::Task<ag::Error<ag::dns::DnsError>> ag::dns::DohUpstream::Http1Or2Connection::drive_io() {
     std::weak_ptr<bool> guard = shutdown_guard;
     Error<SocketError> error = co_await io->receive( // NOLINT(*-unchecked-optional-access)
             AioSocket::OnReadCallback{
@@ -965,48 +1054,30 @@ ag::coro::Task<ag::Error<ag::dns::DnsError>> ag::dns::DohUpstream::Http2Connecti
     co_return make_error(DnsError::AE_INTERNAL_ERROR, "Unreachable");
 }
 
-ag::coro::Task<ag::Error<ag::dns::DnsError>> ag::dns::DohUpstream::Http2Connection::connect_socket(
-        std::string hostname, SocketAddress peer) {
-    AioSocket &socket = io.emplace(parent->make_secured_socket(utils::TP_TCP,
-            SocketFactory::SecureSocketParameters{
-                    .session_cache = &parent->m_tls_session_cache,
-                    .server_name = std::move(hostname),
-                    .alpn = {&NGHTTP2_PROTO_ALPN[1]},
-                    .fingerprints = parent->m_fingerprints,
-            }));
-
-    log_hconn(dbg, this, "{}", peer.str());
-    std::weak_ptr<bool> guard = shutdown_guard;
-    Error<SocketError> err = co_await socket.connect(AioSocket::ConnectParameters{
-            .loop = &parent->m_config.loop,
-            .peer = peer,
-            .timeout = parent->m_config.timeout,
-    });
-    if (guard.expired()) {
-        co_return make_error(DnsError::AE_SHUTTING_DOWN);
-    }
-    if (err != nullptr) {
-        io.reset();
-        co_return make_error(DnsError::AE_SOCKET_ERROR, err);
-    }
-
-    co_return {};
-}
-
-bool ag::dns::DohUpstream::Http2Connection::on_socket_read(void *arg, Uint8View data) {
-    auto *self = (Http2Connection *) arg;
+bool ag::dns::DohUpstream::Http1Or2Connection::on_socket_read(void *arg, Uint8View data) {
+    auto *self = (Http1Or2Connection *) arg;
     DohUpstream *upstream = self->parent;
 
     if (upstream->m_read_timer_task.has_value()) {
         upstream->refresh_read_timer();
     }
 
-    if (Result r = self->session->input(data); r.has_error()) {
-        self->session_error = make_error(DnsError::AE_INTERNAL_ERROR, r.error());
-        return false;
-    }
-    if (Error<http::Http2Error> error = self->session->flush(); error != nullptr) {
-        self->session_error = make_error(DnsError::AE_INTERNAL_ERROR, std::move(error));
+    if (auto *h2_client = std::get_if<std::unique_ptr<http::Http2Client>>(&self->session)) {
+        if (Result r = (*h2_client)->input(data); r.has_error()) {
+            self->session_error = make_error(DnsError::AE_INTERNAL_ERROR, r.error());
+            return false;
+        }
+        if (Error<http::Http2Error> error = (*h2_client)->flush(); error != nullptr) {
+            self->session_error = make_error(DnsError::AE_INTERNAL_ERROR, std::move(error));
+            return false;
+        }
+    } else if (auto *h1_client = std::get_if<std::unique_ptr<http::Http1Client>>(&self->session)) {
+        if (Result r = (*h1_client)->input(data); r.has_error()) {
+            self->session_error = make_error(DnsError::AE_INTERNAL_ERROR, r.error());
+            return false;
+        }
+    } else {
+        self->session_error = make_error(DnsError::AE_INTERNAL_ERROR, "No HTTP client available");
         return false;
     }
     return true;
@@ -1014,6 +1085,10 @@ bool ag::dns::DohUpstream::Http2Connection::on_socket_read(void *arg, Uint8View 
 
 ag::http::Version ag::dns::DohUpstream::Http3Connection::version() const {
     return http::HTTP_3_0;
+}
+
+std::string_view ag::dns::DohUpstream::Http3Connection::version_str() const {
+    return "h3";
 }
 
 ag::coro::Task<ag::Error<ag::dns::DnsError>> ag::dns::DohUpstream::Http3Connection::establish(

@@ -160,6 +160,19 @@ TlsCodec::WriteDecryptedResult TlsCodec::write_decrypted(Uint8View buffer) {
     return DecryptedBytesWritten{(size_t) r};
 }
 
+std::optional<std::string> TlsCodec::get_alpn_selected() const {
+    if (!m_ssl) {
+        return std::nullopt;
+    }
+    const uint8_t *data;
+    unsigned len = 0;
+    SSL_get0_alpn_selected(m_ssl.get(), &data, &len);
+    if (len == 0) {
+        return std::nullopt;
+    }
+    return std::make_optional<std::string>((const char *) data, len);
+}
+
 int TlsCodec::ssl_verify_callback(X509_STORE_CTX *ctx, void *arg) {
     auto *self = (TlsCodec *) arg;
 
