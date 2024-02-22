@@ -49,7 +49,7 @@ public:
 private:
     struct FallbackInfo {
         EventLoop *loop = nullptr;
-        SocketAddress peer;
+        AddressVariant peer;
         SteadyClock::time_point connect_timestamp;
         std::optional<Micros> timeout;
         OutboundProxy *proxy = nullptr;

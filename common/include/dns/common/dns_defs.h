@@ -1,16 +1,32 @@
 #pragma once
 
+#include <cstdint>
+#include <string>
+#include <variant>
+
 #include <ldns/packet.h>
 
 #include "common/defs.h"
 #include "common/error.h"
 #include "common/utils.h"
+#include "common/socket_address.h"
 
 namespace ag {
 namespace dns {
 
 using ldns_pkt_ptr = UniquePtr<ldns_pkt, &ldns_pkt_free>;          // NOLINT(readability-identifier-naming)
 using ldns_buffer_ptr = UniquePtr<ldns_buffer, &ldns_buffer_free>; // NOLINT(readability-identifier-naming)
+
+struct NamePort {
+    std::string name;
+    uint16_t port;
+};
+
+inline auto format_as(const NamePort &name) {
+    return AG_FMT("{}:{}", name.name, name.port);
+}
+
+using AddressVariant = std::variant<SocketAddress, NamePort>;
 
 /**
  * Enum for errors than can happen during DNS exchange

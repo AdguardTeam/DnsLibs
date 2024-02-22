@@ -2,6 +2,8 @@
 #include <event2/buffer.h>
 #include <openssl/err.h>
 
+#include <fmt/std.h>
+
 #include "common/time_utils.h"
 #include "common/utils.h"
 #include "dns/common/dns_defs.h"
@@ -26,7 +28,12 @@ std::optional<evutil_socket_t> TcpStream::get_fd() const {
 }
 
 Error<SocketError> TcpStream::connect(ConnectParameters params) {
-    log_stream(this, trace, "{}", params.peer.str());
+    log_stream(this, trace, "{}", params.peer);
+
+    const auto *peer = std::get_if<SocketAddress>(&params.peer);
+    if (!peer) {
+        return make_error(SocketError::AE_INVALID_ARGUMENT, "Peer must be a socket address");
+    }
 
     if (m_connected) {
         assert(0);
@@ -34,7 +41,7 @@ Error<SocketError> TcpStream::connect(ConnectParameters params) {
     }
 
     m_tcp = Uv<uv_tcp_t>::create_with_parent(this);
-    if (int err = uv_tcp_init_ex(params.loop->handle(), m_tcp->raw(), (uint8_t)params.peer.c_sockaddr()->sa_family)) {
+    if (int err = uv_tcp_init_ex(params.loop->handle(), m_tcp->raw(), (uint8_t)peer->c_sockaddr()->sa_family)) {
         auto error = make_error(uv_errno_t(err));
         return make_error(SocketError::AE_SOCK_ERROR, "Failed to create socket", error);
     }
@@ -49,7 +56,7 @@ Error<SocketError> TcpStream::connect(ConnectParameters params) {
     uv_fileno((uv_handle_t *) m_tcp->raw(), &fd);
     if (Error<SocketError> err; m_prepare_fd.func != nullptr
             && (err = m_prepare_fd.func(
-                        m_prepare_fd.arg, (evutil_socket_t) fd, params.peer, m_parameters.outbound_interface))) {
+                        m_prepare_fd.arg, (evutil_socket_t) fd, *peer, m_parameters.outbound_interface))) {
         return make_error(SocketError::AE_PREPARE_ERROR, AG_FMT("Failed to prepare descriptor: {}", err->str()));
     }
 
@@ -60,9 +67,8 @@ Error<SocketError> TcpStream::connect(ConnectParameters params) {
 
     uv_connect_t *req = new uv_connect_t;
     req->data = new UvWeak<uv_tcp_t>(m_tcp);
-    sockaddr_in *t = (sockaddr_in *) params.peer.c_sockaddr();
     Error<SocketError> sock_err;
-    if (int err = uv_tcp_connect(req, m_tcp->raw(), (sockaddr *) t, on_event)) {
+    if (int err = uv_tcp_connect(req, m_tcp->raw(), peer->c_sockaddr(), on_event)) {
         delete Uv<uv_tcp_t>::weak_from_data(req->data);
         delete req;
         log_stream(this, dbg, "Failed to start connection");

@@ -1,11 +1,14 @@
+#include "upstream_dot.h"
+
+#include <fmt/std.h>
 #include <openssl/x509v3.h>
 #include <openssl/ssl.h>
 
 #include "common/defs.h"
 #include "common/utils.h"
+#include "dns/common/dns_defs.h"
 
 #include "dns_framed.h"
-#include "upstream_dot.h"
 
 using std::chrono::milliseconds;
 using std::chrono::seconds;
@@ -38,28 +41,33 @@ public:
         auto weak_self = weak_from_this();
         auto *dot_upstream = (DotUpstream *) m_pool.lock()->upstream();
         assert(dot_upstream != nullptr);
-        auto result = co_await dot_upstream->m_bootstrapper->get();
-        if (weak_self.expired()) {
-            co_return;
+
+        if (dot_upstream->m_bootstrapper) {
+            auto result = co_await dot_upstream->m_bootstrapper->get();
+            if (weak_self.expired()) {
+                co_return;
+            }
+            if (result.error) {
+                auto &err = *result.error;
+                log_conn(m_log, err, this, "Failed to bootstrap: {}", err.str());
+                this->on_close(make_error(DnsError::AE_BOOTSTRAP_ERROR, result.error));
+                co_return;
+            }
+            m_result = std::move(result);
+            assert(!m_result.addresses.empty());
+            m_address = m_result.addresses[0];
+        } else {
+            m_address = NamePort{std::string(dot_upstream->m_url.get_hostname()), dot_upstream->m_port};
         }
-        if (result.error) {
-            auto &err = *result.error;
-            log_conn(m_log, err, this, "Failed to bootstrap: {}", err.str());
-            this->on_close(make_error(DnsError::AE_BOOTSTRAP_ERROR, result.error));
-            co_return;
-        }
-        m_result = std::move(result);
-        assert(!m_result.addresses.empty());
 
         static const std::string DOT_ALPN = "dot";
 
-        SocketAddress &addr = m_result.addresses[0];
         Millis timeout;
         if (auto *upstream = (DotUpstream *) m_pool.lock()->upstream()) {
             m_stream = upstream->make_secured_socket(utils::TP_TCP,
                     SocketFactory::SecureSocketParameters{
                             .session_cache = &upstream->m_tls_session_cache,
-                            .server_name{upstream->m_url.get_hostname()},
+                            .server_name = std::string(upstream->m_url.get_hostname()),
                             .alpn = {DOT_ALPN},
                             .fingerprints = upstream->m_fingerprints,
                     });
@@ -68,11 +76,10 @@ public:
             on_close(make_error(DnsError::AE_SHUTTING_DOWN, "Shutting down"));
             co_return;
         }
-        dbglog(m_log, "{}", addr.str());
-        m_address = addr;
+        dbglog(m_log, "{}", m_address);
         auto err = m_stream->connect({
                 &m_loop,
-                addr,
+                m_address,
                 {on_connected, on_read, on_close, this},
                 timeout,
         });
@@ -93,8 +100,11 @@ public:
             if (auto error = reply.error()->value(); error == DnsError::AE_SOCKET_ERROR
                     || error == DnsError::AE_TIMED_OUT || error == DnsError::AE_CONNECTION_CLOSED) {
                 if (auto pool = m_pool.lock()) {
-                    if (auto *upstream = (DotUpstream *) pool->upstream()) {
-                        upstream->m_bootstrapper->remove_resolved(m_address);
+                    if (auto *upstream = (DotUpstream *) pool->upstream();
+                            upstream && upstream->m_bootstrapper) {
+                        if (const auto *saddr = std::get_if<SocketAddress>(&m_address)) {
+                            upstream->m_bootstrapper->remove_resolved(*saddr);
+                        }
                     }
                 }
             }
@@ -135,22 +145,24 @@ Error<Upstream::InitError> DotUpstream::init() {
         return error;
     }
 
-    if (m_options.bootstrap.empty()
-            && std::holds_alternative<std::monostate>(m_options.resolved_server_ip)
-            && !SocketAddress(m_url.get_hostname(), m_port).valid()) {
-        return make_error(InitError::AE_EMPTY_BOOTSTRAP);
+    if (const auto *oproxy_settings = config().socket_factory->get_outbound_proxy_settings();
+            !oproxy_settings || !oproxy_protocol_supports_hostname(oproxy_settings->protocol)) {
+        if (m_options.bootstrap.empty() && std::holds_alternative<std::monostate>(m_options.resolved_server_ip)
+                && !SocketAddress(m_url.get_hostname(), m_port).valid()) {
+            return make_error(InitError::AE_EMPTY_BOOTSTRAP);
+        }
+
+        auto create_result = create_bootstrapper(m_options, m_config, m_url, m_port);
+        if (create_result.has_error()) {
+            return make_error(InitError::AE_BOOTSTRAPPER_INIT_FAILED, create_result.error());
+        }
+        m_bootstrapper = std::move(create_result.value());
+        if (auto err = m_bootstrapper->init()) {
+            return make_error(InitError::AE_BOOTSTRAPPER_INIT_FAILED, err);
+        }
     }
 
     m_pool = std::make_shared<ConnectionPool<DotConnection>>(config().loop, shared_from_this(), 10);
-
-    auto create_result = create_bootstrapper(m_options, m_config, m_url, m_port);
-    if (create_result.has_error()) {
-        return make_error(InitError::AE_BOOTSTRAPPER_INIT_FAILED, create_result.error());
-    }
-    m_bootstrapper = std::move(create_result.value());
-    if (auto err = m_bootstrapper->init()) {
-        return make_error(InitError::AE_BOOTSTRAPPER_INIT_FAILED, err);
-    }
 
     return {};
 }

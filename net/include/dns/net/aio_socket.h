@@ -4,6 +4,7 @@
 
 #include "common/coro.h"
 #include "common/logger.h"
+#include "dns/common/dns_defs.h"
 #include "dns/common/event_loop.h"
 #include "dns/net/socket.h"
 
@@ -26,7 +27,7 @@ public:
         /** Event loop for operation */
         EventLoop *loop = nullptr;
         /** Address on the peer to connect to */
-        const SocketAddress &peer;
+        const AddressVariant &peer;
         /** Operation time out value */
         std::optional<Micros> timeout;
     };

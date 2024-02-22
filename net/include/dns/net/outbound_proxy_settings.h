@@ -44,4 +44,9 @@ struct OutboundProxySettings {
     bool ignore_if_unavailable;
 };
 
+/**
+ * Return `true` if outbound proxy protocol `protocol` supports connecting by host name, return `false` otherwise.
+ */
+bool oproxy_protocol_supports_hostname(OutboundProxyProtocol protocol);
+
 } // namespace ag::dns

@@ -1,8 +1,11 @@
+#include "outbound_http_proxy.h"
+
+#include <fmt/std.h>
 #include <magic_enum/magic_enum.hpp>
 
 #include "common/base64.h"
 #include "common/utils.h"
-#include "outbound_http_proxy.h"
+#include "dns/common/dns_defs.h"
 
 #define log_proxy(p_, lvl_, fmt_, ...)                                                                                 \
     lvl_##log((p_)->m_log, "[id={}] {}(): " fmt_, (p_)->m_id, __func__, ##__VA_ARGS__)
@@ -123,7 +126,7 @@ void HttpOProxy::close_connection_impl(uint32_t conn_id) {
 }
 
 Error<SocketError> HttpOProxy::connect_to_proxy(uint32_t conn_id, const ConnectParameters &parameters) {
-    log_conn(this, conn_id, trace, "{} == {}", m_resolved_proxy_address->str(), parameters.peer.str());
+    log_conn(this, conn_id, trace, "{} == {}", m_resolved_proxy_address->str(), parameters.peer);
     assert(parameters.proto == utils::TP_TCP);
 
     auto &conn = m_connections[conn_id];
@@ -155,7 +158,7 @@ static Uint8View string_to_bytes(std::string_view str) {
 }
 
 Error<SocketError> HttpOProxy::connect_through_proxy(uint32_t conn_id, const ConnectParameters &parameters) {
-    log_conn(this, conn_id, trace, "{}:{} == {}", m_settings->address, m_settings->port, parameters.peer.str());
+    log_conn(this, conn_id, trace, "{}:{} == {}", m_settings->address, m_settings->port, parameters.peer);
 
     auto &conn = m_connections[conn_id];
     if (conn == nullptr) {
@@ -175,10 +178,14 @@ Error<SocketError> HttpOProxy::connect_through_proxy(uint32_t conn_id, const Con
         }                                                                                                              \
     } while (0)
 
+    const auto *addr = std::get_if<SocketAddress>(&parameters.peer);
+    const auto *name = std::get_if<NamePort>(&parameters.peer);
+    assert(addr || name);
+
     SEND_S(conn, "CONNECT ");
-    SEND_S(conn, parameters.peer.str());
+    SEND_S(conn, addr ? addr->str() : AG_FMT("{}:{}", name->name, name->port));
     SEND_S(conn, " HTTP/1.1\r\nHost: ");
-    SEND_S(conn, parameters.peer.host_str(/*ipv6_brackets*/ true));
+    SEND_S(conn, addr ? addr->host_str(/*ipv6_brackets*/ true) : name->name);
     SEND_S(conn, "\r\n");
     if (m_settings->auth_info.has_value()) {
         std::string auth_key = AG_FMT("{}:{}", m_settings->auth_info->username, m_settings->auth_info->password);

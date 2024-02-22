@@ -1,10 +1,6 @@
 #pragma once
 
 #include <mutex>
-#include <list>
-#include <condition_variable>
-#include <event2/event.h>
-#include <event2/bufferevent.h>
 
 #include "common/logger.h"
 #if defined _WIN32 && !defined __clang__
@@ -16,7 +12,6 @@
 #endif
 #include "dns/common/event_loop.h"
 #include "dns/net/tcp_dns_buffer.h"
-#include "dns/net/tls_session_cache.h"
 #include "dns/upstream/upstream.h"
 
 #include "connection.h"
@@ -52,7 +47,7 @@ public:
     /** Connection id */
     uint32_t m_id{};
     /** Address */
-    SocketAddress m_address;
+    AddressVariant m_address;
     /** Input buffer */
     TcpDnsBuffer m_input_buffer;
     /** Connection handle */
@@ -72,11 +67,10 @@ public:
     static void on_close(void *arg, Error<SocketError> error);
     void on_close(Error<DnsError> dns_error);
     std::string address_str() {
-        if (m_address.valid()) {
-            return AG_FMT("{}({})", m_address_str, m_address.str());
-        } else {
-            return AG_FMT("{}()", m_address_str);
+        if (const auto *saddr = std::get_if<SocketAddress>(&m_address); saddr && saddr->valid()) {
+            return AG_FMT("{}({})", m_address_str, saddr->str());
         }
+        return AG_FMT("{}()", m_address_str);
     }
 
     auto ensure_connected(Request *request) {

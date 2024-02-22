@@ -10,6 +10,7 @@
 #include "common/net_utils.h"
 #include "common/socket_address.h"
 #include "common/logger.h"
+#include "dns/common/dns_defs.h"
 #include "dns/net/outbound_proxy_settings.h"
 #include "dns/net/socket.h"
 
@@ -63,7 +64,7 @@ public:
         /** Connection protocol */
         utils::TransportProtocol proto;
         /** Address of the peer to connect to */
-        SocketAddress peer;
+        AddressVariant peer;
         /** Set of the proxy callbacks */
         Callbacks callbacks = {};
         /** Operation time out value */

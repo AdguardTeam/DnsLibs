@@ -1,8 +1,13 @@
 #include "outbound_socks_proxy.h"
+
+#include <cassert>
+
+#include <fmt/std.h>
+#include <magic_enum/magic_enum.hpp>
+
 #include "common/net_utils.h"
 #include "common/utils.h"
-#include <cassert>
-#include <magic_enum/magic_enum.hpp>
+#include "dns/common/dns_defs.h"
 
 #ifdef _WIN32
 #include <ws2ipdef.h>
@@ -48,6 +53,7 @@ enum Socks5Command {
 
 enum Socks5AddressType {
     S5AT_IPV4 = 0x01, // a version-4 IP address, with a length of 4 octets
+    S5AT_DOMAIN_NAME = 0x03, // a fully-qualified domain name, with a one-byte length prefix
     S5AT_IPV6 = 0x04, // a version-6 IP address, with a length of 16 octets
 };
 
@@ -226,18 +232,31 @@ Error<SocketError> SocksOProxy::send(uint32_t conn_id, Uint8View data) {
         Socks5UdpHeader header;
         memset(&header, 0, sizeof(header));
 
+        SocketAddress unmapped;
+        std::string name_storage;
         Uint8View addr_bytes;
         uint16_t port;
-        if (const sockaddr *addr = conn->parameters.peer.c_sockaddr(); addr->sa_family == AF_INET) {
+        if (const auto *name = std::get_if<NamePort>(&conn->parameters.peer)) {
+            auto length_prefix = std::min(size_t(UINT8_MAX), name->name.size());
+            name_storage.resize(name->name.size() + 1);
+            name_storage[0] = (uint8_t) length_prefix;
+            std::memcpy(name_storage.data() + 1, name->name.data(), length_prefix);
+
+            header.atyp = S5AT_DOMAIN_NAME;
+            addr_bytes = (uint8_t *) name_storage.data();
+            port = htons(name->port);
+        } else if (const auto *addr = std::get_if<SocketAddress>(&conn->parameters.peer); addr && addr->is_ipv4()) {
+            unmapped = addr->socket_family_cast(AF_INET);
             header.atyp = S5AT_IPV4;
-            const auto *sin = (sockaddr_in *) addr;
-            addr_bytes = {(uint8_t *) &sin->sin_addr, 4};
-            port = sin->sin_port;
-        } else {
+            addr_bytes = unmapped.addr();
+            port = htons(unmapped.port());
+        } else if (addr && addr->is_ipv6()) {
             header.atyp = S5AT_IPV6;
-            const auto *sin = (sockaddr_in6 *) addr;
-            addr_bytes = {(uint8_t *) &sin->sin6_addr, 16};
-            port = sin->sin6_port;
+            addr_bytes = addr->addr();
+            port = htons(addr->port());
+        } else {
+            e = make_error(SocketError::AE_INVALID_ARGUMENT, AG_FMT("Unsupported peer address: {}", conn->parameters.peer));
+            break;
         }
 
         Uint8Vector packet;
@@ -308,7 +327,7 @@ void SocksOProxy::close_connection_impl(uint32_t conn_id) {
 }
 
 Error<SocketError> SocksOProxy::connect_to_proxy(uint32_t conn_id, const ConnectParameters &parameters) {
-    log_conn(this, conn_id, trace, "{} == {}", m_resolved_proxy_address->str(), m_settings->port, parameters.peer.str());
+    log_conn(this, conn_id, trace, "{} == {}", m_resolved_proxy_address->str(), parameters.peer);
 
     Connection *conn = nullptr;
     if (auto &c = m_connections[conn_id]; c == nullptr) {
@@ -330,7 +349,7 @@ Error<SocketError> SocksOProxy::connect_to_proxy(uint32_t conn_id, const Connect
 }
 
 Error<SocketError> SocksOProxy::connect_through_proxy(uint32_t conn_id, const ConnectParameters &parameters) {
-    log_conn(this, conn_id, trace, "{}:{} == {}", m_settings->address, m_settings->port, parameters.peer.str());
+    log_conn(this, conn_id, trace, "{}:{} == {}", m_settings->address, m_settings->port, parameters.peer);
 
     auto &conn = m_connections[conn_id];
     if (conn == nullptr) {
@@ -480,16 +499,14 @@ Error<SocketError> SocksOProxy::connect_to_proxy(Connection *conn) {
                             conn->parameters.timeout,
                     },
             });
-            udp_association_conn->socket
-                    = m_parameters.make_socket.func(m_parameters.make_socket.arg, utils::TP_TCP, std::nullopt);
             proto = utils::TP_TCP;
             conn = udp_association_conn.get();
-            dst_addr = conn->parameters.peer;
+            dst_addr = m_resolved_proxy_address.value();
         } else {
             dst_addr = m_udp_association->bound_addr;
         }
     } else {
-        dst_addr = SocketAddress(m_settings->address, m_settings->port);
+        dst_addr = m_resolved_proxy_address.value();
     }
 
     assert(dst_addr.valid());
@@ -658,9 +675,15 @@ std::optional<SocksOProxy::Callbacks> SocksOProxy::get_connection_callbacks_lock
 Error<SocketError> SocksOProxy::send_socks4_request(Connection *conn) {
     log_conn(this, conn->id, trace, "...");
 
+    const auto *peer = std::get_if<SocketAddress>(&conn->parameters.peer);
+    if (!peer || !peer->is_ipv4()) {
+        return make_error(SocketError::AE_INVALID_ARGUMENT, AG_FMT("Unsupported peer address: {}", conn->parameters.peer));
+    }
+    SocketAddress unmapped = peer->socket_family_cast(AF_INET);
+
     Socks4ConnectRequest request = {};
-    request.dstport = htons(conn->parameters.peer.port());
-    request.dstip = *(uint32_t *) &((sockaddr_in *) conn->parameters.peer.c_sockaddr())->sin_addr;
+    request.dstport = htons(unmapped.port());
+    std::memcpy(&request.dstip, unmapped.addr().data(), unmapped.addr().size());
 
     Uint8View data = {(uint8_t *) &request, sizeof(request)};
     SEND_S(conn, data);
@@ -829,27 +852,37 @@ void SocksOProxy::on_socks5_user_pass_auth_response(Connection *conn, Uint8View 
 Error<SocketError> SocksOProxy::send_socks5_connect_request(Connection *conn) {
     log_conn(this, conn->id, trace, "...");
 
-    const sockaddr *addr = conn->parameters.peer.c_sockaddr();
-
     Socks5ConnectRequest request = {};
     request.cmd = this->is_udp_association_connection(conn->id) ? S5CMD_UDP_ASSOCIATE : S5CMD_CONNECT;
-    request.atyp = (addr->sa_family == AF_INET) ? S5AT_IPV4 : S5AT_IPV6;
 
+    std::string name_storage;
+    SocketAddress unmapped;
+    uint16_t port;
+    Uint8View addr_bytes;
+    if (const auto *name = std::get_if<NamePort>(&conn->parameters.peer)) {
+        auto length_prefix = std::min(size_t(UINT8_MAX), name->name.size());
+        name_storage.resize(name->name.size() + 1);
+        name_storage[0] = (uint8_t) length_prefix;
+        std::memcpy(name_storage.data() + 1, name->name.data(), length_prefix);
+
+        request.atyp = S5AT_DOMAIN_NAME;
+        addr_bytes = (uint8_t *) name_storage.data();
+        port = htons(name->port);
+    } else if (const auto *addr = std::get_if<SocketAddress>(&conn->parameters.peer); addr && addr->is_ipv4()) {
+        unmapped = addr->socket_family_cast(AF_INET);
+        request.atyp = S5AT_IPV4;
+        addr_bytes = unmapped.addr();
+        port = htons(unmapped.port());
+    } else if (addr && addr->is_ipv6()) {
+        request.atyp = S5AT_IPV6;
+        addr_bytes = addr->addr();
+        port = htons(addr->port());
+    } else {
+        return make_error(SocketError::AE_INVALID_ARGUMENT, AG_FMT("Unsupported peer address: {}", conn->parameters.peer));
+    }
     Uint8View data = {(uint8_t *) &request, sizeof(request)};
     SEND_S(conn, data);
-
-    uint16_t port;
-    if (addr->sa_family == AF_INET) {
-        const auto *sin = (sockaddr_in *) addr;
-        data = {(uint8_t *) &sin->sin_addr, 4};
-        port = sin->sin_port;
-    } else {
-        const auto *sin = (sockaddr_in6 *) addr;
-        data = {(uint8_t *) &sin->sin6_addr, 16};
-        port = sin->sin6_port;
-    }
-    SEND_S(conn, data);
-
+    SEND_S(conn, addr_bytes);
     data = {(uint8_t *) &port, sizeof(port)};
     SEND_S(conn, data);
 
@@ -875,13 +908,32 @@ void SocksOProxy::on_socks5_connect_response(Connection *conn, Uint8View data) {
         this->handle_connection_close(conn, make_error(SocketError::AE_BAD_PROXY_REPLY));
         return;
     }
-    if (reply->atyp != S5AT_IPV4 && reply->atyp != S5AT_IPV6) {
+
+    size_t full_length = sizeof(Socks5ConnectReply) + /*port*/2;
+    switch (reply->atyp) {
+    case S5AT_IPV4:
+        full_length += 4;
+        break;
+    case S5AT_DOMAIN_NAME:
+        full_length += 1;
+        if (seek.size() < full_length) {
+            // wait full
+            if (conn->recv_buffer.empty()) {
+                conn->recv_buffer.insert(conn->recv_buffer.end(), data.begin(), data.end());
+            }
+            return;
+        }
+        full_length += seek[sizeof(Socks5ConnectReply)];
+        break;
+    case S5AT_IPV6:
+        full_length += 16;
+        break;
+    default:
         log_conn(this, conn->id, dbg, "Bad address type: {}", reply->atyp);
         this->handle_connection_close(conn, make_error(SocketError::AE_BAD_PROXY_REPLY));
         return;
     }
 
-    size_t full_length = sizeof(Socks5ConnectReply) + ((reply->atyp == S5AT_IPV4) ? 4 : 16) + 2;
     if (seek.size() < full_length) {
         // wait full
         if (conn->recv_buffer.empty()) {
@@ -889,15 +941,17 @@ void SocksOProxy::on_socks5_connect_response(Connection *conn, Uint8View data) {
         }
         return;
     }
-    if (seek.size() > full_length) {
-        log_conn(this, conn->id, dbg, "Too long: {} bytes", seek.size());
-        this->handle_connection_close(conn, make_error(SocketError::AE_BAD_PROXY_REPLY));
-        return;
-    }
+    seek.remove_prefix(full_length);
 
     conn->state = CS_CONNECTED;
-    conn->recv_buffer.resize(0);
     if (this->is_udp_association_connection(conn->id)) {
+        if (!seek.empty()) {
+            log_conn(this, conn->id, dbg, "Reply too long: {} bytes", seek.size());
+            this->handle_connection_close(conn, make_error(SocketError::AE_BAD_PROXY_REPLY));
+            return;
+        }
+        conn->recv_buffer.resize(0);
+
         Uint8View addr = {reply->bnd_addr, (size_t) ((reply->atyp == S5AT_IPV4) ? 4 : 16)};
         uint16_t port = ntohs(*(uint16_t *) (reply->bnd_addr + addr.size()));
 
@@ -905,6 +959,10 @@ void SocksOProxy::on_socks5_connect_response(Connection *conn, Uint8View data) {
     } else if (std::optional<Callbacks> cbx = this->get_connection_callbacks_locked(conn);
             cbx.has_value() && cbx->on_connected != nullptr) {
         cbx->on_connected(cbx->arg, conn->id);
+        if (!seek.empty()) {
+            cbx->on_read(cbx->arg, seek);
+        }
+        conn->recv_buffer.resize(0);
     }
 }
 

@@ -1,3 +1,5 @@
+#include "upstream_doh.h"
+
 #include <array>
 #include <atomic>
 #include <cassert>
@@ -7,7 +9,6 @@
 #include <variant>
 
 #include <ada.h>
-#include <ada/url.h>
 #include <fmt/std.h>
 #include <magic_enum/magic_enum.hpp>
 #include <ngtcp2/ngtcp2_crypto_boringssl.h>
@@ -16,10 +17,11 @@
 #include "common/http/http1.h"
 #include "common/http/http2.h"
 #include "common/http/http3.h"
+#include "common/http/util.h"
 #include "common/logger.h"
 #include "common/parallel.h"
 #include "common/utils.h"
-#include "upstream_doh.h"
+#include "dns/net/outbound_proxy_settings.h"
 
 static constexpr std::string_view ALPN_HTTP_2 = "h2";
 static constexpr std::string_view ALPN_HTTP_1_1 = "http/1.1";
@@ -147,7 +149,7 @@ struct ag::dns::DohUpstream::HttpConnection { // NOLINT(*-special-member-functio
     }
     [[nodiscard]] virtual http::Version version() const = 0;
     [[nodiscard]] virtual std::string_view version_str() const = 0;
-    [[nodiscard]] virtual coro::Task<Error<DnsError>> establish(std::string hostname, SocketAddress peer) = 0;
+    [[nodiscard]] virtual coro::Task<Error<DnsError>> establish(std::string hostname, AddressVariant peer) = 0;
     [[nodiscard]] virtual Result<uint64_t, DnsError> submit_request(const http::Request &request) = 0;
     virtual Error<DnsError> reset_stream(uint64_t stream_id) = 0;
     [[nodiscard]] virtual Error<DnsError> flush() = 0;
@@ -183,7 +185,7 @@ struct ag::dns::DohUpstream::Http1Or2Connection : public ag::dns::DohUpstream::H
 
     [[nodiscard]] http::Version version() const override;
     [[nodiscard]] std::string_view version_str() const override;
-    [[nodiscard]] coro::Task<Error<DnsError>> establish(std::string hostname, SocketAddress peer) override;
+    [[nodiscard]] coro::Task<Error<DnsError>> establish(std::string hostname, AddressVariant peer) override;
     [[nodiscard]] Result<uint64_t, DnsError> submit_request(const http::Request &request) override;
     Error<DnsError> reset_stream(uint64_t stream_id) override;
     [[nodiscard]] Error<DnsError> flush() override;
@@ -220,7 +222,7 @@ struct ag::dns::DohUpstream::Http3Connection : public ag::dns::DohUpstream::Http
 
     [[nodiscard]] http::Version version() const override;
     [[nodiscard]] std::string_view version_str() const override;
-    [[nodiscard]] coro::Task<Error<DnsError>> establish(std::string hostname, SocketAddress peer) override;
+    [[nodiscard]] coro::Task<Error<DnsError>> establish(std::string hostname, AddressVariant peer) override;
     [[nodiscard]] Result<uint64_t, DnsError> submit_request(const http::Request &request) override;
     Error<DnsError> reset_stream(uint64_t stream_id) override;
     [[nodiscard]] Error<DnsError> flush() override;
@@ -243,13 +245,13 @@ struct ag::dns::DohUpstream::Http3Connection : public ag::dns::DohUpstream::Http
 
 using std::chrono::duration_cast;
 
-#define log_upstream(lvl_, self_, fmt_, ...) lvl_##log(g_logger, "[{}] " fmt_, (self_)->m_id, ##__VA_ARGS__)
+#define log_upstream(lvl_, self_, fmt_, ...) lvl_## log(g_logger, "[{}] " fmt_, (self_)->m_id, ## __VA_ARGS__)
 #define log_hconn(lvl_, self_, fmt_, ...)                                                                              \
-    lvl_##log(g_logger, "[{}] [{}-{}] " fmt_, (self_)->parent->m_id, (self_)->id,                                      \
-            (self_)->version_str(), ##__VA_ARGS__)
+    lvl_## log(g_logger, "[{}] [{}-{}] " fmt_, (self_)->parent->m_id, (self_)->id,                                      \
+            (self_)->version_str(), ## __VA_ARGS__)
 #define log_query(lvl_, hconn_, qid_, fmt_, ...)                                                                       \
-    lvl_##log(g_logger, "[{}] [{}-{}] [{}] " fmt_, (hconn_)->parent->m_id, (hconn_)->id,                               \
-            (hconn_)->version_str(), qid_, ##__VA_ARGS__)
+    lvl_## log(g_logger, "[{}] [{}-{}] [{}] " fmt_, (hconn_)->parent->m_id, (hconn_)->id,                               \
+            (hconn_)->version_str(), qid_, ## __VA_ARGS__)
 
 static const ag::Logger g_logger("DOH upstream");
 static std::atomic<uint32_t> g_next_id = 0; // NOLINT(*-avoid-non-const-global-variables)
@@ -282,29 +284,41 @@ ag::Error<ag::dns::Upstream::InitError> ag::dns::DohUpstream::init() {
         return error;
     }
 
-    if (m_options.bootstrap.empty() && std::holds_alternative<std::monostate>(m_options.resolved_server_ip)
-            && !SocketAddress(m_url.get_hostname(), m_port).valid()) {
-        return make_error(InitError::AE_EMPTY_BOOTSTRAP);
+    if (utils::istarts_with(m_options.address, SCHEME_H3)) {
+        m_http_version = http::HTTP_3_0;
+    } else if (!m_config.enable_http3) {
+        m_http_version = http::HTTP_2_0;
     }
 
-    std::string address;
-    if (auto resolved = ag::SocketAddress(m_options.resolved_server_ip, DEFAULT_DOH_PORT); resolved.valid()) {
-        address = resolved.host_str(/*ipv6_brackets*/ true);
-    } else {
-        address = m_url.get_hostname();
-    }
+    if (const auto *oproxy_settings = config().socket_factory->get_outbound_proxy_settings(); !oproxy_settings
+            || !oproxy_protocol_supports_hostname(oproxy_settings->protocol)
+            || !std::holds_alternative<std::monostate>(options().resolved_server_ip)
+            || SocketAddress(m_url.get_hostname(), m_port).valid()
+            || m_http_version == http::HTTP_3_0) {
+        if (m_options.bootstrap.empty() && std::holds_alternative<std::monostate>(m_options.resolved_server_ip)
+                && !SocketAddress(m_url.get_hostname(), m_port).valid()) {
+            return make_error(InitError::AE_EMPTY_BOOTSTRAP);
+        }
 
-    Bootstrapper &bootstrapper = m_bootstrapper.emplace(Bootstrapper::Params{
-            .address_string = address,
-            .default_port = m_port,
-            .bootstrap = m_options.bootstrap,
-            .timeout = m_config.timeout,
-            .upstream_config = m_config,
-            .outbound_interface = m_options.outbound_interface,
-    });
+        std::string address;
+        if (auto resolved = ag::SocketAddress(m_options.resolved_server_ip, DEFAULT_DOH_PORT); resolved.valid()) {
+            address = resolved.host_str(/*ipv6_brackets*/ true);
+        } else {
+            address = m_url.get_hostname();
+        }
 
-    if (Error<Bootstrapper::BootstrapperError> err = bootstrapper.init()) {
-        return make_error(InitError::AE_EMPTY_BOOTSTRAP, std::move(err));
+        Bootstrapper &bootstrapper = m_bootstrapper.emplace(Bootstrapper::Params{
+                .address_string = address,
+                .default_port = m_port,
+                .bootstrap = m_options.bootstrap,
+                .timeout = m_config.timeout,
+                .upstream_config = m_config,
+                .outbound_interface = m_options.outbound_interface,
+        });
+
+        if (Error<Bootstrapper::BootstrapperError> err = bootstrapper.init()) {
+            return make_error(InitError::AE_EMPTY_BOOTSTRAP, std::move(err));
+        }
     }
 
     m_request_template.authority(std::string(m_url.get_hostname()));
@@ -315,12 +329,6 @@ ag::Error<ag::dns::Upstream::InitError> ag::dns::DohUpstream::init() {
     }
     m_path = m_url.get_pathname();
     log_upstream(dbg, this, "Prepared request template: {}", m_request_template);
-
-    if (utils::istarts_with(m_options.address, DohUpstream::SCHEME_H3)) {
-        m_http_version = http::HTTP_3_0;
-    } else if (!m_config.enable_http3) {
-        m_http_version = http::HTTP_2_0;
-    }
 
     return {};
 }
@@ -410,34 +418,44 @@ ag::coro::Task<void> ag::dns::DohUpstream::drive_connection(Millis handshake_tim
     }
 
     std::weak_ptr<bool> shutdown_guard = m_shutdown_guard;
-    log_upstream(trace, this, "Bootstrapping...");
-    Bootstrapper::ResolveResult resolved = co_await m_bootstrapper->get(); // NOLINT(*-unchecked-optional-access)
-    if (shutdown_guard.expired()) {
-        co_return;
+    std::vector<AddressVariant> addresses_to_connect;
+    if (m_bootstrapper.has_value()) {
+        log_upstream(trace, this, "Bootstrapping...");
+        Bootstrapper::ResolveResult resolved = co_await m_bootstrapper->get(); // NOLINT(*-unchecked-optional-access)
+        if (shutdown_guard.expired()) {
+            co_return;
+        }
+        if (resolved.error) {
+            close_connection(make_error(DnsError::AE_BOOTSTRAP_ERROR, resolved.error));
+            co_return;
+        }
+        if (resolved.addresses.empty()) {
+            close_connection(make_error(DnsError::AE_BOOTSTRAP_ERROR, "Empty address list"));
+            co_return;
+        }
+        log_upstream(trace, this, "Bootstrapping done");
+        for (SocketAddress &address : resolved.addresses) {
+            addresses_to_connect.emplace_back(std::move(address));
+        }
+    } else {
+        addresses_to_connect.emplace_back(NamePort{std::string(m_url.get_hostname()), m_port});
     }
-    if (resolved.error) {
-        close_connection(make_error(DnsError::AE_BOOTSTRAP_ERROR, resolved.error));
-        co_return;
-    }
-    if (resolved.addresses.empty()) {
-        close_connection(make_error(DnsError::AE_BOOTSTRAP_ERROR, "Empty address list"));
-        co_return;
-    }
-    log_upstream(trace, this, "Bootstrapped");
 
     m_pending_connections = std::make_shared<decltype(m_pending_connections)::element_type>();
     decltype(m_pending_connections)::weak_type connections_guard = m_pending_connections;
     bool found_ipv4 = false;
     bool found_ipv6 = false;
-    for (const SocketAddress &peer : resolved.addresses) {
+    for (const auto &peer : addresses_to_connect) {
         if (found_ipv4 && found_ipv6) {
             break;
         }
-        if (peer.is_ipv4() && std::exchange(found_ipv4, true)) {
-            continue;
-        }
-        if (peer.is_ipv6() && std::exchange(found_ipv6, true)) {
-            continue;
+        if (const auto *saddr = std::get_if<SocketAddress>(&peer)) {
+            if (saddr->is_ipv4() && std::exchange(found_ipv4, true)) {
+                continue;
+            }
+            if (saddr->is_ipv6() && std::exchange(found_ipv6, true)) {
+                continue;
+            }
         }
         if (m_http_version == http::HTTP_3_0) {
             m_pending_connections->emplace_back(std::make_unique<Http3Connection>(this), peer);
@@ -472,9 +490,11 @@ ag::coro::Task<void> ag::dns::DohUpstream::drive_connection(Millis handshake_tim
             assert(m_connection_state == ConnectionState::CONNECTING);
             co_return co_await drive_connection(handshake_timeout - duration_cast<Millis>(SteadyClock::now() - start_ts));
         }
-        if (http_conn.error()->value() == DnsError::AE_TIMED_OUT) {
+        if (http_conn.error()->value() == DnsError::AE_TIMED_OUT && m_bootstrapper.has_value()) {
             for (const auto &conn : *m_pending_connections) {
-                m_bootstrapper->remove_resolved(conn.second);
+                if (const auto *saddr = std::get_if<SocketAddress>(&conn.second)) {
+                    m_bootstrapper->remove_resolved(*saddr);
+                }
             }
         }
         close_connection(http_conn.error());
@@ -506,10 +526,10 @@ ag::coro::Task<void> ag::dns::DohUpstream::drive_connection(Millis handshake_tim
 }
 
 ag::coro::Task<ag::Result<ag::dns::DohUpstream::HttpConnection *, ag::dns::DnsError>>
-ag::dns::DohUpstream::establish_connection(HttpConnection *http_conn, SocketAddress peer) {
+ag::dns::DohUpstream::establish_connection(HttpConnection *http_conn, AddressVariant peer) {
     std::weak_ptr<bool> shutdown_guard = http_conn->shutdown_guard;
 
-    log_hconn(trace, http_conn, "Connecting to {}...", peer.str());
+    log_hconn(trace, http_conn, "Connecting to {}...", peer);
     std::string_view hostname = m_url.get_hostname(); // was validated during initialization
     Error<DnsError> error = co_await http_conn->establish(std::string(hostname), peer);
     if (shutdown_guard.expired()) {
@@ -517,8 +537,10 @@ ag::dns::DohUpstream::establish_connection(HttpConnection *http_conn, SocketAddr
     }
 
     if (error != nullptr) {
-        if (error->value() == DnsError::AE_SOCKET_ERROR) {
-            m_bootstrapper->remove_resolved(peer); // NOLINT(*-unchecked-optional-access)
+        if (error->value() == DnsError::AE_SOCKET_ERROR && m_bootstrapper.has_value()) {
+            if (const auto *saddr = std::get_if<SocketAddress>(&peer)) {
+                m_bootstrapper->remove_resolved(*saddr);
+            }
         }
         co_return error;
     }
@@ -528,7 +550,7 @@ ag::dns::DohUpstream::establish_connection(HttpConnection *http_conn, SocketAddr
 
 ag::coro::Task<ag::Result<ag::dns::DohUpstream::HttpConnection *, ag::dns::DnsError>>
 ag::dns::DohUpstream::establish_any_of_connections(
-        const std::vector<std::pair<std::unique_ptr<HttpConnection>, SocketAddress>> &connections) {
+        const std::vector<std::pair<std::unique_ptr<HttpConnection>, AddressVariant>> &connections) {
     std::vector<Error<DnsError>> errors;
 
     auto op = parallel::any_of_cond<Result<HttpConnection *, DnsError>>(
@@ -895,7 +917,7 @@ std::string_view ag::dns::DohUpstream::Http1Or2Connection::version_str() const {
 }
 
 ag::coro::Task<ag::Error<ag::dns::DnsError>> ag::dns::DohUpstream::Http1Or2Connection::establish(
-        std::string hostname, SocketAddress peer) {
+        std::string hostname, AddressVariant peer) {
     if (io.has_value() || !std::holds_alternative<std::monostate>(session)) {
         co_return make_error(DnsError::AE_INTERNAL_ERROR, "Unreachable");
     }
@@ -1092,7 +1114,12 @@ std::string_view ag::dns::DohUpstream::Http3Connection::version_str() const {
 }
 
 ag::coro::Task<ag::Error<ag::dns::DnsError>> ag::dns::DohUpstream::Http3Connection::establish(
-        std::string hostname, SocketAddress peer) {
+        std::string hostname, AddressVariant peer) {
+    const auto *peer_saddr = std::get_if<SocketAddress>(&peer);
+    if (!peer_saddr) {
+        co_return make_error(DnsError::AE_INTERNAL_ERROR, AG_FMT("Unsupported peer address: {}", peer));
+    }
+
     if (io.has_value() || session != nullptr) {
         co_return make_error(DnsError::AE_INTERNAL_ERROR, "Unreachable");
     }
@@ -1126,7 +1153,7 @@ ag::coro::Task<ag::Error<ag::dns::DnsError>> ag::dns::DohUpstream::Http3Connecti
     }
     SSL_set_connect_state(ssl.get());
 
-    if (Error<DnsError> error = co_await connect_socket(std::move(hostname), peer); error != nullptr) {
+    if (Error<DnsError> error = co_await connect_socket(std::move(hostname), *peer_saddr); error != nullptr) {
         co_return error;
     }
 

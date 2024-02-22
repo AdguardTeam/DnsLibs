@@ -1,10 +1,13 @@
+#include "udp_socket.h"
+
 #include <cassert>
+
+#include <fmt/std.h>
 #include <uv.h>
 
 #include "common/time_utils.h"
 #include "common/utils.h"
-
-#include "udp_socket.h"
+#include "dns/common/dns_defs.h"
 
 namespace ag::dns {
 
@@ -23,7 +26,12 @@ std::optional<evutil_socket_t> UdpSocket::get_fd() const {
 }
 
 Error<SocketError> UdpSocket::connect(ConnectParameters params) {
-    log_sock(this, trace, "{}", params.peer.str());
+    log_sock(this, trace, "{}", params.peer);
+
+    const auto *peer = std::get_if<SocketAddress>(&params.peer);
+    if (!peer) {
+        return make_error(SocketError::AE_INVALID_ARGUMENT, "Peer must be a socket address");
+    }
 
     Error<SocketError> result;
 
@@ -33,7 +41,7 @@ Error<SocketError> UdpSocket::connect(ConnectParameters params) {
     }
 
     m_udp = Uv<uv_udp_t>::create_with_parent(this);
-    if (int err = uv_udp_init_ex(params.loop->handle(), m_udp->raw(), (uint8_t)params.peer.c_sockaddr()->sa_family); err != 0) {
+    if (int err = uv_udp_init_ex(params.loop->handle(), m_udp->raw(), (uint8_t)peer->c_sockaddr()->sa_family); err != 0) {
         return make_error(SocketError::AE_SOCK_ERROR, "Failed to initialize UDP handle", make_error(uv_errno_t(err)));
     }
 
@@ -47,12 +55,12 @@ Error<SocketError> UdpSocket::connect(ConnectParameters params) {
     uv_fileno((uv_handle_t *) m_udp->raw(), &fd);
     if (Error<SocketError> err; m_prepare_fd.func != nullptr
             && (err = m_prepare_fd.func(
-                        m_prepare_fd.arg, (evutil_socket_t) fd, params.peer, m_parameters.outbound_interface))) {
+                        m_prepare_fd.arg, (evutil_socket_t) fd, *peer, m_parameters.outbound_interface))) {
         return make_error(SocketError::AE_PREPARE_ERROR, AG_FMT("Failed to prepare descriptor: {}", err->str()));
     }
 
     Error<SocketError> sock_err;
-    if (int err = uv_udp_connect(m_udp->raw(), params.peer.c_sockaddr()); err != 0) {
+    if (int err = uv_udp_connect(m_udp->raw(), peer->c_sockaddr()); err != 0) {
         auto error = make_error(uv_errno_t(err));
         log_sock(this, dbg, "Failed to connect: {}", error->str());
         sock_err = (err == UV_ECONNREFUSED)

@@ -1,6 +1,8 @@
 #include <atomic>
 #include <utility>
 
+#include <fmt/std.h>
+
 #include "common/coro.h"
 #include "dns/net/aio_socket.h"
 #include "dns/net/tcp_dns_buffer.h"
@@ -29,7 +31,7 @@ AioSocket::~AioSocket() {
 }
 
 void AioSocket::connect(AioSocket::ConnectParameters params, std::function<void(Error<SocketError>)> handler) {
-    log_sock(this, trace, "{}", params.peer.str());
+    log_sock(this, trace, "{}", params.peer);
 
     if (m_handler != nullptr) {
         handler(make_error(SocketError::AE_IN_PROGRESS));

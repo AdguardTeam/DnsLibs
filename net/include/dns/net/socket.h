@@ -14,6 +14,7 @@
 #include "common/net_utils.h"
 #include "common/logger.h"
 #include "common/route_resolver.h"
+#include "dns/common/dns_defs.h"
 #include "dns/common/event_loop.h"
 #include "dns/net/outbound_proxy_settings.h"
 #include "dns/net/certificate_verifier.h"
@@ -45,6 +46,7 @@ enum class SocketError {
     AE_OUTBOUND_PROXY_ERROR,
     AE_IN_PROGRESS,
     AE_BIND_TO_IF_ERROR,
+    AE_INVALID_ARGUMENT,
 };
 
 class SocketFactory {
@@ -214,7 +216,7 @@ public:
         /** Event loop for operation */
         EventLoop *loop = nullptr;
         /** Address on the peer to connect to */
-        const SocketAddress &peer;
+        const AddressVariant &peer;
         /** Set of the socket callbacks */
         Callbacks callbacks = {};
         /** Operation time out value */
@@ -324,6 +326,7 @@ struct ErrorCodeToString<dns::SocketError> {
         case decltype(e)::AE_OUTBOUND_PROXY_ERROR: return "Proxy error";
         case decltype(e)::AE_IN_PROGRESS: return "Async operation in progress";
         case decltype(e)::AE_BIND_TO_IF_ERROR: return "Failed to bind socket to interface";
+        case decltype(e)::AE_INVALID_ARGUMENT: return "Invalid socket parameters";
         }
     }
 };

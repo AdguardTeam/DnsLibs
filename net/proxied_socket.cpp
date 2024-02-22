@@ -1,5 +1,7 @@
 #include "proxied_socket.h"
 
+#include <fmt/std.h>
+
 #define log_sock(s_, lvl_, fmt_, ...) lvl_##log((s_)->m_log, "[id={}] " fmt_, (s_)->m_id, ##__VA_ARGS__)
 
 namespace ag::dns {
@@ -24,7 +26,7 @@ std::optional<evutil_socket_t> ProxiedSocket::get_fd() const {
 }
 
 Error<SocketError> ProxiedSocket::connect(ConnectParameters params) {
-    log_sock(this, trace, "{}", params.peer.str());
+    log_sock(this, trace, "{}", params.peer);
 
     if (auto err = this->set_callbacks(params.callbacks)) {
         log_sock(this, dbg, "Failed to set callbacks: {}", err->str());
@@ -32,7 +34,7 @@ Error<SocketError> ProxiedSocket::connect(ConnectParameters params) {
         return err;
     }
 
-    if (params.peer.is_loopback()) {
+    if (const auto *peer = std::get_if<SocketAddress>(&params.peer); peer && peer->is_loopback()) {
         log_sock(this, dbg, "Don't direct localhost into proxy. Falling back to direct connection");
         m_proxy = m_proxied_callbacks.get_fallback_proxy(m_proxied_callbacks.arg).proxy;
         auto connect_result = m_proxy->connect(
@@ -134,7 +136,9 @@ void ProxiedSocket::on_proxy_connection_failed(void *arg, Error<SocketError> err
         return;
     }
 
-    self->m_fallback_info->proxy = self->m_proxied_callbacks.get_fallback_proxy(self->m_proxied_callbacks.arg).proxy;
+    if (self->m_fallback_info) {
+        self->m_fallback_info->proxy = self->m_proxied_callbacks.get_fallback_proxy(self->m_proxied_callbacks.arg).proxy;
+    }
 }
 
 void ProxiedSocket::on_connected(void *arg, uint32_t) {

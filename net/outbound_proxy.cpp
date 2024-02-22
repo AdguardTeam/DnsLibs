@@ -1,8 +1,10 @@
+#include "outbound_proxy.h"
+
 #include <atomic>
 #include <cassert>
 #include <utility>
 
-#include "outbound_proxy.h"
+#include "dns/net/outbound_proxy_settings.h"
 
 using namespace ag::dns;
 
@@ -103,4 +105,18 @@ void OutboundProxy::on_bootstrap_ready(Error<SocketError> bootstrap_error) {
             parameters.callbacks.on_close(parameters.callbacks.arg, error);
         }
     }
+}
+
+bool ag::dns::oproxy_protocol_supports_hostname(OutboundProxyProtocol protocol) {
+    switch (protocol) {
+    case OutboundProxyProtocol::HTTP_CONNECT:
+    case OutboundProxyProtocol::HTTPS_CONNECT:
+    case OutboundProxyProtocol::SOCKS5:
+    case OutboundProxyProtocol::SOCKS5_UDP:
+        return true;
+    case OutboundProxyProtocol::SOCKS4:
+        return false;
+    }
+    assert(0);
+    return false;
 }
