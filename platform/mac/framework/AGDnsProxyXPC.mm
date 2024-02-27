@@ -9,38 +9,40 @@ static ag::Logger gLogger{"AGDnsProxyXPCImpl"};
 @implementation AGDnsProxyXPCImpl {
     dispatch_queue_t _queue;
     AGDnsProxy *_proxy;
+    AGDnsProxyEvents *_events;
 }
 
-- (instancetype)init {
+- (instancetype)initWithConfig:(AGDnsProxyConfig *)config
+                        events:(id<AGDnsProxyEventsXPC>)events
+                         error:(NSError **)error {
     self = [super init];
     if (self) {
         _queue = dispatch_queue_create("com.adguard.dnslibs.AGDnsProxyXPCImpl.queue", DISPATCH_QUEUE_SERIAL);
+        auto *dnsEvents = [[AGDnsProxyEvents alloc] init];
+        dnsEvents.onRequestProcessed = ^(const AGDnsRequestProcessedEvent *event) {
+            [events onRequestProcessed:event];
+        };
+        _events = dnsEvents;
+        _proxy = [[AGDnsProxy alloc] initWithConfig:config handler:_events error:error];
+        if (!_proxy) {
+            return nil;
+        }
     }
     return self;
 }
 
 + (NSXPCInterface *)xpcInterface {
-    auto *callbacksIface = [NSXPCInterface interfaceWithProtocol:@protocol(AGDnsProxyEventsXPC)];
-
     auto *iface = [NSXPCInterface interfaceWithProtocol:@protocol(AGDnsProxyXPC)];
-    [iface setInterface:callbacksIface
-            forSelector:@selector(initWithConfig:eventsHandler:completionHandler:)
-          argumentIndex:1
-                ofReply:NO];
-
     return iface;
 }
 
-- (void)initWithConfig:(AGDnsProxyConfig *)config
-         eventsHandler:(id <AGDnsProxyEventsXPC>)eventsHandler
-     completionHandler:(void (^)(NSError *))handler {
+- (void)reconfig:(AGDnsProxyConfig *)config
+        completionHandler:(void (^)(NSError *))handler {
     dispatch_async(_queue, ^{
-        auto *events = [[AGDnsProxyEvents alloc] init];
-        events.onRequestProcessed = ^(const AGDnsRequestProcessedEvent *event) {
-            [eventsHandler onRequestProcessed:event];
-        };
         NSError *error = nil;
-        _proxy = [[AGDnsProxy alloc] initWithConfig:config handler:events error:&error];
+        [_proxy stop];
+        _proxy = nil;
+        _proxy = [[AGDnsProxy alloc] initWithConfig:config handler:_events error:&error];
         handler(error);
     });
 }
@@ -56,6 +58,14 @@ static ag::Logger gLogger{"AGDnsProxyXPCImpl"};
         [_proxy stop];
         handler();
     });
+}
+
+- (AGDnsProxy *)unwrap {
+    __block AGDnsProxy *proxy;
+    dispatch_sync(_queue, ^{
+        proxy = _proxy;
+    });
+    return proxy;
 }
 
 @end

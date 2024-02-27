@@ -21,13 +21,11 @@
 @protocol AGDnsProxyXPC
 
 /**
- * Start the DNS proxy.
+ * Reconfig the DNS proxy.
  * @param config Configuration.
- * @param eventsHandler Events handler.
  * @param handler Invoked with `nil` after the proxy has started, or with the error otherwise.
  */
-- (void)initWithConfig:(AGDnsProxyConfig *)config
-         eventsHandler:(id <AGDnsProxyEventsXPC>)eventsHandler
+- (void)reconfig:(AGDnsProxyConfig *)config
      completionHandler:(void (^)(NSError *))handler NS_SWIFT_NOTHROW;
 
 /**
@@ -46,6 +44,14 @@
 @end
 
 @interface AGDnsProxyXPCImpl : NSObject <AGDnsProxyXPC>
+
+- (instancetype)init NS_UNAVAILABLE;
+
+- (instancetype)initWithConfig:(AGDnsProxyConfig *)config
+                        events:(id<AGDnsProxyEventsXPC>)events
+                         error:(NSError **)error;
+
+- (AGDnsProxy *)unwrap;
 
 /** Return an `NSXPCInterface` that describes the `AGDnsProxyXPC` protocol. */
 + (NSXPCInterface *)xpcInterface;

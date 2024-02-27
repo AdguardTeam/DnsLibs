@@ -1,5 +1,5 @@
 framework module AGDnsProxy {
-    umbrella header "AGDnsProxy.h"
+    umbrella header "AGDnsProxyModule.h"
     export *
     module * { export * }
 }

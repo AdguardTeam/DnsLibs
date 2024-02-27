@@ -59,7 +59,7 @@ add_library(AGDnsProxy SHARED
     AGDnsProxy.h AGDnsProxy.mm
     AGDnsProxyXPC.h AGDnsProxyXPC.mm
     AGDnsXPCObject.h AGDnsXPCObject.m
-    module.modulemap
+    AGDnsProxyModule.h module.modulemap
 )
 if("${TARGET_OS}" STREQUAL "macos")
     target_sources(AGDnsProxy PRIVATE NSTask+AGUtils.mm)
@@ -80,6 +80,7 @@ set_target_properties(AGDnsProxy PROPERTIES
 set_property(TARGET AGDnsProxy PROPERTY PUBLIC_HEADER
     AGDnsProxy.h
     AGDnsProxyEvents.h
+    AGDnsProxyModule.h
     AGDnsProxyXPC.h
     AGDnsXPCObject.h
 )
