@@ -11,7 +11,13 @@
 #include <ada.h>
 #include <fmt/std.h>
 #include <magic_enum/magic_enum.hpp>
+#include <openssl/err.h>
+
+#ifdef OPENSSL_IS_BORINGSSL
 #include <ngtcp2/ngtcp2_crypto_boringssl.h>
+#else
+#include <ngtcp2/ngtcp2_crypto_quictls.h>
+#endif
 
 #include "common/base64.h"
 #include "common/http/http1.h"
@@ -1124,7 +1130,7 @@ ag::coro::Task<ag::Error<ag::dns::DnsError>> ag::dns::DohUpstream::Http3Connecti
         co_return make_error(DnsError::AE_INTERNAL_ERROR, "Unreachable");
     }
 
-    bssl::UniquePtr<SSL_CTX> ssl_ctx{SSL_CTX_new(TLS_client_method())};
+    ag::UniquePtr<SSL_CTX, &SSL_CTX_free> ssl_ctx{SSL_CTX_new(TLS_client_method())};
     if (ssl_ctx == nullptr) {
         co_return make_error(DnsError::AE_INTERNAL_ERROR, ERR_error_string(ERR_get_error(), nullptr));
     }
@@ -1133,11 +1139,16 @@ ag::coro::Task<ag::Error<ag::dns::DnsError>> ag::dns::DohUpstream::Http3Connecti
     SSL_CTX_set_verify(ssl_ctx.get(), SSL_VERIFY_NONE, nullptr);
     SSL_CTX_set_cert_verify_callback(ssl_ctx.get(), on_certificate_verify, this);
     TlsSessionCache::prepare_ssl_ctx(ssl_ctx.get());
-    if (0 != ngtcp2_crypto_boringssl_configure_client_context(ssl_ctx.get())) {
+#ifdef OPENSSL_IS_BORINGSSL
+    if (0 != ngtcp2_crypto_boringssl_configure_client_context(ssl_ctx.get()))
+#else
+    if (0 != ngtcp2_crypto_quictls_configure_client_context(ssl_ctx.get()))
+#endif
+    {
         co_return make_error(DnsError::AE_INTERNAL_ERROR, "Couldn't configure SSL object for QUIC");
     }
 
-    bssl::UniquePtr<SSL> ssl(SSL_new(ssl_ctx.get()));
+    ag::UniquePtr<SSL, &SSL_free> ssl(SSL_new(ssl_ctx.get()));
     static constexpr std::string_view ALPN = NGHTTP3_ALPN_H3;
     if (0 != SSL_set_alpn_protos(ssl.get(), (uint8_t *) ALPN.data(), ALPN.size())) {
         co_return make_error(DnsError::AE_INTERNAL_ERROR, "Couldn't configure ALPN");

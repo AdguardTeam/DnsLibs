@@ -16,7 +16,12 @@
 
 #include <ngtcp2/ngtcp2.h>
 #include <ngtcp2/ngtcp2_crypto.h>
+
+#ifdef OPENSSL_IS_BORINGSSL
 #include <ngtcp2/ngtcp2_crypto_boringssl.h>
+#else
+#include <ngtcp2/ngtcp2_crypto_quictls.h>
+#endif
 
 #include <ldns/ldns.h>
 #include <event2/event.h>
@@ -223,8 +228,8 @@ private:
     size_t m_max_pktlen;
     uint32_t m_quic_version;
     Buffer m_send_buf;
-    bssl::UniquePtr<SSL_CTX> m_ssl_ctx;
-    bssl::UniquePtr<SSL> m_ssl;
+    ag::UniquePtr<SSL_CTX, &SSL_CTX_free> m_ssl_ctx;
+    ag::UniquePtr<SSL, &SSL_free> m_ssl;
     ngtcp2_conn *m_conn{nullptr};
     Crypto m_crypto[3];
     std::list<int64_t> m_stream_send_queue;

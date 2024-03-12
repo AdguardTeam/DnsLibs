@@ -112,7 +112,7 @@ std::optional<std::string> DefaultVerifier::verify(
         return err;
     }
 
-    using X509_STORE_CTX_ptr = bssl::UniquePtr<X509_STORE_CTX>;
+    using X509_STORE_CTX_ptr = ag::UniquePtr<X509_STORE_CTX, &X509_STORE_CTX_free>;
     X509_STORE_CTX_ptr ctx_holder(X509_STORE_CTX_new());
     X509_STORE_CTX *ctx = ctx_holder.get();
     if (X509_STORE_CTX_init(

@@ -33,7 +33,7 @@ TlsCodec::TlsCodec(const CertificateVerifier *cert_verifier, TlsSessionCache *se
 }
 
 Error<TlsCodec::TlsError> TlsCodec::connect(const std::string &sni, std::vector<std::string> alpn) {
-    bssl::UniquePtr<SSL_CTX> ctx{SSL_CTX_new(TLS_client_method())};
+    ag::UniquePtr<SSL_CTX, &SSL_CTX_free> ctx{SSL_CTX_new(TLS_client_method())};
     SSL_CTX_set_verify(ctx.get(), SSL_VERIFY_PEER, nullptr);
     SSL_CTX_set_cert_verify_callback(ctx.get(), ssl_verify_callback, this);
     TlsSessionCache::prepare_ssl_ctx(ctx.get());
@@ -84,7 +84,7 @@ TlsCodec::SendEncryptedResult TlsCodec::send_encrypted() {
 
     BIO *write_bio = SSL_get_wbio(m_ssl.get());
 
-    Uint8Vector buffer(std::min(BIO_pending(write_bio), ENCRYPTED_READ_CHUNK_SIZE));
+    Uint8Vector buffer(std::min(size_t(BIO_pending(write_bio)), ENCRYPTED_READ_CHUNK_SIZE));
     int r = BIO_read(write_bio, buffer.data(), (int) buffer.size());
     if (r < 0) {
         if (!BIO_should_retry(write_bio)) {
@@ -190,6 +190,8 @@ int TlsCodec::ssl_verify_callback(X509_STORE_CTX *ctx, void *arg) {
     return 1;
 }
 
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wdeprecated-declarations"
 Error<TlsCodec::TlsError> TlsCodec::proceed_handshake() {
     Error<TlsCodec::TlsError> err;
 
@@ -215,5 +217,6 @@ Error<TlsCodec::TlsError> TlsCodec::proceed_handshake() {
 
     return err;
 }
+#pragma GCC diagnostic pop
 
 } // namespace ag::dns

@@ -9,7 +9,7 @@
 
 namespace ag::dns {
 
-using SslSessionPtr = bssl::UniquePtr<SSL_SESSION>;
+using SslSessionPtr = ag::UniquePtr<SSL_SESSION, &SSL_SESSION_free>;
 
 /**
  * A cache of recently seen SSL_SESSIONs for the given URL.

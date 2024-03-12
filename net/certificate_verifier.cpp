@@ -23,7 +23,11 @@ static std::optional<Uint8Array<SHA256_DIGEST_LENGTH>> get_cert_hash(X509 *certi
         pkey = X509_get_pubkey(certificate);
         buf_len = i2d_PUBKEY(pkey, nullptr);
     } else {
+#ifdef OPENSSL_IS_BORINGSSL
         buf_len = i2d_X509_tbs(certificate, nullptr);
+#else
+        buf_len = i2d_re_X509_tbs(certificate, nullptr);
+#endif
     }
     if (buf_len <= 0) {
         return std::nullopt;
@@ -35,14 +39,17 @@ static std::optional<Uint8Array<SHA256_DIGEST_LENGTH>> get_cert_hash(X509 *certi
         i2d_PUBKEY(pkey, (unsigned char **) &buffer);
         EVP_PKEY_free(pkey);
     } else {
+#ifdef OPENSSL_IS_BORINGSSL
         i2d_X509_tbs(certificate, (unsigned char **) &buffer);
+#else
+        i2d_re_X509_tbs(certificate, (unsigned char **) &buffer);
+#endif
     }
 
     std::array<uint8_t, SHA256_DIGEST_LENGTH> hash;
-    SHA256_CTX ctx;
-    SHA256_Init(&ctx);
-    SHA256_Update(&ctx, out.data(), out.size());
-    SHA256_Final((uint8_t *) hash.data(), &ctx);
+    ag::UniquePtr<EVP_MD_CTX, EVP_MD_CTX_free> ctx{EVP_MD_CTX_new()};
+    uint32_t hash_len = hash.size();
+    EVP_Digest(out.data(), out.size(), hash.data(), &hash_len, EVP_sha256(), nullptr);
 
     return hash;
 }
@@ -73,7 +80,7 @@ std::optional<std::string> CertificateVerifier::verify_fingerprints(
         return std::nullopt;
     }
 
-    for (size_t i = 0; i < sk_X509_num(chain); ++i) {
+    for (size_t i = 0; i < size_t(sk_X509_num(chain)); ++i) {
         X509 *certificate = sk_X509_value(chain, i);
         if (is_cert_find_in_fingerprints(certificate, fingerprints)) {
             return std::nullopt;

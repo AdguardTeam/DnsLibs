@@ -99,13 +99,20 @@ DoqUpstream::~DoqUpstream() {
     disconnect("Destructor");
 }
 
+static ngtcp2_encryption_level from_ssl_encryption_level(enum ssl_encryption_level_t ossl_level) {
+#ifdef OPENSSL_IS_BORINGSSL
+    return ngtcp2_crypto_boringssl_from_ssl_encryption_level(ossl_level);
+#else
+    return ngtcp2_crypto_quictls_from_ossl_encryption_level(ossl_level);
+#endif
+}
+
+
 #if BORINGSSL_API_VERSION < 10
-int dns_over_quic::set_encryption_secrets(SSL *ssl, enum ssl_encryption_level_t ossl_level, const uint8_t *read_secret,
+int DoqUpstream::set_encryption_secrets(SSL *ssl, enum ssl_encryption_level_t ossl_level, const uint8_t *read_secret,
         const uint8_t *write_secret, size_t secret_len) {
-    auto doq = static_cast<dns_over_quic *>(SSL_get_app_data(ssl));
-    if (0
-            != doq->on_key(ngtcp2_crypto_boringssl_from_ssl_encryption_level(ossl_level), read_secret, write_secret,
-                    secret_len)) {
+    auto doq = static_cast<DoqUpstream *>(SSL_get_app_data(ssl));
+    if (0 != doq->on_key(from_ssl_encryption_level(ossl_level), read_secret, write_secret, secret_len)) {
         return 0;
     }
     return 1;
@@ -134,7 +141,7 @@ int DoqUpstream::set_tx_secret(SSL *ssl, enum ssl_encryption_level_t ossl_level,
 
 int DoqUpstream::add_handshake_data(SSL *ssl, enum ssl_encryption_level_t ossl_level, const uint8_t *data, size_t len) {
     auto doq = static_cast<DoqUpstream *>(SSL_get_app_data(ssl));
-    doq->write_client_handshake(ngtcp2_crypto_boringssl_from_ssl_encryption_level(ossl_level), data, len);
+    doq->write_client_handshake(from_ssl_encryption_level(ossl_level), data, len);
     return 1;
 }
 
@@ -142,11 +149,69 @@ int DoqUpstream::flush_flight(SSL * /*ssl*/) {
     return 1;
 }
 
+static int alert_from_verify_result(long result) {
+    switch (result) {
+    case X509_V_ERR_CERT_CHAIN_TOO_LONG:
+    case X509_V_ERR_DEPTH_ZERO_SELF_SIGNED_CERT:
+    case X509_V_ERR_INVALID_CA:
+    case X509_V_ERR_PATH_LENGTH_EXCEEDED:
+    case X509_V_ERR_SELF_SIGNED_CERT_IN_CHAIN:
+    case X509_V_ERR_UNABLE_TO_GET_CRL:
+    case X509_V_ERR_UNABLE_TO_GET_CRL_ISSUER:
+    case X509_V_ERR_UNABLE_TO_GET_ISSUER_CERT:
+    case X509_V_ERR_UNABLE_TO_GET_ISSUER_CERT_LOCALLY:
+    case X509_V_ERR_UNABLE_TO_VERIFY_LEAF_SIGNATURE:
+        return SSL_AD_UNKNOWN_CA;
+
+    case X509_V_ERR_UNABLE_TO_DECRYPT_CERT_SIGNATURE:
+    case X509_V_ERR_UNABLE_TO_DECRYPT_CRL_SIGNATURE:
+    case X509_V_ERR_UNABLE_TO_DECODE_ISSUER_PUBLIC_KEY:
+    case X509_V_ERR_ERROR_IN_CERT_NOT_BEFORE_FIELD:
+    case X509_V_ERR_ERROR_IN_CERT_NOT_AFTER_FIELD:
+    case X509_V_ERR_ERROR_IN_CRL_LAST_UPDATE_FIELD:
+    case X509_V_ERR_ERROR_IN_CRL_NEXT_UPDATE_FIELD:
+    case X509_V_ERR_CERT_UNTRUSTED:
+    case X509_V_ERR_CERT_REJECTED:
+    case X509_V_ERR_HOSTNAME_MISMATCH:
+    case X509_V_ERR_EMAIL_MISMATCH:
+    case X509_V_ERR_IP_ADDRESS_MISMATCH:
+        return SSL_AD_BAD_CERTIFICATE;
+
+    case X509_V_ERR_CERT_SIGNATURE_FAILURE:
+    case X509_V_ERR_CRL_SIGNATURE_FAILURE:
+        return SSL_AD_DECRYPT_ERROR;
+
+    case X509_V_ERR_CERT_HAS_EXPIRED:
+    case X509_V_ERR_CERT_NOT_YET_VALID:
+    case X509_V_ERR_CRL_HAS_EXPIRED:
+    case X509_V_ERR_CRL_NOT_YET_VALID:
+        return SSL_AD_CERTIFICATE_EXPIRED;
+
+    case X509_V_ERR_CERT_REVOKED:
+        return SSL_AD_CERTIFICATE_REVOKED;
+
+    case X509_V_ERR_UNSPECIFIED:
+    case X509_V_ERR_OUT_OF_MEM:
+    case X509_V_ERR_INVALID_CALL:
+    case X509_V_ERR_STORE_LOOKUP:
+        return SSL_AD_INTERNAL_ERROR;
+
+    case X509_V_ERR_APPLICATION_VERIFICATION:
+        return SSL_AD_HANDSHAKE_FAILURE;
+
+    case X509_V_ERR_INVALID_PURPOSE:
+        return SSL_AD_UNSUPPORTED_CERTIFICATE;
+
+    default:
+        return SSL_AD_CERTIFICATE_UNKNOWN;
+    }
+}
+
 int DoqUpstream::send_alert(SSL *ssl, enum ssl_encryption_level_t /*level*/, uint8_t alert) {
     auto doq = (DoqUpstream *) SSL_get_app_data(ssl);
     errlog(doq->m_log, "SSL error ({}), sending alert", alert);
 
-    auto res = SSL_alert_from_verify_result(alert);
+    auto res = alert_from_verify_result(alert);
     if (res == SSL_AD_BAD_CERTIFICATE || res == SSL_AD_CERTIFICATE_EXPIRED || res == SSL_AD_CERTIFICATE_REVOKED
             || res == SSL_AD_UNSUPPORTED_CERTIFICATE || res == SSL_AD_CERTIFICATE_UNKNOWN) {
         ngtcp2_conn_set_tls_error(doq->m_conn, res);
@@ -157,7 +222,7 @@ int DoqUpstream::send_alert(SSL *ssl, enum ssl_encryption_level_t /*level*/, uin
 
 static auto quic_method = SSL_QUIC_METHOD {
 #if BORINGSSL_API_VERSION < 10
-    dns_over_quic::set_encryption_secrets,
+    DoqUpstream::set_encryption_secrets,
 #else
     DoqUpstream::set_rx_secret, DoqUpstream::set_tx_secret,
 #endif

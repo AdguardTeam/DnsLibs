@@ -34,7 +34,7 @@ std::optional<std::string> ApplicationVerifier::verify(
 
     STACK_OF(X509) *chain = X509_STORE_CTX_get0_untrusted(ctx);
     event.chain.reserve(sk_X509_num(chain));
-    for (size_t i = 0; i < sk_X509_num(chain); ++i) {
+    for (size_t i = 0; i < size_t(sk_X509_num(chain)); ++i) {
         X509 *cert = sk_X509_value(chain, i);
         serialized = serialize_certificate(cert);
         if (serialized.has_value()) {

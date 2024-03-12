@@ -9,6 +9,7 @@
 
 #include <openssl/ssl.h>
 #include <openssl/bio.h>
+#include <openssl/err.h>
 
 #include "common/defs.h"
 #include "common/logger.h"
@@ -103,7 +104,7 @@ public:
 private:
     const CertificateVerifier *m_cert_verifier = nullptr;
     TlsSessionCache *m_session_cache = nullptr;
-    bssl::UniquePtr<SSL> m_ssl;
+    ag::UniquePtr<SSL, &SSL_free> m_ssl;
     Logger m_log;
     std::vector<CertFingerprint> m_fingerprints;
     std::string m_server_name;
@@ -119,7 +120,11 @@ private:
 template<>
 struct ErrorCodeToString<dns::TlsCodec::OSslError> {
     std::string operator()(dns::TlsCodec::OSslError e) {
+#ifdef OPENSSL_IS_BORINGSSL
         const char *msg = SSL_error_description(int(e));
+#else
+        const char *msg = ERR_reason_error_string(int(e));
+#endif
         if (!msg) {
             return AG_FMT("Unknown error: {}", int(e));
         }

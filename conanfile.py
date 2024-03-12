@@ -35,11 +35,14 @@ class DnsLibsConan(ConanFile):
         self.requires("klib/2021-04-06@adguard_team/native_libs_common", transitive_headers=True)
         self.requires("ldns/2021-03-29@adguard_team/native_libs_common", transitive_headers=True)
         self.requires("magic_enum/0.9.5", transitive_headers=True)
-        self.requires("native_libs_common/5.0.12@adguard_team/native_libs_common", transitive_headers=True)
+        self.requires("native_libs_common/6.0.0@adguard_team/native_libs_common", transitive_headers=True)
         self.requires("ngtcp2/1.0.1@adguard_team/native_libs_common", transitive_headers=True)
         self.requires("pcre2/10.37@adguard_team/native_libs_common", transitive_headers=True)
         self.requires("tldregistry/2022-12-26@adguard_team/native_libs_common", transitive_headers=True)
-        self.requires("openssl/boring-2023-05-17@adguard_team/native_libs_common", transitive_headers=True)
+        if "mips" in str(self.settings.arch):
+            self.requires("openssl/3.1.5-quic1@adguard_team/native_libs_common", transitive_headers=True, force=True)
+        else:
+            self.requires("openssl/boring-2023-05-17@adguard_team/native_libs_common", transitive_headers=True)
         self.requires("ada/2.7.4", transitive_headers=True)
         if self.settings.os == "Windows":
             self.requires("detours/2021-04-14@adguard_team/native_libs_common", transitive_headers=True)
