@@ -361,7 +361,6 @@ OutboundProxySettings AndroidDnsProxy::marshal_outbound_proxy(JNIEnv *env, jobje
     auto bootstrap_field = env->GetFieldID(clazz, "bootstrap", "Ljava/util/List;");
     auto auth_info_field = env->GetFieldID(clazz, "authInfo", "L" FQN_OUTBOUND_PROXY_AUTH_INFO ";");
     auto trust_any_certificate_field = env->GetFieldID(clazz, "trustAnyCertificate", "Z");
-    auto ignore_if_unavailable_field = env->GetFieldID(clazz, "ignoreIfUnavailable", "Z");
 
     OutboundProxySettings csettings = {};
     auto protocol = env->GetObjectField(jsettings, protocol_field);
@@ -399,7 +398,6 @@ OutboundProxySettings AndroidDnsProxy::marshal_outbound_proxy(JNIEnv *env, jobje
     }
 
     csettings.trust_any_certificate = env->GetBooleanField(jsettings, trust_any_certificate_field);
-    csettings.ignore_if_unavailable = env->GetBooleanField(jsettings, ignore_if_unavailable_field);
 
     return csettings;
 }
@@ -425,11 +423,11 @@ LocalRef<jobject> AndroidDnsProxy::marshal_outbound_proxy(JNIEnv *env, const Out
 
     auto clazz = env->FindClass(FQN_OUTBOUND_PROXY_SETTINGS);
     auto ctor = env->GetMethodID(clazz, "<init>",
-            "(L" FQN_OUTBOUND_PROXY_PROTOCOL ";Ljava/lang/String;ILjava/util/List;L" FQN_OUTBOUND_PROXY_AUTH_INFO ";ZZ)V");
+            "(L" FQN_OUTBOUND_PROXY_PROTOCOL ";Ljava/lang/String;ILjava/util/List;L" FQN_OUTBOUND_PROXY_AUTH_INFO ";Z)V");
     return {env,
             env->NewObject(clazz, ctor, m_proxy_protocol_enum_values.at((size_t) csettings.protocol).get(),
                     address.get(), (jint) csettings.port, bootstrap.get(), auth_info.get(),
-                    csettings.trust_any_certificate, csettings.ignore_if_unavailable)};
+                    csettings.trust_any_certificate)};
 }
 
 DnsFilter::EngineParams AndroidDnsProxy::marshal_filter_params(JNIEnv *env, jobject java_filter_params) {

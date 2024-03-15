@@ -238,7 +238,6 @@ static ag_outbound_proxy_settings *marshal_outbound_proxy(const std::optional<Ou
         c_outbound_proxy->auth_info = nullptr;
     }
     c_outbound_proxy->trust_any_certificate = outbound_proxy->trust_any_certificate;
-    c_outbound_proxy->ignore_if_unavailable = outbound_proxy->ignore_if_unavailable;
     return c_outbound_proxy;
 }
 
@@ -456,7 +455,6 @@ static std::optional<OutboundProxySettings> marshal_outbound_proxy(const ag_outb
         }
     }
     settings.trust_any_certificate = c_settings->trust_any_certificate;
-    settings.ignore_if_unavailable = c_settings->ignore_if_unavailable;
     return std::move(settings);
 }
 

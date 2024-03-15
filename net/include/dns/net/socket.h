@@ -159,18 +159,9 @@ public:
     [[nodiscard]] const CertificateVerifier *get_certificate_verifier() const;
 
 private:
-    struct OutboundProxyState;
-
-    enum ProxyConectionFailedResult {
-        /// Close a connection
-        SFPCFR_CLOSE_CONNECTION,
-        /// Re-route a connection directly to the target
-        SFPCFR_RETRY_DIRECTLY,
-    };
-
     Parameters m_parameters;
     RouteResolverPtr m_router;
-    std::unique_ptr<OutboundProxyState> m_proxy;
+    std::unique_ptr<OutboundProxy> m_proxy;
 
     [[nodiscard]] SocketPtr make_direct_socket(SocketParameters parameters) const;
 
@@ -188,8 +179,6 @@ private:
                                                          std::optional<SecureSocketParameters> secure_parameters);
 
     [[nodiscard]] bool should_route_through_proxy(utils::TransportProtocol proto) const;
-
-    [[nodiscard]] ProxyConectionFailedResult on_proxy_connection_failed(Error<SocketError> err);
 };
 
 class Socket {

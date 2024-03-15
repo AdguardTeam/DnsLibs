@@ -549,65 +549,6 @@ TEST_F(UpstreamTest, TestUpstreamsWithServerIp) {
     ASSERT_NO_FATAL_FAILURE(co_await sequential_test(test_upstreams_with_server_ip_data));
 }
 
-struct DeadProxySuccess : UpstreamParamTest<std::tuple<std::string, OutboundProxySettings>> {};
-
-#ifdef _WIN32
-// On Windows connections to the dead proxy time out instead of being refused
-TEST_P(DeadProxySuccess, DISABLED_test) {
-#else
-TEST_P(DeadProxySuccess, test) {
-#endif
-    co_await m_loop->co_submit();
-    auto oproxy = std::make_unique<OutboundProxySettings>(std::get<1>(GetParam()));
-    make_upstream_factory(oproxy.get());
-    auto upstream_res = create_upstream({std::get<0>(GetParam()), {"8.8.8.8"}});
-    ASSERT_FALSE(upstream_res.has_error()) << upstream_res.error()->str();
-    auto err = co_await check_upstream(*upstream_res.value(), std::get<0>(GetParam()));
-    ASSERT_FALSE(err.has_value()) << err.value();
-}
-
-INSTANTIATE_TEST_SUITE_P(TcpOnlyProxy, DeadProxySuccess,
-        ::testing::Combine(
-                ::testing::Values("tcp://8.8.8.8", "tls://dns.adguard-dns.com", "https://dns.adguard-dns.com/dns-query"),
-                ::testing::Values(
-                        OutboundProxySettings{
-                                .protocol = OutboundProxyProtocol::HTTP_CONNECT,
-                                .address = "127.0.0.1",
-                                .port = 42,
-                                .ignore_if_unavailable = true,
-                        },
-                        OutboundProxySettings{
-                                .protocol = OutboundProxyProtocol::HTTPS_CONNECT,
-                                .address = "127.0.0.1",
-                                .port = 42,
-                                .ignore_if_unavailable = true,
-                        },
-                        OutboundProxySettings{
-                                .protocol = OutboundProxyProtocol::SOCKS4,
-                                .address = "127.0.0.1",
-                                .port = 42,
-                                .ignore_if_unavailable = true,
-                        },
-                        OutboundProxySettings{
-                                .protocol = OutboundProxyProtocol::SOCKS5,
-                                .address = "127.0.0.1",
-                                .port = 42,
-                                .ignore_if_unavailable = true,
-                        })));
-
-INSTANTIATE_TEST_SUITE_P(TcpUdpProxy, DeadProxySuccess,
-        ::testing::Combine(::testing::Values("8.8.8.8",
-                                   "sdns://"
-                                   "AQIAAAAAAAAAETk0LjE0MC4xNC4xNDo1NDQzINErR_JS3PLCu_iZEIbq95zkSV2LFsigxDIuUso_"
-                                   "OQhzIjIuZG5zY3J5cHQuZGVmYXVsdC5uczEuYWRndWFyZC5jb20",
-                                   "quic://dns.adguard-dns.com:8853"),
-                ::testing::Values(OutboundProxySettings{
-                        .protocol = OutboundProxyProtocol::SOCKS5_UDP,
-                        .address = "127.0.0.1",
-                        .port = 42,
-                        .ignore_if_unavailable = true,
-                })));
-
 struct DeadProxyFailure : UpstreamParamTest<std::tuple<std::string, OutboundProxySettings>> {};
 #ifdef _WIN32
 // On Windows connections to the dead proxy time out instead of being refused

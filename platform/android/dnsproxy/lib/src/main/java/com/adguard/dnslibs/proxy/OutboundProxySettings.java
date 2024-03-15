@@ -63,7 +63,6 @@ public class OutboundProxySettings {
     private final List<String> bootstrap;
     private final AuthInfo authInfo;
     private final boolean trustAnyCertificate;
-    private final boolean ignoreIfUnavailable;
 
     /**
      * @param protocol The proxy protocol
@@ -76,7 +75,6 @@ public class OutboundProxySettings {
         this.bootstrap = new ArrayList<>();
         this.authInfo = null;
         this.trustAnyCertificate = false;
-        this.ignoreIfUnavailable = false;
     }
 
     /**
@@ -89,12 +87,10 @@ public class OutboundProxySettings {
      *                  MUST NOT be empty in case the `address` is a hostname.
      * @param authInfo (optional) The authentication information
      * @param trustAnyCertificate If true and the proxy connection is secure, the certificate won't be verified
-     * @param ignoreIfUnavailable Whether the DNS proxy should ignore the outbound proxy and route
-     *                            queries directly to target hosts even if it's determined as unavailable
      */
     public OutboundProxySettings(@NotNull Protocol protocol, @NotNull String address, int port,
                                  @Nullable List<String> bootstrap, @Nullable AuthInfo authInfo,
-                                 boolean trustAnyCertificate, boolean ignoreIfUnavailable) {
+                                 boolean trustAnyCertificate) {
         this.protocol = Objects.requireNonNull(protocol, "protocol");
         this.address = Objects.requireNonNull(address, "address");
         this.port = port;
@@ -105,7 +101,6 @@ public class OutboundProxySettings {
         }
         this.authInfo = authInfo;
         this.trustAnyCertificate = trustAnyCertificate;
-        this.ignoreIfUnavailable = ignoreIfUnavailable;
     }
 
     /**
@@ -150,14 +145,6 @@ public class OutboundProxySettings {
         return trustAnyCertificate;
     }
 
-    /**
-     * @return Whether the DNS proxy should continue trying to go through the proxy
-     *         even if it's determined as unavailable
-     */
-    public boolean isIgnoreIfUnavailable() {
-        return ignoreIfUnavailable;
-    }
-
     @Override
     public boolean equals(Object o) {
         if (this == o) return true;
@@ -168,13 +155,12 @@ public class OutboundProxySettings {
                 && this.port == that.port
                 && this.bootstrap.equals(that.bootstrap)
                 && Objects.equals(this.authInfo, that.authInfo)
-                && this.trustAnyCertificate == that.trustAnyCertificate
-                && this.ignoreIfUnavailable == that.ignoreIfUnavailable;
+                && this.trustAnyCertificate == that.trustAnyCertificate;
     }
 
     @Override
     public int hashCode() {
         return Objects.hash(this.protocol, this.address, this.port, this.bootstrap, this.authInfo,
-                this.trustAnyCertificate, this.ignoreIfUnavailable);
+                this.trustAnyCertificate);
     }
 }

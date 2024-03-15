@@ -12,86 +12,21 @@
 
 namespace ag::dns {
 
-static constexpr Secs PROXY_UNAVAILABLE_TIMEOUT(10);
-static constexpr Secs PROXY_AVAILABLE_TIMEOUT(3);
-
-enum proxy_availability_status {
-    /// There were no connections to the proxy server recently
-    PAS_UNKNOWN,
-    /// There was a successful connection to the proxy server recently
-    PAS_AVAILABLE,
-    /// All the recent connections to the proxy server had failed
-    PAS_UNAVAILABLE,
-};
-
-struct SocketFactory::OutboundProxyState {
-    EventLoop *loop = nullptr;
-    /// The main proxy
-    std::unique_ptr<OutboundProxy> main_proxy;
-    /// The fallback proxy: used in case of the main one is not available
-    std::unique_ptr<OutboundProxy> fallback_proxy;
-
-    /// Whether the proxy is available. If not, the behavior depends on
-    /// `outbound_proxy_settings#ignore_if_unavailable` flag
-    ExpiringValue<proxy_availability_status, PAS_UNKNOWN> availability_status;
-    /// Resetting bypassed connections task
-    std::optional<EventLoop::TaskId> reset_task;
-
-    static void on_successful_proxy_connection(void *arg) {
-        auto *self = (SocketFactory *) arg;
-        ((DirectOProxy *) self->m_proxy->fallback_proxy.get())->reset_connections();
-        self->m_proxy->reset_task.reset();
-        self->m_proxy->availability_status = {PAS_AVAILABLE, PROXY_AVAILABLE_TIMEOUT};
-    }
-
-    static ProxiedSocket::Fallback get_fallback_proxy(void *arg) {
-        auto *self = (SocketFactory *) arg;
-        return ProxiedSocket::Fallback{self->m_proxy->fallback_proxy.get()};
-    }
-
-    static ProxiedSocket::OnConnectionFailedAction on_proxy_connection_failed(void *arg, Error<SocketError> err) {
-        auto *self = (SocketFactory *) arg;
-        switch (self->on_proxy_connection_failed(std::move(err))) {
-        case SFPCFR_CLOSE_CONNECTION:
-            break;
-        case SFPCFR_RETRY_DIRECTLY:
-            return ProxiedSocket::OCFA_RETRY_DIRECTLY;
-        }
-        return ProxiedSocket::OCFA_CLOSE_CONNECTION;
-    }
-
-    ~OutboundProxyState() {
-        if (this->reset_task.has_value()) {
-            this->loop->cancel(std::exchange(this->reset_task, std::nullopt).value());
-        }
-
-        if (this->main_proxy != nullptr) {
-            this->main_proxy->deinit();
-            this->main_proxy.reset();
-        }
-
-        if (this->fallback_proxy != nullptr) {
-            this->fallback_proxy->deinit();
-            this->fallback_proxy.reset();
-        }
-    }
-};
-
-SocketFactory::SocketFactory(struct Parameters parameters)
+SocketFactory::SocketFactory(Parameters parameters)
         : m_parameters(std::move(parameters))
         , m_router(parameters.enable_route_resolver ? RouteResolver::create() : RouteResolverPtr{nullptr}) {
     if (m_parameters.oproxy.settings != nullptr) {
-        m_proxy = std::make_unique<OutboundProxyState>();
-        m_proxy->loop = &m_parameters.loop;
-        m_proxy->main_proxy.reset(this->make_proxy());
-        m_proxy->fallback_proxy.reset(this->make_fallback_proxy());
+        m_proxy.reset(this->make_proxy());
     }
 }
 
 SocketFactory::~SocketFactory() = default;
 
 void SocketFactory::deinit() {
-    m_proxy.reset();
+    if (m_proxy) {
+        m_proxy->deinit();
+        m_proxy.reset();
+    }
 }
 
 SocketFactory::SocketPtr SocketFactory::make_socket(SocketParameters p) const {
@@ -100,13 +35,17 @@ SocketFactory::SocketPtr SocketFactory::make_socket(SocketParameters p) const {
         socket = this->make_direct_socket(std::move(p));
     } else {
         socket = std::make_unique<ProxiedSocket>(ProxiedSocket::Parameters{
-                *m_proxy->main_proxy,
+                *m_proxy,
                 std::move(p),
                 {on_prepare_fd, (void *) this},
                 {
-                        OutboundProxyState::on_successful_proxy_connection,
-                        OutboundProxyState::on_proxy_connection_failed,
-                        OutboundProxyState::get_fallback_proxy,
+                        [](void *) {},
+                        [](void *, Error<SocketError>) {
+                            return ProxiedSocket::OCFA_CLOSE_CONNECTION;
+                        },
+                        [](void *) -> ProxiedSocket::Fallback {
+                            return {};
+                        },
                         (void *) this,
                 },
         });
@@ -189,35 +128,11 @@ bool SocketFactory::should_route_through_proxy(utils::TransportProtocol proto) c
     if (m_proxy == nullptr) {
         return false;
     }
-    if (!m_proxy->main_proxy->get_supported_protocols().test(proto)) {
+    if (!m_proxy->get_supported_protocols().test(proto)) {
         return false;
     }
 
-    return m_proxy->availability_status.get() != PAS_UNAVAILABLE
-            || !this->get_outbound_proxy_settings()->ignore_if_unavailable;
-}
-
-SocketFactory::ProxyConectionFailedResult SocketFactory::on_proxy_connection_failed(Error<SocketError> err) {
-    if (!err || err->value() != SocketError::AE_CONNECTION_REFUSED) {
-        return SFPCFR_CLOSE_CONNECTION;
-    }
-
-    if (!this->get_outbound_proxy_settings()->ignore_if_unavailable) {
-        return SFPCFR_CLOSE_CONNECTION;
-    }
-
-    if (m_proxy->availability_status.get() != PAS_AVAILABLE) {
-        m_proxy->availability_status = {PAS_UNAVAILABLE, PROXY_UNAVAILABLE_TIMEOUT};
-    }
-
-    if (!m_proxy->reset_task.has_value()) {
-        m_proxy->reset_task = m_parameters.loop.schedule(PROXY_UNAVAILABLE_TIMEOUT, [this]() {
-            m_proxy->reset_task.reset();
-            ((DirectOProxy *) m_proxy->fallback_proxy.get())->reset_connections();
-        });
-    }
-
-    return SFPCFR_RETRY_DIRECTLY;
+    return true;
 }
 
 Error<SocketError> SocketFactory::on_prepare_fd(

@@ -172,8 +172,7 @@ namespace Adguard.Dns.TestApp
                         "https://94.140.14.14",
                         "https://94.140.15.15"
                     },
-                    TrustAnyCertificate = false,
-                    IgnoreIfUnavailable = true
+                    TrustAnyCertificate = false
                 },
                 Ipv6Available = false,
                 OptimisticCache = false,

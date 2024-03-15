@@ -22,7 +22,7 @@ namespace Adguard.Dns
 		/// <summary>
 		/// The current API version hash with which the ProxyServer was tested
 		/// </summary>
-		private const string API_VERSION_HASH = "6fedfaf50a6d05334b8bcf3c54febb1944d9e336987f23c0aeeecea5b4f6e872";
+		private const string API_VERSION_HASH = "6aff8ec5ce48c04e1ca91a0d5653298a12c59508dc2c984bf2c8fd3d237efe7f";
 
         #endregion
 
@@ -523,16 +523,6 @@ namespace Adguard.Dns
             [MarshalAs(UnmanagedType.I1)]
             [NativeName("trust_any_certificate")]
             internal bool TrustAnyCertificate;
-
-            /**
-             * Whether the DNS proxy should ignore the outbound proxy and route queries directly
-             * to target hosts even if it's determined as unavailable
-             * This option is only for ANDROID
-             * see more in https://jira.adguard.com/browse/AG-15207
-             */
-            [MarshalAs(UnmanagedType.I1)]
-            [NativeName("ignore_if_unavailable")]
-            internal bool IgnoreIfUnavailable;
         };
 
         [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Ansi)]

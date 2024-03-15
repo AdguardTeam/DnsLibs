@@ -1,5 +1,7 @@
 # Changelog
 
+* [Changed] Removed `ag::dns::OutboundProxySettings::ignore_if_unavailable`. Also removed the corresponding fields from platform-specific adapters.
+
 ## V2.4
 
 * [Feature] Added an option to do transparent filtering. See `ag::dns::DnsMessageInfo::transparent` for details.

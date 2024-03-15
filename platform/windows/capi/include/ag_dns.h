@@ -291,12 +291,6 @@ typedef struct {
 
     /** If true and the proxy connection is secure, the certificate won't be verified */
     bool trust_any_certificate;
-
-    /**
-     * Whether the DNS proxy should ignore the outbound proxy and route queries directly
-     * to target hosts even if it's determined as unavailable.
-     */
-    bool ignore_if_unavailable;
 } ag_outbound_proxy_settings;
 
 /**

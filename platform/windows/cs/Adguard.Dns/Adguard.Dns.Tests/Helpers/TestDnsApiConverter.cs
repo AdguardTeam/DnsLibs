@@ -141,8 +141,7 @@ namespace Adguard.Dns.Tests.Helpers
                         "https://94.140.14.14",
                         "https://94.140.15.15"
                     },
-                    TrustAnyCertificate = true,
-                    IgnoreIfUnavailable = true
+                    TrustAnyCertificate = true
                 }
             };
 
@@ -209,9 +208,6 @@ namespace Adguard.Dns.Tests.Helpers
             Assert.AreEqual(
                 dnsSettings.OutboundProxySettings.TrustAnyCertificate,
                 dnsSettingsConverted.OutboundProxySettings.TrustAnyCertificate);
-            Assert.AreEqual(
-                dnsSettings.OutboundProxySettings.IgnoreIfUnavailable,
-                dnsSettingsConverted.OutboundProxySettings.IgnoreIfUnavailable);
             Assert.AreEqual(dnsSettings.Listeners.Count,
 	            dnsSettingsConverted.Listeners.Count);
             Assert.AreEqual(dnsSettings.Listeners[0].EndPoint,

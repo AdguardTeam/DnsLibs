@@ -43,13 +43,5 @@ namespace Adguard.Dns.Api.DnsProxyServer.Configs
         /// If true and the proxy connection is secure, the certificate won't be verified
         /// </summary>
         public bool TrustAnyCertificate { get; set; }
-
-        /// <summary>
-        /// Whether the DNS proxy should ignore the outbound proxy and route queries directly
-        /// to target hosts even if it's determined as unavailable
-        /// This option is only for ANDROID
-        /// see more in https://jira.adguard.com/browse/AG-15207
-        /// </summary>
-        public bool IgnoreIfUnavailable { get; set; }
     }
 }
