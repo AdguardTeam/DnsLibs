@@ -39,7 +39,7 @@
  * Stop the DNS proxy.
  * @param handler Invoked after the proxy has stopped.
  */
-- (void)stopWithCompletionHandler:(void (^)())handler;
+- (void)stopWithCompletionHandler:(void (^)(void))handler;
 
 @end
 
