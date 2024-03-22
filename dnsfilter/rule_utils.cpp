@@ -155,13 +155,14 @@ static std::optional<rule_utils::Rule> parse_host_file_rule(std::string_view str
     r.match_method = rule_utils::Rule::MMID_EXACT;
     r.matching_parts.reserve(parts.size() - 1);
     for (size_t i = 1; i < parts.size(); ++i) {
-        const std::string_view &domain = parts[i];
+        std::string_view domain = parts[i];
         if (domain.empty()) {
             continue;
         }
         if (!is_valid_domain_pattern(domain) && domain.npos == domain.find('*')) {
             return std::nullopt;
         }
+        domain = rule_utils::normalize_domain_dot(domain);
         r.matching_parts.emplace_back(ag::utils::to_lower(domain));
     }
 
@@ -517,6 +518,7 @@ static std::optional<rule_utils::Rule> parse_adblock_rule(std::string_view str, 
         r.cidr = std::move(cidr);
     } else if (!match_info.is_regex_rule && !match_info.has_wildcard && (exact_pattern || subdomains_pattern)) {
         r.match_method = exact_pattern ? Rule::MMID_EXACT : Rule::MMID_SUBDOMAINS;
+        str = rule_utils::normalize_domain_dot(str);
         r.matching_parts.emplace_back(ag::utils::to_lower(str));
     } else if (!match_info.is_regex_rule && match_info.pattern_mode == 0) {
         std::vector<std::string_view> shortcuts = ag::utils::split_by(str, '*');
@@ -603,6 +605,9 @@ std::string rule_utils::get_regex(const Rule &r) {
     bool assert_line_start = info.pattern_mode & MPM_LINE_START_ASSERTED;
     bool assert_domain_start = info.pattern_mode & MPM_DOMAIN_START_ASSERTED;
     bool assert_end = info.pattern_mode & MPM_LINE_END_ASSERTED;
+    if (assert_end) {
+        info.text = normalize_domain_dot(info.text);
+    }
 
     std::string re = AG_FMT("{}{}{}", assert_line_start ? "^" : (assert_domain_start ? "^(*.)?" : ""), info.text,
             assert_end ? "$" : "");

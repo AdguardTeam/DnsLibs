@@ -190,3 +190,36 @@ TEST(FilteringLogAction, NoType) {
     ASSERT_EQ("||switch.toaster.myhostname.com^", DnsFilter::generate_rule(action->templates[0], event, 0));
     ASSERT_EQ("||myhostname.com^", DnsFilter::generate_rule(action->templates[1], event, 0));
 }
+
+TEST(FilteringLogAction, SuggestBlockWithoutDot) {
+    DnsRequestProcessedEvent event;
+    event.domain = "toaster.myhostname.local.";
+    event.type = "AAAA";
+    auto action = DnsFilter::suggest_action(event);
+    ASSERT_TRUE(action);
+    ASSERT_TRUE(action->blocking);
+    ASSERT_EQ(DnsFilter::RGO_IMPORTANT | DnsFilter::RGO_DNSTYPE, action->allowed_options);
+    ASSERT_EQ(0, action->required_options);
+    ASSERT_EQ(2, action->templates.size());
+    ASSERT_EQ("||toaster.myhostname.local^", DnsFilter::generate_rule(action->templates[0], event, 0));
+    ASSERT_EQ("||myhostname.local^", DnsFilter::generate_rule(action->templates[1], event, 0));
+}
+
+TEST(FilteringLogAction, SuggestUnBlockWithoutDot) {
+    DnsRequestProcessedEvent event;
+    event.domain = "toaster.myhostname.local.";
+    event.type = "AAAA";
+
+    event.rules.emplace_back("|toaster.myhostname.local");
+
+    auto action = DnsFilter::suggest_action(event);
+
+    ASSERT_TRUE(action);
+    ASSERT_FALSE(action->blocking);
+    ASSERT_EQ(DnsFilter::RGO_IMPORTANT | DnsFilter::RGO_DNSTYPE, action->allowed_options);
+    ASSERT_EQ(0, action->required_options);
+    ASSERT_EQ(2, action->templates.size());
+
+    ASSERT_EQ("@@||toaster.myhostname.local^", DnsFilter::generate_rule(action->templates[0], event, 0));
+    ASSERT_EQ("@@||myhostname.local^", DnsFilter::generate_rule(action->templates[1], event, 0));
+}

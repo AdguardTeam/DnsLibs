@@ -135,6 +135,18 @@ static inline bool is_comment(std::string_view str) {
 }
 
 /**
+ * Remove dot at the end of the domain
+ * @param[in]  domain   domain name
+ * @return     Normalized domain without dot at the end
+ */
+[[nodiscard]] static inline std::string_view normalize_domain_dot(std::string_view domain) {
+    if (domain.ends_with('.')) {
+        domain.remove_suffix(1);
+    }
+    return domain;
+}
+
+/**
  * Parse rule from given string
  * @param[in]  str   input string
  * @param[in]  log   logger (if null, rule parsing errors won't be logged)

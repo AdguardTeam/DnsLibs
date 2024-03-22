@@ -9,7 +9,9 @@ static constexpr std::string_view DOMAINS_DELIMITER = "|";
 bool rule_utils::parse_denyallow_modifier(
         Rule &rule, std::string_view params_str, const MatchInfo &match_info, Logger *log) {
     if (ag::utils::trim(params_str).empty()) {
-        dbglog(*log, "The denyallow modifier requires a list of domains as a parameter");
+        if (log) {
+            dbglog(*log, "The denyallow modifier requires a list of domains as a parameter");
+        }
         return false;
     }
     auto &content = std::get<DnsFilter::AdblockRuleInfo>(rule.public_part.content);
@@ -17,7 +19,7 @@ bool rule_utils::parse_denyallow_modifier(
     content.params->denyallow_domains.reserve(domains.size());
     std::transform(domains.begin(), domains.end(), std::back_inserter(content.params->denyallow_domains),
             [](std::string_view domain) {
-                return std::string(domain);
+                return std::string(normalize_domain_dot(domain));
             });
     return true;
 }

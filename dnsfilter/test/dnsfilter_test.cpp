@@ -82,11 +82,14 @@ TEST_F(DnsfilterTest, SuccessfulRuleParsing) {
             {"|example.org", {make_rule(), rule_utils::Rule::MMID_SHORTCUTS_AND_REGEX}},
             {"example.org|", {make_rule(), rule_utils::Rule::MMID_SHORTCUTS_AND_REGEX}},
             {"|example.org|", {make_rule(), rule_utils::Rule::MMID_EXACT}},
+            {"|example.org.|", {make_rule(), rule_utils::Rule::MMID_EXACT}},
             {".example", {make_rule(), rule_utils::Rule::MMID_SHORTCUTS}},
             {"example.", {make_rule(), rule_utils::Rule::MMID_SHORTCUTS}},
             {"*example.org", {make_rule(), rule_utils::Rule::MMID_SHORTCUTS}},
             {"||example.org|", {make_rule(), rule_utils::Rule::MMID_SUBDOMAINS}},
+            {"||example.org.|", {make_rule(), rule_utils::Rule::MMID_SUBDOMAINS}},
             {"||example.org^", {make_rule(), rule_utils::Rule::MMID_SUBDOMAINS}},
+            {"||example.org.^", {make_rule(), rule_utils::Rule::MMID_SUBDOMAINS}},
             {"||example.org", {make_rule(), rule_utils::Rule::MMID_SHORTCUTS_AND_REGEX}},
             {"/example.org/", {make_rule(), rule_utils::Rule::MMID_SHORTCUTS_AND_REGEX}},
             {"/example.org/$badfilter", {make_rule(1 << DnsFilter::DARP_BADFILTER)}},
@@ -102,6 +105,7 @@ TEST_F(DnsfilterTest, SuccessfulRuleParsing) {
             {"||travelstool.com^", {make_rule(), rule_utils::Rule::MMID_SUBDOMAINS}},
             {"example.org:8080", {make_rule(), rule_utils::Rule::MMID_SHORTCUTS_AND_REGEX}},
             {"//example.org:8080", {make_rule(), rule_utils::Rule::MMID_SUBDOMAINS}},
+            {"//example.org.:8080", {make_rule(), rule_utils::Rule::MMID_SUBDOMAINS}},
             {"://example.org", {make_rule(), rule_utils::Rule::MMID_SHORTCUTS_AND_REGEX}},
             {"://example.org/", {make_rule(), rule_utils::Rule::MMID_SUBDOMAINS}},
             {"http://example.org/", {make_rule(), rule_utils::Rule::MMID_SUBDOMAINS}},
@@ -376,7 +380,17 @@ const std::vector<BasicTestData> BASIC_TEST_DATA = {
                 true,
         },
         {
+                {"example5.org.^"},
+                "example5.org",
+                true,
+        },
+        {
                 {"||example6.org|"},
+                "example6.org",
+                true,
+        },
+        {
+                {"||example6.org.|"},
                 "example6.org",
                 true,
         },
@@ -446,6 +460,11 @@ const std::vector<BasicTestData> BASIC_TEST_DATA = {
                 true,
         },
         {
+                {"example18.org.|"},
+                "eexample18.org",
+                true,
+        },
+        {
                 {"example19.org^"},
                 "eexample19.org",
                 true,
@@ -454,6 +473,11 @@ const std::vector<BasicTestData> BASIC_TEST_DATA = {
                 {"|example20.org"},
                 "example20.orgg",
                 true,
+        },
+        {
+                {"|example20.org."}, // dot persists
+                "example20.orgg",
+                false,
         },
         {
                 {"example21."},
@@ -466,7 +490,17 @@ const std::vector<BasicTestData> BASIC_TEST_DATA = {
                 true,
         },
         {
+                {"example22.org.|"},
+                "sub.example22.org",
+                true,
+        },
+        {
                 {"example23.org^"},
+                "sub.example23.org",
+                true,
+        },
+        {
+                {"example23.org.^"},
                 "sub.example23.org",
                 true,
         },
@@ -481,7 +515,17 @@ const std::vector<BasicTestData> BASIC_TEST_DATA = {
                 true,
         },
         {
+                {"||example25.org.|"},
+                "sub.example25.org",
+                true,
+        },
+        {
                 {"|example27.org|"},
+                "example27.org",
+                true,
+        },
+        {
+                {"|example27.org.|"},
                 "example27.org",
                 true,
         },
@@ -491,7 +535,17 @@ const std::vector<BasicTestData> BASIC_TEST_DATA = {
                 true,
         },
         {
+                {"|example29.org.^"},
+                "example29.org",
+                true,
+        },
+        {
                 {"|https://example31.org/"},
+                "example31.org",
+                true,
+        },
+        {
+                {"|https://example31.org./"},
                 "example31.org",
                 true,
         },
@@ -541,7 +595,17 @@ const std::vector<BasicTestData> BASIC_TEST_DATA = {
                 true,
         },
         {
+                {"example56.org./^"},
+                "eexample56.org",
+                true,
+        },
+        {
                 {"example57.org^/"},
+                "eexample57.org",
+                true,
+        },
+        {
+                {"example57.org.^/"},
                 "eexample57.org",
                 true,
         },
@@ -601,6 +665,11 @@ const std::vector<BasicTestData> BASIC_TEST_DATA = {
                 false,
         },
         {
+                {"||example.org^$denyallow=sub.example.org."},
+                "sub.example.org",
+                false,
+        },
+        {
                 {"||example.org^$denyallow=sub.example.org"},
                 "sub.sub.example.org",
                 false,
@@ -624,6 +693,31 @@ const std::vector<BasicTestData> BASIC_TEST_DATA = {
                 {"@@*$denyallow=com|net", "/.*$/"},
                 "example.net",
                 true,
+        },
+        {
+                {"||example.org^", "@@www.example.org.^"},
+                "www.example.org",
+                false,
+        },
+        {
+                {"||example.org^", "@@www.example.org."},
+                "www.example.org",
+                true,
+        },
+        {
+                {"example.org^", "@@www.example.org.^"},
+                "www.example.org",
+                false,
+        },
+        {
+                {"||example.org.^", "@@www.example.org^"},
+                "www.example.org",
+                false,
+        },
+        {
+                {"||example.org.^", "@@www.example.org.^"},
+                "www.example.org",
+                false,
         },
 };
 
@@ -655,7 +749,7 @@ TEST_F(DnsfilterTest, BasicRulesMatch) {
                 ASSERT_TRUE(content->props.test(DnsFilter::DARP_EXCEPTION));
             }
         } else {
-            ASSERT_FALSE(entry.expect_blocked);
+            ASSERT_FALSE(entry.expect_blocked) << entry.rules[0];
         }
 
         filter.destroy(handle);
@@ -746,6 +840,10 @@ TEST_F(DnsfilterTest, BasicRulesNoMatch) {
             {
                     "example10.org/",
                     "example10.orgg",
+            },
+            {
+                    "example11.org.",
+                    "example11.org"
             },
             {
                     "|example26.org|",
@@ -988,6 +1086,16 @@ TEST_F(DnsfilterTest, HostsFileSyntax) {
                             "sub.example63.org",
                     },
                     {"1.1.1.1 example61.org example62.org example63.org"}},
+            {"1.1.1.1 example71.org. example72.org. example73.org. #comment",
+                    {
+                            "example71.org",
+                            "example72.org",
+                            "example73.org",
+                    },
+                    {
+                            "sub.example73.org",
+                    },
+                    {"1.1.1.1 example71.org. example72.org. example73.org."}},
     };
 
     for (const TestData &entry : TEST_DATA) {
@@ -1395,11 +1503,14 @@ TEST(RuleValidator, IsValidRule) {
     ASSERT_TRUE(ag::dns::DnsFilter::is_valid_rule("|example.org"));
     ASSERT_TRUE(ag::dns::DnsFilter::is_valid_rule("example.org|"));
     ASSERT_TRUE(ag::dns::DnsFilter::is_valid_rule("|example.org|"));
+    ASSERT_TRUE(ag::dns::DnsFilter::is_valid_rule("|example.org.|"));
     ASSERT_TRUE(ag::dns::DnsFilter::is_valid_rule(".example"));
     ASSERT_TRUE(ag::dns::DnsFilter::is_valid_rule("example."));
     ASSERT_TRUE(ag::dns::DnsFilter::is_valid_rule("*example.org"));
     ASSERT_TRUE(ag::dns::DnsFilter::is_valid_rule("||example.org|"));
+    ASSERT_TRUE(ag::dns::DnsFilter::is_valid_rule("||example.org.|"));
     ASSERT_TRUE(ag::dns::DnsFilter::is_valid_rule("||example.org^"));
+    ASSERT_TRUE(ag::dns::DnsFilter::is_valid_rule("||example.org.^"));
     ASSERT_TRUE(ag::dns::DnsFilter::is_valid_rule("||example.org"));
     ASSERT_TRUE(ag::dns::DnsFilter::is_valid_rule("/example.org/"));
     ASSERT_TRUE(ag::dns::DnsFilter::is_valid_rule("/example.org/$badfilter"));
@@ -1421,8 +1532,11 @@ TEST(RuleValidator, IsValidRule) {
     ASSERT_TRUE(ag::dns::DnsFilter::is_valid_rule("https://example.org|"));
     ASSERT_TRUE(ag::dns::DnsFilter::is_valid_rule("ws://example.org|"));
     ASSERT_TRUE(ag::dns::DnsFilter::is_valid_rule("example.org^|"));
+    ASSERT_TRUE(ag::dns::DnsFilter::is_valid_rule("example.org.^|"));
     ASSERT_TRUE(ag::dns::DnsFilter::is_valid_rule("example.org|^"));
+    ASSERT_TRUE(ag::dns::DnsFilter::is_valid_rule("example.org.|^"));
     ASSERT_TRUE(ag::dns::DnsFilter::is_valid_rule("|example.org^"));
+    ASSERT_TRUE(ag::dns::DnsFilter::is_valid_rule("|example.org.^"));
     ASSERT_TRUE(ag::dns::DnsFilter::is_valid_rule("|https://example31.org/"));
     ASSERT_TRUE(ag::dns::DnsFilter::is_valid_rule("/127.0.0.1/"));
     ASSERT_TRUE(ag::dns::DnsFilter::is_valid_rule("/12:34:56:78::90/"));
@@ -1458,6 +1572,7 @@ TEST(RuleValidator, IsValidRule) {
     ASSERT_TRUE(ag::dns::DnsFilter::is_valid_rule("||4.3.2.1.in-addr.arpa.^$dnsrewrite=REFUSED;PTR;example.net."));
     ASSERT_TRUE(ag::dns::DnsFilter::is_valid_rule("example.org$dnsrewrite=NOERROR;A;1.2.3.4"));
     ASSERT_TRUE(ag::dns::DnsFilter::is_valid_rule("example.org$dnsrewrite=SERVFAIL;CNAME;example.org"));
+    ASSERT_TRUE(ag::dns::DnsFilter::is_valid_rule("example.org$dnsrewrite=SERVFAIL;CNAME;example.org."));
     ASSERT_TRUE(ag::dns::DnsFilter::is_valid_rule("example.org$dnsrewrite=NOERROR;MX;42 example.mail"));
     ASSERT_TRUE(ag::dns::DnsFilter::is_valid_rule("example.org$dnsrewrite=FORMERR;TXT;hello_world"));
     ASSERT_TRUE(ag::dns::DnsFilter::is_valid_rule("example.org$dnsrewrite=NXDOMAIN;;"));
@@ -1478,6 +1593,7 @@ TEST(RuleValidator, IsValidRule) {
     ASSERT_TRUE(ag::dns::DnsFilter::is_valid_rule("/.*/$dnsrewrite"));
     ASSERT_TRUE(ag::dns::DnsFilter::is_valid_rule("$denyallow=com|net"));
     ASSERT_TRUE(ag::dns::DnsFilter::is_valid_rule("$denyallow=example.org"));
+    ASSERT_TRUE(ag::dns::DnsFilter::is_valid_rule("$denyallow=example.org."));
     ASSERT_TRUE(ag::dns::DnsFilter::is_valid_rule("example.com # This is a comment"));
     ASSERT_TRUE(ag::dns::DnsFilter::is_valid_rule("example.com # This is a comment."));
     ASSERT_TRUE(ag::dns::DnsFilter::is_valid_rule("example.com #This is a comment."));

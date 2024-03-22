@@ -44,9 +44,10 @@ std::optional<ag::dns::DnsFilter::FilteringLogAction> ag::dns::DnsFilter::sugges
         action.required_options |= RGO_IMPORTANT;
     }
 
-    action.templates.emplace_back(AG_FMT("{}||{}^", action.blocking ? "" : "@@", event.domain));
+    std::string_view normalized_domain = dnsfilter::rule_utils::normalize_domain_dot(event.domain);
+    action.templates.emplace_back(AG_FMT("{}||{}^", action.blocking ? "" : "@@", normalized_domain));
 
-    if (std::string_view reduced_domain = tldregistry::reduce_domain(event.domain, 1); reduced_domain != event.domain) {
+    if (std::string_view reduced_domain = tldregistry::reduce_domain(event.domain, 1); reduced_domain != normalized_domain) {
         action.templates.emplace_back(AG_FMT("{}||{}^", action.blocking ? "" : "@@", reduced_domain));
     }
 
