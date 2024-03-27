@@ -17,9 +17,7 @@
 #include "upstream_doq.h"
 #include "upstream_dot.h"
 #include "upstream_plain.h"
-#ifdef __APPLE__
 #include "upstream_system.h"
-#endif //_APPLE
 
 namespace ag::dns {
 
@@ -45,7 +43,7 @@ static constexpr std::string_view SCHEME_WITH_SUFFIX[] = {
         DohUpstream::SCHEME_HTTPS,
         DohUpstream::SCHEME_H3,
         DoqUpstream::SCHEME,
-        "system://",
+        SystemUpstream::SYSTEM_SCHEME,
 };
 
 static_assert(std::size(SCHEME_WITH_SUFFIX) + 1 == magic_enum::enum_count<Scheme>(),

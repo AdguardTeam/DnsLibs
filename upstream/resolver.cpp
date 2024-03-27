@@ -8,6 +8,7 @@
 #include "upstream_doh.h"
 #include "upstream_dot.h"
 #include "upstream_plain.h"
+#include "upstream_system.h"
 
 #define log_ip(l_, lvl_, ip_, fmt_, ...) lvl_##log(l_, "[{}] " fmt_, ip_, ##__VA_ARGS__)
 
@@ -86,7 +87,7 @@ static std::string get_server_address(const Logger &log, std::string_view addres
             warnlog(log, "Failed to parse DNS stamp");
             return "";
         }
-    } else if (!check_ip_address(result)) {
+    } else if (!result.starts_with(SystemUpstream::SYSTEM_SCHEME) && !check_ip_address(result)) {
         warnlog(log, "Resolver address must be a valid ip address");
         return "";
     }
