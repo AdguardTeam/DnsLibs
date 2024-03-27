@@ -50,7 +50,7 @@ coro::Task<Upstream::ExchangeResult> SystemUpstream::exchange(const ldns_pkt *re
     ldns_pkt_set_ad(reply_pkt, false);
     ldns_pkt_set_cd(reply_pkt, false);
 
-    if (result.value()) {
+    if (result.has_value()) {
         ldns_pkt_set_ancount(reply_pkt, ldns_rr_list_rr_count(result.value().get()));
         ldns_pkt_set_answer(reply_pkt, ldns_rr_list_clone(result.value().get()));
         ldns_pkt_set_rcode(reply_pkt, LDNS_RCODE_NOERROR);
