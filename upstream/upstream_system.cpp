@@ -43,7 +43,7 @@ coro::Task<Upstream::ExchangeResult> SystemUpstream::exchange(const ldns_pkt *re
     }
 
     ldns_pkt *reply_pkt = ldns_pkt_clone(request_pkt);
-    ldns_pkt_set_qr(reply_pkt, false);
+    ldns_pkt_set_qr(reply_pkt, true);
     ldns_pkt_set_aa(reply_pkt, false);
     ldns_pkt_set_rd(reply_pkt, true);
     ldns_pkt_set_ra(reply_pkt, true);
