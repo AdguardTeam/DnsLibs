@@ -15,7 +15,11 @@ public:
     Impl(EventLoop *loop, uint32_t if_index)
             : m_loop(loop)
             , m_if_index(if_index) {
-        m_queue = dispatch_queue_create("SystemResolver", DISPATCH_QUEUE_SERIAL);
+        m_queue = dispatch_queue_create("DnsLibs.SystemResolver", DISPATCH_QUEUE_SERIAL);
+    }
+
+    ~Impl() {
+        dispatch_release(m_queue);
     }
 
     auto resolve(std::string_view domain, ldns_rr_type rr_type) {
@@ -115,7 +119,9 @@ public:
                     }
                     ldns_rr_list_push_rr(self->rr_list.get(), rr);
                 } else {
-                    if (errorCode == kDNSServiceErr_NoSuchRecord || errorCode == kDNSServiceErr_NoSuchName) {
+                    if (errorCode == kDNSServiceErr_NoSuchRecord) {
+                        self->error = make_error(SystemResolverError::AE_RECORD_NOT_FOUND);
+                    } else if (errorCode == kDNSServiceErr_NoSuchName) {
                         self->error = make_error(SystemResolverError::AE_DOMAIN_NOT_FOUND);
                     } else {
                         self->error = make_error(SystemResolverError::AE_SYSTEM_RESOLVE_ERROR);
@@ -149,8 +155,6 @@ public:
 
     EventLoop *m_loop = nullptr;
     uint32_t m_if_index{}; ///< The network interface index.
-    DNSServiceErrorType m_error_code = 0;
-    ServiceRefPtr m_service_ref{};
     dispatch_queue_t m_queue;
 };
 
@@ -162,8 +166,8 @@ SystemResolver::~SystemResolver() = default;
 
 ag::Result<std::unique_ptr<SystemResolver>, SystemResolverError> SystemResolver::create(EventLoop *loop, uint32_t if_index) {
     std::unique_ptr<SystemResolver> ret = std::make_unique<SystemResolver>(ConstructorAccess{}, loop, if_index);
-    if (ret && ret->m_pimpl && ret->m_pimpl->m_error_code != 0) {
-        return make_error(SystemResolverError{ret->m_pimpl->m_error_code});
+    if (!ret || !ret->m_pimpl) {
+        return make_error(SystemResolverError::AE_INIT_ERROR);
     }
     return ret;
 }

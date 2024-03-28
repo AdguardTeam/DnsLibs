@@ -37,7 +37,9 @@ coro::Task<Upstream::ExchangeResult> SystemUpstream::exchange(const ldns_pkt *re
     const ldns_rr_type RR_TYPE = ldns_rr_get_type(question);
 
     auto result = co_await m_resolver->resolve(domain, RR_TYPE);
-    if (result.has_error() && result.error()->value() != SystemResolverError::AE_DOMAIN_NOT_FOUND) {
+    if (result.has_error()
+            && result.error()->value() != SystemResolverError::AE_DOMAIN_NOT_FOUND
+            && result.error()->value() != SystemResolverError::AE_RECORD_NOT_FOUND) {
         co_return make_error(
                 DnsError::AE_BAD_RESPONSE, ErrorCodeToString<SystemResolverError>{}(result.error().get()->value()));
     }
@@ -54,10 +56,19 @@ coro::Task<Upstream::ExchangeResult> SystemUpstream::exchange(const ldns_pkt *re
         ldns_pkt_set_ancount(reply_pkt, ldns_rr_list_rr_count(result.value().get()));
         ldns_pkt_set_answer(reply_pkt, ldns_rr_list_clone(result.value().get()));
         ldns_pkt_set_rcode(reply_pkt, LDNS_RCODE_NOERROR);
-    }else {
-        ldns_pkt_set_rcode(reply_pkt, LDNS_RCODE_NXDOMAIN);
+        co_return ldns_pkt_ptr{reply_pkt};
     }
 
-    co_return ldns_pkt_ptr{reply_pkt};
+    switch (result.error()->value()) {
+    case SystemResolverError::AE_DOMAIN_NOT_FOUND:
+        ldns_pkt_set_rcode(reply_pkt, LDNS_RCODE_NXDOMAIN);
+        co_return ldns_pkt_ptr{reply_pkt};
+    case SystemResolverError::AE_RECORD_NOT_FOUND:
+        ldns_pkt_set_rcode(reply_pkt, LDNS_RCODE_NOERROR);
+        co_return ldns_pkt_ptr{reply_pkt};
+    default:
+        assert(0);
+    }
+
 }
 } // namespace ag::dns

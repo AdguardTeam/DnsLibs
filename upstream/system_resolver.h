@@ -13,7 +13,8 @@ namespace ag::dns {
 
 enum class SystemResolverError {
     AE_OK,                   // No error occurred
-    AE_DOMAIN_NOT_FOUND,     // The specified name/record does not exist
+    AE_RECORD_NOT_FOUND,     // The specified record does not exist
+    AE_DOMAIN_NOT_FOUND,     // The specified name does not exist
     AE_SYSTEM_RESOLVE_ERROR, // Other errors from DNSService
     AE_DECODE_ERROR,         // Errors from ldns
     AE_INIT_ERROR            // DNSServiceRef could not be created
@@ -62,8 +63,10 @@ struct ErrorCodeToString<dns::SystemResolverError> {
         switch (e) {
         case dns::SystemResolverError::AE_OK:
             return "No error";
+        case dns::SystemResolverError::AE_RECORD_NOT_FOUND:
+            return "No such record";
         case dns::SystemResolverError::AE_DOMAIN_NOT_FOUND:
-            return "No such name or record";
+            return "No such name";
         case dns::SystemResolverError::AE_DECODE_ERROR:
             return "LDNS error";
         case dns::SystemResolverError::AE_INIT_ERROR:
