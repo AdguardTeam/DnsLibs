@@ -68,6 +68,7 @@ coro::Task<Upstream::ExchangeResult> SystemUpstream::exchange(const ldns_pkt *re
         co_return ldns_pkt_ptr{reply_pkt};
     default:
         assert(0);
+        co_return ldns_pkt_ptr{};
     }
 
 }
