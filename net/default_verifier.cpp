@@ -1,6 +1,10 @@
 #include <cassert>
 #include <openssl/x509v3.h>
 
+#ifdef __APPLE__
+#include <TargetConditionals.h>
+#endif
+
 #include "common/logger.h"
 #include "dns/net/default_verifier.h"
 
