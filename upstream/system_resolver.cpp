@@ -15,62 +15,94 @@ public:
     Impl(EventLoop *loop, uint32_t if_index)
             : m_loop(loop)
             , m_if_index(if_index) {
-        m_queue = dispatch_queue_create("DnsLibs.SystemResolver", DISPATCH_QUEUE_SERIAL);
     }
 
     ~Impl() {
-        dispatch_release(m_queue);
+        for (auto it = m_requests.begin(); it != m_requests.end();) {
+            auto next_it = std::next(it);
+            it->second.error = make_error(SystemResolverError::AE_SHUTTING_DOWN);
+            complete_request(it->second); // it removed here
+            it = next_it;
+        }
     }
 
+    using ServiceRefPtr = ag::UniquePtr<std::remove_pointer_t<DNSServiceRef>, &DNSServiceRefDeallocate>;
+
+    struct Request {
+        uint64_t id;
+        Impl *parent;
+        std::string domain;
+        ldns_rr_type rr_type;
+        bool rr_type_received;
+        SystemResolver::LdnsRrListPtr rr_list{ldns_rr_list_new()};
+        Error<SystemResolverError> error;
+        ServiceRefPtr service;
+        UvPtr<uv_poll_t> poll_event;
+        std::coroutine_handle<> continuation;
+    };
+
     auto resolve(std::string_view domain, ldns_rr_type rr_type) {
+        uint64_t id = m_next_request_id++;
+        auto &req = m_requests[id];
+        req.id = id;
+        req.parent = this;
+        req.domain = std::string(domain);
+        req.rr_type = rr_type;
         struct Awaitable {
-            Impl *parent;
-            EventLoop *loop;
-            std::mutex mutex;
-            std::string domain;
-            ldns_rr_type rr_type;
-            bool rr_type_received;
-            SystemResolver::LdnsRrListPtr rr_list{ldns_rr_list_new()};
-            Error<SystemResolverError> error;
-            ServiceRefPtr service;
-            bool done;
-            std::coroutine_handle<> caller;
+            Request *req;
 
             auto await_ready() {
-                std::scoped_lock l{mutex};
                 DNSServiceRef service_ref;
 
                 auto error_code = DNSServiceQueryRecord(&service_ref,
                         kDNSServiceFlagsUnicastResponse | kDNSServiceFlagsReturnIntermediates
                                 | kDNSServiceFlagAnsweredFromCache,
-                        parent->m_if_index, domain.data(), rr_type, kDNSServiceClass_IN, handle_dns_service_query_record_reply, this);
+                        req->parent->m_if_index, req->domain.data(), req->rr_type, kDNSServiceClass_IN, handle_dns_service_query_record_reply, req);
 
                 if (error_code != kDNSServiceErr_NoError) {
-                    error = make_error(SystemResolverError::AE_SYSTEM_RESOLVE_ERROR);
+                    req->error = make_error(SystemResolverError::AE_SYSTEM_RESOLVE_ERROR);
                     return true;
                 }
-                tracelog(g_log, "Requested domain {} rrtype {}",
-                        domain, AllocatedPtr<char>{ldns_rr_type2str(ldns_rr_type(rr_type))}.get() ?: AG_FMT("TYPE{}", (int)rr_type));
-                DNSServiceSetDispatchQueue(service_ref, parent->m_queue);
-                service.reset(service_ref);
+                req->service.reset(service_ref);
 
+                req->poll_event = Uv<uv_poll_t>::create_with_parent(req);
+                uv_os_sock_t fd = DNSServiceRefSockFD(service_ref);
+                if (0 != uv_poll_init_socket(req->parent->m_loop->handle(), req->poll_event->raw(), fd)) {
+                    req->error = make_error(SystemResolverError::AE_SYSTEM_RESOLVE_ERROR);
+                    return true;
+                }
+                if (0 != uv_poll_start(req->poll_event->raw(), UV_READABLE, on_uv_read)) {
+                    req->error = make_error(SystemResolverError::AE_SYSTEM_RESOLVE_ERROR);
+                    return true;
+                }
+
+                tracelog(g_log, "Requested domain {} rrtype {}",
+                        req->domain, AllocatedPtr<char>{ldns_rr_type2str(ldns_rr_type(req->rr_type))}.get() ?: AG_FMT("TYPE{}", (int)req->rr_type));
                 return false;
             }
 
-            auto await_suspend(std::coroutine_handle<> h) {
-                std::scoped_lock l{mutex};
-                if (done) {
-                    h();
-                } else {
-                    caller = h;
+            static void on_uv_read(uv_poll_t* handle, int status, int events) {
+                if (events & UV_READABLE) {
+                    if (auto req = (Request *) Uv<uv_poll_t>::parent_from_data(handle->data)) {
+                        if (req->service) {
+                            DNSServiceProcessResult(req->service.get());
+                        } else {
+                            req->poll_event.reset();
+                        }
+                    }
                 }
             }
 
+            auto await_suspend(std::coroutine_handle<> continuation) {
+                req->continuation = continuation;
+            }
+
             Result<SystemResolver::LdnsRrListPtr, SystemResolverError> await_resume() {
-                if (error) {
-                    return error;
+                auto node = req->parent->m_requests.extract(req->id);
+                if (node.mapped().error) {
+                    return node.mapped().error;
                 } else {
-                    return std::move(rr_list);
+                    return std::move(node.mapped().rr_list);
                 }
             }
             /**
@@ -87,20 +119,20 @@ public:
              * @param ttl The time to live of the resource record.
              * @param context A pointer to the user-defined context.
              */
-            static void handle_dns_service_query_record_reply(DNSServiceRef sdRef, DNSServiceFlags flags,
-                    uint32_t interfaceIndex, DNSServiceErrorType errorCode, const char *fullname, uint16_t rrtype,
-                    uint16_t rrclass, uint16_t rdlen, const void *rdata, uint32_t ttl, void *context) {
+            static void handle_dns_service_query_record_reply(DNSServiceRef sdRef [[maybe_unused]],
+                    DNSServiceFlags flags, uint32_t interfaceIndex [[maybe_unused]], DNSServiceErrorType errorCode,
+                    const char *fullname, uint16_t rrtype, uint16_t rrclass, uint16_t rdlen, const void *rdata,
+                    uint32_t ttl, void *context) {
                 tracelog(g_log, "Reply: error {}, {} {} {} {} {}, flags {:x}",
                         errorCode, fullname ?: "(null)",
                         ttl,
                         AllocatedPtr<char>{ldns_rr_class2str(ldns_rr_class(rrclass))}.get() ?: AG_FMT("CLASS{}", rrclass),
                         AllocatedPtr<char>{ldns_rr_type2str(ldns_rr_type(rrtype))}.get() ?: AG_FMT("TYPE{}", rrtype),
                         utils::encode_to_hex(Uint8View{(const uint8_t *) rdata, rdlen}), flags);
-                auto *self = (Awaitable *) context;
-                std::scoped_lock l{self->mutex};
+                auto *req = (Request *) context;
                 if (errorCode == kDNSServiceErr_NoError) {
-                    if (rrtype == self->rr_type) {
-                        self->rr_type_received = true;
+                    if (rrtype == req->rr_type) {
+                        req->rr_type_received = true;
                     }
                     ldns_rr *rr = ldns_rr_new();
                     ldns_rr_set_owner(rr, ldns_dname_new_frm_str(fullname));
@@ -115,47 +147,47 @@ public:
                     memcpy(r_vecdata.data() + 2, rdata, rdlen);
                     ldns_status status = ldns_wire2rdf(rr, r_vecdata.data(), r_vecdata.size(), &pos);
                     if (status != LDNS_STATUS_OK) {
-                        self->error = make_error(SystemResolverError::AE_DECODE_ERROR, make_error(status));
+                        req->error = make_error(SystemResolverError::AE_DECODE_ERROR, make_error(status));
                     }
-                    ldns_rr_list_push_rr(self->rr_list.get(), rr);
+                    ldns_rr_list_push_rr(req->rr_list.get(), rr);
                 } else {
                     if (errorCode == kDNSServiceErr_NoSuchRecord) {
-                        self->error = make_error(SystemResolverError::AE_RECORD_NOT_FOUND);
+                        req->error = make_error(SystemResolverError::AE_RECORD_NOT_FOUND);
                     } else if (errorCode == kDNSServiceErr_NoSuchName) {
-                        self->error = make_error(SystemResolverError::AE_DOMAIN_NOT_FOUND);
+                        req->error = make_error(SystemResolverError::AE_DOMAIN_NOT_FOUND);
                     } else {
-                        self->error = make_error(SystemResolverError::AE_SYSTEM_RESOLVE_ERROR);
+                        req->error = make_error(SystemResolverError::AE_SYSTEM_RESOLVE_ERROR);
                     }
                 }
 
                 if ((flags & kDNSServiceFlagsMoreComing) == 0) {
-                    if ((flags & kDNSServiceFlagAnsweredFromCache) && !self->rr_type_received
+                    if ((flags & kDNSServiceFlagAnsweredFromCache) && !req->rr_type_received
                             && errorCode == kDNSServiceErr_NoError) {
                         tracelog(g_log, "Detected partial answer from cache, waiting more");
                         return;
                     }
                     tracelog(g_log, "Done");
-                    self->done = true;
-                    self->service.reset();
-                    self->loop->submit(self->caller);
+                    req->parent->complete_request(*req);
                     return;
                 }
                 tracelog(g_log, "More coming");
             }
         };
-        return Awaitable{
-                .parent = this,
-                .loop = m_loop,
-                .domain = std::string(domain),
-                .rr_type = rr_type,
-        };
+        return Awaitable{.req = &req};
     }
 
-    using ServiceRefPtr = ag::UniquePtr<std::remove_pointer_t<DNSServiceRef>, &DNSServiceRefDeallocate>;
+    void complete_request(Request &req) {
+        if (req.continuation) {
+            req.continuation();
+        } else {
+            m_requests.erase(req.id);
+        }
+    }
 
     EventLoop *m_loop = nullptr;
     uint32_t m_if_index{}; ///< The network interface index.
-    dispatch_queue_t m_queue;
+    uint64_t m_next_request_id = 0;
+    std::map<uint64_t, Request> m_requests;
 };
 
 SystemResolver::SystemResolver(ag::dns::SystemResolver::ConstructorAccess, ag::dns::EventLoop *loop, uint32_t if_index) {

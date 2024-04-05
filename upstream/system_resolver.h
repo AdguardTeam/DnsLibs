@@ -17,7 +17,8 @@ enum class SystemResolverError {
     AE_DOMAIN_NOT_FOUND,     // The specified name does not exist
     AE_SYSTEM_RESOLVE_ERROR, // Other errors from DNSService
     AE_DECODE_ERROR,         // Errors from ldns
-    AE_INIT_ERROR            // DNSServiceRef could not be created
+    AE_INIT_ERROR,           // DNSServiceRef could not be created
+    AE_SHUTTING_DOWN,        // Shutting down
 };
 
 /**
@@ -71,6 +72,8 @@ struct ErrorCodeToString<dns::SystemResolverError> {
             return "LDNS error";
         case dns::SystemResolverError::AE_INIT_ERROR:
             return "DNSServiceRef could not be created";
+        case dns::SystemResolverError::AE_SHUTTING_DOWN:
+            return "Shutting down";
         case dns::SystemResolverError::AE_SYSTEM_RESOLVE_ERROR:
             return "Other errors from DNSService";
         }
