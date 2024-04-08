@@ -21,7 +21,7 @@ Error<Upstream::InitError> SystemUpstream::init() {
         }
     }
 
-    auto result = SystemResolver::create(&config().loop, if_index);
+    auto result = SystemResolver::create(&config().loop, config().timeout, if_index);
     if (result.has_error()) {
         return make_error(InitError::AE_SYSTEMRESOLVER_INIT_FAILED,
                 ErrorCodeToString<SystemResolverError>{}(result.error().get()->value()));
@@ -37,11 +37,15 @@ coro::Task<Upstream::ExchangeResult> SystemUpstream::exchange(const ldns_pkt *re
     const ldns_rr_type RR_TYPE = ldns_rr_get_type(question);
 
     auto result = co_await m_resolver->resolve(domain, RR_TYPE);
-    if (result.has_error()
-            && result.error()->value() != SystemResolverError::AE_DOMAIN_NOT_FOUND
-            && result.error()->value() != SystemResolverError::AE_RECORD_NOT_FOUND) {
-        co_return make_error(
-                DnsError::AE_BAD_RESPONSE, ErrorCodeToString<SystemResolverError>{}(result.error().get()->value()));
+    if (result.has_error()) {
+        auto &error = result.error();
+        if (error->value() != SystemResolverError::AE_DOMAIN_NOT_FOUND
+            && error->value() != SystemResolverError::AE_RECORD_NOT_FOUND) {
+            if (error->value() == SystemResolverError::AE_TIMED_OUT) {
+                co_return make_error(DnsError::AE_TIMED_OUT, ErrorCodeToString<SystemResolverError>{}(error->value()));
+            }
+            co_return make_error(DnsError::AE_INTERNAL_ERROR, ErrorCodeToString<SystemResolverError>{}(error->value()));
+        }
     }
 
     ldns_pkt *reply_pkt = ldns_pkt_clone(request_pkt);

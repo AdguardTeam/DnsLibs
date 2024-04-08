@@ -19,6 +19,7 @@ enum class SystemResolverError {
     AE_DECODE_ERROR,         // Errors from ldns
     AE_INIT_ERROR,           // DNSServiceRef could not be created
     AE_SHUTTING_DOWN,        // Shutting down
+    AE_TIMED_OUT,            // Timed out
 };
 
 /**
@@ -37,8 +38,8 @@ public:
      * Constructs a SystemResolver for a specific network interface.
      * @param if_index Index of the network interface (default is 0, which means any interface).
      */
-    SystemResolver(ConstructorAccess, EventLoop *loop, uint32_t if_index = 0);
-    static Result<std::unique_ptr<SystemResolver>, SystemResolverError> create(EventLoop *loop, uint32_t if_index);
+    SystemResolver(ConstructorAccess, EventLoop *loop, Millis timeout, uint32_t if_index = 0);
+    static Result<std::unique_ptr<SystemResolver>, SystemResolverError> create(EventLoop *loop, Millis timeout, uint32_t if_index);
     ~SystemResolver();
 
     /**
@@ -74,6 +75,8 @@ struct ErrorCodeToString<dns::SystemResolverError> {
             return "DNSServiceRef could not be created";
         case dns::SystemResolverError::AE_SHUTTING_DOWN:
             return "Shutting down";
+        case dns::SystemResolverError::AE_TIMED_OUT:
+            return "Timed out";
         case dns::SystemResolverError::AE_SYSTEM_RESOLVE_ERROR:
             return "Other errors from DNSService";
         }

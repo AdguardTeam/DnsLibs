@@ -12,9 +12,11 @@ static ag::Logger g_log{"SystemResolver"};
 
 class SystemResolver::Impl {
 public:
-    Impl(EventLoop *loop, uint32_t if_index)
+    Impl(EventLoop *loop, Millis timeout, uint32_t if_index)
             : m_loop(loop)
-            , m_if_index(if_index) {
+            , m_if_index(if_index)
+            , m_timeout(timeout)
+    {
     }
 
     ~Impl() {
@@ -38,6 +40,7 @@ public:
         Error<SystemResolverError> error;
         ServiceRefPtr service;
         UvPtr<uv_poll_t> poll_event;
+        UvPtr<uv_timer_t> timer_event;
         std::coroutine_handle<> continuation;
     };
 
@@ -56,7 +59,7 @@ public:
 
                 auto error_code = DNSServiceQueryRecord(&service_ref,
                         kDNSServiceFlagsUnicastResponse | kDNSServiceFlagsReturnIntermediates
-                                | kDNSServiceFlagAnsweredFromCache,
+                                | kDNSServiceFlagAnsweredFromCache | kDNSServiceFlagsTimeout,
                         req->parent->m_if_index, req->domain.data(), req->rr_type, kDNSServiceClass_IN, handle_dns_service_query_record_reply, req);
 
                 if (error_code != kDNSServiceErr_NoError) {
@@ -72,6 +75,16 @@ public:
                     return true;
                 }
                 if (0 != uv_poll_start(req->poll_event->raw(), UV_READABLE, on_uv_read)) {
+                    req->error = make_error(SystemResolverError::AE_SYSTEM_RESOLVE_ERROR);
+                    return true;
+                }
+                req->timer_event = Uv<uv_timer_t>::create_with_parent(req);
+                if (0 != uv_timer_init(req->parent->m_loop->handle(), req->timer_event->raw())) {
+                    req->error = make_error(SystemResolverError::AE_SYSTEM_RESOLVE_ERROR);
+                    return true;
+                }
+                if (0 != uv_timer_start(req->timer_event->raw(), on_uv_timer,
+                            req->parent->m_timeout.count(), 0)) {
                     req->error = make_error(SystemResolverError::AE_SYSTEM_RESOLVE_ERROR);
                     return true;
                 }
@@ -93,6 +106,14 @@ public:
                 }
             }
 
+            static void on_uv_timer(uv_timer_t* handle) {
+                if (auto req = (Request *) Uv<uv_poll_t>::parent_from_data(handle->data)) {
+                    req->error = make_error(SystemResolverError::AE_TIMED_OUT);
+                    req->parent->complete_request(*req);
+                    return;
+                }
+            }
+
             auto await_suspend(std::coroutine_handle<> continuation) {
                 req->continuation = continuation;
             }
@@ -105,6 +126,20 @@ public:
                     return std::move(node.mapped().rr_list);
                 }
             }
+
+            static SystemResolverError dns_error_to_resolver_error(int errorCode) {
+                switch (errorCode) {
+                case kDNSServiceErr_NoSuchRecord:
+                    return SystemResolverError::AE_RECORD_NOT_FOUND;
+                case kDNSServiceErr_NoSuchName:
+                    return SystemResolverError::AE_DOMAIN_NOT_FOUND;
+                case kDNSServiceErr_Timeout:
+                    return SystemResolverError::AE_TIMED_OUT;
+                default:
+                    return SystemResolverError::AE_SYSTEM_RESOLVE_ERROR;
+                }
+            }
+
             /**
              * Handles the reply from a DNSServiceQueryRecord request.
              * @param sdRef The DNSServiceRef initialized by DNSServiceQueryRecord.
@@ -130,35 +165,33 @@ public:
                         AllocatedPtr<char>{ldns_rr_type2str(ldns_rr_type(rrtype))}.get() ?: AG_FMT("TYPE{}", rrtype),
                         utils::encode_to_hex(Uint8View{(const uint8_t *) rdata, rdlen}), flags);
                 auto *req = (Request *) context;
-                if (errorCode == kDNSServiceErr_NoError) {
-                    if (rrtype == req->rr_type) {
-                        req->rr_type_received = true;
-                    }
-                    ldns_rr *rr = ldns_rr_new();
-                    ldns_rr_set_owner(rr, ldns_dname_new_frm_str(fullname));
-                    ldns_rr_set_type(rr, static_cast<ldns_rr_type>(rrtype));
-                    ldns_rr_set_class(rr, static_cast<ldns_rr_class>(rrclass));
-                    ldns_rr_set_ttl(rr, ttl);
-                    size_t pos = 0;
-                    std::vector<uint8_t> r_vecdata;
-                    r_vecdata.resize(rdlen + 2);
-                    uint16_t rdlen_network = htons(rdlen);
-                    memcpy(r_vecdata.data(), &rdlen_network, 2);
-                    memcpy(r_vecdata.data() + 2, rdata, rdlen);
-                    ldns_status status = ldns_wire2rdf(rr, r_vecdata.data(), r_vecdata.size(), &pos);
-                    if (status != LDNS_STATUS_OK) {
-                        req->error = make_error(SystemResolverError::AE_DECODE_ERROR, make_error(status));
-                    }
-                    ldns_rr_list_push_rr(req->rr_list.get(), rr);
-                } else {
-                    if (errorCode == kDNSServiceErr_NoSuchRecord) {
-                        req->error = make_error(SystemResolverError::AE_RECORD_NOT_FOUND);
-                    } else if (errorCode == kDNSServiceErr_NoSuchName) {
-                        req->error = make_error(SystemResolverError::AE_DOMAIN_NOT_FOUND);
-                    } else {
-                        req->error = make_error(SystemResolverError::AE_SYSTEM_RESOLVE_ERROR);
-                    }
+                if (errorCode != kDNSServiceErr_NoError) {
+                    req->error = make_error(dns_error_to_resolver_error(errorCode));
+                    req->parent->complete_request(*req);
+                    return;
                 }
+
+                if (rrtype == req->rr_type) {
+                    req->rr_type_received = true;
+                }
+                ldns_rr *rr = ldns_rr_new();
+                ldns_rr_set_owner(rr, ldns_dname_new_frm_str(fullname));
+                ldns_rr_set_type(rr, static_cast<ldns_rr_type>(rrtype));
+                ldns_rr_set_class(rr, static_cast<ldns_rr_class>(rrclass));
+                ldns_rr_set_ttl(rr, ttl);
+                size_t pos = 0;
+                std::vector<uint8_t> r_vecdata;
+                r_vecdata.resize(rdlen + 2);
+                uint16_t rdlen_network = htons(rdlen);
+                memcpy(r_vecdata.data(), &rdlen_network, 2);
+                memcpy(r_vecdata.data() + 2, rdata, rdlen);
+                ldns_status status = ldns_wire2rdf(rr, r_vecdata.data(), r_vecdata.size(), &pos);
+                if (status != LDNS_STATUS_OK) {
+                    req->error = make_error(SystemResolverError::AE_DECODE_ERROR, make_error(status));
+                    req->parent->complete_request(*req);
+                    return;
+                }
+                ldns_rr_list_push_rr(req->rr_list.get(), rr);
 
                 if ((flags & kDNSServiceFlagsMoreComing) == 0) {
                     if ((flags & kDNSServiceFlagAnsweredFromCache) && !req->rr_type_received
@@ -188,16 +221,17 @@ public:
     uint32_t m_if_index{}; ///< The network interface index.
     uint64_t m_next_request_id = 0;
     std::map<uint64_t, Request> m_requests;
+    Millis m_timeout;
 };
 
-SystemResolver::SystemResolver(ag::dns::SystemResolver::ConstructorAccess, ag::dns::EventLoop *loop, uint32_t if_index) {
-    m_pimpl = std::make_unique<Impl>(loop, if_index);
+SystemResolver::SystemResolver(ag::dns::SystemResolver::ConstructorAccess, ag::dns::EventLoop *loop, Millis timeout, uint32_t if_index) {
+    m_pimpl = std::make_unique<Impl>(loop, timeout, if_index);
 }
 
 SystemResolver::~SystemResolver() = default;
 
-ag::Result<std::unique_ptr<SystemResolver>, SystemResolverError> SystemResolver::create(EventLoop *loop, uint32_t if_index) {
-    std::unique_ptr<SystemResolver> ret = std::make_unique<SystemResolver>(ConstructorAccess{}, loop, if_index);
+ag::Result<std::unique_ptr<SystemResolver>, SystemResolverError> SystemResolver::create(EventLoop *loop, Millis timeout, uint32_t if_index) {
+    std::unique_ptr<SystemResolver> ret = std::make_unique<SystemResolver>(ConstructorAccess{}, loop, timeout, if_index);
     if (!ret || !ret->m_pimpl) {
         return make_error(SystemResolverError::AE_INIT_ERROR);
     }
