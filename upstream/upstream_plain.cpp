@@ -38,7 +38,8 @@ Error<Upstream::InitError> PlainUpstream::init() {
     }
 
     if (m_address.port() == 0) {
-        m_address = SocketAddress(m_address.addr(), DEFAULT_PLAIN_PORT);
+        // Don't lose the scope ID!
+        m_address.set_port(DEFAULT_PLAIN_PORT);
     }
     if (!m_address.valid()) {
         return make_error(InitError::AE_INVALID_ADDRESS, m_options.address);
