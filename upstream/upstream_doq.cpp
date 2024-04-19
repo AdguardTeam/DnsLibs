@@ -302,7 +302,7 @@ void DoqUpstream::send_requests() {
 }
 
 Error<Upstream::InitError> DoqUpstream::init() {
-    auto error = this->init_url_port(/*allow_creds*/ false, /*allow_path*/ false, DEFAULT_DOQ_PORT, /*host_to_lowercase*/ true);
+    auto error = this->init_url_port(/*allow_creds*/ false, /*allow_path*/ false, DEFAULT_DOQ_PORT, /*host_to_lowercase*/ false);
     if (error) {
         return error;
     }

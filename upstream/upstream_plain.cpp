@@ -20,7 +20,7 @@ PlainUpstream::PlainUpstream(const UpstreamOptions &opts, const UpstreamFactoryC
 
 Error<Upstream::InitError> PlainUpstream::init() {
     if (m_options.address.find("://") != std::string::npos) {
-        auto error = this->init_url_port(/*allow_creds*/ false, /*allow_path*/ false, DEFAULT_PLAIN_PORT, /*host_to_lowercase*/ true);
+        auto error = this->init_url_port(/*allow_creds*/ false, /*allow_path*/ false, DEFAULT_PLAIN_PORT, /*host_to_lowercase*/ false);
         if (error) {
             return error;
         }
