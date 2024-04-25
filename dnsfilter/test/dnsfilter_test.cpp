@@ -1481,6 +1481,11 @@ static const CidrTestSample CIDR_TEST_SAMPLES[] = {
                 .ip = "feed::beef",
                 .rules = {"feed::be00/128"},
         },
+        {
+                .ip = "fe80::1%1",
+                .rules = {"fe80::/10"},
+                .expected_match = {"fe80::/10"},
+        },
 };
 
 INSTANTIATE_TEST_SUITE_P(DnsFilter, Cidr, testing::ValuesIn(CIDR_TEST_SAMPLES));

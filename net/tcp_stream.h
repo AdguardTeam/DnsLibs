@@ -28,7 +28,6 @@ private:
     Callbacks m_callbacks = {};
     bool m_connected = false;
     std::optional<std::chrono::microseconds> m_current_timeout;
-    HashMap<uv_write_t *, Uint8Vector> m_writes;
     HashMap<char *, std::unique_ptr<char[]>> m_reads;
 
     [[nodiscard]] std::optional<evutil_socket_t> get_fd() const override;

@@ -100,8 +100,8 @@ void EventLoop::execute_stopper_iteration() noexcept {
 }
 
 void EventLoop::stop() {
+    m_stopping = true;
     submit([this]{
-        m_stopping = true;
         m_stopper = Uv<uv_idle_t>::create_with_parent(this);
         uv_idle_init(m_handle->raw(), m_stopper->raw());
         uv_idle_start(m_stopper->raw(), [](uv_idle_t *idle) {
@@ -141,7 +141,7 @@ void EventLoop::start() {
 
 EventLoop::~EventLoop() {
     dbglog(m_log, "Destroying");
-    if (m_running) {
+    if (m_running && !m_stopping) {
         errlog(m_log, "Event loop was not stopped before destruction");
         abort();
     }

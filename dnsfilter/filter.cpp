@@ -736,7 +736,11 @@ void Filter::Impl::search_in_cidrs(MatchArg &match) const {
         return;
     }
 
-    CidrRange seek(match.ctx.host);
+    if (!match.ctx.ip_as_cidr.has_value()) {
+        return;
+    }
+
+    CidrRange &seek = *match.ctx.ip_as_cidr;
     auto last_includes = this->cidrs_table.upper_bound(seek);
     for (auto iter = this->cidrs_table.begin(); iter != last_includes; ++iter) {
         match_by_file_position(match, iter->second);

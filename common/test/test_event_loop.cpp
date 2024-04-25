@@ -19,6 +19,12 @@ TEST(EventLoop, Submit) {
     loop->join();
 }
 
+TEST(EventLoop, InstantDestructionAfterStop) {
+    auto loop = EventLoop::create();
+    loop->start();
+    loop->stop();
+}
+
 TEST(EventLoop, Coro) {
     static Logger log("Coro");
     auto loop = EventLoop::create();

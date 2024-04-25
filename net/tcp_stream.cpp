@@ -94,23 +94,20 @@ Error<SocketError> TcpStream::connect(ConnectParameters params) {
     return {};
 }
 
+struct UvWrite : public uv_write_t {
+    Uint8Vector buf;
+};
+
 void TcpStream::on_write(uv_write_t *req, int status) {
-    auto *weak_data = Uv<uv_tcp_t>::weak_from_data(req->data);
-    if (auto tcp_handle = weak_data->lock()) {
-        auto *self = (TcpStream *) tcp_handle->parent();
-        self->m_writes.erase(req);
-    }
-    delete weak_data;
-    delete req;
+    delete static_cast<UvWrite *>(req);
 }
 
 Error<SocketError> TcpStream::send(Uint8View data) {
     log_stream(this, trace, "{}", data.size());
 
-    auto req = new uv_write_t;
-    req->data = new UvWeak<uv_tcp_t>(m_tcp);
-    m_writes[req].assign(data.begin(), data.begin() + data.size());
-    uv_buf_t buf = uv_buf_init((char *) m_writes[req].data(), m_writes[req].size());
+    auto req = new UvWrite{};
+    req->buf.assign(data.begin(), data.begin() + data.size());
+    uv_buf_t buf = uv_buf_init((char *) req->buf.data(), req->buf.size());
     if (int err = uv_write(req, (uv_stream_t *) m_tcp->raw(), &buf, 1, &on_write)) {
         log_stream(this, dbg, "Failed to write data");
         return make_error(SocketError::AE_SOCK_ERROR, make_error(uv_errno_t(err)));
@@ -220,7 +217,12 @@ void TcpStream::on_read(uv_stream_t *stream, ssize_t nread, const uv_buf_t *buf)
             }
             return;
         }
-        dbglog(self->m_log, "Read error: {}", nread);
+        dbglog(self->m_log, "Read error: {}", uv_strerror(nread));
+        Error<SocketError> err = make_error(SocketError::AE_SOCK_ERROR,
+                make_error(uv_errno_t(nread)));
+        if (Callbacks cbx = self->get_callbacks(); cbx.on_close != nullptr) {
+            cbx.on_close(cbx.arg, err);
+        }
         return;
     }
 

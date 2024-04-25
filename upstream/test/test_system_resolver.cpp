@@ -22,7 +22,7 @@ protected:
         Logger::set_log_level(LOG_LEVEL_TRACE);
         m_loop = EventLoop::create();
         m_loop->start();
-        m_resolver = std::move(SystemResolver::create(m_loop.get(), 0).value());
+        m_resolver = std::move(SystemResolver::create(m_loop.get(), Secs{5}, 0).value());
     }
     void TearDown() override {
         m_resolver.reset();
