@@ -21,7 +21,7 @@ namespace ag::dns::proxy::test {
 
 // Generated with:
 // echo | openssl s_client -connect 94.140.14.14:853 -servername dns.adguard-dns.com 2>/dev/null | openssl x509 -pubkey -noout | openssl pkey -pubin -outform der | openssl dgst -sha256 -binary | openssl enc -base64
-static constexpr auto ADGUARD_DNS_SPKI = "gX+tmLZzEdlwVKPNCeIY/DGV0VIHGpdPb25KjJ4OZjU=";
+static constexpr auto ADGUARD_DNS_SPKI = "BF+fS5RPhZQggn38wZ6lqii8lxPNWQPzU2VVVqbLhqM=";
 static constexpr auto ZEROSSL_SPKI = "3fLLVjRIWnCqDqIETU2OcnMP7EzmN/Z3Q/jQ8cIaAoc=";
 
 static constexpr auto DNS64_SERVER_ADDR = "2001:4860:4860::6464";
@@ -194,7 +194,8 @@ static const std::string encrypted_upstreams[] = {
         "https://dns.adguard-dns.com/dns-query"
 };
 
-TEST_P(SPKITest, TestSPKI) {
+// Disabled since AG servers does not have stable SubjectPublicKeyInfo.
+TEST_P(SPKITest, Disabled_TestSPKI) {
     m_settings.upstreams = {{
         .address = GetParam(),
         .bootstrap = {"1.1.1.1"},
@@ -266,13 +267,14 @@ TEST_F(DnsProxyTest, TestWrongSPKI) {
     ASSERT_EQ(ldns_pkt_get_rcode(response.get()), LDNS_RCODE_SERVFAIL);
 }
 
-TEST_F(DnsProxyTest, DnsStampWithHash) {
+// Disabled since AG servers does not have stable SubjectPublicKeyInfo.
+TEST_F(DnsProxyTest, DISABLED_DnsStampWithHash) {
     using namespace std::chrono_literals;
     DnsProxySettings settings = make_dnsproxy_settings();
     // Stamp's "hashes" field takes another form of hash, generated with:
     // echo | openssl s_client -connect 94.140.14.14:853 -servername dns.adguard-dns.com 2>/dev/null | openssl x509 -outform der | openssl asn1parse -inform der -strparse 4 -noout -out - | openssl dgst -sha256
     settings.upstreams = {{
-            .address = "sdns://AwAAAAAAAAAAEDk0LjE0MC4xNC4xNDo4NTMg0PnTRd3hkxAOGDJDTTOxx97I-pkHgdMnEOapOXu7SNATZG5zLmFkZ3VhcmQtZG5zLmNvbQ",
+            .address = "sdns://AwAAAAAAAAAAEDk0LjE0MC4xNC4xNDo4NTMgt62MXPPPq9LPHxpgGSeXXo1flLUZWExquscITUzJnsoTZG5zLmFkZ3VhcmQtZG5zLmNvbQ",
     }};
     settings.upstream_timeout = 5000ms;
     settings.ipv6_available = false;

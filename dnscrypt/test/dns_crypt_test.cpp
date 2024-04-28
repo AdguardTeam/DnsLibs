@@ -212,8 +212,8 @@ static constexpr std::string_view check_dns_crypt_server_test_stamps[]{
         "OQhzIjIuZG5zY3J5cHQuZGVmYXVsdC5uczEuYWRndWFyZC5jb20",
         // AdGuard DNS Family
         "sdns://"
-        "AQIAAAAAAAAAFDE3Ni4xMDMuMTMwLjEzMjo1NDQzILgxXdexS27jIKRw3C7Wsao5jMnlhvhdRUXWuMm1AFq6ITIuZG5zY3J5cHQuZmFtaWx5Lm"
-        "5zMS5hZGd1YXJkLmNvbQ",
+        "AQIAAAAAAAAAETk0LjE0MC4xNC4xNTo1NDQzILgxXdexS27jIKRw3C7Wsao5jMnlhvhdRUXWuMm1AFq6ITIuZG5zY3J5cHQuZmFtaWx5Lm5zMS"
+        "5hZGd1YXJkLmNvbQ",
 };
 
 static constexpr utils::TransportProtocol check_dns_crypt_server_test_protocols[]{

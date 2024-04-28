@@ -331,7 +331,8 @@ int main() {
 
     test_proxy();
     test_utils();
-    test_cert_fingerprint();
+    // Disabled since AG servers does not have stable SubjectPublicKeyInfo
+    // test_cert_fingerprint();
     test_dnsstamp();
     test_filtering_log_action();
     test_is_valid_rule();

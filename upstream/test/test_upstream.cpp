@@ -390,8 +390,8 @@ static const UpstreamTestData test_upstreams_data[]{
                 {}},
         {// AdGuard Family (DNSCrypt)
                 "sdns://"
-                "AQIAAAAAAAAAFDE3Ni4xMDMuMTMwLjEzMjo1NDQzILgxXdexS27jIKRw3C7Wsao5jMnlhvhdRUXWuMm1AFq6ITIuZG5zY3J5cHQuZm"
-                "FtaWx5Lm5zMS5hZGd1YXJkLmNvbQ",
+                "AQIAAAAAAAAAETk0LjE0MC4xNC4xNTo1NDQzILgxXdexS27jIKRw3C7Wsao5jMnlhvhdRUXWuMm1AFq6ITIuZG5zY3J5cHQuZmFtaW"
+                "x5Lm5zMS5hZGd1YXJkLmNvbQ",
                 {"8.8.8.8"}},
         {// Cloudflare DNS (DoH)
                 "sdns://AgcAAAAAAAAABzEuMC4wLjEAEmRucy5jbG91ZGZsYXJlLmNvbQovZG5zLXF1ZXJ5",
