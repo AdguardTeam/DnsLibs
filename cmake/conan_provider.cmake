@@ -580,6 +580,20 @@ endmacro()
 # to check if the dependency provider was invoked at all.
 cmake_language(DEFER DIRECTORY "${CMAKE_SOURCE_DIR}" CALL conan_provide_dependency_check)
 
+# Detect conan profile to use
+set(_PROFILES_DIR ${CMAKE_CURRENT_LIST_DIR}/../conan/profiles)
+if (APPLE)
+    set(_SELECTED_PROFILE "${_PROFILES_DIR}/apple.jinja")
+elseif(ANDROID)
+    set(_SELECTED_PROFILE "${_PROFILES_DIR}/android.jinja")
+elseif(WIN32)
+    set(_SELECTED_PROFILE "${_PROFILES_DIR}/windows-msvc.jinja")
+elseif(CMAKE_SYSTEM_NAME STREQUAL "Linux")
+    set(_SELECTED_PROFILE "${_PROFILES_DIR}/linux.jinja")
+else()
+    set(_SELECTED_PROFILE "default")
+endif()
+
 # Configurable variables for Conan profiles
-set(CONAN_HOST_PROFILE "default;auto-cmake" CACHE STRING "Conan host profile")
+set(CONAN_HOST_PROFILE "${_SELECTED_PROFILE};auto-cmake" CACHE STRING "Conan host profile")
 set(CONAN_BUILD_PROFILE "default" CACHE STRING "Conan build profile")

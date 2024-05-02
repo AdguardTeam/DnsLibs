@@ -17,8 +17,7 @@ android {
         externalNativeBuild {
             cmake {
                 targets "adguard-dns"
-                arguments "-DCONAN_HOST_PROFILE=${project.rootDir}/../../../conan/profiles/android.jinja;auto-cmake",
-                        "-DANDROID_STL=c++_static",
+                arguments "-DANDROID_STL=c++_static",
                         "-DCMAKE_BUILD_TYPE=RelWithDebInfo"
             }
         }

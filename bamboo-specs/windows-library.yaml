@@ -46,7 +46,6 @@ DL - Win tests and deploy:
             -DCMAKE_USE_OPENSSL=ON ^
             -DCMAKE_C_COMPILER="cl.exe" ^
             -DCMAKE_CXX_COMPILER="cl.exe" ^
-            -DCONAN_HOST_PROFILE="%CL_GIT_ROOT%/conan/profiles/windows-msvc.jinja;auto-cmake" ^
             -DCMAKE_MAKE_PROGRAM=%CMAKE_MAKE_PROGRAM% ^
             -G "%CMAKE_GENERATOR%" ^
             ..
@@ -83,7 +82,6 @@ DL - Win tests and deploy:
               -DCMAKE_C_COMPILER="cl.exe" ^
               -DCMAKE_CXX_COMPILER="cl.exe" ^
               -DCMAKE_MAKE_PROGRAM=%CMAKE_MAKE_PROGRAM% ^
-              -DCONAN_HOST_PROFILE="%CL_GIT_ROOT%/conan/profiles/windows-msvc.jinja;auto-cmake" ^
               -G "%CMAKE_GENERATOR%" ^
               ..
           

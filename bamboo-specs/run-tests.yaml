@@ -56,7 +56,6 @@ Run C++ tests:
             -DCMAKE_C_COMPILER=clang \
             -DCMAKE_CXX_COMPILER=clang++ \
             -DCMAKE_C_FLAGS='' -DCMAKE_CXX_FLAGS='-stdlib=libc++' \
-            -DCONAN_HOST_PROFILE="default;auto-cmake" \
             -DCMAKE_MAKE_PROGRAM=${CMAKE_MAKE_PROGRAM} -G "${CMAKE_GENERATOR}" \
             -DSANITIZE=yes \
             ${SRC_ROOT}

@@ -20,18 +20,9 @@ See https://github.com/AdguardTeam/NativeLibsCommon/blob/master/README.md for de
 
 Execute the following commands in Terminal:
 
-* Windows
-
 ```shell
 mkdir build && cd build
-cmake -DCONAN_HOST_PROFILE="../conan/profiles/windows-msvc.jinja;auto-cmake" ..
-```
-
-* Other platforms
-
-```shell
-mkdir build && cd build
-cmake ..               
+cmake ..
 ```
 
 For testing execute the following:

@@ -127,7 +127,6 @@ function build_target() {
     cmake_opt="-DCMAKE_BUILD_TYPE=${BUILD_TYPE} -GNinja"
     cmake_opt="${cmake_opt} -DCMAKE_XCODE_ATTRIBUTE_DEBUG_INFORMATION_FORMAT=\"dwarf-with-dsym\""
     cmake_opt="${cmake_opt} -DCMAKE_CXX_FLAGS=\"-stdlib=libc++\""
-    cmake_opt="${cmake_opt} -DCONAN_HOST_PROFILE=${DNS_LIBS_DIR}/conan/profiles/apple.jinja;auto-cmake"
     cmake_opt="${cmake_opt} -DTARGET_OS:STRING=${target_os} -DCMAKE_OSX_ARCHITECTURES=${target_arch}"
 
     case ${target_os} in
