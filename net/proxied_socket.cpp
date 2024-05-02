@@ -46,7 +46,8 @@ Error<SocketError> ProxiedSocket::connect(ConnectParameters params) {
             peer = &*storage;
         }
     }
-    if (const auto *peer_as_addr = std::get_if<SocketAddress>(peer); peer_as_addr && peer_as_addr->is_loopback()) {
+    if (const auto *peer_as_addr = std::get_if<SocketAddress>(peer); peer_as_addr &&
+            (peer_as_addr->is_loopback() || peer_as_addr->is_any())) {
         log_sock(this, dbg, "Don't direct localhost into proxy. Falling back to direct connection");
         m_proxy = m_proxied_callbacks.get_fallback_proxy(m_proxied_callbacks.arg).proxy;
         auto connect_result = m_proxy->connect(
