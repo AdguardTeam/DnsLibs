@@ -408,7 +408,7 @@ loop_exit:
     co_return result;
 }
 
-ag::coro::Task<void> ag::dns::DohUpstream::drive_connection(Millis handshake_timeout) {
+ag::coro::Task<void> ag::dns::DohUpstream::drive_connection(Millis handshake_timeout, int tries) {
     SteadyClock::time_point start_ts = SteadyClock::now();
 
     if (m_connection_state != ConnectionState::CONNECTING) {
@@ -488,13 +488,13 @@ ag::coro::Task<void> ag::dns::DohUpstream::drive_connection(Millis handshake_tim
     }
 
     if (http_conn.has_error()) {
-        if (http_conn.error()->value() == DnsError::AE_RETRY_CONNECTION) {
+        if (http_conn.error()->value() == DnsError::AE_RETRY_CONNECTION && tries > 0) {
             log_upstream(dbg, this, "Retrying connection");
             m_http_conn.reset();
             m_pending_connections.reset();
             cancel_read_timer();
             assert(m_connection_state == ConnectionState::CONNECTING);
-            co_return co_await drive_connection(handshake_timeout - duration_cast<Millis>(SteadyClock::now() - start_ts));
+            co_return co_await drive_connection(handshake_timeout - duration_cast<Millis>(SteadyClock::now() - start_ts), tries - 1);
         }
         if (http_conn.error()->value() == DnsError::AE_TIMED_OUT && m_bootstrapper.has_value()) {
             for (const auto &conn : *m_pending_connections) {

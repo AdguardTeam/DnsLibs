@@ -59,7 +59,7 @@ private:
     Error<InitError> init() override;
     coro::Task<ExchangeResult> exchange(const ldns_pkt *, const DnsMessageInfo *info) override;
 
-    coro::Task<void> drive_connection(Millis timeout);
+    coro::Task<void> drive_connection(Millis timeout, int tries = 5);
     coro::Task<Result<HttpConnection *, DnsError>> establish_connection(HttpConnection *http_conn, AddressVariant peer);
     coro::Task<Result<HttpConnection *, DnsError>> establish_any_of_connections(
             const std::vector<std::pair<std::unique_ptr<HttpConnection>, AddressVariant>> &connections);
