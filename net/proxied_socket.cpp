@@ -34,14 +34,26 @@ Error<SocketError> ProxiedSocket::connect(ConnectParameters params) {
         return err;
     }
 
-    if (const auto *peer = std::get_if<SocketAddress>(&params.peer); peer && peer->is_loopback()) {
+    std::optional<AddressVariant> storage;
+    const AddressVariant *peer = &params.peer;
+    if (const auto *peer_as_host = std::get_if<NamePort>(peer); peer_as_host) {
+        if (peer_as_host->name == "localhost") {
+            storage = SocketAddress("127.0.0.1", peer_as_host->port);
+            peer = &*storage;
+        }
+        if (peer_as_host->name == "localhost6") {
+            storage = SocketAddress("::1", peer_as_host->port);
+            peer = &*storage;
+        }
+    }
+    if (const auto *peer_as_addr = std::get_if<SocketAddress>(peer); peer_as_addr && peer_as_addr->is_loopback()) {
         log_sock(this, dbg, "Don't direct localhost into proxy. Falling back to direct connection");
         m_proxy = m_proxied_callbacks.get_fallback_proxy(m_proxied_callbacks.arg).proxy;
         auto connect_result = m_proxy->connect(
                 {
                         .loop = params.loop,
                         .proto = this->get_protocol(),
-                        .peer = params.peer,
+                        .peer = *peer_as_addr,
                         .callbacks = {nullptr, nullptr, on_connected, on_read, on_close, this},
                         .timeout = params.timeout,
                 });

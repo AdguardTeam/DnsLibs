@@ -17,6 +17,7 @@ SocketFactory::SocketFactory(Parameters parameters)
         , m_router(parameters.enable_route_resolver ? RouteResolver::create() : RouteResolverPtr{nullptr}) {
     if (m_parameters.oproxy.settings != nullptr) {
         m_proxy.reset(this->make_proxy());
+        m_direct_proxy.reset(this->make_fallback_proxy());
     }
 }
 
@@ -43,8 +44,8 @@ SocketFactory::SocketPtr SocketFactory::make_socket(SocketParameters p) const {
                         [](void *, Error<SocketError>) {
                             return ProxiedSocket::OCFA_CLOSE_CONNECTION;
                         },
-                        [](void *) -> ProxiedSocket::Fallback {
-                            return {};
+                        [](void *arg) -> ProxiedSocket::Fallback {
+                            return {((SocketFactory *)arg)->m_direct_proxy.get()};
                         },
                         (void *) this,
                 },

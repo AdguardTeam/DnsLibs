@@ -162,6 +162,7 @@ private:
     Parameters m_parameters;
     RouteResolverPtr m_router;
     std::unique_ptr<OutboundProxy> m_proxy;
+    std::unique_ptr<OutboundProxy> m_direct_proxy;
 
     [[nodiscard]] SocketPtr make_direct_socket(SocketParameters parameters) const;
 
