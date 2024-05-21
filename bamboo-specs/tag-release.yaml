@@ -13,7 +13,7 @@ stages:
 Tag release:
   key: JOB1
   docker:
-    image: adguard/core-libs:1.11
+    image: adguard/core-libs:2.1
     volumes:
       ${bamboo.working.directory}: ${bamboo.working.directory}
       ${bamboo.tmp.directory}: ${bamboo.tmp.directory}

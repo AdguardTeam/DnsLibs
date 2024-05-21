@@ -13,7 +13,7 @@ stages:
 Default Job:
   key: JOB1
   docker:
-    image: adguard/core-libs:1.21
+    image: adguard/core-libs:2.1
     volumes:
       ${bamboo.git.cache.directory}: ${bamboo.git.cache.directory}
       ${system.HOME}/.ssh: /root/.ssh
