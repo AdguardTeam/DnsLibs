@@ -1511,7 +1511,7 @@ static coro::Task<CFDataRef> handleIPv6Packet(AGDnsProxy *self, NSData *packet)
             } else if (ip_header->ip_v == 6) {
                 reply = co_await handleIPv6Packet(self, packet);
             } else {
-                dbglog(*self->log, "Wrong IP version: %u", ip_header->ip_v);
+                dbglog(*self->log, "Wrong IP version: {}", ip_header->ip_v);
             }
 
             @autoreleasepool {

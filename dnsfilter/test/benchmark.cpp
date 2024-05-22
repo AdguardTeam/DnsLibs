@@ -198,7 +198,7 @@ int main(int argc, char **argv) {
             domains_base_path = argv[i + 1];
             ++i;
         } else {
-            FAIL_WITH_MSG("unknown option %s\n{}", argv[i], HELP_MESSAGE);
+            FAIL_WITH_MSG("unknown option {}\n{}", argv[i], HELP_MESSAGE);
         }
     }
 
