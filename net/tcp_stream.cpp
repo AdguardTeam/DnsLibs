@@ -41,7 +41,7 @@ Error<SocketError> TcpStream::connect(ConnectParameters params) {
     }
 
     m_tcp = Uv<uv_tcp_t>::create_with_parent(this);
-    if (int err = uv_tcp_init_ex(params.loop->handle(), m_tcp->raw(), (uint8_t)peer->c_sockaddr()->sa_family)) {
+    if (int err = uv_tcp_init(params.loop->handle(), m_tcp->raw())) {
         auto error = make_error(uv_errno_t(err));
         return make_error(SocketError::AE_SOCK_ERROR, "Failed to create socket", error);
     }
