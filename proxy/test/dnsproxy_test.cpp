@@ -1632,6 +1632,7 @@ TEST_F(DnsProxyTest, OptimisticCache) {
 
 TEST_F(DnsProxyTest, DnssecSimpleTest) {
     DnsProxySettings settings = make_dnsproxy_settings();
+    settings.upstreams[0].address = "1.1.1.1";
     settings.enable_dnssec_ok = true;
 
     std::vector<std::string> dnssecSupport = {"cloudflare.com", "example.org"};
