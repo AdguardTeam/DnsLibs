@@ -55,7 +55,7 @@ DL - Win tests and deploy:
         %CTEST% -D ExperimentalTest --no-compress-output || exit /b 1
         deactivate
       working-dir: dns-libs
-      description: Compile and run tests
+      description: Compile and run tests (x86)
   - script:
       interpreter: BINSH_OR_CMDEXE
       scripts:
@@ -87,10 +87,45 @@ DL - Win tests and deploy:
           
           rem Target "tests" depends on everything, so this will also build AdguardDns64.dll
           %CMAKE_MAKE_PROGRAM% tests || exit /b 1
-          %CTEST% -D ExperimentalTest --no-compress-output || exit /b 1
           deactivate
       working-dir: dns-libs
-      description: Compile and run tests (x64)
+      description: Compile (x64)
+  - script:
+      interpreter: BINSH_OR_CMDEXE
+      scripts:
+        - |-
+          call vcvarsall amd64_arm64
+          call .\venv\Scripts\activate
+          conan remove -c "*"
+
+          set CMAKE=cmake
+          set CTEST=ctest
+          set CMAKE_MAKE_PROGRAM=ninja
+          set CMAKE_MAKE_FLAGS=""
+          set CMAKE_GENERATOR="Ninja"
+          set CL_GIT_ROOT=%cd%
+          cd %bamboo_winProjectDir%/capi
+          set CL_ROOT=%cd%
+
+          if exist build64\ rmdir /s /q build64 || exit /b 1
+          mkdir build64 || exit /b 1
+          cd build64 || exit /b 1
+
+          %CMAKE% -DCMAKE_BUILD_TYPE=%bamboo_cmakeBuildProfile% ^
+              -DCMAKE_USE_OPENSSL=ON ^
+              -DCMAKE_C_COMPILER="cl.exe" ^
+              -DCMAKE_CXX_COMPILER="cl.exe" ^
+              -DCMAKE_MAKE_PROGRAM=%CMAKE_MAKE_PROGRAM% ^
+              -DCMAKE_SYSTEM_NAME=Windows ^
+              -DCMAKE_SYSTEM_PROCESSOR=ARM64 ^
+              -G "%CMAKE_GENERATOR%" ^
+              ..
+
+          rem Target "tests" depends on everything, so this will also build AdguardDns64.dll
+          %CMAKE_MAKE_PROGRAM% tests || exit /b 1
+          deactivate
+      working-dir: dns-libs
+      description: Compile (Arm64)
   - script:
       interpreter: BINSH_OR_CMDEXE
       scripts:

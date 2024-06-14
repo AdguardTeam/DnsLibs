@@ -86,8 +86,13 @@ set(RES_FILES
 
 
 if (CMAKE_SIZEOF_VOID_P EQUAL 8)
-    set (LIBRARY_NAME AdguardDns64)
-    set (OUTPUT_DLL_FOLDER x64)
+    if (CMAKE_SYSTEM_PROCESSOR MATCHES "ARM64")
+        set (LIBRARY_NAME AdguardDnsArm64)
+        set (OUTPUT_DLL_FOLDER Arm64)
+    else ()
+        set (LIBRARY_NAME AdguardDns64)
+        set (OUTPUT_DLL_FOLDER x64)
+    endif ()
 else ()
     set (LIBRARY_NAME AdguardDns)
     set (OUTPUT_DLL_FOLDER x86)
