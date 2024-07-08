@@ -202,7 +202,7 @@ void DnsForwarder::finalize_processed_event(DnsRequestProcessedEvent &event, con
 
     if (error) {
         dbglog(m_log, "{}", error->str());
-        event.error = error->str();
+        event.error = error->pretty_str();
     } else {
         event.error.clear();
     }
