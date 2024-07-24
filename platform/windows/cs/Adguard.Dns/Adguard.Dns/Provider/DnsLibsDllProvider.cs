@@ -18,48 +18,32 @@ namespace Adguard.Dns.Provider
 		/// The main dll names were changed to "win32" versions for all kinds of architectures
 		/// due to https://jira.adguard.com/browse/AG-17629
 		/// </summary>
-		private static readonly Dictionary<ArchitectureLocal, KeyValuePair<string, string>> DNS_LIBS_DLL_PATHES_MAP =
-			new Dictionary<ArchitectureLocal, KeyValuePair<string, string>>
+		private static readonly Dictionary<ArchitectureLocal, string> DNS_LIBS_DLL_PATHES_MAP =
+			new Dictionary<ArchitectureLocal, string>
 			{
 				{
 					ArchitectureLocal.X86,
-					new KeyValuePair<string, string>(
 						Path.Combine(
 							AppDomain.CurrentDomain.BaseDirectory,
-							WIN32_DNS_LIBS_DLL_NAME),
-						Path.Combine(
-							AppDomain.CurrentDomain.BaseDirectory,
-							WIN64_DNS_LIBS_DLL_NAME))},
+							WIN32_DNS_LIBS_DLL_NAME)
+                },
 				{
 					ArchitectureLocal.X64,
-					new KeyValuePair<string, string>(
 						Path.Combine(
 							AppDomain.CurrentDomain.BaseDirectory,
-							WIN64_DNS_LIBS_DLL_NAME),
-						Path.Combine(
-							AppDomain.CurrentDomain.BaseDirectory,
-							WIN32_DNS_LIBS_DLL_NAME))
-
+							WIN64_DNS_LIBS_DLL_NAME)
 				},
 				{
 					ArchitectureLocal.Arm,
-					new KeyValuePair<string, string>(
 						Path.Combine(
 							AppDomain.CurrentDomain.BaseDirectory,
-							WIN32_DNS_LIBS_DLL_NAME),
-						Path.Combine(
-							AppDomain.CurrentDomain.BaseDirectory,
-							WIN64_DNS_LIBS_DLL_NAME))
+							WIN32_DNS_LIBS_DLL_NAME)
 				},
 				{
 					ArchitectureLocal.Arm64,
-					new KeyValuePair<string, string>(
 						Path.Combine(
 							AppDomain.CurrentDomain.BaseDirectory,
-							WIN64_DNS_LIBS_DLL_NAME),
-						Path.Combine(
-							AppDomain.CurrentDomain.BaseDirectory,
-							WIN32_DNS_LIBS_DLL_NAME))
+							WIN64_DNS_LIBS_DLL_NAME)
 				}
 			};
 
