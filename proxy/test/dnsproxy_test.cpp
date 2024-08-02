@@ -49,6 +49,7 @@ protected:
 static DnsProxySettings make_dnsproxy_settings() {
     auto settings = DnsProxySettings::get_default();
     settings.upstreams = {{.address = "8.8.8.8"}};
+    settings.adblock_rules_blocking_mode = DnsProxyBlockingMode::REFUSED;
     return settings;
 }
 
@@ -195,7 +196,7 @@ static const std::string encrypted_upstreams[] = {
 };
 
 // Disabled since AG servers does not have stable SubjectPublicKeyInfo.
-TEST_P(SPKITest, Disabled_TestSPKI) {
+TEST_P(SPKITest, DISABLED_TestSPKI) {
     m_settings.upstreams = {{
         .address = GetParam(),
         .bootstrap = {"1.1.1.1"},
@@ -217,7 +218,8 @@ TEST_P(SPKITest, Disabled_TestSPKI) {
     ASSERT_EQ(ldns_pkt_get_rcode(response.get()), LDNS_RCODE_NOERROR);
 }
 
-TEST_P(SPKITest, MatchSecondFingerprintInChain) {
+// Disabled since AG servers does not have stable SubjectPublicKeyInfo.
+TEST_P(SPKITest, DISABLE_MatchSecondFingerprintInChain) {
     m_settings.upstreams = {{
             .address = GetParam(),
             .bootstrap = {"1.1.1.1"},

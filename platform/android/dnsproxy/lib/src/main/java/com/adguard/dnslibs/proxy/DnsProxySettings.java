@@ -27,11 +27,18 @@ public class DnsProxySettings {
         NXDOMAIN(1),
 
         /**
-         * Respond with an address that is all-zeroes, or
+         * Respond with an address that is all zeroes, or
          * a custom blocking address, if it is specified, or
          * an empty SOA response if request type is not A/AAAA.
          */
-        ADDRESS(2);
+        ADDRESS(2),
+
+        /**
+         * response with an address that is all zeroes
+         * regardless of the custom blocking address settings,
+         * or an empty SOA response if request type is not A/AAAA.
+         */
+        UNSPECIFIED_ADDRESS(5);
 
         private final int code;
         BlockingMode(int code) { this.code = code; }

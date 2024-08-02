@@ -158,7 +158,9 @@ public:
             result = create_nxdomain_response(request, settings);
             break;
         case DnsProxyBlockingMode::ADDRESS:
-            result = create_address_or_soa_response(request, original_response, settings);
+        case DnsProxyBlockingMode::UNSPECIFIED_ADDRESS:
+            result = create_address_or_soa_response(
+                    request, original_response, settings, mode == DnsProxyBlockingMode::UNSPECIFIED_ADDRESS);
             break;
         }
         return result;
@@ -291,13 +293,16 @@ private:
     }
 
     // Return empty SOA response if question type is not A, AAAA or HTTPS
-    static CreateResponseResult create_address_or_soa_response(
-            const ldns_pkt *request, const ldns_pkt *original_response, const DnsProxySettings *settings) {
+    static CreateResponseResult create_address_or_soa_response(const ldns_pkt *request,
+            const ldns_pkt *original_response, const DnsProxySettings *settings, bool force_unspecified_address) {
         ldns_rr *question = ldns_rr_list_rr(ldns_pkt_question(request), 0);
         ldns_rr_type type = ldns_rr_get_type(question);
 
         switch (type) {
         case LDNS_RR_TYPE_A: {
+            if (force_unspecified_address) {
+                return create_arecord_response(request, settings, {"0.0.0.0"});
+            }
             if (!settings->custom_blocking_ipv4.empty()) {
                 assert(utils::is_valid_ip4(settings->custom_blocking_ipv4));
                 return create_arecord_response(request, settings, {settings->custom_blocking_ipv4.c_str()});
@@ -308,6 +313,9 @@ private:
             return create_soa_response(request, settings, SOA_RETRY_DEFAULT);
         }
         case LDNS_RR_TYPE_AAAA: {
+            if (force_unspecified_address) {
+                return create_aaaarecord_response(request, settings, {"::"});
+            }
             if (!settings->custom_blocking_ipv6.empty()) {
                 assert(utils::is_valid_ip6(settings->custom_blocking_ipv6));
                 return create_aaaarecord_response(request, settings, {settings->custom_blocking_ipv6.c_str()});

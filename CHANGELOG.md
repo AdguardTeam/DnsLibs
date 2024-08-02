@@ -1,5 +1,12 @@
 # Changelog
 
+* [Feature] Added a new blocking mode: `UNSPECIFIED_ADDRESS`. The new mode should be made selectable in the UI.
+    * [Android] See `com.adguard.dnslibs.proxy.DnsProxySettings.BlockingMode#UNSPECIFIED_ADDRESS`.
+    * [Apple] See `AGBM_UNSPECIFIED_ADDRESS`.
+    * [C API] See `AGBM_UNSPECIFIED_ADDRESS`.
+ 
+* [Feature] The default blocking mode on Windows changed to `UNSPECIFIED_ADDRESS`. The default should also be updated in the Windows UI.
+
 * [Changed] Removed `ag::dns::OutboundProxySettings::ignore_if_unavailable`. Also removed the corresponding fields from platform-specific adapters.
 
 ## V2.4

@@ -22,7 +22,7 @@ namespace Adguard.Dns
 		/// <summary>
 		/// The current API version hash with which the ProxyServer was tested
 		/// </summary>
-		private const string API_VERSION_HASH = "6aff8ec5ce48c04e1ca91a0d5653298a12c59508dc2c984bf2c8fd3d237efe7f";
+		private const string API_VERSION_HASH = "eba3b9b395fdf60599031bd4b7567d05d0e9b940d766cbd6bc10e09b57ba3f81";
 
         #endregion
 
@@ -1129,7 +1129,13 @@ namespace Adguard.Dns
             /// a custom blocking address, if it is specified, or
             /// an empty SOA response if request type is not A/AAAA.
             /// </summary>
-            AGBM_ADDRESS
+            AGBM_ADDRESS,
+
+            /// <summary>
+            /// Respond with an address that is all zeroes regardless of the custom blocking address setting,
+            /// or an empty SOA response if request type is not A/AAAA.
+            /// </summary>
+            AGBM_UNSPECIFIED_ADDRESS
         }
 
         /// <summary>

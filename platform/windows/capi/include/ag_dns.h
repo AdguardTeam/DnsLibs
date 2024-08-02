@@ -197,6 +197,11 @@ typedef enum {
      * an empty SOA response if request type is not A/AAAA.
      */
     AGBM_ADDRESS,
+    /**
+     * Respond with an address that is all zeroes regardless of the custom blocking address setting,
+     * or an empty SOA response if request type is not A/AAAA.
+     */
+    AGBM_UNSPECIFIED_ADDRESS,
 } ag_dnsproxy_blocking_mode;
 
 /**

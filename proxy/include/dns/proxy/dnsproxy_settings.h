@@ -43,6 +43,11 @@ enum class DnsProxyBlockingMode {
      * an empty SOA response if request type is not A/AAAA.
      */
     ADDRESS,
+    /**
+     * Respond with an address that is all zeroes regardless of the custom blocking address setting,
+     * or an empty SOA response if request type is not A/AAAA.
+     */
+    UNSPECIFIED_ADDRESS,
 };
 
 /**
