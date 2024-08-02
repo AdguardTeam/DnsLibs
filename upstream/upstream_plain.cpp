@@ -13,8 +13,8 @@ namespace ag::dns {
 PlainUpstream::PlainUpstream(const UpstreamOptions &opts, const UpstreamFactoryConfig &config)
         : Upstream(opts, config)
         , m_log(AG_FMT("Plain upstream ({})", opts.address))
-        , m_prefer_tcp{}
-        , m_address{}
+        , m_prefer_tcp{false}
+        , m_prefer_udp{false}
         , m_shutdown_guard(std::make_shared<bool>(true)) {
 }
 

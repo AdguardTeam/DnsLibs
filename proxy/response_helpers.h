@@ -125,6 +125,10 @@ public:
             ldns_pkt *result = create_response_by_request(request);
             ldns_pkt_set_rcode(result, rewritten_info->rcode);
             for (auto &rr : rewritten_info->rrs) {
+                if (ldns_rr_get_type(rr.get()) != LDNS_RR_TYPE_CNAME
+                        && ldns_rr_get_type(rr.get()) != ldns_rr_get_type(question)) {
+                    continue;
+                }
                 // If this is a CNAME rewrite, then we shouldn't replace the owner
                 // of non-CNAME records for the rewritten name.
                 if (!rewritten_info->cname.has_value() || ldns_rr_get_type(rr.get()) == LDNS_RR_TYPE_CNAME) {

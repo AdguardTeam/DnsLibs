@@ -512,20 +512,6 @@ static AdblockModifiersMatchStatus match_adblock_modifiers(
         }
     }
 
-    if (info.props.test(DnsFilter::DARP_DNSREWRITE)) {
-        // check if the request's type corresponds to the $dnsrewrite rule's type
-        std::optional<rule_utils::DnsrewriteInfo> &dnsrewrite = info.params->dnsrewrite;
-        if (dnsrewrite.has_value()) {
-            if ((dnsrewrite->rrtype == LDNS_RR_TYPE_A && ctx.rr_type != LDNS_RR_TYPE_A)
-                    || (dnsrewrite->rrtype == LDNS_RR_TYPE_AAAA && ctx.rr_type != LDNS_RR_TYPE_AAAA)
-                    || (dnsrewrite->rrtype == LDNS_RR_TYPE_PTR && ctx.rr_type != LDNS_RR_TYPE_PTR)
-                    || (dnsrewrite->rrtype == LDNS_RR_TYPE_CNAME && ctx.rr_type != LDNS_RR_TYPE_A
-                            && ctx.rr_type != LDNS_RR_TYPE_AAAA)) {
-                return AMMS_NOT_MATCHED;
-            }
-        }
-    }
-
     return AMMS_MATCH_CANDIDATE;
 }
 

@@ -428,6 +428,7 @@ TEST_F(DnsProxyTest, TestDnstypeReply) {
 
 TEST_F(DnsProxyTest, TestDnsrewriteRule) {
     DnsProxySettings settings = make_dnsproxy_settings();
+    settings.blocked_response_ttl_secs = 4242;
     settings.filter_params = {{{1,
             "@@example.com$important\n"
             "example.com$dnsrewrite=1.2.3.4\n"
@@ -447,8 +448,24 @@ TEST_F(DnsProxyTest, TestDnsrewriteRule) {
     ldns_pkt_ptr response;
     ASSERT_NO_FATAL_FAILURE(perform_request(*m_proxy, create_request("example.com", LDNS_RR_TYPE_A, LDNS_RD), response));
     ASSERT_EQ(last_event.rules.size(), 3);
-    ASSERT_EQ(ldns_pkt_ancount(response.get()), 2);
     ASSERT_EQ(ldns_pkt_get_rcode(response.get()), LDNS_RCODE_NOERROR);
+    ASSERT_EQ(ldns_pkt_ancount(response.get()), 1);
+
+    ag::UniquePtr<char, &free> rrstr{ldns_rr2str(ldns_rr_list_rr(ldns_pkt_answer(response.get()), 0))};
+    ASSERT_STREQ("example.com.\t4242\tIN\tA\t100.200.200.100\n", rrstr.get());
+
+    ASSERT_NO_FATAL_FAILURE(perform_request(*m_proxy, create_request("example.com", LDNS_RR_TYPE_MX, LDNS_RD), response));
+    ASSERT_EQ(last_event.rules.size(), 3);
+    ASSERT_EQ(ldns_pkt_get_rcode(response.get()), LDNS_RCODE_NOERROR);
+    ASSERT_EQ(ldns_pkt_ancount(response.get()), 1);
+
+    rrstr.reset(ldns_rr2str(ldns_rr_list_rr(ldns_pkt_answer(response.get()), 0)));
+    ASSERT_STREQ("example.com.\t4242\tIN\tMX\t42 example.mail.\n", rrstr.get());
+
+    ASSERT_NO_FATAL_FAILURE(perform_request(*m_proxy, create_request("example.com", LDNS_RR_TYPE_AAAA, LDNS_RD), response));
+    ASSERT_EQ(last_event.rules.size(), 3);
+    ASSERT_EQ(ldns_pkt_get_rcode(response.get()), LDNS_RCODE_NOERROR);
+    ASSERT_EQ(ldns_pkt_ancount(response.get()), 0);
 }
 
 TEST_F(DnsProxyTest, TestDnsrewriteCname) {
