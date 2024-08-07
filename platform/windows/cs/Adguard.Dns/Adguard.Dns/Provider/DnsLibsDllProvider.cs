@@ -13,12 +13,13 @@ namespace Adguard.Dns.Provider
 	{
 		private const string WIN32_DNS_LIBS_DLL_NAME = @"x86\AdguardDns.dll";
 		private const string WIN64_DNS_LIBS_DLL_NAME = @"x64\AdguardDns.dll";
+        private const string ARM64_DNS_LIBS_DLL_NAME = @"Arm64\AdguardDns.dll";
 
-		/// <summary>
-		/// The main dll names were changed to "win32" versions for all kinds of architectures
-		/// due to https://jira.adguard.com/browse/AG-17629
-		/// </summary>
-		private static readonly Dictionary<ArchitectureLocal, string> DNS_LIBS_DLL_PATHES_MAP =
+        /// <summary>
+        /// The main dll names were changed to "win32" versions for all kinds of architectures
+        /// due to https://jira.adguard.com/browse/AG-17629
+        /// </summary>
+        private static readonly Dictionary<ArchitectureLocal, string> DNS_LIBS_DLL_PATHES_MAP =
 			new Dictionary<ArchitectureLocal, string>
 			{
 				{
@@ -43,7 +44,7 @@ namespace Adguard.Dns.Provider
 					ArchitectureLocal.Arm64,
 						Path.Combine(
 							AppDomain.CurrentDomain.BaseDirectory,
-							WIN64_DNS_LIBS_DLL_NAME)
+                            ARM64_DNS_LIBS_DLL_NAME)
 				}
 			};
 

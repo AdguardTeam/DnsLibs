@@ -35,4 +35,5 @@ third-party/boringssl/boringssl/go.mod
 # Win libs
 x64/
 x86/
+Arm64/
 signtool.log

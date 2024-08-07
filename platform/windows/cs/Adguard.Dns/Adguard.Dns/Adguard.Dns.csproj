@@ -107,6 +107,7 @@
   <ItemGroup>
     <None Include="x86\**" CopyToOutputDirectory="Always" />
     <None Include="x64\**" CopyToOutputDirectory="Always" />
+    <None Include="Arm64\**" CopyToOutputDirectory="Always" />
     <None Include="packages.config" />
   </ItemGroup>
   <!-- Post build script -->

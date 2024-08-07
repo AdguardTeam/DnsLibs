@@ -21,6 +21,8 @@
     <file src="../DnsLibs/x86/AdguardDns.pdb" target="build/x86"/>
     <file src="../DnsLibs/x64/AdguardDns.dll" target="build/x64"/>
     <file src="../DnsLibs/x64/AdguardDns.pdb" target="build/x64"/>
+    <file src="../DnsLibs/Arm64/AdguardDns.dll" target="build/Arm64"/>
+    <file src="../DnsLibs/Arm64/AdguardDns.pdb" target="build/Arm64"/>
     <file src="../DnsLibs/Adguard.Dns*.nrmap" target="nrmap"/>
     <!-- Targets -->
     <file src="Properties/Adguard.Dns.targets" target="build"/>

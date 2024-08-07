@@ -19,6 +19,11 @@ COPIED_X64_FILES = [
     r"x64\AdguardDns.pdb"
 ]
 
+COPIED_ARM64_FILES = [  
+    r"Arm64\AdguardDns.dll",
+    r"Arm64\AdguardDns.pdb"
+]
+
 if __name__ == '__main__':
     try:
         print("Starting AdguardDns post build event script")
@@ -26,6 +31,7 @@ if __name__ == '__main__':
         helper.copy_to_output(args, COPIED_FILES, OUTPUT_DIR_NAME)
         helper.copy_to_output(args, COPIED_X86_FILES, os.path.join(OUTPUT_DIR_NAME, 'x86'))
         helper.copy_to_output(args, COPIED_X64_FILES, os.path.join(OUTPUT_DIR_NAME, 'x64'))
+        helper.copy_to_output(args, COPIED_ARM64_FILES, os.path.join(OUTPUT_DIR_NAME, 'Arm64'))
 
         print("Adguard post build event script has been completed successfully")
 
