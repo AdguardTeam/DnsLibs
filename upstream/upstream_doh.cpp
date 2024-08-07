@@ -1140,6 +1140,7 @@ ag::coro::Task<ag::Error<ag::dns::DnsError>> ag::dns::DohUpstream::Http3Connecti
     SSL_CTX_set_cert_verify_callback(ssl_ctx.get(), on_certificate_verify, this);
     TlsSessionCache::prepare_ssl_ctx(ssl_ctx.get());
 #ifdef OPENSSL_IS_BORINGSSL
+    SSL_CTX_set_permute_extensions(ssl_ctx.get(), true);
     if (0 != ngtcp2_crypto_boringssl_configure_client_context(ssl_ctx.get()))
 #else
     if (0 != ngtcp2_crypto_quictls_configure_client_context(ssl_ctx.get()))

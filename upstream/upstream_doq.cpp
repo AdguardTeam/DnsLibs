@@ -855,6 +855,9 @@ int DoqUpstream::init_ssl_ctx() {
     // setup our verifier
     SSL_CTX_set_verify(m_ssl_ctx.get(), SSL_VERIFY_PEER, nullptr);
     SSL_CTX_set_cert_verify_callback(m_ssl_ctx.get(), DoqUpstream::ssl_verify_callback, nullptr);
+#ifdef OPENSSL_IS_BORINGSSL
+    SSL_CTX_set_permute_extensions(m_ssl_ctx.get(), true);
+#endif // OPENSSL_IS_BORINGSSL
     TlsSessionCache::prepare_ssl_ctx(m_ssl_ctx.get());
     return 0;
 }

@@ -36,6 +36,9 @@ Error<TlsCodec::TlsError> TlsCodec::connect(const std::string &sni, std::vector<
     ag::UniquePtr<SSL_CTX, &SSL_CTX_free> ctx{SSL_CTX_new(TLS_client_method())};
     SSL_CTX_set_verify(ctx.get(), SSL_VERIFY_PEER, nullptr);
     SSL_CTX_set_cert_verify_callback(ctx.get(), ssl_verify_callback, this);
+#ifdef OPENSSL_IS_BORINGSSL
+    SSL_CTX_set_permute_extensions(ctx.get(), true);
+#endif // OPENSSL_IS_BORINGSSL
     TlsSessionCache::prepare_ssl_ctx(ctx.get());
 
     m_ssl.reset(SSL_new(ctx.get()));

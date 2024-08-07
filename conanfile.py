@@ -35,7 +35,7 @@ class DnsLibsConan(ConanFile):
         self.requires("klib/2021-04-06@adguard_team/native_libs_common", transitive_headers=True)
         self.requires("ldns/2021-03-29@adguard_team/native_libs_common", transitive_headers=True)
         self.requires("magic_enum/0.9.5", transitive_headers=True)
-        self.requires("native_libs_common/6.1.8@adguard_team/native_libs_common", transitive_headers=True)
+        self.requires("native_libs_common/6.1.11@adguard_team/native_libs_common", transitive_headers=True)
         self.requires("ngtcp2/1.0.1@adguard_team/native_libs_common", transitive_headers=True)
         self.requires("pcre2/10.37@adguard_team/native_libs_common", transitive_headers=True)
         self.requires("tldregistry/2022-12-26@adguard_team/native_libs_common", transitive_headers=True)
