@@ -37,3 +37,6 @@ x64/
 x86/
 Arm64/
 signtool.log
+
+conan/
+cmake/conan_provider.cmake

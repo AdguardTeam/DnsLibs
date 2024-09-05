@@ -1,7 +1,7 @@
 # For more information about using CMake with Android Studio, read the
 # documentation: https://d.android.com/studio/projects/add-native-code.html
 cmake_minimum_required(VERSION 3.24)
-set(CMAKE_PROJECT_TOP_LEVEL_INCLUDES "../../../../cmake/conan_provider.cmake")
+set(CMAKE_PROJECT_TOP_LEVEL_INCLUDES "../../../../cmake/conan_bootstrap.cmake")
 project(jni C CXX)
 
 set(CMAKE_C_STANDARD 11)
