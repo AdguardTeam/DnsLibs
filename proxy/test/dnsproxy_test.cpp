@@ -371,6 +371,21 @@ TEST_F(DnsProxyTest, TestIpv6Blocking) {
     ASSERT_EQ(status, LDNS_STATUS_OK);
 }
 
+TEST_F(DnsProxyTest, DdrBlocking) {
+    DnsProxySettings settings = make_dnsproxy_settings();
+
+    auto [ret, err] = m_proxy->init(settings, {});
+    ASSERT_TRUE(ret) << err->str();
+
+    ldns_pkt_ptr pkt = create_request("_dns.resolver.arpa", LDNS_RR_TYPE_SVCB, LDNS_RD);
+    ldns_pkt_ptr response;
+    ASSERT_NO_FATAL_FAILURE(perform_request(*m_proxy, pkt, response));
+
+    ASSERT_EQ(ldns_pkt_ancount(response.get()), 0);
+    ASSERT_EQ(ldns_pkt_get_rcode(response.get()), LDNS_RCODE_NOERROR);
+    ASSERT_EQ(ldns_pkt_nscount(response.get()), 1);
+}
+
 TEST_F(DnsProxyTest, TestCnameBlocking) {
     DnsProxySettings settings = make_dnsproxy_settings();
     settings.filter_params = {{{1, "cname_blocking_test_filter.txt"}}};

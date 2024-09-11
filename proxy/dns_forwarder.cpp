@@ -36,6 +36,7 @@ using std::chrono::duration_cast;
 namespace ag::dns {
 
 static constexpr std::string_view MOZILLA_DOH_HOST = "use-application-dns.net.";
+static constexpr std::string_view RFC9462_DISCOVERY_HOST = "_dns.resolver.arpa.";
 
 static constexpr uint32_t SOA_RETRY_IPV6_BLOCK = 60;
 
@@ -588,7 +589,7 @@ coro::Task<DnsForwarder::HandleMessageResult> DnsForwarder::handle_message_inter
     const ldns_rr_type type = ldns_rr_get_type(question);
 
     // disable Mozilla DoH
-    if ((type == LDNS_RR_TYPE_A || type == LDNS_RR_TYPE_AAAA) && 0 == strcmp(domain.get(), MOZILLA_DOH_HOST.data())) {
+    if ((type == LDNS_RR_TYPE_A || type == LDNS_RR_TYPE_AAAA) && MOZILLA_DOH_HOST == domain.get()) {
         auto response = std::get<ldns_pkt_ptr>(ResponseHelpers::create_nxdomain_response(request.get(), m_settings));
         log_packet(m_log, response.get(), "Mozilla DOH blocking response");
         Uint8Vector raw_response = transform_response_to_raw_data(response.get());
@@ -623,6 +624,19 @@ coro::Task<DnsForwarder::HandleMessageResult> DnsForwarder::handle_message_inter
             auto soa_response = std::get<ldns_pkt_ptr>(
                     ResponseHelpers::create_soa_response(ctx.request.get(), m_settings, SOA_RETRY_IPV6_BLOCK));
             log_packet(m_log, soa_response.get(), "IPv6 blocking response");
+            finalize_processed_event(event, ctx.request.get(), soa_response.get(), nullptr, std::nullopt);
+            co_return {transform_response_to_raw_data(soa_response.get()), std::move(event)};
+        }
+
+        // Disable Discovery of Designated Resolvers (RFC9462):
+        // this will lead clients to use the encrypted version of the upstream resolver directly,
+        // defeating the purpose of the DNS proxy.
+        if (LDNS_RR_TYPE_SVCB == type && RFC9462_DISCOVERY_HOST == domain.get()
+                && (!filter_response || ldns_pkt_get_rcode(filter_response.get()) == LDNS_RCODE_NOERROR)) {
+            dbglog_fid(m_log, ctx.request.get(), "SVCB query for {} blocked (DDR blocking)", domain.get());
+            auto soa_response = std::get<ldns_pkt_ptr>(
+                    ResponseHelpers::create_soa_response(ctx.request.get(), m_settings, SOA_RETRY_IPV6_BLOCK));
+            log_packet(m_log, soa_response.get(), "DDR blocking response");
             finalize_processed_event(event, ctx.request.get(), soa_response.get(), nullptr, std::nullopt);
             co_return {transform_response_to_raw_data(soa_response.get()), std::move(event)};
         }
