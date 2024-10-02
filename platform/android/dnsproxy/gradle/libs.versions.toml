@@ -1,0 +1,28 @@
+[versions]
+agp = "8.6.1"
+annotations = "23.0.0"
+dnsjava = "2.1.9"
+junit = "4.13.2"
+junitVersion = "1.2.1"
+espressoCore = "3.6.1"
+appcompat = "1.7.0"
+material = "1.12.0"
+rules = "1.6.1"
+slf4jApi = "1.7.30"
+
+[libraries]
+annotations = { module = "org.jetbrains:annotations", version.ref = "annotations" }
+dnsjava = { module = "dnsjava:dnsjava", version.ref = "dnsjava" }
+junit = { group = "junit", name = "junit", version.ref = "junit" }
+ext-junit = { group = "androidx.test.ext", name = "junit", version.ref = "junitVersion" }
+espresso-core = { group = "androidx.test.espresso", name = "espresso-core", version.ref = "espressoCore" }
+appcompat = { group = "androidx.appcompat", name = "appcompat", version.ref = "appcompat" }
+material = { group = "com.google.android.material", name = "material", version.ref = "material" }
+rules = { module = "androidx.test:rules", version.ref = "rules" }
+slf4j-android = { module = "org.slf4j:slf4j-android", version.ref = "slf4jApi" }
+slf4j-api = { module = "org.slf4j:slf4j-api", version.ref = "slf4jApi" }
+
+[plugins]
+android-application = { id = "com.android.application", version.ref = "agp" }
+android-library = { id = "com.android.library", version.ref = "agp" }
+

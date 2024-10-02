@@ -158,12 +158,12 @@ public class DnsStamp {
 
     /**
      * A URL representation of this stamp which can be used
-     * as a valid {@link com.adguard.dnslibs.proxy.UpstreamSettings} address.
+     * as a valid {@link UpstreamSettings} address.
      */
     public native String getPrettyUrl();
     /**
      * A URL representation of this stamp which is prettier, but can NOT be used
-     * as a valid {@link com.adguard.dnslibs.proxy.UpstreamSettings} address.
+     * as a valid {@link UpstreamSettings} address.
      */
     public native String getPrettierUrl();
 

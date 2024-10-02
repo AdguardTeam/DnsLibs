@@ -1224,7 +1224,7 @@ TEST_F(DnsProxyTest, HttpsBlockingModeCustomAddressBlockEch) {
 
 TEST_F(DnsProxyTest, HttpsBlockingModeCustomAddressDoesntAffectOtherFields) {
     DnsProxySettings settings = make_dnsproxy_settings();
-    settings.filter_params = {{{1, "crypto.cloudflare.com", true}}};
+    settings.filter_params = {{{1, "adguard-dns.com", true}}};
     settings.adblock_rules_blocking_mode = DnsProxyBlockingMode::ADDRESS;
     settings.hosts_rules_blocking_mode = DnsProxyBlockingMode::ADDRESS;
     settings.custom_blocking_ipv4 = "4.3.2.1";
@@ -1236,7 +1236,7 @@ TEST_F(DnsProxyTest, HttpsBlockingModeCustomAddressDoesntAffectOtherFields) {
     ldns_pkt_ptr res;
 
     ASSERT_NO_FATAL_FAILURE(
-            perform_request(*m_proxy, create_request("crypto.cloudflare.com", LDNS_RR_TYPE_HTTPS, LDNS_RD),res));
+            perform_request(*m_proxy, create_request("adguard-dns.com", LDNS_RR_TYPE_HTTPS, LDNS_RD),res));
     ASSERT_EQ(LDNS_RCODE_NOERROR, ldns_pkt_get_rcode(res.get()));
     ASSERT_EQ(1, ldns_pkt_ancount(res.get()));
     auto rdfs = get_concat_rdfs_as_str(res.get());

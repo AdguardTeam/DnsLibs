@@ -1,18 +1,19 @@
-apply plugin: 'com.android.library'
+plugins {
+    alias(libs.plugins.android.library)
+}
 
 version = [name: '2.5.47', code: 578]
 
 android {
-    namespace = "com.adguard.dnslibs"
-    ndkVersion "26.2.11394342"
-    compileSdkVersion 29
+    namespace 'com.adguard.dnslibs'
+    ndkVersion '26.2.11394342'
+    compileSdk 34
 
     defaultConfig {
-        minSdkVersion 24
-        targetSdkVersion 29
-        versionCode version.code
-        versionName version.name
+        minSdk 24
+
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
+        consumerProguardFiles "consumer-rules.pro"
 
         externalNativeBuild {
             cmake {
@@ -53,12 +54,13 @@ android {
 }
 
 dependencies {
-    implementation 'org.slf4j:slf4j-api:1.7.25'
-    implementation 'org.jetbrains:annotations:15.0'
+    implementation libs.slf4j.api
+    implementation libs.annotations
 
-    androidTestImplementation 'androidx.test.ext:junit:1.1.1'
-    androidTestImplementation 'androidx.test:rules:1.2.0'
-    androidTestImplementation 'androidx.test.espresso:espresso-core:3.2.0'
-    androidTestImplementation 'dnsjava:dnsjava:2.1.9'
-    androidTestImplementation 'org.slf4j:slf4j-android:1.7.25'
+    testImplementation libs.junit
+    androidTestImplementation libs.ext.junit
+    androidTestImplementation libs.espresso.core
+    androidTestImplementation libs.slf4j.android
+    androidTestImplementation libs.dnsjava
+    androidTestImplementation libs.rules
 }

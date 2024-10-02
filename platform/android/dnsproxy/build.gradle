@@ -1,29 +1,4 @@
-buildscript {
-    // Apply some addional properties for buildscript section
-    try { apply from: 'buildscript.additional.gradle', to: buildscript } catch (Exception ignored) { }
-
-    repositories {
-        google()
-        jcenter()
-    }
-
-    dependencies {
-        classpath 'com.android.tools.build:gradle:7.4.2'
-    }
+// Top-level build file where you can add configuration options common to all sub-projects/modules.
+plugins {
+    alias(libs.plugins.android.library) apply false
 }
-
-// Apply some additional logic on demand
-try { apply from: 'additional.gradle' } catch (Exception ignored) { }
-
-allprojects {
-    repositories {
-        google()
-        jcenter()
-    }
-}
-
-// FIXME this causes Android Studio to always recompile the native library each time something is being run
-//task clean(type: Delete) {
-//    delete rootProject.buildDir
-//    rootProject.allprojects { delete new File("${it.projectDir}/.cxx") }
-//}
