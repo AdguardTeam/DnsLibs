@@ -2,7 +2,7 @@ plugins {
     alias(libs.plugins.android.library)
 }
 
-version = [name: '2.5.47', code: 578]
+version = [name: '2.5.48', code: 579]
 
 android {
     namespace 'com.adguard.dnslibs'
