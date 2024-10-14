@@ -47,6 +47,7 @@ private:
     static void on_timeout(uv_timer_t *handle);
     static void on_write(uv_write_t *req, int status);
     static void allocate_read(uv_handle_t *handle, size_t size, uv_buf_t *buf);
+    int init_native_handle(const ConnectParameters& params);
 };
 
 }

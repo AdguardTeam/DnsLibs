@@ -27,6 +27,15 @@ std::optional<evutil_socket_t> TcpStream::get_fd() const {
     return std::nullopt;
 }
 
+int TcpStream::init_native_handle(const ConnectParameters& params) {
+    auto peer = std::get_if<SocketAddress>(&params.peer);
+    if (peer && !std::holds_alternative<std::monostate>(m_parameters.outbound_interface)) {
+        return uv_tcp_init_ex(params.loop->handle(), m_tcp->raw(), (uint8_t)peer->c_sockaddr()->sa_family);
+    } else {
+        return uv_tcp_init(params.loop->handle(), m_tcp->raw());
+    }
+}
+
 Error<SocketError> TcpStream::connect(ConnectParameters params) {
     log_stream(this, trace, "{}", params.peer);
 
@@ -41,7 +50,7 @@ Error<SocketError> TcpStream::connect(ConnectParameters params) {
     }
 
     m_tcp = Uv<uv_tcp_t>::create_with_parent(this);
-    if (int err = uv_tcp_init(params.loop->handle(), m_tcp->raw())) {
+    if (int err = init_native_handle(params)) {
         auto error = make_error(uv_errno_t(err));
         return make_error(SocketError::AE_SOCK_ERROR, "Failed to create socket", error);
     }
