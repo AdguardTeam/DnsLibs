@@ -439,3 +439,5 @@ commit_hash:
     hash: "cae11f4a78a90c872f107d1a445f5dddb2de2056"
   "2.5.48":
     hash: "91570921a8e84d34d341485bdd202085953a5904"
+  "2.5.49":
+    hash: "c0a7deac3a0fc0342301620f26e41326a447d354"
