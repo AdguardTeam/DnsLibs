@@ -3,6 +3,7 @@
 #include <uv.h>
 #include <memory>
 #include <string>
+#include <type_traits>
 
 #include "common/logger.h"
 #include "common/utils.h"
@@ -63,6 +64,15 @@ public:
 
     [[nodiscard]] UvT *operator->() {
         return m_handle;
+    }
+
+    /**
+     * Mark the wrapped libuv handle as uninitialized -- `uv_close` will NOT be called
+     * upon destruction. This function shoud be called when `uv_*_init()` fails,
+     * immediately followed by destruction of this wrapper.
+     */
+    void mark_uninit() {
+        m_handle->type = UV_UNKNOWN_HANDLE;
     }
 
     ~Uv() {

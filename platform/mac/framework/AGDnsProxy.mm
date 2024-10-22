@@ -1284,7 +1284,8 @@ static ProxySettingsOverrides convertProxySettingsOverrides(const AGDnsProxySett
     if (config.filters != nil) {
         settings.filter_params.filters.reserve([config.filters count]);
         for (AGDnsFilterParams *fp in config.filters) {
-            dbglog(*self->log, "Filter id={} {}={}", fp.id, fp.inMemory ? "content" : "path", fp.data.UTF8String);
+            dbglog(*self->log, "Filter id={} {}={}", fp.id, fp.inMemory ? "content" : "path",
+                    fp.inMemory ? AG_FMT("{} bytes", fp.data.length) : fp.data.UTF8String);
 
             settings.filter_params.filters.emplace_back(
                 DnsFilter::FilterParams{(int32_t) fp.id, fp.data.UTF8String, (bool) fp.inMemory});

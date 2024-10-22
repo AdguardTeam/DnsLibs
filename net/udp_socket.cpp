@@ -42,6 +42,8 @@ Error<SocketError> UdpSocket::connect(ConnectParameters params) {
 
     m_udp = Uv<uv_udp_t>::create_with_parent(this);
     if (int err = uv_udp_init_ex(params.loop->handle(), m_udp->raw(), (uint8_t)peer->c_sockaddr()->sa_family); err != 0) {
+        m_udp->mark_uninit();
+        m_udp.reset();
         return make_error(SocketError::AE_SOCK_ERROR, "Failed to initialize UDP handle", make_error(uv_errno_t(err)));
     }
 
@@ -51,12 +53,11 @@ Error<SocketError> UdpSocket::connect(ConnectParameters params) {
         return make_error(SocketError::AE_SOCK_ERROR, "Failed to initialize timer", error);
     }
 
-    uv_os_fd_t fd;
-    uv_fileno((uv_handle_t *) m_udp->raw(), &fd);
-    if (Error<SocketError> err; m_prepare_fd.func != nullptr
-            && (err = m_prepare_fd.func(
-                        m_prepare_fd.arg, (evutil_socket_t) fd, *peer, m_parameters.outbound_interface))) {
-        return make_error(SocketError::AE_PREPARE_ERROR, AG_FMT("Failed to prepare descriptor: {}", err->str()));
+    if (uv_os_fd_t fd; m_prepare_fd.func != nullptr && 0 == uv_fileno((uv_handle_t *) m_udp->raw(), &fd)) {
+        if (Error<SocketError> err = m_prepare_fd.func(
+                    m_prepare_fd.arg, (evutil_socket_t) fd, *peer, m_parameters.outbound_interface)) {
+            return make_error(SocketError::AE_PREPARE_ERROR, AG_FMT("Failed to prepare descriptor: {}", err->str()));
+        }
     }
 
     Error<SocketError> sock_err;
@@ -104,9 +105,6 @@ Error<SocketError> UdpSocket::send(Uint8View data) {
     Write *wr = new Write{.buf{data.begin(), data.end()}};
     wr->req.data = wr;
     uv_buf_t uv_buf = uv_buf_init((char *)wr->buf.data(), wr->buf.size());
-    uv_os_fd_t fd;
-    uv_fileno((uv_handle_t *) m_udp->raw(), &fd);
-    log_sock(this, trace, "Writing {} bytes to {}", data.size(), fd);
     if (int err = uv_udp_send(&wr->req, m_udp->raw(), &uv_buf, 1, nullptr, &Write::on_write)) {
         Write::on_write(&wr->req, err);
         auto error = make_error(uv_errno_t(err));

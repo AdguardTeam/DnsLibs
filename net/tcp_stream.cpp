@@ -27,15 +27,6 @@ std::optional<evutil_socket_t> TcpStream::get_fd() const {
     return std::nullopt;
 }
 
-int TcpStream::init_native_handle(const ConnectParameters& params) {
-    auto peer = std::get_if<SocketAddress>(&params.peer);
-    if (peer && !std::holds_alternative<std::monostate>(m_parameters.outbound_interface)) {
-        return uv_tcp_init_ex(params.loop->handle(), m_tcp->raw(), (uint8_t)peer->c_sockaddr()->sa_family);
-    } else {
-        return uv_tcp_init(params.loop->handle(), m_tcp->raw());
-    }
-}
-
 Error<SocketError> TcpStream::connect(ConnectParameters params) {
     log_stream(this, trace, "{}", params.peer);
 
@@ -50,7 +41,9 @@ Error<SocketError> TcpStream::connect(ConnectParameters params) {
     }
 
     m_tcp = Uv<uv_tcp_t>::create_with_parent(this);
-    if (int err = init_native_handle(params)) {
+    if (int err = uv_tcp_init_ex(params.loop->handle(), m_tcp->raw(), (uint8_t)peer->c_sockaddr()->sa_family)) {
+        m_tcp->mark_uninit();
+        m_tcp.reset();
         auto error = make_error(uv_errno_t(err));
         return make_error(SocketError::AE_SOCK_ERROR, "Failed to create socket", error);
     }
@@ -61,12 +54,11 @@ Error<SocketError> TcpStream::connect(ConnectParameters params) {
         return make_error(SocketError::AE_SOCK_ERROR, "Failed to create timer", error);
     }
 
-    uv_os_fd_t fd;
-    uv_fileno((uv_handle_t *) m_tcp->raw(), &fd);
-    if (Error<SocketError> err; m_prepare_fd.func != nullptr
-            && (err = m_prepare_fd.func(
-                        m_prepare_fd.arg, (evutil_socket_t) fd, *peer, m_parameters.outbound_interface))) {
-        return make_error(SocketError::AE_PREPARE_ERROR, AG_FMT("Failed to prepare descriptor: {}", err->str()));
+    if (uv_os_fd_t fd; m_prepare_fd.func != nullptr && 0 == uv_fileno((uv_handle_t *) m_tcp->raw(), &fd)) {
+        if (Error<SocketError> err = m_prepare_fd.func(
+                    m_prepare_fd.arg, (evutil_socket_t) fd, *peer, m_parameters.outbound_interface)) {
+            return make_error(SocketError::AE_PREPARE_ERROR, AG_FMT("Failed to prepare descriptor: {}", err->str()));
+        }
     }
 
     if (auto e = this->set_callbacks(params.callbacks); e) {
