@@ -31,6 +31,7 @@ static const DnsProxySettings DEFAULT_PROXY_SETTINGS = {
                         "*.lan",
                         // DNS Service Discovery
                         "lb._dns-sd._udp.*.in-addr.arpa",
+                        "*.service.arpa",
                         // Wi-Fi calling ePDG's
                         "epdg.epc.aptg.com.tw",
                         "epdg.epc.att.net",
