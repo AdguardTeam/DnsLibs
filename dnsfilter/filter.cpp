@@ -75,7 +75,7 @@ static void destroy_multi_index_table(kh_hash_to_indexes_t *table) {
 struct LeftoverEntry {
     // @note: each entry must contain either or both of shortcuts and regex
     std::vector<std::string> shortcuts; // list of extracted shortcuts
-    std::optional<Regex> regex; // compiled regex
+    std::optional<SimpleRegex> regex; // compiled regex
     uint32_t file_idx; // file index
 };
 
@@ -373,9 +373,9 @@ bool Filter::Impl::load_line(uint32_t file_idx, std::string_view line, void *arg
         CHECK_MEM(sizeof(LeftoverEntry));
         std::vector<std::string> shortcuts = std::move(rule->matching_parts);
         std::transform(shortcuts.begin(), shortcuts.end(), shortcuts.begin(), utils::to_lower);
-        std::optional<Regex> re = (rule->match_method == rule_utils::Rule::MMID_SHORTCUTS)
+        std::optional<SimpleRegex> re = (rule->match_method == rule_utils::Rule::MMID_SHORTCUTS)
                 ? std::nullopt
-                : std::make_optional(Regex(rule_utils::get_regex(*rule)));
+                : std::make_optional(SimpleRegex(rule_utils::get_regex(*rule)));
         assert(!shortcuts.empty() || re.has_value());
         for (auto &shortcut : shortcuts) {
             CHECK_MEM(shortcut.size() + sizeof(std::string));
@@ -552,12 +552,12 @@ static bool match_pattern(const rule_utils::Rule &rule, const Filter::MatchConte
         break;
     case rule_utils::Rule::MMID_SHORTCUTS_AND_REGEX:
         if (rule.matching_parts.empty() || match_shortcuts(rule.matching_parts, match_context.host)) {
-            Regex re(rule_utils::get_regex(rule));
+            SimpleRegex re(rule_utils::get_regex(rule));
             matched = re.match(match_context.host);
         }
         break;
     case rule_utils::Rule::MMID_REGEX: {
-        Regex re = Regex(rule_utils::get_regex(rule));
+        SimpleRegex re(rule_utils::get_regex(rule));
         matched = match_context.subdomains.end()
                 != std::find_if(match_context.subdomains.begin(), match_context.subdomains.end(),
                         [&re](std::string_view subdomain) {
@@ -743,7 +743,7 @@ void Filter::Impl::search_in_leftovers(MatchArg &match) const {
             continue;
         }
 
-        const std::optional<Regex> &re = entry.regex;
+        const std::optional<SimpleRegex> &re = entry.regex;
         if (!re.has_value() || re->match(match.ctx.host)) {
             match_by_file_position(match, entry.file_idx);
         }

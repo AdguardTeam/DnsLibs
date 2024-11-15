@@ -18,13 +18,13 @@ static constexpr std::string_view SKIPPABLE_PREFIXES[]
 static constexpr std::string_view SPECIAL_SUFFIXES[] = {"|", "^", "/"};
 static constexpr std::string_view SPECIAL_REGEX_CHARACTERS = "\\^$*+?.()|[]{}";
 
-static const Regex SHORTCUT_REGEXES[] = {
+static const SimpleRegex SHORTCUT_REGEXES[] = {
         // Strip all types of brackets
-        Regex("([^\\\\]*)\\([^\\\\]*\\)"),
-        Regex("([^\\\\]*)\\{[^\\\\]*\\}"),
-        Regex("([^\\\\]*)\\[[^\\\\]*\\]"),
+        SimpleRegex("([^\\\\]*)\\([^\\\\]*\\)"),
+        SimpleRegex("([^\\\\]*)\\{[^\\\\]*\\}"),
+        SimpleRegex("([^\\\\]*)\\[[^\\\\]*\\]"),
         // Strip some escaped characters
-        Regex("([^\\\\]*)\\[a-zA-Z]"),
+        SimpleRegex("([^\\\\]*)\\[a-zA-Z]"),
 };
 
 struct SupportedModifierDescriptor {
@@ -129,7 +129,7 @@ static constexpr std::string_view rule_type_mask[] = {
 };
 
 static bool is_domain_rule(std::string_view str) {
-    auto [head, tail] = ag::utils::split2_by(str, '#');
+    auto [head, tail] = ag::utils::split2_by(str, '#', false);
     if (rule_utils::is_domain_name(head) /* not trimmed */) {
         for (auto mask : rule_type_mask) {
             if (tail.starts_with(mask.substr(1))) {
@@ -534,9 +534,9 @@ static std::optional<rule_utils::Rule> parse_adblock_rule(std::string_view str, 
         } else {
 #define SPECIAL_CHAR_PLACEHOLDER "..."
             std::string text(str);
-            for (const Regex &re : SHORTCUT_REGEXES) {
+            for (const SimpleRegex &re : SHORTCUT_REGEXES) {
                 if (re.is_valid()) {
-                    text = re.replace(text, "$1" SPECIAL_CHAR_PLACEHOLDER);
+                    text = re.replace(text, "$1" SPECIAL_CHAR_PLACEHOLDER).value_or(text);
                 }
             }
 
@@ -553,7 +553,7 @@ static std::optional<rule_utils::Rule> parse_adblock_rule(std::string_view str, 
         }
 
         std::string re = rule_utils::get_regex(r);
-        if (!Regex(re).is_valid()) {
+        if (!SimpleRegex(re).is_valid()) {
             ru_dbglog(log, "Invalid regex: {}", re);
             return std::nullopt;
         }
