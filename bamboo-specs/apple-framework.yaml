@@ -23,6 +23,10 @@ DL - Mac tests and deploy:
         python3 -m venv venv
         source ./venv/bin/activate
         python3 -m pip install conan
+        
+        conan remote add --index 0 art ${bamboo_conanRepoUrl} || true
+        awk 'BEGIN{$1 = ENVIRON["bamboo_sshSecretKey"]; gsub(/\\n/,"\n"); print}' | ssh-add -
+        export GIT_SSH_COMMAND="ssh -o StrictHostKeyChecking=no"
 
         export DNS_LIBS_DIR="${PWD}"
         cd platform/mac
@@ -58,14 +62,16 @@ DL - Mac tests and deploy:
       scripts:
       - |-
         source ./venv/bin/activate
-        conan upload -r art -c '*' >> upload.txt 2>&1
+        conan remote login art "${bamboo_artifactoryUser}" --password "${bamboo_artifactoryPassword}" > upload.txt 2>&1
+        conan upload -r art -c '*' 1>&2
         echo conan upload finished with status $?
         conan remove -c "*"
         deactivate
         rm -rf venv
       description: Conan upload and cleanup
   requirements:
-  - macOS 11.0 or later
+    - ephemeral
+    - image: registry.int.agrd.dev/macos/sequoia-build-agent-xcode16.1:latest
   artifacts:
     -
       name: Upload Log
