@@ -26,7 +26,6 @@ DL - Mac tests and deploy:
         
         conan remote add --index 0 art ${bamboo_conanRepoUrl} || true
         awk 'BEGIN{$1 = ENVIRON["bamboo_sshSecretKey"]; gsub(/\\n/,"\n"); print}' | ssh-add -
-        export GIT_SSH_COMMAND="ssh -o StrictHostKeyChecking=no"
 
         export DNS_LIBS_DIR="${PWD}"
         cd platform/mac
