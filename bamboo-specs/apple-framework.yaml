@@ -25,7 +25,7 @@ DL - Mac tests and deploy:
         python3 -m pip install conan
         
         conan remote add --index 0 art ${bamboo_conanRepoUrl} || true
-        awk 'BEGIN{$1 = ENVIRON["bamboo_sshSecretKey"]; gsub(/\\n/,"\n"); print}' | ssh-add -
+        printf "%b\n" "${bamboo_sshSecretKey}" | ssh-add -
 
         export DNS_LIBS_DIR="${PWD}"
         cd platform/mac
