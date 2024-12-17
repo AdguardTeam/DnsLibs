@@ -13,12 +13,7 @@ stages:
 Generate documents:
   key: JOB1
   docker:
-    image: grumaxxx/docker_doxygen:0.3
-    volumes:
-      ${bamboo.working.directory}: ${bamboo.working.directory}
-      ${bamboo.tmp.directory}: ${bamboo.tmp.directory}
-      ${bamboo.git.cache.directory}: ${bamboo.git.cache.directory}
-      ${system.HOME}/.ssh: /root/.ssh
+    image: adguard/core-libs:2.4
     docker-run-arguments: [ ]
   tasks:
     - !include docker-clean.yaml
@@ -27,6 +22,9 @@ Generate documents:
         path: dns-libs
         force-clean-build: 'true'
         description: Checkout dns-libs
+    - checkout:
+        repository: git-scripts
+        path: git-scripts
     - script:
         interpreter: SHELL
         scripts:
@@ -39,8 +37,7 @@ Generate documents:
               master|stable-*)
                 ;;
               *)
-                git remote set-url origin ${bamboo_planRepository_repositoryUrl}
-                git fetch origin
+                ../git-scripts/git_kit.sh pull ${bamboo_planRepository_repositoryUrl}
                 git checkout ${bamboo_repository_pr_sourceBranch}
                 ;;
             esac
@@ -62,6 +59,8 @@ Generate documents:
   artifact-subscriptions: []
 repositories:
   - dns-libs:
+      scope: global
+  - git-scripts:
       scope: global
 branches:
   create: for-pull-request

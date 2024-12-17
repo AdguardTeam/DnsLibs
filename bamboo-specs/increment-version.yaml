@@ -13,12 +13,7 @@ stages:
 DL - Increment version:
   key: JOB1
   docker:
-    image: adguard/core-libs:2.1
-    volumes:
-      ${bamboo.working.directory}: ${bamboo.working.directory}
-      ${bamboo.tmp.directory}: ${bamboo.tmp.directory}
-      ${bamboo.git.cache.directory}: ${bamboo.git.cache.directory}
-      ${system.HOME}/.ssh: /root/.ssh
+    image: adguard/core-libs:2.4
     docker-run-arguments: []
   tasks:
   - !include docker-clean.yaml
@@ -32,6 +27,9 @@ DL - Increment version:
       path: dns-libs-private
       force-clean-build: 'true'
       description: Checkout
+  - checkout:
+      repository: git-scripts
+      path: git-scripts
   - script:
       interpreter: SHELL
       scripts:
@@ -49,8 +47,7 @@ DL - Increment version:
 
         ./increment_version.sh ${bamboo_custom_version} || exit 1
 
-        git remote set-url origin ${bamboo_planRepository_repositoryUrl}
-        git pull
+        ../git-scripts/git_kit.sh pull ${bamboo_planRepository_repositoryUrl}
         git reset
         git add platform/android/dnsproxy/lib/build.gradle
         git add platform/mac/framework/CMakeLists.txt
@@ -85,6 +82,8 @@ repositories:
 - dns-libs:
     scope: global
 - dns-libs-private:
+    scope: global
+- git-scripts:
     scope: global
 branches:
   create: manually

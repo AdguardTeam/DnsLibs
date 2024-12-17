@@ -13,30 +13,22 @@ stages:
 Tag release:
   key: JOB1
   docker:
-    image: adguard/core-libs:2.1
-    volumes:
-      ${bamboo.working.directory}: ${bamboo.working.directory}
-      ${bamboo.tmp.directory}: ${bamboo.tmp.directory}
-      ${system.HOME}/.ssh: /root/.ssh
-      ${bamboo.git.cache.directory}: ${bamboo.git.cache.directory}
+    image: adguard/core-libs:2.4
     docker-run-arguments: []
   tasks:
-  - script:
-      interpreter: SHELL
-      scripts:
-      - |-
-        rm -rf *
-        if [ -O "${bamboo.git.cache.directory}" ]; then chmod 0777 "${bamboo.git.cache.directory}"; fi
+  - !include docker-clean.yaml
   - checkout:
-      force-clean-build: 'false'
       description: Checkout Default Repository
+  - checkout:
+      repository: git-scripts
+      path: git-scripts
   - script:
       interpreter: SHELL
       scripts:
       - |-
         case "${bamboo_repository_branch_name}" in
         master|stable-*)
-            git remote set-url origin ${bamboo_planRepository_repositoryUrl}
+            ./git-scripts/git_kit.sh pull ${bamboo_planRepository_repositoryUrl}
             VER=$(sed -ne '/version =/s/.* '\''\(.*\)'\'',.*/\1/p' platform/android/dnsproxy/lib/build.gradle)
             git tag v$VER || true
             git push origin v$VER
@@ -51,6 +43,8 @@ Tag release:
   artifact-subscriptions: []
 repositories:
 - dns-libs:
+    scope: global
+- git-scripts:
     scope: global
 triggers: []
 branches:
