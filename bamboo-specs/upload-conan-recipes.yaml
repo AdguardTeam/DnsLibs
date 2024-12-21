@@ -28,8 +28,6 @@ Default Job:
             set -x
             set -e
 
-            python3 -m pip install conan --upgrade
-
             # Clean up local cache
             conan remove -c "*"
 
