@@ -28,8 +28,7 @@ Default Job:
             set -x
             set -e
 
-            # Clean up local cache
-            conan remove -c "*"
+            ./git-scripts/git_kit.sh pull ${bamboo_planRepository_repositoryUrl}
 
             conan remote add --index 0 art ${bamboo.conanRepoUrl} || true
 
@@ -42,7 +41,7 @@ Default Job:
             conan remote login art "${bamboo_artifactoryUser}" --password "${bamboo_artifactoryPassword}" > upload.txt 2>&1
 
             # Upload packages
-            conan upload -r art -c "*" 2> >(grep Uploading >&2) > upload.txt
+            conan upload -r art -c "*" 2> >(grep Uploading >&2) >> upload.txt
             echo conan upload finished with status $?
   artifacts:
     -
