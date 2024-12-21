@@ -38,10 +38,10 @@ Default Job:
             python3 -m pip install -r requirements.txt
             ./export_conan.py
 
-            conan remote login art "${bamboo_artifactoryUser}" --password "${bamboo_artifactoryPassword}" > upload.txt 2>&1
+            conan remote login art "${bamboo_artifactoryUser}" --password "${bamboo_artifactoryPassword}"
 
             # Upload packages
-            conan upload -r art -c "*" 2> >(grep Uploading >&2) >> upload.txt
+            conan upload -r art -c "*" 2>&1 | grep Uploading >&2
             echo conan upload finished with status $?
   artifacts:
     -
