@@ -61,22 +61,13 @@ DL - Mac tests and deploy:
       scripts:
       - |-
         source ./venv/bin/activate
-        conan remote login art "${bamboo_artifactoryUser}" --password "${bamboo_artifactoryPassword}" > upload.txt 2>&1
-        conan upload -r art -c '*' 1>&2
+        conan remote login art "${bamboo_artifactoryUser}" --password "${bamboo_artifactoryPassword}"
+        conan upload -r art -c '*' 2>&1 | grep Uploading >&2
         echo conan upload finished with status $?
-        conan remove -c "*"
-        deactivate
-        rm -rf venv
       description: Conan upload and cleanup
   requirements:
     - ephemeral
     - image: registry.int.agrd.dev/macos/sequoia-build-agent-xcode16.1:latest
-  artifacts:
-    -
-      name: Upload Log
-      location: .
-      pattern: 'upload.txt'
-      shared: false
   artifact-subscriptions: []
 repositories:
 - dns-libs:

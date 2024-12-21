@@ -37,8 +37,6 @@ DL - Android build and deploy:
         set -x
         set -e
 
-        python3 -m pip install conan --upgrade
-        conan remove -c "*"
         conan remote add --index 0 art ${bamboo.conanRepoUrl} || true
 
         cp -r ../../../../dns-libs-private/* .
@@ -69,10 +67,9 @@ DL - Android build and deploy:
       interpreter: SHELL
       scripts:
       - |-
-        conan remote login art "${bamboo_artifactoryUser}" --password "${bamboo_artifactoryPassword}" > upload.txt 2>&1
-        conan upload -r art -c '*' >> upload.txt 2>&1
+        conan remote login art "${bamboo_artifactoryUser}" --password "${bamboo_artifactoryPassword}"
+        conan upload -r art -c '*' 2>&1 | grep Uploading >&2
         echo conan upload finished with status $?
-        conan remove -c "*"
       description: Conan upload and cleanup
   artifacts:
   - name: aar
@@ -80,11 +77,6 @@ DL - Android build and deploy:
     pattern: lib.aar
     shared: true
     required: true
-  -
-    name: Upload Log
-    location: .
-    pattern: 'upload.txt'
-    shared: false
   requirements:
   - adg-privileged-docker
   artifact-subscriptions: []
