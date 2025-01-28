@@ -1291,7 +1291,8 @@ coro::Task<Uint8Vector> DnsForwarder::handle_message_with_timeout(
     uint16_t packet_id = ldns_pkt_id(request.get());
     if (m_settings->enable_servfail_on_upstreams_failure) {
         servfail_response = std::get<ldns_pkt_ptr>(ResponseHelpers::create_servfail_response(request.get()));
-        finalize_processed_event(servfail_event, request.get(), servfail_response.get(), nullptr, std::nullopt);
+        finalize_processed_event(servfail_event, request.get(), servfail_response.get(), nullptr, std::nullopt,
+                make_error(DnsError::AE_TIMED_OUT, "Message has not been handled within the allotted amount of time"));
     }
     Millis timeout = m_settings->upstream_timeout.count() > 0
                      ? m_settings->upstream_timeout : UpstreamFactory::DEFAULT_TIMEOUT;

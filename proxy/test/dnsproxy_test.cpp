@@ -163,7 +163,7 @@ TEST_F(DnsProxyTest, TestResolvedIp) {
     ldns_pkt_ptr response;
     ASSERT_NO_FATAL_FAILURE(
             perform_request(*m_proxy, create_request("example.com", LDNS_RR_TYPE_A, LDNS_RD), response));
-    ASSERT_EQ(ldns_pkt_ancount(response.get()), 1);
+    ASSERT_EQ(ldns_pkt_ancount(response.get()), 6);
     ASSERT_EQ(ldns_pkt_get_rcode(response.get()), LDNS_RCODE_NOERROR);
 }
 
@@ -218,8 +218,8 @@ TEST_P(SPKITest, DISABLED_TestSPKI) {
     ASSERT_EQ(ldns_pkt_get_rcode(response.get()), LDNS_RCODE_NOERROR);
 }
 
-// Disabled since AG servers does not have stable SubjectPublicKeyInfo.
-TEST_P(SPKITest, DISABLE_MatchSecondFingerprintInChain) {
+// Disabled since AG servers do not have stable SubjectPublicKeyInfo.
+TEST_P(SPKITest, DISABLED_MatchSecondFingerprintInChain) {
     m_settings.upstreams = {{
             .address = GetParam(),
             .bootstrap = {"1.1.1.1"},
