@@ -9,6 +9,7 @@
 #include <variant>
 
 #include <ada.h>
+#include <ada/unicode.h>
 #include <fmt/std.h>
 #include <magic_enum/magic_enum.hpp>
 #include <openssl/err.h>
@@ -329,7 +330,9 @@ ag::Error<ag::dns::Upstream::InitError> ag::dns::DohUpstream::init() {
 
     m_request_template.authority(std::string(m_url.get_hostname()));
     if (!m_url.get_username().empty() && !m_url.get_password().empty()) {
-        auto creds_fmt = AG_FMT("{}:{}", m_url.get_username(), m_url.get_password());
+        auto decode_username = ada::unicode::percent_decode(m_url.get_username(), m_url.get_username().find('%'));
+        auto decode_password = ada::unicode::percent_decode(m_url.get_password(), m_url.get_password().find('%'));
+        auto creds_fmt = AG_FMT("{}:{}", decode_username, decode_password);
         auto creds_base64 = ag::encode_to_base64(as_u8v(creds_fmt), false);
         m_request_template.headers().put("Authorization", AG_FMT("Basic {}", creds_base64));
     }

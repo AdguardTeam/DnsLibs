@@ -37,6 +37,10 @@ public:
             std::vector<CertFingerprint> fingerprints);
     ~DohUpstream() override;
 
+    const http::Request get_request_template() const {
+        return m_request_template;
+    }
+
     DohUpstream() = delete;
     DohUpstream(const DohUpstream &) = delete;
     DohUpstream &operator=(const DohUpstream &) = delete;
