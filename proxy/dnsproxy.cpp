@@ -96,7 +96,7 @@ static const DnsProxySettings DEFAULT_PROXY_SETTINGS = {
         .enable_route_resolver = false,
         .enable_parallel_upstream_queries = false,
         .enable_fallback_on_upstreams_failure = true,
-        .enable_servfail_on_upstreams_failure = true,
+        .enable_servfail_on_upstreams_failure = false,
         .enable_http3 = false,
 };
 

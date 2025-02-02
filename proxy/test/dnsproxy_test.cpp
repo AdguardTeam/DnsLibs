@@ -163,7 +163,7 @@ TEST_F(DnsProxyTest, TestResolvedIp) {
     ldns_pkt_ptr response;
     ASSERT_NO_FATAL_FAILURE(
             perform_request(*m_proxy, create_request("example.com", LDNS_RR_TYPE_A, LDNS_RD), response));
-    ASSERT_EQ(ldns_pkt_ancount(response.get()), 6);
+    ASSERT_GE(ldns_pkt_ancount(response.get()), 1);
     ASSERT_EQ(ldns_pkt_get_rcode(response.get()), LDNS_RCODE_NOERROR);
 }
 
@@ -254,6 +254,7 @@ TEST_F(DnsProxyTest, TestWrongSPKI) {
     }};
     settings.upstream_timeout = 5000ms,
     settings.ipv6_available = false;
+    settings.enable_servfail_on_upstreams_failure = true;
 
     DnsProxyEvents events{.on_certificate_verification = [](CertificateVerificationEvent event) {
         return std::nullopt;

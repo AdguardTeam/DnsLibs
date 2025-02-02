@@ -1,5 +1,9 @@
 # Changelog
 
+## V2.5
+
+* [Changed] Default for option enable_servfail_on_upstreams_failure is changed to off. Please ensure that you use DnsLibs-provided defaults.
+
 * [Feature] Added a new blocking mode: `UNSPECIFIED_ADDRESS`. The new mode should be made selectable in the UI.
     * [Android] See `com.adguard.dnslibs.proxy.DnsProxySettings.BlockingMode#UNSPECIFIED_ADDRESS`.
     * [Apple] See `AGBM_UNSPECIFIED_ADDRESS`.
