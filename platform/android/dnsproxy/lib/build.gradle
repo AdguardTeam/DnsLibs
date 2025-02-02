@@ -1,6 +1,4 @@
-plugins {
-    alias(libs.plugins.android.library)
-}
+apply plugin: 'com.android.library'
 
 version = [name: '2.5.61', code: 592]
 
