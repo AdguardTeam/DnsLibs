@@ -1,10 +1,14 @@
 #include "android_dnsproxy.h"
-#include "jni_defs.h"
-#include "scoped_jni_env.h"
+
 #include <cassert>
 #include <cctype>
-#include <jni.h>
 #include <string>
+
+#include <jni.h>
+
+#include "android_utils.h"
+#include "scoped_jni_env.h"
+#include "jni_defs.h"
 
 #include "dns/proxy/dnsproxy.h"
 #include "dns/upstream/upstream_utils.h"
@@ -14,18 +18,6 @@ using namespace ag::dns;
 using namespace ag::jni;
 
 extern "C" JNIEXPORT jint JNICALL JNI_OnLoad(JavaVM *vm, void *) {
-    ScopedJniEnv env(vm, 1);
-
-    GlobalRef logClass(vm, env->FindClass(FQN_DNSPROXY));
-    jmethodID logMethod = env->GetStaticMethodID(logClass.get(), "log", "(ILjava/lang/String;)V");
-
-    Logger::set_callback(
-            [vm, clazz = std::move(logClass), logMethod](LogLevel level, std::string_view message) mutable {
-                ScopedJniEnv env(vm, 8);
-                env->CallStaticVoidMethod(
-                        clazz.get(), logMethod, (jint) level, JniUtils::marshal_string(env.get(), message).get());
-            });
-
     return JNI_VERSION_1_2;
 }
 
@@ -1073,4 +1065,37 @@ Java_com_adguard_dnslibs_proxy_DnsProxy_generateRuleFromTemplate(JNIEnv *env, jo
                                                                  jint options) {
     auto *proxy = (AndroidDnsProxy *) native_ptr;
     return proxy->generate_rule(env, tmplt, event, options);
+}
+
+extern "C"
+JNIEXPORT void JNICALL
+Java_com_adguard_dnslibs_proxy_DnsProxy_setLoggingCallback(JNIEnv *env, jclass clazz,
+                                                           jobject callback) {
+    JavaVM *vm;
+    if (int ret = env->GetJavaVM(&vm); ret != 0) {
+        AG_ANDROID_LOG(ANDROID_LOG_ERROR, "DnsProxy", "%s: GetJavaVM: %d", __func__, ret);
+        return;
+    }
+
+    LocalRef logClass{env, env->FindClass(FQN_DNSPROXY_LOGGING_CALLBACK)};
+    GlobalRef logObject{vm, callback};
+    jmethodID logMethod = env->GetMethodID(logClass.get(), "log", "(ILjava/lang/String;)V");
+
+    Logger::set_callback(
+            [vm, obj = std::move(logObject), logMethod](LogLevel level,
+                                                        std::string_view message) mutable {
+                ScopedJniEnv env(vm, 8);
+                env->CallVoidMethod(obj.get(), logMethod, (jint) level,
+                                    JniUtils::marshal_string(env.get(), message).get());
+            });
+}
+
+extern "C"
+JNIEXPORT void JNICALL
+Java_com_adguard_dnslibs_proxy_DnsProxy_log(JNIEnv *env, jclass clazz, jint level,
+                                            jstring message) {
+    static ag::Logger logger{"JavaAdapter"};
+    const char *message_utf_chars = env->GetStringUTFChars(message, nullptr);
+    logger.log((ag::LogLevel) level, "{}", message_utf_chars);
+    env->ReleaseStringUTFChars(message, message_utf_chars);
 }

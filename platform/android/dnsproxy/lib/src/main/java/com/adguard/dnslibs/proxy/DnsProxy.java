@@ -3,8 +3,7 @@ package com.adguard.dnslibs.proxy;
 import android.content.Context;
 
 import org.jetbrains.annotations.NotNull;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+import org.slf4j.helpers.MessageFormatter;
 
 import java.io.ByteArrayInputStream;
 import java.io.Closeable;
@@ -53,8 +52,6 @@ public class DnsProxy implements Closeable {
         public String description = "";
     }
 
-    private static final Logger log = LoggerFactory.getLogger(DnsProxy.class);
-
     private enum State {
         NEW, INITIALIZED, CLOSED,
     }
@@ -79,10 +76,11 @@ public class DnsProxy implements Closeable {
 
     /**
      * Initializes the DNS proxy.
-     * @param context app context.
+     *
+     * @param context  app context.
      * @param settings the settings. Not {@code null}.
-     * @throws NullPointerException if any of the arguments is {@code null}.
-     * @throws DnsProxyInitException  If the proxy fails to initialize.
+     * @throws NullPointerException  if any of the arguments is {@code null}.
+     * @throws DnsProxyInitException If the proxy fails to initialize.
      */
     public DnsProxy(@NotNull Context context, @NotNull DnsProxySettings settings)
             throws DnsProxyInitException, NullPointerException {
@@ -91,11 +89,12 @@ public class DnsProxy implements Closeable {
 
     /**
      * Initializes the DNS proxy.
+     *
      * @param context  app context.
      * @param settings the settings. Not {@code null}.
      * @param events   the event callback. May be {@code null}.
-     * @throws NullPointerException if any of the required arguments is {@code null}.
-     * @throws DnsProxyInitException  If the proxy fails to initialize.
+     * @throws NullPointerException  if any of the required arguments is {@code null}.
+     * @throws DnsProxyInitException If the proxy fails to initialize.
      */
     public DnsProxy(@NotNull Context context, @NotNull DnsProxySettings settings, DnsProxyEvents events)
             throws DnsProxyInitException, NullPointerException {
@@ -105,10 +104,10 @@ public class DnsProxy implements Closeable {
             List<String> searchDomains = DnsNetworkUtils.getDNSSearchDomains(context);
             if (searchDomains != null) {
                 for (String domain : searchDomains) {
-                    if (!domain.isEmpty() && domain.startsWith(".")) {
+                    if (domain.startsWith(".")) {
                         domain = domain.substring(1);
                     }
-                    if (!domain.isEmpty() && domain.endsWith(".")) {
+                    if (domain.endsWith(".")) {
                         domain = domain.substring(0, domain.length() - 1);
                     }
                     if (!domain.isEmpty()) {
@@ -130,6 +129,7 @@ public class DnsProxy implements Closeable {
      * <p>
      * It is safe to call this method from different threads once the proxy has been initialized
      * and properly shared. Other methods of this class are NOT thread-safe.
+     *
      * @param message a message from client.
      * @param info    additional information about the message or how to process it.
      * @return a blocked DNS message if the message was blocked,
@@ -203,33 +203,12 @@ public class DnsProxy implements Closeable {
 
     private native void handleMessageAsync(long nativePtr, byte[] message, DnsMessageInfo info, Consumer<byte[]> callback);
 
-    @SuppressWarnings("unused") // Called from native code
-    private static void log(int level, String message) {
-        switch (LogLevel.translate(level)) {
-        case TRACE:
-            log.trace(message);
-            break;
-        case DEBUG:
-            log.debug(message);
-            break;
-        case INFO:
-            log.info(message);
-            break;
-        case WARN:
-            log.warn(message);
-            break;
-        case ERROR:
-            log.error(message);
-            break;
-        }
-    }
-
     public enum LogLevel {
         ERROR, WARN, INFO, DEBUG, TRACE;
 
         static LogLevel translate(int nativeLogLevel) {
             if (nativeLogLevel < 0 || nativeLogLevel >= values().length) {
-                return TRACE;
+                throw new IllegalArgumentException("nativeLogLevel out of range");
             }
             return values()[nativeLogLevel];
         }
@@ -246,20 +225,24 @@ public class DnsProxy implements Closeable {
 
     /**
      * Check if string is a valid rule
+     *
      * @param str string to check
      * @return true if string is a valid rule, false otherwise
      */
     public static native boolean isValidRule(String str);
 
-    /** Return the DNS proxy library version. */
+    /**
+     * Return the DNS proxy library version.
+     */
     public static native String version();
 
     /**
      * Checks if upstream is valid and available
+     *
      * @param upstreamSettings Upstream settings
-     * @param timeoutMs Maximum amount of time, in milliseconds, allowed for upstream exchange
-     * @param ipv6Available Whether IPv6 is available (bootstrapper is allowed to make AAAA queries)
-     * @param offline Don't perform online upstream check
+     * @param timeoutMs        Maximum amount of time, in milliseconds, allowed for upstream exchange
+     * @param ipv6Available    Whether IPv6 is available (bootstrapper is allowed to make AAAA queries)
+     * @param offline          Don't perform online upstream check
      * @throws IllegalArgumentException with an explanation if check failed
      */
     public static void testUpstream(UpstreamSettings upstreamSettings,
@@ -276,7 +259,7 @@ public class DnsProxy implements Closeable {
     }
 
     private static native String testUpstreamNative(long nativePtr, Object upstreamSettings, long timeoutMs,
-        boolean ipv6, Object eventsAdapter, boolean offline);
+                                                    boolean ipv6, Object eventsAdapter, boolean offline);
 
     /**
      * Events adapter implementation.
@@ -284,7 +267,7 @@ public class DnsProxy implements Closeable {
      * This class is private. See {@link DnsProxyEvents} for user events interface.
      */
     private static class EventsAdapter {
-        private static final Logger log = LoggerFactory.getLogger(EventsAdapter.class);
+        private static final Logger log = DnsProxy.getLogger(EventsAdapter.class);
 
         private final DnsProxyEvents userEvents;
         private final X509TrustManager trustManager;
@@ -343,6 +326,7 @@ public class DnsProxy implements Closeable {
 
     /**
      * Suggest an action based on a filtering log event.
+     *
      * @throws NullPointerException if any argument is {@code null}.
      */
     public FilteringLogAction filteringLogActionFromEvent(@NotNull DnsRequestProcessedEvent event) {
@@ -353,6 +337,7 @@ public class DnsProxy implements Closeable {
 
     /**
      * Generate a rule from a template and a corresponding event.
+     *
      * @return A rule or {@code null} on error.
      * @throws NullPointerException if any argument is {@code null}.
      */
@@ -367,4 +352,66 @@ public class DnsProxy implements Closeable {
     }
 
     private native String generateRuleFromTemplate(long nativePtr, FilteringLogAction.RuleTemplate template, DnsRequestProcessedEvent event, int options);
+
+    @FunctionalInterface
+    public interface LoggingCallback {
+        /**
+         * Write a message to the log. Use {@link LogLevel#translate(int)}
+         * to translate the log level.
+         */
+        void log(int level, String message);
+    }
+
+    public static native void setLoggingCallback(LoggingCallback callback);
+
+    interface Logger {
+        default void error(String message, Throwable t) {
+            log(LogLevel.ERROR, message + ": {}", t);
+        }
+
+        default void warn(String message, Throwable t) {
+            log(LogLevel.WARN, message + ": {}", t);
+        }
+
+        default void info(String message, Throwable t) {
+            log(LogLevel.INFO, message + ": {}", t);
+        }
+
+        default void debug(String message, Throwable t) {
+            log(LogLevel.DEBUG, message + ": {}", t);
+        }
+
+        default void trace(String message, Throwable t) {
+            log(LogLevel.TRACE, message + ": {}", t);
+        }
+
+        default void error(String format, Object... args) {
+            log(LogLevel.ERROR, format, args);
+        }
+
+        default void warn(String format, Object... args) {
+            log(LogLevel.WARN, format, args);
+        }
+
+        default void info(String format, Object... args) {
+            log(LogLevel.INFO, format, args);
+        }
+
+        default void debug(String format, Object... args) {
+            log(LogLevel.DEBUG, format, args);
+        }
+
+        default void trace(String format, Object... args) {
+            log(LogLevel.TRACE, format, args);
+        }
+
+        void log(LogLevel level, String format, Object... args);
+    }
+
+    static Logger getLogger(Class<?> type) {
+        return (level, format, args) -> log(level.ordinal(),
+                type.getSimpleName() + MessageFormatter.arrayFormat(format, args).getMessage());
+    }
+
+    private static native void log(int level, String message);
 }

@@ -58,7 +58,6 @@ dependencies {
     testImplementation libs.junit
     androidTestImplementation libs.ext.junit
     androidTestImplementation libs.espresso.core
-    androidTestImplementation libs.slf4j.android
     androidTestImplementation libs.dnsjava
     androidTestImplementation libs.rules
 }

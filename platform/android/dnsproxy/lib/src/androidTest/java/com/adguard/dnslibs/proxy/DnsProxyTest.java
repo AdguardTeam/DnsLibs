@@ -17,8 +17,6 @@ import org.junit.Ignore;
 import org.junit.Rule;
 import org.junit.Test;
 import org.junit.runner.RunWith;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import org.xbill.DNS.DClass;
 import org.xbill.DNS.Message;
 import org.xbill.DNS.Name;
@@ -47,9 +45,28 @@ import java.util.concurrent.atomic.AtomicReference;
 public class DnsProxyTest {
     static {
         DnsProxy.setLogLevel(DnsProxy.LogLevel.TRACE);
+        DnsProxy.setLoggingCallback((level, message) -> {
+            switch (DnsProxy.LogLevel.translate(level)) {
+                case ERROR:
+                    android.util.Log.e("DnsProxyTest", message);
+                    break;
+                case WARN:
+                    android.util.Log.w("DnsProxyTest", message);
+                    break;
+                case INFO:
+                    android.util.Log.i("DnsProxyTest", message);
+                    break;
+                case DEBUG:
+                    android.util.Log.d("DnsProxyTest", message);
+                    break;
+                case TRACE:
+                    android.util.Log.v("DnsProxyTest", message);
+                    break;
+            }
+        });
     }
 
-    private static final Logger log = LoggerFactory.getLogger(DnsProxyTest.class);
+    private static final DnsProxy.Logger log = DnsProxy.getLogger(DnsProxyTest.class);
     private final Context context = ApplicationProvider.getApplicationContext();
 
     // Proxy won't initialize without upstreams, and since recently

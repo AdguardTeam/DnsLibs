@@ -2,6 +2,9 @@
 
 ## V2.5
 
+* [Changed] A callback must now be set to enable logging on Android. 
+    * [Android] See `com.adguard.dnslibs.proxy.DnsProxy#setLoggingCallback`.
+
 * [Changed] Default for option enable_servfail_on_upstreams_failure is changed to off. Please ensure that you use DnsLibs-provided defaults.
 
 * [Feature] Added a new blocking mode: `UNSPECIFIED_ADDRESS`. The new mode should be made selectable in the UI.

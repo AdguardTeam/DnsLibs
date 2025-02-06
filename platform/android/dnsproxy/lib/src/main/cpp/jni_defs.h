@@ -1,6 +1,7 @@
 #pragma once
 
 #define FQN_DNSPROXY "com/adguard/dnslibs/proxy/DnsProxy"
+#define FQN_DNSPROXY_LOGGING_CALLBACK FQN_DNSPROXY "$LoggingCallback"
 #define FQN_DNSPROXY_RESULT FQN_DNSPROXY "$InitResult"
 #define FQN_DNSPROXY_ERROR_CODE FQN_DNSPROXY "$InitErrorCode"
 #define FQN_DNSPROXY_SETTINGS "com/adguard/dnslibs/proxy/DnsProxySettings"
