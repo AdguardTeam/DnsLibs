@@ -975,11 +975,11 @@ ag::coro::Task<ag::Error<ag::dns::DnsError>> ag::dns::DohUpstream::Http1Or2Conne
                     .on_stream_closed =
                             [](void *arg, uint32_t stream_id, nghttp2_error_code error_code) {
                                 on_stream_closed(arg, stream_id,
-                                        make_error(DnsError::AE_EXCHANGE_ERROR, nghttp2_strerror(error_code)));
+                                        make_error(DnsError::AE_EXCHANGE_ERROR, nghttp2_http2_strerror(error_code)));
                             },
                     .on_close =
                             [](void *arg, nghttp2_error_code error_code) {
-                                on_close(arg, make_error(DnsError::AE_EXCHANGE_ERROR, nghttp2_strerror(error_code)));
+                                on_close(arg, make_error(DnsError::AE_EXCHANGE_ERROR, nghttp2_http2_strerror(error_code)));
                             },
                     .on_output = on_output,
                     .on_data_sent =
