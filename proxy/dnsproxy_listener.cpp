@@ -144,6 +144,9 @@ private:
         if (guard.expired()) {
             co_return;
         }
+        if (result.empty()) {
+            co_return;
+        }
         uv_buf_t reply = uv_buf_init((char *) result.data(), result.size());
         int err = co_await send_reply(reply, info.peername.c_sockaddr());
         if (guard.expired()) {
@@ -373,15 +376,20 @@ private:
         if (guard.expired()) {
             co_return;
         }
-        uv_buf_t reply = uv_buf_init((char *) result.data(), result.size());
-        int err = co_await this->send_reply(reply);
-        if (guard.expired()) {
-            co_return;
-        }
-        if (err < 0) {
-            log_id(m_log, trace, m_id, "send error: {}", uv_strerror(err));
+        if (!result.empty()) {
+            uv_buf_t reply = uv_buf_init((char *) result.data(), result.size());
+            int err = co_await this->send_reply(reply);
+            if (guard.expired()) {
+                co_return;
+            }
+            if (err < 0) {
+                log_id(m_log, warn, m_id, "send error: {}", uv_strerror(err));
+                this->do_close();
+                co_return;
+            }
         }
         if (!m_persistent) {
+            log_id(m_log, dbg, m_id, "closing non-persistent connection");
             this->do_close();
         }
 
