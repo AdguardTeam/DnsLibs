@@ -280,8 +280,8 @@ namespace Adguard.Dns.Tests.Helpers
         [Test]
         public void TestCertificateVerificationEventConverter()
         {
-            AGDnsApi.ag_certificate_verification_event coreArgsС = new AGDnsApi.ag_certificate_verification_event();
-            CertificateVerificationEventArgs certificate = DnsApiConverter.FromNativeObject(coreArgsС);
+            AGDnsApi.ag_certificate_verification_event coreArgsC = new AGDnsApi.ag_certificate_verification_event();
+            CertificateVerificationEventArgs certificate = DnsApiConverter.FromNativeObject(coreArgsC);
             Assert.NotNull(certificate);
         }
 

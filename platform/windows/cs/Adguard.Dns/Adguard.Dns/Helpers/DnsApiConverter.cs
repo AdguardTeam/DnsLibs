@@ -312,7 +312,7 @@ namespace Adguard.Dns.Helpers
                 dnsStamp.Hashes,
                 (x, y) => MarshalUtils.BytesToAgBuffer(x),
                 allocatedPointers);
-            AGDnsApi.ag_dns_stamp dnsStampС = new AGDnsApi.ag_dns_stamp
+            AGDnsApi.ag_dns_stamp dnsStampC = new AGDnsApi.ag_dns_stamp
             {
                 ProtoType = dnsStamp.ProtoType,
                 ServerAddress = MarshalUtils.StringToPtr(dnsStamp.ServerAddress),
@@ -322,7 +322,7 @@ namespace Adguard.Dns.Helpers
                 hashes = hashesC,
                 Properties = dnsStamp.Properties
             };
-            return dnsStampС;
+            return dnsStampC;
         }
 
         #endregion
@@ -519,11 +519,11 @@ namespace Adguard.Dns.Helpers
         #region Server event arguments
 
         internal static CertificateVerificationEventArgs FromNativeObject(
-            AGDnsApi.ag_certificate_verification_event coreArgsС)
+            AGDnsApi.ag_certificate_verification_event coreArgsC)
         {
-            byte[] certBytes = MarshalUtils.AgBufferToBytes(coreArgsС.pCertificate);
+            byte[] certBytes = MarshalUtils.AgBufferToBytes(coreArgsC.pCertificate);
             List<byte[]> chain = MarshalUtils.AgListToList<MarshalUtils.ag_buffer, byte[]>(
-                coreArgsС.chain,
+                coreArgsC.chain,
                 MarshalUtils.AgBufferToBytes);
             CertificateVerificationEventArgs eventArgs = new CertificateVerificationEventArgs
             {
@@ -535,16 +535,16 @@ namespace Adguard.Dns.Helpers
         }
 
         internal static DnsRequestProcessedEventArgs FromNativeObject(
-            AGDnsApi.ag_dns_request_processed_event coreArgsС)
+            AGDnsApi.ag_dns_request_processed_event coreArgsC)
         {
             List<string> rules = MarshalUtils.AgListToList<IntPtr, string>(
-                coreArgsС.rules,
+                coreArgsC.rules,
                 MarshalUtils.PtrToString);
             List<int> filterListIds = MarshalUtils.AgListToList<int, int>(
-                coreArgsС.filter_list_ids,
+                coreArgsC.filter_list_ids,
                 filterId => filterId);
 
-            long? upstreamId = MarshalUtils.ReadNullableInt(coreArgsС.pUpstreamId);
+            long? upstreamId = MarshalUtils.ReadNullableInt(coreArgsC.pUpstreamId);
             DnsRequestProcessedEventArgs eventArgs = new DnsRequestProcessedEventArgs
             {
                 UpstreamId = upstreamId.HasValue ? (int?)upstreamId.Value : null,
@@ -552,8 +552,8 @@ namespace Adguard.Dns.Helpers
                 FilterListIds = filterListIds
             };
 
-            MarshalUtils.AllPtrsToStrings(coreArgsС, eventArgs);
-            MarshalUtils.CopyFieldsToProperties(coreArgsС, eventArgs);
+            MarshalUtils.AllPtrsToStrings(coreArgsC, eventArgs);
+            MarshalUtils.CopyFieldsToProperties(coreArgsC, eventArgs);
             return eventArgs;
         }
 
