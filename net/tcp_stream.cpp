@@ -85,7 +85,7 @@ Error<SocketError> TcpStream::connect(ConnectParameters params) {
 
     if (sock_err) {
         params.loop->submit([sock_err, weak = m_tcp->weak_from_this()](){
-            if (auto *tcp = weak.lock().get()) {
+            if (auto tcp = weak.lock()) {
                 if (Callbacks cbx = static_cast<TcpStream *>(tcp->parent())->get_callbacks(); cbx.on_close != nullptr) {
                     cbx.on_close(cbx.arg, sock_err);
                 }

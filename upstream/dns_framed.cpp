@@ -47,7 +47,9 @@ DnsFramedConnection::DnsFramedConnection(
 void DnsFramedConnection::connect() {
     assert(m_state == Connection::Status::IDLE);
     m_state = Connection::Status::PENDING;
-    Upstream *upstream = m_pool.lock()->upstream();
+    auto pool = m_pool.lock();
+    assert(pool != nullptr);
+    auto upstream = pool->upstream();
     assert(upstream != nullptr);
     m_stream = upstream->make_socket(utils::TP_TCP);
     auto err = m_stream->connect({
@@ -163,7 +165,7 @@ void DnsFramedConnection::on_close(Error<DnsError> dns_error) {
         this->finish_request(request_id, dns_error);
     }
 
-    if (auto *pool = m_pool.lock().get()) {
+    if (auto pool = m_pool.lock()) {
         pool->remove_connection(ptr);
     }
     log_conn(m_log, trace, this, "{} finished", __func__);

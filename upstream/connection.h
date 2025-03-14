@@ -145,8 +145,8 @@ public:
         return m_address_str;
     }
 
-    Upstream *upstream() {
-        return m_upstream.lock().get();
+    std::shared_ptr<Upstream> upstream() {
+        return m_upstream.lock();
     }
 
     void remove_connection(const ConnectionPtr &conn) {

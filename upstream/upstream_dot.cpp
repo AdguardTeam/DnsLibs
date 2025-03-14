@@ -1,5 +1,7 @@
 #include "upstream_dot.h"
 
+#include <memory>
+
 #include <fmt/std.h>
 #include <openssl/x509v3.h>
 #include <openssl/ssl.h>
@@ -38,11 +40,13 @@ public:
     }
 
     coro::Task<void> co_connect() {
-        auto weak_self = weak_from_this();
-        auto *dot_upstream = (DotUpstream *) m_pool.lock()->upstream();
+        auto pool = m_pool.lock();
+        assert(pool != nullptr);
+        auto dot_upstream = std::dynamic_pointer_cast<DotUpstream>(pool->upstream());
         assert(dot_upstream != nullptr);
 
         if (dot_upstream->m_bootstrapper) {
+            auto weak_self = weak_from_this();
             auto result = co_await dot_upstream->m_bootstrapper->get();
             if (weak_self.expired()) {
                 co_return;
@@ -63,19 +67,14 @@ public:
         static const std::string DOT_ALPN = "dot";
 
         Millis timeout;
-        if (auto *upstream = (DotUpstream *) m_pool.lock()->upstream()) {
-            m_stream = upstream->make_secured_socket(utils::TP_TCP,
+        m_stream = dot_upstream->make_secured_socket(utils::TP_TCP,
                     SocketFactory::SecureSocketParameters{
-                            .session_cache = &upstream->m_tls_session_cache,
-                            .server_name = std::string(upstream->m_url.get_hostname()),
+                            .session_cache = &dot_upstream->m_tls_session_cache,
+                            .server_name = std::string(dot_upstream->m_url.get_hostname()),
                             .alpn = {DOT_ALPN},
-                            .fingerprints = upstream->m_fingerprints,
+                            .fingerprints = dot_upstream->m_fingerprints,
                     });
-            timeout = upstream->m_config.timeout;
-        } else {
-            on_close(make_error(DnsError::AE_SHUTTING_DOWN, "Shutting down"));
-            co_return;
-        }
+        timeout = dot_upstream->m_config.timeout;
         dbglog(m_log, "{}", m_address);
         auto err = m_stream->connect({
                 &m_loop,
@@ -100,7 +99,7 @@ public:
             if (auto error = reply.error()->value(); error == DnsError::AE_SOCKET_ERROR
                     || error == DnsError::AE_TIMED_OUT || error == DnsError::AE_CONNECTION_CLOSED) {
                 if (auto pool = m_pool.lock()) {
-                    if (auto *upstream = (DotUpstream *) pool->upstream();
+                    if (auto upstream = std::dynamic_pointer_cast<DotUpstream>(pool->upstream());
                             upstream && upstream->m_bootstrapper) {
                         if (const auto *saddr = std::get_if<SocketAddress>(&m_address)) {
                             upstream->m_bootstrapper->remove_resolved(*saddr);

@@ -95,7 +95,7 @@ public:
         };
         auto wait_timeout = [](EventLoop &loop, std::weak_ptr<DnsFramedConnection> conn, Millis timeout, uint16_t request_id) -> coro::Task<void> {
             co_await loop.co_sleep(timeout);
-            if (DnsFramedConnection *self = conn.lock().get()) {
+            if (auto self = conn.lock()) {
                 self->finish_request(request_id, Reply{make_error(DnsError::AE_TIMED_OUT)});
             }
         };
@@ -120,7 +120,7 @@ public:
         };
         auto wait_timeout = [](EventLoop &loop, std::weak_ptr<DnsFramedConnection> conn, Millis timeout, uint16_t request_id) -> coro::Task<void> {
             co_await loop.co_sleep(timeout);
-            if (DnsFramedConnection *self = conn.lock().get()) {
+            if (auto self = conn.lock()) {
                 self->finish_request(request_id, Reply{make_error(DnsError::AE_TIMED_OUT)});
             }
         };
