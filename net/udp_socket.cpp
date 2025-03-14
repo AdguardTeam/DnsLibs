@@ -96,13 +96,23 @@ Error<SocketError> UdpSocket::connect(ConnectParameters params) {
 
 Error<SocketError> UdpSocket::send(Uint8View data) {
     struct Write {
+        std::weak_ptr<Uv<uv_udp_t>> uv_udp;
         std::vector<uint8_t> buf;
         uv_udp_send_t req{};
         static void on_write(uv_udp_send_t *req, int status [[maybe_unused]]) {
-            delete (Write *) req->data;
+            auto *w = (Write *) req->data;
+            if (status != 0) {
+                if (auto uv_udp = w->uv_udp.lock()) {
+                    auto *socket = (UdpSocket *) uv_udp->parent();
+                    socket->m_callbacks.on_close(socket->m_callbacks.arg,
+                            make_error(SocketError::AE_SOCK_ERROR,
+                                    AG_FMT("uv_udp_send status: ({}) {}", status, uv_strerror(status))));
+                }
+            }
+            delete w;
         }
     };
-    Write *wr = new Write{.buf{data.begin(), data.end()}};
+    auto *wr = new Write{.uv_udp = m_udp->weak_from_this(), .buf{data.begin(), data.end()}};
     wr->req.data = wr;
     uv_buf_t uv_buf = uv_buf_init((char *)wr->buf.data(), wr->buf.size());
     if (int err = uv_udp_send(&wr->req, m_udp->raw(), &uv_buf, 1, nullptr, &Write::on_write)) {
