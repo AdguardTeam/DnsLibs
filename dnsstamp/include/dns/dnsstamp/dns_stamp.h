@@ -48,7 +48,8 @@ enum class StampProtoType : uint8_t {
  */
 struct ServerStamp {
     enum class FromStringError {
-        AE_NO_STAMP_PREFIX,
+        AE_NO_STAMP_SDNS_PREFIX,
+        AE_NO_STAMP_URL_PREFIX,
         AE_INVALID_STAMP,
         AE_TOO_SHORT,
         AE_UNSUPPORTED_PROTOCOL,
@@ -71,6 +72,13 @@ struct ServerStamp {
      *                        although such URL can't be used as an upstream URL.
      */
     [[nodiscard]] std::string pretty_url(bool pretty_dnscrypt) const;
+
+    /**
+     * Creates stamp struct from a DNS Stamp (SDNS)
+     * @param sdns SDNS string
+     * @return stamp struct or error
+     */
+    static FromStringResult from_sdns(std::string_view sdns);
 
     /**
      * Creates stamp struct from URL
@@ -115,7 +123,8 @@ template<>
 struct ErrorCodeToString<dns::ServerStamp::FromStringError> {
     std::string operator()(dns::ServerStamp::FromStringError e) {
         switch (e) {
-        case decltype(e)::AE_NO_STAMP_PREFIX: return AG_FMT("Stamps are expected to start with {}", dns::STAMP_URL_PREFIX_WITH_SCHEME);
+        case decltype(e)::AE_NO_STAMP_SDNS_PREFIX: return AG_FMT("Stamps are expected to start with {}", dns::STAMP_URL_PREFIX_WITH_SCHEME);
+        case decltype(e)::AE_NO_STAMP_URL_PREFIX: return "Unsupported URL format: expected a valid DNS upstream URL (e.g., sdns://, https://, tls://, udp://, etc.)";
         case decltype(e)::AE_INVALID_STAMP: return "Invalid stamp";
         case decltype(e)::AE_TOO_SHORT: return "Stamp is too short";
         case decltype(e)::AE_UNSUPPORTED_PROTOCOL: return "Unsupported stamp protocol identifier";

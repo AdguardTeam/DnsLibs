@@ -8,6 +8,7 @@
 #include <type_traits>
 #include <utility>
 #include <vector>
+#include <ada.h>
 
 #ifdef _WIN32
 #include <ws2tcpip.h>
@@ -337,11 +338,23 @@ std::string ServerStamp::str() const {
     return {};
 }
 
-ServerStamp::FromStringResult ServerStamp::from_string(std::string_view url) {
-    if (!url.starts_with(STAMP_URL_PREFIX_WITH_SCHEME)) {
-        return make_error(FromStringError::AE_NO_STAMP_PREFIX);
+static std::string create_valid_url_for_parsing(std::string_view url) {
+    if (url.find("://") != std::string_view::npos) {
+        return AG_FMT("{}", url);
     }
-    std::string_view encoded(url);
+    SocketAddress addr(url);
+    if (addr.valid()) {
+        return AG_FMT("udp://{}", addr.str());
+    }
+    return AG_FMT("{}", url);
+}
+
+ServerStamp::FromStringResult ServerStamp::from_sdns(std::string_view sdns) {
+    if (!sdns.starts_with(STAMP_URL_PREFIX_WITH_SCHEME)) {
+        return make_error(FromStringError::AE_NO_STAMP_SDNS_PREFIX);
+    }
+
+    std::string_view encoded(sdns);
     encoded.remove_prefix(std::string_view(STAMP_URL_PREFIX_WITH_SCHEME).size());
     if (auto pos = encoded.find('@'); pos != std::string_view::npos) {
         encoded.remove_prefix(pos + 1);
@@ -368,6 +381,41 @@ ServerStamp::FromStringResult ServerStamp::from_string(std::string_view url) {
     default:
         return make_error(FromStringError::AE_UNSUPPORTED_PROTOCOL);
     }
+}
+
+ServerStamp::FromStringResult ServerStamp::from_string(std::string_view url) {
+    auto res = from_sdns(url);
+    if (!res.has_error() || res.error().get()->value() != FromStringError::AE_NO_STAMP_SDNS_PREFIX) {
+        return res;
+    }
+
+    ServerStamp stamp;
+    std::string valid_url = create_valid_url_for_parsing(url);
+    auto parsed_url = ada::parse(valid_url);
+    if (!parsed_url) {
+        return make_error(FromStringError::AE_NO_STAMP_URL_PREFIX);
+    }
+    stamp.server_addr_str = parsed_url->get_hostname();
+    if (!parsed_url->get_port().empty()) {
+        stamp.server_addr_str += AG_FMT(":{}", parsed_url->get_port());
+    }
+    auto protocol = parsed_url->get_protocol();
+    if (protocol == "https:" || protocol == "h3:") {
+        stamp.proto = StampProtoType::DOH;
+        stamp.provider_name = parsed_url->get_hostname();
+        stamp.path = parsed_url->get_pathname();
+    } else if (protocol == "tls:") {
+        stamp.proto = StampProtoType::TLS;
+        stamp.provider_name = parsed_url->get_hostname();
+    } else if (protocol == "quic:") {
+        stamp.proto = StampProtoType::DOQ;
+        stamp.provider_name = parsed_url->get_hostname();
+    } else if (protocol == "tcp:" || protocol == "udp:" || protocol.empty()) {
+        stamp.proto = StampProtoType::PLAIN;
+    } else {
+        return make_error(FromStringError::AE_UNSUPPORTED_PROTOCOL);
+    }
+    return stamp;
 }
 
 std::string ServerStamp::pretty_url(bool pretty_dnscrypt) const {

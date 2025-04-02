@@ -6,8 +6,13 @@
 #include <string_view>
 #include <vector>
 
-#include "dns/dnsstamp/dns_stamp.h"
 #include <gtest/gtest.h>
+
+#ifdef _WIN32
+#include <winsock2.h>
+#endif
+
+#include "dns/dnsstamp/dns_stamp.h"
 
 namespace ag::dns::test {
 
@@ -324,6 +329,140 @@ TEST_F(DnsstampTest, TestPrettyUrlAndStr) {
         ASSERT_FALSE(stamp_result.has_error()) << stamp_result.error()->str() << " (" << d.ugly << ")";
         ASSERT_EQ(d.pretty, stamp_result->pretty_url(d.pretty_dnscrypt));
         ASSERT_EQ(d.ugly, stamp_result->str());
+    }
+}
+
+TEST_F(DnsstampTest, TestStampParseDOH) {
+#ifdef _WIN32
+    WSADATA wsa_data = {};
+    ASSERT_EQ(0, WSAStartup(MAKEWORD(2, 2), &wsa_data));
+#endif
+
+    struct TestCase {
+        std::string_view input;
+        std::string_view expected_server_addr_str;
+        StampProtoType expected_proto;
+        std::string_view expected_provider;
+        std::string_view expected_path;
+    };
+
+    std::vector<TestCase> test_cases = {
+            {"https://example.com:443/dns-query", "example.com", StampProtoType::DOH, "example.com", "/dns-query"},
+            {"https://example.com:3129/dns-query", "example.com:3129", StampProtoType::DOH, "example.com", "/dns-query"},
+            {"https://example.com", "example.com", StampProtoType::DOH, "example.com", "/"},
+            {"h3://example.com:443/dns-query", "example.com:443", StampProtoType::DOH, "example.com", "/dns-query"},
+            {"h3://example.com:3129/dns-query", "example.com:3129", StampProtoType::DOH, "example.com", "/dns-query"},
+            {"h3://example.com", "example.com", StampProtoType::DOH, "example.com", ""},
+            {"https://8.8.8.8", "8.8.8.8", StampProtoType::DOH, "8.8.8.8", "/"},
+            {"https://8.8.8.8:3129/dns-query", "8.8.8.8:3129", StampProtoType::DOH, "8.8.8.8", "/dns-query"},
+            {"https://[2001:4860:4860::8888]", "[2001:4860:4860::8888]", StampProtoType::DOH, "[2001:4860:4860::8888]", "/"},
+    };
+
+    for (const auto &tc : test_cases) {
+        SCOPED_TRACE("Testing input: " + std::string(tc.input));
+        test_server_stamp_parse(tc.input.data(), [&](const auto &stamp) {
+            return stamp.proto == tc.expected_proto
+                    && stamp.server_addr_str == tc.expected_server_addr_str
+                    && stamp.provider_name == tc.expected_provider
+                    && stamp.path == tc.expected_path;
+        });
+    }
+}
+
+TEST_F(DnsstampTest, TestStampParseTLS) {
+    const auto stamp_str = "tls://example.com:853";
+    test_server_stamp_parse(stamp_str, [](const auto &stamp) {
+        return stamp.proto == StampProtoType::TLS
+                && stamp.provider_name == "example.com"
+                && stamp.server_addr_str == "example.com:853";
+    });
+}
+
+TEST_F(DnsstampTest, TestStampParseDoq) {
+    const auto stamp_str = "quic://example.com:853";
+    test_server_stamp_parse(stamp_str, [](const auto &stamp) {
+        return stamp.proto == StampProtoType::DOQ
+                && stamp.provider_name == "example.com"
+                && stamp.server_addr_str == "example.com:853";
+    });
+}
+
+TEST_F(DnsstampTest, TestStampParsePlain) {
+#ifdef _WIN32
+    WSADATA wsa_data = {};
+    ASSERT_EQ(0, WSAStartup(MAKEWORD(2, 2), &wsa_data));
+#endif
+
+    struct TestCase {
+        std::string_view input;
+        std::string_view expected_server_addr_str;
+        StampProtoType expected_proto;
+    };
+
+    std::vector<TestCase> test_cases = {
+            {"udp://example.com", "example.com", StampProtoType::PLAIN},
+            {"udp://example.com:53", "example.com:53", StampProtoType::PLAIN},
+            {"tcp://example.com", "example.com", StampProtoType::PLAIN},
+            {"tcp://example.com:53", "example.com:53", StampProtoType::PLAIN},
+            {"8.8.8.8", "8.8.8.8:0", StampProtoType::PLAIN},
+            {"2001:4860:4860::8888", "[2001:4860:4860::8888]:0", StampProtoType::PLAIN},
+            {"[2001:4860:4860::8888]", "[2001:4860:4860::8888]:0", StampProtoType::PLAIN},
+            {"8.8.8.8:5353", "8.8.8.8:5353", StampProtoType::PLAIN},
+            {"[2001:4860:4860::8888]:5353", "[2001:4860:4860::8888]:5353", StampProtoType::PLAIN},
+    };
+
+    for (const auto &tc : test_cases) {
+        SCOPED_TRACE("Testing input: " + std::string(tc.input));
+        test_server_stamp_parse(tc.input.data(), [&](const auto &stamp) {
+            return stamp.proto == tc.expected_proto && stamp.server_addr_str == tc.expected_server_addr_str;
+        });
+    }
+}
+
+TEST_F(DnsstampTest, TestPrettyUrl) {
+    const auto stamp_str = "tls://example.com";
+    test_server_stamp_parse(stamp_str, [](const auto &stamp) {
+        return stamp.pretty_url(false) == "tls://example.com";
+    });
+}
+
+TEST_F(DnsstampTest, TestPrettyUrlWithPort) {
+    const auto stamp_str = "quic://example.com:7844";
+    test_server_stamp_parse(stamp_str, [](const auto &stamp) {
+        return stamp.pretty_url(false) == "quic://example.com:7844";
+    });
+}
+
+TEST_F(DnsstampTest, TestInvalids) {
+    std::vector<std::string_view> test_cases = {
+            "ftp://example.com",
+            "socks5://example.com",
+            "https://example.com:99999",
+            "example.com",
+            "example.com:433",
+            "https://",
+            "asdf.asdf.asdf",
+            "8.8.8.260",
+            "8.8.260.8",
+            "8.260.8.8",
+            "260.8.8.8",
+            "8.8.8.8:99999",
+            "https://8.8.8.260",
+            "https://260.8.8.8",
+            "https://8.8.8.8:99999",
+            "2001:4860:4860::8888]",
+            "[2001:4860:4860::8888",
+            "2001:4860:kfff::8888",
+            "[2001:4860:4860::8888]:99999"
+            "https://2001:4860:4860::8888]",
+            "https://[2001:4860:4860::8888",
+            "https://2001:4860:kfff::8888",
+            "https://[2001:4860:4860::8888]:99999"
+    };
+
+    for (const auto &tc : test_cases) {
+        SCOPED_TRACE("Testing input: " + std::string(tc));
+        test_server_stamp_parse(tc.data(), nullptr);
     }
 }
 
