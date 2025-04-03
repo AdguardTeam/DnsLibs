@@ -1,2 +1,2 @@
 #pragma once
-#define AG_DNSLIBS_VERSION "2.5.70"
+#define AG_DNSLIBS_VERSION "2.6.0"
