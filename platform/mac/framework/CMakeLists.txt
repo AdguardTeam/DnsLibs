@@ -39,10 +39,6 @@ project(dnsproxy_framework C CXX OBJC OBJCXX)
 add_compile_options(-Werror=unguarded-availability)
 # Allow framework to be linked into application extension
 link_libraries(-Wl,-application_extension)
-# TODO: Remove this workaround after updating to XCode 15.1: https://developer.apple.com/documentation/xcode-release-notes/xcode-15-release-notes#Linking
-if (CMAKE_CXX_COMPILER_ID MATCHES "AppleClang" AND CMAKE_C_COMPILER_VERSION VERSION_GREATER_EQUAL "15.0.0")
-    add_link_options(-Wl,-ld_classic)
-endif()
 
 set(CMAKE_C_STANDARD   11)
 set(CMAKE_CXX_STANDARD 20)
