@@ -1,6 +1,11 @@
+#include <vector>
+#include <uv.h>
+
 #include "common/logger.h"
 #include "common/time_utils.h"
+
 #include "dns/common/event_loop.h"
+#include "dns/common/uv_wrapper.h"
 
 namespace ag::dns {
 
@@ -37,42 +42,35 @@ uv_loop_t *EventLoop::handle() {
 }
 
 std::vector<uv_handle_t *> EventLoop::get_active_handles() {
-    struct WalkInfo {
-        std::vector<uv_handle_t *> active_handles;
-        EventLoop &loop;
-    } walk_info{.loop = *this};
-    auto walker = [](uv_handle_t *handle, void *arg){
-        WalkInfo &walk_info = *(WalkInfo *)arg;
-        if (walk_info.loop.m_async && (void *) walk_info.loop.m_async->raw() == (void *) handle) {
+    std::vector<uv_handle_t *> active_handles;
+    walk([&active_handles, this](uv_handle_t *handle) {
+        if (m_async && (void *) m_async->raw() == (void *) handle) {
             return;
         }
-        if (walk_info.loop.m_timer && (void *) walk_info.loop.m_timer->raw() == (void *) handle) {
+        if (m_timer && (void *) m_timer->raw() == (void *) handle) {
             return;
         }
-        if (walk_info.loop.m_stopper && (void *) walk_info.loop.m_stopper->raw() == (void *) handle) {
+        if (m_stopper && (void *) m_stopper->raw() == (void *) handle) {
             return;
         }
         if (!uv_is_closing(handle)) {
-            walk_info.active_handles.emplace_back(handle);
+            active_handles.emplace_back(handle);
         }
-    };
-    uv_walk(m_handle->raw(), walker, &walk_info);
-    return walk_info.active_handles;
+    });
+    return active_handles;
 }
 
 void EventLoop::force_fire_timers() {
-    auto force_fire_timers = [](uv_handle_t *handle, void *data){
-        auto *self = (EventLoop *) data;
+    walk([this](uv_handle_t *handle){
         if (handle->type == UV_TIMER && uv_is_active(handle)) {
             auto *timer = (uv_timer_t *) handle;
             uv_timer_stop(timer);
             if (timer->timer_cb) {
-                dbglog(((EventLoop *)self)->m_log, "Force firing timer {}", (void *)timer);
+                dbglog(m_log, "Force firing timer {}", (void *)timer);
                 timer->timer_cb(timer);
             }
         }
-    };
-    uv_walk(m_handle->raw(), force_fire_timers, this);
+    });
 }
 
 void EventLoop::execute_stopper_iteration() noexcept {

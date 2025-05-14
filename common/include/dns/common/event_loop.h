@@ -1,11 +1,12 @@
 #pragma once
 
-#include <memory>
-#include <thread>
+#include <chrono>
+#include <concepts>
 #include <future>
 #include <list>
-#include <chrono>
 #include <map>
+#include <memory>
+#include <thread>
 
 #include "common/clock.h"
 #include "common/coro.h"
@@ -175,6 +176,16 @@ private:
     void execute_stopper_iteration() noexcept;
     std::vector<uv_handle_t *> get_active_handles();
     void force_fire_timers();
+
+    template <typename Func>
+    requires std::invocable<Func &, uv_handle_t *>
+    void walk(Func func) {
+        auto walker = [](uv_handle_t *handle, void *arg) {
+            auto *callback = (Func *) arg;
+            (*callback)(handle);
+        };
+        uv_walk(m_handle->raw(), walker, &func);
+    }
 };
 
 } // namespace ag::dns

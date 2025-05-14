@@ -13,7 +13,7 @@ stages:
 Tag release:
   key: JOB1
   docker:
-    image: adguard/core-libs:2.4
+    image: adguard/core-libs:2.6
     docker-run-arguments: []
   tasks:
   - !include docker-clean.yaml

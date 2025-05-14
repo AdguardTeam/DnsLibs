@@ -1,12 +1,21 @@
-#include "rule_utils.h"
+#include <algorithm>
+#include <array>
+#include <cassert>
+#include <cstdint>
+#include <optional>
+#include <string>
+#include <string_view>
+#include <vector>
+#include <utility>
+
 #include "common/logger.h"
 #include "common/net_utils.h"
 #include "common/regex.h"
 #include "common/socket_address.h"
 #include "common/utils.h"
-#include <algorithm>
-#include <array>
-#include <cassert>
+#include "dns/dnsfilter/dnsfilter.h"
+
+#include "rule_utils.h"
 
 namespace ag::dns::dnsfilter {
 
@@ -151,7 +160,7 @@ static std::optional<rule_utils::Rule> parse_host_file_rule(std::string_view str
     if (!ag::utils::is_valid_ip4(parts[0]) && !ag::utils::is_valid_ip6(parts[0])) {
         return std::nullopt;
     }
-    rule_utils::Rule r = {.public_part = {.content = DnsFilter::HostsRuleInfo{}}};
+    rule_utils::Rule r{};
     r.match_method = rule_utils::Rule::MMID_EXACT;
     r.matching_parts.reserve(parts.size() - 1);
     for (size_t i = 1; i < parts.size(); ++i) {
@@ -170,7 +179,11 @@ static std::optional<rule_utils::Rule> parse_host_file_rule(std::string_view str
         return std::nullopt;
     }
 
-    r.public_part = {0, std::string(str), DnsFilter::HostsRuleInfo{std::string(parts[0])}};
+    r.public_part = {
+            .filter_id = 0,
+            .text = std::string(str),
+            .content = DnsFilter::HostsRuleInfo{std::string(parts[0])},
+    };
     return std::make_optional(std::move(r));
 }
 
@@ -396,7 +409,8 @@ static inline bool is_host_rule(std::string_view str) {
 // https://github.com/AdguardTeam/AdguardHome/wiki/Hosts-Blocklists#domains-only
 static inline rule_utils::Rule make_exact_domain_name_rule(std::string_view str) {
     str = utils::rtrim(str.substr(0, str.find('#')));
-    rule_utils::Rule r = {.public_part = {.content = DnsFilter::AdblockRuleInfo{}}};
+    rule_utils::Rule r{};
+    r.public_part.content = DnsFilter::AdblockRuleInfo{};
     r.public_part.text = std::string{str};
     r.match_method = rule_utils::Rule::MMID_EXACT;
     r.matching_parts = {ag::utils::to_lower(str)};
@@ -488,7 +502,8 @@ static std::optional<rule_utils::Rule> parse_adblock_rule(std::string_view str, 
         return std::nullopt;
     }
 
-    Rule r = {.public_part = {.content = DnsFilter::AdblockRuleInfo{}}};
+    Rule r{};
+    r.public_part.content = DnsFilter::AdblockRuleInfo{};
     auto &rule_info = std::get<DnsFilter::AdblockRuleInfo>(r.public_part.content);
     rule_info.props.set(DnsFilter::DARP_EXCEPTION, is_exception);
     rule_info.params = new DnsFilter::AdblockRuleInfo::Parameters{};
