@@ -382,11 +382,11 @@ namespace Adguard.Dns
         {
             /// <summary>
             /// The upstreams to use for discovery of DNS64 prefixes (usually the system DNS servers),
-            /// represented as a <see cref="MarshalUtils.ag_list"/> with entries with
+            /// represented as a <see cref="MarshalUtils.ag_buffer"/> with entries with
             /// the type <see cref="ag_upstream_options"/>
             /// </summary>
             [MarshalAs(UnmanagedType.Struct)]
-            internal MarshalUtils.ag_list upstreams;
+            internal MarshalUtils.ag_buffer upstreams;
 
             /// <summary>
             /// How many times, at most, to try DNS64 prefixes discovery before giving up
@@ -514,7 +514,7 @@ namespace Adguard.Dns
              * MUST NOT be empty in case the `address` is a hostname.
              */
             [MarshalAs(UnmanagedType.Struct)]
-            internal MarshalUtils.ag_list bootstrap;
+            internal MarshalUtils.ag_buffer bootstrap;
 
             /** The authentication information (pointer to <see cref="ag_outbound_proxy_auth_info"/>)*/
             internal IntPtr auth_info;
@@ -544,12 +544,12 @@ namespace Adguard.Dns
 
             /// <summary>
             /// List of plain DNS servers to be used to resolve the hostname in upstreams' address,
-            /// represented as a <see cref="MarshalUtils.ag_list"/> with entries with
+            /// represented as a <see cref="MarshalUtils.ag_buffer"/> with entries with
             /// the type <see cref="IntPtr"/>,
             /// which be further marshall with <see cref="ManualMarshalPtrToStringAttribute"/>
             /// </summary>
             [MarshalAs(UnmanagedType.Struct)]
-            internal MarshalUtils.ag_list bootstrap;
+            internal MarshalUtils.ag_buffer bootstrap;
 
             /// <summary>
             /// Resolver's IP address.
@@ -579,7 +579,7 @@ namespace Adguard.Dns
             /// certificate chain, the verification will be successful
             /// </summary>
             [MarshalAs(UnmanagedType.Struct)]
-            internal MarshalUtils.ag_list fingerprints;
+            internal MarshalUtils.ag_buffer fingerprints;
         }
 
         [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Ansi)]
@@ -613,7 +613,7 @@ namespace Adguard.Dns
             /// <summary>
             /// List of filters, represented as a <see cref="ag_filter_params"/> structures
             /// </summary>
-            internal MarshalUtils.ag_list filters;
+            internal MarshalUtils.ag_buffer filters;
         } ;
 
         [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Ansi)]
@@ -621,19 +621,19 @@ namespace Adguard.Dns
         {
             /// <summary>
             /// List of upstreams,
-            /// represented as a <see cref="MarshalUtils.ag_list"/> with entries with
+            /// represented as a <see cref="MarshalUtils.ag_buffer"/> with entries with
             /// the type <see cref="ag_upstream_options"/>
             /// </summary>
             [MarshalAs(UnmanagedType.Struct)]
-            internal MarshalUtils.ag_list upstreams;
+            internal MarshalUtils.ag_buffer upstreams;
 
             /// <summary>
             /// List of fallbacks,
-            /// represented as a <see cref="MarshalUtils.ag_list"/> with entries with
+            /// represented as a <see cref="MarshalUtils.ag_buffer"/> with entries with
             /// the type <see cref="ag_upstream_options"/>
             /// </summary>
             [MarshalAs(UnmanagedType.Struct)]
-            internal MarshalUtils.ag_list fallbacks;
+            internal MarshalUtils.ag_buffer fallbacks;
 
             /// <summary>
             /// Requests for these domains will be forwarded directly to the fallback upstreams, if there are any.
@@ -643,7 +643,7 @@ namespace Adguard.Dns
             /// </summary>
             [MarshalAs(UnmanagedType.Struct)]
             [NativeName("fallback_domains")]
-            internal MarshalUtils.ag_list fallbackDomains;
+            internal MarshalUtils.ag_buffer fallbackDomains;
 
             /// <summary>
             /// Pointer to the DNS64 settings
@@ -668,11 +668,11 @@ namespace Adguard.Dns
 
             /// <summary>
             /// List of addresses/ports/protocols/etc... to listen on,
-            /// represented as a <see cref="MarshalUtils.ag_list"/> with entries with
+            /// represented as a <see cref="MarshalUtils.ag_buffer"/> with entries with
             /// the type <see cref="ag_listener_settings"/>
             /// </summary>
             [MarshalAs(UnmanagedType.Struct)]
-            internal MarshalUtils.ag_list listeners;
+            internal MarshalUtils.ag_buffer listeners;
 
             /** Outbound proxy settings (pointer to <see cref="ag_outbound_proxy_settings"/>)*/
             internal IntPtr outbound_proxy;
@@ -860,7 +860,7 @@ namespace Adguard.Dns
             /// rotations.
             /// </summary>
             [MarshalAs(UnmanagedType.Struct)]
-            internal MarshalUtils.ag_list hashes;
+            internal MarshalUtils.ag_buffer hashes;
 
             /// <summary>
             /// Server properties
@@ -893,7 +893,7 @@ namespace Adguard.Dns
             /// There can be multiple requests processed inside a single connection
             /// </summary>
             [MarshalAs(UnmanagedType.Struct)]
-            internal MarshalUtils.ag_list chain;
+            internal MarshalUtils.ag_buffer chain;
         };
 
         [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Ansi)]
@@ -970,15 +970,15 @@ namespace Adguard.Dns
 
             /// <summary>
             /// Pointer Filtering rules texts
-            /// (<seealso cref="MarshalUtils.ag_list"/>)
+            /// (<seealso cref="MarshalUtils.ag_buffer"/>)
             /// </summary>
-            internal MarshalUtils.ag_list rules;
+            internal MarshalUtils.ag_buffer rules;
 
             /// <summary>
             /// Pointer to the filter lists IDs of corresponding rules
-            /// (<seealso cref="MarshalUtils.ag_list"/>)
+            /// (<seealso cref="MarshalUtils.ag_buffer"/>)
             /// </summary>
-            internal MarshalUtils.ag_list filter_list_ids;
+            internal MarshalUtils.ag_buffer filter_list_ids;
 
             /// <summary>
             /// True if filtering rule is whitelist
@@ -1017,7 +1017,7 @@ namespace Adguard.Dns
             /// </summary>
             [NativeName("templates")]
             [MarshalAs(UnmanagedType.Struct)]
-            internal MarshalUtils.ag_list Templates;
+            internal MarshalUtils.ag_buffer Templates;
 
             /// <summary>
             /// Options that are allowed to be passed to `generate_rule`.

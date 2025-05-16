@@ -148,10 +148,10 @@ namespace Adguard.Dns.Tests.Helpers
             Queue<IntPtr> allocatedPointers = new Queue<IntPtr>();
             AGDnsApi.ag_dnsproxy_settings nativeDnsSettings =
                 DnsApiConverter.ToNativeObject(dnsSettings, allocatedPointers);
-            Assert.AreNotEqual(IntPtr.Zero, nativeDnsSettings.fallbacks.entries);
-            Assert.AreNotEqual(IntPtr.Zero, nativeDnsSettings.fallbackDomains.entries);
-            Assert.AreNotEqual(IntPtr.Zero, nativeDnsSettings.listeners.entries);
-            Assert.AreNotEqual(IntPtr.Zero, nativeDnsSettings.upstreams.entries);
+            Assert.AreNotEqual(IntPtr.Zero, nativeDnsSettings.fallbacks.data);
+            Assert.AreNotEqual(IntPtr.Zero, nativeDnsSettings.fallbackDomains.data);
+            Assert.AreNotEqual(IntPtr.Zero, nativeDnsSettings.listeners.data);
+            Assert.AreNotEqual(IntPtr.Zero, nativeDnsSettings.upstreams.data);
             Assert.AreEqual(nativeDnsSettings.BlockedResponseTtlSec, dnsSettings.BlockedResponseTtlSec);
             Assert.AreEqual(nativeDnsSettings.Ipv6Available, dnsSettings.Ipv6Available);
             Assert.AreEqual(nativeDnsSettings.BlockIpv6, dnsSettings.BlockIpv6);
@@ -318,7 +318,7 @@ namespace Adguard.Dns.Tests.Helpers
 		        AllowedOptions = AGDnsApi.ag_rule_generation_options.AGRGO_IMPORTANT,
 		        RequiredOptions = AGDnsApi.ag_rule_generation_options.AGRGO_IMPORTANT,
                 IsBlocking = false,
-                Templates = new MarshalUtils.ag_list()
+                Templates = new MarshalUtils.ag_buffer()
             };
 
 	        FilteringLogAction filteringLog = DnsApiConverter.FromNativeObject(actionC);

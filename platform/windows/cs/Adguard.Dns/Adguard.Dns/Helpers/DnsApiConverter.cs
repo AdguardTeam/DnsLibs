@@ -54,17 +54,17 @@ namespace Adguard.Dns.Helpers
             DnsProxySettings dnsProxySettings,
             Queue<IntPtr> allocatedPointers)
         {
-            MarshalUtils.ag_list upstreamsC = MarshalUtils.ListToAgList(
+            MarshalUtils.ag_buffer upstreamsC = MarshalUtils.ListToAgList(
                 dnsProxySettings.Upstreams,
                 ToNativeObject,
                 allocatedPointers);
 
-            MarshalUtils.ag_list fallbacksC = MarshalUtils.ListToAgList(
+            MarshalUtils.ag_buffer fallbacksC = MarshalUtils.ListToAgList(
                 dnsProxySettings.Fallbacks,
                 ToNativeObject,
                 allocatedPointers);
 
-            MarshalUtils.ag_list fallbackDomains = MarshalUtils.ListToAgList(
+            MarshalUtils.ag_buffer fallbackDomains = MarshalUtils.ListToAgList(
                 dnsProxySettings.FallbackDomains,
                 MarshalUtils.StringToPtr,
                 allocatedPointers);
@@ -79,7 +79,7 @@ namespace Adguard.Dns.Helpers
 
             AGDnsApi.ag_filter_engine_params filterEngineParamsC =
                 ToNativeObject(dnsProxySettings.EngineParams, allocatedPointers);
-            MarshalUtils.ag_list listenersC = MarshalUtils.ListToAgList(
+            MarshalUtils.ag_buffer listenersC = MarshalUtils.ListToAgList(
                 dnsProxySettings.Listeners,
                 ToNativeObject,
                 allocatedPointers);
@@ -112,7 +112,7 @@ namespace Adguard.Dns.Helpers
             EngineParams engineParams,
             Queue<IntPtr> allocatedPointers)
         {
-            MarshalUtils.ag_list filterParamsC = MarshalUtils.ListToAgList(
+            MarshalUtils.ag_buffer filterParamsC = MarshalUtils.ListToAgList(
                 engineParams.FilterParams,
                 ToNativeObject,
                 allocatedPointers);
@@ -139,7 +139,7 @@ namespace Adguard.Dns.Helpers
                     allocatedPointers);
             }
 
-            MarshalUtils.ag_list bootstrapC = MarshalUtils.ListToAgList(
+            MarshalUtils.ag_buffer bootstrapC = MarshalUtils.ListToAgList(
                 outboundProxySettings.Bootstrap,
                 MarshalUtils.StringToPtr,
                 allocatedPointers);
@@ -178,7 +178,7 @@ namespace Adguard.Dns.Helpers
             Dns64Settings dns64,
             Queue<IntPtr> allocatedPointers)
         {
-            MarshalUtils.ag_list dns64upstreamsC = MarshalUtils.ListToAgList(
+            MarshalUtils.ag_buffer dns64upstreamsC = MarshalUtils.ListToAgList(
                 dns64.Upstreams,
                 ToNativeObject,
                 allocatedPointers);
@@ -260,12 +260,12 @@ namespace Adguard.Dns.Helpers
             UpstreamOptions upstreamOptions,
             Queue<IntPtr> allocatedPointers)
         {
-            MarshalUtils.ag_list bootstrapC = MarshalUtils.ListToAgList(
+            MarshalUtils.ag_buffer bootstrapC = MarshalUtils.ListToAgList(
                 upstreamOptions.Bootstrap,
                 MarshalUtils.StringToPtr,
                 allocatedPointers);
 
-            MarshalUtils.ag_list fingerprintsC = MarshalUtils.ListToAgList(
+            MarshalUtils.ag_buffer fingerprintsC = MarshalUtils.ListToAgList(
                 upstreamOptions.Fingerprints,
                 MarshalUtils.StringToPtr,
                 allocatedPointers);
@@ -308,7 +308,7 @@ namespace Adguard.Dns.Helpers
             Queue<IntPtr> allocatedPointers)
         {
             MarshalUtils.ag_buffer publicKeyC = MarshalUtils.BytesToAgBuffer(dnsStamp.PublicKey);
-            MarshalUtils.ag_list hashesC = MarshalUtils.ListToAgList(
+            MarshalUtils.ag_buffer hashesC = MarshalUtils.ListToAgList(
                 dnsStamp.Hashes,
                 (x, y) => MarshalUtils.BytesToAgBuffer(x),
                 allocatedPointers);
@@ -561,11 +561,11 @@ namespace Adguard.Dns.Helpers
             DnsRequestProcessedEventArgs dnsRequestProcessedEventArgs,
             Queue<IntPtr> allocatedPointers)
         {
-            MarshalUtils.ag_list rules = MarshalUtils.ListToAgList(
+            MarshalUtils.ag_buffer rules = MarshalUtils.ListToAgList(
                 dnsRequestProcessedEventArgs.Rules,
                 MarshalUtils.StringToPtr,
                 allocatedPointers);
-            MarshalUtils.ag_list filterListIds = MarshalUtils.ListToAgList(
+            MarshalUtils.ag_buffer filterListIds = MarshalUtils.ListToAgList(
                 dnsRequestProcessedEventArgs.FilterListIds,
                 ToNativeObject,
                 allocatedPointers);

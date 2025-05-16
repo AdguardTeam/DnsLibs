@@ -44,8 +44,8 @@
       <HintPath>..\packages\Adguard.Utils.2.4.185\lib\net45\AdGuard.Utils.dll</HintPath>
       <Private>True</Private>
     </Reference>
-    <Reference Include="AdGuard.Utils.Base, Version=1.0.0.0, Culture=neutral, PublicKeyToken=cc321ba03e90d705, processorArchitecture=MSIL">
-      <HintPath>..\packages\Adguard.Utils.Base.1.0.72\lib\net45\AdGuard.Utils.Base.dll</HintPath>
+    <Reference Include="AdGuard.Utils.Base, Version=1.1.0.0, Culture=neutral, PublicKeyToken=cc321ba03e90d705, processorArchitecture=MSIL">
+      <HintPath>..\packages\Adguard.Utils.Base.1.1.94\lib\net45\AdGuard.Utils.Base.dll</HintPath>
       <Private>True</Private>
     </Reference>
     <Reference Include="Microsoft.CSharp" />
