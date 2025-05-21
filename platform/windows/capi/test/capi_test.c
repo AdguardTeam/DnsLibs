@@ -131,9 +131,10 @@ static void test_dnsstamp() {
     ASSERT(!error);
     ASSERT(0 == strcmp(stamp->provider_name, "dns.adguard.com"));
     ASSERT(0 == strcmp(stamp->path, "/dns-query"));
-    ASSERT(stamp->properties & AGSIP_DNSSEC);
-    ASSERT(stamp->properties & AGSIP_NO_LOG);
-    ASSERT(!(stamp->properties & AGSIP_NO_FILTER));
+    ASSERT(stamp->properties);
+    ASSERT(*stamp->properties & AGSIP_DNSSEC);
+    ASSERT(*stamp->properties & AGSIP_NO_LOG);
+    ASSERT(!(*stamp->properties & AGSIP_NO_FILTER));
     ASSERT(stamp->hashes.size == 2);
     ASSERT(0 == strcmp(ag_dns_stamp_pretty_url(stamp), "https://dns.adguard.com/dns-query"));
     ASSERT(0 == strcmp(ag_dns_stamp_prettier_url(stamp), "https://dns.adguard.com/dns-query"));
@@ -144,7 +145,7 @@ static void test_dnsstamp() {
     stamp->proto = AGSPT_DOQ;
     stamp->hashes.data = &hash;
     stamp->hashes.size = 1;
-    stamp->properties = AGSIP_NO_FILTER;
+    *stamp->properties = AGSIP_NO_FILTER;
     stamp->path = NULL;
 
     ASSERT(0 == strcmp(ag_dns_stamp_pretty_url(stamp), "quic://dns.adguard.com"));

@@ -48,7 +48,7 @@ namespace Adguard.Dns.Api.DnsProxyServer.Configs
         /// <summary>
         /// Server properties
         /// </summary>
-        public AGDnsApi.ag_server_informal_properties Properties { get; set; }
+        public AGDnsApi.ag_server_informal_properties? Properties { get; set; }
 
         /// <summary>
         /// A URL representation of this stamp which can be used

@@ -102,7 +102,7 @@ static void read_bytes(T &result, size_t &pos, const Uint8Vector &value) {
 static void write_stamp_proto_props_server_addr_str(
         Uint8Vector &bin, const ServerStamp &stamp, StampProtoType stamp_proto_type) {
     bin = {static_cast<uint8_t>(stamp_proto_type)};
-    write_bytes(bin, stamp.props);
+    write_bytes(bin, stamp.props.value());
     write_bytes_with_size(bin, stamp.server_addr_str);
 }
 
@@ -172,7 +172,8 @@ static StampError read_stamp_proto_props_server_addr_str(ServerStamp &stamp, siz
         return make_error(ServerStamp::FromStringError::AE_TOO_SHORT);
     }
     pos = 1;
-    read_bytes(stamp.props, pos, value);
+    stamp.props = ServerInformalProperties{};
+    read_bytes(stamp.props.value(), pos, value);
     if (!read_bytes_with_size(stamp.server_addr_str, pos, value)) {
         return make_error(ServerStamp::FromStringError::AE_INVALID_STAMP);
     }
@@ -322,6 +323,7 @@ static ServerStamp::FromStringResult new_doq_server_stamp(const Uint8Vector &bin
 }
 
 std::string ServerStamp::str() const {
+    assert(props.has_value());
     switch (proto) {
     case StampProtoType::PLAIN:
         return stamp_plain_string(*this);
@@ -465,5 +467,10 @@ std::string ServerStamp::pretty_url(bool pretty_dnscrypt) const {
 
     return AG_FMT("{}{}{}{}", scheme, provider_name, port, path);
 }
+
+void ServerStamp::set_server_properties(ServerInformalProperties properties) {
+    this->props = properties;
+}
+
 
 } // namespace ag::dns

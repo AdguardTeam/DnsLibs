@@ -56,8 +56,10 @@ LocalRef<jobject> AndroidDnsStamp::marshal_dnsstamp(JNIEnv *env, const ServerSta
 
     clazz = env->FindClass(FQN_DNSSTAMP_INFORMAL_PROPERTIES);
     auto to_enum_set_method = env->GetStaticMethodID(clazz, "toEnumSet", "(I)Ljava/util/EnumSet;");
-    if (LocalRef props{env, env->CallStaticObjectMethod(clazz, to_enum_set_method, (jint) stamp.props)}) {
-        env->SetObjectField(dns_stamp, props_field, props.get());
+    if (stamp.props.has_value()) {
+        if (LocalRef props{env, env->CallStaticObjectMethod(clazz, to_enum_set_method, (jint) stamp.props.value())}) {
+            env->SetObjectField(dns_stamp, props_field, props.get());
+        }
     }
 
     if (!stamp.hashes.empty()) {

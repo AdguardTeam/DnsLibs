@@ -579,7 +579,7 @@ typedef struct {
      */
     NAMED_ARRAY_OF(ag_buffer, hashes_s) hashes;
     /** Server properties */
-    ag_server_informal_properties properties;
+    ag_server_informal_properties *properties;
 } ag_dns_stamp;
 
 /**

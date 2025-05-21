@@ -16,9 +16,10 @@ int main() {
     assert(!error);
     assert([stamp.providerName isEqualToString:@"dns.adguard.com"]);
     assert([stamp.path isEqualToString:@"/dns-query"]);
-    assert(stamp.dnssec);
-    assert(stamp.noLog);
-    assert(!stamp.noFilter);
+    auto props = [stamp.properties unsignedLongLongValue];
+    assert(props & AGSIP_DNSSEC);
+    assert(props & AGSIP_NO_LOG);
+    assert(!(props & AGSIP_NO_FILTER));
     assert(stamp.hashes);
     assert(stamp.hashes.count == 2);
     assert([stamp.prettyUrl isEqualToString:@"https://dns.adguard.com/dns-query"]);
@@ -27,9 +28,7 @@ int main() {
 
     stamp.proto = AGSPT_DOQ;
     stamp.hashes = @[[NSData dataWithBytes:"\xca\xfe\xba\xbe" length:4]];
-    stamp.dnssec = NO;
-    stamp.noFilter = YES;
-    stamp.noLog = NO;
+    stamp.properties = @(AGSIP_NO_FILTER);
     stamp.path = nil;
 
     assert([stamp.prettyUrl isEqualToString:@"quic://dns.adguard.com"]);

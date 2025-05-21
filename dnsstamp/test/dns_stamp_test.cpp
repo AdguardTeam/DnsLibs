@@ -174,6 +174,7 @@ TEST_F(DnsstampTest, TestDohShortStamp) {
     stamp.proto = StampProtoType::DOH;
     stamp.provider_name = "example.com";
     stamp.path = "/dns-query";
+    stamp.props = ServerInformalProperties{};
     test_server_stamp_create(stamp, expected);
 }
 
@@ -205,6 +206,7 @@ TEST_F(DnsstampTest, TestDotShortStamp) {
     ServerStamp stamp{};
     stamp.proto = StampProtoType::TLS;
     stamp.provider_name = "dns.adguard.com";
+    stamp.props = ServerInformalProperties{};
     test_server_stamp_create(stamp, expected);
 }
 
@@ -226,6 +228,7 @@ TEST_F(DnsstampTest, TestDoqShortStamp) {
     ServerStamp stamp{};
     stamp.proto = StampProtoType::DOQ;
     stamp.provider_name = "dns.adguard.com";
+    stamp.props = ServerInformalProperties{};
     test_server_stamp_create(stamp, expected);
 }
 
@@ -235,6 +238,7 @@ TEST_F(DnsstampTest, TestDoqOnlyPort) {
     stamp.proto = StampProtoType::DOQ;
     stamp.provider_name = "dns.adguard.com";
     stamp.server_addr_str = ":7844";
+    stamp.props = ServerInformalProperties{};
     test_server_stamp_create(stamp, expected);
 }
 

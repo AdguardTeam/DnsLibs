@@ -315,7 +315,9 @@ static ServerStamp marshal_stamp(const ag_dns_stamp *c_stamp) {
         const ag_buffer &hash = c_stamp->hashes.data[i];
         stamp.hashes.emplace_back(hash.data, hash.data + hash.size);
     }
-    stamp.props = (ServerInformalProperties) c_stamp->properties;
+    if (c_stamp->properties) {
+        stamp.props = (ServerInformalProperties) *c_stamp->properties;
+    }
     return stamp;
 }
 
@@ -696,7 +698,10 @@ ag_dns_stamp *ag_dns_stamp_from_str(const char *stamp_str, const char **error) {
             c_result->hashes.data[i] = marshal_buffer({h.data(), h.size()});
         }
     }
-    c_result->properties = (ag_server_informal_properties) stamp->props;
+    if (stamp->props.has_value()) {
+        c_result->properties = (ag_server_informal_properties*) std::malloc(sizeof(ag_server_informal_properties));
+        *c_result->properties = (ag_server_informal_properties) stamp->props.value();
+    }
     return c_result;
 }
 
@@ -712,6 +717,9 @@ void ag_dns_stamp_free(ag_dns_stamp *stamp) {
         ag_buffer_free(stamp->hashes.data[i]);
     }
     std::free((void *) stamp->hashes.data);
+    if (stamp->properties) {
+        std::free((void *) stamp->properties);
+    }
     std::free(stamp);
 }
 

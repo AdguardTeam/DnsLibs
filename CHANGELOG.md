@@ -2,6 +2,11 @@
 
 ## V2.5
 
+* [Changed] For non-SDNS urls server properties is now null. It can be set later using `set_server_properties()`.
+    * [C API] See `ag_dns_stamp`.
+    * [Android] `DnsStamp::getProperties` became nullable. See `com.adguard.dnslibs.proxy.DnsStamp#getProperties`.
+    * [Apple] Use new enum with properties. See `AGServerInformalProperties` and `AGDnsStamp`.
+
 * [Changed] A callback must now be set to enable logging on Android. 
     * [Android] See `com.adguard.dnslibs.proxy.DnsProxy#setLoggingCallback`.
 

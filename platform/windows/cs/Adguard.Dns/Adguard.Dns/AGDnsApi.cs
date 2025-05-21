@@ -22,7 +22,7 @@ namespace Adguard.Dns
 		/// <summary>
 		/// The current API version hash with which the ProxyServer was tested
 		/// </summary>
-		private const string API_VERSION_HASH = "eba3b9b395fdf60599031bd4b7567d05d0e9b940d766cbd6bc10e09b57ba3f81";
+		private const string API_VERSION_HASH = "bacb1e8b96a22517f6951a9a7a7d11a452549e460d34936144b7987e06933f05";
 
         #endregion
 
@@ -865,9 +865,7 @@ namespace Adguard.Dns
             /// <summary>
             /// Server properties
             /// </summary>
-            [NativeName("properties")]
-            [MarshalAs(UnmanagedType.I4)]
-            internal ag_server_informal_properties Properties;
+            internal IntPtr properties;
         };
 
         #endregion

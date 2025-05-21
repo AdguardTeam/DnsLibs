@@ -708,6 +708,19 @@ typedef NS_ENUM(NSInteger, AGStampProtoType) {
 };
 
 /**
+ * @ingroup enums
+ * Server information properties.
+ */
+typedef NS_ENUM(NSInteger, AGServerInformalProperties) {
+    /** Resolver does DNSSEC validation */
+    AGSIP_DNSSEC = 1 << 0,
+    /** Resolver does not record logs */
+    AGSIP_NO_LOG = 1 << 1,
+    /** Resolver doesn't intentionally block domains */
+    AGSIP_NO_FILTER = 1 << 2,
+};
+
+/**
  * @interface AGDnsStamp
  * Represents a DNS stamp.
  */
@@ -746,12 +759,7 @@ typedef NS_ENUM(NSInteger, AGStampProtoType) {
 @property(nonatomic) NSArray<NSData *> *hashes;
 
 /** Server properties */
-/** Resolver does DNSSEC validation */
-@property(nonatomic) BOOL dnssec;
-/** Resolver does not record logs */
-@property(nonatomic) BOOL noLog;
-/** Resolver doesn't intentionally block domains */
-@property(nonatomic) BOOL noFilter;
+@property(nonatomic, nullable) NSNumber *properties;
 
 - (instancetype) init NS_UNAVAILABLE;
 

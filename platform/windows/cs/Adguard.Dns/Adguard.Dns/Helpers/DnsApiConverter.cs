@@ -312,6 +312,9 @@ namespace Adguard.Dns.Helpers
                 dnsStamp.Hashes,
                 (x, y) => MarshalUtils.BytesToAgBuffer(x),
                 allocatedPointers);
+            IntPtr propertiesC = dnsStamp.Properties.HasValue
+                ? ToNativeObject((int)dnsStamp.Properties.Value, allocatedPointers)
+                : IntPtr.Zero;
             AGDnsApi.ag_dns_stamp dnsStampC = new AGDnsApi.ag_dns_stamp
             {
                 ProtoType = dnsStamp.ProtoType,
@@ -320,7 +323,7 @@ namespace Adguard.Dns.Helpers
                 DoHPath = MarshalUtils.StringToPtr(dnsStamp.DoHPath),
                 server_public_key = publicKeyC,
                 hashes = hashesC,
-                Properties = dnsStamp.Properties
+                properties = propertiesC
             };
             return dnsStampC;
         }

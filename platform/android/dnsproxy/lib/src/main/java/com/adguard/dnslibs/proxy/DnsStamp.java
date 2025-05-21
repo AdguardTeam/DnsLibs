@@ -1,5 +1,7 @@
 package com.adguard.dnslibs.proxy;
 
+import org.jetbrains.annotations.Nullable;
+
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.EnumSet;
@@ -140,6 +142,7 @@ public class DnsStamp {
         this.serverPublicKey = serverPublicKey;
     }
 
+    @Nullable
     public EnumSet<InformalProperties> getProperties() {
         return properties;
     }

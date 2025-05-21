@@ -87,6 +87,11 @@ struct ServerStamp {
      */
     static FromStringResult from_string(std::string_view url);
 
+    /**
+     * Sets server informal properties
+     */
+    void set_server_properties(ServerInformalProperties properties);
+
     /** Server address with port */
     std::string server_addr_str;
 
@@ -110,7 +115,7 @@ struct ServerStamp {
     std::string path;
 
     /** Server properties (DNSSec, NoLog, NoFilter). */
-    ServerInformalProperties props;
+    std::optional<ServerInformalProperties> props;
 
     /** Stamp protocol. */
     StampProtoType proto;

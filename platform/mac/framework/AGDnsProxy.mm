@@ -259,17 +259,10 @@ static ServerStamp convert_stamp(AGDnsStamp *stamp) {
             native.hashes.emplace_back((uint8_t *) hash.bytes, (uint8_t *) hash.bytes + hash.length);
         }
     }
-    uint64_t props = 0;
-    if (stamp.dnssec) {
-        props |= DNSSEC;
+    if (stamp.properties != nil) {
+        native.props = (ServerInformalProperties)[stamp.properties unsignedLongLongValue];
     }
-    if (stamp.noFilter) {
-        props |= NO_FILTER;
-    }
-    if (stamp.noLog) {
-        props |= NO_LOG;
-    }
-    native.props = (ServerInformalProperties) props;
+
     return native;
 }
 
@@ -1579,14 +1572,10 @@ withCompletionHandler:(void (^)(NSData *))handler {
             }
             _hashes = hs;
         }
-        if (stamp->props & DNSSEC) {
-            _dnssec = YES;
-        }
-        if (stamp->props & NO_LOG) {
-            _noLog = YES;
-        }
-        if (stamp->props & NO_FILTER) {
-            _noFilter = YES;
+        if (stamp->props.has_value()) {
+            _properties = @((unsigned long long)stamp->props.value());
+        } else {
+            _properties = nil;
         }
     }
     return self;
@@ -1601,9 +1590,7 @@ withCompletionHandler:(void (^)(NSData *))handler {
         _path = [coder decodeObjectOfClass:NSString.class forKey:@"_path"];
         _serverPublicKey = [coder decodeObjectOfClass:NSData.class forKey:@"_serverPublicKey"];
         _hashes = [coder decodeObjectOfClasses:[[NSSet alloc] initWithObjects:NSArray.class, NSData.class, nil] forKey:@"_hashes"];
-        _dnssec = [coder decodeBoolForKey:@"_dnssec"];
-        _noLog = [coder decodeBoolForKey:@"_noLog"];
-        _noFilter = [coder decodeBoolForKey:@"_noFilter"];
+        _properties = [coder decodeObjectOfClass:NSNumber.class forKey:@"_properties"];
     }
 
     return self;
@@ -1616,9 +1603,7 @@ withCompletionHandler:(void (^)(NSData *))handler {
     [coder encodeObject:self.path forKey:@"_path"];
     [coder encodeObject:self.serverPublicKey forKey:@"_serverPublicKey"];
     [coder encodeObject:self.hashes forKey:@"_hashes"];
-    [coder encodeBool:self.dnssec forKey:@"_dnssec"];
-    [coder encodeBool:self.noLog forKey:@"_noLog"];
-    [coder encodeBool:self.noFilter forKey:@"_noFilter"];
+    [coder encodeObject:self.properties forKey:@"_properties"];
 }
 
 - (instancetype)initWithString:(NSString *)stampStr
