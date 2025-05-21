@@ -79,7 +79,7 @@ public:
 
         int32_t filter_id; // id of a filter which contains the matched rule
         std::string text; // rule text
-        ContentType content; // rule type specific info
+        ContentType content = AdblockRuleInfo{}; // rule type specific info
     };
 
     struct MatchParam {
