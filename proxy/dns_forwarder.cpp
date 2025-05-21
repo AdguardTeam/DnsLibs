@@ -516,7 +516,7 @@ void DnsForwarder::deinit() {
     m_fallbacks.clear();
     infolog(m_log, "Done");
 
-    infolog(m_log, "Deinitilizing socket factory...");
+    infolog(m_log, "Deinitializing socket factory...");
     if (m_socket_factory != nullptr) {
         m_socket_factory->deinit();
     }
