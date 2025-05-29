@@ -512,6 +512,8 @@ namespace Adguard.Dns.Helpers
             };
             MarshalUtils.AllPtrsToStrings(agDnsStampC, dnsStamp);
             MarshalUtils.CopyFieldsToProperties(agDnsStampC, dnsStamp);
+            dnsStamp.Properties =
+                (AGDnsApi.ag_server_informal_properties?)MarshalUtils.ReadNullableInt(agDnsStampC.properties);
             return dnsStamp;
         }
 

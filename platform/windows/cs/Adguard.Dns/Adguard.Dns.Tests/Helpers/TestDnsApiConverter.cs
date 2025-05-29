@@ -234,7 +234,7 @@ namespace Adguard.Dns.Tests.Helpers
         {
             DnsStamp dnsStamp = new DnsStamp
             {
-                ProtoType = new AGDnsApi.ag_stamp_proto_type(),
+                ProtoType = AGDnsApi.ag_stamp_proto_type.DOH,
                 ServerAddress = "addressTest",
                 ProviderName = "Nametest",
                 DoHPath = "DoHPathTest",
@@ -243,7 +243,7 @@ namespace Adguard.Dns.Tests.Helpers
                     new byte[] {12, 34, 15},
                     new byte[] {10, 8, 16, 3}
                 },
-                Properties = new AGDnsApi.ag_server_informal_properties()
+                Properties = AGDnsApi.ag_server_informal_properties.AGSIP_NO_LOG
             };
             Queue<IntPtr> allocatedPointers = new Queue<IntPtr>();
             AGDnsApi.ag_dns_stamp stampNative = DnsApiConverter.ToNativeObject(dnsStamp, allocatedPointers);
@@ -258,6 +258,10 @@ namespace Adguard.Dns.Tests.Helpers
                 Assert.IsTrue(CollectionUtils.CollectionsEquals(dnsStamp.Hashes[i], dnsStampConverted.Hashes[i]));
             }
             Assert.AreEqual(dnsStamp.Hashes.Capacity, dnsStampConverted.Hashes.Capacity);
+            Assert.AreEqual(dnsStamp.Properties, dnsStampConverted.Properties);
+            Assert.AreEqual(dnsStamp.DoHPath, dnsStampConverted.DoHPath);
+            Assert.AreEqual(dnsStamp.ProtoType, dnsStampConverted.ProtoType);
+            Assert.AreEqual(dnsStamp.ProviderName, dnsStampConverted.ProviderName);
         }
 
         [Test]
