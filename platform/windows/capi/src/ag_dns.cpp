@@ -763,8 +763,13 @@ const char *ag_dnsproxy_version() {
 }
 
 const char *ag_dns_stamp_to_str(ag_dns_stamp *c_stamp) {
-    ServerStamp stamp = marshal_stamp(c_stamp);
-    return marshal_str(stamp.str());
+    if (c_stamp->properties) {
+        ServerStamp stamp = marshal_stamp(c_stamp);
+        return marshal_str(stamp.str());
+    }
+
+    return ag_dns_stamp_pretty_url(c_stamp);
+    
 }
 
 const char *ag_dns_stamp_pretty_url(ag_dns_stamp *c_stamp) {
