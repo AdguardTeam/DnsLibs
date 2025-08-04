@@ -323,7 +323,10 @@ static ServerStamp::FromStringResult new_doq_server_stamp(const Uint8Vector &bin
 }
 
 std::string ServerStamp::str() const {
-    assert(props.has_value());
+    if (!props.has_value()) {
+        return pretty_url(/*pretty_dnscrypt=*/ true);
+    }
+
     switch (proto) {
     case StampProtoType::PLAIN:
         return stamp_plain_string(*this);

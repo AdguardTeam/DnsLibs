@@ -83,6 +83,33 @@ TEST_F(DnsstampWithPk1Test, TestDnscryptStampCreate) {
     test_server_stamp_create(stamp, expected);
 }
 
+TEST_F(DnsstampTest, TestPlainUrlStampCreate) {
+    struct TestData {
+        std::string_view input;
+        std::string_view expected;
+    };
+    static constexpr TestData data[] = {
+        {
+            .input = "https://dns.adguard-dns.com/dns-query",
+            .expected = "https://dns.adguard-dns.com/dns-query"
+        },
+        {
+            .input = "tls://[2a00:5a60::ad2:0ff]:5443/dns-query",
+            .expected = "tls://[2a00:5a60::ad2:ff]:5443"
+        },
+        {
+            .input = "quic://1.1.1.1:1080/dns-query",
+            .expected = "quic://1.1.1.1:1080"
+        },
+    };
+    for (const auto &[input, expected] : data) {
+        const auto stamp = ServerStamp::from_string(input);
+        ASSERT_FALSE(stamp.has_error()) << stamp.error()->str() << " (" << input << ")";
+        ASSERT_EQ(expected, stamp->pretty_url(/*pretty_dnscrypt=*/ true));
+        ASSERT_EQ(expected, stamp->str());
+    }
+}
+
 template <typename... Ts>
 struct DnsstampParamTest : DnsstampTest, ::testing::WithParamInterface<Ts...> {};
 
