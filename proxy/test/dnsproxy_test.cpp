@@ -127,7 +127,7 @@ TEST_F(DnsProxyTest, TestDns64) {
 
 TEST_F(DnsProxyTest, TestHttpsRR) {
     DnsProxySettings settings = make_dnsproxy_settings();
-    settings.filter_params = {{{1, "104.18.164.229\n"
+    settings.filter_params = {{{1, "104.16.94.52\n"
                                    "2606:4700::6810:85e5\n", true}}};
 
     auto [ret, err] = m_proxy->init(settings, {});
