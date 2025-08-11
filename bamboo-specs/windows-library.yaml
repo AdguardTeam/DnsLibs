@@ -19,128 +19,87 @@ DL - Win tests and deploy:
       force-clean-build: 'true'
       description: Checkout main repository
   - script:
-      interpreter: BINSH_OR_CMDEXE
+      interpreter: WINDOWS_POWER_SHELL
       scripts:
       - |-
-        call vcvarsamd64_x86
+        $ErrorActionPreference = "Stop"
 
-        python -m venv venv --clear
-        call .\venv\Scripts\activate
-        pip install conan --upgrade
-        conan remove -c "*"
+        cd ${bamboo.build.working.directory}
+        cd dns-libs
 
-        set CMAKE=cmake
-        set CTEST=ctest
-        set CMAKE_MAKE_PROGRAM=ninja
-        set CMAKE_MAKE_FLAGS=""
-        set CMAKE_GENERATOR="Ninja"
-        set CL_GIT_ROOT=%cd%
-        cd %bamboo_winProjectDir%/capi
-        set CL_ROOT=%cd%
+        # Save vcvars to switch between them
+        $vcvars32 = cmd /c "vcvarsamd64_x86 & set"
+        $vcvars64 = cmd /c "vcvars64 & set"
+        $vcvarsarm64 = cmd /c "vcvarsamd64_arm64 & set"
+        function setvar($_) {
+          if ($_ -match "=") {
+            $v = $_.split("="); set-item -force -path "ENV:\$($v[0])"  -value "$($v[1])"
+          }
+        }
 
-        if exist build\ rmdir /s /q build || exit /b 1
-        mkdir build || exit /b 1
-        cd build || exit /b 1
+        # Build 32-bit and 64-bit versions
+        cd platform/windows
+        cd capi
+        & {
+          $vcvars32 | foreach { setvar $_ }
+          mkdir build
+          pushd build
+          & cmake -DCMAKE_BUILD_TYPE=RelWithDebInfo `
+            -DCMAKE_USE_OPENSSL=ON `
+            -DCMAKE_C_COMPILER="cl.exe" `
+            -DCMAKE_CXX_COMPILER="cl.exe" `
+            -G Ninja ..
+          if (!$?) { exit 1 }
+          & ninja AdguardDns
+          if (!$?) { exit 1 }
+          & ninja tests
+          if (!$?) { exit 1 }
+          & ctest -D ExperimentalTest --no-compress-output
+          if (!$?) { exit 1 }
+          popd
+        }
+        & {
+          $vcvars64 | foreach { setvar $_ }
+          mkdir build64
+          pushd build64
+          & cmake -DCMAKE_BUILD_TYPE=RelWithDebInfo `
+            -DCMAKE_USE_OPENSSL=ON `
+            -DCMAKE_C_COMPILER="cl.exe" `
+            -DCMAKE_CXX_COMPILER="cl.exe" `
+            -G Ninja ..
+          if (!$?) { exit 1 }
+          & ninja AdguardDns64
+          if (!$?) { exit 1 }
+          popd
+        }
+        & {
+          $vcvarsarm64 | foreach { setvar $_ }
+          mkdir buildarm64
+          pushd buildarm64
+          & cmake -DCMAKE_BUILD_TYPE=RelWithDebInfo `
+            -DCMAKE_USE_OPENSSL=ON `
+            -DCMAKE_C_COMPILER="cl.exe" `
+            -DCMAKE_CXX_COMPILER="cl.exe" `
+            -DCMAKE_SYSTEM_NAME=Windows `
+            -DCMAKE_SYSTEM_PROCESSOR=ARM64 `
+            -G Ninja ..
+          if (!$?) { exit 1 }
+          & ninja AdguardDnsArm64
+          if (!$?) { exit 1 }
+          popd
+        }
+        cd ../cs/Adguard.Dns
+        Remove-Item *.nupkg -Force
+        ${Env:NUGET_PACKAGES}="$(pwd)/packages"
+        & nuget restore
+        if (!$?) { exit 1 }
 
-        %CMAKE% -DCMAKE_BUILD_TYPE=%bamboo_cmakeBuildProfile% ^
-            -DCMAKE_USE_OPENSSL=ON ^
-            -DCMAKE_C_COMPILER="cl.exe" ^
-            -DCMAKE_CXX_COMPILER="cl.exe" ^
-            -DCMAKE_MAKE_PROGRAM=%CMAKE_MAKE_PROGRAM% ^
-            -G "%CMAKE_GENERATOR%" ^
-            ..
-
-        rem Target "tests" depends on everything, so this will also build AdguardDns.dll
-        %CMAKE_MAKE_PROGRAM% tests || exit /b 1
-        %CTEST% -D ExperimentalTest --no-compress-output || exit /b 1
-        deactivate
-      working-dir: dns-libs
-      description: Compile and run tests (x86)
-  - script:
-      interpreter: BINSH_OR_CMDEXE
-      scripts:
-        - |-
-          call vcvars64
-          call .\venv\Scripts\activate
-          conan remove -c "*"
-
-          set CMAKE=cmake
-          set CTEST=ctest
-          set CMAKE_MAKE_PROGRAM=ninja
-          set CMAKE_MAKE_FLAGS=""
-          set CMAKE_GENERATOR="Ninja"
-          set CL_GIT_ROOT=%cd%
-          cd %bamboo_winProjectDir%/capi
-          set CL_ROOT=%cd%
-
-          if exist build64\ rmdir /s /q build64 || exit /b 1
-          mkdir build64 || exit /b 1
-          cd build64 || exit /b 1
-          
-          %CMAKE% -DCMAKE_BUILD_TYPE=%bamboo_cmakeBuildProfile% ^
-              -DCMAKE_USE_OPENSSL=ON ^
-              -DCMAKE_C_COMPILER="cl.exe" ^
-              -DCMAKE_CXX_COMPILER="cl.exe" ^
-              -DCMAKE_MAKE_PROGRAM=%CMAKE_MAKE_PROGRAM% ^
-              -G "%CMAKE_GENERATOR%" ^
-              ..
-          
-          rem Target "tests" depends on everything, so this will also build AdguardDns64.dll
-          %CMAKE_MAKE_PROGRAM% tests || exit /b 1
-          deactivate
-      working-dir: dns-libs
-      description: Compile (x64)
-  - script:
-      interpreter: BINSH_OR_CMDEXE
-      scripts:
-        - |-
-          call vcvarsall amd64_arm64
-          call .\venv\Scripts\activate
-          conan remove -c "*"
-
-          set CMAKE=cmake
-          set CTEST=ctest
-          set CMAKE_MAKE_PROGRAM=ninja
-          set CMAKE_MAKE_FLAGS=""
-          set CMAKE_GENERATOR="Ninja"
-          set CL_GIT_ROOT=%cd%
-          cd %bamboo_winProjectDir%/capi
-          set CL_ROOT=%cd%
-
-          if exist build64\ rmdir /s /q build64 || exit /b 1
-          mkdir build64 || exit /b 1
-          cd build64 || exit /b 1
-
-          %CMAKE% -DCMAKE_BUILD_TYPE=%bamboo_cmakeBuildProfile% ^
-              -DCMAKE_USE_OPENSSL=ON ^
-              -DCMAKE_C_COMPILER="cl.exe" ^
-              -DCMAKE_CXX_COMPILER="cl.exe" ^
-              -DCMAKE_MAKE_PROGRAM=%CMAKE_MAKE_PROGRAM% ^
-              -DCMAKE_SYSTEM_NAME=Windows ^
-              -DCMAKE_SYSTEM_PROCESSOR=ARM64 ^
-              -G "%CMAKE_GENERATOR%" ^
-              ..
-
-          rem Target "tests" depends on everything, so this will also build AdguardDns64.dll
-          %CMAKE_MAKE_PROGRAM% tests || exit /b 1
-          deactivate
-      working-dir: dns-libs
-      description: Compile (Arm64)
-  - script:
-      interpreter: BINSH_OR_CMDEXE
-      scripts:
-      - |-
-        call vcvarsamd64_x86
-        set CL_GIT_ROOT=%cd%
-        cd %bamboo_winProjectDir%
-        set CL_ROOT=%cd%
-        cd cs\Adguard.Dns
-        REM build csharp library
-        del /s *.nupkg
-        REM set NUGET_PACKAGES=c:\builder\BambooNuGetPackages
-        set NUGET_PACKAGES=%cd%/packages
-        nuget restore
-        msbuild Adguard.Dns.Tests /t:Build /t:Test /p:Configuration=Release /p:Platform=AnyCPU || exit /b 1
+        # Run tests
+        & msbuild Adguard.Dns.Tests /t:Build /t:Test /p:Configuration=Release /p:Platform=AnyCPU
+        if (!$?) { exit 1 }
+        # Check that package can be assembled
+        & nuget pack Adguard.Dns -p Configuration=Release -p Platform=AnyCPU
+        if (!$?) { exit 1 }
         exit 0
       working-dir: dns-libs
       description: Build C#library and Run C# tests
@@ -158,13 +117,11 @@ DL - Win tests and deploy:
       interpreter: SHELL
       scripts:
       - |-
-        call .\venv\Scripts\activate
         REM Upload built binaries
         conan remote login art "%bamboo_artifactoryUser%" --password "%bamboo_artifactoryPassword%"
         conan upload -r art -c "*" 1>&2
         REM Clean up local cache
         conan remove -c "*"
-        deactivate
       working-dir: dns-libs
       description: Conan upload and cleanup
   requirements:
