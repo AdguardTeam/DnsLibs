@@ -4,6 +4,11 @@
 #include <vector>
 #include <magic_enum/magic_enum.hpp>
 
+#ifdef __APPLE__
+#include <sys/qos.h>
+#include <TargetConditionals.h>
+#endif // __APPLE__
+
 #include "common/logger.h"
 #include "common/net_utils.h"
 #include "dns/dnsfilter/dnsfilter.h"
@@ -169,6 +174,11 @@ struct DnsProxySettings {
 
     /** Enable HTTP/3 for DNS-over-HTTPS upstreams if it's able to connect quicker. */
     bool enable_http3;
+
+#if defined(__APPLE__) && TARGET_OS_IPHONE
+    /** QoS priority class for threads/queues on iOS. */
+    qos_class_t qos_priority;
+#endif // __APPLE__ && TARGET_OS_IPHONE
 };
 
 }  // namespace ag::dns

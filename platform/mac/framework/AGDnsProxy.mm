@@ -638,6 +638,9 @@ static ServerStamp convert_stamp(AGDnsStamp *stamp) {
     _enableFallbackOnUpstreamsFailure = settings->enable_fallback_on_upstreams_failure;
     _enableServfailOnUpstreamsFailure = settings->enable_servfail_on_upstreams_failure;
     _enableHttp3 = settings->enable_http3;
+#if TARGET_OS_IPHONE
+    _qosPriority = settings->qos_priority;
+#endif // TARGET_OS_IPHONE
     return self;
 }
 
@@ -1399,6 +1402,10 @@ static ProxySettingsOverrides convertProxySettingsOverrides(const AGDnsProxySett
     settings.enable_parallel_upstream_queries = config.enableParallelUpstreamQueries;
     settings.enable_fallback_on_upstreams_failure = config.enableFallbackOnUpstreamsFailure;
     settings.enable_servfail_on_upstreams_failure = config.enableServfailOnUpstreamsFailure;
+
+#if TARGET_OS_IPHONE
+    settings.qos_priority = config.qosPriority;
+#endif // TARGET_OS_IPHONE
 
     auto [ret, err_or_warn] = self->proxy.init(std::move(settings), std::move(native_events));
     if (!ret) {

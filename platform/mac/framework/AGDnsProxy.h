@@ -540,6 +540,13 @@ typedef NS_ENUM(NSInteger, AGDnsOutboundProxyProtocol) {
  * Enable HTTP/3 for DNS-over-HTTPS upstreams if it's able to connect quicker.
  */
 @property(nonatomic) BOOL enableHttp3;
+#if TARGET_OS_IPHONE
+/**
+ * QoS priority class for threads/queues on iOS.
+ */
+@property(nonatomic) qos_class_t qosPriority;
+#endif // TARGET_OS_IPHONE
+
 /**
  * Path to adguard-tun-helper (macOS only)
  */

@@ -8,6 +8,11 @@
 #include <memory>
 #include <thread>
 
+#ifdef __APPLE__
+#include <sys/qos.h>
+#include <TargetConditionals.h>
+#endif // __APPLE__
+
 #include "common/clock.h"
 #include "common/coro.h"
 #include "common/defs.h"
@@ -19,6 +24,16 @@ namespace ag::dns {
 class EventLoop;
 
 using EventLoopPtr = std::shared_ptr<EventLoop>;
+
+/**
+ * Event loop settings struct.
+ * For now only holds QoS class for threads on iOS.
+ */
+struct EventLoopSettings {
+#if defined(__APPLE__) && TARGET_OS_IPHONE
+    qos_class_t qos_priority = QOS_CLASS_DEFAULT;
+#endif // __APPLE__ && TARGET_OS_IPHONE
+};
 
 /**
  * Event loop class. Uses libuv.
@@ -33,7 +48,7 @@ public:
 
     ~EventLoop();
 
-    void start();
+    void start(EventLoopSettings settings = {});
     void stop();
     void join();
 

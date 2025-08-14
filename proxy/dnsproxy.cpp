@@ -5,6 +5,11 @@
 #include <utility>
 #include <vector>
 
+#ifdef __APPLE__
+#include <sys/qos.h>
+#include <TargetConditionals.h>
+#endif // __APPLE__
+
 #include "common/coro.h"
 #include "common/defs.h"
 #include "common/logger.h"
@@ -98,6 +103,9 @@ static const DnsProxySettings DEFAULT_PROXY_SETTINGS = {
         .enable_fallback_on_upstreams_failure = true,
         .enable_servfail_on_upstreams_failure = false,
         .enable_http3 = false,
+#if defined(__APPLE__) && TARGET_OS_IPHONE
+        .qos_priority = QOS_CLASS_DEFAULT,
+#endif // __APPLE__ && TARGET_OS_IPHONE
 };
 
 const DnsProxySettings &DnsProxySettings::get_default() {
@@ -132,6 +140,7 @@ DnsProxy::DnsProxyInitResult DnsProxy::init(DnsProxySettings settings, DnsProxyE
     }
 
     proxy->loop = EventLoop::create();
+
     proxy->forwarder.emplace();
     auto [result, err_or_warn] = proxy->forwarder->init(proxy->loop, proxy->settings, proxy->events);
     if (!result) {
@@ -156,7 +165,11 @@ DnsProxy::DnsProxyInitResult DnsProxy::init(DnsProxySettings settings, DnsProxyE
         }
     }
 
-    proxy->loop->start();
+    proxy->loop->start({
+#if defined(__APPLE__) && TARGET_OS_IPHONE
+        .qos_priority = proxy->settings.qos_priority
+#endif // __APPLE__ && TARGET_OS_IPHONE
+    });
 
     infolog(proxy->log, "Proxy module initialized");
     return {true, err_or_warn};

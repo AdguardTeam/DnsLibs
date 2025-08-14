@@ -1,6 +1,10 @@
 #include <vector>
 #include <uv.h>
 
+#ifdef __APPLE__
+#include <TargetConditionals.h>
+#endif // __APPLE__
+
 #include "common/logger.h"
 #include "common/time_utils.h"
 
@@ -118,17 +122,20 @@ void EventLoop::join() {
     dbglog(m_log, "Joined");
 }
 
-void EventLoop::start() {
+void EventLoop::start(EventLoopSettings settings) {
     if (m_handle && !m_running) {
         m_running = true;
-        m_thread = std::thread([this]{
+        m_thread = std::thread([this, settings = std::move(settings)]{
+            (void)settings; // [[maybe_unused]] isn't supported on lambda captures
 #ifndef _WIN32
             signal(SIGPIPE, SIG_IGN);
 #ifdef __APPLE__
-# if !TARGET_OS_IPHONE
+#if TARGET_OS_IPHONE
+            pthread_set_qos_class_self_np(settings.qos_priority, 0);
+#else
             pthread_set_qos_class_self_np(QOS_CLASS_USER_INITIATED, 0);
-# endif // !TARGET_OS_IPHONE
-#endif
+#endif // TARGET_OS_IPHONE
+#endif // __APPLE__
 #endif
             uv_run(m_handle->raw(), UV_RUN_DEFAULT);
             m_running = false;
