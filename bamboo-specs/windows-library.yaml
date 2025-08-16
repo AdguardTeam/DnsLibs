@@ -114,14 +114,14 @@ DL - Win tests and deploy:
         testResultsDirectory: '**/Adguard.Dns.Tests/TestResult.xml'
         pickupOutdatedFiles: 'false'
   - script:
-      interpreter: SHELL
+      interpreter: WINDOWS_POWER_SHELL
       scripts:
       - |-
-        REM Upload built binaries
-        conan remote login art "%bamboo_artifactoryUser%" --password "%bamboo_artifactoryPassword%"
-        conan upload -r art -c "*" 1>&2
-        REM Clean up local cache
-        conan remove -c "*"
+        conan remote login art $Env:bamboo_artifactoryUser --password $Env:bamboo_artifactoryPassword
+        conan upload -r art -c "*" 2>&1 | Select-String "Uploading" -SimpleMatch
+        Write-Host "conan upload finished with status $LASTEXITCODE"
+        conan remove -c "*" *> $null
+        conan cache clean *> $null
       working-dir: dns-libs
       description: Conan upload and cleanup
   requirements:

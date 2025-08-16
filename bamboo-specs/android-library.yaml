@@ -67,9 +67,7 @@ DL - Android build and deploy:
       interpreter: SHELL
       scripts:
       - |-
-        conan remote login art "${bamboo_artifactoryUser}" --password "${bamboo_artifactoryPassword}"
-        conan upload -r art -c '*' 2>&1 | grep Uploading >&2
-        echo conan upload finished with status $?
+        ./bamboo-specs/scripts/conan_upload_and_cleanup.sh
       description: Conan upload and cleanup
   artifacts:
   - name: aar
