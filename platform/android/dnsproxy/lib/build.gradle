@@ -4,7 +4,7 @@ version = [name: '2.6.15', code: 617]
 
 android {
     namespace 'com.adguard.dnslibs'
-    ndkVersion '26.2.11394342'
+    ndkVersion '28.1.13356709'
     compileSdk 34
 
     defaultConfig {
