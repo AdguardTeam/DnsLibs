@@ -23,18 +23,15 @@ Run C++ tests:
   - script:
       interpreter: SHELL
       scripts:
-        - |-
-          set -x -e
-
-          conan remote add --index 0 art ${bamboo.conanRepoUrl} || true
-      description: Add conan remote
-  - script:
-      interpreter: SHELL
-      scripts:
       - |-
         #!/bin/bash
         set -e
         set -x
+
+        conan remote add --index 0 art ${bamboo.conanRepoUrl} || true
+
+        DL_ROOT=${PWD}
+        trap "git clean -d -x -f ${DL_ROOT} --exclude '**/Testing/*/*.xml'" EXIT
 
         export CMAKE=cmake
         export CTEST=ctest
@@ -79,7 +76,7 @@ Run C++ tests:
       interpreter: SHELL
       scripts:
       - |-
-        ./bamboo-specs/scripts/conan_upload_and_cleanup.sh
+        dns-libs/bamboo-specs/scripts/conan_upload_and_cleanup.sh
       description: Conan upload and cleanup
   requirements:
   - adg-privileged-docker

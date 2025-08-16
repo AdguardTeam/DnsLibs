@@ -41,6 +41,9 @@ DL - Android build and deploy:
 
         cp -r ../../../../dns-libs-private/* .
 
+        DL_ROOT=${PWD}/../../..
+        trap "git clean -d -x -f ${DL_ROOT} --exclude '**/lib-release.aar'" EXIT
+
         current_branch=${bamboo_repository_branch_name}
         if [ "${bamboo_customRevision}" != "" ]; then
             current_branch=${bamboo_customRevision}
