@@ -70,7 +70,7 @@ DL - Android build and deploy:
       interpreter: SHELL
       scripts:
       - |-
-        ./bamboo-specs/scripts/conan_upload_and_cleanup.sh
+        dns-libs/bamboo-specs/scripts/conan_upload_and_cleanup.sh
       description: Conan upload and cleanup
   artifacts:
   - name: aar
