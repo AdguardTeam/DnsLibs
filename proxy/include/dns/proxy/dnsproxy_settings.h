@@ -83,6 +83,13 @@ struct ListenerSettings {
     }
 };
 
+#if defined(__APPLE__) && TARGET_OS_IPHONE
+struct DnsQosSettings {
+    qos_class_t qos_class = QOS_CLASS_DEFAULT;
+    int relative_priority = 0;
+};
+#endif // defined(__APPLE__) && TARGET_OS_IPHONE
+
 struct DnsProxySettings {
     /**
      * Get the default DNS proxy settings
@@ -176,8 +183,8 @@ struct DnsProxySettings {
     bool enable_http3;
 
 #if defined(__APPLE__) && TARGET_OS_IPHONE
-    /** QoS priority class for threads/queues on iOS. */
-    qos_class_t qos_priority;
+    /** QoS class and relative priority for threads on iOS. */
+    DnsQosSettings qos_settings;
 #endif // __APPLE__ && TARGET_OS_IPHONE
 };
 

@@ -408,6 +408,42 @@ typedef NS_ENUM(NSInteger, AGDnsOutboundProxyProtocol) {
 
 @end
 
+#if TARGET_OS_IPHONE
+/**
+ * @interface AGQosSettings
+ * Represents QoS-related settings on iOS.
+ */
+@interface AGDnsQosSettings : AGDnsXPCObject <NSSecureCoding>
+
+/**
+ * QoS priority class for threads/queues on iOS.
+ */
+@property(nonatomic) qos_class_t qosClass;
+
+/**
+ * Relative priority within the QoS class.
+ */
+@property (nonatomic) int relativePriority;
+
+/**
+ * Designated initializer.
+ *
+ * @param qosClass The QoS class (USER_INTERACTIVE, USER_INITIATED, etc.)
+ * @param relativePriority Relative priority.
+ */
+- (instancetype)initWithQosClass:(qos_class_t)qosClass
+                relativePriority:(int)relativePriority NS_DESIGNATED_INITIALIZER;
+
+- (instancetype)init;
+
+- (instancetype)initWithCoder:(NSCoder *)coder;
+
+- (void)encodeWithCoder:(NSCoder *)coder;
+
+- (NSString*)description;
+
+@end
+#endif // TARGET_OS_IPHONE
 
 /**
  * @interface AGDnsProxyConfig
@@ -542,9 +578,14 @@ typedef NS_ENUM(NSInteger, AGDnsOutboundProxyProtocol) {
 @property(nonatomic) BOOL enableHttp3;
 #if TARGET_OS_IPHONE
 /**
- * QoS priority class for threads/queues on iOS.
+ * QoS settings for threads on iOS.
  */
-@property(nonatomic) qos_class_t qosPriority;
+
+@property(nonatomic, strong) AGDnsQosSettings *qosSettings;
+/**
+ * QoS settings for queues on iOS.
+ */
+@property(nonatomic, strong) AGDnsQosSettings *callbacksQosSettings;
 #endif // TARGET_OS_IPHONE
 
 /**

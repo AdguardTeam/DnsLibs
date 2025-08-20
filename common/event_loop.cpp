@@ -131,7 +131,7 @@ void EventLoop::start(EventLoopSettings settings) {
             signal(SIGPIPE, SIG_IGN);
 #ifdef __APPLE__
 #if TARGET_OS_IPHONE
-            pthread_set_qos_class_self_np(settings.qos_priority, 0);
+            pthread_set_qos_class_self_np(settings.qos_class, settings.qos_relative_priority);
 #else
             pthread_set_qos_class_self_np(QOS_CLASS_USER_INITIATED, 0);
 #endif // TARGET_OS_IPHONE

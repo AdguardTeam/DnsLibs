@@ -577,6 +577,58 @@ static ServerStamp convert_stamp(AGDnsStamp *stamp) {
 
 @end
 
+#if TARGET_OS_IPHONE
+@implementation AGDnsQosSettings
+
+- (instancetype)initWithQosClass:(qos_class_t)qosClass
+                relativePriority:(int)relativePriority
+{
+    self = [super init];
+    if (self) {
+        _qosClass = qosClass;
+
+        if (relativePriority < QOS_MIN_RELATIVE_PRIORITY) {
+            _relativePriority = QOS_MIN_RELATIVE_PRIORITY;
+        } else {
+            _relativePriority = relativePriority;
+        }
+    }
+    return self;
+}
+
+- (instancetype)init {
+    return [self initWithQosClass:QOS_CLASS_DEFAULT relativePriority:0];
+}
+
+- (instancetype)initWithNative:(const DnsQosSettings *)settings
+{
+    return [self initWithQosClass:settings->qos_class relativePriority:settings->relative_priority];
+}
+
++ (BOOL)supportsSecureCoding {
+    return YES;
+}
+
+- (void)encodeWithCoder:(NSCoder *)coder {
+    [coder encodeInteger:_qosClass forKey:@"qosClass"];
+    [coder encodeInteger:_relativePriority forKey:@"relativePriority"];
+}
+
+- (instancetype)initWithCoder:(NSCoder *)coder {
+    auto qosClass = (qos_class_t)[coder decodeIntegerForKey:@"qosClass"];
+    int relPrio = (int)[coder decodeIntegerForKey:@"relativePriority"];
+    return [self initWithQosClass:qosClass relativePriority:relPrio];
+}
+
+- (NSString*)description {
+    return [NSString stringWithFormat:
+            @"[(%p)AGQosSettings: qosClass=%u, relativePriority=%d]",
+            self, _qosClass, _relativePriority];
+}
+
+@end
+#endif // TARGET_OS_IPHONE
+
 @implementation AGDnsProxyConfig
 
 + (BOOL)supportsSecureCoding {
@@ -639,7 +691,7 @@ static ServerStamp convert_stamp(AGDnsStamp *stamp) {
     _enableServfailOnUpstreamsFailure = settings->enable_servfail_on_upstreams_failure;
     _enableHttp3 = settings->enable_http3;
 #if TARGET_OS_IPHONE
-    _qosPriority = settings->qos_priority;
+    _qosSettings = [[AGDnsQosSettings alloc] initWithNative: &settings->qos_settings];
 #endif // TARGET_OS_IPHONE
     return self;
 }
@@ -677,6 +729,10 @@ static ServerStamp convert_stamp(AGDnsStamp *stamp) {
         _enableServfailOnUpstreamsFailure = [coder decodeBoolForKey:@"_enableServfailOnUpstreamsFailure"];
         _enableHttp3 = [coder decodeBoolForKey:@"_enableHttp3"];
         _helperPath = [coder decodeObjectOfClass:NSString.class forKey:@"_helperPath"];
+#if TARGET_OS_IPHONE
+        _qosSettings = [coder decodeObjectOfClass:AGDnsQosSettings.class forKey:@"_qosSettings"];
+        _callbacksQosSettings = [coder decodeObjectOfClass:AGDnsQosSettings.class forKey:@"_callbacksQosSettings"];
+#endif // TARGET_OS_IPHONE
     }
 
     return self;
@@ -713,6 +769,10 @@ static ServerStamp convert_stamp(AGDnsStamp *stamp) {
     [coder encodeBool:self.enableServfailOnUpstreamsFailure forKey:@"_enableServfailOnUpstreamsFailure"];
     [coder encodeBool:self.enableHttp3 forKey:@"_enableHttp3"];
     [coder encodeObject:self.helperPath forKey:@"_helperPath"];
+#if TARGET_OS_IPHONE
+    [coder encodeObject:self.qosSettings forKey:@"_qosSettings"];
+    [coder encodeObject:self.callbacksQosSettings forKey:@"_callbacksQosSettings"];
+#endif // TARGET_OS_IPHONE
 }
 
 - (NSString *)description {
@@ -744,6 +804,10 @@ static ServerStamp convert_stamp(AGDnsStamp *stamp) {
     [description appendFormat:@", self.enableServfailOnUpstreamsFailure=%d", self.enableServfailOnUpstreamsFailure];
     [description appendFormat:@", self.enableHttp3=%d", self.enableHttp3];
     [description appendFormat:@", self.helperPath=%@", self.helperPath];
+#if TARGET_OS_IPHONE
+    [description appendFormat:@", self.qosSettings=%@", self.qosSettings];
+    [description appendFormat:@", self.callbacksQosSettings=%@", self.callbacksQosSettings];
+#endif // TARGET_OS_IPHONE
     [description appendString:@">"];
     return description;
 }
@@ -1294,7 +1358,14 @@ static ProxySettingsOverrides convertProxySettingsOverrides(const AGDnsProxySett
     }
 
     void *obj = (__bridge void *)self;
-    self->queue = dispatch_queue_create("com.adguard.dnslibs.AGDnsProxy.queue", nil);
+
+    dispatch_queue_attr_t attr = nil;
+#if TARGET_OS_IPHONE
+    attr = dispatch_queue_attr_make_with_qos_class(DISPATCH_QUEUE_SERIAL,
+                                                   config.callbacksQosSettings.qosClass,
+                                                   config.callbacksQosSettings.relativePriority);
+#endif // TARGET_OS_IPHONE
+    self->queue = dispatch_queue_create("com.adguard.dnslibs.AGDnsProxy.queue", attr);
     dispatch_queue_set_specific(self->queue, IS_DNS_QUEUE_KEY, (void *) 0x1, nullptr);
     self->events = handler;
     DnsProxyEvents native_events = {};
@@ -1404,7 +1475,8 @@ static ProxySettingsOverrides convertProxySettingsOverrides(const AGDnsProxySett
     settings.enable_servfail_on_upstreams_failure = config.enableServfailOnUpstreamsFailure;
 
 #if TARGET_OS_IPHONE
-    settings.qos_priority = config.qosPriority;
+    settings.qos_settings.qos_class = config.qosSettings.qosClass;
+    settings.qos_settings.relative_priority = config.qosSettings.relativePriority;
 #endif // TARGET_OS_IPHONE
 
     auto [ret, err_or_warn] = self->proxy.init(std::move(settings), std::move(native_events));

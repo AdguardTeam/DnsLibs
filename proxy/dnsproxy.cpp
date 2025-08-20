@@ -104,7 +104,10 @@ static const DnsProxySettings DEFAULT_PROXY_SETTINGS = {
         .enable_servfail_on_upstreams_failure = false,
         .enable_http3 = false,
 #if defined(__APPLE__) && TARGET_OS_IPHONE
-        .qos_priority = QOS_CLASS_DEFAULT,
+        .qos_settings = {
+            .qos_class = QOS_CLASS_DEFAULT,
+            .relative_priority = 0,
+        }
 #endif // __APPLE__ && TARGET_OS_IPHONE
 };
 
@@ -167,7 +170,8 @@ DnsProxy::DnsProxyInitResult DnsProxy::init(DnsProxySettings settings, DnsProxyE
 
     proxy->loop->start({
 #if defined(__APPLE__) && TARGET_OS_IPHONE
-        .qos_priority = proxy->settings.qos_priority
+        .qos_class = proxy->settings.qos_settings.qos_class,
+        .qos_relative_priority = proxy->settings.qos_settings.relative_priority
 #endif // __APPLE__ && TARGET_OS_IPHONE
     });
 

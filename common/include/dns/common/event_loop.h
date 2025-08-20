@@ -27,11 +27,12 @@ using EventLoopPtr = std::shared_ptr<EventLoop>;
 
 /**
  * Event loop settings struct.
- * For now only holds QoS class for threads on iOS.
+ * For now only holds QoS class and relative priority for threads/queues on iOS.
  */
 struct EventLoopSettings {
 #if defined(__APPLE__) && TARGET_OS_IPHONE
-    qos_class_t qos_priority = QOS_CLASS_DEFAULT;
+    qos_class_t qos_class = QOS_CLASS_DEFAULT;
+    int qos_relative_priority = 0;
 #endif // __APPLE__ && TARGET_OS_IPHONE
 };
 
