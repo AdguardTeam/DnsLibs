@@ -29,23 +29,23 @@ class DnsLibsConan(ConanFile):
     exports_sources = patch_files
 
     def requirements(self):
-        self.requires("libevent/2.1.11@adguard_team/native_libs_common", transitive_headers=True)
-        self.requires("libsodium/1.0.18@adguard_team/native_libs_common", transitive_headers=True)
-        self.requires("libuv/1.41.0@adguard_team/native_libs_common", transitive_headers=True)
-        self.requires("klib/2021-04-06@adguard_team/native_libs_common", transitive_headers=True)
-        self.requires("ldns/2021-03-29@adguard_team/native_libs_common", transitive_headers=True)
+        self.requires("libevent/2.1.11@adguard/oss", transitive_headers=True)
+        self.requires("libsodium/1.0.18@adguard/oss", transitive_headers=True)
+        self.requires("libuv/1.41.0@adguard/oss", transitive_headers=True)
+        self.requires("klib/2021-04-06@adguard/oss", transitive_headers=True)
+        self.requires("ldns/2021-03-29@adguard/oss", transitive_headers=True)
         self.requires("magic_enum/0.9.5", transitive_headers=True)
-        self.requires("native_libs_common/7.0.29@adguard_team/native_libs_common", transitive_headers=True)
-        self.requires("ngtcp2/1.0.1@adguard_team/native_libs_common", transitive_headers=True)
-        self.requires("pcre2/10.37@adguard_team/native_libs_common", transitive_headers=True)
-        self.requires("tldregistry/2022-12-26@adguard_team/native_libs_common", transitive_headers=True)
+        self.requires("native_libs_common/7.0.34@adguard/oss", transitive_headers=True)
+        self.requires("ngtcp2/1.0.1@adguard/oss", transitive_headers=True)
+        self.requires("pcre2/10.37@adguard/oss", transitive_headers=True)
+        self.requires("tldregistry/2022-12-26@adguard/oss", transitive_headers=True)
         if "mips" in str(self.settings.arch):
-            self.requires("openssl/3.1.5-quic1@adguard_team/native_libs_common", transitive_headers=True, force=True)
+            self.requires("openssl/3.1.5-quic1@adguard/oss", transitive_headers=True, force=True)
         else:
-            self.requires("openssl/boring-2023-05-17@adguard_team/native_libs_common", transitive_headers=True)
+            self.requires("openssl/boring-2024-09-13@adguard/oss", transitive_headers=True)
         self.requires("ada/2.7.4", transitive_headers=True)
         if self.settings.os == "Windows":
-            self.requires("detours/2021-04-14@adguard_team/native_libs_common", transitive_headers=True)
+            self.requires("detours/2021-04-14@adguard/oss", transitive_headers=True)
 
     def build_requirements(self):
         self.test_requires("gtest/1.14.0")
