@@ -19,24 +19,12 @@ namespace ag::dns {
 
 using std::chrono::duration_cast;
 
-static constexpr int64_t RESOLVE_TRYING_INTERVAL_MS = 7000;
-static constexpr int64_t TEMPORARY_DISABLE_INTERVAL_MS = 7000;
-
 // For each resolver a half of time out is given for a try. If one fails, it's moved to the end
 // of the list to give it a chance in the future.
 //
 // Note: in case of success MUST always return vector of addresses in address field of result
-coro::Task<Bootstrapper::ResolveResult> Bootstrapper::resolve() {
-    if (SocketAddress addr(m_server_name, m_server_port); addr.valid()) {
-        co_return {{addr}, m_server_name, Millis(0), {}};
-    }
-
-    if (m_resolvers.empty()) {
-        co_return {{}, m_server_name, Millis(0), make_error(BootstrapperError::AE_EMPTY_LIST)};
-    }
-
+coro::Task<void> Bootstrapper::do_resolve() {
     HashSet<SocketAddress> addrs;
-    utils::Timer whole_resolve_timer;
     Millis timeout = m_timeout;
     Error<Resolver::ResolverError> error;
 
@@ -55,10 +43,7 @@ coro::Task<Bootstrapper::ResolveResult> Bootstrapper::resolve() {
     std::weak_ptr<bool> shutdown_guard = m_shutdown_guard;
     std::optional<Resolver::Result> res = co_await aw;
     if (shutdown_guard.expired()) {
-        co_return Bootstrapper::ResolveResult{
-            .server_name = server_name,
-            .error = make_error(BootstrapperError::AE_SHUTTING_DOWN)
-        };
+        co_return;
     }
     if (res.has_value()) {
         std::move(res->value().begin(), res->value().end(), std::inserter(addrs, addrs.begin()));
@@ -71,60 +56,46 @@ coro::Task<Bootstrapper::ResolveResult> Bootstrapper::resolve() {
         }
     }
 
-    auto elapsed = whole_resolve_timer.elapsed<Millis>();
-
     std::vector<SocketAddress> addresses(std::move_iterator(addrs.begin()), std::move_iterator(addrs.end()));
-    co_return {std::move(addresses), m_server_name, elapsed,
+    complete_resolve({std::move(addresses), m_server_name, {},
             error ? error->value() == Resolver::ResolverError::AE_SHUTTING_DOWN
                             ? make_error(BootstrapperError::AE_SHUTTING_DOWN, error)
                             : make_error(BootstrapperError::AE_RESOLVE_FAILED, error)
-                  : nullptr};
+                  : nullptr});
 }
 
-Error<Bootstrapper::BootstrapperError> Bootstrapper::temporary_disabler_check() {
-    using namespace std::chrono;
-    if (m_resolve_fail_times_ms.first) {
-        if (int64_t tries_timeout_ms = m_resolve_fail_times_ms.first + RESOLVE_TRYING_INTERVAL_MS;
-                m_resolve_fail_times_ms.second > tries_timeout_ms) {
-            auto now_ms = duration_cast<Millis>(steady_clock::now().time_since_epoch()).count();
-            if (int64_t disabled_for_ms = now_ms - tries_timeout_ms,
-                    remaining_ms = TEMPORARY_DISABLE_INTERVAL_MS - disabled_for_ms;
-                    remaining_ms > 0) {
-                return make_error(BootstrapperError::AE_TEMPORARY_DISABLED, AG_FMT("Disabled for {}ms", remaining_ms));
-            }
-            m_resolve_fail_times_ms.first = 0;
-        }
+std::optional<Bootstrapper::ResolveResult> Bootstrapper::try_get_ready_result() {
+    if (SocketAddress addr(m_server_name, m_server_port); addr.valid()) {
+        return ResolveResult{{addr}, m_server_name, Millis(0), {}};
     }
-    return {};
-}
-
-void Bootstrapper::temporary_disabler_update(bool fail) {
-    using namespace std::chrono;
-    if (fail) {
-        auto now_ms = duration_cast<Millis>(steady_clock::now().time_since_epoch()).count();
-        m_resolve_fail_times_ms.second = now_ms;
-        if (!m_resolve_fail_times_ms.first) {
-            m_resolve_fail_times_ms.first = m_resolve_fail_times_ms.second;
-        }
-    } else {
-        m_resolve_fail_times_ms.first = 0;
-    }
-}
-
-coro::Task<Bootstrapper::ResolveResult> Bootstrapper::get() {
     if (!m_resolved_cache.empty()) {
-        co_return {m_resolved_cache, m_server_name, Millis(0), {}};
-    } else if (auto error = temporary_disabler_check()) {
-        co_return {{}, m_server_name, Millis(0), error};
+        return ResolveResult{m_resolved_cache, m_server_name, Millis(0), {}};
     }
+    if (m_resolvers.empty()) {
+        return ResolveResult{{}, m_server_name, Millis(0), make_error(BootstrapperError::AE_EMPTY_LIST)};
+    }
+    return std::nullopt;
+}
 
-    ResolveResult result = co_await resolve();
-    assert(bool(result.error) == result.addresses.empty());
-    if (!result.error || result.error->value() != BootstrapperError::AE_SHUTTING_DOWN) {
-        temporary_disabler_update(bool(result.error));
+void Bootstrapper::request_resolve(std::function<void(ResolveResult)> &&handler) {
+    bool in_progress = !m_request_handlers.empty();
+    m_request_handlers.emplace_back(std::move(handler));
+    if (!in_progress || SteadyClock::now() - m_last_resolve_time > Millis(500)) {
+        m_last_resolve_time = SteadyClock::now();
+        coro::run_detached(do_resolve());
+    }
+}
+
+void Bootstrapper::complete_resolve(ResolveResult result) {
+    if (!result.error) {
         m_resolved_cache = result.addresses;
     }
-    co_return result;
+    std::list<RequestHandler> request_handlers;
+    request_handlers.swap(m_request_handlers);
+    for (auto it = request_handlers.begin(); it != request_handlers.end(); it++) {
+        result.time_elapsed = it->timer.elapsed<Millis>();
+        it->handler(result);
+    }
 }
 
 void Bootstrapper::remove_resolved(const SocketAddress &addr) {
@@ -173,7 +144,12 @@ Bootstrapper::Bootstrapper(const Params &p)
     m_shutdown_guard = std::make_shared<bool>(true);
 }
 
-Bootstrapper::~Bootstrapper() = default;
+Bootstrapper::~Bootstrapper() {
+    complete_resolve(Bootstrapper::ResolveResult{
+            .server_name = m_server_name,
+            .error = make_error(BootstrapperError::AE_SHUTTING_DOWN)
+    });
+}
 Bootstrapper::Bootstrapper(Bootstrapper &&) = default;
 Bootstrapper &Bootstrapper::operator=(Bootstrapper &&) = default;
 

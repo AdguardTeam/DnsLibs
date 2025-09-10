@@ -18,10 +18,6 @@ std::vector<SocketAddress> RESOLVED_ADDRESSES = {
         SocketAddress("1.1.1.1", 853),
 };
 
-coro::Task<Bootstrapper::ResolveResult> Bootstrapper::get() {
-    co_return {.addresses = m_resolved_cache};
-}
-
 Bootstrapper::Bootstrapper(const Params &p)
         : m_log("bootstrapper test") {
 }
@@ -50,9 +46,15 @@ Error<Bootstrapper::BootstrapperError> Bootstrapper::temporary_disabler_check() 
 void Bootstrapper::temporary_disabler_update(bool) {
 }
 
-coro::Task<Bootstrapper::ResolveResult> Bootstrapper::resolve() {
-    co_return {};
+coro::Task<void> Bootstrapper::do_resolve() { co_return; }
+
+void Bootstrapper::complete_resolve(ResolveResult) {}
+
+std::optional<Bootstrapper::ResolveResult> Bootstrapper::try_get_ready_result() {
+    return ResolveResult{m_resolved_cache, m_server_name, Millis(0), {}};
 }
+
+void Bootstrapper::request_resolve(std::function<void(ag::dns::Bootstrapper::ResolveResult)> &&handler) {}
 
 } // namespace ag::dns
 

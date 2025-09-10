@@ -51,10 +51,33 @@ public:
         Error<BootstrapperError> error; // non-nullopt if something went wrong
     };
 
+    std::optional<ResolveResult> try_get_ready_result();
+
+    void request_resolve(std::function<void(ResolveResult)> &&handler);
+
     /**
      * Get resolved addresses from bootstrapper
      */
-    coro::Task<ResolveResult> get();
+    auto get() {
+        struct Awaitable {
+            Bootstrapper *self;
+            std::optional<ResolveResult> result;
+            bool await_ready() {
+                result = self->try_get_ready_result();
+                return result.has_value();
+            }
+            void await_suspend(std::coroutine_handle<> h) {
+                self->request_resolve([this, h](ResolveResult resolve_result) {
+                    this->result = std::move(resolve_result);
+                    h();
+                });
+            }
+            ResolveResult await_resume() {
+                return this->result.value();
+            }
+        };
+        return Awaitable{.self = this};
+    }
 
     /**
      * Remove resolved address from the cache
@@ -82,7 +105,9 @@ private:
      */
     void temporary_disabler_update(bool fail);
 
-    coro::Task<ResolveResult> resolve();
+    coro::Task<void> do_resolve();
+
+    void complete_resolve(ResolveResult resolve_result);
 
     /** Logger */
     Logger m_log;
@@ -94,10 +119,16 @@ private:
     Millis m_timeout;
     /** Resolved addresses cache */
     std::vector<SocketAddress> m_resolved_cache;
-    /** Times of first and last remove fails */
-    std::pair<int64_t, int64_t> m_resolve_fail_times_ms;
     /** List of resolvers to use */
     std::vector<ResolverPtr> m_resolvers;
+    /** Resolve tasks */
+    struct RequestHandler {
+        std::function<void(ResolveResult)> handler;
+        utils::Timer timer;
+    };
+    std::list<RequestHandler> m_request_handlers;
+    /** Last resolve time */
+    SteadyClock::time_point m_last_resolve_time;
     /** Shutdown guard */
     std::shared_ptr<bool> m_shutdown_guard;
 };

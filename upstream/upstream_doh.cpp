@@ -361,6 +361,8 @@ ag::coro::Task<ag::dns::Upstream::ExchangeResult> ag::dns::DohUpstream::exchange
 
             coro::run_detached([](std::weak_ptr<bool> shutdown_guard, DohUpstream *self,
                                        SteadyClock::time_point start_ts) -> coro::Task<void> {
+                // Immediate fail leads to a loop, so we need to wait for the next loop iteration
+                co_await self->m_config.loop.co_submit();
                 if (!shutdown_guard.expired()) {
                     co_await self->drive_connection(
                             self->m_config.timeout - duration_cast<Millis>(SteadyClock::now() - start_ts));
