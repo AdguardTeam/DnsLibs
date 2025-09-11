@@ -506,6 +506,9 @@ void DoqUpstream::on_socket_read(void *arg, Uint8View data) {
     auto *ctx = (SocketContext *) arg;
     DoqUpstream *self = ctx->upstream;
     tracelog(self->m_log, "{}(): Read {} bytes from {}", __func__, data.size(), ctx->socket->get_peer().str());
+    if (self->m_state == STOP) {
+        return;
+    }
 
     std::string disconnect_reason;
     if (int ret = self->feed_data(data); ret != NETWORK_ERR_OK) {
