@@ -29,7 +29,7 @@ function(add_unit_test TEST_NAME TEST_DIR EXTRA_INCLUDES IS_GTEST EXPAND_GTEST)
     endif()
 
     if (${EXPAND_GTEST} AND NOT ${CMAKE_CROSSCOMPILING})
-        gtest_discover_tests(${TEST_NAME})
+        gtest_discover_tests(${TEST_NAME} PROPERTIES DISCOVERY_TIMEOUT 30)
     else()
         add_test(${TEST_NAME} ${TEST_NAME})
     endif()

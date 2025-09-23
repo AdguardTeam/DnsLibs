@@ -27,6 +27,9 @@ DL - Win tests and deploy:
         cd ${bamboo.build.working.directory}
         cd dns-libs
 
+        & conan remote add --index 0 art ${bamboo.conanRepoUrl}
+        $Env:bamboo_sshSecretKey -replace '\\n', "`n" | sc $Env:USERPROFILE\.ssh\id_rsa
+
         # Save vcvars to switch between them
         $vcvars32 = cmd /c "vcvarsamd64_x86 & set"
         $vcvars64 = cmd /c "vcvars64 & set"
@@ -90,10 +93,15 @@ DL - Win tests and deploy:
         }
         cd ../cs/Adguard.Dns
         Remove-Item *.nupkg -Force
+        & nuget sources add -Name Artifactory -Source "${bamboo.nugetRepoUrl}"
+        if (!$?) { exit 1 }
         ${Env:NUGET_PACKAGES}="$(pwd)/packages"
         & nuget restore
         if (!$?) { exit 1 }
 
+        # Skip strong name verification
+        & sn -Vr *
+        if (!$?) { exit 1 }
         # Run tests
         & msbuild Adguard.Dns.Tests /t:Build /t:Test /p:Configuration=Release /p:Platform=AnyCPU
         if (!$?) { exit 1 }
@@ -125,7 +133,8 @@ DL - Win tests and deploy:
       working-dir: dns-libs
       description: Conan upload and cleanup
   requirements:
-  - system.builder.msbuild.MSBuild v15.0 (32bit)
+  - ephemeral-windows
+  - image: registry.int.agrd.dev/windows/windows11-bamboo:16
   artifact-subscriptions: []
 variables:
   cmakeBuildProfile: RelWithDebInfo
