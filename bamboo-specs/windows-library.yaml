@@ -134,7 +134,7 @@ DL - Win tests and deploy:
       description: Conan upload and cleanup
   requirements:
   - ephemeral-windows
-  - image: registry.int.agrd.dev/windows/windows11-bamboo:16
+  - image: registry.int.agrd.dev/windows/windows11-bamboo:18
   artifact-subscriptions: []
 variables:
   cmakeBuildProfile: RelWithDebInfo
