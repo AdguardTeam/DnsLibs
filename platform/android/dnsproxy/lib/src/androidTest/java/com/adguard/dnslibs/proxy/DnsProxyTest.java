@@ -575,4 +575,47 @@ public class DnsProxyTest {
             fail();
         }
     }
+
+    @Test
+    public void testSystemUpstream() {
+        testSystemUpstreamWithAddress("system://");
+    }
+
+    @Test
+    public void testSystemUpstreamWithNetworkInterface() {
+        testSystemUpstreamWithAddress("system://eth0");
+    }
+
+    private void testSystemUpstreamWithAddress(String upstreamAddress) {
+        final DnsProxySettings settings = getDefaultSettings();
+        settings.getUpstreams().clear();
+
+        final UpstreamSettings systemUpstream = new UpstreamSettings();
+        systemUpstream.setAddress(upstreamAddress);
+        systemUpstream.setId(100);
+        settings.getUpstreams().add(systemUpstream);
+
+        settings.setUpstreamTimeoutMs(5000);
+
+        final List<DnsRequestProcessedEvent> eventList =
+                Collections.synchronizedList(new ArrayList<DnsRequestProcessedEvent>());
+
+        final DnsProxyEvents events = new DnsProxyEvents() {
+            @Override
+            public void onRequestProcessed(DnsRequestProcessedEvent event) {
+                log.info("System upstream ({}) DNS request processed: {}", upstreamAddress, event.toString());
+                eventList.add(event);
+            }
+        };
+        try (final DnsProxy proxy = new DnsProxy(context, settings, events)) {
+            assertEquals(settings, proxy.getSettings());
+
+            final Message req = Message.newQuery(Record.newRecord(Name.fromString("google.com."), Type.A, DClass.IN));
+            final Message res = new Message(proxy.handleMessage(req.toWire(), null));
+
+            assertEquals(Rcode.NOERROR, res.getRcode());
+        } catch (IOException e) {
+            fail("System upstream test failed for " + upstreamAddress + ": " + e.toString());
+        }
+    }
 }

@@ -100,6 +100,10 @@ public class DnsProxy implements Closeable {
             throws DnsProxyInitException, NullPointerException {
         this();
         Objects.requireNonNull(settings);
+
+        // Set application context for native network operations
+        setApplicationContext(context);
+
         if (settings.isDetectSearchDomains()) {
             List<String> searchDomains = DnsNetworkUtils.getDNSSearchDomains(context);
             if (searchDomains != null) {
@@ -222,6 +226,8 @@ public class DnsProxy implements Closeable {
     }
 
     private static native void setLogLevel(int level);
+
+    private static native void setApplicationContext(Context context);
 
     /**
      * Check if string is a valid rule

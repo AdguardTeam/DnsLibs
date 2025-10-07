@@ -40,7 +40,7 @@ public:
             static pthread_key_t tls_key{};
             static pthread_once_t once_control = PTHREAD_ONCE_INIT;
             ret = pthread_once(&once_control, [] {
-                auto ret = pthread_key_create(&tls_key, [](void *arg) {
+                [[maybe_unused]] auto ret = pthread_key_create(&tls_key, [](void *arg) {
                     auto vm = (JavaVM *) arg;
                     if (vm) {
                         vm->DetachCurrentThread();

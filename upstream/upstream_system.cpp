@@ -1,7 +1,15 @@
 #include "upstream_system.h"
+#include "common/logger.h"
 #include <net/if.h>
 
+#ifdef __ANDROID__
+#include <android/multinetwork.h>
+#include "android_context_manager.h"
+#endif
+
 namespace ag::dns {
+
+static ag::Logger g_log{"SystemUpstream"};
 
 SystemUpstream::SystemUpstream(const UpstreamOptions &opts, const UpstreamFactoryConfig &config)
         : Upstream(opts, config)
@@ -13,6 +21,20 @@ SystemUpstream::SystemUpstream(const UpstreamOptions &opts, const UpstreamFactor
 }
 
 Error<Upstream::InitError> SystemUpstream::init() {
+#ifdef __ANDROID__
+    net_handle_t network_handle = NETWORK_UNSPECIFIED;
+
+    if (!m_interface.empty()) {
+        auto handle_opt = AndroidContextManager::get_network_handle_for_interface(m_interface);
+        if (!handle_opt.has_value()) {
+            return make_error(InitError::AE_INVALID_ADDRESS, AG_FMT("Invalid interface name: {}", m_interface));
+        }
+        tracelog(g_log, "Resolved interface '{}' to network handle: {}", m_interface, handle_opt.value());
+        network_handle = handle_opt.value();
+    }
+
+    auto result = SystemResolver::create(&config().loop, config().timeout, network_handle);
+#else
     uint32_t if_index = 0;
     if (!m_interface.empty()) {
         if_index = if_nametoindex(m_interface.c_str());
@@ -22,6 +44,7 @@ Error<Upstream::InitError> SystemUpstream::init() {
     }
 
     auto result = SystemResolver::create(&config().loop, config().timeout, if_index);
+#endif
     if (result.has_error()) {
         return make_error(InitError::AE_SYSTEMRESOLVER_INIT_FAILED,
                 ErrorCodeToString<SystemResolverError>{}(result.error().get()->value()));
@@ -40,7 +63,7 @@ coro::Task<Upstream::ExchangeResult> SystemUpstream::exchange(const ldns_pkt *re
     if (result.has_error()) {
         auto &error = result.error();
         if (error->value() != SystemResolverError::AE_DOMAIN_NOT_FOUND
-            && error->value() != SystemResolverError::AE_RECORD_NOT_FOUND) {
+                && error->value() != SystemResolverError::AE_RECORD_NOT_FOUND) {
             if (error->value() == SystemResolverError::AE_TIMED_OUT) {
                 co_return make_error(DnsError::AE_TIMED_OUT, ErrorCodeToString<SystemResolverError>{}(error->value()));
             }
@@ -74,6 +97,5 @@ coro::Task<Upstream::ExchangeResult> SystemUpstream::exchange(const ldns_pkt *re
         assert(0);
         co_return ldns_pkt_ptr{};
     }
-
 }
 } // namespace ag::dns

@@ -15,6 +15,9 @@
 #include "dns/net/default_verifier.h"
 #include "dns/upstream/upstream.h"
 #include "dns/upstream/upstream_utils.h"
+#ifdef __ANDROID__
+#include "android_res_api.h"
+#endif
 
 #include "test_utils.h"
 
@@ -200,6 +203,17 @@ protected:
             infolog(logger, "Testing upstream: {}", data.address);
             std::this_thread::sleep_for(DELAY_BETWEEN_REQUESTS);
             auto upstream_res = create_upstream({data.address, data.bootstrap, data.server_ip});
+
+#ifdef __ANDROID__
+            // Skip system:// tests if Android API is not available
+            if (data.address.starts_with("system://")) {
+                if (!AndroidResApi::is_available()) {
+                    infolog(logger, "Skipping system:// test - Android API not available");
+                    continue;
+                }
+            }
+#endif
+
             ASSERT_FALSE(upstream_res.has_error()) << AG_FMT(
                     "Failed to generate upstream from address {}: {}", data.address, upstream_res.error()->str());
             auto error = coro::to_future(check_upstream_internal(std::move(upstream_res.value()), data.address)).get();
@@ -225,6 +239,9 @@ TEST_F(UpstreamTest, CreateUpstreamWithWrongOptions) {
 #ifdef __APPLE__
             {"system://enqwerty"},
 #endif // __APPLE__
+#ifdef __ANDROID__
+            {"system://invalidnetwork"},
+#endif // __ANDROID__
             // no bootstrapper and resolved server address
             {"https://example.com"},
             {"tls://one.one.one.one"},
@@ -362,6 +379,10 @@ static const UpstreamTestData test_upstreams_data[]{
         {"tcp://8.8.8.8", {}},
 #ifdef __APPLE__
         {"system://en0", {}},
+#endif
+#ifdef __ANDROID__
+        {"system://", {}},
+        {"system://eth0", {}},
 #endif
         {"8.8.8.8:53", {"8.8.8.8:53"}},
         {"1.0.0.1", {}},

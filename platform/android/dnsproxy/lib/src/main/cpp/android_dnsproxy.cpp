@@ -12,13 +12,20 @@
 
 #include "dns/proxy/dnsproxy.h"
 #include "dns/upstream/upstream_utils.h"
+#include "android_context_manager.h"
 
 using namespace ag;
 using namespace ag::dns;
 using namespace ag::jni;
 
 extern "C" JNIEXPORT jint JNICALL JNI_OnLoad(JavaVM *vm, void *) {
+    AndroidContextManager::initialize(vm);
     return JNI_VERSION_1_2;
+}
+
+extern "C" JNIEXPORT void JNICALL Java_com_adguard_dnslibs_proxy_DnsProxy_setApplicationContext(
+        JNIEnv *env, jclass clazz, jobject context) {
+    AndroidContextManager::set_application_context(context);
 }
 
 extern "C" JNIEXPORT jlong JNICALL Java_com_adguard_dnslibs_proxy_DnsProxy_create(JNIEnv *env, jobject jthis) {

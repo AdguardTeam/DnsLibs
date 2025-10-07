@@ -97,10 +97,10 @@ using CreateResult = UpstreamFactory::CreateResult;
 
 static CreateResult create_upstream_system(
         const UpstreamOptions &opts, const UpstreamFactoryConfig &config, std::vector<CertFingerprint>/*fingerprints*/ ) {
-#ifdef __APPLE__
+#if defined(__APPLE__) || defined(__ANDROID__)
     return CreateResult{std::make_unique<SystemUpstream>(opts, config)};
 #else
-    return make_error(UpstreamFactory::UpstreamCreateError::AE_NOT_SUPPORTED, "");
+    return make_error(UpstreamFactory::UpstreamCreateError::AE_NOT_SUPPORTED, "System resolver is not supported on this platform");
 #endif
 }
 
