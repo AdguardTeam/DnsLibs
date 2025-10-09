@@ -22,7 +22,7 @@ Execute the following commands in Terminal:
 
 ```shell
 mkdir build && cd build
-cmake ..
+cmake .. -DCMAKE_BUILD_TYPE=Debug
 ```
 
 For testing execute the following:

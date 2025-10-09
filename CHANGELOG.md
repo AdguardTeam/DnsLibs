@@ -1,5 +1,9 @@
 # Changelog
 
+## V2.7.0
+
+* [Feature] Added socket protection callback to prevent routing loops when using system-wide proxy rules
+
 ## V2.5
 
 * [Changed] For non-SDNS urls server properties is now null. It can be set later using `set_server_properties()`.

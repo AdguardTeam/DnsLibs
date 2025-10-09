@@ -29,7 +29,7 @@ git submodule update
 Next, create a directory and build project
 ```
 mkdir build && cd build
-cmake ..
+cmake .. -DCMAKE_BUILD_TYPE=Debug
 make -j4 listener_standalone
 ```
 By default, listener_standalone runs like proxy-server on UDP-port 1234 and TCP-port 1234 and just redirect all dns-requests

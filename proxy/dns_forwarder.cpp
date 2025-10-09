@@ -360,6 +360,9 @@ DnsForwarder::InitResult DnsForwarder::init(
                 .bootstrapper = std::make_unique<ProxyBootstrapper>(*m_loop, *m_settings, *m_events, m_shutdown_guard),
         };
     }
+    if (events.on_protect_socket) {
+        sf_parameters.protect_fd = events.on_protect_socket;
+    }
 
     m_socket_factory = std::make_shared<SocketFactory>(std::move(sf_parameters));
 

@@ -82,6 +82,7 @@ public:
         } oproxy;
         std::unique_ptr<CertificateVerifier> verifier;
         bool enable_route_resolver = true;
+        std::function<Error<SocketError>(evutil_socket_t, const SocketAddress &)> protect_fd;
     };
 
     struct SocketParameters {

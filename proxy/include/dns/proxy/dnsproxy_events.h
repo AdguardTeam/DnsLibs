@@ -7,6 +7,7 @@
 #include <vector>
 #include <optional>
 #include "dns/net/application_verifier.h"
+#include "dns/net/socket.h"
 
 namespace ag::dns {
 
@@ -52,6 +53,15 @@ struct DnsProxyEvents {
      *  - if not provided, default verifier will be used
      */
     OnCertificateVerificationFn on_certificate_verification;
+    /**
+     * Provides an implementation of route-loop protection for socket.
+     * This is an alternative way for case when providing UpstreamSettings.outbound_interface is not enough.
+     * Notes:
+     *  - if not provided, no socket protection is applied
+     *  - called for every outbound socket before connect
+     *  - if returns an error, the connection will fail
+     */
+    std::function<Error<SocketError>(evutil_socket_t, const SocketAddress &)> on_protect_socket;
 };
 
 
