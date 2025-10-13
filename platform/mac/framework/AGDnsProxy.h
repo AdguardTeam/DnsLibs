@@ -576,6 +576,10 @@ typedef NS_ENUM(NSInteger, AGDnsOutboundProxyProtocol) {
  * Enable HTTP/3 for DNS-over-HTTPS upstreams if it's able to connect quicker.
  */
 @property(nonatomic) BOOL enableHttp3;
+/**
+ * Enable post-quantum cryptography.
+ */
+@property(nonatomic) BOOL enablePostQuantumCryptography;
 #if TARGET_OS_IPHONE
 /**
  * QoS settings for threads on iOS.

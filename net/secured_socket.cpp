@@ -22,6 +22,7 @@ SecuredSocket::SecuredSocket(SocketFactory::SocketPtr underlying_socket, const C
         , m_codec(cert_verifier, secure_parameters.session_cache, std::move(secure_parameters.fingerprints))
         , m_sni(std::move(secure_parameters.server_name))
         , m_alpn(std::move(secure_parameters.alpn))
+        , m_enable_pq(secure_parameters.enable_post_quantum)
         , m_log(__func__) {
     m_shutdown_guard = std::make_shared<bool>(true);
 }
@@ -77,7 +78,7 @@ void SecuredSocket::on_connected(void *arg) {
     auto *self = (SecuredSocket *) arg;
     assert(self->m_state == SS_CONNECTING_SOCKET);
 
-    if (auto err = self->m_codec.connect(self->m_sni, self->m_alpn)) {
+    if (auto err = self->m_codec.connect(self->m_sni, self->m_alpn, self->m_enable_pq)) {
         if (Callbacks cbx = self->get_callbacks(); cbx.on_close != nullptr) {
             cbx.on_close(cbx.arg, make_error(SocketError::AE_TLS_ERROR, err));
             return;

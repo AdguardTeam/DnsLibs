@@ -167,5 +167,10 @@ namespace Adguard.Dns.Api.DnsProxyServer.Configs
         /// Enable HTTP/3 for DNS-over-HTTPS upstreams if it's able to connect quicker.
         /// </summary>
         public bool EnableHttp3  { get; set; }
+
+        /// <summary>
+        /// Enable post-quantum cryptography for DNS-over-TLS/HTTPS/QUIC.
+        /// </summary>
+        public bool EnablePostQuantumCryptography { get; set; }
     }
 }

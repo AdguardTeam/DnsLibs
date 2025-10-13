@@ -293,6 +293,7 @@ static ag_dnsproxy_settings *marshal_settings(const DnsProxySettings &settings) 
     c_settings->enable_fallback_on_upstreams_failure = settings.enable_fallback_on_upstreams_failure;
     c_settings->enable_servfail_on_upstreams_failure = settings.enable_servfail_on_upstreams_failure;
     c_settings->enable_http3 = settings.enable_http3;
+    c_settings->enable_post_quantum_cryptography = settings.enable_post_quantum_cryptography;
 
     return c_settings;
 }
@@ -521,6 +522,7 @@ static DnsProxySettings marshal_settings(const ag_dnsproxy_settings *c_settings)
     settings.enable_fallback_on_upstreams_failure = c_settings->enable_fallback_on_upstreams_failure;
     settings.enable_servfail_on_upstreams_failure = c_settings->enable_servfail_on_upstreams_failure;
     settings.enable_http3 = c_settings->enable_http3;
+    settings.enable_post_quantum_cryptography = c_settings->enable_post_quantum_cryptography;
 
     return settings;
 }

@@ -79,6 +79,11 @@ struct UpstreamOptions {
 
     /** If set to true, an outbound proxy won't be used for the upstream's network connections */
     bool ignore_proxy_settings; // @todo: expose this flag in the public API if it's needed
+
+    /**
+     * Enable post-quantum cryptography (ML-KEM-768) for TLS connections.
+     */
+    bool enable_post_quantum_cryptography = false;
 };
 
 /**

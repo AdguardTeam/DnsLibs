@@ -57,9 +57,10 @@ public:
      * Initiate the TLS session
      * @param sni server name
      * @param alpn application protocols
+     * @param enable_pq enable post-quantum groups (ML-KEM-768)
      * @return none if started successfully
      */
-    Error<TlsError> connect(const std::string &sni, std::vector<std::string> alpn);
+    Error<TlsError> connect(const std::string &sni, std::vector<std::string> alpn, bool enable_pq = false);
 
     /**
      * Check if the codec has pending data to send via network

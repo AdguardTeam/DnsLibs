@@ -690,6 +690,7 @@ static ServerStamp convert_stamp(AGDnsStamp *stamp) {
     _enableFallbackOnUpstreamsFailure = settings->enable_fallback_on_upstreams_failure;
     _enableServfailOnUpstreamsFailure = settings->enable_servfail_on_upstreams_failure;
     _enableHttp3 = settings->enable_http3;
+    _enablePostQuantumCryptography = settings->enable_post_quantum_cryptography;
 #if TARGET_OS_IPHONE
     _qosSettings = [[AGDnsQosSettings alloc] initWithNative: &settings->qos_settings];
 #endif // TARGET_OS_IPHONE
@@ -728,6 +729,7 @@ static ServerStamp convert_stamp(AGDnsStamp *stamp) {
         _enableFallbackOnUpstreamsFailure = [coder decodeBoolForKey:@"_enableFallbackOnUpstreamsFailure"];
         _enableServfailOnUpstreamsFailure = [coder decodeBoolForKey:@"_enableServfailOnUpstreamsFailure"];
         _enableHttp3 = [coder decodeBoolForKey:@"_enableHttp3"];
+        _enablePostQuantumCryptography = [coder decodeBoolForKey:@"_enablePostQuantumCryptography"];
         _helperPath = [coder decodeObjectOfClass:NSString.class forKey:@"_helperPath"];
 #if TARGET_OS_IPHONE
         _qosSettings = [coder decodeObjectOfClass:AGDnsQosSettings.class forKey:@"_qosSettings"];
@@ -768,6 +770,7 @@ static ServerStamp convert_stamp(AGDnsStamp *stamp) {
     [coder encodeBool:self.enableFallbackOnUpstreamsFailure forKey:@"_enableFallbackOnUpstreamsFailure"];
     [coder encodeBool:self.enableServfailOnUpstreamsFailure forKey:@"_enableServfailOnUpstreamsFailure"];
     [coder encodeBool:self.enableHttp3 forKey:@"_enableHttp3"];
+    [coder encodeBool:self.enablePostQuantumCryptography forKey:@"_enablePostQuantumCryptography"];
     [coder encodeObject:self.helperPath forKey:@"_helperPath"];
 #if TARGET_OS_IPHONE
     [coder encodeObject:self.qosSettings forKey:@"_qosSettings"];
@@ -803,6 +806,7 @@ static ServerStamp convert_stamp(AGDnsStamp *stamp) {
     [description appendFormat:@", self.enableFallbackOnUpstreamsFailure=%d", self.enableFallbackOnUpstreamsFailure];
     [description appendFormat:@", self.enableServfailOnUpstreamsFailure=%d", self.enableServfailOnUpstreamsFailure];
     [description appendFormat:@", self.enableHttp3=%d", self.enableHttp3];
+    [description appendFormat:@", self.enablePostQuantumCryptography=%d", self.enablePostQuantumCryptography];
     [description appendFormat:@", self.helperPath=%@", self.helperPath];
 #if TARGET_OS_IPHONE
     [description appendFormat:@", self.qosSettings=%@", self.qosSettings];
@@ -1473,6 +1477,8 @@ static ProxySettingsOverrides convertProxySettingsOverrides(const AGDnsProxySett
     settings.enable_parallel_upstream_queries = config.enableParallelUpstreamQueries;
     settings.enable_fallback_on_upstreams_failure = config.enableFallbackOnUpstreamsFailure;
     settings.enable_servfail_on_upstreams_failure = config.enableServfailOnUpstreamsFailure;
+    settings.enable_http3 = config.enableHttp3;
+    settings.enable_post_quantum_cryptography = config.enablePostQuantumCryptography;
 
 #if TARGET_OS_IPHONE
     settings.qos_settings.qos_class = config.qosSettings.qosClass;

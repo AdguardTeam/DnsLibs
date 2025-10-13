@@ -1,10 +1,18 @@
 # Changelog
 
-## V2.7.0
+## V2.7
+
+* [Feature] Added support for post-quantum cryptography (ML-KEM-768).
+    * The hybrid scheme X25519 + ML-KEM-768 is now supported for DNS-over-TLS, DNS-over-HTTPS, and DNS-over-QUIC protocols.
+    * Enabled by default on all platforms.
+    * [C API] See `ag_dnsproxy_settings::enable_post_quantum_cryptography`.
+    * [Android] See `com.adguard.dnslibs.proxy.DnsProxySettings#setEnablePostQuantumCryptography`.
+    * [Apple] See `AGDnsProxyConfig.enablePostQuantumCryptography`.
+    * [Windows] See `DnsProxySettings.EnablePostQuantumCryptography`.
 
 * [Feature] Added socket protection callback to prevent routing loops when using system-wide proxy rules
 
-## V2.5
+## V2.6
 
 * [Changed] For non-SDNS urls server properties is now null. It can be set later using `set_server_properties()`.
     * [C API] See `ag_dns_stamp`.
@@ -13,6 +21,8 @@
 
 * [Changed] A callback must now be set to enable logging on Android. 
     * [Android] See `com.adguard.dnslibs.proxy.DnsProxy#setLoggingCallback`.
+
+## V2.5
 
 * [Changed] Default for option enable_servfail_on_upstreams_failure is changed to off. Please ensure that you use DnsLibs-provided defaults.
 

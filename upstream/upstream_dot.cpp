@@ -73,6 +73,7 @@ public:
                             .server_name = std::string(dot_upstream->m_url.get_hostname()),
                             .alpn = {DOT_ALPN},
                             .fingerprints = dot_upstream->m_fingerprints,
+                            .enable_post_quantum = dot_upstream->m_options.enable_post_quantum_cryptography,
                     });
         timeout = dot_upstream->m_config.timeout;
         dbglog(m_log, "{}", m_address);

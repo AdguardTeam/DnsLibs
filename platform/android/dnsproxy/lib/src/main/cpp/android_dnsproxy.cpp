@@ -497,6 +497,7 @@ DnsProxySettings AndroidDnsProxy::marshal_settings(JNIEnv *env, jobject java_dns
     auto fallback_on_failure_field = env->GetFieldID(clazz, "enableFallbackOnUpstreamsFailure", "Z");
     auto servfail_on_failure_field = env->GetFieldID(clazz, "enableServfailOnUpstreamsFailure", "Z");
     auto enable_http3_field = env->GetFieldID(clazz, "enableHttp3", "Z");
+    auto enable_post_quantum_cryptography_field = env->GetFieldID(clazz, "enablePostQuantumCryptography", "Z");
     auto timeout_field = env->GetFieldID(clazz, "upstreamTimeoutMs", "J");
 
     DnsProxySettings settings{};
@@ -570,6 +571,7 @@ DnsProxySettings AndroidDnsProxy::marshal_settings(JNIEnv *env, jobject java_dns
     settings.enable_fallback_on_upstreams_failure = env->GetBooleanField(java_dnsproxy_settings, fallback_on_failure_field);
     settings.enable_servfail_on_upstreams_failure = env->GetBooleanField(java_dnsproxy_settings, servfail_on_failure_field);
     settings.enable_http3 = env->GetBooleanField(java_dnsproxy_settings, enable_http3_field);
+    settings.enable_post_quantum_cryptography = env->GetBooleanField(java_dnsproxy_settings, enable_post_quantum_cryptography_field);
     settings.upstream_timeout = Millis{env->GetLongField(java_dnsproxy_settings, timeout_field)};
 
     return settings;
@@ -602,6 +604,7 @@ LocalRef<jobject> AndroidDnsProxy::marshal_settings(JNIEnv *env, const DnsProxyS
     auto fallback_on_failure_field = env->GetFieldID(clazz, "enableFallbackOnUpstreamsFailure", "Z");
     auto servfail_on_failure_field = env->GetFieldID(clazz, "enableServfailOnUpstreamsFailure", "Z");
     auto enable_http3_field = env->GetFieldID(clazz, "enableHttp3", "Z");
+    auto enable_post_quantum_cryptography_field = env->GetFieldID(clazz, "enablePostQuantumCryptography", "Z");
     auto timeout_field = env->GetFieldID(clazz, "upstreamTimeoutMs", "J");
 
     auto java_settings = env->NewObject(clazz, ctor);
@@ -667,6 +670,7 @@ LocalRef<jobject> AndroidDnsProxy::marshal_settings(JNIEnv *env, const DnsProxyS
     env->SetBooleanField(java_settings, fallback_on_failure_field, (jboolean) settings.enable_fallback_on_upstreams_failure);
     env->SetBooleanField(java_settings, servfail_on_failure_field, (jboolean) settings.enable_servfail_on_upstreams_failure);
     env->SetBooleanField(java_settings, enable_http3_field, (jboolean) settings.enable_http3);
+    env->SetBooleanField(java_settings, enable_post_quantum_cryptography_field, (jboolean) settings.enable_post_quantum_cryptography);
     env->SetLongField(java_settings, timeout_field, (jlong) settings.upstream_timeout.count());
 
     return LocalRef(env, java_settings);

@@ -31,6 +31,7 @@ private:
     TlsCodec m_codec;
     std::string m_sni;
     std::vector<std::string> m_alpn;
+    bool m_enable_pq = false;
     Logger m_log;
     std::shared_ptr<bool> m_shutdown_guard;
 

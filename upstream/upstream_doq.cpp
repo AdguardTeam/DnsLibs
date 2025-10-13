@@ -877,6 +877,22 @@ int DoqUpstream::init_ssl() {
     SSL_set_connect_state(m_ssl.get());
     SSL_set_quic_use_legacy_codepoint(m_ssl.get(), m_quic_version != NGTCP2_PROTO_VER_V1);
 
+#ifdef OPENSSL_IS_BORINGSSL
+    if (m_options.enable_post_quantum_cryptography) {
+        static constexpr uint16_t PQ_GROUPS[] = {
+            SSL_GROUP_X25519_MLKEM768,
+            SSL_GROUP_X25519,
+            SSL_GROUP_SECP256R1,
+            SSL_GROUP_SECP384R1,
+        };
+        if (!SSL_set1_group_ids(m_ssl.get(), PQ_GROUPS, std::size(PQ_GROUPS))) {
+            warnlog(m_log, "Failed to set post-quantum groups, continuing with defaults");
+        } else {
+            tracelog(m_log, "Post-quantum cryptography enabled (ML-KEM-768)");
+        }
+    }
+#endif // OPENSSL_IS_BORINGSSL
+
     std::string alpn, printable;
     for (auto &dq_alpn : DQ_ALPNS) {
         alpn.push_back(dq_alpn.size());

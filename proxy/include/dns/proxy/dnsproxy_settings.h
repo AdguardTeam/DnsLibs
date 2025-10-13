@@ -182,6 +182,9 @@ struct DnsProxySettings {
     /** Enable HTTP/3 for DNS-over-HTTPS upstreams if it's able to connect quicker. */
     bool enable_http3;
 
+    /** Enable post-quantum cryptography. */
+    bool enable_post_quantum_cryptography;
+
 #if defined(__APPLE__) && TARGET_OS_IPHONE
     /** QoS class and relative priority for threads on iOS. */
     DnsQosSettings qos_settings;

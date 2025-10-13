@@ -79,6 +79,7 @@ public class DnsProxySettings {
     private boolean enableFallbackOnUpstreamsFailure;
     private boolean enableServfailOnUpstreamsFailure;
     private boolean enableHttp3;
+    private boolean enablePostQuantumCryptography;
     private long upstreamTimeoutMs;
 
     /**
@@ -443,6 +444,20 @@ public class DnsProxySettings {
     }
 
     /**
+     * @return Whether post-quantum cryptography is enabled.
+     */
+    public boolean isEnablePostQuantumCryptography() {
+        return enablePostQuantumCryptography;
+    }
+
+    /**
+     * @param enablePostQuantumCryptography Enable post-quantum cryptography.
+     */
+    public void setEnablePostQuantumCryptography(boolean enablePostQuantumCryptography) {
+        this.enablePostQuantumCryptography = enablePostQuantumCryptography;
+    }
+
+    /**
      * @return Maximum amount of time, in milliseconds, allowed for upstream exchange.
      */
     public long getUpstreamTimeoutMs() {
@@ -484,6 +499,8 @@ public class DnsProxySettings {
                 enableParallelUpstreamQueries == that.enableParallelUpstreamQueries &&
                 enableFallbackOnUpstreamsFailure == that.enableFallbackOnUpstreamsFailure &&
                 enableServfailOnUpstreamsFailure == that.enableServfailOnUpstreamsFailure &&
+                enableHttp3 == that.enableHttp3 &&
+                enablePostQuantumCryptography == that.enablePostQuantumCryptography &&
                 upstreamTimeoutMs == that.upstreamTimeoutMs;
     }
 
@@ -494,7 +511,7 @@ public class DnsProxySettings {
                 customBlockingIpv4, customBlockingIpv6,
                 dnsCacheSize, optimisticCache, enableDNSSECOK, enableRetransmissionHandling, blockEch,
                 enableParallelUpstreamQueries, enableFallbackOnUpstreamsFailure, enableServfailOnUpstreamsFailure,
-                upstreamTimeoutMs);
+                enableHttp3, enablePostQuantumCryptography, upstreamTimeoutMs);
     }
 
     /**

@@ -400,6 +400,8 @@ typedef struct {
     bool enable_servfail_on_upstreams_failure;
     /** Enable HTTP/3 for DNS-over-HTTPS upstreams if it's able to connect quicker */
     bool enable_http3;
+    /** Enable post-quantum cryptography */
+    bool enable_post_quantum_cryptography;
 } ag_dnsproxy_settings;
 
 /**

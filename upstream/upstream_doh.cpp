@@ -939,6 +939,7 @@ ag::coro::Task<ag::Error<ag::dns::DnsError>> ag::dns::DohUpstream::Http1Or2Conne
                     .server_name = std::move(hostname),
                     .alpn = {std::string(ALPN_HTTP_2), std::string(ALPN_HTTP_1_1)},
                     .fingerprints = parent->m_fingerprints,
+                    .enable_post_quantum = parent->m_options.enable_post_quantum_cryptography,
             }));
 
     std::weak_ptr<bool> guard = shutdown_guard;

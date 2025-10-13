@@ -103,6 +103,7 @@ static const DnsProxySettings DEFAULT_PROXY_SETTINGS = {
         .enable_fallback_on_upstreams_failure = true,
         .enable_servfail_on_upstreams_failure = false,
         .enable_http3 = false,
+        .enable_post_quantum_cryptography = true,
 #if defined(__APPLE__) && TARGET_OS_IPHONE
         .qos_settings = {
             .qos_class = QOS_CLASS_DEFAULT,
@@ -140,6 +141,19 @@ DnsProxy::DnsProxyInitResult DnsProxy::init(DnsProxySettings settings, DnsProxyE
 
     for (UpstreamOptions &opts : proxy->settings.fallbacks) {
         opts.ignore_proxy_settings = true;
+    }
+
+    // Propagate post-quantum setting to all upstreams
+    for (UpstreamOptions &opts : proxy->settings.upstreams) {
+        opts.enable_post_quantum_cryptography = proxy->settings.enable_post_quantum_cryptography;
+    }
+    for (UpstreamOptions &opts : proxy->settings.fallbacks) {
+        opts.enable_post_quantum_cryptography = proxy->settings.enable_post_quantum_cryptography;
+    }
+    if (proxy->settings.dns64.has_value()) {
+        for (UpstreamOptions &opts : proxy->settings.dns64->upstreams) {
+            opts.enable_post_quantum_cryptography = proxy->settings.enable_post_quantum_cryptography;
+        }
     }
 
     proxy->loop = EventLoop::create();

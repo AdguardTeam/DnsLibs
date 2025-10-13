@@ -32,7 +32,7 @@ TlsCodec::TlsCodec(const CertificateVerifier *cert_verifier, TlsSessionCache *se
         , m_fingerprints(std::move(fingerprint)) {
 }
 
-Error<TlsCodec::TlsError> TlsCodec::connect(const std::string &sni, std::vector<std::string> alpn) {
+Error<TlsCodec::TlsError> TlsCodec::connect(const std::string &sni, std::vector<std::string> alpn, bool enable_pq) {
     ag::UniquePtr<SSL_CTX, &SSL_CTX_free> ctx{SSL_CTX_new(TLS_client_method())};
     SSL_CTX_set_verify(ctx.get(), SSL_VERIFY_PEER, nullptr);
     SSL_CTX_set_cert_verify_callback(ctx.get(), ssl_verify_callback, this);
@@ -47,6 +47,22 @@ Error<TlsCodec::TlsError> TlsCodec::connect(const std::string &sni, std::vector<
     if (!m_server_name.empty() && !SocketAddress(m_server_name, 0).valid()) {
         SSL_set_tlsext_host_name(m_ssl.get(), sni.c_str());
     }
+
+#ifdef OPENSSL_IS_BORINGSSL
+    if (enable_pq) {
+        static constexpr uint16_t PQ_GROUPS[] = {
+            SSL_GROUP_X25519_MLKEM768,
+            SSL_GROUP_X25519,
+            SSL_GROUP_SECP256R1,
+            SSL_GROUP_SECP384R1,
+        };
+        if (!SSL_set1_group_ids(m_ssl.get(), PQ_GROUPS, std::size(PQ_GROUPS))) {
+            warnlog(m_log, "Failed to set post-quantum groups, continuing with defaults");
+        } else {
+            tracelog(m_log, "Post-quantum cryptography enabled (ML-KEM-768)");
+        }
+    }
+#endif // OPENSSL_IS_BORINGSSL
 
     if (!alpn.empty()) {
         Uint8Vector serialized = make_alpn(alpn);

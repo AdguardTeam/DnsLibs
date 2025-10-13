@@ -103,6 +103,8 @@ public:
         std::vector<std::string> alpn;
         /** Fingerprints */
         std::vector<CertFingerprint> fingerprints;
+        /** Enable post-quantum cryptography (ML-KEM-768) */
+        bool enable_post_quantum = false;
     };
 
     explicit SocketFactory(Parameters parameters);
