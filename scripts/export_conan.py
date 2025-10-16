@@ -38,6 +38,8 @@ elif sys.argv[1] == "local":
     result = subprocess.run(["git", "rev-parse", "--short","HEAD"], check=True, capture_output=True)
     last_commit_hash = result.stdout.decode().splitlines()[0]
     versions.append(last_commit_hash)
+else:
+    versions = [sys.argv[1]]
 
 for version in versions:
     if re.match(r'\d+\.\d+\.\d+', version) is not None:
