@@ -2060,4 +2060,174 @@ TEST_F(DnsProxyTest, DoNotCrashOnPacketWithoutQuestion) {
     proxy.deinit();
 }
 
+TEST_F(DnsProxyTest, TransparentModeAllowsUnblockedDomains) {
+    auto settings = make_dnsproxy_settings();
+    settings.filter_params = {{{1, "||blocked-test-domain.example^\n", true}}};
+
+    DnsRequestProcessedEvent last_event{};
+    DnsProxyEvents events{.on_request_processed = [&last_event](const DnsRequestProcessedEvent &event) {
+        last_event = event;
+    }};
+
+    auto [ret, err] = m_proxy->init(settings, events);
+    ASSERT_TRUE(ret) << err->str();
+
+    uint16_t query_id = ldns_pkt_id(create_request("google.com", LDNS_RR_TYPE_A, LDNS_RD).get());
+
+    // Captured DNS response for google.com
+    // Real response from 8.8.8.8 (124 bytes)
+    // Contains: 6 A records for google.com
+    static const uint8_t CAPTURED_GOOGLE_RESPONSE[] = {0x00, 0x00, 0x81, 0x80, 0x00, 0x01, 0x00, 0x06, 0x00, 0x00, 0x00,
+            0x00, 0x06, 0x67, 0x6f, 0x6f, 0x67, 0x6c, 0x65, 0x03, 0x63, 0x6f, 0x6d, 0x00, 0x00, 0x01, 0x00, 0x01, 0xc0,
+            0x0c, 0x00, 0x01, 0x00, 0x01, 0x00, 0x00, 0x00, 0x0c, 0x00, 0x04, 0x8e, 0xfa, 0x8c, 0x65, 0xc0, 0x0c, 0x00,
+            0x01, 0x00, 0x01, 0x00, 0x00, 0x00, 0x0c, 0x00, 0x04, 0x8e, 0xfa, 0x8c, 0x71, 0xc0, 0x0c, 0x00, 0x01, 0x00,
+            0x01, 0x00, 0x00, 0x00, 0x0c, 0x00, 0x04, 0x8e, 0xfa, 0x8c, 0x8a, 0xc0, 0x0c, 0x00, 0x01, 0x00, 0x01, 0x00,
+            0x00, 0x00, 0x0c, 0x00, 0x04, 0x8e, 0xfa, 0x8c, 0x64, 0xc0, 0x0c, 0x00, 0x01, 0x00, 0x01, 0x00, 0x00, 0x00,
+            0x0c, 0x00, 0x04, 0x8e, 0xfa, 0x8c, 0x8b, 0xc0, 0x0c, 0x00, 0x01, 0x00, 0x01, 0x00, 0x00, 0x00, 0x0c, 0x00,
+            0x04, 0x8e, 0xfa, 0x8c, 0x66};
+
+    Uint8Vector response_copy(CAPTURED_GOOGLE_RESPONSE, CAPTURED_GOOGLE_RESPONSE + sizeof(CAPTURED_GOOGLE_RESPONSE));
+
+    response_copy[0] = (query_id >> 8) & 0xFF;
+    response_copy[1] = query_id & 0xFF;
+
+    DnsMessageInfo response_info{.transparent = true};
+    Uint8Vector filtered_response =
+            m_proxy->handle_message_sync({response_copy.data(), response_copy.size()}, &response_info);
+    ASSERT_FALSE(filtered_response.empty());
+
+    ldns_pkt *filtered_pkt;
+    ASSERT_EQ(LDNS_STATUS_OK, ldns_wire2pkt(&filtered_pkt, filtered_response.data(), filtered_response.size()));
+    ag::UniquePtr<ldns_pkt, &ldns_pkt_free> filtered_guard{filtered_pkt};
+
+    ASSERT_EQ(ldns_pkt_id(filtered_pkt), query_id);
+    ASSERT_NE(ldns_pkt_get_rcode(filtered_pkt), LDNS_RCODE_REFUSED) << "Response was incorrectly blocked";
+    ASSERT_EQ(last_event.domain, "google.com.");
+}
+
+TEST_F(DnsProxyTest, TransparentModeBlocksDomains) {
+    auto settings = make_dnsproxy_settings();
+    settings.filter_params = {{{1, "||blocked-test-domain.example^\n", true}}};
+
+    DnsRequestProcessedEvent last_event{};
+    DnsProxyEvents events{.on_request_processed = [&last_event](const DnsRequestProcessedEvent &event) {
+        last_event = event;
+    }};
+
+    auto [ret, err] = m_proxy->init(settings, events);
+    ASSERT_TRUE(ret) << err->str();
+
+    ldns_pkt_ptr query = create_request("blocked-test-domain.example", LDNS_RR_TYPE_A, LDNS_RD);
+
+    uint8_t *query_wire;
+    size_t query_size;
+    ASSERT_EQ(LDNS_STATUS_OK, ldns_pkt2wire(&query_wire, query.get(), &query_size));
+    ag::AllocatedPtr<uint8_t> query_guard{query_wire};
+
+    DnsMessageInfo info{.transparent = true};
+    Uint8Vector processed_query = m_proxy->handle_message_sync({query_wire, query_size}, &info);
+
+    ASSERT_FALSE(processed_query.empty());
+
+    ldns_pkt *processed_pkt;
+    ASSERT_EQ(LDNS_STATUS_OK, ldns_wire2pkt(&processed_pkt, processed_query.data(), processed_query.size()));
+    ag::UniquePtr<ldns_pkt, &ldns_pkt_free> processed_guard{processed_pkt};
+
+    ASSERT_TRUE(ldns_pkt_qr(processed_pkt)) << "Query was not blocked";
+    ASSERT_EQ(ldns_pkt_get_rcode(processed_pkt), LDNS_RCODE_REFUSED);
+}
+
+namespace {
+// Shared constants for transparent mode CNAME filtering tests
+constexpr auto TRANSPARENT_CNAME_TEST_DOMAIN = "www.github.com";
+
+// Captured DNS response for www.github.com with CNAME
+// Real response from 8.8.8.8 (62 bytes)
+// Contains: www.github.com CNAME github.com + A record
+constexpr uint8_t CAPTURED_DNS_RESPONSE_WITH_CNAME[] = {0x00, 0x00, 0x81, 0x80, 0x00, 0x01, 0x00, 0x02, 0x00, 0x00,
+        0x00, 0x00, 0x03, 0x77, 0x77, 0x77, 0x06, 0x67, 0x69, 0x74, 0x68, 0x75, 0x62, 0x03, 0x63, 0x6f, 0x6d, 0x00,
+        0x00, 0x01, 0x00, 0x01, 0xc0, 0x0c, 0x00, 0x05, 0x00, 0x01, 0x00, 0x00, 0x0e, 0x0f, 0x00, 0x02, 0xc0, 0x10,
+        0xc0, 0x10, 0x00, 0x01, 0x00, 0x01, 0x00, 0x00, 0x00, 0x3c, 0x00, 0x04, 0x14, 0x1a, 0x9c, 0xd7};
+} // namespace
+
+TEST_F(DnsProxyTest, TransparentModeWhitelistPreventsBlockingByCname) {
+
+    auto settings = make_dnsproxy_settings();
+    settings.filter_params = {{{1,
+            "|github.com^\n"          // Block CNAME target (exact match only)
+            "@@||www.github.com^|\n", // Whitelist original domain
+            true}}};
+
+    DnsRequestProcessedEvent last_event{};
+    DnsProxyEvents events{.on_request_processed = [&last_event](const DnsRequestProcessedEvent &event) {
+        last_event = event;
+    }};
+
+    auto [ret, err] = m_proxy->init(settings, events);
+    ASSERT_TRUE(ret) << err->str();
+
+    ldns_pkt_ptr query = create_request(TRANSPARENT_CNAME_TEST_DOMAIN, LDNS_RR_TYPE_A, LDNS_RD);
+    uint16_t query_id = ldns_pkt_id(query.get());
+
+    Uint8Vector response_copy(CAPTURED_DNS_RESPONSE_WITH_CNAME,
+            CAPTURED_DNS_RESPONSE_WITH_CNAME + sizeof(CAPTURED_DNS_RESPONSE_WITH_CNAME));
+
+    response_copy[0] = (query_id >> 8) & 0xFF;
+    response_copy[1] = query_id & 0xFF;
+
+    DnsMessageInfo response_info{.transparent = true};
+    Uint8Vector filtered_response =
+            m_proxy->handle_message_sync({response_copy.data(), response_copy.size()}, &response_info);
+    ASSERT_FALSE(filtered_response.empty());
+
+    ldns_pkt *filtered_pkt;
+    ASSERT_EQ(LDNS_STATUS_OK, ldns_wire2pkt(&filtered_pkt, filtered_response.data(), filtered_response.size()));
+    ag::UniquePtr<ldns_pkt, &ldns_pkt_free> filtered_guard{filtered_pkt};
+
+    ASSERT_EQ(ldns_pkt_id(filtered_pkt), query_id);
+    ASSERT_NE(ldns_pkt_get_rcode(filtered_pkt), LDNS_RCODE_REFUSED)
+            << "Whitelist for original domain should prevent CNAME blocking";
+    ASSERT_EQ(last_event.domain, std::string(TRANSPARENT_CNAME_TEST_DOMAIN) + ".");
+}
+
+TEST_F(DnsProxyTest, TransparentModeImportantOverridesWhitelist) {
+    auto settings = make_dnsproxy_settings();
+    settings.filter_params = {{{1,
+            "|github.com^$important\n"
+            "@@||www.github.com^|\n",
+            true}}};
+
+    DnsRequestProcessedEvent last_event{};
+    DnsProxyEvents events{.on_request_processed = [&last_event](const DnsRequestProcessedEvent &event) {
+        last_event = event;
+    }};
+
+    auto [ret, err] = m_proxy->init(settings, events);
+    ASSERT_TRUE(ret) << err->str();
+
+    ldns_pkt_ptr query = create_request(TRANSPARENT_CNAME_TEST_DOMAIN, LDNS_RR_TYPE_A, LDNS_RD);
+    uint16_t query_id = ldns_pkt_id(query.get());
+
+    Uint8Vector response_copy(CAPTURED_DNS_RESPONSE_WITH_CNAME,
+            CAPTURED_DNS_RESPONSE_WITH_CNAME + sizeof(CAPTURED_DNS_RESPONSE_WITH_CNAME));
+
+    response_copy[0] = (query_id >> 8) & 0xFF;
+    response_copy[1] = query_id & 0xFF;
+
+    DnsMessageInfo response_info{.transparent = true};
+    Uint8Vector filtered_response =
+            m_proxy->handle_message_sync({response_copy.data(), response_copy.size()}, &response_info);
+    ASSERT_FALSE(filtered_response.empty());
+
+    ldns_pkt *filtered_pkt;
+    ASSERT_EQ(LDNS_STATUS_OK, ldns_wire2pkt(&filtered_pkt, filtered_response.data(), filtered_response.size()));
+    ag::UniquePtr<ldns_pkt, &ldns_pkt_free> filtered_guard{filtered_pkt};
+
+    ASSERT_EQ(ldns_pkt_id(filtered_pkt), query_id);
+    ASSERT_EQ(ldns_pkt_get_rcode(filtered_pkt), LDNS_RCODE_REFUSED)
+            << "$important on CNAME should override whitelist on original domain";
+    ASSERT_EQ(last_event.domain, std::string(TRANSPARENT_CNAME_TEST_DOMAIN) + ".");
+    ASSERT_FALSE(last_event.whitelist) << "Request should be blocked, not whitelisted";
+}
+
 } // namespace ag::dns::proxy::test

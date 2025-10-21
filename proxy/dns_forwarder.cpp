@@ -806,6 +806,15 @@ coro::Task<ldns_pkt_ptr> DnsForwarder::apply_filter_to_response(FilterContext &c
 coro::Task<ldns_pkt_ptr> DnsForwarder::handle_response(FilterContext &ctx, Upstream *upstream,
         std::string_view normalized_domain, const ldns_rr_type type, const DnsMessageInfo *info) {
     std::weak_ptr<bool> guard = m_shutdown_guard;
+
+    // Restore filter context state.
+    if (info && info->transparent) {
+        co_await apply_filter_to_request(ctx);
+        if (guard.expired()) {
+            co_return {};
+        }
+    }
+
     const auto ancount = ldns_pkt_ancount(ctx.response.get());
     for (size_t i = 0; i < ancount; ++i) {
         // CNAME response blocking
