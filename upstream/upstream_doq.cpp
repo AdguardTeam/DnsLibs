@@ -600,11 +600,15 @@ int DoqUpstream::on_write() {
     assert(m_send_buf.left() >= m_max_pktlen);
 
     if (auto rv = write_streams(); rv != NETWORK_ERR_OK) {
-        schedule_retransmit();
+        if (m_state != STOP) {
+            schedule_retransmit();
+        }
         return rv;
     }
 
-    schedule_retransmit();
+    if (m_state != STOP) {
+        schedule_retransmit();
+    }
     return 0;
 }
 
@@ -634,6 +638,9 @@ static int ag_evbuffer_peek_exact(struct evbuffer *buffer, ev_ssize_t len,
  * @param eof_out Output variable for eof flag
  */
 int64_t DoqUpstream::peek_stream_data(struct evbuffer_iovec *vec_out, int *n_vec_out, bool *eof_out) {
+    if (!m_conn) {
+        return -1;
+    }
     while (!m_stream_send_queue.empty() && ngtcp2_conn_get_max_data_left(m_conn)) {
         int64_t stream_id = m_stream_send_queue.front();
         auto it = m_streams.find(stream_id);
@@ -659,6 +666,9 @@ int64_t DoqUpstream::peek_stream_data(struct evbuffer_iovec *vec_out, int *n_vec
 }
 
 int DoqUpstream::write_streams() {
+    if (!m_conn) {
+        return NETWORK_ERR_DROP_CONN;
+    }
     ngtcp2_vec vec[2];
 
     for (;;) {
@@ -916,6 +926,9 @@ int DoqUpstream::init_ssl() {
 }
 
 void DoqUpstream::write_client_handshake(ngtcp2_encryption_level level, const uint8_t *data, size_t datalen) {
+    if (!m_conn) {
+        return;
+    }
     auto &crypto = m_crypto[level];
     crypto.data.emplace_back(data, datalen);
     auto &buf = crypto.data.back();
@@ -923,6 +936,9 @@ void DoqUpstream::write_client_handshake(ngtcp2_encryption_level level, const ui
 }
 
 int DoqUpstream::feed_data(Uint8View data) {
+    if (!m_conn) {
+        return NGTCP2_ERR_CALLBACK_FAILURE;
+    }
     ngtcp2_path path = {{.addr = (sockaddr *) m_local_addr.c_sockaddr(), .addrlen = m_local_addr.c_socklen()},
             {.addr = (sockaddr *) m_remote_addr_empty.c_sockaddr(), .addrlen = m_remote_addr_empty.c_socklen()}};
 
@@ -1230,11 +1246,17 @@ void DoqUpstream::disconnect(std::string_view reason) {
 }
 
 int DoqUpstream::handle_expiry() {
+    if (!m_conn) {
+        return 0;
+    }
     auto now = get_tstamp();
     return ngtcp2_conn_handle_expiry(m_conn, now);
 }
 
 void DoqUpstream::schedule_retransmit() {
+    if (!m_conn) {
+        return;
+    }
     auto expiry_ns = ngtcp2_conn_get_expiry(m_conn);
     if (expiry_ns > NEVER) {
         return;
