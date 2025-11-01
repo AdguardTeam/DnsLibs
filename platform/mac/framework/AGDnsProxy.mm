@@ -686,6 +686,7 @@ static ServerStamp convert_stamp(AGDnsStamp *stamp) {
     _enableRetransmissionHandling = settings->enable_retransmission_handling;
     _enableRouteResolver = settings->enable_route_resolver;
     _blockEch = settings->block_ech;
+    _blockH3Alpn = settings->block_h3_alpn;
     _enableParallelUpstreamQueries = settings->enable_parallel_upstream_queries;
     _enableFallbackOnUpstreamsFailure = settings->enable_fallback_on_upstreams_failure;
     _enableServfailOnUpstreamsFailure = settings->enable_servfail_on_upstreams_failure;
@@ -725,6 +726,7 @@ static ServerStamp convert_stamp(AGDnsStamp *stamp) {
         _enableRetransmissionHandling = [coder decodeBoolForKey:@"_enableRetransmissionHandling"];
         _enableRouteResolver = [coder decodeBoolForKey:@"_enableRouteResolver"];
         _blockEch = [coder decodeBoolForKey:@"_blockEch"];
+        _blockH3Alpn = [coder decodeBoolForKey:@"_blockH3Alpn"];
         _enableParallelUpstreamQueries = [coder decodeBoolForKey:@"_enableParallelUpstreamQueries"];
         _enableFallbackOnUpstreamsFailure = [coder decodeBoolForKey:@"_enableFallbackOnUpstreamsFailure"];
         _enableServfailOnUpstreamsFailure = [coder decodeBoolForKey:@"_enableServfailOnUpstreamsFailure"];
@@ -766,6 +768,7 @@ static ServerStamp convert_stamp(AGDnsStamp *stamp) {
     [coder encodeBool:self.enableRetransmissionHandling forKey:@"_enableRetransmissionHandling"];
     [coder encodeBool:self.enableRouteResolver forKey:@"_enableRouteResolver"];
     [coder encodeBool:self.blockEch forKey:@"_blockEch"];
+    [coder encodeBool:self.blockH3Alpn forKey:@"_blockH3Alpn"];
     [coder encodeBool:self.enableParallelUpstreamQueries forKey:@"_enableParallelUpstreamQueries"];
     [coder encodeBool:self.enableFallbackOnUpstreamsFailure forKey:@"_enableFallbackOnUpstreamsFailure"];
     [coder encodeBool:self.enableServfailOnUpstreamsFailure forKey:@"_enableServfailOnUpstreamsFailure"];
@@ -802,6 +805,7 @@ static ServerStamp convert_stamp(AGDnsStamp *stamp) {
     [description appendFormat:@", self.enableRetransmissionHandling=%d", self.enableRetransmissionHandling];
     [description appendFormat:@", self.enableRouteResolver=%d", self.enableRouteResolver];
     [description appendFormat:@", self.blockEch=%d", self.blockEch];
+    [description appendFormat:@", self.blockH3Alpn=%d", self.blockH3Alpn];
     [description appendFormat:@", self.enableParallelUpstreamQueries=%d", self.enableParallelUpstreamQueries];
     [description appendFormat:@", self.enableFallbackOnUpstreamsFailure=%d", self.enableFallbackOnUpstreamsFailure];
     [description appendFormat:@", self.enableServfailOnUpstreamsFailure=%d", self.enableServfailOnUpstreamsFailure];
@@ -1474,6 +1478,7 @@ static ProxySettingsOverrides convertProxySettingsOverrides(const AGDnsProxySett
     settings.enable_retransmission_handling = config.enableRetransmissionHandling;
     settings.enable_route_resolver = config.enableRouteResolver;
     settings.block_ech = config.blockEch;
+    settings.block_h3_alpn = config.blockH3Alpn;
     settings.enable_parallel_upstream_queries = config.enableParallelUpstreamQueries;
     settings.enable_fallback_on_upstreams_failure = config.enableFallbackOnUpstreamsFailure;
     settings.enable_servfail_on_upstreams_failure = config.enableServfailOnUpstreamsFailure;

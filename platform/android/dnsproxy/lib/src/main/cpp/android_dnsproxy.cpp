@@ -493,6 +493,7 @@ DnsProxySettings AndroidDnsProxy::marshal_settings(JNIEnv *env, jobject java_dns
     auto enable_dnssec_ok_field = env->GetFieldID(clazz, "enableDNSSECOK", "Z");
     auto enable_retr_field = env->GetFieldID(clazz, "enableRetransmissionHandling", "Z");
     auto block_ech_field = env->GetFieldID(clazz, "blockEch", "Z");
+    auto block_h3_alpn_field = env->GetFieldID(clazz, "blockH3Alpn", "Z");
     auto parallel_queries_field = env->GetFieldID(clazz, "enableParallelUpstreamQueries", "Z");
     auto fallback_on_failure_field = env->GetFieldID(clazz, "enableFallbackOnUpstreamsFailure", "Z");
     auto servfail_on_failure_field = env->GetFieldID(clazz, "enableServfailOnUpstreamsFailure", "Z");
@@ -567,6 +568,7 @@ DnsProxySettings AndroidDnsProxy::marshal_settings(JNIEnv *env, jobject java_dns
     settings.enable_dnssec_ok = env->GetBooleanField(java_dnsproxy_settings, enable_dnssec_ok_field);
     settings.enable_retransmission_handling = env->GetBooleanField(java_dnsproxy_settings, enable_retr_field);
     settings.block_ech = env->GetBooleanField(java_dnsproxy_settings, block_ech_field);
+    settings.block_h3_alpn = env->GetBooleanField(java_dnsproxy_settings, block_h3_alpn_field);
     settings.enable_parallel_upstream_queries = env->GetBooleanField(java_dnsproxy_settings, parallel_queries_field);
     settings.enable_fallback_on_upstreams_failure = env->GetBooleanField(java_dnsproxy_settings, fallback_on_failure_field);
     settings.enable_servfail_on_upstreams_failure = env->GetBooleanField(java_dnsproxy_settings, servfail_on_failure_field);
@@ -600,6 +602,7 @@ LocalRef<jobject> AndroidDnsProxy::marshal_settings(JNIEnv *env, const DnsProxyS
     auto enable_dnssec_ok_field = env->GetFieldID(clazz, "enableDNSSECOK", "Z");
     auto enable_retr_field = env->GetFieldID(clazz, "enableRetransmissionHandling", "Z");
     auto block_ech_field = env->GetFieldID(clazz, "blockEch", "Z");
+    auto block_h3_alpn_field = env->GetFieldID(clazz, "blockH3Alpn", "Z");
     auto parallel_queries_field = env->GetFieldID(clazz, "enableParallelUpstreamQueries", "Z");
     auto fallback_on_failure_field = env->GetFieldID(clazz, "enableFallbackOnUpstreamsFailure", "Z");
     auto servfail_on_failure_field = env->GetFieldID(clazz, "enableServfailOnUpstreamsFailure", "Z");
@@ -666,6 +669,7 @@ LocalRef<jobject> AndroidDnsProxy::marshal_settings(JNIEnv *env, const DnsProxyS
     env->SetBooleanField(java_settings, enable_dnssec_ok_field, (jboolean) settings.enable_dnssec_ok);
     env->SetBooleanField(java_settings, enable_retr_field, (jboolean) settings.enable_retransmission_handling);
     env->SetBooleanField(java_settings, block_ech_field, (jboolean) settings.block_ech);
+    env->SetBooleanField(java_settings, block_h3_alpn_field, (jboolean) settings.block_h3_alpn);
     env->SetBooleanField(java_settings, parallel_queries_field, (jboolean) settings.enable_parallel_upstream_queries);
     env->SetBooleanField(java_settings, fallback_on_failure_field, (jboolean) settings.enable_fallback_on_upstreams_failure);
     env->SetBooleanField(java_settings, servfail_on_failure_field, (jboolean) settings.enable_servfail_on_upstreams_failure);

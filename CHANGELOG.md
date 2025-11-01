@@ -9,6 +9,11 @@
     * [Android] See `com.adguard.dnslibs.proxy.DnsProxySettings#setEnablePostQuantumCryptography`.
     * [Apple] See `AGDnsProxyConfig.enablePostQuantumCryptography`.
     * [Windows] See `DnsProxySettings.EnablePostQuantumCryptography`.
+* [Feature] Added option to block HTTP/3 by removing "h3" from ALPN parameter in HTTPS records.
+    * [C API] See `ag_dnsproxy_settings::block_h3_alpn`.
+    * [Android] See `com.adguard.dnslibs.proxy.DnsProxySettings#setBlockH3Alpn`.
+    * [Apple] See `AGDnsProxyConfig.blockH3Alpn`.
+    * [Windows] See `DnsProxySettings.BlockH3Alpn`.
 
 * [Feature] Added socket protection callback to prevent routing loops when using system-wide proxy rules
 

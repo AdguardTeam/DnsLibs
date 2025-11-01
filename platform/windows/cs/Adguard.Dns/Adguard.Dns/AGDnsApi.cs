@@ -22,7 +22,7 @@ namespace Adguard.Dns
 		/// <summary>
 		/// The current API version hash with which the ProxyServer was tested
 		/// </summary>
-		private const string API_VERSION_HASH = "d5990b19584b3ff1d0611209a4cd4af54bcc8d842bfc796452e730c3542efe5e";
+		private const string API_VERSION_HASH = "7b8d5d63ae81003f11fa1b7fa3d0f58bd95b93ecd678cd352edc2efa0ba04de4";
 
         #endregion
 
@@ -777,6 +777,13 @@ namespace Adguard.Dns
             [MarshalAs(UnmanagedType.I1)]
             [NativeName("block_ech")]
             internal bool BlockEch;
+
+            /// <summary>
+            /// If enabled, remove h3 from ALPN parameter from responses.
+            /// </summary>
+            [MarshalAs(UnmanagedType.I1)]
+            [NativeName("block_h3_alpn")]
+            internal bool BlockH3Alpn;
 
             /// <summary>
             /// If true, all upstreams are queried in parallel, and the first response is returned.

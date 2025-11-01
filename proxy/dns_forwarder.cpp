@@ -855,6 +855,11 @@ coro::Task<ldns_pkt_ptr> DnsForwarder::handle_response(FilterContext &ctx, Upstr
                         dbglog_fid(m_log, filter_response.get(), "Removed ECH parameters from SVCB/HTTPS RR");
                     }
                 }
+                if (m_settings->block_h3_alpn) {
+                    if (SvcbHttpsHelpers::remove_h3_alpn_param(filter_response.get())) {
+                        dbglog_fid(m_log, filter_response.get(), "Removed h3 from ALPN parameter in SVCB/HTTPS RR");
+                    }
+                }
                 finalize_processed_event(ctx.event, ctx.request.get(), filter_response.get(), ctx.response.get(),
                         upstream ? std::make_optional(upstream->options().id) : std::nullopt, nullptr);
                 co_return filter_response;
@@ -886,6 +891,11 @@ coro::Task<ldns_pkt_ptr> DnsForwarder::handle_response(FilterContext &ctx, Upstr
             override.value_or(m_settings->block_ech)) {
         if (SvcbHttpsHelpers::remove_ech_svcparam(ctx.response.get())) {
             dbglog_fid(m_log, ctx.response.get(), "Removed ECH parameters from SVCB/HTTPS RR");
+        }
+    }
+    if (m_settings->block_h3_alpn) {
+        if (SvcbHttpsHelpers::remove_h3_alpn_param(ctx.response.get())) {
+            dbglog_fid(m_log, ctx.response.get(), "Removed h3 from ALPN parameter in SVCB/HTTPS RR");
         }
     }
     co_return {};

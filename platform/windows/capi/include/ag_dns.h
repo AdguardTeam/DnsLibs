@@ -386,6 +386,8 @@ typedef struct {
     bool enable_retransmission_handling;
     /** If enabled, strip Encrypted Client Hello parameters from responses */
     bool block_ech;
+    /** If enabled, remove h3 from ALPN parameter in HTTPS records */
+    bool block_h3_alpn;
     /** If true, all upstreams are queried in parallel, and the first response is returned */
     bool enable_parallel_upstream_queries;
     /**

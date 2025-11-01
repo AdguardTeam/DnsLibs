@@ -75,6 +75,7 @@ public class DnsProxySettings {
     private boolean enableDNSSECOK;
     private boolean enableRetransmissionHandling;
     private boolean blockEch;
+    private boolean blockH3Alpn;
     private boolean enableParallelUpstreamQueries;
     private boolean enableFallbackOnUpstreamsFailure;
     private boolean enableServfailOnUpstreamsFailure;
@@ -384,6 +385,20 @@ public class DnsProxySettings {
     }
 
     /**
+     * @return whether stripping of h3 from ALPN parameter is enabled.
+     */
+    public boolean isBlockH3Alpn() {
+        return blockH3Alpn;
+    }
+
+    /**
+     * @param blockH3Alpn if true, h3 will be removed from ALPN parameter in HTTPS records.
+     */
+    public void setBlockH3Alpn(boolean blockH3Alpn) {
+        this.blockH3Alpn = blockH3Alpn;
+    }
+
+    /**
      * @return whether parallel upstream queriying is enabled.
      */
     public boolean isEnableParallelUpstreamQueries() {
@@ -496,6 +511,7 @@ public class DnsProxySettings {
                 enableDNSSECOK == that.enableDNSSECOK &&
                 enableRetransmissionHandling == that.enableRetransmissionHandling &&
                 blockEch == that.blockEch &&
+                blockH3Alpn == that.blockH3Alpn &&
                 enableParallelUpstreamQueries == that.enableParallelUpstreamQueries &&
                 enableFallbackOnUpstreamsFailure == that.enableFallbackOnUpstreamsFailure &&
                 enableServfailOnUpstreamsFailure == that.enableServfailOnUpstreamsFailure &&
@@ -509,7 +525,7 @@ public class DnsProxySettings {
         return Objects.hash(upstreams, fallbacks, fallbackDomains, detectSearchDomains, dns64, blockedResponseTtlSecs,
                 filterParams, listeners, outboundProxy, ipv6Available, blockIpv6, adblockRulesBlockingMode, hostsRulesBlockingMode,
                 customBlockingIpv4, customBlockingIpv6,
-                dnsCacheSize, optimisticCache, enableDNSSECOK, enableRetransmissionHandling, blockEch,
+                dnsCacheSize, optimisticCache, enableDNSSECOK, enableRetransmissionHandling, blockEch, blockH3Alpn,
                 enableParallelUpstreamQueries, enableFallbackOnUpstreamsFailure, enableServfailOnUpstreamsFailure,
                 enableHttp3, enablePostQuantumCryptography, upstreamTimeoutMs);
     }

@@ -559,6 +559,10 @@ typedef NS_ENUM(NSInteger, AGDnsOutboundProxyProtocol) {
  */
 @property(nonatomic) BOOL blockEch;
 /**
+ * If enabled, remove h3 from ALPN parameter in HTTPS records.
+ */
+@property(nonatomic) BOOL blockH3Alpn;
+/**
  * If true, all upstreams are queried in parallel, and the first response is returned.
  */
 @property(nonatomic) BOOL enableParallelUpstreamQueries;

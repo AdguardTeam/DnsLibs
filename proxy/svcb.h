@@ -21,6 +21,16 @@ public:
     }
 
     /**
+     * Remove the "h3" from alpn parameter from SVCB/HTTPS records in `response`
+     * @return `true` if "h3" was removed, false otherwise
+     */
+    static bool remove_h3_alpn_param(ldns_pkt *response) {
+        RemoveH3AlpnAction action;
+        process_rr(response, &action);
+        return action.wasRemoved();
+    }
+
+    /**
      * Retrieve IP hints (IPv4/IPv6) from DNS response.
      * @return Vector of IP hints as strings.
      */
@@ -71,6 +81,80 @@ private:
                         ldns_rdf_size(context.params) - sizeof(context.key) - sizeof(context.len) - context.len);
             }
         }
+        bool wasRemoved() const {
+            return removed;
+        }
+
+    private:
+        bool removed = false;
+    };
+
+    class RemoveH3AlpnAction : public SvcbHttpsAction {
+    public:
+        void duringProcessing(ProcessingContext &context) override {
+            if (context.key != LDNS_SVCPARAM_KEY_ALPN) {
+                return;
+            }
+
+            const uint8_t *alpn_data = context.param_start + sizeof(context.key) + sizeof(context.len);
+            size_t alpn_len = context.len;
+
+            std::vector<uint8_t> new_alpn_data;
+            size_t offset = 0;
+            
+            while (offset < alpn_len) {
+                if (offset + 1 > alpn_len) {
+                    break; // Invalid format
+                }
+                
+                uint8_t proto_len = alpn_data[offset];
+                if (offset + 1 + proto_len > alpn_len) {
+                    break; // Invalid format
+                }
+                
+                std::string_view protocol(reinterpret_cast<const char*>(alpn_data + offset + 1), proto_len);
+
+                if (protocol != "h3") {
+                    new_alpn_data.push_back(proto_len);
+                    new_alpn_data.insert(new_alpn_data.end(), 
+                                        alpn_data + offset + 1, 
+                                        alpn_data + offset + 1 + proto_len);
+                } else {
+                    removed = true;
+                }
+                
+                offset += 1 + proto_len;
+            }
+            
+            if (!removed) {
+                return;
+            }
+            
+            // If no ALPNs left, remove the entire parameter
+            if (new_alpn_data.empty()) {
+                std::memmove(context.param_start, context.params_tail.data(), context.params_tail.size());
+                ldns_rdf_set_size(context.params,
+                        ldns_rdf_size(context.params) - sizeof(context.key) - sizeof(context.len) - context.len);
+            } else {
+                uint16_t new_len = static_cast<uint16_t>(new_alpn_data.size());
+                uint16_t new_len_be = htons(new_len);
+                int size_diff = static_cast<int>(context.len) - static_cast<int>(new_len);
+
+                std::memcpy(context.param_start + sizeof(context.key), &new_len_be, sizeof(new_len_be));
+                
+                // Copy new ALPN data
+                std::memcpy(context.param_start + sizeof(context.key) + sizeof(context.len), 
+                           new_alpn_data.data(), new_len);
+                
+                // Move remaining data
+                std::memmove(context.param_start + sizeof(context.key) + sizeof(context.len) + new_len,
+                           context.params_tail.data(), context.params_tail.size());
+                
+                // Update RDF size
+                ldns_rdf_set_size(context.params, ldns_rdf_size(context.params) - size_diff);
+            }
+        }
+        
         bool wasRemoved() const {
             return removed;
         }
