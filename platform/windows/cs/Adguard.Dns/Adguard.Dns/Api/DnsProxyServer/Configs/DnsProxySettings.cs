@@ -147,6 +147,11 @@ namespace Adguard.Dns.Api.DnsProxyServer.Configs
         public bool BlockEch { get; set; }
 
         /// <summary>
+        /// If enabled, remove h3 from ALPN parameter from responses.
+        /// </summary>
+        public bool BlockH3Alpn { get; set; }
+
+        /// <summary>
         /// If true, all upstreams are queried in parallel, and the first response is returned.
         /// </summary>
         public bool EnableParallelUpstreamQueries { get; set; }

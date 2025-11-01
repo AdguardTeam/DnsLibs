@@ -155,6 +155,9 @@ struct DnsProxySettings {
     /** Block Encrypted Client Hello by removing the "ech" parameter from SVCB/HTTPS records. */
     bool block_ech;
 
+    /** Block HTTP/3 by removing "h3" from the "alpn" parameter in SVCB/HTTPS records. */
+    bool block_h3_alpn;
+
     /**
      * Enable route resolver on Apple platforms.
      * This is needed when DnsProxy is used inside network extension and needs to use routes of some VPN.

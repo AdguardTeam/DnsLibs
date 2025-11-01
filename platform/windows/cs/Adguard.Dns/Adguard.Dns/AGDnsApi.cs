@@ -22,7 +22,7 @@ namespace Adguard.Dns
 		/// <summary>
 		/// The current API version hash with which the ProxyServer was tested
 		/// </summary>
-		private const string API_VERSION_HASH = "bacb1e8b96a22517f6951a9a7a7d11a452549e460d34936144b7987e06933f05";
+		private const string API_VERSION_HASH = "8f646fb37b097b6bc68c357ab159c91406de3194eae113e08ca49640e7043a13";
 
         #endregion
 
@@ -809,6 +809,13 @@ namespace Adguard.Dns
             [MarshalAs(UnmanagedType.I1)]
             [NativeName("enable_http3")]
             internal bool EnableHttp3;
+
+            /// <summary>
+            /// Enable post-quantum cryptography.
+            /// </summary>
+            [MarshalAs(UnmanagedType.I1)]
+            [NativeName("enable_post_quantum_cryptography")]
+            internal bool EnablePostQuantumCryptography;
         }
 
         /// <summary>

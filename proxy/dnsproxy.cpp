@@ -98,6 +98,7 @@ static const DnsProxySettings DEFAULT_PROXY_SETTINGS = {
         .enable_dnssec_ok = false,
         .enable_retransmission_handling = false,
         .block_ech = false,
+        .block_h3_alpn = false,
         .enable_route_resolver = false,
         .enable_parallel_upstream_queries = false,
         .enable_fallback_on_upstreams_failure = true,

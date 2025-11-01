@@ -1178,6 +1178,27 @@ TEST_F(DnsProxyTest, HttpsBlockingModeCustomAddressHostsRule) {
     ASSERT_EQ(hints.at(1), settings.custom_blocking_ipv6);
 }
 
+TEST_F(DnsProxyTest, RemoveH3AlpnIfBlocked) {
+    DnsProxySettings settings = make_dnsproxy_settings();
+    settings.block_h3_alpn = true;
+
+    auto [ret, err] = m_proxy->init(settings, {});
+    ASSERT_TRUE(ret) << err->str();
+
+    ldns_pkt_ptr res;
+
+    ASSERT_NO_FATAL_FAILURE(
+        perform_request(*m_proxy, create_request("adguard.com", LDNS_RR_TYPE_HTTPS, LDNS_RD), res));
+    ASSERT_EQ(LDNS_RCODE_NOERROR, ldns_pkt_get_rcode(res.get()));
+
+    std::string response_str = get_concat_rdfs_as_str(res.get());
+    std::cout << response_str << std::endl;
+
+    ASSERT_EQ(response_str.find("alpn=h3"), std::string::npos);
+    ASSERT_NE(response_str.find("alpn="), std::string::npos);
+    ASSERT_NE(response_str.find("hint"), std::string::npos);
+}
+
 TEST_F(DnsProxyTest, RemoveEchIfBlocked) {
     DnsProxySettings settings = make_dnsproxy_settings();
     settings.block_ech = true;

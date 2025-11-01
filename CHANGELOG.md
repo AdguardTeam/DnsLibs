@@ -1,5 +1,13 @@
 # Changelog
 
+## V2.6
+
+* [Feature] Added option to block HTTP/3 by removing "h3" from ALPN parameter in HTTPS records.
+    * [C API] See `ag_dnsproxy_settings::block_h3_alpn`.
+    * [Android] See `com.adguard.dnslibs.proxy.DnsProxySettings#setBlockH3Alpn`.
+    * [Apple] See `AGDnsProxyConfig.blockH3Alpn`.
+    * [Windows] See `DnsProxySettings.BlockH3Alpn`.
+
 ## V2.5
 
 * [Changed] For non-SDNS urls server properties is now null. It can be set later using `set_server_properties()`.
