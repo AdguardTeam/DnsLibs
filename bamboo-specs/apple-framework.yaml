@@ -65,7 +65,7 @@ DL - Mac tests and deploy:
       description: Conan upload and cleanup
   requirements:
     - ephemeral
-    - image: registry.int.agrd.dev/macos/sequoia-build-agent-xcode16.3:latest
+    - image: registry.int.agrd.dev/macos/sequoia-build-agent-xcode26.1.1:latest
   artifact-subscriptions: []
 repositories:
 - dns-libs:
