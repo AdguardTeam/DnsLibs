@@ -54,6 +54,7 @@ DL - Increment version:
         git add platform/windows/capi/src/ag_dns.rc
         git add platform/windows/cs/Adguard.Dns/SolutionInfo.cs
         git add common/include/dns/common/version.h
+        git add CHANGELOG.md
 
         case "${bamboo_repository_branch_name}" in
         master|stable-*)
