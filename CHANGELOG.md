@@ -1,5 +1,7 @@
 # Changelog
 
+## 2.8.1
+
 * [Feature] Added `blocking_reason` field to `DnsRequestProcessedEvent` to indicate why a DNS request was blocked.
     * New enum `DnsBlockingReason` with values:
         * `NONE` - request was not blocked
