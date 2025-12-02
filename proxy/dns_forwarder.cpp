@@ -11,6 +11,7 @@
 #include "dns/net/application_verifier.h"
 #include "dns/net/default_verifier.h"
 #include "dns/proxy/dnsproxy.h"
+#include "dns/proxy/dnsproxy_events.h"
 
 #include "dns64.h"
 #include "dns_forwarder.h"
@@ -595,6 +596,7 @@ coro::Task<DnsForwarder::HandleMessageResult> DnsForwarder::handle_message_inter
     if ((type == LDNS_RR_TYPE_A || type == LDNS_RR_TYPE_AAAA) && MOZILLA_DOH_HOST == domain.get()) {
         auto response = std::get<ldns_pkt_ptr>(ResponseHelpers::create_nxdomain_response(request.get(), m_settings));
         log_packet(m_log, response.get(), "Mozilla DOH blocking response");
+        event.blocking_reason = DBR_MOZILLA_DOH_DETECTION;
         Uint8Vector raw_response = transform_response_to_raw_data(response.get());
         finalize_processed_event(event, request.get(), response.get(), nullptr, std::nullopt, {});
         co_return {std::move(raw_response), std::move(event)};
@@ -627,6 +629,7 @@ coro::Task<DnsForwarder::HandleMessageResult> DnsForwarder::handle_message_inter
             auto soa_response = std::get<ldns_pkt_ptr>(
                     ResponseHelpers::create_soa_response(ctx.request.get(), m_settings, SOA_RETRY_IPV6_BLOCK));
             log_packet(m_log, soa_response.get(), "IPv6 blocking response");
+            event.blocking_reason = DBR_IPV6;
             finalize_processed_event(event, ctx.request.get(), soa_response.get(), nullptr, std::nullopt);
             co_return {transform_response_to_raw_data(soa_response.get()), std::move(event)};
         }
@@ -640,6 +643,7 @@ coro::Task<DnsForwarder::HandleMessageResult> DnsForwarder::handle_message_inter
             auto soa_response = std::get<ldns_pkt_ptr>(
                     ResponseHelpers::create_soa_response(ctx.request.get(), m_settings, SOA_RETRY_IPV6_BLOCK));
             log_packet(m_log, soa_response.get(), "DDR blocking response");
+            event.blocking_reason = DBR_DDR;
             finalize_processed_event(event, ctx.request.get(), soa_response.get(), nullptr, std::nullopt);
             co_return {transform_response_to_raw_data(soa_response.get()), std::move(event)};
         }
@@ -825,6 +829,7 @@ coro::Task<ldns_pkt_ptr> DnsForwarder::handle_response(FilterContext &ctx, Upstr
                 co_return {};
             }
             if (filter_response) {
+                ctx.event.blocking_reason = DBR_CNAME_MATCHED_BY_RULE;
                 finalize_processed_event(ctx.event, ctx.request.get(), filter_response.get(), ctx.response.get(),
                         upstream ? std::make_optional(upstream->options().id) : std::nullopt, nullptr);
                 co_return filter_response;
@@ -837,6 +842,7 @@ coro::Task<ldns_pkt_ptr> DnsForwarder::handle_response(FilterContext &ctx, Upstr
                 co_return {};
             }
             if (filter_response) {
+                ctx.event.blocking_reason = DBR_IP_MATCHED_BY_RULE;
                 finalize_processed_event(ctx.event, ctx.request.get(), filter_response.get(), ctx.response.get(),
                         upstream ? std::make_optional(upstream->options().id) : std::nullopt, nullptr);
                 co_return filter_response;
@@ -860,6 +866,7 @@ coro::Task<ldns_pkt_ptr> DnsForwarder::handle_response(FilterContext &ctx, Upstr
                         dbglog_fid(m_log, filter_response.get(), "Removed h3 from ALPN parameter in SVCB/HTTPS RR");
                     }
                 }
+                ctx.event.blocking_reason = DBR_HTTPS_MATCHED_BY_RULE;
                 finalize_processed_event(ctx.event, ctx.request.get(), filter_response.get(), ctx.response.get(),
                         upstream ? std::make_optional(upstream->options().id) : std::nullopt, nullptr);
                 co_return filter_response;
@@ -955,6 +962,7 @@ coro::Task<ldns_pkt_ptr> DnsForwarder::apply_filter(FilterContext &ctx) {
         dbglog_fid(m_log, ctx.request.get(), "DNS query blocked by $dnsrewrite rule(s): num={}",
                 effective_rules.dnsrewrite.size());
     }
+    ctx.event.blocking_reason = DBR_QUERY_MATCHED_BY_RULE;
 
     if (rewrite_info.has_value() && rewrite_info->cname.has_value()) {
         ldns_pkt_ptr rewritten_request{ldns_pkt_clone(ctx.request.get())};

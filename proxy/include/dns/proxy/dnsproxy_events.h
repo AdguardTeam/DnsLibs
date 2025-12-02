@@ -11,6 +11,20 @@
 
 namespace ag::dns {
 
+/**
+ * Dns blocking reason
+ */
+enum DnsBlockingReason {
+    DBR_NONE, /** Not blocked */
+    DBR_MOZILLA_DOH_DETECTION, /** Mozilla DoH detection */
+    DBR_DDR, /** DDR blocking */
+    DBR_IPV6, /** IPv6 blocking */
+    DBR_QUERY_MATCHED_BY_RULE, /** Query matched by rule */
+    DBR_CNAME_MATCHED_BY_RULE, /** cname matched by rule */
+    DBR_IP_MATCHED_BY_RULE, /** IP matched by rule */
+    DBR_HTTPS_MATCHED_BY_RULE, /** HTTPS matched by rule */
+};
+
 
 /**
  * DNS request processed event
@@ -33,6 +47,7 @@ struct DnsRequestProcessedEvent {
     std::string error; /**< If not empty, contains the error text (occurred while processing the DNS query) */
     bool cache_hit = false; /**< True if this response was served from the cache */
     bool dnssec = false; /**< True if this response has DNSSEC rrsig */
+    DnsBlockingReason blocking_reason = DnsBlockingReason::DBR_NONE; /**< Dns blocking reason */
 };
 
 /**

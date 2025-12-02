@@ -55,6 +55,7 @@ private:
         jfieldID error;
         jfieldID cache_hit;
         jfieldID dnssec;
+        jfieldID blocking_reason;
     } m_processed_event_fields{};
 
     struct {
@@ -93,6 +94,7 @@ private:
     std::vector<jni::GlobalRef<jobject>> m_listener_protocol_enum_values;
     std::vector<jni::GlobalRef<jobject>> m_proxy_protocol_enum_values;
     std::vector<jni::GlobalRef<jobject>> m_blocking_mode_values;
+    std::vector<jni::GlobalRef<jobject>> m_blocking_reason_values;
     std::vector<jni::GlobalRef<jobject>> m_dnsproxy_init_result;
 
     /**

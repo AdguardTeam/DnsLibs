@@ -702,6 +702,8 @@ LocalRef<jobject> AndroidDnsProxy::marshal_processed_event(JNIEnv *env, const Dn
     env->SetBooleanField(java_event, m_processed_event_fields.whitelist, event.whitelist);
     env->SetBooleanField(java_event, m_processed_event_fields.cache_hit, event.cache_hit);
     env->SetBooleanField(java_event, m_processed_event_fields.dnssec, event.dnssec);
+    env->SetObjectField(java_event, m_processed_event_fields.blocking_reason,
+            m_blocking_reason_values.at((size_t) event.blocking_reason).get());
 
     {
         const jsize ids_len = event.filter_list_ids.size();
@@ -775,6 +777,10 @@ DnsRequestProcessedEvent AndroidDnsProxy::marshal_processed_event(JNIEnv *env, j
                 event.rules.emplace_back(m_utils.marshal_string(env, (jstring) jrule.get()));
             }
         });
+    }
+    if (jobject jblocking_reason = env->GetObjectField(jevent, m_processed_event_fields.blocking_reason);
+            !env->IsSameObject(jblocking_reason, nullptr)) {
+        event.blocking_reason = (DnsBlockingReason) m_utils.get_enum_ordinal(env, jblocking_reason);
     }
 
     return event;
@@ -971,6 +977,7 @@ AndroidDnsProxy::AndroidDnsProxy(JavaVM *vm)
     m_processed_event_fields.filter_list_ids = env->GetFieldID(c, "filterListIds", "[I");
     m_processed_event_fields.cache_hit = env->GetFieldID(c, "cacheHit", "Z");
     m_processed_event_fields.dnssec = env->GetFieldID(c, "dnssec", "Z");
+    m_processed_event_fields.blocking_reason = env->GetFieldID(c, "blockingReason", "L" FQN_BLOCKING_REASON ";");
 
     c = (m_jclasses.cert_verify_event = GlobalRef(vm, env->FindClass(FQN_CERT_VERIFY_EVENT))).get();
     m_cert_verify_event_methods.ctor = env->GetMethodID(c, "<init>", "()V");
@@ -993,6 +1000,7 @@ AndroidDnsProxy::AndroidDnsProxy(JavaVM *vm)
     m_listener_protocol_enum_values = m_utils.get_enum_values(env.get(), FQN_LISTENER_PROTOCOL);
     m_proxy_protocol_enum_values = m_utils.get_enum_values(env.get(), FQN_OUTBOUND_PROXY_PROTOCOL);
     m_blocking_mode_values = m_utils.get_enum_values(env.get(), FQN_BLOCKING_MODE);
+    m_blocking_reason_values = m_utils.get_enum_values(env.get(), FQN_BLOCKING_REASON);
     m_dnsproxy_init_result = m_utils.get_enum_values(env.get(), FQN_DNSPROXY_ERROR_CODE);
 
     c = (m_jclasses.message_info = GlobalRef(vm, env->FindClass(FQN_DNS_MESSAGE_INFO))).get();

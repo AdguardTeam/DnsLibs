@@ -23,6 +23,7 @@
 @property(nonatomic) NSString *error; /**< If not empty, contains the error text (occurred while processing the DNS query) */
 @property(nonatomic) BOOL cacheHit; /**< True if this response was served from the cache */
 @property(nonatomic) BOOL dnssec; /**< True if this response has DNSSEC rrsig */
+@property(nonatomic) NSInteger blockingReason; /**< DNS blocking reason (AGDnsBlockingReason) */
 
 - (instancetype)initWithCoder:(NSCoder *)coder;
 

@@ -1,5 +1,20 @@
 # Changelog
 
+* [Feature] Added `blocking_reason` field to `DnsRequestProcessedEvent` to indicate why a DNS request was blocked.
+    * New enum `DnsBlockingReason` with values:
+        * `NONE` - request was not blocked
+        * `MOZILLA_DOH_DETECTION` - blocked by Mozilla DoH detection
+        * `DDR` - blocked by DDR (Discovery of Designated Resolvers)
+        * `IPV6` - blocked IPv6 request (when `block_ipv6` option is enabled)
+        * `QUERY_MATCHED_BY_RULE` - domain name in the query matched a filtering rule
+        * `CNAME_MATCHED_BY_RULE` - CNAME in the response matched a filtering rule
+        * `IP_MATCHED_BY_RULE` - IP address in the response matched a filtering rule
+        * `HTTPS_MATCHED_BY_RULE` - HTTPS record matched a filtering rule
+    * [C API] See `ag_dns_blocking_reason` and `ag_dns_request_processed_event::blocking_reason`.
+    * [Android] See `com.adguard.dnslibs.proxy.DnsBlockingReason` and `com.adguard.dnslibs.proxy.DnsRequestProcessedEvent#getBlockingReason`.
+    * [Apple] See `AGDnsBlockingReason` and `AGDnsRequestProcessedEvent.blockingReason`.
+    * [Windows] See `ag_dns_blocking_reason` and `DnsRequestProcessedEventArgs.BlockingReason`.
+
 ## V2.7
 
 * [Feature] Added support for post-quantum cryptography (ML-KEM-768).

@@ -347,6 +347,7 @@ static DnsRequestProcessedEvent marshal_processed_event(const ag_dns_request_pro
             event.rules.emplace_back(rule);
         }
     }
+    event.blocking_reason = (DnsBlockingReason)c_event->blocking_reason;
     return event;
 }
 
@@ -559,6 +560,7 @@ static DnsProxyEvents marshal_events(const ag_dnsproxy_events *c_events) {
             e.error = c_str_if_not_empty(event.error);
             e.status = c_str_if_not_empty(event.status);
             e.upstream_id = event.upstream_id ? &*event.upstream_id : nullptr;
+            e.blocking_reason = (ag_dns_blocking_reason)event.blocking_reason;
 
             std::vector<const char *> c_rules;
             c_rules.reserve(event.rules.size());

@@ -37,6 +37,8 @@ public class DnsRequestProcessedEvent {
     private boolean cacheHit;
     /** True if this response has DNSSEC rrsig */
     private boolean dnssec;
+    /** DNS blocking reason */
+    private DnsBlockingReason blockingReason = DnsBlockingReason.NONE;
 
     public boolean isCacheHit() {
         return cacheHit;
@@ -100,6 +102,10 @@ public class DnsRequestProcessedEvent {
 
     public String getError() {
         return error;
+    }
+
+    public DnsBlockingReason getBlockingReason() {
+        return blockingReason;
     }
 
     public void setDomain(String domain) {
@@ -166,6 +172,10 @@ public class DnsRequestProcessedEvent {
         this.dnssec = dnssec;
     }
 
+    public void setBlockingReason(DnsBlockingReason blockingReason) {
+        this.blockingReason = blockingReason;
+    }
+
     @Override
     public String toString() {
         return "DnsRequestProcessedEvent{" +
@@ -185,6 +195,7 @@ public class DnsRequestProcessedEvent {
                 ", error='" + error + '\'' +
                 ", cacheHit=" + cacheHit +
                 ", dnssec=" + dnssec +
+                ", blockingReason=" + blockingReason +
                 '}';
     }
 }

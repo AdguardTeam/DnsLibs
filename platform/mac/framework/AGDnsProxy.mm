@@ -864,6 +864,8 @@ static ServerStamp convert_stamp(AGDnsStamp *stamp) {
 
     _dnssec = event.dnssec;
 
+    _blockingReason = (NSInteger)event.blocking_reason;
+
     return self;
 }
 
@@ -875,6 +877,7 @@ static ServerStamp convert_stamp(AGDnsStamp *stamp) {
     event.bytes_sent = _bytesSent;
     event.cache_hit = _cacheHit;
     event.dnssec = _dnssec;
+    event.blocking_reason = (ag::dns::DnsBlockingReason)_blockingReason;
     event.status = convert_string(_status);
     event.domain = convert_string(_domain);
     event.elapsed = _elapsed;
@@ -913,6 +916,7 @@ static ServerStamp convert_stamp(AGDnsStamp *stamp) {
         _error = [coder decodeObjectOfClass:NSString.class forKey:@"_error"];
         _cacheHit = [coder decodeBoolForKey:@"_cacheHit"];
         _dnssec = [coder decodeBoolForKey:@"_dnssec"];
+        _blockingReason = [coder decodeIntegerForKey:@"_blockingReason"];
     }
 
     return self;
@@ -935,6 +939,7 @@ static ServerStamp convert_stamp(AGDnsStamp *stamp) {
     [coder encodeObject:self.error forKey:@"_error"];
     [coder encodeBool:self.cacheHit forKey:@"_cacheHit"];
     [coder encodeBool:self.dnssec forKey:@"_dnssec"];
+    [coder encodeInteger:self.blockingReason forKey:@"_blockingReason"];
 }
 
 - (NSString*)description {
@@ -949,9 +954,11 @@ static ServerStamp convert_stamp(AGDnsStamp *stamp) {
             "whitelist=%@, "
             "error=%@, "
             "cacheHit=%@, "
-            "dnssec=%@]",
+            "dnssec=%@, "
+            "blockingReason=%s]",
             self, _domain, _type, _status, _answer, _originalAnswer, _upstreamId, _filterListIds,
-            _whitelist ? @"YES" : @"NO", _error, _cacheHit ? @"YES" : @"NO", _dnssec ? @"YES" : @"NO"];
+            _whitelist ? @"YES" : @"NO", _error, _cacheHit ? @"YES" : @"NO", _dnssec ? @"YES" : @"NO",
+            magic_enum::enum_name((ag::dns::DnsBlockingReason)_blockingReason).data()];
 }
 
 @end

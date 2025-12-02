@@ -96,5 +96,10 @@ namespace Adguard.Dns.Api.DnsProxyServer.EventArgs
         /// True if this response has DNSSEC rrsig
         /// </summary>
         public bool DNSSEC { get; set; }
+
+        /// <summary>
+        /// DNS blocking reason
+        /// </summary>
+        public AGDnsApi.ag_dns_blocking_reason BlockingReason { get; set; }
     }
 }

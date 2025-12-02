@@ -121,6 +121,29 @@ typedef NS_ENUM(NSInteger, AGDnsBlockingMode) {
 };
 
 /**
+ * @ingroup enums
+ * DNS blocking reason.
+ */
+typedef NS_ENUM(NSInteger, AGDnsBlockingReason) {
+    /** Not blocked */
+    AGDBR_NONE,
+    /** Mozilla DoH detection */
+    AGDBR_MOZILLA_DOH_DETECTION,
+    /** DDR blocking */
+    AGDBR_DDR,
+    /** IPv6 blocking */
+    AGDBR_IPV6,
+    /** Query matched by rule */
+    AGDBR_QUERY_MATCHED_BY_RULE,
+    /** CNAME matched by rule */
+    AGDBR_CNAME_MATCHED_BY_RULE,
+    /** IP matched by rule */
+    AGDBR_IP_MATCHED_BY_RULE,
+    /** HTTPS matched by rule */
+    AGDBR_HTTPS_MATCHED_BY_RULE,
+};
+
+/**
  * @interface AGLogger
  * Class for configuring logging for DNS library.
  *

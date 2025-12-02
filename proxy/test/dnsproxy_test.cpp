@@ -328,7 +328,12 @@ TEST_F(DnsProxyTest, TestIpv6Blocking) {
     settings.ipv6_available = false;
     settings.filter_params = {{{1, "cname_blocking_test_filter.txt"}}};
 
-    auto [ret, err] = m_proxy->init(settings, {});
+    DnsRequestProcessedEvent last_event{};
+    DnsProxyEvents events{.on_request_processed = [&last_event](const DnsRequestProcessedEvent &event) {
+        last_event = event;
+    }};
+
+    auto [ret, err] = m_proxy->init(settings, events);
     ASSERT_TRUE(ret) << err->str();
 
     ldns_pkt_ptr pkt = create_request(IPV4_ONLY_HOST, LDNS_RR_TYPE_AAAA, LDNS_RD);
@@ -338,6 +343,7 @@ TEST_F(DnsProxyTest, TestIpv6Blocking) {
     ASSERT_EQ(ldns_pkt_ancount(response.get()), 0);
     ASSERT_EQ(ldns_pkt_get_rcode(response.get()), LDNS_RCODE_NOERROR);
     ASSERT_EQ(ldns_pkt_nscount(response.get()), 1);
+    ASSERT_EQ(last_event.blocking_reason, DBR_IPV6);
 
     pkt = create_request("google.com", LDNS_RR_TYPE_AAAA, LDNS_RD);
     response.reset();
@@ -346,12 +352,14 @@ TEST_F(DnsProxyTest, TestIpv6Blocking) {
     ASSERT_EQ(ldns_pkt_ancount(response.get()), 0);
     ASSERT_EQ(ldns_pkt_get_rcode(response.get()), LDNS_RCODE_NOERROR);
     ASSERT_EQ(ldns_pkt_nscount(response.get()), 1);
+    ASSERT_EQ(last_event.blocking_reason, DBR_IPV6);
 
     pkt = create_request("example.org", LDNS_RR_TYPE_AAAA, LDNS_RD);
     response.reset();
     ASSERT_NO_FATAL_FAILURE(perform_request(*m_proxy, pkt, response));
     ASSERT_EQ(ldns_pkt_ancount(response.get()), 0);
     ASSERT_EQ(ldns_pkt_get_rcode(response.get()), LDNS_RCODE_REFUSED);
+    ASSERT_EQ(last_event.blocking_reason, DBR_QUERY_MATCHED_BY_RULE);
 
     // Long domain name. With "hostmaster." in SOA record it is longer than 253 characters.
     // https://jira.adguard.com/browse/AG-9026
@@ -375,7 +383,12 @@ TEST_F(DnsProxyTest, TestIpv6Blocking) {
 TEST_F(DnsProxyTest, DdrBlocking) {
     DnsProxySettings settings = make_dnsproxy_settings();
 
-    auto [ret, err] = m_proxy->init(settings, {});
+    DnsRequestProcessedEvent last_event{};
+    DnsProxyEvents events{.on_request_processed = [&last_event](const DnsRequestProcessedEvent &event) {
+        last_event = event;
+    }};
+
+    auto [ret, err] = m_proxy->init(settings, events);
     ASSERT_TRUE(ret) << err->str();
 
     ldns_pkt_ptr pkt = create_request("_dns.resolver.arpa", LDNS_RR_TYPE_SVCB, LDNS_RD);
@@ -385,6 +398,37 @@ TEST_F(DnsProxyTest, DdrBlocking) {
     ASSERT_EQ(ldns_pkt_ancount(response.get()), 0);
     ASSERT_EQ(ldns_pkt_get_rcode(response.get()), LDNS_RCODE_NOERROR);
     ASSERT_EQ(ldns_pkt_nscount(response.get()), 1);
+    ASSERT_EQ(last_event.blocking_reason, DBR_DDR);
+}
+
+TEST_F(DnsProxyTest, MozillaDoHBlocking) {
+    DnsProxySettings settings = make_dnsproxy_settings();
+
+    DnsRequestProcessedEvent last_event{};
+    DnsProxyEvents events{.on_request_processed = [&last_event](const DnsRequestProcessedEvent &event) {
+        last_event = event;
+    }};
+
+    auto [ret, err] = m_proxy->init(settings, events);
+    ASSERT_TRUE(ret) << err->str();
+
+    // Test A query
+    ldns_pkt_ptr pkt = create_request("use-application-dns.net", LDNS_RR_TYPE_A, LDNS_RD);
+    ldns_pkt_ptr response;
+    ASSERT_NO_FATAL_FAILURE(perform_request(*m_proxy, pkt, response));
+
+    ASSERT_EQ(ldns_pkt_ancount(response.get()), 0);
+    ASSERT_EQ(ldns_pkt_get_rcode(response.get()), LDNS_RCODE_NXDOMAIN);
+    ASSERT_EQ(last_event.blocking_reason, DBR_MOZILLA_DOH_DETECTION);
+
+    // Test AAAA query
+    pkt = create_request("use-application-dns.net", LDNS_RR_TYPE_AAAA, LDNS_RD);
+    response.reset();
+    ASSERT_NO_FATAL_FAILURE(perform_request(*m_proxy, pkt, response));
+
+    ASSERT_EQ(ldns_pkt_ancount(response.get()), 0);
+    ASSERT_EQ(ldns_pkt_get_rcode(response.get()), LDNS_RCODE_NXDOMAIN);
+    ASSERT_EQ(last_event.blocking_reason, DBR_MOZILLA_DOH_DETECTION);
 }
 
 TEST_F(DnsProxyTest, TestCnameBlocking) {
@@ -396,7 +440,7 @@ TEST_F(DnsProxyTest, TestCnameBlocking) {
         last_event = event;
     }};
 
-    auto [ret, err] = m_proxy->init(settings, {});
+    auto [ret, err] = m_proxy->init(settings, events);
     ASSERT_TRUE(ret) << err->str();
 
     ldns_pkt_ptr response;
@@ -404,6 +448,7 @@ TEST_F(DnsProxyTest, TestCnameBlocking) {
             perform_request(*m_proxy, create_request(CNAME_BLOCKING_HOST, LDNS_RR_TYPE_A, LDNS_RD), response));
     ASSERT_EQ(ldns_pkt_ancount(response.get()), 0);
     ASSERT_EQ(ldns_pkt_get_rcode(response.get()), LDNS_RCODE_REFUSED);
+    ASSERT_EQ(last_event.blocking_reason, DBR_CNAME_MATCHED_BY_RULE);
 }
 
 TEST_F(DnsProxyTest, test_dnstype_blocking_rule) {
@@ -423,6 +468,7 @@ TEST_F(DnsProxyTest, test_dnstype_blocking_rule) {
     ASSERT_EQ(ldns_pkt_ancount(response.get()), 0);
     ASSERT_EQ(ldns_pkt_get_rcode(response.get()), LDNS_RCODE_REFUSED);
     ASSERT_EQ(last_event.rules.size(), 1);
+    ASSERT_EQ(last_event.blocking_reason, DBR_QUERY_MATCHED_BY_RULE);
 }
 
 TEST_F(DnsProxyTest, TestDnstypeReply) {
@@ -2156,6 +2202,7 @@ TEST_F(DnsProxyTest, TransparentModeBlocksDomains) {
 
     ASSERT_TRUE(ldns_pkt_qr(processed_pkt)) << "Query was not blocked";
     ASSERT_EQ(ldns_pkt_get_rcode(processed_pkt), LDNS_RCODE_REFUSED);
+    ASSERT_EQ(last_event.blocking_reason, DBR_QUERY_MATCHED_BY_RULE);
 }
 
 namespace {

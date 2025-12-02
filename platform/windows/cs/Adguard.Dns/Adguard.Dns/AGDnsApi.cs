@@ -22,7 +22,7 @@ namespace Adguard.Dns
 		/// <summary>
 		/// The current API version hash with which the ProxyServer was tested
 		/// </summary>
-		private const string API_VERSION_HASH = "7b8d5d63ae81003f11fa1b7fa3d0f58bd95b93ecd678cd352edc2efa0ba04de4";
+		private const string API_VERSION_HASH = "f4e4489b56c105aa83205e4110f3453b0b71762dcbf3cccbc2bb70db9b336091";
 
         #endregion
 
@@ -129,6 +129,52 @@ namespace Adguard.Dns
 		[return: MarshalAs(UnmanagedType.I4)]
 		public delegate void
 			ag_handle_message_async_cb(IntPtr pEvent);
+
+		/// <summary>
+		/// DNS blocking reason
+		/// </summary>
+		public enum ag_dns_blocking_reason
+		{
+			/// <summary>
+			/// Not blocked
+			/// </summary>
+			AGDBR_NONE,
+
+			/// <summary>
+			/// Mozilla DoH detection
+			/// </summary>
+			AGDBR_MOZILLA_DOH_DETECTION,
+
+			/// <summary>
+			/// DDR blocking
+			/// </summary>
+			AGDBR_DDR,
+
+			/// <summary>
+			/// IPv6 blocking
+			/// </summary>
+			AGDBR_IPV6,
+
+			/// <summary>
+			/// Query matched by rule
+			/// </summary>
+			AGDBR_QUERY_MATCHED_BY_RULE,
+
+			/// <summary>
+			/// CNAME matched by rule
+			/// </summary>
+			AGDBR_CNAME_MATCHED_BY_RULE,
+
+			/// <summary>
+			/// IP matched by rule
+			/// </summary>
+			AGDBR_IP_MATCHED_BY_RULE,
+
+			/// <summary>
+			/// HTTPS matched by rule
+			/// </summary>
+			AGDBR_HTTPS_MATCHED_BY_RULE,
+		}
 
 		[Flags]
         public enum ag_rule_generation_options : uint
@@ -1019,6 +1065,13 @@ namespace Adguard.Dns
             [MarshalAs(UnmanagedType.I1)]
             [NativeName("dnssec")]
             internal bool DNSSEC;
+
+            /// <summary>
+            /// DNS blocking reason
+            /// </summary>
+            [MarshalAs(UnmanagedType.I4)]
+            [NativeName("blocking_reason")]
+            internal ag_dns_blocking_reason BlockingReason;
         }
 
         [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Ansi)]

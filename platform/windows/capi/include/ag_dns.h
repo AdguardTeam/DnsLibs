@@ -205,6 +205,29 @@ typedef enum {
 } ag_dnsproxy_blocking_mode;
 
 /**
+ * @ingroup enums
+ * DNS blocking reason
+ */
+typedef enum {
+    /** Not blocked */
+    AGDBR_NONE,
+    /** Mozilla DoH detection */
+    AGDBR_MOZILLA_DOH_DETECTION,
+    /** DDR blocking */
+    AGDBR_DDR,
+    /** IPv6 blocking */
+    AGDBR_IPV6,
+    /** Query matched by rule */
+    AGDBR_QUERY_MATCHED_BY_RULE,
+    /** CNAME matched by rule */
+    AGDBR_CNAME_MATCHED_BY_RULE,
+    /** IP matched by rule */
+    AGDBR_IP_MATCHED_BY_RULE,
+    /** HTTPS matched by rule */
+    AGDBR_HTTPS_MATCHED_BY_RULE,
+} ag_dns_blocking_reason;
+
+/**
  * @struct ag_proxy_settings_overrides
  * The subset of ag_dnsproxy_settings available for overriding on a specific listener.
  */
@@ -445,6 +468,8 @@ typedef struct {
     bool cache_hit;
     /** True if this response has DNSSEC rrsig */
     bool dnssec;
+    /** DNS blocking reason */
+    ag_dns_blocking_reason blocking_reason;
 } ag_dns_request_processed_event;
 
 /**
