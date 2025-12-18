@@ -1850,12 +1850,12 @@ TEST_F(DnsProxyTest, DnssecTheSameQtypeRequest) {
     ASSERT_TRUE(ret) << err->str();
 
     ldns_pkt_ptr res;
-    ASSERT_NO_FATAL_FAILURE(perform_request(*m_proxy, create_request("example.org", LDNS_RR_TYPE_RRSIG, LDNS_RD), res));
+    ASSERT_NO_FATAL_FAILURE(perform_request(*m_proxy, create_request("a.iana-servers.net", LDNS_RR_TYPE_RRSIG, LDNS_RD), res));
     ASSERT_EQ(LDNS_RCODE_NOERROR, ldns_pkt_get_rcode(res.get()));
     ASSERT_GT(ldns_pkt_ancount(res.get()), 0);
     // check that response not modified
     ASSERT_FALSE(last_event.answer.find("RRSIG") == std::string::npos);
-    auto ptr = ldns_pkt_rr_list_by_type(res.get(), LDNS_RR_TYPE_RRSIG, LDNS_SECTION_ANSWER);
+    auto *ptr = ldns_pkt_rr_list_by_type(res.get(), LDNS_RR_TYPE_RRSIG, LDNS_SECTION_ANSWER);
     ASSERT_NE(nullptr, ptr);
     ldns_rr_list_deep_free(ptr);
 }
