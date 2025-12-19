@@ -184,13 +184,19 @@ public:
                     // netd always writes data in two chunks - header + body.
                     // android_res_nresult requires blocking read, or will return -EIO if there is no body.
                     // So, set blocking mode and execute in threadpool for blocking tasks
-                    uv_poll_stop(req->poll_event->raw());
+                    req->poll_event.reset();
+                    if (req->fd_consumed) {
+                        dbglog(g_log, "on_uv_read: fd {} already consumed, ignoring read event", req->query_fd);
+                        return;
+                    }
+                    req->fd_consumed = true;
                     req->parent->submit_work<ResResult>([fd = req->query_fd]{
                         ResResult result;
                         fcntl(fd, F_SETFL, fcntl(fd, F_GETFL) & ~O_NONBLOCK);
                         result.len = AndroidResApi::nresult(fd, &result.rcode,
                                                             result.answer_buffer.data(),
                                                             result.answer_buffer.size());
+                        tracelog(g_log, "on_uv_read/uv_work: nresult returned result_len={}, rcode={}", result.len, result.rcode);
                         return result;
                     }, req->guard, [req](ResResult result){
                         req->parent->process_result(*req, result);
@@ -225,17 +231,6 @@ public:
 
     void process_result(Request &req, ResResult &result) {
         tracelog(g_log, "process_result: Processing result for fd {}", req.query_fd);
-
-        // Check if fd already consumed
-        if (req.fd_consumed) {
-            tracelog(g_log, "process_result: fd {} already consumed, aborting", req.query_fd);
-            return;
-        }
-
-        // Mark fd as consumed immediately since nresult always closes it
-        req.fd_consumed = true;
-
-        tracelog(g_log, "process_result: nresult returned result_len={}, rcode={}", result.len, result.rcode);
 
         if (result.len < 0) {
             if (result.len == -ENOENT) {
