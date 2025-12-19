@@ -1,6 +1,7 @@
 #include <errno.h>
 #include <future>
 #include <unistd.h>
+#include <sys/ioctl.h>
 
 #include "dns/common/event_loop.h"
 #include "system_resolver.h"
@@ -45,7 +46,51 @@ public:
         UvPtr<uv_poll_t> poll_event;
         UvPtr<uv_timer_t> timer_event;
         std::coroutine_handle<> continuation;
+        std::shared_ptr<bool> guard = std::make_shared<bool>();
     };
+
+    struct ResResult {
+        std::array<uint8_t, DNS_PACKET_BUFFER_SIZE> answer_buffer;
+        int len = 0;
+        int rcode = 0;
+    };
+
+    /**
+     * Submit work to libuv threadpool and wait for result.
+     * @tparam T Result type
+     * @param work Working lambda
+     * @param guard Guard (must not outlive the loop)
+     * @param continuation Continuation lambda
+     */
+    template <typename T>
+    void submit_work(std::function<T()> work, std::weak_ptr<bool> guard, std::function<void(T&&)> continuation) {
+        uv_work_t work_req{};
+        struct State {
+            std::function<T()> *work;
+            std::function<void(T&&)> *after_work;
+            EventLoop *after_work_loop;
+            std::weak_ptr<bool> guard;
+            T result;
+        };
+        work_req.data = new State {
+            .work = new std::function<T()>(std::move(work)),
+            .after_work = new std::function<void(T&&)>(std::move(continuation)),
+            .after_work_loop = m_loop,
+            .guard = guard,
+        };
+        // We do not use libuv's after_task_cb here because:
+        // 1) it forces to track work uv_req_t
+        // 2) it can't be cancelled immediately - only with sync waiting.
+        uv_queue_work(nullptr, &work_req, [](uv_work_t *req) {
+            auto *state = (State *) req->data;
+            state->result = (*state->work)();
+            if (!state->guard.expired()) {
+                state->after_work_loop->submit([moved_state = std::shared_ptr<State>(state)] {
+                    (*moved_state->after_work)(std::move(moved_state->result));
+                });
+            }
+        }, nullptr);
+    }
 
     auto resolve(std::string_view domain, ldns_rr_type rr_type) {
         uint64_t id = m_next_request_id++;
@@ -67,6 +112,7 @@ public:
                 // 1. Create DNS query packet
                 ldns_pkt *query_pkt = ldns_pkt_query_new(
                         ldns_dname_new_frm_str(req->domain.c_str()), req->rr_type, LDNS_RR_CLASS_IN, LDNS_RD);
+                ldns_pkt_set_random_id(query_pkt);
 
                 if (!query_pkt) {
                     req->error = make_error(SystemResolverError::AE_DECODE_ERROR);
@@ -108,12 +154,7 @@ public:
                 }
                 // Poll for read events on the fd
                 if (0 != uv_poll_start(
-                    req->poll_event->raw(), UV_READABLE, [](uv_poll_t *handle, int status, int events) {
-                        auto *req = static_cast<Request *>(Uv<uv_poll_t>::parent_from_data(handle->data));
-                        if (events & UV_READABLE) {
-                            req->parent->process_result(*req);
-                        }
-                    })) {
+                    req->poll_event->raw(), UV_READABLE, on_uv_read)) {
                     req->error = make_error(SystemResolverError::AE_SYSTEM_RESOLVE_ERROR);
                     return true;
                 }
@@ -135,15 +176,33 @@ public:
             }
 
             static void on_uv_read(uv_poll_t *handle, int status, int events) {
+                auto *req = static_cast<Request *>(Uv<uv_poll_t>::parent_from_data(handle->data));
+                if (!req) {
+                    return;
+                }
                 if (events & UV_READABLE) {
-                    if (auto req = (Request *) Uv<uv_poll_t>::parent_from_data(handle->data)) {
-                        req->parent->process_result(*req);
-                    }
+                    // netd always writes data in two chunks - header + body.
+                    // android_res_nresult requires blocking read, or will return -EIO if there is no body.
+                    // So, set blocking mode and execute in threadpool for blocking tasks
+                    uv_poll_stop(req->poll_event->raw());
+                    req->parent->submit_work<ResResult>([fd = req->query_fd]{
+                        ResResult result;
+                        fcntl(fd, F_SETFL, fcntl(fd, F_GETFL) & ~O_NONBLOCK);
+                        result.len = AndroidResApi::nresult(fd, &result.rcode,
+                                                            result.answer_buffer.data(),
+                                                            result.answer_buffer.size());
+                        return result;
+                    }, req->guard, [req](ResResult result){
+                        req->parent->process_result(*req, result);
+                    });
                 }
             }
 
             static void on_uv_timer(uv_timer_t *handle) {
                 auto req = (Request *) Uv<uv_timer_t>::parent_from_data(handle->data);
+                if (!req) {
+                    return;
+                }
                 req->error = make_error(SystemResolverError::AE_TIMED_OUT);
                 req->parent->complete_request(*req);
             }
@@ -164,7 +223,7 @@ public:
         return Awaitable{.req = &req};
     }
 
-    void process_result(Request &req) {
+    void process_result(Request &req, ResResult &result) {
         tracelog(g_log, "process_result: Processing result for fd {}", req.query_fd);
 
         // Check if fd already consumed
@@ -173,23 +232,18 @@ public:
             return;
         }
 
-        // Read result from Android API
-        uint8_t answer_buffer[DNS_PACKET_BUFFER_SIZE];
-        int rcode = 0;
-        int result_len = AndroidResApi::nresult(req.query_fd, &rcode, answer_buffer, sizeof(answer_buffer));
-
         // Mark fd as consumed immediately since nresult always closes it
         req.fd_consumed = true;
 
-        tracelog(g_log, "process_result: nresult returned result_len={}, rcode={}", result_len, rcode);
+        tracelog(g_log, "process_result: nresult returned result_len={}, rcode={}", result.len, result.rcode);
 
-        if (result_len < 0) {
-            if (result_len == -ENOENT) {
+        if (result.len < 0) {
+            if (result.len == -ENOENT) {
                 req.error = make_error(SystemResolverError::AE_DOMAIN_NOT_FOUND);
-            } else if (result_len == -ETIMEDOUT) {
+            } else if (result.len == -ETIMEDOUT) {
                 req.error = make_error(SystemResolverError::AE_TIMED_OUT);
             } else {
-                tracelog(g_log, "process_result: Android API error: {}", result_len);
+                tracelog(g_log, "process_result: Android API error: {}", strerror(-result.len));
                 req.error = make_error(SystemResolverError::AE_SYSTEM_RESOLVE_ERROR);
             }
             complete_request(req);
@@ -200,11 +254,11 @@ public:
         req.query_fd = INVALID_FD;
 
         // Handle DNS response codes
-        if (rcode == LDNS_RCODE_NXDOMAIN) {
+        if (result.rcode == LDNS_RCODE_NXDOMAIN) {
             req.error = make_error(SystemResolverError::AE_DOMAIN_NOT_FOUND);
             complete_request(req);
             return;
-        } else if (rcode != LDNS_RCODE_NOERROR) {
+        } else if (result.rcode != LDNS_RCODE_NOERROR) {
             req.error = make_error(SystemResolverError::AE_SYSTEM_RESOLVE_ERROR);
             complete_request(req);
             return;
@@ -212,7 +266,7 @@ public:
 
         // Parse DNS response
         ldns_pkt *response_pkt = nullptr;
-        ldns_status status = ldns_wire2pkt(&response_pkt, answer_buffer, result_len);
+        ldns_status status = ldns_wire2pkt(&response_pkt, result.answer_buffer.data(), result.len);
         if (status != LDNS_STATUS_OK) {
             req.error = make_error(SystemResolverError::AE_DECODE_ERROR);
             complete_request(req);
