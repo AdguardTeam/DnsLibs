@@ -55,43 +55,6 @@ public:
         int rcode = 0;
     };
 
-    /**
-     * Submit work to libuv threadpool and wait for result.
-     * @tparam T Result type
-     * @param work Working lambda
-     * @param guard Guard (must not outlive the loop)
-     * @param continuation Continuation lambda
-     */
-    template <typename T>
-    void submit_work(std::function<T()> work, std::weak_ptr<bool> guard, std::function<void(T&&)> continuation) {
-        uv_work_t work_req{};
-        struct State {
-            std::function<T()> *work;
-            std::function<void(T&&)> *after_work;
-            EventLoop *after_work_loop;
-            std::weak_ptr<bool> guard;
-            T result;
-        };
-        work_req.data = new State {
-            .work = new std::function<T()>(std::move(work)),
-            .after_work = new std::function<void(T&&)>(std::move(continuation)),
-            .after_work_loop = m_loop,
-            .guard = guard,
-        };
-        // We do not use libuv's after_task_cb here because:
-        // 1) it forces to track work uv_req_t
-        // 2) it can't be cancelled immediately - only with sync waiting.
-        uv_queue_work(nullptr, &work_req, [](uv_work_t *req) {
-            auto *state = (State *) req->data;
-            state->result = (*state->work)();
-            if (!state->guard.expired()) {
-                state->after_work_loop->submit([moved_state = std::shared_ptr<State>(state)] {
-                    (*moved_state->after_work)(std::move(moved_state->result));
-                });
-            }
-        }, nullptr);
-    }
-
     auto resolve(std::string_view domain, ldns_rr_type rr_type) {
         uint64_t id = m_next_request_id++;
         auto &req = m_requests[id];
@@ -190,17 +153,14 @@ public:
                         return;
                     }
                     req->fd_consumed = true;
-                    req->parent->submit_work<ResResult>([fd = req->query_fd]{
-                        ResResult result;
-                        fcntl(fd, F_SETFL, fcntl(fd, F_GETFL) & ~O_NONBLOCK);
-                        result.len = AndroidResApi::nresult(fd, &result.rcode,
-                                                            result.answer_buffer.data(),
-                                                            result.answer_buffer.size());
-                        tracelog(g_log, "on_uv_read/uv_work: nresult returned result_len={}, rcode={}", result.len, result.rcode);
-                        return result;
-                    }, req->guard, [req](ResResult result){
-                        req->parent->process_result(*req, result);
-                    });
+                    int fd = req->query_fd;
+                    ResResult result;
+                    fcntl(fd, F_SETFL, fcntl(fd, F_GETFL) & ~O_NONBLOCK);
+                    result.len = AndroidResApi::nresult(fd, &result.rcode,
+                                                        result.answer_buffer.data(),
+                                                        result.answer_buffer.size());
+                    tracelog(g_log, "on_uv_read: nresult returned result_len={}, rcode={}", result.len, result.rcode);
+                    req->parent->process_result(*req, result);
                 }
             }
 
@@ -299,7 +259,7 @@ public:
         }
 
         if (req.continuation) {
-            req.continuation.resume();
+            std::exchange(req.continuation, nullptr).resume();
         } else {
             m_requests.erase(req.id);
         }
