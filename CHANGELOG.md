@@ -1,5 +1,7 @@
 # Changelog
 
+## 2.8.7
+
 * [Feature] Added new function reapply_settings to update upstreams list without reloading filters.
     * [C API] See `ag_dnsproxy_reapply_settings`.
     * [Android] See `com.adguard.dnslibs.proxy.DnsProxy#reapplySettings`.
