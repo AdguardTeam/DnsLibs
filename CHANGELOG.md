@@ -1,12 +1,17 @@
 # Changelog
 
+* [Feature] Added new function reapply_settings to update upstreams list without reloading filters.
+    * [C API] See `ag_dnsproxy_reapply_settings`.
+    * [Android] See `com.adguard.dnslibs.proxy.DnsProxy#reapplySettings`.
+    * [Apple] See `AGDnsProxy.reapplySettings`.
+
 ## 2.8.1
 
 * [Feature] Added `blocking_reason` field to `DnsRequestProcessedEvent` to indicate why a DNS request was blocked.
     * New enum `DnsBlockingReason` with values:
         * `NONE` - request was not blocked
         * `MOZILLA_DOH_DETECTION` - blocked by Mozilla DoH detection
-        * `DDR` - blocked by DDR (Discovery of Designated Resolvers)
+        * `DDR` - blocked DDR (Discovery of Designated Resolvers)
         * `IPV6` - blocked IPv6 request (when `block_ipv6` option is enabled)
         * `QUERY_MATCHED_BY_RULE` - domain name in the query matched a filtering rule
         * `CNAME_MATCHED_BY_RULE` - CNAME in the response matched a filtering rule
@@ -26,15 +31,12 @@
     * [Android] See `com.adguard.dnslibs.proxy.DnsProxySettings#setEnablePostQuantumCryptography`.
     * [Apple] See `AGDnsProxyConfig.enablePostQuantumCryptography`.
     * [Windows] See `DnsProxySettings.EnablePostQuantumCryptography`.
+
 * [Feature] Added option to block HTTP/3 by removing "h3" from ALPN parameter in HTTPS records.
     * [C API] See `ag_dnsproxy_settings::block_h3_alpn`.
     * [Android] See `com.adguard.dnslibs.proxy.DnsProxySettings#setBlockH3Alpn`.
     * [Apple] See `AGDnsProxyConfig.blockH3Alpn`.
     * [Windows] See `DnsProxySettings.BlockH3Alpn`.
-* [Feature] Added new function reapply_settings to update upstreams list without reloading filters.
-    * [C API] See `ag_dnsproxy_reapply_settings`.
-    * [Android] See `com.adguard.dnslibs.proxy.DnsProxy#reapplySettings`.
-    * [Apple] See `AGDnsProxy.reapplySettings`.
 
 * [Feature] Added socket protection callback to prevent routing loops when using system-wide proxy rules
 
