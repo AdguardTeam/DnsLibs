@@ -22,7 +22,7 @@ namespace Adguard.Dns
 		/// <summary>
 		/// The current API version hash with which the ProxyServer was tested
 		/// </summary>
-		private const string API_VERSION_HASH = "f4e4489b56c105aa83205e4110f3453b0b71762dcbf3cccbc2bb70db9b336091";
+		private const string API_VERSION_HASH = "f7a7331668021ee893ffb733ced5e7863773414117565dbb47ec51c6c2a3f735";
 
         #endregion
 
@@ -215,6 +215,24 @@ namespace Adguard.Dns
 		internal static extern void ag_dnsproxy_deinit(IntPtr proxy);
 
 		/// <summary>
+		/// Reapply the DNS proxy settings.
+		/// </summary>
+		/// <param name="pDnsProxyServer">Pointer to the DNS proxy instance</param>
+		/// <param name="pDnsProxySettings">Pointer to the new <see cref="ag_dnsproxy_settings"/> object</param>
+		/// <param name="reapplyFilters">If true, reapply filters completely. If false, perform fast update without reloading filters</param>
+		/// <param name="pOutResult">Pointer to the out result (<seealso cref="ag_dnsproxy_init_result"/>)</param>
+		/// <param name="ppOutMessage">Pointer to the out message</param>
+		/// <returns>True if settings were successfully reapplied, false otherwise</returns>
+		[DllImport(DnsLibName, CallingConvention = CallingConvention.Cdecl)]
+		[return: MarshalAs(UnmanagedType.I1)]
+		internal static extern bool ag_dnsproxy_reapply_settings(
+			IntPtr pDnsProxyServer,
+			IntPtr pDnsProxySettings,
+			[MarshalAs(UnmanagedType.I1)] bool reapplyFilters,
+			IntPtr pOutResult,
+			IntPtr ppOutMessage);
+
+		/// <summary>
 		/// Process a DNS message and return the response.
 		/// </summary>
 		/// <param name="pDnsProxyServer">Proxy server </param>
@@ -223,8 +241,10 @@ namespace Adguard.Dns
 		/// <returns>The DNS response in wire format</returns>
 		/// <remarks> The caller is responsible for freeing both buffers with `ag_buffer_free()`</remarks>
 		[DllImport(DnsLibName, CallingConvention = CallingConvention.Cdecl)]
-		internal static extern MarshalUtils.ag_buffer ag_dnsproxy_handle_message(IntPtr pDnsProxyServer,
-			MarshalUtils.ag_buffer message, IntPtr info);
+		internal static extern MarshalUtils.ag_buffer ag_dnsproxy_handle_message(
+			IntPtr pDnsProxyServer,
+			MarshalUtils.ag_buffer message,
+			IntPtr info);
 
 		/// <summary>
 		/// Process a DNS message and call `handler` on an unspecified thread with the response.
@@ -235,7 +255,8 @@ namespace Adguard.Dns
 		/// <param name="handler">Callback function for asynchronous message processing.</param>
 		/// <remarks> The caller is responsible for freeing  message buffer, but you shouldn't free buffer that will be passed to handler</remarks>
 		[DllImport(DnsLibName, CallingConvention = CallingConvention.Cdecl)]
-		internal static extern void ag_dnsproxy_handle_message_async(IntPtr pDnsProxyServer,
+		internal static extern void ag_dnsproxy_handle_message_async(
+			IntPtr pDnsProxyServer,
 			MarshalUtils.ag_buffer message,
 			IntPtr info, ag_handle_message_async_cb handler);
 

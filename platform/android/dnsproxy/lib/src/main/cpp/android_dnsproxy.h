@@ -234,6 +234,15 @@ public:
     void deinit(JNIEnv *env);
 
     /**
+     * Reapply DNS proxy settings with optional filter reloading.
+     * @param settings New proxy settings from Java.
+     * @param reapply_filters If true, DNS filters will be reloaded from settings.
+     *                        If false, existing filters are preserved (fast update).
+     * @return Init result, marshalled to Java.
+     */
+    jobject reapply_settings(JNIEnv *env, jobject settings, jboolean reapply_filters);
+
+    /**
      * Process a DNS message.
      * @param message The DNS message, in wire format.
      * @param info Additional parameters, see `com.adguard.dnslibs.proxy.DnsMessageInfo`.

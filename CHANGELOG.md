@@ -31,6 +31,10 @@
     * [Android] See `com.adguard.dnslibs.proxy.DnsProxySettings#setBlockH3Alpn`.
     * [Apple] See `AGDnsProxyConfig.blockH3Alpn`.
     * [Windows] See `DnsProxySettings.BlockH3Alpn`.
+* [Feature] Added new function reapply_settings to update upstreams list without reloading filters.
+    * [C API] See `ag_dnsproxy_reapply_settings`.
+    * [Android] See `com.adguard.dnslibs.proxy.DnsProxy#reapplySettings`.
+    * [Apple] See `AGDnsProxy.reapplySettings`.
 
 * [Feature] Added socket protection callback to prevent routing loops when using system-wide proxy rules
 

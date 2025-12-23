@@ -191,9 +191,35 @@ public class DnsProxy implements Closeable {
         return getSettings(nativePtr);
     }
 
+    /**
+     * Reapply DNS proxy settings with optional filter reloading.
+     * This method allows updating DNS proxy configuration without full reinitialization.
+     * 
+     * @param settings New DNS proxy settings to apply
+     * @param reapplyFilters If true, DNS filters will be reloaded from settings.
+     *                      If false, existing filters are preserved (fast update).
+     * @return Init result indicating success or failure
+     * @throws IllegalStateException if the proxy is closed.
+     * @throws DnsProxyInitException if reapplying settings fails.
+     */
+    public InitResult reapplySettings(DnsProxySettings settings, boolean reapplyFilters) 
+            throws IllegalStateException, DnsProxyInitException {
+        if (state != State.INITIALIZED) {
+            throw new IllegalStateException("Closed");
+        }
+        
+        InitResult result = reapplySettings(nativePtr, settings, reapplyFilters);
+        if (!result.success) {
+            throw new DnsProxyInitException(result);
+        }
+        return result;
+    }
+
     private native DnsProxySettings getDefaultSettings(long nativePtr);
 
     private native DnsProxySettings getSettings(long nativePtr);
+
+    private native InitResult reapplySettings(long nativePtr, DnsProxySettings settings, boolean reapplyFilters);
 
     private native long create();
 

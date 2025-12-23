@@ -47,6 +47,29 @@ static ag::Logger gLogger{"AGDnsProxyXPCImpl"};
     });
 }
 
+- (void)reapplySettings:(AGDnsProxyConfig *)config
+           reapplyFilters:(BOOL)reapplyFilters
+        completionHandler:(void (^)(NSError *))handler {
+    dispatch_async(_queue, ^{
+        NSError *error = nil;
+        if (_proxy) {
+            BOOL success = [_proxy reapplySettings:config reapplyFilters:reapplyFilters error:&error];
+            if (!success && !error) {
+                // Create generic error if reapply failed but no specific error was set
+                error = [NSError errorWithDomain:@"com.adguard.dnsproxy.xpc"
+                                            code:-1
+                                        userInfo:@{NSLocalizedDescriptionKey: @"Failed to reapply settings"}];
+            }
+        } else {
+            // No proxy instance - create error
+            error = [NSError errorWithDomain:@"com.adguard.dnsproxy.xpc"
+                                        code:-2
+                                    userInfo:@{NSLocalizedDescriptionKey: @"DNS proxy is not initialized"}];
+        }
+        handler(error);
+    });
+}
+
 - (void)handlePacket:(NSData *)packet completionHandler:(void (^)(NSData *))completionHandler {
     dispatch_async(_queue, ^{
         [_proxy handlePacket:packet completionHandler:completionHandler];

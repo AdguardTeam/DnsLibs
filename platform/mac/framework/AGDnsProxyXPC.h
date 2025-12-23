@@ -29,6 +29,18 @@
      completionHandler:(void (^)(NSError *))handler NS_SWIFT_NOTHROW;
 
 /**
+ * Reapply DNS proxy settings with optional filter reloading.
+ *
+ * @param config New DNS proxy configuration to apply
+ * @param reapplyFilters If true, DNS filters will be reloaded from settings.
+ *                       If false, existing filters are preserved (fast update).
+ * @param handler Invoked with `nil` if reapplying succeeded, or with the error otherwise.
+ */
+- (void)reapplySettings:(AGDnsProxyConfig *)config
+         reapplyFilters:(BOOL)reapplyFilters
+      completionHandler:(void (^)(NSError *))handler NS_SWIFT_NOTHROW;
+
+/**
  * Process an IP datagram, carrying a UDP payload, carrying a DNS request.
  * @param packet The datagram to process.
  * @param completionHandler Invoked with an IP datagram, carrying a UDP payload, carrying the DNS response.

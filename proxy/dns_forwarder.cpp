@@ -326,8 +326,8 @@ static coro::Task<void> discover_dns64_prefixes(std::vector<UpstreamOptions> uss
         std::shared_ptr<SocketFactory> socket_factory, dns64::StatePtr state, EventLoop &loop, uint32_t max_tries,
         Millis wait_time, std::weak_ptr<bool> shutdown_guard);
 
-DnsForwarder::InitResult DnsForwarder::init(
-        EventLoopPtr loop, const DnsProxySettings &settings, const DnsProxyEvents &events) {
+Error<DnsProxyInitError> DnsForwarder::init(EventLoopPtr loop, const DnsProxySettings &settings,
+        const DnsProxyEvents &events, std::shared_ptr<DnsFilterManager> filter_manager) {
     m_log = ag::Logger{"DNS forwarder"};
     m_loop = std::move(loop);
     m_shutdown_guard = std::make_shared<bool>(true);
@@ -338,11 +338,11 @@ DnsForwarder::InitResult DnsForwarder::init(
 
     if (!settings.custom_blocking_ipv4.empty() && !utils::is_valid_ip4(settings.custom_blocking_ipv4)) {
         this->deinit();
-        return {false, make_error(DnsProxyInitError::AE_INVALID_IPV4, AG_FMT("{}", settings.custom_blocking_ipv4))};
+        return make_error(DnsProxyInitError::AE_INVALID_IPV4, AG_FMT("{}", settings.custom_blocking_ipv4));
     }
     if (!settings.custom_blocking_ipv6.empty() && !utils::is_valid_ip6(settings.custom_blocking_ipv6)) {
         this->deinit();
-        return {false, make_error(DnsProxyInitError::AE_INVALID_IPV6, AG_FMT("{}", settings.custom_blocking_ipv6))};
+        return make_error(DnsProxyInitError::AE_INVALID_IPV6, AG_FMT("{}", settings.custom_blocking_ipv6));
     }
 
     struct SocketFactory::Parameters sf_parameters = {.loop = *m_loop};
@@ -407,33 +407,14 @@ DnsForwarder::InitResult DnsForwarder::init(
     }
     if (m_upstreams.empty() && (m_fallbacks.empty() || !settings.enable_fallback_on_upstreams_failure)) {
         this->deinit();
-        return {false, make_error(DnsProxyInitError::AE_UPSTREAM_INIT_ERROR)};
+        return make_error(DnsProxyInitError::AE_UPSTREAM_INIT_ERROR);
     }
     infolog(m_log, "Upstreams initialized");
 
-    infolog(m_log, "Initializing the filtering module...");
-    auto [handle, err_or_warn] = m_filter.create(settings.filter_params);
-    if (!handle) {
-        this->deinit();
-        return {false, err_or_warn};
+    if (!filter_manager) {
+        return make_error(DnsProxyInitError::AE_FILTER_LOAD_ERROR);
     }
-    m_filter_handle = handle;
-    if (err_or_warn) {
-        warnlog(m_log, "Filtering module initialized with warnings:\n{}", err_or_warn->str());
-    } else {
-        infolog(m_log, "Filtering module initialized");
-    }
-
-    if (!settings.fallback_domains.empty()) {
-        infolog(m_log, "Initializing the fallback filter...");
-        auto params = make_fallback_filter_params(settings.fallback_domains, m_log);
-        auto [fallback_handle, fallback_err_or_warn] = m_filter.create(params);
-        if (fallback_err_or_warn) { // Fallback filter must initialize cleanly, warnings are errors
-            this->deinit();
-            return {false, make_error(DnsProxyInitError::AE_FALLBACK_FILTER_INIT_ERROR, fallback_err_or_warn)};
-        }
-        m_fallback_filter_handle = fallback_handle;
-    }
+    m_filter_manager = filter_manager;
 
     m_dns64_state = std::make_shared<dns64::State>();
     if (settings.dns64.has_value()) {
@@ -447,7 +428,7 @@ DnsForwarder::InitResult DnsForwarder::init(
     m_random_engine.seed(std::random_device{}());
 
     infolog(m_log, "Forwarder initialized");
-    return {true, err_or_warn};
+    return {};
 }
 
 static coro::Task<void> discover_dns64_prefixes(std::vector<UpstreamOptions> uss, Millis timeout,
@@ -524,14 +505,6 @@ void DnsForwarder::deinit() {
     if (m_socket_factory != nullptr) {
         m_socket_factory->deinit();
     }
-    infolog(m_log, "Done");
-
-    infolog(m_log, "Destroying DNS filter...");
-    m_filter.destroy(std::exchange(m_filter_handle, nullptr));
-    infolog(m_log, "Done");
-
-    infolog(m_log, "Destroying fallback filter...");
-    m_filter.destroy(std::exchange(m_fallback_filter_handle, nullptr));
     infolog(m_log, "Done");
 
     infolog(m_log, "Clearing cache...");
@@ -914,7 +887,7 @@ coro::Task<ldns_pkt_ptr> DnsForwarder::handle_response(FilterContext &ctx, Upstr
 
 coro::Task<ldns_pkt_ptr> DnsForwarder::apply_filter(FilterContext &ctx) {
 
-    auto rules = m_filter.match(m_filter_handle, ctx.match);
+    auto rules = m_filter_manager->m_filter.match(m_filter_manager->m_filter_handle, ctx.match);
     for (const DnsFilter::Rule &rule : rules) {
         tracelog_fid(m_log, ctx.request.get(), "Matched rule: {}", rule.text);
     }
@@ -1252,11 +1225,12 @@ bool DnsForwarder::finalize_dnssec_log_logic(ldns_pkt *response, bool is_our_do_
 
 // Return true if request matches any rule in the fallback filter
 bool DnsForwarder::apply_fallback_filter(std::string_view hostname, const ldns_pkt *request) {
-    if (!m_fallback_filter_handle) {
+    if (!m_filter_manager->m_fallback_filter_handle) {
         return false;
     }
-    auto rules = m_filter.match(
-            m_fallback_filter_handle, {hostname, ldns_rr_get_type(ldns_rr_list_rr(ldns_pkt_question(request), 0))});
+    auto rules = m_filter_manager->m_filter.match(
+            m_filter_manager->m_fallback_filter_handle,
+            {hostname, ldns_rr_get_type(ldns_rr_list_rr(ldns_pkt_question(request), 0))});
     if (!rules.empty()) {
         dbglog_fid(m_log, request, "{} matches fallback filter rule: {}", hostname, rules[0].text);
         return true;
@@ -1369,6 +1343,45 @@ void DnsForwarder::truncate_response(ldns_pkt *response, const ldns_pkt *request
                     AG_FMT("Truncated response (edns: {}, max size: {})", ldns_pkt_edns(request), max_size));
         }
     }
+}
+
+
+DnsFilterManager::InitResult DnsFilterManager::init(const DnsProxySettings &settings) {
+    infolog(m_log, "Initializing the filtering module...");
+    auto [handle, err_or_warn] = m_filter.create(settings.filter_params);
+    if (!handle) {
+        this->deinit();
+        return {false, err_or_warn};
+    }
+    m_filter_handle = handle;
+    if (err_or_warn) {
+        warnlog(m_log, "Filtering module initialized with warnings:\n{}", err_or_warn->str());
+    } else {
+        infolog(m_log, "Filtering module initialized");
+    }
+
+    if (!settings.fallback_domains.empty()) {
+        infolog(m_log, "Initializing the fallback filter...");
+        auto params = make_fallback_filter_params(settings.fallback_domains, m_log);
+        auto [fallback_handle, fallback_err_or_warn] = m_filter.create(params);
+        if (fallback_err_or_warn) { // Fallback filter must initialize cleanly, warnings are errors
+            this->deinit();
+            return {false, make_error(DnsProxyInitError::AE_FALLBACK_FILTER_INIT_ERROR, fallback_err_or_warn)};
+        }
+        m_fallback_filter_handle = fallback_handle;
+    }
+
+    return {true, err_or_warn};
+}
+
+void DnsFilterManager::deinit() {
+    infolog(m_log, "Destroying DNS filter...");
+    m_filter.destroy(std::exchange(m_filter_handle, nullptr));
+    infolog(m_log, "Done");
+
+    infolog(m_log, "Destroying fallback filter...");
+    m_filter.destroy(std::exchange(m_fallback_filter_handle, nullptr));
+    infolog(m_log, "Done");
 }
 
 } // namespace ag::dns

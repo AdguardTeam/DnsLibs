@@ -753,6 +753,19 @@ withCompletionHandler:(void (^)(NSData *))handler;
 - (void) stop;
 
 /**
+ * Reapply DNS proxy settings with optional filter reloading.
+ * 
+ * @param config New DNS proxy configuration to apply
+ * @param reapplyFilters If true, DNS filters will be reloaded from settings.
+ *                      If false, existing filters are preserved (fast update).
+ * @param error Error reference for any initialization errors
+ * @return True if reapplying settings succeeded, false otherwise
+ */
+- (BOOL) reapplySettings: (AGDnsProxyConfig *) config
+          reapplyFilters: (BOOL) reapplyFilters
+                   error: (NSError **) error NS_SWIFT_NOTHROW;
+
+/**
 * Check if string is a valid rule
 * @param str string to check
 * @return True if string is a valid rule, false otherwise

@@ -1329,20 +1329,7 @@ static ProxySettingsOverrides convertProxySettingsOverrides(const AGDnsProxySett
     return ret;
 }
 
-- (instancetype) initWithConfig: (AGDnsProxyConfig *) config
-                        handler: (AGDnsProxyEvents *) handler
-                          error: (NSError **) error
-{
-    self = [super init];
-    if (!self) {
-        return nil;
-    }
-    self->initialized = NO;
-
-    self->log = Logger{"AGDnsProxy"};
-
-    infolog(*self->log, "Initializing dns proxy...");
-
+static DnsProxySettings convertConfig(AGDnsProxyConfig *config, const Logger &log) {
     DnsProxySettings settings = DnsProxySettings::get_default();
     settings.upstreams = convert_upstreams(config.upstreams);
     settings.fallbacks = convert_upstreams(config.fallbacks);
@@ -1361,7 +1348,7 @@ static ProxySettingsOverrides convertProxySettingsOverrides(const AGDnsProxySett
     if (config.filters != nil) {
         settings.filter_params.filters.reserve([config.filters count]);
         for (AGDnsFilterParams *fp in config.filters) {
-            dbglog(*self->log, "Filter id={} {}={}", fp.id, fp.inMemory ? "content" : "path",
+            dbglog(log, "Filter id={} {}={}", fp.id, fp.inMemory ? "content" : "path",
                     fp.inMemory ? AG_FMT("{} bytes", fp.data.length) : fp.data.UTF8String);
 
             settings.filter_params.filters.emplace_back(
@@ -1371,6 +1358,71 @@ static ProxySettingsOverrides convertProxySettingsOverrides(const AGDnsProxySett
         settings.filter_params.mem_limit = config.filtersMemoryLimitBytes;
 #endif // TARGET_OS_IPHONE
     }
+
+    if (config.dns64Settings != nil) {
+        NSArray<AGDnsUpstream *> *dns64_upstreams = config.dns64Settings.upstreams;
+        if (dns64_upstreams == nil) {
+            dbglog(log, "DNS64 upstreams list is nil");
+        } else if ([dns64_upstreams count] == 0) {
+            dbglog(log, "DNS64 upstreams list is empty");
+        } else {
+            settings.dns64 = Dns64Settings{
+                    .upstreams = convert_upstreams(dns64_upstreams),
+                    .max_tries = config.dns64Settings.maxTries > 0
+                                 ? static_cast<uint32_t>(config.dns64Settings.maxTries) : 0,
+                    .wait_time = std::chrono::milliseconds(config.dns64Settings.waitTimeMs),
+            };
+        }
+    }
+
+    settings.ipv6_available = config.ipv6Available;
+    settings.block_ipv6 = config.blockIpv6;
+
+    settings.adblock_rules_blocking_mode = (DnsProxyBlockingMode) config.adblockRulesBlockingMode;
+    settings.hosts_rules_blocking_mode = (DnsProxyBlockingMode) config.hostsRulesBlockingMode;
+    if (config.customBlockingIpv4 != nil) {
+        settings.custom_blocking_ipv4 = [config.customBlockingIpv4 UTF8String];
+    }
+    if (config.customBlockingIpv6 != nil) {
+        settings.custom_blocking_ipv6 = [config.customBlockingIpv6 UTF8String];
+    }
+
+    settings.dns_cache_size = config.dnsCacheSize;
+    settings.optimistic_cache = config.optimisticCache;
+    settings.enable_dnssec_ok = config.enableDNSSECOK;
+    settings.enable_retransmission_handling = config.enableRetransmissionHandling;
+    settings.enable_route_resolver = config.enableRouteResolver;
+    settings.block_ech = config.blockEch;
+    settings.block_h3_alpn = config.blockH3Alpn;
+    settings.enable_parallel_upstream_queries = config.enableParallelUpstreamQueries;
+    settings.enable_fallback_on_upstreams_failure = config.enableFallbackOnUpstreamsFailure;
+    settings.enable_servfail_on_upstreams_failure = config.enableServfailOnUpstreamsFailure;
+    settings.enable_http3 = config.enableHttp3;
+    settings.enable_post_quantum_cryptography = config.enablePostQuantumCryptography;
+
+#if TARGET_OS_IPHONE
+    settings.qos_settings.qos_class = config.qosSettings.qosClass;
+    settings.qos_settings.relative_priority = config.qosSettings.relativePriority;
+#endif // TARGET_OS_IPHONE
+
+    return settings;
+}
+
+- (instancetype) initWithConfig: (AGDnsProxyConfig *) config
+                        handler: (AGDnsProxyEvents *) handler
+                          error: (NSError **) error
+{
+    self = [super init];
+    if (!self) {
+        return nil;
+    }
+    self->initialized = NO;
+
+    self->log = Logger{"AGDnsProxy"};
+
+    infolog(*self->log, "Initializing dns proxy...");
+
+    DnsProxySettings settings = convertConfig(config, *self->log);
 
     void *obj = (__bridge void *)self;
 
@@ -1407,22 +1459,6 @@ static ProxySettingsOverrides convertProxySettingsOverrides(const AGDnsProxySett
                 return [AGDnsProxy verifyCertificate: &event log: *sself->log];
             }
         };
-
-    if (config.dns64Settings != nil) {
-        NSArray<AGDnsUpstream *> *dns64_upstreams = config.dns64Settings.upstreams;
-        if (dns64_upstreams == nil) {
-            dbglog(*self->log, "DNS64 upstreams list is nil");
-        } else if ([dns64_upstreams count] == 0) {
-            dbglog(*self->log, "DNS64 upstreams list is empty");
-        } else {
-            settings.dns64 = Dns64Settings{
-                    .upstreams = convert_upstreams(dns64_upstreams),
-                    .max_tries = config.dns64Settings.maxTries > 0
-                                 ? static_cast<uint32_t>(config.dns64Settings.maxTries) : 0,
-                    .wait_time = std::chrono::milliseconds(config.dns64Settings.waitTimeMs),
-            };
-        }
-    }
 
     std::vector<std::shared_ptr<void>> closefds; // Close fds on return
     if (config.listeners != nil) {
@@ -1467,36 +1503,6 @@ static ProxySettingsOverrides convertProxySettingsOverrides(const AGDnsProxySett
         dbglog(*self->log, "Finished creating listener fds if needed, {} pending to close", closefds.size());
     }
 
-    settings.ipv6_available = config.ipv6Available;
-    settings.block_ipv6 = config.blockIpv6;
-
-    settings.adblock_rules_blocking_mode = (DnsProxyBlockingMode) config.adblockRulesBlockingMode;
-    settings.hosts_rules_blocking_mode = (DnsProxyBlockingMode) config.hostsRulesBlockingMode;
-    if (config.customBlockingIpv4 != nil) {
-        settings.custom_blocking_ipv4 = [config.customBlockingIpv4 UTF8String];
-    }
-    if (config.customBlockingIpv6 != nil) {
-        settings.custom_blocking_ipv6 = [config.customBlockingIpv6 UTF8String];
-    }
-
-    settings.dns_cache_size = config.dnsCacheSize;
-    settings.optimistic_cache = config.optimisticCache;
-    settings.enable_dnssec_ok = config.enableDNSSECOK;
-    settings.enable_retransmission_handling = config.enableRetransmissionHandling;
-    settings.enable_route_resolver = config.enableRouteResolver;
-    settings.block_ech = config.blockEch;
-    settings.block_h3_alpn = config.blockH3Alpn;
-    settings.enable_parallel_upstream_queries = config.enableParallelUpstreamQueries;
-    settings.enable_fallback_on_upstreams_failure = config.enableFallbackOnUpstreamsFailure;
-    settings.enable_servfail_on_upstreams_failure = config.enableServfailOnUpstreamsFailure;
-    settings.enable_http3 = config.enableHttp3;
-    settings.enable_post_quantum_cryptography = config.enablePostQuantumCryptography;
-
-#if TARGET_OS_IPHONE
-    settings.qos_settings.qos_class = config.qosSettings.qosClass;
-    settings.qos_settings.relative_priority = config.qosSettings.relativePriority;
-#endif // TARGET_OS_IPHONE
-
     auto [ret, err_or_warn] = self->proxy.init(std::move(settings), std::move(native_events));
     if (!ret) {
         auto str = AG_FMT("Failed to initialize the DNS proxy: {}", err_or_warn->str());
@@ -1519,6 +1525,45 @@ static ProxySettingsOverrides convertProxySettingsOverrides(const AGDnsProxySett
     infolog(*self->log, "Dns proxy initialized");
 
     return self;
+}
+
+- (BOOL) reapplySettings: (AGDnsProxyConfig *) config
+         reapplyFilters: (BOOL) reapplyFilters
+                  error: (NSError **) error
+{
+    if (!self->initialized) {
+        if (error) {
+            *error = [NSError errorWithDomain:AGDnsProxyErrorDomain
+                                         code:AGDPE_PROXY_NOT_SET
+                                     userInfo:@{NSLocalizedDescriptionKey: @"DNS proxy is not initialized"}];
+        }
+        return NO;
+    }
+
+    infolog(*self->log, "Reapplying DNS proxy settings...");
+
+    DnsProxySettings settings = convertConfig(config, *self->log);
+
+    auto [ret, err_or_warn] = self->proxy.reapply_settings(std::move(settings), reapplyFilters);
+    if (!ret) {
+        auto str = AG_FMT("Failed to reapply DNS proxy settings: {}", err_or_warn->str());
+        errlog(*self->log, "{}", str);
+        if (error) {
+            *error = [NSError errorWithDomain:AGDnsProxyErrorDomain
+                                         code:(AGDnsProxyInitError)(err_or_warn->value())
+                                         userInfo:@{NSLocalizedDescriptionKey : convert_string(str)}];
+        }
+        return NO;
+    }
+    if (error && err_or_warn) {
+        auto str = AG_FMT("DNS proxy settings reapplied with warnings:\n{}", err_or_warn->str());
+        *error = [NSError errorWithDomain:AGDnsProxyErrorDomain
+                                     code:(AGDnsProxyInitError)(err_or_warn->value())
+                                     userInfo:@{NSLocalizedDescriptionKey : convert_string(str)}];
+    }
+
+    infolog(*self->log, "DNS proxy settings reapplied successfully");
+    return YES;
 }
 
 static coro::Task<CFDataRef> handleIPv4Packet(AGDnsProxy *self, NSData *packet)

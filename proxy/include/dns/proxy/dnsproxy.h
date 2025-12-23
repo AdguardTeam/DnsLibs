@@ -41,6 +41,17 @@ public:
     void deinit();
 
     /**
+     * @brief Reapply DNS proxy settings with optional filter reloading
+     *
+     * @param settings New DNS proxy settings to apply
+     * @param reapply_filters If true, DNS filters will be reloaded from settings.
+     *                       If false, existing filters are preserved (fast update).
+     * @return {true, opt_warning_description} or {false, error_description}
+     * 
+     */
+    [[nodiscard]] DnsProxyInitResult reapply_settings(DnsProxySettings settings, bool reapply_filters);
+
+    /**
      * @brief Get the DNS proxy settings
      * @return Current settings
      */
@@ -73,6 +84,12 @@ public:
 private:
     struct Impl;
     std::unique_ptr<Impl> m_pimpl;
+
+    DnsProxyInitResult reapply_settings_internal(DnsProxySettings settings, bool reapply_filters);
+    coro::Task<Uint8Vector> handle_message_internal(Uint8View message, const DnsMessageInfo *info);
+
+    friend class UdpListener;
+    friend class TcpDnsConnection;
 };
 
 } // namespace ag::dns

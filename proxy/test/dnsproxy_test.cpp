@@ -2298,4 +2298,124 @@ TEST_F(DnsProxyTest, TransparentModeImportantOverridesWhitelist) {
     ASSERT_FALSE(last_event.whitelist) << "Request should be blocked, not whitelisted";
 }
 
+TEST_F(DnsProxyTest, TestReapplySettingsFastUpdate) {
+    // Test fast update: only upstreams are updated, filters remain unchanged
+    DnsProxySettings settings = make_dnsproxy_settings();
+    settings.filter_params = {{{1, "example.com", true}}};
+    
+    auto [ret, err] = m_proxy->init(settings, {});
+    ASSERT_TRUE(ret) << err->str();
+    
+    // Test that filter works before reapply
+    ldns_pkt_ptr response;
+    ASSERT_NO_FATAL_FAILURE(
+            perform_request(*m_proxy, create_request("example.com", LDNS_RR_TYPE_A, LDNS_RD), response));
+    ASSERT_EQ(ldns_pkt_get_rcode(response.get()), LDNS_RCODE_REFUSED);
+    
+    // Change only upstreams, keep filters unchanged
+    settings.upstreams = {{"8.8.8.8"}};
+    auto [ret2, err2] = m_proxy->reapply_settings(settings, /*reapply_filters=*/false);
+    ASSERT_TRUE(ret2) << (err2 ? err2->str() : "");
+    
+    // Test that filter still works after fast reapply (filters preserved)
+    response.reset();
+    ASSERT_NO_FATAL_FAILURE(
+            perform_request(*m_proxy, create_request("example.com", LDNS_RR_TYPE_A, LDNS_RD), response));
+    ASSERT_EQ(ldns_pkt_get_rcode(response.get()), LDNS_RCODE_REFUSED);
+    
+    // Test that new upstream is used (should work with 8.8.8.8)
+    response.reset();
+    ASSERT_NO_FATAL_FAILURE(
+            perform_request(*m_proxy, create_request("google.com", LDNS_RR_TYPE_A, LDNS_RD), response));
+    ASSERT_EQ(ldns_pkt_get_rcode(response.get()), LDNS_RCODE_NOERROR);
+}
+
+TEST_F(DnsProxyTest, TestReapplySettingsFullUpdate) {
+    // Test full update: both upstreams and filters are updated
+    DnsProxySettings settings = make_dnsproxy_settings();
+    settings.filter_params = {{{1, "example.com", true}}};
+    
+    auto [ret, err] = m_proxy->init(settings, {});
+    ASSERT_TRUE(ret) << err->str();
+    
+    // Test that original filter works
+    ldns_pkt_ptr response;
+    ASSERT_NO_FATAL_FAILURE(
+            perform_request(*m_proxy, create_request("example.com", LDNS_RR_TYPE_A, LDNS_RD), response));
+    ASSERT_EQ(ldns_pkt_get_rcode(response.get()), LDNS_RCODE_REFUSED);
+
+    response.reset();
+    ASSERT_NO_FATAL_FAILURE(perform_request(*m_proxy, create_request("test.com", LDNS_RR_TYPE_A, LDNS_RD), response));
+    ASSERT_EQ(ldns_pkt_get_rcode(response.get()), LDNS_RCODE_NOERROR);
+    
+    // Change both upstreams and filters
+    settings.upstreams = {{"8.8.8.8"}};
+    settings.filter_params = {{{1, "test.com", true}}}; // Different filter
+    auto [ret2, err2] = m_proxy->reapply_settings(settings, /*reapply_filters=*/true);
+    ASSERT_TRUE(ret2) << (err2 ? err2->str() : "");
+    
+    // Test that old filter no longer works (example.com should pass)
+    response.reset();
+    ASSERT_NO_FATAL_FAILURE(
+            perform_request(*m_proxy, create_request("example.com", LDNS_RR_TYPE_A, LDNS_RD), response));
+    ASSERT_EQ(ldns_pkt_get_rcode(response.get()), LDNS_RCODE_NOERROR);
+    
+    // Test that new filter works (test.com should be blocked)
+    response.reset();
+    ASSERT_NO_FATAL_FAILURE(perform_request(*m_proxy, create_request("test.com", LDNS_RR_TYPE_A, LDNS_RD), response));
+    ASSERT_EQ(ldns_pkt_get_rcode(response.get()), LDNS_RCODE_REFUSED);
+}
+
+TEST_F(DnsProxyTest, TestReapplySettingsWithoutInit) {
+    // Test that reapply_settings fails if proxy is not initialized
+    DnsProxySettings settings = make_dnsproxy_settings();
+    
+    auto [ret, err] = m_proxy->reapply_settings(settings, /*reapply_filters=*/false);
+    ASSERT_FALSE(ret);
+    ASSERT_TRUE(err);
+    ASSERT_EQ(err->value(), DnsProxyInitError::AE_PROXY_NOT_SET);
+}
+
+TEST_F(DnsProxyTest, TestReapplySettingsFilterError) {
+    // Test that reapply_settings handles filter initialization errors
+    DnsProxySettings settings = make_dnsproxy_settings();
+    
+    auto [ret, err] = m_proxy->init(settings, {});
+    ASSERT_TRUE(ret) << err->str();
+    
+    // Try to reapply with invalid filter (non-existent file)
+    settings.filter_params = {{{1, "/non/existent/filter/file.txt"}}};
+    auto [ret2, err2] = m_proxy->reapply_settings(settings, /*reapply_filters=*/true);
+    ASSERT_FALSE(ret2);
+    ASSERT_TRUE(err2);
+}
+
+TEST_F(DnsProxyTest, TestReapplySettingsPreservesEvents) {
+    // Test that events continue to work after reapply_settings
+    DnsProxySettings settings = make_dnsproxy_settings();
+    settings.filter_params = {{{1, "example.com", true}}};
+
+    DnsRequestProcessedEvent last_event{};
+    DnsProxyEvents events{.on_request_processed = [&last_event](const DnsRequestProcessedEvent &event) {
+        last_event = event;
+    }};
+
+    auto [ret, err] = m_proxy->init(settings, events);
+    ASSERT_TRUE(ret) << err->str();
+
+    // Reapply settings (fast update)
+    settings.upstreams = {{"8.8.8.8"}};
+    auto [ret2, err2] = m_proxy->reapply_settings(settings, /*reapply_filters=*/false);
+    ASSERT_TRUE(ret2) << (err2 ? err2->str() : "");
+
+    // Test that events still work
+    ldns_pkt_ptr response;
+    ASSERT_NO_FATAL_FAILURE(
+            perform_request(*m_proxy, create_request("example.com", LDNS_RR_TYPE_A, LDNS_RD), response));
+
+    ASSERT_FALSE(last_event.domain.empty());
+    ASSERT_EQ(last_event.domain, "example.com.");
+    ASSERT_FALSE(last_event.rules.empty());
+}
+
 } // namespace ag::dns::proxy::test

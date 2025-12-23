@@ -140,7 +140,8 @@ private:
                 .settings_overrides = listener_to_message_overrides(m_settings.settings_overrides),
         };
         std::weak_ptr<bool> guard = m_shutdown_guard;
-        Uint8Vector result = co_await m_proxy->handle_message(Uint8View{(uint8_t *) request.base, request.len}, &info);
+        Uint8Vector result = co_await m_proxy->handle_message_internal(
+                Uint8View{(uint8_t *) request.base, request.len}, &info);
         if (guard.expired()) {
             co_return;
         }
@@ -372,7 +373,7 @@ private:
                 .settings_overrides = listener_to_message_overrides(m_settings_overrides),
         };
         std::weak_ptr<bool> guard = m_shutdown_guard;
-        auto result = co_await m_proxy->handle_message({(const uint8_t *) request.base, request.len}, &info);
+        auto result = co_await m_proxy->handle_message_internal({(const uint8_t *) request.base, request.len}, &info);
         if (guard.expired()) {
             co_return;
         }

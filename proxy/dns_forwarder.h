@@ -25,15 +25,15 @@ struct UpstreamExchangeResult {
     Result<ldns_pkt_ptr, DnsError> result;
     Upstream *upstream = nullptr;
 };
+class DnsFilterManager;
 
 class DnsForwarder {
 public:
-    using InitResult = std::pair<bool, Error<DnsProxyInitError>>;
-
     DnsForwarder();
     ~DnsForwarder();
 
-    InitResult init(EventLoopPtr loop, const DnsProxySettings &settings, const DnsProxyEvents &events);
+    Error<DnsProxyInitError> init(EventLoopPtr loop, const DnsProxySettings &settings, const DnsProxyEvents &events,
+            std::shared_ptr<DnsFilterManager> filter_manager);
     void deinit();
 
     coro::Task<Uint8Vector> handle_message(Uint8View message, const DnsMessageInfo *info);
@@ -105,9 +105,7 @@ private:
     const DnsProxyEvents *m_events = nullptr;
     std::vector<UpstreamPtr> m_upstreams;
     std::vector<UpstreamPtr> m_fallbacks;
-    DnsFilter m_filter;
-    DnsFilter::Handle m_filter_handle = nullptr;
-    DnsFilter::Handle m_fallback_filter_handle = nullptr;
+    std::shared_ptr<DnsFilterManager> m_filter_manager;
     dns64::StatePtr m_dns64_state = nullptr;
     std::shared_ptr<SocketFactory> m_socket_factory;
     std::shared_ptr<bool> m_shutdown_guard;
@@ -116,6 +114,30 @@ private:
     std::default_random_engine m_random_engine;
 
     coro::Task<void> optimistic_cache_background_resolve(ldns_pkt_ptr req, std::string normalized_domain);
+};
+
+class DnsFilterManager {
+    friend class DnsForwarder;
+public:
+    using InitResult = std::pair<bool, Error<DnsProxyInitError>>;
+
+    DnsFilterManager() = default;
+    ~DnsFilterManager() = default;
+
+    DnsFilterManager(const DnsFilterManager &) = delete;
+    DnsFilterManager(DnsFilterManager &&) = delete;
+    DnsFilterManager &operator=(const DnsFilterManager &) = delete;
+    DnsFilterManager &operator=(DnsFilterManager &&) = delete;
+
+    InitResult init(const DnsProxySettings &settings);
+    void deinit();
+
+private:
+    Logger m_log{"dns_filter_manager"};
+
+    DnsFilter m_filter;
+    DnsFilter::Handle m_filter_handle = nullptr;
+    DnsFilter::Handle m_fallback_filter_handle = nullptr;
 };
 
 } // namespace ag::dns

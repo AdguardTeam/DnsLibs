@@ -756,6 +756,21 @@ AG_EXPORT void ag_dnsproxy_deinit(ag_dnsproxy *proxy);
 
 /**
  * @ingroup api
+ * Reapply DNS proxy settings with optional filter reloading.
+ * @param proxy a proxy handle
+ * @param settings new DNS proxy configuration to apply
+ * @param reapply_filters if true, DNS filters will be reloaded from settings.
+ *                        If false, existing filters are preserved (fast update).
+ * @param out_result upon return, contains the result of the operation
+ * @param out_message upon return, contains the error or warning message, or is unchanged
+ * @return true if reapplying succeeded, false otherwise
+ */
+AG_EXPORT bool ag_dnsproxy_reapply_settings(ag_dnsproxy *proxy, const ag_dnsproxy_settings *settings,
+                                            bool reapply_filters, ag_dnsproxy_init_result *out_result,
+                                            const char **out_message);
+
+/**
+ * @ingroup api
  * Process a DNS message and return the response.
  * @param message a DNS message in wire format
  * @param info additional parameters

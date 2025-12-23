@@ -124,6 +124,8 @@ struct DnsProxy::Impl {
     DnsProxySettings settings;
     DnsProxyEvents events;
     std::vector<ListenerPtr> listeners;
+    std::shared_ptr<DnsFilterManager> filter_manager;
+    std::shared_ptr<bool> shutdown_guard;
 };
 
 DnsProxy::DnsProxy()
@@ -157,15 +159,25 @@ DnsProxy::DnsProxyInitResult DnsProxy::init(DnsProxySettings settings, DnsProxyE
         }
     }
 
+    proxy->shutdown_guard = std::make_shared<bool>(true);
     proxy->loop = EventLoop::create();
 
     proxy->forwarder.emplace();
-    auto [result, err_or_warn] = proxy->forwarder->init(proxy->loop, proxy->settings, proxy->events);
+
+    proxy->filter_manager = std::make_shared<DnsFilterManager>();
+    auto [result, err_or_warn] = proxy->filter_manager->init(proxy->settings);
     if (!result) {
+        proxy->filter_manager.reset();
+        this->deinit();
+        dbglog(proxy->log, "Filter init failed: {}", err_or_warn->str());
+        return {false, err_or_warn};
+    }
+    auto err = proxy->forwarder->init(proxy->loop, proxy->settings, proxy->events, proxy->filter_manager);
+    if (err) {
         proxy->forwarder.reset();
         this->deinit();
-        dbglog(proxy->log, "Forwarder init failed: {}", err_or_warn->str());
-        return {false, err_or_warn};
+        dbglog(proxy->log, "Forwarder init failed: {}", err->str());
+        return {false, err};
     }
 
     if (!proxy->settings.listeners.empty()) {
@@ -196,6 +208,8 @@ DnsProxy::DnsProxyInitResult DnsProxy::init(DnsProxySettings settings, DnsProxyE
 
 void DnsProxy::deinit() {
     std::unique_ptr<Impl> &proxy = m_pimpl;
+
+    proxy->shutdown_guard.reset();
     if (proxy->loop == nullptr) {
         infolog(proxy->log, "Proxy module is not initialized, deinitialization is not needed");
         return;
@@ -213,6 +227,10 @@ void DnsProxy::deinit() {
             proxy->forwarder->deinit();
         }
 
+        if (proxy->filter_manager) {
+            proxy->filter_manager->deinit();
+        }
+
         infolog(proxy->log, "Stopping event loop");
         proxy->loop->stop();
         infolog(proxy->log, "Stopping event loop done");
@@ -224,16 +242,87 @@ void DnsProxy::deinit() {
     proxy->settings = {};
 }
 
+DnsProxy::DnsProxyInitResult DnsProxy::reapply_settings_internal(DnsProxySettings settings, bool reapply_filters) {
+    std::unique_ptr<Impl> &proxy = m_pimpl;
+
+    infolog(proxy->log, "Reapplying settings, reapply_filters={}", reapply_filters);
+
+    Error<DnsProxyInitError> warning;
+    std::shared_ptr<DnsFilterManager> new_filter_manager;
+    proxy->settings = std::move(settings);
+
+    if (reapply_filters) {
+        new_filter_manager = std::make_shared<DnsFilterManager>();
+        auto [result, err_or_warn] = new_filter_manager->init(proxy->settings);
+        if (!result) {
+            dbglog(proxy->log, "Filter init failed: {}", err_or_warn->str());
+            new_filter_manager->deinit();
+            new_filter_manager.reset();
+            return {false, err_or_warn};
+        }
+        warning = err_or_warn;
+    }
+
+    if (proxy->forwarder) {
+        proxy->forwarder->deinit();
+        proxy->forwarder.reset();
+    }
+
+    if (reapply_filters) {
+        proxy->filter_manager->deinit();
+        proxy->filter_manager.reset();
+        proxy->filter_manager = new_filter_manager;
+    }
+
+    proxy->forwarder.emplace();
+    auto forwarder_err = proxy->forwarder->init(proxy->loop, proxy->settings, proxy->events, proxy->filter_manager);
+    if (forwarder_err) {
+        proxy->forwarder.reset();
+        dbglog(proxy->log, "Forwarder init failed: {}", forwarder_err->str());
+        return {false, forwarder_err};
+    }
+
+    infolog(proxy->log, "Settings reapplied successfully");
+    return {true, warning};
+}
+
+DnsProxy::DnsProxyInitResult DnsProxy::reapply_settings(DnsProxySettings settings, bool reapply_filters) {
+    std::unique_ptr<Impl> &proxy = m_pimpl;
+
+    if (!proxy->loop) {
+        return {false, make_error(DnsProxyInitError::AE_PROXY_NOT_SET)};
+    }
+
+    auto future = proxy->loop->async<DnsProxyInitResult>(
+            [this, settings = std::move(settings), reapply_filters](auto promise) mutable {
+                promise->set_value(reapply_settings_internal(std::move(settings), reapply_filters));
+            });
+
+    return future.get();
+}
+
 const DnsProxySettings &DnsProxy::get_settings() const {
     return m_pimpl->settings;
 }
 
-coro::Task<Uint8Vector> DnsProxy::handle_message(Uint8View message, const DnsMessageInfo *info) {
+coro::Task<Uint8Vector> DnsProxy::handle_message_internal(Uint8View message, const DnsMessageInfo *info) {
     std::unique_ptr<Impl> &proxy = m_pimpl;
 
     Uint8Vector response = co_await proxy->forwarder->handle_message(message, info);
 
     co_return response;
+}
+
+coro::Task<Uint8Vector> DnsProxy::handle_message(Uint8View message, const DnsMessageInfo *info) {
+    std::unique_ptr<Impl> &proxy = m_pimpl;
+
+    std::weak_ptr<bool> guard = proxy->shutdown_guard;
+    co_await proxy->loop->co_submit();
+    if (guard.expired() || !proxy->forwarder) {
+        co_return {};
+    }
+
+    co_return co_await handle_message_internal(message, info);
 }
 
 Uint8Vector DnsProxy::handle_message_sync(Uint8View message, const DnsMessageInfo *info) {

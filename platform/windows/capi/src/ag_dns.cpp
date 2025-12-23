@@ -642,6 +642,29 @@ void ag_dnsproxy_deinit(ag_dnsproxy *handle) {
     delete proxy;
 }
 
+bool ag_dnsproxy_reapply_settings(ag_dnsproxy *handle, const ag_dnsproxy_settings *c_settings,
+        bool reapply_filters, ag_dnsproxy_init_result *out_result, const char **out_message) {
+    auto *proxy = (DnsProxy *) handle;
+    auto settings = marshal_settings(c_settings);
+
+    auto [ret, err_or_warn] = proxy->reapply_settings(std::move(settings), reapply_filters);
+
+    if (ret) {
+        if (err_or_warn) {
+            *out_result = (ag_dnsproxy_init_result) err_or_warn->value();
+            *out_message = strdup(err_or_warn->str().c_str());
+        } else {
+            *out_result = AGDPIR_OK;
+        }
+        return true;
+    }
+
+    assert(err_or_warn);
+    *out_result = (ag_dnsproxy_init_result) err_or_warn->value();
+    *out_message = strdup(err_or_warn->str().c_str());
+    return false;
+}
+
 static std::optional<DnsMessageInfo> marshal_dns_message_info(const ag_dns_message_info *c_info) {
     if (!c_info) {
         return std::nullopt;
