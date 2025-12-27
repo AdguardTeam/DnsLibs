@@ -5,6 +5,8 @@ set(CMAKE_CXX_STANDARD 20)
 
 set(DNSLIBS_DIR ${CMAKE_CURRENT_SOURCE_DIR}/..)
 
+option(USE_INTERFACE_NAMES_IN_SYSTEM_UPSTREAM "Enable interface name resolution in SystemUpstream on Android (requires JNI)" OFF)
+
 add_library(upstream EXCLUDE_FROM_ALL
         upstream.cpp
         upstream_doh.h upstream_doh.cpp
@@ -29,11 +31,17 @@ if (APPLE OR ANDROID)
     elseif (ANDROID)
         target_sources(upstream PRIVATE 
             system_resolver_android.cpp
+            android_res_api.h android_res_api.cpp
         )
-        # Include path for Android JNI components
-        target_include_directories(upstream PRIVATE
-            ${DNSLIBS_DIR}/platform/android/dnsproxy/lib/src/main/cpp
-        )
+        if (USE_INTERFACE_NAMES_IN_SYSTEM_UPSTREAM)
+            target_sources(upstream PRIVATE
+                ${DNSLIBS_DIR}/platform/android/dnsproxy/lib/src/main/cpp/android_context_manager.cpp
+            )
+            target_include_directories(upstream PRIVATE
+                ${DNSLIBS_DIR}/platform/android/dnsproxy/lib/src/main/cpp
+            )
+            target_compile_definitions(upstream PRIVATE USE_INTERFACE_NAMES_IN_SYSTEM_UPSTREAM)
+        endif()
     endif()
 endif ()
 

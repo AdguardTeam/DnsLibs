@@ -679,6 +679,10 @@ public class DnsProxyTest {
 
     @Test
     public void testSystemUpstreamWithNetworkInterface() {
+        org.junit.Assume.assumeTrue(
+                "Skipping testSystemUpstreamWithNetworkInterface: USE_INTERFACE_NAMES_IN_SYSTEM_UPSTREAM is OFF",
+                com.adguard.dnslibs.BuildConfig.USE_INTERFACE_NAMES_IN_SYSTEM_UPSTREAM);
+
         testSystemUpstreamWithAddress("system://eth0");
     }
 

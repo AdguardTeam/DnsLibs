@@ -7,11 +7,18 @@ android {
     ndkVersion '28.1.13356709'
     compileSdk 34
 
+    buildFeatures {
+        buildConfig true
+    }
+
     defaultConfig {
         minSdk 24
 
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         consumerProguardFiles "consumer-rules.pro"
+
+        // Expose USE_INTERFACE_NAMES_IN_SYSTEM_UPSTREAM to Java code
+        buildConfigField "boolean", "USE_INTERFACE_NAMES_IN_SYSTEM_UPSTREAM", "false"
 
         externalNativeBuild {
             cmake {

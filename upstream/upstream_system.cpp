@@ -4,7 +4,9 @@
 
 #ifdef __ANDROID__
 #include <android/multinetwork.h>
+#ifdef USE_INTERFACE_NAMES_IN_SYSTEM_UPSTREAM
 #include "android_context_manager.h"
+#endif
 #endif
 
 namespace ag::dns {
@@ -25,12 +27,17 @@ Error<Upstream::InitError> SystemUpstream::init() {
     net_handle_t network_handle = NETWORK_UNSPECIFIED;
 
     if (!m_interface.empty()) {
+#ifdef USE_INTERFACE_NAMES_IN_SYSTEM_UPSTREAM
         auto handle_opt = AndroidContextManager::get_network_handle_for_interface(m_interface);
         if (!handle_opt.has_value()) {
             return make_error(InitError::AE_INVALID_ADDRESS, AG_FMT("Invalid interface name: {}", m_interface));
         }
         tracelog(g_log, "Resolved interface '{}' to network handle: {}", m_interface, handle_opt.value());
         network_handle = handle_opt.value();
+#else
+        return make_error(InitError::AE_INVALID_ADDRESS,
+                AG_FMT("Interface names not supported in this build (interface: {})", m_interface));
+#endif
     }
 
     auto result = SystemResolver::create(&config().loop, config().timeout, network_handle);
