@@ -21,6 +21,7 @@ add_library(adguard-dns SHARED
         src/main/cpp/jni_utils.cpp
         src/main/cpp/android_dnsstamp.cpp
         src/main/cpp/android_context_manager.cpp
+        src/main/cpp/android_tun_listener.cpp
         )
 
 if (NOT TARGET dnsproxy)

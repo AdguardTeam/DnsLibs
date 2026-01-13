@@ -231,6 +231,9 @@ static auto quic_method = SSL_QUIC_METHOD {
 
 void DoqUpstream::retransmit_cb(uv_timer_t *timer) {
     auto doq = static_cast<DoqUpstream *>(Uv<uv_timer_t>::parent_from_data(timer->data));
+    if (doq == nullptr) {
+        return;
+    }
     tracelog(doq->m_log, "{}(): ...", __func__);
     if (doq->m_state == STOP) {
         return;
@@ -252,11 +255,17 @@ void DoqUpstream::retransmit_cb(uv_timer_t *timer) {
 
 void DoqUpstream::short_timeout_timer_cb(uv_timer_t *timer) {
     auto doq = static_cast<DoqUpstream *>(Uv<uv_timer_t>::parent_from_data(timer->data));
+    if (doq == nullptr) {
+        return;
+    }
     doq->disconnect("Short timeout timer expired");
 }
 
 void DoqUpstream::handshake_timer_cb(uv_timer_t *timer) {
     auto doq = static_cast<DoqUpstream *>(Uv<uv_timer_t>::parent_from_data(timer->data));
+    if (doq == nullptr) {
+        return;
+    }
     // also stop idle timer
     uv_timer_stop(doq->m_req_idle_timer->raw());
     doq->disconnect("Handshake timer expired");

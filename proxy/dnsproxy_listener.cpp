@@ -8,6 +8,7 @@
 #include "dns/common/net_consts.h"
 
 #include "dnsproxy_listener.h"
+#include "tcp_dns_payload_parser.h"
 
 #define log_listener(l_, lvl_, fmt_, ...)                                                                              \
     lvl_##log((l_)->m_log, "[{} {}] " fmt_, magic_enum::enum_name((l_)->m_settings.protocol), (l_)->m_address.str(),   \
@@ -223,46 +224,6 @@ protected:
     }
 };
 
-class TcpDnsPayloadParser {
-private:
-    enum class State { RD_SIZE, RD_PAYLOAD };
-    State m_state = State::RD_SIZE;
-    uint16_t m_size = 0;
-    Uint8Vector m_data;
-
-public:
-    TcpDnsPayloadParser() = default;
-
-    // Push more data to this parser
-    void push_data(Uint8View data) {
-        m_data.insert(m_data.end(), data.begin(), data.end());
-    }
-
-    // Initialize `out` to contain the next parsed payload
-    // Return true if successful or false if more data is needed (in which case `out` won't be modified)
-    bool next_payload(Uint8Vector &out) {
-        switch (m_state) {
-        case State::RD_SIZE:
-            if (m_data.size() < 2) {
-                return false; // Need more data
-            }
-            m_size = *(uint16_t *) m_data.data();
-            m_size = ntohs(m_size);
-            m_state = State::RD_PAYLOAD;
-            [[fallthrough]];
-        case State::RD_PAYLOAD:
-            if (m_data.size() < (size_t) 2 + m_size) {
-                return false; // Need more data
-            }
-            out = Uint8Vector(m_data.begin() + 2, m_data.begin() + 2 + m_size);
-            m_data.erase(m_data.begin(), m_data.begin() + 2 + m_size);
-            m_state = State::RD_SIZE;
-            break;
-        }
-        return true;
-    }
-};
-
 class TcpDnsConnection {
 public:
     TcpDnsConnection(uint64_t id, ProxySettingsOverrides settings_overrides)
@@ -323,6 +284,9 @@ private:
 
     static void alloc_cb(uv_handle_t *handle, size_t, uv_buf_t *buf) {
         auto *c = (TcpDnsConnection *) Uv<uv_tcp_t>::parent_from_data(handle->data);
+        if (c == nullptr) {
+            return;
+        }
         buf->base = (char *) c->m_incoming_buf;
         buf->len = sizeof(c->m_incoming_buf);
     }
@@ -427,6 +391,9 @@ private:
 
     static void idle_timeout_cb(uv_timer_t *h) {
         auto *c = (TcpDnsConnection *) Uv<uv_timer_t>::parent_from_data(h->data);
+        if (c == nullptr) {
+            return;
+        }
         log_id(c->m_log, dbg, c->m_id, "Idle timer expired, disconnecting");
         c->do_close();
     }
@@ -461,6 +428,9 @@ private:
 
     static void conn_cb(uv_stream_t *server, int status) {
         auto *self = (TcpListener *) Uv<uv_tcp_t>::parent_from_data(server->data);
+        if (!self) {
+            return;
+        }
 
         if (status < 0) {
             log_listener(self, dbg, "Connection failed: {}", uv_strerror(status));

@@ -45,6 +45,14 @@ uv_loop_t *EventLoop::handle() {
     return m_handle->raw();
 }
 
+timeval EventLoop::now() {
+    timeval tv;
+    uint64_t now_ms = uv_now(m_handle->raw());
+    tv.tv_sec = now_ms / 1000;
+    tv.tv_usec = (now_ms % 1000) * 1000;
+    return tv;
+}
+
 std::vector<uv_handle_t *> EventLoop::get_active_handles() {
     std::vector<uv_handle_t *> active_handles;
     walk([&active_handles, this](uv_handle_t *handle) {

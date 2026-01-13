@@ -19,6 +19,7 @@ set(SRCS
         dnsproxy_listener.cpp
         retransmission_detector.cpp
         dns_truncate.cpp
+        tun_listener.cpp
     )
 
 add_library(dnsproxy EXCLUDE_FROM_ALL ${SRCS})
@@ -46,12 +47,16 @@ if(NOT TARGET dnslibs_net)
     add_subdirectory(${DNSLIBS_DIR}/net ${CMAKE_BINARY_DIR}/net)
 endif(NOT TARGET dnslibs_net)
 
+if(NOT TARGET dnslibs_tcpip)
+    add_subdirectory(${DNSLIBS_DIR}/tcpip ${CMAKE_BINARY_DIR}/tcpip)
+endif(NOT TARGET dnslibs_tcpip)
+
 find_package(libuv REQUIRED)
 find_package(ldns REQUIRED)
 
 set_target_properties(dnsproxy PROPERTIES POSITION_INDEPENDENT_CODE ON)
 target_include_directories(dnsproxy PUBLIC ./include)
-target_link_libraries(dnsproxy dnslibs_common dnsfilter upstream dnslibs_net ldns::ldns libuv::libuv)
+target_link_libraries(dnsproxy dnslibs_common dnsfilter upstream dnslibs_net dnslibs_tcpip ldns::ldns libuv::libuv)
 
 if (NOT MSVC)
     target_compile_options(dnsproxy PRIVATE -Wall -Wextra -Wformat=2 -Wno-unused-parameter -Wno-unused-variable -Wno-ignored-qualifiers -Wno-missing-field-initializers)
@@ -77,10 +82,12 @@ add_unit_test(dns64_test ${TEST_DIR} "" TRUE TRUE)
 add_unit_test(dnsproxy_test ${TEST_DIR} "" TRUE TRUE)
 add_unit_test(listener_test ${TEST_DIR} "" TRUE FALSE)
 add_unit_test(truncate_test ${TEST_DIR} "" TRUE TRUE)
+add_unit_test(tun_listener_test ${TEST_DIR} "" TRUE FALSE)
 
 add_executable(listener_standalone EXCLUDE_FROM_ALL test/listener_standalone.cpp)
 add_executable(cache_benchmark EXCLUDE_FROM_ALL test/cache_benchmark.cpp)
-add_dependencies(tests listener_standalone)
+add_executable(tun_listener_standalone EXCLUDE_FROM_ALL test/tun_listener_standalone.cpp)
+add_dependencies(tests listener_standalone tun_listener_standalone)
 if (NOT MSVC)
     target_link_libraries(listener_standalone resolv)
 endif()

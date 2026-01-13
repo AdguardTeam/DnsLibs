@@ -236,7 +236,7 @@ public class DnsProxy implements Closeable {
     public enum LogLevel {
         ERROR, WARN, INFO, DEBUG, TRACE;
 
-        static LogLevel translate(int nativeLogLevel) {
+        public static LogLevel translate(int nativeLogLevel) {
             if (nativeLogLevel < 0 || nativeLogLevel >= values().length) {
                 throw new IllegalArgumentException("nativeLogLevel out of range");
             }

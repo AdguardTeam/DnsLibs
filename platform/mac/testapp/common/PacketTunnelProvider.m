@@ -4,11 +4,13 @@
 
 #import "PacketTunnelProvider.h"
 #import <AGDnsProxy/AGDnsProxy.h>
+#import <AGDnsProxy/AGDnsTunListener.h>
 
 @implementation AGTunnel {
     void (^onStarted)(NSError * __nullable error);
 
     AGDnsProxy *proxy;
+    AGDnsTunListener *tunListener;
 }
 
 - (void) dealloc
@@ -96,6 +98,10 @@
         completionHandler: (void (^)(void)) completionHandler
 {
     NSLog(@"stopTunnelWithReason: %u", (int)reason);
+    if (self->tunListener) {
+        [self->tunListener stop];
+        self->tunListener = nil;
+    }
     completionHandler();
 }
 
@@ -162,22 +168,28 @@
     self->onStarted(nil);
 }
 
-// Read enqueued packets from OS and pass them to DNS proxy
+// Initialize TunListener for UDP + TCP DNS support
 - (void) startPacketHandling
 {
-    [self.packetFlow readPacketsWithCompletionHandler: ^(NSArray<NSData *> * _Nonnull packets,
-            NSArray<NSNumber *> * _Nonnull protocols)
-    {
-        NSLog(@"readPacketsWithCompletionHandler");
-        [packets enumerateObjectsUsingBlock:^(NSData *_Nonnull obj, NSUInteger idx, BOOL *_Nonnull stop) {
-            [self->proxy handlePacket: obj completionHandler:^(NSData *reply) {
-                if (reply != nil) {
-                    [self.packetFlow writePackets: @[reply] withProtocols: @[protocols[idx]]];
-                }
-            }];
-        }];
-        [self startPacketHandling];
-    }];
+    NSError *error = nil;
+    // Create TunListener in external mode using NEPacketTunnelFlow
+    self->tunListener = [[AGDnsTunListener alloc]
+        initWithTunFd:nil                    // External mode
+         orTunnelFlow:self.packetFlow        // Use NEPacketTunnelFlow API
+                  mtu:0                      // Use default MTU
+       messageHandler:^(NSData *request, AGDnsTunListenerReplyHandler replyHandler) {
+           [self->proxy handleMessage:request
+                             withInfo:nil
+                withCompletionHandler:replyHandler];
+       }
+                error:&error];
+
+    if (error || !self->tunListener) {
+        NSLog(@"Failed to initialize TunListener: %@", error);
+        return;
+    }
+
+    NSLog(@"TunListener initialized successfully (UDP + TCP DNS support enabled)");
 }
 
 @end

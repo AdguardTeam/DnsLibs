@@ -1,4 +1,5 @@
 #import "AGDnsProxy.h"
 #import "AGDnsProxyEvents.h"
+#import "AGDnsTunListener.h"
 #import "AGDnsProxyXPC.h"
 #import "AGDnsXPCObject.h"

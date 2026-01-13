@@ -25,3 +25,7 @@
 #define FQN_DNSSTAMP_INFORMAL_PROPERTIES FQN_DNSSTAMP "$InformalProperties"
 #define FQN_DNS_MESSAGE_INFO "com/adguard/dnslibs/proxy/DnsMessageInfo"
 #define FQN_BLOCKING_REASON "com/adguard/dnslibs/proxy/DnsBlockingReason"
+#define FQN_DNSTUNLISTENER "com/adguard/dnslibs/proxy/DnsTunListener"
+#define FQN_DNSTUNLISTENER_INIT_RESULT FQN_DNSTUNLISTENER "$InitResult"
+#define FQN_DNSTUNLISTENER_REQUEST_CALLBACK FQN_DNSTUNLISTENER "$RequestCallback"
+#define FQN_DNSTUNLISTENER_OUTPUT_HANDLER FQN_DNSTUNLISTENER "$OutputHandler"

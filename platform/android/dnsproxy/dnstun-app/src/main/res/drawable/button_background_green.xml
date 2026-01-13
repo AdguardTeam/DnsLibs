@@ -1,0 +1,47 @@
+<?xml version="1.0" encoding="utf-8"?>
+<selector xmlns:android="http://schemas.android.com/apk/res/android">
+	<item android:state_pressed="false">
+		<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+			<item>
+				<shape android:shape="rectangle">
+					<corners android:radius="1000dp" />
+					<solid android:color="@color/adguard_green_light"/>
+				</shape>
+			</item>
+			<item android:top="2dp">
+				<shape android:shape="rectangle">
+					<corners android:radius="1000dp" />
+					<solid android:color="@color/adguard_green_border"/>
+				</shape>
+			</item>
+			<item android:top="2dp" android:bottom="1dp" android:left="1dp" android:right="1dp">
+				<shape android:shape="rectangle">
+					<corners android:radius="1000dp" />
+					<solid android:color="@color/adguard_green"/>
+				</shape>
+			</item>
+		</layer-list>
+	</item>
+	<item android:state_pressed="true">
+		<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+			<item>
+				<shape android:shape="rectangle">
+					<corners android:radius="1000dp" />
+					<solid android:color="@color/adguard_green_light_pressed"/>
+				</shape>
+			</item>
+			<item android:top="2dp">
+				<shape android:shape="rectangle">
+					<corners android:radius="1000dp" />
+					<solid android:color="@color/adguard_green_border_pressed"/>
+				</shape>
+			</item>
+			<item android:top="2dp" android:bottom="1dp" android:left="1dp" android:right="1dp">
+				<shape android:shape="rectangle">
+					<corners android:radius="1000dp" />
+					<solid android:color="@color/adguard_green_pressed"/>
+				</shape>
+			</item>
+		</layer-list>
+	</item>
+</selector>

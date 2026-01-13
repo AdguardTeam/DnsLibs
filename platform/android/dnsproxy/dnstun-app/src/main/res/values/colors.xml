@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="colorPrimary">#3F51B5</color>
+    <color name="colorPrimaryDark">#303F9F</color>
+    <color name="colorAccent">#FF4081</color>
+
+    <color name="primary">#39b349</color>
+    <color name="primary_dark">#0c851a</color>
+    <color name="accent">#0c851a</color>
+
+    <color name="adguard_green">#39B54A</color>
+    <color name="adguard_green_border">#33A343</color>
+    <color name="adguard_green_light">#DFF7E2</color>
+
+    <color name="adguard_green_pressed">@color/primary</color>
+    <color name="adguard_green_border_pressed">#226D2C</color>
+    <color name="adguard_green_light_pressed">@color/primary</color>
+
+    <color name="button_gray">#808080</color>
+    <color name="button_gray_border">#777777</color>
+    <color name="button_gray_light">#aaaaaa</color>
+
+    <color name="button_gray_pressed">#666666</color>
+    <color name="button_gray_border_pressed">#5F5F5F</color>
+    <color name="button_gray_light_pressed">#888888</color>
+</resources>

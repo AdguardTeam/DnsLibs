@@ -116,8 +116,7 @@ public:
                     return true;
                 }
                 // Poll for read events on the fd
-                if (0 != uv_poll_start(
-                    req->poll_event->raw(), UV_READABLE, on_uv_read)) {
+                if (0 != uv_poll_start(req->poll_event->raw(), UV_READABLE, on_uv_read)) {
                     req->error = make_error(SystemResolverError::AE_SYSTEM_RESOLVE_ERROR);
                     return true;
                 }

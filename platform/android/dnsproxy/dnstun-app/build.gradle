@@ -1,0 +1,99 @@
+apply plugin: 'com.android.application'
+
+version = "0.1"
+
+android {
+    namespace 'com.adguard.testapp'
+    ndkVersion "28.1.13356709"
+    compileSdkVersion 34
+    defaultConfig {
+        applicationId 'com.adguard.testapp'
+        minSdkVersion 24
+        targetSdkVersion 34
+        versionCode 1
+        versionName "0.1"
+        testInstrumentationRunner "android.support.test.runner.AndroidJUnitRunner"
+        archivesBaseName = "tcpip-testapp-1.0.5"
+        vectorDrawables {
+            useSupportLibrary true
+        }
+    }
+    buildTypes {
+        release {
+            minifyEnabled false
+            proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
+        }
+    }
+    productFlavors {
+    }
+    packagingOptions {
+        exclude 'META-INF/DEPENDENCIES.txt'
+        exclude 'META-INF/LICENSE.txt'
+        exclude 'META-INF/NOTICE.txt'
+        exclude 'META-INF/NOTICE'
+        exclude 'META-INF/LICENSE'
+        exclude 'META-INF/DEPENDENCIES'
+        exclude 'META-INF/notice.txt'
+        exclude 'META-INF/license.txt'
+        exclude 'META-INF/dependencies.txt'
+        exclude 'META-INF/LGPL2.1'
+        exclude 'META-INF/ASL2.0'
+        exclude '**/VERSION.txt'
+        resources {
+            excludes += '/META-INF/{AL2.0,LGPL2.1}'
+        }
+    }
+    useLibrary 'org.apache.http.legacy'
+    buildFeatures {
+        viewBinding true
+    }
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_1_8
+        targetCompatibility JavaVersion.VERSION_1_8
+    }
+}
+
+dependencies {
+    implementation fileTree(include: ['*.jar'], dir: 'libs')
+    implementation 'androidx.constraintlayout:constraintlayout:2.1.4'
+    implementation 'androidx.navigation:navigation-fragment:2.6.0'
+    implementation 'androidx.navigation:navigation-ui:2.6.0'
+    implementation 'androidx.lifecycle:lifecycle-runtime-ktx:2.8.2'
+    implementation 'androidx.activity:activity-compose:1.9.0'
+    implementation platform('androidx.compose:compose-bom:2023.08.00')
+    implementation 'androidx.compose.ui:ui'
+    implementation 'androidx.compose.ui:ui-graphics'
+    implementation 'androidx.compose.ui:ui-tooling-preview'
+    implementation 'androidx.compose.material3:material3'
+    androidTestImplementation 'androidx.test.espresso:espresso-core:3.5.1'
+    androidTestImplementation 'androidx.test.ext:junit:1.1.5'
+
+    // App Compat
+    implementation 'androidx.appcompat:appcompat:1.0.2'
+    implementation 'androidx.legacy:legacy-support-v4:1.0.0'
+
+    // Android Design
+    implementation 'com.google.android.material:material:1.0.0'
+    implementation 'androidx.cardview:cardview:1.0.0'
+
+    testImplementation 'junit:junit:4.12'
+    implementation project(':lib')
+
+    // Commons
+    // https://github.com/AdguardTeam/commons-codec
+    implementation 'commons-codec:commons-codec-compatible:1.10'
+    // https://mvnrepository.com/artifact/org.apache.commons/commons-collections4
+    implementation 'org.apache.commons:commons-collections4:4.1'
+    // https://mvnrepository.com/artifact/org.apache.commons/commons-lang3
+    // Use 3.5 (targets Java 6 --  compatible with Android 4)
+    //noinspection GradleDependency
+    implementation 'org.apache.commons:commons-lang3:3.5'
+    // https://mvnrepository.com/artifact/commons-io/commons-io
+    // Use 2.4 (targets Java 5 --  compatible with Android 4)
+    //noinspection GradleDependency
+    implementation group: 'commons-io', name: 'commons-io', version: '2.4'
+    androidTestImplementation platform('androidx.compose:compose-bom:2023.08.00')
+    androidTestImplementation 'androidx.compose.ui:ui-test-junit4'
+    debugImplementation 'androidx.compose.ui:ui-tooling'
+    debugImplementation 'androidx.compose.ui:ui-test-manifest'
+}

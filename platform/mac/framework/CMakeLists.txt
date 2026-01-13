@@ -53,6 +53,7 @@ add_definitions(-DFMT_EXCEPTIONS=0)
 add_library(AGDnsProxy SHARED
     AGDnsProxyEvents.h
     AGDnsProxy.h AGDnsProxy.mm
+    AGDnsTunListener.h AGDnsTunListener.mm
     AGDnsProxyXPC.h AGDnsProxyXPC.mm
     AGDnsXPCObject.h AGDnsXPCObject.m
     AGDnsProxyModule.h module.modulemap
@@ -76,6 +77,7 @@ set_target_properties(AGDnsProxy PROPERTIES
 set_property(TARGET AGDnsProxy PROPERTY PUBLIC_HEADER
     AGDnsProxy.h
     AGDnsProxyEvents.h
+    AGDnsTunListener.h
     AGDnsProxyModule.h
     AGDnsProxyXPC.h
     AGDnsXPCObject.h
@@ -193,4 +195,14 @@ if("${TARGET_OS}" STREQUAL "macos")
     add_dependencies(test_AGDnsProxyReapplySettings AGDnsProxy)
     add_dependencies(tests test_AGDnsProxyReapplySettings)
     add_test(AGDnsProxyReapplySettingsTest test_AGDnsProxyReapplySettings)
+
+    add_executable(test_AGDnsTunListener EXCLUDE_FROM_ALL test_AGDnsTunListener.mm)
+    target_compile_options(test_AGDnsTunListener PRIVATE "-fobjc-arc")
+    target_compile_options(test_AGDnsTunListener PRIVATE -F${CMAKE_CURRENT_BINARY_DIR})
+    target_link_libraries(test_AGDnsTunListener
+            "-F${CMAKE_CURRENT_BINARY_DIR}"
+            "-Wl,-rpath,${CMAKE_CURRENT_BINARY_DIR}"
+            "-framework AGDnsProxy -framework Foundation -framework NetworkExtension")
+    add_dependencies(test_AGDnsTunListener AGDnsProxy)
+    add_dependencies(tests test_AGDnsTunListener)
 endif()

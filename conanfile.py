@@ -29,6 +29,7 @@ class DnsLibsConan(ConanFile):
     exports_sources = patch_files
 
     def requirements(self):
+        self.requires("cxxopts/3.1.1", transitive_headers=True)
         self.requires("libevent/2.1.11@adguard/oss", transitive_headers=True)
         self.requires("libsodium/1.0.18@adguard/oss", transitive_headers=True)
         self.requires("libuv/1.41.0@adguard/oss", transitive_headers=True)

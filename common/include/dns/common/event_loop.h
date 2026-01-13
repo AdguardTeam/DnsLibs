@@ -55,6 +55,12 @@ public:
 
     uv_loop_t *handle();
 
+    /**
+     * Get cached current time (updated on each event loop iteration)
+     * @return Output timeval structure
+     */
+    timeval now();
+
     template <typename T>
     using PromisePtr = std::shared_ptr<std::promise<T>>;
 
