@@ -63,10 +63,13 @@ Error<Upstream::InitError> SystemUpstream::init() {
 
 coro::Task<Upstream::ExchangeResult> SystemUpstream::exchange(const ldns_pkt *request_pkt, const DnsMessageInfo *info) {
     const ldns_rr *question = ldns_rr_list_rr(ldns_pkt_question(request_pkt), 0);
-    const std::string domain = ldns_rdf2str(ldns_rr_owner(question));
+    auto domain = AllocatedPtr<char>(ldns_rdf2str(ldns_rr_owner(question)));
+    if (!domain) {
+        co_return make_error(DnsError::AE_INTERNAL_ERROR, "Failed to get domain name from question");
+    }
     const ldns_rr_type RR_TYPE = ldns_rr_get_type(question);
 
-    auto result = co_await m_resolver->resolve(domain, RR_TYPE);
+    auto result = co_await m_resolver->resolve(domain.get(), RR_TYPE);
     if (result.has_error()) {
         auto &error = result.error();
         if (error->value() != SystemResolverError::AE_DOMAIN_NOT_FOUND
