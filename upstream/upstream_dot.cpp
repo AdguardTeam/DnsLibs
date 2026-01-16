@@ -45,6 +45,7 @@ public:
         auto dot_upstream = std::dynamic_pointer_cast<DotUpstream>(pool->upstream());
         assert(dot_upstream != nullptr);
 
+        std::vector<SocketAddress> candidates;
         if (dot_upstream->m_bootstrapper) {
             auto weak_self = weak_from_this();
             auto result = co_await dot_upstream->m_bootstrapper->get();
@@ -59,33 +60,194 @@ public:
             }
             m_result = std::move(result);
             assert(!m_result.addresses.empty());
-            m_address = m_result.addresses[0];
+
+            bool found_ipv4 = false;
+            bool found_ipv6 = false;
+            for (const auto &addr : m_result.addresses) {
+                if (found_ipv4 && found_ipv6) {
+                    break;
+                }
+                if (addr.is_ipv4() && !std::exchange(found_ipv4, true)) {
+                    candidates.push_back(addr);
+                } else if (addr.is_ipv6() && !std::exchange(found_ipv6, true)) {
+                    candidates.push_back(addr);
+                }
+            }
         } else {
             m_address = NamePort{std::string(dot_upstream->m_url.get_hostname()), dot_upstream->m_port};
         }
 
         static const std::string DOT_ALPN = "dot";
+        Millis timeout = dot_upstream->m_config.timeout;
 
-        Millis timeout;
-        m_stream = dot_upstream->make_secured_socket(utils::TP_TCP,
-                    SocketFactory::SecureSocketParameters{
-                            .session_cache = &dot_upstream->m_tls_session_cache,
-                            .server_name = std::string(dot_upstream->m_url.get_hostname()),
-                            .alpn = {DOT_ALPN},
-                            .fingerprints = dot_upstream->m_fingerprints,
-                            .enable_post_quantum = dot_upstream->m_options.enable_post_quantum_cryptography,
+        if (!candidates.empty()) {
+            struct ConnectAttempt {
+                SocketAddress address;
+                SocketFactory::SocketPtr stream;
+                std::optional<Error<SocketError>> result;
+                std::coroutine_handle<> handle;
+
+                void complete_with(Error<SocketError> error) {
+                    if (result.has_value()) {
+                        return;
+                    }
+
+                    result = error;
+                    auto h = handle;
+                    if (h) {
+                        handle = nullptr;
+                        h();
+                    }
+                }
+
+                void cancel() {
+                    stream.reset();
+                    complete_with(make_error(SocketError::AE_CONNECTION_REFUSED));
+                }
+
+                coro::Task<Result<SocketAddress, DnsError>> try_connect(
+                        DotUpstream *upstream, EventLoop *loop, Millis timeout) {
+                    stream = upstream->make_secured_socket(utils::TP_TCP,
+                                SocketFactory::SecureSocketParameters{
+                                        .session_cache = &upstream->m_tls_session_cache,
+                                        .server_name = std::string(upstream->m_url.get_hostname()),
+                                        .alpn = {DOT_ALPN},
+                                        .fingerprints = upstream->m_fingerprints,
+                                        .enable_post_quantum = upstream->m_options.enable_post_quantum_cryptography,
+                                });
+
+                    auto on_connected = [](void *arg) {
+                        auto *self = static_cast<ConnectAttempt *>(arg);
+                        self->complete_with(Error<SocketError>());
+                    };
+
+                    auto on_close = [](void *arg, Error<SocketError> error) {
+                        auto *self = static_cast<ConnectAttempt *>(arg);
+                        self->complete_with(error ? error : make_error(SocketError::AE_CONNECTION_REFUSED));
+                    };
+
+                    auto err = stream->connect({
+                            loop,
+                            address,
+                            {on_connected, nullptr, on_close, this},
+                            timeout,
                     });
-        timeout = dot_upstream->m_config.timeout;
-        dbglog(m_log, "{}", m_address);
-        auto err = m_stream->connect({
-                &m_loop,
-                m_address,
-                {on_connected, on_read, on_close, this},
-                timeout,
-        });
-        if (err) {
-            log_conn(m_log, err, this, "Failed to start connect: {}", err->str());
-            on_close(this, err);
+
+                    if (err) {
+                        co_return make_error(DnsError::AE_SOCKET_ERROR, err);
+                    }
+
+                    struct Awaitable {
+                        ConnectAttempt *self;
+                        bool await_ready() { 
+                            return self->result.has_value(); 
+                        }
+                        bool await_suspend(std::coroutine_handle<> h) {
+                            self->handle = h;
+                            // Check again after setting handle to avoid race
+                            return !self->result.has_value();
+                        }
+                        Result<SocketAddress, DnsError> await_resume() {
+                            self->handle = nullptr;
+                            if (!self->result.has_value()) {
+                                return make_error(DnsError::AE_SHUTTING_DOWN);
+                            }
+                            if (self->result.value()) {
+                                return make_error(DnsError::AE_SOCKET_ERROR, self->result.value());
+                            }
+                            return self->address;
+                        }
+                    };
+                    co_return co_await Awaitable{.self = this};
+                }
+            };
+
+            std::vector<ConnectAttempt> attempts;
+            attempts.reserve(candidates.size());
+            for (const auto &addr : candidates) {
+                attempts.emplace_back(addr);
+            }
+
+            auto op = parallel::any_of_cond<Result<SocketAddress, DnsError>>(
+                    [](const Result<SocketAddress, DnsError> &result) {
+                        return !result.has_error();
+                    });
+            for (auto &attempt : attempts) {
+                op.add(attempt.try_connect(dot_upstream.get(), &m_loop, timeout));
+            }
+
+            auto weak_self = weak_from_this();
+            std::optional<Result<SocketAddress, DnsError>> winner = co_await op;
+            if (weak_self.expired()) {
+                co_return;
+            }
+
+            // Remove failed addresses from the bootstrap cache.
+            // Note: If the attempt.try_connect() coroutine hasn't finished yet,
+            // we won't remove its address, even if it later fails.
+            if (dot_upstream->m_bootstrapper) {
+                for (auto &attempt : attempts) {
+                    if (attempt.result.has_value() && attempt.result.value()) {
+                        dot_upstream->m_bootstrapper->remove_resolved(attempt.address);
+                    }
+                }
+            }
+
+            if (!winner.has_value() || winner->has_error()) {
+                Error<DnsError> final_error = winner.has_value() 
+                    ? winner->error() 
+                    : make_error(DnsError::AE_SOCKET_ERROR, "All connection attempts failed");
+                log_conn(m_log, dbg, this, "Failed to connect to any address: {}", final_error->str());
+                this->on_close(final_error);
+                co_return;
+            }
+
+            SocketAddress winner_addr = winner->value();
+            for (auto &attempt : attempts) {
+                if (attempt.address == winner_addr) {
+                    if (attempt.result.has_value() && !attempt.result.value()) {
+                        m_stream = std::move(attempt.stream);
+                        m_address = winner_addr;
+                    }
+                } else {
+                    attempt.cancel();
+                }
+            }
+
+            if (!m_stream) {
+                log_conn(m_log, dbg, this, "Internal error: winner stream not found");
+                this->on_close(make_error(DnsError::AE_SOCKET_ERROR, "Internal error"));
+                co_return;
+            }
+
+            auto err = m_stream->set_callbacks({on_connected, on_read, on_close, this});
+            if (err) {
+                log_conn(m_log, dbg, this, "Failed to set callbacks: {}", err->str());
+                on_close(this, err);
+                co_return;
+            }
+
+            on_connected(this);
+        } else {
+            m_stream = dot_upstream->make_secured_socket(utils::TP_TCP,
+                        SocketFactory::SecureSocketParameters{
+                                .session_cache = &dot_upstream->m_tls_session_cache,
+                                .server_name = std::string(dot_upstream->m_url.get_hostname()),
+                                .alpn = {DOT_ALPN},
+                                .fingerprints = dot_upstream->m_fingerprints,
+                                .enable_post_quantum = dot_upstream->m_options.enable_post_quantum_cryptography,
+                        });
+            dbglog(m_log, "{}", m_address);
+            auto err = m_stream->connect({
+                    &m_loop,
+                    m_address,
+                    {on_connected, on_read, on_close, this},
+                    timeout,
+            });
+            if (err) {
+                log_conn(m_log, err, this, "Failed to start connect: {}", err->str());
+                on_close(this, err);
+            }
         }
     }
 
