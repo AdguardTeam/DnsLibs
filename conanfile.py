@@ -119,6 +119,7 @@ class DnsLibsConan(ConanFile):
         ]
         self.cpp_info.libdirs = ['lib']
         self.cpp_info.requires = [
+            "cxxopts::cxxopts",
             "magic_enum::magic_enum",
             "pcre2::pcre2",
             "libsodium::libsodium",
