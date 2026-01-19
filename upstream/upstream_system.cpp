@@ -1,5 +1,6 @@
 #include "upstream_system.h"
 #include "common/logger.h"
+#include <ctime>
 #include <net/if.h>
 
 #ifdef __ANDROID__
@@ -12,6 +13,29 @@
 namespace ag::dns {
 
 static ag::Logger g_log{"SystemUpstream"};
+
+static constexpr uint32_t DEFAULT_SOA_TTL = 300;
+
+// Based on ResponseHelpers::create_soa()
+static ldns_rr *create_soa_for_system_response(const ldns_pkt *request) {
+    const ldns_rr *question = ldns_rr_list_rr(ldns_pkt_question(request), 0);
+
+    ldns_rr *soa = ldns_rr_new();
+    ldns_rr_set_owner(soa, ldns_rdf_clone(ldns_rr_owner(question)));
+    ldns_rr_set_ttl(soa, DEFAULT_SOA_TTL);
+    ldns_rr_set_type(soa, LDNS_RR_TYPE_SOA);
+    ldns_rr_set_class(soa, LDNS_RR_CLASS_IN);
+
+    ldns_rr_push_rdf(soa, ldns_dname_new_frm_str("fake-for-negative-caching.adguard.com."));
+    ldns_rr_push_rdf(soa, ldns_dname_new_frm_str("hostmaster."));
+    ldns_rr_push_rdf(soa, ldns_native2rdf_int32(LDNS_RDF_TYPE_TIME, time(nullptr)));
+    ldns_rr_push_rdf(soa, ldns_native2rdf_int32(LDNS_RDF_TYPE_PERIOD, 1800));
+    ldns_rr_push_rdf(soa, ldns_native2rdf_int32(LDNS_RDF_TYPE_PERIOD, 900));
+    ldns_rr_push_rdf(soa, ldns_native2rdf_int32(LDNS_RDF_TYPE_PERIOD, 604800));
+    ldns_rr_push_rdf(soa, ldns_native2rdf_int32(LDNS_RDF_TYPE_PERIOD, 86400));
+
+    return soa;
+}
 
 SystemUpstream::SystemUpstream(const UpstreamOptions &opts, const UpstreamFactoryConfig &config)
         : Upstream(opts, config)
@@ -90,18 +114,26 @@ coro::Task<Upstream::ExchangeResult> SystemUpstream::exchange(const ldns_pkt *re
     ldns_pkt_set_cd(reply_pkt, false);
 
     if (result.has_value()) {
-        ldns_pkt_set_ancount(reply_pkt, ldns_rr_list_rr_count(result.value().get()));
+        size_t record_count = ldns_rr_list_rr_count(result.value().get());
+        ldns_pkt_set_ancount(reply_pkt, record_count);
         ldns_pkt_set_answer(reply_pkt, ldns_rr_list_clone(result.value().get()));
         ldns_pkt_set_rcode(reply_pkt, LDNS_RCODE_NOERROR);
+
+        if (record_count == 0) {
+            ldns_pkt_push_rr(reply_pkt, LDNS_SECTION_AUTHORITY, create_soa_for_system_response(request_pkt));
+        }
+
         co_return ldns_pkt_ptr{reply_pkt};
     }
 
     switch (result.error()->value()) {
     case SystemResolverError::AE_DOMAIN_NOT_FOUND:
         ldns_pkt_set_rcode(reply_pkt, LDNS_RCODE_NXDOMAIN);
+        ldns_pkt_push_rr(reply_pkt, LDNS_SECTION_AUTHORITY, create_soa_for_system_response(request_pkt));
         co_return ldns_pkt_ptr{reply_pkt};
     case SystemResolverError::AE_RECORD_NOT_FOUND:
         ldns_pkt_set_rcode(reply_pkt, LDNS_RCODE_NOERROR);
+        ldns_pkt_push_rr(reply_pkt, LDNS_SECTION_AUTHORITY, create_soa_for_system_response(request_pkt));
         co_return ldns_pkt_ptr{reply_pkt};
     default:
         assert(0);

@@ -718,4 +718,110 @@ public class DnsProxyTest {
             fail("System upstream test failed for " + upstreamAddress + ": " + e.toString());
         }
     }
+
+    @Test
+    public void testSystemUpstreamEmptyAAAAResponseContainsSOA() {
+        final DnsProxySettings settings = getDefaultSettings();
+        settings.getUpstreams().clear();
+
+        final UpstreamSettings systemUpstream = new UpstreamSettings();
+        systemUpstream.setAddress("system://");
+        systemUpstream.setId(100);
+        settings.getUpstreams().add(systemUpstream);
+
+        settings.setUpstreamTimeoutMs(5000);
+
+        try (final DnsProxy proxy = new DnsProxy(context, settings)) {
+            final Message req = Message.newQuery(Record.newRecord(Name.fromString("ipv4only.arpa."), Type.AAAA, DClass.IN));
+            final Message res = new Message(proxy.handleMessage(req.toWire(), null));
+
+            assertEquals(Rcode.NOERROR, res.getRcode());
+
+            if (res.getSectionArray(org.xbill.DNS.Section.ANSWER).length == 0) {
+                final Record[] authority = res.getSectionArray(org.xbill.DNS.Section.AUTHORITY);
+                assertTrue("Empty response must contain SOA in authority section (RFC 2308)", authority.length > 0);
+
+                boolean hasSOA = false;
+                for (Record rr : authority) {
+                    if (rr.getType() == Type.SOA) {
+                        hasSOA = true;
+                        break;
+                    }
+                }
+                assertTrue("Authority section must contain SOA record for empty response (RFC 2308)", hasSOA);
+            }
+        } catch (IOException e) {
+            fail("System upstream empty AAAA test failed: " + e.toString());
+        }
+    }
+
+    @Test
+    public void testSystemUpstreamNXDOMAINResponseContainsSOA() {
+        final DnsProxySettings settings = getDefaultSettings();
+        settings.getUpstreams().clear();
+
+        final UpstreamSettings systemUpstream = new UpstreamSettings();
+        systemUpstream.setAddress("system://");
+        systemUpstream.setId(100);
+        settings.getUpstreams().add(systemUpstream);
+
+        settings.setUpstreamTimeoutMs(5000);
+
+        try (final DnsProxy proxy = new DnsProxy(context, settings)) {
+            final Message req = Message.newQuery(Record.newRecord(Name.fromString("this-domain-does-not-exist-12345.invalid."), Type.A, DClass.IN));
+            final Message res = new Message(proxy.handleMessage(req.toWire(), null));
+
+            if (res.getRcode() == Rcode.NXDOMAIN) {
+                final Record[] authority = res.getSectionArray(org.xbill.DNS.Section.AUTHORITY);
+                assertTrue("NXDOMAIN response must contain SOA in authority section (RFC 2308)", authority.length > 0);
+
+                boolean hasSOA = false;
+                for (Record rr : authority) {
+                    if (rr.getType() == Type.SOA) {
+                        hasSOA = true;
+                        break;
+                    }
+                }
+                assertTrue("Authority section must contain SOA record for NXDOMAIN response (RFC 2308)", hasSOA);
+            }
+        } catch (IOException e) {
+            fail("System upstream NXDOMAIN test failed: " + e.toString());
+        }
+    }
+
+    @Test
+    public void testSystemUpstreamCNAMEResolution() {
+        final DnsProxySettings settings = getDefaultSettings();
+        settings.getUpstreams().clear();
+
+        final UpstreamSettings systemUpstream = new UpstreamSettings();
+        systemUpstream.setAddress("system://");
+        systemUpstream.setId(100);
+        settings.getUpstreams().add(systemUpstream);
+
+        settings.setUpstreamTimeoutMs(5000);
+
+        try (final DnsProxy proxy = new DnsProxy(context, settings)) {
+            final Message req = Message.newQuery(Record.newRecord(Name.fromString("www.reddit.com."), Type.A, DClass.IN));
+            final Message res = new Message(proxy.handleMessage(req.toWire(), null));
+
+            assertEquals("Response should be NOERROR", Rcode.NOERROR, res.getRcode());
+
+            final Record[] answer = res.getSectionArray(org.xbill.DNS.Section.ANSWER);
+            assertTrue("Response should not be empty", answer.length > 0);
+
+            boolean hasA = false;
+            for (Record rr : answer) {
+                if (rr.getType() == Type.A) {
+                    hasA = true;
+                    break;
+                }
+            }
+
+            assertTrue("Response should contain A record", hasA);
+        } catch (IOException e) {
+            fail("System upstream CNAME test failed: " + e.toString());
+        }
+    }
+
 }

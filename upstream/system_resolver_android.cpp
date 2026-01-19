@@ -227,14 +227,12 @@ public:
             return;
         }
 
-        // Extract answer records
+        // Extract all records from answer section
         ldns_rr_list *answer_list = ldns_pkt_answer(response_pkt);
         if (answer_list) {
             for (size_t i = 0; i < ldns_rr_list_rr_count(answer_list); ++i) {
                 ldns_rr *rr = ldns_rr_list_rr(answer_list, i);
-                if (ldns_rr_get_type(rr) == req.rr_type) {
-                    ldns_rr_list_push_rr(req.rr_list.get(), ldns_rr_clone(rr));
-                }
+                ldns_rr_list_push_rr(req.rr_list.get(), ldns_rr_clone(rr));
             }
         }
 
