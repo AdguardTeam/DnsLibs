@@ -6,6 +6,12 @@
     * Needed to handle `NEAppProxyTCPFlow`/`NEAppProxyUDPFlow` modes (redirect/bypass/filter) and integrate them with `AGDnsProxy`.
     * See `documentation/DNS_PROXY_PROVIDER.md`.
 
+## 2.8.9
+
+* [Feature] Added TUN listener which properly handles TCP DNS packets.
+    * [Android] See `DnsTunListener`
+    * [Apple] See `AGDnsTunListener`
+
 ## 2.8.7
 
 * [Feature] Added new function reapply_settings to update upstreams list without reloading filters.
