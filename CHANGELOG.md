@@ -1,5 +1,7 @@
 # Changelog
 
+## 2.8.16
+
 * [Feature] Added `AGDnsAppProxyFlowManager` for Apple platforms to support DNS proxying via Network Extension App Proxy flows.
     * Needed to handle `NEAppProxyTCPFlow`/`NEAppProxyUDPFlow` modes (redirect/bypass/filter) and integrate them with `AGDnsProxy`.
     * See `documentation/DNS_PROXY_PROVIDER.md`.
