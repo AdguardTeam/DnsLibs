@@ -1,0 +1,53 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>PayloadType</key>
+    <string>Configuration</string>
+
+    <key>PayloadVersion</key>
+    <integer>1</integer>
+
+    <key>PayloadIdentifier</key>
+    <string>com.adguard.dns.DnsLibsTestApp.mdmprofile.dnsproxy</string>
+
+    <key>PayloadUUID</key>
+    <string>5D81E5F2-6CF4-4E1F-8F55-7D7ED1B07B29</string>
+
+    <key>PayloadDisplayName</key>
+    <string>DnsLibs DNS Proxy</string>
+
+    <key>PayloadOrganization</key>
+    <string>AdGuard</string>
+
+    <key>PayloadContent</key>
+    <array>
+        <dict>
+            <key>PayloadType</key>
+            <string>com.apple.dnsProxy.managed</string>
+
+            <key>PayloadVersion</key>
+            <integer>1</integer>
+
+            <key>PayloadIdentifier</key>
+            <string>com.adguard.dns.DnsLibsTestApp.payload.dnsproxy</string>
+
+            <key>PayloadUUID</key>
+            <string>2B8E8B67-0E66-4F3C-8FE6-1B6D6BB6D930</string>
+
+            <key>PayloadDisplayName</key>
+            <string>DnsLibs DNS Proxy</string>
+
+            <key>AppBundleIdentifier</key>
+            <string>com.adguard.dns.DnsLibsTestApp</string>
+
+            <key>ProviderBundleIdentifier</key>
+            <string>com.adguard.dns.DnsLibsTestApp.DnsProxy</string>
+
+            <key>ProviderConfiguration</key>
+            <dict>
+            </dict>
+        </dict>
+    </array>
+</dict>
+</plist>

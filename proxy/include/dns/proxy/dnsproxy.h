@@ -47,7 +47,7 @@ public:
      * @param reapply_filters If true, DNS filters will be reloaded from settings.
      *                       If false, existing filters are preserved (fast update).
      * @return {true, opt_warning_description} or {false, error_description}
-     * 
+     *
      */
     [[nodiscard]] DnsProxyInitResult reapply_settings(DnsProxySettings settings, bool reapply_filters);
 
@@ -70,6 +70,17 @@ public:
     coro::Task<Uint8Vector> handle_message(Uint8View message, const DnsMessageInfo *info);
 
     /**
+     * @brief Check if a DNS message's domain matches `fallback_domains`
+     *
+     * This method parses `message` as a DNS packet and checks whether its question name matches
+     * the configured `fallback_domains` patterns.
+     *
+     * @param message message from client
+     * @return true if the question name matches `fallback_domains`, false otherwise
+     */
+    [[nodiscard]] bool match_fallback_domains(Uint8View message) const;
+
+    /**
      * Synchronous interface for @see `handle_message`
      */
     Uint8Vector handle_message_sync(Uint8View message, const DnsMessageInfo *info);
@@ -87,6 +98,7 @@ private:
 
     DnsProxyInitResult reapply_settings_internal(DnsProxySettings settings, bool reapply_filters);
     coro::Task<Uint8Vector> handle_message_internal(Uint8View message, const DnsMessageInfo *info);
+    bool match_fallback_domains_internal(Uint8View message) const;
 
     friend class UdpListener;
     friend class TcpDnsConnection;

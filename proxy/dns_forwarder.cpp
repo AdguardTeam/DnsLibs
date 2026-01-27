@@ -1384,4 +1384,38 @@ void DnsFilterManager::deinit() {
     infolog(m_log, "Done");
 }
 
+bool DnsFilterManager::match_fallback_domains(Uint8View message) {
+    if (!m_fallback_filter_handle) {
+        return false;
+    }
+
+    ldns_pkt *request_naked = nullptr;
+    ldns_status status = ldns_wire2pkt(&request_naked, message.data(), message.size());
+    if (status != LDNS_STATUS_OK || request_naked == nullptr) {
+        if (request_naked) {
+            ldns_pkt_free(request_naked);
+        }
+        return false;
+    }
+
+    UniquePtr<ldns_pkt, &ldns_pkt_free> request{request_naked};
+    const ldns_rr *question = ldns_rr_list_rr(ldns_pkt_question(request.get()), 0);
+    if (question == nullptr) {
+        return false;
+    }
+
+    AllocatedPtr<char> domain{ldns_rdf2str(ldns_rr_owner(question))};
+    if (!domain.get()) {
+        return false;
+    }
+
+    std::string_view normalized_domain = domain.get();
+    if (ldns_dname_str_absolute(domain.get())) {
+        normalized_domain.remove_suffix(1);
+    }
+
+    auto rules = m_filter.match(m_fallback_filter_handle, {normalized_domain, ldns_rr_get_type(question)});
+    return !rules.empty();
+}
+
 } // namespace ag::dns

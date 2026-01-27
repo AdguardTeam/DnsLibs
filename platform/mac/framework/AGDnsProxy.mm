@@ -1673,6 +1673,7 @@ withCompletionHandler:(void (^)(NSData *))handler {
             if (info) {
                 cpp_info.emplace();
                 cpp_info->transparent = info.transparent;
+                cpp_info->proto = info.isTcp ? ag::utils::TP_TCP : ag::utils::TP_UDP;
             }
             auto result = co_await self->proxy.handle_message({(uint8_t *) message.bytes, (size_t) message.length},
                     opt_as_ptr(cpp_info));
@@ -1681,6 +1682,13 @@ withCompletionHandler:(void (^)(NSData *))handler {
             }
         }(self, message, info, handler));
     });
+}
+
+- (BOOL)matchFallbackDomains:(NSData *)message {
+    if (!initialized) {
+        return NO;
+    }
+    return self->proxy.match_fallback_domains({(uint8_t *) message.bytes, (size_t) message.length});
 }
 
 + (BOOL) isValidRule: (NSString *) str

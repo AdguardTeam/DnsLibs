@@ -306,6 +306,24 @@ const DnsProxySettings &DnsProxy::get_settings() const {
     return m_pimpl->settings;
 }
 
+bool DnsProxy::match_fallback_domains_internal(Uint8View message) const {
+    const std::unique_ptr<Impl> &proxy = m_pimpl;
+
+    if (!proxy->filter_manager) {
+        return false;
+    }
+
+    return proxy->filter_manager->match_fallback_domains(message);
+}
+
+bool DnsProxy::match_fallback_domains(ag::Uint8View message) const {
+    const std::unique_ptr<Impl> &proxy = m_pimpl;
+    auto action = [this, message]() mutable {
+        return this->match_fallback_domains_internal(message);
+    };
+    return proxy->loop->async<bool>(action).get();
+}
+
 coro::Task<Uint8Vector> DnsProxy::handle_message_internal(Uint8View message, const DnsMessageInfo *info) {
     std::unique_ptr<Impl> &proxy = m_pimpl;
 

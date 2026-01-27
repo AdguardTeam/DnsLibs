@@ -56,6 +56,7 @@ add_library(AGDnsProxy SHARED
     AGDnsTunListener.h AGDnsTunListener.mm
     AGDnsProxyXPC.h AGDnsProxyXPC.mm
     AGDnsXPCObject.h AGDnsXPCObject.m
+    AGDnsAppProxyFlowManager.h AGDnsAppProxyFlowManager.mm
     AGDnsProxyModule.h module.modulemap
 )
 if("${TARGET_OS}" STREQUAL "macos")
@@ -81,6 +82,7 @@ set_property(TARGET AGDnsProxy PROPERTY PUBLIC_HEADER
     AGDnsProxyModule.h
     AGDnsProxyXPC.h
     AGDnsXPCObject.h
+    AGDnsAppProxyFlowManager.h
 )
 set_property(SOURCE module.modulemap
         PROPERTY MACOSX_PACKAGE_LOCATION "Modules")

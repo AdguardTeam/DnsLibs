@@ -132,6 +132,8 @@ public:
     InitResult init(const DnsProxySettings &settings);
     void deinit();
 
+    [[nodiscard]] bool match_fallback_domains(Uint8View message);
+
 private:
     Logger m_log{"dns_filter_manager"};
 

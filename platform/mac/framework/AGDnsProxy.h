@@ -690,6 +690,11 @@ typedef NS_ENUM(NSUInteger, AGDnsRuleGenerationOptions) {
  * query when handling a message transparently, for example, to process CNAME-rewrites.
  */
 @property(nonatomic) BOOL transparent;
+/**
+ * If `true`, the proxy will know that this message was sent over TCP.
+ */
+@property(nonatomic) BOOL isTcp;
+
 @end
 
 /**
@@ -747,6 +752,14 @@ typedef NS_ENUM(NSUInteger, AGDnsRuleGenerationOptions) {
 withCompletionHandler:(void (^)(NSData *))handler;
 
 /**
+ * Check if a DNS message's domain matches `fallbackDomains`.
+ *
+ * @param message A complete DNS message in wire format.
+ * @return YES if the question name matches `fallbackDomains`, NO otherwise.
+ */
+- (BOOL)matchFallbackDomains:(NSData *)message;
+
+/**
  * Stop DnsProxy.
  * @note Should be called before dealloc
  */
@@ -754,7 +767,7 @@ withCompletionHandler:(void (^)(NSData *))handler;
 
 /**
  * Reapply DNS proxy settings with optional filter reloading.
- * 
+ *
  * @param config New DNS proxy configuration to apply
  * @param reapplyFilters If true, DNS filters will be reloaded from settings.
  *                      If false, existing filters are preserved (fast update).
@@ -850,8 +863,8 @@ typedef NS_ENUM(NSInteger, AGServerInformalProperties) {
  */
 @property(nonatomic) NSArray<NSData *> *hashes;
 
-/** Server properties */
-@property(nonatomic, nullable) NSNumber *properties;
+/** Server properties (may be null) */
+@property(nonatomic) NSNumber *properties;
 
 - (instancetype) init NS_UNAVAILABLE;
 

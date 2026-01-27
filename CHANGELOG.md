@@ -1,5 +1,9 @@
 # Changelog
 
+* [Feature] Added `AGDnsAppProxyFlowManager` for Apple platforms to support DNS proxying via Network Extension App Proxy flows.
+    * Needed to handle `NEAppProxyTCPFlow`/`NEAppProxyUDPFlow` modes (redirect/bypass/filter) and integrate them with `AGDnsProxy`.
+    * See `documentation/DNS_PROXY_PROVIDER.md`.
+
 ## 2.8.7
 
 * [Feature] Added new function reapply_settings to update upstreams list without reloading filters.
@@ -49,7 +53,7 @@
     * [Android] `DnsStamp::getProperties` became nullable. See `com.adguard.dnslibs.proxy.DnsStamp#getProperties`.
     * [Apple] Use new enum with properties. See `AGServerInformalProperties` and `AGDnsStamp`.
 
-* [Changed] A callback must now be set to enable logging on Android. 
+* [Changed] A callback must now be set to enable logging on Android.
     * [Android] See `com.adguard.dnslibs.proxy.DnsProxy#setLoggingCallback`.
 
 ## V2.5
@@ -60,7 +64,7 @@
     * [Android] See `com.adguard.dnslibs.proxy.DnsProxySettings.BlockingMode#UNSPECIFIED_ADDRESS`.
     * [Apple] See `AGBM_UNSPECIFIED_ADDRESS`.
     * [C API] See `AGBM_UNSPECIFIED_ADDRESS`.
- 
+
 * [Feature] The default blocking mode on Windows changed to `UNSPECIFIED_ADDRESS`. The default should also be updated in the Windows UI.
 
 * [Changed] Removed `ag::dns::OutboundProxySettings::ignore_if_unavailable`. Also removed the corresponding fields from platform-specific adapters.
@@ -75,13 +79,13 @@
     * [C API] See `ag_dnsproxy_handle_message_async`.
 
 * [Feature] Improved DNS Fallback Mechanism.
-Added logic to retry DNS queries over TCP if initial UDP attempts are unsuccessful or return 
-incomplete data. 
+Added logic to retry DNS queries over TCP if initial UDP attempts are unsuccessful or return
+incomplete data.
 
 * [Feature] Support for Basic Authentication in DNS-over-HTTPS.
 Username and password can now be passed directly in the address.
 Compatible with both HTTPS URLs and DNS Stamps.
-Example configurations:  
+Example configurations:
   * `https://username:password@dns.google/dns-query`
   * `sdns://username:password@AgcAAAAAAAAABzEuMC4wLjEAEmRucy5jbG91ZGZsYXJlLmNvbQovZG5zLXF1ZXJ5`
 
@@ -142,7 +146,7 @@ Example configurations:
   See `DnsProxySettings::enable_http3`, `AGDnsProxyConfig.enableHttp3`,
   `com.adguard.dnslibs.proxy.DnsProxySettings#enableHttp3`, `ag_dnsproxy_settings::enable_http3`
 
-* [Feature] Added an option to query upstreams in parallel. See 
+* [Feature] Added an option to query upstreams in parallel. See
   `DnsProxySettings::enable_parallel_upstream_queries` and the corresponding options in platform-specific adapters.
 * [Feature] Added an option to change fallback behaviour. See
   `DnsProxySettings::enable_fallback_on_upstreams_failure` and the corresponding options in platform-specific adapters.
@@ -168,7 +172,7 @@ Example configurations:
 * [Feature] DnsProxy calls are now asynchronous. On iOS [handlePacket:completionHandler:] should be called instead of synchronous one.
 
 * [Feature] The DoQ upstream now uses the port 853 by default (was 8853), conforms to RFC-9250, and doesn't support ALPNs other than "doq".
-            ACHTUNG: Some changes might be required on the application side due to the default port change? 
+            ACHTUNG: Some changes might be required on the application side due to the default port change?
 
 ## V1.7.28
 
@@ -199,7 +203,7 @@ Example configurations:
   * WARNING: Note to application developers: you MUST get the default value of this field
     from `DnsProxySettings::get_default()`/`DnsProxySettings.getDefault()`/`AGDnsProxyConfig.getDefault()`
     as it contains important default for Wi-Fi calling, but we can't add them automatically, because the user must see the defaults in UI and be able to edit them.
-  
+
 * [Features] Retransmission handling: see `enableRetransmissionHandling` or `enable_retransmission_handling`.
     Mostly intended for iOS.
     If `enable_retransmission_handling` is true, retransmitted requests (defined as requests with the same id and sent from the same address that one of the requests that are currently being handled) will be handled only using fallback upstreams, and the answer to the original request will not be sent (to prevent possibly sending SERVFAIL, b/c iOS may mark the resolver as "bad" in this case and refuse to resolve anything from that point).
