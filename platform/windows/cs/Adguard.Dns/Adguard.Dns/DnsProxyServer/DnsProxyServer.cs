@@ -12,6 +12,7 @@ using static Adguard.Dns.AGDnsApi;
 namespace Adguard.Dns.DnsProxyServer
 {
     // ReSharper disable InconsistentNaming
+    /// <inheritdoc cref="IDnsProxyServer" />
     public class DnsProxyServer : IDnsProxyServer, IDisposable
     {
         private IntPtr m_pCallbackConfigurationC;
@@ -25,7 +26,8 @@ namespace Adguard.Dns.DnsProxyServer
         private readonly DnsProxySettings m_DnsProxySettings;
         private readonly IDnsProxyServerCallbackConfiguration m_CallbackConfiguration;
 
-        private uint m_DnsMessageHandlerNextId = 0;
+        private uint m_DnsMessageHandlerNextId;
+        // ReSharper disable once CollectionNeverQueried.Local
         private readonly Dictionary<uint, ag_handle_message_async_cb> m_DnsMessageHandlers =
 	        new Dictionary<uint, ag_handle_message_async_cb>();
 
@@ -300,15 +302,13 @@ namespace Adguard.Dns.DnsProxyServer
 				nativeMessageHandler);
         }
         
-                /// <summary>
+        /// <summary>
         ///  Reapply DNS proxy settings with optional filter reloading.
         /// </summary>
         /// <param name="dnsProxySettings">dnsProxySettings</param>
         /// <param name="reapplyFilters">if true, DNS filters will be reloaded from settings.
         /// If false, existing filters are preserved (fast update).</param>
-        /// <param name="outResultEnum">Result enum</param>
-        public bool ReapplySettings(
-            DnsProxySettings dnsProxySettings, bool reapplyFilters, out ag_dnsproxy_init_result outResultEnum)
+        public bool ReapplySettings(DnsProxySettings dnsProxySettings, bool reapplyFilters)
         {
             Logger.InfoBeforeCall();
             lock (m_SyncRoot)
@@ -316,7 +316,6 @@ namespace Adguard.Dns.DnsProxyServer
                 if (m_pProxyServer == IntPtr.Zero)
                 {
                     Logger.Info("Cannot reapply settings as the inner proxy server is not specified yet");
-                    outResultEnum = ag_dnsproxy_init_result.AGDPIR_PROXY_NOT_SET;
                     return false;
                 }
             
@@ -337,7 +336,7 @@ namespace Adguard.Dns.DnsProxyServer
                         reapplyFilters,
                         pOutResult,
                         ppOutMessage);
-                    outResultEnum = ag_dnsproxy_init_result.AGDPIR_OK;
+                    ag_dnsproxy_init_result outResultEnum = ag_dnsproxy_init_result.AGDPIR_OK;
                     long? outResult = MarshalUtils.ReadNullableInt(pOutResult);
                     if (outResult.HasValue)
                     {
@@ -350,7 +349,15 @@ namespace Adguard.Dns.DnsProxyServer
                         result,
                         outResultEnum,
                         outMessage);
-                    return result;
+
+                    if (outResultEnum == ag_dnsproxy_init_result.AGDPIR_OK)
+                    {
+                        return result;
+                    }
+                    
+                    string errorMessage =
+                        $"Failed to reapply settings with the result {outResultEnum} and message {outMessage}";
+                    throw new DnsProxyInitializationException(errorMessage, outResultEnum);
                 }
                 finally
                 {
@@ -364,7 +371,8 @@ namespace Adguard.Dns.DnsProxyServer
 
 		#endregion
 
-		public void Dispose()
+        /// <inheritdoc />
+        public void Dispose()
         {
             lock (m_SyncRoot)
             {
