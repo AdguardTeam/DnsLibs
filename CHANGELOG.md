@@ -1,5 +1,7 @@
 # Changelog
 
+## 2.8.19
+
 * [Feature] Refactored `reapply_settings` to use `ReapplyOptions` enum.
     * Options: `RO_SETTINGS` (reload DNS settings except listeners and filters), `RO_FILTERS` (reload filters).
     * Can combine flags using bitwise OR to reload multiple components.
