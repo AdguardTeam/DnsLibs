@@ -24,12 +24,14 @@ namespace Adguard.Dns.DnsProxyServer
         void Stop();
 
         /// <summary>
-        ///  Reapply DNS proxy settings with optional filter reloading.
+        ///  Reapply DNS proxy settings with selective reloading
+        ///
+        /// This function allows updating DNS proxy configuration without full reinitialization.
+        /// You can selectively reload different parts of the configuration using ag_dnsproxy_reapply_options flags.
         /// </summary>
         /// <param name="dnsProxySettings">dnsProxySettings</param>
-        /// <param name="reapplyFilters">if true, DNS filters will be reloaded from settings.
-        /// If false, existing filters are preserved (fast update).</param>
-        bool ReapplySettings(DnsProxySettings dnsProxySettings, bool reapplyFilters);
+        /// <param name="options">bitwise OR combination of <see cref="AGDnsApi.ag_dnsproxy_reapply_options"/> flags</param>
+        bool ReapplySettings(DnsProxySettings dnsProxySettings, AGDnsApi.ag_dnsproxy_reapply_options options);
 
         /// <summary>
         /// Gets the current DNS proxy settings as a <see cref="DnsProxySettings"/> object

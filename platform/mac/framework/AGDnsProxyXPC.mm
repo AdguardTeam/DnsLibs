@@ -48,12 +48,14 @@ static ag::Logger gLogger{"AGDnsProxyXPCImpl"};
 }
 
 - (void)reapplySettings:(AGDnsProxyConfig *)config
-           reapplyFilters:(BOOL)reapplyFilters
-        completionHandler:(void (^)(NSError *))handler {
+                options:(AGDnsProxyReapplyOptions)options
+      completionHandler:(void (^)(NSError *))handler {
     dispatch_async(_queue, ^{
         NSError *error = nil;
         if (_proxy) {
-            BOOL success = [_proxy reapplySettings:config reapplyFilters:reapplyFilters error:&error];
+            BOOL success = [_proxy reapplySettings:config
+                                           options:options
+                                             error:&error];
             if (!success && !error) {
                 // Create generic error if reapply failed but no specific error was set
                 error = [NSError errorWithDomain:@"com.adguard.dnsproxy.xpc"

@@ -21,6 +21,27 @@ import javax.net.ssl.X509TrustManager;
 
 public class DnsProxy implements Closeable {
 
+    /**
+     * Options for reapplying DNS proxy settings.
+     */
+    public enum ReapplyOption {
+        SETTINGS(1 << 0), // Reload all DNS settings except listeners and filter_params
+        FILTERS(1 << 1),  // Reload filter parameters (filter_params)
+        ;
+
+        public final int code;
+        ReapplyOption(int code) {
+            this.code = code;
+        }
+        public static int encode(EnumSet<ReapplyOption> reapplyOptions) {
+            int options = 0;
+            for (ReapplyOption element : reapplyOptions) {
+                options |= element.code;
+            }
+            return options;
+        }
+    }
+
     public enum InitErrorCode {
         PROXY_NOT_SET,
         EVENT_LOOP_NOT_SET,
@@ -192,23 +213,25 @@ public class DnsProxy implements Closeable {
     }
 
     /**
-     * Reapply DNS proxy settings with optional filter reloading.
+     * Reapply DNS proxy settings with selective reloading.
+     *
      * This method allows updating DNS proxy configuration without full reinitialization.
-     * 
-     * @param settings New DNS proxy settings to apply
-     * @param reapplyFilters If true, DNS filters will be reloaded from settings.
-     *                      If false, existing filters are preserved (fast update).
+     * You can selectively reload different parts of the configuration using ReapplyOption enum.
+     *
+     * @param settings New DNS proxy settings to apply.
+     * @param reapplyOptions EnumSet of ReapplyOption flags (e.g., EnumSet.of(ReapplyOption.SETTINGS, ReapplyOption.FILTERS))
      * @return Init result indicating success or failure
      * @throws IllegalStateException if the proxy is closed.
      * @throws DnsProxyInitException if reapplying settings fails.
      */
-    public InitResult reapplySettings(DnsProxySettings settings, boolean reapplyFilters) 
+    public InitResult reapplySettings(DnsProxySettings settings, EnumSet<ReapplyOption> reapplyOptions) 
             throws IllegalStateException, DnsProxyInitException {
         if (state != State.INITIALIZED) {
             throw new IllegalStateException("Closed");
         }
         
-        InitResult result = reapplySettings(nativePtr, settings, reapplyFilters);
+        int options = ReapplyOption.encode(reapplyOptions);
+        InitResult result = reapplySettings(nativePtr, settings, options);
         if (!result.success) {
             throw new DnsProxyInitException(result);
         }
@@ -219,7 +242,7 @@ public class DnsProxy implements Closeable {
 
     private native DnsProxySettings getSettings(long nativePtr);
 
-    private native InitResult reapplySettings(long nativePtr, DnsProxySettings settings, boolean reapplyFilters);
+    private native InitResult reapplySettings(long nativePtr, DnsProxySettings settings, int reapplyOptions);
 
     private native long create();
 

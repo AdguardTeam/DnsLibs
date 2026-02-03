@@ -596,8 +596,9 @@ public class DnsProxyTest {
             newSettings.getUpstreams().clear();
             newSettings.getUpstreams().add(newUpstream);
             
-            // Fast update (reapply_filters=false)
-            DnsProxy.InitResult result = proxy.reapplySettings(newSettings, false);
+            // Fast update (SETTINGS only)
+            DnsProxy.InitResult result =
+                    proxy.reapplySettings(newSettings, EnumSet.of(DnsProxy.ReapplyOption.SETTINGS));
             assertTrue("Fast reapply should succeed", result.success);
             assertEquals(DnsProxy.InitErrorCode.OK, result.code);
             
@@ -640,8 +641,9 @@ public class DnsProxyTest {
             newSettings.getUpstreams().clear();
             newSettings.getUpstreams().add(newUpstream);
             
-            // Full update (reapply_filters=true)
-            DnsProxy.InitResult result = proxy.reapplySettings(newSettings, true);
+            // Full update (SETTINGS | FILTERS)
+            DnsProxy.InitResult result = proxy.reapplySettings(
+                    newSettings, EnumSet.of(DnsProxy.ReapplyOption.SETTINGS, DnsProxy.ReapplyOption.FILTERS));
             assertTrue("Full reapply should succeed", result.success);
             assertEquals(DnsProxy.InitErrorCode.OK, result.code);
             
@@ -665,10 +667,97 @@ public class DnsProxyTest {
         
         // Test that reapplySettings throws IllegalStateException on closed proxy
         try {
-            proxy.reapplySettings(settings, false);
+            proxy.reapplySettings(settings, EnumSet.of(DnsProxy.ReapplyOption.SETTINGS));
             fail("Expected IllegalStateException when calling reapplySettings on closed proxy");
         } catch (IllegalStateException e) {
             assertEquals("Closed", e.getMessage());
+        }
+    }
+
+    @Test
+    public void testReapplySettingsFiltersOnly() throws IOException {
+        // Test filters-only update: only filters are updated, upstreams remain unchanged
+        final DnsProxySettings settings = getDefaultSettings();
+        // Add a blocking filter for example.com
+        settings.getFilterParams().add(new FilterParams(1, "||example.com^", true));
+        
+        try (final DnsProxy proxy = new DnsProxy(context, settings)) {
+            // Test that original filter works - example.com should be blocked
+            final Message req1 = Message.newQuery(Record.newRecord(Name.fromString("example.com."), Type.A, DClass.IN));
+            final Message res1 = new Message(proxy.handleMessage(req1.toWire(), null));
+            assertEquals("example.com should be blocked initially", Rcode.REFUSED, res1.getRcode());
+            
+            // Test that test.com is not blocked initially
+            final Message req2 = Message.newQuery(Record.newRecord(Name.fromString("test.com."), Type.A, DClass.IN));
+            final Message res2 = new Message(proxy.handleMessage(req2.toWire(), null));
+            assertEquals("test.com should not be blocked initially", Rcode.NOERROR, res2.getRcode());
+            
+            // Change only filters, keep upstreams unchanged
+            final DnsProxySettings newSettings = getDefaultSettings();
+            // Replace filter: block test.com instead of example.com
+            newSettings.getFilterParams().add(new FilterParams(1, "||test.com^", true));
+            
+            // Filters-only update (FILTERS only)
+            DnsProxy.InitResult result = proxy.reapplySettings(
+                    newSettings, EnumSet.of(DnsProxy.ReapplyOption.FILTERS));
+            assertTrue("Filters-only reapply should succeed", result.success);
+            assertEquals(DnsProxy.InitErrorCode.OK, result.code);
+            
+            // Test that old filter no longer works - example.com should now pass
+            final Message req3 = Message.newQuery(Record.newRecord(Name.fromString("example.com."), Type.A, DClass.IN));
+            final Message res3 = new Message(proxy.handleMessage(req3.toWire(), null));
+            assertEquals("example.com should not be blocked after filter update", Rcode.NOERROR, res3.getRcode());
+            
+            // Test that new filter works - test.com should now be blocked
+            final Message req4 = Message.newQuery(Record.newRecord(Name.fromString("test.com."), Type.A, DClass.IN));
+            final Message res4 = new Message(proxy.handleMessage(req4.toWire(), null));
+            assertEquals("test.com should be blocked after filter update", Rcode.REFUSED, res4.getRcode());
+        }
+    }
+
+    @Test
+    public void testReapplySettingsNoOp() throws IOException {
+        // Test no-op update: both flags are false, nothing should change
+        final DnsProxySettings settings = getDefaultSettings();
+        // Add a blocking filter for example.com
+        settings.getFilterParams().add(new FilterParams(1, "||example.com^", true));
+        
+        try (final DnsProxy proxy = new DnsProxy(context, settings)) {
+            // Test that filter works before reapply
+            final Message req1 = Message.newQuery(Record.newRecord(Name.fromString("example.com."), Type.A, DClass.IN));
+            final Message res1 = new Message(proxy.handleMessage(req1.toWire(), null));
+            assertEquals("example.com should be blocked initially", Rcode.REFUSED, res1.getRcode());
+            
+            // Call reapply_settings with empty EnumSet (no-op)
+            final DnsProxySettings newSettings = getDefaultSettings();
+            DnsProxy.InitResult result = proxy.reapplySettings(newSettings, EnumSet.noneOf(DnsProxy.ReapplyOption.class));
+            assertTrue("No-op reapply should succeed", result.success);
+            assertEquals(DnsProxy.InitErrorCode.OK, result.code);
+            
+            // Test that filter still works after no-op reapply (nothing changed)
+            final Message req2 = Message.newQuery(Record.newRecord(Name.fromString("example.com."), Type.A, DClass.IN));
+            final Message res2 = new Message(proxy.handleMessage(req2.toWire(), null));
+            assertEquals("example.com should still be blocked after no-op", Rcode.REFUSED, res2.getRcode());
+        }
+    }
+
+    @Test
+    public void testReapplySettingsFilterError() throws IOException {
+        // Test that reapply_settings handles filter initialization errors
+        final DnsProxySettings settings = getDefaultSettings();
+        
+        try (final DnsProxy proxy = new DnsProxy(context, settings)) {
+            // Try to reapply with invalid filter (non-existent file)
+            final DnsProxySettings newSettings = getDefaultSettings();
+            newSettings.getFilterParams().add(new FilterParams(1, "/non/existent/filter/file.txt", false));
+            
+            try {
+                proxy.reapplySettings(newSettings, EnumSet.of(DnsProxy.ReapplyOption.SETTINGS, DnsProxy.ReapplyOption.FILTERS));
+                fail("Expected DnsProxyInitException when reapplying with invalid filter");
+            } catch (DnsProxyInitException e) {
+                // Expected exception
+                assertFalse("Filter error should result in failure", e.getResult().success);
+            }
         }
     }
 

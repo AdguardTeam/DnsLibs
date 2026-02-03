@@ -643,11 +643,11 @@ void ag_dnsproxy_deinit(ag_dnsproxy *handle) {
 }
 
 bool ag_dnsproxy_reapply_settings(ag_dnsproxy *handle, const ag_dnsproxy_settings *c_settings,
-        bool reapply_filters, ag_dnsproxy_init_result *out_result, const char **out_message) {
+        ag_dnsproxy_reapply_options options, ag_dnsproxy_init_result *out_result, const char **out_message) {
     auto *proxy = (DnsProxy *) handle;
     auto settings = marshal_settings(c_settings);
 
-    auto [ret, err_or_warn] = proxy->reapply_settings(std::move(settings), reapply_filters);
+    auto [ret, err_or_warn] = proxy->reapply_settings(std::move(settings), DnsProxy::ReapplyOptions(options));
 
     if (ret) {
         if (err_or_warn) {

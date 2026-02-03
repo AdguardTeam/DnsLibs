@@ -1,5 +1,13 @@
 # Changelog
 
+* [Feature] Refactored `reapply_settings` to use `ReapplyOptions` enum.
+    * Options: `RO_SETTINGS` (reload DNS settings except listeners and filters), `RO_FILTERS` (reload filters).
+    * Can combine flags using bitwise OR to reload multiple components.
+    * [C API] See `ag_dnsproxy_reapply_options` (`AGDPRO_NONE`, `AGDPRO_SETTINGS`, `AGDPRO_FILTERS`) and `ag_dnsproxy_reapply_settings`.
+    * [Android] See `DnsProxy.ReapplyOption` enum and `DnsProxy#reapplySettings(DnsProxySettings, EnumSet<ReapplyOption>)`.
+    * [Apple] See `AGDnsProxyReapplyOptions` (`AGDnsProxyReapplyNone`, `AGDnsProxyReapplySettings`, `AGDnsProxyReapplyFilters`) and `AGDnsProxy.reapplySettings`.
+    * [Windows C#] See `ag_dnsproxy_reapply_options` and `DnsProxyServer.ReapplySettings`.
+
 ## 2.8.16
 
 * [Feature] Added `AGDnsAppProxyFlowManager` for Apple platforms to support DNS proxying via Network Extension App Proxy flows.

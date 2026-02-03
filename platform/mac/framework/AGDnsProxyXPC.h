@@ -29,15 +29,17 @@
      completionHandler:(void (^)(NSError *))handler NS_SWIFT_NOTHROW;
 
 /**
- * Reapply DNS proxy settings with optional filter reloading.
+ * Reapply DNS proxy settings with selective reloading.
+ *
+ * This method allows updating DNS proxy configuration without full reinitialization.
+ * You can selectively reload different parts of the configuration using AGDnsProxyReapplyOptions flags.
  *
  * @param config New DNS proxy configuration to apply
- * @param reapplyFilters If true, DNS filters will be reloaded from settings.
- *                       If false, existing filters are preserved (fast update).
+ * @param options Bitwise OR combination of AGDnsProxyReapplyOptions flags
  * @param handler Invoked with `nil` if reapplying succeeded, or with the error otherwise.
  */
 - (void)reapplySettings:(AGDnsProxyConfig *)config
-         reapplyFilters:(BOOL)reapplyFilters
+                options:(AGDnsProxyReapplyOptions)options
       completionHandler:(void (^)(NSError *))handler NS_SWIFT_NOTHROW;
 
 /**

@@ -243,16 +243,22 @@ void DnsProxy::deinit() {
     proxy->settings = {};
 }
 
-DnsProxy::DnsProxyInitResult DnsProxy::reapply_settings_internal(DnsProxySettings settings, bool reapply_filters) {
+DnsProxy::DnsProxyInitResult DnsProxy::reapply_settings_internal(
+        DnsProxySettings settings, ReapplyOptions reapply_options) {
     std::unique_ptr<Impl> &proxy = m_pimpl;
 
-    infolog(proxy->log, "Reapplying settings, reapply_filters={}", reapply_filters);
+    infolog(proxy->log, "Reapplying settings, reapply_options={}", int(reapply_options));
+
+    if (!reapply_options) {
+        dbglog(proxy->log, "Nothing to reapply");
+        return {true, {}};
+    }
 
     Error<DnsProxyInitError> warning;
     std::shared_ptr<DnsFilterManager> new_filter_manager;
     proxy->settings = std::move(settings);
 
-    if (reapply_filters) {
+    if (reapply_options & RO_FILTERS) {
         new_filter_manager = std::make_shared<DnsFilterManager>();
         auto [result, err_or_warn] = new_filter_manager->init(proxy->settings);
         if (!result) {
@@ -264,30 +270,39 @@ DnsProxy::DnsProxyInitResult DnsProxy::reapply_settings_internal(DnsProxySetting
         warning = err_or_warn;
     }
 
-    if (proxy->forwarder) {
-        proxy->forwarder->deinit();
-        proxy->forwarder.reset();
+    if (reapply_options & RO_SETTINGS) {
+        if (proxy->forwarder) {
+            proxy->forwarder->deinit();
+            proxy->forwarder.reset();
+        }
     }
 
-    if (reapply_filters) {
+    if (reapply_options & RO_FILTERS) {
         proxy->filter_manager->deinit();
         proxy->filter_manager.reset();
         proxy->filter_manager = new_filter_manager;
+
+        if (proxy->forwarder && !(reapply_options & RO_SETTINGS)) {
+            proxy->forwarder->clear_cache();
+            proxy->forwarder->update_filter_manager(proxy->filter_manager);
+        }
     }
 
-    proxy->forwarder.emplace();
-    auto forwarder_err = proxy->forwarder->init(proxy->loop, proxy->settings, proxy->events, proxy->filter_manager);
-    if (forwarder_err) {
-        proxy->forwarder.reset();
-        dbglog(proxy->log, "Forwarder init failed: {}", forwarder_err->str());
-        return {false, forwarder_err};
+    if (reapply_options & RO_SETTINGS) {
+        proxy->forwarder.emplace();
+        auto forwarder_err = proxy->forwarder->init(proxy->loop, proxy->settings, proxy->events, proxy->filter_manager);
+        if (forwarder_err) {
+            proxy->forwarder.reset();
+            dbglog(proxy->log, "Forwarder init failed: {}", forwarder_err->str());
+            return {false, forwarder_err};
+        }
     }
 
     infolog(proxy->log, "Settings reapplied successfully");
     return {true, warning};
 }
 
-DnsProxy::DnsProxyInitResult DnsProxy::reapply_settings(DnsProxySettings settings, bool reapply_filters) {
+DnsProxy::DnsProxyInitResult DnsProxy::reapply_settings(DnsProxySettings settings, ReapplyOptions reapply_options) {
     std::unique_ptr<Impl> &proxy = m_pimpl;
 
     if (!proxy->loop) {
@@ -295,8 +310,8 @@ DnsProxy::DnsProxyInitResult DnsProxy::reapply_settings(DnsProxySettings setting
     }
 
     auto future = proxy->loop->async<DnsProxyInitResult>(
-            [this, settings = std::move(settings), reapply_filters](auto promise) mutable {
-                promise->set_value(reapply_settings_internal(std::move(settings), reapply_filters));
+            [this, settings = std::move(settings), reapply_options](auto promise) mutable {
+                promise->set_value(reapply_settings_internal(std::move(settings), reapply_options));
             });
 
     return future.get();

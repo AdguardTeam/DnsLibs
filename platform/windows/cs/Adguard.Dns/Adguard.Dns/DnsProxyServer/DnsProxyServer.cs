@@ -303,12 +303,14 @@ namespace Adguard.Dns.DnsProxyServer
         }
         
         /// <summary>
-        ///  Reapply DNS proxy settings with optional filter reloading.
+        ///  Reapply DNS proxy settings with selective reloading
+        ///
+        /// This function allows updating DNS proxy configuration without full reinitialization.
+        /// You can selectively reload different parts of the configuration using ag_dnsproxy_reapply_options flags.
         /// </summary>
         /// <param name="dnsProxySettings">dnsProxySettings</param>
-        /// <param name="reapplyFilters">if true, DNS filters will be reloaded from settings.
-        /// If false, existing filters are preserved (fast update).</param>
-        public bool ReapplySettings(DnsProxySettings dnsProxySettings, bool reapplyFilters)
+        /// <param name="options">bitwise OR combination of <see cref="ag_dnsproxy_reapply_options"/> flags</param>
+        public bool ReapplySettings(DnsProxySettings dnsProxySettings, ag_dnsproxy_reapply_options options)
         {
             Logger.InfoBeforeCall();
             lock (m_SyncRoot)
@@ -333,7 +335,7 @@ namespace Adguard.Dns.DnsProxyServer
                     bool result = ag_dnsproxy_reapply_settings(
                         m_pProxyServer,
                         pDnsProxySettingsC,
-                        reapplyFilters,
+                        options,
                         pOutResult,
                         ppOutMessage);
                     ag_dnsproxy_init_result outResultEnum = ag_dnsproxy_init_result.AGDPIR_OK;

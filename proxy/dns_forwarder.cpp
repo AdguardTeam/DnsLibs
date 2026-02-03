@@ -414,7 +414,7 @@ Error<DnsProxyInitError> DnsForwarder::init(EventLoopPtr loop, const DnsProxySet
     if (!filter_manager) {
         return make_error(DnsProxyInitError::AE_FILTER_LOAD_ERROR);
     }
-    m_filter_manager = filter_manager;
+    update_filter_manager(filter_manager);
 
     m_dns64_state = std::make_shared<dns64::State>();
     if (settings.dns64.has_value()) {
@@ -481,6 +481,16 @@ static coro::Task<void> discover_dns64_prefixes(std::vector<UpstreamOptions> uss
     dbglog(logger, "Failed to discover any prefixes");
 }
 
+void DnsForwarder::update_filter_manager(std::shared_ptr<DnsFilterManager> filter_manager) {
+    m_filter_manager = std::move(filter_manager);
+}
+
+void DnsForwarder::clear_cache() {
+    infolog(m_log, "Clearing cache...");
+    m_response_cache.clear();
+    infolog(m_log, "Done");
+}
+
 void DnsForwarder::deinit() {
     infolog(m_log, "Deinitializing...");
 
@@ -507,9 +517,7 @@ void DnsForwarder::deinit() {
     }
     infolog(m_log, "Done");
 
-    infolog(m_log, "Clearing cache...");
-    m_response_cache.clear();
-    infolog(m_log, "Done");
+    clear_cache();
 
     infolog(m_log, "Deinitialized");
 }

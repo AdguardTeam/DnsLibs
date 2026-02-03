@@ -36,6 +36,9 @@ public:
             std::shared_ptr<DnsFilterManager> filter_manager);
     void deinit();
 
+    void update_filter_manager(std::shared_ptr<DnsFilterManager> filter_manager);
+    void clear_cache();
+
     coro::Task<Uint8Vector> handle_message(Uint8View message, const DnsMessageInfo *info);
 
 private:

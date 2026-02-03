@@ -234,13 +234,12 @@ public:
     void deinit(JNIEnv *env);
 
     /**
-     * Reapply DNS proxy settings with optional filter reloading.
+     * Reapply DNS proxy settings with selective reloading.
      * @param settings New proxy settings from Java.
-     * @param reapply_filters If true, DNS filters will be reloaded from settings.
-     *                        If false, existing filters are preserved (fast update).
+     * @param reapply_options Bitwise OR combination of RO_* flags from Java.
      * @return Init result, marshalled to Java.
      */
-    jobject reapply_settings(JNIEnv *env, jobject settings, jboolean reapply_filters);
+    jobject reapply_settings(JNIEnv *env, jobject settings, jint reapply_options);
 
     /**
      * Process a DNS message.

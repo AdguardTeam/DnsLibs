@@ -76,10 +76,10 @@ extern "C" JNIEXPORT void JNICALL Java_com_adguard_dnslibs_proxy_DnsProxy_deinit
 }
 
 extern "C" JNIEXPORT jobject JNICALL Java_com_adguard_dnslibs_proxy_DnsProxy_reapplySettings(
-        JNIEnv *env, jobject thiz, jlong native_ptr, jobject settings, jboolean reapply_filters) {
+        JNIEnv *env, jobject thiz, jlong native_ptr, jobject settings, jint reapply_options) {
     auto *proxy = (AndroidDnsProxy *) native_ptr;
     assert(proxy);
-    return proxy->reapply_settings(env, settings, reapply_filters);
+    return proxy->reapply_settings(env, settings, reapply_options);
 }
 
 extern "C" JNIEXPORT jobject JNICALL Java_com_adguard_dnslibs_proxy_DnsProxy_getDefaultSettings(
@@ -898,12 +898,12 @@ void AndroidDnsProxy::deinit(JNIEnv *env) {
     m_actual_proxy.deinit();
 }
 
-jobject AndroidDnsProxy::reapply_settings(JNIEnv *env, jobject settings, jboolean reapply_filters) {
+jobject AndroidDnsProxy::reapply_settings(JNIEnv *env, jobject settings, jint reapply_options) {
     auto check = m_jni_initialized.load();
     assert(check);
 
     DnsProxySettings cpp_settings = marshal_settings(env, settings);
-    auto result = m_actual_proxy.reapply_settings(std::move(cpp_settings), reapply_filters);
+    auto result = m_actual_proxy.reapply_settings(std::move(cpp_settings), DnsProxy::ReapplyOptions(reapply_options));
 
     return marshal_init_result(env, result).release();
 }

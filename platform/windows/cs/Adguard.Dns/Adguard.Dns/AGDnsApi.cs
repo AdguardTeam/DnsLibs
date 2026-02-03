@@ -22,7 +22,7 @@ namespace Adguard.Dns
 		/// <summary>
 		/// The current API version hash with which the ProxyServer was tested
 		/// </summary>
-		private const string API_VERSION_HASH = "f7a7331668021ee893ffb733ced5e7863773414117565dbb47ec51c6c2a3f735";
+		private const string API_VERSION_HASH = "376feab685657bb8346c578412aace21dfc68b4612c010e96409a3c34de8d6a1";
 
         #endregion
 
@@ -215,11 +215,14 @@ namespace Adguard.Dns
 		internal static extern void ag_dnsproxy_deinit(IntPtr proxy);
 
 		/// <summary>
-		/// Reapply the DNS proxy settings.
+		/// Reapply DNS proxy settings with selective reloading
+		/// This function allows updating DNS proxy configuration without full reinitialization.
+		/// You can selectively reload different parts of the configuration using
+		/// <see cref="ag_dnsproxy_reapply_options"/> flags.
 		/// </summary>
 		/// <param name="pDnsProxyServer">Pointer to the DNS proxy instance</param>
 		/// <param name="pDnsProxySettings">Pointer to the new <see cref="ag_dnsproxy_settings"/> object</param>
-		/// <param name="reapplyFilters">If true, reapply filters completely. If false, perform fast update without reloading filters</param>
+		/// <param name="options">bitwise OR combination of <see cref="ag_dnsproxy_reapply_options"/> flags</param>
 		/// <param name="pOutResult">Pointer to the out result (<seealso cref="ag_dnsproxy_init_result"/>)</param>
 		/// <param name="ppOutMessage">Pointer to the out message</param>
 		/// <returns>True if settings were successfully reapplied, false otherwise</returns>
@@ -228,7 +231,7 @@ namespace Adguard.Dns
 		internal static extern bool ag_dnsproxy_reapply_settings(
 			IntPtr pDnsProxyServer,
 			IntPtr pDnsProxySettings,
-			[MarshalAs(UnmanagedType.I1)] bool reapplyFilters,
+			[MarshalAs(UnmanagedType.Struct)] ag_dnsproxy_reapply_options options,
 			IntPtr pOutResult,
 			IntPtr ppOutMessage);
 
@@ -524,6 +527,22 @@ namespace Adguard.Dns
             [MarshalAs(UnmanagedType.Struct)]
             [NativeName("settings_overrides")]
             internal ag_proxy_settings_overrides settings_overrides;
+        }
+		
+        /// <summary>
+        ///  Options for reapplying DNS proxy settings.
+        /// These flags can be combined using bitwise OR to control which parts of the configuration
+        /// should be reloaded without full reinitialization.
+        /// </summary>
+        [Flags]
+        public enum ag_dnsproxy_reapply_options
+        {
+	        /** No changes, no-op */
+	        AGDPRO_NONE     = 0,
+	        /** Reload all DNS settings except listeners and filter_params */
+	        AGDPRO_SETTINGS = 1 << 0,
+	        /** Reload filter parameters (filter_params) */
+	        AGDPRO_FILTERS  = 1 << 1,
         }
 
         public enum ag_outbound_proxy_protocol

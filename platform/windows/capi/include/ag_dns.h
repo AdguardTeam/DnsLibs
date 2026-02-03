@@ -228,6 +228,22 @@ typedef enum {
 } ag_dns_blocking_reason;
 
 /**
+ * @ingroup enums
+ * Options for reapplying DNS proxy settings.
+ *
+ * These flags can be combined using bitwise OR to control which parts of the configuration
+ * should be reloaded without full reinitialization.
+ */
+typedef enum {
+    /** No changes, no-op */
+    AGDPRO_NONE     = 0,
+    /** Reload all DNS settings except listeners and filter_params */
+    AGDPRO_SETTINGS = 1 << 0,
+    /** Reload filter parameters (filter_params) */
+    AGDPRO_FILTERS  = 1 << 1,
+} ag_dnsproxy_reapply_options;
+
+/**
  * @struct ag_proxy_settings_overrides
  * The subset of ag_dnsproxy_settings available for overriding on a specific listener.
  */
@@ -756,18 +772,21 @@ AG_EXPORT void ag_dnsproxy_deinit(ag_dnsproxy *proxy);
 
 /**
  * @ingroup api
- * Reapply DNS proxy settings with optional filter reloading.
+ * @brief Reapply DNS proxy settings with selective reloading
+ *
+ * This function allows updating DNS proxy configuration without full reinitialization.
+ * You can selectively reload different parts of the configuration using ag_dnsproxy_reapply_options flags.
+ *
  * @param proxy a proxy handle
  * @param settings new DNS proxy configuration to apply
- * @param reapply_filters if true, DNS filters will be reloaded from settings.
- *                        If false, existing filters are preserved (fast update).
+ * @param options bitwise OR combination of ag_dnsproxy_reapply_options flags
  * @param out_result upon return, contains the result of the operation
  * @param out_message upon return, contains the error or warning message, or is unchanged
  * @return true if reapplying succeeded, false otherwise
  */
 AG_EXPORT bool ag_dnsproxy_reapply_settings(ag_dnsproxy *proxy, const ag_dnsproxy_settings *settings,
-                                            bool reapply_filters, ag_dnsproxy_init_result *out_result,
-                                            const char **out_message);
+                                            ag_dnsproxy_reapply_options options,
+                                            ag_dnsproxy_init_result *out_result, const char **out_message);
 
 /**
  * @ingroup api

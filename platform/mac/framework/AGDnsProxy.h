@@ -92,6 +92,22 @@ typedef NS_ENUM(NSInteger, AGDnsListenerProtocol) {
 
 /**
  * @ingroup enums
+ * Options for reapplying DNS proxy settings.
+ *
+ * These flags can be combined using bitwise OR to control which parts of the configuration
+ * should be reloaded without full reinitialization.
+ */
+typedef NS_OPTIONS(NSUInteger, AGDnsProxyReapplyOptions) {
+    /** No changes, no-op */
+    AGDnsProxyReapplyNone     = 0,
+    /** Reload all DNS settings except listeners and filter_params */
+    AGDnsProxyReapplySettings = 1 << 0,
+    /** Reload filter parameters (filter_params) */
+    AGDnsProxyReapplyFilters  = 1 << 1,
+};
+
+/**
+ * @ingroup enums
  * Specifies how to respond to blocked requests.
  *
  * A request is blocked if it matches a blocking AdBlock-style rule,
@@ -766,16 +782,18 @@ withCompletionHandler:(void (^)(NSData *))handler;
 - (void) stop;
 
 /**
- * Reapply DNS proxy settings with optional filter reloading.
+ * Reapply DNS proxy settings with selective reloading.
+ *
+ * This method allows updating DNS proxy configuration without full reinitialization.
+ * You can selectively reload different parts of the configuration using AGDnsProxyReapplyOptions flags.
  *
  * @param config New DNS proxy configuration to apply
- * @param reapplyFilters If true, DNS filters will be reloaded from settings.
- *                      If false, existing filters are preserved (fast update).
+ * @param options Bitwise OR combination of AGDnsProxyReapplyOptions flags
  * @param error Error reference for any initialization errors
  * @return True if reapplying settings succeeded, false otherwise
  */
 - (BOOL) reapplySettings: (AGDnsProxyConfig *) config
-          reapplyFilters: (BOOL) reapplyFilters
+                 options: (AGDnsProxyReapplyOptions) options
                    error: (NSError **) error NS_SWIFT_NOTHROW;
 
 /**

@@ -191,7 +191,7 @@ static void test_reapply_settings() {
     settings->upstreams.size = 1;
     memset(&settings->filter_params, 0, sizeof(settings->filter_params));   // filter disable - no work
 
-    bool reapply_result = ag_dnsproxy_reapply_settings(proxy, settings, false, &result, &message);
+    bool reapply_result = ag_dnsproxy_reapply_settings(proxy, settings, AGDPRO_SETTINGS, &result, &message);
     ASSERT(reapply_result);
     ASSERT(result == AGDPIR_OK);
     ASSERT(message == NULL);
@@ -222,7 +222,7 @@ static void test_reapply_settings() {
     ASSERT(ancount > 0);
 
     // reapply settings full (disable filters)
-    reapply_result = ag_dnsproxy_reapply_settings(proxy, settings, true, &result, &message);
+    reapply_result = ag_dnsproxy_reapply_settings(proxy, settings, AGDPRO_SETTINGS | AGDPRO_FILTERS, &result, &message);
     ASSERT(reapply_result);
     ASSERT(result == AGDPIR_OK);
     ASSERT(message == NULL);
@@ -246,6 +246,50 @@ static void test_reapply_settings() {
     ASSERT(LDNS_STATUS_OK == ldns_wire2pkt(&response, res.data, res.size));
     ASSERT(LDNS_RCODE_NOERROR == ldns_pkt_get_rcode(response));     // no error now
     ASSERT(ldns_pkt_ancount(response) > 0);
+
+    ldns_pkt_free(response);
+    ag_buffer_free(res);
+
+    // Test filters-only reapply (reapply_upstreams=false, reapply_filters=true)
+    // Re-enable blocking filter
+    ag_filter_params filter2 = {
+        .id = 1,
+        .data = "example.org",
+        .in_memory = true
+    };
+    settings->filter_params.filters.data = &filter2;
+    settings->filter_params.filters.size = 1;
+
+    reapply_result = ag_dnsproxy_reapply_settings(proxy, settings, AGDPRO_FILTERS, &result, &message);
+    ASSERT(reapply_result);
+    ASSERT(result == AGDPIR_OK);
+    ASSERT(message == NULL);
+
+    // Verify filter is now active again (request should be blocked)
+    expect_blocked_request = true;
+    on_req_called = false;
+    res = ag_dnsproxy_handle_message(proxy, msg, NULL);
+    ASSERT(on_req_called);
+    ASSERT(LDNS_STATUS_OK == ldns_wire2pkt(&response, res.data, res.size));
+    ASSERT(LDNS_RCODE_NOERROR == ldns_pkt_get_rcode(response));
+    ASSERT(ldns_pkt_ancount(response) > 0);  // blocked with 0.0.0.0 answer
+
+    ldns_pkt_free(response);
+    ag_buffer_free(res);
+
+    // Test no-op reapply (AGDP_RO_NONE)
+    reapply_result = ag_dnsproxy_reapply_settings(proxy, settings, AGDPRO_NONE, &result, &message);
+    ASSERT(reapply_result);
+    ASSERT(result == AGDPIR_OK);
+    ASSERT(message == NULL);
+
+    // Verify nothing changed - filter should still be active (request should be blocked)
+    on_req_called = false;
+    res = ag_dnsproxy_handle_message(proxy, msg, NULL);
+    ASSERT(on_req_called);
+    ASSERT(LDNS_STATUS_OK == ldns_wire2pkt(&response, res.data, res.size));
+    ASSERT(LDNS_RCODE_NOERROR == ldns_pkt_get_rcode(response));
+    ASSERT(ldns_pkt_ancount(response) > 0);  // still blocked with 0.0.0.0 answer
 
     // Clear pointers before freeing to avoid double-free
     memset(&settings->upstreams, 0, sizeof(settings->upstreams));

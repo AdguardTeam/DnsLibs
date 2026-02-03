@@ -1528,8 +1528,8 @@ static DnsProxySettings convertConfig(AGDnsProxyConfig *config, const Logger &lo
 }
 
 - (BOOL) reapplySettings: (AGDnsProxyConfig *) config
-         reapplyFilters: (BOOL) reapplyFilters
-                  error: (NSError **) error
+                 options: (AGDnsProxyReapplyOptions) options
+                   error: (NSError **) error
 {
     if (!self->initialized) {
         if (error) {
@@ -1544,7 +1544,7 @@ static DnsProxySettings convertConfig(AGDnsProxyConfig *config, const Logger &lo
 
     DnsProxySettings settings = convertConfig(config, *self->log);
 
-    auto [ret, err_or_warn] = self->proxy.reapply_settings(std::move(settings), reapplyFilters);
+    auto [ret, err_or_warn] = self->proxy.reapply_settings(std::move(settings), DnsProxy::ReapplyOptions(options));
     if (!ret) {
         auto str = AG_FMT("Failed to reapply DNS proxy settings: {}", err_or_warn->str());
         errlog(*self->log, "{}", str);

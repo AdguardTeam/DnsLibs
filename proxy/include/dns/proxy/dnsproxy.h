@@ -18,6 +18,20 @@ class DnsProxy {
 public:
     using DnsProxyInitResult = std::pair<bool, Error<DnsProxyInitError>>;
 
+    enum ReapplyOptions : uint8_t {
+        RO_NONE     = 0,      ///< No changes, no-op
+        RO_SETTINGS = 1 << 0, ///< Reload all DNS settings except listeners and filter_params
+        RO_FILTERS  = 1 << 1, ///< Reload filter parameters (filter_params)
+    };
+
+    friend inline ReapplyOptions operator|(ReapplyOptions l, ReapplyOptions r) {
+        return ReapplyOptions((uint8_t)l | (uint8_t)r);
+    }
+
+    friend inline ReapplyOptions operator&(ReapplyOptions l, ReapplyOptions r) {
+        return ReapplyOptions((uint8_t)l & (uint8_t)r);
+    }
+
     DnsProxy();
     ~DnsProxy();
 
@@ -41,15 +55,16 @@ public:
     void deinit();
 
     /**
-     * @brief Reapply DNS proxy settings with optional filter reloading
+     * @brief Reapply DNS proxy settings with selective reloading
+     *
+     * This method allows updating DNS proxy configuration without full reinitialization.
+     * You can selectively reload different parts of the configuration using ReapplyOptions flags.
      *
      * @param settings New DNS proxy settings to apply
-     * @param reapply_filters If true, DNS filters will be reloaded from settings.
-     *                       If false, existing filters are preserved (fast update).
+     * @param reapply_options Bitwise OR combination of ReapplyOptions flags
      * @return {true, opt_warning_description} or {false, error_description}
-     *
      */
-    [[nodiscard]] DnsProxyInitResult reapply_settings(DnsProxySettings settings, bool reapply_filters);
+    [[nodiscard]] DnsProxyInitResult reapply_settings(DnsProxySettings settings, ReapplyOptions reapply_options);
 
     /**
      * @brief Get the DNS proxy settings
@@ -96,7 +111,7 @@ private:
     struct Impl;
     std::unique_ptr<Impl> m_pimpl;
 
-    DnsProxyInitResult reapply_settings_internal(DnsProxySettings settings, bool reapply_filters);
+    DnsProxyInitResult reapply_settings_internal(DnsProxySettings settings, ReapplyOptions reapply_options);
     coro::Task<Uint8Vector> handle_message_internal(Uint8View message, const DnsMessageInfo *info);
     bool match_fallback_domains_internal(Uint8View message) const;
 
