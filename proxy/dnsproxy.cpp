@@ -162,6 +162,10 @@ DnsProxy::DnsProxyInitResult DnsProxy::init(DnsProxySettings settings, DnsProxyE
 
     proxy->shutdown_guard = std::make_shared<bool>(true);
     proxy->loop = EventLoop::create();
+    if (!proxy->loop) {
+        this->deinit();
+        return {false, make_error(DnsProxyInitError::AE_EVENT_LOOP_NOT_SET, "Failed to create event loop")};
+    }
 
     proxy->forwarder.emplace();
 
