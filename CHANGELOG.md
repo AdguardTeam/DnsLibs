@@ -34,7 +34,7 @@
 * [Feature] Added `blocking_reason` field to `DnsRequestProcessedEvent` to indicate why a DNS request was blocked.
     * New enum `DnsBlockingReason` with values:
         * `NONE` - request was not blocked
-        * `MOZILLA_DOH_DETECTION` - blocked by Mozilla DoH detection
+        * `MOZILLA_DOH_DETECTION` - blocked Mozilla DoH detection
         * `DDR` - blocked DDR (Discovery of Designated Resolvers)
         * `IPV6` - blocked IPv6 request (when `block_ipv6` option is enabled)
         * `QUERY_MATCHED_BY_RULE` - domain name in the query matched a filtering rule
