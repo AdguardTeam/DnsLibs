@@ -231,7 +231,7 @@ namespace Adguard.Dns
 		internal static extern bool ag_dnsproxy_reapply_settings(
 			IntPtr pDnsProxyServer,
 			IntPtr pDnsProxySettings,
-			[MarshalAs(UnmanagedType.Struct)] ag_dnsproxy_reapply_options options,
+			ag_dnsproxy_reapply_options options,
 			IntPtr pOutResult,
 			IntPtr ppOutMessage);
 
