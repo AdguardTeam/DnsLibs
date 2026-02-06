@@ -83,8 +83,9 @@ namespace Adguard.Dns.DnsProxyServer
                     IntPtr pDnsProxySettingsC = MarshalUtils.StructureToPtr(dnsProxySettingsC, allocatedPointers);
                     m_pCallbackConfigurationC = MarshalUtils.StructureToPtr(m_callbackConfigurationC);
 
-                    pOutResult = Marshal.AllocHGlobal(Marshal.SizeOf(typeof(IntPtr)));
-                    ppOutMessage = Marshal.AllocHGlobal(Marshal.SizeOf(typeof(IntPtr)));
+                    pOutResult = Marshal.AllocHGlobal(IntPtr.Size);
+                    ppOutMessage = Marshal.AllocHGlobal(IntPtr.Size);
+                    Marshal.WriteIntPtr(ppOutMessage, IntPtr.Zero);
                     m_pProxyServer = ag_dnsproxy_init(
 	                    pDnsProxySettingsC,
 	                    m_pCallbackConfigurationC,
@@ -330,8 +331,9 @@ namespace Adguard.Dns.DnsProxyServer
                     ag_dnsproxy_settings dnsProxySettingsC =
                         DnsApiConverter.ToNativeObject(dnsProxySettings, allocatedPointers);
                     IntPtr pDnsProxySettingsC = MarshalUtils.StructureToPtr(dnsProxySettingsC, allocatedPointers);
-                    pOutResult = Marshal.AllocHGlobal(Marshal.SizeOf(typeof(IntPtr)));
-                    ppOutMessage = Marshal.AllocHGlobal(Marshal.SizeOf(typeof(IntPtr)));
+                    pOutResult = Marshal.AllocHGlobal(IntPtr.Size);
+                    ppOutMessage = Marshal.AllocHGlobal(IntPtr.Size);
+                    Marshal.WriteIntPtr(ppOutMessage, IntPtr.Zero);
                     bool result = ag_dnsproxy_reapply_settings(
                         m_pProxyServer,
                         pDnsProxySettingsC,
