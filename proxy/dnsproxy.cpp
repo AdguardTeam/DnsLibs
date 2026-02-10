@@ -260,7 +260,20 @@ DnsProxy::DnsProxyInitResult DnsProxy::reapply_settings_internal(
 
     Error<DnsProxyInitError> warning;
     std::shared_ptr<DnsFilterManager> new_filter_manager;
-    proxy->settings = std::move(settings);
+
+    if (reapply_options & RO_SETTINGS) {
+        // Update everything except listeners and filter_params
+        auto saved_listeners = std::move(proxy->settings.listeners);
+        auto saved_filter_params = std::move(proxy->settings.filter_params);
+        proxy->settings = std::move(settings);
+        proxy->settings.listeners = std::move(saved_listeners);
+        if (!(reapply_options & RO_FILTERS)) {
+            proxy->settings.filter_params = std::move(saved_filter_params);
+        }
+    } else if (reapply_options & RO_FILTERS) {
+        // Update only filter_params
+        proxy->settings.filter_params = std::move(settings.filter_params);
+    }
 
     if (reapply_options & RO_FILTERS) {
         new_filter_manager = std::make_shared<DnsFilterManager>();

@@ -53,6 +53,63 @@ static DnsProxySettings make_dnsproxy_settings() {
     return settings;
 }
 
+static DnsProxySettings make_dnsproxy_settings_with_listeners() {
+    auto settings = make_dnsproxy_settings();
+    settings.listeners = {
+            {.address = "127.0.0.1", .port = 5354, .protocol = utils::TP_UDP},
+            {.address = "127.0.0.1", .port = 5355, .protocol = utils::TP_TCP, .persistent = true},
+    };
+    return settings;
+}
+
+static void check_listeners(
+        const DnsProxySettings &current, const std::vector<ListenerSettings> &expected) {
+    ASSERT_EQ(current.listeners.size(), expected.size());
+    for (size_t i = 0; i < expected.size(); ++i) {
+        SCOPED_TRACE("listener[" + std::to_string(i) + "]");
+        ASSERT_EQ(current.listeners[i].address, expected[i].address);
+        ASSERT_EQ(current.listeners[i].port, expected[i].port);
+        ASSERT_EQ(current.listeners[i].protocol, expected[i].protocol);
+        ASSERT_EQ(current.listeners[i].persistent, expected[i].persistent);
+    }
+}
+
+static void check_filter_params(
+        const DnsProxySettings &current, const DnsFilter::EngineParams &expected) {
+    ASSERT_EQ(current.filter_params.filters.size(), expected.filters.size());
+    for (size_t i = 0; i < expected.filters.size(); ++i) {
+        SCOPED_TRACE("filter[" + std::to_string(i) + "]");
+        ASSERT_EQ(current.filter_params.filters[i].id, expected.filters[i].id);
+        ASSERT_EQ(current.filter_params.filters[i].data, expected.filters[i].data);
+        ASSERT_EQ(current.filter_params.filters[i].in_memory, expected.filters[i].in_memory);
+    }
+}
+
+static void check_other_settings(
+        const DnsProxySettings &current, const DnsProxySettings &expected) {
+    ASSERT_EQ(current.blocked_response_ttl_secs, expected.blocked_response_ttl_secs);
+    ASSERT_EQ(current.block_ipv6, expected.block_ipv6);
+    ASSERT_EQ(current.ipv6_available, expected.ipv6_available);
+    ASSERT_EQ(current.dns_cache_size, expected.dns_cache_size);
+    ASSERT_EQ(current.adblock_rules_blocking_mode, expected.adblock_rules_blocking_mode);
+    ASSERT_EQ(current.hosts_rules_blocking_mode, expected.hosts_rules_blocking_mode);
+    ASSERT_EQ(current.optimistic_cache, expected.optimistic_cache);
+    ASSERT_EQ(current.enable_dnssec_ok, expected.enable_dnssec_ok);
+    ASSERT_EQ(current.enable_retransmission_handling, expected.enable_retransmission_handling);
+    ASSERT_EQ(current.block_ech, expected.block_ech);
+    ASSERT_EQ(current.block_h3_alpn, expected.block_h3_alpn);
+    ASSERT_EQ(current.enable_parallel_upstream_queries, expected.enable_parallel_upstream_queries);
+    ASSERT_EQ(current.enable_fallback_on_upstreams_failure, expected.enable_fallback_on_upstreams_failure);
+    ASSERT_EQ(current.enable_servfail_on_upstreams_failure, expected.enable_servfail_on_upstreams_failure);
+    ASSERT_EQ(current.enable_http3, expected.enable_http3);
+    ASSERT_EQ(current.enable_post_quantum_cryptography, expected.enable_post_quantum_cryptography);
+    ASSERT_EQ(current.upstreams.size(), expected.upstreams.size());
+    for (size_t i = 0; i < expected.upstreams.size(); ++i) {
+        SCOPED_TRACE("upstream[" + std::to_string(i) + "]");
+        ASSERT_EQ(current.upstreams[i].address, expected.upstreams[i].address);
+    }
+}
+
 static std::string get_concat_rdfs_as_str(ldns_pkt *pkt) {
     std::string result;
     ldns_rr *rr = ldns_rr_list_rr(ldns_pkt_answer(pkt), 0);
@@ -2476,6 +2533,135 @@ TEST_F(DnsProxyTest, TestReapplySettingsNoOp) {
     ASSERT_NO_FATAL_FAILURE(
             perform_request(*m_proxy, create_request("example.com", LDNS_RR_TYPE_A, LDNS_RD), response));
     ASSERT_EQ(ldns_pkt_get_rcode(response.get()), LDNS_RCODE_REFUSED);
+}
+
+TEST_F(DnsProxyTest, TestReapplySettingsRoSettingsPreservesListenersAndFilters) {
+    // Test that RO_SETTINGS preserves listeners and filter_params, updates everything else
+    DnsProxySettings settings = make_dnsproxy_settings_with_listeners();
+    settings.filter_params = {{{1, "example.com", true}}};
+    settings.blocked_response_ttl_secs = 1000;
+    settings.block_ipv6 = false;
+
+    auto [ret, err] = m_proxy->init(settings, {});
+    ASSERT_TRUE(ret) << err->str();
+
+    // Reapply with RO_SETTINGS — listeners and filter_params must be preserved
+    DnsProxySettings new_settings = make_dnsproxy_settings();
+    new_settings.upstreams = {{"1.1.1.1"}};
+    new_settings.blocked_response_ttl_secs = 2000;
+    new_settings.block_ipv6 = true;
+    new_settings.filter_params = {{{2, "other.com", true}}}; // Should be ignored
+    auto [ret2, err2] = m_proxy->reapply_settings(new_settings, DnsProxy::RO_SETTINGS);
+    ASSERT_TRUE(ret2) << (err2 ? err2->str() : "");
+
+    const auto &current = m_proxy->get_settings();
+    ASSERT_NO_FATAL_FAILURE(check_listeners(current, settings.listeners));
+    ASSERT_NO_FATAL_FAILURE(check_filter_params(current, settings.filter_params));
+    // Other settings should be updated to new_settings values
+    DnsProxySettings expected_other = new_settings;
+    expected_other.upstreams = {{"1.1.1.1"}};
+    ASSERT_NO_FATAL_FAILURE(check_other_settings(current, expected_other));
+
+    // Original filter should still work (example.com blocked)
+    ldns_pkt_ptr response;
+    ASSERT_NO_FATAL_FAILURE(
+            perform_request(*m_proxy, create_request("example.com", LDNS_RR_TYPE_A, LDNS_RD), response));
+    ASSERT_EQ(ldns_pkt_get_rcode(response.get()), LDNS_RCODE_REFUSED);
+}
+
+TEST_F(DnsProxyTest, TestReapplySettingsRoFiltersPreservesListenersAndOtherSettings) {
+    // Test that RO_FILTERS preserves listeners and other settings, updates only filter_params
+    DnsProxySettings settings = make_dnsproxy_settings_with_listeners();
+    settings.filter_params = {{{1, "example.com", true}}};
+    settings.blocked_response_ttl_secs = 1234;
+    settings.block_ipv6 = true;
+    settings.dns_cache_size = 5000;
+
+    auto [ret, err] = m_proxy->init(settings, {});
+    ASSERT_TRUE(ret) << err->str();
+
+    // Reapply with RO_FILTERS only
+    DnsProxySettings new_settings = make_dnsproxy_settings();
+    new_settings.blocked_response_ttl_secs = 9999; // Should be ignored
+    new_settings.block_ipv6 = false; // Should be ignored
+    new_settings.dns_cache_size = 1; // Should be ignored
+    new_settings.filter_params = {{{1, "test.com", true}}}; // This should be applied
+    auto [ret2, err2] = m_proxy->reapply_settings(new_settings, DnsProxy::RO_FILTERS);
+    ASSERT_TRUE(ret2) << (err2 ? err2->str() : "");
+
+    const auto &current = m_proxy->get_settings();
+    ASSERT_NO_FATAL_FAILURE(check_listeners(current, settings.listeners));
+    ASSERT_NO_FATAL_FAILURE(check_filter_params(current, new_settings.filter_params));
+    ASSERT_NO_FATAL_FAILURE(check_other_settings(current, settings));
+
+    // Verify new filter is applied (test.com blocked, example.com passes)
+    ldns_pkt_ptr response;
+    ASSERT_NO_FATAL_FAILURE(
+            perform_request(*m_proxy, create_request("test.com", LDNS_RR_TYPE_A, LDNS_RD), response));
+    ASSERT_EQ(ldns_pkt_get_rcode(response.get()), LDNS_RCODE_REFUSED);
+
+    response.reset();
+    ASSERT_NO_FATAL_FAILURE(
+            perform_request(*m_proxy, create_request("example.com", LDNS_RR_TYPE_A, LDNS_RD), response));
+    ASSERT_EQ(ldns_pkt_get_rcode(response.get()), LDNS_RCODE_NOERROR);
+}
+
+TEST_F(DnsProxyTest, TestReapplySettingsFullUpdatePreservesListeners) {
+    // Test that RO_SETTINGS | RO_FILTERS preserves listeners, updates everything else
+    DnsProxySettings settings = make_dnsproxy_settings_with_listeners();
+    settings.filter_params = {{{1, "example.com", true}}};
+    settings.blocked_response_ttl_secs = 1000;
+
+    auto [ret, err] = m_proxy->init(settings, {});
+    ASSERT_TRUE(ret) << err->str();
+
+    // Reapply with both flags
+    DnsProxySettings new_settings = make_dnsproxy_settings();
+    new_settings.upstreams = {{"1.1.1.1"}};
+    new_settings.blocked_response_ttl_secs = 2000;
+    new_settings.filter_params = {{{1, "test.com", true}}};
+    auto [ret2, err2] = m_proxy->reapply_settings(
+            new_settings, DnsProxy::RO_SETTINGS | DnsProxy::RO_FILTERS);
+    ASSERT_TRUE(ret2) << (err2 ? err2->str() : "");
+
+    const auto &current = m_proxy->get_settings();
+    ASSERT_NO_FATAL_FAILURE(check_listeners(current, settings.listeners));
+    ASSERT_NO_FATAL_FAILURE(check_filter_params(current, new_settings.filter_params));
+    ASSERT_NO_FATAL_FAILURE(check_other_settings(current, new_settings));
+
+    // Old filter should not work, new filter should work
+    ldns_pkt_ptr response;
+    ASSERT_NO_FATAL_FAILURE(
+            perform_request(*m_proxy, create_request("example.com", LDNS_RR_TYPE_A, LDNS_RD), response));
+    ASSERT_EQ(ldns_pkt_get_rcode(response.get()), LDNS_RCODE_NOERROR);
+
+    response.reset();
+    ASSERT_NO_FATAL_FAILURE(
+            perform_request(*m_proxy, create_request("test.com", LDNS_RR_TYPE_A, LDNS_RD), response));
+    ASSERT_EQ(ldns_pkt_get_rcode(response.get()), LDNS_RCODE_REFUSED);
+}
+
+TEST_F(DnsProxyTest, TestReapplySettingsNoOpPreservesEverything) {
+    // Test that RO_NONE preserves everything
+    DnsProxySettings settings = make_dnsproxy_settings_with_listeners();
+    settings.filter_params = {{{1, "example.com", true}}};
+    settings.blocked_response_ttl_secs = 1234;
+
+    auto [ret, err] = m_proxy->init(settings, {});
+    ASSERT_TRUE(ret) << err->str();
+
+    // Reapply with RO_NONE — everything must be preserved
+    DnsProxySettings new_settings = make_dnsproxy_settings();
+    new_settings.upstreams = {{"9.9.9.9"}}; // Should be ignored
+    new_settings.blocked_response_ttl_secs = 9999; // Should be ignored
+    new_settings.filter_params = {{{2, "other.com", true}}}; // Should be ignored
+    auto [ret2, err2] = m_proxy->reapply_settings(new_settings, DnsProxy::RO_NONE);
+    ASSERT_TRUE(ret2) << (err2 ? err2->str() : "");
+
+    const auto &current = m_proxy->get_settings();
+    ASSERT_NO_FATAL_FAILURE(check_listeners(current, settings.listeners));
+    ASSERT_NO_FATAL_FAILURE(check_filter_params(current, settings.filter_params));
+    ASSERT_NO_FATAL_FAILURE(check_other_settings(current, settings));
 }
 
 } // namespace ag::dns::proxy::test
