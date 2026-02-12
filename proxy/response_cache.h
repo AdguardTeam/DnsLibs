@@ -41,9 +41,9 @@ public:
      * and `expired` is set to `true`.
      * @param block_ech Whether ECH blocking is enabled for this request (affects cache key)
      */
-    Result get(const ldns_pkt *request, bool block_ech = false) {
+    Result get(const ldns_pkt *request) {
         Result r{};
-        std::string key = get_cache_key(request, block_ech);
+        std::string key = get_cache_key(request);
 
         if (m_cache.max_size() == 0) { // Caching disabled
             return r;
@@ -105,9 +105,7 @@ public:
      * Check cacheability and put an eligible response to the cache
      * @param block_ech Whether ECH blocking is enabled for this request (affects cache key)
      */
-    void put(const ldns_pkt *request, ldns_pkt_ptr response, std::optional<int32_t> upstream_id,
-        bool block_ech = false) {
-
+    void put(const ldns_pkt *request, ldns_pkt_ptr response, std::optional<int32_t> upstream_id) {
         if (m_cache.max_size() == 0) {
             // Caching disabled
             return;
@@ -159,12 +157,12 @@ public:
                 .upstream_id = upstream_id,
         };
 
-        m_cache.insert(get_cache_key(request, block_ech), std::move(cached_response));
+        m_cache.insert(get_cache_key(request), std::move(cached_response));
     }
 
     /** Erase cached entry of request if exists */
-    void erase(const ldns_pkt *request, bool block_ech = false) {
-        m_cache.erase(get_cache_key(request, block_ech));
+    void erase(const ldns_pkt *request) {
+        m_cache.erase(get_cache_key(request));
     }
 
     /** Change capacity of LRU cache */
@@ -190,12 +188,12 @@ private:
     };
     LruCache<std::string, Value> m_cache;
 
-    static std::string get_cache_key(const ldns_pkt *request, bool block_ech) {
+    static std::string get_cache_key(const ldns_pkt *request) {
         const auto *question = ldns_rr_list_rr(ldns_pkt_question(request), 0);
-        std::string key = fmt::format("{}|{}|{}{}{}|", // '|' is to avoid collisions
+        std::string key = fmt::format("{}|{}|{}{}|", // '|' is to avoid collisions
                 (int) ldns_rr_get_type(question), (int) ldns_rr_get_class(question),
-                ldns_pkt_edns_do(request) ? "1" : "0", ldns_pkt_cd(request) ? "1" : "0",
-                block_ech ? "e" : ""); // 'e' suffix for ECH-blocked cache entries
+                ldns_pkt_edns_do(request) ? "1" : "0",
+                ldns_pkt_cd(request) ? "1" : "0"); // 'e' suffix for ECH-blocked cache entries
 
         // Compute the domain name, in lower case for case-insensitivity
         const auto *owner = ldns_rr_owner(question);

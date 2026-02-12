@@ -129,7 +129,8 @@ static ldns_pkt_ptr create_request(
     return ldns_pkt_ptr(ldns_pkt_query_new(ldns_dname_new_frm_str(domain.c_str()), type, cls, flags));
 }
 
-static void perform_request(DnsProxy &proxy, const ldns_pkt_ptr &request, ldns_pkt_ptr &response) {
+static void perform_request(
+        DnsProxy &proxy, const ldns_pkt_ptr &request, ldns_pkt_ptr &response, DnsMessageInfo *info = nullptr) {
     // Avoid rate limit
     std::this_thread::sleep_for(Millis(100));
 
@@ -139,7 +140,7 @@ static void perform_request(DnsProxy &proxy, const ldns_pkt_ptr &request, ldns_p
     ASSERT_EQ(status, LDNS_STATUS_OK) << ldns_get_errorstr_by_id(status);
 
     const auto resp_data = proxy.handle_message_sync(
-            {ldns_buffer_at(buffer.get(), 0), ldns_buffer_position(buffer.get())}, nullptr);
+            {ldns_buffer_at(buffer.get(), 0), ldns_buffer_position(buffer.get())}, info);
 
     ldns_pkt *resp;
     status = ldns_wire2pkt(&resp, resp_data.data(), resp_data.size());
@@ -2662,6 +2663,93 @@ TEST_F(DnsProxyTest, TestReapplySettingsNoOpPreservesEverything) {
     ASSERT_NO_FATAL_FAILURE(check_listeners(current, settings.listeners));
     ASSERT_NO_FATAL_FAILURE(check_filter_params(current, settings.filter_params));
     ASSERT_NO_FATAL_FAILURE(check_other_settings(current, settings));
+}
+
+TEST_F(DnsProxyTest, RegressCache1) {
+    // This test reproduces one possible scenario where the proxy could return an incorrect response due to
+    // how caching works. This particular issue has been fixed, the test ensures that it doesn't come back.
+
+    DnsProxySettings settings = make_dnsproxy_settings();
+    settings.optimistic_cache = true;
+    settings.dns_cache_size = 1;
+    settings.block_ech = true;
+
+    DnsRequestProcessedEvent last_event{};
+    DnsProxyEvents events{.on_request_processed = [&last_event](const DnsRequestProcessedEvent &event) {
+        last_event = event;
+    }};
+
+    auto [ret, err] = m_proxy->init(settings, events);
+    ASSERT_TRUE(ret) << err->str();
+
+    ldns_pkt_ptr pkt = create_request("tls-ech.dev.", LDNS_RR_TYPE_HTTPS, LDNS_RD);
+    ldns_pkt_ptr res;
+
+    DnsMessageInfo info{
+            .transparent = false,
+    };
+
+    // First request, ECH blocking disabled via override.
+    info.settings_overrides.block_ech = false;
+    ASSERT_NO_FATAL_FAILURE(perform_request(*m_proxy, pkt, res, &info));
+    ASSERT_TRUE(SvcbHttpsHelpers::remove_ech_svcparam(res.get()));
+
+    // Make the cache entry stale.
+    SteadyClock::add_time_shift(Secs{3600});
+
+    // Second request, ECH blocking disabled via override.
+    // This should trigger optimistic cache behaviour: stale entry is returned and a background fetch is started.
+    info.settings_overrides.block_ech = false;
+    ASSERT_NO_FATAL_FAILURE(perform_request(*m_proxy, pkt, res, &info));
+    ASSERT_TRUE(SvcbHttpsHelpers::remove_ech_svcparam(res.get()));
+
+    // Wait for background fetch.
+    std::this_thread::sleep_for(Millis{500});
+
+    // Background fetch "poisons" the cache with an unprocessed response with ECH parameters intact.
+    // ECH blocking no longer works.
+    info.settings_overrides.block_ech = true;
+    ASSERT_NO_FATAL_FAILURE(perform_request(*m_proxy, pkt, res, &info));
+    ASSERT_FALSE(SvcbHttpsHelpers::remove_ech_svcparam(res.get()));
+
+    info.settings_overrides.block_ech = false;
+    ASSERT_NO_FATAL_FAILURE(perform_request(*m_proxy, pkt, res, &info));
+    ASSERT_TRUE(SvcbHttpsHelpers::remove_ech_svcparam(res.get()));
+}
+
+TEST_F(DnsProxyTest, RegressCache2) {
+    // This test reproduces another possible scenario where the proxy could return an incorrect response due to
+    // how caching works. This particular issue has been fixed, the test ensures that it doesn't come back.
+
+    DnsProxySettings settings = make_dnsproxy_settings();
+    settings.optimistic_cache = false;
+    settings.dns_cache_size = 1;
+    settings.block_ech = false;
+
+    DnsRequestProcessedEvent last_event{};
+    DnsProxyEvents events{.on_request_processed = [&last_event](const DnsRequestProcessedEvent &event) {
+        last_event = event;
+    }};
+
+    auto [ret, err] = m_proxy->init(settings, events);
+    ASSERT_TRUE(ret) << err->str();
+
+    ldns_pkt_ptr pkt = create_request("tls-ech.dev.", LDNS_RR_TYPE_HTTPS, LDNS_RD);
+    ldns_pkt_ptr res;
+
+    DnsMessageInfo info{
+            .transparent = false,
+    };
+
+    // ECH blocking enabled via override.
+    info.settings_overrides.block_ech = true;
+    ASSERT_NO_FATAL_FAILURE(perform_request(*m_proxy, pkt, res, &info));
+    ASSERT_FALSE(SvcbHttpsHelpers::remove_ech_svcparam(res.get()));
+
+    // Cache could get "poisoned" with a processed response lacking the ECH config.
+    info.settings_overrides.block_ech = false;
+    ASSERT_NO_FATAL_FAILURE(perform_request(*m_proxy, pkt, res, &info));
+    ASSERT_TRUE(SvcbHttpsHelpers::remove_ech_svcparam(res.get()));
 }
 
 } // namespace ag::dns::proxy::test

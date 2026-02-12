@@ -550,30 +550,6 @@ coro::Task<DnsForwarder::HandleMessageResult> DnsForwarder::handle_message_inter
         normalized_domain.remove_suffix(1); // drop trailing dot
     }
 
-    // Compute effective block_ech for this request (used for cache key)
-    const bool effective_block_ech = (info ? info->settings_overrides.block_ech : std::nullopt)
-            .value_or(m_settings->block_ech);
-    ResponseCache::Result cached;
-
-    // Skip caching for transparent filtering
-    if (!info || !info->transparent) {
-        cached = m_response_cache.get(request.get(), effective_block_ech);
-    }
-
-    if (cached.response && (!cached.expired || m_settings->optimistic_cache)) {
-        log_packet(m_log, cached.response.get(), "Cached response");
-        event.cache_hit = true;
-        truncate_response(cached.response.get(), request.get(), opt_as_ptr(info));
-        finalize_processed_event(event, request.get(), cached.response.get(), nullptr, cached.upstream_id, {});
-        Uint8Vector raw_response = transform_response_to_raw_data(cached.response.get());
-        if (cached.expired) {
-            assert(m_settings->optimistic_cache);
-            this->optimistic_cache_background_resolve(std::move(request), std::string{normalized_domain})
-                    .run_detached();
-        }
-        co_return {std::move(raw_response), std::move(event)};
-    }
-
     const ldns_rr_type type = ldns_rr_get_type(question);
 
     // disable Mozilla DoH
@@ -641,9 +617,35 @@ coro::Task<DnsForwarder::HandleMessageResult> DnsForwarder::handle_message_inter
     bool is_our_do_bit = m_settings->enable_dnssec_ok && DnssecHelpers::set_do_bit(ctx.request.get());
 
     UpstreamExchangeResult exchange_result;
+    ResponseCache::Result cached;
 
-    // Don't do upstream exchange for transparent filtering
-    if (info && info->transparent) {
+    // Skip caching for transparent filtering
+    if (!info || !info->transparent) {
+        cached = m_response_cache.get(request.get());
+    }
+
+    utils::ScopeExit run_optimistic_cache_resolve{[&] {
+        if (event.cache_hit && cached.expired) {
+            assert(m_settings->optimistic_cache);
+            this->optimistic_cache_background_resolve(std::move(ctx.request), std::string{normalized_domain})
+                    .run_detached();
+        }
+    }};
+
+    if (cached.response && (!cached.expired || m_settings->optimistic_cache)) {
+        event.cache_hit = true;
+        exchange_result.result = std::move(cached.response);
+        if (cached.upstream_id.has_value()) {
+            if (auto it = std::find_if(m_upstreams.begin(), m_upstreams.end(),
+                        [&](const auto &u) {
+                            return u->options().id == *cached.upstream_id;
+                        });
+                    it != m_upstreams.end()) {
+                exchange_result.upstream = it->get();
+            }
+        }
+    } else if (info && info->transparent) {
+        // Don't do upstream exchange for transparent filtering
         if (!ldns_pkt_qr(ctx.request.get())) {
             // This is a query. Return the modified request to the caller.
             dbglog_fid(m_log, ctx.request.get(), "Returning processed request (transparent filtering)");
@@ -655,13 +657,12 @@ coro::Task<DnsForwarder::HandleMessageResult> DnsForwarder::handle_message_inter
         // If this is a retransmitted request, use fallback upstreams only
         exchange_result =
                 co_await do_upstreams_exchange(normalized_domain, ctx.request.get(), ctx.fallback_only, opt_as_ptr(info));
+        if (guard.expired()) {
+            co_return {};
+        }
     }
 
     auto &[response, selected_upstream] = exchange_result;
-    if (guard.expired()) {
-        co_return {};
-    }
-
     if (!response) {
         auto err = response.error();
         if (err->value() == DnsError::AE_TIMED_OUT) {
@@ -681,8 +682,15 @@ coro::Task<DnsForwarder::HandleMessageResult> DnsForwarder::handle_message_inter
 
     ctx.response = std::move(response.value());
     log_packet(m_log, ctx.response.get(),
-            AG_FMT("Upstream ({}) response", selected_upstream ? selected_upstream->options().address : "<transparent>")
+            AG_FMT("{} ({}) response", event.cache_hit ? "Cached" : "Upstream",
+                    selected_upstream ? selected_upstream->options().address : "<transparent>")
                     .c_str());
+
+    // The response should be cached before it is modified by filters and/or settings.
+    if (!event.cache_hit && (!info || !info->transparent)) {
+        m_response_cache.put(
+                ctx.request.get(), ldns_pkt_ptr{ldns_pkt_clone(ctx.response.get())}, selected_upstream->options().id);
+    }
 
     event.bytes_sent = ldns_pkt_size(ctx.request.get());
     event.bytes_received = ldns_pkt_size(ctx.response.get());
@@ -703,11 +711,6 @@ coro::Task<DnsForwarder::HandleMessageResult> DnsForwarder::handle_message_inter
     finalize_processed_event(event, ctx.request.get(), ctx.response.get(), nullptr,
             selected_upstream ? std::make_optional(selected_upstream->options().id) : std::nullopt);
     auto response_wire = transform_response_to_raw_data(ctx.response.get());
-    if (!info || !info->transparent) {
-        assert(selected_upstream);
-        m_response_cache.put(ctx.request.get(), std::move(ctx.response), selected_upstream->options().id,
-            effective_block_ech);
-    }
     co_return {std::move(response_wire), std::move(event)};
 }
 
@@ -874,8 +877,8 @@ coro::Task<ldns_pkt_ptr> DnsForwarder::handle_response(FilterContext &ctx, Upstr
                 co_return {};
             }
             if (synth_response) {
-                ctx.response = std::move(synth_response);
-                log_packet(m_log, ctx.response.get(), "DNS64 synthesized response");
+                log_packet(m_log, synth_response.get(), "DNS64 synthesized response");
+                co_return synth_response;
             }
         }
     }
@@ -1209,10 +1212,10 @@ coro::Task<void> DnsForwarder::optimistic_cache_background_resolve(ldns_pkt_ptr 
     if (res.has_error()) {
         dbglog_id(
                 m_log, req.get(), "Async upstream exchange failed, removing entry from cache: {}", res.error()->str());
-        m_response_cache.erase(req.get(), m_settings->block_ech);
+        m_response_cache.erase(req.get());
     } else {
         log_packet(m_log, res->get(), "Async upstream exchange result");
-        m_response_cache.put(req.get(), std::move(res.value()), upstream->options().id, m_settings->block_ech);
+        m_response_cache.put(req.get(), std::move(res.value()), upstream->options().id);
     }
     co_return;
 }
