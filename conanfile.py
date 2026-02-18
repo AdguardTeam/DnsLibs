@@ -17,10 +17,12 @@ class DnsLibsConan(ConanFile):
     options = {
         "shared": [True, False],
         "fPIC": [True, False],
+        "tcpip": [True, False],
     }
     default_options = {
         "shared": False,
         "fPIC": True,
+        "tcpip": True,
     }
     # A list of paths to patches. The paths must be relative to the conanfile directory.
     # They are applied in case of the version equals 777 and mostly intended to be used
@@ -74,6 +76,7 @@ class DnsLibsConan(ConanFile):
         deps = CMakeDeps(self)
         deps.generate()
         tc = CMakeToolchain(self)
+        tc.cache_variables["DNSLIBS_ENABLE_TCPIP"] = self.info.options.tcpip
         tc.generate()
 
     def layout(self):
@@ -117,6 +120,8 @@ class DnsLibsConan(ConanFile):
             "dnslibs_net",
             "dnslibs_common",
         ]
+        if self.options.tcpip:
+            self.cpp_info.libs += "dnslibs_tcpip"
         self.cpp_info.libdirs = ['lib']
         self.cpp_info.requires = [
             "cxxopts::cxxopts",
