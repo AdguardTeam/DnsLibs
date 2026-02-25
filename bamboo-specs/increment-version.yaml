@@ -64,7 +64,7 @@ DL - Increment version:
 
             git add ../conandata.yml
             git commit -m "skipci: Automatic version increment by Bamboo"
-            git push
+            git push origin HEAD
 
             BAMBOO_URL=$(echo ${bamboo_resultsUrl} | sed -ne 's|\(https://[^/]\+\)/.*|\1|p')
             curl -H "Authorization: Bearer ${bamboo.bambooTriggerTokenSecret}" \
