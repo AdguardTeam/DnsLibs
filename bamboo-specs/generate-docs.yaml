@@ -43,7 +43,7 @@ Generate documents:
             esac
 
             mkdir doc && cd doc
-            mkdir capi && mkdir mac && mkdir win
+            mkdir capi && mkdir mac && mkdir win && mkdir android
 
             cd ../scripts
             ./generate_docs.sh
