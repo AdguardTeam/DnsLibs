@@ -160,8 +160,9 @@ public class DnsTunVpnService extends VpnService {
             tunListener = new DnsTunListener(
                 tunFd.detachFd(),
                 mtu,
-                (request) -> {
-                    return dnsProxy.handleMessage(request, null);
+                (request, replyHandler) -> {
+                    // Process DNS request asynchronously through DnsProxy
+                    dnsProxy.handleMessageAsync(request, null, replyHandler::onReply);
                 }
             );
 

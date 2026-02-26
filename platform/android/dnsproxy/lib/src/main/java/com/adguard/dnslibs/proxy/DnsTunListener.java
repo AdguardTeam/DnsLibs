@@ -21,26 +21,42 @@ import java.util.function.Consumer;
  * DnsTunListener listener = new DnsTunListener(
  *     tunFd.getFd(),
  *     1500,
- *     (request) -> dnsProxy.handleMessage(request, null)
+ *     (request, replyHandler) -> {
+ *         // Process request asynchronously
+ *         dnsProxy.handleMessageAsync(request, null, replyHandler::onReply);
+ *     }
  * );
  * }</pre>
  */
 public class DnsTunListener implements Closeable {
 
     /**
+     * Handler for sending DNS response back to TUN interface.
+     * This handler may be called asynchronously on any thread.
+     */
+    @FunctionalInterface
+    public interface ReplyHandler {
+        /**
+         * Send DNS response back to the TUN interface.
+         * @param reply DNS response message, or null if no response should be sent
+         */
+        void onReply(@Nullable byte[] reply);
+    }
+
+    /**
      * Callback for incoming DNS requests from TUN interface.
      * This callback is called for both UDP and TCP DNS traffic.
-     * The callback must return the DNS response synchronously.
+     * The callback may process the request asynchronously and call replyHandler at any time,
+     * on any thread. The request data is copied and remains valid after the callback returns.
      */
     @FunctionalInterface
     public interface RequestCallback {
         /**
-         * Process a DNS request and return the response.
+         * Process a DNS request asynchronously.
          * @param request DNS request (query) without transport headers
-         * @return DNS response message, or null if no response should be sent
+         * @param replyHandler Handler to send the response back. May be called asynchronously.
          */
-        @Nullable
-        byte[] onRequest(@NotNull byte[] request);
+        void onRequest(@NotNull byte[] request, @NotNull ReplyHandler replyHandler);
     }
 
     /**
@@ -132,16 +148,33 @@ public class DnsTunListener implements Closeable {
     }
 
     /**
-     * Called from native code when a DNS request is received.
-     * Must return the DNS response synchronously.
-     * @param request DNS request data
-     * @return DNS response, or null if no response
+     * Internal ReplyHandler implementation that bridges JNI to Java callback.
+     * Created by native code and passed to user's RequestCallback.
      */
-    private byte[] onRequest(byte[] request) {
-        if (requestCallback != null) {
-            return requestCallback.onRequest(request);
+    private static class NativeReplyHandler implements ReplyHandler {
+        private final long nativePtr;
+        private final long completionId;
+        private volatile boolean replied = false;
+        
+        NativeReplyHandler(long nativePtr, long completionId) {
+            this.nativePtr = nativePtr;
+            this.completionId = completionId;
         }
-        return null;
+        
+        @Override
+        public void onReply(@Nullable byte[] reply) {
+            // Ensure reply is only sent once
+            if (!replied) {
+                synchronized (this) {
+                    if (!replied) {
+                        replied = true;
+                        nativeSendReply(nativePtr, completionId, reply);
+                    }
+                }
+            }
+        }
+        
+        private static native void nativeSendReply(long nativePtr, long completionId, byte[] reply);
     }
 
     private static InitException parseInitError(String error) {

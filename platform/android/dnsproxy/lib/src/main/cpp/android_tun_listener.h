@@ -3,6 +3,8 @@
 #include <jni.h>
 #include <memory>
 #include <atomic>
+#include <mutex>
+#include <unordered_map>
 
 #include "common/defs.h"
 #include "dns/proxy/tun_listener.h"
@@ -41,11 +43,21 @@ private:
     
     struct {
         jni::GlobalRef<jclass> request_callback_class;
+        jni::GlobalRef<jclass> native_reply_handler_class;
     } m_jclasses{};
     
     struct {
         jmethodID on_request;
     } m_request_callback_methods{};
+    
+    struct {
+        jmethodID ctor;
+    } m_native_reply_handler_methods{};
+    
+    // Storage for pending completion callbacks
+    std::mutex m_completions_mutex;
+    std::unordered_map<uint64_t, TunListener::Completion> m_completions;
+    std::atomic<uint64_t> m_next_completion_id{1};
 
 public:
     /**
@@ -69,6 +81,14 @@ public:
      * @param env JNI environment
      */
     void deinit(JNIEnv *env);
+    
+    /**
+     * Send reply for a pending request.
+     * @param env JNI environment
+     * @param reply_handler_id ID of the reply handler
+     * @param reply Reply data (may be null)
+     */
+    void send_reply(JNIEnv *env, jlong reply_handler_id, jbyteArray reply);
 };
 
 } // namespace ag::dns

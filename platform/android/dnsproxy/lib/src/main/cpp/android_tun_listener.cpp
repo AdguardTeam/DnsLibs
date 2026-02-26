@@ -2,6 +2,8 @@
 
 #include <jni.h>
 #include <memory>
+#include <mutex>
+#include <unordered_map>
 
 #include "dns/proxy/tun_listener.h"
 #include "jni_defs.h"
@@ -35,14 +37,28 @@ extern "C" JNIEXPORT void JNICALL Java_com_adguard_dnslibs_proxy_DnsTunListener_
     listener->deinit(env);
 }
 
+extern "C" JNIEXPORT void JNICALL 
+Java_com_adguard_dnslibs_proxy_DnsTunListener_00024NativeReplyHandler_nativeSendReply(
+        JNIEnv *env, jclass clazz, jlong native_ptr, jlong completion_id, jbyteArray reply) {
+    auto *listener = (AndroidTunListener *)native_ptr;
+    assert(listener);
+    listener->send_reply(env, completion_id, reply);
+}
+
 AndroidTunListener::AndroidTunListener(JavaVM *vm)
         : m_utils(vm) {
     ScopedJniEnv env(vm, 16);
     
     // Get RequestCallback class and methods
-    jclass c = (m_jclasses.request_callback_class = GlobalRef(
+    jclass callback_class = (m_jclasses.request_callback_class = GlobalRef(
                         vm, env->FindClass(FQN_DNSTUNLISTENER_REQUEST_CALLBACK))).get();
-    m_request_callback_methods.on_request = env->GetMethodID(c, "onRequest", "([B)[B");
+    m_request_callback_methods.on_request = env->GetMethodID(callback_class, "onRequest",
+        "([BL" FQN_DNSTUNLISTENER_REPLY_HANDLER ";)V");
+    
+    // Get NativeReplyHandler class and constructor
+    jclass handler_class = (m_jclasses.native_reply_handler_class = GlobalRef(
+                        vm, env->FindClass(FQN_DNSTUNLISTENER_NATIVE_REPLY_HANDLER))).get();
+    m_native_reply_handler_methods.ctor = env->GetMethodID(handler_class, "<init>", "(JJ)V");
     
     m_jni_initialized.store(true);
 }
@@ -60,40 +76,42 @@ TunListener::RequestCallback AndroidTunListener::marshal_request_callback(JNIEnv
     return [this, vm](Uint8View request, TunListener::Completion completion) {
         assert(m_jni_initialized.load());
         
+        // Generate unique ID for this completion callback
+        uint64_t completion_id = m_next_completion_id.fetch_add(1);
+        
+        // Store completion callback
+        {
+            std::lock_guard<std::mutex> lock(m_completions_mutex);
+            m_completions[completion_id] = std::move(completion);
+        }
+        
         ScopedJniEnv scoped_env(vm, 16);
         
-        // Convert request to Java byte array
+        // Copy request data because it's only valid during this callback execution
         jni::LocalRef<jbyteArray> java_request{scoped_env.get(), scoped_env->NewByteArray(request.size())};
         assert(java_request);
         
         scoped_env->SetByteArrayRegion(java_request.get(), 0, request.size(), (const jbyte *)request.data());
         
-        // Call Java method and get reply synchronously
-        jni::LocalRef<jbyteArray> java_reply{scoped_env.get(),
-                (jbyteArray)scoped_env->CallObjectMethod(
-                        m_request_callback.get(), m_request_callback_methods.on_request, java_request.get())};
+        // Create NativeReplyHandler object with nativePtr and completion_id
+        jni::LocalRef<jobject> reply_handler{scoped_env.get(),
+            scoped_env->NewObject(m_jclasses.native_reply_handler_class.get(),
+                m_native_reply_handler_methods.ctor,
+                (jlong)this,
+                (jlong)completion_id)};
+        
+        // Call Java method with request and ReplyHandler object
+        scoped_env->CallVoidMethod(
+                m_request_callback.get(), 
+                m_request_callback_methods.on_request, 
+                java_request.get(),
+                reply_handler.get());
         
         if (scoped_env->ExceptionCheck()) {
             scoped_env->ExceptionClear();
-            assert(false);
-        }
-        
-        // Convert reply back to C++ and call completion
-        if (java_reply) {
-            jsize reply_len = scoped_env->GetArrayLength(java_reply.get());
-            if (reply_len > 0) {
-                jbyte *reply_data = scoped_env->GetByteArrayElements(java_reply.get(), nullptr);
-                if (reply_data) {
-                    completion(Uint8View{(const uint8_t *)reply_data, (size_t)reply_len});
-                    scoped_env->ReleaseByteArrayElements(java_reply.get(), reply_data, JNI_ABORT);
-                } else {
-                    completion(Uint8View{});
-                }
-            } else {
-                completion(Uint8View{});
-            }
-        } else {
-            completion(Uint8View{});
+            // Remove completion on error
+            std::lock_guard<std::mutex> lock(m_completions_mutex);
+            m_completions.erase(completion_id);
         }
     };
 }
@@ -125,5 +143,47 @@ void AndroidTunListener::deinit(JNIEnv *env) {
     assert(m_jni_initialized.load());
     
     m_listener.deinit();
+    
+    // Clear all pending completions
+    {
+        std::lock_guard<std::mutex> lock(m_completions_mutex);
+        m_completions.clear();
+    }
+    
     m_jni_initialized.store(false);
+}
+
+void AndroidTunListener::send_reply(JNIEnv *env, jlong reply_handler_id, jbyteArray reply) {
+    assert(m_jni_initialized.load());
+    
+    // Find and remove the completion callback
+    TunListener::Completion completion;
+    {
+        std::lock_guard<std::mutex> lock(m_completions_mutex);
+        auto it = m_completions.find((uint64_t)reply_handler_id);
+        if (it == m_completions.end()) {
+            // Completion already called or invalid ID
+            return;
+        }
+        completion = std::move(it->second);
+        m_completions.erase(it);
+    }
+    
+    // Convert reply to C++ and call completion
+    if (reply) {
+        jsize reply_len = env->GetArrayLength(reply);
+        if (reply_len > 0) {
+            jbyte *reply_data = env->GetByteArrayElements(reply, nullptr);
+            if (reply_data) {
+                completion(Uint8View{(const uint8_t *)reply_data, (size_t)reply_len});
+                env->ReleaseByteArrayElements(reply, reply_data, JNI_ABORT);
+            } else {
+                completion(Uint8View{});
+            }
+        } else {
+            completion(Uint8View{});
+        }
+    } else {
+        completion(Uint8View{});
+    }
 }

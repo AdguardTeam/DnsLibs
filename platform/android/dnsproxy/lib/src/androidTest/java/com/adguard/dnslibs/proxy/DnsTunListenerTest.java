@@ -66,9 +66,9 @@ public class DnsTunListenerTest {
             listener = new DnsTunListener(
                 100,  // Dummy fd for testing
                 1500,  // MTU
-                (request) -> {
+                (request, replyHandler) -> {
                     // Echo back the request for testing
-                    return request;
+                    replyHandler.onReply(request);
                 }
             );
             
@@ -109,7 +109,7 @@ public class DnsTunListenerTest {
             new DnsTunListener(
                 -1,  // Invalid fd
                 1500,
-                (request) -> null
+                (request, replyHandler) -> replyHandler.onReply(null)
             );
             fail("Should throw InitException");
         } catch (DnsTunListener.InitException e) {
@@ -130,7 +130,7 @@ public class DnsTunListenerTest {
             new DnsTunListener(
                     -2,  // Invalid fd
                     1500,
-                    (request) -> null
+                    (request, replyHandler) -> replyHandler.onReply(null)
             );
             fail("Should throw InitException");
         } catch (DnsTunListener.InitException e) {
@@ -151,7 +151,7 @@ public class DnsTunListenerTest {
             new DnsTunListener(
                 100,  // Dummy fd
                 -1,  // Invalid MTU
-                (request) -> null
+                (request, replyHandler) -> replyHandler.onReply(null)
             );
             fail("Should throw InitException");
         } catch (DnsTunListener.InitException e) {
@@ -176,10 +176,10 @@ public class DnsTunListenerTest {
             listener = new DnsTunListener(
                 100,  // Dummy fd
                 1500,
-                (request) -> {
+                (request, replyHandler) -> {
                     receivedRequest.set(request);
-                    // Return a test reply
-                    return new byte[]{1, 2, 3, 4};
+                    // Send a test reply asynchronously
+                    replyHandler.onReply(new byte[]{1, 2, 3, 4});
                 }
             );
             
@@ -203,7 +203,7 @@ public class DnsTunListenerTest {
         DnsTunListener listener = new DnsTunListener(
             101,  // Dummy fd
             1500,
-            (request) -> null
+            (request, replyHandler) -> replyHandler.onReply(null)
         );
         
         listener.close();
@@ -219,7 +219,7 @@ public class DnsTunListenerTest {
         DnsTunListener listener = new DnsTunListener(
             100,  // Dummy fd
             1500,
-            (request) -> null
+            (request, replyHandler) -> replyHandler.onReply(null)
         );
         
         listener.close();
@@ -245,9 +245,9 @@ public class DnsTunListenerTest {
             listener = new DnsTunListener(
                 100,  // Dummy fd
                 1500,
-                (request) -> {
-                    // Process request through DnsProxy
-                    return dnsProxy.handleMessage(request, null);
+                (request, replyHandler) -> {
+                    // Process request through DnsProxy asynchronously
+                    dnsProxy.handleMessageAsync(request, null, replyHandler::onReply);
                 }
             );
             
@@ -274,7 +274,7 @@ public class DnsTunListenerTest {
             listener = new DnsTunListener(
                 100,  // Dummy fd
                 0,  // Use default MTU
-                (request) -> null
+                (request, replyHandler) -> replyHandler.onReply(null)
             );
             
             assertNotNull("Listener should be initialized with default MTU", listener);
