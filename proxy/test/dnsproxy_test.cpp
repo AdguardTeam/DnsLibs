@@ -8,6 +8,7 @@
 #include "common/file.h"
 #include "common/logger.h"
 #include "common/utils.h"
+#include "common/socket_address.h"
 #include "dns/common/net_consts.h"
 #include "dns/proxy/dnsproxy.h"
 #include "dns/upstream/upstream_utils.h"
@@ -184,14 +185,54 @@ TEST_F(DnsProxyTest, TestDns64) {
 }
 
 TEST_F(DnsProxyTest, TestHttpsRR) {
+    // Initialize proxy without filter to get real HTTPS records
     DnsProxySettings settings = make_dnsproxy_settings();
-    settings.filter_params = {{{1, "104.16.94.52\n"
-                                   "2606:4700::6810:85e5\n", true}}};
-
     auto [ret, err] = m_proxy->init(settings, {});
     ASSERT_TRUE(ret) << err->str();
 
+    // Query adguard.com and extract ipv4hint
     ldns_pkt_ptr response;
+    ASSERT_NO_FATAL_FAILURE(
+            perform_request(*m_proxy, create_request("adguard.com", LDNS_RR_TYPE_HTTPS, LDNS_RD), response));
+    ASSERT_EQ(ldns_pkt_get_rcode(response.get()), LDNS_RCODE_NOERROR);
+    ASSERT_GT(ldns_pkt_ancount(response.get()), 0);
+    
+    auto adguard_hints = SvcbHttpsHelpers::get_ip_hints_from_response(response.get());
+    ASSERT_FALSE(adguard_hints.empty()) << "No IP hints found in adguard.com HTTPS record";
+
+    // Query cloudflare.com and extract ipv6hint
+    ASSERT_NO_FATAL_FAILURE(
+            perform_request(*m_proxy, create_request("cloudflare.com", LDNS_RR_TYPE_HTTPS, LDNS_RD), response));
+    ASSERT_EQ(ldns_pkt_get_rcode(response.get()), LDNS_RCODE_NOERROR);
+    ASSERT_GT(ldns_pkt_ancount(response.get()), 0);
+    
+    auto cloudflare_hints = SvcbHttpsHelpers::get_ip_hints_from_response(response.get());
+    ASSERT_FALSE(cloudflare_hints.empty()) << "No IP hints found in cloudflare.com HTTPS record";
+
+    // Build filter with extracted IP addresses
+    std::string filter_rules_ipv4;
+    std::string filter_rules_ipv6;
+    // Add IPv4 hints from adguard.com
+    for (const auto &hint : adguard_hints) {
+        if (SocketAddress(hint).is_ipv4()) {
+            filter_rules_ipv4 = AG_FMT("{}{}\n", filter_rules_ipv4, hint);
+        }
+    }
+    ASSERT_FALSE(filter_rules_ipv4.empty()) << "No IPv4 hints found in adguard.com HTTPS record";
+    // Add IPv6 hints from cloudflare.com
+    for (const auto &hint : cloudflare_hints) {
+        if (SocketAddress(hint).is_ipv6()) {
+            filter_rules_ipv6 = AG_FMT("{}{}\n", filter_rules_ipv6, hint);
+        }
+    }
+    ASSERT_FALSE(filter_rules_ipv6.empty()) << "No IPv6 hints found in cloudflare.com HTTPS record";
+
+    // Reapply proxy settings with the filter
+    settings.filter_params = {{{1, AG_FMT("{}{}", filter_rules_ipv4, filter_rules_ipv6), true}}};
+    auto [ret2, err2] = m_proxy->reapply_settings(settings, DnsProxy::RO_FILTERS);
+    ASSERT_TRUE(ret2) << err2->str();
+
+    //  Verify that requests are now blocked
     ASSERT_NO_FATAL_FAILURE(
             perform_request(*m_proxy, create_request("adguard.com", LDNS_RR_TYPE_HTTPS, LDNS_RD), response));
     ASSERT_EQ(ldns_pkt_get_rcode(response.get()), LDNS_RCODE_REFUSED);
