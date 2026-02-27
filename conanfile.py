@@ -49,6 +49,7 @@ class DnsLibsConan(ConanFile):
         self.requires("ada/2.7.4", transitive_headers=True)
         if self.settings.os == "Windows":
             self.requires("detours/2021-04-14@adguard/oss", transitive_headers=True)
+            self.requires("nlohmann_json/3.12.0")
 
     def build_requirements(self):
         self.test_requires("gtest/1.14.0")

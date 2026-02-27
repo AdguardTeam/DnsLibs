@@ -4,6 +4,10 @@
 #include <csignal>
 #include <thread>
 
+#ifdef _WIN32
+#include <cstdio>
+#endif
+
 #include "dns/proxy/dnsproxy.h"
 
 using namespace ag::dns;
@@ -23,7 +27,11 @@ int main() {
     using namespace std::chrono_literals;
 
     constexpr auto address = "::";
+#ifdef _WIN32
+    constexpr auto port = 53;
+#else
     constexpr auto port = 5321;
+#endif
     constexpr auto persistent = true;
     constexpr auto idle_timeout = 60000ms;
 
@@ -56,8 +64,16 @@ int main() {
     settings.optimistic_cache = false;
     settings.enable_http3 = false;
 
+    DnsProxyEvents events{};
+
+#ifdef _WIN32
+    events.on_certificate_verification = [](CertificateVerificationEvent) {
+        return std::nullopt;
+    };
+#endif
+
     DnsProxy proxy;
-    auto [ret, err] = proxy.init(settings, {});
+    auto [ret, err] = proxy.init(std::move(settings), std::move(events));
     if (!ret) {
         return 1;
     }
@@ -67,9 +83,26 @@ int main() {
     std::signal(SIGPIPE, SIG_IGN);
 #endif
 
+    fprintf(stderr, "My PID: %d\n", getpid());
+
+#ifdef _WIN32
+    // Put the helper into the working directory to automatically set and restrict DNS to loopback.
+    // Note: `-Verb RunAs` prevents environment inheritance.
+    auto cmd = AG_FMT(
+            R"(powershell -Command "Start-Process adguard-win-dns-helper.exe -ArgumentList \"{} 127.0.0.1 ::1\" -Verb RunAs")",
+            getpid());
+    FILE *helper = _popen(cmd.c_str(), "w");
+#endif
+
     while (keep_running) {
         std::this_thread::sleep_for(std::chrono::milliseconds(100));
     }
+
+#ifdef _WIN32
+    if (helper) {
+        _pclose(helper);
+    }
+#endif
 
     proxy.deinit();
     return 0;

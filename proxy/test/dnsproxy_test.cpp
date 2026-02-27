@@ -196,7 +196,7 @@ TEST_F(DnsProxyTest, TestHttpsRR) {
             perform_request(*m_proxy, create_request("adguard.com", LDNS_RR_TYPE_HTTPS, LDNS_RD), response));
     ASSERT_EQ(ldns_pkt_get_rcode(response.get()), LDNS_RCODE_NOERROR);
     ASSERT_GT(ldns_pkt_ancount(response.get()), 0);
-    
+
     auto adguard_hints = SvcbHttpsHelpers::get_ip_hints_from_response(response.get());
     ASSERT_FALSE(adguard_hints.empty()) << "No IP hints found in adguard.com HTTPS record";
 
@@ -205,7 +205,7 @@ TEST_F(DnsProxyTest, TestHttpsRR) {
             perform_request(*m_proxy, create_request("cloudflare.com", LDNS_RR_TYPE_HTTPS, LDNS_RD), response));
     ASSERT_EQ(ldns_pkt_get_rcode(response.get()), LDNS_RCODE_NOERROR);
     ASSERT_GT(ldns_pkt_ancount(response.get()), 0);
-    
+
     auto cloudflare_hints = SvcbHttpsHelpers::get_ip_hints_from_response(response.get());
     ASSERT_FALSE(cloudflare_hints.empty()) << "No IP hints found in cloudflare.com HTTPS record";
 

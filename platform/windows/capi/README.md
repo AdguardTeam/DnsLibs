@@ -24,3 +24,9 @@ To run tests:
 
 * Build the DLL and run the following commands in the same command prompt. 
 * `ninja tests && ctest`
+
+# Windows helper sample
+`src/win_dns_helper.cpp` contains an example of an elevated helper program that forces Windows to use the specified
+plain DNS server addresses (loopback addresses may be specified) and prevents DNS queries to any other plain DNS
+servers, and can also restore the original DNS settings. It can be used in scripts or arranged as a service to
+automatically route DNS traffic to the DNS proxy.

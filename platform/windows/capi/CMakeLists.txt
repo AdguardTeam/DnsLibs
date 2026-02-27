@@ -129,6 +129,15 @@ if (TARGET ${LIBRARY_NAME})
     endif ()
 endif ()
 
+# Evelated DNS helper example.
+add_executable(adguard-win-dns-helper src/win_dns_helper.cpp)
+# Exceptions required to catch nlohmann::json parse errors.
+set_source_files_properties(src/win_dns_helper.cpp PROPERTIES COMPILE_OPTIONS "/EHsc /D_HAS_EXCEPTIONS=1")
+
+find_package(native_libs_common REQUIRED)
+find_package(nlohmann_json REQUIRED)
+target_link_libraries(adguard-win-dns-helper native_libs_common::native_libs_common nlohmann_json::nlohmann_json)
+
 enable_testing()
 
 if (NOT TARGET tests)

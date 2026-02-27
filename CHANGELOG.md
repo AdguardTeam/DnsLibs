@@ -1,5 +1,8 @@
 # Changelog
 
+* [Feature] Added an example of a helper program that allows to automatically route DNS traffic
+            to the DNS proxy on Windows. See `platform/windows/capi/README.md` for details.
+  
 ## 2.8.19
 
 * [Feature] Refactored `reapply_settings` to use `ReapplyOptions` enum.
