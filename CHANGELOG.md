@@ -1,5 +1,7 @@
 # Changelog
 
+## 2.8.32
+
 * [Feature] Added an example of a helper program that allows to automatically route DNS traffic
             to the DNS proxy on Windows. See `platform/windows/capi/README.md` for details.
   
