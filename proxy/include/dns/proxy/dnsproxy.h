@@ -111,6 +111,7 @@ private:
     struct Impl;
     std::unique_ptr<Impl> m_pimpl;
 
+    void propagate_settings_to_upstreams();
     DnsProxyInitResult reapply_settings_internal(DnsProxySettings settings, ReapplyOptions reapply_options);
     coro::Task<Uint8Vector> handle_message_internal(Uint8View message, const DnsMessageInfo *info);
     bool match_fallback_domains_internal(Uint8View message) const;

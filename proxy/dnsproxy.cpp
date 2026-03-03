@@ -143,22 +143,7 @@ DnsProxy::DnsProxyInitResult DnsProxy::init(DnsProxySettings settings, DnsProxyE
     proxy->settings = std::move(settings);
     proxy->events = std::move(events);
 
-    for (UpstreamOptions &opts : proxy->settings.fallbacks) {
-        opts.ignore_proxy_settings = true;
-    }
-
-    // Propagate post-quantum setting to all upstreams
-    for (UpstreamOptions &opts : proxy->settings.upstreams) {
-        opts.enable_post_quantum_cryptography = proxy->settings.enable_post_quantum_cryptography;
-    }
-    for (UpstreamOptions &opts : proxy->settings.fallbacks) {
-        opts.enable_post_quantum_cryptography = proxy->settings.enable_post_quantum_cryptography;
-    }
-    if (proxy->settings.dns64.has_value()) {
-        for (UpstreamOptions &opts : proxy->settings.dns64->upstreams) {
-            opts.enable_post_quantum_cryptography = proxy->settings.enable_post_quantum_cryptography;
-        }
-    }
+    propagate_settings_to_upstreams();
 
     proxy->shutdown_guard = std::make_shared<bool>(true);
     proxy->loop = EventLoop::create();
@@ -270,6 +255,7 @@ DnsProxy::DnsProxyInitResult DnsProxy::reapply_settings_internal(
         if (!(reapply_options & RO_FILTERS)) {
             proxy->settings.filter_params = std::move(saved_filter_params);
         }
+        propagate_settings_to_upstreams();
     } else if (reapply_options & RO_FILTERS) {
         // Update only filter_params
         proxy->settings.filter_params = std::move(settings.filter_params);
@@ -378,6 +364,26 @@ coro::Task<Uint8Vector> DnsProxy::handle_message(Uint8View message, const DnsMes
 
 Uint8Vector DnsProxy::handle_message_sync(Uint8View message, const DnsMessageInfo *info) {
     return coro::to_future(handle_message(message, info)).get();
+}
+
+void DnsProxy::propagate_settings_to_upstreams() {
+    std::unique_ptr<Impl> &proxy = m_pimpl;
+
+    for (UpstreamOptions &opts : proxy->settings.fallbacks) {
+        opts.ignore_proxy_settings = true;
+    }
+
+    for (UpstreamOptions &opts : proxy->settings.upstreams) {
+        opts.enable_post_quantum_cryptography = proxy->settings.enable_post_quantum_cryptography;
+    }
+    for (UpstreamOptions &opts : proxy->settings.fallbacks) {
+        opts.enable_post_quantum_cryptography = proxy->settings.enable_post_quantum_cryptography;
+    }
+    if (proxy->settings.dns64.has_value()) {
+        for (UpstreamOptions &opts : proxy->settings.dns64->upstreams) {
+            opts.enable_post_quantum_cryptography = proxy->settings.enable_post_quantum_cryptography;
+        }
+    }
 }
 
 const char *DnsProxy::version() {
