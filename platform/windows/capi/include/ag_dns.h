@@ -727,6 +727,12 @@ typedef void (*ag_handle_message_async_cb)(const ag_buffer *result);
 typedef void ag_dnsproxy;
 
 /**
+ * @ingroup defines
+ * An opaque data type representing a WFP firewall.
+ */
+typedef void ag_wfpfirewall;
+
+/**
  * @defgroup api API functions
  * This collection of functions enables interaction with a proxy server and related objects,
  * including logging capabilities and more.
@@ -968,6 +974,65 @@ AG_EXPORT void ag_dns_filtering_log_action_free(ag_dns_filtering_log_action *act
  */
 AG_EXPORT char *ag_dns_generate_rule_with_options(
         const ag_dns_rule_template *tmplt, const ag_dns_request_processed_event *event, uint32_t options);
+
+/**
+ * @ingroup api
+ * Return the string representation of the GUID of the "preferred adapter": the network interface whose DNS
+ * settings Windows considers first when deciding where to send a DNS query.
+ * @return A NULL-terminated string which has to be freed with `ag_str_free()` on success, NULL on error.
+ */
+AG_EXPORT char *ag_dns_get_preferred_adapter_guid();
+
+/**
+ * @ingroup api
+ * Modify the DNS settings for a network interface.
+ *
+ * Equivalent to specifying the preferred/alternative DNS server in IPv4/IPv6 properties in the interface
+ * properties GUI. An empty string is equivalent to selecting "Obtain DNS server address automatically".
+ *
+ * @param dns_list NULL-terminated comma-separated list of nameserver addresses.
+ * @param if_guid NULL-terminated interface GUID string. See the `ConvertInterface<X>To<Y>` functions in `netioapi.h`.
+ * @param ipv6 `true` to modify the IPv6 properties, `false` for IPv4.
+ * @return `0` on success or a non-zero error code defined in Winerror.h. `FormatMessage` with the
+ *         `FORMAT_MESSAGE_FROM_SYSTEM` flag can be used to get a generic description of the error.
+ */
+AG_EXPORT uint32_t ag_dns_set_if_nameserver(const char *dns_list, const char *if_guid, bool ipv6);
+
+/**
+ * @ingroup api
+ * Get the current value of the NameServer property of an interface. Return NULL on any error,
+ * including if the property does not exist or isn't a null-terminated string.
+ *
+ * @param if_guid NULL-terminated interface GUID string. See the `ConvertInterface<X>To<Y>` functions in `netioapi.h`.
+ * @param ipv6 `true` to get the IPv6 property, `false` for IPv4.
+ * @return A NULL-terminated string which has to be freed with `ag_str_free()` on success, NULL on error.
+ */
+AG_EXPORT char *ag_dns_get_if_nameserver(const char *if_guid, bool ipv6);
+
+/**
+ * @ingroup api
+ * Create a new WFP firewall. Firewall restrictions will remain active until `ag_dns_wfpfirewall_deinit()` is called
+ * on the returned pointer.
+ *
+ * @param name A NULL-terminated wide character string which shall be included in WFP entities names.
+ * @param exclude_pid ID of the process to exclude from all restrictions. If `0`, exclude the current process.
+ */
+AG_EXPORT ag_wfpfirewall *ag_dns_wfpfirewall_init(const wchar_t *name, uint32_t exclude_pid);
+
+/**
+ * Block DNS traffic to/from all addresses except `allowed_v4` and `allowed_v6`.
+ * @param fw A pointer returned by `ag_dns_wfpfirewall_init()`.
+ * @param allowed_v4 NULL-terminated comma-separated list of IPv4 prefixes in CIDR notation.
+ * @param allowed_v6 NULL-terminated comma-separated list of IPv6 prefixes in CIDR notation.
+ * @return NULL on success, a NULL-terminated error description which has to be freed with `ag_str_free()` on error.
+ */
+AG_EXPORT char *ag_dns_wfpfirewall_restrict_dns_to(ag_wfpfirewall *fw, const char *allowed_v4, const char *allowed_v6);
+
+/**
+ * Revert all restrictions and destroy the firewall.
+ * @param fw A pointer returned by `ag_dns_wfpfirewall_init()`.
+ */
+AG_EXPORT void ag_dns_wfpfirewall_deinit(ag_wfpfirewall *fw);
 
 #ifdef __cplusplus
 } // extern "C"

@@ -22,7 +22,7 @@ namespace Adguard.Dns
 		/// <summary>
 		/// The current API version hash with which the ProxyServer was tested
 		/// </summary>
-		private const string API_VERSION_HASH = "376feab685657bb8346c578412aace21dfc68b4612c010e96409a3c34de8d6a1";
+		private const string API_VERSION_HASH = "8da51c410cc869f68277d20c956e0ed8da740586a72f8f399fdf0dbaa4b3d906";
 
         #endregion
 
@@ -442,6 +442,85 @@ namespace Adguard.Dns
 			string template,
 			IntPtr pEvent,
 			ag_rule_generation_options options);
+		
+		#endregion
+
+		#region DNS SDK sample app
+
+		/// <summary>
+		/// Return the string representation of the GUID of the "preferred adapter":
+		/// the network interface whose DNS settings Windows considers first
+		/// when deciding where to send a DNS query.
+		/// </summary>
+		/// <returns>A pointer to a null-terminated string which has to be freed
+		/// with <see cref="ag_str_free"/> on success, <see cref="IntPtr.Zero"/> on error</returns>
+		[DllImport(DnsLibName, CallingConvention = CallingConvention.Cdecl)]
+		internal static extern IntPtr ag_dns_get_preferred_adapter_guid();
+
+		/// <summary>
+		/// Modify the DNS settings for a network interface.
+		/// Equivalent to specifying the preferred/alternative DNS server in IPv4/IPv6 properties
+		/// in the interface properties GUI.
+		/// An empty string is equivalent to selecting "Obtain DNS server address automatically".
+		/// </summary>
+		/// <param name="pDnsList">Pointer to a null-terminated comma-separated list of nameserver addresses</param>
+		/// <param name="pIfGuid">Pointer to a null-terminated interface GUID string</param>
+		/// <param name="ipv6"><c>true</c> to modify the IPv6 properties, <c>false</c> for IPv4</param>
+		/// <returns><c>0</c> on success or a non-zero error code defined in Winerror.h</returns>
+		[DllImport(DnsLibName, CallingConvention = CallingConvention.Cdecl)]
+		internal static extern uint ag_dns_set_if_nameserver(
+			IntPtr pDnsList,
+			IntPtr pIfGuid,
+			[MarshalAs(UnmanagedType.I1)] bool ipv6);
+
+		/// <summary>
+		/// Get the current value of the NameServer property of an interface.
+		/// Returns <see cref="IntPtr.Zero"/> on any error,
+		/// including if the property does not exist or isn't a null-terminated string.
+		/// </summary>
+		/// <param name="pIfGuid">Pointer to a null-terminated interface GUID string</param>
+		/// <param name="ipv6"><c>true</c> to get the IPv6 property, <c>false</c> for IPv4</param>
+		/// <returns>A pointer to a null-terminated string which has to be freed
+		/// with <see cref="ag_str_free"/> on success, <see cref="IntPtr.Zero"/> on error</returns>
+		[DllImport(DnsLibName, CallingConvention = CallingConvention.Cdecl)]
+		internal static extern IntPtr ag_dns_get_if_nameserver(
+			IntPtr pIfGuid,
+			[MarshalAs(UnmanagedType.I1)] bool ipv6);
+
+		/// <summary>
+		/// Create a new WFP firewall.
+		/// Firewall restrictions will remain active until <see cref="ag_dns_wfpfirewall_deinit"/> is called
+		/// on the returned pointer.
+		/// </summary>
+		/// <param name="pName">Pointer to a null-terminated wide character string
+		/// which shall be included in WFP entities names</param>
+		/// <param name="excludePid">ID of the process to exclude from all restrictions.
+		/// If <c>0</c>, exclude the current process</param>
+		/// <returns>Pointer to the WFP firewall instance</returns>
+		[DllImport(DnsLibName, CallingConvention = CallingConvention.Cdecl)]
+		internal static extern IntPtr ag_dns_wfpfirewall_init(IntPtr pName, uint excludePid);
+
+		/// <summary>
+		/// Block DNS traffic to/from all addresses except <paramref name="pAllowedV4"/>
+		/// and <paramref name="pAllowedV6"/>.
+		/// </summary>
+		/// <param name="pFw">Pointer returned by <see cref="ag_dns_wfpfirewall_init"/></param>
+		/// <param name="pAllowedV4">Pointer to a null-terminated comma-separated list
+		/// of IPv4 prefixes in CIDR notation</param>
+		/// <param name="pAllowedV6">Pointer to a null-terminated comma-separated list
+		/// of IPv6 prefixes in CIDR notation</param>
+		/// <returns><see cref="IntPtr.Zero"/> on success, a pointer to a null-terminated error description
+		/// which has to be freed with <see cref="ag_str_free"/> on error</returns>
+		[DllImport(DnsLibName, CallingConvention = CallingConvention.Cdecl)]
+		internal static extern IntPtr ag_dns_wfpfirewall_restrict_dns_to(IntPtr pFw, IntPtr pAllowedV4, IntPtr pAllowedV6);
+
+		/// <summary>
+		/// Revert all restrictions and destroy the firewall.
+		/// </summary>
+		/// <param name="pFw">Pointer returned by <see cref="ag_dns_wfpfirewall_init"/></param>
+		[DllImport(DnsLibName, CallingConvention = CallingConvention.Cdecl)]
+		internal static extern void ag_dns_wfpfirewall_deinit(IntPtr pFw);
+		
 
         #endregion
 

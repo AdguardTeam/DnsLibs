@@ -2,6 +2,8 @@
 
 #include <cstring>
 
+#include "common/net_utils.h"
+#include "common/wfp_firewall.h"
 #include "dns/dnsfilter/dnsfilter.h"
 #include "dns/proxy/dnsproxy.h"
 #include "dns/upstream/upstream_utils.h"
@@ -848,4 +850,53 @@ char *ag_dns_generate_rule_with_options(
     auto event = marshal_processed_event(c_event);
     DnsFilter::RuleTemplate rule_template((const char *) tmplt);
     return strdup(DnsFilter::generate_rule(rule_template, event, options).c_str());
+}
+
+char *ag_dns_get_preferred_adapter_guid() {
+    auto guid = utils::win_get_preferred_adapter_guid();
+    return strdup(guid.c_str());
+}
+
+uint32_t ag_dns_set_if_nameserver(const char *dns_list, const char *if_guid, bool ipv6) {
+    return utils::win_set_if_nameserver(dns_list, if_guid, ipv6);
+}
+
+char *ag_dns_get_if_nameserver(const char *if_guid, bool ipv6) {
+    auto nameserver = utils::win_get_if_nameserver(if_guid, ipv6);
+    return nameserver.has_value() ? strdup(nameserver->c_str()) : nullptr;
+}
+
+ag_wfpfirewall *ag_dns_wfpfirewall_init(const wchar_t *name, uint32_t exclude_pid) {
+    return new WfpFirewall(name, exclude_pid);
+}
+
+void ag_dns_wfpfirewall_deinit(ag_wfpfirewall *fw) {
+    delete (WfpFirewall *) fw;
+}
+
+char *ag_dns_wfpfirewall_restrict_dns_to(ag_wfpfirewall *fw, const char *allowed_v4, const char *allowed_v6) {
+    auto *firewall = (WfpFirewall *) fw;
+
+    std::vector<std::string_view> split = utils::split_by(allowed_v4, ',');
+    std::vector<CidrRange> v4_ranges;
+    v4_ranges.reserve(split.size());
+    for (std::string_view v4 : split) {
+        CidrRange range{v4};
+        if (range.valid()) {
+            v4_ranges.emplace_back(std::move(range));
+        }
+    }
+
+    split = utils::split_by(allowed_v6, ',');
+    std::vector<CidrRange> v6_ranges;
+    v6_ranges.reserve(split.size());
+    for (std::string_view v6 : split) {
+        CidrRange range{v6};
+        if (range.valid()) {
+            v6_ranges.emplace_back(std::move(range));
+        }
+    }
+
+    auto error = firewall->restrict_dns_to(v4_ranges, v6_ranges);
+    return error ? strdup(error->str().c_str()) : nullptr;
 }

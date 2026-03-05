@@ -37,20 +37,31 @@ namespace Adguard.Dns.Api.FilteringLogAction
         /// <returns>The filtering log action if succeded, <c>null</c> otherwise.</returns>
         public FilteringLogAction GetFilteringLogAction()
         {
-            IntPtr pAction = AGDnsApi.ag_dns_filtering_log_action_from_event(m_PEventArgs);
-            if (pAction == IntPtr.Zero)
+            IntPtr pAction = IntPtr.Zero;
+            try
             {
-                Logger.Verbose(
-                    "Cannot obtain filtering log actions for request. Domain - {0})",
-                    m_EventArgs.Domain);
+                pAction = AGDnsApi.ag_dns_filtering_log_action_from_event(m_PEventArgs);
+                if (pAction == IntPtr.Zero)
+                {
+                    Logger.Verbose(
+                        "Cannot obtain filtering log actions for request. Domain - {0})",
+                        m_EventArgs.Domain);
 
-                return null;
+                    return null;
+                }
+
+                AGDnsApi.ag_dns_filtering_log_action actionC =
+                    MarshalUtils.PtrToStructure<AGDnsApi.ag_dns_filtering_log_action>(pAction);
+                FilteringLogAction action = DnsApiConverter.FromNativeObject(actionC);
+                return action;
             }
-
-            AGDnsApi.ag_dns_filtering_log_action actionC =
-                MarshalUtils.PtrToStructure<AGDnsApi.ag_dns_filtering_log_action>(pAction);
-            FilteringLogAction action = DnsApiConverter.FromNativeObject(actionC);
-            return action;
+            finally
+            {
+                if (pAction != IntPtr.Zero)
+                {
+                    AGDnsApi.ag_dns_filtering_log_action_free(pAction);
+                }
+            }
         }
 
         /// <summary>

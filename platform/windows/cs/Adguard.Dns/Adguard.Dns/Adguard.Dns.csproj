@@ -88,6 +88,7 @@
     <Compile Include="Api\FilteringLogAction\FilteringLogAction.cs" />
     <Compile Include="Api\FilteringLogAction\FilteringLogRuleGenerator.cs" />
     <Compile Include="Api\FilteringLogAction\IFilteringLogRuleGenerator.cs" />
+    <Compile Include="Api\SystemDnsModifier\SystemDnsModifierHelper.cs" />
     <Compile Include="DnsProxyServer\IDnsProxyServer.cs" />
     <Compile Include="DnsProxyServer\DnsProxyServer.cs" />
     <Compile Include="Exceptions\DnsExceptionHandler.cs" />
