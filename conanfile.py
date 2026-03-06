@@ -141,3 +141,4 @@ class DnsLibsConan(ConanFile):
         ]
         if self.settings.os == "Windows":
             self.cpp_info.requires.append("detours::detours")
+            self.cpp_info.requires.append("nlohmann_json::nlohmann_json")
