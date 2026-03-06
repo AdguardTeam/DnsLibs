@@ -32,7 +32,7 @@ typedef NS_ENUM(NSInteger, AGDnsAppProxyFlowMode) {
  *     func startDnsProxy() throws {
  *         // ... configure AGDnsProxy ...
  *         dnsProxy = AGDnsProxy(config: config, handler: events, error: &error)
- *         dnsFlowManager = AGDnsAppProxyFlowManager(dnsProxy: dnsProxy)
+ *         dnsFlowManager = AGDnsAppProxyFlowManager(dnsProxy: dnsProxy, maxLocalFlowCount: 100)
  *     }
  *
  *     override func handleNewFlow(_ flow: NEAppProxyFlow) -> Bool {
@@ -54,8 +54,11 @@ typedef NS_ENUM(NSInteger, AGDnsAppProxyFlowMode) {
 /**
  * @brief Create a flow manager.
  * @param dnsProxy The DNS proxy instance used when `bypass` is disabled.
+ * @param maxLocalFlowCount Maximum number of simultaneously active local flows.
+ *        Pass 0 to disable the limit.
  */
-- (instancetype)initWithDnsProxy:(AGDnsProxy *)dnsProxy NS_DESIGNATED_INITIALIZER;
+- (instancetype)initWithDnsProxy:(AGDnsProxy *)dnsProxy
+               maxLocalFlowCount:(NSInteger)maxLocalFlowCount NS_DESIGNATED_INITIALIZER;
 
 /**
  * @brief Handle a newly accepted app proxy flow.
