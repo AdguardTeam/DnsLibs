@@ -122,7 +122,7 @@ class DnsLibsConan(ConanFile):
             "dnslibs_common",
         ]
         if self.options.tcpip:
-            self.cpp_info.libs += "dnslibs_tcpip"
+            self.cpp_info.libs.append("dnslibs_tcpip")
         self.cpp_info.libdirs = ['lib']
         self.cpp_info.requires = [
             "cxxopts::cxxopts",
