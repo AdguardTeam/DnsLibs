@@ -6,7 +6,6 @@
 
 #import <Network/Network.h>
 
-#include <atomic>
 #include <errno.h>
 #include <netinet/in.h>
 
@@ -62,58 +61,21 @@ inline bool is_response(ag::Uint8View pkt) {
 
 @end
 
-@interface AGDnsAppProxyFlowManager ()
-- (int)incrementLocalFlowCount;
-- (int)decrementLocalFlowCount;
-- (int)incrementRemoteSocketCount;
-- (int)decrementRemoteSocketCount;
-@end
-
 @implementation AGDnsAppProxyFlowManager {
     AGDnsProxy *_dnsProxy;
     NSMutableSet<id> *_flowHandlers;
-    NSInteger _maxLocalFlowCount;
-    std::atomic<int> _localFlowCount;
-    std::atomic<int> _remoteSocketCount;
 }
 
-- (instancetype)initWithDnsProxy:(AGDnsProxy *)dnsProxy maxLocalFlowCount:(NSInteger)maxLocalFlowCount {
+- (instancetype)initWithDnsProxy:(AGDnsProxy *)dnsProxy {
     self = [super init];
     if (self) {
         _dnsProxy = dnsProxy;
         _flowHandlers = [NSMutableSet set];
-        _maxLocalFlowCount = maxLocalFlowCount;
-        _localFlowCount.store(0);
-        _remoteSocketCount.store(0);
     }
     return self;
 }
 
-- (int)incrementLocalFlowCount {
-    return ++_localFlowCount;
-}
-
-- (int)decrementLocalFlowCount {
-    return --_localFlowCount;
-}
-
-- (int)incrementRemoteSocketCount {
-    return ++_remoteSocketCount;
-}
-
-- (int)decrementRemoteSocketCount {
-    return --_remoteSocketCount;
-}
-
 - (BOOL)handleAppProxyFlow:(NEAppProxyFlow *)flow mode:(AGDnsAppProxyFlowMode)mode {
-    if (_maxLocalFlowCount > 0) {
-        int current = _localFlowCount.load();
-        if (current >= _maxLocalFlowCount) {
-            warnlog(g_logger, "Local flow limit reached ({}/{}), rejecting flow {}",
-                    current, (int) _maxLocalFlowCount, flow.description.UTF8String);
-            return NO;
-        }
-    }
     if ([flow isKindOfClass:NEAppProxyTCPFlow.class]) {
         AGDnsAppProxyTCPFlowHandler *handler =
                 [[AGDnsAppProxyTCPFlowHandler alloc] initWithDnsProxy:_dnsProxy
@@ -121,8 +83,6 @@ inline bool is_response(ag::Uint8View pkt) {
                                                                  flow:(NEAppProxyTCPFlow *) flow
                                                                  mode:mode];
         [_flowHandlers addObject:handler];
-        int count = [self incrementLocalFlowCount];
-        dbglog(g_logger, "Local flow count +1 = {} (TCP flow {})", count, flow.description.UTF8String);
         return YES;
     }
     if ([flow isKindOfClass:NEAppProxyUDPFlow.class]) {
@@ -132,8 +92,6 @@ inline bool is_response(ag::Uint8View pkt) {
                                                                  flow:(NEAppProxyUDPFlow *) flow
                                                                  mode:mode];
         [_flowHandlers addObject:handler];
-        int count = [self incrementLocalFlowCount];
-        dbglog(g_logger, "Local flow count +1 = {} (UDP flow {})", count, flow.description.UTF8String);
         return YES;
     }
     return NO;
@@ -271,8 +229,6 @@ inline bool is_response(ag::Uint8View pkt) {
     _socket.fd = fd;
     _socket.pendingWrite = [NSMutableData data];
     _socket.endpoint = remoteEndpoint;
-    int remoteCount = [_manager incrementRemoteSocketCount];
-    dbglog(g_logger, "Remote socket count +1 = {} (TCP bypass to {})", remoteCount, remoteEndpoint.description.UTF8String);
 
     __weak AGDnsAppProxyTCPFlowHandler *weakSelf = self;
     _socket.readSource = dispatch_source_create(DISPATCH_SOURCE_TYPE_READ, (uintptr_t) fd, 0, _queue);
@@ -467,11 +423,7 @@ inline bool is_response(ag::Uint8View pkt) {
         }
         _socket.fd = -1;
         _socket = nil;
-        int remoteCount = [_manager decrementRemoteSocketCount];
-        dbglog(g_logger, "Remote socket count -1 = {} (TCP bypass closed)", remoteCount);
     }
-    int flowCount = [_manager decrementLocalFlowCount];
-    dbglog(g_logger, "Local flow count -1 = {} (TCP flow {})", flowCount, _flow.description.UTF8String);
     [_flow closeReadWithError:nil];
     [_flow closeWriteWithError:nil];
     dbglog(g_logger, "AGDnsAppProxyTCPFlowHandler stopped for flow {}", _flow.description.UTF8String);
@@ -603,8 +555,6 @@ inline bool is_response(ag::Uint8View pkt) {
 
     _udpSocket = [[AGDnsAppProxySocketEntry alloc] init];
     _udpSocket.fd = fd;
-    int remoteCount = [_manager incrementRemoteSocketCount];
-    dbglog(g_logger, "Remote socket count +1 = {} (UDP bypass)", remoteCount);
 
     __weak AGDnsAppProxyUDPFlowHandler *weakSelf = self;
     _udpSocket.readSource = dispatch_source_create(DISPATCH_SOURCE_TYPE_READ, (uintptr_t) fd, 0, _queue);
@@ -771,11 +721,7 @@ inline bool is_response(ag::Uint8View pkt) {
         }
         _udpSocket.fd = -1;
         _udpSocket = nil;
-        int remoteCount = [_manager decrementRemoteSocketCount];
-        dbglog(g_logger, "Remote socket count -1 = {} (UDP bypass closed)", remoteCount);
     }
-    int flowCount = [_manager decrementLocalFlowCount];
-    dbglog(g_logger, "Local flow count -1 = {} (UDP flow {})", flowCount, _flow.description.UTF8String);
     [_flow closeReadWithError:nil];
     [_flow closeWriteWithError:nil];
     dbglog(g_logger, "AGDnsAppProxyUDPFlowHandler stopped for flow {}", _flow.description.UTF8String);
