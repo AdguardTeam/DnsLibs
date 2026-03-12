@@ -11,23 +11,55 @@ This Objective-C code represents the public interface of the @ref AGDnsProxy cla
 - Create an instance of the @ref AGDnsProxy class using the AGDnsProxy::initWithConfig:handler:error: method.
 The method takes the proxy configuration, event handler, and a reference to an <span style="color: red;">NSError *</span> object to be populated with an error if one occurs.
 
-- There are two possible ways of handling DNS requests:
+- There are several ways of handling DNS requests:
 
-    1) UDP/TCP Listeners
+    1. UDP/TCP Listeners
     Listener configurations are specified in the @ref AGDnsProxyConfig, and the library user should redirect DNS traffic to this @ref AGListenerSettings::port.
 
-    2) Processing UDP packets with AGDnsProxy::handlePacket:completionHandler:
+    2. Processing UDP packets with AGDnsProxy::handlePacket:completionHandler:
     @note this function cannot handle TCP packets.
 
     If there is a packet tunnel, you can take a straightforward approach and redirect UDP packets from it using this function.
     This function takes packet data and a completion handler block, which will be called after
     the packet is processed and a response packet is returned. If no response packet is required, the method will return nil.
 
+    3. Processing UDP and TCP DNS traffic from a TUN interface with @ref AGDnsTunListener.
+
 - Stop the @ref AGDnsProxy by calling the @ref AGDnsProxy::stop() method. This method should be called before the @ref AGDnsProxy instance is destroyed.
 
-@section test Useful functions
+@section tunlistener Using AGDnsTunListener
 
-Check if a string is a valid rule by calling the @ref AGDnsProxy::isValidRule: method. The method takes a string as an argument
+@ref AGDnsTunListener is an Objective-C wrapper around the native TUN listener.
+Use it when you need to process both UDP and TCP DNS traffic coming from a TUN interface.
+
+It supports two modes:
+
+- Autonomous mode: pass a TUN file descriptor and `nil` for `NEPacketTunnelFlow`.
+- Packet tunnel mode: pass `nil` for the TUN file descriptor and provide an @ref NEPacketTunnelFlow.
+
+ The listener extracts DNS messages from incoming packets and calls the user-provided
+ `messageHandler` block with the DNS payload as `NSData *` without transport headers.
+ The handler may reply synchronously or asynchronously using `AGDnsTunListenerReplyHandler`.
+
+ A typical integration is to forward the message to
+ @ref AGDnsProxy::handleMessage:withInfo:withCompletionHandler:.
+
+ @code{.swift}
+ var error: NSError?
+ let listener = AGDnsTunListener(
+     tunFd: nil,
+     orTunnelFlow: self.packetFlow,
+     mtu: 0,
+     messageHandler: { request, replyHandler in
+         proxy.handleMessage(request, withInfo: nil, withCompletionHandler: replyHandler)
+     },
+     error: &error
+ )
+ @endcode
+
+ @section test Useful functions
+
+ Check if a string is a valid rule by calling the @ref AGDnsProxy::isValidRule: method. The method takes a string as an argument
 and returns true if the string is a rule, and false otherwise.
 
 @section stamps Working with DNS stamps
@@ -66,8 +98,33 @@ the message as appropriate (e.g., print to console, write to log file, etc.).
 Get the DNS proxy library version by calling the static @ref AGDnsProxy::libraryVersion method.
 The method returns a string with the version of the library.
 
-@section example Usage example
+ @section example Usage example
 
-[C API example](@ref test_AGDnsProxyStandalone.mm).
+ The example below shows a minimal setup of @ref AGDnsProxy with a custom upstream,
+ followed by processing a DNS message with
+ @ref AGDnsProxy::handleMessage:withInfo:withCompletionHandler:.
 
- */
+ @code{.swift}
+ let upstream = AGDnsUpstream()
+ upstream.address = "https://dns.cloudflare.com/dns-query"
+
+ let config = AGDnsProxyConfig()
+ config.upstreams = [upstream]
+
+ let events = AGDnsProxyEvents()
+ var error: NSError?
+ guard let proxy = AGDnsProxy(config: config, handler: events, error: &error) else {
+     return
+ }
+
+ let request: Data = ...
+ proxy.handleMessage(request, withInfo: nil) { response in
+     if let response {
+         // Send the DNS response back to the caller.
+     }
+ }
+
+ proxy.stop()
+ @endcode
+
+  */
