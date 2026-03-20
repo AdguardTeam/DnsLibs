@@ -99,7 +99,10 @@ class DNSProxyProvider: NEDNSProxyProvider {
         }
         try logWriter?.start()
 
-        dnsFlowManager = AGDnsAppProxyFlowManager(dnsProxy: self.dnsProxy);
+        dnsFlowManager = AGDnsAppProxyFlowManager(
+            dnsProxy: self.dnsProxy,
+            maxLocalFlowCount: 30
+        )
     }
 
 

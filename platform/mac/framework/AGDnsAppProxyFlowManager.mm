@@ -6,8 +6,12 @@
 
 #import <Network/Network.h>
 
+#include <atomic>
 #include <errno.h>
 #include <netinet/in.h>
+#include <queue>
+#include <string>
+#include <utility>
 
 static ag::Logger g_logger("AGDnsAppProxyFlowManager");
 
@@ -61,54 +65,164 @@ inline bool is_response(ag::Uint8View pkt) {
 
 @end
 
+@interface AGDnsAppProxyFlowManager ()
+- (int)decrementLocalFlowCount;
+- (int)incrementRemoteSocketCount;
+- (int)decrementRemoteSocketCount;
+- (BOOL)tryAcquireLocalFlowSlot;
+- (BOOL)startHandlerForFlow:(NEAppProxyFlow *)flow mode:(AGDnsAppProxyFlowMode)mode;
+- (void)drainPendingFlowsOnAdmissionQueue;
+@end
+
+struct PendingFlowEntry {
+    NEAppProxyFlow *__strong flow = nil;
+    AGDnsAppProxyFlowMode mode = AGDnsAppProxyFlowModeRedirect;
+};
+
 @implementation AGDnsAppProxyFlowManager {
     AGDnsProxy *_dnsProxy;
     NSMutableSet<id> *_flowHandlers;
+    NSInteger _maxLocalFlowCount;
+    dispatch_queue_t _admissionQueue;
+    std::queue<PendingFlowEntry> _pendingFlows;
+    BOOL _stopping;
+    std::atomic<int> _localFlowCount;
+    std::atomic<int> _remoteSocketCount;
 }
 
-- (instancetype)initWithDnsProxy:(AGDnsProxy *)dnsProxy {
+- (instancetype)initWithDnsProxy:(AGDnsProxy *)dnsProxy maxLocalFlowCount:(NSInteger)maxLocalFlowCount {
     self = [super init];
     if (self) {
         _dnsProxy = dnsProxy;
         _flowHandlers = [NSMutableSet set];
+        _maxLocalFlowCount = maxLocalFlowCount;
+        _admissionQueue = dispatch_queue_create("com.adguard.dnslibs.appproxy.admission", DISPATCH_QUEUE_SERIAL);
+        _stopping = NO;
+        _localFlowCount.store(0);
+        _remoteSocketCount.store(0);
     }
     return self;
 }
 
-- (BOOL)handleAppProxyFlow:(NEAppProxyFlow *)flow mode:(AGDnsAppProxyFlowMode)mode {
+- (BOOL)startHandlerForFlow:(NEAppProxyFlow *)flow mode:(AGDnsAppProxyFlowMode)mode {
+    id handler = nil;
     if ([flow isKindOfClass:NEAppProxyTCPFlow.class]) {
-        AGDnsAppProxyTCPFlowHandler *handler =
+        handler =
                 [[AGDnsAppProxyTCPFlowHandler alloc] initWithDnsProxy:_dnsProxy
                                                               manager:self
                                                                  flow:(NEAppProxyTCPFlow *) flow
                                                                  mode:mode];
-        [_flowHandlers addObject:handler];
-        return YES;
-    }
-    if ([flow isKindOfClass:NEAppProxyUDPFlow.class]) {
-        AGDnsAppProxyUDPFlowHandler *handler =
+    } else if ([flow isKindOfClass:NEAppProxyUDPFlow.class]) {
+        handler =
                 [[AGDnsAppProxyUDPFlowHandler alloc] initWithDnsProxy:_dnsProxy
                                                               manager:self
                                                                  flow:(NEAppProxyUDPFlow *) flow
                                                                  mode:mode];
-        [_flowHandlers addObject:handler];
+    }
+
+    if (!handler) {
+        (void) [self decrementLocalFlowCount];
+        return NO;
+    }
+
+    [_flowHandlers addObject:handler];
+    dbglog(g_logger, "Accepted flow {}", flow.description.UTF8String);
+    return YES;
+}
+
+- (void)drainPendingFlowsOnAdmissionQueue {
+    while (!_stopping && !_pendingFlows.empty()) {
+        if (![self tryAcquireLocalFlowSlot]) {
+            return;
+        }
+        PendingFlowEntry pending = std::move(_pendingFlows.front());
+        _pendingFlows.pop();
+        if ([self startHandlerForFlow:pending.flow mode:pending.mode]) {
+            dbglog(g_logger, "Dequeued flow {}, pending left = {}",
+                    pending.flow.description.UTF8String, _pendingFlows.size());
+        }
+    }
+}
+
+- (int)decrementLocalFlowCount {
+    int count = --_localFlowCount;
+    dispatch_async(_admissionQueue, ^{
+        if (!self->_stopping) {
+            [self drainPendingFlowsOnAdmissionQueue];
+        }
+    });
+    return count;
+}
+
+- (int)incrementRemoteSocketCount {
+    return ++_remoteSocketCount;
+}
+
+- (int)decrementRemoteSocketCount {
+    return --_remoteSocketCount;
+}
+
+- (BOOL)tryAcquireLocalFlowSlot {
+    if (_maxLocalFlowCount <= 0) {
+        ++_localFlowCount;
         return YES;
     }
-    return NO;
+    int current = _localFlowCount.load(std::memory_order_relaxed);
+    while (true) {
+        if (current >= _maxLocalFlowCount) {
+            return NO;
+        }
+        int desired = current + 1;
+        if (_localFlowCount.compare_exchange_weak(current, desired, std::memory_order_relaxed)) {
+            return YES;
+        }
+    }
+}
+
+- (BOOL)handleAppProxyFlow:(NEAppProxyFlow *)flow mode:(AGDnsAppProxyFlowMode)mode {
+    bool supported = [flow isKindOfClass:NEAppProxyTCPFlow.class] || [flow isKindOfClass:NEAppProxyUDPFlow.class];
+    if (!supported) {
+        return NO;
+    }
+
+    dispatch_async(_admissionQueue, ^{
+        if (self->_stopping) {
+            return;
+        }
+        if ([self tryAcquireLocalFlowSlot] && [self startHandlerForFlow:flow mode:mode]) {
+            return;
+        }
+        PendingFlowEntry pending;
+        pending.flow = flow;
+        pending.mode = mode;
+        self->_pendingFlows.push(std::move(pending));
+        dbglog(g_logger, "Queued flow {}, pending={}",
+                flow.description.UTF8String, self->_pendingFlows.size());
+        [self drainPendingFlowsOnAdmissionQueue];
+    });
+    return YES;
 }
 
 - (void)removeFlowHandler:(id)handler {
     if (handler) {
-        [_flowHandlers removeObject:handler];
+        dispatch_async(_admissionQueue, ^{
+        	[_flowHandlers removeObject:handler];
+    	});
     }
 }
 
 - (void)stop {
-    NSSet<id> *handlers = [_flowHandlers copy];
+    __block NSSet<id> *handlers = nil;
+    dispatch_sync(_admissionQueue, ^{
+        self->_stopping = YES;
+        std::queue<PendingFlowEntry> empty;
+        std::swap(self->_pendingFlows, empty);
+        handlers = [self->_flowHandlers copy];
+        [self->_flowHandlers removeAllObjects];
+    });
     for (id handler in handlers) {
         [handler stop];
     }
-    [_flowHandlers removeAllObjects];
 }
 
 @end
@@ -229,6 +343,8 @@ inline bool is_response(ag::Uint8View pkt) {
     _socket.fd = fd;
     _socket.pendingWrite = [NSMutableData data];
     _socket.endpoint = remoteEndpoint;
+    int remoteCount = [_manager incrementRemoteSocketCount];
+    dbglog(g_logger, "Remote socket count +1 = {} (TCP bypass to {})", remoteCount, remoteEndpoint.description.UTF8String);
 
     __weak AGDnsAppProxyTCPFlowHandler *weakSelf = self;
     _socket.readSource = dispatch_source_create(DISPATCH_SOURCE_TYPE_READ, (uintptr_t) fd, 0, _queue);
@@ -423,7 +539,11 @@ inline bool is_response(ag::Uint8View pkt) {
         }
         _socket.fd = -1;
         _socket = nil;
+        int remoteCount = [_manager decrementRemoteSocketCount];
+        dbglog(g_logger, "Remote socket count -1 = {} (TCP bypass closed)", remoteCount);
     }
+    int flowCount = [_manager decrementLocalFlowCount];
+    dbglog(g_logger, "Local flow count -1 = {} (TCP flow {})", flowCount, _flow.description.UTF8String);
     [_flow closeReadWithError:nil];
     [_flow closeWriteWithError:nil];
     dbglog(g_logger, "AGDnsAppProxyTCPFlowHandler stopped for flow {}", _flow.description.UTF8String);
@@ -555,6 +675,8 @@ inline bool is_response(ag::Uint8View pkt) {
 
     _udpSocket = [[AGDnsAppProxySocketEntry alloc] init];
     _udpSocket.fd = fd;
+    int remoteCount = [_manager incrementRemoteSocketCount];
+    dbglog(g_logger, "Remote socket count +1 = {} (UDP bypass)", remoteCount);
 
     __weak AGDnsAppProxyUDPFlowHandler *weakSelf = self;
     _udpSocket.readSource = dispatch_source_create(DISPATCH_SOURCE_TYPE_READ, (uintptr_t) fd, 0, _queue);
@@ -721,7 +843,11 @@ inline bool is_response(ag::Uint8View pkt) {
         }
         _udpSocket.fd = -1;
         _udpSocket = nil;
+        int remoteCount = [_manager decrementRemoteSocketCount];
+        dbglog(g_logger, "Remote socket count -1 = {} (UDP bypass closed)", remoteCount);
     }
+    int flowCount = [_manager decrementLocalFlowCount];
+    dbglog(g_logger, "Local flow count -1 = {} (UDP flow {})", flowCount, _flow.description.UTF8String);
     [_flow closeReadWithError:nil];
     [_flow closeWriteWithError:nil];
     dbglog(g_logger, "AGDnsAppProxyUDPFlowHandler stopped for flow {}", _flow.description.UTF8String);
