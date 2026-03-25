@@ -101,8 +101,8 @@ public:
                 }
 
                 void cancel() {
-                    stream.reset();
                     complete_with(make_error(SocketError::AE_CONNECTION_REFUSED));
+                    stream.reset();
                 }
 
                 coro::Task<Result<SocketAddress, DnsError>> try_connect(
@@ -176,9 +176,16 @@ public:
                 op.add(attempt.try_connect(dot_upstream.get(), &m_loop, timeout));
             }
 
+            auto cancel_all = [&attempts]() {
+                for (auto &attempt : attempts) {
+                    attempt.cancel();
+                }
+            };
+
             auto weak_self = weak_from_this();
             std::optional<Result<SocketAddress, DnsError>> winner = co_await op;
             if (weak_self.expired()) {
+                cancel_all();
                 co_return;
             }
 
@@ -194,6 +201,7 @@ public:
             }
 
             if (!winner.has_value() || winner->has_error()) {
+                cancel_all();
                 Error<DnsError> final_error = winner.has_value() 
                     ? winner->error() 
                     : make_error(DnsError::AE_SOCKET_ERROR, "All connection attempts failed");
@@ -215,6 +223,7 @@ public:
             }
 
             if (!m_stream) {
+                cancel_all();
                 log_conn(m_log, dbg, this, "Internal error: winner stream not found");
                 this->on_close(make_error(DnsError::AE_SOCKET_ERROR, "Internal error"));
                 co_return;
