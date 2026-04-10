@@ -46,15 +46,20 @@ Error<Bootstrapper::BootstrapperError> Bootstrapper::temporary_disabler_check() 
 void Bootstrapper::temporary_disabler_update(bool) {
 }
 
-coro::Task<void> Bootstrapper::do_resolve() { co_return; }
+coro::Task<void> Bootstrapper::do_resolve() {
+    co_return;
+}
 
-void Bootstrapper::complete_resolve(ResolveResult) {}
+void Bootstrapper::complete_resolve(ResolveResult) {
+}
 
 std::optional<Bootstrapper::ResolveResult> Bootstrapper::try_get_ready_result() {
     return ResolveResult{m_resolved_cache, m_server_name, Millis(0), {}};
 }
 
-void Bootstrapper::request_resolve(std::function<void(ag::dns::Bootstrapper::ResolveResult)> &&handler) {}
+// NOLINTNEXTLINE(cppcoreguidelines-rvalue-reference-param-not-moved)
+void Bootstrapper::request_resolve(std::function<void(ag::dns::Bootstrapper::ResolveResult)> &&handler) {
+}
 
 } // namespace ag::dns
 

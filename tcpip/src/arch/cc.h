@@ -17,7 +17,6 @@ void libuv_lwip_log_debug(const char *message, ...);
         libuv_lwip_log_debug x;                                                                                        \
     } while (0)
 
-
 // Determine endianess
 #if defined(_WIN32) && !defined(__clang__)
 

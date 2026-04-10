@@ -19,17 +19,17 @@ public:
     using DnsProxyInitResult = std::pair<bool, Error<DnsProxyInitError>>;
 
     enum ReapplyOptions : uint8_t {
-        RO_NONE     = 0,      ///< No changes, no-op
+        RO_NONE = 0,          ///< No changes, no-op
         RO_SETTINGS = 1 << 0, ///< Reload all DNS settings except listeners and filter_params
-        RO_FILTERS  = 1 << 1, ///< Reload filter parameters (filter_params)
+        RO_FILTERS = 1 << 1,  ///< Reload filter parameters (filter_params)
     };
 
     friend inline ReapplyOptions operator|(ReapplyOptions l, ReapplyOptions r) {
-        return ReapplyOptions((uint8_t)l | (uint8_t)r);
+        return ReapplyOptions((uint8_t) l | (uint8_t) r);
     }
 
     friend inline ReapplyOptions operator&(ReapplyOptions l, ReapplyOptions r) {
-        return ReapplyOptions((uint8_t)l & (uint8_t)r);
+        return ReapplyOptions((uint8_t) l & (uint8_t) r);
     }
 
     DnsProxy();

@@ -1,6 +1,6 @@
+#include <magic_enum/magic_enum.hpp>
 #include <sodium.h>
 #include <utility>
-#include <magic_enum/magic_enum.hpp>
 
 #include "common/utils.h"
 #include "dns/dnscrypt/dns_crypt_cipher.h"
@@ -50,8 +50,9 @@ XSalsa20Poly1305::OpenResult XSalsa20Poly1305::open(
         Uint8View ciphertext, const nonce_array &nonce, const KeyArray &key) const {
 
     Uint8Vector decrypted(ciphertext.size() - crypto_secretbox_MACBYTES);
-    if (0 == crypto_secretbox_open_easy(
-            decrypted.data(), ciphertext.data(), ciphertext.size(), nonce.data(), key.data())) {
+    if (0
+            == crypto_secretbox_open_easy(
+                    decrypted.data(), ciphertext.data(), ciphertext.size(), nonce.data(), key.data())) {
         return decrypted;
     }
     return make_error(CipherError::AE_AEAD_OPEN_ERROR, "x_salsa_20_poly_1305 open");
@@ -89,8 +90,9 @@ XChacha20Poly1305::SealResult XChacha20Poly1305::seal(
         Uint8View message, const nonce_array &nonce, const KeyArray &key) const {
 
     Uint8Vector ciphertext(message.size() + crypto_secretbox_xchacha20poly1305_MACBYTES);
-    if (0 == crypto_secretbox_xchacha20poly1305_easy(
-                ciphertext.data(), message.data(), message.size(), nonce.data(), key.data())) {
+    if (0
+            == crypto_secretbox_xchacha20poly1305_easy(
+                    ciphertext.data(), message.data(), message.size(), nonce.data(), key.data())) {
         return ciphertext;
     }
     return make_error(CipherError::AE_AEAD_SEAL_ERROR, "x_chacha_20_poly_1305 seal");
@@ -100,8 +102,9 @@ XChacha20Poly1305::OpenResult XChacha20Poly1305::open(
         Uint8View ciphertext, const nonce_array &nonce, const KeyArray &key) const {
 
     Uint8Vector decrypted(ciphertext.size() - crypto_box_curve25519xchacha20poly1305_MACBYTES);
-    if (0 == crypto_secretbox_xchacha20poly1305_open_easy(
-                decrypted.data(), ciphertext.data(), ciphertext.size(), nonce.data(), key.data())) {
+    if (0
+            == crypto_secretbox_xchacha20poly1305_open_easy(
+                    decrypted.data(), ciphertext.data(), ciphertext.size(), nonce.data(), key.data())) {
         return decrypted;
     }
     return make_error(CipherError::AE_AEAD_OPEN_ERROR, "x_chacha_20_poly_1305 open");
@@ -123,4 +126,4 @@ CreateCipherResult create_cipher(CryptoConstruction value) {
     }
 }
 
-} // namespace ag::dnscrypt
+} // namespace ag::dns::dnscrypt

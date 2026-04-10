@@ -1,12 +1,10 @@
 #pragma once
 
-
 #include <memory>
 #include <optional>
 
 #include "common/defs.h"
 #include "outbound_proxy.h"
-
 
 namespace ag::dns {
 
@@ -33,10 +31,9 @@ private:
     [[nodiscard]] bool set_timeout(uint32_t conn_id, Micros timeout) override;
     [[nodiscard]] Error<SocketError> set_callbacks_impl(uint32_t conn_id, Callbacks cbx) override;
     void close_connection_impl(uint32_t conn_id) override;
-    [[nodiscard]] Error<SocketError> connect_to_proxy(uint32_t conn_id,
-                                                                const ConnectParameters &parameters) override;
-    [[nodiscard]] Error<SocketError> connect_through_proxy(uint32_t conn_id,
-                                                                     const ConnectParameters &parameters) override;
+    [[nodiscard]] Error<SocketError> connect_to_proxy(uint32_t conn_id, const ConnectParameters &parameters) override;
+    [[nodiscard]] Error<SocketError> connect_through_proxy(
+            uint32_t conn_id, const ConnectParameters &parameters) override;
 
     static void on_connected(void *arg);
     static void on_read(void *arg, Uint8View data);
@@ -62,4 +59,4 @@ private:
     void on_socks5_connect_response(Connection *conn, Uint8View data);
 };
 
-}
+} // namespace ag::dns

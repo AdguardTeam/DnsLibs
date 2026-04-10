@@ -1,11 +1,12 @@
 #pragma once
 
+#include <list>
 #include <openssl/ssl.h>
+#include <string>
+#include <unordered_map>
+
 #include "common/defs.h"
 #include "common/logger.h"
-#include <unordered_map>
-#include <list>
-#include <string>
 
 namespace ag::dns {
 

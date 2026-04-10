@@ -121,11 +121,9 @@ static void log_packet(
         AllocatedPtr<char> type{ldns_rr_type2str(ldns_rr_get_type(question))};
         AllocatedPtr<char> domain{ldns_rdf2str(ldns_rr_owner(question))};
         AllocatedPtr<char> rcode{ldns_pkt_rcode2str(ldns_pkt_get_rcode(packet))};
-        str_dns = fmt::format("{} {} rcode: {}\n{}",
-                              domain.get() ? domain.get() : "(null)",
-                              type.get() ? type.get() : "(null)",
-                              rcode.get() ? rcode.get() : "(null)",
-                              DnsForwarderUtils::rr_list_to_string(ldns_pkt_answer(packet)));
+        str_dns = fmt::format("{} {} rcode: {}\n{}", domain.get() ? domain.get() : "(null)",
+                type.get() ? type.get() : "(null)", rcode.get() ? rcode.get() : "(null)",
+                DnsForwarderUtils::rr_list_to_string(ldns_pkt_answer(packet)));
         return LDNS_STATUS_OK;
     }();
     if (status != LDNS_STATUS_OK) {
@@ -133,7 +131,7 @@ static void log_packet(
                 magic_enum::enum_name(status));
     } else if (info) {
         dbglog_id(log, packet, "{} from {} over {}: {}", pkt_name, info->peername.str(),
-                  magic_enum::enum_name<utils::TransportProtocol>(info->proto), str_dns);
+                magic_enum::enum_name<utils::TransportProtocol>(info->proto), str_dns);
     } else {
         dbglog_id(log, packet, "{}: {}", pkt_name, str_dns);
     }
@@ -209,7 +207,8 @@ void DnsForwarder::finalize_processed_event(DnsRequestProcessedEvent &event, con
         event.error.clear();
     }
 
-    event.elapsed = duration_cast<Millis>(SystemClock::now().time_since_epoch()).count() - event.start_time;
+    event.elapsed = static_cast<int32_t>(
+            duration_cast<Millis>(SystemClock::now().time_since_epoch()).count() - event.start_time);
 }
 
 // If we know any DNS64 prefixes, request A RRs from `upstream` and
@@ -318,7 +317,7 @@ static Uint8Vector transform_response_to_raw_data(const ldns_pkt *response) {
     return data;
 }
 
-DnsForwarder::DnsForwarder() = default;
+DnsForwarder::DnsForwarder() = default; // NOLINT(cert-msc51-cpp,cert-msc32-c)
 
 DnsForwarder::~DnsForwarder() = default;
 
@@ -567,13 +566,13 @@ coro::Task<DnsForwarder::HandleMessageResult> DnsForwarder::handle_message_inter
     std::vector<DnsFilter::Rule> effective_rules;
 
     ldns_pkt_ptr ctx_response;
-    FilterContext ctx {
-        .match = {.domain = normalized_domain, .rr_type = question_rr_type(request.get())},
-        .request = request,
-        .response = ctx_response,
-        .event = event,
-        .last_effective_rules = effective_rules,
-        .fallback_only = fallback_only,
+    FilterContext ctx{
+            .match = {.domain = normalized_domain, .rr_type = question_rr_type(request.get())},
+            .request = request,
+            .response = ctx_response,
+            .event = event,
+            .last_effective_rules = effective_rules,
+            .fallback_only = fallback_only,
     };
 
     if (!ldns_pkt_qr(ctx.request.get())) {
@@ -655,8 +654,8 @@ coro::Task<DnsForwarder::HandleMessageResult> DnsForwarder::handle_message_inter
         exchange_result.result = ldns_pkt_ptr{ldns_pkt_clone(ctx.request.get())};
     } else {
         // If this is a retransmitted request, use fallback upstreams only
-        exchange_result =
-                co_await do_upstreams_exchange(normalized_domain, ctx.request.get(), ctx.fallback_only, opt_as_ptr(info));
+        exchange_result = co_await do_upstreams_exchange(
+                normalized_domain, ctx.request.get(), ctx.fallback_only, opt_as_ptr(info));
         if (guard.expired()) {
             co_return {};
         }
@@ -692,8 +691,8 @@ coro::Task<DnsForwarder::HandleMessageResult> DnsForwarder::handle_message_inter
                 ctx.request.get(), ldns_pkt_ptr{ldns_pkt_clone(ctx.response.get())}, selected_upstream->options().id);
     }
 
-    event.bytes_sent = ldns_pkt_size(ctx.request.get());
-    event.bytes_received = ldns_pkt_size(ctx.response.get());
+    event.bytes_sent = static_cast<int32_t>(ldns_pkt_size(ctx.request.get()));
+    event.bytes_received = static_cast<int32_t>(ldns_pkt_size(ctx.response.get()));
     event.dnssec = finalize_dnssec_log_logic(ctx.response.get(), is_our_do_bit);
 
     if (LDNS_RCODE_NOERROR == ldns_pkt_get_rcode(ctx.response.get())) {
@@ -983,7 +982,8 @@ coro::Task<ldns_pkt_ptr> DnsForwarder::apply_filter(FilterContext &ctx) {
     auto result = ResponseHelpers::create_blocking_response(
             ctx.request.get(), ctx.response.get(), m_settings, effective_rules.leftovers, std::move(rewrite_info));
     if (std::holds_alternative<ResponseHelpers::NeedsResponse>(result)) {
-        tracelog_fid(m_log, ctx.request.get(), "DNS query blocking method needs response, waiting response to apply filter again");
+        tracelog_fid(m_log, ctx.request.get(),
+                "DNS query blocking method needs response, waiting response to apply filter again");
         ctx.last_effective_rules.clear();
         co_return nullptr;
     }
@@ -995,8 +995,7 @@ coro::Task<ldns_pkt_ptr> DnsForwarder::apply_filter(FilterContext &ctx) {
 #ifdef ANDROID
 [[clang::optnone]]
 #endif
-coro::Task<UpstreamExchangeResult>
-DnsForwarder::do_upstream_exchange(
+coro::Task<UpstreamExchangeResult> DnsForwarder::do_upstream_exchange(
         Upstream *upstream, const ldns_pkt *request, const DnsMessageInfo *info, Millis error_rtt) {
     tracelog_id(m_log, request, "Upstream [{}] ({}) exchange starting", upstream->options().id,
             upstream->options().address);
@@ -1028,10 +1027,9 @@ DnsForwarder::do_upstream_exchange(
                 upstream->options().address);
     }
 
-    if (result.has_error()
-            && (result.error()->value() == DnsError::AE_TIMED_OUT)) {
+    if (result.has_error() && (result.error()->value() == DnsError::AE_TIMED_OUT)) {
         dbglog_id(m_log, request, "Upstream [{}] ({}) exchange timed out", upstream->options().id,
-                    upstream->options().address);
+                upstream->options().address);
     }
 
     if (result.has_error()) {
@@ -1114,7 +1112,8 @@ coro::Task<UpstreamExchangeResult> DnsForwarder::do_parallel_exchange(const std:
     co_return std::move(*result);
 }
 
-static std::tuple<std::vector<Upstream *>, Millis, bool> collect_upstreams(const std::vector<UpstreamPtr> &src, bool fallback) {
+static std::tuple<std::vector<Upstream *>, Millis, bool> collect_upstreams(
+        const std::vector<UpstreamPtr> &src, bool fallback) {
     Millis max_rtt{0};
     Millis min_rtt = Millis::max();
     bool has_unestimated = false;
@@ -1150,7 +1149,8 @@ coro::Task<UpstreamExchangeResult> DnsForwarder::do_upstreams_exchange(
         // Fallbacks are always queried in parallel with `wait_all` enabled.
         std::weak_ptr<bool> guard = m_shutdown_guard;
         if (has_unestimated || m_settings->enable_parallel_upstream_queries) {
-            last_result = co_await do_parallel_exchange(upstreams_to_query, request, info, 2 * max_rtt, /*wait_all*/ false);
+            last_result =
+                    co_await do_parallel_exchange(upstreams_to_query, request, info, 2 * max_rtt, /*wait_all*/ false);
             if (guard.expired()) {
                 co_return {make_error(DnsError::AE_SHUTTING_DOWN), nullptr};
             }
@@ -1169,7 +1169,8 @@ coro::Task<UpstreamExchangeResult> DnsForwarder::do_upstreams_exchange(
                 }
                 std::discrete_distribution<size_t> distrib(upstream_weights.begin(), upstream_weights.end());
                 size_t selected_idx = distrib(m_random_engine);
-                last_result = co_await do_upstream_exchange(upstreams_to_query[selected_idx], request, info, 2 * max_rtt);
+                last_result =
+                        co_await do_upstream_exchange(upstreams_to_query[selected_idx], request, info, 2 * max_rtt);
                 if (guard.expired()) {
                     co_return {make_error(DnsError::AE_SHUTTING_DOWN), nullptr};
                 }
@@ -1239,8 +1240,7 @@ bool DnsForwarder::apply_fallback_filter(std::string_view hostname, const ldns_p
     if (!m_filter_manager->m_fallback_filter_handle) {
         return false;
     }
-    auto rules = m_filter_manager->m_filter.match(
-            m_filter_manager->m_fallback_filter_handle,
+    auto rules = m_filter_manager->m_filter.match(m_filter_manager->m_fallback_filter_handle,
             {hostname, ldns_rr_get_type(ldns_rr_list_rr(ldns_pkt_question(request), 0))});
     if (!rules.empty()) {
         dbglog_fid(m_log, request, "{} matches fallback filter rule: {}", hostname, rules[0].text);
@@ -1313,9 +1313,9 @@ coro::Task<Uint8Vector> DnsForwarder::handle_message_with_timeout(
         finalize_processed_event(servfail_event, request.get(), servfail_response.get(), nullptr, std::nullopt,
                 make_error(DnsError::AE_TIMED_OUT, "Message has not been handled within the allotted amount of time"));
     }
-    Millis timeout = m_settings->upstream_timeout.count() > 0
-                     ? m_settings->upstream_timeout : UpstreamFactory::DEFAULT_TIMEOUT;
-    auto handle_message_aw = handle_message_internal(std::move(request), std::move(info), fallback_only);
+    Millis timeout =
+            m_settings->upstream_timeout.count() > 0 ? m_settings->upstream_timeout : UpstreamFactory::DEFAULT_TIMEOUT;
+    auto handle_message_aw = handle_message_internal(std::move(request), info, fallback_only);
     auto timeout_aw = [](EventLoop &loop, Millis timeout) -> coro::Task<HandleMessageResult> {
         co_await loop.co_sleep(timeout);
         co_return {.timed_out = true};
@@ -1330,7 +1330,7 @@ coro::Task<Uint8Vector> DnsForwarder::handle_message_with_timeout(
         if (m_settings->enable_servfail_on_upstreams_failure) {
             log_packet(m_log, servfail_response.get(), "Server failure response");
             if (m_events->on_request_processed) {
-                servfail_event.elapsed = timeout.count();
+                servfail_event.elapsed = static_cast<int32_t>(timeout.count());
                 m_events->on_request_processed(servfail_event);
             }
             co_return transform_response_to_raw_data(servfail_response.get());
@@ -1355,7 +1355,6 @@ void DnsForwarder::truncate_response(ldns_pkt *response, const ldns_pkt *request
         }
     }
 }
-
 
 DnsFilterManager::InitResult DnsFilterManager::init(const DnsProxySettings &settings) {
     infolog(m_log, "Initializing the filtering module...");

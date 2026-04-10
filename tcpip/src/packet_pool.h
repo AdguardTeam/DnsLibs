@@ -15,7 +15,7 @@ public:
      * @param size number of blocks
      * @param mtu size of one block
      */
-    PacketPool(size_t size, int mtu);
+    PacketPool(size_t size, uint32_t mtu);
 
     ~PacketPool();
 
@@ -34,13 +34,13 @@ public:
     /**
      * Return number of unused allocated blocks
      */
-    int get_size();
+    size_t get_size();
 
 private:
     struct PacketPoolState;
 
     size_t m_capacity;
-    int m_mtu;
+    uint32_t m_mtu;
     std::list<std::unique_ptr<uint8_t[]>> m_packets;
     PacketPoolState *m_state;
 };

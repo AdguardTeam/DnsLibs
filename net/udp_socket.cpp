@@ -41,7 +41,8 @@ Error<SocketError> UdpSocket::connect(ConnectParameters params) {
     }
 
     m_udp = Uv<uv_udp_t>::create_with_parent(this);
-    if (int err = uv_udp_init_ex(params.loop->handle(), m_udp->raw(), (uint8_t)peer->c_sockaddr()->sa_family); err != 0) {
+    if (int err = uv_udp_init_ex(params.loop->handle(), m_udp->raw(), (uint8_t) peer->c_sockaddr()->sa_family);
+            err != 0) {
         m_udp->mark_uninit();
         m_udp.reset();
         return make_error(SocketError::AE_SOCK_ERROR, "Failed to initialize UDP handle", make_error(uv_errno_t(err)));
@@ -64,11 +65,10 @@ Error<SocketError> UdpSocket::connect(ConnectParameters params) {
     if (int err = uv_udp_connect(m_udp->raw(), peer->c_sockaddr()); err != 0) {
         auto error = make_error(uv_errno_t(err));
         log_sock(this, dbg, "Failed to connect: {}", error->str());
-        sock_err = (err == UV_ECONNREFUSED)
-                ? make_error(SocketError::AE_CONNECTION_REFUSED, error)
-                : make_error(SocketError::AE_SOCK_ERROR, error);
+        sock_err = (err == UV_ECONNREFUSED) ? make_error(SocketError::AE_CONNECTION_REFUSED, error)
+                                            : make_error(SocketError::AE_SOCK_ERROR, error);
     }
-    params.loop->submit([sock_err, weak = m_udp->weak_from_this()](){
+    params.loop->submit([sock_err, weak = m_udp->weak_from_this()]() {
         if (auto *udp = weak.lock().get()) {
             if (sock_err) {
                 if (Callbacks cbx = static_cast<UdpSocket *>(udp->parent())->get_callbacks(); cbx.on_close != nullptr) {
@@ -114,7 +114,7 @@ Error<SocketError> UdpSocket::send(Uint8View data) {
     };
     auto *wr = new Write{.uv_udp = m_udp->weak_from_this(), .buf{data.begin(), data.end()}};
     wr->req.data = wr;
-    uv_buf_t uv_buf = uv_buf_init((char *)wr->buf.data(), wr->buf.size());
+    uv_buf_t uv_buf = uv_buf_init((char *) wr->buf.data(), wr->buf.size());
     if (int err = uv_udp_send(&wr->req, m_udp->raw(), &uv_buf, 1, nullptr, &Write::on_write)) {
         Write::on_write(&wr->req, err);
         auto error = make_error(uv_errno_t(err));
@@ -155,7 +155,6 @@ void UdpSocket::update_read_status() {
     }
 }
 
-
 struct UdpSocket::Callbacks UdpSocket::get_callbacks() const {
     return m_callbacks;
 }
@@ -184,7 +183,7 @@ void UdpSocket::on_timeout(uv_timer_t *handle) {
 bool UdpSocket::update_timer() {
     if (m_timer) {
         if (m_current_timeout) {
-            int timeout_ms = ag::to_millis(*m_current_timeout).count();
+            int64_t timeout_ms = ag::to_millis(*m_current_timeout).count();
             return 0 == uv_timer_start(m_timer->raw(), &on_timeout, timeout_ms, 0);
         } else {
             return 0 == uv_timer_stop(m_timer->raw());
@@ -233,7 +232,7 @@ void UdpSocket::on_read(uv_udp_t *udp, ssize_t nread, const uv_buf_t *buf, const
     }
 
     if (Callbacks cbx = self->get_callbacks(); cbx.on_read != nullptr) {
-        cbx.on_read(cbx.arg, { (uint8_t *) buf->base, size_t(nread) });
+        cbx.on_read(cbx.arg, {(uint8_t *) buf->base, size_t(nread)});
         // Parent may be destroyed inside read.
         return;
     } else {

@@ -53,8 +53,8 @@ struct UpstreamFactory::Impl {
     Logger log{"Upstream factory"};
     UpstreamFactoryConfig config;
 
-    Impl(UpstreamFactoryConfig cfg)
-            : config(std::move(cfg)) {
+    explicit Impl(UpstreamFactoryConfig cfg)
+            : config(cfg) {
         if (config.timeout.count() == 0) {
             config.timeout = DEFAULT_TIMEOUT;
         }
@@ -95,12 +95,13 @@ static Result<std::vector<CertFingerprint>, UpstreamFactory::UpstreamCreateError
 
 using CreateResult = UpstreamFactory::CreateResult;
 
-static CreateResult create_upstream_system(
-        const UpstreamOptions &opts, const UpstreamFactoryConfig &config, std::vector<CertFingerprint>/*fingerprints*/ ) {
+static CreateResult create_upstream_system(const UpstreamOptions &opts, const UpstreamFactoryConfig &config,
+        std::vector<CertFingerprint> /*fingerprints*/) {
 #if defined(__APPLE__) || defined(__ANDROID__)
     return CreateResult{std::make_unique<SystemUpstream>(opts, config)};
 #else
-    return make_error(UpstreamFactory::UpstreamCreateError::AE_NOT_SUPPORTED, "System resolver is not supported on this platform");
+    return make_error(UpstreamFactory::UpstreamCreateError::AE_NOT_SUPPORTED,
+            "System resolver is not supported on this platform");
 #endif
 }
 
@@ -208,7 +209,7 @@ UpstreamFactory::CreateResult UpstreamFactory::Impl::create_upstream(const Upstr
 }
 
 UpstreamFactory::UpstreamFactory(UpstreamFactoryConfig cfg)
-        : m_factory(std::make_unique<Impl>(std::move(cfg))) {
+        : m_factory(std::make_unique<Impl>(cfg)) {
 }
 
 UpstreamFactory::~UpstreamFactory() = default;
@@ -226,7 +227,8 @@ UpstreamFactory::CreateResult UpstreamFactory::create_upstream(const UpstreamOpt
     return result;
 }
 
-Error<Upstream::InitError> Upstream::init_url_port(bool allow_creds, bool allow_path, uint16_t default_port, bool host_to_lowercase) {
+Error<Upstream::InitError> Upstream::init_url_port(
+        bool allow_creds, bool allow_path, uint16_t default_port, bool host_to_lowercase) {
     auto url = ada::parse<ada::url_aggregator>(m_options.address, nullptr);
     if (!url) {
         return make_error(InitError::AE_INVALID_ADDRESS, "Invalid URL");

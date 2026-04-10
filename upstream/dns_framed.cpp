@@ -1,12 +1,11 @@
-#include <memory>
-#include <vector>
-#include <string>
 #include <cassert>
-#include <memory>
 #include <ldns/wire2host.h>
+#include <memory>
+#include <string>
+#include <vector>
 
-#include "common/socket_address.h"
 #include "common/logger.h"
+#include "common/socket_address.h"
 #include "common/utils.h"
 #include "dns/net/socket.h"
 #include "dns/net/tcp_dns_buffer.h"
@@ -14,8 +13,8 @@
 
 #include "dns_framed.h"
 
-#define log_conn(l_, lvl_, conn_, fmt_, ...) lvl_##log(l_, "[id={} addr={}] " fmt_, conn_->m_id, conn_->address_str(), ##__VA_ARGS__)
-
+#define log_conn(l_, lvl_, conn_, fmt_, ...)                                                                           \
+    lvl_##log(l_, "[id={} addr={}] " fmt_, conn_->m_id, conn_->address_str(), ##__VA_ARGS__)
 
 using namespace std::chrono;
 
@@ -32,7 +31,7 @@ static SocketAddress prepare_address(std::string_view address_string) {
     }
     auto address = ag::utils::str_to_socket_address(address_string);
     if (address.port() == 0) {
-        return SocketAddress(address.addr(), DEFAULT_PORT);
+        return {address.addr(), DEFAULT_PORT};
     }
     return address;
 }
@@ -53,11 +52,11 @@ void DnsFramedConnection::connect() {
     assert(upstream != nullptr);
     m_stream = upstream->make_socket(utils::TP_TCP);
     auto err = m_stream->connect({
-                                         &m_loop,
-                                         prepare_address(upstream->options().address),
-                                         { on_connected, on_read, on_close, this },
-                                         upstream->config().timeout,
-                                 });
+            &m_loop,
+            prepare_address(upstream->options().address),
+            {on_connected, on_read, on_close, this},
+            upstream->config().timeout,
+    });
     if (err) {
         log_conn(m_log, err, this, "Failed to start connect: {}", err->str());
         on_close(this, err);
@@ -76,7 +75,7 @@ DnsFramedConnection::~DnsFramedConnection() {
 }
 
 void DnsFramedConnection::on_connected(void *arg) {
-    auto *self = (DnsFramedConnection *)arg;
+    auto *self = (DnsFramedConnection *) arg;
     log_conn(self->m_log, trace, self, "{}", __func__);
     DnsFramedConnectionPtr ptr = self->shared_from_this();
 
@@ -100,7 +99,7 @@ void DnsFramedConnection::on_connected(void *arg) {
 }
 
 void DnsFramedConnection::on_read(void *arg, Uint8View data) {
-    auto *self = (DnsFramedConnection *)arg;
+    auto *self = (DnsFramedConnection *) arg;
     log_conn(self->m_log, trace, self, "{}", __func__);
     DnsFramedConnectionPtr ptr = self->shared_from_this();
 
@@ -132,7 +131,7 @@ void DnsFramedConnection::on_read(void *arg, Uint8View data) {
 }
 
 void DnsFramedConnection::on_close(void *arg, Error<SocketError> error) {
-    auto *self = (DnsFramedConnection *)arg;
+    auto *self = (DnsFramedConnection *) arg;
 
     Error<DnsError> err;
     if (error) {

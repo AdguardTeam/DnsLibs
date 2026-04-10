@@ -9,8 +9,8 @@
 #include <thread>
 
 #ifdef __APPLE__
-#include <sys/qos.h>
 #include <TargetConditionals.h>
+#include <sys/qos.h>
 #endif // __APPLE__
 
 #include "common/clock.h"
@@ -41,7 +41,8 @@ struct EventLoopSettings {
  * This class is not thread-safe, it should be accessed only before loop start and inside loop.
  */
 class EventLoop : public std::enable_shared_from_this<EventLoop> {
-    struct ConstructorAccess { };
+    struct ConstructorAccess {};
+
 public:
     static EventLoopPtr create();
 
@@ -81,9 +82,15 @@ public:
     class TaskId {
     private:
         uint64_t value = 0;
+
     public:
-        friend bool operator==(const TaskId &l, const TaskId &r) { return l.value == r.value; }
-        TaskId &operator++() { ++value; return *this; }
+        friend bool operator==(const TaskId &l, const TaskId &r) {
+            return l.value == r.value;
+        }
+        TaskId &operator++() {
+            ++value;
+            return *this;
+        }
     };
 
     struct PostponedTasks {
@@ -128,7 +135,7 @@ public:
      * @return Future which will be completed when function completes execution on the event loop
      */
     std::future<void> async(std::function<void()> &&func) {
-        return async<void>([func = std::move(func)](PromisePtr<void> promise){
+        return async<void>([func = std::move(func)](PromisePtr<void> promise) {
             func();
             promise->set_value();
         });
@@ -142,7 +149,7 @@ public:
      */
     template <typename T>
     std::future<T> async(std::function<T()> &&func) {
-        return async<T>([func = std::move(func)](PromisePtr<T> promise){
+        return async<T>([func = std::move(func)](PromisePtr<T> promise) {
             promise->set_value(func());
         });
     }
@@ -171,7 +178,9 @@ public:
         return Awaitable{.time = time, .loop = this};
     }
 
-    [[nodiscard]] bool valid() { return m_handle != nullptr; }
+    [[nodiscard]] bool valid() {
+        return m_handle != nullptr;
+    }
 
 private:
     ag::Logger m_log;
@@ -200,7 +209,7 @@ private:
     void force_fire_timers();
 
     template <typename Func>
-    requires std::invocable<Func &, uv_handle_t *>
+        requires std::invocable<Func &, uv_handle_t *>
     void walk(Func func) {
         auto walker = [](uv_handle_t *handle, void *arg) {
             auto *callback = (Func *) arg;

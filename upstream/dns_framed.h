@@ -4,11 +4,11 @@
 
 #include "common/logger.h"
 #if defined _WIN32 && !defined __clang__
-#pragma optimize( "", off )
+#pragma optimize("", off)
 #endif
 #include "common/parallel.h"
 #if defined _WIN32 && !defined __clang__
-#pragma optimize( "", on )
+#pragma optimize("", on)
 #endif
 #include "dns/common/event_loop.h"
 #include "dns/net/tcp_dns_buffer.h"
@@ -91,16 +91,17 @@ public:
                     self->connect();
                 }
             }
-            void await_resume() {}
+            void await_resume() {
+            }
         };
-        auto wait_timeout = [](EventLoop &loop, std::weak_ptr<DnsFramedConnection> conn, Millis timeout, uint16_t request_id) -> coro::Task<void> {
+        auto wait_timeout = [](EventLoop &loop, std::weak_ptr<DnsFramedConnection> conn, Millis timeout,
+                                    uint16_t request_id) -> coro::Task<void> {
             co_await loop.co_sleep(timeout);
             if (auto self = conn.lock()) {
                 self->finish_request(request_id, Reply{make_error(DnsError::AE_TIMED_OUT)});
             }
         };
-        coro::run_detached(
-                wait_timeout(m_loop, weak_from_this(), request->timeout, request->request_id));
+        coro::run_detached(wait_timeout(m_loop, weak_from_this(), request->timeout, request->request_id));
         return Awaitable{.self = this, .req = request};
     }
 
@@ -116,16 +117,17 @@ public:
                 self->m_requests[req->request_id] = req;
                 req->caller = h;
             }
-            void await_resume() {}
+            void await_resume() {
+            }
         };
-        auto wait_timeout = [](EventLoop &loop, std::weak_ptr<DnsFramedConnection> conn, Millis timeout, uint16_t request_id) -> coro::Task<void> {
+        auto wait_timeout = [](EventLoop &loop, std::weak_ptr<DnsFramedConnection> conn, Millis timeout,
+                                    uint16_t request_id) -> coro::Task<void> {
             co_await loop.co_sleep(timeout);
             if (auto self = conn.lock()) {
                 self->finish_request(request_id, Reply{make_error(DnsError::AE_TIMED_OUT)});
             }
         };
-        coro::run_detached(
-                wait_timeout(m_loop, weak_from_this(), request->timeout, request->request_id));
+        coro::run_detached(wait_timeout(m_loop, weak_from_this(), request->timeout, request->request_id));
         return Awaitable{.self = this, .req = request};
     }
 };

@@ -2,7 +2,7 @@
 
 #import <Foundation/Foundation.h>
 
-@interface NSTask(AGUtils)
+@interface NSTask (AGUtils)
 
 /**
  * Launch task and return dispatch group for this task.<p/>

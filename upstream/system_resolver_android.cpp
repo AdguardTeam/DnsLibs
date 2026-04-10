@@ -1,7 +1,7 @@
 #include <errno.h>
 #include <future>
-#include <unistd.h>
 #include <sys/ioctl.h>
+#include <unistd.h>
 
 #include "dns/common/event_loop.h"
 #include "system_resolver.h"
@@ -127,8 +127,9 @@ public:
                     req->error = make_error(SystemResolverError::AE_SYSTEM_RESOLVE_ERROR);
                     return true;
                 }
-                if (0 != uv_timer_start(
-                        req->timer_event->raw(), on_uv_timer, req->parent->m_timeout.count(), /*repeat*/ 0)) {
+                if (0
+                        != uv_timer_start(
+                                req->timer_event->raw(), on_uv_timer, req->parent->m_timeout.count(), /*repeat*/ 0)) {
                     req->error = make_error(SystemResolverError::AE_SYSTEM_RESOLVE_ERROR);
                     return true;
                 }
@@ -155,9 +156,8 @@ public:
                     int fd = req->query_fd;
                     ResResult result;
                     fcntl(fd, F_SETFL, fcntl(fd, F_GETFL) & ~O_NONBLOCK);
-                    result.len = AndroidResApi::nresult(fd, &result.rcode,
-                                                        result.answer_buffer.data(),
-                                                        result.answer_buffer.size());
+                    result.len = AndroidResApi::nresult(
+                            fd, &result.rcode, result.answer_buffer.data(), result.answer_buffer.size());
                     tracelog(g_log, "on_uv_read: nresult returned result_len={}, rcode={}", result.len, result.rcode);
                     req->parent->process_result(*req, result);
                 }

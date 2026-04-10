@@ -1,15 +1,13 @@
 #pragma once
 
-
 #include <memory>
 #include <optional>
 #include <string>
 #include <variant>
 
-
-#include <openssl/ssl.h>
 #include <openssl/bio.h>
 #include <openssl/err.h>
+#include <openssl/ssl.h>
 
 #include "common/defs.h"
 #include "common/logger.h"
@@ -17,15 +15,12 @@
 #include "dns/net/certificate_verifier.h"
 #include "dns/net/tls_session_cache.h"
 
-
 namespace ag {
 namespace dns {
 
-
 class TlsCodec {
 public:
-    enum class OSslError {
-    };
+    enum class OSslError {};
     enum class TlsError {
         AE_INVALID_STATE,
         AE_UNEXPECTED_EOF,
@@ -118,7 +113,7 @@ private:
 } // namespace dns
 
 // clang format off
-template<>
+template <>
 struct ErrorCodeToString<dns::TlsCodec::OSslError> {
     std::string operator()(dns::TlsCodec::OSslError e) {
 #ifdef OPENSSL_IS_BORINGSSL
@@ -133,17 +128,24 @@ struct ErrorCodeToString<dns::TlsCodec::OSslError> {
     }
 };
 
-template<>
+template <>
 struct ErrorCodeToString<dns::TlsCodec::TlsError> {
     std::string operator()(dns::TlsCodec::TlsError e) {
         switch (e) {
-        case decltype(e)::AE_INVALID_STATE: return "Invalid state";
-        case decltype(e)::AE_UNEXPECTED_EOF: return "Remote server unexpectedly closed TLS connection";
-        case decltype(e)::AE_ALPN_SET_FAILED: return "Failed to set ALPN protocols";
-        case decltype(e)::AE_BUFFER_ERROR: return "Failed to get buffered data";
-        case decltype(e)::AE_WRITE_ERROR: return "Failed to write received data in crypto buffer";
-        case decltype(e)::AE_READ_ERROR: return "Failed to read from TLS connection";
-        case decltype(e)::AE_HANDSHAKE_ERROR: return "TLS handshake failed";
+        case decltype(e)::AE_INVALID_STATE:
+            return "Invalid state";
+        case decltype(e)::AE_UNEXPECTED_EOF:
+            return "Remote server unexpectedly closed TLS connection";
+        case decltype(e)::AE_ALPN_SET_FAILED:
+            return "Failed to set ALPN protocols";
+        case decltype(e)::AE_BUFFER_ERROR:
+            return "Failed to get buffered data";
+        case decltype(e)::AE_WRITE_ERROR:
+            return "Failed to write received data in crypto buffer";
+        case decltype(e)::AE_READ_ERROR:
+            return "Failed to read from TLS connection";
+        case decltype(e)::AE_HANDSHAKE_ERROR:
+            return "TLS handshake failed";
         }
     }
 };

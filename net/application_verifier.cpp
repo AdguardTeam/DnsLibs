@@ -2,8 +2,8 @@
 
 namespace ag::dns {
 
-ApplicationVerifier::ApplicationVerifier(const OnCertificateVerificationFn &on_certificate_verification)
-        : m_on_certificate_verification(on_certificate_verification) {
+ApplicationVerifier::ApplicationVerifier(OnCertificateVerificationFn on_certificate_verification)
+        : m_on_certificate_verification(std::move(on_certificate_verification)) {
 }
 
 std::optional<Uint8Vector> ApplicationVerifier::serialize_certificate(X509 *cert) {

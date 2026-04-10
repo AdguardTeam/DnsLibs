@@ -52,7 +52,7 @@ Error<SocketError> AioSocket::send(Uint8View data) {
 }
 
 void AioSocket::receive(AioSocket::OnReadCallback on_read_handler, std::optional<Micros> timeout,
-                        std::function<void(Error<SocketError>)> handler) {
+        std::function<void(Error<SocketError>)> handler) {
     log_sock(this, trace, "...");
 
     if (m_handler != nullptr) {

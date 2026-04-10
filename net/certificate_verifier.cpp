@@ -55,7 +55,8 @@ static std::optional<Uint8Array<SHA256_DIGEST_LENGTH>> get_cert_hash(X509 *certi
 }
 
 static bool is_cert_find_in_fingerprints(X509 *certificate, std::span<CertFingerprint> fingerprints) {
-    std::optional<Uint8Array<SHA256_DIGEST_LENGTH>> spki, tbs;
+    std::optional<Uint8Array<SHA256_DIGEST_LENGTH>> spki;
+    std::optional<Uint8Array<SHA256_DIGEST_LENGTH>> tbs;
     return std::any_of(fingerprints.begin(), fingerprints.end(), [&](CertFingerprint f) {
         if (auto *spki_digest = std::get_if<SpkiSha256Digest>(&f)) {
             if (!spki.has_value()) {
@@ -67,15 +68,14 @@ static bool is_cert_find_in_fingerprints(X509 *certificate, std::span<CertFinger
             if (!tbs.has_value()) {
                 tbs = get_cert_hash(certificate, false);
             }
-            return tbs.has_value() ? std::equal(tbs_digest->data.begin(), tbs_digest->data.end(), tbs->data())
-                                    : false;
+            return tbs.has_value() ? std::equal(tbs_digest->data.begin(), tbs_digest->data.end(), tbs->data()) : false;
         }
         return false;
     });
 }
 
 std::optional<std::string> CertificateVerifier::verify_fingerprints(
-        STACK_OF(X509) *chain, std::span<CertFingerprint> fingerprints) const {
+        STACK_OF(X509) * chain, std::span<CertFingerprint> fingerprints) const {
     if (fingerprints.empty()) {
         return std::nullopt;
     }

@@ -27,10 +27,12 @@ TEST(Dns64Test, TestDns64Discovery) {
     ASSERT_FALSE(upstream_res.has_error()) << upstream_res.error()->str();
     auto &upstream = upstream_res.value();
 
-    const auto prefs_res = coro::to_future([](EventLoop &loop, const UpstreamPtr &upstream) -> coro::Task<DiscoveryResult> {
-        co_await loop.co_submit();
-        co_return co_await dns64::discover_prefixes(upstream);
-    }(*loop, upstream)).get();
+    const auto prefs_res =
+            coro::to_future([](EventLoop &loop, const UpstreamPtr &upstream) -> coro::Task<DiscoveryResult> {
+                co_await loop.co_submit();
+                co_return co_await dns64::discover_prefixes(upstream);
+            }(*loop, upstream))
+                    .get();
 
     ASSERT_FALSE(prefs_res.has_error()) << prefs_res.error()->str();
     auto &prefs = prefs_res.value();
@@ -56,10 +58,10 @@ TEST(Dns64Test, TestIpv6Synthesis) {
 
     constexpr uint8_t pref[] = {5, 5, 5, 5, 5, 5, 5, 5, 0, 5, 5, 5};
 
-    constexpr Uint8Array<16> expect_4 = {5, 5, 5, 5, 1, 2, 3, 4, 0}; // rest is zeroes
-    constexpr Uint8Array<16> expect_5 = {5, 5, 5, 5, 5, 1, 2, 3, 0, 4}; // rest is zeroes
-    constexpr Uint8Array<16> expect_6 = {5, 5, 5, 5, 5, 5, 1, 2, 0, 3, 4}; // rest is zeroes
-    constexpr Uint8Array<16> expect_7 = {5, 5, 5, 5, 5, 5, 5, 1, 0, 2, 3, 4}; // rest is zeroes
+    constexpr Uint8Array<16> expect_4 = {5, 5, 5, 5, 1, 2, 3, 4, 0};             // rest is zeroes
+    constexpr Uint8Array<16> expect_5 = {5, 5, 5, 5, 5, 1, 2, 3, 0, 4};          // rest is zeroes
+    constexpr Uint8Array<16> expect_6 = {5, 5, 5, 5, 5, 5, 1, 2, 0, 3, 4};       // rest is zeroes
+    constexpr Uint8Array<16> expect_7 = {5, 5, 5, 5, 5, 5, 5, 1, 0, 2, 3, 4};    // rest is zeroes
     constexpr Uint8Array<16> expect_8 = {5, 5, 5, 5, 5, 5, 5, 5, 0, 1, 2, 3, 4}; // rest is zeroes
     constexpr Uint8Array<16> expect_12 = {5, 5, 5, 5, 5, 5, 5, 5, 0, 5, 5, 5, 1, 2, 3, 4};
 

@@ -3,10 +3,12 @@
 #include <cstddef>
 #include <cstdint>
 #include <string_view>
+
+#include <ldns/ldns.h>
+
 #include "common/defs.h"
 #include "common/net_utils.h"
 #include "dns/common/dns_defs.h"
-#include <ldns/ldns.h>
 
 namespace ag::dns::dnscrypt {
 

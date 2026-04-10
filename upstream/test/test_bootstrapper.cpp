@@ -33,11 +33,12 @@ TEST_F(BootstrapperTest, DontWaitAll) {
     ASSERT_FALSE(err) << err->str();
 
     auto before_ts = SteadyClock::now();
-    Bootstrapper::ResolveResult result = coro::to_future(
-            [](EventLoop &loop, Bootstrapper &bootstrapper) -> coro::Task<Bootstrapper::ResolveResult> {
+    Bootstrapper::ResolveResult result =
+            coro::to_future([](EventLoop &loop, Bootstrapper &bootstrapper) -> coro::Task<Bootstrapper::ResolveResult> {
                 co_await loop.co_submit();
                 co_return co_await bootstrapper.get();
-            }(*loop, *bootstrapper)).get();
+            }(*loop, *bootstrapper))
+                    .get();
     bootstrapper.reset();
     loop->stop();
     loop->join();

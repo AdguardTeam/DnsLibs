@@ -3,8 +3,8 @@
 #include <memory>
 
 #include <fmt/std.h>
-#include <openssl/x509v3.h>
 #include <openssl/ssl.h>
+#include <openssl/x509v3.h>
 
 #include "common/defs.h"
 #include "common/utils.h"
@@ -14,13 +14,13 @@
 
 using std::chrono::milliseconds;
 using std::chrono::seconds;
-using std::chrono::duration_cast;
 
 static constexpr auto DOT_IDLE_TIMEOUT = seconds(30);
 
 namespace ag::dns {
 
-#define log_conn(l_, lvl_, conn_, fmt_, ...) lvl_##log(l_, "[id={} addr={}] " fmt_, conn_->m_id, conn_->address_str(), ##__VA_ARGS__)
+#define log_conn(l_, lvl_, conn_, fmt_, ...)                                                                           \
+    lvl_##log(l_, "[id={} addr={}] " fmt_, conn_->m_id, conn_->address_str(), ##__VA_ARGS__)
 #define tracelog_id(l_, pkt_, fmt_, ...) tracelog((l_), "[{}] " fmt_, ldns_pkt_id(pkt_), ##__VA_ARGS__)
 
 class DotConnection;
@@ -108,13 +108,13 @@ public:
                 coro::Task<Result<SocketAddress, DnsError>> try_connect(
                         DotUpstream *upstream, EventLoop *loop, Millis timeout) {
                     stream = upstream->make_secured_socket(utils::TP_TCP,
-                                SocketFactory::SecureSocketParameters{
-                                        .session_cache = &upstream->m_tls_session_cache,
-                                        .server_name = std::string(upstream->m_url.get_hostname()),
-                                        .alpn = {DOT_ALPN},
-                                        .fingerprints = upstream->m_fingerprints,
-                                        .enable_post_quantum = upstream->m_options.enable_post_quantum_cryptography,
-                                });
+                            SocketFactory::SecureSocketParameters{
+                                    .session_cache = &upstream->m_tls_session_cache,
+                                    .server_name = std::string(upstream->m_url.get_hostname()),
+                                    .alpn = {DOT_ALPN},
+                                    .fingerprints = upstream->m_fingerprints,
+                                    .enable_post_quantum = upstream->m_options.enable_post_quantum_cryptography,
+                            });
 
                     auto on_connected = [](void *arg) {
                         auto *self = static_cast<ConnectAttempt *>(arg);
@@ -139,8 +139,8 @@ public:
 
                     struct Awaitable {
                         ConnectAttempt *self;
-                        bool await_ready() { 
-                            return self->result.has_value(); 
+                        bool await_ready() {
+                            return self->result.has_value();
                         }
                         bool await_suspend(std::coroutine_handle<> h) {
                             self->handle = h;
@@ -202,9 +202,9 @@ public:
 
             if (!winner.has_value() || winner->has_error()) {
                 cancel_all();
-                Error<DnsError> final_error = winner.has_value() 
-                    ? winner->error() 
-                    : make_error(DnsError::AE_SOCKET_ERROR, "All connection attempts failed");
+                Error<DnsError> final_error = winner.has_value()
+                        ? winner->error()
+                        : make_error(DnsError::AE_SOCKET_ERROR, "All connection attempts failed");
                 log_conn(m_log, dbg, this, "Failed to connect to any address: {}", final_error->str());
                 this->on_close(final_error);
                 co_return;
@@ -239,13 +239,13 @@ public:
             on_connected(this);
         } else {
             m_stream = dot_upstream->make_secured_socket(utils::TP_TCP,
-                        SocketFactory::SecureSocketParameters{
-                                .session_cache = &dot_upstream->m_tls_session_cache,
-                                .server_name = std::string(dot_upstream->m_url.get_hostname()),
-                                .alpn = {DOT_ALPN},
-                                .fingerprints = dot_upstream->m_fingerprints,
-                                .enable_post_quantum = dot_upstream->m_options.enable_post_quantum_cryptography,
-                        });
+                    SocketFactory::SecureSocketParameters{
+                            .session_cache = &dot_upstream->m_tls_session_cache,
+                            .server_name = std::string(dot_upstream->m_url.get_hostname()),
+                            .alpn = {DOT_ALPN},
+                            .fingerprints = dot_upstream->m_fingerprints,
+                            .enable_post_quantum = dot_upstream->m_options.enable_post_quantum_cryptography,
+                    });
             dbglog(m_log, "{}", m_address);
             auto err = m_stream->connect({
                     &m_loop,
@@ -286,9 +286,8 @@ public:
     Bootstrapper::ResolveResult m_result;
 };
 
-static Result<BootstrapperPtr, Upstream::InitError> create_bootstrapper(
-        const UpstreamOptions &opts, const UpstreamFactoryConfig &config,
-        const ada::url_aggregator url, uint16_t port) {
+static Result<BootstrapperPtr, Upstream::InitError> create_bootstrapper(const UpstreamOptions &opts,
+        const UpstreamFactoryConfig &config, const ada::url_aggregator url, uint16_t port) {
     std::string address;
 
     if (auto resolved = SocketAddress(opts.resolved_server_ip, DEFAULT_DOT_PORT); resolved.valid()) {
@@ -297,21 +296,21 @@ static Result<BootstrapperPtr, Upstream::InitError> create_bootstrapper(
         address = url.get_hostname();
     }
 
-    return std::make_unique<Bootstrapper>(Bootstrapper::Params{address, port,
-            opts.bootstrap, config.timeout, config, opts.outbound_interface});
+    return std::make_unique<Bootstrapper>(
+            Bootstrapper::Params{address, port, opts.bootstrap, config.timeout, config, opts.outbound_interface});
 }
 
-DotUpstream::DotUpstream(const UpstreamOptions &opts, const UpstreamFactoryConfig &config,
-        std::vector<CertFingerprint> fingerprints)
+DotUpstream::DotUpstream(
+        const UpstreamOptions &opts, const UpstreamFactoryConfig &config, std::vector<CertFingerprint> fingerprints)
         : Upstream(opts, config)
         , m_log("DOT upstream")
         , m_tls_session_cache(opts.address)
-        , m_fingerprints(std::move(fingerprints))
-{
+        , m_fingerprints(std::move(fingerprints)) {
 }
 
 Error<Upstream::InitError> DotUpstream::init() {
-    auto error = this->init_url_port(/*allow_creds*/ false, /*allow_path*/ false, DEFAULT_DOT_PORT, /*host_to_lowercase*/ false);
+    auto error = this->init_url_port(
+            /*allow_creds*/ false, /*allow_path*/ false, DEFAULT_DOT_PORT, /*host_to_lowercase*/ false);
     if (error) {
         return error;
     }
@@ -355,7 +354,7 @@ coro::Task<Upstream::ExchangeResult> DotUpstream::exchange(const ldns_pkt *reque
 
     milliseconds timeout = m_config.timeout;
 
-    Uint8View buf{ ldns_buffer_begin(buffer.get()), ldns_buffer_position(buffer.get()) };
+    Uint8View buf{ldns_buffer_begin(buffer.get()), ldns_buffer_position(buffer.get())};
     tracelog_id(m_log, request_pkt, "Sending request for a domain: {}", domain ? domain.get() : "(unknown)");
     std::weak_ptr<ConnectionPoolBase> guard = m_pool;
     Connection::Reply reply = co_await m_pool->perform_request(buf, timeout);

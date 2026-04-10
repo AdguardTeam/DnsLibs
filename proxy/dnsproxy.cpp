@@ -6,8 +6,8 @@
 #include <vector>
 
 #ifdef __APPLE__
-#include <sys/qos.h>
 #include <TargetConditionals.h>
+#include <sys/qos.h>
 #endif // __APPLE__
 
 #include "common/coro.h"
@@ -26,8 +26,7 @@ using namespace std::chrono;
 
 namespace ag::dns {
 
-static const DnsProxySettings DEFAULT_PROXY_SETTINGS = {
-        .upstreams = {},
+static const DnsProxySettings DEFAULT_PROXY_SETTINGS = {.upstreams = {},
         .fallbacks = {},
         .fallback_domains =
                 {
@@ -107,10 +106,11 @@ static const DnsProxySettings DEFAULT_PROXY_SETTINGS = {
         .enable_http3 = false,
         .enable_post_quantum_cryptography = true,
 #if defined(__APPLE__) && TARGET_OS_IPHONE
-        .qos_settings = {
-            .qos_class = QOS_CLASS_DEFAULT,
-            .relative_priority = 0,
-        }
+        .qos_settings =
+                {
+                        .qos_class = QOS_CLASS_DEFAULT,
+                        .relative_priority = 0,
+                }
 #endif // __APPLE__ && TARGET_OS_IPHONE
 };
 
@@ -187,8 +187,8 @@ DnsProxy::DnsProxyInitResult DnsProxy::init(DnsProxySettings settings, DnsProxyE
 
     proxy->loop->start({
 #if defined(__APPLE__) && TARGET_OS_IPHONE
-        .qos_class = proxy->settings.qos_settings.qos_class,
-        .qos_relative_priority = proxy->settings.qos_settings.relative_priority
+            .qos_class = proxy->settings.qos_settings.qos_class,
+            .qos_relative_priority = proxy->settings.qos_settings.relative_priority,
 #endif // __APPLE__ && TARGET_OS_IPHONE
     });
 

@@ -74,7 +74,8 @@ using CreateCipherResult = Result<Cipher *, CreateCipherError>;
 
 CreateCipherResult create_cipher(CryptoConstruction value);
 
-static inline Cipher::SharedKeyResult cipher_shared_key(CryptoConstruction cc, const KeyArray &secret_key, const KeyArray &public_key) {
+static inline Cipher::SharedKeyResult cipher_shared_key(
+        CryptoConstruction cc, const KeyArray &secret_key, const KeyArray &public_key) {
     auto cipher_res = create_cipher(cc);
     if (cipher_res.has_error()) {
         return make_error(Cipher::CipherError::AE_CREATE_CIPHER_ERROR, cipher_res.error());
@@ -82,7 +83,8 @@ static inline Cipher::SharedKeyResult cipher_shared_key(CryptoConstruction cc, c
     return (*cipher_res)->shared_key(secret_key, public_key);
 }
 
-static inline Cipher::SealResult cipher_seal(CryptoConstruction cc, Uint8View message, const nonce_array &nonce, const KeyArray &key) {
+static inline Cipher::SealResult cipher_seal(
+        CryptoConstruction cc, Uint8View message, const nonce_array &nonce, const KeyArray &key) {
     auto cipher_res = create_cipher(cc);
     if (cipher_res.has_error()) {
         return make_error(Cipher::CipherError::AE_CREATE_CIPHER_ERROR, cipher_res.error());
@@ -90,7 +92,8 @@ static inline Cipher::SealResult cipher_seal(CryptoConstruction cc, Uint8View me
     return (*cipher_res)->seal(message, nonce, key);
 }
 
-static inline Cipher::OpenResult cipher_open(CryptoConstruction cc, Uint8View ciphertext, const nonce_array &nonce, const KeyArray &key) {
+static inline Cipher::OpenResult cipher_open(
+        CryptoConstruction cc, Uint8View ciphertext, const nonce_array &nonce, const KeyArray &key) {
     auto cipher_res = create_cipher(cc);
     if (cipher_res.has_error()) {
         return make_error(Cipher::CipherError::AE_CREATE_CIPHER_ERROR, cipher_res.error());
@@ -103,26 +106,34 @@ static inline Cipher::OpenResult cipher_open(CryptoConstruction cc, Uint8View ci
 namespace ag {
 
 // clang format off
-template<>
+template <>
 struct ErrorCodeToString<ag::dns::dnscrypt::Cipher::CipherError> {
     std::string operator()(ag::dns::dnscrypt::Cipher::CipherError e) {
         switch (e) {
-        case decltype(e)::AE_CREATE_CIPHER_ERROR: return "Error creating cipher";
-        case decltype(e)::AE_SCALARMULT_ERROR: return "Scalarmult error";
-        case decltype(e)::AE_HSALSA20_ERROR: return "HSalsa20 error";
-        case decltype(e)::AE_HCHACHA20_ERROR: return "HChacha20 error";
-        case decltype(e)::AE_AEAD_SEAL_ERROR: return "AEAD seal error";
-        case decltype(e)::AE_AEAD_OPEN_ERROR: return "AEAD open error";
-        case decltype(e)::AE_WEAK_PUBKEY: return "Weak public key";
+        case decltype(e)::AE_CREATE_CIPHER_ERROR:
+            return "Error creating cipher";
+        case decltype(e)::AE_SCALARMULT_ERROR:
+            return "Scalarmult error";
+        case decltype(e)::AE_HSALSA20_ERROR:
+            return "HSalsa20 error";
+        case decltype(e)::AE_HCHACHA20_ERROR:
+            return "HChacha20 error";
+        case decltype(e)::AE_AEAD_SEAL_ERROR:
+            return "AEAD seal error";
+        case decltype(e)::AE_AEAD_OPEN_ERROR:
+            return "AEAD open error";
+        case decltype(e)::AE_WEAK_PUBKEY:
+            return "Weak public key";
         }
     }
 };
 
-template<>
+template <>
 struct ErrorCodeToString<ag::dns::dnscrypt::CreateCipherError> {
     std::string operator()(ag::dns::dnscrypt::CreateCipherError e) {
         switch (e) {
-        case decltype(e)::AE_UNKNOWN_CIPHER: return "Don't know how to make cipher with value";
+        case decltype(e)::AE_UNKNOWN_CIPHER:
+            return "Don't know how to make cipher with value";
         }
     }
 };

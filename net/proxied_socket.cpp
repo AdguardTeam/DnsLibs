@@ -46,18 +46,17 @@ Error<SocketError> ProxiedSocket::connect(ConnectParameters params) {
             peer = &*storage;
         }
     }
-    if (const auto *peer_as_addr = std::get_if<SocketAddress>(peer); peer_as_addr &&
-            (peer_as_addr->is_loopback() || peer_as_addr->is_any())) {
+    if (const auto *peer_as_addr = std::get_if<SocketAddress>(peer);
+            peer_as_addr && (peer_as_addr->is_loopback() || peer_as_addr->is_any())) {
         log_sock(this, dbg, "Don't direct localhost into proxy. Falling back to direct connection");
         m_proxy = m_proxied_callbacks.get_fallback_proxy(m_proxied_callbacks.arg).proxy;
-        auto connect_result = m_proxy->connect(
-                {
-                        .loop = params.loop,
-                        .proto = this->get_protocol(),
-                        .peer = *peer_as_addr,
-                        .callbacks = {nullptr, nullptr, on_connected, on_read, on_close, this},
-                        .timeout = params.timeout,
-                });
+        auto connect_result = m_proxy->connect({
+                .loop = params.loop,
+                .proto = this->get_protocol(),
+                .peer = *peer_as_addr,
+                .callbacks = {nullptr, nullptr, on_connected, on_read, on_close, this},
+                .timeout = params.timeout,
+        });
         if (connect_result.has_error()) {
             return connect_result.error();
         }
@@ -74,7 +73,8 @@ Error<SocketError> ProxiedSocket::connect(ConnectParameters params) {
             .loop = params.loop,
             .proto = this->get_protocol(),
             .peer = params.peer,
-            .callbacks = {on_successful_proxy_connection, on_proxy_connection_failed, on_connected, on_read, on_close, this},
+            .callbacks = {on_successful_proxy_connection, on_proxy_connection_failed, on_connected, on_read, on_close,
+                    this},
             .timeout = half_timeout,
             .outbound_interface = m_parameters.outbound_interface,
     });
@@ -143,14 +143,15 @@ void ProxiedSocket::on_successful_proxy_connection(void *arg) {
 void ProxiedSocket::on_proxy_connection_failed(void *arg, Error<SocketError> err) {
     auto *self = (ProxiedSocket *) arg;
 
-    OnConnectionFailedAction action = self->m_proxied_callbacks.on_proxy_connection_failed(
-            self->m_proxied_callbacks.arg, std::move(err));
+    OnConnectionFailedAction action =
+            self->m_proxied_callbacks.on_proxy_connection_failed(self->m_proxied_callbacks.arg, std::move(err));
     if (action == OCFA_CLOSE_CONNECTION) {
         return;
     }
 
     if (self->m_fallback_info) {
-        self->m_fallback_info->proxy = self->m_proxied_callbacks.get_fallback_proxy(self->m_proxied_callbacks.arg).proxy;
+        self->m_fallback_info->proxy =
+                self->m_proxied_callbacks.get_fallback_proxy(self->m_proxied_callbacks.arg).proxy;
     }
 }
 

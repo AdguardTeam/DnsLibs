@@ -4,19 +4,26 @@
 
 @section features_sec Quick start
 
-This code defines a C# class @ref Adguard.Dns.DnsProxyServer.DnsProxyServer "DnsProxyServer" that provides a way to start and stop a DNS proxy server.
-Here is a quick start guide on how to use this class:
+This code defines a C# class @ref Adguard.Dns.DnsProxyServer.DnsProxyServer "DnsProxyServer" that provides a way to
+start and stop a DNS proxy server. Here is a quick start guide on how to use this class:
 
-- Create an instance of @ref Adguard.Dns.Api.DnsProxyServer.Configs.DnsProxySettings "DnsProxySettings" with the desired settings for your DNS proxy server.
+- Create an instance of @ref Adguard.Dns.Api.DnsProxyServer.Configs.DnsProxySettings "DnsProxySettings" with the desired
+settings for your DNS proxy server.
 
-- Construct a class that inherits from @ref Adguard.Dns.Api.DnsProxyServer.Callbacks.IDnsProxyServerCallbackConfiguration "IDnsProxyServerCallbackConfiguration" and define a callback method to be triggered when the request is completed.
+- Construct a class that inherits from @ref
+Adguard.Dns.Api.DnsProxyServer.Callbacks.IDnsProxyServerCallbackConfiguration "IDnsProxyServerCallbackConfiguration" and
+define a callback method to be triggered when the request is completed.
 
-- Create an instance of @ref Adguard.Dns.DnsProxyServer.DnsProxyServer "DnsProxyServer" with the @ref Adguard.Dns.Api.DnsProxyServer.Configs.DnsProxySettings "DnsProxySettings"
-and @ref Adguard.Dns.Api.DnsProxyServer.Callbacks.IDnsProxyServerCallbackConfiguration "IDnsProxyServerCallbackConfiguration" instances as parameters.
+- Create an instance of @ref Adguard.Dns.DnsProxyServer.DnsProxyServer "DnsProxyServer" with the @ref
+Adguard.Dns.Api.DnsProxyServer.Configs.DnsProxySettings "DnsProxySettings" and @ref
+Adguard.Dns.Api.DnsProxyServer.Callbacks.IDnsProxyServerCallbackConfiguration "IDnsProxyServerCallbackConfiguration"
+instances as parameters.
 
-- Call the Start() method on the @ref Adguard.Dns.DnsProxyServer.DnsProxyServer "DnsProxyServer" instance to start the server.
+- Call the Start() method on the @ref Adguard.Dns.DnsProxyServer.DnsProxyServer "DnsProxyServer" instance to start the
+server.
 
-- Call the Stop() method on the @ref Adguard.Dns.DnsProxyServer.DnsProxyServer "DnsProxyServer" instance to stop the server.
+- Call the Stop() method on the @ref Adguard.Dns.DnsProxyServer.DnsProxyServer "DnsProxyServer" instance to stop the
+server.
 
 @section func Useful functions
 
@@ -31,23 +38,24 @@ bool isValidRule = Adguard.Dns.Utils.DnsUtils.IsRuleValid(ruleText);
 
 @section dns_stamp Working with DNS stamps
 
-The @ref Adguard.Dns.Api.DnsProxyServer.Configs.DnsStamp "DnsStamp" class provides an API for creating and manipulating DNS stamp objects. An object represents a DNS resolver
- endpoint that uses DNSCrypt, DNS-over-HTTPS (DoH), or other protocols.
-To use this API:
+The @ref Adguard.Dns.Api.DnsProxyServer.Configs.DnsStamp "DnsStamp" class provides an API for creating and manipulating
+DNS stamp objects. An object represents a DNS resolver endpoint that uses DNSCrypt, DNS-over-HTTPS (DoH), or other
+protocols. To use this API:
 
-Create a @ref Adguard.Dns.Api.DnsProxyServer.Configs.DnsStamp "DnsStamp" object by calling the @ref Adguard.Dns.Utils.DnsUtils.ParseDnsStamp() method from the DnsUtils with a string in the "sdns://" format.
-Example:
+Create a @ref Adguard.Dns.Api.DnsProxyServer.Configs.DnsStamp "DnsStamp" object by calling the @ref
+Adguard.Dns.Utils.DnsUtils.ParseDnsStamp() method from the DnsUtils with a string in the "sdns://" format. Example:
 
 ```
 string dnsStampStr = "sdns://...";
 DnsStamp dnsStamp = Adguard.Dns.Utils.DnsUtils.ParseDnsStamp(dnsStampStr);
 ```
 
-Access the @ref Adguard.Dns.Api.DnsProxyServer.Configs.DnsStamp "DnsStamp" object properties such as protocol type, server IP address, provider name, and others using their respective getter methods or properties.
+Access the @ref Adguard.Dns.Api.DnsProxyServer.Configs.DnsStamp "DnsStamp" object properties such as protocol type,
+server IP address, provider name, and others using their respective getter methods or properties.
 
 Use the convenience methods provided by DnsUtils for creating and representing stamps in different formats,
- including @ref Adguard.Dns.Utils.DnsUtils.GetDnsStampPrettyUrl(), @ref Adguard.Dns.Utils.DnsUtils.GetDnsStampPrettierUrl(),
- and @ref Adguard.Dns.Utils.DnsUtils.GetDnsStampString().
+ including @ref Adguard.Dns.Utils.DnsUtils.GetDnsStampPrettyUrl(), @ref
+Adguard.Dns.Utils.DnsUtils.GetDnsStampPrettierUrl(), and @ref Adguard.Dns.Utils.DnsUtils.GetDnsStampString().
 
 Example:
 

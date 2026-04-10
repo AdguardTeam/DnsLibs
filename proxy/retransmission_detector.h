@@ -1,24 +1,25 @@
 #pragma once
 
-#include "common/socket_address.h"
-#include "common/utils.h"
 #include <mutex>
 #include <unordered_map>
+
+#include "common/socket_address.h"
+#include "common/utils.h"
 
 namespace ag::dns::retransmission_detector {
 
 struct RequestKey {
-    uint16_t id; // Request ID
+    uint16_t id;            // Request ID
     SocketAddress peername; // Requestor address
 
     bool operator==(const RequestKey &other) const {
         return id == other.id && peername == other.peername;
     }
 };
-} // namespace ag::dns
+} // namespace ag::dns::retransmission_detector
 
 namespace std {
-template<>
+template <>
 struct hash<ag::dns::retransmission_detector::RequestKey> {
     size_t operator()(const ag::dns::retransmission_detector::RequestKey &key) const {
         return ag::utils::hash_combine(key.id, key.peername);
@@ -43,7 +44,8 @@ public:
 
 private:
     std::mutex m_mtx;
-    std::unordered_map<retransmission_detector::RequestKey, int> m_count_map; // value is never 0: incremented on insertion
+    std::unordered_map<retransmission_detector::RequestKey, int>
+            m_count_map; // value is never 0: incremented on insertion
 };
 
 } // namespace ag::dns

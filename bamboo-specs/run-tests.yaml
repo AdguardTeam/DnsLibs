@@ -30,6 +30,30 @@ Run C++ tests:
 
         conan remote add --index 0 art ${bamboo.conanRepoUrl} || true
 
+        LLVM_MAJOR_VER="$(
+          for d in /usr/lib/llvm-*; do
+            v="${d##*/llvm-}"
+            case "$v" in
+              (*[!0-9]*|'') : ;;
+              (*) echo "$v" ;;
+            esac
+          done | sort -n | tail -1
+        )"
+
+        apt install -y "clang-format-$LLVM_MAJOR_VER" "clang-tidy-$LLVM_MAJOR_VER"
+
+        make lint-cpp
+      description: Lint C++ code
+  - script:
+      interpreter: SHELL
+      scripts:
+      - |-
+        #!/bin/bash
+        set -e
+        set -x
+
+        conan remote add --index 0 art ${bamboo.conanRepoUrl} || true
+
         DL_ROOT=${PWD}
         trap "git clean -d -x -f ${DL_ROOT} --exclude '**/Testing/*/*.xml'" EXIT
 

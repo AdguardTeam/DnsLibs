@@ -1,19 +1,17 @@
 #pragma once
 
-
 #include <cstdint>
 #include <optional>
 #include <string>
 
-
 namespace ag::dns {
 
 enum class OutboundProxyProtocol {
-    HTTP_CONNECT, // Plain HTTP proxy
+    HTTP_CONNECT,  // Plain HTTP proxy
     HTTPS_CONNECT, // HTTPs proxy
-    SOCKS4, // Socks4 proxy
-    SOCKS5, // Socks5 proxy without UDP support
-    SOCKS5_UDP, // Socks5 proxy with UDP support
+    SOCKS4,        // Socks4 proxy
+    SOCKS5,        // Socks5 proxy without UDP support
+    SOCKS5_UDP,    // Socks5 proxy with UDP support
 };
 
 struct OutboundProxyAuthInfo {

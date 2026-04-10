@@ -3,6 +3,7 @@
 #include <ada.h>
 #include <algorithm>
 #include <chrono>
+#include <ldns/packet.h>
 #include <memory>
 #include <numeric>
 #include <optional>
@@ -10,14 +11,13 @@
 #include <string_view>
 #include <utility>
 #include <vector>
-#include <ldns/packet.h>
 
 #include "common/coro.h"
 #include "common/defs.h"
 #include "common/net_utils.h"
 #include "dns/common/dns_defs.h"
-#include "dns/common/net_consts.h"
 #include "dns/common/dns_utils.h"
+#include "dns/common/net_consts.h"
 #include "dns/net/certificate_verifier.h"
 #include "dns/net/socket.h"
 #include "dns/net/tls_session_cache.h"
@@ -72,8 +72,8 @@ struct UpstreamOptions {
     IfIdVariant outbound_interface;
 
     /**
-     * (Optional) List of upstreams base64 encoded SPKI fingerprints to verify. If at least one of them is matched in the
-     * certificate chain, the verification will be successful
+     * (Optional) List of upstreams base64 encoded SPKI fingerprints to verify. If at least one of them is matched in
+     * the certificate chain, the verification will be successful
      */
     std::vector<std::string> fingerprints;
 
@@ -101,7 +101,9 @@ public:
     };
 
     Upstream(UpstreamOptions opts, UpstreamFactoryConfig config)
-            : m_options(std::move(opts)), m_config(std::move(config)) {}
+            : m_options(std::move(opts))
+            , m_config(std::move(config)) {
+    }
 
     virtual ~Upstream() = default;
 
@@ -121,9 +123,13 @@ public:
      */
     virtual coro::Task<ExchangeResult> exchange(const ldns_pkt *request, const DnsMessageInfo *info = nullptr) = 0;
 
-    [[nodiscard]] const UpstreamOptions &options() const { return m_options; }
+    [[nodiscard]] const UpstreamOptions &options() const {
+        return m_options;
+    }
 
-    [[nodiscard]] const UpstreamFactoryConfig &config() const { return m_config; }
+    [[nodiscard]] const UpstreamFactoryConfig &config() const {
+        return m_config;
+    }
 
     /**
      * Helper function for easier socket creation
@@ -133,8 +139,8 @@ public:
                 {proto, m_options.outbound_interface, m_options.ignore_proxy_settings});
     }
 
-    [[nodiscard]] SocketFactory::SocketPtr make_secured_socket(utils::TransportProtocol proto,
-                                                               SocketFactory::SecureSocketParameters secure_socket_parameters) const {
+    [[nodiscard]] SocketFactory::SocketPtr make_secured_socket(
+            utils::TransportProtocol proto, SocketFactory::SecureSocketParameters secure_socket_parameters) const {
         return m_config.socket_factory->make_secured_socket(
                 {proto, m_options.outbound_interface, m_options.ignore_proxy_settings},
                 std::move(secure_socket_parameters));
@@ -233,6 +239,7 @@ public:
     CreateResult create_upstream(const UpstreamOptions &opts) const;
 
     struct Impl;
+
 private:
     std::unique_ptr<Impl> m_factory;
 };
@@ -240,15 +247,20 @@ private:
 } // namespace dns
 
 // clang format off
-template<>
+template <>
 struct ErrorCodeToString<dns::UpstreamFactory::UpstreamCreateError> {
     std::string operator()(dns::UpstreamFactory::UpstreamCreateError e) {
         switch (e) {
-        case decltype(e)::AE_INVALID_URL: return "Invalid URL";
-        case decltype(e)::AE_INVALID_STAMP: return "Invalid DNS stamp";
-        case decltype(e)::AE_INVALID_FINGERPRINT: return "Passed fingerprint is not valid";
-        case decltype(e)::AE_INIT_FAILED: return "Error initializing upstream";
-        case decltype(e)::AE_NOT_SUPPORTED: return "SystemUpstream is only supported on Apple platforms";
+        case decltype(e)::AE_INVALID_URL:
+            return "Invalid URL";
+        case decltype(e)::AE_INVALID_STAMP:
+            return "Invalid DNS stamp";
+        case decltype(e)::AE_INVALID_FINGERPRINT:
+            return "Passed fingerprint is not valid";
+        case decltype(e)::AE_INIT_FAILED:
+            return "Error initializing upstream";
+        case decltype(e)::AE_NOT_SUPPORTED:
+            return "SystemUpstream is only supported on Apple platforms";
         }
     }
 };
@@ -257,12 +269,18 @@ template <>
 struct ErrorCodeToString<dns::Upstream::InitError> {
     std::string operator()(dns::Upstream::InitError e) {
         switch (e) {
-        case decltype(e)::AE_EMPTY_SERVER_NAME: return "Server name is empty";
-        case decltype(e)::AE_EMPTY_BOOTSTRAP: return "Bootstrap should not be empty when server IP address is not known";
-        case decltype(e)::AE_BOOTSTRAPPER_INIT_FAILED: return "Failed to create bootstrapper";
-        case decltype(e)::AE_INVALID_ADDRESS: return "Passed server address is not valid";
-        case decltype(e)::AE_SSL_CONTEXT_INIT_FAILED: return "Failed to initialize SSL context";
-        case decltype(e)::AE_SYSTEMRESOLVER_INIT_FAILED: return "Failed to initialize system resolver";
+        case decltype(e)::AE_EMPTY_SERVER_NAME:
+            return "Server name is empty";
+        case decltype(e)::AE_EMPTY_BOOTSTRAP:
+            return "Bootstrap should not be empty when server IP address is not known";
+        case decltype(e)::AE_BOOTSTRAPPER_INIT_FAILED:
+            return "Failed to create bootstrapper";
+        case decltype(e)::AE_INVALID_ADDRESS:
+            return "Passed server address is not valid";
+        case decltype(e)::AE_SSL_CONTEXT_INIT_FAILED:
+            return "Failed to initialize SSL context";
+        case decltype(e)::AE_SYSTEMRESOLVER_INIT_FAILED:
+            return "Failed to initialize system resolver";
         }
     }
 };

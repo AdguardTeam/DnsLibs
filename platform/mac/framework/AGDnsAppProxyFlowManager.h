@@ -2,6 +2,7 @@
 
 #import <Foundation/Foundation.h>
 #import <NetworkExtension/NetworkExtension.h>
+
 #import "AGDnsProxy.h"
 
 typedef NS_ENUM(NSInteger, AGDnsAppProxyFlowMode) {

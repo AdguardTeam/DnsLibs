@@ -18,7 +18,7 @@ struct PacketPool::PacketPoolState {
     }
 };
 
-PacketPool::PacketPool(size_t size, int mtu)
+PacketPool::PacketPool(size_t size, uint32_t mtu)
         : m_capacity(size)
         , m_mtu(mtu)
         , m_state(new PacketPoolState{this, 1, true}) {
@@ -66,7 +66,7 @@ void PacketPool::return_packet_data(uint8_t *packet) {
     m_state->release();
 }
 
-int PacketPool::get_size() {
+size_t PacketPool::get_size() {
     return m_packets.size();
 }
 

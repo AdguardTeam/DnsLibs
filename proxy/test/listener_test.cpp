@@ -33,7 +33,7 @@ TEST_P(ListenerTest, ListensAndResponds) {
     std::atomic_bool proxy_initialized{false};
     std::atomic_bool proxy_init_result{false};
 
-    const auto params = GetParam();
+    const auto &params = GetParam();
     const auto listener_settings = params.settings;
 
     std::thread t([&]() {
@@ -81,10 +81,15 @@ TEST_P(ListenerTest, ListensAndResponds) {
     std::atomic_long successful_requests{0};
     static std::atomic_int request_id{0};
     struct Worker {
-        Worker(EventLoopPtr loop, std::future<void> future) : loop(loop), future(std::move(future)) {
+        Worker(EventLoopPtr loop, std::future<void> future)
+                : loop(loop)
+                , future(std::move(future)) {
             loop->start();
         }
-        Worker(Worker &&other) : loop(std::exchange(other.loop, nullptr)), future(std::move(other.future)) {}
+        Worker(Worker &&other) noexcept
+                : loop(std::exchange(other.loop, nullptr))
+                , future(std::move(other.future)) {
+        }
         ~Worker() {
             if (loop) {
                 loop->stop();
@@ -106,46 +111,43 @@ TEST_P(ListenerTest, ListensAndResponds) {
         std::this_thread::sleep_for(10ms);
         EventLoopPtr loop = EventLoop::create();
         Worker worker{loop,
-        coro::to_future([](std::atomic_long &successful_requests,
-                                ListenerSettings listener_settings,
-                                const std::string &address,
-                                size_t i,
-                                auto params,
-                                EventLoopPtr loop) -> coro::Task<void> {
-            Logger logger{fmt::format("test_coro_{}", i)};
-            SocketFactory socket_factory({*loop});
-            UpstreamFactory upstream_factory({*loop, &socket_factory, false, false, 1s});
+                coro::to_future([](std::atomic_long &successful_requests, ListenerSettings listener_settings,
+                                        const std::string &address, size_t i, auto params,
+                                        EventLoopPtr loop) -> coro::Task<void> {
+                    Logger logger{fmt::format("test_coro_{}", i)};
+                    SocketFactory socket_factory({*loop});
+                    UpstreamFactory upstream_factory({*loop, &socket_factory, false, false, 1s});
 
-            auto upstream_res = upstream_factory.create_upstream({.address = address});
+                    auto upstream_res = upstream_factory.create_upstream({.address = address});
 
-            if (upstream_res.has_error()) {
-                errlog(logger, "Upstream create: {}", upstream_res.error()->str());
-                co_return;
-            }
+                    if (upstream_res.has_error()) {
+                        errlog(logger, "Upstream create: {}", upstream_res.error()->str());
+                        co_return;
+                    }
 
-            for (size_t j = 0; j < params.requests_per_thread; ++j) {
-                ldns_pkt_ptr req(ldns_pkt_query_new(
-                        ldns_dname_new_frm_str(params.query), LDNS_RR_TYPE_AAAA, LDNS_RR_CLASS_IN, LDNS_RD));
-                ldns_pkt_set_id(req.get(), ++request_id);
+                    for (size_t j = 0; j < params.requests_per_thread; ++j) {
+                        ldns_pkt_ptr req(ldns_pkt_query_new(
+                                ldns_dname_new_frm_str(params.query), LDNS_RR_TYPE_AAAA, LDNS_RR_CLASS_IN, LDNS_RD));
+                        ldns_pkt_set_id(req.get(), ++request_id);
 
-                auto res = co_await upstream_res.value()->exchange(req.get());
-                if (res.has_error()) {
-                    errlog(logger, "[id={}] Upstream exchange: {}", ldns_pkt_id(req.get()), res.error()->str());
-                    continue;
-                }
-                auto &resp = res.value();
+                        auto res = co_await upstream_res.value()->exchange(req.get());
+                        if (res.has_error()) {
+                            errlog(logger, "[id={}] Upstream exchange: {}", ldns_pkt_id(req.get()), res.error()->str());
+                            continue;
+                        }
+                        auto &resp = res.value();
 
-                const auto rcode = ldns_pkt_get_rcode(resp.get());
-                if (LDNS_RCODE_NOERROR == rcode
-                        && (!ldns_pkt_tc(resp.get()) || listener_settings.protocol == ag::utils::TP_UDP)) {
-                    ++successful_requests;
-                } else {
-                    char *str = ldns_pkt2str(resp.get());
-                    errlog(logger, "[id={}] Invalid response:\n{}", ldns_pkt_id(req.get()), str);
-                    std::free(str);
-                }
-            }
-        }(successful_requests, listener_settings, address, i, params, loop))};
+                        const auto rcode = ldns_pkt_get_rcode(resp.get());
+                        if (LDNS_RCODE_NOERROR == rcode
+                                && (!ldns_pkt_tc(resp.get()) || listener_settings.protocol == ag::utils::TP_UDP)) {
+                            ++successful_requests;
+                        } else {
+                            char *str = ldns_pkt2str(resp.get());
+                            errlog(logger, "[id={}] Invalid response:\n{}", ldns_pkt_id(req.get()), str);
+                            std::free(str); // NOLINT(cppcoreguidelines-no-malloc,hicpp-no-malloc)
+                        }
+                    }
+                }(successful_requests, listener_settings, address, i, params, loop))};
         workers.emplace_back(std::move(worker));
     }
     for (auto &w : workers) {
@@ -234,8 +236,7 @@ TEST(ListenerTest, DISABLED_ManyRequestsPending) {
 
     std::this_thread::sleep_for(2s);
     ASSERT_TRUE(proxy_init_result);
-    ldns_pkt_ptr reqpkt(
-            ldns_pkt_query_new(ldns_dname_new_frm_str("g.co"), LDNS_RR_TYPE_A, LDNS_RR_CLASS_IN, LDNS_RD));
+    ldns_pkt_ptr reqpkt(ldns_pkt_query_new(ldns_dname_new_frm_str("g.co"), LDNS_RR_TYPE_A, LDNS_RR_CLASS_IN, LDNS_RD));
     ldns_buffer_ptr buffer{ldns_buffer_new(REQUEST_BUFFER_INITIAL_CAPACITY)};
     ldns_pkt2buffer_wire(buffer.get(), reqpkt.get());
 

@@ -2,6 +2,7 @@
 
 #include <string.h>
 #include <vector>
+
 #include <lwip/ip.h>
 #include <lwip/prot/tcp.h>
 #include <lwip/udp.h>
@@ -83,6 +84,7 @@ int pcap_write_header(int fd) {
             .sigfigs = 0,
             .snaplen = MAX_SUPPORTED_MTU,
             .linktype = LINKTYPE_RAW};
+    // NOLINTNEXTLINE(bugprone-narrowing-conversions,cppcoreguidelines-narrowing-conversions)
     return write(fd, &pcap_header, sizeof(pcap_header));
 }
 
@@ -91,6 +93,8 @@ int pcap_write_packet(int fd, struct timeval *tv, const void *data, size_t len) 
     return pcap_write_packet_uv_buf(fd, tv, &buf, 1);
 }
 
+// NOLINTBEGIN(cppcoreguidelines-pro-type-reinterpret-cast,
+// bugprone-narrowing-conversions,cppcoreguidelines-narrowing-conversions)
 static inline int writev_file(int fd, const TcpipIovec *iov, int iov_cnt) {
 #ifdef _WIN32
     int r = 0;
@@ -103,10 +107,12 @@ static inline int writev_file(int fd, const TcpipIovec *iov, int iov_cnt) {
     return writev(fd, reinterpret_cast<const struct iovec *>(iov), iov_cnt);
 #endif
 }
+// NOLINTEND(cppcoreguidelines-pro-type-reinterpret-cast,
+// bugprone-narrowing-conversions,cppcoreguidelines-narrowing-conversions)
 
 int pcap_write_packet_uv_buf(int fd, struct timeval *tv, const uv_buf_t *buf, int buf_cnt) {
     struct pcap_sf_pkthdr rec = {.ts = {.tv_sec = (int32_t) tv->tv_sec, .tv_usec = (int32_t) tv->tv_usec}, .caplen = 0};
-    
+
     std::vector<TcpipIovec> iovec_pcap;
     iovec_pcap.reserve(buf_cnt + 1);
     iovec_pcap.push_back({
@@ -120,7 +126,7 @@ int pcap_write_packet_uv_buf(int fd, struct timeval *tv, const uv_buf_t *buf, in
     }
     rec.len = rec.caplen;
 
-    return writev_file(fd, iovec_pcap.data(), iovec_pcap.size());
+    return writev_file(fd, iovec_pcap.data(), static_cast<int>(iovec_pcap.size()));
 }
 size_t get_approx_headers_size(size_t bytes_transfered, uint8_t proto_id, uint16_t mtu_size) {
     size_t headers_num = (bytes_transfered + mtu_size - 1) / mtu_size;

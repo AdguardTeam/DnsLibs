@@ -47,10 +47,9 @@ private:
      */
     coro::Task<ExchangeResult> exchange(const ldns_pkt *request_pkt, const DnsMessageInfo *info) override;
 
-    Logger m_log; ///< The logger for this upstream.
+    Logger m_log;                               ///< The logger for this upstream.
     std::unique_ptr<SystemResolver> m_resolver; ///< The system resolver used by this upstream.
-    std::string m_interface; ///< The network interface used by this upstream.
+    std::string m_interface;                    ///< The network interface used by this upstream.
 };
 
 } // namespace ag::dns
-

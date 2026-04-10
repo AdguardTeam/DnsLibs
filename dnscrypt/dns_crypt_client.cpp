@@ -1,10 +1,10 @@
 #include <sodium.h>
 #include <utility>
 
-#include "dns/dnscrypt/dns_crypt_client.h"
 #include "common/net_utils.h"
 #include "common/utils.h"
 #include "dns/common/net_consts.h"
+#include "dns/dnscrypt/dns_crypt_client.h"
 #include "dns/dnscrypt/dns_crypt_consts.h"
 #include "dns/dnscrypt/dns_crypt_ldns.h"
 #include "dns/dnscrypt/dns_crypt_utils.h"
@@ -40,7 +40,8 @@ coro::Task<Client::DialResult> Client::dial(const ServerStamp &stamp, EventLoop 
     local_server_info.m_server_public_key = stamp.server_pk;
     local_server_info.m_server_address = stamp.server_addr_str;
     if (SocketAddress addr = utils::str_to_socket_address(local_server_info.m_server_address); addr.port() == 0) {
-        local_server_info.m_server_address = AG_FMT("{}:{}", addr.host_str(/*ipv6_brackets*/ true), DEFAULT_DNSCRYPT_PORT);
+        local_server_info.m_server_address =
+                AG_FMT("{}:{}", addr.host_str(/*ipv6_brackets*/ true), DEFAULT_DNSCRYPT_PORT);
     }
     local_server_info.m_provider_name = stamp.provider_name;
     if (local_server_info.m_provider_name.empty()) {
@@ -61,8 +62,9 @@ coro::Task<Client::DialResult> Client::dial(const ServerStamp &stamp, EventLoop 
     co_return DialInfo{std::move(local_server_info), rtt};
 }
 
-coro::Task<Client::ExchangeResult> Client::exchange(const ldns_pkt &message, const ServerInfo &local_server_info, EventLoop &loop,
-        Millis timeout, const SocketFactory *socket_factory, SocketFactory::SocketParameters socket_parameters) const {
+coro::Task<Client::ExchangeResult> Client::exchange(const ldns_pkt &message, const ServerInfo &local_server_info,
+        EventLoop &loop, Millis timeout, const SocketFactory *socket_factory,
+        SocketFactory::SocketParameters socket_parameters) const {
 
     utils::Timer timer;
     auto query_res = create_ldns_buffer(message);
@@ -79,10 +81,10 @@ coro::Task<Client::ExchangeResult> Client::exchange(const ldns_pkt &message, con
     ldns_buffer_new_frm_data(&encrypted_query_buffer, encrypted_query.data(), encrypted_query.size());
     ldns_buffer_set_position(&encrypted_query_buffer, encrypted_query.size());
     socket_parameters.proto = m_protocol;
-    auto [encrypted_response, exchange_rtt, exchange_err] = co_await dns_exchange(loop,
-            timeout, utils::str_to_socket_address(local_server_info.m_server_address),
-            encrypted_query_buffer, socket_factory, std::move(socket_parameters));
-    free(ldns_buffer_export(&encrypted_query_buffer));
+    auto [encrypted_response, exchange_rtt, exchange_err] =
+            co_await dns_exchange(loop, timeout, utils::str_to_socket_address(local_server_info.m_server_address),
+                    encrypted_query_buffer, socket_factory, std::move(socket_parameters));
+    free(ldns_buffer_export(&encrypted_query_buffer)); // NOLINT(cppcoreguidelines-no-malloc,hicpp-no-malloc)
     if (exchange_err) {
         co_return make_error(DnsError::AE_NESTED_DNS_ERROR, exchange_err);
     }
@@ -90,8 +92,7 @@ coro::Task<Client::ExchangeResult> Client::exchange(const ldns_pkt &message, con
     // In case if the server local_server_info is not valid anymore (for instance, certificate was rotated)
     // the read operation will most likely time out.
     // This might be a signal to re-dial for the server certificate.
-    auto decrypt_res = local_server_info.decrypt(ag::as_u8v(encrypted_response),
-            ag::as_u8v(client_nonce));
+    auto decrypt_res = local_server_info.decrypt(ag::as_u8v(encrypted_response), ag::as_u8v(client_nonce));
     if (decrypt_res.has_error()) {
         co_return make_error(DnsError::AE_DECRYPT_ERROR, decrypt_res.error());
     }

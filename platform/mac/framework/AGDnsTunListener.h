@@ -5,30 +5,29 @@ NS_ASSUME_NONNULL_BEGIN
 
 /**
  * Completion handler for DNS message processing.
- * 
+ *
  * This handler may be called asynchronously on any thread.
  * The implementation must copy the reply data if it needs to be used after the handler returns.
- * 
+ *
  * @param reply DNS response message, or nil if no response should be sent
  */
-typedef void (^AGDnsTunListenerReplyHandler)(NSData * _Nullable reply);
+typedef void (^AGDnsTunListenerReplyHandler)(NSData *_Nullable reply);
 
 /**
  * Handler for incoming DNS messages from TUN interface.
- * 
+ *
  * This handler is called for both UDP and TCP DNS traffic.
  * The handler may process the message asynchronously and call replyHandler at any time,
  * on any thread. The message data is copied and remains valid after the handler returns.
- * 
+ *
  * @param message DNS message (query) without transport headers
  * @param replyHandler Completion handler to send the response back. May be called asynchronously.
  */
 typedef void (^AGDnsTunListenerMessageHandler)(NSData *message, AGDnsTunListenerReplyHandler replyHandler);
 
-
 /**
  * TUN listener that handles both UDP and TCP DNS traffic from a TUN device.
- * 
+ *
  * This class wraps the C++ TunListener and provides an Objective-C interface
  * for processing DNS queries from a TUN/TAP network interface.
  *
@@ -68,7 +67,7 @@ typedef void (^AGDnsTunListenerMessageHandler)(NSData *message, AGDnsTunListener
 
 /**
  * Initialize TUN listener.
- * 
+ *
  * Two modes are supported:
  * 1. Autonomous mode (fd >= 0, tunnelFlow == nil): Listener manages TUN device internally
  * 2. NEPacketTunnelFlow mode (fd == nil, tunnelFlow != nil): For iOS VPN extensions
@@ -88,7 +87,7 @@ typedef void (^AGDnsTunListenerMessageHandler)(NSData *message, AGDnsTunListener
 
 /**
  * Stop the listener and clean up resources.
- * 
+ *
  * This method stops the internal event loop and releases all resources.
  * After calling this method, the listener cannot be reused.
  */

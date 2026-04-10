@@ -1,25 +1,21 @@
 #pragma once
 
-
 #include <mutex>
 #include <optional>
 #include <string>
 #include <vector>
 
 #include "common/defs.h"
-#include "dns/net/socket.h"
 #include "common/logger.h"
+#include "dns/net/socket.h"
 #include "tls_codec.h"
-
 
 namespace ag::dns {
 
-
 class SecuredSocket : public Socket {
 public:
-    SecuredSocket(SocketFactory::SocketPtr underlying_socket,
-                  const CertificateVerifier *cert_verifier,
-                  SocketFactory::SecureSocketParameters secure_parameters);
+    SecuredSocket(SocketFactory::SocketPtr underlying_socket, const CertificateVerifier *cert_verifier,
+            SocketFactory::SecureSocketParameters secure_parameters);
     ~SecuredSocket() override = default;
 
 private:
@@ -50,6 +46,5 @@ private:
     struct Callbacks get_callbacks();
     Error<SocketError> flush_pending_encrypted_data();
 };
-
 
 } // namespace ag::dns

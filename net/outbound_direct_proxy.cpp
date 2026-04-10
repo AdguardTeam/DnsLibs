@@ -5,7 +5,7 @@
 namespace ag::dns {
 
 DirectOProxy::DirectOProxy(Parameters parameters)
-        : OutboundProxy(__func__, nullptr, std::move(parameters)) {
+        : OutboundProxy(__func__, nullptr, parameters) {
 }
 
 void DirectOProxy::reset_connections() {
@@ -31,9 +31,8 @@ std::optional<evutil_socket_t> DirectOProxy::get_fd(uint32_t conn_id) const {
 
 Error<SocketError> DirectOProxy::send(uint32_t conn_id, Uint8View data) {
     auto it = m_connections.find(conn_id);
-    return (it != m_connections.end())
-            ? it->second.socket->send(data)
-            : make_error(SocketError::AE_CONNECTION_ID_NOT_FOUND, fmt::to_string(conn_id));
+    return (it != m_connections.end()) ? it->second.socket->send(data)
+                                       : make_error(SocketError::AE_CONNECTION_ID_NOT_FOUND, fmt::to_string(conn_id));
 }
 
 bool DirectOProxy::set_timeout(uint32_t conn_id, Micros timeout) {
@@ -71,8 +70,7 @@ Error<SocketError> DirectOProxy::connect_to_proxy(uint32_t conn_id, const Connec
     return this->connect_through_proxy(conn_id, parameters);
 }
 
-Error<SocketError> DirectOProxy::connect_through_proxy(
-        uint32_t conn_id, const ConnectParameters &parameters) {
+Error<SocketError> DirectOProxy::connect_through_proxy(uint32_t conn_id, const ConnectParameters &parameters) {
     Connection &conn = m_connections
                                .emplace(conn_id,
                                        Connection{

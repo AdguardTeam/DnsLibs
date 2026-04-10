@@ -6,9 +6,9 @@
 #include <utility>
 #include <vector>
 
-#include "common/utils.h"
 #include "common/defs.h"
 #include "common/error.h"
+#include "common/utils.h"
 
 namespace ag {
 namespace dns {
@@ -124,19 +124,29 @@ struct ServerStamp {
 } // namespace dns
 
 // clang format off
-template<>
+template <>
 struct ErrorCodeToString<dns::ServerStamp::FromStringError> {
     std::string operator()(dns::ServerStamp::FromStringError e) {
         switch (e) {
-        case decltype(e)::AE_NO_STAMP_SDNS_PREFIX: return AG_FMT("Stamps are expected to start with {}", dns::STAMP_URL_PREFIX_WITH_SCHEME);
-        case decltype(e)::AE_NO_STAMP_URL_PREFIX: return "Unsupported URL format: expected a valid DNS upstream URL (e.g., sdns://, https://, tls://, udp://, etc.)";
-        case decltype(e)::AE_INVALID_STAMP: return "Invalid stamp";
-        case decltype(e)::AE_TOO_SHORT: return "Stamp is too short";
-        case decltype(e)::AE_UNSUPPORTED_PROTOCOL: return "Unsupported stamp protocol identifier";
-        case decltype(e)::AE_INVALID_HOST_PORT_FORMAT: return "Can't extract host and/or port";
-        case decltype(e)::AE_INVALID_ADDRESS: return "Invalid server address";
-        case decltype(e)::AE_INVALID_PORT: return "Invalid server port";
-        case decltype(e)::AE_GARBAGE_AFTER_END: return "Invalid stamp (garbage after end)";
+        case decltype(e)::AE_NO_STAMP_SDNS_PREFIX:
+            return AG_FMT("Stamps are expected to start with {}", dns::STAMP_URL_PREFIX_WITH_SCHEME);
+        case decltype(e)::AE_NO_STAMP_URL_PREFIX:
+            return "Unsupported URL format: expected a valid DNS upstream URL (e.g., sdns://, https://, tls://, "
+                   "udp://, etc.)";
+        case decltype(e)::AE_INVALID_STAMP:
+            return "Invalid stamp";
+        case decltype(e)::AE_TOO_SHORT:
+            return "Stamp is too short";
+        case decltype(e)::AE_UNSUPPORTED_PROTOCOL:
+            return "Unsupported stamp protocol identifier";
+        case decltype(e)::AE_INVALID_HOST_PORT_FORMAT:
+            return "Can't extract host and/or port";
+        case decltype(e)::AE_INVALID_ADDRESS:
+            return "Invalid server address";
+        case decltype(e)::AE_INVALID_PORT:
+            return "Invalid server port";
+        case decltype(e)::AE_GARBAGE_AFTER_END:
+            return "Invalid stamp (garbage after end)";
         }
     }
 };

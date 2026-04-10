@@ -1,7 +1,8 @@
-#include "upstream_system.h"
-#include "common/logger.h"
 #include <ctime>
 #include <net/if.h>
+
+#include "common/logger.h"
+#include "upstream_system.h"
 
 #ifdef __ANDROID__
 #include <android/multinetwork.h>

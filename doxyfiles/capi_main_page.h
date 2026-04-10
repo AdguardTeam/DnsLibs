@@ -15,21 +15,22 @@
 
  @section start Get started
 
- To initialize and start a DNS proxy server, you can call the @ref ag_dnsproxy_init() function with the appropriate settings
- and events structures. After the proxy server has been successfully initialized, you can use the returned proxy handle
- to manage the server's operation and interact with the API.
+ To initialize and start a DNS proxy server, you can call the @ref ag_dnsproxy_init() function with the appropriate
+settings and events structures. After the proxy server has been successfully initialized, you can use the returned proxy
+handle to manage the server's operation and interact with the API.
 
  Once initialized, there are two possible ways of handling DNS requests:
 
  1) UDP/TCP Listeners
- Listener configurations are specified in the @ref ag_dnsproxy_settings, and the library user should redirect DNS traffic to this @ref ag_listener_settings::port.
+ Listener configurations are specified in the @ref ag_dnsproxy_settings, and the library user should redirect DNS
+traffic to this @ref ag_listener_settings::port.
 
  2) Processing UDP packets with @ref ag_dnsproxy_handle_message()
  @note this function cannot handle TCP packets.
 
- If there is a packet tunnel, you can take a straightforward approach and redirect UDP packets from it using this function.
- This function takes packet data and a completion handler block, which will be called after
- the packet is processed and a response packet is returned. If no response packet is required, the method will return nil.
+ If there is a packet tunnel, you can take a straightforward approach and redirect UDP packets from it using this
+function. This function takes packet data and a completion handler block, which will be called after the packet is
+processed and a response packet is returned. If no response packet is required, the method will return nil.
 
  After finishing working with the server, you need to call the @ref ag_dnsproxy_deinit() function.
 
@@ -40,8 +41,8 @@
 
  @section stamps Working with DNS stamps
 
- To work with DNS stamps, use the @ref ag_dns_stamp_from_str(), @ref ag_dns_stamp_free(), @ref ag_dns_stamp_to_str(), @ref ag_dns_stamp_pretty_url(),
- and @ref ag_dns_stamp_prettier_url() functions.
+ To work with DNS stamps, use the @ref ag_dns_stamp_from_str(), @ref ag_dns_stamp_free(), @ref ag_dns_stamp_to_str(),
+@ref ag_dns_stamp_pretty_url(), and @ref ag_dns_stamp_prettier_url() functions.
 
  @section test Useful functions
 
@@ -59,7 +60,8 @@
 
  @section version How to get version
 
- To get information about the library version, use the @ref ag_dnsproxy_version() function, and to get the C API version, use the @ref ag_get_capi_version() function.
+ To get information about the library version, use the @ref ag_dnsproxy_version() function, and to get the C API
+version, use the @ref ag_get_capi_version() function.
 
  @section example Usage example
 

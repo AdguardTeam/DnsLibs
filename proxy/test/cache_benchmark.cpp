@@ -21,32 +21,32 @@ double time(Func &&f, Args &&...args) {
     auto start = high_resolution_clock::now();
     std::forward<Func>(f)(std::forward<Args>(args)...);
     auto end = high_resolution_clock::now();
-    return duration_cast<nanoseconds>(end - start).count() / 1e9;
+    return static_cast<double>(duration_cast<nanoseconds>(end - start).count()) / 1e9;
 }
 
 int main() {
-    DnsProxySettings settings = DnsProxySettings::get_default();
+    const DnsProxySettings &settings = DnsProxySettings::get_default();
     DnsProxy proxy;
     auto [ret, err_or_warn] = proxy.init(settings, {});
     if (!ret) {
-        std::cout << "Error: " << *err_or_warn << '\n';
+        std::cout << "Error: " << (err_or_warn ? err_or_warn->pretty_str() : "") << '\n';
         return 1;
     }
     if (err_or_warn) {
-        std::cout << "Warn: " << *err_or_warn << '\n';
+        std::cout << "Warn: " << err_or_warn->pretty_str() << '\n';
     }
 
     ag::utils::ScopeExit se([&proxy]() {
         proxy.deinit();
     });
 
-    ag::ldns_pkt_ptr reqpkt(
+    ldns_pkt_ptr reqpkt(
             ldns_pkt_query_new(ldns_dname_new_frm_str("google.com"), LDNS_RR_TYPE_A, LDNS_RR_CLASS_IN, LDNS_RD));
     if (!reqpkt) {
         return 1;
     }
 
-    UniquePtr<ldns_buffer, &ldns_buffer_free> buf(ldns_buffer_new(512));
+    ag::UniquePtr<ldns_buffer, &ldns_buffer_free> buf(ldns_buffer_new(512));
     if (ldns_pkt2buffer_wire(buf.get(), reqpkt.get()) != LDNS_STATUS_OK) {
         return 1;
     }

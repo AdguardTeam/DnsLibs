@@ -96,7 +96,7 @@ static std::string get_server_address(const Logger &log, std::string_view addres
 
 Resolver::Resolver(UpstreamOptions options, UpstreamFactoryConfig upstream_factory_config)
         : m_log(AG_FMT("Resolver {}", options.address))
-        , m_upstream_factory_config(std::move(upstream_factory_config))
+        , m_upstream_factory_config(upstream_factory_config)
         , m_upstream_options(std::move(options)) {
     m_upstream_options.address = get_server_address(m_log, m_upstream_options.address);
     m_shutdown_guard = std::make_shared<bool>(true);
@@ -160,7 +160,6 @@ coro::Task<Resolver::Result> Resolver::resolve(std::string_view host, int port, 
     UpstreamFactory upstream_factory{m_upstream_factory_config};
     UpstreamFactory::CreateResult factory_result = upstream_factory.create_upstream(m_upstream_options);
     if (factory_result.has_error()) {
-        std::string err = AG_FMT("Failed to create upstream: {}", factory_result.error()->str());
         log_ip(m_log, dbg, resolver_address, "{}", factory_result.error()->str());
         co_return make_error(ResolverError::AE_UPSTREAM_INIT_FAILED, factory_result.error());
     }
@@ -173,7 +172,8 @@ coro::Task<Resolver::Result> Resolver::resolve(std::string_view host, int port, 
     }
     std::weak_ptr<bool> shutdown_guard = m_shutdown_guard;
     auto replies = upstream->config().ipv6_available
-            ? co_await parallel::all_of<Upstream::ExchangeResult>(upstream->exchange(a_req.get()), upstream->exchange(aaaa_req.get()))
+            ? co_await parallel::all_of<Upstream::ExchangeResult>(
+                      upstream->exchange(a_req.get()), upstream->exchange(aaaa_req.get()))
             : co_await parallel::all_of<Upstream::ExchangeResult>(upstream->exchange(a_req.get()));
     timeout -= timer.elapsed<Millis>();
     if (shutdown_guard.expired()) {
@@ -183,8 +183,10 @@ coro::Task<Resolver::Result> Resolver::resolve(std::string_view host, int port, 
     Error<ResolverError> last_error{};
     for (auto &reply : replies) {
         if (reply.has_error()) {
-            log_ip(m_log, dbg, resolver_address, "Failed to talk to upstream for host '{}' (elapsed:{}):\n{}", host, timer.elapsed<Millis>(), reply.error()->str());
-            last_error = make_error(ResolverError::AE_EXCHANGE_FAILED, AG_FMT("Could not resolve {}", host), reply.error());
+            log_ip(m_log, dbg, resolver_address, "Failed to talk to upstream for host '{}' (elapsed:{}):\n{}", host,
+                    timer.elapsed<Millis>(), reply.error()->str());
+            last_error =
+                    make_error(ResolverError::AE_EXCHANGE_FAILED, AG_FMT("Could not resolve {}", host), reply.error());
             continue;
         }
         auto reply_addrs = socket_address_from_reply(m_log, reply->get(), port);
@@ -192,7 +194,8 @@ coro::Task<Resolver::Result> Resolver::resolve(std::string_view host, int port, 
     }
 
     if (addrs.empty()) {
-        error = last_error ? last_error : make_error(ResolverError::AE_EMPTY_ADDRS, AG_FMT("Could not resolve {}", host));
+        error = last_error ? last_error
+                           : make_error(ResolverError::AE_EMPTY_ADDRS, AG_FMT("Could not resolve {}", host));
     }
 
     if (error) {

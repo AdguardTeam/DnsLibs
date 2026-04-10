@@ -2,9 +2,10 @@
 
 #include <chrono>
 #include <memory>
+
+#include "common/logger.h"
 #include "dns/dnsstamp/dns_stamp.h"
 #include "dns/upstream/upstream.h"
-#include "common/logger.h"
 
 namespace ag::dns {
 

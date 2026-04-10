@@ -1,18 +1,17 @@
 #pragma once
 
-
-#include "common/defs.h"
-#include "common/net_utils.h"
-#include "common/logger.h"
-#include "dns/net/socket.h"
-#include <event2/event.h>
-#include <optional>
 #include <memory>
 #include <mutex>
+#include <optional>
 
+#include <event2/event.h>
+
+#include "common/defs.h"
+#include "common/logger.h"
+#include "common/net_utils.h"
+#include "dns/net/socket.h"
 
 namespace ag::dns {
-
 
 class UdpSocket : public Socket {
 public:
@@ -45,8 +44,9 @@ private:
     void update_read_status();
 
     static void on_timeout(uv_timer_t *handle);
-    static void on_read(uv_udp_t *udp, ssize_t nread, const uv_buf_t *buf, const sockaddr * /* addr */, uint32_t /* flags */);
+    static void on_read(
+            uv_udp_t *udp, ssize_t nread, const uv_buf_t *buf, const sockaddr * /* addr */, uint32_t /* flags */);
     static void allocate_read(uv_handle_t *handle, size_t size, uv_buf_t *buf);
 };
 
-}
+} // namespace ag::dns

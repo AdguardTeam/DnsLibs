@@ -42,8 +42,8 @@ struct Field {
             : Field(local_field.end_offset(), size) {
     }
     template <typename... Ts>
-    constexpr Field(size_t offset, Ts &&...xs)
-            : Field(offset, (... + xs.size)) {
+    explicit constexpr Field(size_t offset, Ts &&...xs)
+            : Field(offset, (... + std::forward<Ts>(xs).size)) {
     }
     constexpr size_t end_offset() const {
         return offset + size;
@@ -53,6 +53,7 @@ struct Field {
     size_t size;
 };
 
+// NOLINTBEGIN(cppcoreguidelines-pro-type-reinterpret-cast)
 template <typename R, typename T>
 constexpr const auto &field_cref(const T &container, const Field &local_field) {
     return reinterpret_cast<const R &>(container[local_field.offset]);
@@ -62,6 +63,7 @@ template <typename R, size_t S, typename T>
 constexpr const auto &field_c_array_cref(const T &container, const Field &local_field) {
     return reinterpret_cast<const R(&)[S]>(container[local_field.offset]);
 }
+// NOLINTEND(cppcoreguidelines-pro-type-reinterpret-cast)
 
 static constexpr Field CERT_MAGIC_FIELD{0, std::size(CERT_MAGIC)};
 static constexpr Field ES_VERSION_FIELD{CERT_MAGIC_FIELD, sizeof(CryptoConstruction)};
@@ -82,8 +84,8 @@ static const ag::Logger &server_info_log() {
     return result;
 }
 
-coro::Task<ServerInfo::FetchResult> ServerInfo::fetch_current_dnscrypt_cert(EventLoop &loop,
-        Millis timeout, const SocketFactory *socket_factory, SocketFactory::SocketParameters socket_parameters) {
+coro::Task<ServerInfo::FetchResult> ServerInfo::fetch_current_dnscrypt_cert(EventLoop &loop, Millis timeout,
+        const SocketFactory *socket_factory, SocketFactory::SocketParameters socket_parameters) {
 
     if (m_server_public_key.size() != crypto_sign_PUBLICKEYBYTES) {
         co_return make_error(FetchError::AE_INVALID_PUBKEY_LENGTH);
@@ -142,8 +144,8 @@ ServerInfo::EncryptResult ServerInfo::encrypt(utils::TransportProtocol local_pro
     } else {
         min_question_size = std::max(MIN_UDP_QUESTION_SIZE, min_question_size);
     }
-    size_t padded_length
-            = std::min(MAX_DNS_UDP_SAFE_PACKET_SIZE, (std::max(min_question_size, QUERY_OVERHEAD) + 63) & ~63u);
+    size_t padded_length =
+            std::min(MAX_DNS_UDP_SAFE_PACKET_SIZE, (std::max(min_question_size, QUERY_OVERHEAD) + 63) & ~63u);
     if (QUERY_OVERHEAD + packet.size() + 1 > padded_length) {
         return make_error(EncryptError::AE_QUESTION_SECTION_IS_TOO_LARGE);
     }
@@ -235,7 +237,8 @@ ServerInfo::TxtToCertInfoResult ServerInfo::txt_to_cert_info(const ldns_rr &answ
     // Validate the certificate date
     auto now = duration_cast<Secs>(SystemClock::now().time_since_epoch()).count();
     if (now < local_cert_info.not_before) {
-        return make_error(TxtToCertInfoError::AE_CERTIFICATE_NOT_YET_VALID, format_gmtime(Secs{local_cert_info.not_before}));
+        return make_error(
+                TxtToCertInfoError::AE_CERTIFICATE_NOT_YET_VALID, format_gmtime(Secs{local_cert_info.not_before}));
     }
     if (now > local_cert_info.not_after) {
         return make_error(TxtToCertInfoError::AE_CERTIFICATE_EXPIRED, format_gmtime(Secs{local_cert_info.not_after}));

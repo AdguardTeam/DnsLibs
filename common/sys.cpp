@@ -7,10 +7,12 @@
 #if defined(__linux__) || defined(__LINUX__) || defined(__MACH__)
 #include <sys/resource.h>
 #elif defined(_WIN32)
+// clang-format off
 #include <windows.h>
 #include <errno.h>
 #include <psapi.h>
 #include <stdio.h>
+// clang-format on
 #endif
 
 namespace ag::dns::sys {

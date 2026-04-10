@@ -2,11 +2,11 @@
 #include <cassert>
 
 #if defined _WIN32 && !defined __clang__
-#pragma optimize( "", off )
+#pragma optimize("", off)
 #endif
 #include "common/parallel.h"
 #if defined _WIN32 && !defined __clang__
-#pragma optimize( "", on )
+#pragma optimize("", on)
 #endif
 #include "common/utils.h"
 #include "dns/dnsstamp/dns_stamp.h"
@@ -17,8 +17,6 @@
 
 namespace ag::dns {
 
-using std::chrono::duration_cast;
-
 // For each resolver a half of time out is given for a try. If one fails, it's moved to the end
 // of the list to give it a chance in the future.
 //
@@ -28,18 +26,18 @@ coro::Task<void> Bootstrapper::do_resolve() {
     Millis timeout = m_timeout;
     Error<Resolver::ResolverError> error;
 
-    auto aw = parallel::any_of_cond<Resolver::Result>([log = m_log, server_name = m_server_name, &error](const Resolver::Result &result){
-        if (result.has_error()) {
-            log_addr(log, dbg, server_name, "Failed to resolve host: {}", result.error()->str());
-            error = result.error();
-            return false;
-        }
-        return true;
-    });
+    auto aw = parallel::any_of_cond<Resolver::Result>(
+            [log = m_log, server_name = m_server_name, &error](const Resolver::Result &result) {
+                if (result.has_error()) {
+                    log_addr(log, dbg, server_name, "Failed to resolve host: {}", result.error()->str());
+                    error = result.error();
+                    return false;
+                }
+                return true;
+            });
     for (auto &resolver : m_resolvers) {
         aw.add(resolver->resolve(m_server_name, m_server_port, timeout));
     }
-    std::string server_name = m_server_name;
     std::weak_ptr<bool> shutdown_guard = m_shutdown_guard;
     std::optional<Resolver::Result> res = co_await aw;
     if (shutdown_guard.expired()) {
@@ -110,8 +108,7 @@ static std::vector<ResolverPtr> create_resolvers(const Logger &log, const Bootst
     opts.outbound_interface = p.outbound_interface;
     for (const std::string &server : p.bootstrap) {
         auto split_result = ag::utils::split_host_port(server);
-        if (!p.upstream_config.ipv6_available
-                && !split_result.has_error()
+        if (!p.upstream_config.ipv6_available && !split_result.has_error()
                 && SocketAddress(split_result.value().first, 0).is_ipv6()) {
             continue;
         }
@@ -146,9 +143,7 @@ Bootstrapper::Bootstrapper(const Params &p)
 
 Bootstrapper::~Bootstrapper() {
     complete_resolve(Bootstrapper::ResolveResult{
-            .server_name = m_server_name,
-            .error = make_error(BootstrapperError::AE_SHUTTING_DOWN)
-    });
+            .server_name = m_server_name, .error = make_error(BootstrapperError::AE_SHUTTING_DOWN)});
 }
 Bootstrapper::Bootstrapper(Bootstrapper &&) = default;
 Bootstrapper &Bootstrapper::operator=(Bootstrapper &&) = default;

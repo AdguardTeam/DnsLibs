@@ -76,7 +76,6 @@ typedef NS_ENUM(NSInteger, AGDnsLogLevel) {
     AGDLLTrace,
 };
 
-
 /**
  * @ingroup enums
  * Listener protocols.
@@ -99,11 +98,11 @@ typedef NS_ENUM(NSInteger, AGDnsListenerProtocol) {
  */
 typedef NS_OPTIONS(NSUInteger, AGDnsProxyReapplyOptions) {
     /** No changes, no-op */
-    AGDnsProxyReapplyNone     = 0,
+    AGDnsProxyReapplyNone = 0,
     /** Reload all DNS settings except listeners and filter_params */
     AGDnsProxyReapplySettings = 1 << 0,
     /** Reload filter parameters (filter_params) */
-    AGDnsProxyReapplyFilters  = 1 << 1,
+    AGDnsProxyReapplyFilters = 1 << 1,
 };
 
 /**
@@ -173,7 +172,7 @@ typedef NS_ENUM(NSInteger, AGDnsBlockingReason) {
  *
  * @param level logging level to be set
  */
-+ (void) setLevel: (AGDnsLogLevel) level;
++ (void)setLevel:(AGDnsLogLevel)level;
 
 /**
  * A function that outputs a log message.
@@ -192,7 +191,7 @@ typedef void (^logCallback)(AGDnsLogLevel level, const char *msg, int length);
  *
  * @param func logging function
  */
-+ (void) setCallback: (logCallback) func;
++ (void)setCallback:(logCallback)func;
 
 @end
 
@@ -248,7 +247,7 @@ typedef void (^logCallback)(AGDnsLogLevel level, const char *msg, int length);
 
 - (void)encodeWithCoder:(NSCoder *)coder;
 
-- (NSString*)description;
+- (NSString *)description;
 
 @end
 
@@ -277,7 +276,7 @@ typedef void (^logCallback)(AGDnsLogLevel level, const char *msg, int length);
 
 - (void)encodeWithCoder:(NSCoder *)coder;
 
-- (NSString*)description;
+- (NSString *)description;
 
 @end
 
@@ -294,7 +293,7 @@ typedef void (^logCallback)(AGDnsLogLevel level, const char *msg, int length);
 
 - (void)encodeWithCoder:(NSCoder *)coder;
 
-- (NSString*)description;
+- (NSString *)description;
 
 @end
 
@@ -344,7 +343,7 @@ typedef void (^logCallback)(AGDnsLogLevel level, const char *msg, int length);
 
 - (void)encodeWithCoder:(NSCoder *)coder;
 
-- (NSString*)description;
+- (NSString *)description;
 
 @end
 
@@ -377,13 +376,13 @@ typedef NS_ENUM(NSInteger, AGDnsOutboundProxyProtocol) {
 /** Password for authentication */
 @property(nonatomic) NSString *password;
 
-- (instancetype) init NS_UNAVAILABLE;
+- (instancetype)init NS_UNAVAILABLE;
 
 - (instancetype)initWithCoder:(NSCoder *)coder;
 
 - (void)encodeWithCoder:(NSCoder *)coder;
 
-- (NSString*)description;
+- (NSString *)description;
 
 @end
 
@@ -410,13 +409,13 @@ typedef NS_ENUM(NSInteger, AGDnsOutboundProxyProtocol) {
 /** If true and the proxy connection is secure, the certificate won't be verified */
 @property(nonatomic) BOOL trustAnyCertificate;
 
-- (instancetype) init NS_UNAVAILABLE;
+- (instancetype)init NS_UNAVAILABLE;
 
 - (instancetype)initWithCoder:(NSCoder *)coder;
 
 - (void)encodeWithCoder:(NSCoder *)coder;
 
-- (NSString*)description;
+- (NSString *)description;
 
 @end
 
@@ -443,7 +442,7 @@ typedef NS_ENUM(NSInteger, AGDnsOutboundProxyProtocol) {
 
 - (void)encodeWithCoder:(NSCoder *)coder;
 
-- (NSString*)description;
+- (NSString *)description;
 
 @end
 
@@ -462,7 +461,7 @@ typedef NS_ENUM(NSInteger, AGDnsOutboundProxyProtocol) {
 /**
  * Relative priority within the QoS class.
  */
-@property (nonatomic) int relativePriority;
+@property(nonatomic) int relativePriority;
 
 /**
  * Designated initializer.
@@ -470,8 +469,7 @@ typedef NS_ENUM(NSInteger, AGDnsOutboundProxyProtocol) {
  * @param qosClass The QoS class (USER_INTERACTIVE, USER_INITIATED, etc.)
  * @param relativePriority Relative priority.
  */
-- (instancetype)initWithQosClass:(qos_class_t)qosClass
-                relativePriority:(int)relativePriority NS_DESIGNATED_INITIALIZER;
+- (instancetype)initWithQosClass:(qos_class_t)qosClass relativePriority:(int)relativePriority NS_DESIGNATED_INITIALIZER;
 
 - (instancetype)init;
 
@@ -479,7 +477,7 @@ typedef NS_ENUM(NSInteger, AGDnsOutboundProxyProtocol) {
 
 - (void)encodeWithCoder:(NSCoder *)coder;
 
-- (NSString*)description;
+- (NSString *)description;
 
 @end
 #endif // TARGET_OS_IPHONE
@@ -649,7 +647,7 @@ typedef NS_ENUM(NSInteger, AGDnsOutboundProxyProtocol) {
 /**
  * Get default DNS proxy settings
  */
-+ (instancetype) getDefault;
++ (instancetype)getDefault;
 @end
 
 /**
@@ -685,7 +683,7 @@ typedef NS_ENUM(NSUInteger, AGDnsRuleGenerationOptions) {
  */
 @interface AGDnsFilteringLogAction : NSObject
 @property(nonatomic) NSArray<AGDnsRuleTemplate *> *templates; /**< A set of rule templates */
-@property(nonatomic) NSUInteger allowedOptions; /**< Options that are allowed to be passed to `generate_rule` */
+@property(nonatomic) NSUInteger allowedOptions;  /**< Options that are allowed to be passed to `generate_rule` */
 @property(nonatomic) NSUInteger requiredOptions; /**< Options that are required for the generated rule to be correct */
 @property(nonatomic) BOOL blocking; /**< Whether something will be blocked or un-blocked as a result of this action */
 /**
@@ -744,9 +742,9 @@ typedef NS_ENUM(NSUInteger, AGDnsRuleGenerationOptions) {
  * @param events proxy events handler
  * @param error  error reference
  */
-- (instancetype) initWithConfig: (AGDnsProxyConfig *) config
-                        handler: (AGDnsProxyEvents *) events
-                          error: (NSError **) error NS_SWIFT_NOTHROW;
+- (instancetype)initWithConfig:(AGDnsProxyConfig *)config
+                       handler:(AGDnsProxyEvents *)events
+                         error:(NSError **)error NS_SWIFT_NOTHROW;
 
 /**
  * Process UDP/TCP packet payload.
@@ -755,7 +753,7 @@ typedef NS_ENUM(NSUInteger, AGDnsRuleGenerationOptions) {
  * @param completionHandler Completion handler
  * @return The response packet payload, or nil if nothing shoud be sent in response
  */
-- (void) handlePacket: (NSData *) packet completionHandler: (void (^)(NSData *)) completionHandler;
+- (void)handlePacket:(NSData *)packet completionHandler:(void (^)(NSData *))completionHandler;
 
 /**
  * Process a DNS message (query or response).
@@ -764,8 +762,8 @@ typedef NS_ENUM(NSUInteger, AGDnsRuleGenerationOptions) {
  * @param handler Completion handler. Will be called on an unspecified thread with the result message.
  */
 - (void)handleMessage:(NSData *)message
-             withInfo:(AGDnsMessageInfo *)info
-withCompletionHandler:(void (^)(NSData *))handler;
+                     withInfo:(AGDnsMessageInfo *)info
+        withCompletionHandler:(void (^)(NSData *))handler;
 
 /**
  * Check if a DNS message's domain matches `fallbackDomains`.
@@ -779,7 +777,7 @@ withCompletionHandler:(void (^)(NSData *))handler;
  * Stop DnsProxy.
  * @note Should be called before dealloc
  */
-- (void) stop;
+- (void)stop;
 
 /**
  * Reapply DNS proxy settings with selective reloading.
@@ -792,22 +790,22 @@ withCompletionHandler:(void (^)(NSData *))handler;
  * @param error Error reference for any initialization errors
  * @return True if reapplying settings succeeded, false otherwise
  */
-- (BOOL) reapplySettings: (AGDnsProxyConfig *) config
-                 options: (AGDnsProxyReapplyOptions) options
-                   error: (NSError **) error NS_SWIFT_NOTHROW;
+- (BOOL)reapplySettings:(AGDnsProxyConfig *)config
+                options:(AGDnsProxyReapplyOptions)options
+                  error:(NSError **)error NS_SWIFT_NOTHROW;
 
 /**
-* Check if string is a valid rule
-* @param str string to check
-* @return True if string is a valid rule, false otherwise
-*/
-+ (BOOL) isValidRule: (NSString *) str;
+ * Check if string is a valid rule
+ * @param str string to check
+ * @return True if string is a valid rule, false otherwise
+ */
++ (BOOL)isValidRule:(NSString *)str;
 
 /**
  * Gets the library version
  * @return The DNS proxy library version
  */
-+ (NSString *) libraryVersion;
++ (NSString *)libraryVersion;
 
 @end
 
@@ -884,17 +882,17 @@ typedef NS_ENUM(NSInteger, AGServerInformalProperties) {
 /** Server properties (may be null) */
 @property(nonatomic) NSNumber *properties;
 
-- (instancetype) init NS_UNAVAILABLE;
+- (instancetype)init NS_UNAVAILABLE;
 
 - (instancetype)initWithCoder:(NSCoder *)coder;
 
 - (void)encodeWithCoder:(NSCoder *)coder;
 
 /** Init a stamp from "sdns://" string */
-- (instancetype) initWithString:(NSString *)stampStr error:(NSError **)error NS_SWIFT_NOTHROW;
+- (instancetype)initWithString:(NSString *)stampStr error:(NSError **)error NS_SWIFT_NOTHROW;
 
 /** Create a stamp from "sdns://" string */
-+ (instancetype) stampWithString:(NSString *)stampStr error:(NSError **)error NS_SWIFT_NOTHROW;
++ (instancetype)stampWithString:(NSString *)stampStr error:(NSError **)error NS_SWIFT_NOTHROW;
 
 /** A URL representation of this stamp which can be used as a valid AGDnsUpstream address */
 @property(nonatomic, readonly) NSString *prettyUrl;

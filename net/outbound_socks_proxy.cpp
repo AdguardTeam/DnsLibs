@@ -52,9 +52,9 @@ enum Socks5Command {
 };
 
 enum Socks5AddressType {
-    S5AT_IPV4 = 0x01, // a version-4 IP address, with a length of 4 octets
+    S5AT_IPV4 = 0x01,        // a version-4 IP address, with a length of 4 octets
     S5AT_DOMAIN_NAME = 0x03, // a fully-qualified domain name, with a one-byte length prefix
-    S5AT_IPV6 = 0x04, // a version-6 IP address, with a length of 16 octets
+    S5AT_IPV6 = 0x04,        // a version-6 IP address, with a length of 16 octets
 };
 
 enum Socks5ReplyStatus {
@@ -63,60 +63,60 @@ enum Socks5ReplyStatus {
 
 #pragma pack(push, 1)
 
-struct Socks4ConnectRequest { // NOLINT(cppcoreguidelines-pro-type-member-init)
-    uint8_t ver = SVN_4; // version number
-    uint8_t cd = S4CMD_CONNECT; // command code
-    uint16_t dstport; // destination port number
+struct Socks4ConnectRequest {        // NOLINT(cppcoreguidelines-pro-type-member-init)
+    uint8_t ver = SVN_4;             // version number
+    uint8_t cd = S4CMD_CONNECT;      // command code
+    uint16_t dstport;                // destination port number
     [[maybe_unused]] uint32_t dstip; // destination IP address
     uint8_t userid[];
 };
 
 struct Socks4ConnectReply {
-    uint8_t ver; // version number
-    uint8_t cd; // command code
-    uint16_t dstport; // destination port number
+    uint8_t ver;                     // version number
+    uint8_t cd;                      // command code
+    uint16_t dstport;                // destination port number
     [[maybe_unused]] uint32_t dstip; // destination IP address
 };
 
 struct Socks5AuthMethodRequest { // NOLINT(cppcoreguidelines-pro-type-member-init)
-    uint8_t ver = SVN_5; // version number
-    uint8_t nmethods{}; // number of method identifier octets
-    uint8_t methods[]; // methods
+    uint8_t ver = SVN_5;         // version number
+    uint8_t nmethods{};          // number of method identifier octets
+    uint8_t methods[];           // methods
 };
 
 struct Socks5AuthMethodResponse {
-    uint8_t ver; // version number
+    uint8_t ver;    // version number
     uint8_t method; // method
 };
 
 struct Socks5AuthUserPassResponse {
-    uint8_t ver; // version number
+    uint8_t ver;    // version number
     uint8_t status; // verification status
 };
 
-struct Socks5ConnectRequest { // NOLINT(cppcoreguidelines-pro-type-member-init)
-    uint8_t ver = SVN_5; // set to X'05' for this version of the protocol
-    uint8_t cmd; // command id
+struct Socks5ConnectRequest {     // NOLINT(cppcoreguidelines-pro-type-member-init)
+    uint8_t ver = SVN_5;          // set to X'05' for this version of the protocol
+    uint8_t cmd;                  // command id
     [[maybe_unused]] uint8_t rsv; // reserved
-    uint8_t atyp; // address type of following address
-    uint8_t dst_addr[]; // desired destination address
+    uint8_t atyp;                 // address type of following address
+    uint8_t dst_addr[];           // desired destination address
     // desired destination port in network octet order
 };
 
 struct Socks5ConnectReply {
-    uint8_t ver; // set to X'05' for this version of the protocol
-    uint8_t rep; // reply status
+    uint8_t ver;                  // set to X'05' for this version of the protocol
+    uint8_t rep;                  // reply status
     [[maybe_unused]] uint8_t rsv; // reserved
-    uint8_t atyp; // address type of following address
-    uint8_t bnd_addr[]; // server bound address
+    uint8_t atyp;                 // address type of following address
+    uint8_t bnd_addr[];           // server bound address
     // server bound port in network octet order
 };
 
 struct Socks5UdpHeader {
     [[maybe_unused]] uint16_t rsv; // reserved
-    uint8_t frag; // current fragment number
-    uint8_t atyp; // address type of following addresses:
-    uint8_t dst_addr[]; // desired destination address
+    uint8_t frag;                  // current fragment number
+    uint8_t atyp;                  // address type of following addresses:
+    uint8_t dst_addr[];            // desired destination address
     // desired destination port
     // user data
 };
@@ -162,13 +162,14 @@ struct SocksOProxy::UdpAssociation { // NOLINT(cppcoreguidelines-pro-type-member
 };
 
 SocksOProxy::SocksOProxy(const OutboundProxySettings *settings, Parameters parameters)
-        : OutboundProxy(__func__, settings, std::move(parameters)) {
+        : OutboundProxy(__func__, settings, parameters) {
 }
 
 SocksOProxy::~SocksOProxy() = default;
 
 void SocksOProxy::deinit_impl() {
-    std::vector<uint32_t> udp_connections, tcp_connections;
+    std::vector<uint32_t> udp_connections;
+    std::vector<uint32_t> tcp_connections;
     udp_connections.reserve(m_connections.size());
     tcp_connections.reserve(m_connections.size());
     for (auto &[conn_id, conn] : m_connections) {
@@ -239,7 +240,7 @@ Error<SocketError> SocksOProxy::send(uint32_t conn_id, Uint8View data) {
         if (const auto *name = std::get_if<NamePort>(&conn->parameters.peer)) {
             auto length_prefix = std::min(size_t(UINT8_MAX), name->name.size());
             name_storage.resize(name->name.size() + 1);
-            name_storage[0] = (uint8_t) length_prefix;
+            name_storage[0] = static_cast<char>(length_prefix);
             std::memcpy(name_storage.data() + 1, name->name.data(), length_prefix);
 
             header.atyp = S5AT_DOMAIN_NAME;
@@ -255,7 +256,8 @@ Error<SocketError> SocksOProxy::send(uint32_t conn_id, Uint8View data) {
             addr_bytes = addr->addr();
             port = htons(addr->port());
         } else {
-            e = make_error(SocketError::AE_INVALID_ARGUMENT, AG_FMT("Unsupported peer address: {}", conn->parameters.peer));
+            e = make_error(
+                    SocketError::AE_INVALID_ARGUMENT, AG_FMT("Unsupported peer address: {}", conn->parameters.peer));
             break;
         }
 
@@ -337,7 +339,6 @@ Error<SocketError> SocksOProxy::connect_to_proxy(uint32_t conn_id, const Connect
         return make_error(SocketError::AE_DUPLICATE_ID, fmt::to_string(conn_id));
     }
 
-
     auto err = this->connect_to_proxy(conn);
     if (err) {
         conn->parameters.callbacks = {}; // do not raise `on_close` callback
@@ -358,7 +359,8 @@ Error<SocketError> SocksOProxy::connect_through_proxy(uint32_t conn_id, const Co
 
     if (conn->state != CS_CONNECTING_SOCKET) {
         log_conn(this, conn_id, dbg, "Invalid connection state: {}", magic_enum::enum_name(conn->state));
-        return make_error(SocketError::AE_INVALID_CONN_STATE, AG_FMT("id={} state={}", conn_id, magic_enum::enum_name(conn->state)));
+        return make_error(SocketError::AE_INVALID_CONN_STATE,
+                AG_FMT("id={} state={}", conn_id, magic_enum::enum_name(conn->state)));
     }
 
     if (conn->parameters.proto == utils::TP_UDP) {
@@ -422,7 +424,8 @@ void SocksOProxy::on_read(void *arg, Uint8View data) {
     case CS_CONNECTED:
         if (self->is_udp_association_connection(conn->id)) {
             log_conn(self, conn->id, dbg, "Unexpected data ({} bytes) on UDP association connection", data.size());
-            auto error = make_error(SocketError::AE_UNEXPECTED_DATA, AG_FMT("Unexpected data ({} bytes) on UDP association connection", data.size()));
+            auto error = make_error(SocketError::AE_UNEXPECTED_DATA,
+                    AG_FMT("Unexpected data ({} bytes) on UDP association connection", data.size()));
             self->terminate_udp_association(conn, error);
         } else if (std::optional<Callbacks> cbx = self->get_connection_callbacks_locked(conn);
                 cbx.has_value() && cbx->on_read != nullptr) {
@@ -438,7 +441,8 @@ void SocksOProxy::on_read(void *arg, Uint8View data) {
     case CS_CONNECTING_SOCKET:
     case CS_CLOSING: {
         log_conn(self, conn->id, dbg, "Invalid state: {}", magic_enum::enum_name(conn->state));
-        auto error = make_error(SocketError::AE_INVALID_CONN_STATE, AG_FMT("id={} state={}", conn->id, magic_enum::enum_name(conn->state)));
+        auto error = make_error(SocketError::AE_INVALID_CONN_STATE,
+                AG_FMT("id={} state={}", conn->id, magic_enum::enum_name(conn->state)));
         self->handle_connection_close(conn, error);
         break;
     }
@@ -465,8 +469,10 @@ Error<SocketError> SocksOProxy::connect_to_proxy(Connection *conn) {
 
         bool need_to_start_assoc = m_udp_association == nullptr;
         if (!need_to_start_assoc) {
-            if (auto assoc_conn_it = m_connections.find(m_udp_association->conn_id); assoc_conn_it == m_connections.end()) {
-                log_conn(this, m_udp_association->conn_id, dbg, "UDP association exists but related connection not found");
+            if (auto assoc_conn_it = m_connections.find(m_udp_association->conn_id);
+                    assoc_conn_it == m_connections.end()) {
+                log_conn(this, m_udp_association->conn_id, dbg,
+                        "UDP association exists but related connection not found");
                 assert(0);
                 need_to_start_assoc = true;
             } else if (assoc_conn_it->second->state != CS_CONNECTED) {
@@ -531,11 +537,11 @@ void SocksOProxy::close_connection(Connection *conn) {
         return;
     }
 
-    bool some_other_udp_connections_left
-            = std::any_of(m_connections.begin(), m_connections.end(), [conn_id, loop](const auto &i) {
-                  return conn_id != i.first && i.second->parameters.loop == loop
-                          && i.second->parameters.proto == utils::TP_UDP;
-              });
+    bool some_other_udp_connections_left =
+            std::any_of(m_connections.begin(), m_connections.end(), [conn_id, loop](const auto &i) {
+                return conn_id != i.first && i.second->parameters.loop == loop
+                        && i.second->parameters.proto == utils::TP_UDP;
+            });
     if (some_other_udp_connections_left || m_connections.empty()) {
         return;
     }
@@ -677,7 +683,8 @@ Error<SocketError> SocksOProxy::send_socks4_request(Connection *conn) {
 
     const auto *peer = std::get_if<SocketAddress>(&conn->parameters.peer);
     if (!peer || !peer->is_ipv4()) {
-        return make_error(SocketError::AE_INVALID_ARGUMENT, AG_FMT("Unsupported peer address: {}", conn->parameters.peer));
+        return make_error(
+                SocketError::AE_INVALID_ARGUMENT, AG_FMT("Unsupported peer address: {}", conn->parameters.peer));
     }
     SocketAddress unmapped = peer->socket_family_cast(AF_INET);
 
@@ -862,7 +869,7 @@ Error<SocketError> SocksOProxy::send_socks5_connect_request(Connection *conn) {
     if (const auto *name = std::get_if<NamePort>(&conn->parameters.peer)) {
         auto length_prefix = std::min(size_t(UINT8_MAX), name->name.size());
         name_storage.resize(name->name.size() + 1);
-        name_storage[0] = (uint8_t) length_prefix;
+        name_storage[0] = static_cast<char>(length_prefix);
         std::memcpy(name_storage.data() + 1, name->name.data(), length_prefix);
 
         request.atyp = S5AT_DOMAIN_NAME;
@@ -878,7 +885,8 @@ Error<SocketError> SocksOProxy::send_socks5_connect_request(Connection *conn) {
         addr_bytes = addr->addr();
         port = htons(addr->port());
     } else {
-        return make_error(SocketError::AE_INVALID_ARGUMENT, AG_FMT("Unsupported peer address: {}", conn->parameters.peer));
+        return make_error(
+                SocketError::AE_INVALID_ARGUMENT, AG_FMT("Unsupported peer address: {}", conn->parameters.peer));
     }
     Uint8View data = {(uint8_t *) &request, sizeof(request)};
     SEND_S(conn, data);
@@ -909,7 +917,7 @@ void SocksOProxy::on_socks5_connect_response(Connection *conn, Uint8View data) {
         return;
     }
 
-    size_t full_length = sizeof(Socks5ConnectReply) + /*port*/2;
+    size_t full_length = sizeof(Socks5ConnectReply) + /*port*/ 2;
     switch (reply->atyp) {
     case S5AT_IPV4:
         full_length += 4;

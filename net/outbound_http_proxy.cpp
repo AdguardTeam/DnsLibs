@@ -32,10 +32,10 @@ struct HttpOProxy::Connection {
 };
 
 HttpOProxy::HttpOProxy(const OutboundProxySettings *settings, Parameters parameters)
-        : OutboundProxy(__func__, settings, std::move(parameters)) {
+        : OutboundProxy(__func__, settings, parameters) {
     if (m_settings->protocol == OutboundProxyProtocol::HTTPS_CONNECT) {
-        m_tls_session_cache
-                = std::make_optional<TlsSessionCache>(AG_FMT("{}:{}", m_settings->address, m_settings->port));
+        m_tls_session_cache =
+                std::make_optional<TlsSessionCache>(AG_FMT("{}:{}", m_settings->address, m_settings->port));
     }
 }
 
@@ -167,7 +167,8 @@ Error<SocketError> HttpOProxy::connect_through_proxy(uint32_t conn_id, const Con
 
     if (conn->state != CS_CONNECTING_SOCKET) {
         log_conn(this, conn_id, dbg, "Invalid connection state: {}", magic_enum::enum_name(conn->state));
-        return make_error(SocketError::AE_INVALID_CONN_STATE, AG_FMT("id={} state={}", conn_id, magic_enum::enum_name(conn->state)));
+        return make_error(SocketError::AE_INVALID_CONN_STATE,
+                AG_FMT("id={} state={}", conn_id, magic_enum::enum_name(conn->state)));
     }
 
 #define SEND_S(conn_, str_)                                                                                            \
@@ -239,10 +240,10 @@ void HttpOProxy::on_read(void *arg, Uint8View data) {
         break;
     case CS_IDLE:
     case CS_CONNECTING_SOCKET:
-    case CS_CLOSING:
-    {
+    case CS_CLOSING: {
         log_conn(self, conn->id, dbg, "Invalid state: {}", magic_enum::enum_name(conn->state));
-        auto err = make_error(SocketError::AE_INVALID_CONN_STATE, AG_FMT("id={} state={}", conn->id, magic_enum::enum_name(conn->state)));
+        auto err = make_error(SocketError::AE_INVALID_CONN_STATE,
+                AG_FMT("id={} state={}", conn->id, magic_enum::enum_name(conn->state)));
         on_close(conn, err);
         break;
     }
@@ -284,8 +285,7 @@ void HttpOProxy::handle_http_response_chunk(Connection *conn, std::string_view c
 
     log_conn(this, conn->id, dbg, "{}", seek);
 
-    if (!seek.starts_with("HTTP/1.1 200 Connection established\r\n")
-            && !seek.starts_with("HTTP/1.1 200 OK\r\n")) {
+    if (!seek.starts_with("HTTP/1.1 200 Connection established\r\n") && !seek.starts_with("HTTP/1.1 200 OK\r\n")) {
         on_close(conn, make_error(SocketError::AE_BAD_PROXY_REPLY));
         return;
     }

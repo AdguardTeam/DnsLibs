@@ -4,8 +4,8 @@
 #include <lwip/ip_addr.h>
 
 #include "common/socket_address.h"
-#include "tcpip/utils.h"
 #include "tcpip/platform.h"
+#include "tcpip/utils.h"
 #include "tcpip_util.h"
 
 using namespace ag;

@@ -1,11 +1,11 @@
-#include <errno.h>
 #include <cstring>
+#include <errno.h>
 #include <limits>
-#include <vector>
 #include <lwip/init.h>
 #include <lwip/pbuf.h>
 #include <lwip/tcp.h>
 #include <lwip/timeouts.h>
+#include <vector>
 
 #include "common/logger.h"
 #include "tcp_conn_manager.h"
@@ -32,6 +32,7 @@ static err_t tcp_raw_poll(void *arg, struct tcp_pcb *tpcb);
 static err_t tcp_raw_sent(void *arg, struct tcp_pcb *tpcb, u16_t len);
 static err_t tcp_raw_accept(void *arg, struct tcp_pcb *newpcb, err_t err);
 
+// NOLINTBEGIN(cppcoreguidelines-no-malloc,hicpp-no-malloc)
 static void tcp_raw_error(void *arg, err_t err) {
     auto *ctx = (ConnCtx *) arg;
 
@@ -109,7 +110,7 @@ static err_t process_data(TcpConnDescriptor *conn, const struct pbuf *buffer) {
     buf_v.reserve(chain_length);
 
     for (const struct pbuf *iter = buffer; (buf_v.size() < chain_length) && (iter != nullptr); iter = iter->next) {
-        buf_v.push_back(uv_buf_init((char *)iter->payload, iter->len));
+        buf_v.push_back(uv_buf_init((char *) iter->payload, iter->len));
     }
 
     int recv_result = tcp_cm_receive(conn, buf_v.size(), buf_v.data());
@@ -302,5 +303,6 @@ void tcp_raw_slide_window(struct tcp_pcb *pcb, size_t sent) {
         sent -= to_slide;
     }
 }
+// NOLINTEND(cppcoreguidelines-no-malloc,hicpp-no-malloc)
 
 } // namespace ag

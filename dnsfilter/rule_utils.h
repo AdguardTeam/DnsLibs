@@ -20,11 +20,15 @@ namespace ag::dns::dnsfilter::rule_utils {
 static constexpr std::string_view REVERSE_DNS_DOMAIN_SUFFIX = ".in-addr.arpa.";
 static constexpr std::string_view REVERSE_IPV6_DNS_DOMAIN_SUFFIX = ".ip6.arpa.";
 
-#define ru_dbglog(l, fmt, ...) do { if ((l) != nullptr && (l)->is_enabled(ag::LOG_LEVEL_DEBUG)) (l)->log(ag::LOG_LEVEL_DEBUG, ("{}: " fmt), __func__, ##__VA_ARGS__); } while(0)
+#define ru_dbglog(l, fmt, ...)                                                                                         \
+    do {                                                                                                               \
+        if ((l) != nullptr && (l)->is_enabled(ag::LOG_LEVEL_DEBUG))                                                    \
+            (l)->log(ag::LOG_LEVEL_DEBUG, ("{}: " fmt), __func__, ##__VA_ARGS__);                                      \
+    } while (0)
 
 struct DnstypeInfo {
     enum MatchMode {
-        DTMM_ENABLE, // `types` is the list of the affected ones
+        DTMM_ENABLE,  // `types` is the list of the affected ones
         DTMM_EXCLUDE, // `types` is the list of the non-affected ones
     };
 
@@ -83,9 +87,7 @@ struct DnsrewriteInfo {
     bool operator==(const DnsrewriteInfo &other) const {
         // not comparing `parsed_value` fields here intentionally,
         // because they are checked automatically by comparison of the `value` fields
-        return this->rcode == other.rcode
-                && this->rrtype == other.rrtype
-                && this->value == other.value;
+        return this->rcode == other.rcode && this->rrtype == other.rrtype && this->value == other.value;
     }
 };
 
@@ -125,7 +127,6 @@ struct Rule {
     // non-nullopt if the rule has `$dnstype` modifier
     std::optional<DnstypeInfo> dnstype;
 };
-
 
 /**
  * Check if string is a commentary
@@ -184,7 +185,7 @@ enum match_pattern_mode {
 
 struct MatchInfo {
     std::string_view text; // matching text without all prefixes
-    bool is_regex_rule; // whether the original rule is a regex rule
+    bool is_regex_rule;    // whether the original rule is a regex rule
     bool has_wildcard;
     int pattern_mode; // see `match_pattern_mode`
 };
@@ -194,23 +195,23 @@ struct MatchInfo {
  * https://github.com/AdguardTeam/AdguardHome/wiki/Hosts-Blocklists#dnsrewrite
  * @return true if successful
  */
-bool parse_dnsrewrite_modifier(rule_utils::Rule &rule, std::string_view params_str,
-        const MatchInfo &match_info, Logger *log);
+bool parse_dnsrewrite_modifier(
+        rule_utils::Rule &rule, std::string_view params_str, const MatchInfo &match_info, Logger *log);
 
 /**
  * Parse the `$denyallow` modifier parameters
  * https://github.com/AdguardTeam/AdGuardHome/wiki/Hosts-Blocklists#denyallow
  * @return true if successful
  */
-bool parse_denyallow_modifier(rule_utils::Rule &rule, std::string_view params_str,
-        const MatchInfo &match_info, Logger *log);
+bool parse_denyallow_modifier(
+        rule_utils::Rule &rule, std::string_view params_str, const MatchInfo &match_info, Logger *log);
 
 /**
  * Check if the string is a domain name
  */
 bool is_domain_name(std::string_view str);
 
-} // namespace ag::dnsfilter::rule_utils
+} // namespace ag::dns::dnsfilter::rule_utils
 
 namespace ag::dns {
 

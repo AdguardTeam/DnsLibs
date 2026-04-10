@@ -1,11 +1,12 @@
-#include "upstream_dnscrypt.h"
+#include <chrono>
+#include <memory>
+#include <sodium.h>
+
 #include "common/clock.h"
 #include "common/logger.h"
 #include "common/utils.h"
 #include "dns/dnscrypt/dns_crypt_client.h"
-#include <chrono>
-#include <memory>
-#include <sodium.h>
+#include "upstream_dnscrypt.h"
 
 #define tracelog_id(log_, pkt_, fmt_, ...) tracelog(log_, "[{}] " fmt_, ldns_pkt_id(pkt_), ##__VA_ARGS__)
 
@@ -61,7 +62,8 @@ coro::Task<Upstream::ExchangeResult> DnscryptUpstream::exchange(const ldns_pkt *
         co_return result.error;
     }
     if (m_config.timeout < result.rtt) {
-        co_return make_error(DnsError::AE_TIMED_OUT, AG_FMT("Certificate fetch took too much time: {}ms", result.rtt.count()));
+        co_return make_error(
+                DnsError::AE_TIMED_OUT, AG_FMT("Certificate fetch took too much time: {}ms", result.rtt.count()));
     }
     auto reply = co_await apply_exchange(*request_pkt, m_config.timeout - result.rtt);
     if (guard.expired()) {
@@ -83,14 +85,15 @@ coro::Task<DnscryptUpstream::SetupResult> DnscryptUpstream::setup_impl() {
     if (!m_impl || m_impl->server_info.get_server_cert().not_after < now) {
         std::weak_ptr<bool> guard = m_shutdown_guard;
         dnscrypt::Client client;
-        auto dial_res
-                = co_await client.dial(m_stamp, this->config().loop, m_config.timeout, m_config.socket_factory, this->make_socket_parameters());
+        auto dial_res = co_await client.dial(m_stamp, this->config().loop, m_config.timeout, m_config.socket_factory,
+                this->make_socket_parameters());
         if (guard.expired()) {
             co_return {rtt, make_error(DnsError::AE_SHUTTING_DOWN)};
         }
         if (dial_res.has_error()) {
-            co_return {rtt, make_error(DnsError::AE_HANDSHAKE_ERROR,
-                    AG_FMT("Failed to fetch certificate info from {}", m_options.address), dial_res.error())};
+            co_return {rtt,
+                    make_error(DnsError::AE_HANDSHAKE_ERROR,
+                            AG_FMT("Failed to fetch certificate info from {}", m_options.address), dial_res.error())};
         }
         auto &[dial_server_info, dial_rtt] = *dial_res;
         m_impl = std::make_unique<Impl>(Impl{client, std::move(dial_server_info)});
@@ -106,9 +109,8 @@ coro::Task<Upstream::ExchangeResult> DnscryptUpstream::apply_exchange(const ldns
 
     utils::Timer timer;
 
-    auto udp_reply_res = co_await local_upstream.udp_client.exchange(
-            request_pkt, local_upstream.server_info, this->config().loop,
-            timeout, m_config.socket_factory, this->make_socket_parameters());
+    auto udp_reply_res = co_await local_upstream.udp_client.exchange(request_pkt, local_upstream.server_info,
+            this->config().loop, timeout, m_config.socket_factory, this->make_socket_parameters());
     if (guard.expired()) {
         co_return make_error(DnsError::AE_SHUTTING_DOWN);
     }
@@ -122,8 +124,8 @@ coro::Task<Upstream::ExchangeResult> DnscryptUpstream::apply_exchange(const ldns
                     AG_FMT("Can't retry over tcp: {}", evutil_socket_error_to_string(utils::AG_ETIMEDOUT)));
         }
 
-        auto tcp_reply_res = co_await tcp_client.exchange(request_pkt, local_upstream.server_info,
-                this->config().loop, timeout, m_config.socket_factory, this->make_socket_parameters());
+        auto tcp_reply_res = co_await tcp_client.exchange(request_pkt, local_upstream.server_info, this->config().loop,
+                timeout, m_config.socket_factory, this->make_socket_parameters());
         if (guard.expired()) {
             co_return make_error(DnsError::AE_SHUTTING_DOWN);
         }

@@ -4,7 +4,7 @@
 
 using namespace ag;
 
-TEST(PacketPool, Functional){
+TEST(PacketPool, Functional) {
     const size_t pool_capacity = 20;
     std::unique_ptr<PacketPool> pool{new PacketPool(pool_capacity, DEFAULT_MTU_SIZE)};
     std::vector<Packet> packets;

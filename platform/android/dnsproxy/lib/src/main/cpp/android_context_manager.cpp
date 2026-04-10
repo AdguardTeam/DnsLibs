@@ -1,8 +1,9 @@
 #ifdef __ANDROID__
 
+#include <android/multinetwork.h>
+
 #include "android_context_manager.h"
 #include "common/logger.h"
-#include <android/multinetwork.h>
 
 #include "scoped_jni_env.h"
 
@@ -63,8 +64,8 @@ ag::jni::GlobalRef<jobject> AndroidContextManager::get_connectivity_manager() {
         return {};
     }
 
-    ag::jni::LocalRef<jobject> connectivityManager{env.get(),
-            env->CallObjectMethod(context, getSystemServiceMethod, connectivityServiceStr.get())};
+    ag::jni::LocalRef<jobject> connectivityManager{
+            env.get(), env->CallObjectMethod(context, getSystemServiceMethod, connectivityServiceStr.get())};
 
     if (env->ExceptionCheck()) {
         env->ExceptionClear();
@@ -105,7 +106,8 @@ std::optional<net_handle_t> AndroidContextManager::get_network_handle_from_conne
         return std::nullopt;
     }
 
-    ag::jni::LocalRef<jobjectArray> networks{env.get(), static_cast<jobjectArray>(env->CallObjectMethod(connectivityManager, getAllNetworksMethod))};
+    ag::jni::LocalRef<jobjectArray> networks{
+            env.get(), static_cast<jobjectArray>(env->CallObjectMethod(connectivityManager, getAllNetworksMethod))};
 
     if (env->ExceptionCheck()) {
         env->ExceptionClear();
@@ -140,7 +142,8 @@ std::optional<net_handle_t> AndroidContextManager::get_network_handle_from_conne
             continue;
         }
 
-        linkProperties = ag::jni::LocalRef<jobject>{env.get(), env->CallObjectMethod(connectivityManager, getLinkPropertiesMethod, network.get())};
+        linkProperties = ag::jni::LocalRef<jobject>{
+                env.get(), env->CallObjectMethod(connectivityManager, getLinkPropertiesMethod, network.get())};
         if (env->ExceptionCheck()) {
             env->ExceptionClear();
             continue;
@@ -152,9 +155,10 @@ std::optional<net_handle_t> AndroidContextManager::get_network_handle_from_conne
 
         lpClass = ag::jni::LocalRef<jclass>{env.get(), env->GetObjectClass(linkProperties.get())};
         if (lpClass) {
-            jmethodID getInterfaceNameMethod = env->GetMethodID(lpClass.get(), "getInterfaceName", "()Ljava/lang/String;");
+            jmethodID getInterfaceNameMethod =
+                    env->GetMethodID(lpClass.get(), "getInterfaceName", "()Ljava/lang/String;");
             if (getInterfaceNameMethod) {
-                interfaceNameStr = ag::jni::LocalRef<jstring>{env.get(), 
+                interfaceNameStr = ag::jni::LocalRef<jstring>{env.get(),
                         static_cast<jstring>(env->CallObjectMethod(linkProperties.get(), getInterfaceNameMethod))};
                 if (env->ExceptionCheck()) {
                     env->ExceptionClear();

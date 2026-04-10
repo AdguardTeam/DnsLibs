@@ -2,6 +2,7 @@
 
 #include <cstddef>
 #include <cstdint>
+
 #include "common/defs.h"
 #include "dns_crypt_utils.h"
 

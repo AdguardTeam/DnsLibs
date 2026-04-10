@@ -37,9 +37,12 @@ template <>
 struct ErrorCodeToString<dns::UpstreamUtilsError> {
     std::string operator()(dns::UpstreamUtilsError e) {
         switch (e) {
-        case decltype(e)::AE_FACTORY_ERROR: return "Upstream factory error";
-        case decltype(e)::AE_EXCHANGE_ERROR: return "Upstream exchange error";
-        case decltype(e)::AE_WRONG_ANSWER_NUMBER: return "DNS upstream returned reply with wrong number of answers";
+        case decltype(e)::AE_FACTORY_ERROR:
+            return "Upstream factory error";
+        case decltype(e)::AE_EXCHANGE_ERROR:
+            return "Upstream exchange error";
+        case decltype(e)::AE_WRONG_ANSWER_NUMBER:
+            return "DNS upstream returned reply with wrong number of answers";
         }
     }
 };

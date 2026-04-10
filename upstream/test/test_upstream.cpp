@@ -1,8 +1,8 @@
 #include <csignal>
+#include <functional>
 #include <future>
 #include <span>
 #include <thread>
-#include <functional>
 
 #include <fmt/chrono.h>
 #include <ldns/ldns.h>
@@ -120,9 +120,8 @@ static coro::Task<void> parallel_test_basic(EventLoop &loop, const T *tests, siz
     auto all_of_awaitable = parallel::all_of<TestError>();
     for (size_t i = 0; i < count; i++) {
         const auto &[address, bootstrap, server_ip] = tests[i];
-        all_of_awaitable.add(
-                [](EventLoop &loop, size_t idx, const F &function, auto &address, auto &bootstrap,
-                        auto &server_ip) -> coro::Task<TestError> {
+        all_of_awaitable.add([](EventLoop &loop, size_t idx, const F &function, auto &address, auto &bootstrap,
+                                     auto &server_ip) -> coro::Task<TestError> {
             co_await loop.co_sleep(DELAY_BETWEEN_REQUESTS * idx);
             co_return co_await function(address, bootstrap, server_ip);
         }(loop, ++i, function, address, bootstrap, server_ip));
@@ -242,7 +241,7 @@ TEST_F(UpstreamTest, CreateUpstreamWithWrongOptions) {
 #ifdef __ANDROID__
             {"system://invalidnetwork"},
 #endif // __ANDROID__
-            // no bootstrapper and resolved server address
+       // no bootstrapper and resolved server address
             {"https://example.com"},
             {"tls://one.one.one.one"},
 
@@ -291,8 +290,8 @@ TEST_F(UpstreamTest, UseUpstreamWithWrongOptions) {
             // existent domain, invalid bootstrap
             {"https://dns.adguard-dns.com/dnsquery", {"4.3.2.1"}},
             // DoT
-            {"tls://one.one.two.asdf.", {"8.8.8.8"}}, // invalid/valid
-            {"tls://one.one.one.one", {"4.3.2.1"}}, // valid/invalid
+            {"tls://one.one.two.asdf.", {"8.8.8.8"}},    // invalid/valid
+            {"tls://one.one.one.one", {"4.3.2.1"}},      // valid/invalid
             {"tls://one.one.one.one:1234", {"8.8.8.8"}}, // invalid/valid
     };
 
@@ -402,8 +401,9 @@ static const UpstreamTestData test_upstreams_data[]{
         {"https://username:password@dns.google/dns-query", {"8.8.8.8"}},
         {"sdns://username:password@AgcAAAAAAAAABzEuMC4wLjEAEmRucy5jbG91ZGZsYXJlLmNvbQovZG5zLXF1ZXJ5", {}},
         {// Cisco OpenDNS DNS (DNSCrypt) (no port in stamp, default port test)
-            "sdns://AQEAAAAAAAAADjIwOC42Ny4yMjAuMTIzILc1EUAgbyJdPivYItf9aR6hwzzI1maNDL4Ev6vKQ_t5GzIuZG5zY3J5cHQtY2VydC5vcGVuZG5zLmNvbQ"
-        },
+                "sdns://"
+                "AQEAAAAAAAAADjIwOC42Ny4yMjAuMTIzILc1EUAgbyJdPivYItf9aR6hwzzI1maNDL4Ev6vKQ_"
+                "t5GzIuZG5zY3J5cHQtY2VydC5vcGVuZG5zLmNvbQ"},
         {// AdGuard DNS (DNSCrypt)
                 "sdns://"
                 "AQIAAAAAAAAAETk0LjE0MC4xNC4xNDo1NDQzINErR_JS3PLCu_iZEIbq95zkSV2LFsigxDIuUso_"
@@ -415,8 +415,7 @@ static const UpstreamTestData test_upstreams_data[]{
                 "x5Lm5zMS5hZGd1YXJkLmNvbQ",
                 {"8.8.8.8"}},
         {// Cloudflare DNS (DoH)
-                "sdns://AgcAAAAAAAAABzEuMC4wLjEAEmRucy5jbG91ZGZsYXJlLmNvbQovZG5zLXF1ZXJ5",
-                {"8.8.8.8:53"}},
+                "sdns://AgcAAAAAAAAABzEuMC4wLjEAEmRucy5jbG91ZGZsYXJlLmNvbQovZG5zLXF1ZXJ5", {"8.8.8.8:53"}},
         {// Google (Plain)
                 "sdns://AAcAAAAAAAAABzguOC44Ljg", {}},
         {// AdGuard DNS (DNS-over-TLS)
@@ -479,7 +478,8 @@ static const UpstreamTestData upstream_dot_bootstrap_test_data[]{
                 {"https://1.1.1.1/dns-query"},
         },
         {
-                "tls://one.one.one.one/", {"sdns://AwAAAAAAAAAAAAAHMS4xLjEuMQ"}, // DoT 1.1.1.1
+                "tls://one.one.one.one/",
+                {"sdns://AwAAAAAAAAAAAAAHMS4xLjEuMQ"}, // DoT 1.1.1.1
         },
         {
                 "tls://one.one.one.one/",
@@ -504,7 +504,8 @@ TEST_P(UpstreamDefaultOptionsTest, TestUpstreamDefaultOptions) {
     co_await m_loop->co_submit();
     const auto &address = GetParam();
     auto upstream_res = create_upstream({address, {}});
-    ASSERT_FALSE(upstream_res.has_error()) << "Failed to generate upstream from address " << address << ": " << upstream_res.error()->str();
+    ASSERT_FALSE(upstream_res.has_error())
+            << "Failed to generate upstream from address " << address << ": " << upstream_res.error()->str();
     auto err = co_await check_upstream(*upstream_res.value(), address);
     ASSERT_FALSE(err) << *err;
 }
@@ -587,8 +588,8 @@ TEST_P(DeadProxyFailure, FailedExchange) {
 }
 
 INSTANTIATE_TEST_SUITE_P(TcpOnlyProxy, DeadProxyFailure,
-        ::testing::Combine(
-                ::testing::Values("tcp://8.8.8.8", "tls://dns.adguard-dns.com", "https://dns.adguard-dns.com/dns-query"),
+        ::testing::Combine(::testing::Values("tcp://8.8.8.8", "tls://dns.adguard-dns.com",
+                                   "https://dns.adguard-dns.com/dns-query"),
                 ::testing::Values(OutboundProxySettings{OutboundProxyProtocol::HTTP_CONNECT, "127.0.0.1", 42},
                         OutboundProxySettings{OutboundProxyProtocol::HTTPS_CONNECT, "127.0.0.1", 42},
                         OutboundProxySettings{OutboundProxyProtocol::SOCKS4, "127.0.0.1", 42},
@@ -618,32 +619,32 @@ TEST_F(UpstreamTest, DISABLED_ConcurrentRequests) {
     };
     auto upstream_res = create_upstream(opts, 5s);
     ASSERT_FALSE(upstream_res.has_error()) << upstream_res.error()->str();
-    co_await parallel_test_basic_n(*m_loop, WORKERS_NUM, [upstream = upstream_res->get()](size_t i) -> coro::Task<TestError> {
-        TestError result_err;
-        for (size_t j = 0; j < REQUESTS_NUM; ++j) {
-            ldns_pkt_ptr pkt = create_test_message();
-            auto reply = co_await upstream->exchange(pkt.get());
-            if (reply.has_error()) {
-                result_err += AG_FMT("Upstream i = {} reply error: {}", i, reply.error()->str());
-                continue;
-            }
-            if (!reply) {
-                result_err += "Upstream reply is null";
-                continue;
-            }
-            result_err += assert_response(*reply.value());
-        }
-        co_return result_err;
-    });
+    co_await parallel_test_basic_n(
+            *m_loop, WORKERS_NUM, [upstream = upstream_res->get()](size_t i) -> coro::Task<TestError> {
+                TestError result_err;
+                for (size_t j = 0; j < REQUESTS_NUM; ++j) {
+                    ldns_pkt_ptr pkt = create_test_message();
+                    auto reply = co_await upstream->exchange(pkt.get());
+                    if (reply.has_error()) {
+                        result_err += AG_FMT("Upstream i = {} reply error: {}", i, reply.error()->str());
+                        continue;
+                    }
+                    if (!reply) {
+                        result_err += "Upstream reply is null";
+                        continue;
+                    }
+                    result_err += assert_response(*reply.value());
+                }
+                co_return result_err;
+            });
 }
 
-TEST_F(UpstreamTest, DISABLED_doq_easy_test) {
+TEST_F(UpstreamTest, DISABLED_DoqEasyTest) {
     co_await m_loop->co_submit();
     for (int i = 0; i < 1000; ++i) {
         using namespace std::chrono_literals;
         using namespace concat_err_string;
-        static const UpstreamOptions opts{
-                .address = "quic://dns.adguard-dns.com:8853", .bootstrap = {"8.8.8.8"}};
+        static const UpstreamOptions opts{.address = "quic://dns.adguard-dns.com:8853", .bootstrap = {"8.8.8.8"}};
         auto upstream_res = create_upstream(opts, 5s);
         ASSERT_FALSE(upstream_res.has_error()) << upstream_res.error()->str();
 

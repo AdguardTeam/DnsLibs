@@ -10,7 +10,6 @@
 
 namespace ag::dns {
 
-
 class DefaultVerifier : public CertificateVerifier {
 public:
     DefaultVerifier();
@@ -21,12 +20,11 @@ public:
     DefaultVerifier &operator=(const DefaultVerifier &);
     DefaultVerifier &operator=(DefaultVerifier &&) noexcept;
 
-    std::optional<std::string> verify(X509_STORE_CTX *ctx, std::string_view host_name,
-            std::span<CertFingerprint> fingerprints) const override;
+    std::optional<std::string> verify(
+            X509_STORE_CTX *ctx, std::string_view host_name, std::span<CertFingerprint> fingerprints) const override;
 
 private:
     X509_STORE *m_ca_store = nullptr;
 };
-
 
 } // namespace ag::dns

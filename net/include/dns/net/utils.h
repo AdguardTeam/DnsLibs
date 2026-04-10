@@ -33,14 +33,13 @@ coro::Task<Result<Uint8Vector, SocketError>> receive_dns_packet(AioSocket *self,
 
 /**
  * Receive, decode, and validate a DNS packet from the peer.
- * Blocks until either an error occurred, an invalid packet is received, or a valid packet is fully received and decoded.
+ * Blocks until either an error occurred, an invalid packet is received, or a valid packet is fully received and
+ * decoded.
  * @param self AioSocket instance
  * @param timeout operation timeout
  * @param check_and_decode function to decode and validate the received packet
  * @return The received and decoded packet if succeeded and valid, nullptr otherwise
  */
 coro::Task<Result<ldns_pkt_ptr, SocketError>> receive_and_decode_dns_packet(
-        AioSocket *self,
-        std::optional<Micros> timeout,
-        std::function<ldns_pkt_ptr(Uint8Vector)> check_and_decode);
+        AioSocket *self, std::optional<Micros> timeout, std::function<ldns_pkt_ptr(Uint8Vector)> check_and_decode);
 } // namespace ag::dns

@@ -1,6 +1,7 @@
-#include "dns/net/tls_session_cache.h"
-#include "common/utils.h"
 #include <cassert>
+
+#include "common/utils.h"
+#include "dns/net/tls_session_cache.h"
 
 namespace ag::dns {
 

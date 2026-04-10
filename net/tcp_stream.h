@@ -1,9 +1,9 @@
 #pragma once
 
-
 #include <chrono>
 #include <mutex>
 #include <optional>
+
 #include <event2/bufferevent.h>
 
 #include "common/defs.h"
@@ -42,11 +42,11 @@ private:
 
     [[nodiscard]] Callbacks get_callbacks() const;
 
-    static void on_event(uv_connect_t* req, int status);
+    static void on_event(uv_connect_t *req, int status);
     static void on_read(uv_stream_t *stream, ssize_t nread, const uv_buf_t *buf);
     static void on_timeout(uv_timer_t *handle);
     static void on_write(uv_write_t *req, int status);
     static void allocate_read(uv_handle_t *handle, size_t size, uv_buf_t *buf);
 };
 
-}
+} // namespace ag::dns

@@ -1,5 +1,5 @@
-#include <vector>
 #include <uv.h>
+#include <vector>
 
 #ifdef __APPLE__
 #include <TargetConditionals.h>
@@ -24,8 +24,7 @@ EventLoopPtr EventLoop::create() {
 }
 
 EventLoop::EventLoop(const EventLoop::ConstructorAccess & /* access */)
-        : m_log(__func__)
-{
+        : m_log(__func__) {
     m_handle = Uv<uv_loop_t>::create_with_parent(this);
     if (0 != uv_loop_init(m_handle->raw())) {
         m_handle.reset();
@@ -48,8 +47,8 @@ uv_loop_t *EventLoop::handle() {
 timeval EventLoop::now() {
     timeval tv;
     uint64_t now_ms = uv_now(m_handle->raw());
-    tv.tv_sec = now_ms / 1000;
-    tv.tv_usec = (now_ms % 1000) * 1000;
+    tv.tv_sec = static_cast<decltype(tv.tv_sec)>(now_ms / 1000);
+    tv.tv_usec = static_cast<decltype(tv.tv_usec)>((now_ms % 1000) * 1000);
     return tv;
 }
 
@@ -73,12 +72,12 @@ std::vector<uv_handle_t *> EventLoop::get_active_handles() {
 }
 
 void EventLoop::force_fire_timers() {
-    walk([this](uv_handle_t *handle){
+    walk([this](uv_handle_t *handle) {
         if (handle->type == UV_TIMER && uv_is_active(handle)) {
             auto *timer = (uv_timer_t *) handle;
             uv_timer_stop(timer);
             if (timer->timer_cb) {
-                dbglog(m_log, "Force firing timer {}", (void *)timer);
+                dbglog(m_log, "Force firing timer {}", (void *) timer);
                 timer->timer_cb(timer);
             }
         }
@@ -100,7 +99,7 @@ void EventLoop::execute_stopper_iteration() noexcept {
         }
         warnlog(m_log, "Warning! Active handles exist on the event loop stop:");
         for (uv_handle_t *ah : active_handles) {
-            warnlog(m_log, "{} {}", uv_handle_type_name(ah->type), (void *)ah);
+            warnlog(m_log, "{} {}", uv_handle_type_name(ah->type), (void *) ah);
         }
     }
     if (++m_stopping_cycle == MAX_STOPPER_ITERATIONS) {
@@ -111,7 +110,7 @@ void EventLoop::execute_stopper_iteration() noexcept {
 
 void EventLoop::stop() {
     m_stopping = true;
-    submit([this]{
+    submit([this] {
         m_stopper = Uv<uv_idle_t>::create_with_parent(this);
         uv_idle_init(m_handle->raw(), m_stopper->raw());
         uv_idle_start(m_stopper->raw(), [](uv_idle_t *idle) {
@@ -133,8 +132,8 @@ void EventLoop::join() {
 void EventLoop::start(EventLoopSettings settings) {
     if (m_handle && !m_running) {
         m_running = true;
-        m_thread = std::thread([this, settings = std::move(settings)]{
-            (void)settings; // [[maybe_unused]] isn't supported on lambda captures
+        m_thread = std::thread([this, settings] {
+            (void) settings; // [[maybe_unused]] isn't supported on lambda captures
 #ifndef _WIN32
             signal(SIGPIPE, SIG_IGN);
 #ifdef __APPLE__
@@ -182,12 +181,10 @@ EventLoop::TaskId EventLoop::schedule(Micros postpone_time, std::function<void()
     {
         std::scoped_lock l(m_timer_mutex);
         id = ++m_timer_queue.task_id_counter;
-        m_timer_queue.queue.emplace(SteadyClock::now() + postpone_time, PostponedTasks::Task{
-                .task_id = id,
-                .func = std::move(task)
-        });
+        m_timer_queue.queue.emplace(
+                SteadyClock::now() + postpone_time, PostponedTasks::Task{.task_id = id, .func = std::move(task)});
     }
-    submit([this]{
+    submit([this] {
         update_timer();
     });
     return id;
@@ -242,11 +239,14 @@ void EventLoop::update_timer() {
     if (auto begin = m_timer_queue.queue.begin(); begin != m_timer_queue.queue.end()) {
         auto timeout = std::max(Millis{0}, std::chrono::ceil<Millis>(begin->first - SteadyClock::now()));
         tracelog(m_log, "Scheduled next task in {}", timeout);
-        uv_timer_start(m_timer->raw(), [](uv_timer_t *timer){
-            if (auto *self = static_cast<EventLoop *>(Uv<uv_timer_t>::parent_from_data(timer->data))) {
-                self->execute_timer_tasks();
-            }
-        }, timeout.count(), 0);
+        uv_timer_start(
+                m_timer->raw(),
+                [](uv_timer_t *timer) {
+                    if (auto *self = static_cast<EventLoop *>(Uv<uv_timer_t>::parent_from_data(timer->data))) {
+                        self->execute_timer_tasks();
+                    }
+                },
+                timeout.count(), 0);
     } else {
         uv_timer_stop(m_timer->raw());
     }

@@ -22,6 +22,7 @@ namespace ag {
 #define FROM_START_OF_BUFFER nullptr
 
 // Copied this constant from netinet/tcp.h, because header conflicts with LWIP
+#undef TCP_NODELAY
 #define TCP_NODELAY 1 /* Turn off Nagle's algorithm. */
 
 #define log_conn(conn_, lvl_, fmt_, ...)                                                                               \
@@ -223,7 +224,7 @@ int tcp_cm_send_data(TcpConnDescriptor *connection, const uint8_t *data, size_t 
 
     tcp_refresh_connection_timeout(connection);
 
-    return bytes_to_send;
+    return static_cast<int>(bytes_to_send);
 }
 
 void tcp_cm_data_sent_notify(TcpConnDescriptor *connection, size_t length) {
@@ -259,7 +260,7 @@ void tcp_cm_close_descriptor(TcpipCtx *ctx, uint64_t id, bool graceful) {
     log_conn(connection, trace, "Connection closed {}, {} active connections left", (void *) connection,
             kh_size(ctx->tcp.connections.by_id));
 
-    free(connection);
+    free(connection); // NOLINT(cppcoreguidelines-no-malloc,hicpp-no-malloc)
 }
 
 int tcp_cm_receive(TcpConnDescriptor *connection, size_t data_len, const uv_buf_t *data) {
@@ -275,6 +276,7 @@ int tcp_cm_receive(TcpConnDescriptor *connection, size_t data_len, const uv_buf_
 TcpConnDescriptor *tcp_cm_create_descriptor(TcpipCtx *ctx, struct pbuf *buffer, const ip_addr_t *src_addr,
         u16_t src_port, const ip_addr_t *dst_addr, u16_t dst_port) {
     static_assert(std::is_trivial_v<TcpConnDescriptor>);
+    // NOLINTNEXTLINE(cppcoreguidelines-no-malloc,hicpp-no-malloc)
     auto *connection = (TcpConnDescriptor *) calloc(1, sizeof(TcpConnDescriptor));
     if (nullptr == connection) {
         return nullptr;
@@ -368,7 +370,9 @@ TcpFlowCtrlInfo tcp_cm_flow_ctrl_info(const TcpConnDescriptor *connection) {
     TcpFlowCtrlInfo r = {};
     if (connection->pcb != nullptr) {
         r = {
-                .send_buffer_size = (tcp_sndqueuelen(connection->pcb) < TCP_SND_QUEUELEN) ? tcp_raw_get_out_buf_space(connection->pcb) : 0,
+                .send_buffer_size = (tcp_sndqueuelen(connection->pcb) < TCP_SND_QUEUELEN)
+                        ? tcp_raw_get_out_buf_space(connection->pcb)
+                        : 0,
                 .send_window_size = size_t(SND_WND_SCALE(connection->pcb, connection->pcb->snd_wnd)),
         };
     }

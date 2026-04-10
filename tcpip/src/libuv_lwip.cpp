@@ -7,7 +7,6 @@
 #include <cstring>
 #include <mutex>
 
-#include <uv.h>
 #include <lwip/init.h>
 #include <lwip/ip4_frag.h>
 #include <lwip/ip6_frag.h>
@@ -16,6 +15,7 @@
 #include <lwip/priv/tcp_priv.h> // Timeout constants
 #include <lwip/sys.h>
 #include <lwip/timeouts.h>
+#include <uv.h>
 
 #include "common/logger.h"
 #include "dns/common/uv_wrapper.h"
@@ -71,7 +71,8 @@ int libuv_lwip_init(TcpipCtx *ctx) {
 
     g_lwip->ip6_reass_tmr = dns::Uv<uv_timer_t>::create_with_parent(g_lwip);
     uv_timer_init(loop, g_lwip->ip6_reass_tmr->raw());
-    uv_timer_start(g_lwip->ip6_reass_tmr->raw(), ip6_reass_timer_callback, IP6_REASS_TMR_INTERVAL, IP6_REASS_TMR_INTERVAL);
+    uv_timer_start(
+            g_lwip->ip6_reass_tmr->raw(), ip6_reass_timer_callback, IP6_REASS_TMR_INTERVAL, IP6_REASS_TMR_INTERVAL);
 
     g_lwip->nd6_tmr = dns::Uv<uv_timer_t>::create_with_parent(g_lwip);
     uv_timer_init(loop, g_lwip->nd6_tmr->raw());
@@ -98,6 +99,7 @@ void libuv_lwip_free() {
     g_lwip = nullptr;
 }
 
+// NOLINTBEGIN(cert-dcl50-cpp)
 void libuv_lwip_log_debug(const char *message, ...) {
     if (g_lwip == nullptr) {
         return;
@@ -112,6 +114,7 @@ void libuv_lwip_log_debug(const char *message, ...) {
     errlog(g_lwip->logger, "{}", fmt_message);
     va_end(args);
 }
+// NOLINTEND(cert-dcl50-cpp)
 
 static void ip_reass_timer_callback(uv_timer_t *handle) {
     if (!dns::Uv<uv_timer_t>::parent_from_data(handle->data)) {
@@ -162,14 +165,8 @@ extern "C" void tcp_timer_needed() {
     if (g_lwip != nullptr && !g_lwip->tcp_timer_active && (tcp_active_pcbs || tcp_tw_pcbs)) {
         /* enable and start timer */
         g_lwip->tcp_timer_active = 1;
-        uv_timer_start(g_lwip->tcp_fasttmr->raw(),
-                tcp_timer_callback,
-                TCP_FAST_INTERVAL,
-                TCP_FAST_INTERVAL);
-        uv_timer_start(g_lwip->tcp_slowtmr->raw(),
-                tcp_timer_callback,
-                TCP_SLOW_INTERVAL,
-                TCP_SLOW_INTERVAL);
+        uv_timer_start(g_lwip->tcp_fasttmr->raw(), tcp_timer_callback, TCP_FAST_INTERVAL, TCP_FAST_INTERVAL);
+        uv_timer_start(g_lwip->tcp_slowtmr->raw(), tcp_timer_callback, TCP_SLOW_INTERVAL, TCP_SLOW_INTERVAL);
     }
 }
 
@@ -180,7 +177,8 @@ extern "C" uint32_t sys_now() {
     } else {
         // Fallback for early initialization or after cleanup
         return std::chrono::duration_cast<std::chrono::milliseconds>(
-            std::chrono::steady_clock::now().time_since_epoch()).count();
+                std::chrono::steady_clock::now().time_since_epoch())
+                .count();
     }
 }
 

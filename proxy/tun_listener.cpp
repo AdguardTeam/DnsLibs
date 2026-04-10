@@ -6,11 +6,11 @@
 #include "common/logger.h"
 #include "common/net_utils.h"
 #include "common/socket_address.h"
-#include "tcpip/tcpip.h"
-#include "tcpip/utils.h"
-#include "tcp_dns_payload_parser.h"
 #include "dns/common/dns_utils.h"
 #include "dns/common/event_loop.h"
+#include "tcp_dns_payload_parser.h"
+#include "tcpip/tcpip.h"
+#include "tcpip/utils.h"
 
 namespace ag::dns {
 
@@ -31,7 +31,7 @@ struct TunListener::Impl {
     int mtu{0};
     TunListener::RequestCallback request_callback;
     TunListener::OutputCallback output_callback; // Only used in external mode
-    TcpipCtx *tcpip_ctx{nullptr}; // Only used in autonomous mode
+    TcpipCtx *tcpip_ctx{nullptr};                // Only used in autonomous mode
     HashMap<uint64_t, TunConnection> connections;
     std::shared_ptr<bool> shutdown_guard;
 
@@ -79,10 +79,8 @@ struct TunListener::Impl {
     }
 
     void on_connect_request(TcpipConnectRequestEvent *req) {
-        dbglog(log, "[{}] Connect request: proto={}, {}:{} -> {}:{}",
-                req->id, req->proto,
-                req->src->host_str(), req->src->port(),
-                req->dst->host_str(), req->dst->port());
+        dbglog(log, "[{}] Connect request: proto={}, {}:{} -> {}:{}", req->id, req->proto, req->src->host_str(),
+                req->src->port(), req->dst->host_str(), req->dst->port());
 
         // Accept all DNS connections (port 53)
         if (req->dst->port() == 53) {
@@ -146,7 +144,7 @@ struct TunListener::Impl {
             coro::run_detached(process_request(read_event->id, std::move(data), it->second.proto));
         }
 
-        read_event->result = total_consumed;
+        read_event->result = static_cast<int>(total_consumed);
 
         // Notify tcpip that we've consumed the data
         tcpip_sent_to_remote(tcpip_ctx, read_event->id, total_consumed);
@@ -162,9 +160,8 @@ struct TunListener::Impl {
             uint16_t length_prefix = htons(reply.size());
             Uint8Vector tcp_response;
             tcp_response.reserve(reply.size() + sizeof(length_prefix));
-            tcp_response.insert(tcp_response.end(),
-                    (uint8_t *) &length_prefix,
-                    (uint8_t *) &length_prefix + sizeof(length_prefix));
+            tcp_response.insert(
+                    tcp_response.end(), (uint8_t *) &length_prefix, (uint8_t *) &length_prefix + sizeof(length_prefix));
             tcp_response.insert(tcp_response.end(), reply.begin(), reply.end());
 
             dbglog(log, "[{}] Sending {} bytes response (+ 2 byte length prefix)", conn_id, reply.size());
@@ -194,7 +191,7 @@ struct TunListener::Impl {
             }
 
             Uint8Vector reply_copy(reply.begin(), reply.end());
-            loop->submit([this, conn_id, proto, reply_copy = std::move(reply_copy), guard]() {
+            loop->submit([this, conn_id, proto, reply_copy = std::move(reply_copy), guard]() mutable {
                 if (guard.expired()) {
                     return;
                 }
@@ -232,7 +229,7 @@ struct TunListener::Impl {
 };
 
 TunListener::TunListener()
-    : m_pimpl(new TunListener::Impl) {
+        : m_pimpl(new TunListener::Impl) {
 }
 
 TunListener::~TunListener() = default;
@@ -252,7 +249,7 @@ Error<TunListener::InitError> TunListener::init(
     }
 
     tun_listener->fd = fd;
-    tun_listener->mtu = mtu == 0 ? DEFAULT_MTU_SIZE : mtu;
+    tun_listener->mtu = (mtu == 0) ? int{DEFAULT_MTU_SIZE} : mtu;
     tun_listener->request_callback = std::move(request_callback);
     tun_listener->shutdown_guard = std::make_shared<bool>(true);
 
@@ -269,7 +266,7 @@ Error<TunListener::InitError> TunListener::init(
 
     // Initialize tcpip stack BEFORE starting event loop
     TcpipParameters params{};
-    params.tun_fd = tun_listener->fd;  // -1 for external mode, >= 0 for autonomous mode
+    params.tun_fd = tun_listener->fd; // -1 for external mode, >= 0 for autonomous mode
     params.event_loop = tun_listener->loop.get();
     params.mtu_size = tun_listener->mtu == 0 ? DEFAULT_MTU_SIZE : (uint32_t) tun_listener->mtu;
     params.pcap_filename = nullptr;
@@ -285,16 +282,15 @@ Error<TunListener::InitError> TunListener::init(
     // Start event loop AFTER tcpip is initialized
     tun_listener->loop->start({
 #if defined(__APPLE__) && TARGET_OS_IPHONE
-            .qos_class = QOS_CLASS_DEFAULT,
-            .qos_relative_priority = 0
+            .qos_class = QOS_CLASS_DEFAULT, .qos_relative_priority = 0
 #endif // __APPLE__ && TARGET_OS_IPHONE
     });
 
     if (tun_listener->fd == -1) {
         infolog(tun_listener->log, "TunListener initialized in external mode (mtu={})", tun_listener->mtu);
     } else {
-        infolog(tun_listener->log, "TunListener initialized in autonomous mode (fd={}, mtu={})",
-                tun_listener->fd, tun_listener->mtu);
+        infolog(tun_listener->log, "TunListener initialized in autonomous mode (fd={}, mtu={})", tun_listener->fd,
+                tun_listener->mtu);
     }
 
     return {};

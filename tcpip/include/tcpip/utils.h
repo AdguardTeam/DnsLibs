@@ -33,8 +33,8 @@ class PacketsHolder {
 public:
     PacketsHolder() = default;
     explicit PacketsHolder(Packets packets)
-            : m_packets(packets.data, packets.data + packets.size)
-    {}
+            : m_packets(packets.data, packets.data + packets.size) {
+    }
     ~PacketsHolder() {
         for (auto p : m_packets) {
             if (p.destructor) {
@@ -62,11 +62,10 @@ public:
         std::swap(m_packets, other.m_packets);
         return *this;
     }
+
 private:
     std::vector<Packet> m_packets;
 };
-
-
 
 /**
  * Combine 2 hash codes into a single one
@@ -100,7 +99,6 @@ inline uint64_t ip_addr_hash(sa_family_t family, const void *addr) {
 
     return hash;
 }
-
 
 enum IcmpMessageType {
     ICMP_MT_ECHO_REPLY = 0,              // Echo Reply Message
@@ -138,7 +136,7 @@ struct IcmpEchoRequest {
 
 struct IcmpEchoReply {
     /** source address of the reply (essentially equals to `dst` in corresponding `tcpip_icmp_echo_t`) */
-    SocketAddress  peer;
+    SocketAddress peer;
     uint16_t id;    /**< an identifier to aid in matching echos and replies */
     uint16_t seqno; /**< a sequence number to aid in matching echos and replies */
     uint8_t type;   /**< a type of the reply message */

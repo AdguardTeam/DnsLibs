@@ -1,0 +1,7 @@
+{
+	"name": "Docker Compose Dev Container",
+
+	"dockerComposeFile": "docker-compose.yml",
+    "service": "dns-libs-debug",
+    "workspaceFolder": "/workspace"
+}

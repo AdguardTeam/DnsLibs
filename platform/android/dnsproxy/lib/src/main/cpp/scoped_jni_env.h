@@ -1,8 +1,8 @@
 #pragma once
 
+#include <cassert>
 #include <jni.h>
 #include <pthread.h>
-#include <cassert>
 
 namespace ag::jni {
 

@@ -1,10 +1,9 @@
 #pragma once
 
-
-#include <vector>
 #include <optional>
-#include "common/defs.h"
+#include <vector>
 
+#include "common/defs.h"
 
 namespace ag::dns {
 
@@ -31,4 +30,4 @@ private:
     Uint8Vector m_buffer;
 };
 
-}
+} // namespace ag::dns

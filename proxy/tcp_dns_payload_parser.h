@@ -6,7 +6,7 @@ namespace ag::dns {
 
 /**
  * TCP DNS payload parser - handles length-prefixed DNS messages over TCP
- * 
+ *
  * TCP DNS messages are prefixed with a 2-byte length field (network byte order)
  * followed by the DNS message payload.
  */

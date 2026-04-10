@@ -166,7 +166,7 @@ static std::pair<bool, std::optional<rule_utils::DnsrewriteInfo>> parse_paramete
                     continue;
                 }
                 if (auto rrtype = parse_rrtype(parts[i], log); rrtype.has_value()) {
-                    get_info().rrtype = rrtype.value();
+                    get_info().rrtype = rrtype;
                     continue;
                 }
                 break;
@@ -284,7 +284,7 @@ bool rule_utils::parse_dnsrewrite_modifier(
     } else if (info->value.empty()) {
         // do nothing
     } else if (std::string_view value = info->value;
-               is_domain_name(value) || is_domain_name(value.substr(0, value.length() - 1))) {
+            is_domain_name(value) || is_domain_name(value.substr(0, value.length() - 1))) {
         info->rrtype = LDNS_RR_TYPE_CNAME;
     } else if (SocketAddress addr = ag::utils::str_to_socket_address(info->value); addr.is_ipv6()) {
         info->rrtype = LDNS_RR_TYPE_AAAA;

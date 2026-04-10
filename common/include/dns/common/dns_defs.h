@@ -8,8 +8,8 @@
 
 #include "common/defs.h"
 #include "common/error.h"
-#include "common/utils.h"
 #include "common/socket_address.h"
+#include "common/utils.h"
 
 namespace ag {
 namespace dns {
@@ -81,31 +81,52 @@ enum class DnsProxyInitError {
 } // namespace dns
 
 // clang format off
-template<>
+template <>
 struct ErrorCodeToString<dns::DnsError> {
     std::string operator()(dns::DnsError e) {
         switch (e) {
-        case decltype(e)::AE_ENCODE_ERROR: return "Can't encode request";
-        case decltype(e)::AE_DECODE_ERROR: return "Can't decode reply";
-        case decltype(e)::AE_ENCRYPT_ERROR: return "Error encrypting query for server";
-        case decltype(e)::AE_DECRYPT_ERROR: return "Error decrypting server reply";
-        case decltype(e)::AE_BOOTSTRAP_ERROR: return "Failed to resolve address of DNS server";
-        case decltype(e)::AE_HANDSHAKE_ERROR: return "Error while handshaking to server";
-        case decltype(e)::AE_REPLY_PACKET_ID_MISMATCH: return "Packet ID of reply doesn't match request";
-        case decltype(e)::AE_REQUEST_PACKET_TOO_SHORT: return "Request packet too short";
-        case decltype(e)::AE_RESPONSE_PACKET_TOO_SHORT: return "Response packet too short";
-        case decltype(e)::AE_TRUNCATED_RESPONSE: return "Response was truncated";
-        case decltype(e)::AE_NESTED_DNS_ERROR: return "Nested DNS request failed";
-        case decltype(e)::AE_CURL_ERROR: return "CURL request failed";
-        case decltype(e)::AE_BAD_RESPONSE: return "Bad response";
-        case decltype(e)::AE_SOCKET_ERROR: return "Socket error";
-        case decltype(e)::AE_OUTBOUND_PROXY_ERROR: return "Couldn't connect to outbound proxy";
-        case decltype(e)::AE_CONNECTION_CLOSED: return "Connection error";
-        case decltype(e)::AE_INTERNAL_ERROR: return "Internal error";
-        case decltype(e)::AE_TIMED_OUT: return "Timed out";
-        case decltype(e)::AE_SHUTTING_DOWN: return "Shutting down";
-        case decltype(e)::AE_EXCHANGE_ERROR: return "Upstream exchange error";
-        case decltype(e)::AE_RETRY_CONNECTION: return "Connection should be retried";
+        case decltype(e)::AE_ENCODE_ERROR:
+            return "Can't encode request";
+        case decltype(e)::AE_DECODE_ERROR:
+            return "Can't decode reply";
+        case decltype(e)::AE_ENCRYPT_ERROR:
+            return "Error encrypting query for server";
+        case decltype(e)::AE_DECRYPT_ERROR:
+            return "Error decrypting server reply";
+        case decltype(e)::AE_BOOTSTRAP_ERROR:
+            return "Failed to resolve address of DNS server";
+        case decltype(e)::AE_HANDSHAKE_ERROR:
+            return "Error while handshaking to server";
+        case decltype(e)::AE_REPLY_PACKET_ID_MISMATCH:
+            return "Packet ID of reply doesn't match request";
+        case decltype(e)::AE_REQUEST_PACKET_TOO_SHORT:
+            return "Request packet too short";
+        case decltype(e)::AE_RESPONSE_PACKET_TOO_SHORT:
+            return "Response packet too short";
+        case decltype(e)::AE_TRUNCATED_RESPONSE:
+            return "Response was truncated";
+        case decltype(e)::AE_NESTED_DNS_ERROR:
+            return "Nested DNS request failed";
+        case decltype(e)::AE_CURL_ERROR:
+            return "CURL request failed";
+        case decltype(e)::AE_BAD_RESPONSE:
+            return "Bad response";
+        case decltype(e)::AE_SOCKET_ERROR:
+            return "Socket error";
+        case decltype(e)::AE_OUTBOUND_PROXY_ERROR:
+            return "Couldn't connect to outbound proxy";
+        case decltype(e)::AE_CONNECTION_CLOSED:
+            return "Connection error";
+        case decltype(e)::AE_INTERNAL_ERROR:
+            return "Internal error";
+        case decltype(e)::AE_TIMED_OUT:
+            return "Timed out";
+        case decltype(e)::AE_SHUTTING_DOWN:
+            return "Shutting down";
+        case decltype(e)::AE_EXCHANGE_ERROR:
+            return "Upstream exchange error";
+        case decltype(e)::AE_RETRY_CONNECTION:
+            return "Connection should be retried";
         }
     };
 };
@@ -114,19 +135,32 @@ template <>
 struct ErrorCodeToString<ag::dns::DnsProxyInitError> {
     std::string operator()(ag::dns::DnsProxyInitError e) {
         switch (e) {
-        case decltype(e)::AE_PROXY_NOT_SET: return "Proxy is not set";
-        case decltype(e)::AE_EVENT_LOOP_NOT_SET: return "Event loop is not set";
-        case decltype(e)::AE_INVALID_ADDRESS: return "Invalid address";
-        case decltype(e)::AE_EMPTY_PROXY: return "DnsProxy is nullptr";
-        case decltype(e)::AE_PROTOCOL_ERROR: return "Protocol is not implemented";
-        case decltype(e)::AE_LISTENER_INIT_ERROR: return "Error was occured in DnsProxyListener initializing";
-        case decltype(e)::AE_INVALID_IPV4: return "Invalid custom blocking IPv4 address";
-        case decltype(e)::AE_INVALID_IPV6: return "Invalid custom blocking IPv6 address";
-        case decltype(e)::AE_UPSTREAM_INIT_ERROR: return "Failed to initialize any upstream";
-        case decltype(e)::AE_FALLBACK_FILTER_INIT_ERROR: return "Failed to initialize the fallback filtering module";
-        case decltype(e)::AE_FILTER_LOAD_ERROR: return "Failed to load Filter";
-        case decltype(e)::AE_MEM_LIMIT_REACHED: return "Filter added partially (reached memory limit)";
-        case decltype(e)::AE_NON_UNIQUE_FILTER_ID: return "Non unique filter id";
+        case decltype(e)::AE_PROXY_NOT_SET:
+            return "Proxy is not set";
+        case decltype(e)::AE_EVENT_LOOP_NOT_SET:
+            return "Event loop is not set";
+        case decltype(e)::AE_INVALID_ADDRESS:
+            return "Invalid address";
+        case decltype(e)::AE_EMPTY_PROXY:
+            return "DnsProxy is nullptr";
+        case decltype(e)::AE_PROTOCOL_ERROR:
+            return "Protocol is not implemented";
+        case decltype(e)::AE_LISTENER_INIT_ERROR:
+            return "Error was occured in DnsProxyListener initializing";
+        case decltype(e)::AE_INVALID_IPV4:
+            return "Invalid custom blocking IPv4 address";
+        case decltype(e)::AE_INVALID_IPV6:
+            return "Invalid custom blocking IPv6 address";
+        case decltype(e)::AE_UPSTREAM_INIT_ERROR:
+            return "Failed to initialize any upstream";
+        case decltype(e)::AE_FALLBACK_FILTER_INIT_ERROR:
+            return "Failed to initialize the fallback filtering module";
+        case decltype(e)::AE_FILTER_LOAD_ERROR:
+            return "Failed to load Filter";
+        case decltype(e)::AE_MEM_LIMIT_REACHED:
+            return "Filter added partially (reached memory limit)";
+        case decltype(e)::AE_NON_UNIQUE_FILTER_ID:
+            return "Non unique filter id";
         }
     }
 };

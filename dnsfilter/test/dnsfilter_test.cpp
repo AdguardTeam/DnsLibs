@@ -190,7 +190,8 @@ TEST_F(DnsfilterTest, SuccessfulRuleParsing) {
             {"$dnstype=HTTPS", {make_rule(1 << DnsFilter::DARP_DNSTYPE), rule_utils::Rule::MMID_SHORTCUTS_AND_REGEX}},
             {"/.*/$dnstype=HTTPS", {make_rule(1 << DnsFilter::DARP_DNSTYPE), rule_utils::Rule::MMID_REGEX}},
             {"/.*$/$dnstype=HTTPS", {make_rule(1 << DnsFilter::DARP_DNSTYPE), rule_utils::Rule::MMID_REGEX}},
-            {"*$dnsrewrite", {make_rule((1 << DnsFilter::DARP_DNSREWRITE)), rule_utils::Rule::MMID_SHORTCUTS_AND_REGEX}},
+            {"*$dnsrewrite",
+                    {make_rule((1 << DnsFilter::DARP_DNSREWRITE)), rule_utils::Rule::MMID_SHORTCUTS_AND_REGEX}},
             {"$dnsrewrite", {make_rule((1 << DnsFilter::DARP_DNSREWRITE)), rule_utils::Rule::MMID_SHORTCUTS_AND_REGEX}},
             {"/.*/$dnsrewrite", {make_rule((1 << DnsFilter::DARP_DNSREWRITE)), rule_utils::Rule::MMID_REGEX}},
     };
@@ -213,8 +214,7 @@ TEST_F(DnsfilterTest, SuccessfulHostsRuleParsing) {
     };
 
     const TestData TEST_DATA[] = {
-            {"0.0.0.0 example.org",
-                    {{.content = DnsFilter::HostsRuleInfo{"0.0.0.0"}}, rule_utils::Rule::MMID_EXACT}},
+            {"0.0.0.0 example.org", {{.content = DnsFilter::HostsRuleInfo{"0.0.0.0"}}, rule_utils::Rule::MMID_EXACT}},
             {"1:1:: example.org", {{.content = DnsFilter::HostsRuleInfo{"1:1::"}}, rule_utils::Rule::MMID_EXACT}},
             {"1:1:1:1:1:1:1:1 example.org",
                     {{.content = DnsFilter::HostsRuleInfo{"1:1:1:1:1:1:1:1"}}, rule_utils::Rule::MMID_EXACT}},
@@ -243,12 +243,12 @@ TEST_F(DnsfilterTest, SuccessfulExactDomainRuleParsing) {
     };
 
     const TestData TEST_DATA[] = {
-            {"example.org", "example.org" },
-            {"example.org # Comment", "example.org" },
-            {"example.org # Comment.", "example.org" },
-            {"example.org #Comment", "example.org" },
-            {"example.org #Comment.", "example.org" },
-            {"example.org ##Comment.", "example.org" }, // contains CSS mask but also space, so it is not valid CSS rule
+            {"example.org", "example.org"},
+            {"example.org # Comment", "example.org"},
+            {"example.org # Comment.", "example.org"},
+            {"example.org #Comment", "example.org"},
+            {"example.org #Comment.", "example.org"},
+            {"example.org ##Comment.", "example.org"}, // contains CSS mask but also space, so it is not valid CSS rule
 
     };
 
@@ -270,6 +270,7 @@ TEST_F(DnsfilterTest, WrongRuleParsing) {
             "||example$unknown",
             "||example$important,important",
             "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee.example.org",
+            // NOLINTNEXTLINE(bugprone-suspicious-missing-comma)
             "eeee.eeee.eeee.eeee.eeee.eeee.eeee.eeee.eeee.eeee.eeee.eeee.eeee.eeee.eeee.eeee.eeee.eeee.eeee.eeee.eeee."
             "eeee.eeee.eeee.eeee.eeee.eeee.eeee.eeee.eeee.eeee.eeee.eeee.eeee.eeee.eeee.eeee.eeee.eeee.eeee.eeee.eeee."
             "eeee.eeee.eeee.eeee.eeee.eeee.eeee.eeee.eeee.eeee.eeee.eeee.eeee.eeee.eeee.eeee.eeee.eeee.eeee.eeee.eeee."
@@ -800,7 +801,8 @@ TEST_F(DnsfilterTest, BasicRulesNoMatch) {
     };
 
     const std::vector<TestData> TEST_DATA = {
-            {"||*example-1*", "sub.baexaASDFmple-1ab"}, {"||*.example0.*", "example0.com"},
+            {"||*example-1*", "sub.baexaASDFmple-1ab"},
+            {"||*.example0.*", "example0.com"},
             {
                     "example1.org|",
                     "example1.orgg",
@@ -841,10 +843,7 @@ TEST_F(DnsfilterTest, BasicRulesNoMatch) {
                     "example10.org/",
                     "example10.orgg",
             },
-            {
-                    "example11.org.",
-                    "example11.org"
-            },
+            {"example11.org.", "example11.org"},
             {
                     "|example26.org|",
                     "sub.example26.org",
@@ -865,10 +864,13 @@ TEST_F(DnsfilterTest, BasicRulesNoMatch) {
                     "|192.168.*.1^",
                     "192.168.35.2",
             },
-            {"example56.org:8080", "eexample56.orgg"}, {"|172.165.*.1:80^", "1172.165.35.11"},
-            {"example15.org/", "example15.orgg"}, {"example15.org^/", "example15.orgg"},
-            {"example15.org/^", "example15.orgg"}, {"||123.123.123.123^", "123.123.123.1234"},
-            {"0.1", "10.0.0.1"}, // Exact domain matching => no match
+            {"example56.org:8080", "eexample56.orgg"},
+            {"|172.165.*.1:80^", "1172.165.35.11"},
+            {"example15.org/", "example15.orgg"},
+            {"example15.org^/", "example15.orgg"},
+            {"example15.org/^", "example15.orgg"},
+            {"||123.123.123.123^", "123.123.123.1234"},
+            {"0.1", "10.0.0.1"},                            // Exact domain matching => no match
             {"isdotignored.", "isdotignored_no_it_is_not"}, // Dot is not ignored => no match
     };
 
@@ -1030,7 +1032,8 @@ TEST_F(DnsfilterTest, HostsFileSyntax) {
     };
 
     const std::vector<TestData> TEST_DATA = {
-            {"1.1.1.1 example11.org example12.org example13.org",
+            {
+                    "1.1.1.1 example11.org example12.org example13.org",
                     {
                             "example11.org",
                             "example12.org",
@@ -1040,7 +1043,8 @@ TEST_F(DnsfilterTest, HostsFileSyntax) {
                             "sub.example13.org",
                     },
             },
-            {":: example21.org example22.org example23.org",
+            {
+                    ":: example21.org example22.org example23.org",
                     {
                             "example21.org",
                             "example22.org",
@@ -1056,7 +1060,8 @@ TEST_F(DnsfilterTest, HostsFileSyntax) {
                             "example32.org",
                             "example33.org",
                     }},
-            {"1:1:1:1:1:1:1:1 example41.org example42.org example43.org",
+            {
+                    "1:1:1:1:1:1:1:1 example41.org example42.org example43.org",
                     {
                             "example41.org",
                             "example42.org",
@@ -1066,7 +1071,8 @@ TEST_F(DnsfilterTest, HostsFileSyntax) {
                             "sub.example42.org",
                     },
             },
-            {"1:: example51.org example52.org example53.org",
+            {
+                    "1:: example51.org example52.org example53.org",
                     {
                             "example51.org",
                             "example52.org",
@@ -1209,8 +1215,8 @@ TEST_F(DnsfilterTest, MultipleFilters) {
         }
     }
 
-    DnsFilter::EngineParams params
-            = {{{0, file_by_filter_name(TEST_FILTER_NAME + "1")}, {1, file_by_filter_name(TEST_FILTER_NAME + "2")}}};
+    DnsFilter::EngineParams params = {
+            {{0, file_by_filter_name(TEST_FILTER_NAME + "1")}, {1, file_by_filter_name(TEST_FILTER_NAME + "2")}}};
     auto [handle, err_or_warn] = filter.create(params);
     ASSERT_TRUE(handle) << err_or_warn->str();
 
@@ -1375,7 +1381,6 @@ struct CidrTestSample {
         return os << "[" << self.idx << "] ip: " << self.ip;
     }
 };
-
 
 class Cidr : public ::testing::TestWithParam<CidrTestSample> {
 protected:

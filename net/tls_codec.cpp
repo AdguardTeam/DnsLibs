@@ -51,10 +51,10 @@ Error<TlsCodec::TlsError> TlsCodec::connect(const std::string &sni, std::vector<
 #ifdef OPENSSL_IS_BORINGSSL
     if (enable_pq) {
         static constexpr uint16_t PQ_GROUPS[] = {
-            SSL_GROUP_X25519_MLKEM768,
-            SSL_GROUP_X25519,
-            SSL_GROUP_SECP256R1,
-            SSL_GROUP_SECP384R1,
+                SSL_GROUP_X25519_MLKEM768,
+                SSL_GROUP_X25519,
+                SSL_GROUP_SECP256R1,
+                SSL_GROUP_SECP384R1,
         };
         if (!SSL_set1_group_ids(m_ssl.get(), PQ_GROUPS, std::size(PQ_GROUPS))) {
             warnlog(m_log, "Failed to set post-quantum groups, continuing with defaults");

@@ -18,7 +18,7 @@ public:
          * The caller should accumulate the data itself.
          * @return true if reading must go on, false otherwise
          */
-        bool (* func)(void *arg, Uint8View data);
+        bool (*func)(void *arg, Uint8View data);
         /** User context for the callbacks */
         void *arg;
     };
@@ -46,14 +46,18 @@ public:
             Ret result;
             ConnectParameters params;
             AioSocket *self;
-            bool await_ready() { return false; }
+            bool await_ready() {
+                return false;
+            }
             void await_suspend(std::coroutine_handle<> h) {
                 self->connect(params, [this, h](Ret error) mutable {
                     result = std::move(error);
                     h.resume();
                 });
             }
-            Ret await_resume() { return result; }
+            Ret await_resume() {
+                return result;
+            }
         };
         return Awaitable{.params = params, .self = this};
     }
@@ -79,14 +83,18 @@ public:
             OnReadCallback on_read_handler;
             std::optional<Micros> timeout;
             AioSocket *self;
-            bool await_ready() { return false; }
+            bool await_ready() {
+                return false;
+            }
             void await_suspend(std::coroutine_handle<> h) {
                 self->receive(on_read_handler, timeout, [this, h](Ret error) mutable {
                     result = std::move(error);
                     h.resume();
                 });
             }
-            Ret await_resume() { return result; }
+            Ret await_resume() {
+                return result;
+            }
         };
         return Awaitable{.on_read_handler = on_read_handler, .timeout = timeout, .self = this};
     }
@@ -103,8 +111,7 @@ private:
     OnReadCallback m_on_read_callback = {};
     Error<SocketError> m_pending_error;
 
-    [[nodiscard]] Socket::ConnectParameters make_underlying_connect_parameters(
-            ConnectParameters &params) const;
+    [[nodiscard]] Socket::ConnectParameters make_underlying_connect_parameters(ConnectParameters &params) const;
     [[nodiscard]] Socket::Callbacks make_callbacks(bool want_read) const;
     static void on_connected(void *arg);
     static void on_read(void *arg, Uint8View data);
@@ -112,7 +119,8 @@ private:
 
     std::function<void(Error<SocketError>)> m_handler;
     void connect(ConnectParameters params, std::function<void(Error<SocketError>)> handler);
-    void receive(OnReadCallback on_read_handler, std::optional<Micros> timeout, std::function<void(Error<SocketError>)> handler);
+    void receive(OnReadCallback on_read_handler, std::optional<Micros> timeout,
+            std::function<void(Error<SocketError>)> handler);
 };
 
-}
+} // namespace ag::dns

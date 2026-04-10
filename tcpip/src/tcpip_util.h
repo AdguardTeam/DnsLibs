@@ -38,7 +38,6 @@ void socket_address_to_ip_addr(const SocketAddress &sock_addr, ip_addr_t *out_ad
  */
 void ipaddr_ntoa_r_pretty(const ip_addr_t *addr, char *buf, int buflen);
 
-
 /**
  * Writes pcap file header
  * @param fd File descriptor

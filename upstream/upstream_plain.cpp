@@ -6,8 +6,6 @@
 
 #define tracelog_id(l_, pkt_, fmt_, ...) tracelog((l_), "[{}] " fmt_, ldns_pkt_id(pkt_), ##__VA_ARGS__)
 
-using std::chrono::duration_cast;
-
 namespace ag::dns {
 
 PlainUpstream::PlainUpstream(const UpstreamOptions &opts, const UpstreamFactoryConfig &config)
@@ -20,7 +18,8 @@ PlainUpstream::PlainUpstream(const UpstreamOptions &opts, const UpstreamFactoryC
 
 Error<Upstream::InitError> PlainUpstream::init() {
     if (m_options.address.find("://") != std::string::npos) {
-        auto error = this->init_url_port(/*allow_creds*/ false, /*allow_path*/ false, DEFAULT_PLAIN_PORT, /*host_to_lowercase*/ false);
+        auto error = this->init_url_port(
+                /*allow_creds*/ false, /*allow_path*/ false, DEFAULT_PLAIN_PORT, /*host_to_lowercase*/ false);
         if (error) {
             return error;
         }

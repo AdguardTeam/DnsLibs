@@ -1,10 +1,5 @@
 #pragma once
 
-#include "common/defs.h"
-#include "common/error.h"
-#include "common/coro.h"
-#include "dns/common/event_loop.h"
-
 #include <cassert>
 #include <ldns/ldns.h>
 #include <string_view>
@@ -12,6 +7,11 @@
 #ifdef __ANDROID__
 #include <android/multinetwork.h>
 #endif
+
+#include "common/coro.h"
+#include "common/defs.h"
+#include "common/error.h"
+#include "dns/common/event_loop.h"
 
 namespace ag::dns {
 
@@ -44,15 +44,18 @@ public:
      * Constructs a SystemResolver for a specific Android network.
      * @param network_handle Android network handle (default is NETWORK_UNSPECIFIED).
      */
-    SystemResolver(ConstructorAccess, EventLoop *loop, Millis timeout, net_handle_t network_handle = NETWORK_UNSPECIFIED);
-    static Result<std::unique_ptr<SystemResolver>, SystemResolverError> create(EventLoop *loop, Millis timeout, net_handle_t network_handle);
+    SystemResolver(
+            ConstructorAccess, EventLoop *loop, Millis timeout, net_handle_t network_handle = NETWORK_UNSPECIFIED);
+    static Result<std::unique_ptr<SystemResolver>, SystemResolverError> create(
+            EventLoop *loop, Millis timeout, net_handle_t network_handle);
 #else
     /**
      * Constructs a SystemResolver for a specific network interface.
      * @param if_index Index of the network interface (default is 0, which means any interface).
      */
     SystemResolver(ConstructorAccess, EventLoop *loop, Millis timeout, uint32_t if_index = 0);
-    static Result<std::unique_ptr<SystemResolver>, SystemResolverError> create(EventLoop *loop, Millis timeout, uint32_t if_index);
+    static Result<std::unique_ptr<SystemResolver>, SystemResolverError> create(
+            EventLoop *loop, Millis timeout, uint32_t if_index);
 #endif
 
     ~SystemResolver();
@@ -63,8 +66,7 @@ public:
      * @param rr_type Type of the resource record to resolve.
      * @return A unique pointer to a list of resource records.
      */
-    coro::Task<Result<LdnsRrListPtr, SystemResolverError>>
-    resolve(std::string_view domain, ldns_rr_type rr_type);
+    coro::Task<Result<LdnsRrListPtr, SystemResolverError>> resolve(std::string_view domain, ldns_rr_type rr_type);
 
 private:
     class Impl;
@@ -98,7 +100,7 @@ struct ErrorCodeToString<dns::SystemResolverError> {
     }
 };
 
-template<>
+template <>
 struct ErrorCodeToString<ldns_status> {
     const char *operator()(ldns_status e) {
         const char *error_str = ldns_get_errorstr_by_id(e);

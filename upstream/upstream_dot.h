@@ -1,14 +1,13 @@
 #pragma once
 
-#include <utility>
 #include <event2/event.h>
 #include <ldns/net.h>
+#include <utility>
 
 #include "dns/net/tls_session_cache.h"
-#include "dns/upstream/upstream.h"
-
-#include "dns_framed.h"
 #include "dns/upstream/bootstrapper.h"
+#include "dns/upstream/upstream.h"
+#include "dns_framed.h"
 
 namespace ag::dns {
 

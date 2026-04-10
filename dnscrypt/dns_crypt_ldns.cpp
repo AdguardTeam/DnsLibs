@@ -19,7 +19,7 @@ ldns_pkt_ptr create_request_ldns_pkt(ldns_rr_type rr_type, ldns_rr_class rr_clas
     }
     ldns_pkt_ptr pkt(ldns_pkt_query_new(dname, rr_type, rr_class, flags));
     if (!pkt) {
-        std::free(dname);
+        std::free(dname); // NOLINT(cppcoreguidelines-no-malloc,hicpp-no-malloc)
         return nullptr;
     }
     if (size_opt) {
@@ -47,8 +47,8 @@ LdnsDecodeResult create_ldns_pkt(uint8_t *data, size_t size) {
     return result;
 }
 
-coro::Task<DnsExchangeUnparsedResult> dns_exchange(EventLoop &loop, Millis timeout, const SocketAddress &socket_address, ldns_buffer &buffer,
-        const SocketFactory *socket_factory, SocketFactory::SocketParameters socket_parameters) {
+coro::Task<DnsExchangeUnparsedResult> dns_exchange(EventLoop &loop, Millis timeout, const SocketAddress &socket_address,
+        ldns_buffer &buffer, const SocketFactory *socket_factory, SocketFactory::SocketParameters socket_parameters) {
 
     utils::Timer timer;
 
@@ -76,16 +76,16 @@ coro::Task<DnsExchangeUnparsedResult> dns_exchange(EventLoop &loop, Millis timeo
     co_return {std::move(reply), timer.elapsed<Millis>()};
 }
 
-coro::Task<DnsExchangeResult> dns_exchange_from_ldns_pkt(EventLoop &loop, Millis timeout, const SocketAddress &socket_address,
-        const ldns_pkt &request_pkt, const SocketFactory *socket_factory,
+coro::Task<DnsExchangeResult> dns_exchange_from_ldns_pkt(EventLoop &loop, Millis timeout,
+        const SocketAddress &socket_address, const ldns_pkt &request_pkt, const SocketFactory *socket_factory,
         SocketFactory::SocketParameters socket_parameters) {
 
     auto buffer = create_ldns_buffer(request_pkt);
     if (buffer.has_error()) {
         co_return {.error = buffer.error()};
     }
-    auto [reply, rtt, allocated_err]
-            = co_await dns_exchange(loop, timeout, socket_address, *buffer.value(), socket_factory, std::move(socket_parameters));
+    auto [reply, rtt, allocated_err] = co_await dns_exchange(
+            loop, timeout, socket_address, *buffer.value(), socket_factory, std::move(socket_parameters));
     if (allocated_err) {
         co_return {.error = allocated_err};
     }

@@ -72,7 +72,7 @@ struct ag::dns::DohUpstream::ConnectAwaitable {
         return waiter.complete;
     }
     void await_suspend(std::coroutine_handle<> h) {
-        waiter.handle = std::move(h);
+        waiter.handle = h;
     }
     Error<DnsError> await_resume() {
         return waiter.error;
@@ -141,8 +141,7 @@ struct ag::dns::DohUpstream::HttpConnection { // NOLINT(*-special-member-functio
     explicit HttpConnection(DohUpstream *parent)
             : parent_shutdown_guard(parent->m_shutdown_guard)
             , parent(parent)
-            , loop(parent->m_config.loop)
-    {
+            , loop(parent->m_config.loop) {
     }
 
     HttpConnection() = delete;
@@ -252,13 +251,12 @@ struct ag::dns::DohUpstream::Http3Connection : public ag::dns::DohUpstream::Http
 
 using std::chrono::duration_cast;
 
-#define log_upstream(lvl_, self_, fmt_, ...) lvl_## log(g_logger, "[{}] " fmt_, (self_)->m_id, ## __VA_ARGS__)
+#define log_upstream(lvl_, self_, fmt_, ...) lvl_##log(g_logger, "[{}] " fmt_, (self_)->m_id, ##__VA_ARGS__)
 #define log_hconn(lvl_, self_, fmt_, ...)                                                                              \
-    lvl_## log(g_logger, "[{}] [{}-{}] " fmt_, (self_)->parent->m_id, (self_)->id,                                      \
-            (self_)->version_str(), ## __VA_ARGS__)
+    lvl_##log(g_logger, "[{}] [{}-{}] " fmt_, (self_)->parent->m_id, (self_)->id, (self_)->version_str(), ##__VA_ARGS__)
 #define log_query(lvl_, hconn_, qid_, fmt_, ...)                                                                       \
-    lvl_## log(g_logger, "[{}] [{}-{}] [{}] " fmt_, (hconn_)->parent->m_id, (hconn_)->id,                               \
-            (hconn_)->version_str(), qid_, ## __VA_ARGS__)
+    lvl_##log(g_logger, "[{}] [{}-{}] [{}] " fmt_, (hconn_)->parent->m_id, (hconn_)->id, (hconn_)->version_str(),      \
+            qid_, ##__VA_ARGS__)
 
 static const ag::Logger g_logger("DOH upstream");
 static std::atomic<uint32_t> g_next_id = 0; // NOLINT(*-avoid-non-const-global-variables)
@@ -286,7 +284,8 @@ ag::dns::DohUpstream::~DohUpstream() {
 }
 
 ag::Error<ag::dns::Upstream::InitError> ag::dns::DohUpstream::init() {
-    auto error = this->init_url_port(/*allow_creds*/ true, /*allow_path*/ true, DEFAULT_DOH_PORT, /*host_to_lowercase*/ true);
+    auto error = this->init_url_port(
+            /*allow_creds*/ true, /*allow_path*/ true, DEFAULT_DOH_PORT, /*host_to_lowercase*/ true);
     if (error) {
         return error;
     }
@@ -300,8 +299,7 @@ ag::Error<ag::dns::Upstream::InitError> ag::dns::DohUpstream::init() {
     if (const auto *oproxy_settings = config().socket_factory->get_outbound_proxy_settings(); !oproxy_settings
             || !oproxy_protocol_supports_hostname(oproxy_settings->protocol)
             || !std::holds_alternative<std::monostate>(options().resolved_server_ip)
-            || SocketAddress(m_url.get_hostname(), m_port).valid()
-            || m_http_version == http::HTTP_3_0) {
+            || SocketAddress(m_url.get_hostname(), m_port).valid() || m_http_version == http::HTTP_3_0) {
         if (m_options.bootstrap.empty() && std::holds_alternative<std::monostate>(m_options.resolved_server_ip)
                 && !SocketAddress(m_url.get_hostname(), m_port).valid()) {
             return make_error(InitError::AE_EMPTY_BOOTSTRAP);
@@ -446,7 +444,7 @@ ag::coro::Task<void> ag::dns::DohUpstream::drive_connection(Millis handshake_tim
         }
         log_upstream(trace, this, "Bootstrapping done");
         for (SocketAddress &address : resolved.addresses) {
-            addresses_to_connect.emplace_back(std::move(address));
+            addresses_to_connect.emplace_back(address);
         }
     } else {
         addresses_to_connect.emplace_back(NamePort{std::string(m_url.get_hostname()), m_port});
@@ -499,7 +497,8 @@ ag::coro::Task<void> ag::dns::DohUpstream::drive_connection(Millis handshake_tim
             m_pending_connections.reset();
             cancel_read_timer();
             assert(m_connection_state == ConnectionState::CONNECTING);
-            co_return co_await drive_connection(handshake_timeout - duration_cast<Millis>(SteadyClock::now() - start_ts), tries - 1);
+            co_return co_await drive_connection(
+                    handshake_timeout - duration_cast<Millis>(SteadyClock::now() - start_ts), tries - 1);
         }
         if (http_conn.error()->value() == DnsError::AE_TIMED_OUT && m_bootstrapper.has_value()) {
             for (const auto &conn : *m_pending_connections) {
@@ -513,8 +512,10 @@ ag::coro::Task<void> ag::dns::DohUpstream::drive_connection(Millis handshake_tim
     }
 
     m_connection_state = ConnectionState::CONNECTED;
-    m_http_conn = std::move(std::find_if(m_pending_connections->begin(), m_pending_connections->end(),
-            [&](const auto &conn){ return conn.first.get() == http_conn.value(); })->first);
+    m_http_conn =
+            std::move(std::find_if(m_pending_connections->begin(), m_pending_connections->end(), [&](const auto &conn) {
+                return conn.first.get() == http_conn.value();
+            })->first);
     m_request_template.version(m_http_conn->version());
     m_pending_connections.reset();
 
@@ -961,38 +962,41 @@ ag::coro::Task<ag::Error<ag::dns::DnsError>> ag::dns::DohUpstream::Http1Or2Conne
 
     if (alpn == ALPN_HTTP_2) {
         auto client = http::Http2Client::make(http::Http2Settings{},
-            http::Http2Client::Callbacks{
-                    .arg = this,
-                    .on_response =
-                            [](void *arg, uint32_t stream_id, http::Response response) {
-                                on_response(arg, stream_id, std::move(response));
-                            },
-                    .on_body =
-                            [](void *arg, uint32_t stream_id, Uint8View chunk) {
-                                on_body(arg, stream_id, chunk);
-                            },
-                    .on_stream_read_finished =
-                            [](void *arg, uint32_t stream_id) {
-                                on_stream_read_finished(arg, stream_id);
-                            },
-                    .on_stream_closed =
-                            [](void *arg, uint32_t stream_id, nghttp2_error_code error_code) {
-                                on_stream_closed(arg, stream_id,
-                                        make_error(DnsError::AE_EXCHANGE_ERROR, nghttp2_http2_strerror(error_code)));
-                            },
-                    .on_close =
-                            [](void *arg, nghttp2_error_code error_code) {
-                                on_close(arg, make_error(DnsError::AE_EXCHANGE_ERROR, nghttp2_http2_strerror(error_code)));
-                            },
-                    .on_output = on_output,
-                    .on_data_sent =
-                            [](void *arg, uint32_t stream_id, size_t n) {
-                                auto *self = (Http1Or2Connection *) arg;
-                                auto *h2_client = std::get_if<std::unique_ptr<http::Http2Client>>(&self->session);
-                                assert(h2_client);
-                                (*h2_client)->consume_stream(stream_id, n);
-                            },
-            });
+                http::Http2Client::Callbacks{
+                        .arg = this,
+                        .on_response =
+                                [](void *arg, uint32_t stream_id, http::Response response) {
+                                    on_response(arg, stream_id, std::move(response));
+                                },
+                        .on_body =
+                                [](void *arg, uint32_t stream_id, Uint8View chunk) {
+                                    on_body(arg, stream_id, chunk);
+                                },
+                        .on_stream_read_finished =
+                                [](void *arg, uint32_t stream_id) {
+                                    on_stream_read_finished(arg, stream_id);
+                                },
+                        .on_stream_closed =
+                                [](void *arg, uint32_t stream_id, nghttp2_error_code error_code) {
+                                    on_stream_closed(arg, stream_id,
+                                            make_error(
+                                                    DnsError::AE_EXCHANGE_ERROR, nghttp2_http2_strerror(error_code)));
+                                },
+                        .on_close =
+                                [](void *arg, nghttp2_error_code error_code) {
+                                    on_close(arg,
+                                            make_error(
+                                                    DnsError::AE_EXCHANGE_ERROR, nghttp2_http2_strerror(error_code)));
+                                },
+                        .on_output = on_output,
+                        .on_data_sent =
+                                [](void *arg, uint32_t stream_id, size_t n) {
+                                    auto *self = (Http1Or2Connection *) arg;
+                                    auto *h2_client = std::get_if<std::unique_ptr<http::Http2Client>>(&self->session);
+                                    assert(h2_client);
+                                    (*h2_client)->consume_stream(stream_id, n);
+                                },
+                });
         if (client.has_error()) {
             co_return make_error(DnsError::AE_INTERNAL_ERROR, client.error());
         }
@@ -1328,17 +1332,16 @@ void ag::dns::DohUpstream::Http3Connection::on_expiry_update(void *arg, ag::Nano
         self->loop.cancel(self->expiry_task.value());
     }
 
-    self->expiry_task =
-            self->loop.schedule(duration_cast<Micros>(period), [self, guard]() {
-                if (guard.expired()) {
-                    return;
-                }
-                if (auto error = self->handle_expiry()) {
-                    if (!self->parent_shutdown_guard.expired() && self->parent->m_http_conn.get() == self) {
-                        self->parent->close_connection(error);
-                    }
-                }
-            });
+    self->expiry_task = self->loop.schedule(duration_cast<Micros>(period), [self, guard]() {
+        if (guard.expired()) {
+            return;
+        }
+        if (auto error = self->handle_expiry()) {
+            if (!self->parent_shutdown_guard.expired() && self->parent->m_http_conn.get() == self) {
+                self->parent->close_connection(error);
+            }
+        }
+    });
 }
 
 int ag::dns::DohUpstream::Http3Connection::on_certificate_verify(X509_STORE_CTX *ctx, void *arg) {

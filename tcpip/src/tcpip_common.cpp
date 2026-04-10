@@ -5,11 +5,11 @@
 #include <span>
 #include <vector>
 
+#include <lwip/ip_addr.h>
 #include <lwip/netdb.h>
 #include <lwip/netif.h>
 #include <lwip/pbuf.h>
 #include <lwip/tcp.h>
-#include <lwip/ip_addr.h>
 #include <uv.h>
 
 #include "libuv_lwip.h"
@@ -59,7 +59,7 @@ static err_t tun_output(const struct netif *netif, const struct pbuf *packet_buf
 
     size_t idx = 0;
     for (const struct pbuf *iter = packet_buffer; (idx < chain_length) && (iter != nullptr); idx++, iter = iter->next) {
-        chunks.push_back(uv_buf_init((char *)iter->payload, iter->len));
+        chunks.push_back(uv_buf_init((char *) iter->payload, iter->len));
     }
 
     tracelog(ctx->logger, "TUN output: {} bytes", (int) packet_buffer->tot_len);
@@ -99,8 +99,10 @@ static err_t tun_output_to_fd(TcpipCtx *ctx, std::span<uv_buf_t> chunks) {
 
     /* Write packet to TUN */
     // uv_buf_t is compatible with iovec on Unix
-    ssize_t written = writev(ctx->parameters.tun_fd,
-            reinterpret_cast<const struct iovec *>(chunks.data()), chunks.size());
+    ssize_t written =
+            // NOLINTNEXTLINE(cppcoreguidelines-pro-type-reinterpret-cast)
+            writev(ctx->parameters.tun_fd, reinterpret_cast<const struct iovec *>(chunks.data()),
+                    static_cast<int>(chunks.size()));
     if (-1 == written) {
         if (errno == EWOULDBLOCK) {
             err = ERR_MEM;
@@ -122,7 +124,7 @@ static err_t tun_output_to_utun_fd(TcpipCtx *ctx, std::span<uv_buf_t> chunks, in
     std::vector<uv_buf_t> new_chunks;
     new_chunks.reserve(chunks.size() + 1);
     struct UtunHdr hdr = {.family = (int) htonl(family)};
-    new_chunks.push_back(uv_buf_init((char *)&hdr, sizeof(hdr)));
+    new_chunks.push_back(uv_buf_init((char *) &hdr, sizeof(hdr)));
     for (const uv_buf_t &chunk : chunks) {
         new_chunks.push_back(chunk);
     }
@@ -152,9 +154,9 @@ static err_t netif_init_cb(struct netif *netif) {
 }
 
 enum TunReadStatus {
-    TRS_OK,     // data was read from tun device and sent to netif driver
-    TRS_DROP,   // read data was malformed, so another read is required
-    TRS_STOP    // no more data can be read from tun device
+    TRS_OK,   // data was read from tun device and sent to netif driver
+    TRS_DROP, // read data was malformed, so another read is required
+    TRS_STOP  // no more data can be read from tun device
 };
 
 /**
@@ -225,8 +227,8 @@ static pbuf *zerocopy_pbuf_create(Packet *packet) {
     buf_custom->p.custom_free_function = zerocopy_pbuf_free;
     buf_custom->v = *packet;
 
-    pbuf *buffer = pbuf_alloced_custom(PBUF_RAW, buf_custom->v.size, PBUF_REF, &buf_custom->p,
-            buf_custom->v.data, u16_t(buf_custom->v.size));
+    pbuf *buffer = pbuf_alloced_custom(
+            PBUF_RAW, buf_custom->v.size, PBUF_REF, &buf_custom->p, buf_custom->v.data, u16_t(buf_custom->v.size));
     if (buffer == nullptr) {
         delete buf_custom;
         return nullptr;
@@ -341,7 +343,7 @@ static void release_resources(TcpipCtx *ctx) {
         close(ctx->pcap_fd);
     }
 
-    free(ctx->tun_input_buffer);
+    free(ctx->tun_input_buffer); // NOLINT(cppcoreguidelines-no-malloc,hicpp-no-malloc)
 
     delete ctx;
 }
@@ -352,7 +354,7 @@ static void clean_up_events(TcpipCtx *ctx) {
 }
 
 TcpipCtx *tcpip_init_internal(const TcpipParameters *params) {
-    auto *ctx = new(std::nothrow) TcpipCtx{};
+    auto *ctx = new (std::nothrow) TcpipCtx{};
     if (nullptr == ctx) {
         errlog(ctx->logger, "init: no memory for operation");
         return nullptr;
@@ -361,13 +363,14 @@ TcpipCtx *tcpip_init_internal(const TcpipParameters *params) {
     ctx->parameters = *params;
     ctx->parameters.mtu_size = (0 == ctx->parameters.mtu_size) ? DEFAULT_MTU_SIZE : ctx->parameters.mtu_size;
     if (ctx->parameters.tun_fd != -1) {
-        ctx->pool = new PacketPool(DEFAULT_PACKET_POOL_SIZE, ctx->parameters.mtu_size);
+        ctx->pool = new PacketPool(DEFAULT_PACKET_POOL_SIZE, static_cast<int>(ctx->parameters.mtu_size));
     }
     if (!configure_events(ctx)) {
         errlog(ctx->logger, "init: failed to create events");
         goto error;
     }
 
+    // NOLINTBEGIN(cppcoreguidelines-no-malloc,hicpp-no-malloc)
     ctx->tun_input_buffer = (uint8_t *) malloc(ctx->parameters.mtu_size);
     static_assert(std::is_trivial_v<netif>);
     ctx->netif = (netif *) calloc(1, sizeof(struct netif));
@@ -375,6 +378,7 @@ TcpipCtx *tcpip_init_internal(const TcpipParameters *params) {
         errlog(ctx->logger, "init: no memory for operation");
         goto error;
     }
+    // NOLINTEND(cppcoreguidelines-no-malloc,hicpp-no-malloc)
 
     if (libuv_lwip_init(ctx) != ERR_OK) {
         errlog(ctx->logger, "lwip init failed");
@@ -403,7 +407,7 @@ error:
 
 static void release_lwip_resources(TcpipCtx *ctx) {
     netif_remove(ctx->netif);
-    free(ctx->netif);
+    free(ctx->netif); // NOLINT(cppcoreguidelines-no-malloc,hicpp-no-malloc)
     libuv_lwip_free();
 }
 
@@ -442,7 +446,7 @@ static void dump_packet_to_pcap(TcpipCtx *ctx, const uint8_t *data, size_t len) 
 
 static void dump_packet_iovec_to_pcap(TcpipCtx *ctx, std::span<uv_buf_t> chunks) {
     auto tv = ctx->parameters.event_loop->now();
-    if (pcap_write_packet_uv_buf(ctx->pcap_fd, &tv, chunks.data(), chunks.size()) < 0) {
+    if (pcap_write_packet_uv_buf(ctx->pcap_fd, &tv, chunks.data(), static_cast<int>(chunks.size())) < 0) {
         dbglog(ctx->logger, "pcap: failed to write packet to file");
         close(ctx->pcap_fd);
         ctx->pcap_fd = -1;

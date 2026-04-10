@@ -151,8 +151,8 @@ TEST_F(DnsrewriteTest, FullAAAA) {
 }
 
 TEST_F(DnsrewriteTest, FullPTR) {
-    std::optional<rule_utils::Rule> rule
-            = rule_utils::parse("||4.3.2.1.in-addr.arpa.^$dnsrewrite=NOERROR;PTR;example.net.", &log);
+    std::optional<rule_utils::Rule> rule =
+            rule_utils::parse("||4.3.2.1.in-addr.arpa.^$dnsrewrite=NOERROR;PTR;example.net.", &log);
     ASSERT_TRUE(rule.has_value());
 
     auto r = DnsFilter::apply_dnsrewrite_rules({&rule->public_part});
@@ -221,8 +221,8 @@ TEST_F(DnsrewriteTest, FullTXT) {
 }
 
 TEST_F(DnsrewriteTest, FullHTTPS) {
-    std::optional<rule_utils::Rule> rule
-            = rule_utils::parse("example.com$dnsrewrite=NOERROR;HTTPS;42 example.net alpn=h3", &log);
+    std::optional<rule_utils::Rule> rule =
+            rule_utils::parse("example.com$dnsrewrite=NOERROR;HTTPS;42 example.net alpn=h3", &log);
     ASSERT_TRUE(rule.has_value());
 
     auto r = DnsFilter::apply_dnsrewrite_rules({&rule->public_part});
@@ -241,8 +241,8 @@ TEST_F(DnsrewriteTest, FullHTTPS) {
 }
 
 TEST_F(DnsrewriteTest, FullSVCB) {
-    std::optional<rule_utils::Rule> rule
-            = rule_utils::parse("example.com$dnsrewrite=NOERROR;SVCB;42 example.net alpn=bar port=8004", &log);
+    std::optional<rule_utils::Rule> rule =
+            rule_utils::parse("example.com$dnsrewrite=NOERROR;SVCB;42 example.net alpn=bar port=8004", &log);
     ASSERT_TRUE(rule.has_value());
 
     auto r = DnsFilter::apply_dnsrewrite_rules({&rule->public_part});
@@ -260,7 +260,7 @@ TEST_F(DnsrewriteTest, FullSVCB) {
     ASSERT_FALSE(r.rewritten_info->cname.has_value());
 }
 
-TEST_F(DnsrewriteTest, Multiple_Noerror) {
+TEST_F(DnsrewriteTest, MultipleNoerror) {
     struct TestData {
         struct RdfData {
             ldns_rdf_type type;

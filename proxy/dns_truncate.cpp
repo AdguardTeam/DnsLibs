@@ -1,3 +1,4 @@
+#include <algorithm>
 #include <cstddef>
 #include <cstdint>
 #include <ldns/rbtree.h>
@@ -75,7 +76,7 @@ static size_t truncate_loop(
         cur_size += rr_size(rr, section, compression, cur_size);
         if (cur_size > max_size) {
             cur_size = max_size; // Prevent any futher RRs being added
-            return i; // Number of RRs, excluding the current one which overflowed
+            return i;            // Number of RRs, excluding the current one which overflowed
         }
         if (cur_size == max_size) {
             return i + 1; // Number of RRs
@@ -85,9 +86,7 @@ static size_t truncate_loop(
 }
 
 bool ldns_pkt_truncate(ldns_pkt *pkt, uint16_t max_size) {
-    if (max_size < 512) {
-        max_size = 512;
-    }
+    max_size = std::max(max_size, uint16_t{512});
 
     size_t cur_size = 12; // Header
 

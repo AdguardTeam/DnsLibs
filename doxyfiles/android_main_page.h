@@ -2,8 +2,9 @@
 @mainpage DNS Libs API Documentation for Android
 
 @section intro Introduction
-This document outlines the main functionality and usage of the DNS proxy and filtering library designed for Android devices.
-The library provides DNS filtering with ad blocking capabilities, support for modern DNS protocols, and VPN-based DNS tunneling.
+This document outlines the main functionality and usage of the DNS proxy and filtering library designed for Android
+devices. The library provides DNS filtering with ad blocking capabilities, support for modern DNS protocols, and
+VPN-based DNS tunneling.
 
 @section components Main Components
 
@@ -18,7 +19,7 @@ Key features:
 - HTTP/3 and Post-Quantum cryptography support
 - Optimistic caching for improved performance
 
-See @ref com.adguard.dnslibs.proxy.DnsProxy class for the main API and 
+See @ref com.adguard.dnslibs.proxy.DnsProxy class for the main API and
 @ref com.adguard.dnslibs.proxy.DnsProxySettings for configuration options.
 
 @subsection dnstun DnsTunListener
@@ -31,7 +32,8 @@ See @ref com.adguard.dnslibs.proxy.DnsTunListener for implementation details.
 
 @subsection workflow_proxy DNS Proxy Mode
 
-This mode allows your application to act as a local DNS proxy, filtering DNS queries before forwarding them to upstream servers.
+This mode allows your application to act as a local DNS proxy, filtering DNS queries before forwarding them to upstream
+servers.
 
 1. **Create settings**: Initialize @ref com.adguard.dnslibs.proxy.DnsProxySettings with desired configuration
    - Configure upstream DNS servers using @ref com.adguard.dnslibs.proxy.UpstreamSettings
@@ -52,7 +54,8 @@ This mode allows your application to act as a local DNS proxy, filtering DNS que
    - @ref com.adguard.dnslibs.proxy.DnsRequestProcessedEvent for processed requests
    - Certificate verification callbacks
 
-5. **Update settings**: Use @ref com.adguard.dnslibs.proxy.DnsProxy.reapplySettings() to update configuration without reinitialization
+5. **Update settings**: Use @ref com.adguard.dnslibs.proxy.DnsProxy.reapplySettings() to update configuration without
+reinitialization
 
 6. **Cleanup**: Call @ref com.adguard.dnslibs.proxy.DnsProxy.close() to release resources
 

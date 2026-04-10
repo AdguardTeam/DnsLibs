@@ -25,8 +25,7 @@
  * @param config Configuration.
  * @param handler Invoked with `nil` after the proxy has started, or with the error otherwise.
  */
-- (void)reconfig:(AGDnsProxyConfig *)config
-     completionHandler:(void (^)(NSError *))handler NS_SWIFT_NOTHROW;
+- (void)reconfig:(AGDnsProxyConfig *)config completionHandler:(void (^)(NSError *))handler NS_SWIFT_NOTHROW;
 
 /**
  * Reapply DNS proxy settings with selective reloading.
@@ -39,8 +38,8 @@
  * @param handler Invoked with `nil` if reapplying succeeded, or with the error otherwise.
  */
 - (void)reapplySettings:(AGDnsProxyConfig *)config
-                options:(AGDnsProxyReapplyOptions)options
-      completionHandler:(void (^)(NSError *))handler NS_SWIFT_NOTHROW;
+                  options:(AGDnsProxyReapplyOptions)options
+        completionHandler:(void (^)(NSError *))handler NS_SWIFT_NOTHROW;
 
 /**
  * Process an IP datagram, carrying a UDP payload, carrying a DNS request.

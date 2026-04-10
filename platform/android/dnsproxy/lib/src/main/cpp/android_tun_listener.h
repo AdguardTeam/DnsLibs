@@ -1,8 +1,8 @@
 #pragma once
 
+#include <atomic>
 #include <jni.h>
 #include <memory>
-#include <atomic>
 #include <mutex>
 #include <unordered_map>
 
@@ -20,40 +20,40 @@ namespace ag::dns {
 class AndroidTunListener {
 private:
     TunListener m_listener;
-    
+
     /**
      * Marshal Java callbacks to C++ callbacks.
      */
     TunListener::RequestCallback marshal_request_callback(JNIEnv *env, jobject request_callback);
-    
+
     /**
      * Marshal C++ init result to Java InitResult object.
      */
     jni::LocalRef<jobject> marshal_init_result(JNIEnv *env, const Error<TunListener::InitError> &init_result);
-    
+
     // Sequentially-consistently store after initializing,
     // and sequentially-consistently load BEFORE using,
     // the JNI handles and utils below.
     // Needed for thread-safety if you want to init things in one thread and use them in another.
     std::atomic_bool m_jni_initialized{false};
-    
+
     jni::JniUtils m_utils;
-    
+
     jni::GlobalRef<jobject> m_request_callback{}; // Java RequestCallback
-    
+
     struct {
         jni::GlobalRef<jclass> request_callback_class;
         jni::GlobalRef<jclass> native_reply_handler_class;
     } m_jclasses{};
-    
+
     struct {
         jmethodID on_request;
     } m_request_callback_methods{};
-    
+
     struct {
         jmethodID ctor;
     } m_native_reply_handler_methods{};
-    
+
     // Storage for pending completion callbacks
     std::mutex m_completions_mutex;
     std::unordered_map<uint64_t, TunListener::Completion> m_completions;
@@ -65,7 +65,7 @@ public:
      * @param vm Java VM instance
      */
     explicit AndroidTunListener(JavaVM *vm);
-    
+
     /**
      * Initialize the TUN listener.
      * @param env JNI environment
@@ -75,13 +75,13 @@ public:
      * @return InitResult Java object with initialization result
      */
     jobject init(JNIEnv *env, jint fd, jint mtu, jobject request_callback);
-    
+
     /**
      * Deinitialize the TUN listener.
      * @param env JNI environment
      */
     void deinit(JNIEnv *env);
-    
+
     /**
      * Send reply for a pending request.
      * @param env JNI environment

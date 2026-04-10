@@ -28,7 +28,7 @@ static void udp_raw_recv(
     buf_v.reserve(chain_length);
 
     for (const struct pbuf *iter = buffer; (buf_v.size() < chain_length) && (iter != nullptr); iter = iter->next) {
-        buf_v.push_back(uv_buf_init((char *)iter->payload, iter->len));
+        buf_v.push_back(uv_buf_init((char *) iter->payload, iter->len));
     }
 
     const ip_addr_t *dst_addr = ip_current_dest_addr();

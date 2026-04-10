@@ -1,19 +1,17 @@
 #pragma once
 
-
 #include <bitset>
 #include <magic_enum/magic_enum.hpp>
 #include <optional>
 #include <variant>
 
 #include "common/defs.h"
+#include "common/logger.h"
 #include "common/net_utils.h"
 #include "common/socket_address.h"
-#include "common/logger.h"
 #include "dns/common/dns_defs.h"
 #include "dns/net/outbound_proxy_settings.h"
 #include "dns/net/socket.h"
-
 
 namespace ag::dns {
 
@@ -24,29 +22,29 @@ public:
 
     struct Callbacks {
         /** Raised after the connection to the proxy server succeeded */
-        void (* on_successful_proxy_connection)(void *arg);
+        void (*on_successful_proxy_connection)(void *arg);
         /** Raised after an error on the connection to the proxy server */
-        void (* on_proxy_connection_failed)(void *arg, Error<SocketError> err);
+        void (*on_proxy_connection_failed)(void *arg, Error<SocketError> err);
         /**
          * Raised after tunnel to a peer through the proxy is established
          * @param conn_id ID of the opened connection
          */
-        void (* on_connected)(void *arg, uint32_t conn_id);
+        void (*on_connected)(void *arg, uint32_t conn_id);
         /** Raised after a data chunk has been received */
-        void (* on_read)(void *arg, Uint8View data);
+        void (*on_read)(void *arg, Uint8View data);
         /**
          * Raised after the tunnel is closed
          * @param conn_id id of the connection on which error happened
          * @param error none if closed gracefully
          */
-        void (* on_close)(void *arg, Error<SocketError> error);
+        void (*on_close)(void *arg, Error<SocketError> error);
         /** User context for the callbacks */
         void *arg;
     };
 
     struct MakeSocketCallback {
         /** Raised when proxy wants to create a socket */
-        SocketFactory::SocketPtr (* func)(void *arg, utils::TransportProtocol proto,
+        SocketFactory::SocketPtr (*func)(void *arg, utils::TransportProtocol proto,
                 std::optional<SocketFactory::SecureSocketParameters> secure_parameters);
         /** User context for the callback */
         void *arg;
@@ -140,12 +138,14 @@ protected:
     /**
      * Connect to the proxy server
      */
-    [[nodiscard]] virtual Error<SocketError> connect_to_proxy(uint32_t conn_id, const ConnectParameters &parameters) = 0;
+    [[nodiscard]] virtual Error<SocketError> connect_to_proxy(
+            uint32_t conn_id, const ConnectParameters &parameters) = 0;
 
     /**
      * Connect to the peer through the proxy server
      */
-    [[nodiscard]] virtual Error<SocketError> connect_through_proxy(uint32_t conn_id, const ConnectParameters &parameters) = 0;
+    [[nodiscard]] virtual Error<SocketError> connect_through_proxy(
+            uint32_t conn_id, const ConnectParameters &parameters) = 0;
 
     /**
      * Update socket callbacks. May be used to turn on/off the read events

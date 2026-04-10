@@ -7,8 +7,8 @@
 #include "common/clock.h"
 #include "common/file.h"
 #include "common/logger.h"
-#include "dns/common/sys.h"
 #include "common/utils.h"
+#include "dns/common/sys.h"
 #include "dns/dnsfilter/dnsfilter.h"
 
 #undef max // `Nanos::max()` conflicts with `max` macro from `minwindef.h` on Windows
@@ -61,14 +61,14 @@ typedef struct {
     } overall;
 } test_result_t;
 
-static constexpr std::string_view HELP_MESSAGE
-        = "DNS filter benchmarking utility\n"
-          "\n"
-          "Usage: dnsfilter_benchmark [options...]\n"
-          "\n"
-          "    -h           print this message\n"
-          "    -f <path>    path to filter list file (default='" DEFAULT_FILTER_PATH "')\n"
-          "    -d <path>    path to domains list file (default='" DEFAULT_DOMAINS_BASE_PATH "')\n";
+static constexpr std::string_view HELP_MESSAGE =
+        "DNS filter benchmarking utility\n"
+        "\n"
+        "Usage: dnsfilter_benchmark [options...]\n"
+        "\n"
+        "    -h           print this message\n"
+        "    -f <path>    path to filter list file (default='" DEFAULT_FILTER_PATH "')\n"
+        "    -d <path>    path to domains list file (default='" DEFAULT_DOMAINS_BASE_PATH "')\n";
 
 static std::vector<std::string> domains;
 
@@ -112,8 +112,8 @@ static int apply_filter_to_base(test_result_t *tr, DnsFilter *filter, DnsFilter:
         tr->match_domains.total_matches += rules.size();
 
         if (!effective_rules.leftovers.empty()) {
-            if (const auto *adblock_info
-                    = std::get_if<DnsFilter::AdblockRuleInfo>(&effective_rules.leftovers[0]->content);
+            if (const auto *adblock_info =
+                            std::get_if<DnsFilter::AdblockRuleInfo>(&effective_rules.leftovers[0]->content);
                     adblock_info != nullptr && !adblock_info->props.test(DnsFilter::DARP_EXCEPTION)) {
                 tr->match_domains.effective_blocking_matches += effective_rules.leftovers.size();
             } else {
@@ -146,8 +146,8 @@ static int apply_filter_to_base(test_result_t *tr, DnsFilter *filter, DnsFilter:
 static void report_results(const test_result_t *result) {
     infolog(g_log, "============================================");
     infolog(g_log, "Load rules measurements:");
-    std::chrono::duration elapsed
-            = std::chrono::duration<double, std::ratio<1>>(result->load_rules.end_ts - result->load_rules.start_ts);
+    std::chrono::duration elapsed =
+            std::chrono::duration<double, std::ratio<1>>(result->load_rules.end_ts - result->load_rules.start_ts);
     infolog(g_log, "\tTime elapsed:               {}s", elapsed.count());
     infolog(g_log, "\tRSS before:                 {}kB", result->load_rules.start_rss);
     infolog(g_log, "\tRSS after:                  {}kB", result->load_rules.end_rss);
@@ -157,8 +157,8 @@ static void report_results(const test_result_t *result) {
     infolog(g_log, "\tTotal rules matched:        {}", result->match_domains.total_matches);
     infolog(g_log, "\tEffective blocking rules:   {}", result->match_domains.effective_blocking_matches);
     infolog(g_log, "\tEffective exception rules:  {}", result->match_domains.effective_exception_matches);
-    elapsed = std::chrono::duration<double, std::ratio<1>>(
-            result->match_domains.end_ts - result->match_domains.start_ts);
+    elapsed =
+            std::chrono::duration<double, std::ratio<1>>(result->match_domains.end_ts - result->match_domains.start_ts);
     infolog(g_log, "\tTime elapsed:               {}s", elapsed.count());
     infolog(g_log, "\tMin per-domain:             {}ns", result->match_domains.min_per_domain.count());
     infolog(g_log, "\tMax per-domain:             {}ns", result->match_domains.max_per_domain.count());
@@ -212,10 +212,10 @@ int main(int argc, char **argv) {
 
     result.match_domains.tries = domains.size();
 
-    result.overall.start_rss = ag::dns::sys::current_rss();
+    result.overall.start_rss = static_cast<int>(ag::dns::sys::current_rss());
     TICK(result.overall.start_ts);
 
-    result.load_rules.start_rss = ag::dns::sys::current_rss();
+    result.load_rules.start_rss = static_cast<int>(ag::dns::sys::current_rss());
 
     infolog(g_log, "Loading rules in filter...");
     DnsFilter filter;
@@ -228,7 +228,7 @@ int main(int argc, char **argv) {
         exit(-1);
     }
     TICK(result.load_rules.end_ts);
-    result.load_rules.end_rss = ag::dns::sys::current_rss();
+    result.load_rules.end_rss = static_cast<int>(ag::dns::sys::current_rss());
     if (err_or_warn) {
         warnlog(g_log, "... rules loaded with warnings: {}", err_or_warn->str());
     } else {
@@ -236,15 +236,15 @@ int main(int argc, char **argv) {
     }
 
     infolog(g_log, "Matching domains against rules...");
-    result.match_domains.start_rss = ag::dns::sys::current_rss();
+    result.match_domains.start_rss = static_cast<int>(ag::dns::sys::current_rss());
     apply_filter_to_base(&result, &filter, handle);
-    result.match_domains.end_rss = ag::dns::sys::current_rss();
+    result.match_domains.end_rss = static_cast<int>(ag::dns::sys::current_rss());
     infolog(g_log, "...domains matched");
 
     filter.destroy(handle);
 
     TICK(result.overall.end_ts);
-    result.overall.end_rss = ag::dns::sys::current_rss();
+    result.overall.end_rss = static_cast<int>(ag::dns::sys::current_rss());
 
     report_results(&result);
 }

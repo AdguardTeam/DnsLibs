@@ -1,8 +1,8 @@
 #pragma once
 
 #include <chrono>
-#include <string_view>
 #include <ldns/packet.h>
+#include <string_view>
 
 #include "common/defs.h"
 #include "dns/common/dns_defs.h"
@@ -60,15 +60,15 @@ public:
     coro::Task<DialResult> dial(std::string_view stamp_str, EventLoop &loop, Millis timeout,
             const SocketFactory *socket_factory, SocketFactory::SocketParameters socket_parameters) const;
 
-     /**
-      * Dial fetches and validates DNSCrypt certificate from the given server
-      * Data received during this call is then used for DNS requests encryption/decryption
-      * @param stamp Stamp
-      * @param loop Event loop
-      * @param timeout Timeout for read/write operations (0 means infinite timeout)
-      * @param socket_factory Socket factory which creates sockets for data exchange
-      * @param socket_parameters Connection socket parameters (the `proto` field is ignored)
-      */
+    /**
+     * Dial fetches and validates DNSCrypt certificate from the given server
+     * Data received during this call is then used for DNS requests encryption/decryption
+     * @param stamp Stamp
+     * @param loop Event loop
+     * @param timeout Timeout for read/write operations (0 means infinite timeout)
+     * @param socket_factory Socket factory which creates sockets for data exchange
+     * @param socket_parameters Connection socket parameters (the `proto` field is ignored)
+     */
     coro::Task<DialResult> dial(const ServerStamp &stamp, EventLoop &loop, Millis timeout,
             const SocketFactory *socket_factory, SocketFactory::SocketParameters socket_parameters) const;
 
@@ -97,15 +97,20 @@ private:
 namespace ag {
 
 // clang format off
-template<>
+template <>
 struct ErrorCodeToString<ag::dns::dnscrypt::Client::DialError> {
     std::string operator()(ag::dns::dnscrypt::Client::DialError e) {
-        switch(e) {
-        case decltype(e)::AE_STAMP_PARSE_ERROR: return "Failed to parse DNS stamp";
-        case decltype(e)::AE_BAD_PROTOCOL: return "Stamp is not for a DNSCrypt server";
-        case decltype(e)::AE_KEYPAIR_GENERATION_ERROR: return "Can not generate keypair";
-        case decltype(e)::AE_EMPTY_PROVIDER_NAME: return "Provider name is empty";
-        case decltype(e)::AE_FETCH_DNSCRYPT_CERT_ERROR: return "Error fetching DNSCrypt cert";
+        switch (e) {
+        case decltype(e)::AE_STAMP_PARSE_ERROR:
+            return "Failed to parse DNS stamp";
+        case decltype(e)::AE_BAD_PROTOCOL:
+            return "Stamp is not for a DNSCrypt server";
+        case decltype(e)::AE_KEYPAIR_GENERATION_ERROR:
+            return "Can not generate keypair";
+        case decltype(e)::AE_EMPTY_PROVIDER_NAME:
+            return "Provider name is empty";
+        case decltype(e)::AE_FETCH_DNSCRYPT_CERT_ERROR:
+            return "Error fetching DNSCrypt cert";
         }
     }
 };

@@ -1,11 +1,10 @@
 #pragma once
 
-
 #include <variant>
-#include "dns/net/socket.h"
-#include "common/clock.h"
-#include "outbound_proxy.h"
 
+#include "common/clock.h"
+#include "dns/net/socket.h"
+#include "outbound_proxy.h"
 
 namespace ag::dns {
 
@@ -19,14 +18,13 @@ public:
         OutboundProxy *proxy;
     };
 
-
     struct Callbacks {
         /** Raised after the connection to the proxy server succeeded */
-        void (* on_successful_proxy_connection)(void *arg);
+        void (*on_successful_proxy_connection)(void *arg);
         /** Raised after an error on the connection to the proxy server */
-        OnConnectionFailedAction (* on_proxy_connection_failed)(void *arg, Error<SocketError> err);
+        OnConnectionFailedAction (*on_proxy_connection_failed)(void *arg, Error<SocketError> err);
         /** Callback to fetch the fallback proxy when the main proxy is unavailable */
-        Fallback (* get_fallback_proxy)(void *arg);
+        Fallback (*get_fallback_proxy)(void *arg);
         /** User context for the callback */
         void *arg;
     };

@@ -1,0 +1,26 @@
+{
+  "ul-indent": {
+    "indent": 4
+  },
+  "ul-style": {
+    "style": "dash"
+  },
+  "emphasis-style": {
+    "style": "asterisk"
+  },
+  "no-duplicate-heading": {
+    "siblings_only": true
+  },
+  "no-inline-html": {
+    "allowed_elements": [
+      "a", "p", "picture", "source", "img"
+    ]
+  },
+  "no-trailing-spaces": {
+    "br_spaces": 0
+  },
+  "line-length": false,
+  "no-bare-urls": false,
+  "no-emphasis-as-heading": false,
+  "link-fragments": false
+}

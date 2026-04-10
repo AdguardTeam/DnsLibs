@@ -66,9 +66,9 @@ private:
      */
     class SvcbHttpsAction {
     public:
-        virtual void beforeProcessing(ProcessingContext &context){};
+        virtual void beforeProcessing(ProcessingContext &context) {};
         virtual void duringProcessing(ProcessingContext &context) = 0;
-        virtual void afterProcessing(ProcessingContext &context){};
+        virtual void afterProcessing(ProcessingContext &context) {};
     };
 
     class RemoveEchAction : public SvcbHttpsAction {
@@ -101,35 +101,34 @@ private:
 
             std::vector<uint8_t> new_alpn_data;
             size_t offset = 0;
-            
+
             while (offset < alpn_len) {
                 if (offset + 1 > alpn_len) {
                     break; // Invalid format
                 }
-                
+
                 uint8_t proto_len = alpn_data[offset];
                 if (offset + 1 + proto_len > alpn_len) {
                     break; // Invalid format
                 }
-                
-                std::string_view protocol(reinterpret_cast<const char*>(alpn_data + offset + 1), proto_len);
+
+                std::string_view protocol(reinterpret_cast<const char *>(alpn_data + offset + 1), proto_len);
 
                 if (protocol != "h3") {
                     new_alpn_data.push_back(proto_len);
-                    new_alpn_data.insert(new_alpn_data.end(), 
-                                        alpn_data + offset + 1, 
-                                        alpn_data + offset + 1 + proto_len);
+                    new_alpn_data.insert(
+                            new_alpn_data.end(), alpn_data + offset + 1, alpn_data + offset + 1 + proto_len);
                 } else {
                     removed = true;
                 }
-                
+
                 offset += 1 + proto_len;
             }
-            
+
             if (!removed) {
                 return;
             }
-            
+
             // If no ALPNs left, remove the entire parameter
             if (new_alpn_data.empty()) {
                 std::memmove(context.param_start, context.params_tail.data(), context.params_tail.size());
@@ -141,20 +140,20 @@ private:
                 int size_diff = static_cast<int>(context.len) - static_cast<int>(new_len);
 
                 std::memcpy(context.param_start + sizeof(context.key), &new_len_be, sizeof(new_len_be));
-                
+
                 // Copy new ALPN data
-                std::memcpy(context.param_start + sizeof(context.key) + sizeof(context.len), 
-                           new_alpn_data.data(), new_len);
-                
+                std::memcpy(
+                        context.param_start + sizeof(context.key) + sizeof(context.len), new_alpn_data.data(), new_len);
+
                 // Move remaining data
                 std::memmove(context.param_start + sizeof(context.key) + sizeof(context.len) + new_len,
-                           context.params_tail.data(), context.params_tail.size());
-                
+                        context.params_tail.data(), context.params_tail.size());
+
                 // Update RDF size
                 ldns_rdf_set_size(context.params, ldns_rdf_size(context.params) - size_diff);
             }
         }
-        
+
         bool wasRemoved() const {
             return removed;
         }
@@ -265,7 +264,8 @@ private:
         ldns_buffer_write(buffer, context.param_start, context.len + sizeof(context.key) + sizeof(context.key));
     }
 
-    static void insert_custom_ip_hint_to_buffer(ldns_buffer *buffer, ldns_enum_svcparam_key key, std::vector<const char *> ips) {
+    static void insert_custom_ip_hint_to_buffer(
+            ldns_buffer *buffer, ldns_enum_svcparam_key key, std::vector<const char *> ips) {
         size_t key_pos = ldns_buffer_position(buffer);
         ldns_buffer_write_u16(buffer, key);
         size_t len_pos = ldns_buffer_position(buffer);

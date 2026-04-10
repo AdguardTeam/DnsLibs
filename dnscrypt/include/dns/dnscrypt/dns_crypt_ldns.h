@@ -3,23 +3,23 @@
 #include <chrono>
 #include <cstddef>
 #include <cstdint>
+#include <functional>
+#include <ldns/buffer.h>
+#include <ldns/error.h>
+#include <ldns/packet.h>
 #include <optional>
 #include <string>
 #include <string_view>
 #include <utility>
-#include <functional>
 #include <vector>
-#include <ldns/buffer.h>
-#include <ldns/error.h>
-#include <ldns/packet.h>
 
 #include "common/coro.h"
 #include "common/defs.h"
-#include "dns/common/dns_defs.h"
 #include "common/socket_address.h"
-#include "dns_crypt_utils.h"
+#include "dns/common/dns_defs.h"
 #include "dns/dnsstamp/dns_stamp.h"
 #include "dns/net/socket.h"
+#include "dns_crypt_utils.h"
 
 namespace ag::dns::dnscrypt {
 
@@ -48,7 +48,7 @@ struct DnsExchangeResult {
  * @return Ldns packet unique ptr, nullptr if error
  */
 ldns_pkt_ptr create_request_ldns_pkt(ldns_rr_type rr_type, ldns_rr_class rr_class, uint16_t flags,
-                                     std::string_view dname_str, std::optional<size_t> size_opt);
+        std::string_view dname_str, std::optional<size_t> size_opt);
 
 /**
  * Create ldns buffer from ldns packet
@@ -75,9 +75,8 @@ LdnsDecodeResult create_ldns_pkt(uint8_t *data, size_t size);
  * @param socket_parameters Connection socket parameters
  * @return DNS exchange allocated result
  */
-coro::Task<DnsExchangeUnparsedResult> dns_exchange(EventLoop &loop, Millis timeout,
-        const SocketAddress &socket_address, ldns_buffer &buffer,
-        const SocketFactory *socket_factory, SocketFactory::SocketParameters socket_parameters);
+coro::Task<DnsExchangeUnparsedResult> dns_exchange(EventLoop &loop, Millis timeout, const SocketAddress &socket_address,
+        ldns_buffer &buffer, const SocketFactory *socket_factory, SocketFactory::SocketParameters socket_parameters);
 
 /**
  * Send data from packet to socket address and returns ldns packet reply
@@ -90,7 +89,7 @@ coro::Task<DnsExchangeUnparsedResult> dns_exchange(EventLoop &loop, Millis timeo
  * @return DNS exchange result
  */
 coro::Task<DnsExchangeResult> dns_exchange_from_ldns_pkt(EventLoop &loop, Millis timeout,
-         const SocketAddress &socket_address, const ldns_pkt &request_pkt,
-         const SocketFactory *socket_factory, SocketFactory::SocketParameters socket_parameters);
+        const SocketAddress &socket_address, const ldns_pkt &request_pkt, const SocketFactory *socket_factory,
+        SocketFactory::SocketParameters socket_parameters);
 
 } // namespace ag::dns::dnscrypt

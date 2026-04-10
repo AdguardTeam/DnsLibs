@@ -1,18 +1,14 @@
 #pragma once
 
+#include <condition_variable>
+#include <deque>
+#include <list>
+#include <unordered_map>
+#include <variant>
 
-#include "common/logger.h"
-#include "common/defs.h"
-#include "common/utils.h"
-#include "common/socket_address.h"
-#include "dns/common/event_loop.h"
-#include "dns/net/socket.h"
-#include "dns/upstream/upstream.h"
-#include "dns/upstream/bootstrapper.h"
-
-#include <openssl/ssl.h>
 #include <openssl/crypto.h>
 #include <openssl/rand.h>
+#include <openssl/ssl.h>
 
 #include <ngtcp2/ngtcp2.h>
 #include <ngtcp2/ngtcp2_crypto.h>
@@ -23,16 +19,19 @@
 #include <ngtcp2/ngtcp2_crypto_quictls.h>
 #endif
 
-#include <ldns/ldns.h>
-#include <event2/event.h>
 #include <event2/buffer.h>
+#include <event2/event.h>
+#include <ldns/ldns.h>
 
-#include <deque>
-#include <unordered_map>
-#include <condition_variable>
-#include <list>
-#include <variant>
+#include "common/defs.h"
+#include "common/logger.h"
+#include "common/socket_address.h"
+#include "common/utils.h"
+#include "dns/common/event_loop.h"
+#include "dns/net/socket.h"
 #include "dns/net/tls_session_cache.h"
+#include "dns/upstream/bootstrapper.h"
+#include "dns/upstream/upstream.h"
 
 using namespace std::chrono;
 
@@ -54,16 +53,15 @@ public:
 
 #if BORINGSSL_API_VERSION < 10
     static int set_encryption_secrets(SSL *ssl, enum ssl_encryption_level_t ossl_level, const uint8_t *read_secret,
-                                      const uint8_t *write_secret, size_t secret_len);
+            const uint8_t *write_secret, size_t secret_len);
 #else
     static int set_rx_secret(SSL *ssl, enum ssl_encryption_level_t ossl_level, const SSL_CIPHER *cipher,
-                             const uint8_t *read_secret, size_t secret_len);
+            const uint8_t *read_secret, size_t secret_len);
     static int set_tx_secret(SSL *ssl, enum ssl_encryption_level_t ossl_level, const SSL_CIPHER *cipher,
-                             const uint8_t *write_secret, size_t secret_len);
+            const uint8_t *write_secret, size_t secret_len);
 #endif
 
-    static int add_handshake_data(SSL *ssl, enum ssl_encryption_level_t ossl_level,
-                                  const uint8_t *data, size_t len);
+    static int add_handshake_data(SSL *ssl, enum ssl_encryption_level_t ossl_level, const uint8_t *data, size_t len);
 
     static int flush_flight(SSL *ssl);
     static int send_alert(SSL *ssl, enum ssl_encryption_level_t level, uint8_t alert);
@@ -75,21 +73,29 @@ private:
         NETWORK_ERR_FATAL = -10,
         NETWORK_ERR_DROP_CONN = -14
     };
-    enum State {
-        STOP = 0,
-        HANDSHAKE,
-        RUN
-    };
+    enum State { STOP = 0, HANDSHAKE, RUN };
     struct Buffer {
         Buffer(const uint8_t *data, size_t datalen);
         explicit Buffer(size_t datalen);
 
-        size_t size() const { return tail; }
-        size_t left() const { return buf.size() - tail; }
-        uint8_t *wpos() { return buf.data() + tail; }
-        const uint8_t *rpos() const { return buf.data(); }
-        void push(size_t len) { tail += len; }
-        void reset() { tail = 0; }
+        size_t size() const {
+            return tail;
+        }
+        size_t left() const {
+            return buf.size() - tail;
+        }
+        uint8_t *wpos() {
+            return buf.data() + tail;
+        }
+        const uint8_t *rpos() const {
+            return buf.data();
+        }
+        void push(size_t len) {
+            tail += len;
+        }
+        void reset() {
+            tail = 0;
+        }
 
         Uint8Vector buf;
         size_t tail;
@@ -150,34 +156,27 @@ private:
     Error<InitError> init() override;
     coro::Task<ExchangeResult> exchange(const ldns_pkt *, const DnsMessageInfo *info) override;
 
-    static int version_negotiation(ngtcp2_conn *conn, const ngtcp2_pkt_hd *hd,
-        const uint32_t *sv, size_t nsv, void *user_data);
+    static int version_negotiation(
+            ngtcp2_conn *conn, const ngtcp2_pkt_hd *hd, const uint32_t *sv, size_t nsv, void *user_data);
 
-    static int recv_crypto_data(ngtcp2_conn *conn, ngtcp2_encryption_level crypto_level,
-                                uint64_t offset, const uint8_t *data, size_t datalen,
-                                void *user_data);
+    static int recv_crypto_data(ngtcp2_conn *conn, ngtcp2_encryption_level crypto_level, uint64_t offset,
+            const uint8_t *data, size_t datalen, void *user_data);
 
-    static int recv_stream_data(ngtcp2_conn *conn, uint32_t flags, int64_t stream_id,
-                                uint64_t offset, const uint8_t *data, size_t datalen,
-                                void *user_data, void *stream_user_data);
+    static int recv_stream_data(ngtcp2_conn *conn, uint32_t flags, int64_t stream_id, uint64_t offset,
+            const uint8_t *data, size_t datalen, void *user_data, void *stream_user_data);
 
-    static int get_new_connection_id(ngtcp2_conn *conn, ngtcp2_cid *cid,
-                                     uint8_t *token, size_t cidlen, void *user_data);
+    static int get_new_connection_id(
+            ngtcp2_conn *conn, ngtcp2_cid *cid, uint8_t *token, size_t cidlen, void *user_data);
 
     static int update_key(ngtcp2_conn *conn, uint8_t *rx_secret, uint8_t *tx_secret,
-                          ngtcp2_crypto_aead_ctx *rx_aead_ctx, uint8_t *rx_iv,
-                          ngtcp2_crypto_aead_ctx *tx_aead_ctx, uint8_t *tx_iv,
-                          const uint8_t *current_rx_secret,
-                          const uint8_t *current_tx_secret, size_t secretlen,
-                          void *user_data);
+            ngtcp2_crypto_aead_ctx *rx_aead_ctx, uint8_t *rx_iv, ngtcp2_crypto_aead_ctx *tx_aead_ctx, uint8_t *tx_iv,
+            const uint8_t *current_rx_secret, const uint8_t *current_tx_secret, size_t secretlen, void *user_data);
 
-    static int on_close_stream(ngtcp2_conn *conn, uint32_t flags, int64_t stream_id,
-                               uint64_t app_error_code, void *user_data,
-                               void *stream_user_data);
+    static int on_close_stream(ngtcp2_conn *conn, uint32_t flags, int64_t stream_id, uint64_t app_error_code,
+            void *user_data, void *stream_user_data);
 
-    static int acked_stream_data_offset(ngtcp2_conn *conn, int64_t stream_id,
-                                        uint64_t offset, uint64_t datalen, void *user_data,
-                                        void *stream_user_data);
+    static int acked_stream_data_offset(ngtcp2_conn *conn, int64_t stream_id, uint64_t offset, uint64_t datalen,
+            void *user_data, void *stream_user_data);
 
     static int handshake_confirmed(ngtcp2_conn *, void *data);
     static int ssl_verify_callback(X509_STORE_CTX *ctx, void *arg);
@@ -210,8 +209,7 @@ private:
     void update_req_idle_timer();
 
     void write_client_handshake(ngtcp2_encryption_level level, const uint8_t *data, size_t datalen);
-    int on_key(ngtcp2_encryption_level level, const uint8_t *rx_secret,
-               const uint8_t *tx_secret, size_t secretlen);
+    int on_key(ngtcp2_encryption_level level, const uint8_t *rx_secret, const uint8_t *tx_secret, size_t secretlen);
     static void on_rand(uint8_t *dest, size_t destlen, const ngtcp2_rand_ctx *rand_ctx);
 
     int connect_to_peers(const std::vector<ag::SocketAddress> &current_addresses);
@@ -246,4 +244,4 @@ private:
     std::vector<CertFingerprint> m_fingerprints;
 };
 
-} // ag
+} // namespace ag::dns

@@ -24,12 +24,12 @@ public:
         MatchContext(MatchContext &&) = delete;
         MatchContext &operator=(MatchContext &&) = delete;
 
-        std::string host; // matching domain name
-        std::vector<std::string_view> subdomains; // list of subdomains
+        std::string host;                           // matching domain name
+        std::vector<std::string_view> subdomains;   // list of subdomains
         std::vector<DnsFilter::Rule> matched_rules; // list of matched rules
-        ldns_rr_type rr_type; // query RR type
-        std::string reverse_lookup_fqdn; // non-empty if the request is a reverse DNS lookup
-        std::optional<CidrRange> ip_as_cidr; // non-nullopt in case the `host` is an IP address
+        ldns_rr_type rr_type;                       // query RR type
+        std::string reverse_lookup_fqdn;            // non-empty if the request is a reverse DNS lookup
+        std::optional<CidrRange> ip_as_cidr;        // non-nullopt in case the `host` is an IP address
     };
 
     [[nodiscard]] static MatchContext make_match_context(DnsFilter::MatchParam param);
@@ -37,15 +37,13 @@ public:
     Filter();
     ~Filter();
 
-    Filter(Filter&&);
-    Filter &operator=(Filter&&);
+    Filter(Filter &&);
+    Filter &operator=(Filter &&);
 
-    Filter(const Filter&) = delete;
-    Filter &operator=(const Filter&) = delete;
+    Filter(const Filter &) = delete;
+    Filter &operator=(const Filter &) = delete;
 
-    enum LoadResult {
-        LR_OK, LR_ERROR, LR_MEM_LIMIT_REACHED
-    };
+    enum LoadResult { LR_OK, LR_ERROR, LR_MEM_LIMIT_REACHED };
 
     /**
      * Load rule list

@@ -18,8 +18,8 @@ namespace ag::dns::test {
 
 // generated with:
 // openssl x509 -noout -fingerprint -sha256 -inform pem -in /etc/ssl/certs/Go_Daddy_Class_2_CA.pem
-static constexpr const auto pk_str
-        = "C3:84:6B:F2:4B:9E:93:CA:64:27:4C:0E:C6:7C:1E:CC:5E:02:4F:FC:AC:D2:D7:40:19:35:0E:81:FE:54:6A:E4";
+static constexpr const auto pk_str =
+        "C3:84:6B:F2:4B:9E:93:CA:64:27:4C:0E:C6:7C:1E:CC:5E:02:4F:FC:AC:D2:D7:40:19:35:0E:81:FE:54:6A:E4";
 
 static Uint8Vector to_bytes(std::string_view sv, char separator) {
     Uint8Vector bin;
@@ -89,23 +89,14 @@ TEST_F(DnsstampTest, TestPlainUrlStampCreate) {
         std::string_view expected;
     };
     static constexpr TestData data[] = {
-        {
-            .input = "https://dns.adguard-dns.com/dns-query",
-            .expected = "https://dns.adguard-dns.com/dns-query"
-        },
-        {
-            .input = "tls://[2a00:5a60::ad2:0ff]:5443/dns-query",
-            .expected = "tls://[2a00:5a60::ad2:ff]:5443"
-        },
-        {
-            .input = "quic://1.1.1.1:1080/dns-query",
-            .expected = "quic://1.1.1.1:1080"
-        },
+            {.input = "https://dns.adguard-dns.com/dns-query", .expected = "https://dns.adguard-dns.com/dns-query"},
+            {.input = "tls://[2a00:5a60::ad2:0ff]:5443/dns-query", .expected = "tls://[2a00:5a60::ad2:ff]:5443"},
+            {.input = "quic://1.1.1.1:1080/dns-query", .expected = "quic://1.1.1.1:1080"},
     };
     for (const auto &[input, expected] : data) {
         const auto stamp = ServerStamp::from_string(input);
         ASSERT_FALSE(stamp.has_error()) << stamp.error()->str() << " (" << input << ")";
-        ASSERT_EQ(expected, stamp->pretty_url(/*pretty_dnscrypt=*/ true));
+        ASSERT_EQ(expected, stamp->pretty_url(/*pretty_dnscrypt=*/true));
         ASSERT_EQ(expected, stamp->str());
     }
 }
@@ -181,9 +172,9 @@ INSTANTIATE_TEST_SUITE_P(
         DnscryptStampParseTest, DnscryptStampParseTest, ::testing::ValuesIn(test_dnscrypt_stamp_parse_data));
 
 TEST_F(DnsstampWithPk1Test, TestDohStamp) {
-    static constexpr auto expected
-            = "sdns://"
-              "AgcAAAAAAAAACTEyNy4wLjAuMSDDhGvyS56TymQnTA7GfB7MXgJP_KzS10AZNQ6B_lRq5AtleGFtcGxlLmNvbQovZG5zLXF1ZXJ5";
+    static constexpr auto expected =
+            "sdns://"
+            "AgcAAAAAAAAACTEyNy4wLjAuMSDDhGvyS56TymQnTA7GfB7MXgJP_KzS10AZNQ6B_lRq5AtleGFtcGxlLmNvbQovZG5zLXF1ZXJ5";
     ServerStamp stamp{};
     stamp.props = ServerInformalProperties{(uint64_t) ServerInformalProperties::DNSSEC
             | (uint64_t) ServerInformalProperties::NO_LOG | (uint64_t) ServerInformalProperties::NO_FILTER};
@@ -207,8 +198,8 @@ TEST_F(DnsstampTest, TestDohShortStamp) {
 
 TEST_F(DnsstampTest, TestDohStampParse) {
     // Google DoH
-    static constexpr auto stamp_str
-            = "sdns://AgUAAAAAAAAAACAe9iTP_15r07rd8_3b_epWVGfjdymdx-5mdRZvMAzBuQ5kbnMuZ29vZ2xlLmNvbQ0vZXhwZXJpbWVudGFs";
+    static constexpr auto stamp_str =
+            "sdns://AgUAAAAAAAAAACAe9iTP_15r07rd8_3b_epWVGfjdymdx-5mdRZvMAzBuQ5kbnMuZ29vZ2xlLmNvbQ0vZXhwZXJpbWVudGFs";
     test_server_stamp_parse(stamp_str, [](const auto &stamp) {
         return stamp.proto == StampProtoType::DOH && stamp.provider_name == "dns.google.com"
                 && stamp.path == "/experimental";
@@ -216,8 +207,8 @@ TEST_F(DnsstampTest, TestDohStampParse) {
 }
 
 TEST_F(DnsstampWithPk1Test, TestDotStamp) {
-    static constexpr auto expected
-            = "sdns://AwcAAAAAAAAACTEyNy4wLjAuMSDDhGvyS56TymQnTA7GfB7MXgJP_KzS10AZNQ6B_lRq5AtleGFtcGxlLmNvbQ";
+    static constexpr auto expected =
+            "sdns://AwcAAAAAAAAACTEyNy4wLjAuMSDDhGvyS56TymQnTA7GfB7MXgJP_KzS10AZNQ6B_lRq5AtleGFtcGxlLmNvbQ";
     ServerStamp stamp{};
     stamp.props = ServerInformalProperties{(uint64_t) ServerInformalProperties::DNSSEC
             | (uint64_t) ServerInformalProperties::NO_LOG | (uint64_t) ServerInformalProperties::NO_FILTER};
@@ -238,8 +229,8 @@ TEST_F(DnsstampTest, TestDotShortStamp) {
 }
 
 TEST_F(DnsstampWithPk1Test, TestDoqStamp) {
-    static constexpr auto expected
-            = "sdns://BAcAAAAAAAAACTEyNy4wLjAuMSDDhGvyS56TymQnTA7GfB7MXgJP_KzS10AZNQ6B_lRq5AtleGFtcGxlLmNvbQ";
+    static constexpr auto expected =
+            "sdns://BAcAAAAAAAAACTEyNy4wLjAuMSDDhGvyS56TymQnTA7GfB7MXgJP_KzS10AZNQ6B_lRq5AtleGFtcGxlLmNvbQ";
     ServerStamp stamp{};
     stamp.props = ServerInformalProperties{(uint64_t) ServerInformalProperties::DNSSEC
             | (uint64_t) ServerInformalProperties::NO_LOG | (uint64_t) ServerInformalProperties::NO_FILTER};
@@ -311,8 +302,8 @@ TEST_F(DnsstampTest, TestPrettyUrlAndStr) {
                     .pretty = "quic://dns.adguard.com:784",
             },
             {
-                    .ugly
-                    = "sdns://BAcAAAAAAAAACTEyNy4wLjAuMSDDhGvyS56TymQnTA7GfB7MXgJP_KzS10AZNQ6B_lRq5AtleGFtcGxlLmNvbQ",
+                    .ugly = "sdns://"
+                            "BAcAAAAAAAAACTEyNy4wLjAuMSDDhGvyS56TymQnTA7GfB7MXgJP_KzS10AZNQ6B_lRq5AtleGFtcGxlLmNvbQ",
                     .pretty = "quic://example.com",
             },
             {
@@ -320,8 +311,8 @@ TEST_F(DnsstampTest, TestPrettyUrlAndStr) {
                     .pretty = "tls://dns.adguard.com",
             },
             {
-                    .ugly
-                    = "sdns://AwcAAAAAAAAACTEyNy4wLjAuMSDDhGvyS56TymQnTA7GfB7MXgJP_KzS10AZNQ6B_lRq5AtleGFtcGxlLmNvbQ",
+                    .ugly = "sdns://"
+                            "AwcAAAAAAAAACTEyNy4wLjAuMSDDhGvyS56TymQnTA7GfB7MXgJP_KzS10AZNQ6B_lRq5AtleGFtcGxlLmNvbQ",
                     .pretty = "tls://example.com",
             },
             {
@@ -340,8 +331,7 @@ TEST_F(DnsstampTest, TestPrettyUrlAndStr) {
                             "5mdRZvMAzBuQ5kbnMuZ29vZ2xlLmNvbQ0vZXhwZXJpbWVudGFs",
                     .pretty = "https://dns.google.com/experimental",
             },
-            {
-                    .ugly = "sdns://"
+            {.ugly = "sdns://"
                      "AQIAAAAAAAAADzE3Ni4xMDMuMTMwLjEzMCDRK0fyUtzywrv4mRCG6vec5EldixbIoMQyLlLKPzkIcyIyLmRuc2NyeXB0LmRlZ"
                      "mF1bHQubnMxLmFkZ3VhcmQuY29t",
                     .pretty = "dnscrypt://2.dnscrypt.default.ns1.adguard.com"},
@@ -379,23 +369,23 @@ TEST_F(DnsstampTest, TestStampParseDOH) {
 
     std::vector<TestCase> test_cases = {
             {"https://example.com:443/dns-query", "example.com", StampProtoType::DOH, "example.com", "/dns-query"},
-            {"https://example.com:3129/dns-query", "example.com:3129", StampProtoType::DOH, "example.com", "/dns-query"},
+            {"https://example.com:3129/dns-query", "example.com:3129", StampProtoType::DOH, "example.com",
+                    "/dns-query"},
             {"https://example.com", "example.com", StampProtoType::DOH, "example.com", "/"},
             {"h3://example.com:443/dns-query", "example.com:443", StampProtoType::DOH, "example.com", "/dns-query"},
             {"h3://example.com:3129/dns-query", "example.com:3129", StampProtoType::DOH, "example.com", "/dns-query"},
             {"h3://example.com", "example.com", StampProtoType::DOH, "example.com", ""},
             {"https://8.8.8.8", "8.8.8.8", StampProtoType::DOH, "8.8.8.8", "/"},
             {"https://8.8.8.8:3129/dns-query", "8.8.8.8:3129", StampProtoType::DOH, "8.8.8.8", "/dns-query"},
-            {"https://[2001:4860:4860::8888]", "[2001:4860:4860::8888]", StampProtoType::DOH, "[2001:4860:4860::8888]", "/"},
+            {"https://[2001:4860:4860::8888]", "[2001:4860:4860::8888]", StampProtoType::DOH, "[2001:4860:4860::8888]",
+                    "/"},
     };
 
     for (const auto &tc : test_cases) {
         SCOPED_TRACE("Testing input: " + std::string(tc.input));
         test_server_stamp_parse(tc.input.data(), [&](const auto &stamp) {
-            return stamp.proto == tc.expected_proto
-                    && stamp.server_addr_str == tc.expected_server_addr_str
-                    && stamp.provider_name == tc.expected_provider
-                    && stamp.path == tc.expected_path;
+            return stamp.proto == tc.expected_proto && stamp.server_addr_str == tc.expected_server_addr_str
+                    && stamp.provider_name == tc.expected_provider && stamp.path == tc.expected_path;
         });
     }
 }
@@ -403,8 +393,7 @@ TEST_F(DnsstampTest, TestStampParseDOH) {
 TEST_F(DnsstampTest, TestStampParseTLS) {
     const auto stamp_str = "tls://example.com:853";
     test_server_stamp_parse(stamp_str, [](const auto &stamp) {
-        return stamp.proto == StampProtoType::TLS
-                && stamp.provider_name == "example.com"
+        return stamp.proto == StampProtoType::TLS && stamp.provider_name == "example.com"
                 && stamp.server_addr_str == "example.com:853";
     });
 }
@@ -412,8 +401,7 @@ TEST_F(DnsstampTest, TestStampParseTLS) {
 TEST_F(DnsstampTest, TestStampParseDoq) {
     const auto stamp_str = "quic://example.com:853";
     test_server_stamp_parse(stamp_str, [](const auto &stamp) {
-        return stamp.proto == StampProtoType::DOQ
-                && stamp.provider_name == "example.com"
+        return stamp.proto == StampProtoType::DOQ && stamp.provider_name == "example.com"
                 && stamp.server_addr_str == "example.com:853";
     });
 }
@@ -465,31 +453,12 @@ TEST_F(DnsstampTest, TestPrettyUrlWithPort) {
 }
 
 TEST_F(DnsstampTest, TestInvalids) {
-    std::vector<std::string_view> test_cases = {
-            "ftp://example.com",
-            "socks5://example.com",
-            "https://example.com:99999",
-            "example.com",
-            "example.com:433",
-            "https://",
-            "asdf.asdf.asdf",
-            "8.8.8.260",
-            "8.8.260.8",
-            "8.260.8.8",
-            "260.8.8.8",
-            "8.8.8.8:99999",
-            "https://8.8.8.260",
-            "https://260.8.8.8",
-            "https://8.8.8.8:99999",
-            "2001:4860:4860::8888]",
-            "[2001:4860:4860::8888",
-            "2001:4860:kfff::8888",
-            "[2001:4860:4860::8888]:99999"
-            "https://2001:4860:4860::8888]",
-            "https://[2001:4860:4860::8888",
-            "https://2001:4860:kfff::8888",
-            "https://[2001:4860:4860::8888]:99999"
-    };
+    std::vector<std::string_view> test_cases = {"ftp://example.com", "socks5://example.com",
+            "https://example.com:99999", "example.com", "example.com:433", "https://", "asdf.asdf.asdf", "8.8.8.260",
+            "8.8.260.8", "8.260.8.8", "260.8.8.8", "8.8.8.8:99999", "https://8.8.8.260", "https://260.8.8.8",
+            "https://8.8.8.8:99999", "2001:4860:4860::8888]", "[2001:4860:4860::8888", "2001:4860:kfff::8888",
+            "[2001:4860:4860::8888]:99999", "https://2001:4860:4860::8888]", "https://[2001:4860:4860::8888",
+            "https://2001:4860:kfff::8888", "https://[2001:4860:4860::8888]:99999"};
 
     for (const auto &tc : test_cases) {
         SCOPED_TRACE("Testing input: " + std::string(tc));
@@ -497,4 +466,4 @@ TEST_F(DnsstampTest, TestInvalids) {
     }
 }
 
-} // namespace ag::test
+} // namespace ag::dns::test

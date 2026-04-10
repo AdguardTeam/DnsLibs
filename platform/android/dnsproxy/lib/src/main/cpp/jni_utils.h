@@ -1,7 +1,7 @@
 #pragma once
 
-#include <jni.h>
 #include <functional>
+#include <jni.h>
 #include <string_view>
 
 #include "common/defs.h"
@@ -29,7 +29,8 @@ private:
 public:
     GlobalRef() = default;
 
-    GlobalRef(JavaVM *vm, T ref) : m_vm{vm} {
+    GlobalRef(JavaVM *vm, T ref)
+            : m_vm{vm} {
         ScopedJniEnv env(vm, 1);
         m_ref = (T) env->NewGlobalRef(ref);
     }
@@ -76,7 +77,6 @@ public:
     }
 };
 
-
 /**
  * DeleteLocalRef in dtor.
  */
@@ -95,9 +95,15 @@ private:
 public:
     LocalRef() = default;
 
-    LocalRef(JNIEnv *env, T ref) : m_env{env}, m_ref{ref} {}
+    LocalRef(JNIEnv *env, T ref)
+            : m_env{env}
+            , m_ref{ref} {
+    }
 
-    LocalRef(JNIEnv *env, const GlobalRef<T> &global) : m_env{env}, m_ref{env->NewLocalRef(global.get())} {}
+    LocalRef(JNIEnv *env, const GlobalRef<T> &global)
+            : m_env{env}
+            , m_ref{env->NewLocalRef(global.get())} {
+    }
 
     LocalRef(const LocalRef &) = delete;
 
@@ -172,7 +178,6 @@ private:
     } m_integer_methods{};
 
 public:
-
     /**
      * Initialize global refs.
      */
@@ -202,7 +207,7 @@ public:
     /**
      * Marshal C++ std::optional<int32_t> to Java Integer.
      */
-    LocalRef<jobject> marshal_integer(JNIEnv *env, const std::optional<int32_t>& value);
+    LocalRef<jobject> marshal_integer(JNIEnv *env, const std::optional<int32_t> &value);
 
     /**
      * Marshal a Java Integer to C++ std::optional<int32_t>.
@@ -230,7 +235,6 @@ public:
      * @return The ordinal of the given enum value. See Javadoc for definition of ordinal.
      */
     jint get_enum_ordinal(JNIEnv *env, jobject enum_value);
-
 };
 
 } // namespace ag::jni

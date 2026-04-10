@@ -5,8 +5,8 @@
 #include <optional>
 #include <string>
 #include <string_view>
-#include <vector>
 #include <utility>
+#include <vector>
 
 #include "common/logger.h"
 #include "common/net_utils.h"
@@ -22,8 +22,8 @@ namespace ag::dns::dnsfilter {
 static constexpr int MODIFIERS_MARKER = '$';
 static constexpr int MODIFIERS_DELIMITER = ',';
 static constexpr std::string_view EXCEPTION_MARKER = "@@";
-static constexpr std::string_view SKIPPABLE_PREFIXES[]
-        = {"https://", "http://", "http*://", "ws://", "wss://", "ws*://", "://", "//"};
+static constexpr std::string_view SKIPPABLE_PREFIXES[] = {
+        "https://", "http://", "http*://", "ws://", "wss://", "ws*://", "://", "//"};
 static constexpr std::string_view SPECIAL_SUFFIXES[] = {"|", "^", "/"};
 static constexpr std::string_view SPECIAL_REGEX_CHARACTERS = "\\^$*+?.()|[]{}";
 
@@ -49,9 +49,8 @@ struct SupportedModifierDescriptor {
      * @param match_info the parsed match info of the rule
      * @return true if successful
      */
-    bool (*parse_modifier_params)(
-            rule_utils::Rule &rule, std::string_view params_str, const rule_utils::MatchInfo &match_info, Logger *log)
-            = nullptr;
+    bool (*parse_modifier_params)(rule_utils::Rule &rule, std::string_view params_str,
+            const rule_utils::MatchInfo &match_info, Logger *log) = nullptr;
 };
 
 static bool parse_dnstype_modifier(
@@ -124,17 +123,24 @@ static inline bool is_ip(std::string_view str) {
 }
 
 bool rule_utils::is_domain_name(std::string_view str) {
-    return !str.empty() // Duh
+    return !str.empty()                         // Duh
             && !is_ip(str) && str.back() != '.' // We consider a domain name ending with '.' a pattern
-            && str.front() != '.' // Valid pattern, but not a valid domain
-            && is_valid_domain_pattern(str) // This is a bit more general than Go dnsproxy's regex, but yolo
-            && str.npos == str.find('*'); // '*' is our special char for pattern matching
+            && str.front() != '.'               // Valid pattern, but not a valid domain
+            && is_valid_domain_pattern(str)     // This is a bit more general than Go dnsproxy's regex, but yolo
+            && str.npos == str.find('*');       // '*' is our special char for pattern matching
 }
 
 static constexpr std::string_view rule_type_mask[] = {
-        "##", "#@#", "#?#", "#@?#",
-        "#$#", "#@$#", "#?$#", "#@?$#",
-        "#%#", "#@%#",
+        "##",
+        "#@#",
+        "#?#",
+        "#@?#",
+        "#$#",
+        "#@$#",
+        "#?$#",
+        "#@?$#",
+        "#%#",
+        "#@%#",
 };
 
 static bool is_domain_rule(std::string_view str) {
@@ -372,8 +378,8 @@ static inline int remove_port(std::string_view &rule) {
 
 // https://github.com/AdguardTeam/AdguardHome/wiki/Hosts-Blocklists#adblock-style
 static rule_utils::MatchInfo extract_match_info(std::string_view rule) {
-    rule_utils::MatchInfo info
-            = {.text = rule, .is_regex_rule = check_regex(rule), .has_wildcard = false, .pattern_mode = 0};
+    rule_utils::MatchInfo info = {
+            .text = rule, .is_regex_rule = check_regex(rule), .has_wildcard = false, .pattern_mode = 0};
 
     if (info.is_regex_rule) {
         info.text.remove_prefix(1); // begin slash
@@ -472,8 +478,7 @@ static std::vector<std::string_view> extract_regex_shortcuts(std::string_view te
 }
 
 static bool is_too_wide_rule(const DnsFilter::AdblockRuleInfo &rule_info, const rule_utils::MatchInfo &match_info) {
-    return !rule_info.props.test(DnsFilter::DARP_DNSTYPE)
-            && !rule_info.props.test(DnsFilter::DARP_DNSREWRITE)
+    return !rule_info.props.test(DnsFilter::DARP_DNSTYPE) && !rule_info.props.test(DnsFilter::DARP_DNSREWRITE)
             && !rule_info.props.test(DnsFilter::DARP_DENYALLOW)
             && (match_info.text.length() < 3 || match_info.text.find_first_not_of(".*") == match_info.text.npos);
 }
@@ -528,7 +533,7 @@ static std::optional<rule_utils::Rule> parse_adblock_rule(std::string_view str, 
         r.match_method = Rule::MMID_EXACT;
         r.matching_parts.emplace_back(ag::utils::addr_to_str(addr.addr())); // strip port, compress
     } else if (std::optional<CidrRange> cidr;
-               !match_info.is_regex_rule && !match_info.has_wildcard && !addr.valid() && cidr.emplace(str).valid()) {
+            !match_info.is_regex_rule && !match_info.has_wildcard && !addr.valid() && cidr.emplace(str).valid()) {
         r.match_method = Rule::MMID_CIDR;
         r.cidr = std::move(cidr);
     } else if (!match_info.is_regex_rule && !match_info.has_wildcard && (exact_pattern || subdomains_pattern)) {
@@ -633,7 +638,7 @@ std::string rule_utils::get_regex(const Rule &r) {
         std::string tmp;
         tmp.reserve(re.length() + n);
         for (size_t i = 0; i < re.length(); ++i) {
-            int ch = re[i];
+            char ch = re[i];
             switch (ch) {
             case '*':
                 tmp.push_back('.');
@@ -695,6 +700,9 @@ DnsFilter::AdblockRuleInfo::AdblockRuleInfo(const AdblockRuleInfo &other) {
 }
 
 DnsFilter::AdblockRuleInfo &DnsFilter::AdblockRuleInfo::operator=(const AdblockRuleInfo &other) {
+    if (this == &other) {
+        return *this;
+    }
     this->props = other.props;
     this->params = other.params == nullptr ? nullptr : new Parameters{*other.params};
     return *this;

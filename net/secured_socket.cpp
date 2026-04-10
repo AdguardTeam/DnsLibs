@@ -13,10 +13,10 @@ enum SecuredSocket::State : int {
 SecuredSocket::SecuredSocket(SocketFactory::SocketPtr underlying_socket, const CertificateVerifier *cert_verifier,
         SocketFactory::SecureSocketParameters secure_parameters)
         : Socket(__func__,
-                {
-                        .proto = underlying_socket->get_protocol(),
-                },
-                {})
+                  {
+                          .proto = underlying_socket->get_protocol(),
+                  },
+                  {})
         , m_state(SS_IDLE)
         , m_underlying_socket(std::move(underlying_socket))
         , m_codec(cert_verifier, secure_parameters.session_cache, std::move(secure_parameters.fingerprints))

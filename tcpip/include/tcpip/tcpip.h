@@ -62,17 +62,17 @@ typedef enum {
 } TcpipEvent;
 
 typedef struct {
-    uint64_t id;                /**< generated identifier of request for connection */
-    int proto;                  /**< connection protocol */
-    const SocketAddress *src;   /**< source address of connection */
-    const SocketAddress *dst;   /**< destination address of connection */
+    uint64_t id;              /**< generated identifier of request for connection */
+    int proto;                /**< connection protocol */
+    const SocketAddress *src; /**< source address of connection */
+    const SocketAddress *dst; /**< destination address of connection */
 } TcpipConnectRequestEvent;
 
 typedef struct {
-    uint64_t id;                      /**< generated identifier of request for connection */
-    size_t datalen;                   /**< message vector size */
-    const uv_buf_t *data;             /**< message vector */
-    int result; /**< operation result - filled by caller: >= 0 if successful, negative otherwise */
+    uint64_t id;          /**< generated identifier of request for connection */
+    size_t datalen;       /**< message vector size */
+    const uv_buf_t *data; /**< message vector */
+    int result;           /**< operation result - filled by caller: >= 0 if successful, negative otherwise */
 } TcpipReadEvent;
 
 typedef struct {
@@ -89,9 +89,9 @@ typedef struct {
 typedef struct {
     int family; /**< ip family */
     struct {
-        size_t chunks_num;                   /**< message vector size */
-        const uv_buf_t *chunks;              /**< message vector */
-    } packet;                                /**< note, that it's a single packet which should be sent in one piece */
+        size_t chunks_num;      /**< message vector size */
+        const uv_buf_t *chunks; /**< message vector */
+    } packet;                   /**< note, that it's a single packet which should be sent in one piece */
 } TcpipTunOutputEvent;
 
 /**
@@ -107,7 +107,7 @@ typedef struct {
  * This structure holds TCP/IP stack configuration parameters
  */
 typedef struct {
-    int tun_fd;                /**< File descriptor of TUN device */
+    int tun_fd; /**< File descriptor of TUN device */
     dns::EventLoop *event_loop;
     uint32_t mtu_size;         /**< Maximum transfer unit for TCP protocol (if 0 `DEFAULT_MTU_SIZE` will be used) */
     const char *pcap_filename; /**< Pcap file name */

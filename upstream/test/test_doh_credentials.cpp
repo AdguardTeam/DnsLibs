@@ -2,8 +2,8 @@
 #include <memory>
 #include <string>
 
-#include "common/gtest_coro.h"
 #include "common/base64.h"
+#include "common/gtest_coro.h"
 #include "common/utils.h"
 #include "dns/common/event_loop.h"
 #include "dns/net/socket.h"
@@ -69,7 +69,6 @@ static const DohCredentialTestParam doh_credential_test_cases[] = {
         {"https://username:%00password@dns.google/dns-query", "username", std::string("\0password", 9)},
 };
 
-INSTANTIATE_TEST_SUITE_P(DohUpstreamParamTest, DohUpstreamParamTest,
-        ::testing::ValuesIn(doh_credential_test_cases));
+INSTANTIATE_TEST_SUITE_P(DohUpstreamParamTest, DohUpstreamParamTest, ::testing::ValuesIn(doh_credential_test_cases));
 
 } // namespace ag::dns::upstream::test

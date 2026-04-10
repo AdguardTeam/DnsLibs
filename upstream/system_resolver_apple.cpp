@@ -2,8 +2,8 @@
 
 #include <fmt/format.h>
 
-#include "system_resolver.h"
 #include "dns/common/event_loop.h"
+#include "system_resolver.h"
 #include <dns_sd.h>
 
 namespace ag::dns {
@@ -15,8 +15,7 @@ public:
     Impl(EventLoop *loop, Millis timeout, uint32_t if_index)
             : m_loop(loop)
             , m_if_index(if_index)
-            , m_timeout(timeout)
-    {
+            , m_timeout(timeout) {
     }
 
     ~Impl() {
@@ -60,7 +59,8 @@ public:
                 auto error_code = DNSServiceQueryRecord(&service_ref,
                         kDNSServiceFlagsUnicastResponse | kDNSServiceFlagsReturnIntermediates
                                 | kDNSServiceFlagAnsweredFromCache | kDNSServiceFlagsTimeout,
-                        req->parent->m_if_index, req->domain.data(), req->rr_type, kDNSServiceClass_IN, handle_dns_service_query_record_reply, req);
+                        req->parent->m_if_index, req->domain.data(), req->rr_type, kDNSServiceClass_IN,
+                        handle_dns_service_query_record_reply, req);
 
                 if (error_code != kDNSServiceErr_NoError) {
                     req->error = make_error(SystemResolverError::AE_SYSTEM_RESOLVE_ERROR);
@@ -83,18 +83,18 @@ public:
                     req->error = make_error(SystemResolverError::AE_SYSTEM_RESOLVE_ERROR);
                     return true;
                 }
-                if (0 != uv_timer_start(req->timer_event->raw(), on_uv_timer,
-                            req->parent->m_timeout.count(), 0)) {
+                if (0 != uv_timer_start(req->timer_event->raw(), on_uv_timer, req->parent->m_timeout.count(), 0)) {
                     req->error = make_error(SystemResolverError::AE_SYSTEM_RESOLVE_ERROR);
                     return true;
                 }
 
-                tracelog(g_log, "Requested domain {} rrtype {}",
-                        req->domain, AllocatedPtr<char>{ldns_rr_type2str(ldns_rr_type(req->rr_type))}.get() ?: AG_FMT("TYPE{}", (int)req->rr_type));
+                tracelog(g_log, "Requested domain {} rrtype {}", req->domain,
+                        AllocatedPtr<char>{ldns_rr_type2str(ldns_rr_type(req->rr_type))}.get()
+                                ?: AG_FMT("TYPE{}", (int) req->rr_type));
                 return false;
             }
 
-            static void on_uv_read(uv_poll_t* handle, int status, int events) {
+            static void on_uv_read(uv_poll_t *handle, int status, int events) {
                 if (events & UV_READABLE) {
                     if (auto req = (Request *) Uv<uv_poll_t>::parent_from_data(handle->data)) {
                         if (req->service) {
@@ -106,7 +106,7 @@ public:
                 }
             }
 
-            static void on_uv_timer(uv_timer_t* handle) {
+            static void on_uv_timer(uv_timer_t *handle) {
                 if (auto req = (Request *) Uv<uv_poll_t>::parent_from_data(handle->data)) {
                     req->error = make_error(SystemResolverError::AE_TIMED_OUT);
                     req->parent->complete_request(*req);
@@ -158,10 +158,9 @@ public:
                     DNSServiceFlags flags, uint32_t interfaceIndex [[maybe_unused]], DNSServiceErrorType errorCode,
                     const char *fullname, uint16_t rrtype, uint16_t rrclass, uint16_t rdlen, const void *rdata,
                     uint32_t ttl, void *context) {
-                tracelog(g_log, "Reply: error {}, {} {} {} {} {}, flags {:x}",
-                        errorCode, fullname ?: "(null)",
-                        ttl,
-                        AllocatedPtr<char>{ldns_rr_class2str(ldns_rr_class(rrclass))}.get() ?: AG_FMT("CLASS{}", rrclass),
+                tracelog(g_log, "Reply: error {}, {} {} {} {} {}, flags {:x}", errorCode, fullname ?: "(null)", ttl,
+                        AllocatedPtr<char>{ldns_rr_class2str(ldns_rr_class(rrclass))}.get()
+                                ?: AG_FMT("CLASS{}", rrclass),
                         AllocatedPtr<char>{ldns_rr_type2str(ldns_rr_type(rrtype))}.get() ?: AG_FMT("TYPE{}", rrtype),
                         utils::encode_to_hex(Uint8View{(const uint8_t *) rdata, rdlen}), flags);
                 auto *req = (Request *) context;
@@ -224,24 +223,26 @@ public:
     Millis m_timeout;
 };
 
-SystemResolver::SystemResolver(ag::dns::SystemResolver::ConstructorAccess, ag::dns::EventLoop *loop, Millis timeout, uint32_t if_index) {
+SystemResolver::SystemResolver(
+        ag::dns::SystemResolver::ConstructorAccess, ag::dns::EventLoop *loop, Millis timeout, uint32_t if_index) {
     m_pimpl = std::make_unique<Impl>(loop, timeout, if_index);
 }
 
 SystemResolver::~SystemResolver() = default;
 
-ag::Result<std::unique_ptr<SystemResolver>, SystemResolverError> SystemResolver::create(EventLoop *loop, Millis timeout, uint32_t if_index) {
-    std::unique_ptr<SystemResolver> ret = std::make_unique<SystemResolver>(ConstructorAccess{}, loop, timeout, if_index);
+ag::Result<std::unique_ptr<SystemResolver>, SystemResolverError> SystemResolver::create(
+        EventLoop *loop, Millis timeout, uint32_t if_index) {
+    std::unique_ptr<SystemResolver> ret =
+            std::make_unique<SystemResolver>(ConstructorAccess{}, loop, timeout, if_index);
     if (!ret || !ret->m_pimpl) {
         return make_error(SystemResolverError::AE_INIT_ERROR);
     }
     return ret;
 }
 
-coro::Task<Result<SystemResolver::LdnsRrListPtr, SystemResolverError>>
-SystemResolver::resolve(std::string_view domain, ldns_rr_type rr_type) {
+coro::Task<Result<SystemResolver::LdnsRrListPtr, SystemResolverError>> SystemResolver::resolve(
+        std::string_view domain, ldns_rr_type rr_type) {
     co_return co_await m_pimpl->resolve(domain, rr_type);
 }
-
 
 } // namespace ag::dns

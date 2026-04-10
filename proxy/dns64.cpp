@@ -13,8 +13,8 @@ static constexpr auto WKN = "ipv4only.arpa.";
 static constexpr uint8_t WKA0_BYTES[] = {192, 0, 0, 170};
 static constexpr uint8_t WKA1_BYTES[] = {192, 0, 0, 171};
 
-static constexpr ag::Uint8View WELL_KNOWN_ADDRESSES[]
-        = {{WKA0_BYTES, std::size(WKA0_BYTES)}, {WKA1_BYTES, std::size(WKA1_BYTES)}};
+static constexpr ag::Uint8View WELL_KNOWN_ADDRESSES[] = {
+        {WKA0_BYTES, std::size(WKA0_BYTES)}, {WKA1_BYTES, std::size(WKA1_BYTES)}};
 
 static constexpr size_t IPV6_NULL_IDX = 8;
 
@@ -53,7 +53,7 @@ static Uint8Vector find_pref64(Uint8View ip6, const Uint8View wka) {
     }
 
     // Erase all but the prefix and return
-    vec.erase(vec.begin() + first_occur, vec.end());
+    vec.erase(vec.begin() + static_cast<ptrdiff_t>(first_occur), vec.end());
     return vec;
 }
 

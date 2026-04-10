@@ -1,15 +1,15 @@
 #pragma once
 
-#include <stdint.h>
-#include <stddef.h>
 #include <stdbool.h>
+#include <stddef.h>
+#include <stdint.h>
 
 #ifdef _WIN32
-#  define AG_EXPORT extern __declspec(dllexport)
+#define AG_EXPORT extern __declspec(dllexport)
 #elif defined(__GNUC__)
-#  define AG_EXPORT __attribute__ ((visibility("default")))
+#define AG_EXPORT __attribute__((visibility("default")))
 #else
-#  define AG_EXPORT
+#define AG_EXPORT
 #endif
 
 /**
@@ -34,7 +34,11 @@
  *  @endcode
  *  @ingroup defines
  */
-#define NAMED_ARRAY_OF(T, N) struct N { T *data; uint32_t size; }
+#define NAMED_ARRAY_OF(T, N)                                                                                           \
+    struct N {                                                                                                         \
+        T *data;                                                                                                       \
+        uint32_t size;                                                                                                 \
+    }
 
 /** @def ARRAY_OF(T)
  *  A macro that defines a typed array structure with a pointer to the data and its size.
@@ -48,7 +52,11 @@
  *  @endcode
  *  @ingroup defines
  */
-#define ARRAY_OF(T) struct { T *data; uint32_t size; }
+#define ARRAY_OF(T)                                                                                                    \
+    struct {                                                                                                           \
+        T *data;                                                                                                       \
+        uint32_t size;                                                                                                 \
+    }
 
 #ifdef __cplusplus
 extern "C" {
@@ -139,8 +147,8 @@ typedef struct {
     uint32_t outbound_interface_index;
 
     /**
-     * (Optional) List of upstreams base64 encoded SPKI fingerprints to verify. If at least one of them is matched in the
-     * certificate chain, the verification will be successful
+     * (Optional) List of upstreams base64 encoded SPKI fingerprints to verify. If at least one of them is matched in
+     * the certificate chain, the verification will be successful
      */
     ARRAY_OF(const char *) fingerprints;
 } ag_upstream_options;
@@ -236,11 +244,11 @@ typedef enum {
  */
 typedef enum {
     /** No changes, no-op */
-    AGDPRO_NONE     = 0,
+    AGDPRO_NONE = 0,
     /** Reload all DNS settings except listeners and filter_params */
     AGDPRO_SETTINGS = 1 << 0,
     /** Reload filter parameters (filter_params) */
-    AGDPRO_FILTERS  = 1 << 1,
+    AGDPRO_FILTERS = 1 << 1,
 } ag_dnsproxy_reapply_options;
 
 /**
@@ -360,7 +368,6 @@ typedef struct {
 typedef struct {
     NAMED_ARRAY_OF(ag_filter_params, filters_s) filters;
 } ag_filter_engine_params;
-
 
 /**
  * @struct ag_dnsproxy_settings
@@ -551,7 +558,6 @@ typedef ag_certificate_verification_result (*ag_certificate_verification_cb)(con
  * @param length The length of the log message, in bytes
  */
 typedef void (*ag_log_cb)(void *attachment, ag_log_level level, const char *message, uint32_t length);
-
 
 /**
  * @struct ag_dnsproxy_events
@@ -767,7 +773,7 @@ typedef void ag_wfpfirewall;
  * @return The proxy handle, or NULL in case of an error
  */
 AG_EXPORT ag_dnsproxy *ag_dnsproxy_init(const ag_dnsproxy_settings *settings, const ag_dnsproxy_events *events,
-                                        ag_dnsproxy_init_result *out_result, const char **out_message);
+        ag_dnsproxy_init_result *out_result, const char **out_message);
 
 /**
  * @ingroup api
@@ -791,8 +797,7 @@ AG_EXPORT void ag_dnsproxy_deinit(ag_dnsproxy *proxy);
  * @return true if reapplying succeeded, false otherwise
  */
 AG_EXPORT bool ag_dnsproxy_reapply_settings(ag_dnsproxy *proxy, const ag_dnsproxy_settings *settings,
-                                            ag_dnsproxy_reapply_options options,
-                                            ag_dnsproxy_init_result *out_result, const char **out_message);
+        ag_dnsproxy_reapply_options options, ag_dnsproxy_init_result *out_result, const char **out_message);
 
 /**
  * @ingroup api
@@ -811,8 +816,8 @@ AG_EXPORT ag_buffer ag_dnsproxy_handle_message(ag_dnsproxy *proxy, ag_buffer mes
  * @param info additional parameters
  * @note The caller is responsible for freeing `message` with `ag_buffer_free()`
  */
-AG_EXPORT void ag_dnsproxy_handle_message_async(ag_dnsproxy *proxy, ag_buffer message, const ag_dns_message_info *info,
-        ag_handle_message_async_cb handler);
+AG_EXPORT void ag_dnsproxy_handle_message_async(
+        ag_dnsproxy *proxy, ag_buffer message, const ag_dns_message_info *info, ag_handle_message_async_cb handler);
 
 /**
  * @ingroup api1

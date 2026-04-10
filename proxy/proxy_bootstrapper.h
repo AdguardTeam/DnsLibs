@@ -23,13 +23,13 @@ struct ProxyBootstrapper : public SocketFactory::ProxyBootstrapper {
     ProxyBootstrapper(EventLoop &loop, const DnsProxySettings &settings, const DnsProxyEvents &events,
             std::weak_ptr<bool> shutdown_guard)
             : socket_factory({
-                    .loop = loop,
-                    .verifier = (events.on_certificate_verification != nullptr)
-                            ? std::unique_ptr<CertificateVerifier>(
-                                    new ApplicationVerifier(events.on_certificate_verification))
-                            : std::unique_ptr<CertificateVerifier>(new DefaultVerifier),
-                    .enable_route_resolver = settings.enable_route_resolver,
-            })
+                      .loop = loop,
+                      .verifier = (events.on_certificate_verification != nullptr)
+                              ? std::unique_ptr<CertificateVerifier>(
+                                        new ApplicationVerifier(events.on_certificate_verification))
+                              : std::unique_ptr<CertificateVerifier>(new DefaultVerifier),
+                      .enable_route_resolver = settings.enable_route_resolver,
+              })
             , shutdown_guard(std::move(shutdown_guard))
             , upstream_config(UpstreamFactoryConfig{
                       .loop = loop,

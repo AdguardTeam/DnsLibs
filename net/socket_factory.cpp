@@ -45,7 +45,7 @@ SocketFactory::SocketPtr SocketFactory::make_socket(SocketParameters p) const {
                             return ProxiedSocket::OCFA_CLOSE_CONNECTION;
                         },
                         [](void *arg) -> ProxiedSocket::Fallback {
-                            return {((SocketFactory *)arg)->m_direct_proxy.get()};
+                            return {((SocketFactory *) arg)->m_direct_proxy.get()};
                         },
                         (void *) this,
                 },

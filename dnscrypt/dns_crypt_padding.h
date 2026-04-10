@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cstddef>
+
 #include "common/defs.h"
 
 namespace ag::dns::dnscrypt {

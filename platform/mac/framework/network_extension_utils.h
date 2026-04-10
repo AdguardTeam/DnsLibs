@@ -32,11 +32,8 @@ namespace ag::ne_utils {
  * @param out_len Output sockaddr length.
  * @return `true` if conversion succeeded.
  */
-inline bool sockaddr_from_nwendpoint(NWEndpoint *endpoint,
-                                    int family_hint,
-                                    bool allow_port_zero,
-                                    sockaddr_storage *out_addr,
-                                    socklen_t *out_len) {
+inline bool sockaddr_from_nwendpoint(NWEndpoint *endpoint, int family_hint, bool allow_port_zero,
+                                     sockaddr_storage *out_addr, socklen_t *out_len) {
     if (!endpoint || !out_addr || !out_len) {
         return false;
     }
@@ -47,7 +44,7 @@ inline bool sockaddr_from_nwendpoint(NWEndpoint *endpoint,
         return false;
     }
 
-    NWHostEndpoint *hostEndpoint = (NWHostEndpoint *) endpoint;
+    NWHostEndpoint *hostEndpoint = (NWHostEndpoint *)endpoint;
     NSString *host = hostEndpoint.hostname;
     NSString *port = hostEndpoint.port;
     if (host.length == 0 || port.length == 0) {
@@ -69,11 +66,11 @@ inline bool sockaddr_from_nwendpoint(NWEndpoint *endpoint,
 
     sockaddr_in sin = {};
     sin.sin_family = AF_INET;
-    sin.sin_port = htons((uint16_t) port_value);
+    sin.sin_port = htons((uint16_t)port_value);
 
     sockaddr_in6 sin6 = {};
     sin6.sin6_family = AF_INET6;
-    sin6.sin6_port = htons((uint16_t) port_value);
+    sin6.sin6_port = htons((uint16_t)port_value);
 
     int v4_ok = inet_pton(AF_INET, host_c, &sin.sin_addr);
     int v6_ok = inet_pton(AF_INET6, host_c, &sin6.sin6_addr);
@@ -128,14 +125,14 @@ inline NWEndpoint *nwendpoint_from_sockaddr(const sockaddr *addr, socklen_t addr
     NSString *port = nil;
 
     if (addr->sa_family == AF_INET && addr_len >= sizeof(sockaddr_in)) {
-        const sockaddr_in *sin = (const sockaddr_in *) addr;
+        const sockaddr_in *sin = (const sockaddr_in *)addr;
         if (!inet_ntop(AF_INET, &sin->sin_addr, host_buf, sizeof(host_buf))) {
             return nil;
         }
         host = [NSString stringWithUTF8String:host_buf];
         port = [NSString stringWithFormat:@"%u", ntohs(sin->sin_port)];
     } else if (addr->sa_family == AF_INET6 && addr_len >= sizeof(sockaddr_in6)) {
-        const sockaddr_in6 *sin6 = (const sockaddr_in6 *) addr;
+        const sockaddr_in6 *sin6 = (const sockaddr_in6 *)addr;
         if (!inet_ntop(AF_INET6, &sin6->sin6_addr, host_buf, sizeof(host_buf))) {
             return nil;
         }

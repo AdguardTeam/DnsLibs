@@ -6,9 +6,7 @@
 static ag::coro::Task<bool> co_test_ipv6_connectivity(ag::dns::EventLoop &loop) {
     co_await loop.co_submit();
     ag::dns::ldns_pkt_ptr query{
-            ldns_pkt_query_new(
-                    ldns_dname_new_frm_str("google.com"),
-                    LDNS_RR_TYPE_A, LDNS_RR_CLASS_IN, LDNS_RD)};
+            ldns_pkt_query_new(ldns_dname_new_frm_str("google.com"), LDNS_RR_TYPE_A, LDNS_RR_CLASS_IN, LDNS_RD)};
 
     ag::dns::SocketFactory socket_factory({loop});
     ag::dns::UpstreamFactory upstream_factory({
@@ -19,7 +17,7 @@ static ag::coro::Task<bool> co_test_ipv6_connectivity(ag::dns::EventLoop &loop) 
 
     // Google public DNS
     for (auto &addr : {"2001:4860:4860::8888", "2001:4860:4860::8844"}) {
-        auto r = upstream_factory.create_upstream({ addr, {}, {} });
+        auto r = upstream_factory.create_upstream({addr, {}, {}});
         if (r.has_error()) {
             co_return false;
         }

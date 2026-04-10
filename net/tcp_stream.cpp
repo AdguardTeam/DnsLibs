@@ -16,8 +16,8 @@ namespace ag::dns {
     lvl_##log((s_)->m_log, "[id={}] {}(): " fmt_, (s_)->m_id, __func__, ##__VA_ARGS__)
 
 TcpStream::TcpStream(SocketFactory::SocketParameters p, PrepareFdCallback prepare_fd)
-        : Socket(__func__, std::move(p), prepare_fd)
-{}
+        : Socket(__func__, std::move(p), prepare_fd) {
+}
 
 std::optional<evutil_socket_t> TcpStream::get_fd() const {
     uv_os_fd_t fd;
@@ -41,7 +41,7 @@ Error<SocketError> TcpStream::connect(ConnectParameters params) {
     }
 
     m_tcp = Uv<uv_tcp_t>::create_with_parent(this);
-    if (int err = uv_tcp_init_ex(params.loop->handle(), m_tcp->raw(), (uint8_t)peer->c_sockaddr()->sa_family)) {
+    if (int err = uv_tcp_init_ex(params.loop->handle(), m_tcp->raw(), (uint8_t) peer->c_sockaddr()->sa_family)) {
         m_tcp->mark_uninit();
         m_tcp.reset();
         auto error = make_error(uv_errno_t(err));
@@ -74,9 +74,8 @@ Error<SocketError> TcpStream::connect(ConnectParameters params) {
         delete req;
         log_stream(this, dbg, "Failed to start connection");
         auto error = make_error(uv_errno_t(err));
-        sock_err = (err == UV_ECONNREFUSED)
-                ?  make_error(SocketError::AE_CONNECTION_REFUSED, error)
-                : make_error(SocketError::AE_SOCK_ERROR, error);
+        sock_err = (err == UV_ECONNREFUSED) ? make_error(SocketError::AE_CONNECTION_REFUSED, error)
+                                            : make_error(SocketError::AE_SOCK_ERROR, error);
     }
 
     if (params.timeout.has_value() && !this->set_timeout(params.timeout.value())) {
@@ -84,7 +83,7 @@ Error<SocketError> TcpStream::connect(ConnectParameters params) {
     }
 
     if (sock_err) {
-        params.loop->submit([sock_err, weak = m_tcp->weak_from_this()](){
+        params.loop->submit([sock_err, weak = m_tcp->weak_from_this()]() {
             if (auto tcp = weak.lock()) {
                 if (Callbacks cbx = static_cast<TcpStream *>(tcp->parent())->get_callbacks(); cbx.on_close != nullptr) {
                     cbx.on_close(cbx.arg, sock_err);
@@ -100,7 +99,7 @@ struct UvWrite : public uv_write_t {
 };
 
 void TcpStream::on_write(uv_write_t *req, int status) {
-    delete static_cast<UvWrite *>(req);
+    delete static_cast<UvWrite *>(req); // NOLINT(cppcoreguidelines-pro-type-static-cast-downcast)
 }
 
 Error<SocketError> TcpStream::send(Uint8View data) {
@@ -219,8 +218,7 @@ void TcpStream::on_read(uv_stream_t *stream, ssize_t nread, const uv_buf_t *buf)
             return;
         }
         dbglog(self->m_log, "Read error: {}", uv_strerror(nread));
-        Error<SocketError> err = make_error(SocketError::AE_SOCK_ERROR,
-                make_error(uv_errno_t(nread)));
+        Error<SocketError> err = make_error(SocketError::AE_SOCK_ERROR, make_error(uv_errno_t(nread)));
         if (Callbacks cbx = self->get_callbacks(); cbx.on_close != nullptr) {
             cbx.on_close(cbx.arg, err);
         }
@@ -229,7 +227,7 @@ void TcpStream::on_read(uv_stream_t *stream, ssize_t nread, const uv_buf_t *buf)
 
     if (Callbacks cbx = self->get_callbacks(); cbx.on_read != nullptr) {
         auto node = self->m_reads.extract(buf->base);
-        cbx.on_read(cbx.arg, { (uint8_t *) node.key(), size_t(nread) });
+        cbx.on_read(cbx.arg, {(uint8_t *) node.key(), size_t(nread)});
         // Parent may be destroyed inside read.
         return;
     } else {
@@ -256,7 +254,7 @@ void TcpStream::on_timeout(uv_timer_t *handle) {
 bool TcpStream::update_timer() {
     if (m_timer != nullptr) {
         if (m_current_timeout.has_value()) {
-            int timeout_ms = ag::to_millis(*m_current_timeout).count();
+            int64_t timeout_ms = ag::to_millis(*m_current_timeout).count();
             return 0 == uv_timer_start(m_timer->raw(), &on_timeout, timeout_ms, 0);
         } else {
             return 0 == uv_timer_stop(m_timer->raw());

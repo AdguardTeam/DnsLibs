@@ -3,9 +3,10 @@
 #ifdef __ANDROID__
 
 #include <cstdint>
+#include <jni.h>
 #include <optional>
 #include <string_view>
-#include <jni.h>
+
 #include "jni_utils.h"
 
 // Forward declaration to avoid including multinetwork.h
@@ -47,7 +48,6 @@ public:
     static void set_application_context(jobject context);
 
 private:
-
     /**
      * Get ConnectivityManager from Android context.
      * @return ConnectivityManager GlobalRef or empty GlobalRef

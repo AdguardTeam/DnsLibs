@@ -1,10 +1,10 @@
 #pragma once
 
+#include <chrono>
 #include <memory>
+#include <random>
 #include <utility>
 #include <vector>
-#include <chrono>
-#include <random>
 
 #include "common/coro.h"
 #include "common/defs.h"
@@ -28,6 +28,7 @@ using ConnectionPoolPtr = std::shared_ptr<ConnectionPoolBase>;
 class Connection {
 protected:
     struct ConstructorAccess {};
+
 public:
     enum class Status {
         IDLE,
@@ -62,7 +63,8 @@ public:
         }
     };
 
-    Connection(const ConstructorAccess & /*unused*/, EventLoop &loop, const ConnectionPoolPtr &pool, const std::string &address_str)
+    Connection(const ConstructorAccess & /*unused*/, EventLoop &loop, const ConnectionPoolPtr &pool,
+            const std::string &address_str)
             : m_loop(loop)
             , m_pool(pool)
             , m_address_str(address_str) {
@@ -84,6 +86,7 @@ public:
     Connection &operator=(const Connection &) = delete;
 
     Status m_state = Status::IDLE;
+
 protected:
     /** Event loop */
     EventLoop &m_loop;
@@ -102,8 +105,7 @@ public:
             : m_log(__func__)
             , m_max_connections(max_connections)
             , m_loop(loop)
-            , m_upstream(ups)
-    {
+            , m_upstream(ups) {
         m_address_str = ups->options().address;
         tracelog(m_log, "{} Created", m_address_str);
     };
@@ -115,7 +117,7 @@ public:
      * Get connection from pool
      */
     ConnectionPtr get() {
-        auto it = std::find_if(m_connections.begin(), m_connections.end(), [](const ConnectionPtr &conn){
+        auto it = std::find_if(m_connections.begin(), m_connections.end(), [](const ConnectionPtr &conn) {
             return conn->m_state == Connection::Status::ACTIVE;
         });
         if (it != m_connections.end()) {
@@ -178,7 +180,8 @@ template <typename ConnectionClass>
 class ConnectionPool : public ConnectionPoolBase {
 public:
     ConnectionPool(EventLoop &loop, const std::shared_ptr<Upstream> &ups, int max_connections)
-            : ConnectionPoolBase(loop, ups, max_connections) {}
+            : ConnectionPoolBase(loop, ups, max_connections) {
+    }
     ConnectionPtr create() override {
         auto conn = ConnectionClass::create(m_loop, shared_from_this(), address_str());
         m_connections.push_back(conn);

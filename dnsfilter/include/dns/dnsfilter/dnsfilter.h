@@ -1,18 +1,17 @@
 #pragma once
 
-
+#include <bitset>
+#include <ldns/ldns.h>
+#include <magic_enum/magic_enum.hpp>
+#include <memory>
 #include <optional>
 #include <string>
-#include <vector>
-#include <variant>
-#include <bitset>
 #include <tuple>
-#include <memory>
-#include <magic_enum/magic_enum.hpp>
-#include <ldns/ldns.h>
+#include <variant>
+#include <vector>
 
-#include "common/error.h"
 #include "common/defs.h"
+#include "common/error.h"
 
 #include "dns/common/dns_defs.h"
 #include "dns/proxy/dnsproxy_events.h"
@@ -30,10 +29,10 @@ public:
     using DnsFilterResult = std::pair<Handle, Error<DnsProxyInitError>>;
 
     struct FilterParams {
-        int32_t id{0}; // filter id
-        std::string data; // path to file with rules or actual rules
+        int32_t id{0};         // filter id
+        std::string data;      // path to file with rules or actual rules
         bool in_memory{false}; // if true, data is actual rules, otherwise data is path to file with rules
-        SystemTime mtime;  // time of last modification of file with rule
+        SystemTime mtime;      // time of last modification of file with rule
     };
 
     struct EngineParams {
@@ -42,12 +41,12 @@ public:
     };
 
     enum AdblockRuleProps {
-        DARP_EXCEPTION, // is exceptional (starts with `@@`)
-        DARP_IMPORTANT, // has `$important` modifier
-        DARP_BADFILTER, // has `$badfilter` modifier
-        DARP_DNSTYPE, // has `$dnstype` modifier
+        DARP_EXCEPTION,  // is exceptional (starts with `@@`)
+        DARP_IMPORTANT,  // has `$important` modifier
+        DARP_BADFILTER,  // has `$badfilter` modifier
+        DARP_DNSTYPE,    // has `$dnstype` modifier
         DARP_DNSREWRITE, // has `$dnsrewrite` modifier
-        DARP_DENYALLOW, // has `$denyallow` modifier
+        DARP_DENYALLOW,  // has `$denyallow` modifier
     };
 
     // Both https://github.com/AdguardTeam/AdguardHome/wiki/Hosts-Blocklists#adblock-style
@@ -56,7 +55,7 @@ public:
         using PropsSet = std::bitset<magic_enum::enum_count<AdblockRuleProps>()>;
         struct Parameters;
 
-        PropsSet props; // properties (see `adblock_rule_props`)
+        PropsSet props;               // properties (see `adblock_rule_props`)
         Parameters *params = nullptr; // parsed parameters
 
         AdblockRuleInfo() = default;
@@ -77,8 +76,8 @@ public:
     struct Rule {
         using ContentType = std::variant<AdblockRuleInfo, HostsRuleInfo>;
 
-        int32_t filter_id; // id of a filter which contains the matched rule
-        std::string text; // rule text
+        int32_t filter_id;                       // id of a filter which contains the matched rule
+        std::string text;                        // rule text
         ContentType content = AdblockRuleInfo{}; // rule type specific info
     };
 
@@ -93,7 +92,7 @@ public:
     DnsFilter(const DnsFilter &) = delete;
     DnsFilter(DnsFilter &&) = delete;
 
-    ~DnsFilter();
+    ~DnsFilter() = default;
 
     DnsFilter &operator=(const DnsFilter &) = delete;
     DnsFilter &operator=(DnsFilter &&) = delete;

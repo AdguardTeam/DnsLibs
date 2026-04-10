@@ -11,15 +11,14 @@
 
 #include "common/defs.h"
 #include "common/error.h"
-#include "common/net_utils.h"
 #include "common/logger.h"
+#include "common/net_utils.h"
 #include "common/route_resolver.h"
 #include "dns/common/dns_defs.h"
 #include "dns/common/event_loop.h"
-#include "dns/net/outbound_proxy_settings.h"
 #include "dns/net/certificate_verifier.h"
+#include "dns/net/outbound_proxy_settings.h"
 #include "dns/net/tls_session_cache.h"
-
 
 namespace ag {
 namespace dns {
@@ -137,8 +136,8 @@ public:
      * @param secure_parameters the security parameters
      * @return the socket
      */
-    [[nodiscard]] SocketPtr make_secured_socket(SocketParameters parameters,
-                                                SecureSocketParameters secure_parameters) const;
+    [[nodiscard]] SocketPtr make_secured_socket(
+            SocketParameters parameters, SecureSocketParameters secure_parameters) const;
 
     /**
      * Prepare an externally created descriptor in the same way as `make_socket` does
@@ -147,8 +146,8 @@ public:
      * @param outbound_interface name or index of the network interface to route traffic through
      * @return some error if failed
      */
-    [[nodiscard]] Error<SocketError> prepare_fd(evutil_socket_t fd,
-                                       const SocketAddress &peer, const IfIdVariant &outbound_interface) const;
+    [[nodiscard]] Error<SocketError> prepare_fd(
+            evutil_socket_t fd, const SocketAddress &peer, const IfIdVariant &outbound_interface) const;
 
     /**
      * Get outbound proxy settings
@@ -169,25 +168,24 @@ private:
 
     [[nodiscard]] SocketPtr make_direct_socket(SocketParameters parameters) const;
 
-    [[nodiscard]] SocketPtr make_secured_socket(SocketPtr underlying_socket,
-                                                SecureSocketParameters secure_parameters) const;
+    [[nodiscard]] SocketPtr make_secured_socket(
+            SocketPtr underlying_socket, SecureSocketParameters secure_parameters) const;
 
-    static Error<SocketError> on_prepare_fd(void *arg, evutil_socket_t fd,
-                                   const SocketAddress &peer, const IfIdVariant &outbound_interface);
+    static Error<SocketError> on_prepare_fd(
+            void *arg, evutil_socket_t fd, const SocketAddress &peer, const IfIdVariant &outbound_interface);
 
     [[nodiscard]] OutboundProxy *make_proxy() const;
 
     [[nodiscard]] OutboundProxy *make_fallback_proxy() const;
 
-    static SocketFactory::SocketPtr on_make_proxy_socket(void *arg, utils::TransportProtocol proto,
-                                                         std::optional<SecureSocketParameters> secure_parameters);
+    static SocketFactory::SocketPtr on_make_proxy_socket(
+            void *arg, utils::TransportProtocol proto, std::optional<SecureSocketParameters> secure_parameters);
 
     [[nodiscard]] bool should_route_through_proxy(utils::TransportProtocol proto) const;
 };
 
 class Socket {
 public:
-
     struct Callbacks {
         /** Raised after successful connection */
         void (*on_connected)(void *arg);
@@ -279,8 +277,8 @@ protected:
 
     struct PrepareFdCallback {
         /** Raised after the descriptor creation */
-        Error<SocketError> (*func)(void *arg, evutil_socket_t fd,
-                          const SocketAddress &peer, const IfIdVariant &outbound_interface);
+        Error<SocketError> (*func)(
+                void *arg, evutil_socket_t fd, const SocketAddress &peer, const IfIdVariant &outbound_interface);
 
         /** User context for the callback */
         void *arg;
@@ -291,41 +289,58 @@ protected:
     SocketFactory::SocketParameters m_parameters = {};
     PrepareFdCallback m_prepare_fd = {};
 
-    Socket(const std::string &logger_name,
-           SocketFactory::SocketParameters parameters, PrepareFdCallback prepare_fd);
+    Socket(const std::string &logger_name, SocketFactory::SocketParameters parameters, PrepareFdCallback prepare_fd);
 };
 
 } // namespace dns
 
 // clang format off
-template<>
+template <>
 struct ErrorCodeToString<dns::SocketError> {
     std::string operator()(dns::SocketError e) {
         switch (e) {
-        case decltype(e)::AE_SOCK_ERROR: return "Sockets error";
-        case decltype(e)::AE_ALREADY_CONNECTED: return "Socket slready connected";
-        case decltype(e)::AE_PREPARE_ERROR: return "Error preparing socket";
-        case decltype(e)::AE_SET_TIMEOUT_ERROR: return "Failed to set timeout";
-        case decltype(e)::AE_TIMED_OUT: return "Timed out";
-        case decltype(e)::AE_CONNECTION_REFUSED: return "Connection refused";
-        case decltype(e)::AE_CONNECTION_ID_NOT_FOUND: return "Non-existent connection ID";
-        case decltype(e)::AE_DUPLICATE_ID: return "Duplicate connection ID";
-        case decltype(e)::AE_INVALID_CONN_STATE: return "Invalid connection state";
-        case decltype(e)::AE_UNEXPECTED_DATA: return "Unexpected data";
-        case decltype(e)::AE_UDP_ASSOCIATION_TERMINATED: return "UDP association terminated";
-        case decltype(e)::AE_UDP_ASSOCIATION_NOT_FOUND: return "UDP association not found";
-        case decltype(e)::AE_BAD_PROXY_REPLY: return "Bad proxy reply";
-        case decltype(e)::AE_TLS_ERROR: return "TLS error";
-        case decltype(e)::AE_OUTBOUND_PROXY_ERROR: return "Proxy error";
-        case decltype(e)::AE_IN_PROGRESS: return "Async operation in progress";
-        case decltype(e)::AE_BIND_TO_IF_ERROR: return "Failed to bind socket to interface";
-        case decltype(e)::AE_INVALID_ARGUMENT: return "Invalid socket parameters";
+        case decltype(e)::AE_SOCK_ERROR:
+            return "Sockets error";
+        case decltype(e)::AE_ALREADY_CONNECTED:
+            return "Socket slready connected";
+        case decltype(e)::AE_PREPARE_ERROR:
+            return "Error preparing socket";
+        case decltype(e)::AE_SET_TIMEOUT_ERROR:
+            return "Failed to set timeout";
+        case decltype(e)::AE_TIMED_OUT:
+            return "Timed out";
+        case decltype(e)::AE_CONNECTION_REFUSED:
+            return "Connection refused";
+        case decltype(e)::AE_CONNECTION_ID_NOT_FOUND:
+            return "Non-existent connection ID";
+        case decltype(e)::AE_DUPLICATE_ID:
+            return "Duplicate connection ID";
+        case decltype(e)::AE_INVALID_CONN_STATE:
+            return "Invalid connection state";
+        case decltype(e)::AE_UNEXPECTED_DATA:
+            return "Unexpected data";
+        case decltype(e)::AE_UDP_ASSOCIATION_TERMINATED:
+            return "UDP association terminated";
+        case decltype(e)::AE_UDP_ASSOCIATION_NOT_FOUND:
+            return "UDP association not found";
+        case decltype(e)::AE_BAD_PROXY_REPLY:
+            return "Bad proxy reply";
+        case decltype(e)::AE_TLS_ERROR:
+            return "TLS error";
+        case decltype(e)::AE_OUTBOUND_PROXY_ERROR:
+            return "Proxy error";
+        case decltype(e)::AE_IN_PROGRESS:
+            return "Async operation in progress";
+        case decltype(e)::AE_BIND_TO_IF_ERROR:
+            return "Failed to bind socket to interface";
+        case decltype(e)::AE_INVALID_ARGUMENT:
+            return "Invalid socket parameters";
         }
     }
 };
 // clang format on
 
-template<>
+template <>
 struct ErrorCodeToString<uv_errno_t> {
     std::string operator()(uv_errno_t e) {
         const char *msg = uv_strerror(int(e));

@@ -120,8 +120,6 @@ namespace ag::dns {
 
 DnsFilter::DnsFilter() = default;
 
-DnsFilter::~DnsFilter() = default;
-
 DnsFilter::DnsFilterResult DnsFilter::create(const EngineParams &p) {
     auto *e = new (std::nothrow) dnsfilter::Engine();
     auto [ret, err_or_warn] = e->init(p);
@@ -226,9 +224,10 @@ static std::vector<const DnsFilter::Rule *> filter_out_by_badfilter(const std::v
     std::vector<std::string> badfilter_texts;
     badfilter_texts.reserve(std::distance(badfilter_rules_start, rule_ptrs.end()));
     auto badfilter_texts_end = badfilter_texts.begin() + std::distance(badfilter_rules_start, rule_ptrs.end());
-    std::transform(badfilter_rules_start, rule_ptrs.end(), std::back_inserter(badfilter_texts), [](const DnsFilter::Rule *r) {
-        return dnsfilter::rule_utils::get_text_without_badfilter(*r);
-    });
+    std::transform(
+            badfilter_rules_start, rule_ptrs.end(), std::back_inserter(badfilter_texts), [](const DnsFilter::Rule *r) {
+                return dnsfilter::rule_utils::get_text_without_badfilter(*r);
+            });
 
     std::vector<const DnsFilter::Rule *> result;
     result.reserve(std::distance(rule_ptrs.begin(), badfilter_rules_start));

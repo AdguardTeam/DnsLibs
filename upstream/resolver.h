@@ -1,17 +1,15 @@
 #pragma once
 
-
-#include <vector>
-#include <string_view>
 #include <chrono>
+#include <string_view>
+#include <vector>
 
-#include "common/logger.h"
 #include "common/defs.h"
-#include "common/utils.h"
+#include "common/logger.h"
 #include "common/socket_address.h"
+#include "common/utils.h"
 
 #include "dns/upstream/upstream.h"
-
 
 namespace ag {
 namespace dns {
@@ -68,15 +66,20 @@ private:
 } // namespace dns
 
 // clang format off
-template<>
+template <>
 struct ErrorCodeToString<dns::Resolver::ResolverError> {
     std::string operator()(dns::Resolver::ResolverError e) {
         switch (e) {
-        case decltype(e)::AE_INVALID_ADDRESS: return "Invalid resolver address";
-        case decltype(e)::AE_UPSTREAM_INIT_FAILED: return "Failed to create upstream";
-        case decltype(e)::AE_EXCHANGE_FAILED: return "Failed to talk to upstream";
-        case decltype(e)::AE_EMPTY_ADDRS: return "No addresses received for host";
-        case decltype(e)::AE_SHUTTING_DOWN: return "Shutting down";
+        case decltype(e)::AE_INVALID_ADDRESS:
+            return "Invalid resolver address";
+        case decltype(e)::AE_UPSTREAM_INIT_FAILED:
+            return "Failed to create upstream";
+        case decltype(e)::AE_EXCHANGE_FAILED:
+            return "Failed to talk to upstream";
+        case decltype(e)::AE_EMPTY_ADDRS:
+            return "No addresses received for host";
+        case decltype(e)::AE_SHUTTING_DOWN:
+            return "Shutting down";
         }
     }
 };

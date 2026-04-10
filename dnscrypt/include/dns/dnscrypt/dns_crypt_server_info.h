@@ -2,9 +2,9 @@
 
 #include <chrono>
 #include <cstdint>
+#include <functional>
 #include <string>
 #include <utility>
-#include <functional>
 
 #include "common/coro.h"
 #include "common/defs.h"
@@ -20,12 +20,12 @@ namespace ag::dns::dnscrypt {
  */
 struct CertInfo {
     uint32_t serial; /** Cert serial number (the cert can be superseded by another one with a higher serial number) */
-    KeyArray server_pk; /** Server public key */
+    KeyArray server_pk;  /** Server public key */
     KeyArray shared_key; /** Shared key */
     ClientMagicArray magic_query;
     CryptoConstruction encryption_algorithm; /** Encryption algorithm */
-    uint32_t not_before; /** Cert is valid starting from this date (epoch time) */
-    uint32_t not_after; /** Cert is valid until this date (epoch time) */
+    uint32_t not_before;                     /** Cert is valid starting from this date (epoch time) */
+    uint32_t not_after;                      /** Cert is valid until this date (epoch time) */
 };
 
 /**
@@ -70,8 +70,8 @@ struct ServerInfo {
      * @param socket_parameters Connection socket parameters
      * @return Fetch result
      */
-    coro::Task<FetchResult> fetch_current_dnscrypt_cert(EventLoop &loop,
-            Millis timeout, const SocketFactory *socket_factory, SocketFactory::SocketParameters socket_parameters);
+    coro::Task<FetchResult> fetch_current_dnscrypt_cert(EventLoop &loop, Millis timeout,
+            const SocketFactory *socket_factory, SocketFactory::SocketParameters socket_parameters);
 
     /**
      * Encrypt packet using server info
@@ -89,13 +89,18 @@ struct ServerInfo {
      */
     DecryptResult decrypt(Uint8View encrypted, Uint8View nonce) const;
 
-    template<typename T>
-    void set_server_address(T&& value) { m_server_address = std::forward<T>(value); }
+    template <typename T>
+    void set_server_address(T &&value) {
+        m_server_address = std::forward<T>(value);
+    }
 
-    decltype(auto) get_provider_name() const { return m_provider_name; }
+    decltype(auto) get_provider_name() const {
+        return m_provider_name;
+    }
 
-    decltype(auto) get_server_cert() const { return m_server_cert; }
-
+    decltype(auto) get_server_cert() const {
+        return m_server_cert;
+    }
 
 private:
     enum class TxtToCertInfoError {
@@ -112,12 +117,12 @@ private:
 
     TxtToCertInfoResult txt_to_cert_info(const ldns_rr &answer_rr) const;
 
-    KeyArray m_secret_key; /** Client secret key */
-    KeyArray m_public_key; /** Client public key */
+    KeyArray m_secret_key;           /** Client secret key */
+    KeyArray m_public_key;           /** Client public key */
     Uint8Vector m_server_public_key; /** Server public key */
-    std::string m_server_address; /** Server IP address */
-    std::string m_provider_name; /** Provider name */
-    CertInfo m_server_cert; /** Certificate info (obtained with the first unencrypted DNS request) */
+    std::string m_server_address;    /** Server IP address */
+    std::string m_provider_name;     /** Provider name */
+    CertInfo m_server_cert;          /** Certificate info (obtained with the first unencrypted DNS request) */
 
     friend class Client;
 };
@@ -127,51 +132,68 @@ private:
 namespace ag {
 
 // clang format off
-template<>
+template <>
 struct ErrorCodeToString<ag::dns::dnscrypt::ServerInfo::FetchError> {
     std::string operator()(ag::dns::dnscrypt::ServerInfo::FetchError e) {
         switch (e) {
-        case decltype(e)::AE_INVALID_PUBKEY_LENGTH: return "Invalid public key length";
-        case decltype(e)::AE_DNS_ERROR: return "DNS request for server cert info failed";
-        case decltype(e)::AE_NO_USABLE_CERTIFICATE: return "No usable certificate found";
+        case decltype(e)::AE_INVALID_PUBKEY_LENGTH:
+            return "Invalid public key length";
+        case decltype(e)::AE_DNS_ERROR:
+            return "DNS request for server cert info failed";
+        case decltype(e)::AE_NO_USABLE_CERTIFICATE:
+            return "No usable certificate found";
         }
     }
 };
 
-template<>
+template <>
 struct ErrorCodeToString<ag::dns::dnscrypt::ServerInfo::EncryptError> {
     std::string operator()(ag::dns::dnscrypt::ServerInfo::EncryptError e) {
         switch (e) {
-        case decltype(e)::AE_QUESTION_SECTION_IS_TOO_LARGE: return "Question too large; cannot be padded";
-        case decltype(e)::AE_PAD_ERROR: return "Pad error";
-        case decltype(e)::AE_AEAD_SEAL_ERROR: return "AEAD seal error";
+        case decltype(e)::AE_QUESTION_SECTION_IS_TOO_LARGE:
+            return "Question too large; cannot be padded";
+        case decltype(e)::AE_PAD_ERROR:
+            return "Pad error";
+        case decltype(e)::AE_AEAD_SEAL_ERROR:
+            return "AEAD seal error";
         }
     }
 };
 
-template<>
+template <>
 struct ErrorCodeToString<ag::dns::dnscrypt::ServerInfo::DecryptError> {
     std::string operator()(ag::dns::dnscrypt::ServerInfo::DecryptError e) {
         switch (e) {
-        case decltype(e)::AE_INVALID_MESSAGE_SIZE_OR_PREFIX: return "Invalid message size or prefix";
-        case decltype(e)::AE_UNEXPECTED_NONCE: return "Unexpected nonce";
-        case decltype(e)::AE_AEAD_OPEN_ERROR: return "AEAD open error";
-        case decltype(e)::AE_UNPAD_ERROR: return "Unpad error";
+        case decltype(e)::AE_INVALID_MESSAGE_SIZE_OR_PREFIX:
+            return "Invalid message size or prefix";
+        case decltype(e)::AE_UNEXPECTED_NONCE:
+            return "Unexpected nonce";
+        case decltype(e)::AE_AEAD_OPEN_ERROR:
+            return "AEAD open error";
+        case decltype(e)::AE_UNPAD_ERROR:
+            return "Unpad error";
         }
     }
 };
 
-template<>
+template <>
 struct ErrorCodeToString<ag::dns::dnscrypt::ServerInfo::TxtToCertInfoError> {
     std::string operator()(ag::dns::dnscrypt::ServerInfo::TxtToCertInfoError e) {
         switch (e) {
-        case decltype(e)::AE_CERTIFICATE_TOO_SHORT: return "Certificate is too short";
-        case decltype(e)::AE_INVALID_CERT_MAGIC: return "Invalid cert magic";
-        case decltype(e)::AE_UNSUPPORTED_CRYPTO_CONSTRUCTION: return "Unsupported crypto construction";
-        case decltype(e)::AE_INCORRECT_SIGNATURE: return "Incorrect signature";
-        case decltype(e)::AE_CERTIFICATE_NOT_YET_VALID: return "Certificate is not valid yet";
-        case decltype(e)::AE_CERTIFICATE_EXPIRED: return "Certificate is expired";
-        case decltype(e)::AE_SHARED_KEY_CALCULATION: return "Error calculating shared key";
+        case decltype(e)::AE_CERTIFICATE_TOO_SHORT:
+            return "Certificate is too short";
+        case decltype(e)::AE_INVALID_CERT_MAGIC:
+            return "Invalid cert magic";
+        case decltype(e)::AE_UNSUPPORTED_CRYPTO_CONSTRUCTION:
+            return "Unsupported crypto construction";
+        case decltype(e)::AE_INCORRECT_SIGNATURE:
+            return "Incorrect signature";
+        case decltype(e)::AE_CERTIFICATE_NOT_YET_VALID:
+            return "Certificate is not valid yet";
+        case decltype(e)::AE_CERTIFICATE_EXPIRED:
+            return "Certificate is expired";
+        case decltype(e)::AE_SHARED_KEY_CALCULATION:
+            return "Error calculating shared key";
         }
     }
 };

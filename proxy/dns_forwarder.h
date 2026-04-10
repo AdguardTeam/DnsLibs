@@ -121,6 +121,7 @@ private:
 
 class DnsFilterManager {
     friend class DnsForwarder;
+
 public:
     using InitResult = std::pair<bool, Error<DnsProxyInitError>>;
 

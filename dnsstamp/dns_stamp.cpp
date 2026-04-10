@@ -1,3 +1,4 @@
+#include <ada.h>
 #include <cassert>
 #include <cstddef>
 #include <cstring>
@@ -8,7 +9,6 @@
 #include <type_traits>
 #include <utility>
 #include <vector>
-#include <ada.h>
 
 #ifdef _WIN32
 #include <ws2tcpip.h>
@@ -26,7 +26,8 @@ namespace ag::dns {
 /// Function that writes stamp part
 using WriteStampPartFunction = std::function<void(Uint8Vector &, const ServerStamp &)>;
 /// Function that reads stamp part
-using ReadStampPartFunction = std::function<Error<ServerStamp::FromStringError>(ServerStamp &, size_t &, const Uint8Vector &)>;
+using ReadStampPartFunction =
+        std::function<Error<ServerStamp::FromStringError>(ServerStamp &, size_t &, const Uint8Vector &)>;
 
 using StampError = Error<ServerStamp::FromStringError>;
 
@@ -42,7 +43,8 @@ static void write_bytes(Uint8Vector &result, const void *data, size_t size) {
 }
 
 template <typename T>
-static std::enable_if_t<std::is_standard_layout_v<T>> write_bytes(Uint8Vector &result, const T &value) {
+    requires std::is_standard_layout_v<T>
+static void write_bytes(Uint8Vector &result, const T &value) {
     write_bytes(result, &value, sizeof value);
 }
 
@@ -156,7 +158,8 @@ static StampError validate_server_addr_str(std::string_view addr_str) {
     }
     if (!port.empty()) {
         std::string portStr{port};
-        const char *ptr = portStr.data(), *end = portStr.data() + portStr.size();
+        const char *ptr = portStr.data();
+        const char *end = portStr.data() + portStr.size();
         long portNumber = strtol(portStr.c_str(), (char **) &ptr, 10);
         if (ptr != end || portNumber <= 0 || portNumber > 65535) {
             return make_error(ServerStamp::FromStringError::AE_INVALID_PORT);
@@ -165,8 +168,8 @@ static StampError validate_server_addr_str(std::string_view addr_str) {
     return {};
 }
 
-static StampError read_stamp_proto_props_server_addr_str(ServerStamp &stamp, size_t &pos,
-        const Uint8Vector &value, StampProtoType proto, size_t min_value_size, uint16_t default_port) {
+static StampError read_stamp_proto_props_server_addr_str(ServerStamp &stamp, size_t &pos, const Uint8Vector &value,
+        StampProtoType proto, size_t min_value_size, uint16_t default_port) {
     stamp.proto = proto;
     if (value.size() < min_value_size) {
         return make_error(ServerStamp::FromStringError::AE_TOO_SHORT);
@@ -324,7 +327,7 @@ static ServerStamp::FromStringResult new_doq_server_stamp(const Uint8Vector &bin
 
 std::string ServerStamp::str() const {
     if (!props.has_value()) {
-        return pretty_url(/*pretty_dnscrypt=*/ true);
+        return pretty_url(/*pretty_dnscrypt=*/true);
     }
 
     switch (proto) {
@@ -474,6 +477,5 @@ std::string ServerStamp::pretty_url(bool pretty_dnscrypt) const {
 void ServerStamp::set_server_properties(ServerInformalProperties properties) {
     this->props = properties;
 }
-
 
 } // namespace ag::dns

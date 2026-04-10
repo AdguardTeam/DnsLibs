@@ -40,8 +40,7 @@ void OutboundProxy::deinit() {
 OutboundProxy::ConnectResult OutboundProxy::connect(ConnectParameters p) {
     uint32_t conn_id = get_next_connection_id();
 
-    if (!m_resolved_proxy_address.has_value()
-            && m_parameters.bootstrapper != nullptr && m_settings != nullptr
+    if (!m_resolved_proxy_address.has_value() && m_parameters.bootstrapper != nullptr && m_settings != nullptr
             && !utils::str_to_socket_address(m_settings->address).valid()) {
         m_bootstrap_waiters.emplace(conn_id, p);
         if (m_bootstrap_waiters.size() == 1) {

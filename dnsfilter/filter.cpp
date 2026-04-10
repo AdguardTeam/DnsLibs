@@ -75,8 +75,8 @@ static void destroy_multi_index_table(kh_hash_to_indexes_t *table) {
 struct LeftoverEntry {
     // @note: each entry must contain either or both of shortcuts and regex
     std::vector<std::string> shortcuts; // list of extracted shortcuts
-    std::optional<SimpleRegex> regex; // compiled regex
-    uint32_t file_idx; // file index
+    std::optional<SimpleRegex> regex;   // compiled regex
+    uint32_t file_idx;                  // file index
 };
 
 class Filter::Impl {
@@ -101,7 +101,7 @@ public:
     struct LoadLineArg {
         Impl *filter;
         size_t approx_mem; // approximate usage so far
-        size_t mem_limit; // maximum allowed usage, 0 means no limit
+        size_t mem_limit;  // maximum allowed usage, 0 means no limit
         LoadResult result; // last rule load result
     };
 
@@ -389,10 +389,9 @@ bool Filter::Impl::load_line(uint32_t file_idx, std::string_view line, void *arg
     }
     case rule_utils::Rule::MMID_CIDR: {
         constexpr size_t MAP_NODE_OVERHEAD = 2 * sizeof(void *);
-        CHECK_MEM(sizeof(std::remove_reference<decltype(rule->cidr.value())>::type)
+        CHECK_MEM(sizeof(std::remove_reference_t<decltype(rule->cidr.value())>)
                 + rule->cidr->get_address().size() // NOLINT(bugprone-unchecked-optional-access)
-                + sizeof(file_idx)
-                + MAP_NODE_OVERHEAD);
+                + sizeof(file_idx) + MAP_NODE_OVERHEAD);
         self->cidrs_table.emplace(
                 std::move(rule->cidr.value()), file_idx); // NOLINT(bugprone-unchecked-optional-access)
         log_filter(self, trace, "Rule placed in CIDRs table: {}", str);
@@ -594,7 +593,7 @@ static bool match_pattern(const rule_utils::Rule &rule, const Filter::MatchConte
         }
     }
 
-    exit:
+exit:
     return matched;
 }
 
@@ -817,10 +816,10 @@ Filter::MatchContext::MatchContext(DnsFilter::MatchParam param)
         this->subdomains.emplace_back(parts[1]);
     }
 
-    static constexpr std::string_view REVERSE_DNS_DOMAIN_SUFFIX
-            = rule_utils::REVERSE_DNS_DOMAIN_SUFFIX.substr(0, rule_utils::REVERSE_DNS_DOMAIN_SUFFIX.length() - 1);
-    static constexpr std::string_view REVERSE_IPV6_DNS_DOMAIN_SUFFIX
-            = rule_utils::REVERSE_IPV6_DNS_DOMAIN_SUFFIX.substr(
+    static constexpr std::string_view REVERSE_DNS_DOMAIN_SUFFIX =
+            rule_utils::REVERSE_DNS_DOMAIN_SUFFIX.substr(0, rule_utils::REVERSE_DNS_DOMAIN_SUFFIX.length() - 1);
+    static constexpr std::string_view REVERSE_IPV6_DNS_DOMAIN_SUFFIX =
+            rule_utils::REVERSE_IPV6_DNS_DOMAIN_SUFFIX.substr(
                     0, rule_utils::REVERSE_IPV6_DNS_DOMAIN_SUFFIX.length() - 1);
     if (this->rr_type == LDNS_RR_TYPE_PTR && this->host.back() != '.'
             && (this->host.ends_with(REVERSE_DNS_DOMAIN_SUFFIX)

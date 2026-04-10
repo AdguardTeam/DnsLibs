@@ -25,7 +25,7 @@ class ResponseHelpers {
 public:
     using ldns_rdf_ptr = UniquePtr<ldns_rdf, &ldns_rdf_deep_free>; // NOLINT(*-identifier-naming)
     static constexpr uint32_t SOA_RETRY_DEFAULT = 900;
-    struct NeedsResponse{};
+    struct NeedsResponse {};
     using CreateResponseResult = std::variant<ldns_pkt_ptr, NeedsResponse>;
 
     static CreateResponseResult create_soa_response(
@@ -82,8 +82,8 @@ public:
      * 3. If there are IPv4 addresses in rule set and no IPv6, AAAA request will be responded with NOERROR SOA.
      *    If there are IPv6 addresses in rule set and no IPv4, A request will be responded with NOERROR SOA.
      */
-    static CreateResponseResult create_response_with_ips(const ldns_pkt *request, const ldns_pkt *original_response, const DnsProxySettings *settings,
-            const std::vector<const char *> &ips) {
+    static CreateResponseResult create_response_with_ips(const ldns_pkt *request, const ldns_pkt *original_response,
+            const DnsProxySettings *settings, const std::vector<const char *> &ips) {
         const ldns_rr *question = ldns_rr_list_rr(ldns_pkt_question(request), 0);
         ldns_rr_type type = ldns_rr_get_type(question);
 
@@ -116,7 +116,7 @@ public:
      * If rule is Adblock-style or Hosts-rule with "blocking IP", then blocking mode is applied.
      * Otherwise, `create_response_with_ips()` is called.
      */
-    static CreateResponseResult create_blocking_response(const ldns_pkt *request, const  ldns_pkt *original_response,
+    static CreateResponseResult create_blocking_response(const ldns_pkt *request, const ldns_pkt *original_response,
             const DnsProxySettings *settings, const std::vector<const DnsFilter::Rule *> &rules,
             std::optional<DnsFilter::ApplyDnsrewriteResult::RewriteInfo> rewritten_info) {
         const ldns_rr *question = ldns_rr_list_rr(ldns_pkt_question(request), 0);
@@ -232,8 +232,8 @@ private:
         return soa;
     }
 
-    static ldns_pkt_ptr create_arecord_response(const ldns_pkt *request, const DnsProxySettings *settings,
-            const std::vector<const char *> &ips) {
+    static ldns_pkt_ptr create_arecord_response(
+            const ldns_pkt *request, const DnsProxySettings *settings, const std::vector<const char *> &ips) {
         const ldns_rr *question = ldns_rr_list_rr(ldns_pkt_question(request), 0);
 
         ldns_rr *answer = ldns_rr_new();
@@ -253,8 +253,8 @@ private:
         return ldns_pkt_ptr{response};
     }
 
-    static ldns_pkt_ptr create_aaaarecord_response(const ldns_pkt *request, const DnsProxySettings *settings,
-            const std::vector<const char *> &ips) {
+    static ldns_pkt_ptr create_aaaarecord_response(
+            const ldns_pkt *request, const DnsProxySettings *settings, const std::vector<const char *> &ips) {
         const ldns_rr *question = ldns_rr_list_rr(ldns_pkt_question(request), 0);
 
         ldns_rr *answer = ldns_rr_new();
@@ -328,10 +328,12 @@ private:
         case LDNS_RR_TYPE_HTTPS: {
             if (!settings->custom_blocking_ipv4.empty() || !settings->custom_blocking_ipv6.empty()) {
                 std::vector<const char *> ips;
-                if (utils::is_valid_ip4(settings->custom_blocking_ipv4) || !is_blocking_ip(settings->custom_blocking_ipv4)) {
+                if (utils::is_valid_ip4(settings->custom_blocking_ipv4)
+                        || !is_blocking_ip(settings->custom_blocking_ipv4)) {
                     ips.push_back(settings->custom_blocking_ipv4.c_str());
                 }
-                if (utils::is_valid_ip4(settings->custom_blocking_ipv6) || !is_blocking_ip(settings->custom_blocking_ipv4)) {
+                if (utils::is_valid_ip4(settings->custom_blocking_ipv6)
+                        || !is_blocking_ip(settings->custom_blocking_ipv4)) {
                     ips.push_back(settings->custom_blocking_ipv6.c_str());
                 }
                 if (original_response == nullptr) {

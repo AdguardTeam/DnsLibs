@@ -349,7 +349,7 @@ static DnsRequestProcessedEvent marshal_processed_event(const ag_dns_request_pro
             event.rules.emplace_back(rule);
         }
     }
-    event.blocking_reason = (DnsBlockingReason)c_event->blocking_reason;
+    event.blocking_reason = (DnsBlockingReason) c_event->blocking_reason;
     return event;
 }
 
@@ -516,8 +516,8 @@ static DnsProxySettings marshal_settings(const ag_dnsproxy_settings *c_settings)
 
     settings.listeners = marshal_listeners(c_settings->listeners.data, c_settings->listeners.size);
     settings.outbound_proxy = marshal_outbound_proxy(c_settings->outbound_proxy);
-    settings.filter_params.filters
-            = marshal_filters(c_settings->filter_params.filters.data, c_settings->filter_params.filters.size);
+    settings.filter_params.filters =
+            marshal_filters(c_settings->filter_params.filters.data, c_settings->filter_params.filters.size);
     settings.optimistic_cache = c_settings->optimistic_cache;
     settings.enable_dnssec_ok = c_settings->enable_dnssec_ok;
     settings.enable_retransmission_handling = c_settings->enable_retransmission_handling;
@@ -542,8 +542,7 @@ static DnsProxyEvents marshal_events(const ag_dnsproxy_events *c_events) {
         return events;
     }
     if (c_events->on_request_processed) {
-        events.on_request_processed = [cb = c_events->on_request_processed](
-                                              const DnsRequestProcessedEvent &event) {
+        events.on_request_processed = [cb = c_events->on_request_processed](const DnsRequestProcessedEvent &event) {
             ag_dns_request_processed_event e{};
 
             e.whitelist = event.whitelist;
@@ -562,7 +561,7 @@ static DnsProxyEvents marshal_events(const ag_dnsproxy_events *c_events) {
             e.error = c_str_if_not_empty(event.error);
             e.status = c_str_if_not_empty(event.status);
             e.upstream_id = event.upstream_id ? &*event.upstream_id : nullptr;
-            e.blocking_reason = (ag_dns_blocking_reason)event.blocking_reason;
+            e.blocking_reason = (ag_dns_blocking_reason) event.blocking_reason;
 
             std::vector<const char *> c_rules;
             c_rules.reserve(event.rules.size());
@@ -576,9 +575,9 @@ static DnsProxyEvents marshal_events(const ag_dnsproxy_events *c_events) {
         };
     }
     if (c_events->on_certificate_verification) {
-        events.on_certificate_verification
-                = [cb = c_events->on_certificate_verification](
-                          const CertificateVerificationEvent &event) -> std::optional<std::string> {
+        events.on_certificate_verification =
+                [cb = c_events->on_certificate_verification](
+                        const CertificateVerificationEvent &event) -> std::optional<std::string> {
             ag_certificate_verification_event e{};
 
             e.certificate.size = event.certificate.size();
@@ -730,7 +729,7 @@ ag_dns_stamp *ag_dns_stamp_from_str(const char *stamp_str, const char **error) {
         }
     }
     if (stamp->props.has_value()) {
-        c_result->properties = (ag_server_informal_properties*) std::malloc(sizeof(ag_server_informal_properties));
+        c_result->properties = (ag_server_informal_properties *) std::malloc(sizeof(ag_server_informal_properties));
         *c_result->properties = (ag_server_informal_properties) stamp->props.value();
     }
     return c_result;
@@ -800,7 +799,6 @@ const char *ag_dns_stamp_to_str(ag_dns_stamp *c_stamp) {
     }
 
     return ag_dns_stamp_pretty_url(c_stamp);
-    
 }
 
 const char *ag_dns_stamp_pretty_url(ag_dns_stamp *c_stamp) {
@@ -824,10 +822,11 @@ ag_dns_filtering_log_action *ag_dns_filtering_log_action_from_event(const ag_dns
         templates[i] = strdup(action->templates[i].text.c_str());
     }
     return new ag_dns_filtering_log_action{
-            .templates = {
-                    .data = (const ag_dns_rule_template **) templates,
-                    .size = (uint32_t) action->templates.size(),
-            },
+            .templates =
+                    {
+                            .data = (const ag_dns_rule_template **) templates,
+                            .size = (uint32_t) action->templates.size(),
+                    },
             .allowed_options = action->allowed_options,
             .required_options = action->required_options,
             .blocking = action->blocking,
