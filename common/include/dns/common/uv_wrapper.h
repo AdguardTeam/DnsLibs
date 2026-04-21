@@ -80,7 +80,7 @@ public:
         delete weak_from_data(m_handle->data);
         m_handle->data = nullptr;
         if constexpr (std::is_same_v<std::remove_cvref_t<UvT>, uv_loop_t>) {
-            if (((uv_loop_t *) m_handle)->time != 0) {
+            if (((uv_loop_t *) m_handle)->internal_fields != nullptr) {
                 uv_loop_close((uv_loop_t *) m_handle);
             }
             delete m_handle;
