@@ -13,6 +13,7 @@ find_package(ldns REQUIRED)
 set(SRCS
         sys.cpp
         event_loop.cpp
+        url_utils.cpp
 )
 
 add_library(dnslibs_common STATIC EXCLUDE_FROM_ALL ${SRCS})
