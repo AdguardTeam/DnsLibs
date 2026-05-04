@@ -12,6 +12,7 @@
 #include "common/socket_address.h"
 #include "dns/common/dns_defs.h"
 #include "dns/common/event_loop.h"
+#include "dns/common/url_utils.h"
 #include "dns/upstream/upstream.h"
 
 namespace ag::dns {
@@ -106,7 +107,7 @@ public:
             , m_max_connections(max_connections)
             , m_loop(loop)
             , m_upstream(ups) {
-        m_address_str = ups->options().address;
+        m_address_str = mask_password(ups->options().address);
         tracelog(m_log, "{} Created", m_address_str);
     };
     virtual ~ConnectionPoolBase() {
