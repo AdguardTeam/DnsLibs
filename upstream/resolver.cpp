@@ -2,6 +2,7 @@
 #include <magic_enum/magic_enum.hpp>
 
 #include "common/net_utils.h"
+#include "dns/common/url_utils.h"
 #include "dns/dnsstamp/dns_stamp.h"
 
 #include "resolver.h"
@@ -95,7 +96,7 @@ static std::string get_server_address(const Logger &log, std::string_view addres
 }
 
 Resolver::Resolver(UpstreamOptions options, UpstreamFactoryConfig upstream_factory_config)
-        : m_log(AG_FMT("Resolver {}", options.address))
+        : m_log(AG_FMT("Resolver {}", mask_password(options.address)))
         , m_upstream_factory_config(upstream_factory_config)
         , m_upstream_options(std::move(options)) {
     m_upstream_options.address = get_server_address(m_log, m_upstream_options.address);

@@ -2,6 +2,7 @@
 #include <net/if.h>
 
 #include "common/logger.h"
+#include "dns/common/url_utils.h"
 #include "upstream_system.h"
 
 #ifdef __ANDROID__
@@ -40,7 +41,7 @@ static ldns_rr *create_soa_for_system_response(const ldns_pkt *request) {
 
 SystemUpstream::SystemUpstream(const UpstreamOptions &opts, const UpstreamFactoryConfig &config)
         : Upstream(opts, config)
-        , m_log(AG_FMT("System upstream ({})", opts.address)) {
+        , m_log(AG_FMT("System upstream ({})", mask_password(opts.address))) {
     const auto POS = opts.address.find("://");
     if (POS != std::string::npos) {
         m_interface = opts.address.substr(POS + 3);

@@ -1,6 +1,7 @@
 #include "upstream_plain.h"
 #include "common/net_utils.h"
 #include "common/utils.h"
+#include "dns/common/url_utils.h"
 #include "dns/net/aio_socket.h"
 #include "dns/net/utils.h"
 
@@ -10,7 +11,7 @@ namespace ag::dns {
 
 PlainUpstream::PlainUpstream(const UpstreamOptions &opts, const UpstreamFactoryConfig &config)
         : Upstream(opts, config)
-        , m_log(AG_FMT("Plain upstream ({})", opts.address))
+        , m_log(AG_FMT("Plain upstream ({})", mask_password(opts.address)))
         , m_prefer_tcp{false}
         , m_prefer_udp{false}
         , m_shutdown_guard(std::make_shared<bool>(true)) {
