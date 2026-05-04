@@ -57,3 +57,4 @@ link_libraries(dnslibs_common)
 set(TEST_DIR ${CMAKE_CURRENT_SOURCE_DIR}/test)
 
 add_unit_test(test_event_loop ${TEST_DIR} . TRUE TRUE)
+add_unit_test(test_url_utils ${TEST_DIR} . TRUE TRUE)
