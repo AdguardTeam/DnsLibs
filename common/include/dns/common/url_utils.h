@@ -8,7 +8,7 @@ namespace ag::dns {
 /**
  * Mask the password in a URL string for safe logging.
  * E.g. "https://user:secret@host/path" -> "https://user:***@host/path"
- * If there is no password in the URL, returns the input unchanged (as std::string).
+ * If there is no password in the URL, returns the input unchanged.
  */
 std::string mask_password(std::string_view url);
 
