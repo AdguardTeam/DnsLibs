@@ -45,6 +45,11 @@ TEST(UrlUtils, AtInPath) {
     EXPECT_EQ("https://host/path@something", mask_password("https://host/path@something"));
 }
 
+TEST(UrlUtils, CredentialsInPath) {
+    // user:pass@bar after path slash — not authority credentials
+    EXPECT_EQ("https://host/user:pass@bar", mask_password("https://host/user:pass@bar"));
+}
+
 TEST(UrlUtils, UsernameOnlyNoColon) {
     // Only username without ':' separator — no password to mask
     EXPECT_EQ("https://user@host/path", mask_password("https://user@host/path"));

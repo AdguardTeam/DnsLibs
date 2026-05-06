@@ -107,11 +107,11 @@ public:
             , m_max_connections(max_connections)
             , m_loop(loop)
             , m_upstream(ups) {
-        m_address_str = mask_password(ups->options().address);
-        tracelog(m_log, "{} Created", m_address_str);
+        m_address_str = ups->options().address;
+        tracelog(m_log, "{} Created", mask_password(m_address_str));
     };
     virtual ~ConnectionPoolBase() {
-        tracelog(m_log, "{} Destroyed", m_address_str);
+        tracelog(m_log, "{} Destroyed", mask_password(m_address_str));
     }
 
     /**

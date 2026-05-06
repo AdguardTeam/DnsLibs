@@ -68,9 +68,9 @@ public:
     void on_close(Error<DnsError> dns_error);
     std::string address_str() {
         if (const auto *saddr = std::get_if<SocketAddress>(&m_address); saddr && saddr->valid()) {
-            return AG_FMT("{}({})", m_address_str, saddr->str());
+            return AG_FMT("{}({})", mask_password(m_address_str), saddr->str());
         }
-        return AG_FMT("{}()", m_address_str);
+        return AG_FMT("{}()", mask_password(m_address_str));
     }
 
     auto ensure_connected(Request *request) {
