@@ -335,7 +335,13 @@ ag::Error<ag::dns::Upstream::InitError> ag::dns::DohUpstream::init() {
         m_request_template.headers().put("Authorization", AG_FMT("Basic {}", creds_base64));
     }
     m_path = m_url.get_pathname();
-    log_upstream(dbg, this, "Prepared request template: {}", m_request_template);
+    if (g_logger.is_enabled(ag::LOG_LEVEL_DEBUG)) {
+        http::Request log_request = m_request_template;
+        if (log_request.headers().contains("Authorization")) {
+            log_request.headers().put("Authorization", "Basic ***");
+        }
+        log_upstream(dbg, this, "Prepared request template: {}", log_request);
+    }
 
     return {};
 }
@@ -692,7 +698,13 @@ ag::Result<uint64_t, ag::dns::DnsError> ag::dns::DohUpstream::send_request(const
             encode_to_base64(
                     {ldns_buffer_at(buffer.get(), 0), ldns_buffer_position(buffer.get())}, /*url_safe*/ true)));
 
-    log_query(trace, m_http_conn, ldns_pkt_id(query), "Sending request: {}", request);
+    if (g_logger.is_enabled(ag::LOG_LEVEL_TRACE)) {
+        http::Request log_request = request;
+        if (log_request.headers().contains("Authorization")) {
+            log_request.headers().put("Authorization", "Basic ***");
+        }
+        log_query(trace, m_http_conn, ldns_pkt_id(query), "Sending request: {}", log_request);
+    }
 
     Result stream_id = m_http_conn->submit_request(request);
     if (stream_id.has_error()) {
