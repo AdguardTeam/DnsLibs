@@ -1,0 +1,331 @@
+name: Build library and run tests
+
+on:
+  push:
+    branches:
+      - master
+      - 'stable-*'
+      - 'dev-*'
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  linux-build:
+    name: Linux build and tests
+    if: github.repository == 'AdGuardSoftwareLimited/dns-libs'
+    runs-on:
+      - ephemeral
+      - ephemeral-linux
+      - registry.int.agrd.dev/linux/corelibs-builder:20260501-2313
+      - ephemeral-limit-memory-12288
+      - ephemeral-limit-cpu-6
+    container:
+      image: adguard/core-libs:2.9
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Lint C++
+        run: |
+          set -e
+          set -x
+
+          LLVM_MAJOR_VER="$(
+            for d in /usr/lib/llvm-*; do
+              v="${d##*/llvm-}"
+              case "$v" in
+                (*[!0-9]*|'') : ;;
+                (*) echo "$v" ;;
+              esac
+            done | sort -n | tail -1
+          )"
+          apt install -y "clang-format-$LLVM_MAJOR_VER" "clang-tidy-$LLVM_MAJOR_VER" "clangd-$LLVM_MAJOR_VER"
+
+          python3 -m pip install conan --upgrade
+          conan remote add --index 0 art ${{ vars.CONAN_REPO_URL }} || true
+
+          make lint-cpp
+          rm -rf build
+
+      - name: Build and run tests with sanitizer
+        run: |
+          set -e
+          set -x
+
+          conan remote add --index 0 art ${{ vars.CONAN_REPO_URL }} || true
+
+          mkdir -p build
+          cd build
+          export LDFLAGS=-fuse-ld=lld
+          export ASAN_OPTIONS=detect_container_overflow=0
+          cmake -DCMAKE_BUILD_TYPE=Debug -GNinja \
+              -DCMAKE_C_COMPILER=clang \
+              -DCMAKE_CXX_COMPILER=clang++ \
+              -DCMAKE_CXX_FLAGS='-stdlib=libc++' \
+              -DSANITIZE=yes \
+              ..
+          ninja tests
+          ctest -D ExperimentalTest --no-compress-output
+
+      - name: Upload test results
+        uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: test-results-linux
+          path: '**/Testing/*/*.xml'
+
+      - name: Upload to Conan and cleanup
+        if: always()
+        run: |
+          conan remote login art "${{ secrets.ARTIFACTORY_USER }}" --password "${{ secrets.ARTIFACTORY_API_KEY }}" || true
+          conan upload -r art -c "*" 2>&1 | grep "Uploading" || true
+          echo "conan upload finished"
+          conan remove -c "*" || true
+          conan cache clean || true
+
+  mac-build:
+    name: Apple framework build
+    if: github.repository == 'AdGuardSoftwareLimited/dns-libs'
+    runs-on:
+      - ephemeral
+      - ephemeral-mac
+      - ${{ vars.BUILD_IMAGE_VERSION_MACOS }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Build xcframework
+        run: |
+          set -e
+          set -x
+
+          rm -rf venv
+          python3 -m venv venv
+          source ./venv/bin/activate
+
+          python3 -m pip install conan
+          conan remote add --index 0 art ${{ vars.CONAN_REPO_URL }} || true
+
+          export DNS_LIBS_DIR="${PWD}"
+          cd platform/mac
+          mkdir -p build
+          cd build
+          export SRCROOT="${PWD}"
+
+          ../framework/build_dnsproxy_framework.sh --os all
+          deactivate
+
+      - name: Package xcframework
+        id: pkg
+        run: |
+          set -e
+          set -x
+
+          VER="$(sed -ne 's/^ *VERSION \(.*\)/\1/p' platform/mac/framework/CMakeLists.txt)"
+          ARCH_NAME="AGDnsProxy-apple-${VER}.zip"
+
+          cd platform/mac/build/framework
+          echo "#${VER}" > CHANGELOG
+          cp "${GITHUB_WORKSPACE}/LICENSE.md" LICENSE
+          zip -4yr "${ARCH_NAME}" AGDnsProxy.xcframework AGDnsProxy.dSYMs CHANGELOG LICENSE
+
+          echo "version=${VER}" >> "$GITHUB_OUTPUT"
+          echo "archive=${PWD}/${ARCH_NAME}" >> "$GITHUB_OUTPUT"
+          echo "archive_name=${ARCH_NAME}" >> "$GITHUB_OUTPUT"
+
+      - name: Upload xcframework artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: apple-xcframework
+          path: ${{ steps.pkg.outputs.archive }}
+          if-no-files-found: error
+
+      - name: Upload to Conan and cleanup
+        if: always()
+        run: |
+          source ./venv/bin/activate
+          conan remote login art "${{ secrets.ARTIFACTORY_USER }}" --password "${{ secrets.ARTIFACTORY_API_KEY }}" || true
+          conan upload -r art -c "*" 2>&1 | grep "Uploading" || true
+          echo "conan upload finished"
+          conan remove -c "*" || true
+          conan cache clean || true
+
+  android-build:
+    name: Android library build
+    if: github.repository == 'AdGuardSoftwareLimited/dns-libs'
+    runs-on:
+      - ephemeral
+      - ephemeral-linux
+      - registry.int.agrd.dev/linux/corelibs-builder:20260501-2313
+      - ephemeral-limit-memory-8192
+      - ephemeral-limit-cpu-6
+      - ephemeral-limit-disk-gb-70
+    container:
+      image: adguard/core-libs:2.9
+    env:
+      M2_LOCAL_REPO: ${{ github.workspace }}/.m2/repository
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Build AAR and publish to local Maven
+        working-directory: platform/android/dnsproxy
+        run: |
+          set -e
+          set -x
+
+          python3 -m pip install conan --upgrade
+          conan remote add --index 0 art ${{ vars.CONAN_REPO_URL }} || true
+
+          touch local.properties
+          CMAKE_DIR=$(dirname $(dirname $(which cmake)))
+          echo cmake.dir=$CMAKE_DIR >> local.properties
+
+          ./gradlew :lib:assembleRelease publishToMavenLocal \
+              -Dmaven.repo.local="$M2_LOCAL_REPO"
+
+          find "$M2_LOCAL_REPO" -name 'maven-metadata-local.xml' -delete
+
+      - name: Upload Android artifactory payload
+        uses: actions/upload-artifact@v7
+        with:
+          name: android-artifactory-payload
+          path: ${{ env.M2_LOCAL_REPO }}
+          if-no-files-found: error
+
+      - name: Upload to Conan and cleanup
+        if: always()
+        run: |
+          conan remote login art "${{ secrets.ARTIFACTORY_USER }}" --password "${{ secrets.ARTIFACTORY_API_KEY }}" || true
+          conan upload -r art -c "*" 2>&1 | grep "Uploading" || true
+          echo "conan upload finished"
+          conan remove -c "*" || true
+          conan cache clean || true
+
+  windows-build:
+    name: Windows build, tests and nuget pack
+    if: github.repository == 'AdGuardSoftwareLimited/dns-libs'
+    runs-on:
+      - ephemeral
+      - ephemeral-windows
+      - registry.int.agrd.dev/windows/windows11-github-msvc2022:20260505-1859
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Build C and C# library and run tests
+        shell: powershell
+        run: |
+          $ErrorActionPreference = 'Stop'
+
+          & conan remote add --index 0 art ${{ vars.CONAN_REPO_URL }}
+
+          # Save vcvars to switch between them
+          $vcvars32 = cmd /c "vcvarsamd64_x86 & set"
+          $vcvars64 = cmd /c "vcvars64 & set"
+          $vcvarsarm64 = cmd /c "vcvarsamd64_arm64 & set"
+          function setvar($_) {
+            if ($_ -match "=") {
+              $v = $_.split("="); set-item -force -path "ENV:\$($v[0])"  -value "$($v[1])"
+            }
+          }
+
+          cd platform/windows/capi
+          & {
+            $vcvars32 | foreach { setvar $_ }
+            mkdir build
+            pushd build
+            & cmake -DCMAKE_BUILD_TYPE=RelWithDebInfo `
+              -DCMAKE_USE_OPENSSL=ON `
+              -DCMAKE_C_COMPILER="cl.exe" `
+              -DCMAKE_CXX_COMPILER="cl.exe" `
+              -G Ninja ..
+            if (!$?) { exit 1 }
+            & ninja AdguardDns
+            if (!$?) { exit 1 }
+            & ninja tests
+            if (!$?) { exit 1 }
+            & ctest -D ExperimentalTest --no-compress-output
+            if (!$?) { exit 1 }
+            popd
+          }
+          & {
+            $vcvars64 | foreach { setvar $_ }
+            mkdir build64
+            pushd build64
+            & cmake -DCMAKE_BUILD_TYPE=RelWithDebInfo `
+              -DCMAKE_USE_OPENSSL=ON `
+              -DCMAKE_C_COMPILER="cl.exe" `
+              -DCMAKE_CXX_COMPILER="cl.exe" `
+              -G Ninja ..
+            if (!$?) { exit 1 }
+            & ninja AdguardDns64
+            if (!$?) { exit 1 }
+            popd
+          }
+          & {
+            $vcvarsarm64 | foreach { setvar $_ }
+            mkdir buildarm64
+            pushd buildarm64
+            & cmake -DCMAKE_BUILD_TYPE=RelWithDebInfo `
+              -DCMAKE_USE_OPENSSL=ON `
+              -DCMAKE_C_COMPILER="cl.exe" `
+              -DCMAKE_CXX_COMPILER="cl.exe" `
+              -DCMAKE_SYSTEM_NAME=Windows `
+              -DCMAKE_SYSTEM_PROCESSOR=ARM64 `
+              -G Ninja ..
+            if (!$?) { exit 1 }
+            & ninja AdguardDnsArm64
+            if (!$?) { exit 1 }
+            popd
+          }
+
+          cd ../cs/Adguard.Dns
+          Remove-Item *.nupkg -Force -ErrorAction SilentlyContinue
+          & nuget sources add -Name Artifactory -Source "${{ vars.NUGET_REPO_URL }}"
+          if (!$?) { exit 1 }
+          ${Env:NUGET_PACKAGES}="$(pwd)/packages"
+          & nuget restore
+          if (!$?) { exit 1 }
+
+          # Skip strong name verification
+          & sn -Vr *
+          if (!$?) { exit 1 }
+          # Run C# tests
+          & msbuild Adguard.Dns.Tests /t:Build /t:Test /p:Configuration=Release /p:Platform=AnyCPU
+          if (!$?) { exit 1 }
+          # Build the NuGet package
+          & nuget pack Adguard.Dns -p Configuration=Release -p Platform=AnyCPU
+          if (!$?) { exit 1 }
+
+      - name: Upload C++ test results
+        uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: test-results-windows
+          path: '**/Testing/*/*.xml'
+
+      - name: Upload C# test results
+        uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: test-results-windows-cs
+          path: '**/Adguard.Dns.Tests/TestResult.xml'
+
+      - name: Upload nuget package
+        uses: actions/upload-artifact@v7
+        with:
+          name: windows-nupkg
+          path: platform/windows/cs/Adguard.Dns/*.nupkg
+          if-no-files-found: error
+
+      - name: Upload to Conan and cleanup
+        if: always()
+        shell: powershell
+        run: |
+          $ErrorActionPreference = 'Continue'
+          & conan remote login art "${{ secrets.ARTIFACTORY_USER }}" --password "${{ secrets.ARTIFACTORY_API_KEY }}"
+          & conan upload -r art -c "*" 2>&1 | Select-String "Uploading" -SimpleMatch
+          Write-Host "conan upload finished with status $LASTEXITCODE"
+          & conan remove -c "*"
+          & conan cache clean
