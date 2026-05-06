@@ -105,8 +105,7 @@ Resolver::Resolver(UpstreamOptions options, UpstreamFactoryConfig upstream_facto
 
 Error<Resolver::ResolverError> Resolver::init() {
     if (m_upstream_options.address.empty()) {
-        constexpr std::string_view err = "Failed to get server address";
-        errlog(m_log, "{}", err);
+        log_ip(m_log, err, m_upstream_options.address, "Failed to get server address");
         return make_error(ResolverError::AE_INVALID_ADDRESS);
     }
 
