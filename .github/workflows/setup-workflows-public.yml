@@ -11,7 +11,7 @@ on:
 jobs:
   disable-private-workflows:
     name: Disable workflows with private uses
-    if: github.repository == 'AdguardTeam/NativeLibsCommon'
+    if: github.repository == 'AdguardTeam/DnsLibs'
     runs-on: ubuntu-latest
     permissions:
       actions: write
