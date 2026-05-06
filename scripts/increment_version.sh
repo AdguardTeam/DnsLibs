@@ -19,7 +19,7 @@ increment_version() {
 # Move to the repository root regardless of where the script is invoked from.
 cd "$(dirname "$0")/.."
 
-CURRENT_VERSION=$(grep "version =" platform/android/dnsproxy/lib/build.gradle \
+CURRENT_VERSION=$(grep "^version =" platform/android/dnsproxy/lib/build.gradle \
   | ${SED} -e "s/,.*//g" -e "s/.*://g" -e "s/[' ]//g")
 echo "Current version is ${CURRENT_VERSION}"
 
@@ -35,7 +35,7 @@ fi
 echo "New version is ${NEW_VERSION}"
 
 # Android version code is derived from build.gradle and is incremented by 1.
-CURRENT_VERSION_CODE=$(grep "version =" platform/android/dnsproxy/lib/build.gradle \
+CURRENT_VERSION_CODE=$(grep "^version =" platform/android/dnsproxy/lib/build.gradle \
   | ${SED} -e "s/.*code://" -e "s/]//g" -e "s/[ ]//g")
 echo "Current version code is ${CURRENT_VERSION_CODE}"
 NEW_VERSION_CODE=$((CURRENT_VERSION_CODE+1))
