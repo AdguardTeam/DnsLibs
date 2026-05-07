@@ -1,4 +1,5 @@
 #include <gtest/gtest.h>
+#include <fmt/format.h>
 #include <memory>
 #include <string>
 
@@ -70,5 +71,37 @@ static const DohCredentialTestParam doh_credential_test_cases[] = {
 };
 
 INSTANTIATE_TEST_SUITE_P(DohUpstreamParamTest, DohUpstreamParamTest, ::testing::ValuesIn(doh_credential_test_cases));
+
+TEST_P(DohUpstreamParamTest, AuthorizationHeaderMaskedInFormattedOutput) {
+    co_await m_loop->co_submit();
+
+    const auto &param = GetParam();
+
+    SocketFactory sf{{.loop = *m_loop}};
+    UpstreamFactory factory({.loop = *m_loop, .socket_factory = &sf});
+
+    UpstreamOptions options;
+    options.address = param.url;
+    options.bootstrap = {"8.8.8.8"};
+
+    auto upstream_res = factory.create_upstream(options);
+    ASSERT_FALSE(upstream_res.has_error()) << "Failed to create Upstream for " << param.url;
+
+    auto doh_upstream = std::dynamic_pointer_cast<DohUpstream>(upstream_res.value());
+    ASSERT_NE(doh_upstream, nullptr);
+
+    http::Request log_request = doh_upstream->get_request_template();
+    if (log_request.headers().contains("Authorization")) {
+        log_request.headers().remove("Authorization");
+        log_request.headers().put("Authorization", "Basic ***");
+    }
+
+    std::string formatted = fmt::format("{}", log_request);
+    std::string creds_fmt = AG_FMT("{}:{}", param.expected_username, param.expected_password);
+    auto creds_base64 = ag::encode_to_base64(as_u8v(creds_fmt), false);
+    EXPECT_EQ(formatted.find(creds_base64), std::string::npos)
+            << "Formatted request should not contain Base64 credentials";
+    EXPECT_NE(formatted.find("Basic ***"), std::string::npos) << "Formatted request should contain masked credentials";
+}
 
 } // namespace ag::dns::upstream::test
