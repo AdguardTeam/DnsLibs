@@ -141,8 +141,7 @@ static std::vector<SocketAddress> socket_address_from_reply(const Logger &log, l
 }
 
 coro::Task<Resolver::Result> Resolver::resolve(std::string_view host, int port, Millis timeout) const {
-    const std::string masked_address = mask_password(m_upstream_options.address);
-    log_ip(m_log, trace, masked_address, "Resolve {}:{}", host, port);
+    log_ip(m_log, trace, mask_password(m_upstream_options.address), "Resolve {}:{}", host, port);
     SocketAddress numeric_ip(host, port);
     if (numeric_ip.valid()) {
         co_return std::vector<SocketAddress>{numeric_ip};
@@ -160,12 +159,12 @@ coro::Task<Resolver::Result> Resolver::resolve(std::string_view host, int port, 
     UpstreamFactory upstream_factory{m_upstream_factory_config};
     UpstreamFactory::CreateResult factory_result = upstream_factory.create_upstream(m_upstream_options);
     if (factory_result.has_error()) {
-        log_ip(m_log, dbg, masked_address, "{}", factory_result.error()->str());
+        log_ip(m_log, dbg, mask_password(m_upstream_options.address), "{}", factory_result.error()->str());
         co_return make_error(ResolverError::AE_UPSTREAM_INIT_FAILED, factory_result.error());
     }
     UpstreamPtr &upstream = factory_result.value();
 
-    log_ip(m_log, trace, masked_address, "Trying to get A/AAAA records for {}", host);
+    log_ip(m_log, trace, mask_password(m_upstream_options.address), "Trying to get A/AAAA records for {}", host);
     ldns_pkt_ptr aaaa_req;
     if (upstream->config().ipv6_available) {
         aaaa_req = create_req(host, LDNS_RR_TYPE_AAAA);
@@ -183,7 +182,7 @@ coro::Task<Resolver::Result> Resolver::resolve(std::string_view host, int port, 
     Error<ResolverError> last_error{};
     for (auto &reply : replies) {
         if (reply.has_error()) {
-            log_ip(m_log, dbg, masked_address, "Failed to talk to upstream for host '{}' (elapsed:{}):\n{}", host,
+            log_ip(m_log, dbg, mask_password(m_upstream_options.address), "Failed to talk to upstream for host '{}' (elapsed:{}):\n{}", host,
                     timer.elapsed<Millis>(), reply.error()->str());
             last_error =
                     make_error(ResolverError::AE_EXCHANGE_FAILED, AG_FMT("Could not resolve {}", host), reply.error());
