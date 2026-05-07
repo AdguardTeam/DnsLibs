@@ -1,5 +1,5 @@
-#include <gtest/gtest.h>
 #include <fmt/format.h>
+#include <gtest/gtest.h>
 #include <memory>
 #include <string>
 

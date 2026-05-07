@@ -182,8 +182,9 @@ coro::Task<Resolver::Result> Resolver::resolve(std::string_view host, int port, 
     Error<ResolverError> last_error{};
     for (auto &reply : replies) {
         if (reply.has_error()) {
-            log_ip(m_log, dbg, mask_password(m_upstream_options.address), "Failed to talk to upstream for host '{}' (elapsed:{}):\n{}", host,
-                    timer.elapsed<Millis>(), reply.error()->str());
+            log_ip(m_log, dbg, mask_password(m_upstream_options.address),
+                    "Failed to talk to upstream for host '{}' (elapsed:{}):\n{}", host, timer.elapsed<Millis>(),
+                    reply.error()->str());
             last_error =
                     make_error(ResolverError::AE_EXCHANGE_FAILED, AG_FMT("Could not resolve {}", host), reply.error());
             continue;
