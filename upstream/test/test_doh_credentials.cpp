@@ -89,19 +89,17 @@ TEST_P(DohUpstreamParamTest, AuthorizationHeaderMaskedInFormattedOutput) {
 
     auto doh_upstream = std::dynamic_pointer_cast<DohUpstream>(upstream_res.value());
     ASSERT_NE(doh_upstream, nullptr);
+    ASSERT_TRUE(doh_upstream->get_request_template().headers().contains("Authorization"));
 
-    http::Request log_request = doh_upstream->get_request_template();
-    if (log_request.headers().contains("Authorization")) {
-        log_request.headers().remove("Authorization");
-        log_request.headers().put("Authorization", "Basic ***");
-    }
+    auto log_request = DohUpstream::mask_request_headers(doh_upstream->get_request_template());
 
     std::string formatted = fmt::format("{}", log_request);
     std::string creds_fmt = AG_FMT("{}:{}", param.expected_username, param.expected_password);
     auto creds_base64 = ag::encode_to_base64(as_u8v(creds_fmt), false);
     EXPECT_EQ(formatted.find(creds_base64), std::string::npos)
             << "Formatted request should not contain Base64 credentials";
-    EXPECT_NE(formatted.find("Basic ***"), std::string::npos) << "Formatted request should contain masked credentials";
+    EXPECT_NE(formatted.find("Authorization: ***"), std::string::npos)
+            << "Formatted request should contain masked credentials";
 }
 
 } // namespace ag::dns::upstream::test
