@@ -93,8 +93,7 @@ coro::Task<DnscryptUpstream::SetupResult> DnscryptUpstream::setup_impl() {
         if (dial_res.has_error()) {
             co_return {rtt,
                     make_error(DnsError::AE_HANDSHAKE_ERROR,
-                            AG_FMT("Failed to fetch certificate info from {}", m_options.address),
-                            dial_res.error())};
+                            AG_FMT("Failed to fetch certificate info from {}", m_options.address), dial_res.error())};
         }
         auto &[dial_server_info, dial_rtt] = *dial_res;
         m_impl = std::make_unique<Impl>(Impl{client, std::move(dial_server_info)});
