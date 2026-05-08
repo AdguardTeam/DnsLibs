@@ -1,0 +1,255 @@
+name: Deploy library
+
+on:
+  workflow_dispatch:
+
+permissions:
+  actions: read
+  contents: write
+  id-token: write
+
+jobs:
+  prepare:
+    name: Prepare release
+    if: github.repository == 'AdGuardSoftwareLimited/dns-libs'
+    runs-on: [team-corelibs]
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+      build_run_id: ${{ steps.build-run.outputs.run_id }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Extract version
+        id: version
+        run: |
+          VERSION=$(grep "[0-9]*\.[0-9]*\." conandata.yml | tail -1 | sed 's/\s*"//' | sed 's/":\s*//')
+          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+
+      - name: Find Build workflow run for this SHA
+        id: build-run
+        uses: actions/github-script@v8
+        with:
+          script: |
+            const { data } = await github.rest.actions.listWorkflowRuns({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              workflow_id: 'build.yml',
+              head_sha: context.sha,
+              status: 'success',
+              per_page: 1,
+            });
+            if (data.workflow_runs.length === 0) {
+              core.setFailed(`No successful Build library and run tests run found for ${context.sha}`);
+              return;
+            }
+            core.setOutput('run_id', data.workflow_runs[0].id);
+
+  tag:
+    name: Tag release
+    needs: prepare
+    uses: AdGuardSoftwareLimited/actions/.github/workflows/git-tag.yml@master
+    with:
+      runs-on: '["team-corelibs"]'
+      tag: v${{ needs.prepare.outputs.version }}
+      force: true
+    secrets: inherit
+    permissions:
+      contents: write
+      id-token: write
+
+  android-prepare-payload:
+    name: Deploy library / Android (prepare payload)
+    needs: [prepare, tag]
+    runs-on: [team-mobile]
+    steps:
+      - name: Download Android artifactory payload from Build run
+        uses: actions/download-artifact@v4
+        with:
+          name: android-artifactory-payload
+          path: artifactory-payload
+          run-id: ${{ needs.prepare.outputs.build_run_id }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Re-upload payload for deploy-to-artifactory workflow
+        uses: actions/upload-artifact@v7
+        with:
+          name: artifactory-payload
+          path: artifactory-payload
+          if-no-files-found: error
+
+  android-deploy:
+    name: Deploy library / Android
+    needs: android-prepare-payload
+    uses: AdGuardSoftwareLimited/actions/.github/workflows/deploy-to-artifactory.yml@master
+    with:
+      runs-on: '["team-mobile"]'
+      environment: android-artifactory
+    secrets: inherit
+
+  apple-deploy:
+    name: Deploy library / Apple
+    needs: [prepare, tag]
+    runs-on:
+      - ephemeral
+      - ephemeral-linux
+      - registry.int.agrd.dev/linux/corelibs-builder:20260501-2313
+    container:
+      image: adguard/core-libs:2.9
+    environment: apple-artifactory
+    permissions:
+      actions: read
+      contents: write
+      id-token: write
+    env:
+      VERSION: ${{ needs.prepare.outputs.version }}
+      PODS_BASE: ${{ vars.ARTIFACTORY_URL }}/artifactory/adguard-pods/binaries/AGDnsProxy
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Download Apple xcframework artifact from Build run
+        uses: actions/download-artifact@v4
+        with:
+          name: apple-xcframework
+          path: apple-payload
+          run-id: ${{ needs.prepare.outputs.build_run_id }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Generate podspec.json
+        run: |
+          set -e
+          ARCH_NAME="AGDnsProxy-apple-${VERSION}.zip"
+          cat > AGDnsProxy.podspec.json <<EOF
+          {
+            "name": "AGDnsProxy",
+            "version": "${VERSION}",
+            "summary": "Adguard DnsLibs",
+            "description": "Adguard DNS libraries",
+            "homepage": "https://github.com/AdguardTeam/DnsLibs",
+            "license": {
+              "type": "Apache 2.0",
+              "file": "LICENSE"
+            },
+            "authors": {
+              "Adguard Software Ltd": "devteam@adguard.com"
+            },
+            "platforms": {
+              "osx": "10.13",
+              "ios": "11.2"
+            },
+            "source": {
+              "http": "${PODS_BASE}/${ARCH_NAME}"
+            },
+            "preserve_paths": ["AGDnsProxy.xcframework"],
+            "vendored_frameworks": "AGDnsProxy.xcframework",
+            "xcconfig": {
+              "LD_RUNPATH_SEARCH_PATHS": "@loader_path/../Frameworks"
+            },
+            "requires_arc": true
+          }
+          EOF
+
+      - name: Upload xcframework zip and podspec to Artifactory
+        env:
+          ARTIFACTORY_USER: ${{ secrets.ARTIFACTORY_USER }}
+          ARTIFACTORY_PASSWORD: ${{ secrets.ARTIFACTORY_PASSWORD }}
+        run: |
+          set -e
+          set -x
+          ARCH_NAME="AGDnsProxy-apple-${VERSION}.zip"
+
+          curl -fsSL -u"${ARTIFACTORY_USER}:${ARTIFACTORY_PASSWORD}" \
+            -X PUT "${PODS_BASE}/${ARCH_NAME}" \
+            -T "apple-payload/${ARCH_NAME}"
+
+          curl -fsSL -u"${ARTIFACTORY_USER}:${ARTIFACTORY_PASSWORD}" \
+            -X PUT "${PODS_BASE}/${VERSION}/AGDnsProxy.podspec.json" \
+            -T AGDnsProxy.podspec.json
+
+      - name: Compute zip checksum
+        id: checksum
+        run: |
+          set -e
+          ARCH_NAME="AGDnsProxy-apple-${VERSION}.zip"
+          if command -v swift >/dev/null 2>&1; then
+            CHECKSUM=$(swift package compute-checksum "apple-payload/${ARCH_NAME}")
+          else
+            CHECKSUM=$(sha256sum "apple-payload/${ARCH_NAME}" | awk '{print $1}')
+          fi
+          echo "checksum=${CHECKSUM}" >> "$GITHUB_OUTPUT"
+
+      - name: Push SwiftPM tag
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ARCH_NAME: AGDnsProxy-apple-${{ needs.prepare.outputs.version }}.zip
+          CHECKSUM: ${{ steps.checksum.outputs.checksum }}
+          SPM_TAG: v${{ needs.prepare.outputs.version }}@swift-6
+        run: |
+          set -e
+          set -x
+
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@adguard.com"
+
+          WORK=$(mktemp -d)
+          cd "$WORK"
+          git init -q
+          git remote add origin "https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
+          git checkout --orphan swiftpm
+
+          cat > Package.swift <<EOF
+          // swift-tools-version:5.9
+          import PackageDescription
+
+          let package = Package(
+            name: "AGDnsProxy",
+            platforms: [
+              .iOS("11.2"), .macOS("10.13")
+            ],
+            products: [
+              .library(name: "AGDnsProxy", targets: ["AGDnsProxy"]),
+            ],
+            targets: [
+              .binaryTarget(
+                name: "AGDnsProxy",
+                url: "${PODS_BASE}/${ARCH_NAME}",
+                checksum: "${CHECKSUM}"
+              ),
+            ]
+          )
+          EOF
+
+          git add Package.swift
+          git commit -m "AGDnsProxy ${VERSION} for SwiftPM"
+          git tag -f "$SPM_TAG"
+          git push -f origin "refs/tags/$SPM_TAG"
+
+  windows-deploy:
+    name: Deploy library / Windows
+    needs: [prepare, tag]
+    runs-on:
+      - ephemeral
+      - ephemeral-windows
+      - registry.int.agrd.dev/windows/windows11-github-msvc2022:20260505-1859
+    environment: windows-artifactory
+    steps:
+      - name: Download nuget package from Build run
+        uses: actions/download-artifact@v4
+        with:
+          name: windows-nupkg
+          path: nupkg
+          run-id: ${{ needs.prepare.outputs.build_run_id }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Push nuget package to Artifactory
+        shell: powershell
+        run: |
+          $ErrorActionPreference = 'Stop'
+          Get-ChildItem -Path nupkg -Filter *.nupkg -Recurse | ForEach-Object {
+            & nuget push $_.FullName `
+              -Source "${{ vars.NUGET_REPO_URL }}" `
+              -ApiKey "${{ secrets.ARTIFACTORY_API_KEY }}" `
+              -SkipDuplicate
+            if (!$?) { exit 1 }
+          }

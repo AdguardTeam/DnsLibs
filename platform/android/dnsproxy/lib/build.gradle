@@ -1,11 +1,18 @@
 apply plugin: 'com.android.library'
+apply plugin: 'maven-publish'
 
-version = [name: '2.8.47', code: 682]
+version = [name: '2.8.51', code: 686]
 
 android {
     namespace 'com.adguard.dnslibs'
     ndkVersion '28.1.13356709'
     compileSdk 34
+
+    publishing {
+        singleVariant('release') {
+            withSourcesJar()
+        }
+    }
 
     buildFeatures {
         buildConfig true
@@ -67,4 +74,17 @@ dependencies {
     androidTestImplementation libs.espresso.core
     androidTestImplementation libs.dnsjava
     androidTestImplementation libs.rules
+}
+
+afterEvaluate {
+    publishing {
+        publications {
+            release(MavenPublication) {
+                from components.release
+                groupId = 'com.adguard.corelibs'
+                artifactId = 'dns-libs'
+                version = project.version.name
+            }
+        }
+    }
 }

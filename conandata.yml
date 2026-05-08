@@ -645,3 +645,11 @@ commit_hash:
     hash: "da044d22d44bd77171647e31e394af3774f5a0cf"
   "2.8.47":
     hash: "24259440227b0e57f29664d92f6c8aefce546710"
+  "2.8.48":
+    hash: "88e367fabcb286cab037e9705f1201ad72b9d6da"
+  "2.8.49":
+    hash: "d49ba9359311333e3be6aa3ad899cc5eca98ab26"
+  "2.8.50":
+    hash: "b51a4c32527a2d8e7f72153ef068f9d8ef7cbdf3"
+  "2.8.51":
+    hash: "34bc763c34b89fd838e18a107f2f1d30b9110c96"
