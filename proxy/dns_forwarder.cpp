@@ -8,6 +8,7 @@
 #include "common/error.h"
 #include "common/parallel.h"
 #include "common/utils.h"
+#include "dns/common/url_utils.h"
 #include "dns/net/application_verifier.h"
 #include "dns/net/default_verifier.h"
 #include "dns/proxy/dnsproxy.h"
@@ -377,7 +378,7 @@ Error<DnsProxyInitError> DnsForwarder::init(EventLoopPtr loop, const DnsProxySet
     m_upstreams.reserve(settings.upstreams.size());
     m_fallbacks.reserve(settings.fallbacks.size());
     for (const UpstreamOptions &options : settings.upstreams) {
-        infolog(m_log, "Initializing upstream {}...", options.address);
+        infolog(m_log, "Initializing upstream {}...", mask_password(options.address));
 #ifdef __APPLE__
 #if TARGET_OS_IPHONE && defined _BUILDING_DNSPROXY_FRAMEWORK
         if (std::holds_alternative<std::monostate>(options.outbound_interface)) {
@@ -395,7 +396,7 @@ Error<DnsProxyInitError> DnsForwarder::init(EventLoopPtr loop, const DnsProxySet
         }
     }
     for (const UpstreamOptions &options : settings.fallbacks) {
-        infolog(m_log, "Initializing fallback upstream {}...", options.address);
+        infolog(m_log, "Initializing fallback upstream {}...", mask_password(options.address));
         auto upstream_result = us_factory.create_upstream(options);
         if (upstream_result.has_error()) {
             errlog(m_log, "Failed to create fallback upstream: {}", upstream_result.error()->str());
@@ -682,7 +683,7 @@ coro::Task<DnsForwarder::HandleMessageResult> DnsForwarder::handle_message_inter
     ctx.response = std::move(response.value());
     log_packet(m_log, ctx.response.get(),
             AG_FMT("{} ({}) response", event.cache_hit ? "Cached" : "Upstream",
-                    selected_upstream ? selected_upstream->options().address : "<transparent>")
+                    selected_upstream ? mask_password(selected_upstream->options().address) : "<transparent>")
                     .c_str());
 
     // The response should be cached before it is modified by filters and/or settings.
@@ -998,7 +999,7 @@ coro::Task<ldns_pkt_ptr> DnsForwarder::apply_filter(FilterContext &ctx) {
 coro::Task<UpstreamExchangeResult> DnsForwarder::do_upstream_exchange(
         Upstream *upstream, const ldns_pkt *request, const DnsMessageInfo *info, Millis error_rtt) {
     tracelog_id(m_log, request, "Upstream [{}] ({}) exchange starting", upstream->options().id,
-            upstream->options().address);
+            mask_password(upstream->options().address));
     std::weak_ptr<bool> guard = m_shutdown_guard;
     ag::utils::Timer timer;
     auto result = co_await upstream->exchange(request, info);
@@ -1006,8 +1007,8 @@ coro::Task<UpstreamExchangeResult> DnsForwarder::do_upstream_exchange(
     if (guard.expired()) {
         co_return {make_error(DnsError::AE_SHUTTING_DOWN), nullptr};
     }
-    tracelog_id(
-            m_log, request, "Upstream [{}] ({}) exchange done", upstream->options().id, upstream->options().address);
+    tracelog_id(m_log, request, "Upstream [{}] ({}) exchange done", upstream->options().id,
+            mask_password(upstream->options().address));
 
     // They say it's normal for a server to close connection unexpectedly:
     // https://github.com/AdguardTeam/DnsLibs/issues/86
@@ -1016,7 +1017,7 @@ coro::Task<UpstreamExchangeResult> DnsForwarder::do_upstream_exchange(
             && (result.error()->value() == DnsError::AE_CONNECTION_CLOSED
                     || result.error()->value() == DnsError::AE_CURL_ERROR)) {
         tracelog_id(m_log, request, "Upstream [{}] ({}) exchange retry starting", upstream->options().id,
-                upstream->options().address);
+                mask_password(upstream->options().address));
         timer.reset();
         result = co_await upstream->exchange(request, info);
         elapsed = timer.elapsed<Millis>();
@@ -1024,12 +1025,12 @@ coro::Task<UpstreamExchangeResult> DnsForwarder::do_upstream_exchange(
             co_return {make_error(DnsError::AE_SHUTTING_DOWN), nullptr};
         }
         tracelog_id(m_log, request, "Upstream [{}] ({}) exchange retry done", upstream->options().id,
-                upstream->options().address);
+                mask_password(upstream->options().address));
     }
 
     if (result.has_error() && (result.error()->value() == DnsError::AE_TIMED_OUT)) {
         dbglog_id(m_log, request, "Upstream [{}] ({}) exchange timed out", upstream->options().id,
-                upstream->options().address);
+                mask_password(upstream->options().address));
     }
 
     if (result.has_error()) {
