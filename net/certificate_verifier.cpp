@@ -1,6 +1,8 @@
 #include <algorithm>
+#include <openssl/x509.h>
 #include <openssl/x509v3.h>
 
+#include "common/utils.h"
 #include "dns/net/certificate_verifier.h"
 
 namespace ag::dns {
@@ -11,7 +13,9 @@ std::optional<std::string> CertificateVerifier::verify_host_name(X509 *certifica
             || 1 == X509_check_ip_asc(certificate, std::string(host).c_str(), flags)) {
         return std::nullopt;
     }
-    return "Host name does not match certificate subject names";
+    char subject_buf[256] = {};
+    X509_NAME_oneline(X509_get_subject_name(certificate), subject_buf, sizeof(subject_buf));
+    return AG_FMT("Host name '{}' does not match certificate subject '{}'", host, subject_buf);
 }
 
 static std::optional<Uint8Array<SHA256_DIGEST_LENGTH>> get_cert_hash(X509 *certificate, bool is_public_key) {
