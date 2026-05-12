@@ -13,6 +13,7 @@
 #include <fmt/std.h>
 #include <magic_enum/magic_enum.hpp>
 #include <openssl/err.h>
+#include <openssl/x509.h>
 
 #ifdef OPENSSL_IS_BORINGSSL
 #include <ngtcp2/ngtcp2_crypto_boringssl.h>
@@ -1357,6 +1358,13 @@ int ag::dns::DohUpstream::Http3Connection::on_certificate_verify(X509_STORE_CTX 
     std::string_view hostname = upstream->m_url.get_hostname(); // was validated during initialization
     if (auto err = verifier->verify(ctx, hostname, upstream->m_fingerprints)) {
         log_hconn(warn, self, "Failed to verify certificate for '{}': {}", hostname, *err);
+        if (X509 *cert = X509_STORE_CTX_get0_cert(ctx)) {
+            char subject_buf[256] = {}, issuer_buf[256] = {};
+            X509_NAME_oneline(X509_get_subject_name(cert), subject_buf, sizeof(subject_buf));
+            X509_NAME_oneline(X509_get_issuer_name(cert), issuer_buf, sizeof(issuer_buf));
+            log_hconn(dbg, self, "  Subject: {}, Issuer: {}, Chain length: {}", subject_buf, issuer_buf,
+                    sk_X509_num(X509_STORE_CTX_get0_untrusted(ctx)));
+        }
         return 0;
     }
 
