@@ -1023,7 +1023,7 @@ using AGUniqueCFRef = UniquePtr<std::remove_pointer_t<T>, &CFRelease>;
 
     SecCertificateRef cert = convertCertificate(event->certificate);
     if (!cert) {
-        dbglog(log, "[Verification] Failed to create certificate object");
+        warnlog(log, "[Verification] Failed to create certificate object");
         return "Failed to create certificate object";
     }
     [trustArray addObject:(__bridge_transfer id) cert];
@@ -1031,7 +1031,7 @@ using AGUniqueCFRef = UniquePtr<std::remove_pointer_t<T>, &CFRelease>;
     for (const auto &chainCert : event->chain) {
         cert = convertCertificate(chainCert);
         if (!cert) {
-            dbglog(log, "[Verification] Failed to create certificate object");
+            warnlog(log, "[Verification] Failed to create certificate object");
             return "Failed to create certificate object";
         }
         [trustArray addObject:(__bridge_transfer id) cert];
@@ -1043,7 +1043,7 @@ using AGUniqueCFRef = UniquePtr<std::remove_pointer_t<T>, &CFRelease>;
 
     if (status != errSecSuccess) {
         std::string err = getTrustCreationErrorStr(status);
-        dbglog(log, "[Verification] Failed to create trust object from chain: {}", err);
+        warnlog(log, "[Verification] Failed to create trust object from chain: {}", err);
         return err;
     }
 
@@ -1084,7 +1084,7 @@ using AGUniqueCFRef = UniquePtr<std::remove_pointer_t<T>, &CFRelease>;
         break;
     }
 
-    dbglog(log, "[Verification] Failed to verify: {}", errStr);
+    warnlog(log, "[Verification] Failed to verify: {}", errStr);
     return errStr;
 }
 

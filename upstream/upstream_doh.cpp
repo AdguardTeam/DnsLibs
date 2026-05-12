@@ -1350,13 +1350,13 @@ int ag::dns::DohUpstream::Http3Connection::on_certificate_verify(X509_STORE_CTX 
 
     const CertificateVerifier *verifier = upstream->m_config.socket_factory->get_certificate_verifier();
     if (verifier == nullptr) {
-        log_hconn(dbg, self, "Cannot verify certificate due to verifier is not set");
+        log_hconn(warn, self, "Cannot verify certificate due to verifier is not set");
         return 0;
     }
 
     std::string_view hostname = upstream->m_url.get_hostname(); // was validated during initialization
     if (auto err = verifier->verify(ctx, hostname, upstream->m_fingerprints)) {
-        log_hconn(dbg, self, "Failed to verify certificate: {}", *err);
+        log_hconn(warn, self, "Failed to verify certificate for '{}': {}", hostname, *err);
         return 0;
     }
 

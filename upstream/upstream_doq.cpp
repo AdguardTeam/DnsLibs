@@ -1299,16 +1299,17 @@ int DoqUpstream::ssl_verify_callback(X509_STORE_CTX *ctx, void * /*arg*/) {
 
     const CertificateVerifier *verifier = doq->m_config.socket_factory->get_certificate_verifier();
     if (verifier == nullptr) {
-        dbglog(doq->m_log, "Cannot verify certificate due to verifier is not set");
+        warnlog(doq->m_log, "Cannot verify certificate for '{}' due to verifier is not set", doq->m_url.get_hostname());
         return 0;
     }
 
-    if (auto err = verifier->verify(ctx, doq->m_url.get_hostname(), doq->m_fingerprints)) {
-        dbglog(doq->m_log, "Failed to verify certificate: {}", *err);
+    std::string_view hostname = doq->m_url.get_hostname();
+    if (auto err = verifier->verify(ctx, hostname, doq->m_fingerprints)) {
+        warnlog(doq->m_log, "Failed to verify certificate for '{}': {}", hostname, *err);
         return 0;
     }
 
-    tracelog(doq->m_log, "Verified successfully");
+    tracelog(doq->m_log, "Verified successfully for '{}'", doq->m_url.get_hostname());
 
     return 1;
 }
