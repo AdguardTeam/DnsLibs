@@ -1307,13 +1307,7 @@ int DoqUpstream::ssl_verify_callback(X509_STORE_CTX *ctx, void * /*arg*/) {
     std::string_view hostname = doq->m_url.get_hostname();
     if (auto err = verifier->verify(ctx, hostname, doq->m_fingerprints)) {
         warnlog(doq->m_log, "Failed to verify certificate for '{}': {}", hostname, *err);
-        if (X509 *cert = X509_STORE_CTX_get0_cert(ctx)) {
-            char subject_buf[256] = {}, issuer_buf[256] = {};
-            X509_NAME_oneline(X509_get_subject_name(cert), subject_buf, sizeof(subject_buf));
-            X509_NAME_oneline(X509_get_issuer_name(cert), issuer_buf, sizeof(issuer_buf));
-            dbglog(doq->m_log, "  Subject: {}, Issuer: {}, Chain length: {}", subject_buf, issuer_buf,
-                    sk_X509_num(X509_STORE_CTX_get0_untrusted(ctx)));
-        }
+        dbglog(doq->m_log, "  {}", get_cert_diagnostic_info(ctx));
         return 0;
     }
 

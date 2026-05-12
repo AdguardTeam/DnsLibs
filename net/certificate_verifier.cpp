@@ -94,4 +94,16 @@ std::optional<std::string> CertificateVerifier::verify_fingerprints(
     return "Fingerprints doesn't match with any certificate in chain";
 }
 
+std::string get_cert_diagnostic_info(X509_STORE_CTX *ctx) {
+    X509 *cert = X509_STORE_CTX_get0_cert(ctx);
+    if (cert == nullptr) {
+        return {};
+    }
+    char subject_buf[256] = {}, issuer_buf[256] = {};
+    X509_NAME_oneline(X509_get_subject_name(cert), subject_buf, sizeof(subject_buf));
+    X509_NAME_oneline(X509_get_issuer_name(cert), issuer_buf, sizeof(issuer_buf));
+    return AG_FMT("Subject: {}, Issuer: {}, Chain length: {}", subject_buf, issuer_buf,
+            sk_X509_num(X509_STORE_CTX_get0_untrusted(ctx)));
+}
+
 } // namespace ag::dns
