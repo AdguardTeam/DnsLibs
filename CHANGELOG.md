@@ -16,6 +16,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Converted CHANGELOG.md to [Keep a Changelog](https://keepachangelog.com/) format.
 - Renamed `increment_version.sh` to `set_version.sh` with explicit version argument.
+- Optimized conan upload steps: removed cleanup since container will anyway be destroyed.
 
 ### Deleted
 
