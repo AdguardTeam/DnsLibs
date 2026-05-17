@@ -1,6 +1,27 @@
 # Changelog
 
-## 2.8.32
+All notable changes to this project will be documented in this file.
+
+The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
+and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+
+## [Unreleased]
+
+### Added
+
+- Added `autotag.yml` workflow for automatic tagging when a new version is added to CHANGELOG.
+- Added `create-release-pr.yml` workflow for manual release PR creation.
+
+### Changed
+
+- Converted CHANGELOG.md to [Keep a Changelog](https://keepachangelog.com/) format.
+- Renamed `increment_version.sh` to `set_version.sh` with explicit version argument.
+
+### Deleted
+
+- Removed `increment-version.yml` workflow that auto-incremented version on every commit.
+
+## [2.8.32] - 2026-02-27
 
 * [Feature] Added an example of a helper program that allows to automatically route DNS traffic
             to the DNS proxy on Windows. See `platform/windows/capi/README.md` for details.
