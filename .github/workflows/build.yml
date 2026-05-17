@@ -74,7 +74,7 @@ jobs:
           name: test-results-linux
           path: '**/Testing/*/*.xml'
 
-      - name: Upload to Conan and cleanup
+      - name: Upload to Conan
         if: always()
         run: |
           conan remote login art "${{ secrets.ARTIFACTORY_USER }}" --password "${{ secrets.ARTIFACTORY_API_KEY }}"
@@ -137,7 +137,7 @@ jobs:
           path: ${{ steps.pkg.outputs.archive }}
           if-no-files-found: error
 
-      - name: Upload to Conan and cleanup
+      - name: Upload to Conan
         if: always()
         run: |
           source ./venv/bin/activate
@@ -187,7 +187,7 @@ jobs:
           path: ${{ env.M2_LOCAL_REPO }}
           if-no-files-found: error
 
-      - name: Upload to Conan and cleanup
+      - name: Upload to Conan
         if: always()
         run: |
           conan remote login art "${{ secrets.ARTIFACTORY_USER }}" --password "${{ secrets.ARTIFACTORY_API_KEY }}"
@@ -310,7 +310,7 @@ jobs:
           path: platform/windows/cs/Adguard.Dns/*.nupkg
           if-no-files-found: error
 
-      - name: Upload to Conan and cleanup
+      - name: Upload to Conan
         if: always()
         shell: powershell
         run: |
