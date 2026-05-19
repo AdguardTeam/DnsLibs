@@ -28,6 +28,20 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Security
 
+## [2.8.52] - 2026-05-08
+
+### Changed
+
+- Updated project layout to be agent-friendly (added `AGENTS.md`).
+
+### Fixed
+
+- Fix `Uv`/`UvPtr` to handle RAII of uninitialized C uv handle.
+
+### Security
+
+- Mask upstream password in log messages to avoid leaking credentials in debug logs.
+
 ## [2.8.45] - 2026-03-25
 
 ### Fixed
@@ -272,7 +286,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - API change: allow in-memory filters. See `ag::dnsfilter::FilterParams`.
 - Optimistic DNS caching. See `ag::DnsProxySettings::optimistic_cache`.
 
-[Unreleased]: https://github.com/AdguardTeam/DnsLibs/compare/v2.8.45...HEAD
+[Unreleased]: https://github.com/AdguardTeam/DnsLibs/compare/v2.8.52...HEAD
+[2.8.52]: https://github.com/AdguardTeam/DnsLibs/compare/v2.8.45...v2.8.52
 [2.8.45]: https://github.com/AdguardTeam/DnsLibs/compare/v2.8.37...v2.8.45
 [2.8.37]: https://github.com/AdguardTeam/DnsLibs/compare/v2.8.19...v2.8.37
 [2.8.19]: https://github.com/AdguardTeam/DnsLibs/compare/v2.8.17...v2.8.19
