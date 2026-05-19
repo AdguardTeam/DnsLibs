@@ -17,16 +17,28 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - Renamed `increment_version.sh` to `set_version.sh` with explicit version argument.
 - Optimized conan upload steps: removed cleanup since container will anyway be destroyed.
 
-### Deleted
+### Deprecated
+
+### Removed
 
 - Removed `increment-version.yml` workflow that auto-incremented version on every commit.
 
-## [2.8.32] - 2026-02-27
+### Fixed
+
+### Security
+
+## [2.8.45] - 2026-03-25
+
+## Fixed
+
+- [AG-49394] Fix bugs in co_connect in upstream_dot
+
+## [2.8.37] - 2026-03-06
 
 * [Feature] Added an example of a helper program that allows to automatically route DNS traffic
             to the DNS proxy on Windows. See `platform/windows/capi/README.md` for details.
-  
-## 2.8.19
+
+## [2.8.19] - 2026-02-03
 
 * [Feature] Refactored `reapply_settings` to use `ReapplyOptions` enum.
     * Options: `RO_SETTINGS` (reload DNS settings except listeners and filters), `RO_FILTERS` (reload filters).
@@ -36,26 +48,20 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
     * [Apple] See `AGDnsProxyReapplyOptions` (`AGDnsProxyReapplyNone`, `AGDnsProxyReapplySettings`, `AGDnsProxyReapplyFilters`) and `AGDnsProxy.reapplySettings`.
     * [Windows C#] See `ag_dnsproxy_reapply_options` and `DnsProxyServer.ReapplySettings`.
 
-## 2.8.16
+## [2.8.17] - 2026-01-27
 
 * [Feature] Added `AGDnsAppProxyFlowManager` for Apple platforms to support DNS proxying via Network Extension App Proxy flows.
     * Needed to handle `NEAppProxyTCPFlow`/`NEAppProxyUDPFlow` modes (redirect/bypass/filter) and integrate them with `AGDnsProxy`.
     * See `documentation/DNS_PROXY_PROVIDER.md`.
 
-## 2.8.9
-
 * [Feature] Added TUN listener which properly handles TCP DNS packets.
     * [Android] See `DnsTunListener`
     * [Apple] See `AGDnsTunListener`
-
-## 2.8.7
 
 * [Feature] Added new function reapply_settings to update upstreams list without reloading filters.
     * [C API] See `ag_dnsproxy_reapply_settings`.
     * [Android] See `com.adguard.dnslibs.proxy.DnsProxy#reapplySettings`.
     * [Apple] See `AGDnsProxy.reapplySettings`.
-
-## 2.8.1
 
 * [Feature] Added `blocking_reason` field to `DnsRequestProcessedEvent` to indicate why a DNS request was blocked.
     * New enum `DnsBlockingReason` with values:
@@ -72,7 +78,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
     * [Apple] See `AGDnsBlockingReason` and `AGDnsRequestProcessedEvent.blockingReason`.
     * [Windows] See `ag_dns_blocking_reason` and `DnsRequestProcessedEventArgs.BlockingReason`.
 
-## V2.7
+## [2.7] - 2025-11-25
 
 * [Feature] Added support for post-quantum cryptography (ML-KEM-768).
     * The hybrid scheme X25519 + ML-KEM-768 is now supported for DNS-over-TLS, DNS-over-HTTPS, and DNS-over-QUIC protocols.
@@ -90,7 +96,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 * [Feature] Added socket protection callback to prevent routing loops when using system-wide proxy rules
 
-## V2.6
+## [2.6] - 2025-10-07
 
 * [Changed] For non-SDNS urls server properties is now null. It can be set later using `set_server_properties()`.
     * [C API] See `ag_dns_stamp`.
@@ -100,7 +106,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 * [Changed] A callback must now be set to enable logging on Android.
     * [Android] See `com.adguard.dnslibs.proxy.DnsProxy#setLoggingCallback`.
 
-## V2.5
+## [2.5] - 2025-02-06
 
 * [Changed] Default for option enable_servfail_on_upstreams_failure is changed to off. Please ensure that you use DnsLibs-provided defaults.
 
@@ -113,7 +119,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 * [Changed] Removed `ag::dns::OutboundProxySettings::ignore_if_unavailable`. Also removed the corresponding fields from platform-specific adapters.
 
-## V2.4
+## [2.4] - 2024-02-22
 
 * [Feature] Added an option to do transparent filtering. See `ag::dns::DnsMessageInfo::transparent` for details.
 
@@ -133,7 +139,7 @@ Example configurations:
   * `https://username:password@dns.google/dns-query`
   * `sdns://username:password@AgcAAAAAAAAABzEuMC4wLjEAEmRucy5jbG91ZGZsYXJlLmNvbQovZG5zLXF1ZXJ5`
 
-## V2.3
+## [2.3] - 2023-11-07
 
 * [Fixed] Localhost upstreams are now can be used even if outbound proxy is set.
 
@@ -147,7 +153,7 @@ Example configurations:
 * [Changed] Outbound network interface name is now a required property on iOS.
   * [Apple/iOS] See `AGDnsUpstream.outboundInterfaceName`.
 
-## V2.2
+## [2.2] - 2023-09-26
 
 * [Feature] Added a workaround for incompatibility between ECH features of CoreLibs and DnsLibs.
             The correct set-up expects an application creates an additional TCP listener with
@@ -183,7 +189,7 @@ Example configurations:
 * [Feature] Made the API more XPC-friendly (without breaking changes) and added
             some boilerplate to help setup the DNS proxy as an XPC endpoint.
 
-## V2.1
+## [2.1] - 2023-05-03
 
 * [Feature] Added an option to try HTTP/3 for DoH upstream connections.
   If enabled, HTTP/3 will be used for DoH if it's faster.
@@ -204,7 +210,7 @@ Example configurations:
   * [Apple] See `AGDnsProxyError`
   * [Android] See `ag_dnsproxy_init_result`
 
-## V2.0
+## [2.0] - 2023-01-17
 
 * [Feature] Add an option to strip Encrypted Client Hello parameters from responses, effectively blocking ECH.
   * [C API] See `ag_dnsproxy_settings::block_ech`
@@ -218,16 +224,17 @@ Example configurations:
 * [Feature] The DoQ upstream now uses the port 853 by default (was 8853), conforms to RFC-9250, and doesn't support ALPNs other than "doq".
             ACHTUNG: Some changes might be required on the application side due to the default port change?
 
-## V1.7.28
+## [1.7.28] - 2022-04-29
 
 * [Feature] Route resolver on Apple platforms is now can be enabled via `AGDnsProxySettings.enableRouteResolver`
 
-## V1.7.0
+## [1.7.0] - 2022-01-21
 
 * [Feature] In the settings returned by `dnsproxy::get_settings()`, listener settings now contain
   the actual port that each listener is listening on.
 
-## V1.6
+## [1.6] - 2021-09-22
+
 * [Feature] Add an ability to route DNS queries directly to a target host in case the configured
             proxy server is determined as unavailable. Mostly intended for Android.
     * [Android] See `OutboundProxySettings`
@@ -240,7 +247,8 @@ Example configurations:
     * WARNING: the `DEFAULT` blocking mode has been removed. The default blocking mode for both rule types
     is now obtained with `ag::DnsProxySettings::get_default()`/`DnsProxySettings.getDefault()`
       /`AGDnsProxyConfig.getDefault()`/`ag_dnsproxy_settings_get_default()`
-## V1.5
+## [1.5] - 2021-05-24
+
 * [Feature] Fallback-only domains. See `fallbackDomains` or `fallback_domains` in respective adapters.
     * This is a list of domains (limited wildcards allowed) that will be forwarded directly to the fallback upstreams (if they exist).
     * There's also an option to automatically append DNS search domains to this list, see `detectSearchDomains` (Android and Apple only, Windows adapter handles search domains on its own).
@@ -275,8 +283,28 @@ Example configurations:
           `com.adguard.dnsproxy.DnsStamp.getPrettierUrl()` (Android)
     * see `ag_dns_stamp::pretty_url`, `ag_dns_stamp::prettier_url` (C API)
 
-## V1.4
+## [1.4] - 2020-10-07
+
 * [Feature] API change: allow in-memory filters<p>
     see `ag::dnsfilter::FilterParams`
 * [Feature] Optimistic DNS caching<p>
     see `ag::DnsProxySettings::optimistic_cache`
+
+[Unreleased]: https://github.com/AdguardTeam/DnsLibs/compare/v2.8.45...HEAD
+[2.8.45]: https://github.com/AdguardTeam/DnsLibs/compare/v2.8.37...v2.8.45
+[2.8.37]: https://github.com/AdguardTeam/DnsLibs/compare/v2.8.19...v2.8.37
+[2.8.19]: https://github.com/AdguardTeam/DnsLibs/compare/v2.8.17...v2.8.19
+[2.8.17]: https://github.com/AdguardTeam/DnsLibs/compare/v2.7.12...v2.8.17
+[2.7]: https://github.com/AdguardTeam/DnsLibs/compare/v2.6.22...v2.7.12
+[2.6]: https://github.com/AdguardTeam/DnsLibs/compare/v2.5.63...v2.6.22
+[2.5]: https://github.com/AdguardTeam/DnsLibs/compare/v2.4.50...v2.5.63
+[2.4]: https://github.com/AdguardTeam/DnsLibs/compare/v2.3.8...v2.4.50
+[2.3]: https://github.com/AdguardTeam/DnsLibs/compare/v2.2.36...v2.3.8
+[2.2]: https://github.com/AdguardTeam/DnsLibs/compare/v2.1.44...v2.2.36
+[2.1]: https://github.com/AdguardTeam/DnsLibs/compare/v2.0.76...v2.1.44
+[2.0]: https://github.com/AdguardTeam/DnsLibs/compare/v1.7.43...v2.0.76
+[1.7.28]: https://github.com/AdguardTeam/DnsLibs/compare/v1.7.22...v1.7.28
+[1.7.0]: https://github.com/AdguardTeam/DnsLibs/compare/v1.6.72...v1.7.0
+[1.6]: https://github.com/AdguardTeam/DnsLibs/compare/v1.5.44...v1.6.72
+[1.5]: https://github.com/AdguardTeam/DnsLibs/compare/v1.4.33.1...v1.5.44
+[1.4]: https://github.com/AdguardTeam/DnsLibs/compare/v1.3.27...v1.4.33.1
