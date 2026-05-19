@@ -66,8 +66,7 @@ class DnsLibsConan(ConanFile):
     def source(self):
         self.run(f"git init . && git remote add origin {self.vcs_url} && git fetch")
         if re.match(r'\d+\.\d+\.\d+', self.version) is not None:
-            version_hash = self.conan_data["commit_hash"][self.version]["hash"]
-            self.run("git checkout -f %s" % version_hash)
+            self.run(f"git checkout -f v{self.version}")
         else:
             self.run("git checkout -f %s" % self.version)
             for p in self.patch_files:

@@ -22,6 +22,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ### Removed
 
 - Removed `increment-version.yml` workflow that auto-incremented version on every commit.
+- Removed `conandata.yml` since conan export is now tag-based, not revision-based.
 
 ### Fixed
 
