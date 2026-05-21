@@ -142,7 +142,6 @@ jobs:
       - ${{ vars.BUILD_IMAGE_VERSION_CORELIBS_BUILDER }}
       - ephemeral-limit-memory-8192
       - ephemeral-limit-cpu-6
-      - ephemeral-limit-disk-gb-70
     container:
       image: adguard/core-libs:2.10
     env:

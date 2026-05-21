@@ -46,8 +46,6 @@ ${SED} -i "s/VERSION ${CURRENT_VERSION//./,},0/VERSION ${NEW_VERSION//./,},0/" p
 ${SED} -i "s/\"ProductVersion\", \"${esc}/\"ProductVersion\", \"${NEW_VERSION}/" platform/windows/capi/src/ag_dns.rc
 ${SED} -i "s/Version(\"${esc}/Version(\"${NEW_VERSION}/" platform/windows/cs/Adguard.Dns/SolutionInfo.cs
 
-${SED} -i -e "3{/^## /b;s/^/## ${NEW_VERSION}\n\n/}" CHANGELOG.md
-
 # Append the new version entry to conandata.yml using the master HEAD hash.
 COMMIT_HASH=$(git rev-parse HEAD)
 echo "Commit hash for ${NEW_VERSION} is ${COMMIT_HASH}"
