@@ -50,7 +50,7 @@ jobs:
     needs: prepare
     uses: AdGuardSoftwareLimited/actions/.github/workflows/git-tag.yml@master
     with:
-      runs-on: '["team-corelibs"]'
+      team: corelibs
       tag: v${{ needs.prepare.outputs.version }}
       force: true
     secrets: inherit
@@ -83,7 +83,7 @@ jobs:
     needs: android-prepare-payload
     uses: AdGuardSoftwareLimited/actions/.github/workflows/deploy-to-artifactory.yml@master
     with:
-      runs-on: '["team-corelibs"]'
+      team: corelibs
       environment: android-artifactory
     secrets: inherit
 
