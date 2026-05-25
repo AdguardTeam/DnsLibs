@@ -1,6 +1,9 @@
 #!/bin/bash
-# Increments project version across all platform-specific files
+# Sets project version across all platform-specific files
 # and appends a new entry to conandata.yml.
+#
+# Usage: ./scripts/set_version.sh <VERSION>
+# Example: ./scripts/set_version.sh 1.2.3
 
 set -e
 
@@ -9,13 +12,6 @@ Darwin) SED=gsed ;;
 *) SED=sed ;;
 esac
 
-increment_version() {
-  major=${1%%.*}
-  minor=$(echo ${1#*.} | ${SED} -e "s/\.[0-9]*//")
-  revision=${1##*.}
-  echo ${major}.${minor}.$((revision+1))
-}
-
 # Move to the repository root regardless of where the script is invoked from.
 cd "$(dirname "$0")/.."
 
@@ -23,13 +19,13 @@ CURRENT_VERSION=$(grep "^version =" platform/android/dnsproxy/lib/build.gradle \
   | ${SED} -e "s/,.*//g" -e "s/.*://g" -e "s/[' ]//g")
 echo "Current version is ${CURRENT_VERSION}"
 
-argument_version=$1
-if [ -z "$argument_version" ]; then
-  NEW_VERSION=$(increment_version "${CURRENT_VERSION}")
-elif [[ "$argument_version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
-  NEW_VERSION=$argument_version
-else
-  echo "INVALID VERSION FORMAT: ${argument_version}" >&2
+NEW_VERSION=$1
+if [ -z "$NEW_VERSION" ]; then
+  echo "Usage: $0 <VERSION>" >&2
+  echo "Example: $0 1.2.3" >&2
+  exit 1
+elif [[ ! "$NEW_VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+  echo "INVALID VERSION FORMAT: ${NEW_VERSION}" >&2
   exit 1
 fi
 echo "New version is ${NEW_VERSION}"
@@ -49,8 +45,6 @@ ${SED} -i "s/    VERSION ${esc}/    VERSION ${NEW_VERSION}/" platform/mac/framew
 ${SED} -i "s/VERSION ${CURRENT_VERSION//./,},0/VERSION ${NEW_VERSION//./,},0/" platform/windows/capi/src/ag_dns.rc
 ${SED} -i "s/\"ProductVersion\", \"${esc}/\"ProductVersion\", \"${NEW_VERSION}/" platform/windows/capi/src/ag_dns.rc
 ${SED} -i "s/Version(\"${esc}/Version(\"${NEW_VERSION}/" platform/windows/cs/Adguard.Dns/SolutionInfo.cs
-
-${SED} -i -e "3{/^## /b;s/^/## ${NEW_VERSION}\n\n/}" CHANGELOG.md
 
 # Append the new version entry to conandata.yml using the master HEAD hash.
 COMMIT_HASH=$(git rev-parse HEAD)

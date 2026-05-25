@@ -50,7 +50,7 @@ jobs:
     needs: prepare
     uses: AdGuardSoftwareLimited/actions/.github/workflows/git-tag.yml@master
     with:
-      runs-on: '["team-corelibs"]'
+      team: corelibs
       tag: v${{ needs.prepare.outputs.version }}
       force: true
     secrets: inherit
@@ -61,7 +61,7 @@ jobs:
   android-prepare-payload:
     name: Deploy library / Android (prepare payload)
     needs: [prepare, tag]
-    runs-on: [team-mobile]
+    runs-on: [team-corelibs]
     steps:
       - name: Download Android artifactory payload from Build run
         uses: actions/download-artifact@v4
@@ -83,19 +83,14 @@ jobs:
     needs: android-prepare-payload
     uses: AdGuardSoftwareLimited/actions/.github/workflows/deploy-to-artifactory.yml@master
     with:
-      runs-on: '["team-mobile"]'
+      team: corelibs
       environment: android-artifactory
     secrets: inherit
 
   apple-deploy:
     name: Deploy library / Apple
     needs: [prepare, tag]
-    runs-on:
-      - ephemeral
-      - ephemeral-linux
-      - registry.int.agrd.dev/linux/corelibs-builder:20260501-2313
-    container:
-      image: adguard/core-libs:2.9
+    runs-on: team-corelibs
     environment: apple-artifactory
     permissions:
       actions: read

@@ -16,11 +16,11 @@ jobs:
     runs-on:
       - ephemeral
       - ephemeral-linux
-      - registry.int.agrd.dev/linux/corelibs-builder:20260501-2313
+      - ${{ vars.BUILD_IMAGE_VERSION_CORELIBS_BUILDER }}
       - ephemeral-limit-memory-12288
       - ephemeral-limit-cpu-6
     container:
-      image: adguard/core-libs:2.9
+      image: adguard/core-libs:2.10
     steps:
       - name: Checkout
         uses: actions/checkout@v6
@@ -29,17 +29,6 @@ jobs:
         run: |
           set -e
           set -x
-
-          LLVM_MAJOR_VER="$(
-            for d in /usr/lib/llvm-*; do
-              v="${d##*/llvm-}"
-              case "$v" in
-                (*[!0-9]*|'') : ;;
-                (*) echo "$v" ;;
-              esac
-            done | sort -n | tail -1
-          )"
-          apt install -y "clang-format-$LLVM_MAJOR_VER" "clang-tidy-$LLVM_MAJOR_VER" "clangd-$LLVM_MAJOR_VER"
 
           python3 -m pip install conan --upgrade
           conan remote add --index 0 art ${{ vars.CONAN_REPO_URL }} || true
@@ -74,14 +63,11 @@ jobs:
           name: test-results-linux
           path: '**/Testing/*/*.xml'
 
-      - name: Upload to Conan and cleanup
+      - name: Upload to Conan
         if: always()
         run: |
-          conan remote login art "${{ secrets.ARTIFACTORY_USER }}" --password "${{ secrets.ARTIFACTORY_API_KEY }}" || true
-          conan upload -r art -c "*" 2>&1 | grep "Uploading" || true
-          echo "conan upload finished"
-          conan remove -c "*" || true
-          conan cache clean || true
+          conan remote login art "${{ secrets.ARTIFACTORY_USER }}" --password "${{ secrets.ARTIFACTORY_API_KEY }}"
+          conan upload -r art -c "*" 2>&1 | grep --line-buffered "Uploading"
 
   mac-build:
     name: Apple framework build
@@ -140,15 +126,12 @@ jobs:
           path: ${{ steps.pkg.outputs.archive }}
           if-no-files-found: error
 
-      - name: Upload to Conan and cleanup
+      - name: Upload to Conan
         if: always()
         run: |
           source ./venv/bin/activate
-          conan remote login art "${{ secrets.ARTIFACTORY_USER }}" --password "${{ secrets.ARTIFACTORY_API_KEY }}" || true
-          conan upload -r art -c "*" 2>&1 | grep "Uploading" || true
-          echo "conan upload finished"
-          conan remove -c "*" || true
-          conan cache clean || true
+          conan remote login art "${{ secrets.ARTIFACTORY_USER }}" --password "${{ secrets.ARTIFACTORY_API_KEY }}"
+          conan upload -r art -c "*" 2>&1 | grep --line-buffered "Uploading"
 
   android-build:
     name: Android library build
@@ -156,12 +139,11 @@ jobs:
     runs-on:
       - ephemeral
       - ephemeral-linux
-      - registry.int.agrd.dev/linux/corelibs-builder:20260501-2313
+      - ${{ vars.BUILD_IMAGE_VERSION_CORELIBS_BUILDER }}
       - ephemeral-limit-memory-8192
       - ephemeral-limit-cpu-6
-      - ephemeral-limit-disk-gb-70
     container:
-      image: adguard/core-libs:2.9
+      image: adguard/core-libs:2.10
     env:
       M2_LOCAL_REPO: ${{ github.workspace }}/.m2/repository
     steps:
@@ -193,14 +175,11 @@ jobs:
           path: ${{ env.M2_LOCAL_REPO }}
           if-no-files-found: error
 
-      - name: Upload to Conan and cleanup
+      - name: Upload to Conan
         if: always()
         run: |
-          conan remote login art "${{ secrets.ARTIFACTORY_USER }}" --password "${{ secrets.ARTIFACTORY_API_KEY }}" || true
-          conan upload -r art -c "*" 2>&1 | grep "Uploading" || true
-          echo "conan upload finished"
-          conan remove -c "*" || true
-          conan cache clean || true
+          conan remote login art "${{ secrets.ARTIFACTORY_USER }}" --password "${{ secrets.ARTIFACTORY_API_KEY }}"
+          conan upload -r art -c "*" 2>&1 | grep --line-buffered "Uploading"
 
   windows-build:
     name: Windows build, tests and nuget pack
@@ -319,13 +298,10 @@ jobs:
           path: platform/windows/cs/Adguard.Dns/*.nupkg
           if-no-files-found: error
 
-      - name: Upload to Conan and cleanup
+      - name: Upload to Conan
         if: always()
         shell: powershell
         run: |
           $ErrorActionPreference = 'Continue'
           & conan remote login art "${{ secrets.ARTIFACTORY_USER }}" --password "${{ secrets.ARTIFACTORY_API_KEY }}"
           & conan upload -r art -c "*" 2>&1 | Select-String "Uploading" -SimpleMatch
-          Write-Host "conan upload finished with status $LASTEXITCODE"
-          & conan remove -c "*"
-          & conan cache clean
