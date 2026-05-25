@@ -1440,6 +1440,12 @@ namespace Adguard.Dns
 		[DllImport(DnsLibName, CallingConvention = CallingConvention.Cdecl)]
 		internal static extern IntPtr ag_dnsproxy_version();
 
+        /// <summary>
+        /// Causes the current process to crash.
+        /// </summary>
+        [DllImport(DnsLibName, CallingConvention = CallingConvention.Cdecl)]
+        internal static extern void ag_dnsproxy_crash();
+
 		/// <summary>
 		/// Free a string, specified by a passed <see cref="pStr"/>
 		/// </summary>

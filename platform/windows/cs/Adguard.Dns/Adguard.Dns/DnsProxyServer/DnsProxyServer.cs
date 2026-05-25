@@ -208,6 +208,16 @@ namespace Adguard.Dns.DnsProxyServer
         }
 
         /// <summary>
+        /// Causes the current process to crash.
+        /// NOTE: This method is used only for debug purposes.
+        /// </summary>
+        public static void Crash()
+        {
+            Logger.Info("Invoking native DnsProxy crash");
+            ag_dnsproxy_crash();
+        }
+
+        /// <summary>
         /// Gets the DNS proxy settings,
         /// according to the specified <see cref="pCurrentDnsProxySettings"/>
         /// </summary>

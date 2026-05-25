@@ -292,6 +292,11 @@ public class DnsProxy implements Closeable {
     public static native String version();
 
     /**
+     * Cause a native crash.
+     */
+    public static native void crash();
+
+    /**
      * Checks if upstream is valid and available
      *
      * @param upstreamSettings Upstream settings
