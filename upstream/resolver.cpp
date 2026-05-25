@@ -2,6 +2,7 @@
 #include <magic_enum/magic_enum.hpp>
 
 #include "common/net_utils.h"
+#include "dns/common/url_utils.h"
 #include "dns/dnsstamp/dns_stamp.h"
 
 #include "resolver.h"
@@ -78,7 +79,7 @@ static std::string get_server_address(const Logger &log, std::string_view addres
     if (result.starts_with(STAMP_URL_PREFIX_WITH_SCHEME)) {
         std::optional<std::string> decoded = get_address_from_stamp(log, result);
         if (decoded.has_value()) {
-            dbglog(log, "Stamp '{}' decoded into '{}'", address, decoded.value());
+            dbglog(log, "Stamp '{}' decoded into '{}'", mask_password(address), decoded.value());
             if (!check_ip_address(*decoded)) {
                 warnlog(log, "Resolver address must be a valid ip address");
                 return "";
@@ -95,7 +96,7 @@ static std::string get_server_address(const Logger &log, std::string_view addres
 }
 
 Resolver::Resolver(UpstreamOptions options, UpstreamFactoryConfig upstream_factory_config)
-        : m_log(AG_FMT("Resolver {}", options.address))
+        : m_log(AG_FMT("Resolver {}", mask_password(options.address)))
         , m_upstream_factory_config(upstream_factory_config)
         , m_upstream_options(std::move(options)) {
     m_upstream_options.address = get_server_address(m_log, m_upstream_options.address);
@@ -104,8 +105,7 @@ Resolver::Resolver(UpstreamOptions options, UpstreamFactoryConfig upstream_facto
 
 Error<Resolver::ResolverError> Resolver::init() {
     if (m_upstream_options.address.empty()) {
-        constexpr std::string_view err = "Failed to get server address";
-        log_ip(m_log, err, m_upstream_options.address, "{}", err);
+        log_ip(m_log, err, m_upstream_options.address, "Failed to get server address");
         return make_error(ResolverError::AE_INVALID_ADDRESS);
     }
 
@@ -141,7 +141,7 @@ static std::vector<SocketAddress> socket_address_from_reply(const Logger &log, l
 }
 
 coro::Task<Resolver::Result> Resolver::resolve(std::string_view host, int port, Millis timeout) const {
-    log_ip(m_log, trace, m_upstream_options.address, "Resolve {}:{}", host, port);
+    log_ip(m_log, trace, mask_password(m_upstream_options.address), "Resolve {}:{}", host, port);
     SocketAddress numeric_ip(host, port);
     if (numeric_ip.valid()) {
         co_return std::vector<SocketAddress>{numeric_ip};
@@ -156,16 +156,15 @@ coro::Task<Resolver::Result> Resolver::resolve(std::string_view host, int port, 
 
     UpstreamFactoryConfig config = m_upstream_factory_config;
     config.timeout = timeout;
-    const std::string &resolver_address = m_upstream_options.address;
     UpstreamFactory upstream_factory{m_upstream_factory_config};
     UpstreamFactory::CreateResult factory_result = upstream_factory.create_upstream(m_upstream_options);
     if (factory_result.has_error()) {
-        log_ip(m_log, dbg, resolver_address, "{}", factory_result.error()->str());
+        log_ip(m_log, dbg, mask_password(m_upstream_options.address), "{}", factory_result.error()->str());
         co_return make_error(ResolverError::AE_UPSTREAM_INIT_FAILED, factory_result.error());
     }
     UpstreamPtr &upstream = factory_result.value();
 
-    log_ip(m_log, trace, resolver_address, "Trying to get A/AAAA records for {}", host);
+    log_ip(m_log, trace, mask_password(m_upstream_options.address), "Trying to get A/AAAA records for {}", host);
     ldns_pkt_ptr aaaa_req;
     if (upstream->config().ipv6_available) {
         aaaa_req = create_req(host, LDNS_RR_TYPE_AAAA);
@@ -183,8 +182,9 @@ coro::Task<Resolver::Result> Resolver::resolve(std::string_view host, int port, 
     Error<ResolverError> last_error{};
     for (auto &reply : replies) {
         if (reply.has_error()) {
-            log_ip(m_log, dbg, resolver_address, "Failed to talk to upstream for host '{}' (elapsed:{}):\n{}", host,
-                    timer.elapsed<Millis>(), reply.error()->str());
+            log_ip(m_log, dbg, mask_password(m_upstream_options.address),
+                    "Failed to talk to upstream for host '{}' (elapsed:{}):\n{}", host, timer.elapsed<Millis>(),
+                    reply.error()->str());
             last_error =
                     make_error(ResolverError::AE_EXCHANGE_FAILED, AG_FMT("Could not resolve {}", host), reply.error());
             continue;

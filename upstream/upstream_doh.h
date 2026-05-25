@@ -41,6 +41,14 @@ public:
         return m_request_template;
     }
 
+    static http::Request mask_request_headers(http::Request request) {
+        if (request.headers().contains("Authorization")) {
+            request.headers().remove("Authorization");
+            request.headers().put("Authorization", "***");
+        }
+        return request;
+    }
+
     DohUpstream() = delete;
     DohUpstream(const DohUpstream &) = delete;
     DohUpstream &operator=(const DohUpstream &) = delete;

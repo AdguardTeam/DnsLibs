@@ -335,7 +335,7 @@ ag::Error<ag::dns::Upstream::InitError> ag::dns::DohUpstream::init() {
         m_request_template.headers().put("Authorization", AG_FMT("Basic {}", creds_base64));
     }
     m_path = m_url.get_pathname();
-    log_upstream(dbg, this, "Prepared request template: {}", m_request_template);
+    log_upstream(dbg, this, "Prepared request template: {}", mask_request_headers(m_request_template));
 
     return {};
 }
@@ -692,7 +692,7 @@ ag::Result<uint64_t, ag::dns::DnsError> ag::dns::DohUpstream::send_request(const
             encode_to_base64(
                     {ldns_buffer_at(buffer.get(), 0), ldns_buffer_position(buffer.get())}, /*url_safe*/ true)));
 
-    log_query(trace, m_http_conn, ldns_pkt_id(query), "Sending request: {}", request);
+    log_query(trace, m_http_conn, ldns_pkt_id(query), "Sending request: {}", mask_request_headers(request));
 
     Result stream_id = m_http_conn->submit_request(request);
     if (stream_id.has_error()) {

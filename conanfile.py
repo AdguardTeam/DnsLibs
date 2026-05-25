@@ -38,7 +38,7 @@ class DnsLibsConan(ConanFile):
         self.requires("klib/2021-04-06@adguard/oss", transitive_headers=True)
         self.requires("ldns/2021-03-29@adguard/oss", transitive_headers=True)
         self.requires("magic_enum/0.9.5", transitive_headers=True)
-        self.requires("native_libs_common/8.0.27@adguard/oss", transitive_headers=True)
+        self.requires("native_libs_common/8.1.28@adguard/oss", transitive_headers=True)
         self.requires("ngtcp2/1.0.1@adguard/oss", transitive_headers=True)
         self.requires("pcre2/10.37@adguard/oss", transitive_headers=True)
         self.requires("tldregistry/2022-12-26@adguard/oss", transitive_headers=True)
@@ -66,8 +66,7 @@ class DnsLibsConan(ConanFile):
     def source(self):
         self.run(f"git init . && git remote add origin {self.vcs_url} && git fetch")
         if re.match(r'\d+\.\d+\.\d+', self.version) is not None:
-            version_hash = self.conan_data["commit_hash"][self.version]["hash"]
-            self.run("git checkout -f %s" % version_hash)
+            self.run(f"git checkout -f v{self.version}")
         else:
             self.run("git checkout -f %s" % self.version)
             for p in self.patch_files:

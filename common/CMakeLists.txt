@@ -13,6 +13,7 @@ find_package(ldns REQUIRED)
 set(SRCS
         sys.cpp
         event_loop.cpp
+        url_utils.cpp
 )
 
 add_library(dnslibs_common STATIC EXCLUDE_FROM_ALL ${SRCS})
@@ -56,3 +57,4 @@ link_libraries(dnslibs_common)
 set(TEST_DIR ${CMAKE_CURRENT_SOURCE_DIR}/test)
 
 add_unit_test(test_event_loop ${TEST_DIR} . TRUE TRUE)
+add_unit_test(test_url_utils ${TEST_DIR} . TRUE TRUE)
