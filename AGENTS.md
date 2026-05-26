@@ -14,7 +14,7 @@ See [README.md](README.md) for full product details.
 - **CMake 3.24+** — build system
 - **Conan 2.0.5+** — C++ package manager
 - **Ninja** — build backend
-- **Clang / LLVM 17+** (LLVM 19 on macOS) — compiler and tooling
+- **Clang / LLVM 21+** — compiler and tooling
 
 ## Directory Structure
 
