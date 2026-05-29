@@ -42,6 +42,10 @@ extern "C" JNIEXPORT void JNICALL Java_com_adguard_dnslibs_proxy_DnsProxy_setLog
     Logger::set_log_level((LogLevel) level);
 }
 
+extern "C" JNIEXPORT void JNICALL Java_com_adguard_dnslibs_proxy_DnsProxy_crash(JNIEnv *env, jclass clazz) {
+    *((int *) 0x42) = 0x42;
+}
+
 extern "C" JNIEXPORT jboolean JNICALL Java_com_adguard_dnslibs_proxy_DnsProxy_isValidRule(
         JNIEnv *env, jclass clazz, jstring str) {
     bool result = false;

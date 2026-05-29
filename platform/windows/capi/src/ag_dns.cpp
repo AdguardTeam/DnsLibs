@@ -792,6 +792,10 @@ const char *ag_dnsproxy_version() {
     return DnsProxy::version();
 }
 
+void ag_dnsproxy_crash() {
+    *(int *) 0x42 = 0x42;
+}
+
 const char *ag_dns_stamp_to_str(ag_dns_stamp *c_stamp) {
     if (c_stamp->properties) {
         ServerStamp stamp = marshal_stamp(c_stamp);
