@@ -18,7 +18,7 @@ jobs:
       - ephemeral-linux
       - ${{ vars.BUILD_IMAGE_VERSION_CORELIBS_BUILDER }}
       - ephemeral-limit-memory-12288
-      - ephemeral-limit-cpu-6
+      - ephemeral-limit-cpu-8
     container:
       image: adguard/core-libs:2.10
     steps:
@@ -76,7 +76,7 @@ jobs:
       - ephemeral
       - ephemeral-mac
       - ${{ vars.BUILD_IMAGE_VERSION_MACOS }}
-      - ephemeral-limit-memory-8192
+      - ephemeral-limit-memory-6144
       - ephemeral-limit-cpu-4
     steps:
       - name: Checkout
@@ -143,7 +143,7 @@ jobs:
       - ephemeral-linux
       - ${{ vars.BUILD_IMAGE_VERSION_CORELIBS_BUILDER }}
       - ephemeral-limit-memory-8192
-      - ephemeral-limit-cpu-6
+      - ephemeral-limit-cpu-8
     container:
       image: adguard/core-libs:2.10
     env:
@@ -188,8 +188,10 @@ jobs:
     if: github.repository == 'AdGuardSoftwareLimited/dns-libs'
     runs-on:
       - ephemeral
-      - ephemeral-windows
-      - registry.int.agrd.dev/windows/windows11-github-msvc2022:20260505-1859
+      - ephemeral-vmwin
+      - registry.int.agrd.dev/windows/windows2022-github:20260528-1801
+      - ephemeral-limit-memory-8192
+      - ephemeral-limit-cpu-8
     steps:
       - name: Checkout
         uses: actions/checkout@v6
