@@ -1052,60 +1052,25 @@ using AGUniqueCFRef = UniquePtr<std::remove_pointer_t<T>, &CFRelease>;
     SecTrustSetAnchorCertificates(trust, NULL);
     SecTrustSetAnchorCertificatesOnly(trust, NO);
 
-    if (@available(macOS 10.14, iOS 12.0, *)) {
-        CFErrorRef cfError = NULL;
-        bool trusted = SecTrustEvaluateWithError(trust, &cfError);
-        if (trusted) {
-            dbglog(log, "[Verification] Succeeded");
-            return std::nullopt;
-        }
-        NSError *nsError = (__bridge_transfer NSError *)cfError;
-        std::string errStr = AG_FMT("{} (domain={}, code={})",
-                nsError.localizedDescription.UTF8String ?: "Unknown error",
-                nsError.domain.UTF8String ?: "?",
-                (long)nsError.code);
-        if (nsError.userInfo[NSUnderlyingErrorKey]) {
-            NSError *underlying = nsError.userInfo[NSUnderlyingErrorKey];
-            errStr += AG_FMT("; underlying: {} (code={})",
-                    underlying.localizedDescription.UTF8String ?: "?",
-                    (long)underlying.code);
-        }
-        warnlog(log, "[Verification] Failed to verify: {}", errStr);
-        return errStr;
-    } else {
-        SecTrustResultType trustResult;
-        SecTrustEvaluate(trust, &trustResult);
-
-        if (trustResult == kSecTrustResultUnspecified || trustResult == kSecTrustResultProceed) {
-            dbglog(log, "[Verification] Succeeded");
-            return std::nullopt;
-        }
-
-        std::string errStr;
-        switch (trustResult) {
-        case kSecTrustResultDeny:
-            errStr = "The user specified that the certificate should not be trusted";
-            break;
-        case kSecTrustResultRecoverableTrustFailure:
-            errStr = "Trust is denied, but recovery may be possible";
-            break;
-        case kSecTrustResultFatalTrustFailure:
-            errStr = "Trust is denied and no simple fix is available";
-            break;
-        case kSecTrustResultOtherError:
-            errStr = "A value that indicates a failure other than trust evaluation";
-            break;
-        case kSecTrustResultInvalid:
-            errStr = "An indication of an invalid setting or result";
-            break;
-        default:
-            errStr = AG_FMT("Unknown error code: {}", magic_enum::enum_name(trustResult));
-            break;
-        }
-
-        warnlog(log, "[Verification] Failed to verify: {}", errStr);
-        return errStr;
+    CFErrorRef cfError = NULL;
+    bool trusted = SecTrustEvaluateWithError(trust, &cfError);
+    if (trusted) {
+        dbglog(log, "[Verification] Succeeded");
+        return std::nullopt;
     }
+    NSError *nsError = (__bridge_transfer NSError *)cfError;
+    std::string errStr = AG_FMT("{} (domain={}, code={})",
+            nsError.localizedDescription.UTF8String ?: "Unknown error",
+            nsError.domain.UTF8String ?: "?",
+            (long)nsError.code);
+    if (nsError.userInfo[NSUnderlyingErrorKey]) {
+        NSError *underlying = nsError.userInfo[NSUnderlyingErrorKey];
+        errStr += AG_FMT("; underlying: {} (code={})",
+                underlying.localizedDescription.UTF8String ?: "?",
+                (long)underlying.code);
+    }
+    warnlog(log, "[Verification] Failed to verify: {}", errStr);
+    return errStr;
 }
 
 static UpstreamOptions convert_upstream(AGDnsUpstream *upstream) {
