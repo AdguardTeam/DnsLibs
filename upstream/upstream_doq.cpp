@@ -1307,7 +1307,7 @@ int DoqUpstream::ssl_verify_callback(X509_STORE_CTX *ctx, void * /*arg*/) {
     std::string_view hostname = doq->m_url.get_hostname();
     if (auto err = verifier->verify(ctx, hostname, doq->m_fingerprints)) {
         warnlog(doq->m_log, "Failed to verify certificate for '{}': {}", hostname, *err);
-        dbglog(doq->m_log, "  {}", get_cert_diagnostic_info(ctx));
+        warnlog(doq->m_log, "  {}", get_cert_diagnostic_info(ctx));
         return 0;
     }
 

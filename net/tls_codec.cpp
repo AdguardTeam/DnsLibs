@@ -202,7 +202,7 @@ int TlsCodec::ssl_verify_callback(X509_STORE_CTX *ctx, void *arg) {
 
     if (auto err = self->m_cert_verifier->verify(ctx, self->m_server_name, self->m_fingerprints)) {
         warnlog(self->m_log, "Failed to verify certificate for '{}': {}", self->m_server_name, *err);
-        dbglog(self->m_log, "  {}", get_cert_diagnostic_info(ctx));
+        warnlog(self->m_log, "  {}", get_cert_diagnostic_info(ctx));
         return 0;
     }
 

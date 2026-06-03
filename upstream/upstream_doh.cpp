@@ -1357,7 +1357,7 @@ int ag::dns::DohUpstream::Http3Connection::on_certificate_verify(X509_STORE_CTX 
     std::string_view hostname = upstream->m_url.get_hostname(); // was validated during initialization
     if (auto err = verifier->verify(ctx, hostname, upstream->m_fingerprints)) {
         log_hconn(warn, self, "Failed to verify certificate for '{}': {}", hostname, *err);
-        log_hconn(dbg, self, "  {}", get_cert_diagnostic_info(ctx));
+        log_hconn(warn, self, "  {}", get_cert_diagnostic_info(ctx));
         return 0;
     }
 
