@@ -225,8 +225,10 @@ jobs:
     needs: [prepare, tag]
     runs-on:
       - ephemeral
-      - ephemeral-windows
-      - registry.int.agrd.dev/windows/windows11-github-msvc2022:20260505-1859
+      - ephemeral-vmwin
+      - registry.int.agrd.dev/windows/windows2022-github:20260529-0846
+      - ephemeral-limit-memory-2048
+      - ephemeral-limit-cpu-2
     environment: windows-artifactory
     steps:
       - name: Download nuget package from Build run

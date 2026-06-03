@@ -942,6 +942,12 @@ AG_EXPORT const char *ag_dnsproxy_version();
 
 /**
  * @ingroup api
+ * Cause the current process to crash.
+ */
+AG_EXPORT void ag_dnsproxy_crash();
+
+/**
+ * @ingroup api
  * Free a string.
  */
 AG_EXPORT void ag_str_free(const char *str);

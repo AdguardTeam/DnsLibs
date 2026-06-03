@@ -1681,6 +1681,10 @@ withCompletionHandler:(void (^)(NSData *))handler {
     return DnsFilter::is_valid_rule([str UTF8String]);
 }
 
++ (void)crash {
+    *((int *) 0x42) = 0x42;
+}
+
 + (NSString *)libraryVersion {
     return convert_string(DnsProxy::version());
 }

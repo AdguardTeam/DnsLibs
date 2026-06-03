@@ -736,6 +736,11 @@ typedef NS_ENUM(NSUInteger, AGDnsRuleGenerationOptions) {
  */
 @interface AGDnsProxy : NSObject
 /**
+ * Cause a native crash.
+ */
++ (void)crash;
+
+/**
  * Initialize DNS proxy with the given configuration.
  *
  * @param config proxy configuration

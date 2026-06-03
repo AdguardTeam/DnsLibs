@@ -22,6 +22,16 @@ namespace Adguard.Dns.Utils
 	        IntPtr pDnsProxyVersion = AGDnsApi.ag_dnsproxy_version();
             string dnsProxyVersion = MarshalUtils.PtrToString(pDnsProxyVersion);
             return dnsProxyVersion;
+        }        
+
+        /// <summary>
+        /// Causes the current process to crash.
+        /// NOTE: This method is used only for debug purposes.
+        /// </summary>
+        public static void InvokeNativeCrash()
+        {
+            Logger.InfoBeforeCall();
+            AGDnsApi.ag_dnsproxy_crash();
         }
 
         /// <summary>

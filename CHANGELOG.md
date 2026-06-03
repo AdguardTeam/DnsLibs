@@ -10,6 +10,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 - Added `autotag.yml` workflow for automatic tagging when a new version is added to CHANGELOG.
 - Added `create-release-pr.yml` workflow for manual release PR creation.
+- Added public crash helpers to `DnsProxy` for testing fatal error handling.
+    - [Android] See `com.adguard.dnslibs.proxy.DnsProxy.crash()`.
+    - [Apple] See `+[AGDnsProxy crash]`.
+    - [Windows C API] See `ag_dnsproxy_crash()`.
+    - [Windows C#] See `DnsProxyServer.Crash()`.
 
 ### Changed
 
