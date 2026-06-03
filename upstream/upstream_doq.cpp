@@ -1311,8 +1311,6 @@ int DoqUpstream::ssl_verify_callback(X509_STORE_CTX *ctx, void * /*arg*/) {
         return 0;
     }
 
-    tracelog(doq->m_log, "Verified successfully for '{}'", doq->m_url.get_hostname());
-
     return 1;
 }
 
