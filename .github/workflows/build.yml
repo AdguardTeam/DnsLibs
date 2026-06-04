@@ -189,7 +189,7 @@ jobs:
     runs-on:
       - ephemeral
       - ephemeral-vmwin
-      - registry.int.agrd.dev/windows/windows2022-github:20260529-0846
+      - ${{ vars.BUILD_IMAGE_VERSION_WINDOWS }}
       - ephemeral-limit-memory-8192
       - ephemeral-limit-cpu-8
     steps:
