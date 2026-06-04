@@ -8,6 +8,20 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+### Changed
+
+### Deprecated
+
+### Removed
+
+### Fixed
+
+### Security
+
+## [2.8.53] - 2026-06-04
+
+### Added
+
 - Added `autotag.yml` workflow for automatic tagging when a new version is added to CHANGELOG.
 - Added `create-release-pr.yml` workflow for manual release PR creation.
 - Added public crash helpers to `DnsProxy` for testing fatal error handling.
@@ -22,16 +36,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - Renamed `increment_version.sh` to `set_version.sh` with explicit version argument.
 - Optimized conan upload steps: removed cleanup since container will anyway be destroyed.
 
-### Deprecated
-
 ### Removed
 
 - Removed `increment-version.yml` workflow that auto-incremented version on every commit.
 - Removed `conandata.yml` since conan export is now tag-based, not revision-based.
-
-### Fixed
-
-### Security
 
 ## [2.8.52] - 2026-05-08
 
@@ -291,7 +299,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - API change: allow in-memory filters. See `ag::dnsfilter::FilterParams`.
 - Optimistic DNS caching. See `ag::DnsProxySettings::optimistic_cache`.
 
-[Unreleased]: https://github.com/AdguardTeam/DnsLibs/compare/v2.8.52...HEAD
+[Unreleased]: https://github.com/AdguardTeam/DnsLibs/compare/v2.8.53...HEAD
+[2.8.53]: https://github.com/AdguardTeam/DnsLibs/compare/v2.8.52...v2.8.53
 [2.8.52]: https://github.com/AdguardTeam/DnsLibs/compare/v2.8.45...v2.8.52
 [2.8.45]: https://github.com/AdguardTeam/DnsLibs/compare/v2.8.37...v2.8.45
 [2.8.37]: https://github.com/AdguardTeam/DnsLibs/compare/v2.8.19...v2.8.37
