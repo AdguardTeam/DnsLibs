@@ -196,12 +196,13 @@ int TlsCodec::ssl_verify_callback(X509_STORE_CTX *ctx, void *arg) {
     auto *self = (TlsCodec *) arg;
 
     if (self->m_cert_verifier == nullptr) {
-        dbglog(self->m_log, "Cannot verify certificate due to verifier is not set");
+        warnlog(self->m_log, "Cannot verify certificate for '{}' due to verifier is not set", self->m_server_name);
         return 0;
     }
 
     if (auto err = self->m_cert_verifier->verify(ctx, self->m_server_name, self->m_fingerprints)) {
-        dbglog(self->m_log, "Failed to verify certificate: {}", *err);
+        warnlog(self->m_log, "Failed to verify certificate for '{}': {}", self->m_server_name, *err);
+        warnlog(self->m_log, "  {}", get_cert_diagnostic_info(ctx));
         return 0;
     }
 

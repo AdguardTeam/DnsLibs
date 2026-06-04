@@ -1,6 +1,10 @@
 #include <algorithm>
+#include <openssl/x509.h>
 #include <openssl/x509v3.h>
 
+#include <common/tls/cert_utils.h>
+
+#include "common/utils.h"
 #include "dns/net/certificate_verifier.h"
 
 namespace ag::dns {
@@ -11,7 +15,8 @@ std::optional<std::string> CertificateVerifier::verify_host_name(X509 *certifica
             || 1 == X509_check_ip_asc(certificate, std::string(host).c_str(), flags)) {
         return std::nullopt;
     }
-    return "Host name does not match certificate subject names";
+    return AG_FMT("Host name '{}' does not match certificate. {}", host,
+            ag::tls::get_cert_diagnostic_info(certificate, nullptr));
 }
 
 static std::optional<Uint8Array<SHA256_DIGEST_LENGTH>> get_cert_hash(X509 *certificate, bool is_public_key) {
@@ -88,6 +93,12 @@ std::optional<std::string> CertificateVerifier::verify_fingerprints(
     }
 
     return "Fingerprints doesn't match with any certificate in chain";
+}
+
+std::string get_cert_diagnostic_info(X509_STORE_CTX *ctx) {
+    X509 *cert = X509_STORE_CTX_get0_cert(ctx);
+    STACK_OF(X509) *chain = X509_STORE_CTX_get0_untrusted(ctx);
+    return ag::tls::get_cert_diagnostic_info(cert, chain);
 }
 
 } // namespace ag::dns

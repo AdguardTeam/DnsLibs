@@ -1023,7 +1023,7 @@ using AGUniqueCFRef = UniquePtr<std::remove_pointer_t<T>, &CFRelease>;
 
     SecCertificateRef cert = convertCertificate(event->certificate);
     if (!cert) {
-        dbglog(log, "[Verification] Failed to create certificate object");
+        warnlog(log, "[Verification] Failed to create certificate object");
         return "Failed to create certificate object";
     }
     [trustArray addObject:(__bridge_transfer id) cert];
@@ -1031,7 +1031,7 @@ using AGUniqueCFRef = UniquePtr<std::remove_pointer_t<T>, &CFRelease>;
     for (const auto &chainCert : event->chain) {
         cert = convertCertificate(chainCert);
         if (!cert) {
-            dbglog(log, "[Verification] Failed to create certificate object");
+            warnlog(log, "[Verification] Failed to create certificate object");
             return "Failed to create certificate object";
         }
         [trustArray addObject:(__bridge_transfer id) cert];
@@ -1043,7 +1043,7 @@ using AGUniqueCFRef = UniquePtr<std::remove_pointer_t<T>, &CFRelease>;
 
     if (status != errSecSuccess) {
         std::string err = getTrustCreationErrorStr(status);
-        dbglog(log, "[Verification] Failed to create trust object from chain: {}", err);
+        warnlog(log, "[Verification] Failed to create trust object from chain: {}", err);
         return err;
     }
 
@@ -1051,40 +1051,25 @@ using AGUniqueCFRef = UniquePtr<std::remove_pointer_t<T>, &CFRelease>;
 
     SecTrustSetAnchorCertificates(trust, NULL);
     SecTrustSetAnchorCertificatesOnly(trust, NO);
-    SecTrustResultType trustResult;
-    SecTrustEvaluate(trust, &trustResult);
 
-    // https://developer.apple.com/documentation/security/sectrustresulttype/ksectrustresultunspecified?language=objc
-    // This value indicates that evaluation reached an (implicitly trusted) anchor certificate without
-    // any evaluation failures, but never encountered any explicitly stated user-trust preference.
-    if (trustResult == kSecTrustResultUnspecified || trustResult == kSecTrustResultProceed) {
+    CFErrorRef cfError = NULL;
+    bool trusted = SecTrustEvaluateWithError(trust, &cfError);
+    if (trusted) {
         dbglog(log, "[Verification] Succeeded");
         return std::nullopt;
     }
-
-    std::string errStr;
-    switch (trustResult) {
-    case kSecTrustResultDeny:
-        errStr = "The user specified that the certificate should not be trusted";
-        break;
-    case kSecTrustResultRecoverableTrustFailure:
-        errStr = "Trust is denied, but recovery may be possible";
-        break;
-    case kSecTrustResultFatalTrustFailure:
-        errStr = "Trust is denied and no simple fix is available";
-        break;
-    case kSecTrustResultOtherError:
-        errStr = "A value that indicates a failure other than trust evaluation";
-        break;
-    case kSecTrustResultInvalid:
-        errStr = "An indication of an invalid setting or result";
-        break;
-    default:
-        errStr = AG_FMT("Unknown error code: {}", magic_enum::enum_name(trustResult));
-        break;
+    NSError *nsError = (__bridge_transfer NSError *)cfError;
+    std::string errStr = AG_FMT("{} (domain={}, code={})",
+            nsError.localizedDescription.UTF8String ?: "Unknown error",
+            nsError.domain.UTF8String ?: "?",
+            (long)nsError.code);
+    if (nsError.userInfo[NSUnderlyingErrorKey]) {
+        NSError *underlying = nsError.userInfo[NSUnderlyingErrorKey];
+        errStr += AG_FMT("; underlying: {} (code={})",
+                underlying.localizedDescription.UTF8String ?: "?",
+                (long)underlying.code);
     }
-
-    dbglog(log, "[Verification] Failed to verify: {}", errStr);
+    warnlog(log, "[Verification] Failed to verify: {}", errStr);
     return errStr;
 }
 
