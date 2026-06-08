@@ -16,6 +16,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Fixed
 
+- Fixed build on GCC 15.1
+
 ### Security
 
 ## [2.8.53] - 2026-06-04
