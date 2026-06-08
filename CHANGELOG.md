@@ -16,9 +16,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Fixed
 
-- Fixed build on GCC 15.1
-
 ### Security
+
+## [2.8.54] - 2026-06-08
+
+### Fixed
+
+- Fixed build on GCC 15.1
 
 ## [2.8.53] - 2026-06-04
 
@@ -301,7 +305,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - API change: allow in-memory filters. See `ag::dnsfilter::FilterParams`.
 - Optimistic DNS caching. See `ag::DnsProxySettings::optimistic_cache`.
 
-[Unreleased]: https://github.com/AdguardTeam/DnsLibs/compare/v2.8.53...HEAD
+[Unreleased]: https://github.com/AdguardTeam/DnsLibs/compare/v2.8.54...HEAD
+[2.8.54]: https://github.com/AdguardTeam/DnsLibs/compare/v2.8.53...v2.8.54
 [2.8.53]: https://github.com/AdguardTeam/DnsLibs/compare/v2.8.52...v2.8.53
 [2.8.52]: https://github.com/AdguardTeam/DnsLibs/compare/v2.8.45...v2.8.52
 [2.8.45]: https://github.com/AdguardTeam/DnsLibs/compare/v2.8.37...v2.8.45
