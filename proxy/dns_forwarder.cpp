@@ -1113,11 +1113,14 @@ coro::Task<UpstreamExchangeResult> DnsForwarder::do_parallel_exchange(const std:
     co_return std::move(*result);
 }
 
-static std::tuple<std::vector<Upstream *>, Millis, bool> collect_upstreams(
-        const std::vector<UpstreamPtr> &src, bool fallback) {
+struct CollectedUpstreams {
+    std::vector<Upstream *> upstreams;
     Millis max_rtt{0};
-    Millis min_rtt = Millis::max();
     bool has_unestimated = false;
+};
+
+static CollectedUpstreams collect_upstreams(const std::vector<UpstreamPtr> &src, bool fallback) {
+    CollectedUpstreams result;
     std::vector<Millis> src_rtts{src.size(), Millis{0}};
     // Calculate min estimate
     for (size_t i = 0; i != src.size(); i++) {
@@ -1125,20 +1128,18 @@ static std::tuple<std::vector<Upstream *>, Millis, bool> collect_upstreams(
         if (rtt_estimate) {
             src_rtts[i] = *rtt_estimate;
         } else {
-            has_unestimated = true;
+            result.has_unestimated = true;
         }
-        min_rtt = std::min(min_rtt, src_rtts[i]);
     }
 
     // Build upstream list
-    std::vector<Upstream *> upstreams;
-    upstreams.reserve(src.size());
+    result.upstreams.reserve(src.size());
     for (size_t i = 0; i != src.size(); i++) {
         auto rtt = src_rtts[i];
-        max_rtt = std::max(max_rtt, rtt);
-        upstreams.push_back(src[i].get());
+        result.max_rtt = std::max(result.max_rtt, rtt);
+        result.upstreams.push_back(src[i].get());
     }
-    return {std::move(upstreams), max_rtt, has_unestimated};
+    return result;
 }
 
 coro::Task<UpstreamExchangeResult> DnsForwarder::do_upstreams_exchange(
@@ -1191,8 +1192,9 @@ coro::Task<UpstreamExchangeResult> DnsForwarder::do_upstreams_exchange(
         }
     }
     if (!m_fallbacks.empty() && (m_settings->enable_fallback_on_upstreams_failure || fallback)) {
-        auto [fallbacks, fallbacks_max_rtt, _] = collect_upstreams(m_fallbacks, true);
-        co_return co_await do_parallel_exchange(fallbacks, request, info, 2 * fallbacks_max_rtt, /*wait_all*/ true);
+        CollectedUpstreams collected_fallbacks = collect_upstreams(m_fallbacks, true);
+        co_return co_await do_parallel_exchange(
+                collected_fallbacks.upstreams, request, info, 2 * collected_fallbacks.max_rtt, /*wait_all*/ true);
     }
     if (last_result) {
         assert(last_result->result.has_error());
