@@ -10,6 +10,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Changed
 
+- Updated ngtcp2 dependency used in DoQ/DoH3.
+
 ### Deprecated
 
 ### Removed
@@ -22,7 +24,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Fixed
 
-- Fixed build on GCC 15.1
+- Fixed build on GCC 15.1.
 
 ## [2.8.53] - 2026-06-04
 
