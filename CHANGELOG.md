@@ -10,8 +10,6 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Changed
 
-- Updated ngtcp2 dependency used in DoQ/DoH3.
-
 ### Deprecated
 
 ### Removed
@@ -19,6 +17,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ### Fixed
 
 ### Security
+
+## [2.8.55] - 2026-06-10
+
+### Changed
+
+- Updated ngtcp2 dependency used in DoQ/DoH3.
 
 ## [2.8.54] - 2026-06-08
 
@@ -307,7 +311,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - API change: allow in-memory filters. See `ag::dnsfilter::FilterParams`.
 - Optimistic DNS caching. See `ag::DnsProxySettings::optimistic_cache`.
 
-[Unreleased]: https://github.com/AdguardTeam/DnsLibs/compare/v2.8.54...HEAD
+[Unreleased]: https://github.com/AdguardTeam/DnsLibs/compare/v2.8.55...HEAD
+[2.8.55]: https://github.com/AdguardTeam/DnsLibs/compare/v2.8.54...v2.8.55
 [2.8.54]: https://github.com/AdguardTeam/DnsLibs/compare/v2.8.53...v2.8.54
 [2.8.53]: https://github.com/AdguardTeam/DnsLibs/compare/v2.8.52...v2.8.53
 [2.8.52]: https://github.com/AdguardTeam/DnsLibs/compare/v2.8.45...v2.8.52
