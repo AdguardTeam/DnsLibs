@@ -19,6 +19,7 @@ jobs:
     if: github.repository == 'AdGuardSoftwareLimited/dns-libs'
     uses: AdGuardSoftwareLimited/actions/.github/workflows/mirror.yml@master
     with:
+      team: corelibs
       target_repo: 'git@github.com:AdguardTeam/DnsLibs.git'
       refspecs: '+refs/heads/*:refs/heads/* +refs/notes/*:refs/notes/* +refs/tags/*:refs/tags/* ^refs/tags/*@swift-6'
     secrets: inherit
