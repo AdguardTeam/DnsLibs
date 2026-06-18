@@ -17,10 +17,12 @@ on:
 
 jobs:
   # Resolve the version to stamp into this build. workflow_call passes it
-  # explicitly; pull requests derive it from CHANGELOG.md; other events (branch
-  # pushes) leave it empty, so the build keeps the placeholder version and the
-  # platform jobs skip version stamping. Local builds do not run this workflow
-  # and instead let scripts/set_version.{sh,ps1} fall back to `git describe`.
+  # explicitly; pull requests derive it from CHANGELOG.md; branch pushes and
+  # manual dispatch fall back to `git describe` so the build is always stamped
+  # with a meaningful version. It only stays empty when no version tag exists
+  # yet, in which case the platform jobs skip stamping and keep the placeholder.
+  # Local builds do not run this workflow and instead let
+  # scripts/set_version.{sh,ps1} fall back to `git describe` directly.
   version:
     name: Resolve version
     if: github.repository == 'AdGuardSoftwareLimited/dns-libs'
@@ -45,15 +47,21 @@ jobs:
         run: |
           set -euo pipefail
 
-          # workflow_call passes the version explicitly; only PRs derive it from
-          # the CHANGELOG. Other events (branch pushes) leave it unset.
+          # workflow_call passes the version explicitly; PRs derive it from the
+          # CHANGELOG; branch pushes and manual dispatch fall back to git describe.
           if [ "$EVENT_NAME" = "workflow_call" ]; then
             echo "Resolved version: ${INPUT_VERSION}"
             echo "value=${INPUT_VERSION}" >> "$GITHUB_OUTPUT"
             exit 0
           fi
           if [ "$EVENT_NAME" != "pull_request" ]; then
-            echo "value=" >> "$GITHUB_OUTPUT"
+            # Branch pushes and manual dispatch are not tied to a CHANGELOG
+            # release entry, so derive a version from the nearest tag (the same
+            # scheme local builds use) -- e.g. "2.8.53-6-gabcdef". This keeps the
+            # build stamped with a meaningful version instead of the placeholder.
+            value=$(git describe --tags --match 'v*' 2>/dev/null | sed -e 's/^v//' || true)
+            echo "Resolved version: ${value}"
+            echo "value=${value}" >> "$GITHUB_OUTPUT"
             exit 0
           fi
 
