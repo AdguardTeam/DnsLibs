@@ -89,29 +89,72 @@ jobs:
           ../framework/build_dnsproxy_framework.sh --os all
           deactivate
 
-      - name: Package xcframework
+      # Build the three deploy-ready payloads. The directory layout inside each
+      # artifact is the remote path the AK deploy workflows publish to verbatim,
+      # so it must match exactly:
+      #   apple-xcframework : core.dns-libs/<version>/AGDnsProxy.zip (generic -> apple-bin)
+      #   apple-podspec     : AGDnsProxy/<version>/AGDnsProxy.podspec.json (generic -> pods)
+      #   apple-swiftpm     : core/dns-libs/<version>.zip            (swift   -> swift-pkgs)
+      - name: Package Apple deploy artifacts
         id: pkg
+        env:
+          AK_BASE: ${{ vars.ARTIFACT_KEEPER_URL }}
         run: |
           set -e
           set -x
 
           VER="$(sed -ne 's/^ *VERSION \(.*\)/\1/p' platform/mac/framework/CMakeLists.txt)"
-          ARCH_NAME="AGDnsProxy-apple-${VER}.zip"
 
+          # The xcframework zip, referenced (by URL) from both the podspec and the
+          # SwiftPM manifest. Bundle the dSYMs, changelog and license alongside it.
           cd platform/mac/build/framework
           echo "#${VER}" > CHANGELOG
           cp "${GITHUB_WORKSPACE}/LICENSE.md" LICENSE
-          zip -4yr "${ARCH_NAME}" AGDnsProxy.xcframework AGDnsProxy.dSYMs CHANGELOG LICENSE
+          zip -4yr AGDnsProxy.zip AGDnsProxy.xcframework AGDnsProxy.dSYMs CHANGELOG LICENSE
+          cd "$GITHUB_WORKSPACE"
 
-          echo "version=${VER}" >> "$GITHUB_OUTPUT"
-          echo "archive=${PWD}/${ARCH_NAME}" >> "$GITHUB_OUTPUT"
-          echo "archive_name=${ARCH_NAME}" >> "$GITHUB_OUTPUT"
+          STAGE="$GITHUB_WORKSPACE/apple-deploy"
+          XCF_DIR="$STAGE/apple-xcframework/core.dns-libs/${VER}"
+          POD_DIR="$STAGE/apple-podspec/AGDnsProxy/${VER}"
+          SPM_DIR="$STAGE/apple-swiftpm/core/dns-libs"
+          mkdir -p "$XCF_DIR" "$POD_DIR" "$SPM_DIR"
+          mv platform/mac/build/framework/AGDnsProxy.zip "$XCF_DIR/AGDnsProxy.zip"
+
+          # Checksum of the exact zip we publish, for the SwiftPM binaryTarget.
+          CHECKSUM=$(shasum -a 256 "$XCF_DIR/AGDnsProxy.zip" | awk '{print $1}')
+
+          # Podspec: fill in the version and the Artifact Keeper base URL.
+          sed -e "s#@VERSION@#${VER}#g" -e "s#@AK_BASE@#${AK_BASE}#g" \
+            platform/mac/packaging/AGDnsProxy.podspec.json \
+            > "$POD_DIR/AGDnsProxy.podspec.json"
+
+          # Package.swift: fill in version, base URL and checksum, then zip as the
+          # SwiftPM registry expects ({scope}/{package}/{version}.zip).
+          PKG_TMP=$(mktemp -d)
+          sed -e "s#@VERSION@#${VER}#g" -e "s#@AK_BASE@#${AK_BASE}#g" -e "s#@CHECKSUM@#${CHECKSUM}#g" \
+            platform/mac/packaging/Package.swift \
+            > "$PKG_TMP/Package.swift"
+          (cd "$PKG_TMP" && zip -4 "$SPM_DIR/${VER}.zip" Package.swift)
 
       - name: Upload xcframework artifact
         uses: actions/upload-artifact@v7
         with:
           name: apple-xcframework
-          path: ${{ steps.pkg.outputs.archive }}
+          path: apple-deploy/apple-xcframework
+          if-no-files-found: error
+
+      - name: Upload podspec artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: apple-podspec
+          path: apple-deploy/apple-podspec
+          if-no-files-found: error
+
+      - name: Upload SwiftPM artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: apple-swiftpm
+          path: apple-deploy/apple-swiftpm
           if-no-files-found: error
 
       - name: Upload to Conan

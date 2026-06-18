@@ -1,0 +1,325 @@
+name: Publish release
+
+# Runs in the private repo once a release-bump PR (from prepare-release.yml) is
+# merged, or on manual dispatch. It:
+#   1. Reads the released version from CHANGELOG.md and creates the v{version}
+#      tag (tag-from-changelog.yml).
+#   2. Resolves the version and the originating Build run from that tag.
+#   3. Deploys the pre-built Android, Apple and Windows artifacts to Artifactory.
+#   4. Exports and uploads the Conan recipes to Artifactory.
+#
+# No GitHub release is published here: this is a private repository.
+
+on:
+  pull_request_target:
+    types: [closed]
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: Ref to publish manually
+        required: false
+        type: string
+
+permissions:
+  actions: read
+  contents: write
+  id-token: write
+  pull-requests: read
+
+jobs:
+  # 1. Read the released version from CHANGELOG.md and create the v{version} tag.
+  tag:
+    uses: AdGuardSoftwareLimited/actions/.github/workflows/tag-from-changelog.yml@master
+    with:
+      ref: ${{ inputs.ref || github.event.pull_request.merge_commit_sha || github.ref_name }}
+      team: corelibs
+
+  # 2. Resolve the version and locate the Build run that produced the artifacts.
+  # The tag job above created the release tag; the matching Build run (build.yml)
+  # must have produced the versioned artifacts.
+  prepare:
+    name: Prepare deploy
+    needs: tag
+    runs-on: [team-corelibs]
+    outputs:
+      version: ${{ steps.prep.outputs.version }}
+      build_run_id: ${{ steps.prep.outputs.build_run_id }}
+    steps:
+      - name: Resolve version and locate Build run
+        id: prep
+        uses: actions/github-script@v8
+        env:
+          # The tag job creates the release tag; deploy resolves the version
+          # and the originating Build run from it.
+          REF: ${{ needs.tag.outputs.tag }}
+        with:
+          script: |
+            const { owner, repo } = context.repo;
+
+            // The deploy is always driven by a release tag (vX.Y.Z[-channel.N]).
+            // REF may be a full ref (refs/tags/vX) or a bare tag (vX).
+            const tag = process.env.REF.replace(/^refs\/tags\//, '');
+            const version = tag.replace(/^v/, '');
+            if (!/^[0-9]+\.[0-9]+\.[0-9]+/.test(version)) {
+              core.setFailed(`Ref '${process.env.REF}' is not a release tag`);
+              return;
+            }
+            core.setOutput('version', version);
+            core.info(`Deploying version ${version} (tag ${tag})`);
+
+            // Resolve the tag to the commit it points at (deref annotated tags).
+            const ref = await github.rest.git.getRef({ owner, repo, ref: `tags/${tag}` });
+            let sha = ref.data.object.sha;
+            if (ref.data.object.type === 'tag') {
+              const t = await github.rest.git.getTag({ owner, repo, tag_sha: sha });
+              sha = t.data.object.sha;
+            }
+
+            // The versioned artifacts come from the release PR's build, which ran
+            // on the PR head commit -- not on the squashed commit the tag points
+            // at. Recover that head SHA from the PR merged into the tagged commit.
+            let buildSha = sha;
+            const { data: prs } = await github.rest.repos.listPullRequestsAssociatedWithCommit({
+              owner, repo, commit_sha: sha,
+            });
+            const pr = prs.find((p) => p.merged_at) || prs[0];
+            if (pr) {
+              buildSha = pr.head.sha;
+              core.info(`Tagged commit came from PR #${pr.number}; using head ${buildSha} for artifacts`);
+            } else {
+              core.info(`No PR associated with ${sha}; looking for a build on the tagged commit itself`);
+            }
+
+            // Find the successful Build run that produced the deploy artifacts.
+            const { data } = await github.rest.actions.listWorkflowRuns({
+              owner, repo,
+              workflow_id: 'build.yml',
+              head_sha: buildSha,
+              status: 'success',
+              per_page: 1,
+            });
+            if (data.workflow_runs.length === 0) {
+              core.setFailed(`No successful Build library and run tests run found for ${buildSha}`);
+              return;
+            }
+            core.setOutput('build_run_id', data.workflow_runs[0].id);
+            core.info(`Using Build run ${data.workflow_runs[0].id}`);
+
+  # 3a. Android: re-publish the payload from the Build run into this run, then
+  # hand it to the reusable deploy workflow (which downloads from the current run).
+  android-prepare-payload:
+    name: Deploy library / Android (prepare payload)
+    needs: prepare
+    runs-on: [team-corelibs]
+    steps:
+      - name: Download Android artifactory payload from Build run
+        uses: actions/download-artifact@v4
+        with:
+          name: android-artifactory-payload
+          path: artifactory-payload
+          run-id: ${{ needs.prepare.outputs.build_run_id }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Re-upload payload for deploy-to-ak-maven workflow
+        uses: actions/upload-artifact@v7
+        with:
+          name: artifactory-payload
+          path: artifactory-payload
+          if-no-files-found: error
+
+  android-deploy:
+    name: Deploy library / Android
+    needs: android-prepare-payload
+    uses: AdGuardSoftwareLimited/actions/.github/workflows/deploy-to-ak-maven.yml@master
+    with:
+      team: corelibs
+      environment: android-artifact-keeper
+      ak-repo: maven-internal
+    secrets: inherit
+
+  # 3b. Apple: re-publish the payloads (xcframework, podspec, SwiftPM) built by
+  # the Build run into this run, so the reusable AK deploy workflows (which
+  # download from the current run) can find them. Each artifact already carries
+  # the exact remote directory layout the deploy workflows expect, so it is
+  # passed through unchanged.
+  apple-prepare-payload:
+    name: Deploy library / Apple (prepare payload)
+    needs: prepare
+    runs-on: [team-corelibs]
+    steps:
+      - name: Download Apple artifacts from Build run
+        uses: actions/download-artifact@v4
+        with:
+          pattern: apple-*
+          path: apple-artifacts
+          run-id: ${{ needs.prepare.outputs.build_run_id }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Re-upload xcframework
+        uses: actions/upload-artifact@v7
+        with:
+          name: apple-xcframework
+          path: apple-artifacts/apple-xcframework
+          if-no-files-found: error
+
+      - name: Re-upload podspec
+        uses: actions/upload-artifact@v7
+        with:
+          name: apple-podspec
+          path: apple-artifacts/apple-podspec
+          if-no-files-found: error
+
+      - name: Re-upload SwiftPM
+        uses: actions/upload-artifact@v7
+        with:
+          name: apple-swiftpm
+          path: apple-artifacts/apple-swiftpm
+          if-no-files-found: error
+
+  # Publish the xcframework binary first; the podspec and SwiftPM manifest both
+  # reference its download URL, so they deploy only after it exists.
+  apple-deploy-xcframework:
+    name: Deploy library / Apple xcframework
+    needs: apple-prepare-payload
+    uses: AdGuardSoftwareLimited/actions/.github/workflows/deploy-to-ak-generic.yml@master
+    with:
+      team: corelibs
+      artifact-pattern: apple-xcframework
+      ak-repo: apple-bin
+    secrets: inherit
+
+  apple-deploy-podspec:
+    name: Deploy library / Apple podspec
+    needs: apple-deploy-xcframework
+    uses: AdGuardSoftwareLimited/actions/.github/workflows/deploy-to-ak-generic.yml@master
+    with:
+      team: corelibs
+      environment: apple-artifact-keeper-podspec
+      artifact-pattern: apple-podspec
+      ak-repo: pods
+    secrets: inherit
+
+  apple-deploy-swiftpm:
+    name: Deploy library / Apple SwiftPM
+    needs: apple-deploy-xcframework
+    uses: AdGuardSoftwareLimited/actions/.github/workflows/deploy-to-ak-swift.yml@master
+    with:
+      team: corelibs
+      environment: apple-artifact-keeper-swiftpm
+      artifact-pattern: apple-swiftpm
+      ak-repo: swift-pkgs
+    secrets: inherit
+
+  # 3c. Windows: download the nuget package from the Build run and push it.
+  windows-deploy:
+    name: Deploy library / Windows
+    needs: prepare
+    runs-on:
+      - ephemeral
+      - ephemeral-vmwin
+      - ${{ vars.BUILD_IMAGE_VERSION_WINDOWS }}
+      - ephemeral-limit-memory-2048
+      - ephemeral-limit-cpu-2
+    environment: windows-artifactory
+    steps:
+      - name: Download nuget package from Build run
+        uses: actions/download-artifact@v4
+        with:
+          name: windows-nupkg
+          path: nupkg
+          run-id: ${{ needs.prepare.outputs.build_run_id }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Push nuget package to Artifactory
+        shell: powershell
+        run: |
+          $ErrorActionPreference = 'Stop'
+          Get-ChildItem -Path nupkg -Filter *.nupkg -Recurse | ForEach-Object {
+            & nuget push $_.FullName `
+              -Source "${{ vars.NUGET_REPO_URL }}" `
+              -ApiKey "${{ secrets.ARTIFACTORY_API_KEY }}" `
+              -SkipDuplicate
+            if (!$?) { exit 1 }
+          }
+
+  # 4. Export and upload the Conan recipes to Artifactory.
+  conan-deploy:
+    needs: tag
+    environment: conan-artifactory
+    runs-on: team-corelibs
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ needs.tag.outputs.tag }}
+          fetch-depth: 0
+
+      - name: Upload conan recipes
+        uses: AdGuardSoftwareLimited/native-libs-common/.github/actions/upload-conan-recipes@master
+        with:
+          export_script_path: scripts/export_conan.sh
+          conan_repo_url: ${{ vars.CONAN_REPO_URL }}
+          artifactory_user: ${{ secrets.ARTIFACTORY_USER }}
+          artifactory_api_key: ${{ secrets.ARTIFACTORY_API_KEY }}
+
+  # 5. Once every platform is published, mirror the tag to the public repository
+  # AdguardTeam/DnsLibs and cut the GitHub Release there. This is a private
+  # repository, so the release is published to the public mirror; mirroring runs
+  # first so the tag exists in the target before the release is created. The
+  # binaries live in Artifactory / Artifact Keeper, so no assets are attached --
+  # this is just the tag + changelog notes. Pre-release tags (v...-beta.N, -rc.N)
+  # are marked as pre-releases.
+  mirror-and-release:
+    name: Mirror and create GitHub release
+    needs:
+      - tag
+      - android-deploy
+      - apple-deploy-xcframework
+      - apple-deploy-podspec
+      - apple-deploy-swiftpm
+      - windows-deploy
+      - conan-deploy
+    uses: AdGuardSoftwareLimited/actions/.github/workflows/mirror-and-release.yml@master
+    with:
+      team: corelibs
+      target_repo: AdguardTeam/DnsLibs
+      tag: ${{ needs.tag.outputs.tag }}
+      changelog: ${{ needs.tag.outputs.changelog }}
+      prerelease: ${{ contains(needs.tag.outputs.tag, '-') }}
+    secrets: inherit
+
+  # 6. Open a tracking issue in each downstream app repo and announce to Slack.
+  # The matrix drives one announce-release.yml call per app; that wrapper creates
+  # the issue and posts to Slack as a correlated chain (so the Slack message can
+  # link the exact issue without a per-entry matrix-output round-trip here).
+  announce:
+    name: Announce / ${{ matrix.repo }}
+    needs:
+      - tag
+      - mirror-and-release
+    permissions:
+      contents: read
+      id-token: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - repo: AdguardTeam/AdguardForAndroid
+            assignee: artemiv4nov
+            channel: '#build-corelibs'
+          - repo: AdguardTeam/AdguardForWindows
+            assignee: adbuker
+            channel: '#build-corelibs'
+          - repo: AdguardTeam/AdguardForMac
+            assignee: vityevato
+            channel: '#build-corelibs'
+    uses: AdGuardSoftwareLimited/native-libs-common/.github/workflows/announce-release.yml@master
+    with:
+      target_repo: ${{ matrix.repo }}
+      product: DNS libraries
+      version: ${{ needs.tag.outputs.version }}
+      release_url: ${{ needs.mirror-and-release.outputs.release-url }}
+      channel: ${{ matrix.channel }}
+      assignees: ${{ matrix.assignee }}
+      team: corelibs
+    secrets: inherit

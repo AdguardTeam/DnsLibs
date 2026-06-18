@@ -1,0 +1,27 @@
+{
+  "name": "AGDnsProxy",
+  "version": "@VERSION@",
+  "summary": "Adguard DnsLibs",
+  "description": "Adguard DNS libraries",
+  "homepage": "https://github.com/AdguardTeam/DnsLibs",
+  "license": {
+    "type": "Apache 2.0",
+    "file": "LICENSE"
+  },
+  "authors": {
+    "Adguard Software Ltd": "devteam@adguard.com"
+  },
+  "platforms": {
+    "osx": "10.13",
+    "ios": "11.2"
+  },
+  "source": {
+    "http": "@AK_BASE@/api/v1/repositories/apple-bin-virtual/download/core.dns-libs/@VERSION@/AGDnsProxy.zip"
+  },
+  "preserve_paths": ["AGDnsProxy.xcframework"],
+  "vendored_frameworks": "AGDnsProxy.xcframework",
+  "xcconfig": {
+    "LD_RUNPATH_SEARCH_PATHS": "@loader_path/../Frameworks"
+  },
+  "requires_arc": true
+}
