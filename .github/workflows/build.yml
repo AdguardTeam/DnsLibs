@@ -8,8 +8,77 @@ on:
       - 'dev-*'
   pull_request:
   workflow_dispatch:
+  workflow_call:
+    inputs:
+      version:
+        description: 'Version name to set'
+        required: true
+        type: string
 
 jobs:
+  # Resolve the version to stamp into this build. workflow_call passes it
+  # explicitly; pull requests derive it from CHANGELOG.md; other events (branch
+  # pushes) leave it empty, so the build keeps the placeholder version and the
+  # platform jobs skip version stamping. Local builds do not run this workflow
+  # and instead let scripts/set_version.{sh,ps1} fall back to `git describe`.
+  version:
+    name: Resolve version
+    if: github.repository == 'AdGuardSoftwareLimited/dns-libs'
+    runs-on: [team-corelibs]
+    outputs:
+      value: ${{ steps.resolve.outputs.value }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          # Full history is needed to tell whether this branch introduced the
+          # latest CHANGELOG version.
+          fetch-depth: 0
+
+      - name: Resolve version
+        id: resolve
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          INPUT_VERSION: ${{ inputs.version }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          set -euo pipefail
+
+          # workflow_call passes the version explicitly; only PRs derive it from
+          # the CHANGELOG. Other events (branch pushes) leave it unset.
+          if [ "$EVENT_NAME" = "workflow_call" ]; then
+            echo "Resolved version: ${INPUT_VERSION}"
+            echo "value=${INPUT_VERSION}" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          if [ "$EVENT_NAME" != "pull_request" ]; then
+            echo "value=" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          # Latest version from CHANGELOG.md (first non-Unreleased entry, with
+          # any -beta.N / -rc.N prerelease suffix).
+          latest=$(sed -nE '/^## \[[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?\]/{s/^## \[([0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?)\].*/\1/p;q;}' CHANGELOG.md)
+          if [ -z "$latest" ]; then
+            echo "Could not find a version in CHANGELOG.md" >&2
+            exit 1
+          fi
+
+          # This branch "introduced" the version if the commit that added its
+          # CHANGELOG heading is not already reachable from the PR base; then we
+          # use the bare version. Otherwise it is an intermediate build, tagged
+          # with the head commit hash.
+          commit=$(git log -1 --format=%H -S"## [$latest]" -- CHANGELOG.md 2>/dev/null || true)
+          if [ -n "$commit" ] && ! git merge-base --is-ancestor "$commit" "$BASE_SHA" 2>/dev/null; then
+            value="$latest"
+          else
+            value="${latest}+$(git rev-parse --short "$HEAD_SHA")"
+          fi
+
+          echo "Resolved version: ${value}"
+          echo "value=${value}" >> "$GITHUB_OUTPUT"
+
   linux-build:
     name: Linux build and tests
     if: github.repository == 'AdGuardSoftwareLimited/dns-libs'
@@ -58,6 +127,7 @@ jobs:
   mac-build:
     name: Apple framework build
     if: github.repository == 'AdGuardSoftwareLimited/dns-libs'
+    needs: version
     runs-on:
       - ephemeral
       - ephemeral-mac
@@ -67,6 +137,10 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v6
+
+      - name: Set version
+        if: needs.version.outputs.value != ''
+        run: scripts/set_version.sh "${{ needs.version.outputs.value }}"
 
       - name: Build xcframework
         run: |
@@ -97,13 +171,18 @@ jobs:
       #   apple-swiftpm     : core/dns-libs/<version>.zip            (swift   -> swift-pkgs)
       - name: Package Apple deploy artifacts
         id: pkg
+        if: needs.version.outputs.value != ''
         env:
+          VERSION: ${{ needs.version.outputs.value }}
           AK_BASE: ${{ vars.ARTIFACT_KEEPER_URL }}
         run: |
           set -e
           set -x
 
-          VER="$(sed -ne 's/^ *VERSION \(.*\)/\1/p' platform/mac/framework/CMakeLists.txt)"
+          # Full version (incl. any prerelease suffix) resolved by the version
+          # job. The Apple package paths/specs carry the full version, while the
+          # framework's internal CMake VERSION holds the numeric core.
+          VER="${VERSION}"
 
           # The xcframework zip, referenced (by URL) from both the podspec and the
           # SwiftPM manifest. Bundle the dSYMs, changelog and license alongside it.
@@ -137,6 +216,7 @@ jobs:
           (cd "$PKG_TMP" && zip -4 "$SPM_DIR/${VER}.zip" Package.swift)
 
       - name: Upload xcframework artifact
+        if: needs.version.outputs.value != ''
         uses: actions/upload-artifact@v7
         with:
           name: apple-xcframework
@@ -144,6 +224,7 @@ jobs:
           if-no-files-found: error
 
       - name: Upload podspec artifact
+        if: needs.version.outputs.value != ''
         uses: actions/upload-artifact@v7
         with:
           name: apple-podspec
@@ -151,6 +232,7 @@ jobs:
           if-no-files-found: error
 
       - name: Upload SwiftPM artifact
+        if: needs.version.outputs.value != ''
         uses: actions/upload-artifact@v7
         with:
           name: apple-swiftpm
@@ -167,6 +249,7 @@ jobs:
   android-build:
     name: Android library build
     if: github.repository == 'AdGuardSoftwareLimited/dns-libs'
+    needs: version
     runs-on:
       - ephemeral
       - ephemeral-linux
@@ -180,6 +263,10 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v6
+
+      - name: Set version
+        if: needs.version.outputs.value != ''
+        run: scripts/set_version.sh "${{ needs.version.outputs.value }}"
 
       - name: Build AAR and publish to local Maven
         working-directory: platform/android/dnsproxy
@@ -215,6 +302,7 @@ jobs:
   windows-build:
     name: Windows build, tests and nuget pack
     if: github.repository == 'AdGuardSoftwareLimited/dns-libs'
+    needs: version
     runs-on:
       - ephemeral
       - ephemeral-vmwin
@@ -224,6 +312,11 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v6
+
+      - name: Set version
+        if: needs.version.outputs.value != ''
+        shell: powershell
+        run: scripts/set_version.ps1 "${{ needs.version.outputs.value }}"
 
       - name: Build C and C# library and run tests
         shell: powershell
