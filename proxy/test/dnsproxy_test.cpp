@@ -2741,7 +2741,7 @@ TEST_F(DnsProxyTest, RegressCache1) {
     auto [ret, err] = m_proxy->init(settings, events);
     ASSERT_TRUE(ret) << err->str();
 
-    ldns_pkt_ptr pkt = create_request("tls-ech.dev.", LDNS_RR_TYPE_HTTPS, LDNS_RD);
+    ldns_pkt_ptr pkt = create_request("cloudflare-ech.com.", LDNS_RR_TYPE_HTTPS, LDNS_RD);
     ldns_pkt_ptr res;
 
     DnsMessageInfo info{
@@ -2793,7 +2793,7 @@ TEST_F(DnsProxyTest, RegressCache2) {
     auto [ret, err] = m_proxy->init(settings, events);
     ASSERT_TRUE(ret) << err->str();
 
-    ldns_pkt_ptr pkt = create_request("tls-ech.dev.", LDNS_RR_TYPE_HTTPS, LDNS_RD);
+    ldns_pkt_ptr pkt = create_request("cloudflare-ech.com.", LDNS_RR_TYPE_HTTPS, LDNS_RD);
     ldns_pkt_ptr res;
 
     DnsMessageInfo info{

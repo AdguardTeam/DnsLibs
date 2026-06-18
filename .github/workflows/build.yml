@@ -13,61 +13,47 @@ jobs:
   linux-build:
     name: Linux build and tests
     if: github.repository == 'AdGuardSoftwareLimited/dns-libs'
-    runs-on:
-      - ephemeral
-      - ephemeral-linux
-      - ${{ vars.BUILD_IMAGE_VERSION_CORELIBS_BUILDER }}
-      - ephemeral-limit-memory-12288
-      - ephemeral-limit-cpu-8
-    container:
-      image: adguard/core-libs:2.10
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v6
+    permissions:
+      contents: read
+      id-token: write
+    secrets:
+      test-env: |
+        ARTIFACTORY_USER=${{ secrets.ARTIFACTORY_USER }}
+        ARTIFACTORY_API_KEY=${{ secrets.ARTIFACTORY_API_KEY }}
+    uses: AdGuardSoftwareLimited/actions/.github/workflows/junit-tests.yml@master
+    with:
+      runs-on: '["ephemeral","ephemeral-linux","${{ vars.BUILD_IMAGE_VERSION_CORELIBS_BUILDER }}","ephemeral-limit-memory-12288","ephemeral-limit-cpu-8"]'
+      container-image: 'adguard/core-libs:2.10'
+      test-command: |
+        set -e
+        set -x
 
-      - name: Lint C++
-        run: |
-          set -e
-          set -x
+        python3 -m pip install conan --upgrade
+        conan remote add --index 0 art ${{ vars.CONAN_REPO_URL }} || true
 
-          python3 -m pip install conan --upgrade
-          conan remote add --index 0 art ${{ vars.CONAN_REPO_URL }} || true
+        make lint-cpp
+        rm -rf build
 
-          make lint-cpp
-          rm -rf build
-
-      - name: Build and run tests with sanitizer
-        run: |
-          set -e
-          set -x
-
-          conan remote add --index 0 art ${{ vars.CONAN_REPO_URL }} || true
-
-          mkdir -p build
-          cd build
-          export LDFLAGS=-fuse-ld=lld
-          export ASAN_OPTIONS=detect_container_overflow=0
-          cmake -DCMAKE_BUILD_TYPE=Debug -GNinja \
-              -DCMAKE_C_COMPILER=clang \
-              -DCMAKE_CXX_COMPILER=clang++ \
-              -DCMAKE_CXX_FLAGS='-stdlib=libc++' \
+        mkdir -p build
+        cd build
+        export LDFLAGS=-fuse-ld=lld
+        export ASAN_OPTIONS=detect_container_overflow=0
+        cmake -DCMAKE_BUILD_TYPE=Debug -GNinja \
+            -DCMAKE_C_COMPILER=clang \
+            -DCMAKE_CXX_COMPILER=clang++ \
+            -DCMAKE_CXX_FLAGS='-stdlib=libc++' \
               -DSANITIZE=yes \
-              ..
-          ninja tests
-          ctest -D ExperimentalTest --no-compress-output
+            ..
+        ninja tests
+        ctest --output-junit junit.xml -D ExperimentalTest --no-compress-output
+      finally-script: |
+        set -e
+        set -x
 
-      - name: Upload test results
-        uses: actions/upload-artifact@v7
-        if: always()
-        with:
-          name: test-results-linux
-          path: '**/Testing/*/*.xml'
-
-      - name: Upload to Conan
-        if: always()
-        run: |
-          conan remote login art "${{ secrets.ARTIFACTORY_USER }}" --password "${{ secrets.ARTIFACTORY_API_KEY }}"
-          conan upload -r art -c "*" 2>&1 | grep --line-buffered "Uploading"
+        conan remote login art "$ARTIFACTORY_USER" --password "$ARTIFACTORY_API_KEY"
+        conan upload -r art -c "*" 2>&1 | grep --line-buffered "Uploading"
+      results-path: 'build/junit.xml'
+      artifact-name: 'test-results-linux'
 
   mac-build:
     name: Apple framework build
