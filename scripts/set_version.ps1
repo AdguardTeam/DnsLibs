@@ -115,9 +115,13 @@ Set-Version-InFile $rcRel "FILEVERSION $old_commas,0" "FILEVERSION $new_commas,0
 Set-Version-InFile $rcRel "PRODUCTVERSION $old_commas,0" "PRODUCTVERSION $new_commas,0"
 Set-Version-InFile $rcRel "`"ProductVersion`", `"$esc`"" "`"ProductVersion`", `"$new_full`""
 
-# .NET assembly versions (numeric core only).
+# .NET assembly versions: AssemblyVersion/AssemblyFileVersion are numeric
+# (core); AssemblyInformationalVersion is free-form and carries the full version
+# (it feeds the NuGet package's $version$ token). Match its value with a
+# wildcard so the replacement is robust regardless of the current contents.
 $csRel = 'platform/windows/cs/Adguard.Dns/SolutionInfo.cs'
 Set-Version-InFile $csRel "AssemblyVersion\(`"$esc_core`"\)" "AssemblyVersion(`"$new_core`")"
 Set-Version-InFile $csRel "AssemblyFileVersion\(`"$esc_core`"\)" "AssemblyFileVersion(`"$new_core`")"
+Set-Version-InFile $csRel 'AssemblyInformationalVersion\("[^"]*"\)' "AssemblyInformationalVersion(`"$new_full`")"
 
 Write-Host "Version updated: $new_full (core $new_core)"
