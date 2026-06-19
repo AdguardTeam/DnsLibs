@@ -230,6 +230,7 @@ jobs:
           name: apple-xcframework
           path: apple-deploy/apple-xcframework
           if-no-files-found: error
+          retention-days: 7
 
       - name: Upload podspec artifact
         if: needs.version.outputs.value != ''
@@ -238,6 +239,7 @@ jobs:
           name: apple-podspec
           path: apple-deploy/apple-podspec
           if-no-files-found: error
+          retention-days: 7
 
       - name: Upload SwiftPM artifact
         if: needs.version.outputs.value != ''
@@ -246,6 +248,7 @@ jobs:
           name: apple-swiftpm
           path: apple-deploy/apple-swiftpm
           if-no-files-found: error
+          retention-days: 7
 
       - name: Upload to Conan
         if: always()
@@ -300,6 +303,7 @@ jobs:
           name: android-artifactory-payload
           path: ${{ env.M2_LOCAL_REPO }}
           if-no-files-found: error
+          retention-days: 7
 
       - name: Upload to Conan
         if: always()
@@ -417,6 +421,7 @@ jobs:
         with:
           name: test-results-windows
           path: '**/Testing/*/*.xml'
+          retention-days: 7
 
       - name: Upload C# test results
         uses: actions/upload-artifact@v7
@@ -424,6 +429,7 @@ jobs:
         with:
           name: test-results-windows-cs
           path: '**/Adguard.Dns.Tests/TestResult.xml'
+          retention-days: 7
 
       - name: Upload nuget package
         uses: actions/upload-artifact@v7
@@ -431,6 +437,7 @@ jobs:
           name: windows-nupkg
           path: platform/windows/cs/Adguard.Dns/*.nupkg
           if-no-files-found: error
+          retention-days: 7
 
       - name: Upload to Conan
         if: always()

@@ -126,6 +126,7 @@ jobs:
           name: artifactory-payload
           path: artifactory-payload
           if-no-files-found: error
+          retention-days: 7
 
   android-deploy:
     name: Deploy library / Android
@@ -161,6 +162,7 @@ jobs:
           name: apple-xcframework
           path: apple-artifacts/apple-xcframework
           if-no-files-found: error
+          retention-days: 7
 
       - name: Re-upload podspec
         uses: actions/upload-artifact@v7
@@ -168,6 +170,7 @@ jobs:
           name: apple-podspec
           path: apple-artifacts/apple-podspec
           if-no-files-found: error
+          retention-days: 7
 
       - name: Re-upload SwiftPM
         uses: actions/upload-artifact@v7
@@ -175,6 +178,7 @@ jobs:
           name: apple-swiftpm
           path: apple-artifacts/apple-swiftpm
           if-no-files-found: error
+          retention-days: 7
 
   # Publish the xcframework binary first; the podspec and SwiftPM manifest both
   # reference its download URL, so they deploy only after it exists.
