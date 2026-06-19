@@ -12,8 +12,9 @@
 # The numeric core "X.Y.Z" is written to the fields that accept numbers only
 # (the Apple framework CMake VERSION, the Windows FILEVERSION/PRODUCTVERSION and
 # the .NET AssemblyVersion/AssemblyFileVersion); the full version string is
-# written to every free-form field (the Gradle version name and the Windows
-# ProductVersion display string).
+# written to every free-form field (the Gradle version name, the Windows
+# ProductVersion display string and AssemblyInformationalVersion, and the C++
+# AG_DNSLIBS_VERSION macro).
 
 set -euo pipefail
 
@@ -95,5 +96,10 @@ CS=platform/windows/cs/Adguard.Dns/SolutionInfo.cs
 "${SED_INPLACE[@]}" "s/AssemblyVersion(\"${esc_core}\")/AssemblyVersion(\"${new_core}\")/" "${CS}"
 "${SED_INPLACE[@]}" "s/AssemblyFileVersion(\"${esc_core}\")/AssemblyFileVersion(\"${new_core}\")/" "${CS}"
 "${SED_INPLACE[@]}" "s/AssemblyInformationalVersion(\"[^\"]*\")/AssemblyInformationalVersion(\"${new_full}\")/" "${CS}"
+
+# C++ library version string (free string, full version). Matched with a
+# wildcard so it works regardless of the current placeholder value.
+VERSION_H=common/include/dns/common/version.h
+"${SED_INPLACE[@]}" "s/#define AG_DNSLIBS_VERSION \"[^\"]*\"/#define AG_DNSLIBS_VERSION \"${new_full}\"/" "${VERSION_H}"
 
 echo "Version updated: ${new_full} (core ${new_core})"

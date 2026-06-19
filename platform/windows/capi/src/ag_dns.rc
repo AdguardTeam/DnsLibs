@@ -19,7 +19,7 @@ BEGIN
                         VALUE "LegalCopyright", "(C) 2009-2025 Adguard Software Ltd"
                         VALUE "CompanyName", "Adguard Software Ltd"
                         VALUE "ProductName", "Adguard DNS for Windows"
-                        VALUE "ProductVersion", "0.0.0"
+                        VALUE "ProductVersion", "0.0.0-git"
                         VALUE "OriginalFilename", "AdguardDns.dll"
                         VALUE "InternalName", "AdguardDns"
                 END

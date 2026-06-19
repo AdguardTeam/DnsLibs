@@ -1,7 +1,7 @@
 apply plugin: 'com.android.library'
 apply plugin: 'maven-publish'
 
-version = [name: '0.0.0', code: 689]
+version = [name: '0.0.0-git', code: 700]
 
 android {
     namespace 'com.adguard.dnslibs'

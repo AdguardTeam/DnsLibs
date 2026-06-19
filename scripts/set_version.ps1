@@ -11,8 +11,9 @@
     The numeric core "X.Y.Z" is written to the fields that accept numbers only
     (the Apple framework CMake VERSION, the Windows FILEVERSION/PRODUCTVERSION
     and the .NET AssemblyVersion/AssemblyFileVersion); the full version string is
-    written to every free-form field (the Gradle version name and the Windows
-    ProductVersion display string).
+    written to every free-form field (the Gradle version name, the Windows
+    ProductVersion display string and AssemblyInformationalVersion, and the C++
+    AG_DNSLIBS_VERSION macro).
 #>
 
 [CmdletBinding()]
@@ -123,5 +124,9 @@ $csRel = 'platform/windows/cs/Adguard.Dns/SolutionInfo.cs'
 Set-Version-InFile $csRel "AssemblyVersion\(`"$esc_core`"\)" "AssemblyVersion(`"$new_core`")"
 Set-Version-InFile $csRel "AssemblyFileVersion\(`"$esc_core`"\)" "AssemblyFileVersion(`"$new_core`")"
 Set-Version-InFile $csRel 'AssemblyInformationalVersion\("[^"]*"\)' "AssemblyInformationalVersion(`"$new_full`")"
+
+# C++ library version string (free string, full version). Matched with a
+# wildcard so it works regardless of the current placeholder value.
+Set-Version-InFile 'common/include/dns/common/version.h' '#define AG_DNSLIBS_VERSION "[^"]*"' "#define AG_DNSLIBS_VERSION `"$new_full`""
 
 Write-Host "Version updated: $new_full (core $new_core)"

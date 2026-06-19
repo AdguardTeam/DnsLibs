@@ -17,4 +17,4 @@ using System.Runtime.InteropServices;
 // Free-form version (may carry a prerelease suffix). Drives the NuGet package
 // version: classic `nuget pack` resolves the nuspec $version$ token from this
 // attribute, falling back to AssemblyVersion when it is absent.
-[assembly: AssemblyInformationalVersion("0.0.0")]
+[assembly: AssemblyInformationalVersion("0.0.0-git")]
