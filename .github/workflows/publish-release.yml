@@ -60,7 +60,7 @@ jobs:
     runs-on: [team-corelibs]
     steps:
       - name: Download Android artifactory payload from Build run
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: android-artifactory-payload
           path: artifactory-payload
@@ -96,7 +96,7 @@ jobs:
     runs-on: [team-corelibs]
     steps:
       - name: Download Apple artifacts from Build run
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           pattern: apple-*
           path: apple-artifacts
@@ -174,7 +174,7 @@ jobs:
     environment: windows-artifactory
     steps:
       - name: Download nuget package from Build run
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: windows-nupkg
           path: nupkg
