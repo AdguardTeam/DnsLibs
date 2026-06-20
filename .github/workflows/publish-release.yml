@@ -42,68 +42,15 @@ jobs:
     needs: tag
     runs-on: [team-corelibs]
     outputs:
-      version: ${{ steps.prep.outputs.version }}
-      build_run_id: ${{ steps.prep.outputs.build_run_id }}
+      build_run_id: ${{ steps.resolve.outputs.build_run_id }}
     steps:
-      - name: Resolve version and locate Build run
-        id: prep
-        uses: actions/github-script@v8
-        env:
-          # The tag job creates the release tag; deploy resolves the version
-          # and the originating Build run from it.
-          REF: ${{ needs.tag.outputs.tag }}
+      - name: Resolve build run
+        id: resolve
+        uses: AdGuardSoftwareLimited/native-libs-common/.github/actions/resolve-build-run@master
         with:
-          script: |
-            const { owner, repo } = context.repo;
-
-            // The deploy is always driven by a release tag (vX.Y.Z[-channel.N]).
-            // REF may be a full ref (refs/tags/vX) or a bare tag (vX).
-            const tag = process.env.REF.replace(/^refs\/tags\//, '');
-            const version = tag.replace(/^v/, '');
-            if (!/^[0-9]+\.[0-9]+\.[0-9]+/.test(version)) {
-              core.setFailed(`Ref '${process.env.REF}' is not a release tag`);
-              return;
-            }
-            core.setOutput('version', version);
-            core.info(`Deploying version ${version} (tag ${tag})`);
-
-            // Resolve the tag to the commit it points at (deref annotated tags).
-            const ref = await github.rest.git.getRef({ owner, repo, ref: `tags/${tag}` });
-            let sha = ref.data.object.sha;
-            if (ref.data.object.type === 'tag') {
-              const t = await github.rest.git.getTag({ owner, repo, tag_sha: sha });
-              sha = t.data.object.sha;
-            }
-
-            // The versioned artifacts come from the release PR's build, which ran
-            // on the PR head commit -- not on the squashed commit the tag points
-            // at. Recover that head SHA from the PR merged into the tagged commit.
-            let buildSha = sha;
-            const { data: prs } = await github.rest.repos.listPullRequestsAssociatedWithCommit({
-              owner, repo, commit_sha: sha,
-            });
-            const pr = prs.find((p) => p.merged_at) || prs[0];
-            if (pr) {
-              buildSha = pr.head.sha;
-              core.info(`Tagged commit came from PR #${pr.number}; using head ${buildSha} for artifacts`);
-            } else {
-              core.info(`No PR associated with ${sha}; looking for a build on the tagged commit itself`);
-            }
-
-            // Find the successful Build run that produced the deploy artifacts.
-            const { data } = await github.rest.actions.listWorkflowRuns({
-              owner, repo,
-              workflow_id: 'build.yml',
-              head_sha: buildSha,
-              status: 'success',
-              per_page: 1,
-            });
-            if (data.workflow_runs.length === 0) {
-              core.setFailed(`No successful Build library and run tests run found for ${buildSha}`);
-              return;
-            }
-            core.setOutput('build_run_id', data.workflow_runs[0].id);
-            core.info(`Using Build run ${data.workflow_runs[0].id}`);
+          tag: ${{ needs.tag.outputs.tag }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          build-workflow: build.yml
 
   # 3a. Android: re-publish the payload from the Build run into this run, then
   # hand it to the reusable deploy workflow (which downloads from the current run).
