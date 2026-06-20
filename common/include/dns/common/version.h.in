@@ -1,0 +1,2 @@
+#pragma once
+#define AG_DNSLIBS_VERSION "@DNS_LIBS_VERSION_FULL@"

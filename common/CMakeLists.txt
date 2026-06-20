@@ -3,6 +3,15 @@ project(dnslibs_common)
 
 set(CMAKE_CXX_STANDARD 20)
 
+# Resolve the project version and generate the public version header from its
+# template. The concrete header is git-ignored and lives in the build tree.
+include(${CMAKE_CURRENT_SOURCE_DIR}/../cmake/version.cmake)
+set(DNS_LIBS_GEN_DIR ${CMAKE_CURRENT_BINARY_DIR}/gen)
+configure_file(
+        ${CMAKE_CURRENT_SOURCE_DIR}/include/dns/common/version.h.in
+        ${DNS_LIBS_GEN_DIR}/dns/common/version.h
+        @ONLY)
+
 find_package(libevent REQUIRED)
 find_package(pcre2 REQUIRED)
 find_package(magic_enum REQUIRED)
@@ -31,7 +40,7 @@ else ()
 endif ()
 
 set_target_properties(dnslibs_common PROPERTIES POSITION_INDEPENDENT_CODE ON)
-target_include_directories(dnslibs_common PUBLIC include)
+target_include_directories(dnslibs_common PUBLIC include ${DNS_LIBS_GEN_DIR})
 target_compile_definitions(dnslibs_common PUBLIC PCRE2_STATIC=1 PCRE2_CODE_UNIT_WIDTH=8 SPDLOG_NO_EXCEPTIONS=1)
 target_link_libraries(dnslibs_common libevent::libevent pcre2::pcre2 )
 target_link_libraries(dnslibs_common magic_enum::magic_enum native_libs_common::native_libs_common libuv::libuv)

@@ -40,3 +40,9 @@ signtool.log
 
 conan/
 cmake/conan_provider.cmake
+
+# Generated from *.in templates (CMake configure_file for builds, conanfile
+# Python render for the package) and the MSBuild version target. Never committed.
+common/include/dns/common/version.h
+platform/windows/capi/src/ag_dns.rc
+platform/windows/cs/Adguard.Dns/VersionInfo.cs

@@ -16,13 +16,10 @@ on:
         type: string
 
 jobs:
-  # Resolve the version to stamp into this build. workflow_call passes it
-  # explicitly; pull requests derive it from CHANGELOG.md; branch pushes and
-  # manual dispatch fall back to `git describe` so the build is always stamped
-  # with a meaningful version. It only stays empty when no version tag exists
-  # yet, in which case the platform jobs skip stamping and keep the placeholder.
-  # Local builds do not run this workflow and instead let
-  # scripts/set_version.{sh,ps1} fall back to `git describe` directly.
+  # Resolve the build version and expose it to the platform jobs as the
+  # DNS_LIBS_VERSION env var; each toolchain bakes it in (CMake/Gradle/MSBuild).
+  # An empty value (untagged) lets each toolchain fall back to its own
+  # git describe / 0.0.0-git.
   version:
     name: Resolve version
     if: github.repository == 'AdGuardSoftwareLimited/dns-libs'
@@ -43,48 +40,33 @@ jobs:
           EVENT_NAME: ${{ github.event_name }}
           INPUT_VERSION: ${{ inputs.version }}
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
-          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
         run: |
           set -euo pipefail
 
-          # workflow_call passes the version explicitly; PRs derive it from the
-          # CHANGELOG; branch pushes and manual dispatch fall back to git describe.
-          if [ "$EVENT_NAME" = "workflow_call" ]; then
-            echo "Resolved version: ${INPUT_VERSION}"
-            echo "value=${INPUT_VERSION}" >> "$GITHUB_OUTPUT"
-            exit 0
-          fi
-          if [ "$EVENT_NAME" != "pull_request" ]; then
-            # Branch pushes and manual dispatch are not tied to a CHANGELOG
-            # release entry, so derive a version from the nearest tag (the same
-            # scheme local builds use) -- e.g. "2.8.53-6-gabcdef". This keeps the
-            # build stamped with a meaningful version instead of the placeholder.
-            value=$(git describe --tags --match 'v*' 2>/dev/null | sed -e 's/^v//' || true)
-            echo "Resolved version: ${value}"
-            echo "value=${value}" >> "$GITHUB_OUTPUT"
-            exit 0
-          fi
+          case "$EVENT_NAME" in
+            workflow_call)
+              # publish-release passes the exact release version.
+              value="$INPUT_VERSION"
+              ;;
+            pull_request)
+              # The PR that adds the CHANGELOG heading builds the bare release
+              # version; any other PR build gets a git-describe prerelease.
+              latest=$(sed -nE '/^## \[[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?\]/{s/^## \[([0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?)\].*/\1/p;q;}' CHANGELOG.md)
+              [ -n "$latest" ] || { echo "No version found in CHANGELOG.md" >&2; exit 1; }
+              commit=$(git log -1 --format=%H -S"## [$latest]" -- CHANGELOG.md 2>/dev/null || true)
+              if [ -n "$commit" ] && ! git merge-base --is-ancestor "$commit" "$BASE_SHA" 2>/dev/null; then
+                value="$latest"
+              else
+                value=$(git describe --tags --match 'v*' 2>/dev/null | sed -e 's/^v//' || true)
+              fi
+              ;;
+            *)
+              # Branch push or manual dispatch.
+              value=$(git describe --tags --match 'v*' 2>/dev/null | sed -e 's/^v//' || true)
+              ;;
+          esac
 
-          # Latest version from CHANGELOG.md (first non-Unreleased entry, with
-          # any -beta.N / -rc.N prerelease suffix).
-          latest=$(sed -nE '/^## \[[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?\]/{s/^## \[([0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?)\].*/\1/p;q;}' CHANGELOG.md)
-          if [ -z "$latest" ]; then
-            echo "Could not find a version in CHANGELOG.md" >&2
-            exit 1
-          fi
-
-          # This branch "introduced" the version if the commit that added its
-          # CHANGELOG heading is not already reachable from the PR base; then we
-          # use the bare version. Otherwise it is an intermediate build, tagged
-          # with the head commit hash.
-          commit=$(git log -1 --format=%H -S"## [$latest]" -- CHANGELOG.md 2>/dev/null || true)
-          if [ -n "$commit" ] && ! git merge-base --is-ancestor "$commit" "$BASE_SHA" 2>/dev/null; then
-            value="$latest"
-          else
-            value="${latest}+$(git rev-parse --short "$HEAD_SHA")"
-          fi
-
-          echo "Resolved version: ${value}"
+          echo "Resolved version: ${value:-(empty)}"
           echo "value=${value}" >> "$GITHUB_OUTPUT"
 
   linux-build:
@@ -142,13 +124,13 @@ jobs:
       - ${{ vars.BUILD_IMAGE_VERSION_MACOS }}
       - ephemeral-limit-memory-6144
       - ephemeral-limit-cpu-4
+    env:
+      # Resolved once; the framework CMake build reads it via cmake/version.cmake
+      # (env fallback) for both the version.h header and the Mach-O VERSION.
+      DNS_LIBS_VERSION: ${{ needs.version.outputs.value }}
     steps:
       - name: Checkout
         uses: actions/checkout@v6
-
-      - name: Set version
-        if: needs.version.outputs.value != ''
-        run: scripts/set_version.sh "${{ needs.version.outputs.value }}"
 
       - name: Build xcframework
         run: |
@@ -271,13 +253,12 @@ jobs:
       image: adguard/core-libs:2.10
     env:
       M2_LOCAL_REPO: ${{ github.workspace }}/.m2/repository
+      # Read by build.gradle (resolveDnsLibsVersion) and forwarded to the native
+      # CMake build as -DDNS_LIBS_VERSION.
+      DNS_LIBS_VERSION: ${{ needs.version.outputs.value }}
     steps:
       - name: Checkout
         uses: actions/checkout@v6
-
-      - name: Set version
-        if: needs.version.outputs.value != ''
-        run: scripts/set_version.sh "${{ needs.version.outputs.value }}"
 
       - name: Build AAR and publish to local Maven
         working-directory: platform/android/dnsproxy
@@ -321,14 +302,13 @@ jobs:
       - ${{ vars.BUILD_IMAGE_VERSION_WINDOWS }}
       - ephemeral-limit-memory-8192
       - ephemeral-limit-cpu-8
+    env:
+      # Read by cmake/version.cmake (the RC resource) and by
+      # Directory.Build.targets (the C# assembly version attributes).
+      DNS_LIBS_VERSION: ${{ needs.version.outputs.value }}
     steps:
       - name: Checkout
         uses: actions/checkout@v6
-
-      - name: Set version
-        if: needs.version.outputs.value != ''
-        shell: powershell
-        run: scripts/set_version.ps1 "${{ needs.version.outputs.value }}"
 
       - name: Build C and C# library and run tests
         shell: powershell

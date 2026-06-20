@@ -1,0 +1,61 @@
+<Project>
+
+  <!--
+    Generates the git-ignored VersionInfo.cs (assembly version attributes) for
+    every project under this directory, so a single value is shared by the
+    product build, the test build and `nuget pack` without a per-command flag.
+
+    Version source order:
+      1. property DnsLibsVersion  (-p:DnsLibsVersion=value)
+      2. env var DNS_LIBS_VERSION
+      3. git describe (tags matching v*)
+      4. 0.0.0-git fallback
+  -->
+
+  <PropertyGroup>
+    <!-- env override when the property was not passed explicitly -->
+    <DnsLibsVersion Condition="'$(DnsLibsVersion)' == ''">$(DNS_LIBS_VERSION)</DnsLibsVersion>
+    <DnsLibsVersionInfoFile>$(MSBuildThisFileDirectory)VersionInfo.cs</DnsLibsVersionInfoFile>
+  </PropertyGroup>
+
+  <!-- Literal include: present at evaluation even though the file is generated
+       below before CoreCompile runs. Shared by all projects under this dir. -->
+  <ItemGroup>
+    <Compile Include="$(DnsLibsVersionInfoFile)">
+      <Link>Properties\VersionInfo.cs</Link>
+    </Compile>
+  </ItemGroup>
+
+  <Target Name="ResolveDnsLibsVersion">
+    <Exec Condition="'$(DnsLibsVersion)' == ''"
+          Command="git describe --tags --match v*"
+          ConsoleToMSBuild="true"
+          WorkingDirectory="$(MSBuildThisFileDirectory)"
+          ContinueOnError="true">
+      <Output TaskParameter="ConsoleOutput" PropertyName="_DnsLibsGitDescribe" />
+      <Output TaskParameter="ExitCode" PropertyName="_DnsLibsGitExit" />
+    </Exec>
+    <PropertyGroup>
+      <DnsLibsVersion Condition="'$(DnsLibsVersion)' == '' and '$(_DnsLibsGitExit)' == '0' and '$(_DnsLibsGitDescribe)' != ''">$(_DnsLibsGitDescribe.Trim().TrimStart('v'))</DnsLibsVersion>
+      <DnsLibsVersion Condition="'$(DnsLibsVersion)' == ''">0.0.0-git</DnsLibsVersion>
+      <DnsLibsVersionCore>$([System.Text.RegularExpressions.Regex]::Match($(DnsLibsVersion), '^[0-9]+\.[0-9]+\.[0-9]+').Value)</DnsLibsVersionCore>
+    </PropertyGroup>
+    <Message Importance="high" Text="DNS_LIBS C# version: $(DnsLibsVersion) (core $(DnsLibsVersionCore))" />
+  </Target>
+
+  <Target Name="GenerateDnsLibsVersionInfo"
+          BeforeTargets="CoreCompile"
+          DependsOnTargets="ResolveDnsLibsVersion">
+    <ItemGroup>
+      <_DnsLibsVersionInfoLine Include="// &lt;auto-generated&gt; written by Directory.Build.targets - not committed" />
+      <_DnsLibsVersionInfoLine Include="[assembly: System.Reflection.AssemblyVersion(&quot;$(DnsLibsVersionCore)&quot;)]" />
+      <_DnsLibsVersionInfoLine Include="[assembly: System.Reflection.AssemblyFileVersion(&quot;$(DnsLibsVersionCore)&quot;)]" />
+      <_DnsLibsVersionInfoLine Include="[assembly: System.Reflection.AssemblyInformationalVersion(&quot;$(DnsLibsVersion)&quot;)]" />
+    </ItemGroup>
+    <WriteLinesToFile File="$(DnsLibsVersionInfoFile)"
+                      Lines="@(_DnsLibsVersionInfoLine)"
+                      Overwrite="true"
+                      WriteOnlyWhenDifferent="true" />
+  </Target>
+
+</Project>

@@ -12,9 +12,7 @@ using System.Runtime.InteropServices;
 [assembly: AssemblyCopyright("Copyright © Adguard Software Ltd 2009-2024")]
 [assembly: AssemblyTrademark("Copyright © Adguard Software Ltd 2024")]
 [assembly: AssemblyCulture("")]
-[assembly: AssemblyVersion("0.0.0")]
-[assembly: AssemblyFileVersion("0.0.0")]
-// Free-form version (may carry a prerelease suffix). Drives the NuGet package
-// version: classic `nuget pack` resolves the nuspec $version$ token from this
-// attribute, falling back to AssemblyVersion when it is absent.
-[assembly: AssemblyInformationalVersion("0.0.0-git")]
+// The version attributes (AssemblyVersion / AssemblyFileVersion /
+// AssemblyInformationalVersion) are emitted into a generated, git-ignored
+// VersionInfo.cs by Directory.Build.targets at build time. Set DnsLibsVersion
+// (or the DNS_LIBS_VERSION env var) to override the git-describe default.

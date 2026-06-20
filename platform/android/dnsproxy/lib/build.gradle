@@ -1,7 +1,29 @@
 apply plugin: 'com.android.library'
 apply plugin: 'maven-publish'
 
-version = [name: '0.0.0-git', code: 700]
+// Resolve the library version: -PdnsLibsVersion / DNS_LIBS_VERSION env var ->
+// git describe --tags --match v* -> 0.0.0-git fallback. This is an AAR, so there
+// is no Android versionCode.
+static String resolveDnsLibsVersion(Project project) {
+    def override = project.findProperty('dnsLibsVersion') ?: System.getenv('DNS_LIBS_VERSION')
+    if (override) {
+        return override.toString().trim()
+    }
+    try {
+        def proc = ['git', 'describe', '--tags', '--match', 'v*'].execute(null, project.rootDir)
+        proc.waitFor()
+        if (proc.exitValue() == 0) {
+            def described = proc.in.text.trim()
+            if (described) {
+                return described.replaceFirst(/^v/, '')
+            }
+        }
+    } catch (ignored) {
+    }
+    return '0.0.0-git'
+}
+
+version = resolveDnsLibsVersion(project)
 
 android {
     namespace 'com.adguard.dnslibs'
@@ -31,7 +53,8 @@ android {
             cmake {
                 targets "adguard-dns"
                 arguments "-DANDROID_STL=c++_static",
-                        "-DCMAKE_BUILD_TYPE=RelWithDebInfo"
+                        "-DCMAKE_BUILD_TYPE=RelWithDebInfo",
+                        "-DDNS_LIBS_VERSION=${project.version}".toString()
             }
         }
     }
@@ -83,7 +106,7 @@ afterEvaluate {
                 from components.release
                 groupId = 'com.adguard.corelibs'
                 artifactId = 'dns-libs'
-                version = project.version.name
+                version = project.version.toString()
             }
         }
     }

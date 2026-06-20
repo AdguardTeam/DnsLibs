@@ -4,6 +4,9 @@ if(NOT CMAKE_INSTALL_PREFIX MATCHES "conan2")
 endif()
 project(AdguardDns C CXX)
 
+# Resolve the project version and generate the version resource from its template.
+include(${CMAKE_CURRENT_SOURCE_DIR}/../../../cmake/version.cmake)
+
 set(CMAKE_POLICY_DEFAULT_CMP0063 NEW) # allows visibility=hidden for static targets for subprojects
 cmake_policy(SET CMP0063 NEW) # allows visibility=hidden for static targets for this project
 
@@ -81,8 +84,12 @@ endif ()
 set(SOURCE_FILES
         src/ag_dns.cpp)
 
+configure_file(
+        ${CMAKE_CURRENT_SOURCE_DIR}/src/ag_dns.rc.in
+        ${CMAKE_CURRENT_BINARY_DIR}/gen/ag_dns.rc
+        @ONLY)
 set(RES_FILES
-        src/ag_dns.rc)
+        ${CMAKE_CURRENT_BINARY_DIR}/gen/ag_dns.rc)
 
 
 if (CMAKE_SIZEOF_VOID_P EQUAL 8)
