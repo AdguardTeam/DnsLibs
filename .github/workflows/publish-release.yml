@@ -21,7 +21,7 @@ on:
         type: string
 
 permissions:
-  actions: read
+  actions: write
   contents: write
   id-token: write
   pull-requests: read
