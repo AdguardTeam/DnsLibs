@@ -16,6 +16,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Fixed
 
+- Fixed deploy for Windows.
+
 ### Security
 
 ## [2.8.56] - 2026-06-24
