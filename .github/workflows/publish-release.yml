@@ -188,7 +188,7 @@ jobs:
           Get-ChildItem -Path nupkg -Filter *.nupkg -Recurse | ForEach-Object {
             & nuget push $_.FullName `
               -Source "${{ vars.NUGET_REPO_URL }}" `
-              -ApiKey "${{ secrets.ARTIFACTORY_API_KEY }}" `
+              -ApiKey "${{ secrets.ARTIFACTORY_USER }}:${{ secrets.ARTIFACTORY_API_KEY }}" `
               -SkipDuplicate
             if (!$?) { exit 1 }
           }
@@ -267,7 +267,7 @@ jobs:
     uses: AdGuardSoftwareLimited/native-libs-common/.github/workflows/announce-release.yml@master
     with:
       target_repo: ${{ matrix.repo }}
-      product: DNS libraries
+      product: DnsLibs
       version: ${{ needs.tag.outputs.version }}
       release_url: ${{ needs.mirror-and-release.outputs.release-url }}
       channel: ${{ matrix.channel }}
