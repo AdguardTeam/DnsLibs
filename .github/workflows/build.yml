@@ -300,8 +300,8 @@ jobs:
       - ephemeral
       - ephemeral-vmwin
       - ${{ vars.BUILD_IMAGE_VERSION_WINDOWS }}
-      - ephemeral-limit-memory-8192
-      - ephemeral-limit-cpu-8
+      - ephemeral-limit-memory-6144
+      - ephemeral-limit-cpu-4
     env:
       # Read by cmake/version.cmake (the RC resource) and by
       # Directory.Build.targets (the C# assembly version attributes).
