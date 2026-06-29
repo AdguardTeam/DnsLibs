@@ -10,8 +10,6 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Changed
 
-- Updated NLC to 8.1.38.
-
 ### Deprecated
 
 ### Removed
@@ -19,6 +17,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ### Fixed
 
 ### Security
+
+## [2.8.58] - 2026-06-29
+
+### Changed
+
+- Updated NLC to 8.1.38.
 
 ## [2.8.57] - 2026-06-25
 
@@ -323,7 +327,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - API change: allow in-memory filters. See `ag::dnsfilter::FilterParams`.
 - Optimistic DNS caching. See `ag::DnsProxySettings::optimistic_cache`.
 
-[Unreleased]: https://github.com/AdguardTeam/DnsLibs/compare/v2.8.57...HEAD
+[Unreleased]: https://github.com/AdguardTeam/DnsLibs/compare/v2.8.58...HEAD
+[2.8.58]: https://github.com/AdguardTeam/DnsLibs/compare/v2.8.57...v2.8.58
 [2.8.57]: https://github.com/AdguardTeam/DnsLibs/compare/v2.8.56...v2.8.57
 [2.8.56]: https://github.com/AdguardTeam/DnsLibs/compare/v2.8.55...v2.8.56
 [2.8.55]: https://github.com/AdguardTeam/DnsLibs/compare/v2.8.54...v2.8.55
