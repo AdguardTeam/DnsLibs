@@ -1,0 +1,56 @@
+name: Publish snapshot
+
+# Manually-triggered snapshot publish. Unlike publish-release.yml it does not
+# tag or create a GitHub release: it mirrors the current commit to the public
+# repository and exports/uploads the Conan recipes to Artifactory at the current
+# `git describe` version (e.g. 2.8.58-5-gabc1234). Use it to make an
+# intermediate commit installable from Conan without cutting a release.
+#
+# The snapshot recipe's source() clones the public repository and checks out the
+# `-g<rev>` commit, so the mirror must run first for the recipe to be buildable.
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: write
+  id-token: write
+
+jobs:
+  # 1. Mirror the current commit (and all branches/tags) to the public
+  # repository, so the snapshot commit exists for the Conan recipe's source()
+  # to check out at build time. Reuse the repo's own mirror.yml, which already
+  # carries the team, target_repo and refspecs.
+  mirror:
+    name: Mirror to public repository
+    uses: ./.github/workflows/mirror.yml
+    secrets: inherit
+    permissions:
+      contents: read
+      actions: write
+      id-token: write
+
+  # 2. Export and upload the Conan recipes to Artifactory at the snapshot
+  # version. Runs after the mirror so the `-g<rev>` commit the recipe checks out
+  # is already present in the public repository.
+  upload-conan-recipes:
+    name: Upload conan recipes
+    needs: mirror
+    environment: conan-artifactory
+    runs-on: team-corelibs
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          # Full history + tags so `git describe` can compute the
+          # <tag>-<n>-g<rev> snapshot version.
+          fetch-depth: 0
+
+      - name: Upload conan recipes
+        uses: AdGuardSoftwareLimited/native-libs-common/.github/actions/upload-conan-recipes@master
+        with:
+          export_script_path: scripts/export_conan.sh
+          conan_repo_url: ${{ vars.CONAN_REPO_URL }}
+          artifactory_user: ${{ secrets.ARTIFACTORY_USER }}
+          artifactory_api_key: ${{ secrets.ARTIFACTORY_API_KEY }}

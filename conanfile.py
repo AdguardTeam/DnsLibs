@@ -98,7 +98,17 @@ class DnsLibsConan(ConanFile):
             return
 
         git = Git(self)
-        git.fetch_commit(self.vcs_url, f"v{self.version}")
+        version = str(self.version)
+        # A "git describe" snapshot version looks like "<tag>-<n>-g<rev>"; check
+        # out the commit after "-g". A plain release version is the "v<version>"
+        # tag. fetch_commit can't fetch an abbreviated rev (GitHub rejects it),
+        # so snapshots clone the repo and check the commit out locally.
+        described = re.search(r"-g([0-9a-f]+)$", version)
+        if described:
+            git.clone(url=self.vcs_url, target=".")
+            git.checkout(described.group(1))
+        else:
+            git.fetch_commit(self.vcs_url, f"v{version}")
 
     def generate(self):
         deps = CMakeDeps(self)
