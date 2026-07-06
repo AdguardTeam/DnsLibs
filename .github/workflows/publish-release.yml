@@ -161,14 +161,17 @@ jobs:
       ak-repo: swift-pkgs
     secrets: inherit
 
+  resolve-images:
+    uses: AdGuardSoftwareLimited/native-libs-common/.github/workflows/resolve-images.yml@master
+
   # 3c. Windows: download the nuget package from the Build run and push it.
   windows-deploy:
     name: Deploy library / Windows
-    needs: prepare
+    needs: [prepare, resolve-images]
     runs-on:
       - ephemeral
       - ephemeral-vmwin
-      - ${{ vars.BUILD_IMAGE_VERSION_WINDOWS }}
+      - ${{ needs.resolve-images.outputs.windows }}
       - ephemeral-limit-memory-2048
       - ephemeral-limit-cpu-2
     environment: windows-artifactory
