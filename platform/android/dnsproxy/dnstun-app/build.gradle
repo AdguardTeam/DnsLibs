@@ -4,7 +4,7 @@ version = "0.1"
 
 android {
     namespace 'com.adguard.testapp'
-    ndkVersion "28.1.13356709"
+    ndkVersion "29.0.14206865"
     compileSdkVersion 34
     defaultConfig {
         applicationId 'com.adguard.testapp'

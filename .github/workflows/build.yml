@@ -82,7 +82,7 @@ jobs:
     uses: AdGuardSoftwareLimited/actions/.github/workflows/junit-tests.yml@master
     with:
       runs-on: '["ephemeral","ephemeral-linux","${{ vars.BUILD_IMAGE_VERSION_CORELIBS_BUILDER }}","ephemeral-limit-memory-12288","ephemeral-limit-cpu-8"]'
-      container-image: 'adguard/core-libs:2.10'
+      container-image: 'adguard/core-libs:2.11'
       test-command: |
         set -e
         set -x
@@ -250,7 +250,7 @@ jobs:
       - ephemeral-limit-memory-8192
       - ephemeral-limit-cpu-8
     container:
-      image: adguard/core-libs:2.10
+      image: adguard/core-libs:2.11
     env:
       M2_LOCAL_REPO: ${{ github.workspace }}/.m2/repository
       # Read by build.gradle (resolveDnsLibsVersion) and forwarded to the native

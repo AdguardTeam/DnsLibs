@@ -27,7 +27,7 @@ version = resolveDnsLibsVersion(project)
 
 android {
     namespace 'com.adguard.dnslibs'
-    ndkVersion '28.1.13356709'
+    ndkVersion '29.0.14206865'
     compileSdk 34
 
     publishing {
