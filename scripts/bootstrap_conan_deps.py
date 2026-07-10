@@ -18,7 +18,6 @@ import shutil
 import stat
 import subprocess
 import sys
-import yaml
 
 work_dir = os.path.dirname(os.path.realpath(__file__))
 project_dir = os.path.dirname(work_dir)
@@ -47,6 +46,27 @@ def remove_dir_if_exists(dir_path):
         shutil.rmtree(dir_path, onerror=on_rm_tree_error)
 
 
+def export_nlc(version):
+    """
+    Export the given native_libs_common version and all of its custom Conan
+    recipes to the local Conan cache.
+
+    NLC is versioned by git tags (`v<version>`); its recipe's `source()` checks
+    out the matching tag when the package is built, so we only need to check out
+    the tag here and export the recipe at the corresponding version. This mirrors
+    NLC's own `scripts/export_conan.sh`.
+    """
+    subprocess.run(["git", "checkout", "v%s" % version], check=True)
+    subprocess.run(["conan", "export", ".", "--user", "adguard",
+                    "--channel", "oss", "--version", version], check=True)
+    recipes_dir = os.path.join(nlc_dir, "conan", "recipes")
+    for recipe in sorted(os.listdir(recipes_dir)):
+        recipe_path = os.path.join(recipes_dir, recipe)
+        if os.path.isdir(recipe_path):
+            subprocess.run(["conan", "export", recipe_path,
+                            "--user", "adguard", "--channel", "oss"], check=True)
+
+
 with open(os.path.join(project_dir, "conanfile.py"), "r") as file:
     for line in map(str.strip, file.readlines()):
         if line.startswith('self.requires("native_libs_common/') \
@@ -60,22 +80,7 @@ try:
     subprocess.run(["git", "clone", nlc_url, nlc_dir], check=True)
     os.chdir(nlc_dir)
 
-    # Reduce the chances of missing a necessary dependency exported with NLC
-    # by exporting all recipes from all versions of NLC, starting with the minimum
-    # necessary.
-    min_nlc_version = min(nlc_versions)
-    with open("conandata.yml", "r") as file:
-        items = yaml.safe_load(file)["commit_hash"]
-
-    for v in nlc_versions: # [k for k in items.keys() if k >= min_nlc_version]:
-        subprocess.run(["git", "checkout", "master"], check=True)
-        try:
-            subprocess.run(["python3", os.path.join(nlc_dir, "scripts", "export_conan.py"), v], check=True)
-        except:
-            if v in nlc_versions:
-                raise
-            else:
-                # Some native_libs_common versions have broken Conan recipes: ignore them.
-                continue
+    for v in nlc_versions:
+        export_nlc(v)
 finally:
     remove_dir_if_exists(nlc_dir)
