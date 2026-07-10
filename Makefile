@@ -140,14 +140,12 @@ else
 endif
 
 ## Lint markdown files.
-## `markdownlint-cli` should be installed:
-##    macOS: `brew install markdownlint-cli`
-##    Linux: `npm install -g markdownlint-cli`
+## `markdownlint-cli2` should be installed:
+##    macOS: `brew install markdownlint-cli2`
+##    Linux: `npm install -g markdownlint-cli2`
 .PHONY: lint-md
 lint-md:
-	echo markdownlint version:
-	markdownlint --version
-	markdownlint .
+	markdownlint-cli2 "**/*.md"
 
 ## Fix linter issues that are auto-fixable.
 .PHONY: lint-fix
@@ -163,7 +161,7 @@ lint-fix-cpp: check-clang-format-version
 ## Auto-fix markdown files.
 .PHONY: lint-fix-md
 lint-fix-md:
-	markdownlint --fix .
+	markdownlint-cli2 --fix "**/*.md"
 
 ## List Conan dependency package directories.
 .PHONY: list-deps-dirs

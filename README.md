@@ -9,9 +9,10 @@ A DNS proxy library that supports all existing DNS protocols including `DNS-over
 
 #### Prerequisites
 
-* Conan C++ package manager 2.0.5 or higher
-* CMake 3.24 or higher
-* GCC 9 or higher / Clang 8 or higher
+- Conan C++ package manager 2.0.5 or higher
+- CMake 3.24 or higher
+- GCC 9 or higher / Clang 8 or higher
+- `markdownlint-cli2` (for linting Markdown files): install via `brew install markdownlint-cli2` on macOS or `npm install -g markdownlint-cli2` on Linux
 
 #### Building
 
@@ -60,6 +61,18 @@ As a result the DNS proxy framework will be located in `<build_path>/<target_nam
 where `<build_path>` is the build path one passed to script, `<target_name>` is the framework name,
 `<framework_type>` is either `framework` (if one specified the target platform) or
 `xcframework` (if one didn't specify any platform, or passed `all`).
+
+### Linting
+
+The following `make` targets are available for linting:
+
+- `make lint` runs all linters (`lint-md` and `lint-cpp`).
+- `make lint-md` lints Markdown files with `markdownlint-cli2` (configured via
+  `.markdownlint-cli2.yaml`).
+- `make lint-cpp` checks C++ formatting with `clang-format` and runs `clangd-tidy`.
+- `make lint-fix` auto-fixes fixable issues for both Markdown and C++.
+- `make lint-fix-md` auto-fixes Markdown files.
+- `make lint-fix-cpp` auto-fixes C++ formatting with `clang-format`.
 
 ## Useful notes
 
