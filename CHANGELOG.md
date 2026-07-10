@@ -10,7 +10,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Changed
 
-- Updated NLC to 8.1.39.
+- Updated NLC to 8.1.42.
 
 ### Deprecated
 
