@@ -242,5 +242,4 @@ Rule examples:
 - [DNSCrypt](https://dnscrypt.info/stamps-specifications/) specifications;
 - An Introduction to [libuv](https://nikhilm.github.io/uvbook/An%20Introduction%20to%20libuv.pdf);
 - [LDNS](https://www.nlnetlabs.nl/documentation/ldns/) docs;
-- [Filtering rules syntax](https://adguard-dns.io/kb/general/dns-filtering-syntax/);
-- [AdGuard Forum](https://forum.adguard.com) for questions and discussions.
+- [Filtering rules syntax](https://adguard-dns.io/kb/general/dns-filtering-syntax/).
