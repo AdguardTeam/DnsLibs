@@ -18,10 +18,10 @@ Run the helper script from the repository root. The `--bp` and `--fwp` options a
 command-line builds because the script defaults rely on Xcode's `SRCROOT`:
 
 ```shell
-cd <path/to/dnsproxy>
+cd <dns-libs-dir>
 bash platform/mac/framework/build_dnsproxy_framework.sh \
     --bp <build_path> \
-    --fwp <path/to/dnsproxy>/platform/mac/framework/
+    --fwp <dns-libs-dir>/platform/mac/framework/
 ```
 
 For a full list of options run:
@@ -66,7 +66,7 @@ The framework project includes Objective-C++ unit tests, but they are only avail
 To build and run them, configure the framework CMake project for macOS and use the `tests` target:
 
 ```shell
-cd <path/to/dnsproxy>/platform/mac/framework
+cd <dns-libs-dir>/platform/mac/framework
 mkdir build && cd build
 cmake .. -DTARGET_OS=macos -DCMAKE_BUILD_TYPE=RelWithDebInfo -GNinja
 ninja tests

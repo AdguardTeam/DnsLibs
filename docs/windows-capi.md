@@ -14,26 +14,37 @@ See the main [DEVELOPMENT.md](../DEVELOPMENT.md) for how to use Conan in this re
 
 ## Build the DLL (x86 or x64)
 
-Open the Visual Studio **Developer Command Prompt** and run:
+Open the Visual Studio **Developer Command Prompt** and run one of the snippets below,
+depending on the target architecture. Initialize **only one** toolchain environment per
+prompt — running `vcvarsamd64_x86` and `vcvars64` sequentially re-initializes the
+environment and is not the intended usage.
+
+### 32-bit (x86) library
+
+On an x64 host use `vcvarsamd64_x86` to cross-compile a 32-bit library.
+On a native x86 host use `vcvars32` instead.
 
 ```batch
 if exist cmake-build-win rmdir /s /q cmake-build-win
 mkdir cmake-build-win
 cd cmake-build-win
 
-:: On an x64 host, use vcvarsamd64_x86 for a 32-bit library.
-:: For a native x86 host use vcvars32.
 vcvarsamd64_x86
 
-:: or for a 64-bit library:
+cmake -DCMAKE_BUILD_TYPE=Release -G Ninja ..
+ninja AdguardDns
+```
+
+### 64-bit (x64) library
+
+```batch
+if exist cmake-build-win rmdir /s /q cmake-build-win
+mkdir cmake-build-win
+cd cmake-build-win
+
 vcvars64
 
 cmake -DCMAKE_BUILD_TYPE=Release -G Ninja ..
-
-:: For a 32-bit library:
-ninja AdguardDns
-
-:: For a 64-bit library:
 ninja AdguardDns64
 ```
 
