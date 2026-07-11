@@ -68,7 +68,7 @@ A minimal example of implementing `NEDNSProxyProvider` is available in the test 
 Key points in that implementation:
 
 - `startProxy(options:)` creates and starts an `AGDnsProxy` instance and an instance of `AGDnsAppProxyFlowManager`.
-- `handleNewFlow(_:)` forwards both TCP and UDP flows to `AGDnsAppProxyFlowManager` using `handleAppProxyFlow(_:mode:)`.
+- `handleNewFlow(_:)` forwards both TCP and UDP flows to `AGDnsAppProxyFlowManager` using `handle(_:mode:)`.
   You can also override `handleNewUDPFlow(_:initialRemoteEndpoint:)` and forward it the same way if you prefer.
 
 ## Extra notes

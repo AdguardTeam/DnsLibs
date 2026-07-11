@@ -37,12 +37,12 @@ typedef NS_ENUM(NSInteger, AGDnsAppProxyFlowMode) {
  *     }
  *
  *     override func handleNewFlow(_ flow: NEAppProxyFlow) -> Bool {
- *         return dnsFlowManager?.handleAppProxyFlow(flow, mode: .redirect) ?? false
+ *         return dnsFlowManager?.handle(flow, mode: .redirect) ?? false
  *     }
  *
  *     override func handleNewUDPFlow(_ flow: NEAppProxyUDPFlow,
  *                                    initialRemoteEndpoint remoteEndpoint: NWEndpoint) -> Bool {
- *         return dnsFlowManager?.handleAppProxyFlow(flow, mode: .redirect) ?? false
+ *         return dnsFlowManager?.handle(flow, mode: .redirect) ?? false
  *     }
  * }
  * @endcode
@@ -67,6 +67,9 @@ typedef NS_ENUM(NSInteger, AGDnsAppProxyFlowMode) {
  * If `mode` is `AGDnsAppProxyFlowModeBypass`, the flow is forwarded without using `AGDnsProxy`.
  * Otherwise, DNS messages are passed to `AGDnsProxy` and replies are written back
  * to the originating flow.
+ *
+ * @note In Swift, this method is imported as `handle(_:mode:)` because Swift's
+ *       "omit needless words" heuristic strips the `AppProxyFlow` suffix from the selector.
  *
  * @param flow A TCP or UDP app proxy flow.
  * @param mode Flow processing mode.

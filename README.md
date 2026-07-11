@@ -26,7 +26,7 @@ A DNS proxy library that supports all existing DNS protocols including `DNS-over
 The library is organized into a shared C++ core and platform-specific adapters.
 
 - Proxy configuration:
-    - [native](proxy/include/proxy/DnsProxySettings.h)
+    - [native](proxy/include/dns/proxy/dnsproxy_settings.h)
     - [macOS/iOS](platform/mac/framework/AGDnsProxy.h)
     - [Android](platform/android/dnsproxy/lib/src/main/java/com/adguard/dnslibs/proxy/DnsProxySettings.java)
 - [Filtering rules syntax](https://adguard-dns.io/kb/general/dns-filtering-syntax/)

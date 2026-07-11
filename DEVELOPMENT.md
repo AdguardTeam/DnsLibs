@@ -113,14 +113,21 @@ For the architecture overview, main classes, and filtering rules see [docs/archi
 
 To test local changes in the library when it is used as a Conan package dependency, do the following:
 
-1. If the default `vcs_url` in `<root>/conanfile.py` is not suitable, change it accordingly.
-2. Commit the changes you wish to test.
-3. Execute `./scripts/export_conan.py local`. This script exports the package, assigning the last commit hash as its version.
-4. In the project that depends on `dns-libs`, update the version to `<commit_hash>` (where `<commit_hash>` is the hash of the target commit):
-   Replace `dns-libs/1.0.0@adguard_team/native_libs_common` with `dns-libs/<commit_hash>@adguard_team/native_libs_common`.
+1. If the default `vcs_url` in `conanfile.py` is not suitable, change it accordingly.
+2. Commit the changes you wish to test. The exported version is derived from `git describe`,
+   so the changes must be committed first.
+3. Run `./scripts/export_conan.sh` to export the package to the local Conan cache. The version
+   is taken from `git describe` (for example, `2.8.58` on a release tag, or `2.8.58-5-g<rev>`
+   between tags), and the package is exported as `dns-libs/<version>@adguard/oss`.
+4. In the project that depends on `dns-libs`, update the dependency reference to the exported
+   version. Replace `dns-libs/1.0.0@adguard/oss` with `dns-libs/<version>@adguard/oss`, where
+   `<version>` is the `git describe` output from step 3.
 5. Re-run the CMake command.
-   - If you have already exported the library in this way, the cached version must be purged:
-     `conan remove -f dns-libs/<commit_hash>`.
+   - If you have already exported the library, the cached version must be purged before
+     re-exporting: `conan remove -f dns-libs/<version>@adguard/oss`.
+
+To test uncommitted working-tree changes instead, export a special `local` version with
+`conan create . --version local` and reference it as `dns-libs/local@adguard/oss`.
 
 ## Useful notes
 
