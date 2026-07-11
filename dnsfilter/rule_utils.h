@@ -13,7 +13,7 @@
 /**
  *  Set of helper functions to manage the rules
  *  Useful links:
- *   - https://github.com/AdguardTeam/AdguardHome/wiki/Hosts-Blocklists
+ *   - https://adguard-dns.io/kb/general/dns-filtering-syntax/
  */
 namespace ag::dns::dnsfilter::rule_utils {
 
@@ -192,7 +192,7 @@ struct MatchInfo {
 
 /**
  * Parse `$dnsrewrite` modifier parameters
- * https://github.com/AdguardTeam/AdguardHome/wiki/Hosts-Blocklists#dnsrewrite
+ * https://adguard-dns.io/kb/general/dns-filtering-syntax/#dnsrewrite-modifier
  * @return true if successful
  */
 bool parse_dnsrewrite_modifier(
@@ -200,7 +200,7 @@ bool parse_dnsrewrite_modifier(
 
 /**
  * Parse the `$denyallow` modifier parameters
- * https://github.com/AdguardTeam/AdGuardHome/wiki/Hosts-Blocklists#denyallow
+ * https://adguard-dns.io/kb/general/dns-filtering-syntax/#denyallow-modifier
  * @return true if successful
  */
 bool parse_denyallow_modifier(

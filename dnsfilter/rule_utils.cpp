@@ -156,7 +156,7 @@ static bool is_domain_rule(std::string_view str) {
     return rule_utils::is_domain_name(utils::rtrim(head));
 }
 
-// https://github.com/AdguardTeam/AdguardHome/wiki/Hosts-Blocklists#-etchosts-syntax
+// https://adguard-dns.io/kb/general/dns-filtering-syntax/#etc-hosts-syntax
 static std::optional<rule_utils::Rule> parse_host_file_rule(std::string_view str, Logger *log) {
     str = ag::utils::rtrim(str.substr(0, str.find('#')));
     std::vector<std::string_view> parts = ag::utils::split_by_any_of(str, " \t");
@@ -193,7 +193,7 @@ static std::optional<rule_utils::Rule> parse_host_file_rule(std::string_view str
     return std::make_optional(std::move(r));
 }
 
-// https://github.com/AdguardTeam/AdguardHome/wiki/Hosts-Blocklists#dnstype
+// https://adguard-dns.io/kb/general/dns-filtering-syntax/#dnstype-modifier
 static bool parse_dnstype_modifier(
         rule_utils::Rule &rule, std::string_view params_str, const rule_utils::MatchInfo &, Logger *log) {
     if (params_str.empty()
@@ -248,7 +248,7 @@ static bool parse_dnstype_modifier(
     return true;
 }
 
-// https://github.com/AdguardTeam/AdguardHome/wiki/Hosts-Blocklists#rule-modifiers
+// https://adguard-dns.io/kb/general/dns-filtering-syntax/#rule-modifiers
 static inline bool extract_modifiers(
         rule_utils::Rule &rule, std::string_view modifiers_str, const rule_utils::MatchInfo &match_info, Logger *log) {
     if (modifiers_str.empty()) {
@@ -376,7 +376,7 @@ static inline int remove_port(std::string_view &rule) {
     return 0;
 }
 
-// https://github.com/AdguardTeam/AdguardHome/wiki/Hosts-Blocklists#adblock-style
+// https://adguard-dns.io/kb/general/dns-filtering-syntax/#adblock-style-syntax
 static rule_utils::MatchInfo extract_match_info(std::string_view rule) {
     rule_utils::MatchInfo info = {
             .text = rule, .is_regex_rule = check_regex(rule), .has_wildcard = false, .pattern_mode = 0};
@@ -412,7 +412,7 @@ static inline bool is_host_rule(std::string_view str) {
     return !tail.empty() && (ag::utils::is_valid_ip4(head) || ag::utils::is_valid_ip6(head));
 }
 
-// https://github.com/AdguardTeam/AdguardHome/wiki/Hosts-Blocklists#domains-only
+// https://adguard-dns.io/kb/general/dns-filtering-syntax/#domains-only-syntax
 static inline rule_utils::Rule make_exact_domain_name_rule(std::string_view str) {
     str = utils::rtrim(str.substr(0, str.find('#')));
     rule_utils::Rule r{};

@@ -34,6 +34,7 @@ See [README.md](README.md) for full product details.
 | `third-party/` | Vendored dependencies: lwip, pcap_savefile, wintun |
 | `scripts/` | Build helpers, Conan export, version increment, git hooks |
 | `cmake/` | CMake modules: unit test helper, Conan bootstrapping/provider |
+| `docs/` | Developer and platform-specific documentation |
 | `bamboo-specs/` | CI/CD pipeline definitions (Bamboo) |
 
 ### Module Dependency Flow

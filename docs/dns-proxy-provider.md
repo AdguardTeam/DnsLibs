@@ -1,4 +1,4 @@
-# NEDnsProxyProvider support
+# NEDNSProxyProvider support
 
 You may want to implement a DNS proxy provider in your app.
 
@@ -30,7 +30,7 @@ A working sample is included in the macOS test app:
 - `platform/mac/DnsLibsTestApp/`
 
 The test app includes logic to install/update the system extension before starting the provider (see
-`SystemManager.swift`).
+`DnsLibsTestApp/DnsLibsTestApp/SystemManager.swift`).
 
 ## iOS (iOS 15+)
 
@@ -68,11 +68,12 @@ A minimal example of implementing `NEDNSProxyProvider` is available in the test 
 Key points in that implementation:
 
 - `startProxy(options:)` creates and starts an `AGDnsProxy` instance and an instance of `AGDnsAppProxyFlowManager`.
-- `handleNewFlow(_:)` and `handleNewUDPFlow(_:initialRemoteEndpoint:)` forward flows to `AGDnsAppProxyFlowManager`.
+- `handleNewFlow(_:)` forwards both TCP and UDP flows to `AGDnsAppProxyFlowManager` using `handle(_:mode:)`.
+  You can also override `handleNewUDPFlow(_:initialRemoteEndpoint:)` and forward it the same way if you prefer.
 
 ## Extra notes
 
-If you use other VPNs that can bypass DNS queries, and intercepts this provider's DNS traffic,
+If you use other VPNs that can bypass DNS queries, and intercept this provider's DNS traffic,
 it is recommended on macOS to use `flow.metadata.sourceAppSigningIdentifier` to bypass such connections in this provider.
 Otherwise, this may lead to a route loop. On iOS, no additional actions are needed.
 
@@ -80,7 +81,7 @@ Example: AdGuard VPN using UTUN, in selective mode. DNSProxyProvider has secure 
 
 1. First, DNS query goes to DNSProxyProvider, DNSProxy wants to bootstrap the selected server, originates another plain query.
 2. It goes to VPN, which in selective mode originates the same query but on the main interface.
-3. This query is intercepted by DNSProxyProxyProvider again, and goes back to DNSProxy, which did not finished bootstrap yet.
+3. This query is intercepted by DNSProxyProvider again, and goes back to DNSProxy, which did not finish bootstrap yet.
 
 Solution: use `flow.metadata.sourceAppSigningIdentifier` to detect AG VPN and bypass such connections, so on step 3 it
 switches to bypassing this connection.

@@ -68,6 +68,9 @@ typedef NS_ENUM(NSInteger, AGDnsAppProxyFlowMode) {
  * Otherwise, DNS messages are passed to `AGDnsProxy` and replies are written back
  * to the originating flow.
  *
+ * @note In Swift, this method is imported as `handle(_:mode:)` because Swift's
+ *       "omit needless words" heuristic strips the `AppProxyFlow` suffix from the selector.
+ *
  * @param flow A TCP or UDP app proxy flow.
  * @param mode Flow processing mode.
  * @return `YES` if the flow type is supported and was either handled immediately
