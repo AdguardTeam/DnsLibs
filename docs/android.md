@@ -25,6 +25,7 @@ Create `platform/android/dnsproxy/local.properties` with the paths to your Andro
 ```properties
 sdk.dir=/path/to/android-sdk
 ndk.dir=/path/to/android-ndk/29.0.14206865
+cmake.dir=path to directory contaning "bin/cmake" e.g. /opt/homebrew or /usr/bin
 ```
 
 The root build script also optionally applies `additional.gradle` and `buildscript.additional.gradle` for extra internal configuration.
