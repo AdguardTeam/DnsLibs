@@ -37,12 +37,12 @@ typedef NS_ENUM(NSInteger, AGDnsAppProxyFlowMode) {
  *     }
  *
  *     override func handleNewFlow(_ flow: NEAppProxyFlow) -> Bool {
- *         return dnsFlowManager?.handle(flow, mode: .redirect) ?? false
+ *         return dnsFlowManager?.handleAppProxyFlow(flow, mode: .redirect) ?? false
  *     }
  *
  *     override func handleNewUDPFlow(_ flow: NEAppProxyUDPFlow,
  *                                    initialRemoteEndpoint remoteEndpoint: NWEndpoint) -> Bool {
- *         return dnsFlowManager?.handle(flow, mode: .redirect) ?? false
+ *         return dnsFlowManager?.handleAppProxyFlow(flow, mode: .redirect) ?? false
  *     }
  * }
  * @endcode

@@ -121,6 +121,6 @@ class DNSProxyProvider: NEDNSProxyProvider {
     }
 
     override func handleNewFlow(_ flow: NEAppProxyFlow) -> Bool {
-        return dnsFlowManager?.handle(flow, mode: .redirect) ?? false
+        return dnsFlowManager?.handleAppProxyFlow(flow, mode: .redirect) ?? false
     }
 }

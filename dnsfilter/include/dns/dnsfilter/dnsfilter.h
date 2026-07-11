@@ -49,8 +49,8 @@ public:
         DARP_DENYALLOW,  // has `$denyallow` modifier
     };
 
-    // Both https://github.com/AdguardTeam/AdguardHome/wiki/Hosts-Blocklists#adblock-style
-    // and https://github.com/AdguardTeam/AdguardHome/wiki/Hosts-Blocklists#domains-only
+    // Both https://adguard-dns.io/kb/general/dns-filtering-syntax/#adblock-style-syntax
+    // and https://adguard-dns.io/kb/general/dns-filtering-syntax/#domains-only-syntax
     struct AdblockRuleInfo {
         using PropsSet = std::bitset<magic_enum::enum_count<AdblockRuleProps>()>;
         struct Parameters;
@@ -68,7 +68,7 @@ public:
         AdblockRuleInfo &operator=(const AdblockRuleInfo &other);
     };
 
-    // https://github.com/AdguardTeam/AdguardHome/wiki/Hosts-Blocklists#etc-hosts
+    // https://adguard-dns.io/kb/general/dns-filtering-syntax/#etc-hosts-syntax
     struct HostsRuleInfo {
         std::string ip;
     };
