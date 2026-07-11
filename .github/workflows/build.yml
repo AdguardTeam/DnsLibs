@@ -95,10 +95,10 @@ jobs:
         python3 -m pip install conan --upgrade
         conan remote add --index 0 art ${{ vars.CONAN_REPO_URL }} || true
 
-        # TODO: run `make lint` instead of `make lint-cpp` once the
-        # `adguard/core-libs` Docker image ships `markdownlint-cli2`
-        # pre-installed, or once the project switches to a local Dockerfile
-        # where the tool can be added directly.
+        # TODO: run `make lint` instead of `make lint-cpp` once the builds
+        # are switched to a local Dockerfile, where the dependency layers
+        # (including Node.js/npm, needed to run `npx -y markdownlint-cli2`
+        # used by the `lint-md` target) can be cached.
         make lint-cpp
         rm -rf build
 

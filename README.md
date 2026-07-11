@@ -12,7 +12,8 @@ A DNS proxy library that supports all existing DNS protocols including `DNS-over
 - Conan C++ package manager 2.0.5 or higher
 - CMake 3.24 or higher
 - GCC 9 or higher / Clang 8 or higher
-- `markdownlint-cli2` (for linting Markdown files): install via `brew install markdownlint-cli2` on macOS or `npm install -g markdownlint-cli2` on Linux
+- Node.js/npm (for linting Markdown files via `markdownlint-cli2`, which is
+  fetched and run automatically with `npx -y`)
 
 #### Building
 
