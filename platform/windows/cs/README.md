@@ -1,6 +1,7 @@
 # Windows test application
 
 Steps to run:
+
 1) Build dnslibs: run the following commands in `x86 Native Tools` terminal
 
     ```bash
@@ -30,7 +31,7 @@ sn –Vr Adguard.Dns.dll
 See more on [docs.microsoft.com](https://docs.microsoft.com/en-us/dotnet/standard/assembly/delay-sign)
 Note, that if you disable verifying strong name signature only once, you haven't do this every time you build, you can just forget about this.
 
-3) Start the test app.
+1) Start the test app.
 If you are using any IDE (VS ot JB Rider) run `Adguard.Dns.TestApp.exe`. If you has built the solution from the console, run following command:
 
     ```bash
@@ -38,4 +39,4 @@ If you are using any IDE (VS ot JB Rider) run `Adguard.Dns.TestApp.exe`. If you 
     Adguard.Dns.TestApp.exe
     ```
 
-4) If you want to grab log into the file (instead of console) you should uncomment (or comment it to force output to console) directive `#define LOG_TO_FILE` in the "header" (`dns-libs\platform\windows\cs\Adguard.Dns\Adguard.Dns.Testapp\Program.cs`) of file and start from the 2nd point.
+2) If you want to grab log into the file (instead of console) you should uncomment (or comment it to force output to console) directive `#define LOG_TO_FILE` in the "header" (`dns-libs\platform\windows\cs\Adguard.Dns\Adguard.Dns.Testapp\Program.cs`) of file and start from the 2nd point.

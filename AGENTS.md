@@ -61,7 +61,7 @@ Run `make init` once after cloning to set up git hooks.
 | `make test-cpp` | Build libs → build test targets → run `ctest` |
 | `make lint` | Run all linters (`lint-md` + `lint-cpp`) |
 | `make lint-cpp` | `clang-format` check + `clangd-tidy` |
-| `make lint-md` | `markdownlint .` |
+| `make lint-md` | Lint Markdown with `npx -y markdownlint-cli2@0.23.0` |
 | `make lint-fix` | Auto-fix all fixable linter issues |
 | `make compile_commands` | Generate `compile_commands.json` for IDE integration |
 | `make clean` | Clean build artifacts |
@@ -90,7 +90,8 @@ Set `BUILD_TYPE=debug` for debug builds (default is `release` →
 
 ### Markdown
 
-- Linted with `markdownlint` (config in `.markdownlint.json`)
+- Linted with `markdownlint-cli2` (config in `.markdownlint-cli2.yaml`),
+  run via `npx -y markdownlint-cli2@0.23.0` so no manual install is needed
 - Unordered lists use dashes (`-`), indented 4 spaces
 - No line-length limit
 - **Markdown table formatting (MD060)**: When the Markdownlint MD060 rule

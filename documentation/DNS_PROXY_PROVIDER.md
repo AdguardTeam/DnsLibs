@@ -77,6 +77,7 @@ it is recommended on macOS to use `flow.metadata.sourceAppSigningIdentifier` to 
 Otherwise, this may lead to a route loop. On iOS, no additional actions are needed.
 
 Example: AdGuard VPN using UTUN, in selective mode. DNSProxyProvider has secure upstream DNS server selected.
+
 1. First, DNS query goes to DNSProxyProvider, DNSProxy wants to bootstrap the selected server, originates another plain query.
 2. It goes to VPN, which in selective mode originates the same query but on the main interface.
 3. This query is intercepted by DNSProxyProxyProvider again, and goes back to DNSProxy, which did not finished bootstrap yet.

@@ -15,6 +15,10 @@ endif
 BUILD_DIR = build
 COMPILE_COMMANDS = $(BUILD_DIR)/compile_commands.json
 EXPORT_DIR ?= bin
+# The exact version of markdownlint-cli2 to run via `npx -y`. Pinning the
+# version keeps linting results reproducible across environments.
+MARKDOWNLINT_VERSION := 0.23.0
+MARKDOWNLINT = npx -y markdownlint-cli2@$(MARKDOWNLINT_VERSION)
 
 ifeq ($(OS), Windows_NT)
 NPROC ?= $(or $(NUMBER_OF_PROCESSORS),8)
@@ -140,14 +144,12 @@ else
 endif
 
 ## Lint markdown files.
-## `markdownlint-cli` should be installed:
-##    macOS: `brew install markdownlint-cli`
-##    Linux: `npm install -g markdownlint-cli`
+## `markdownlint-cli2` is run via `npx -y`, so it does not need to be
+## installed beforehand. Only Node.js/npm must be available on the system.
+## The exact version is pinned via `MARKDOWNLINT_VERSION` above.
 .PHONY: lint-md
 lint-md:
-	echo markdownlint version:
-	markdownlint --version
-	markdownlint .
+	$(MARKDOWNLINT) "**/*.md"
 
 ## Fix linter issues that are auto-fixable.
 .PHONY: lint-fix
@@ -163,7 +165,7 @@ lint-fix-cpp: check-clang-format-version
 ## Auto-fix markdown files.
 .PHONY: lint-fix-md
 lint-fix-md:
-	markdownlint --fix .
+	$(MARKDOWNLINT) --fix "**/*.md"
 
 ## List Conan dependency package directories.
 .PHONY: list-deps-dirs
