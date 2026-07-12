@@ -21,6 +21,7 @@ See [README.md](README.md) for full product details.
 | Directory | Purpose |
 | --- | --- |
 | `common/` | Shared utilities: event loop, platform abstractions |
+| `common/test_helpers/` | Header-only test utilities: `LoopbackDnsServer`, `MockUpstream`, DNS packet helpers (`dns_test_helpers.h`), `REQUIRE_INTEGRATION()` guard |
 | `net/` | Network layer: TLS, sockets, socket factory |
 | `proxy/` | Core DNS proxy logic: forwarder, listener, response cache |
 | `upstream/` | Upstream DNS implementations: DoH, DoT, DoQ, DNSCrypt, plain DNS |
@@ -60,6 +61,7 @@ Run `make init` once after cloning to set up git hooks.
 | `make build_libs` | Bootstrap Conan deps → CMake configure → build `dnsproxy` |
 | `make test` | Run all tests (`test-cpp`) |
 | `make test-cpp` | Build libs → build test targets → run `ctest` |
+| `make test-integration` | Build libs → run `ctest` with `DNSLIBS_INTEGRATION_TESTS=1` (real-network tests enabled; requires internet) |
 | `make lint` | Run all linters (`lint-md` + `lint-cpp`) |
 | `make lint-cpp` | `clang-format` check + `clangd-tidy` |
 | `make lint-md` | Lint Markdown with `npx -y markdownlint-cli2@0.23.0` |
@@ -69,6 +71,28 @@ Run `make init` once after cloning to set up git hooks.
 
 Set `BUILD_TYPE=debug` for debug builds (default is `release` →
 `RelWithDebInfo`).
+
+## Testing
+
+### Test execution policy
+
+The default `make test` suite MUST run fully offline — no real DNS, no public
+internet. This is enforced by the `DNSLIBS_INTEGRATION_TESTS` gate: any test
+that dials a real public DNS server (DoT/DoH/DoQ/DNSCrypt against Google,
+Cloudflare, Quad9, AdGuard) is wrapped in `REQUIRE_INTEGRATION()` and is
+SKIPPED unless `DNSLIBS_INTEGRATION_TESTS=1` is set in the environment.
+
+To run the full integration suite (requires network):
+
+```bash
+DNSLIBS_INTEGRATION_TESTS=1 make test
+# or, equivalently:
+make test-integration
+```
+
+Tests must not depend on `sleep()` for correctness — use condition variables,
+`coro::to_future(...).get()`, `parallel::all_of`, or explicit filesystem
+timestamp manipulation (`utimensat`/`SetFileTime`) instead.
 
 ## Code Style
 

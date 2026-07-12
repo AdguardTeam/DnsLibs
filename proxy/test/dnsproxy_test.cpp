@@ -1,8 +1,16 @@
+#include <atomic>
+#include <chrono>
 #include <cstring>
+#include <functional>
+#include <future>
 #include <gtest/gtest.h>
 #include <ldns/ldns.h>
 #include <memory>
+#include <mutex>
+#include <string>
+#include <string_view>
 #include <thread>
+#include <utility>
 
 #include "common/clock.h"
 #include "common/file.h"
@@ -13,10 +21,12 @@
 #include "dns/proxy/dnsproxy.h"
 #include "dns/upstream/upstream_utils.h"
 
-#include "../../upstream/test/test_utils.h"
 #include "../dns_forwarder.h"
 #include "../dns_forwarder_utils.h"
 #include "../svcb.h"
+#include "dns_test_helpers.h"
+#include "integration_test_guard.h"
+#include "loopback_dns_server.h"
 
 namespace ag::dns::proxy::test {
 
@@ -26,9 +36,17 @@ namespace ag::dns::proxy::test {
 static constexpr auto ADGUARD_DNS_SPKI = "BF+fS5RPhZQggn38wZ6lqii8lxPNWQPzU2VVVqbLhqM=";
 static constexpr auto ZEROSSL_SPKI = "3fLLVjRIWnCqDqIETU2OcnMP7EzmN/Z3Q/jQ8cIaAoc=";
 
-static constexpr auto DNS64_SERVER_ADDR = "2001:4860:4860::6464";
 static constexpr auto IPV4_ONLY_HOST = "ipv4only.arpa.";
 static constexpr auto CNAME_BLOCKING_HOST = "test2.meshkov.info";
+
+// Per-test loopback upstream state. `make_dnsproxy_settings()` creates the
+// server on first call and reuses it on subsequent calls (so reapply-settings
+// tests that call make_dnsproxy_settings() a second time don't destroy the
+// server the proxy is still connected to). The server is torn down in
+// TearDown. Tests may reassign `g_upstream_handler` after
+// `make_dnsproxy_settings()` to shape canned replies.
+static std::unique_ptr<ag::test::LoopbackDnsServer> g_upstream;
+static std::function<ag::dns::ldns_pkt_ptr(const ldns_pkt &)> g_upstream_handler;
 
 class DnsProxyTest : public ::testing::Test {
 protected:
@@ -45,14 +63,134 @@ protected:
         if (m_proxy) {
             m_proxy->deinit();
         }
+        g_upstream.reset();
+        g_upstream_handler = nullptr;
     }
 };
 
+using ag::test::add_a_answer;
+using ag::test::add_rr_from_str;
+using ag::test::add_rrsig;
+using ag::test::make_base_reply;
+
+// The canned default: an A 1.2.3.4 answer for ordinary queries, and an HTTPS
+// SVCB record (ipv4hint + ipv6hint + alpn=h2,h3 + echconfig) for HTTPS queries.
+// HTTPS-blocking/ECH/H3 tests assert on the proxy's transformations of this
+// record; tests querying a blocked domain never hit the upstream.
+static ldns_pkt_ptr default_upstream_handler(const ldns_pkt &req) {
+    const ldns_rr *question = ldns_rr_list_rr(ldns_pkt_question(&req), 0);
+    ldns_pkt_ptr reply = make_base_reply(req);
+    if (question == nullptr) {
+        return reply;
+    }
+    AllocatedPtr<char> owner_str{ldns_rdf2str(ldns_rr_owner(question))};
+    std::string_view owner = owner_str.get();
+    if (ldns_rr_get_type(question) == LDNS_RR_TYPE_HTTPS) {
+        // Only return an HTTPS record for domains that genuinely support HTTPS;
+        // everything else is a non-existent test domain → NXDOMAIN.
+        if (owner == "adguard.com." || owner == "cloudflare.com." || owner == "crypto.cloudflare.com."
+                || owner == "cloudflare-ech.com.") {
+            std::string rr_str =
+                    AG_FMT("{} 300 IN HTTPS 1 . ipv4hint=192.0.2.1 ipv6hint=2001:db8::1 alpn=h2,h3 echconfig=YmFzZTY0",
+                            owner_str.get());
+            add_rr_from_str(reply.get(), rr_str);
+            return reply;
+        }
+        ldns_pkt_set_rcode(reply.get(), LDNS_RCODE_NXDOMAIN);
+        return reply;
+    }
+    // CNAME_BLOCKING_HOST returns a CNAME to example.org (used by
+    // CNAME blocking tests; the filter blocks example.org).
+    if (owner == std::string_view(std::string(CNAME_BLOCKING_HOST) + ".")
+            && ldns_rr_get_type(question) == LDNS_RR_TYPE_A) {
+        add_rr_from_str(reply.get(), AG_FMT("{} 300 IN CNAME example.org.", std::string(CNAME_BLOCKING_HOST) + "."));
+        add_rr_from_str(reply.get(), "example.org. 300 IN A 1.2.3.4");
+        return reply;
+    }
+    // www.abc.com returns a CNAME to d2iwv1xxkqpmiz.cloudfront.net (used by
+    // CNAME/$dnstype blocking tests).
+    if (owner == "www.abc.com.") {
+        add_rr_from_str(reply.get(), "www.abc.com. 300 IN CNAME d2iwv1xxkqpmiz.cloudfront.net.");
+        add_rr_from_str(reply.get(), "d2iwv1xxkqpmiz.cloudfront.net. 300 IN A 1.2.3.4");
+        return reply;
+    }
+    // ipv4only.arpa returns 192.0.0.171 (used by IP-blocking tests;
+    // 192.0.0.171$important overrides whitelisting).
+    if (owner == "ipv4only.arpa." && ldns_rr_get_type(question) == LDNS_RR_TYPE_A) {
+        add_rr_from_str(reply.get(), "ipv4only.arpa. 300 IN A 192.0.0.171");
+        return reply;
+    }
+    // dns.adguard.com AAAA returns 2a10:50c0::ad1:ff (used by IP-blocking tests).
+    if (owner == "dns.adguard.com." && ldns_rr_get_type(question) == LDNS_RR_TYPE_AAAA) {
+        add_rr_from_str(reply.get(), "dns.adguard.com. 300 IN AAAA 2a10:50c0::ad1:ff");
+        return reply;
+    }
+    add_a_answer(reply.get(), question);
+    return reply;
+}
+
 static DnsProxySettings make_dnsproxy_settings() {
+    g_upstream_handler = default_upstream_handler;
+    // Reuse the existing loopback server (if any) so that calling this function
+    // a second time — e.g. in reapply-settings tests — does not destroy the
+    // server the proxy is still talking to.
+    if (!g_upstream) {
+        g_upstream = std::make_unique<ag::test::LoopbackDnsServer>([](const ldns_pkt &req) -> ldns_pkt_ptr {
+            return g_upstream_handler(req);
+        });
+        g_upstream->start();
+    }
     auto settings = DnsProxySettings::get_default();
-    settings.upstreams = {{.address = "8.8.8.8"}};
+    settings.upstreams = {{.address = g_upstream->address(ag::utils::TP_UDP)}};
     settings.adblock_rules_blocking_mode = DnsProxyBlockingMode::REFUSED;
     return settings;
+}
+
+// DNSSEC-aware canned responder for the Dnssec* tests. It adds a synthetic RRSIG
+// to answers for "DNSSEC-supporting" domains (cloudflare.com, example.org),
+// returns a DS+RRSIG for DS queries, an RRSIG for RRSIG queries, a CNAME+A chain
+// for the CNAME regress host, NXDOMAIN for the nonexistent host, and a plain
+// A answer (no RRSIG) for "non-supporting" domains.
+static ldns_pkt_ptr dnssec_upstream_handler(const ldns_pkt &req) {
+    const ldns_rr *question = ldns_rr_list_rr(ldns_pkt_question(&req), 0);
+    ldns_pkt_ptr reply = make_base_reply(req);
+    if (question == nullptr) {
+        return reply;
+    }
+    AllocatedPtr<char> owner_cstr{ldns_rdf2str(ldns_rr_owner(question))};
+    std::string owner = owner_cstr.get();
+    ldns_rr_type qtype = ldns_rr_get_type(question);
+
+    if (owner == "actuallythissitedoesnotexist.fuu.") {
+        ldns_pkt_set_rcode(reply.get(), LDNS_RCODE_NXDOMAIN);
+        return reply;
+    }
+
+    if (owner == std::string(CNAME_BLOCKING_HOST) + "." && qtype == LDNS_RR_TYPE_A) {
+        add_rr_from_str(reply.get(), AG_FMT("{} 300 IN CNAME example.org.", std::string(CNAME_BLOCKING_HOST) + "."));
+        add_rr_from_str(reply.get(), "example.org. 300 IN A 1.2.3.4");
+        return reply;
+    }
+
+    if (qtype == LDNS_RR_TYPE_RRSIG) {
+        add_rrsig(reply.get(), ldns_rr_owner(question), LDNS_RR_TYPE_A);
+        return reply;
+    }
+
+    if (qtype == LDNS_RR_TYPE_DS) {
+        AllocatedPtr<char> ds_owner{ldns_rdf2str(ldns_rr_owner(question))};
+        add_rr_from_str(
+                reply.get(), AG_FMT("{} 300 IN DS 12345 8 2 0102030405060708090A0B0C0D0E0F1011121314", ds_owner.get()));
+        add_rrsig(reply.get(), ldns_rr_owner(question), LDNS_RR_TYPE_DS);
+        return reply;
+    }
+
+    bool dnssec_support = (owner == "cloudflare.com." || owner == "example.org.");
+    add_a_answer(reply.get(), question);
+    if (dnssec_support) {
+        add_rrsig(reply.get(), ldns_rr_owner(question), qtype);
+    }
+    return reply;
 }
 
 static DnsProxySettings make_dnsproxy_settings_with_listeners() {
@@ -130,9 +268,6 @@ static ldns_pkt_ptr create_request(
 
 static void perform_request(
         DnsProxy &proxy, const ldns_pkt_ptr &request, ldns_pkt_ptr &response, DnsMessageInfo *info = nullptr) {
-    // Avoid rate limit
-    std::this_thread::sleep_for(Millis(100));
-
     const UniquePtr<ldns_buffer, &ldns_buffer_free> buffer(ldns_buffer_new(REQUEST_BUFFER_INITIAL_CAPACITY));
 
     ldns_status status = ldns_pkt2buffer_wire(buffer.get(), request.get());
@@ -154,26 +289,53 @@ static AllocatedPtr<char> make_rr_answer_string(ldns_pkt *pkt) {
 TEST_F(DnsProxyTest, TestDns64) {
     using namespace std::chrono_literals;
 
+    // A dedicated loopback DNS64 upstream. It answers AAAA queries for the
+    // well-known host with two DNS64-synthesized addresses carrying the NAT64
+    // prefix 64:ff9b:: (one per well-known IPv4 address), which is exactly what
+    // dns64::discover_prefixes parses to extract the prefix.
+    ag::test::LoopbackDnsServer dns64_server([](const ldns_pkt &req) -> ldns_pkt_ptr {
+        ldns_pkt_ptr reply = make_base_reply(req);
+        const ldns_rr *question = ldns_rr_list_rr(ldns_pkt_question(&req), 0);
+        if (question != nullptr) {
+            for (const char *ip6 : {"64:ff9b::192.0.0.170", "64:ff9b::192.0.0.171"}) {
+                ldns_rr *aaaa = ldns_rr_new();
+                ldns_rr_set_owner(aaaa, ldns_rdf_clone(ldns_rr_owner(question)));
+                ldns_rr_set_ttl(aaaa, 300);
+                ldns_rr_set_type(aaaa, LDNS_RR_TYPE_AAAA);
+                ldns_rr_set_class(aaaa, LDNS_RR_CLASS_IN);
+                ldns_rr_push_rdf(aaaa, ldns_rdf_new_frm_str(LDNS_RDF_TYPE_AAAA, ip6));
+                ldns_pkt_push_rr(reply.get(), LDNS_SECTION_ANSWER, aaaa);
+            }
+        }
+        return reply;
+    });
+    dns64_server.start();
+
     // Assume default settings don't include a DNS64 upstream
     DnsProxySettings settings = make_dnsproxy_settings();
     settings.dns64 = Dns64Settings{
             .upstreams = {{
-                    .address = DNS64_SERVER_ADDR,
+                    .address = dns64_server.address(ag::utils::TP_UDP),
             }},
             .max_tries = 5,
-            .wait_time = 1s,
+            .wait_time = 1ms,
     };
 
-    auto [ret, err] = m_proxy->init(settings, {});
+    std::promise<void> dns64_done;
+    auto dns64_future = dns64_done.get_future();
+    std::atomic_bool dns64_signalled{false};
+    DnsProxyEvents events{.on_dns64_discovered = [&](const std::vector<Uint8Vector> &) {
+        bool expected = false;
+        if (dns64_signalled.compare_exchange_strong(expected, true)) {
+            dns64_done.set_value();
+        }
+    }};
+
+    auto [ret, err] = m_proxy->init(settings, events);
     ASSERT_TRUE(ret) << err->str();
 
-    // This is after m_proxy->init() to not crash in m_proxy->deinit()
-    if (!test_ipv6_connectivity()) {
-        warnlog(m_log, "IPv6 is NOT available, skipping this test");
-        return;
-    }
-
-    std::this_thread::sleep_for(5s); // Let DNS64 discovery happen
+    // Deterministically wait for DNS64 discovery to finish (no sleep).
+    dns64_future.get();
 
     ldns_pkt_ptr pkt = create_request(IPV4_ONLY_HOST, LDNS_RR_TYPE_AAAA, LDNS_RD);
     ldns_pkt_ptr response;
@@ -240,7 +402,10 @@ TEST_F(DnsProxyTest, TestHttpsRR) {
     ASSERT_EQ(ldns_pkt_get_rcode(response.get()), LDNS_RCODE_REFUSED);
 }
 
-TEST_F(DnsProxyTest, TestResolvedIp) {
+// Requires a real DNS-over-TLS server. Kept disabled and gated behind
+// DNSLIBS_INTEGRATION_TESTS so the offline suite never dials the internet.
+TEST_F(DnsProxyTest, DISABLED_TestResolvedIp) {
+    REQUIRE_INTEGRATION();
     using namespace std::chrono_literals;
     DnsProxySettings settings = make_dnsproxy_settings();
     settings.upstreams = {{
@@ -288,8 +453,13 @@ protected:
 static const std::string encrypted_upstreams[] = {
         "quic://dns.adguard-dns.com", "tls://dns.adguard-dns.com", "https://dns.adguard-dns.com/dns-query"};
 
+// The tests below require real encrypted-DNS (DoT/DoH/DoQ) servers and do not
+// run offline. They stay DISABLED_ and are additionally gated behind
+// DNSLIBS_INTEGRATION_TESTS so they remain skipped even if un-disabled.
+
 // Disabled since AG servers does not have stable SubjectPublicKeyInfo.
 TEST_P(SPKITest, DISABLED_TestSPKI) {
+    REQUIRE_INTEGRATION();
     m_settings.upstreams = {{
             .address = GetParam(),
             .bootstrap = {"1.1.1.1"},
@@ -313,6 +483,7 @@ TEST_P(SPKITest, DISABLED_TestSPKI) {
 
 // Disabled since AG servers do not have stable SubjectPublicKeyInfo.
 TEST_P(SPKITest, DISABLED_MatchSecondFingerprintInChain) {
+    REQUIRE_INTEGRATION();
     m_settings.upstreams = {{
             .address = GetParam(),
             .bootstrap = {"1.1.1.1"},
@@ -336,7 +507,8 @@ TEST_P(SPKITest, DISABLED_MatchSecondFingerprintInChain) {
 
 INSTANTIATE_TEST_SUITE_P(SPKITest, SPKITest, testing::ValuesIn(encrypted_upstreams));
 
-TEST_F(DnsProxyTest, TestWrongSPKI) {
+TEST_F(DnsProxyTest, DISABLED_TestWrongSPKI) {
+    REQUIRE_INTEGRATION();
     using namespace std::chrono_literals;
     DnsProxySettings settings = make_dnsproxy_settings();
     settings.upstreams = {{
@@ -364,6 +536,7 @@ TEST_F(DnsProxyTest, TestWrongSPKI) {
 
 // Disabled since AG servers does not have stable SubjectPublicKeyInfo.
 TEST_F(DnsProxyTest, DISABLED_DnsStampWithHash) {
+    REQUIRE_INTEGRATION();
     using namespace std::chrono_literals;
     DnsProxySettings settings = make_dnsproxy_settings();
     // Stamp's "hashes" field takes another form of hash, generated with:
@@ -392,6 +565,7 @@ TEST_F(DnsProxyTest, DISABLED_DnsStampWithHash) {
 }
 
 TEST_F(DnsProxyTest, DISABLED_BootstrapOutboundProxy) {
+    REQUIRE_INTEGRATION();
     DnsProxySettings settings = make_dnsproxy_settings();
     settings.upstreams = {{.address = "tls://dns.adguard-dns.com", .bootstrap = {"1.1.1.1"}}};
     settings.outbound_proxy = OutboundProxySettings{
@@ -1718,8 +1892,8 @@ TEST_F(DnsProxyTest, FallbacksIgnoreProxySocks) {
 
 TEST_F(DnsProxyTest, FallbacksIgnoreProxyHttp) {
     DnsProxySettings settings = make_dnsproxy_settings();
-    settings.upstreams = {{.address = "tcp://94.140.14.14"}};
-    settings.fallbacks = {{.address = "tcp://94.140.14.14"}};
+    settings.upstreams = {{.address = g_upstream->address(ag::utils::TP_TCP)}};
+    settings.fallbacks = {{.address = g_upstream->address(ag::utils::TP_TCP)}};
     // some nonexistent proxy
     settings.outbound_proxy = {{OutboundProxyProtocol::HTTP_CONNECT, "255.255.255.255", 1}};
 
@@ -1852,7 +2026,7 @@ TEST_F(DnsProxyTest, OptimisticCache) {
 
 TEST_F(DnsProxyTest, DnssecSimpleTest) {
     DnsProxySettings settings = make_dnsproxy_settings();
-    settings.upstreams[0].address = "1.1.1.1";
+    g_upstream_handler = dnssec_upstream_handler;
     settings.enable_dnssec_ok = true;
 
     std::vector<std::string> dnssecSupport = {"cloudflare.com", "example.org"};
@@ -1900,6 +2074,7 @@ TEST_F(DnsProxyTest, DnssecSimpleTest) {
 
 TEST_F(DnsProxyTest, DnssecRequestWithDOBit) {
     DnsProxySettings settings = make_dnsproxy_settings();
+    g_upstream_handler = dnssec_upstream_handler;
     settings.enable_dnssec_ok = true;
 
     DnsRequestProcessedEvent last_event{};
@@ -1927,6 +2102,7 @@ TEST_F(DnsProxyTest, DnssecRequestWithDOBit) {
 
 TEST_F(DnsProxyTest, DnssecDSRequest) {
     DnsProxySettings settings = make_dnsproxy_settings();
+    g_upstream_handler = dnssec_upstream_handler;
     settings.enable_dnssec_ok = true;
 
     DnsRequestProcessedEvent last_event{};
@@ -1955,8 +2131,8 @@ TEST_F(DnsProxyTest, DnssecDSRequest) {
 
 TEST_F(DnsProxyTest, DnssecTheSameQtypeRequest) {
     DnsProxySettings settings = make_dnsproxy_settings();
+    g_upstream_handler = dnssec_upstream_handler;
     // dns.adguard.com answers SERVFAIL
-    settings.upstreams = {{.address = "1.1.1.1"}};
     settings.enable_dnssec_ok = true;
 
     DnsRequestProcessedEvent last_event{};
@@ -1981,7 +2157,7 @@ TEST_F(DnsProxyTest, DnssecTheSameQtypeRequest) {
 
 TEST_F(DnsProxyTest, DnssecRegressDoesNotScrubCname) {
     DnsProxySettings settings = make_dnsproxy_settings();
-    settings.upstreams = {{.address = "1.1.1.1"}};
+    g_upstream_handler = dnssec_upstream_handler;
     settings.enable_dnssec_ok = true;
 
     DnsRequestProcessedEvent last_event{};
@@ -2011,6 +2187,7 @@ TEST_F(DnsProxyTest, DnssecRegressDoesNotScrubCname) {
 
 TEST_F(DnsProxyTest, DnssecAuthoritySection) {
     DnsProxySettings settings = make_dnsproxy_settings();
+    g_upstream_handler = dnssec_upstream_handler;
     settings.enable_dnssec_ok = true;
 
     DnsRequestProcessedEvent last_event{};
@@ -2044,8 +2221,8 @@ TEST_F(DnsProxyTest, FallbackFilterWorksAndDefaultsAreCorrect) {
     static constexpr int32_t UPSTREAM_ID = 42;
     static constexpr int32_t FALLBACK_ID = 4242;
     DnsProxySettings settings = make_dnsproxy_settings();
-    settings.upstreams = {{.address = "8.8.8.8", .id = UPSTREAM_ID}};
-    settings.fallbacks = {{.address = "8.8.8.8", .id = FALLBACK_ID}};
+    settings.upstreams = {{.address = g_upstream->address(ag::utils::TP_UDP), .id = UPSTREAM_ID}};
+    settings.fallbacks = {{.address = g_upstream->address(ag::utils::TP_UDP), .id = FALLBACK_ID}};
     DnsRequestProcessedEvent last_event{};
     DnsProxyEvents events{.on_request_processed = [&last_event](const DnsRequestProcessedEvent &event) {
         last_event = event;
@@ -2126,7 +2303,25 @@ TEST_F(DnsProxyTest, FallbackDomainsGood) {
 
 TEST_F(DnsProxyTest, DenyallowRulesDoNotMatchIpAddresses) {
     DnsProxySettings settings = make_dnsproxy_settings();
-    settings.upstreams = {{.address = "1.1.1.1"}};
+    // The filter blocks the well-known DNS64 IPv4 addresses; have the loopback
+    // return them for ipv4only.arpa so the IP-rule match is exercised.
+    g_upstream_handler = [](const ldns_pkt &req) -> ldns_pkt_ptr {
+        const ldns_rr *question = ldns_rr_list_rr(ldns_pkt_question(&req), 0);
+        ldns_pkt_ptr reply = make_base_reply(req);
+        if (question != nullptr) {
+            AllocatedPtr<char> owner_str{ldns_rdf2str(ldns_rr_owner(question))};
+            const char *ip = (std::string(owner_str.get()) == "ipv4only.arpa.") ? "192.0.0.170" : "1.2.3.4";
+            ldns_rr *answer = ldns_rr_new();
+            ldns_rr_set_owner(answer, ldns_rdf_clone(ldns_rr_owner(question)));
+            ldns_rr_set_ttl(answer, 300);
+            ldns_rr_set_type(answer, LDNS_RR_TYPE_A);
+            ldns_rr_set_class(answer, LDNS_RR_CLASS_IN);
+            ldns_rr_push_rdf(answer, ldns_rdf_new_frm_str(LDNS_RDF_TYPE_A, ip));
+            ldns_pkt_push_rr(reply.get(), LDNS_SECTION_ANSWER, answer);
+        }
+        return reply;
+    };
+    settings.upstreams = {{.address = g_upstream->address(ag::utils::TP_UDP)}};
     settings.adblock_rules_blocking_mode = DnsProxyBlockingMode::REFUSED;
     settings.hosts_rules_blocking_mode = DnsProxyBlockingMode::REFUSED;
     settings.filter_params.filters = {
@@ -2217,7 +2412,7 @@ TEST_F(DnsProxyTest, TransparentRequest) {
 TEST_F(DnsProxyTest, FallbackDomainWorksWhenFallbackOnUpstreamsFailureDisabled) {
     DnsProxySettings settings = make_dnsproxy_settings();
     settings.upstreams = {{.address = "1.2.3.4"}};
-    settings.fallbacks = {{.address = "8.8.8.8"}};
+    settings.fallbacks = {{.address = g_upstream->address(ag::utils::TP_UDP)}};
     settings.fallback_domains = {"*.example.org"};
     settings.enable_fallback_on_upstreams_failure = false;
     DnsProxy proxy;
@@ -2234,7 +2429,7 @@ TEST_F(DnsProxyTest, FallbackDomainWorksWhenFallbackOnUpstreamsFailureDisabled) 
 TEST_F(DnsProxyTest, DoNotCrashOnPacketWithoutQuestion) {
     DnsProxySettings settings = make_dnsproxy_settings();
     settings.upstreams = {{.address = "1.2.3.4"}};
-    settings.fallbacks = {{.address = "8.8.8.8"}};
+    settings.fallbacks = {{.address = g_upstream->address(ag::utils::TP_UDP)}};
     settings.fallback_domains = {"*.example.org"};
     settings.enable_fallback_on_upstreams_failure = false;
     DnsProxy proxy;
@@ -2263,8 +2458,7 @@ TEST_F(DnsProxyTest, TransparentModeAllowsUnblockedDomains) {
     uint16_t query_id = ldns_pkt_id(create_request("google.com", LDNS_RR_TYPE_A, LDNS_RD).get());
 
     // Captured DNS response for google.com
-    // Real response from 8.8.8.8 (124 bytes)
-    // Contains: 6 A records for google.com
+    // Captured wire bytes (no network I/O): 6 A records for google.com
     static const uint8_t CAPTURED_GOOGLE_RESPONSE[] = {0x00, 0x00, 0x81, 0x80, 0x00, 0x01, 0x00, 0x06, 0x00, 0x00, 0x00,
             0x00, 0x06, 0x67, 0x6f, 0x6f, 0x67, 0x6c, 0x65, 0x03, 0x63, 0x6f, 0x6d, 0x00, 0x00, 0x01, 0x00, 0x01, 0xc0,
             0x0c, 0x00, 0x01, 0x00, 0x01, 0x00, 0x00, 0x00, 0x0c, 0x00, 0x04, 0x8e, 0xfa, 0x8c, 0x65, 0xc0, 0x0c, 0x00,
@@ -2326,18 +2520,16 @@ TEST_F(DnsProxyTest, TransparentModeBlocksDomains) {
     ASSERT_EQ(last_event.blocking_reason, DBR_QUERY_MATCHED_BY_RULE);
 }
 
-namespace {
 // Shared constants for transparent mode CNAME filtering tests
-constexpr auto TRANSPARENT_CNAME_TEST_DOMAIN = "www.github.com";
+static constexpr auto TRANSPARENT_CNAME_TEST_DOMAIN = "www.github.com";
 
 // Captured DNS response for www.github.com with CNAME
-// Real response from 8.8.8.8 (62 bytes)
+// Captured wire bytes (no network I/O): www.github.com CNAME github.com + A record
 // Contains: www.github.com CNAME github.com + A record
-constexpr uint8_t CAPTURED_DNS_RESPONSE_WITH_CNAME[] = {0x00, 0x00, 0x81, 0x80, 0x00, 0x01, 0x00, 0x02, 0x00, 0x00,
-        0x00, 0x00, 0x03, 0x77, 0x77, 0x77, 0x06, 0x67, 0x69, 0x74, 0x68, 0x75, 0x62, 0x03, 0x63, 0x6f, 0x6d, 0x00,
-        0x00, 0x01, 0x00, 0x01, 0xc0, 0x0c, 0x00, 0x05, 0x00, 0x01, 0x00, 0x00, 0x0e, 0x0f, 0x00, 0x02, 0xc0, 0x10,
-        0xc0, 0x10, 0x00, 0x01, 0x00, 0x01, 0x00, 0x00, 0x00, 0x3c, 0x00, 0x04, 0x14, 0x1a, 0x9c, 0xd7};
-} // namespace
+static constexpr uint8_t CAPTURED_DNS_RESPONSE_WITH_CNAME[] = {0x00, 0x00, 0x81, 0x80, 0x00, 0x01, 0x00, 0x02, 0x00,
+        0x00, 0x00, 0x00, 0x03, 0x77, 0x77, 0x77, 0x06, 0x67, 0x69, 0x74, 0x68, 0x75, 0x62, 0x03, 0x63, 0x6f, 0x6d,
+        0x00, 0x00, 0x01, 0x00, 0x01, 0xc0, 0x0c, 0x00, 0x05, 0x00, 0x01, 0x00, 0x00, 0x0e, 0x0f, 0x00, 0x02, 0xc0,
+        0x10, 0xc0, 0x10, 0x00, 0x01, 0x00, 0x01, 0x00, 0x00, 0x00, 0x3c, 0x00, 0x04, 0x14, 0x1a, 0x9c, 0xd7};
 
 TEST_F(DnsProxyTest, TransparentModeWhitelistPreventsBlockingByCname) {
 
@@ -2434,7 +2626,7 @@ TEST_F(DnsProxyTest, TestReapplySettingsFastUpdate) {
     ASSERT_EQ(ldns_pkt_get_rcode(response.get()), LDNS_RCODE_REFUSED);
 
     // Change only upstreams, keep filters unchanged
-    settings.upstreams = {{"8.8.8.8"}};
+    settings.upstreams = {{g_upstream->address(ag::utils::TP_UDP)}};
     auto [ret2, err2] = m_proxy->reapply_settings(settings, DnsProxy::RO_SETTINGS);
     ASSERT_TRUE(ret2) << (err2 ? err2->str() : "");
 
@@ -2444,7 +2636,7 @@ TEST_F(DnsProxyTest, TestReapplySettingsFastUpdate) {
             perform_request(*m_proxy, create_request("example.com", LDNS_RR_TYPE_A, LDNS_RD), response));
     ASSERT_EQ(ldns_pkt_get_rcode(response.get()), LDNS_RCODE_REFUSED);
 
-    // Test that new upstream is used (should work with 8.8.8.8)
+    // Test that new upstream is used (served by the loopback responder)
     response.reset();
     ASSERT_NO_FATAL_FAILURE(perform_request(*m_proxy, create_request("google.com", LDNS_RR_TYPE_A, LDNS_RD), response));
     ASSERT_EQ(ldns_pkt_get_rcode(response.get()), LDNS_RCODE_NOERROR);
@@ -2469,7 +2661,7 @@ TEST_F(DnsProxyTest, TestReapplySettingsFullUpdate) {
     ASSERT_EQ(ldns_pkt_get_rcode(response.get()), LDNS_RCODE_NOERROR);
 
     // Change both upstreams and filters
-    settings.upstreams = {{"8.8.8.8"}};
+    settings.upstreams = {{g_upstream->address(ag::utils::TP_UDP)}};
     settings.filter_params = {{{1, "test.com", true}}}; // Different filter
     auto [ret2, err2] = m_proxy->reapply_settings(settings, DnsProxy::RO_SETTINGS | DnsProxy::RO_FILTERS);
     ASSERT_TRUE(ret2) << (err2 ? err2->str() : "");
@@ -2524,7 +2716,7 @@ TEST_F(DnsProxyTest, TestReapplySettingsPreservesEvents) {
     ASSERT_TRUE(ret) << err->str();
 
     // Reapply settings (fast update)
-    settings.upstreams = {{"8.8.8.8"}};
+    settings.upstreams = {{g_upstream->address(ag::utils::TP_UDP)}};
     auto [ret2, err2] = m_proxy->reapply_settings(settings, DnsProxy::RO_SETTINGS);
     ASSERT_TRUE(ret2) << (err2 ? err2->str() : "");
 
@@ -2610,7 +2802,7 @@ TEST_F(DnsProxyTest, TestReapplySettingsRoSettingsPreservesListenersAndFilters) 
 
     // Reapply with RO_SETTINGS — listeners and filter_params must be preserved
     DnsProxySettings new_settings = make_dnsproxy_settings();
-    new_settings.upstreams = {{"1.1.1.1"}};
+    new_settings.upstreams = {{g_upstream->address(ag::utils::TP_UDP)}};
     new_settings.blocked_response_ttl_secs = 2000;
     new_settings.block_ipv6 = true;
     new_settings.filter_params = {{{2, "other.com", true}}}; // Should be ignored
@@ -2622,7 +2814,7 @@ TEST_F(DnsProxyTest, TestReapplySettingsRoSettingsPreservesListenersAndFilters) 
     ASSERT_NO_FATAL_FAILURE(check_filter_params(current, settings.filter_params));
     // Other settings should be updated to new_settings values
     DnsProxySettings expected_other = new_settings;
-    expected_other.upstreams = {{"1.1.1.1"}};
+    expected_other.upstreams = {{g_upstream->address(ag::utils::TP_UDP)}};
     ASSERT_NO_FATAL_FAILURE(check_other_settings(current, expected_other));
 
     // Original filter should still work (example.com blocked)
@@ -2679,7 +2871,7 @@ TEST_F(DnsProxyTest, TestReapplySettingsFullUpdatePreservesListeners) {
 
     // Reapply with both flags
     DnsProxySettings new_settings = make_dnsproxy_settings();
-    new_settings.upstreams = {{"1.1.1.1"}};
+    new_settings.upstreams = {{g_upstream->address(ag::utils::TP_UDP)}};
     new_settings.blocked_response_ttl_secs = 2000;
     new_settings.filter_params = {{{1, "test.com", true}}};
     auto [ret2, err2] = m_proxy->reapply_settings(new_settings, DnsProxy::RO_SETTINGS | DnsProxy::RO_FILTERS);
@@ -2712,9 +2904,9 @@ TEST_F(DnsProxyTest, TestReapplySettingsNoOpPreservesEverything) {
 
     // Reapply with RO_NONE — everything must be preserved
     DnsProxySettings new_settings = make_dnsproxy_settings();
-    new_settings.upstreams = {{"9.9.9.9"}};                  // Should be ignored
-    new_settings.blocked_response_ttl_secs = 9999;           // Should be ignored
-    new_settings.filter_params = {{{2, "other.com", true}}}; // Should be ignored
+    new_settings.upstreams = {{g_upstream->address(ag::utils::TP_UDP)}}; // Should be ignored
+    new_settings.blocked_response_ttl_secs = 9999;                       // Should be ignored
+    new_settings.filter_params = {{{2, "other.com", true}}};             // Should be ignored
     auto [ret2, err2] = m_proxy->reapply_settings(new_settings, DnsProxy::RO_NONE);
     ASSERT_TRUE(ret2) << (err2 ? err2->str() : "");
 
@@ -2734,9 +2926,24 @@ TEST_F(DnsProxyTest, RegressCache1) {
     settings.block_ech = true;
 
     DnsRequestProcessedEvent last_event{};
-    DnsProxyEvents events{.on_request_processed = [&last_event](const DnsRequestProcessedEvent &event) {
-        last_event = event;
-    }};
+    std::promise<void> bg_fetch_done;
+    auto bg_future = bg_fetch_done.get_future();
+    std::atomic_bool bg_signalled{false};
+    DnsProxyEvents events{
+            .on_request_processed =
+                    [&last_event](const DnsRequestProcessedEvent &event) {
+                        last_event = event;
+                    },
+            .on_cache_updated =
+                    [&](std::string_view domain) {
+                        if (domain == "cloudflare-ech.com") {
+                            bool expected = false;
+                            if (bg_signalled.compare_exchange_strong(expected, true)) {
+                                bg_fetch_done.set_value();
+                            }
+                        }
+                    },
+    };
 
     auto [ret, err] = m_proxy->init(settings, events);
     ASSERT_TRUE(ret) << err->str();
@@ -2762,8 +2969,8 @@ TEST_F(DnsProxyTest, RegressCache1) {
     ASSERT_NO_FATAL_FAILURE(perform_request(*m_proxy, pkt, res, &info));
     ASSERT_TRUE(SvcbHttpsHelpers::remove_ech_svcparam(res.get()));
 
-    // Wait for background fetch.
-    std::this_thread::sleep_for(Millis{500});
+    // Deterministically wait for the background refetch to update the cache (no sleep).
+    bg_future.get();
 
     // Background fetch "poisons" the cache with an unprocessed response with ECH parameters intact.
     // ECH blocking no longer works.

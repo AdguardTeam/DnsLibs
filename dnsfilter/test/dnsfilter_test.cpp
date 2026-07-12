@@ -1,6 +1,14 @@
+#include <chrono>
 #include <gtest/gtest.h>
 #include <numeric>
 #include <string>
+
+#ifdef _WIN32
+#include <windows.h>
+#else
+#include <fcntl.h>
+#include <sys/stat.h>
+#endif
 
 #include "common/file.h"
 #include "common/logger.h"
@@ -11,6 +19,37 @@
 #include "../rule_utils.h"
 
 namespace ag::dns::dnsfilter::test {
+
+// Bump the file's mtime to a value strictly later than its creation time, so the
+// DnsFilter auto-update check (file mtime != cached mtime) fires immediately,
+// without sleeping for the filesystem's mtime granularity.
+static void bump_file_mtime(const std::string &path) {
+    using namespace std::chrono;
+    // +60s is unambiguously beyond the file's creation second on every filesystem.
+    constexpr seconds MTIME_BUMP{60};
+    const auto target = system_clock::now() + MTIME_BUMP;
+    const auto secs = duration_cast<seconds>(target.time_since_epoch()).count();
+#ifdef _WIN32
+    HANDLE handle = CreateFileA(path.c_str(), FILE_WRITE_ATTRIBUTES, FILE_SHARE_READ | FILE_SHARE_WRITE, nullptr,
+            OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
+    if (handle != INVALID_HANDLE_VALUE) {
+        // 100ns ticks since 1601-01-01 (Windows FILETIME epoch), derived from a
+        // unix-epoch seconds value.
+        constexpr uint64_t UNIX_EPOCH_FILETIME_OFFSET = 11644473600ULL;
+        constexpr uint64_t FILETIME_TICKS_PER_SECOND = 10000000ULL;
+        ULARGE_INTEGER converter;
+        converter.QuadPart = (static_cast<uint64_t>(secs) + UNIX_EPOCH_FILETIME_OFFSET) * FILETIME_TICKS_PER_SECOND;
+        FILETIME write_time{converter.LowPart, converter.HighPart};
+        SetFileTime(handle, nullptr, nullptr, &write_time);
+        CloseHandle(handle);
+    }
+#else
+    struct timespec times[2] = {};
+    times[0].tv_nsec = UTIME_OMIT;               // atime: leave unchanged
+    times[1].tv_sec = static_cast<time_t>(secs); // mtime: now + 60s
+    utimensat(AT_FDCWD, path.c_str(), times, 0);
+#endif
+}
 
 class DnsfilterTest : public ::testing::Test {
 protected:
@@ -1347,13 +1386,17 @@ TEST_F(DnsfilterTest, FileBasedFilterAutoUpdate) {
 
     fd = ag::file::open(file_name, ag::file::RDWR);
 
-    // need wait at least 1 second after file create
-    std::this_thread::sleep_for(Secs(1));
-
     ag::file::set_position(fd, 0);
     ag::file::write(fd, rule2.c_str(), rule2.size());
     ag::file::write(fd, rule1.c_str(), rule1.size());
     ag::file::close(fd);
+
+    // Force the file's mtime to differ from the value cached at create() time.
+    // The bump is applied after the writes (which would otherwise reset the
+    // mtime to the current second), so the filter's auto-update check
+    // (file mtime != cached mtime) fires deterministically without sleeping for
+    // the filesystem's mtime granularity.
+    bump_file_mtime(file_name);
 
     rules.clear();
     rules = filter.match(handle, {"example.com", LDNS_RR_TYPE_A});

@@ -5,8 +5,12 @@
 #include <magic_enum/magic_enum.hpp>
 #include <thread>
 
+#include "common/parallel.h"
 #include "dns/proxy/dnsproxy.h"
 #include "dns/upstream/upstream.h"
+#include "dns_test_helpers.h"
+#include "integration_test_guard.h"
+#include "loopback_dns_server.h"
 
 namespace ag::dns::proxy::test {
 
@@ -36,9 +40,23 @@ TEST_P(ListenerTest, ListensAndResponds) {
     const auto &params = GetParam();
     const auto listener_settings = params.settings;
 
+    // A loopback upstream the proxy forwards to instead of a real public DNS
+    // server. With block_ipv6 enabled below the proxy short-circuits AAAA
+    // queries and never actually contacts it, but wiring a real offline
+    // upstream keeps the test internet-free even if that behavior changes.
+    ag::test::LoopbackDnsServer upstream_server([](const ldns_pkt &req) -> ldns_pkt_ptr {
+        ldns_pkt_ptr reply = ag::test::make_base_reply(req);
+        const ldns_rr *question = ldns_rr_list_rr(ldns_pkt_question(&req), 0);
+        if (question != nullptr) {
+            ag::test::add_a_answer(reply.get(), question);
+        }
+        return reply;
+    });
+    upstream_server.start();
+
     std::thread t([&]() {
         auto settings = DnsProxySettings::get_default();
-        settings.upstreams = {{"94.140.14.140"}};
+        settings.upstreams = {{.address = upstream_server.address(ag::utils::TP_UDP)}};
         settings.listeners = {listener_settings};
 
         // Since we do an AAAA query, this will prevent the proxy
@@ -108,7 +126,6 @@ TEST_P(ListenerTest, ListensAndResponds) {
             params.request_addr, listener_settings.port);
 
     for (size_t i = 0; i < params.n_threads; ++i) {
-        std::this_thread::sleep_for(10ms);
         EventLoopPtr loop = EventLoop::create();
         Worker worker{loop,
                 coro::to_future([](std::atomic_long &successful_requests, ListenerSettings listener_settings,
@@ -166,7 +183,7 @@ TEST(ListenerTest, ShutsDownIfCouldNotInitialize) {
     constexpr auto port = 1;
     DnsProxy proxy;
     auto proxy_settings = DnsProxySettings::get_default();
-    proxy_settings.upstreams = {{"94.140.14.140"}};
+    proxy_settings.upstreams = {{"127.0.0.1"}};
     proxy_settings.listeners = {
             {addr, port, ag::utils::TP_UDP},
             {addr, port, ag::utils::TP_TCP},
@@ -176,6 +193,12 @@ TEST(ListenerTest, ShutsDownIfCouldNotInitialize) {
 }
 
 TEST(ListenerTest, DISABLED_ManyRequestsPending) {
+    // The upstream is a real DoQ server (dns.adguard-dns.com); the test's value
+    // is the QUIC request storm, which cannot be reproduced against a loopback
+    // plain-DNS responder. Gate it so it only runs when integration tests are
+    // explicitly opted into, and keep it DISABLED_ as belt-and-suspenders.
+    REQUIRE_INTEGRATION();
+
     Logger::set_log_level(LogLevel::LOG_LEVEL_TRACE);
     FILE *logfile = fopen("adguard.log", "w");
     ASSERT_TRUE(logfile) << "Failed to open adguard.log for writing: " << strerror(errno);
@@ -202,6 +225,7 @@ TEST(ListenerTest, DISABLED_ManyRequestsPending) {
         auto [ret, err] = proxy.init(proxy_settings, {});
         proxy_init_result = ret;
         proxy_initialized = true;
+        proxy_cond.notify_all();
 
         ldns_pkt_ptr reqpkt(
                 ldns_pkt_query_new(ldns_dname_new_frm_str("youtube.com"), LDNS_RR_TYPE_A, LDNS_RR_CLASS_IN, LDNS_RD));
@@ -234,33 +258,48 @@ TEST(ListenerTest, DISABLED_ManyRequestsPending) {
         }
     });
 
-    std::this_thread::sleep_for(2s);
+    // Wait until the proxy is initialized (replaces a fixed 2 s sleep).
+    {
+        std::unique_lock<std::mutex> l(mtx);
+        proxy_cond.wait(l, [&]() {
+            return proxy_initialized;
+        });
+    }
     ASSERT_TRUE(proxy_init_result);
+
     ldns_pkt_ptr reqpkt(ldns_pkt_query_new(ldns_dname_new_frm_str("g.co"), LDNS_RR_TYPE_A, LDNS_RR_CLASS_IN, LDNS_RD));
     ldns_buffer_ptr buffer{ldns_buffer_new(REQUEST_BUFFER_INITIAL_CAPACITY)};
     ldns_pkt2buffer_wire(buffer.get(), reqpkt.get());
 
+    // Launch 10 000 fire-and-forget requests and deterministically await all of
+    // them via parallel::all_of instead of sleeping for a fixed 10 s.
+    auto all = parallel::all_of<bool>();
     for (int i = 0; i < 10000; i++) {
-        coro::run_detached([&buffer](auto &proxy) -> coro::Task<void> {
+        all.add([&buffer](DnsProxy &proxy) -> coro::Task<bool> {
             co_await proxy.handle_message(
                     {ldns_buffer_at(buffer.get(), 0), ldns_buffer_position(buffer.get())}, nullptr);
+            co_return true;
         }(proxy));
     }
-    std::this_thread::sleep_for(10s);
+    coro::to_future([&all]() -> coro::Task<void> {
+        (void) co_await all;
+    }())
+            .get();
 
-    // send new request after requests storm
+    // Send a new request after the storm and await its result directly instead
+    // of sleeping for a fixed 3 s. This is race-free: the storm above has
+    // fully resolved before the buffer is reused.
     ldns_pkt_ptr reqpkt2(
             ldns_pkt_query_new(ldns_dname_new_frm_str("google.com"), LDNS_RR_TYPE_A, LDNS_RR_CLASS_IN, LDNS_RD));
 
     buffer.reset(ldns_buffer_new(REQUEST_BUFFER_INITIAL_CAPACITY));
     ldns_pkt2buffer_wire(buffer.get(), reqpkt2.get());
 
-    Uint8Vector last_reply_res{};
-    ag::coro::run_detached([&buffer](DnsProxy &proxy, Uint8Vector &reply_res) -> ag::coro::Task<void> {
-        reply_res = co_await proxy.handle_message(
+    Uint8Vector last_reply_res = coro::to_future([&buffer](DnsProxy &proxy) -> coro::Task<Uint8Vector> {
+        co_return co_await proxy.handle_message(
                 {ldns_buffer_at(buffer.get(), 0), ldns_buffer_position(buffer.get())}, nullptr);
-    }(proxy, last_reply_res));
-    std::this_thread::sleep_for(3s);
+    }(proxy))
+                                         .get();
 
     // check if last request got correct response
     ASSERT_FALSE(last_reply_res.empty());

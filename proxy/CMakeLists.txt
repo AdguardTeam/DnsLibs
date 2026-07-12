@@ -89,9 +89,9 @@ configure_file(test/whitelist_test_filter.txt whitelist_test_filter.txt COPYONLY
 configure_file(test/bad_test_filter.txt bad_test_filter.txt COPYONLY)
 configure_file(test/crash_regress_test_filter.txt crash_regress_test_filter.txt COPYONLY)
 
-add_unit_test(dns64_test ${TEST_DIR} "" TRUE TRUE)
-add_unit_test(dnsproxy_test ${TEST_DIR} "" TRUE TRUE)
-add_unit_test(listener_test ${TEST_DIR} "" TRUE FALSE)
+add_unit_test(dns64_test ${TEST_DIR} ${CMAKE_SOURCE_DIR}/common/test_helpers TRUE TRUE)
+add_unit_test(dnsproxy_test ${TEST_DIR} ${CMAKE_SOURCE_DIR}/common/test_helpers TRUE TRUE)
+add_unit_test(listener_test ${TEST_DIR} ${CMAKE_SOURCE_DIR}/common/test_helpers TRUE FALSE)
 add_unit_test(truncate_test ${TEST_DIR} "" TRUE TRUE)
 if(DNSLIBS_ENABLE_TCPIP)
     add_unit_test(tun_listener_test ${TEST_DIR} "" TRUE FALSE)

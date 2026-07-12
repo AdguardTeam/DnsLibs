@@ -104,15 +104,22 @@ include(${CMAKE_CURRENT_SOURCE_DIR}/../cmake/add_unit_test.cmake)
 link_libraries(upstream)
 set(TEST_DIR ${CMAKE_CURRENT_SOURCE_DIR}/test)
 
+set(AG_TEST_HELPERS ${DNSLIBS_DIR}/common/test_helpers)
+
 if (ANDROID)
-    add_unit_test(test_upstream "${TEST_DIR}" "${DNSLIBS_DIR}/dnscrypt/src;${DNSLIBS_DIR}/platform/android/dnsproxy/lib/src/main/cpp" TRUE FALSE)
+    add_unit_test(test_upstream "${TEST_DIR}" "${DNSLIBS_DIR}/dnscrypt/src;${DNSLIBS_DIR}/platform/android/dnsproxy/lib/src/main/cpp;${AG_TEST_HELPERS}" TRUE FALSE)
 else()
-    add_unit_test(test_upstream "${TEST_DIR}" "${DNSLIBS_DIR}/dnscrypt/src" TRUE FALSE)
+    add_unit_test(test_upstream "${TEST_DIR}" "${DNSLIBS_DIR}/dnscrypt/src;${AG_TEST_HELPERS}" TRUE FALSE)
 endif()
-add_unit_test(test_upstream_utils "${TEST_DIR}" "" TRUE TRUE)
+add_unit_test(test_upstream_utils "${TEST_DIR}" "${AG_TEST_HELPERS}" TRUE TRUE)
 if (APPLE)
-    add_unit_test(test_system_resolver "${TEST_DIR}" "" TRUE TRUE)
+    add_unit_test(test_system_resolver "${TEST_DIR}" "${AG_TEST_HELPERS}" TRUE TRUE)
 endif ()
-add_unit_test(test_dot_invalid_address "${TEST_DIR}" "${DNSLIBS_DIR}/upstream/src" TRUE TRUE)
-add_unit_test(test_bootstrapper "${TEST_DIR}" "${DNSLIBS_DIR}/upstream/src" TRUE TRUE)
-add_unit_test(test_doh_credentials "${TEST_DIR}" "${DNSLIBS_DIR}/upstream/src" TRUE TRUE)
+add_unit_test(test_dot_invalid_address "${TEST_DIR}" "${DNSLIBS_DIR}/upstream/src;${AG_TEST_HELPERS}" TRUE TRUE)
+add_unit_test(test_bootstrapper "${TEST_DIR}" "${DNSLIBS_DIR}/upstream/src;${AG_TEST_HELPERS}" TRUE TRUE)
+add_unit_test(test_doh_credentials "${TEST_DIR}" "${DNSLIBS_DIR}/upstream/src;${AG_TEST_HELPERS}" TRUE TRUE)
+# Shared test infrastructure (loopback DNS server, MockUpstream, integration
+# guard) lives in common/test_helpers (header-only); the test itself is built
+# here because MockUpstream derives from dns::Upstream and the round-trip tests
+# exercise PlainUpstream, both of which require linking the upstream library.
+add_unit_test(test_helpers_test "${TEST_DIR}" "${DNSLIBS_DIR}/common/test_helpers" TRUE TRUE)

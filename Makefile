@@ -186,3 +186,11 @@ test: test-cpp
 test-cpp: build_libs
 	cmake --build $(BUILD_DIR) --target tests
 	ctest --test-dir $(BUILD_DIR)
+
+## Run the full test suite including real-network integration tests.
+## Sets DNSLIBS_INTEGRATION_TESTS=1, so tests that dial public DNS servers
+## (DoT/DoH/DoQ/DNSCrypt) are executed instead of skipped. Requires internet.
+.PHONY: test-integration
+test-integration: build_libs
+	cmake --build $(BUILD_DIR) --target tests
+	DNSLIBS_INTEGRATION_TESTS=1 ctest --test-dir $(BUILD_DIR)

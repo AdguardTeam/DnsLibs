@@ -7,6 +7,7 @@
 #include "dns/upstream/upstream.h"
 
 #include "../resolver.h"
+#include "integration_test_guard.h"
 
 namespace ag::dns {
 
@@ -81,6 +82,10 @@ public:
 };
 
 TEST_F(DotUpstreamTest, ThrowsAwayInvalidAddress) {
+    // Exchanges with real Cloudflare over TLS (the RESOLVED_ADDRESSES list
+    // includes 1.1.1.1:853). A loopback reformulation would require a loopback
+    // TLS server, which is out of scope. Gated.
+    REQUIRE_INTEGRATION();
     co_await m_loop->co_submit();
     Logger::set_log_level(LogLevel::LOG_LEVEL_TRACE);
     SocketFactory sf{{

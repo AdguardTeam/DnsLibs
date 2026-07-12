@@ -10,6 +10,7 @@
 
 #include "../system_resolver.h"
 #include "common/gtest_coro.h"
+#include "integration_test_guard.h"
 
 namespace ag::dns::upstream::test {
 
@@ -33,6 +34,8 @@ protected:
 };
 
 TEST_F(SystemResolverTest, ResolveMicrosoftARecord) {
+    // Uses the OS system resolver, which depends on the real network.
+    REQUIRE_INTEGRATION();
     co_await m_loop->co_submit();
     auto result = co_await m_resolver->resolve("www.microsoft.com", LDNS_RR_TYPE_A);
     ASSERT_FALSE(result.has_error());
@@ -42,6 +45,8 @@ TEST_F(SystemResolverTest, ResolveMicrosoftARecord) {
 }
 
 TEST_F(SystemResolverTest, ResolveNonExistentDomain) {
+    // Uses the OS system resolver, which depends on the real network.
+    REQUIRE_INTEGRATION();
     co_await m_loop->co_submit();
     const auto RESULT = co_await m_resolver->resolve("nonexistentdomainabcdefgh.xyz", LDNS_RR_TYPE_A);
     ASSERT_TRUE(RESULT.has_error());
@@ -51,6 +56,8 @@ TEST_F(SystemResolverTest, ResolveNonExistentDomain) {
 }
 
 TEST_F(SystemResolverTest, ResolveNoWait) {
+    // Uses the OS system resolver, which depends on the real network.
+    REQUIRE_INTEGRATION();
     co_await m_loop->co_submit();
     coro::run_detached([](SystemResolver *resolver) -> coro::Task<void> {
         co_await resolver->resolve("www.example.org", LDNS_RR_TYPE_A);

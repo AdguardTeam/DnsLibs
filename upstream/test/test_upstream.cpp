@@ -1,6 +1,9 @@
+#include <atomic>
 #include <csignal>
+#include <cstring>
 #include <functional>
 #include <future>
+#include <memory>
 #include <span>
 #include <thread>
 
@@ -19,11 +22,15 @@
 #include "android_res_api.h"
 #endif
 
-#include "test_utils.h"
+#include "dns_test_helpers.h"
+#include "integration_test_guard.h"
+#include "loopback_dns_server.h"
 
 namespace ag::dns::upstream::test {
 
 static constexpr Secs DEFAULT_TIMEOUT(10);
+// Only used on the integration path (real servers, rate-limited). The offline
+// path (loopback) needs no delay between requests.
 static constexpr Millis DELAY_BETWEEN_REQUESTS{500};
 
 using TestError = std::optional<std::string>;
@@ -114,32 +121,40 @@ static coro::Task<void> parallel_test_basic_n(EventLoop &loop, size_t count, con
     co_await check_all_results(results);
 }
 
-template <typename T, typename F>
-static coro::Task<void> parallel_test_basic(EventLoop &loop, const T *tests, size_t count, const F &function) {
-    co_await loop.co_submit();
-    auto all_of_awaitable = parallel::all_of<TestError>();
-    for (size_t i = 0; i < count; i++) {
-        const auto &[address, bootstrap, server_ip] = tests[i];
-        all_of_awaitable.add([](EventLoop &loop, size_t idx, const F &function, auto &address, auto &bootstrap,
-                                     auto &server_ip) -> coro::Task<TestError> {
-            co_await loop.co_sleep(DELAY_BETWEEN_REQUESTS * idx);
-            co_return co_await function(address, bootstrap, server_ip);
-        }(loop, ++i, function, address, bootstrap, server_ip));
-    }
-    auto v = co_await all_of_awaitable;
-    co_await check_all_results(v);
-}
-
 struct UpstreamTestData {
     std::string address;
-    std::initializer_list<std::string> bootstrap;
+    std::vector<std::string> bootstrap;
     IpAddress server_ip;
 };
+
+// Builds a canned A reply echoing the request's qname with rdata 8.8.8.8, so
+// that assert_response() (which expects exactly one A answer == 8.8.8.8) passes
+// against the loopback server with no internet access.
+static ldns_pkt_ptr make_loopback_a_reply(const ldns_pkt &req) {
+    ldns_pkt_ptr reply = ag::test::make_base_reply(req);
+    const ldns_rr *question = ldns_rr_list_rr(ldns_pkt_question(&req), 0);
+    if (question == nullptr) {
+        return {};
+    }
+    ldns_rr *answer = ldns_rr_new();
+    ldns_rr_set_owner(answer, ldns_rdf_clone(ldns_rr_owner(question)));
+    ldns_rr_set_ttl(answer, 300);
+    ldns_rr_set_type(answer, LDNS_RR_TYPE_A);
+    ldns_rr_set_class(answer, LDNS_RR_CLASS_IN);
+    ldns_rr_push_rdf(answer, ldns_rdf_new_frm_str(LDNS_RDF_TYPE_A, "8.8.8.8"));
+    ldns_pkt_push_rr(reply.get(), LDNS_SECTION_ANSWER, answer);
+    return reply;
+}
 
 class UpstreamTest : public ::testing::Test {
 protected:
     EventLoopPtr m_loop;
     std::unique_ptr<SocketFactory> m_socket_factory;
+    // In-process loopback DNS responder (127.0.0.1). Replies with a canned
+    // 8.8.8.8 A answer, so the offline tests never reach the public internet.
+    ag::test::LoopbackDnsServer m_loopback{[](const ldns_pkt &req) {
+        return make_loopback_a_reply(req);
+    }};
 
     void SetUp() override {
 #if 0
@@ -150,9 +165,11 @@ protected:
         m_loop = EventLoop::create();
         m_loop->start();
         make_upstream_factory();
+        m_loopback.start();
     }
 
     void TearDown() override {
+        m_loopback.stop();
         m_loop->stop();
         m_loop->join();
     }
@@ -179,11 +196,15 @@ protected:
     }
 
     UpstreamFactory::CreateResult create_upstream(const UpstreamOptions &opts, Millis timeout = DEFAULT_TIMEOUT) {
-        static bool ipv6_available = test_ipv6_connectivity();
+        // `ipv6_available` matches the production default (true). The former
+        // static-init probe dialed Google DNS over IPv6 on the first
+        // create_upstream() call, which kept the suite online; for literal-IP
+        // loopback upstreams the flag is inert (the bootstrapper is bypassed),
+        // so a literal true is correct.
         UpstreamFactory factory({
                 .loop = *m_loop,
                 .socket_factory = m_socket_factory.get(),
-                .ipv6_available = ipv6_available,
+                .ipv6_available = true,
                 .enable_http3 = false,
                 .timeout = timeout,
         });
@@ -197,10 +218,15 @@ protected:
         co_return error;
     }
 
-    coro::Task<void> sequential_test(std::span<const UpstreamTestData> test_data) {
+    // Iterates `test_data` sequentially, creating an upstream and exchanging
+    // one query per entry. `delay_between` is only honored on the integration
+    // path (real servers are rate-limited); the offline loopback path passes 0.
+    coro::Task<void> sequential_test(std::span<const UpstreamTestData> test_data, Millis delay_between = Millis{0}) {
         for (const UpstreamTestData &data : test_data) {
             infolog(logger, "Testing upstream: {}", data.address);
-            std::this_thread::sleep_for(DELAY_BETWEEN_REQUESTS);
+            if (delay_between.count() > 0) {
+                std::this_thread::sleep_for(delay_between);
+            }
             auto upstream_res = create_upstream({data.address, data.bootstrap, data.server_ip});
 
 #ifdef __ANDROID__
@@ -219,6 +245,19 @@ protected:
             ASSERT_FALSE(error) << *error;
         }
     }
+
+    // "<scheme>://127.0.0.1:<port>" for the loopback server.
+    std::string local_udp() const {
+        return m_loopback.address(ag::utils::TP_UDP);
+    }
+    std::string local_tcp() const {
+        return m_loopback.address(ag::utils::TP_TCP);
+    }
+    // Plain (no-scheme) loopback address: makes PlainUpstream try UDP first
+    // and fall back to TCP on a truncated reply.
+    std::string local_plain() const {
+        return AG_FMT("127.0.0.1:{}", m_loopback.port());
+    }
 };
 
 template <typename... Ts>
@@ -230,11 +269,11 @@ TEST_F(UpstreamTest, CreateUpstreamWithWrongOptions) {
             // malformed ip address
             {"8..8.8:53"},
             {"8.a.8.8:53"},
-            {"8.8.8.8:-1"},
+            {"127.0.0.1:-1"},
             {"[::1::]"},
             {"tcp://8..8.8:53"},
-            {"tcp://1.1.1.1,8.8.8.8"},
-            {"1.1.1.1,8.8.8.8"},
+            {"tcp://127.0.0.1,1.2.3.4"},
+            {"127.0.0.1,1.2.3.4"},
 #ifdef __APPLE__
             {"system://enqwerty"},
 #endif // __APPLE__
@@ -252,10 +291,10 @@ TEST_F(UpstreamTest, CreateUpstreamWithWrongOptions) {
             {"tls://one.one.one.one", {"1..1.1"}},
 
             // some degenerate URLs
-            {"tls://", {"1.1.1.1"}},
-            {"tls:///", {"1.1.1.1"}},
-            {"tls://   ", {"1.1.1.1"}},
-            {"tls://   /", {"1.1.1.1"}},
+            {"tls://", {"127.0.0.1"}},
+            {"tls:///", {"127.0.0.1"}},
+            {"tls://   ", {"127.0.0.1"}},
+            {"tls://   /", {"127.0.0.1"}},
             {"tcp://", {}},
             {"tcp:///", {}},
             {"tcp://   ", {}},
@@ -270,8 +309,8 @@ TEST_F(UpstreamTest, CreateUpstreamWithWrongOptions) {
             {"https://   /", {}},
 
             // wrong basic authentication parameters
-            {"https://usernamepassword@dns.google/dns-query", {"8.8.8.8"}},
-            {"https://:pass@dns.google/dns-query", {"8.8.8.8"}},
+            {"https://usernamepassword@127.0.0.1/dns-query", {"127.0.0.1"}},
+            {"https://:pass@127.0.0.1/dns-query", {"127.0.0.1"}},
             {"sdns://usernamepassword@AgcAAAAAAAAABzEuMC4wLjEAEmRucy5jbG91ZGZsYXJlLmNvbQovZG5zLXF1ZXJ5", {}},
             {"sdns://:pass@AgcAAAAAAAAABzEuMC4wLjEAEmRucy5jbG91ZGZsYXJlLmNvbQovZG5zLXF1ZXJ5", {}},
     };
@@ -282,7 +321,11 @@ TEST_F(UpstreamTest, CreateUpstreamWithWrongOptions) {
     }
 }
 
+// These combos rely on real domain names and real bootstrap resolution/TLS
+// servers. The offline loopback server cannot reproduce them (a loopback
+// plain upstream bypasses the bootstrapper entirely), so they are gated.
 TEST_F(UpstreamTest, UseUpstreamWithWrongOptions) {
+    REQUIRE_INTEGRATION();
     co_await m_loop->co_submit();
     static const UpstreamOptions OPTIONS[]{
             // non existent domain, valid bootstrap
@@ -305,7 +348,10 @@ TEST_F(UpstreamTest, UseUpstreamWithWrongOptions) {
     }
 }
 
+// Tests DoT bootstrap timeout against a real address. A loopback reformulation
+// would require a loopback TLS server, which is out of scope.
 TEST_F(UpstreamTest, TestBootstrapTimeout) {
+    REQUIRE_INTEGRATION();
     using namespace std::chrono_literals;
     using namespace concat_err_string;
     static constexpr auto timeout = 100ms;
@@ -344,23 +390,41 @@ TEST_F(UpstreamTest, TestBootstrapTimeout) {
     ASSERT_FALSE(err) << *err;
 }
 
-struct DnsTruncatedTest : UpstreamParamTest<std::string_view> {};
-
-static constexpr std::string_view truncated_test_data[]{
-        // AdGuard DNS
-        "94.140.14.14:53",
-        // Google DNS
-        "8.8.8.8:53",
-        // See the details here: https://github.com/AdguardTeam/AdGuardHome/issues/524
-        // AdGuard DNS (DNSCrypt)
-        "sdns://"
-        "AQIAAAAAAAAAETk0LjE0MC4xNC4xNDo1NDQzINErR_JS3PLCu_iZEIbq95zkSV2LFsigxDIuUso_"
-        "OQhzIjIuZG5zY3J5cHQuZGVmYXVsdC5uczEuYWRndWFyZC5jb20",
-};
-
-TEST_P(DnsTruncatedTest, TestDnsTruncated) {
+// Offline path for the truncated-reply behavior: a loopback server returns a
+// truncated reply (TC=1) over UDP, forcing PlainUpstream to retry over TCP,
+// where the server returns a non-truncated reply (TC=0). Exercises the real
+// UDP->TCP fallback with no internet access.
+TEST_F(UpstreamTest, DnsTruncatedLocal) {
     co_await m_loop->co_submit();
-    const auto &address = GetParam();
+    auto tc_call = std::make_shared<std::atomic<int>>(0);
+    ag::test::LoopbackDnsServer server([tc_call](const ldns_pkt &req) -> ldns_pkt_ptr {
+        ldns_pkt_ptr reply = ag::test::make_base_reply(req);
+        // First call (the UDP attempt) is truncated; the TCP retry is not.
+        int n = tc_call->fetch_add(1);
+        ldns_pkt_set_tc(reply.get(), n == 0);
+        return reply;
+    });
+    server.start();
+    auto upstream_res = create_upstream({AG_FMT("127.0.0.1:{}", server.port())}, Secs(5));
+    ASSERT_FALSE(upstream_res.has_error()) << "Error while creating an upstream: " << upstream_res.error()->str();
+    auto request = dnscrypt::create_request_ldns_pkt(
+            LDNS_RR_TYPE_TXT, LDNS_RR_CLASS_IN, LDNS_RD, "unit-test-truncated.example.", std::nullopt);
+    ldns_pkt_set_random_id(request.get());
+    auto res = co_await upstream_res.value()->exchange(request.get());
+    ASSERT_FALSE(res.has_error()) << "Error while making a request: " << res.error()->str();
+    ASSERT_FALSE(ldns_pkt_tc(res->get())) << "Response must NOT be truncated";
+    server.stop();
+}
+
+// Real DNSCrypt server: the truncation handling for DNSCrypt can't be
+// reproduced against loopback (it requires the DNSCrypt handshake).
+TEST_F(UpstreamTest, DnsTruncatedDnscryptIntegration) {
+    REQUIRE_INTEGRATION();
+    co_await m_loop->co_submit();
+    static constexpr std::string_view address =
+            "sdns://"
+            "AQIAAAAAAAAAETk0LjE0MC4xNC4xNDo1NDQzINErR_JS3PLCu_iZEIbq95zkSV2LFsigxDIuUso_"
+            "OQhzIjIuZG5zY3J5cHQuZGVmYXVsdC5uczEuYWRndWFyZC5jb20";
     auto upstream_res = create_upstream({std::string(address), {}}, Secs(5));
     ASSERT_FALSE(upstream_res.has_error()) << "Error while creating an upstream: " << upstream_res.error()->str();
     auto request = dnscrypt::create_request_ldns_pkt(
@@ -371,9 +435,10 @@ TEST_P(DnsTruncatedTest, TestDnsTruncated) {
     ASSERT_FALSE(ldns_pkt_tc(res->get())) << "Response must NOT be truncated";
 }
 
-INSTANTIATE_TEST_SUITE_P(DnsTruncatedTest, DnsTruncatedTest, testing::ValuesIn(truncated_test_data));
-
-static const UpstreamTestData test_upstreams_data[]{
+// Integration-only: real DoT/DoH/DoH3/DoQ/DNSCrypt upstreams. The point of
+// testing these protocols is the real handshake, which a loopback plain DNS
+// server can't validate. Gated so the default suite stays offline.
+static const UpstreamTestData real_upstreams_data[]{
         {"udp://1.1.1.1:53", {}},
         {"tcp://8.8.8.8", {}},
 #ifdef __APPLE__
@@ -451,17 +516,55 @@ int count_open_fds() {
 
     return count;
 }
+
+// Bounded poll for the open-fd count to stabilize after a sequential run,
+// replacing the former fixed 500 ms sleep. Lets closed sockets leave TIME_WAIT
+// without slowing the offline path. No-op outside Linux.
+static coro::Task<void> wait_for_fds_to_stabilize(EventLoop &loop, int baseline) {
+    for (int i = 0; i < 50; ++i) { // up to ~250 ms total
+        if (count_open_fds() <= baseline) {
+            break;
+        }
+        co_await loop.co_sleep(Millis{5});
+    }
+    co_return;
+}
 #endif /* __linux__ */
 
-TEST_F(UpstreamTest, TestUpstreams) {
+// Always-on: plain UDP/TCP against the loopback server. Validates the real
+// PlainUpstream transport + UpstreamFactory path with no internet. No
+// inter-test sleep (nothing to rate-limit).
+TEST_F(UpstreamTest, TestUpstreamsLocal) {
+    const std::vector<UpstreamTestData> local_upstreams_data = {
+            {local_udp(), {}, {}},   // plain UDP
+            {local_tcp(), {}, {}},   // plain TCP
+            {local_plain(), {}, {}}, // plain (no scheme), UDP-first
+    };
 #ifdef __linux__
     int fd_count_before = count_open_fds();
 #endif
-    ASSERT_NO_FATAL_FAILURE(co_await sequential_test(test_upstreams_data));
+    ASSERT_NO_FATAL_FAILURE(co_await sequential_test(local_upstreams_data));
 #ifdef __linux__
-    co_await m_loop->co_sleep(Millis{500});
+    co_await wait_for_fds_to_stabilize(*m_loop, fd_count_before);
     // If there was fd leak, new fd number will be different.
     // There can be extra fd for /dev/null writing.
+    int fd_count_after = count_open_fds();
+    ASSERT_TRUE(fd_count_before <= fd_count_after);
+    ASSERT_TRUE(fd_count_after <= fd_count_before + 1);
+#endif
+}
+
+// Real DoT/DoH/DoH3/DoQ/DNSCrypt upstreams. Only runs when
+// DNSLIBS_INTEGRATION_TESTS is set; otherwise SKIPPED so the default suite
+// never touches the public internet.
+TEST_F(UpstreamTest, TestUpstreamsIntegration) {
+    REQUIRE_INTEGRATION();
+#ifdef __linux__
+    int fd_count_before = count_open_fds();
+#endif
+    ASSERT_NO_FATAL_FAILURE(co_await sequential_test(real_upstreams_data, DELAY_BETWEEN_REQUESTS));
+#ifdef __linux__
+    co_await wait_for_fds_to_stabilize(*m_loop, fd_count_before);
     int fd_count_after = count_open_fds();
     ASSERT_TRUE(fd_count_before <= fd_count_after);
     ASSERT_TRUE(fd_count_after <= fd_count_before + 1);
@@ -489,29 +592,37 @@ static const UpstreamTestData upstream_dot_bootstrap_test_data[]{
         },
 };
 
+// Real DoT/DoH/DNSCrypt bootstrap. Gated; a loopback reformulation would
+// require a loopback TLS server (out of scope).
 TEST_F(UpstreamTest, TestUpstreamDotBootstrap) {
+    REQUIRE_INTEGRATION();
     ASSERT_NO_FATAL_FAILURE(co_await sequential_test(upstream_dot_bootstrap_test_data));
 }
 
-struct UpstreamDefaultOptionsTest : UpstreamParamTest<std::string> {};
-
-static const std::string test_upstream_default_options_data[]{
-        "tls://1.1.1.1",
-        "8.8.8.8",
-};
-
-TEST_P(UpstreamDefaultOptionsTest, TestUpstreamDefaultOptions) {
+// Always-on: plain DNS against the loopback server, succeeds offline.
+TEST_F(UpstreamTest, UpstreamDefaultOptionsLocal) {
     co_await m_loop->co_submit();
-    const auto &address = GetParam();
-    auto upstream_res = create_upstream({address, {}});
-    ASSERT_FALSE(upstream_res.has_error())
-            << "Failed to generate upstream from address " << address << ": " << upstream_res.error()->str();
-    auto err = co_await check_upstream(*upstream_res.value(), address);
-    ASSERT_FALSE(err) << *err;
+    for (const std::string &address : {local_udp(), local_tcp(), local_plain()}) {
+        auto upstream_res = create_upstream({address, {}});
+        ASSERT_FALSE(upstream_res.has_error())
+                << "Failed to generate upstream from address " << address << ": " << upstream_res.error()->str();
+        auto err = co_await check_upstream(*upstream_res.value(), address);
+        ASSERT_FALSE(err) << *err;
+    }
 }
 
-INSTANTIATE_TEST_SUITE_P(
-        UpstreamDefaultOptionsTest, UpstreamDefaultOptionsTest, testing::ValuesIn(test_upstream_default_options_data));
+// Real `tls://1.1.1.1` and `8.8.8.8` with default options. Gated.
+TEST_F(UpstreamTest, UpstreamDefaultOptionsIntegration) {
+    REQUIRE_INTEGRATION();
+    co_await m_loop->co_submit();
+    for (const std::string &address : {"tls://1.1.1.1", "8.8.8.8"}) {
+        auto upstream_res = create_upstream({address, {}});
+        ASSERT_FALSE(upstream_res.has_error())
+                << "Failed to generate upstream from address " << address << ": " << upstream_res.error()->str();
+        auto err = co_await check_upstream(*upstream_res.value(), address);
+        ASSERT_FALSE(err) << *err;
+    }
+}
 
 static const UpstreamTestData test_upstreams_invalid_bootstrap_data[]{
         {
@@ -546,12 +657,14 @@ static const UpstreamTestData test_upstreams_invalid_bootstrap_data[]{
         },
 };
 
-// Test for DoH and DoT upstreams with two bootstraps (only one is valid)
+// DoH and DoT upstreams with two bootstraps (only one is valid). These exercise
+// the bootstrapper's "first success wins" fallback, which only applies to
+// encrypted upstreams (DoT/DoH/DoQ) — plain upstreams bypass the bootstrapper
+// and can't be reformulated against loopback. Gated.
 TEST_F(UpstreamTest, TestUpstreamsInvalidBootstrap) {
+    REQUIRE_INTEGRATION();
     ASSERT_NO_FATAL_FAILURE(co_await sequential_test(test_upstreams_invalid_bootstrap_data));
 }
-
-struct UpstreamsWithServerIpTest : UpstreamParamTest<UpstreamTestData> {};
 
 // Use invalid bootstrap to make sure it fails if tries to use it
 static const std::initializer_list<std::string> invalid_bootstrap{"1.2.3.4:55"};
@@ -567,7 +680,11 @@ static const UpstreamTestData test_upstreams_with_server_ip_data[]{
                 "sdns://AwAAAAAAAAAAEDk0LjE0MC4xNC4xNDo4NTMAE2Rucy5hZGd1YXJkLWRucy5jb20", invalid_bootstrap, {}},
 };
 
+// Encrypted upstreams (DoT/DoH/DoQ) with a resolved server IP. The server_ip
+// path can't be reproduced against a plain loopback DNS server (it requires a
+// loopback TLS server, out of scope). Gated.
 TEST_F(UpstreamTest, TestUpstreamsWithServerIp) {
+    REQUIRE_INTEGRATION();
     ASSERT_NO_FATAL_FAILURE(co_await sequential_test(test_upstreams_with_server_ip_data));
 }
 
@@ -581,28 +698,28 @@ TEST_P(DeadProxyFailure, FailedExchange) {
     co_await m_loop->co_submit();
     auto oproxy = std::make_unique<OutboundProxySettings>(std::get<1>(GetParam()));
     make_upstream_factory(oproxy.get());
-    auto upstream_res = create_upstream({std::get<0>(GetParam()), {"8.8.8.8"}});
+    // Target is a dead loopback address; the outbound proxy (127.0.0.1:42) is
+    // also dead, so the exchange fails fast with no internet access.
+    auto upstream_res = create_upstream({std::get<0>(GetParam()), {}});
     ASSERT_FALSE(upstream_res.has_error()) << upstream_res.error()->str();
     auto err = co_await check_upstream(*upstream_res.value(), std::get<0>(GetParam()));
     ASSERT_TRUE(err.has_value());
 }
 
 INSTANTIATE_TEST_SUITE_P(TcpOnlyProxy, DeadProxyFailure,
-        ::testing::Combine(::testing::Values("tcp://8.8.8.8", "tls://dns.adguard-dns.com",
-                                   "https://dns.adguard-dns.com/dns-query"),
+        ::testing::Combine(::testing::Values("tcp://127.0.0.1:1"),
                 ::testing::Values(OutboundProxySettings{OutboundProxyProtocol::HTTP_CONNECT, "127.0.0.1", 42},
                         OutboundProxySettings{OutboundProxyProtocol::HTTPS_CONNECT, "127.0.0.1", 42},
                         OutboundProxySettings{OutboundProxyProtocol::SOCKS4, "127.0.0.1", 42},
                         OutboundProxySettings{OutboundProxyProtocol::SOCKS5, "127.0.0.1", 42})));
 
 INSTANTIATE_TEST_SUITE_P(UdpProxy, DeadProxyFailure,
-        ::testing::Combine(::testing::Values("8.8.8.8",
-                                   "sdns://"
-                                   "AQIAAAAAAAAAETk0LjE0MC4xNC4xNDo1NDQzINErR_JS3PLCu_iZEIbq95zkSV2LFsigxDIuUso_"
-                                   "OQhzIjIuZG5zY3J5cHQuZGVmYXVsdC5uczEuYWRndWFyZC5jb20",
-                                   "quic://dns.adguard-dns.com:8853"),
+        ::testing::Combine(::testing::Values("127.0.0.1:1"),
                 ::testing::Values(OutboundProxySettings{OutboundProxyProtocol::SOCKS5_UDP, "127.0.0.1", 42})));
 
+// Disabled: a stress test against real servers. Kept disabled (so it never
+// runs in the default suite) rather than gated, to preserve its original
+// intent for manual runs.
 TEST_F(UpstreamTest, DISABLED_ConcurrentRequests) {
     co_await m_loop->co_submit();
     using namespace std::chrono_literals;
@@ -639,6 +756,8 @@ TEST_F(UpstreamTest, DISABLED_ConcurrentRequests) {
             });
 }
 
+// Disabled: a stress test against a real DoQ server. Kept disabled (so it
+// never runs in the default suite) rather than gated.
 TEST_F(UpstreamTest, DISABLED_DoqEasyTest) {
     co_await m_loop->co_submit();
     for (int i = 0; i < 1000; ++i) {
@@ -660,22 +779,22 @@ struct UpstreamIvalidFingerprintTest : UpstreamParamTest<UpstreamOptions> {};
 
 static const UpstreamOptions test_options_with_invalid_fingerprint_data[]{
         {
-                .address = "tls://dns.adguard-dns.com",
-                .bootstrap = {"8.8.8.8"},
+                .address = "tls://127.0.0.1:853",
                 .fingerprints = {"INVALIDFINGERPRINT!"},
         },
         {
-                .address = "https://dns.adguard-dns.com/dns-query",
-                .bootstrap = {"8.8.8.8"},
+                .address = "https://127.0.0.1/dns-query",
                 .fingerprints = {"INVALIDFINGERPRINT!"},
         },
         {
-                .address = "quic://dns.adguard-dns.com",
-                .bootstrap = {"8.8.8.8"},
+                .address = "quic://127.0.0.1:8853",
                 .fingerprints = {"INVALIDFINGERPRINT!"},
         },
 };
 
+// No exchange happens: create_upstream() fails at fingerprint parsing, before
+// any network I/O or address resolution. Pointing the addresses at loopback
+// keeps the suite offline.
 TEST_P(UpstreamIvalidFingerprintTest, TestUpstreamIvalidFingerprint) {
     co_await m_loop->co_submit();
     const auto &op = GetParam();

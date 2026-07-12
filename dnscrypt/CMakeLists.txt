@@ -41,4 +41,5 @@ include(${CMAKE_CURRENT_SOURCE_DIR}/../cmake/add_unit_test.cmake)
 link_libraries(dnscrypt)
 set(TEST_DIR ${CMAKE_CURRENT_SOURCE_DIR}/test)
 
-add_unit_test(dns_crypt_test "${TEST_DIR}" "${CMAKE_CURRENT_SOURCE_DIR}/src" TRUE FALSE)
+add_unit_test(dns_crypt_test "${TEST_DIR}"
+        "${CMAKE_CURRENT_SOURCE_DIR}/src;${CMAKE_SOURCE_DIR}/common/test_helpers" TRUE FALSE)

@@ -15,6 +15,8 @@
 
 #include "dns/dnscrypt/dns_crypt_ldns.h"
 
+#include "integration_test_guard.h"
+
 #ifdef _WIN32
 #include <array>
 #include <winsock2.h>
@@ -175,6 +177,7 @@ TEST_F(DnscryptTest, InvalidStamp) {
 }
 
 TEST_F(DnscryptTest, TimeoutOnDialError) {
+    REQUIRE_INTEGRATION();
     using namespace std::literals::chrono_literals;
     co_await m_loop->co_submit();
     // AdGuard DNS pointing to a wrong IP
@@ -187,6 +190,7 @@ TEST_F(DnscryptTest, TimeoutOnDialError) {
 }
 
 TEST_F(DnscryptTest, TimeoutOnDialExchange) {
+    REQUIRE_INTEGRATION();
     using namespace std::literals::chrono_literals;
     co_await m_loop->co_submit();
     // AdGuard DNS
@@ -234,6 +238,7 @@ protected:
 };
 
 TEST_P(CheckDnscryptServerTest, CheckDnscryptServer) {
+    REQUIRE_INTEGRATION();
     using namespace std::literals::chrono_literals;
     co_await m_loop->co_submit();
     const auto &stamp_str = std::get<0>(GetParam());
