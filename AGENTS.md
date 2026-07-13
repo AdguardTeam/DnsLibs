@@ -21,7 +21,7 @@ See [README.md](README.md) for full product details.
 | Directory | Purpose |
 | --- | --- |
 | `common/` | Shared utilities: event loop, platform abstractions |
-| `common/test_helpers/` | Header-only test utilities: `LoopbackDnsServer`, `MockUpstream`, DNS packet helpers (`dns_test_helpers.h`), `REQUIRE_INTEGRATION()` guard |
+| `common/test_helpers/` | Header-only test utilities: loopback encrypted-protocol responders (`LoopbackDnsServer`, `LoopbackDnscryptServer`, `LoopbackTlsServer`, `LoopbackDohServer`, `LoopbackQuicServer`), `LoopbackHttpConnectProxy`, `MockUpstream`, DNS packet helpers (`dns_test_helpers.h`), `REQUIRE_INTEGRATION()` guard, encrypted-protocol cert kit (`test_certificates.h` + `TestCertificateVerifier` + SPKI/TBS pin helpers) |
 | `net/` | Network layer: TLS, sockets, socket factory |
 | `proxy/` | Core DNS proxy logic: forwarder, listener, response cache |
 | `upstream/` | Upstream DNS implementations: DoH, DoT, DoQ, DNSCrypt, plain DNS |
@@ -62,6 +62,7 @@ Run `make init` once after cloning to set up git hooks.
 | `make test` | Run all tests (`test-cpp`) |
 | `make test-cpp` | Build libs → build test targets → run `ctest` |
 | `make test-integration` | Build libs → run `ctest` with `DNSLIBS_INTEGRATION_TESTS=1` (real-network tests enabled; requires internet) |
+| `make test-ci` | CI target: build libs → build test targets → run `ctest` with `DNSLIBS_INTEGRATION_TESTS=1`, `--output-junit`, and the CDash `ExperimentalTest` step. Pair with `BUILD_TYPE=debug SANITIZE=yes` on Linux to match the sanitized CI build. Note: the real-network integration tests are better suited to a scheduled build (see TODO in `Makefile`) |
 | `make lint` | Run all linters (`lint-md` + `lint-cpp`) |
 | `make lint-cpp` | `clang-format` check + `clangd-tidy` |
 | `make lint-md` | Lint Markdown with `npx -y markdownlint-cli2@0.23.0` |
@@ -71,6 +72,34 @@ Run `make init` once after cloning to set up git hooks.
 
 Set `BUILD_TYPE=debug` for debug builds (default is `release` →
 `RelWithDebInfo`).
+
+## Mandatory Task Rules
+
+You MUST follow the following rules for EVERY task that you perform:
+
+- You MUST verify it with linter, formatter, and compiler.
+
+  Use the following commands:
+    - `make` to check if code builds
+    - `make test` to build and run unit tests
+    - `make lint` to run the linters
+    - `make lint-fix` to fix linting issues that can be fixed automatically
+    - `make clang-format` to check the formatting
+
+- You MUST update the unit tests for changed code.
+
+- You MUST run tests with the `make test` script to verify that your changes do
+  not break existing functionality.
+
+- When making changes to the project structure, ensure the Project structure
+  section in `AGENTS.md` is updated and remains valid.
+
+- If the prompt essentially asks you to refactor or improve existing code, check
+  if you can phrase it as a code guideline. If it's possible, add it to
+  the relevant Code Guidelines section in `AGENTS.md`.
+
+- After completing the task you MUST verify that the code you've written
+  follows the Code Guidelines in this file.
 
 ## Testing
 
@@ -135,6 +164,11 @@ timestamp manipulation (`utimensat`/`SetFileTime`) instead.
 - Prefer existing patterns over inventing new ones
 - Keep changes minimal and focused
 - Tests live in `test/` subdirectories alongside the module they cover
+- Prefer in-process loopback servers (`common/test_helpers/loopback_*` +
+  `TestCertificateVerifier`) over `REQUIRE_INTEGRATION()` for protocol tests.
+  Reserve `REQUIRE_INTEGRATION()` for tests that legitimately exercise a real
+  public service (e.g. a one-per-protocol real-world smoke test, or the
+  OS-resolver tests). The default `make test` suite MUST remain fully offline.
 
 ## Docker Debug Environment
 
@@ -166,35 +200,12 @@ Managed via Conan. Key libraries:
 - **ada** — URL parser
 - **tldregistry** — top-level domain registry for DNS filtering
 - **detours** *(Windows only)* — API hooking for system DNS interception
+- **clangd-tidy** — faster clang-tidy replacement (installed from `requirements.txt`)
+- **pyyaml** — YAML parsing for `clangd-tidy` config (installed from `requirements.txt`)
+- **tqdm** — progress bar for `clangd-tidy` (installed from `requirements.txt`)
 
 Local conan cache is populated by `make bootstrap_deps` which is dependency for many other make commands.
+`make bootstrap_deps` and `make clangd-tidy` each create a Python venv from
+`requirements.txt` (Python 3.8+) unless `SKIP_VENV=1` is set.
 
 To find headers for **native_libs_common** (e.g. when resolving symbols or includes), run `make list-deps-dirs` to list Conan package directories, then look in each directory's `include/` subdirectory.
-
-## Mandatory Task Rules
-
-You MUST follow the following rules for EVERY task that you perform:
-
-- You MUST verify it with linter, formatter, and compiler.
-
-  Use the following commands:
-    - `make` to check if code builds
-    - `make test` to build and run unit tests
-    - `make lint` to run the linters
-    - `make lint-fix` to fix linting issues that can be fixed automatically
-    - `make clang-format` to check the formatting
-
-- You MUST update the unit tests for changed code.
-
-- You MUST run tests with the `make test` script to verify that your changes do
-  not break existing functionality.
-
-- When making changes to the project structure, ensure the Project structure
-  section in `AGENTS.md` is updated and remains valid.
-
-- If the prompt essentially asks you to refactor or improve existing code, check
-  if you can phrase it as a code guideline. If it's possible, add it to
-  the relevant Code Guidelines section in `AGENTS.md`.
-
-- After completing the task you MUST verify that the code you've written
-  follows the Code Guidelines in this file.

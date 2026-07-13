@@ -26,6 +26,16 @@ else
 NPROC ?= $(shell (nproc 2>/dev/null || sysctl -n hw.ncpu 2>/dev/null || echo 8) | tr -d '\n')
 endif
 
+# Whether to build with AddressSanitizer. CI enables this on Linux. Maps to
+# the -DSANITIZE=yes CMake option (see proxy/CMakeLists.txt), which adds
+# -fsanitize=address to the dnsproxy target's compile and link flags.
+SANITIZE ?= no
+ifeq ($(SANITIZE),yes)
+	SANITIZE_FLAGS = -DSANITIZE=yes
+else
+	SANITIZE_FLAGS =
+endif
+
 # Common CMake flags
 ifeq ($(OS), Windows_NT)
 CMAKE_FLAGS = -DCMAKE_BUILD_TYPE=RelWithDebInfo \
@@ -37,6 +47,7 @@ CMAKE_FLAGS = -DCMAKE_BUILD_TYPE=$(CMAKE_BUILD_TYPE) \
 	-DCMAKE_C_COMPILER="clang" \
 	-DCMAKE_CXX_COMPILER="clang++" \
 	-DCMAKE_CXX_FLAGS="-stdlib=libc++" \
+	$(SANITIZE_FLAGS) \
 	-GNinja
 endif
 
@@ -194,3 +205,32 @@ test-cpp: build_libs
 test-integration: build_libs
 	cmake --build $(BUILD_DIR) --target tests
 	DNSLIBS_INTEGRATION_TESTS=1 ctest --test-dir $(BUILD_DIR)
+
+# Path to the JUnit XML report written by the CI test target below. The CI
+# workflow uploads this file as the test-results artifact.
+JUNIT_XML ?= $(BUILD_DIR)/junit.xml
+
+## Run the full test suite in the CI configuration, i.e. the way the CI
+## builds need it to run:
+##   - Real-network integration tests enabled (DNSLIBS_INTEGRATION_TESTS=1),
+##     so tests that dial public DNS servers (DoT/DoH/DoQ/DNSCrypt) run
+##     instead of being skipped.
+##   - JUnit XML report written to $(JUNIT_XML) for the CI test-results
+##     artifact upload.
+##   - Results submitted to CDash via the ExperimentalTest step.
+##
+## To reproduce the sanitized Linux CI build, also export
+## LDFLAGS=-fuse-ld=lld and ASAN_OPTIONS=detect_container_overflow=0, and
+## pass BUILD_TYPE=debug SANITIZE=yes.
+##
+## TODO(scheduled-builds): Running the real-network integration tests on
+## every push and pull request is wasteful and prone to flakes caused by
+## transient public-DNS failures. Consider moving this target to a
+## scheduled (cron) build and running the offline `make test` target on
+## push and pull request events instead.
+.PHONY: test-ci
+test-ci: build_libs
+	cmake --build $(BUILD_DIR) --target tests
+	DNSLIBS_INTEGRATION_TESTS=1 ctest --test-dir $(BUILD_DIR) \
+		--output-junit $(JUNIT_XML) \
+		-D ExperimentalTest --no-compress-output

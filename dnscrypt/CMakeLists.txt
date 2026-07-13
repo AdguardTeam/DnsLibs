@@ -43,3 +43,10 @@ set(TEST_DIR ${CMAKE_CURRENT_SOURCE_DIR}/test)
 
 add_unit_test(dns_crypt_test "${TEST_DIR}"
         "${CMAKE_CURRENT_SOURCE_DIR}/src;${CMAKE_SOURCE_DIR}/common/test_helpers" TRUE FALSE)
+
+# The LoopbackDnscryptServer (header-only DNSCrypt responder on 127.0.0.1)
+# lives in common/test_helpers but requires the real dnscrypt::Client + libsodium
+# to exercise. Built here because the dnscrypt lib already links them. Registered
+# with EXPAND_GTEST=FALSE (like dns_crypt_test) so `ctest -R
+# loopback_dnscrypt_server_test` selects the whole suite.
+add_unit_test(loopback_dnscrypt_server_test "${TEST_DIR}" "${CMAKE_SOURCE_DIR}/common/test_helpers" TRUE FALSE)

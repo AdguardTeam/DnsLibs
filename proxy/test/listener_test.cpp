@@ -9,8 +9,9 @@
 #include "dns/proxy/dnsproxy.h"
 #include "dns/upstream/upstream.h"
 #include "dns_test_helpers.h"
-#include "integration_test_guard.h"
 #include "loopback_dns_server.h"
+#include "loopback_quic_server.h"
+#include "test_certificates.h"
 
 namespace ag::dns::proxy::test {
 
@@ -192,18 +193,25 @@ TEST(ListenerTest, ShutsDownIfCouldNotInitialize) {
     ASSERT_FALSE(ret);
 }
 
-TEST(ListenerTest, DISABLED_ManyRequestsPending) {
-    // The upstream is a real DoQ server (dns.adguard-dns.com); the test's value
-    // is the QUIC request storm, which cannot be reproduced against a loopback
-    // plain-DNS responder. Gate it so it only runs when integration tests are
-    // explicitly opted into, and keep it DISABLED_ as belt-and-suspenders.
-    REQUIRE_INTEGRATION();
+// Many pending requests against a local DoQ upstream. The proxy forwards 10 000
+// fire-and-forget queries through a LoopbackQuicServer (DoQ mode) and a final
+// query whose reply is checked. Fully offline: the server is bound to
+// 127.0.0.1 (literal IP, bootstrapper bypassed), and
+// on_certificate_verification accepts the loopback self-signed cert.
+// Previously DISABLED_ and gated because it dialed quic://dns.adguard-dns.com;
+// now un-disabled and ungated since it's deterministic and offline.
+TEST(ListenerTest, ManyRequestsPending) {
+    // Local DoQ upstream returning a canned A reply for any query.
+    ag::test::LoopbackQuicServer upstream_server([](const ldns_pkt &req) -> ldns_pkt_ptr {
+        ldns_pkt_ptr reply = ag::test::make_base_reply(req);
+        const ldns_rr *question = ldns_rr_list_rr(ldns_pkt_question(&req), 0);
+        if (question != nullptr) {
+            ag::test::add_a_answer(reply.get(), question);
+        }
+        return reply;
+    });
+    upstream_server.start();
 
-    Logger::set_log_level(LogLevel::LOG_LEVEL_TRACE);
-    FILE *logfile = fopen("adguard.log", "w");
-    ASSERT_TRUE(logfile) << "Failed to open adguard.log for writing: " << strerror(errno);
-    Logger::LogToFile l(logfile);
-    Logger::set_callback(l);
     bool proxy_init_result = false;
     std::mutex mtx;
     std::condition_variable proxy_cond;
@@ -216,13 +224,20 @@ TEST(ListenerTest, DISABLED_ManyRequestsPending) {
         auto proxy_settings = DnsProxySettings::get_default();
 
         proxy_settings.listeners = {{address, port, ag::utils::TP_UDP}};
-        proxy_settings.upstreams = {{.address = "quic://dns.adguard-dns.com", .bootstrap = {"1.1.1.1"}}};
+        // Literal-IP loopback address: bootstrapper is bypassed, DoqUpstream
+        // connects directly to the in-process QUIC server.
+        proxy_settings.upstreams = {{.address = upstream_server.address()}};
         proxy_settings.upstream_timeout = 3s;
         proxy_settings.enable_http3 = true;
         proxy_settings.dns_cache_size = 0;
         proxy_settings.optimistic_cache = false;
 
-        auto [ret, err] = proxy.init(proxy_settings, {});
+        // Accept the loopback server's self-signed certificate.
+        DnsProxyEvents events;
+        events.on_certificate_verification = [](CertificateVerificationEvent) -> std::optional<std::string> {
+            return std::nullopt;
+        };
+        auto [ret, err] = proxy.init(proxy_settings, std::move(events));
         proxy_init_result = ret;
         proxy_initialized = true;
         proxy_cond.notify_all();
@@ -312,6 +327,7 @@ TEST(ListenerTest, DISABLED_ManyRequestsPending) {
     proxy_cond.notify_one();
     proxy.deinit();
     proxy_thread.join();
+    upstream_server.stop();
 }
 
 INSTANTIATE_TEST_SUITE_P(ListenerLogic, ListenerTest,

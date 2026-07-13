@@ -34,14 +34,28 @@ protected:
 };
 
 TEST_F(SystemResolverTest, ResolveMicrosoftARecord) {
-    // Uses the OS system resolver, which depends on the real network.
+    // www.microsoft.com is served via a CDN, so its resolution follows a CNAME
+    // chain (e.g. www.microsoft.com -> *.edgekey.net -> *.akamaiedge.net -> A)
+    // before reaching the final A record. This verifies two things: that the
+    // SystemResolver works end-to-end against the real OS system resolver, and
+    // that it surfaces the final A record(s) from a domain whose resolution
+    // involves CNAME records. The exact record count (and the number of A
+    // records) varies by CDN edge / region, so we only assert that at least one
+    // A record is returned rather than a fixed count. Uses the OS system
+    // resolver, which depends on the real network.
     REQUIRE_INTEGRATION();
     co_await m_loop->co_submit();
     auto result = co_await m_resolver->resolve("www.microsoft.com", LDNS_RR_TYPE_A);
     ASSERT_FALSE(result.has_error());
     const auto &rr_list = result.value();
     ASSERT_NE(rr_list, nullptr);
-    ASSERT_EQ(ldns_rr_list_rr_count(rr_list.get()), 4);
+    size_t a_count = 0;
+    for (size_t i = 0; i < ldns_rr_list_rr_count(rr_list.get()); ++i) {
+        if (ldns_rr_get_type(ldns_rr_list_rr(rr_list.get(), i)) == LDNS_RR_TYPE_A) {
+            ++a_count;
+        }
+    }
+    ASSERT_GE(a_count, 1) << "Expected at least one A record in the resolution";
 }
 
 TEST_F(SystemResolverTest, ResolveNonExistentDomain) {

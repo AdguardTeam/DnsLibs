@@ -114,6 +114,47 @@ inline void shutdown_socket(socket_type s) {
     }
 }
 
+// Maximum DNS packet size (RFC 1035 / framing limits). Shared by the
+// loopback plain DNS and TLS servers for their receive/encode buffers.
+inline constexpr size_t MAX_DNS_PACKET = 65535;
+
+// Handler invoked for each accepted DNS request: receives the parsed query
+// packet and returns a reply packet (or an empty pointer to drop the query,
+// e.g. for timeout/negative tests). Shared by the loopback plain DNS and TLS
+// servers so both use the same `build_dns_reply` wire-encode path.
+using DnsReplyHandler = std::function<ag::dns::ldns_pkt_ptr(const ldns_pkt &)>;
+
+// Parses `req_len` wire bytes into a packet, invokes `handler`, and encodes
+// the reply back to wire bytes. Returns nullopt to drop the query (e.g. for
+// timeout/negative tests). Extracted from LoopbackDnsServer so that
+// LoopbackTlsServer can reuse the same parse → handler → serialize path.
+inline std::optional<std::vector<uint8_t>> build_dns_reply(
+        const DnsReplyHandler &handler, const uint8_t *req_data, size_t req_len) {
+    if (!handler) {
+        return std::nullopt;
+    }
+    ldns_pkt *request_raw = nullptr;
+    ldns_status st = ldns_wire2pkt(&request_raw, req_data, req_len);
+    ag::dns::ldns_pkt_ptr request{request_raw};
+    if (st != LDNS_STATUS_OK || !request) {
+        return std::nullopt;
+    }
+    ag::dns::ldns_pkt_ptr reply = handler(*request);
+    if (!reply) {
+        return std::nullopt;
+    }
+    ag::dns::ldns_buffer_ptr buffer{ldns_buffer_new(MAX_DNS_PACKET)};
+    if (!buffer) {
+        return std::nullopt;
+    }
+    if (ldns_pkt2buffer_wire(buffer.get(), reply.get()) != LDNS_STATUS_OK) {
+        return std::nullopt;
+    }
+    const uint8_t *data = ldns_buffer_begin(buffer.get());
+    size_t size = ldns_buffer_position(buffer.get());
+    return std::vector<uint8_t>(data, data + size);
+}
+
 // Receives exactly `len` bytes. Returns false on EOF/error.
 inline bool recv_exact(socket_type s, uint8_t *dst, size_t len) {
     while (len > 0) {
@@ -156,7 +197,7 @@ class LoopbackDnsServer {
 public:
     // Returns an ldns reply packet for the given parsed request, or an empty
     // pointer to drop the query (e.g. for timeout/negative tests).
-    using Handler = std::function<ag::dns::ldns_pkt_ptr(const ldns_pkt &)>;
+    using Handler = detail::DnsReplyHandler;
 
     explicit LoopbackDnsServer(Handler handler, bool tcp = true, bool udp = true)
             : m_handler(std::move(handler))
@@ -242,36 +283,14 @@ public:
     }
 
 private:
-    // Parses `req_len` wire bytes into a packet, invokes the handler, and
-    // encodes the reply back to wire bytes. Returns nullopt to drop the query.
+    // Delegates to the shared detail::build_dns_reply helper so that the
+    // parse → handler → serialize path is identical to LoopbackTlsServer.
     std::optional<std::vector<uint8_t>> build_reply_raw(const uint8_t *req_data, size_t req_len) {
-        if (!m_handler) {
-            return std::nullopt;
-        }
-        ldns_pkt *request_raw = nullptr;
-        ldns_status st = ldns_wire2pkt(&request_raw, req_data, req_len);
-        ag::dns::ldns_pkt_ptr request{request_raw};
-        if (st != LDNS_STATUS_OK || !request) {
-            return std::nullopt;
-        }
-        ag::dns::ldns_pkt_ptr reply = m_handler(*request);
-        if (!reply) {
-            return std::nullopt;
-        }
-        ag::dns::ldns_buffer_ptr buffer{ldns_buffer_new(MAX_DNS_PACKET)};
-        if (!buffer) {
-            return std::nullopt;
-        }
-        if (ldns_pkt2buffer_wire(buffer.get(), reply.get()) != LDNS_STATUS_OK) {
-            return std::nullopt;
-        }
-        const uint8_t *data = ldns_buffer_begin(buffer.get());
-        size_t size = ldns_buffer_position(buffer.get());
-        return std::vector<uint8_t>(data, data + size);
+        return detail::build_dns_reply(m_handler, req_data, req_len);
     }
 
     void udp_loop() {
-        std::vector<uint8_t> buf(MAX_DNS_PACKET);
+        std::vector<uint8_t> buf(detail::MAX_DNS_PACKET);
         while (m_running.load()) {
             sockaddr_in client{};
             detail::socklen_type client_len = sizeof(client);
@@ -332,8 +351,6 @@ private:
             detail::close_fd(conn);
         }
     }
-
-    static constexpr size_t MAX_DNS_PACKET = 65535;
 
     Handler m_handler;
     bool m_tcp;

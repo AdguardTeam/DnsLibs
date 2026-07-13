@@ -28,6 +28,8 @@ This configures the git hooks path to `./scripts/hooks`.
 ### Prerequisites
 
 - Conan C++ package manager 2.0.5 or higher
+- Python 3.8 or higher (for dependency bootstrapping via `scripts/bootstrap_conan_deps.py`
+  and the `clangd-tidy` linter, both run through a venv created from `requirements.txt`)
 - CMake 3.24 or higher
 - Clang/LLVM 21 or higher (GCC 9 or higher is also supported for native builds)
 - Ninja

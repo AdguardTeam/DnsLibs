@@ -1,3 +1,4 @@
+#include <algorithm>
 #include <atomic>
 #include <chrono>
 #include <cstring>
@@ -11,6 +12,7 @@
 #include <string_view>
 #include <thread>
 #include <utility>
+#include <vector>
 
 #include "common/clock.h"
 #include "common/file.h"
@@ -18,6 +20,7 @@
 #include "common/socket_address.h"
 #include "common/utils.h"
 #include "dns/common/net_consts.h"
+#include "dns/dnsstamp/dns_stamp.h"
 #include "dns/proxy/dnsproxy.h"
 #include "dns/upstream/upstream_utils.h"
 
@@ -25,16 +28,14 @@
 #include "../dns_forwarder_utils.h"
 #include "../svcb.h"
 #include "dns_test_helpers.h"
-#include "integration_test_guard.h"
 #include "loopback_dns_server.h"
+#include "loopback_doh_server.h"
+#include "loopback_http_connect_proxy.h"
+#include "loopback_quic_server.h"
+#include "loopback_tls_server.h"
+#include "test_certificates.h"
 
 namespace ag::dns::proxy::test {
-
-// Generated with:
-// echo | openssl s_client -connect 94.140.14.14:853 -servername dns.adguard-dns.com 2>/dev/null | openssl x509 -pubkey
-// -noout | openssl pkey -pubin -outform der | openssl dgst -sha256 -binary | openssl enc -base64
-static constexpr auto ADGUARD_DNS_SPKI = "BF+fS5RPhZQggn38wZ6lqii8lxPNWQPzU2VVVqbLhqM=";
-static constexpr auto ZEROSSL_SPKI = "3fLLVjRIWnCqDqIETU2OcnMP7EzmN/Z3Q/jQ8cIaAoc=";
 
 static constexpr auto IPV4_ONLY_HOST = "ipv4only.arpa.";
 static constexpr auto CNAME_BLOCKING_HOST = "test2.meshkov.info";
@@ -47,6 +48,17 @@ static constexpr auto CNAME_BLOCKING_HOST = "test2.meshkov.info";
 // `make_dnsproxy_settings()` to shape canned replies.
 static std::unique_ptr<ag::test::LoopbackDnsServer> g_upstream;
 static std::function<ag::dns::ldns_pkt_ptr(const ldns_pkt &)> g_upstream_handler;
+
+// Canned A (1.2.3.4) reply shared by the local encrypted-upstream servers
+// (DoT/DoH/DoQ) used by the SPKI/resolved-IP/stamp/outbound-proxy tests.
+static ldns_pkt_ptr canned_a_reply(const ldns_pkt &req) {
+    ldns_pkt_ptr reply = ag::test::make_base_reply(req);
+    const ldns_rr *question = ldns_rr_list_rr(ldns_pkt_question(&req), 0);
+    if (question != nullptr) {
+        ag::test::add_a_answer(reply.get(), question);
+    }
+    return reply;
+}
 
 class DnsProxyTest : public ::testing::Test {
 protected:
@@ -402,20 +414,28 @@ TEST_F(DnsProxyTest, TestHttpsRR) {
     ASSERT_EQ(ldns_pkt_get_rcode(response.get()), LDNS_RCODE_REFUSED);
 }
 
-// Requires a real DNS-over-TLS server. Kept disabled and gated behind
-// DNSLIBS_INTEGRATION_TESTS so the offline suite never dials the internet.
-TEST_F(DnsProxyTest, DISABLED_TestResolvedIp) {
-    REQUIRE_INTEGRATION();
+// Exercises DnsProxy with a `resolved_server_ip` upstream over a local DoT
+// server (formerly dialed a real public DoT endpoint). The local
+// LoopbackTlsServer returns a canned A answer; resolved_server_ip=127.0.0.1
+// short-circuits the bootstrapper so the proxy connects directly to the
+// loopback server. on_certificate_verification accepts the loopback self-signed
+// cert. Fully offline and deterministic.
+TEST_F(DnsProxyTest, TestResolvedIp) {
     using namespace std::chrono_literals;
+    ag::test::LoopbackTlsServer tls_server([](const ldns_pkt &req) -> ldns_pkt_ptr {
+        return canned_a_reply(req);
+    });
+    tls_server.start();
+
     DnsProxySettings settings = make_dnsproxy_settings();
     settings.upstreams = {{
-            .address = "tls://dns.adguard-dns.com",
-            .resolved_server_ip = Ipv4Address{94, 140, 14, 14},
+            .address = tls_server.address(),
+            .resolved_server_ip = Ipv4Address{127, 0, 0, 1},
     }};
     settings.upstream_timeout = 5000ms;
     settings.ipv6_available = false;
 
-    DnsProxyEvents events{.on_certificate_verification = [](CertificateVerificationEvent event) {
+    DnsProxyEvents events{.on_certificate_verification = [](CertificateVerificationEvent) {
         return std::nullopt;
     }};
 
@@ -429,11 +449,39 @@ TEST_F(DnsProxyTest, DISABLED_TestResolvedIp) {
     ASSERT_EQ(ldns_pkt_get_rcode(response.get()), LDNS_RCODE_NOERROR);
 }
 
-class SPKITest : public ::testing::TestWithParam<std::string> {
+// Encrypted-protocol selection for the parametrized SPKI tests. Each value
+// drives a different local loopback server (DoQ / DoT / DoH) so the same
+// SPKI-pinning logic is exercised over all three encrypted transports offline.
+enum class EncryptedProto : uint8_t { DOQ, DOT, DOH };
+
+// Pretty-print the param so gtest test names read as "DOQ"/"DOT"/"DOH" instead
+// of "1-byte object <00>".
+static std::ostream &operator<<(std::ostream &os, EncryptedProto proto) {
+    switch (proto) {
+    case EncryptedProto::DOQ:
+        return os << "DOQ";
+    case EncryptedProto::DOT:
+        return os << "DOT";
+    case EncryptedProto::DOH:
+        return os << "DOH";
+    }
+    return os << "Unknown";
+}
+
+class SPKITest : public ::testing::TestWithParam<EncryptedProto> {
 protected:
     std::unique_ptr<DnsProxy> m_proxy;
     DnsProxySettings m_settings = make_dnsproxy_settings();
     Logger m_log{"DnsProxyTest"};
+    // Local encrypted upstream server, started in SetUp() per the current
+    // param (only the one needed is started). All use the test cert kit
+    // (test_certificates.h), which serves a [leaf, chain] certificate chain:
+    // - compute_spki_hash_base64()       pins the leaf (first) cert's SPKI;
+    // - compute_intermediate_spki_hash_base64() pins the chain (second) cert's
+    //   SPKI, exercising the "match second fingerprint in chain" path.
+    std::unique_ptr<ag::test::LoopbackTlsServer> m_dot;
+    std::unique_ptr<ag::test::LoopbackDohServer> m_doh;
+    std::unique_ptr<ag::test::LoopbackQuicServer> m_doq;
 
     void SetUp() override {
         using namespace std::chrono_literals;
@@ -441,33 +489,71 @@ protected:
         Logger::set_log_level(LogLevel::LOG_LEVEL_TRACE);
         m_settings.upstream_timeout = 5000ms;
         m_settings.ipv6_available = false;
+        switch (GetParam()) {
+        case EncryptedProto::DOQ:
+            m_doq = std::make_unique<ag::test::LoopbackQuicServer>(
+                    [](const ldns_pkt &req) -> ldns_pkt_ptr {
+                        return canned_a_reply(req);
+                    },
+                    ag::test::LoopbackQuicServer::QuicMode::DOQ);
+            m_doq->start();
+            break;
+        case EncryptedProto::DOT:
+            m_dot = std::make_unique<ag::test::LoopbackTlsServer>([](const ldns_pkt &req) -> ldns_pkt_ptr {
+                return canned_a_reply(req);
+            });
+            m_dot->start();
+            break;
+        case EncryptedProto::DOH:
+            m_doh = std::make_unique<ag::test::LoopbackDohServer>([](const ldns_pkt &req) -> ldns_pkt_ptr {
+                return canned_a_reply(req);
+            });
+            m_doh->start();
+            break;
+        }
     }
 
     void TearDown() override {
         if (m_proxy) {
             m_proxy->deinit();
         }
+        m_doq.reset();
+        m_dot.reset();
+        m_doh.reset();
+    }
+
+    // The local upstream address ("quic://..." / "tls://..." / "https://...")
+    // for the current param. A literal 127.0.0.1 IP, so the bootstrapper is
+    // bypassed and the upstream connects directly to the loopback server.
+    std::string local_upstream() const {
+        switch (GetParam()) {
+        case EncryptedProto::DOQ:
+            return m_doq->address();
+        case EncryptedProto::DOT:
+            return m_dot->address();
+        case EncryptedProto::DOH:
+            return m_doh->address();
+        }
+        return {};
     }
 };
 
-static const std::string encrypted_upstreams[] = {
-        "quic://dns.adguard-dns.com", "tls://dns.adguard-dns.com", "https://dns.adguard-dns.com/dns-query"};
+// The proxy-level SPKI tests run fully offline against the local loopback
+// servers above; the real-server REQUIRE_INTEGRATION() gate and DISABLED_
+// prefix are removed. The DnsProxy wires on_certificate_verification into an
+// ApplicationVerifier, whose verify() runs verify_host_name() (leaf cert,
+// SAN includes IP:127.0.0.1) then verify_fingerprints() (the whole chain)
+// before the callback is invoked, so pinning the leaf SPKI succeeds.
 
-// The tests below require real encrypted-DNS (DoT/DoH/DoQ) servers and do not
-// run offline. They stay DISABLED_ and are additionally gated behind
-// DNSLIBS_INTEGRATION_TESTS so they remain skipped even if un-disabled.
-
-// Disabled since AG servers does not have stable SubjectPublicKeyInfo.
-TEST_P(SPKITest, DISABLED_TestSPKI) {
-    REQUIRE_INTEGRATION();
+// Pins the leaf cert's SPKI; verify_fingerprints() matches the first cert in
+// the chain -> success.
+TEST_P(SPKITest, TestSPKI) {
     m_settings.upstreams = {{
-            .address = GetParam(),
-            .bootstrap = {"1.1.1.1"},
-            .resolved_server_ip = Ipv4Address{94, 140, 14, 14},
-            .fingerprints = {ADGUARD_DNS_SPKI},
+            .address = local_upstream(),
+            .fingerprints = {ag::test::compute_spki_hash_base64()},
     }};
 
-    DnsProxyEvents events{.on_certificate_verification = [](CertificateVerificationEvent event) {
+    DnsProxyEvents events{.on_certificate_verification = [](CertificateVerificationEvent) {
         return std::nullopt;
     }};
 
@@ -481,17 +567,15 @@ TEST_P(SPKITest, DISABLED_TestSPKI) {
     ASSERT_EQ(ldns_pkt_get_rcode(response.get()), LDNS_RCODE_NOERROR);
 }
 
-// Disabled since AG servers do not have stable SubjectPublicKeyInfo.
-TEST_P(SPKITest, DISABLED_MatchSecondFingerprintInChain) {
-    REQUIRE_INTEGRATION();
+// Pins the chain (second) cert's SPKI; verify_fingerprints() scans past the
+// non-matching leaf and matches the second cert in the chain -> success.
+TEST_P(SPKITest, MatchSecondFingerprintInChain) {
     m_settings.upstreams = {{
-            .address = GetParam(),
-            .bootstrap = {"1.1.1.1"},
-            .resolved_server_ip = Ipv4Address{94, 140, 14, 14},
-            .fingerprints = {ZEROSSL_SPKI},
+            .address = local_upstream(),
+            .fingerprints = {ag::test::compute_intermediate_spki_hash_base64()},
     }};
 
-    DnsProxyEvents events{.on_certificate_verification = [](CertificateVerificationEvent event) {
+    DnsProxyEvents events{.on_certificate_verification = [](CertificateVerificationEvent) {
         return std::nullopt;
     }};
 
@@ -505,22 +589,35 @@ TEST_P(SPKITest, DISABLED_MatchSecondFingerprintInChain) {
     ASSERT_EQ(ldns_pkt_get_rcode(response.get()), LDNS_RCODE_NOERROR);
 }
 
-INSTANTIATE_TEST_SUITE_P(SPKITest, SPKITest, testing::ValuesIn(encrypted_upstreams));
+INSTANTIATE_TEST_SUITE_P(
+        SPKITest, SPKITest, testing::Values(EncryptedProto::DOQ, EncryptedProto::DOT, EncryptedProto::DOH));
 
-TEST_F(DnsProxyTest, DISABLED_TestWrongSPKI) {
-    REQUIRE_INTEGRATION();
+// Pins a deliberately-wrong SPKI (base64 of 32 zero bytes) against the local
+// DoH server's cert chain; verify_fingerprints() finds no match -> the upstream
+// connection is rejected -> with enable_servfail_on_upstreams_failure the proxy
+// returns SERVFAIL. Replaces the former real-server SPKI-mismatch test.
+TEST_F(DnsProxyTest, TestWrongSPKI) {
     using namespace std::chrono_literals;
+    ag::test::LoopbackDohServer doh_server([](const ldns_pkt &req) -> ldns_pkt_ptr {
+        return canned_a_reply(req);
+    });
+    doh_server.start();
+
+    // A syntactically-valid but non-matching SPKI pin (base64 of 32 zero bytes).
+    ag::dns::SpkiSha256Digest zero_digest{};
+    std::string wrong_spki =
+            ag::encode_to_base64(ag::Uint8View{zero_digest.data.data(), zero_digest.data.size()}, false);
+
     DnsProxySettings settings = make_dnsproxy_settings();
     settings.upstreams = {{
-            .address = "https://cloudflare-dns.com/dns-query",
-            .bootstrap = {"1.1.1.1"},
-            .resolved_server_ip = Ipv4Address{94, 140, 14, 14},
-            .fingerprints = {ADGUARD_DNS_SPKI},
+            .address = doh_server.address(),
+            .fingerprints = {wrong_spki},
     }};
-    settings.upstream_timeout = 5000ms, settings.ipv6_available = false;
+    settings.upstream_timeout = 5000ms;
+    settings.ipv6_available = false;
     settings.enable_servfail_on_upstreams_failure = true;
 
-    DnsProxyEvents events{.on_certificate_verification = [](CertificateVerificationEvent event) {
+    DnsProxyEvents events{.on_certificate_verification = [](CertificateVerificationEvent) {
         return std::nullopt;
     }};
 
@@ -534,23 +631,30 @@ TEST_F(DnsProxyTest, DISABLED_TestWrongSPKI) {
     ASSERT_EQ(ldns_pkt_get_rcode(response.get()), LDNS_RCODE_SERVFAIL);
 }
 
-// Disabled since AG servers does not have stable SubjectPublicKeyInfo.
-TEST_F(DnsProxyTest, DISABLED_DnsStampWithHash) {
-    REQUIRE_INTEGRATION();
+// Builds a local DoT DNS stamp (sdns://) encoding 127.0.0.1:<port> + the leaf
+// cert's TBS SHA-256. The upstream factory converts the stamp "hashes" into a
+// TbsCertSha256Digest pin, and verify_fingerprints() matches it against the
+// leaf cert's TBS -> success. Replaces the former real AdGuard DoT stamp.
+TEST_F(DnsProxyTest, DnsStampWithHash) {
     using namespace std::chrono_literals;
+    ag::test::LoopbackTlsServer tls_server([](const ldns_pkt &req) -> ldns_pkt_ptr {
+        return canned_a_reply(req);
+    });
+    tls_server.start();
+
+    ag::dns::ServerStamp stamp{};
+    stamp.proto = ag::dns::StampProtoType::TLS;
+    stamp.server_addr_str = AG_FMT("127.0.0.1:{}", tls_server.port());
+    stamp.provider_name = "localhost";
+    stamp.hashes = {ag::test::compute_tbs_hash()};
+    stamp.props = ag::dns::ServerInformalProperties{};
+
     DnsProxySettings settings = make_dnsproxy_settings();
-    // Stamp's "hashes" field takes another form of hash, generated with:
-    // echo | openssl s_client -connect 94.140.14.14:853 -servername dns.adguard-dns.com 2>/dev/null | openssl x509
-    // -outform der | openssl asn1parse -inform der -strparse 4 -noout -out - | openssl dgst -sha256
-    settings.upstreams = {{
-            .address = "sdns://"
-                       "AwAAAAAAAAAAEDk0LjE0MC4xNC4xNDo4NTMgt62MXPPPq9LPHxpgGSeXXo1flLUZWExquscITUzJnsoTZG5zLmFkZ3VhcmQ"
-                       "tZG5zLmNvbQ",
-    }};
+    settings.upstreams = {{.address = stamp.str()}};
     settings.upstream_timeout = 5000ms;
     settings.ipv6_available = false;
 
-    DnsProxyEvents events{.on_certificate_verification = [](CertificateVerificationEvent event) {
+    DnsProxyEvents events{.on_certificate_verification = [](CertificateVerificationEvent) {
         return std::nullopt;
     }};
 
@@ -564,22 +668,39 @@ TEST_F(DnsProxyTest, DISABLED_DnsStampWithHash) {
     ASSERT_EQ(ldns_pkt_get_rcode(response.get()), LDNS_RCODE_NOERROR);
 }
 
-TEST_F(DnsProxyTest, DISABLED_BootstrapOutboundProxy) {
-    REQUIRE_INTEGRATION();
+// Routes the proxy's DoT upstream through a local HTTP CONNECT proxy (formerly
+// an external HTTP CONNECT proxy to a real public DoT endpoint). The CONNECT
+// proxy tunnels TCP to the local LoopbackTlsServer; the DoT client performs TLS
+// over the tunnel and gets the canned A answer. Fully offline.
+TEST_F(DnsProxyTest, BootstrapOutboundProxy) {
+    using namespace std::chrono_literals;
+    ag::test::LoopbackTlsServer tls_server([](const ldns_pkt &req) -> ldns_pkt_ptr {
+        return canned_a_reply(req);
+    });
+    tls_server.start();
+
+    ag::test::LoopbackHttpConnectProxy proxy_server;
+    proxy_server.start();
+
     DnsProxySettings settings = make_dnsproxy_settings();
-    settings.upstreams = {{.address = "tls://dns.adguard-dns.com", .bootstrap = {"1.1.1.1"}}};
+    settings.upstreams = {{.address = tls_server.address()}};
     settings.outbound_proxy = OutboundProxySettings{
             .protocol = OutboundProxyProtocol::HTTP_CONNECT,
-            .address = "localhost",
-            .port = 3129,
-            .bootstrap = {"127.0.0.53"},
+            .address = "127.0.0.1",
+            .port = proxy_server.port(),
     };
+    settings.upstream_timeout = 5000ms;
     settings.ipv6_available = false;
 
     DnsRequestProcessedEvent last_event{};
-    DnsProxyEvents events{.on_request_processed = [&last_event](const DnsRequestProcessedEvent &event) {
-        last_event = event;
-    }};
+    DnsProxyEvents events{.on_request_processed =
+                                  [&last_event](const DnsRequestProcessedEvent &event) {
+                                      last_event = event;
+                                  },
+            .on_certificate_verification =
+                    [](CertificateVerificationEvent) {
+                        return std::nullopt;
+                    }};
 
     auto [ret, err] = m_proxy->init(settings, events);
     ASSERT_TRUE(ret) << err->str();

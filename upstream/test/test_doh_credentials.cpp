@@ -11,7 +11,6 @@
 #include "dns/upstream/upstream.h"
 
 #include "../upstream_doh.h"
-#include "integration_test_guard.h"
 
 namespace ag::dns::upstream::test {
 
@@ -37,11 +36,11 @@ public:
 };
 
 TEST_P(DohUpstreamParamTest, ParsesCredentialsCorrectly) {
-    // These exercise DoH URL handling against real dns.google hostnames. While
-    // no live exchange occurs (only header construction is asserted), the URLs
-    // reference real domains, so the tests are gated to keep the default suite
-    // free of any real-DNS surface.
-    REQUIRE_INTEGRATION();
+    // These tests assert only on header construction (no DNS exchange is
+    // performed). create_upstream()/init() is zero-I/O: the DoH upstream
+    // resolves the hostname lazily on the first exchange(), so construction
+    // only parses the URL and builds the request template. The tests are fully
+    // offline despite referencing real dns.google hostnames.
     co_await m_loop->co_submit();
 
     const auto &param = GetParam();
@@ -79,7 +78,6 @@ static const DohCredentialTestParam doh_credential_test_cases[] = {
 INSTANTIATE_TEST_SUITE_P(DohUpstreamParamTest, DohUpstreamParamTest, ::testing::ValuesIn(doh_credential_test_cases));
 
 TEST_P(DohUpstreamParamTest, AuthorizationHeaderMaskedInFormattedOutput) {
-    REQUIRE_INTEGRATION();
     co_await m_loop->co_submit();
 
     const auto &param = GetParam();

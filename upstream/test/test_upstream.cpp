@@ -15,16 +15,21 @@
 #include "common/parallel.h"
 #include "common/utils.h"
 #include "dns/dnscrypt/dns_crypt_ldns.h"
-#include "dns/net/default_verifier.h"
 #include "dns/upstream/upstream.h"
 #include "dns/upstream/upstream_utils.h"
 #ifdef __ANDROID__
 #include "android_res_api.h"
 #endif
 
+#include "dns/dnsstamp/dns_stamp.h"
 #include "dns_test_helpers.h"
 #include "integration_test_guard.h"
 #include "loopback_dns_server.h"
+#include "loopback_dnscrypt_server.h"
+#include "loopback_doh_server.h"
+#include "loopback_quic_server.h"
+#include "loopback_tls_server.h"
+#include "test_certificates.h"
 
 namespace ag::dns::upstream::test {
 
@@ -127,10 +132,12 @@ struct UpstreamTestData {
     IpAddress server_ip;
 };
 
-// Builds a canned A reply echoing the request's qname with rdata 8.8.8.8, so
-// that assert_response() (which expects exactly one A answer == 8.8.8.8) passes
-// against the loopback server with no internet access.
-static ldns_pkt_ptr make_loopback_a_reply(const ldns_pkt &req) {
+// Builds a canned A reply echoing the request's qname with rdata `ip`, so
+// that loopback responders can drive assert_response() (which expects exactly
+// one A answer == 8.8.8.8) without internet access. `ip` defaults to 8.8.8.8
+// for exchange queries; bootstrap resolvers pass "127.0.0.1" so a hostname
+// upstream resolves to the loopback TLS server.
+static ldns_pkt_ptr make_loopback_a_reply(const ldns_pkt &req, std::string_view ip = "8.8.8.8") {
     ldns_pkt_ptr reply = ag::test::make_base_reply(req);
     const ldns_rr *question = ldns_rr_list_rr(ldns_pkt_question(&req), 0);
     if (question == nullptr) {
@@ -141,7 +148,7 @@ static ldns_pkt_ptr make_loopback_a_reply(const ldns_pkt &req) {
     ldns_rr_set_ttl(answer, 300);
     ldns_rr_set_type(answer, LDNS_RR_TYPE_A);
     ldns_rr_set_class(answer, LDNS_RR_CLASS_IN);
-    ldns_rr_push_rdf(answer, ldns_rdf_new_frm_str(LDNS_RDF_TYPE_A, "8.8.8.8"));
+    ldns_rr_push_rdf(answer, ldns_rdf_new_frm_str(LDNS_RDF_TYPE_A, std::string{ip}.c_str()));
     ldns_pkt_push_rr(reply.get(), LDNS_SECTION_ANSWER, answer);
     return reply;
 }
@@ -155,6 +162,37 @@ protected:
     ag::test::LoopbackDnsServer m_loopback{[](const ldns_pkt &req) {
         return make_loopback_a_reply(req);
     }};
+    // In-process loopback DoT responder (127.0.0.1). Replies with the same
+    // canned 8.8.8.8 A answer as m_loopback, over TLS. The self-signed cert is
+    // accepted on the client side by TestCertificateVerifier{ACCEPT_ALL} (set
+    // in make_upstream_factory()), so DoT tests run fully offline.
+    ag::test::LoopbackTlsServer m_loopback_tls{[](const ldns_pkt &req) {
+        return make_loopback_a_reply(req);
+    }};
+    // In-process loopback DoH responder (127.0.0.1, HTTP/2 over TLS). Replies
+    // with the same canned 8.8.8.8 A answer. The cert is accepted via
+    // TestCertificateVerifier{ACCEPT_ALL}; the DohUpstream client always
+    // offers ["h2","http/1.1"] ALPN and the server prefers h2, so the
+    // HTTP/2 path is exercised by default.
+    ag::test::LoopbackDohServer m_loopback_doh{[](const ldns_pkt &req) {
+        return make_loopback_a_reply(req);
+    }};
+    // In-process loopback DoQ responder (127.0.0.1, ALPN "doq", RFC 9250
+    // 2-byte stream framing). Replies with the same canned 8.8.8.8 A answer
+    // over raw QUIC. The cert is accepted via TestCertificateVerifier{ACCEPT_ALL}.
+    ag::test::LoopbackQuicServer m_loopback_doq{[](const ldns_pkt &req) {
+        return make_loopback_a_reply(req);
+    }};
+    // In-process loopback DoH3 responder (127.0.0.1, ALPN "h3", HTTP/3 over
+    // QUIC via Http3Server::accept()). Replies with the same canned 8.8.8.8 A
+    // answer, handling GET ?dns= the same way as the DoH server. Replaces the
+    // former real h3://cloudflare-dns.com entry so the default suite is offline.
+    ag::test::LoopbackQuicServer m_loopback_doh3{
+            [](const ldns_pkt &req) {
+                return make_loopback_a_reply(req);
+            },
+            ag::test::LoopbackQuicServer::QuicMode::DOH3,
+    };
 
     void SetUp() override {
 #if 0
@@ -166,9 +204,17 @@ protected:
         m_loop->start();
         make_upstream_factory();
         m_loopback.start();
+        m_loopback_tls.start();
+        m_loopback_doh.start();
+        m_loopback_doq.start();
+        m_loopback_doh3.start();
     }
 
     void TearDown() override {
+        m_loopback_doh3.stop();
+        m_loopback_doq.stop();
+        m_loopback_doh.stop();
+        m_loopback_tls.stop();
         m_loopback.stop();
         m_loop->stop();
         m_loop->join();
@@ -176,13 +222,11 @@ protected:
 
     void make_upstream_factory(OutboundProxySettings *oproxy = nullptr) {
         struct SocketFactory::Parameters sf_parameters = {.loop = *m_loop};
-#ifndef _WIN32
-        sf_parameters.verifier = std::make_unique<DefaultVerifier>();
-#else
-        sf_parameters.verifier = std::make_unique<ApplicationVerifier>([](const CertificateVerificationEvent &) {
-            return std::nullopt;
-        });
-#endif
+        // Use the in-process TestCertificateVerifier so the loopback DoT
+        // server's self-signed cert (from test_certificates.h) is accepted.
+        // Plain DNS tests are unaffected (they never reach TLS verification).
+        sf_parameters.verifier = std::make_unique<ag::test::TestCertificateVerifier>(
+                ag::test::TestCertificateVerifier::Mode::ACCEPT_ALL);
 
 #if 0
         static OutboundProxySettings proxy_settings =
@@ -258,6 +302,65 @@ protected:
     std::string local_plain() const {
         return AG_FMT("127.0.0.1:{}", m_loopback.port());
     }
+    // "tls://127.0.0.1:<port>" for the loopback DoT server. A literal IP, so
+    // the bootstrapper is bypassed and DotUpstream connects directly.
+    std::string local_dot() const {
+        return m_loopback_tls.address();
+    }
+    // "https://127.0.0.1:<port>/dns-query" for the loopback DoH server. A
+    // literal IP, so the bootstrapper is bypassed and DohUpstream connects
+    // directly.
+    std::string local_doh() const {
+        return m_loopback_doh.address();
+    }
+    // DoH stamp (sdns://) encoding 127.0.0.1:<port> + /dns-query, so the
+    // stamp-parsing code path in the upstream factory is exercised. props
+    // is set (to empty) so str() emits an sdns:// stamp rather than falling
+    // back to pretty_url().
+    std::string local_doh_stamp() const {
+        ServerStamp stamp{};
+        stamp.proto = StampProtoType::DOH;
+        stamp.server_addr_str = AG_FMT("127.0.0.1:{}", m_loopback_doh.port());
+        stamp.provider_name = "127.0.0.1";
+        stamp.path = "/dns-query";
+        stamp.props = ServerInformalProperties{};
+        return stamp.str();
+    }
+    // Credentialed DoH URL: https://username:password@127.0.0.1:<port>/dns-query
+    std::string local_doh_url_with_creds() const {
+        std::string addr = m_loopback_doh.address();          // https://127.0.0.1:<port>/dns-query
+        return "https://username:password@" + addr.substr(8); // 8 = strlen("https://")
+    }
+    // Credentialed DoH stamp: sdns://username:password@<base64_payload>
+    std::string local_doh_stamp_with_creds() const {
+        std::string sdns = local_doh_stamp();                // sdns://<base64>
+        return "sdns://username:password@" + sdns.substr(7); // 7 = strlen("sdns://")
+    }
+    // "quic://127.0.0.1:<port>" for the loopback DoQ server. A literal IP, so
+    // the bootstrapper is bypassed and DoqUpstream connects directly.
+    std::string local_doq() const {
+        return m_loopback_doq.address();
+    }
+    // "h3://127.0.0.1:<port>/dns-query" for the loopback DoH3 server. A literal
+    // IP, so the bootstrapper is bypassed and DohUpstream connects directly
+    // over HTTP/3.
+    std::string local_doh3() const {
+        return m_loopback_doh3.address();
+    }
+    // DoQ stamp (sdns://) encoding the port with a literal-IP provider_name,
+    // so the stamp-parsing code path in the upstream factory is exercised. The
+    // server_addr_str is port-only (":<port>") so resolved_server_ip is NOT
+    // set (which would force DEFAULT_DOQ_PORT); instead the bootstrapper
+    // short-circuits on the literal IP and uses the correct port. Replaces the
+    // former real AdGuard DoQ stamp.
+    std::string local_doq_stamp() const {
+        ServerStamp stamp{};
+        stamp.proto = StampProtoType::DOQ;
+        stamp.server_addr_str = AG_FMT(":{}", m_loopback_doq.port());
+        stamp.provider_name = "127.0.0.1";
+        stamp.props = ServerInformalProperties{};
+        return stamp.str();
+    }
 };
 
 template <typename... Ts>
@@ -321,21 +424,17 @@ TEST_F(UpstreamTest, CreateUpstreamWithWrongOptions) {
     }
 }
 
-// These combos rely on real domain names and real bootstrap resolution/TLS
-// servers. The offline loopback server cannot reproduce them (a loopback
-// plain upstream bypasses the bootstrapper entirely), so they are gated.
-TEST_F(UpstreamTest, UseUpstreamWithWrongOptions) {
-    REQUIRE_INTEGRATION();
+// DoH combos that must fail at exchange time, reproduced with dead loopback
+// targets so the suite stays offline. Each row constructs successfully (init
+// succeeds) but the exchange errors out, preserving the "must fail" semantics
+// of the former real-DoH rows:
+//  - dead port (literal IP, nothing listening on 127.0.0.1:1)
+//  - dead bootstrap (hostname with a dead loopback bootstrap that can't resolve)
+TEST_F(UpstreamTest, UseUpstreamWithWrongDohOptions) {
     co_await m_loop->co_submit();
     static const UpstreamOptions OPTIONS[]{
-            // non existent domain, valid bootstrap
-            {"https://qwer.zxcv.asdf.", {"8.8.8.8"}},
-            // existent domain, invalid bootstrap
-            {"https://dns.adguard-dns.com/dnsquery", {"4.3.2.1"}},
-            // DoT
-            {"tls://one.one.two.asdf.", {"8.8.8.8"}},    // invalid/valid
-            {"tls://one.one.one.one", {"4.3.2.1"}},      // valid/invalid
-            {"tls://one.one.one.one:1234", {"8.8.8.8"}}, // invalid/valid
+            {"https://127.0.0.1:1/dns-query", {}},
+            {"https://localhost/dns-query", {"127.0.0.1:1"}},
     };
 
     for (const UpstreamOptions &options : OPTIONS) {
@@ -348,19 +447,93 @@ TEST_F(UpstreamTest, UseUpstreamWithWrongOptions) {
     }
 }
 
-// Tests DoT bootstrap timeout against a real address. A loopback reformulation
-// would require a loopback TLS server, which is out of scope.
-TEST_F(UpstreamTest, TestBootstrapTimeout) {
+// DoT combos that must fail at exchange time, reproduced with dead loopback
+// targets so the suite stays offline. Each row constructs successfully (init
+// succeeds) but the exchange errors out, preserving the "must fail" semantics
+// of the former real-DoT rows:
+//  - dead port (literal IP, nothing listening on 127.0.0.1:1)
+//  - dead bootstrap (hostname with an unresolvable dead loopback bootstrap)
+TEST_F(UpstreamTest, UseUpstreamWithWrongDotOptions) {
+    co_await m_loop->co_submit();
+    static const UpstreamOptions OPTIONS[]{
+            {"tls://127.0.0.1:1", {}},
+            {"tls://localhost", {"127.0.0.1:1"}},
+    };
+
+    for (const UpstreamOptions &options : OPTIONS) {
+        auto upstream_res = create_upstream(options);
+        ASSERT_FALSE(upstream_res.has_error()) << upstream_res.error()->str();
+
+        ldns_pkt_ptr msg = create_test_message();
+        auto reply_res = co_await upstream_res.value()->exchange(msg.get());
+        ASSERT_TRUE(reply_res.has_error()) << "Expected this upstream to error out: " << options.address;
+    }
+}
+
+// Real-domain combos that must fail at exchange time. These rely on real DNS
+// resolution / real TLS servers (non-existent domain, existent domain with a
+// wrong path, DoT with an invalid hostname / invalid bootstrap / wrong port),
+// which the offline dead-loopback tests above can't reproduce, so they are
+// gated. Kept in addition to the offline UseUpstreamWithWrong{Doh,Dot}Options
+// tests so the integration suite still validates the real-server failure modes.
+TEST_F(UpstreamTest, UseUpstreamWithWrongOptions) {
     REQUIRE_INTEGRATION();
+    co_await m_loop->co_submit();
+    static const UpstreamOptions OPTIONS[]{
+            // non existent domain, valid bootstrap
+            {"https://qwer.zxcv.asdf.", {"8.8.8.8"}},
+            // existent domain, invalid bootstrap
+            {"https://dns.adguard-dns.com/dnsquery", {"10.255.255.1"}},
+            // DoT
+            {"tls://one.one.two.asdf.", {"8.8.8.8"}},    // invalid/valid
+            {"tls://one.one.one.one", {"10.255.255.1"}}, // valid/invalid
+            {"tls://one.one.one.one:1234", {"8.8.8.8"}}, // invalid/valid
+    };
+    // The "invalid bootstrap" rows use an RFC 1918 private address
+    // (10.255.255.1:53) rather than a public IP: nothing listens there (so
+    // resolution genuinely fails), and a local filtering VPN does not intercept
+    // traffic to private subnets the way it does for public resolvers (e.g.
+    // 4.3.2.1, which is a live public resolver and would resolve the hostname,
+    // making the "must fail" assertion flaky). A public "dead" IP would instead
+    // be either intercepted/rerouted by such a VPN or reachable on some
+    // networks, hence the private-subnet choice.
+
+    for (const UpstreamOptions &options : OPTIONS) {
+        auto upstream_res = create_upstream(options);
+        ASSERT_FALSE(upstream_res.has_error()) << upstream_res.error()->str();
+
+        ldns_pkt_ptr msg = create_test_message();
+        auto reply_res = co_await upstream_res.value()->exchange(msg.get());
+        ASSERT_TRUE(reply_res.has_error()) << "Expected this upstream to error out: " << options.address;
+    }
+}
+
+// Tests DoT bootstrap timeout against a loopback target. The upstream is a
+// hostname (localhost:<tls port>) bootstrapped via a loopback DNS server that
+// accepts the query but never replies (handler returns nullptr), so the
+// bootstrapper genuinely waits for the configured timeout — no sleep(), no
+// public internet.
+TEST_F(UpstreamTest, TestBootstrapTimeout) {
     using namespace std::chrono_literals;
     using namespace concat_err_string;
     static constexpr auto timeout = 100ms;
     static constexpr size_t count = 10;
     co_await m_loop->co_submit();
+    // Non-responding loopback DNS bootstrap: accepts the connection/packet but
+    // never sends a reply, forcing the resolver to time out for real.
+    ag::test::LoopbackDnsServer dead_bootstrap{[](const ldns_pkt &) -> ldns_pkt_ptr {
+        return nullptr;
+    }};
+    dead_bootstrap.start();
+    // Bare IP:port (no scheme) so the resolver accepts it as a plain DNS bootstrap;
+    // the server never replies, so resolution genuinely times out.
+    auto dead_bootstrap_addr = AG_FMT("127.0.0.1:{}", dead_bootstrap.port());
     auto errs = co_await parallel_run_n(*m_loop, count, [&](size_t index) -> coro::Task<TestError> {
         infolog(logger, "Start {}", index);
-        // Specifying some wrong port instead so that bootstrap DNS timed out for sure
-        auto upstream_res = create_upstream({"tls://one.one.one.one", {"8.8.8.8:555"}}, timeout);
+        // Hostname upstream so the bootstrapper is exercised; the dead bootstrap
+        // never resolves it, so the exchange times out within the configured window.
+        auto upstream_res =
+                create_upstream({AG_FMT("tls://localhost:{}", m_loopback_tls.port()), {dead_bootstrap_addr}}, timeout);
         if (upstream_res.has_error()) {
             co_return AG_FMT("Failed to create upstream: {}", upstream_res.error()->str());
         }
@@ -377,6 +550,7 @@ TEST_F(UpstreamTest, TestBootstrapTimeout) {
         infolog(logger, "Finished {}", index);
         co_return std::nullopt;
     });
+    dead_bootstrap.stop();
     TestError err;
     for (size_t i = 0; i != errs.size(); ++i) {
         auto result = errs[i];
@@ -416,16 +590,24 @@ TEST_F(UpstreamTest, DnsTruncatedLocal) {
     server.stop();
 }
 
-// Real DNSCrypt server: the truncation handling for DNSCrypt can't be
-// reproduced against loopback (it requires the DNSCrypt handshake).
-TEST_F(UpstreamTest, DnsTruncatedDnscryptIntegration) {
-    REQUIRE_INTEGRATION();
+// Offline: the DNSCrypt truncation-handling path against a loopback DNSCrypt
+// responder. The local server returns a truncated reply (TC=1) on the first
+// (UDP) relay, forcing DnscryptUpstream to retry over TCP, where the server
+// returns a non-truncated reply (TC=0). The final response is therefore not
+// truncated — reproducing the former real-AdGuard assertion with no internet,
+// and exercising the real UDP->TCP fallback over the encrypted relay.
+TEST_F(UpstreamTest, DnsTruncatedDnscryptLocal) {
     co_await m_loop->co_submit();
-    static constexpr std::string_view address =
-            "sdns://"
-            "AQIAAAAAAAAAETk0LjE0MC4xNC4xNDo1NDQzINErR_JS3PLCu_iZEIbq95zkSV2LFsigxDIuUso_"
-            "OQhzIjIuZG5zY3J5cHQuZGVmYXVsdC5uczEuYWRndWFyZC5jb20";
-    auto upstream_res = create_upstream({std::string(address), {}}, Secs(5));
+    auto tc_call = std::make_shared<std::atomic<int>>(0);
+    ag::test::LoopbackDnscryptServer server([tc_call](const ldns_pkt &req) -> ldns_pkt_ptr {
+        ldns_pkt_ptr reply = ag::test::make_base_reply(req);
+        // First relay (the UDP attempt) is truncated; the TCP retry is not.
+        int n = tc_call->fetch_add(1);
+        ldns_pkt_set_tc(reply.get(), n == 0);
+        return reply;
+    });
+    server.start();
+    auto upstream_res = create_upstream({server.stamp(), {}}, Secs(5));
     ASSERT_FALSE(upstream_res.has_error()) << "Error while creating an upstream: " << upstream_res.error()->str();
     auto request = dnscrypt::create_request_ldns_pkt(
             LDNS_RR_TYPE_TXT, LDNS_RR_CLASS_IN, LDNS_RD, "unit-test2.dns.adguard-dns.com.", std::nullopt);
@@ -433,11 +615,17 @@ TEST_F(UpstreamTest, DnsTruncatedDnscryptIntegration) {
     auto res = co_await upstream_res.value()->exchange(request.get());
     ASSERT_FALSE(res.has_error()) << "Error while making a request: " << res.error()->str();
     ASSERT_FALSE(ldns_pkt_tc(res->get())) << "Response must NOT be truncated";
+    // The UDP reply was truncated, so a TCP retry must have happened.
+    ASSERT_GE(tc_call->load(), 2);
+    server.stop();
 }
 
-// Integration-only: real DoT/DoH/DoH3/DoQ/DNSCrypt upstreams. The point of
-// testing these protocols is the real handshake, which a loopback plain DNS
-// server can't validate. Gated so the default suite stays offline.
+// Integration-only: real upstreams across all supported protocols (plain DNS,
+// DoT, DoH, DoH3, DoQ, DNSCrypt). Testing against real servers validates the
+// real handshake and resolution path, which a loopback server can't fully
+// reproduce. Gated so the default suite stays offline; the offline loopback
+// counterparts live in TestUpstreams{Local,DotLocal,DohLocal,DnscryptLocal,
+// DoqDoh3Local} (always-on).
 static const UpstreamTestData real_upstreams_data[]{
         {"udp://1.1.1.1:53", {}},
         {"tcp://8.8.8.8", {}},
@@ -554,9 +742,81 @@ TEST_F(UpstreamTest, TestUpstreamsLocal) {
 #endif
 }
 
-// Real DoT/DoH/DoH3/DoQ/DNSCrypt upstreams. Only runs when
+// Always-on: DoT against the loopback TLS server. Exercises the real
+// DotUpstream + TLS handshake against an in-process responder (the cert is
+// accepted by TestCertificateVerifier{ACCEPT_ALL}). Replaces the former real-
+// DoT entries (tls://1.1.1.1, tls://9.9.9.9:853, tls://dns.google,
+// tls://one.one.one.one) so the default suite never dials public DoT.
+TEST_F(UpstreamTest, TestUpstreamsDotLocal) {
+    const std::vector<UpstreamTestData> local_dot_data = {
+            {local_dot(), {}, {}}, // DoT, literal-IP loopback (bootstrapper bypassed)
+    };
+    ASSERT_NO_FATAL_FAILURE(co_await sequential_test(local_dot_data));
+}
+
+// Always-on: DoH against the loopback DoH server. Exercises the real
+// DohUpstream + TLS + HTTP/2 path against an in-process responder (the cert is
+// accepted by TestCertificateVerifier{ACCEPT_ALL}). Replaces the former real-
+// DoH entries (dns9.quad9.net, dns.cloudflare.com, dns.google, 1.1.1.1, DoH
+// stamps, credentialed DoH URLs/stamps) so the default suite never dials
+// public DoH. All variants use a literal-IP loopback address so the
+// bootstrapper is bypassed.
+TEST_F(UpstreamTest, TestUpstreamsDohLocal) {
+    const std::vector<UpstreamTestData> local_doh_data = {
+            {local_doh(), {}, {}},                  // basic DoH URL
+            {local_doh_url_with_creds(), {}, {}},   // credentialed DoH URL
+            {local_doh_stamp(), {}, {}},            // DoH stamp (sdns://)
+            {local_doh_stamp_with_creds(), {}, {}}, // credentialed DoH stamp
+    };
+    ASSERT_NO_FATAL_FAILURE(co_await sequential_test(local_doh_data));
+}
+
+// Always-on: DNSCrypt against loopback DNSCrypt responders (127.0.0.1).
+// Exercises the real DnscryptUpstream + DNSCrypt handshake (cert fetch + key
+// exchange + encrypted relay) against in-process servers returning a canned
+// 8.8.8.8 A answer. Replaces the former real DNSCrypt entries (Cisco OpenDNS,
+// AdGuard DNS, AdGuard Family) so the default suite never dials public
+// DNSCrypt. Both supported crypto constructions are covered; each stamp uses a
+// literal-IP loopback address so the bootstrapper is bypassed.
+TEST_F(UpstreamTest, TestUpstreamsDnscryptLocal) {
+    // make_loopback_a_reply has a default `ip` argument, so it must be wrapped
+    // in a lambda (defaults are not applied through std::function).
+    auto handler = [](const ldns_pkt &req) {
+        return make_loopback_a_reply(req);
+    };
+    ag::test::LoopbackDnscryptServer server_salsa{handler};
+    server_salsa.start();
+    ag::test::LoopbackDnscryptServer server_chacha{handler, dnscrypt::CryptoConstruction::X_CHACHA_20_POLY_1305};
+    server_chacha.start();
+    const std::vector<UpstreamTestData> local_dnscrypt_data = {
+            {server_salsa.stamp(), {}, {}},  // DNSCrypt, X_SALSA_20_POLY_1305
+            {server_chacha.stamp(), {}, {}}, // DNSCrypt, X_CHACHA_20_POLY_1305
+    };
+    ASSERT_NO_FATAL_FAILURE(co_await sequential_test(local_dnscrypt_data));
+}
+
+// Always-on: DoQ and DoH3 against the loopback QUIC servers. Exercises the real
+// DoqUpstream + DohUpstream (HTTP/3) transports + QUIC/TLS handshake against
+// in-process responders (the cert is accepted by
+// TestCertificateVerifier{ACCEPT_ALL}). Replaces the former real
+// h3://cloudflare-dns.com, quic://dns.adguard-dns.com, and DoQ stamp entries
+// so the default suite never dials public DoQ/DoH3. Both URL-based and
+// stamp-based DoQ upstreams are tested; the DoH3 server handles GET ?dns=
+// identically to the DoH server.
+TEST_F(UpstreamTest, TestUpstreamsDoqDoh3Local) {
+    const std::vector<UpstreamTestData> local_data = {
+            {local_doh3(), {}, {}},      // DoH3 (h3://)
+            {local_doq(), {}, {}},       // DoQ (quic://, literal IP)
+            {local_doq_stamp(), {}, {}}, // DoQ stamp (sdns://)
+    };
+    ASSERT_NO_FATAL_FAILURE(co_await sequential_test(local_data));
+}
+
+// Real upstreams across all protocols. Only runs when
 // DNSLIBS_INTEGRATION_TESTS is set; otherwise SKIPPED so the default suite
-// never touches the public internet.
+// never touches the public internet. (Offline loopback counterparts for each
+// protocol family live in TestUpstreams{Local,DotLocal,DohLocal,DnscryptLocal,
+// DoqDoh3Local}.)
 TEST_F(UpstreamTest, TestUpstreamsIntegration) {
     REQUIRE_INTEGRATION();
 #ifdef __linux__
@@ -571,11 +831,12 @@ TEST_F(UpstreamTest, TestUpstreamsIntegration) {
 #endif
 }
 
-static const UpstreamTestData upstream_dot_bootstrap_test_data[]{
-        {
-                "tls://one.one.one.one/",
-                {"tls://1.1.1.1"},
-        },
+// DoT upstream bootstrapped via encrypted-DNS resolvers that still require real
+// servers: a DoH bootstrap and DNSCrypt/DoT-stamp bootstraps. These cannot be
+// reproduced against loopback until the DoH (Task 6) and DNSCrypt (Task 8)
+// loopback responders exist, so they stay gated. The plain- and DoT-bootstrap
+// rows are migrated to TestUpstreamDotBootstrapLocal (offline).
+static const UpstreamTestData upstream_dot_bootstrap_integration_data[]{
         {
                 "tls://one.one.one.one/",
                 {"https://1.1.1.1/dns-query"},
@@ -592,17 +853,43 @@ static const UpstreamTestData upstream_dot_bootstrap_test_data[]{
         },
 };
 
-// Real DoT/DoH/DNSCrypt bootstrap. Gated; a loopback reformulation would
-// require a loopback TLS server (out of scope).
 TEST_F(UpstreamTest, TestUpstreamDotBootstrap) {
     REQUIRE_INTEGRATION();
-    ASSERT_NO_FATAL_FAILURE(co_await sequential_test(upstream_dot_bootstrap_test_data));
+    ASSERT_NO_FATAL_FAILURE(co_await sequential_test(upstream_dot_bootstrap_integration_data));
 }
 
-// Always-on: plain DNS against the loopback server, succeeds offline.
+// Always-on: DoT upstream bootstrapped via loopback resolvers (plain DNS and
+// DoT). Each resolver resolves the upstream hostname (localhost) to 127.0.0.1,
+// so the DoT exchange lands on the in-process TLS server (m_loopback_tls). No
+// public internet. The upstream uses a hostname (not a literal IP) so the
+// bootstrapper is genuinely exercised.
+TEST_F(UpstreamTest, TestUpstreamDotBootstrapLocal) {
+    // Plain DNS bootstrap: resolves localhost -> 127.0.0.1.
+    ag::test::LoopbackDnsServer plain_bootstrap{[](const ldns_pkt &req) {
+        return make_loopback_a_reply(req, "127.0.0.1");
+    }};
+    plain_bootstrap.start();
+    // DoT bootstrap: same resolver behavior, over TLS (cert accepted by the
+    // fixture's TestCertificateVerifier{ACCEPT_ALL}).
+    ag::test::LoopbackTlsServer dot_bootstrap{[](const ldns_pkt &req) {
+        return make_loopback_a_reply(req, "127.0.0.1");
+    }};
+    dot_bootstrap.start();
+
+    const std::string upstream_addr = AG_FMT("tls://localhost:{}", m_loopback_tls.port());
+    const std::vector<UpstreamTestData> local_data = {
+            {upstream_addr, {AG_FMT("127.0.0.1:{}", plain_bootstrap.port())}},
+            {upstream_addr, {AG_FMT("tls://127.0.0.1:{}", dot_bootstrap.port())}},
+    };
+    ASSERT_NO_FATAL_FAILURE(co_await sequential_test(local_data));
+}
+
+// Always-on: plain DNS, DoT, and DoH against the loopback servers, succeeds
+// offline. The DoT entry replaces the former real `tls://1.1.1.1` default-
+// options check; the DoH entry replaces the former real DoH entries.
 TEST_F(UpstreamTest, UpstreamDefaultOptionsLocal) {
     co_await m_loop->co_submit();
-    for (const std::string &address : {local_udp(), local_tcp(), local_plain()}) {
+    for (const std::string &address : {local_udp(), local_tcp(), local_plain(), local_dot(), local_doh()}) {
         auto upstream_res = create_upstream({address, {}});
         ASSERT_FALSE(upstream_res.has_error())
                 << "Failed to generate upstream from address " << address << ": " << upstream_res.error()->str();
@@ -611,11 +898,12 @@ TEST_F(UpstreamTest, UpstreamDefaultOptionsLocal) {
     }
 }
 
-// Real `tls://1.1.1.1` and `8.8.8.8` with default options. Gated.
+// Real `8.8.8.8` plain DNS with default options. Gated. (The DoT default-options
+// check moved to UpstreamDefaultOptionsLocal against the loopback TLS server.)
 TEST_F(UpstreamTest, UpstreamDefaultOptionsIntegration) {
     REQUIRE_INTEGRATION();
     co_await m_loop->co_submit();
-    for (const std::string &address : {"tls://1.1.1.1", "8.8.8.8"}) {
+    for (const std::string &address : {"8.8.8.8"}) {
         auto upstream_res = create_upstream({address, {}});
         ASSERT_FALSE(upstream_res.has_error())
                 << "Failed to generate upstream from address " << address << ": " << upstream_res.error()->str();
@@ -659,11 +947,80 @@ static const UpstreamTestData test_upstreams_invalid_bootstrap_data[]{
 
 // DoH and DoT upstreams with two bootstraps (only one is valid). These exercise
 // the bootstrapper's "first success wins" fallback, which only applies to
-// encrypted upstreams (DoT/DoH/DoQ) — plain upstreams bypass the bootstrapper
-// and can't be reformulated against loopback. Gated.
+// encrypted upstreams (DoT/DoH/DoQ) — plain upstreams bypass the bootstrapper.
+// Gated; the offline loopback counterparts are in
+// TestUpstreams{Dot,Doh,Doq}InvalidBootstrapLocal.
 TEST_F(UpstreamTest, TestUpstreamsInvalidBootstrap) {
     REQUIRE_INTEGRATION();
     ASSERT_NO_FATAL_FAILURE(co_await sequential_test(test_upstreams_invalid_bootstrap_data));
+}
+
+// DoT upstream with two bootstraps (only one is valid), reproduced against
+// loopback so the suite stays offline. The bootstrapper runs both resolvers in
+// parallel and takes the first success; the dead loopback address fails fast
+// while the good loopback resolver resolves the upstream hostname (localhost)
+// to 127.0.0.1, lands the exchange on m_loopback_tls.
+TEST_F(UpstreamTest, TestUpstreamsDotInvalidBootstrapLocal) {
+    ag::test::LoopbackDnsServer good_bootstrap{[](const ldns_pkt &req) {
+        return make_loopback_a_reply(req, "127.0.0.1");
+    }};
+    good_bootstrap.start();
+
+    const std::string upstream_addr = AG_FMT("tls://localhost:{}", m_loopback_tls.port());
+    const std::string good_addr = AG_FMT("127.0.0.1:{}", good_bootstrap.port());
+    const std::vector<UpstreamTestData> local_data = {
+            {upstream_addr, {"127.0.0.1:1", good_addr}},
+            {upstream_addr, {"127.0.0.1:2", good_addr}},
+    };
+    ASSERT_NO_FATAL_FAILURE(co_await sequential_test(local_data));
+}
+
+// DoH upstream with two bootstraps (only one is valid), reproduced against
+// loopback so the suite stays offline. The bootstrapper runs both resolvers in
+// parallel and takes the first success; the dead loopback address fails fast
+// while the good loopback resolver resolves the upstream hostname (localhost)
+// to 127.0.0.1, landing the exchange on m_loopback_doh. Both a URL-based and
+// a stamp-based DoH upstream are tested.
+TEST_F(UpstreamTest, TestUpstreamsDohInvalidBootstrapLocal) {
+    ag::test::LoopbackDnsServer good_bootstrap{[](const ldns_pkt &req) {
+        return make_loopback_a_reply(req, "127.0.0.1");
+    }};
+    good_bootstrap.start();
+
+    const std::string upstream_url = AG_FMT("https://localhost:{}/dns-query", m_loopback_doh.port());
+    const std::string good_addr = AG_FMT("127.0.0.1:{}", good_bootstrap.port());
+    // DoH stamp with a hostname provider_name so the bootstrapper is exercised.
+    ServerStamp stamp{};
+    stamp.proto = StampProtoType::DOH;
+    stamp.server_addr_str = AG_FMT("127.0.0.1:{}", m_loopback_doh.port());
+    stamp.provider_name = "localhost";
+    stamp.path = "/dns-query";
+    stamp.props = ServerInformalProperties{};
+    const std::vector<UpstreamTestData> local_data = {
+            {upstream_url, {"127.0.0.1:1", good_addr}},
+            {stamp.str(), {"127.0.0.1:2", good_addr}},
+    };
+    ASSERT_NO_FATAL_FAILURE(co_await sequential_test(local_data));
+}
+
+// DoQ upstream with two bootstraps (only one is valid), reproduced against
+// loopback so the suite stays offline. The bootstrapper runs both resolvers in
+// parallel and takes the first success; the dead loopback address fails fast
+// while the good loopback resolver resolves the upstream hostname (localhost)
+// to 127.0.0.1, landing the exchange on m_loopback_doq. Replaces the former
+// real quic://dns.adguard-dns.com row.
+TEST_F(UpstreamTest, TestUpstreamsDoqInvalidBootstrapLocal) {
+    ag::test::LoopbackDnsServer good_bootstrap{[](const ldns_pkt &req) {
+        return make_loopback_a_reply(req, "127.0.0.1");
+    }};
+    good_bootstrap.start();
+
+    const std::string upstream_addr = AG_FMT("quic://localhost:{}", m_loopback_doq.port());
+    const std::string good_addr = AG_FMT("127.0.0.1:{}", good_bootstrap.port());
+    const std::vector<UpstreamTestData> local_data = {
+            {upstream_addr, {"127.0.0.1:1", good_addr}},
+    };
+    ASSERT_NO_FATAL_FAILURE(co_await sequential_test(local_data));
 }
 
 // Use invalid bootstrap to make sure it fails if tries to use it
@@ -680,12 +1037,55 @@ static const UpstreamTestData test_upstreams_with_server_ip_data[]{
                 "sdns://AwAAAAAAAAAAEDk0LjE0MC4xNC4xNDo4NTMAE2Rucy5hZGd1YXJkLWRucy5jb20", invalid_bootstrap, {}},
 };
 
-// Encrypted upstreams (DoT/DoH/DoQ) with a resolved server IP. The server_ip
-// path can't be reproduced against a plain loopback DNS server (it requires a
-// loopback TLS server, out of scope). Gated.
+// Encrypted upstreams (DoT/DoH/DoQ) with a resolved server IP. Gated; the
+// offline loopback counterparts are in
+// TestUpstreams{Dot,Doh,Doq}WithServerIpLocal.
 TEST_F(UpstreamTest, TestUpstreamsWithServerIp) {
     REQUIRE_INTEGRATION();
     ASSERT_NO_FATAL_FAILURE(co_await sequential_test(test_upstreams_with_server_ip_data));
+}
+
+// DoT upstream with a resolved server IP, reproduced against loopback. With
+// resolved_server_ip set, the bootstrapper is bypassed and DotUpstream connects
+// directly to 127.0.0.1:<port> (the loopback TLS server), so the dead bootstrap
+// is never used. Replaces the former real tls://dns.adguard-dns.com row.
+TEST_F(UpstreamTest, TestUpstreamsWithServerIpDotLocal) {
+    const std::string upstream_addr = AG_FMT("tls://localhost:{}", m_loopback_tls.port());
+    const std::vector<UpstreamTestData> local_data = {
+            {upstream_addr, {"127.0.0.1:1"}, Ipv4Address{127, 0, 0, 1}},
+    };
+    ASSERT_NO_FATAL_FAILURE(co_await sequential_test(local_data));
+}
+
+// DoH upstream with a resolved server IP, reproduced against loopback. With
+// resolved_server_ip set, the bootstrapper is bypassed and DohUpstream connects
+// directly to 127.0.0.1:<port> (the loopback DoH server), so the dead bootstrap
+// is never used. Replaces the former real dns.adguard-dns.com DoH URL/stamp
+// rows. Both a URL-based and a stamp-based DoH upstream are tested (the stamp
+// encodes 127.0.0.1:<port> directly, so the bootstrap is also bypassed).
+TEST_F(UpstreamTest, TestUpstreamsDohWithServerIpLocal) {
+    const std::string upstream_url = AG_FMT("https://localhost:{}/dns-query", m_loopback_doh.port());
+    const std::vector<UpstreamTestData> local_data = {
+            {upstream_url, {"127.0.0.1:1"}, Ipv4Address{127, 0, 0, 1}},
+            {local_doh_stamp(), {"127.0.0.1:1"}, {}},
+    };
+    ASSERT_NO_FATAL_FAILURE(co_await sequential_test(local_data));
+}
+
+// DoQ upstream with a resolved server IP, reproduced against loopback. A
+// literal-IP loopback URL makes the bootstrapper short-circuit (no DNS lookup)
+// so the dead bootstrap is never contacted, landing the exchange directly on
+// m_loopback_doq. This replaces the former real
+// quic://dns.adguard-dns.com row, which used resolved_server_ip to bypass
+// DNS. (DoqUpstream::init hardcodes DEFAULT_DOQ_PORT when resolved_server_ip
+// is set, so a literal-IP URL + dead bootstrap is the offline equivalent that
+// preserves the bypass-bootstrap intent without requiring a fixed port.)
+TEST_F(UpstreamTest, TestUpstreamsDoqWithServerIpLocal) {
+    const std::string upstream_addr = AG_FMT("quic://127.0.0.1:{}", m_loopback_doq.port());
+    const std::vector<UpstreamTestData> local_data = {
+            {upstream_addr, {"127.0.0.1:1"}, {}},
+    };
+    ASSERT_NO_FATAL_FAILURE(co_await sequential_test(local_data));
 }
 
 struct DeadProxyFailure : UpstreamParamTest<std::tuple<std::string, OutboundProxySettings>> {};
