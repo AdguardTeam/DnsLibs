@@ -242,38 +242,30 @@ jobs:
       prerelease: ${{ contains(needs.tag.outputs.tag, '-') }}
     secrets: inherit
 
-  # 6. Open a tracking issue in each downstream app repo and announce to Slack.
-  # The matrix drives one announce-release.yml call per app; that wrapper creates
-  # the issue and posts to Slack as a correlated chain (so the Slack message can
-  # link the exact issue without a per-entry matrix-output round-trip here).
+  # 6. Open the downstream tracking issues (with the changelog link and the
+  # public, private-stripped changelog) and announce to Slack as one Block Kit
+  # message. announce-release.yml owns all of the issue-creation and Slack
+  # formatting; only the product name, channel and repo/assignee list differ.
   announce:
-    name: Announce / ${{ matrix.repo }}
+    name: Announce release
     needs:
       - tag
       - mirror-and-release
     permissions:
       contents: read
       id-token: write
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - repo: AdguardTeam/AdguardForAndroid
-            assignee: artemiv4nov
-            channel: '#build-corelibs'
-          - repo: AdguardTeam/AdguardForWindows
-            assignee: adbuker
-            channel: '#build-corelibs'
-          - repo: AdguardTeam/AdguardForMac
-            assignee: vityevato
-            channel: '#build-corelibs'
     uses: AdGuardSoftwareLimited/native-libs-common/.github/workflows/announce-release.yml@master
     with:
-      target_repo: ${{ matrix.repo }}
       product: DnsLibs
       version: ${{ needs.tag.outputs.version }}
       release_url: ${{ needs.mirror-and-release.outputs.release-url }}
-      channel: ${{ matrix.channel }}
-      assignees: ${{ matrix.assignee }}
+      changelog: ${{ needs.tag.outputs.changelog }}
+      channel: '#build-corelibs'
+      targets: |
+        [
+          {"repo": "AdguardTeam/AdguardForAndroid", "assignee": "artemiv4nov", "platform": "Android"},
+          {"repo": "AdguardTeam/AdguardForWindows", "assignee": "adbuker", "platform": "Windows"},
+          {"repo": "AdguardTeam/AdguardForMac", "assignee": "vityevato", "platform": "Mac"}
+        ]
       team: corelibs
     secrets: inherit
