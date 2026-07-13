@@ -229,12 +229,15 @@ jobs:
             > "$POD_DIR/AGDnsProxy.podspec.json"
 
           # Package.swift: fill in version, base URL and checksum, then zip as the
-          # SwiftPM registry expects ({scope}/{package}/{version}.zip).
+          # SwiftPM registry expects ({scope}/{package}/{version}.zip). The package
+          # contents live under a single top-level directory so SwiftPM's
+          # stripFirstLevel extraction has one root directory to strip.
           PKG_TMP=$(mktemp -d)
+          mkdir -p "$PKG_TMP/dns-libs"
           sed -e "s#@VERSION@#${VER}#g" -e "s#@AK_BASE@#${AK_BASE}#g" -e "s#@CHECKSUM@#${CHECKSUM}#g" \
             platform/mac/packaging/Package.swift \
-            > "$PKG_TMP/Package.swift"
-          (cd "$PKG_TMP" && zip -4 "$SPM_DIR/${VER}.zip" Package.swift)
+            > "$PKG_TMP/dns-libs/Package.swift"
+          (cd "$PKG_TMP" && zip -4r "$SPM_DIR/${VER}.zip" dns-libs)
 
       - name: Upload xcframework artifact
         if: needs.version.outputs.value != ''
