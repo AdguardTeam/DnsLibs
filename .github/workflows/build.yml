@@ -92,7 +92,7 @@ jobs:
         ${{ needs.resolve-images.outputs.corelibs-builder }}
         ephemeral-limit-memory-12288
         ephemeral-limit-cpu-8
-        ephemeral-run-id-${{ github.run_id }}
+        ephemeral-run-id-${{ github.run_id }}-${{ github.run_attempt }}
       container-image: 'adguard/core-libs:2.11'
       test-command: |
         set -e
@@ -145,7 +145,7 @@ jobs:
       - ${{ needs.resolve-images.outputs.macos }}
       - ephemeral-limit-memory-6144
       - ephemeral-limit-cpu-4
-      - ephemeral-run-id-${{ github.run_id }}
+      - ephemeral-run-id-${{ github.run_id }}-${{ github.run_attempt }}
     env:
       # Resolved once; the framework CMake build reads it via cmake/version.cmake
       # (env fallback) for both the version.h header and the Mach-O VERSION.
@@ -290,7 +290,7 @@ jobs:
       - ${{ needs.resolve-images.outputs.corelibs-builder }}
       - ephemeral-limit-memory-8192
       - ephemeral-limit-cpu-8
-      - ephemeral-run-id-${{ github.run_id }}-android
+      - ephemeral-run-id-${{ github.run_id }}-${{ github.run_attempt }}-android
     container:
       image: adguard/core-libs:2.11
     env:
@@ -344,7 +344,7 @@ jobs:
       - ${{ needs.resolve-images.outputs.windows }}
       - ephemeral-limit-memory-6144
       - ephemeral-limit-cpu-4
-      - ephemeral-run-id-${{ github.run_id }}
+      - ephemeral-run-id-${{ github.run_id }}-${{ github.run_attempt }}
     env:
       # Read by cmake/version.cmake (the RC resource) and by
       # Directory.Build.targets (the C# assembly version attributes).
