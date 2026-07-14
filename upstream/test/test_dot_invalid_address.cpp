@@ -15,8 +15,9 @@ namespace ag::dns {
 // The mock bootstrapper hands this list to DotUpstream as the resolved address
 // cache. It is rebuilt in the test body with the loopback DoT server's live
 // port; the default (mutable) entries are dead loopback / unusable addresses
-// so no real IP ever leaks into the default suite.
-std::vector<SocketAddress> RESOLVED_ADDRESSES = {
+// so no real IP ever leaks into the default suite. TU-local (static): it is
+// only referenced within this translation unit.
+static std::vector<SocketAddress> RESOLVED_ADDRESSES = {
         SocketAddress("0.0.0.0", 853),
         SocketAddress("::", 853),
         SocketAddress("fe80::cafe:babe", 853),

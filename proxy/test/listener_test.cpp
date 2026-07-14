@@ -3,6 +3,7 @@
 #include <gtest/gtest.h>
 #include <ldns/ldns.h>
 #include <magic_enum/magic_enum.hpp>
+#include <mutex>
 #include <thread>
 
 #include "common/parallel.h"
@@ -238,8 +239,13 @@ TEST(ListenerTest, ManyRequestsPending) {
             return std::nullopt;
         };
         auto [ret, err] = proxy.init(proxy_settings, std::move(events));
-        proxy_init_result = ret;
-        proxy_initialized = true;
+        // Set the shared init result / initialized flag under the same mutex the
+        // waits use, to avoid a data race and missed wakeups.
+        {
+            std::lock_guard<std::mutex> l(mtx);
+            proxy_init_result = ret;
+            proxy_initialized = true;
+        }
         proxy_cond.notify_all();
 
         ldns_pkt_ptr reqpkt(
@@ -273,14 +279,18 @@ TEST(ListenerTest, ManyRequestsPending) {
         }
     });
 
-    // Wait until the proxy is initialized (replaces a fixed 2 s sleep).
+    // Wait until the proxy is initialized (replaces a fixed 2 s sleep). Capture
+    // the init result under the same lock so the assertion below reads a value
+    // free of data races (rather than reading the shared flag unlocked).
+    bool proxy_init_result_local = false;
     {
         std::unique_lock<std::mutex> l(mtx);
         proxy_cond.wait(l, [&]() {
             return proxy_initialized;
         });
+        proxy_init_result_local = proxy_init_result;
     }
-    ASSERT_TRUE(proxy_init_result);
+    ASSERT_TRUE(proxy_init_result_local);
 
     ldns_pkt_ptr reqpkt(ldns_pkt_query_new(ldns_dname_new_frm_str("g.co"), LDNS_RR_TYPE_A, LDNS_RR_CLASS_IN, LDNS_RD));
     ldns_buffer_ptr buffer{ldns_buffer_new(REQUEST_BUFFER_INITIAL_CAPACITY)};
@@ -323,7 +333,12 @@ TEST(ListenerTest, ManyRequestsPending) {
     ASSERT_EQ(LDNS_STATUS_OK, status) << ldns_get_errorstr_by_id(status);
     ldns_pkt_free(reply_pkt);
 
-    proxy_initialized = false;
+    // Signal the proxy thread to stop. Guard the shared flag with the same mutex
+    // its wait predicate reads under, then notify.
+    {
+        std::lock_guard<std::mutex> l(mtx);
+        proxy_initialized = false;
+    }
     proxy_cond.notify_one();
     proxy.deinit();
     proxy_thread.join();

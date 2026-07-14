@@ -89,7 +89,8 @@ inline ag::dns::SpkiSha256Digest compute_spki_digest_for(EVP_PKEY *pkey) {
     ag::Uint8Vector der(static_cast<size_t>(len), 0);
     unsigned char *out = der.data();
     i2d_PUBKEY(pkey, &out);
-    ag::UniquePtr<EVP_MD_CTX, EVP_MD_CTX_free> md_ctx{EVP_MD_CTX_new()};
+    // EVP_Digest is a one-shot helper that manages its own context internally,
+    // so no EVP_MD_CTX is needed here.
     uint32_t hash_len = static_cast<uint32_t>(digest.data.size());
     EVP_Digest(der.data(), der.size(), digest.data.data(), &hash_len, EVP_sha256(), nullptr);
     return digest;
@@ -183,7 +184,8 @@ inline ServerMaterial generate_server_material() {
     ag::Uint8Vector der(static_cast<size_t>(len), 0);
     unsigned char *out = (unsigned char *) der.data();
     i2d_PUBKEY(pkey_raw, &out);
-    ag::UniquePtr<EVP_MD_CTX, EVP_MD_CTX_free> md_ctx{EVP_MD_CTX_new()};
+    // EVP_Digest is a one-shot helper that manages its own context internally,
+    // so no EVP_MD_CTX is needed here.
     uint32_t hash_len = static_cast<uint32_t>(m.spki_digest.data.size());
     EVP_Digest(der.data(), der.size(), m.spki_digest.data.data(), &hash_len, EVP_sha256(), nullptr);
 

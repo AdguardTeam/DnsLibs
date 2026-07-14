@@ -1,15 +1,17 @@
 #pragma once
 
 #include <cstdlib>
+#include <string_view>
 
 #include <gtest/gtest.h>
 
 namespace ag::test {
 
-// True only when DNSLIBS_INTEGRATION_TESTS is set in the environment.
-// Real-network protocol tests are opted into via REQUIRE_INTEGRATION().
+// True only when DNSLIBS_INTEGRATION_TESTS is set to "1"; any other value is
+// treated as disabled to match the REQUIRE_INTEGRATION() skip message.
 inline bool integration_tests_enabled() {
-    return std::getenv("DNSLIBS_INTEGRATION_TESTS") != nullptr;
+    const char *val = std::getenv("DNSLIBS_INTEGRATION_TESTS");
+    return val != nullptr && std::string_view{val} == "1";
 }
 
 } // namespace ag::test

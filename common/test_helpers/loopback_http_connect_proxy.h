@@ -13,6 +13,7 @@
 // single-threaded per connection and select()-driven with a short timeout so
 // stop() (and shutdown of the active client sockets) unblocks it promptly.
 
+#include <algorithm>
 #include <atomic>
 #include <cstdint>
 #include <mutex>

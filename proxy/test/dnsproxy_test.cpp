@@ -346,8 +346,11 @@ TEST_F(DnsProxyTest, TestDns64) {
     auto [ret, err] = m_proxy->init(settings, events);
     ASSERT_TRUE(ret) << err->str();
 
-    // Deterministically wait for DNS64 discovery to finish (no sleep).
-    dns64_future.get();
+    // Deterministically wait for DNS64 discovery to finish (no sleep). Bound the
+    // wait so a regression (discovery never signalling) surfaces as a test
+    // failure instead of hanging the test process.
+    ASSERT_EQ(std::future_status::ready, dns64_future.wait_for(std::chrono::seconds(30)))
+            << "DNS64 discovery did not complete in time";
 
     ldns_pkt_ptr pkt = create_request(IPV4_ONLY_HOST, LDNS_RR_TYPE_AAAA, LDNS_RD);
     ldns_pkt_ptr response;
@@ -3090,8 +3093,11 @@ TEST_F(DnsProxyTest, RegressCache1) {
     ASSERT_NO_FATAL_FAILURE(perform_request(*m_proxy, pkt, res, &info));
     ASSERT_TRUE(SvcbHttpsHelpers::remove_ech_svcparam(res.get()));
 
-    // Deterministically wait for the background refetch to update the cache (no sleep).
-    bg_future.get();
+    // Deterministically wait for the background refetch to update the cache (no
+    // sleep). Bound the wait so a regression (on_cache_updated never firing)
+    // surfaces as a test failure instead of hanging the test process.
+    ASSERT_EQ(std::future_status::ready, bg_future.wait_for(std::chrono::seconds(30)))
+            << "Background cache refetch did not complete in time";
 
     // Background fetch "poisons" the cache with an unprocessed response with ECH parameters intact.
     // ECH blocking no longer works.

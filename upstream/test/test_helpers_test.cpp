@@ -123,6 +123,12 @@ TEST_F(TestHelpersTest, IntegrationGuardReflectsEnvVar) {
     EXPECT_FALSE(ag::test::integration_tests_enabled());
     set_env_var("DNSLIBS_INTEGRATION_TESTS", "1");
     EXPECT_TRUE(ag::test::integration_tests_enabled());
+    // Any value other than "1" (including "0") must be treated as disabled, so
+    // the variable cannot be set to disable real-network tests by accident.
+    set_env_var("DNSLIBS_INTEGRATION_TESTS", "0");
+    EXPECT_FALSE(ag::test::integration_tests_enabled());
+    set_env_var("DNSLIBS_INTEGRATION_TESTS", "false");
+    EXPECT_FALSE(ag::test::integration_tests_enabled());
     unset_env_var("DNSLIBS_INTEGRATION_TESTS");
     co_return;
 }
