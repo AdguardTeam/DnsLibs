@@ -44,10 +44,26 @@ static constexpr auto CNAME_BLOCKING_HOST = "test2.meshkov.info";
 // server on first call and reuses it on subsequent calls (so reapply-settings
 // tests that call make_dnsproxy_settings() a second time don't destroy the
 // server the proxy is still connected to). The server is torn down in
-// TearDown. Tests may reassign `g_upstream_handler` after
-// `make_dnsproxy_settings()` to shape canned replies.
+// TearDown. Tests may reassign the upstream handler via
+// set_upstream_handler() after `make_dnsproxy_settings()` to shape canned
+// replies.
 static std::unique_ptr<ag::test::LoopbackDnsServer> g_upstream;
+// The loopback server runs its own UDP/TCP worker threads and invokes the
+// handler from there, while the test thread reassigns it on the fly (e.g. for
+// DNSSEC and reapply-settings tests). Reading/writing a std::function from
+// different threads without synchronization is undefined behavior, so all access
+// is serialized via `g_upstream_handler_mtx`: assign through
+// set_upstream_handler(), and the read in make_dnsproxy_settings snapshots the
+// handler under the lock before invoking it.
 static std::function<ag::dns::ldns_pkt_ptr(const ldns_pkt &)> g_upstream_handler;
+static std::mutex g_upstream_handler_mtx;
+
+// Assigns `g_upstream_handler` under the mutex (it is read concurrently by the
+// loopback server's worker threads).
+static void set_upstream_handler(std::function<ag::dns::ldns_pkt_ptr(const ldns_pkt &)> handler) {
+    std::lock_guard<std::mutex> lock(g_upstream_handler_mtx);
+    g_upstream_handler = std::move(handler);
+}
 
 // Canned A (1.2.3.4) reply shared by the local encrypted-upstream servers
 // (DoT/DoH/DoQ) used by the SPKI/resolved-IP/stamp/outbound-proxy tests.
@@ -76,7 +92,7 @@ protected:
             m_proxy->deinit();
         }
         g_upstream.reset();
-        g_upstream_handler = nullptr;
+        set_upstream_handler(nullptr);
     }
 };
 
@@ -142,13 +158,26 @@ static ldns_pkt_ptr default_upstream_handler(const ldns_pkt &req) {
 }
 
 static DnsProxySettings make_dnsproxy_settings() {
-    g_upstream_handler = default_upstream_handler;
+    set_upstream_handler(default_upstream_handler);
     // Reuse the existing loopback server (if any) so that calling this function
     // a second time — e.g. in reapply-settings tests — does not destroy the
     // server the proxy is still talking to.
     if (!g_upstream) {
         g_upstream = std::make_unique<ag::test::LoopbackDnsServer>([](const ldns_pkt &req) -> ldns_pkt_ptr {
-            return g_upstream_handler(req);
+            // Copy the handler under the mutex, then invoke the snapshot
+            // outside the lock so a slow handler can't block a concurrent
+            // reassignment (and vice versa). g_upstream_handler is read here on
+            // the loopback server's worker thread but reassigned by the test
+            // thread, so an unsynchronized read/write would be a data race.
+            std::function<ag::dns::ldns_pkt_ptr(const ldns_pkt &)> snapshot;
+            {
+                std::lock_guard<std::mutex> lock(g_upstream_handler_mtx);
+                snapshot = g_upstream_handler;
+            }
+            if (!snapshot) {
+                return nullptr;
+            }
+            return snapshot(req);
         });
         g_upstream->start();
     }
@@ -2150,7 +2179,7 @@ TEST_F(DnsProxyTest, OptimisticCache) {
 
 TEST_F(DnsProxyTest, DnssecSimpleTest) {
     DnsProxySettings settings = make_dnsproxy_settings();
-    g_upstream_handler = dnssec_upstream_handler;
+    set_upstream_handler(dnssec_upstream_handler);
     settings.enable_dnssec_ok = true;
 
     std::vector<std::string> dnssecSupport = {"cloudflare.com", "example.org"};
@@ -2198,7 +2227,7 @@ TEST_F(DnsProxyTest, DnssecSimpleTest) {
 
 TEST_F(DnsProxyTest, DnssecRequestWithDOBit) {
     DnsProxySettings settings = make_dnsproxy_settings();
-    g_upstream_handler = dnssec_upstream_handler;
+    set_upstream_handler(dnssec_upstream_handler);
     settings.enable_dnssec_ok = true;
 
     DnsRequestProcessedEvent last_event{};
@@ -2226,7 +2255,7 @@ TEST_F(DnsProxyTest, DnssecRequestWithDOBit) {
 
 TEST_F(DnsProxyTest, DnssecDSRequest) {
     DnsProxySettings settings = make_dnsproxy_settings();
-    g_upstream_handler = dnssec_upstream_handler;
+    set_upstream_handler(dnssec_upstream_handler);
     settings.enable_dnssec_ok = true;
 
     DnsRequestProcessedEvent last_event{};
@@ -2255,7 +2284,7 @@ TEST_F(DnsProxyTest, DnssecDSRequest) {
 
 TEST_F(DnsProxyTest, DnssecTheSameQtypeRequest) {
     DnsProxySettings settings = make_dnsproxy_settings();
-    g_upstream_handler = dnssec_upstream_handler;
+    set_upstream_handler(dnssec_upstream_handler);
     // dns.adguard.com answers SERVFAIL
     settings.enable_dnssec_ok = true;
 
@@ -2281,7 +2310,7 @@ TEST_F(DnsProxyTest, DnssecTheSameQtypeRequest) {
 
 TEST_F(DnsProxyTest, DnssecRegressDoesNotScrubCname) {
     DnsProxySettings settings = make_dnsproxy_settings();
-    g_upstream_handler = dnssec_upstream_handler;
+    set_upstream_handler(dnssec_upstream_handler);
     settings.enable_dnssec_ok = true;
 
     DnsRequestProcessedEvent last_event{};
@@ -2311,7 +2340,7 @@ TEST_F(DnsProxyTest, DnssecRegressDoesNotScrubCname) {
 
 TEST_F(DnsProxyTest, DnssecAuthoritySection) {
     DnsProxySettings settings = make_dnsproxy_settings();
-    g_upstream_handler = dnssec_upstream_handler;
+    set_upstream_handler(dnssec_upstream_handler);
     settings.enable_dnssec_ok = true;
 
     DnsRequestProcessedEvent last_event{};
@@ -2429,7 +2458,7 @@ TEST_F(DnsProxyTest, DenyallowRulesDoNotMatchIpAddresses) {
     DnsProxySettings settings = make_dnsproxy_settings();
     // The filter blocks the well-known DNS64 IPv4 addresses; have the loopback
     // return them for ipv4only.arpa so the IP-rule match is exercised.
-    g_upstream_handler = [](const ldns_pkt &req) -> ldns_pkt_ptr {
+    set_upstream_handler([](const ldns_pkt &req) -> ldns_pkt_ptr {
         const ldns_rr *question = ldns_rr_list_rr(ldns_pkt_question(&req), 0);
         ldns_pkt_ptr reply = make_base_reply(req);
         if (question != nullptr) {
@@ -2444,7 +2473,7 @@ TEST_F(DnsProxyTest, DenyallowRulesDoNotMatchIpAddresses) {
             ldns_pkt_push_rr(reply.get(), LDNS_SECTION_ANSWER, answer);
         }
         return reply;
-    };
+    });
     settings.upstreams = {{.address = g_upstream->address(ag::utils::TP_UDP)}};
     settings.adblock_rules_blocking_mode = DnsProxyBlockingMode::REFUSED;
     settings.hosts_rules_blocking_mode = DnsProxyBlockingMode::REFUSED;

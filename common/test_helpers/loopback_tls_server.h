@@ -16,6 +16,8 @@
 #include <thread>
 #include <vector>
 
+#include <gtest/gtest.h>
+
 #include <ldns/ldns.h>
 #include <openssl/ssl.h>
 
@@ -97,6 +99,17 @@ public:
         detail::ensure_winsock();
 
         m_ssl_ctx = load_server_ssl_ctx();
+        // load_server_ssl_ctx() returns null when the test certificate material
+        // could not be loaded (or SSL_CTX_new failed). Fail the test explicitly
+        // instead of dereferencing a null SSL_CTX below. EXPECT_NE (not
+        // ASSERT_NE): the coroutine-aware ASSERT_* macros (see
+        // common/gtest_coro.h) expand to `co_return`, which would turn this
+        // plain void method into a coroutine, so use the non-fatal variant and
+        // guard the dereference with an explicit early return.
+        EXPECT_NE(m_ssl_ctx.get(), nullptr) << "failed to load server SSL_CTX (test certificate material unavailable)";
+        if (m_ssl_ctx == nullptr) {
+            return;
+        }
         SSL_CTX_set_alpn_select_cb(m_ssl_ctx.get(), detail::alpn_select_dot_cb, nullptr);
 
         m_tcp_sock = detail::open_stream_socket();
