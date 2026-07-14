@@ -85,6 +85,15 @@ You MUST follow the following rules for EVERY task that you perform:
     - `make lint` to run the linters
     - `make lint-fix` to fix linting issues that can be fixed automatically
     - `make clang-format` to check the formatting
+    - `make clang-tidy` to run the `clang-tidy` static analysis
+
+- You MUST prefer running Makefile targets over invoking the underlying
+  tools directly. When a Makefile target exists for a task (e.g. build,
+  test, lint, format, static analysis), use it rather than calling the
+  tool (`clang-format`, `clang-tidy`/`clangd-tidy`, `cmake`, `ctest`,
+  `npx markdownlint-cli2`, etc.) by hand. This keeps invocations
+  consistent with CI, applies the correct flags and working directory, and
+  avoids drift between local and CI behavior.
 
 - You MUST update the unit tests for changed code.
 
