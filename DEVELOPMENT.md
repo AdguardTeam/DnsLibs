@@ -1,5 +1,6 @@
 # Developer documentation
 
+
 This document is intended for developers who build, modify, or debug the AdGuard DNS libraries.
 
 For coding style, project structure, and logging conventions see [AGENTS.md](AGENTS.md).
