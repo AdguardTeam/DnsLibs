@@ -84,15 +84,9 @@ jobs:
       test-env: |
         ARTIFACTORY_USER=${{ secrets.ARTIFACTORY_USER }}
         ARTIFACTORY_API_KEY=${{ secrets.ARTIFACTORY_API_KEY }}
-    runs-on:
-      - ephemeral
-      - ephemeral-linux
-      - ${{ needs.resolve-images.outputs.corelibs-builder }}
-      - ephemeral-limit-memory-12288
-      - ephemeral-limit-cpu-8
-      - ephemeral-run-id-${{ github.run_id }}-${{ github.run_attempt }}
     uses: AdGuardSoftwareLimited/actions/.github/workflows/junit-tests.yml@master
     with:
+      runs-on: '["ephemeral","ephemeral-linux","${{ needs.resolve-images.outputs.corelibs-builder }}","ephemeral-limit-memory-12288","ephemeral-limit-cpu-8"]'
       container-image: 'adguard/core-libs:2.11'
       test-command: |
         set -e
