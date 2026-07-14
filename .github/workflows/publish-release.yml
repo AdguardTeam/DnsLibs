@@ -174,7 +174,7 @@ jobs:
       - ${{ needs.resolve-images.outputs.windows }}
       - ephemeral-limit-memory-2048
       - ephemeral-limit-cpu-2
-      - ephemeral-run-id-${{ github.run_id }}-${{ github.run_attempt }}
+      - ephemeral-run-id-${{ github.run_id }}
     environment: windows-artifactory
     steps:
       - name: Download nuget package from Build run

@@ -86,7 +86,7 @@ jobs:
         ARTIFACTORY_API_KEY=${{ secrets.ARTIFACTORY_API_KEY }}
     uses: AdGuardSoftwareLimited/actions/.github/workflows/junit-tests.yml@master
     with:
-      runs-on: '["ephemeral","ephemeral-linux","${{ needs.resolve-images.outputs.corelibs-builder }}","ephemeral-limit-memory-12288","ephemeral-limit-cpu-8"]'
+      runs-on: '["ephemeral","ephemeral-linux","${{ needs.resolve-images.outputs.corelibs-builder }}","ephemeral-limit-memory-12288","ephemeral-limit-cpu-8","ephemeral-run-id-${{ github.run_id }}"]'
       container-image: 'adguard/core-libs:2.11'
       test-command: |
         set -e
@@ -139,7 +139,7 @@ jobs:
       - ${{ needs.resolve-images.outputs.macos }}
       - ephemeral-limit-memory-6144
       - ephemeral-limit-cpu-4
-      - ephemeral-run-id-${{ github.run_id }}-${{ github.run_attempt }}
+      - ephemeral-run-id-${{ github.run_id }}
     env:
       # Resolved once; the framework CMake build reads it via cmake/version.cmake
       # (env fallback) for both the version.h header and the Mach-O VERSION.
@@ -284,7 +284,7 @@ jobs:
       - ${{ needs.resolve-images.outputs.corelibs-builder }}
       - ephemeral-limit-memory-8192
       - ephemeral-limit-cpu-8
-      - ephemeral-run-id-${{ github.run_id }}-${{ github.run_attempt }}-android
+      - ephemeral-run-id-${{ github.run_id }}
     container:
       image: adguard/core-libs:2.11
     env:
@@ -338,7 +338,7 @@ jobs:
       - ${{ needs.resolve-images.outputs.windows }}
       - ephemeral-limit-memory-6144
       - ephemeral-limit-cpu-4
-      - ephemeral-run-id-${{ github.run_id }}-${{ github.run_attempt }}
+      - ephemeral-run-id-${{ github.run_id }}
     env:
       # Read by cmake/version.cmake (the RC resource) and by
       # Directory.Build.targets (the C# assembly version attributes).
