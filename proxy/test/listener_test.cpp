@@ -248,27 +248,39 @@ TEST(ListenerTest, ManyRequestsPending) {
         }
         proxy_cond.notify_all();
 
-        ldns_pkt_ptr reqpkt(
-                ldns_pkt_query_new(ldns_dname_new_frm_str("youtube.com"), LDNS_RR_TYPE_A, LDNS_RR_CLASS_IN, LDNS_RD));
-
-        ldns_buffer_ptr buffer{ldns_buffer_new(REQUEST_BUFFER_INITIAL_CAPACITY)};
-        ldns_pkt2buffer_wire(buffer.get(), reqpkt.get());
-
-        ag::coro::run_detached([&buffer](DnsProxy &proxy) -> ag::coro::Task<void> {
-            co_await proxy.handle_message(
-                    {ldns_buffer_at(buffer.get(), 0), ldns_buffer_position(buffer.get())}, nullptr);
-        }(proxy));
-
-        ldns_pkt_ptr reqpkt2(
-                ldns_pkt_query_new(ldns_dname_new_frm_str("vk.com"), LDNS_RR_TYPE_A, LDNS_RR_CLASS_IN, LDNS_RD));
-
-        buffer.reset(ldns_buffer_new(REQUEST_BUFFER_INITIAL_CAPACITY));
-        ldns_pkt2buffer_wire(buffer.get(), reqpkt2.get());
-
-        ag::coro::run_detached([&buffer](DnsProxy &proxy) -> ag::coro::Task<void> {
-            co_await proxy.handle_message(
-                    {ldns_buffer_at(buffer.get(), 0), ldns_buffer_position(buffer.get())}, nullptr);
-        }(proxy));
+        // Seed two fire-and-forget queries so there are in-flight requests
+        // when the main thread launches the 10 000-query storm below.
+        //
+        // handle_message is a coroutine: it captures its Uint8View argument,
+        // suspends on `co_await m_loop->co_submit()` and only reads the view
+        // later on the event loop thread. coro::run_detached() resumes the
+        // coroutine synchronously up to that first suspension, so the view
+        // must stay valid until handle_message finishes. The original test
+        // reused one stack-local ldns_buffer and reset it between the two
+        // requests, freeing the data the suspended handle_message still
+        // referenced — a heap-use-after-free caught by ASan.
+        //
+        // The wire data is therefore moved into the coroutine itself as a
+        // by-value parameter. Coroutine parameters live in the heap-allocated
+        // coroutine frame and are destroyed only when the coroutine finishes,
+        // so the Uint8View into that data stays valid across the suspension.
+        // (Capturing the buffer in the *lambda* would not work: a lambda
+        // coroutine's captures live in the temporary closure object, which is
+        // destroyed as soon as run_detached() returns — dangling the data the
+        // still-suspended handle_message references.)
+        auto fire_forget = [](DnsProxy &proxy, const char *name) {
+            ldns_pkt_ptr reqpkt(
+                    ldns_pkt_query_new(ldns_dname_new_frm_str(name), LDNS_RR_TYPE_A, LDNS_RR_CLASS_IN, LDNS_RD));
+            ldns_buffer_ptr buf{ldns_buffer_new(REQUEST_BUFFER_INITIAL_CAPACITY)};
+            ldns_pkt2buffer_wire(buf.get(), reqpkt.get());
+            const uint8_t *base = ldns_buffer_at(buf.get(), 0);
+            Uint8Vector data{base, base + ldns_buffer_position(buf.get())};
+            ag::coro::run_detached([](DnsProxy &proxy, Uint8Vector data) -> ag::coro::Task<void> {
+                co_await proxy.handle_message(Uint8View{data.data(), data.size()}, nullptr);
+            }(proxy, std::move(data)));
+        };
+        fire_forget(proxy, "youtube.com");
+        fire_forget(proxy, "vk.com");
 
         // Wait until stopped
         {
