@@ -208,6 +208,13 @@ test-integration: build_libs
 
 # Path to the JUnit XML report written by the CI test target below. The CI
 # workflow uploads this file as the test-results artifact.
+#
+# `ctest --test-dir <build> --output-junit <path>` resolves <path> relative
+# to the --test-dir (the build directory), not relative to the current
+# working directory. Passing `$(JUNIT_XML)` (= build/junit.xml) as-is would
+# therefore write the report to build/build/junit.xml and the CI artifact
+# upload at build/junit.xml would find nothing. The ctest invocation below
+# passes the absolute path via `$(abspath ...)` to avoid this.
 JUNIT_XML ?= $(BUILD_DIR)/junit.xml
 
 ## Run the full test suite in the CI configuration, i.e. the way the CI
@@ -232,5 +239,5 @@ JUNIT_XML ?= $(BUILD_DIR)/junit.xml
 test-ci: build_libs
 	cmake --build $(BUILD_DIR) --target tests
 	DNSLIBS_INTEGRATION_TESTS=1 ctest --test-dir $(BUILD_DIR) \
-		--output-junit $(JUNIT_XML) \
+		--output-junit $(abspath $(JUNIT_XML)) \
 		-D ExperimentalTest --no-compress-output
