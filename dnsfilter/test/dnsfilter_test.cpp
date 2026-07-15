@@ -1,6 +1,14 @@
+#include <chrono>
 #include <gtest/gtest.h>
 #include <numeric>
 #include <string>
+
+#ifdef _WIN32
+#include <windows.h>
+#else
+#include <fcntl.h>
+#include <sys/stat.h>
+#endif
 
 #include "common/file.h"
 #include "common/logger.h"
@@ -12,16 +20,57 @@
 
 namespace ag::dns::dnsfilter::test {
 
+// Bump the file's mtime to a value strictly later than its creation time, so the
+// DnsFilter auto-update check (file mtime != cached mtime) fires immediately,
+// without sleeping for the filesystem's mtime granularity. Returns false (which
+// the caller ASSERTs on) when the timestamp could not be set, so a failure
+// surfaces as a test failure instead of silent flakiness.
+static bool bump_file_mtime(const std::string &path) {
+    using namespace std::chrono;
+    // +60s is unambiguously beyond the file's creation second on every filesystem.
+    constexpr seconds MTIME_BUMP{60};
+    const auto target = system_clock::now() + MTIME_BUMP;
+    const auto secs = duration_cast<seconds>(target.time_since_epoch()).count();
+#ifdef _WIN32
+    HANDLE handle = CreateFileA(path.c_str(), FILE_WRITE_ATTRIBUTES, FILE_SHARE_READ | FILE_SHARE_WRITE, nullptr,
+            OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
+    if (handle == INVALID_HANDLE_VALUE) {
+        return false;
+    }
+    // 100ns ticks since 1601-01-01 (Windows FILETIME epoch), derived from a
+    // unix-epoch seconds value.
+    constexpr uint64_t UNIX_EPOCH_FILETIME_OFFSET = 11644473600ULL;
+    constexpr uint64_t FILETIME_TICKS_PER_SECOND = 10000000ULL;
+    ULARGE_INTEGER converter;
+    converter.QuadPart = (static_cast<uint64_t>(secs) + UNIX_EPOCH_FILETIME_OFFSET) * FILETIME_TICKS_PER_SECOND;
+    FILETIME write_time{converter.LowPart, converter.HighPart};
+    BOOL ok = SetFileTime(handle, nullptr, nullptr, &write_time);
+    CloseHandle(handle);
+    return ok != 0;
+#else
+    struct timespec times[2] = {};
+    times[0].tv_nsec = UTIME_OMIT;               // atime: leave unchanged
+    times[1].tv_sec = static_cast<time_t>(secs); // mtime: now + 60s
+    return utimensat(AT_FDCWD, path.c_str(), times, 0) == 0;
+#endif
+}
+
 class DnsfilterTest : public ::testing::Test {
 protected:
     DnsFilter filter;
     ag::file::Handle file;
     Logger log{"dnsfilter_test"};
 
-    const std::string TEST_FILTER_NAME = "dnsfilter_test";
+    // Unique per test case: when EXPAND_GTEST=TRUE + ctest -jN, each TEST_F
+    // runs as a separate process sharing the same working directory. A fixed
+    // name like "dnsfilter_test" would make them race on dnsfilter_test.txt.
+    // Embedding the test name makes every instance use its own file.
+    std::string TEST_FILTER_NAME;
 
     void SetUp() override {
         Logger::set_log_level(LogLevel::LOG_LEVEL_TRACE);
+        const auto *info = ::testing::UnitTest::GetInstance()->current_test_info();
+        TEST_FILTER_NAME = std::string("dnsfilter_test_") + info->name();
         file = ag::file::open(file_by_filter_name(TEST_FILTER_NAME), ag::file::CREAT | ag::file::RDONLY);
         ASSERT_TRUE(ag::file::is_valid(file)) << ag::dns::sys::error_string(ag::dns::sys::error_code());
         ag::file::close(file);
@@ -1347,13 +1396,19 @@ TEST_F(DnsfilterTest, FileBasedFilterAutoUpdate) {
 
     fd = ag::file::open(file_name, ag::file::RDWR);
 
-    // need wait at least 1 second after file create
-    std::this_thread::sleep_for(Secs(1));
-
     ag::file::set_position(fd, 0);
     ag::file::write(fd, rule2.c_str(), rule2.size());
     ag::file::write(fd, rule1.c_str(), rule1.size());
     ag::file::close(fd);
+
+    // Force the file's mtime to differ from the value cached at create() time.
+    // The bump is applied after the writes (which would otherwise reset the
+    // mtime to the current second), so the filter's auto-update check
+    // (file mtime != cached mtime) fires deterministically without sleeping for
+    // the filesystem's mtime granularity. Assert that the bump took effect: if
+    // it silently failed (permissions, filesystem limitations), the test would
+    // become flaky depending on the mtime granularity clock.
+    ASSERT_TRUE(bump_file_mtime(file_name)) << "Failed to bump filter file mtime";
 
     rules.clear();
     rules = filter.match(handle, {"example.com", LDNS_RR_TYPE_A});

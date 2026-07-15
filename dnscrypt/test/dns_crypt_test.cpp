@@ -15,6 +15,8 @@
 
 #include "dns/dnscrypt/dns_crypt_ldns.h"
 
+#include "loopback_dnscrypt_server.h"
+
 #ifdef _WIN32
 #include <array>
 #include <winsock2.h>
@@ -33,6 +35,29 @@ TEST(DnscryptSodiumTest, SodiumInitialized) {
 using ldns_rdf_ptr = UniquePtr<ldns_rdf, &ldns_rdf_free>;
 
 static Logger logger{"dns_crypt_test"};
+
+// Builds a canned A-record reply echoing the request's qname with rdata
+// 8.8.8.8, so the in-process LoopbackDnscryptServer can drive the
+// CheckDnscryptServer assertions (exactly one A answer == 8.8.8.8) with no
+// internet access.
+static ldns_pkt_ptr make_canned_a_reply(const ldns_pkt &request) {
+    ldns_pkt_ptr reply{ldns_pkt_clone(&request)};
+    ldns_pkt_set_qr(reply.get(), true);
+    ldns_pkt_set_ra(reply.get(), true);
+    ldns_pkt_set_rcode(reply.get(), LDNS_RCODE_NOERROR);
+    const ldns_rr *question = ldns_rr_list_rr(ldns_pkt_question(&request), 0);
+    if (question == nullptr) {
+        return {};
+    }
+    ldns_rr *answer = ldns_rr_new();
+    ldns_rr_set_owner(answer, ldns_rdf_clone(ldns_rr_owner(question)));
+    ldns_rr_set_ttl(answer, 300);
+    ldns_rr_set_type(answer, LDNS_RR_TYPE_A);
+    ldns_rr_set_class(answer, LDNS_RR_CLASS_IN);
+    ldns_rr_push_rdf(answer, ldns_rdf_new_frm_str(LDNS_RDF_TYPE_A, "8.8.8.8"));
+    ldns_pkt_push_rr(reply.get(), LDNS_SECTION_ANSWER, answer);
+    return reply;
+}
 
 class DnscryptTest : public ::testing::Test {
 
@@ -177,75 +202,93 @@ TEST_F(DnscryptTest, InvalidStamp) {
 TEST_F(DnscryptTest, TimeoutOnDialError) {
     using namespace std::literals::chrono_literals;
     co_await m_loop->co_submit();
-    // AdGuard DNS pointing to a wrong IP
-    static constexpr auto stamp_str = "sdns://"
-                                      "AQIAAAAAAAAADDguOC44Ljg6NTQ0MyDRK0fyUtzywrv4mRCG6vec5EldixbIoMQyLlLKPzkIcyIyLmRu"
-                                      "c2NyeXB0LmRlZmF1bHQubnMxLmFkZ3VhcmQuY29t";
+    // Start the loopback server only to obtain a valid provider key + provider
+    // name (its stamp), then point the stamp at a dead loopback port where
+    // nothing listens. The cert fetch therefore fails and dial errors out —
+    // preserving the former real-network failure semantics with no public DNS
+    // and no sleep() for correctness.
+    ag::test::LoopbackDnscryptServer server([](const ldns_pkt &req) {
+        return make_canned_a_reply(req);
+    });
+    server.start();
+    auto stamp_res = ServerStamp::from_string(server.stamp());
+    ASSERT_FALSE(stamp_res.has_error()) << stamp_res.error()->str();
+    ServerStamp dead_stamp = std::move(stamp_res.value());
+    dead_stamp.server_addr_str = "127.0.0.1:1";
     dnscrypt::Client client;
-    auto err = (co_await client.dial(stamp_str, *m_loop, 300ms, &m_socket_factory, {})).error();
+    auto err = (co_await client.dial(dead_stamp, *m_loop, 300ms, &m_socket_factory, {})).error();
     ASSERT_TRUE(err) << "Dial must not have been possible";
+    server.stop();
 }
 
 TEST_F(DnscryptTest, TimeoutOnDialExchange) {
     using namespace std::literals::chrono_literals;
     co_await m_loop->co_submit();
-    // AdGuard DNS
-    static constexpr auto stamp_str = "sdns://"
-                                      "AQIAAAAAAAAAETk0LjE0MC4xNC4xNDo1NDQzINErR_JS3PLCu_iZEIbq95zkSV2LFsigxDIuUso_"
-                                      "OQhzIjIuZG5zY3J5cHQuZGVmYXVsdC5uczEuYWRndWFyZC5jb20";
+    // Dial succeeds against the loopback DNSCrypt server, then the server
+    // address is retargeted to a dead loopback port where there's no DNSCrypt
+    // server, so the subsequent exchange fails — preserving the former
+    // real-network failure semantics with no public DNS and no sleep() for
+    // correctness.
+    ag::test::LoopbackDnscryptServer server([](const ldns_pkt &req) {
+        return make_canned_a_reply(req);
+    });
+    server.start();
     dnscrypt::Client client;
-    auto dial_res = co_await client.dial(stamp_str, *m_loop, 1000ms, &m_socket_factory, {});
-    ASSERT_FALSE(dial_res.has_error()) << "Could not establish connection with " << stamp_str
-                                       << " cause: " << dial_res.error()->str();
+    auto dial_res = co_await client.dial(server.stamp(), *m_loop, 1000ms, &m_socket_factory, {});
+    ASSERT_FALSE(dial_res.has_error()) << "Could not establish connection: " << dial_res.error()->str();
     auto &server_info = dial_res->server;
-    // Point it to an IP where there's no DNSCrypt server
-    server_info.set_server_address("8.8.8.8:5443");
+    // Point it to a dead loopback port where there's no DNSCrypt server.
+    server_info.set_server_address("127.0.0.1:1");
     auto req = dnscrypt::create_request_ldns_pkt(LDNS_RR_TYPE_A, LDNS_RR_CLASS_IN, LDNS_RD,
             "google-public-dns-a.google.com.", dnscrypt::MAX_DNS_UDP_SAFE_PACKET_SIZE);
     ldns_pkt_set_random_id(req.get());
     auto exchange_err = (co_await client.exchange(*req, server_info, *m_loop, 1000ms, &m_socket_factory, {})).error();
     ASSERT_TRUE(exchange_err) << "Exchange must not have been possible";
+    server.stop();
 }
 
-static constexpr std::string_view check_dns_crypt_server_test_stamps[]{
-        // AdGuard DNS
-        "sdns://"
-        "AQIAAAAAAAAAETk0LjE0MC4xNC4xNDo1NDQzINErR_JS3PLCu_iZEIbq95zkSV2LFsigxDIuUso_"
-        "OQhzIjIuZG5zY3J5cHQuZGVmYXVsdC5uczEuYWRndWFyZC5jb20",
-        // AdGuard DNS Family
-        "sdns://"
-        "AQIAAAAAAAAAETk0LjE0MC4xNC4xNTo1NDQzILgxXdexS27jIKRw3C7Wsao5jMnlhvhdRUXWuMm1AFq6ITIuZG5zY3J5cHQuZmFtaWx5Lm5zMS"
-        "5hZGd1YXJkLmNvbQ",
+// Parametrized over the two DNSCrypt crypto constructions and both transports,
+// matching the former 2-real-server x 2-transport matrix but fully offline:
+// each case dials + exchanges against an in-process LoopbackDnscryptServer
+// (127.0.0.1) that returns a canned 8.8.8.8 A answer, instead of the real
+// AdGuard DNS / AdGuard Family DNSCrypt resolvers.
+struct CheckDnscryptServerParam {
+    dnscrypt::CryptoConstruction algo;
+    utils::TransportProtocol proto;
 };
 
-static constexpr utils::TransportProtocol check_dns_crypt_server_test_protocols[]{
-        utils::TransportProtocol::TP_UDP,
-        utils::TransportProtocol::TP_TCP,
+static const CheckDnscryptServerParam check_dns_crypt_server_test_params[]{
+        {dnscrypt::CryptoConstruction::X_SALSA_20_POLY_1305, utils::TransportProtocol::TP_UDP},
+        {dnscrypt::CryptoConstruction::X_SALSA_20_POLY_1305, utils::TransportProtocol::TP_TCP},
+        {dnscrypt::CryptoConstruction::X_CHACHA_20_POLY_1305, utils::TransportProtocol::TP_UDP},
+        {dnscrypt::CryptoConstruction::X_CHACHA_20_POLY_1305, utils::TransportProtocol::TP_TCP},
 };
 
-struct CheckDnscryptServerTest : DnsCryptTestWithParam<::testing::tuple<std::string_view, utils::TransportProtocol>> {
+struct CheckDnscryptServerTest : DnsCryptTestWithParam<CheckDnscryptServerParam> {
 public:
     CheckDnscryptServerTest() {
         Logger::set_log_level(LogLevel::LOG_LEVEL_TRACE);
     }
-
-protected:
-    SocketFactory m_socket_factory = SocketFactory({*m_loop});
 };
 
 TEST_P(CheckDnscryptServerTest, CheckDnscryptServer) {
     using namespace std::literals::chrono_literals;
     co_await m_loop->co_submit();
-    const auto &stamp_str = std::get<0>(GetParam());
-    const auto &protocol = std::get<1>(GetParam());
+    const auto &param = GetParam();
+    const auto &protocol = param.proto;
+    // One loopback DNSCrypt responder per case, using the param's crypto
+    // construction. Both UDP and TCP are listened (the client picks the
+    // transport based on the param).
+    ag::test::LoopbackDnscryptServer server(make_canned_a_reply, param.algo);
+    server.start();
     dnscrypt::Client client(protocol);
-    auto dial_res = co_await client.dial(stamp_str, *m_loop, 10s, &m_socket_factory, {});
-    ASSERT_FALSE(dial_res.has_error()) << "Could not establish connection with " << stamp_str
-                                       << " cause: " << dial_res.error()->str();
+    auto dial_res = co_await client.dial(server.stamp(), *m_loop, 10s, &m_socket_factory, {});
+    ASSERT_FALSE(dial_res.has_error()) << "Could not establish connection: " << dial_res.error()->str();
     auto &[server_info, dial_rtt] = *dial_res;
     infolog(logger, "Established a connection with {}, ttl={}, rtt={}ms, protocol={}", server_info.get_provider_name(),
             format_gmtime(Secs(server_info.get_server_cert().not_after)), dial_rtt.count(),
             magic_enum::enum_name(protocol));
+    ASSERT_EQ(server_info.get_server_cert().encryption_algorithm, param.algo);
     auto req = dnscrypt::create_request_ldns_pkt(LDNS_RR_TYPE_A, LDNS_RR_CLASS_IN, LDNS_RD,
             "google-public-dns-a.google.com.",
             utils::make_optional_if(
@@ -274,10 +317,10 @@ TEST_P(CheckDnscryptServerTest, CheckDnscryptServer) {
     infolog(logger, "Got proper response from {}, rtt={}ms, protocol={}", server_info.get_provider_name(),
             exchange_rtt.count(), magic_enum::enum_name(protocol));
     free(ldns_rdf_data(rdf0.get())); // NOLINT(cppcoreguidelines-no-malloc,hicpp-no-malloc)
+    server.stop();
 }
 
 INSTANTIATE_TEST_SUITE_P(CheckDnscryptServerTestInstantiation, CheckDnscryptServerTest,
-        ::testing::Combine(::testing::ValuesIn(check_dns_crypt_server_test_stamps),
-                ::testing::ValuesIn(check_dns_crypt_server_test_protocols)));
+        ::testing::ValuesIn(check_dns_crypt_server_test_params));
 
 } // namespace ag::dns::dnscrypt::test

@@ -86,7 +86,7 @@ jobs:
         ARTIFACTORY_API_KEY=${{ secrets.ARTIFACTORY_API_KEY }}
     uses: AdGuardSoftwareLimited/actions/.github/workflows/junit-tests.yml@master
     with:
-      runs-on: '["ephemeral","ephemeral-linux","${{ needs.resolve-images.outputs.corelibs-builder }}","ephemeral-limit-memory-12288","ephemeral-limit-cpu-8"]'
+      runs-on: '["ephemeral","ephemeral-linux","${{ needs.resolve-images.outputs.corelibs-builder }}","ephemeral-limit-memory-12288","ephemeral-limit-cpu-8","ephemeral-run-id-${{ github.run_id }}"]'
       container-image: 'adguard/core-libs:2.11'
       test-command: |
         set -e
@@ -102,18 +102,24 @@ jobs:
         make lint-cpp
         rm -rf build
 
-        mkdir -p build
-        cd build
+        # Run the full test suite (including the real-network integration
+        # tests) in the sanitized Debug CI configuration via the `test-ci`
+        # Makefile target, which builds the tests and runs ctest with
+        # DNSLIBS_INTEGRATION_TESTS=1, a JUnit XML report at build/junit.xml
+        # and the CDash ExperimentalTest step.
+        #
+        # lld keeps link times reasonable under AddressSanitizer; the
+        # container-overflow detection is disabled to avoid false positives
+        # from libc++ allocations in the CI container.
+        #
+        # TODO(scheduled-builds): running the real-network integration tests
+        # on every push and pull request is wasteful and prone to flakes
+        # caused by transient public-DNS failures. Consider moving
+        # `make test-ci` to a scheduled (cron) build and running the offline
+        # `make test` target on push and pull request events instead.
         export LDFLAGS=-fuse-ld=lld
         export ASAN_OPTIONS=detect_container_overflow=0
-        cmake -DCMAKE_BUILD_TYPE=Debug -GNinja \
-            -DCMAKE_C_COMPILER=clang \
-            -DCMAKE_CXX_COMPILER=clang++ \
-            -DCMAKE_CXX_FLAGS='-stdlib=libc++' \
-              -DSANITIZE=yes \
-            ..
-        ninja tests
-        ctest --output-junit junit.xml -D ExperimentalTest --no-compress-output
+        BUILD_TYPE=debug SANITIZE=yes SKIP_BOOTSTRAP=1 make test-ci
       finally-script: |
         set -e
         set -x
@@ -133,6 +139,7 @@ jobs:
       - ${{ needs.resolve-images.outputs.macos }}
       - ephemeral-limit-memory-6144
       - ephemeral-limit-cpu-4
+      - ephemeral-run-id-${{ github.run_id }}
     env:
       # Resolved once; the framework CMake build reads it via cmake/version.cmake
       # (env fallback) for both the version.h header and the Mach-O VERSION.
@@ -141,6 +148,22 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v6
 
+      # This job only produces the deployable AGDnsProxy.xcframework: it
+      # cross-compiles the framework for 5 slices (macos-x86_64, macos-arm64,
+      # ios-arm64, iphonesimulator-x86_64, iphonesimulator-arm64) via
+      # build_dnsproxy_framework.sh and packages the xcframework/podspec/SwiftPM
+      # artifacts. Unlike the Linux and Windows jobs, it runs NO tests — not the
+      # native C++ ctest suite (which Linux/Windows run via `make test-ci` /
+      # `ctest`), and not the Obj-C framework `test_*.mm` tests defined in
+      # platform/mac/framework/CMakeLists.txt (gated on TARGET_OS=macos, and
+      # never built here since only `ninja AGDnsProxy` runs per slice).
+      #
+      # TODO(mac-tests): consider running a native macOS `make test-ci` (root
+      # CMake project, `DNSLIBS_INTEGRATION_TESTS=1`) and/or the Obj-C framework
+      # tests as a separate mac-test job. The real-network integration tests are
+      # better suited to a scheduled build — see the matching TODO(scheduled-
+      # builds) comments in the Linux/Windows jobs and the Makefile `test-ci`
+      # target.
       - name: Build xcframework
         run: |
           set -e
@@ -261,6 +284,7 @@ jobs:
       - ${{ needs.resolve-images.outputs.corelibs-builder }}
       - ephemeral-limit-memory-8192
       - ephemeral-limit-cpu-8
+      - ephemeral-run-id-${{ github.run_id }}
     container:
       image: adguard/core-libs:2.11
     env:
@@ -314,6 +338,7 @@ jobs:
       - ${{ needs.resolve-images.outputs.windows }}
       - ephemeral-limit-memory-6144
       - ephemeral-limit-cpu-4
+      - ephemeral-run-id-${{ github.run_id }}
     env:
       # Read by cmake/version.cmake (the RC resource) and by
       # Directory.Build.targets (the C# assembly version attributes).
@@ -354,7 +379,22 @@ jobs:
             if (!$?) { exit 1 }
             & ninja tests
             if (!$?) { exit 1 }
-            & ctest -D ExperimentalTest --no-compress-output
+            # Run the real-network integration tests (DoT/DoH/DoQ/DNSCrypt)
+            # alongside the offline suite. The capi build lives in its own
+            # source tree, so it cannot reuse the root `make test-ci` target
+            # the Linux job uses.
+            #
+            # TODO(scheduled-builds): running the real-network integration
+            # tests on every push and pull request is wasteful and prone to
+            # flakes caused by transient public-DNS failures. Consider moving
+            # them to a scheduled (cron) build and running only the offline
+            # tests on push and pull request events instead.
+            $Env:DNSLIBS_INTEGRATION_TESTS = "1"
+            # --output-on-failure streams the captured stdout/stderr of every
+            # failing ctest entry into this step's log (otherwise it only lands
+            # in Testing/Temporary/LastTest.log on the runner, which is not
+            # visible in the Actions UI and can't be diagnosed on cancelled runs).
+            & ctest -D ExperimentalTest --no-compress-output --output-on-failure
             if (!$?) { exit 1 }
             popd
           }
@@ -413,6 +453,33 @@ jobs:
         with:
           name: test-results-windows
           path: '**/Testing/*/*.xml'
+          retention-days: 7
+
+      # The CDash XML above carries per-test pass/fail but not the gtest
+      # stdout/stderr; `ctest -D ExperimentalTest` writes that to LastTest.log
+      # on the runner. Mirror it into the step log + run summary and upload it
+      # so a failure (even on a cancelled run) can be diagnosed without SSH to
+      # the runner.
+      - name: Publish C++ test failure output
+        if: always()
+        shell: powershell
+        run: |
+          $logs = Get-ChildItem -Path . -Recurse -Filter 'LastTest.log' -ErrorAction SilentlyContinue
+          foreach ($log in $logs) {
+            Write-Host "::group::LastTest.log ($($log.FullName))"
+            Get-Content $log.FullName -Tail 4000
+            Write-Host "::endgroup::"
+            $tail = (Get-Content $log.FullName -Tail 800) -join "`n"
+            Add-Content -Path $env:GITHUB_STEP_SUMMARY -Value "## C++ test output ($($log.FullName))`n`n`````n$tail`n`````n"
+          }
+
+      - name: Upload C++ test logs
+        uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: test-logs-windows
+          path: '**/Testing/Temporary/LastTest.log'
+          if-no-files-found: warn
           retention-days: 7
 
       - name: Upload C# test results

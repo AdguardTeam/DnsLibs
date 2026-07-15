@@ -3,7 +3,7 @@ project(dnsproxy)
 
 set(CMAKE_CXX_STANDARD 20)
 
-set(DNSLIBS_DIR ..)
+set(DNSLIBS_DIR ${CMAKE_CURRENT_SOURCE_DIR}/..)
 set(TEST_DIR test)
 
 option(DNSLIBS_ENABLE_TCPIP "Enable building TCP/IP (lwIP) module and TUN listener" ON)
@@ -83,15 +83,20 @@ include(${CMAKE_CURRENT_SOURCE_DIR}/../cmake/add_unit_test.cmake)
 link_libraries(dnsproxy)
 set(TEST_DIR ${CMAKE_CURRENT_SOURCE_DIR}/test)
 
+# Resolved relative to this module so the include is correct regardless of which
+# CMakeLists.txt is the top-level project (e.g. on Windows the build is driven
+# from platform/windows/capi, so CMAKE_SOURCE_DIR is not the repo root).
+set(AG_TEST_HELPERS ${DNSLIBS_DIR}/common/test_helpers)
+
 configure_file(test/cname_blocking_test_filter.txt cname_blocking_test_filter.txt COPYONLY)
 configure_file(test/blocking_modes_test_filter.txt blocking_modes_test_filter.txt COPYONLY)
 configure_file(test/whitelist_test_filter.txt whitelist_test_filter.txt COPYONLY)
 configure_file(test/bad_test_filter.txt bad_test_filter.txt COPYONLY)
 configure_file(test/crash_regress_test_filter.txt crash_regress_test_filter.txt COPYONLY)
 
-add_unit_test(dns64_test ${TEST_DIR} "" TRUE TRUE)
-add_unit_test(dnsproxy_test ${TEST_DIR} "" TRUE TRUE)
-add_unit_test(listener_test ${TEST_DIR} "" TRUE FALSE)
+add_unit_test(dns64_test ${TEST_DIR} ${AG_TEST_HELPERS} TRUE TRUE)
+add_unit_test(dnsproxy_test ${TEST_DIR} ${AG_TEST_HELPERS} TRUE TRUE)
+add_unit_test(listener_test ${TEST_DIR} ${AG_TEST_HELPERS} TRUE FALSE)
 add_unit_test(truncate_test ${TEST_DIR} "" TRUE TRUE)
 if(DNSLIBS_ENABLE_TCPIP)
     add_unit_test(tun_listener_test ${TEST_DIR} "" TRUE FALSE)

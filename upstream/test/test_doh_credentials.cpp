@@ -36,6 +36,11 @@ public:
 };
 
 TEST_P(DohUpstreamParamTest, ParsesCredentialsCorrectly) {
+    // These tests assert only on header construction (no DNS exchange is
+    // performed). create_upstream()/init() is zero-I/O: the DoH upstream
+    // resolves the hostname lazily on the first exchange(), so construction
+    // only parses the URL and builds the request template. The tests are fully
+    // offline despite referencing real dns.google hostnames.
     co_await m_loop->co_submit();
 
     const auto &param = GetParam();
