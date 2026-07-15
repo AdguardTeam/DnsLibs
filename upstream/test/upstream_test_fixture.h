@@ -90,8 +90,10 @@ inline TestError &operator+=(TestError &result, const TestError &err) {
 inline ldns_pkt_ptr create_test_message() {
     ldns_pkt *pkt = ldns_pkt_query_new(
             ldns_dname_new_frm_str("google-public-dns-a.google.com."), LDNS_RR_TYPE_A, LDNS_RR_CLASS_IN, LDNS_RD);
-    static size_t id = 0;
-    ldns_pkt_set_id(pkt, id++);
+    // Atomic so concurrent callers (e.g. DISABLED_ConcurrentRequests) don't race
+    // on the query-ID counter, which would yield duplicate/undefined IDs.
+    static std::atomic<size_t> id = 0;
+    ldns_pkt_set_id(pkt, id.fetch_add(1, std::memory_order_relaxed));
     return ldns_pkt_ptr(pkt);
 }
 
@@ -132,7 +134,7 @@ inline coro::Task<void> check_all_results(const std::vector<TestError> &errors) 
 }
 
 template <typename F>
-auto parallel_run_n(EventLoop &loop, size_t count, const F &f) {
+auto parallel_run_n(size_t count, const F &f) {
     auto all_of_awaitable = parallel::all_of<TestError>();
     for (size_t i = 0; i != count; i++) {
         all_of_awaitable.add(f(i));
@@ -143,7 +145,7 @@ auto parallel_run_n(EventLoop &loop, size_t count, const F &f) {
 template <typename F>
 coro::Task<void> parallel_test_basic_n(EventLoop &loop, size_t count, const F &f) {
     co_await loop.co_submit();
-    auto results = co_await parallel_run_n(loop, count, f);
+    auto results = co_await parallel_run_n(count, f);
     co_await check_all_results(results);
 }
 

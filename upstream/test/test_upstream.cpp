@@ -27,7 +27,7 @@ TEST_F(UpstreamTest, TestBootstrapTimeout) {
     // Bare IP:port (no scheme) so the resolver accepts it as a plain DNS bootstrap;
     // the server never replies, so resolution genuinely times out.
     auto dead_bootstrap_addr = AG_FMT("127.0.0.1:{}", dead_bootstrap.port());
-    auto errs = co_await parallel_run_n(*m_loop, count, [&](size_t index) -> coro::Task<TestError> {
+    auto errs = co_await parallel_run_n(count, [&](size_t index) -> coro::Task<TestError> {
         infolog(logger, "Start {}", index);
         // Hostname upstream so the bootstrapper is exercised; the dead bootstrap
         // never resolves it, so the exchange times out within the configured window.

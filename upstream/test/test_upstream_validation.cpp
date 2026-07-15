@@ -149,7 +149,7 @@ TEST_F(UpstreamTest, UseUpstreamWithWrongOptions) {
     }
 }
 
-struct UpstreamIvalidFingerprintTest : UpstreamParamTest<UpstreamOptions> {};
+struct UpstreamInvalidFingerprintTest : UpstreamParamTest<UpstreamOptions> {};
 
 static const UpstreamOptions test_options_with_invalid_fingerprint_data[]{
         {
@@ -169,14 +169,14 @@ static const UpstreamOptions test_options_with_invalid_fingerprint_data[]{
 // No exchange happens: create_upstream() fails at fingerprint parsing, before
 // any network I/O or address resolution. Pointing the addresses at loopback
 // keeps the suite offline.
-TEST_P(UpstreamIvalidFingerprintTest, TestUpstreamIvalidFingerprint) {
+TEST_P(UpstreamInvalidFingerprintTest, TestUpstreamInvalidFingerprint) {
     co_await m_loop->co_submit();
     const auto &op = GetParam();
     auto upstream_res = create_upstream(op);
     ASSERT_TRUE(upstream_res.has_error()) << "Expected that create_upstream return error";
 }
 
-INSTANTIATE_TEST_SUITE_P(UpstreamIvalidFingerprintTest, UpstreamIvalidFingerprintTest,
+INSTANTIATE_TEST_SUITE_P(UpstreamInvalidFingerprintTest, UpstreamInvalidFingerprintTest,
         testing::ValuesIn(test_options_with_invalid_fingerprint_data));
 
 } // namespace ag::dns::upstream::test
