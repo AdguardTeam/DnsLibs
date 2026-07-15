@@ -61,10 +61,16 @@ protected:
     ag::file::Handle file;
     Logger log{"dnsfilter_test"};
 
-    const std::string TEST_FILTER_NAME = "dnsfilter_test";
+    // Unique per test case: when EXPAND_GTEST=TRUE + ctest -jN, each TEST_F
+    // runs as a separate process sharing the same working directory. A fixed
+    // name like "dnsfilter_test" would make them race on dnsfilter_test.txt.
+    // Embedding the test name makes every instance use its own file.
+    std::string TEST_FILTER_NAME;
 
     void SetUp() override {
         Logger::set_log_level(LogLevel::LOG_LEVEL_TRACE);
+        const auto *info = ::testing::UnitTest::GetInstance()->current_test_info();
+        TEST_FILTER_NAME = std::string("dnsfilter_test_") + info->name();
         file = ag::file::open(file_by_filter_name(TEST_FILTER_NAME), ag::file::CREAT | ag::file::RDONLY);
         ASSERT_TRUE(ag::file::is_valid(file)) << ag::dns::sys::error_string(ag::dns::sys::error_code());
         ag::file::close(file);

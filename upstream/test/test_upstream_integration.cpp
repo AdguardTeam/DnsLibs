@@ -52,7 +52,7 @@ static const UpstreamTestData real_upstreams_data[]{
                 {}},
         {// AdGuard Family (DNSCrypt)
                 "sdns://"
-                "AQIAAAAAAAAAETk0LjE0MC4xNC4xNTo1NDQzILgxXdexS27jIKRw3C7Wsao5jMnlhvhdRUXWuMm1AFq6ITIuZG5zY3J5cHQuZmFta"
+                "AQIAAAAAAAAAETk0LjE0MC4xNC4xNTo1NDQzILgxXdexS27jIKRw3C7Wsao5jMnlhvhdRUXWuMm1AFq6ITIuZG5zY3J5cHQuZmFtaW"
                 "x5Lm5zMS5hZGd1YXJkLmNvbQ",
                 {"8.8.8.8"}},
         {// Cloudflare DNS (DoH)
