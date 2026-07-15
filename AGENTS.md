@@ -29,6 +29,7 @@ See [README.md](README.md) for full product details.
 | `dnscrypt/` | DNSCrypt client implementation |
 | `dnsstamp/` | DNS stamp parsing |
 | `tcpip/` | TCP/IP stack integration |
+| `tools/adig/` | `adig`: dig-like DNS query CLI tool (plain DNS, DoT, DoH, DoQ, DNSCrypt) |
 | `platform/android/` | Android adapter (Kotlin/Gradle) + standalone TUN-based DNS app |
 | `platform/mac/` | Apple adapter (Swift/ObjC, CocoaPods, XCFramework) + standalone TUN-based DNS app |
 | `platform/windows/` | Windows adapter (C++/CMake, C# bindings) |
@@ -46,10 +47,13 @@ common ← dnsfilter ← dnsproxy
 common ← dnscrypt ← upstream
 common ← dnsstamp ← upstream
 common ← tcpip ← dnsproxy (optional, when DNSLIBS_ENABLE_TCPIP=ON)
+common ← upstream ← adig (standalone CLI tool in `tools/adig`)
 
 ```
 
 `platform/*` adapters wrap `dnsproxy` for their respective OS.
+
+`tools/adig` is a standalone CLI tool built directly on the `upstream` library.
 
 ## Build Commands
 
@@ -59,6 +63,8 @@ Run `make init` once after cloning to set up git hooks.
 | --- | --- |
 | `make init` | Configure git hooks path to `./scripts/hooks` |
 | `make build_libs` | Bootstrap Conan deps → CMake configure → build `dnsproxy` |
+| `make build_adig` | Build the `adig` dig-like DNS query CLI tool |
+| `make generate_root_hints` | Regenerate `tools/adig/root_servers.h` from the IANA root hints (needs network) |
 | `make test` | Run all tests (`test-cpp`) |
 | `make test-cpp` | Build libs → build test targets → run `ctest` |
 | `make test-integration` | Build libs → run `ctest` with `DNSLIBS_INTEGRATION_TESTS=1` (real-network tests enabled; requires internet) |
@@ -102,6 +108,25 @@ You MUST follow the following rules for EVERY task that you perform:
 
 - When making changes to the project structure, ensure the Project structure
   section in `AGENTS.md` is updated and remains valid.
+
+- You MUST keep documentation in sync with code changes — stale docs are bugs.
+  Each `docs/` file maps to a directory (see Directory Structure above); update
+  the matching doc when you change that area. Specifically:
+
+    - `DEVELOPMENT.md` — top-level dev workflow (build/test/lint targets,
+      manual CMake, `listener_standalone`, Conan export flow). Cross-link to
+      `AGENTS.md` / `docs/` instead of duplicating.
+    - `docs/adig.md` — `adig` dig-like CLI tool (`tools/adig`): build,
+      usage, and options.
+    - `docs/architecture.md` — core proxy pipeline, upstream selection,
+      `DnsProxySettings` fields/defaults, filtering.
+    - `docs/android.md` — `platform/android` build/prereqs/TUN test app.
+    - `docs/macos-framework.md` — `AGDnsProxy` XCFramework (`platform/mac`).
+    - `docs/macos-testapp.md` — macOS/iOS sample app (`platform/mac/testapp`).
+    - `docs/windows-capi.md` — `AdguardDns*` DLL (`platform/windows/capi`).
+    - `docs/windows-testapp.md` — Windows C# test app
+      (`platform/windows/cs/Adguard.Dns`).
+    - `docs/dns-proxy-provider.md` — `NEDNSProxyProvider` integration.
 
 - If the prompt essentially asks you to refactor or improve existing code, check
   if you can phrase it as a code guideline. If it's possible, add it to
@@ -185,6 +210,19 @@ timestamp manipulation (`utimensat`/`SetFileTime`) instead.
   Reserve `REQUIRE_INTEGRATION()` for tests that legitimately exercise a real
   public service (e.g. a one-per-protocol real-world smoke test, or the
   OS-resolver tests). The default `make test` suite MUST remain fully offline.
+- Unit tests must not depend on remote/third-party resources (network, DNS, DHCP).
+  If an external data set is needed, ship it as a checked-in fixture or generated
+  header instead of fetching it at test time.
+- When implementing dig-compatible features in `tools/adig`, preserve dig's
+  order-sensitive display-flag precedence: options that imply default display
+  toggles (e.g. `+trace`) apply those defaults at the point they appear in the
+  argv stream, and any later flag (`+comments`, `+stats`, ...) still wins.
+  Compare captures of `dig +<option>` against the adig output before
+  committing. Keep the per-hop / per-query output filtering in the pure
+  `adig_cli` layer (utilities like `format_packet_dig` /
+  `format_trace_packet_dig`) so they remain unit-testable without an event
+  loop; the coroutine in `adig.cpp` only measures timing and feeds the actual
+  server IP / hostname.
 
 ## Docker Debug Environment
 

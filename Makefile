@@ -100,6 +100,17 @@ compile_commands:
 build_libs: setup_cmake
 	cmake --build $(BUILD_DIR) --target dnsproxy
 
+.PHONY: build_adig
+## Build the adig CLI tool
+build_adig: setup_cmake
+	cmake --build $(BUILD_DIR) --target adig
+
+.PHONY: generate_root_hints
+## Regenerate tools/adig/root_servers.h from the IANA root hints.
+## Requires network access; ordinary builds/tests use the checked-in header.
+generate_root_hints:
+	python3 scripts/generate_root_hints.py
+
 .PHONY: clean
 ## Clean the project
 clean:

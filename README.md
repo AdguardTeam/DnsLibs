@@ -31,6 +31,15 @@ The library is organized into a shared C++ core and platform-specific adapters.
     - [Android](platform/android/dnsproxy/lib/src/main/java/com/adguard/dnslibs/proxy/DnsProxySettings.java)
 - [Filtering rules syntax](https://adguard-dns.io/kb/general/dns-filtering-syntax/)
 
+## `adig` command-line tool
+
+The repository includes `adig`, a small `dig`-like command-line tool that can
+send DNS queries over all supported protocols (plain DNS, DoT, DoH, DoQ, and
+DNSCrypt via DNS Stamps). It is handy for ad-hoc DNS lookups and for exercising
+upstream configurations during development.
+
+See [`docs/adig.md`](docs/adig.md) for build instructions, usage, and options.
+
 ## Documentation
 
 - [Developer documentation](DEVELOPMENT.md) — how to build, test, and develop the library.

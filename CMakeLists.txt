@@ -5,5 +5,6 @@ endif()
 project(agdns C CXX)
 
 add_subdirectory(proxy)
+add_subdirectory(tools/adig)
 
 enable_testing()
