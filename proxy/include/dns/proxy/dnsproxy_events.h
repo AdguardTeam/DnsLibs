@@ -86,10 +86,11 @@ struct DnsProxyEvents {
     /**
      * Fired after the optimistic-cache background refetch updates the cache entry for a domain
      * (whether the refetch succeeded and put a fresh entry, or removed a stale entry).
-     * Carries the normalized domain name. Default: no-op.
+     * Carries the normalized domain name as an owning std::string, so handlers may safely
+     * retain it beyond the callback (the producer passes it by value/move). Default: no-op.
      * Used by tests to await completion deterministically instead of sleeping.
      */
-    std::function<void(std::string_view)> on_cache_updated;
+    std::function<void(std::string)> on_cache_updated;
 };
 
 } // namespace ag::dns

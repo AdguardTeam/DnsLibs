@@ -3088,7 +3088,7 @@ TEST_F(DnsProxyTest, RegressCache1) {
                         last_event = event;
                     },
             .on_cache_updated =
-                    [&](std::string_view domain) {
+                    [&](const std::string &domain) {
                         if (domain == "cloudflare-ech.com") {
                             bool expected = false;
                             if (bg_signalled.compare_exchange_strong(expected, true)) {

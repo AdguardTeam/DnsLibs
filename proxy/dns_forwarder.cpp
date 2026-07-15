@@ -1234,7 +1234,7 @@ coro::Task<void> DnsForwarder::optimistic_cache_background_resolve(ldns_pkt_ptr 
         m_response_cache.put(req.get(), std::move(res.value()), upstream->options().id);
     }
     if (m_events != nullptr && m_events->on_cache_updated) {
-        m_events->on_cache_updated(normalized_domain);
+        m_events->on_cache_updated(std::move(normalized_domain));
     }
     co_return;
 }
