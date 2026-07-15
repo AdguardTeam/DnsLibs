@@ -390,7 +390,11 @@ jobs:
             # them to a scheduled (cron) build and running only the offline
             # tests on push and pull request events instead.
             $Env:DNSLIBS_INTEGRATION_TESTS = "1"
-            & ctest -D ExperimentalTest --no-compress-output
+            # --output-on-failure streams the captured stdout/stderr of every
+            # failing ctest entry into this step's log (otherwise it only lands
+            # in Testing/Temporary/LastTest.log on the runner, which is not
+            # visible in the Actions UI and can't be diagnosed on cancelled runs).
+            & ctest -D ExperimentalTest --no-compress-output --output-on-failure
             if (!$?) { exit 1 }
             popd
           }
@@ -449,6 +453,33 @@ jobs:
         with:
           name: test-results-windows
           path: '**/Testing/*/*.xml'
+          retention-days: 7
+
+      # The CDash XML above carries per-test pass/fail but not the gtest
+      # stdout/stderr; `ctest -D ExperimentalTest` writes that to LastTest.log
+      # on the runner. Mirror it into the step log + run summary and upload it
+      # so a failure (even on a cancelled run) can be diagnosed without SSH to
+      # the runner.
+      - name: Publish C++ test failure output
+        if: always()
+        shell: powershell
+        run: |
+          $logs = Get-ChildItem -Path . -Recurse -Filter 'LastTest.log' -ErrorAction SilentlyContinue
+          foreach ($log in $logs) {
+            Write-Host "::group::LastTest.log ($($log.FullName))"
+            Get-Content $log.FullName -Tail 4000
+            Write-Host "::endgroup::"
+            $tail = (Get-Content $log.FullName -Tail 800) -join "`n"
+            Add-Content -Path $env:GITHUB_STEP_SUMMARY -Value "## C++ test output ($($log.FullName))`n`n`````n$tail`n`````n"
+          }
+
+      - name: Upload C++ test logs
+        uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: test-logs-windows
+          path: '**/Testing/Temporary/LastTest.log'
+          if-no-files-found: warn
           retention-days: 7
 
       - name: Upload C# test results
