@@ -7,6 +7,14 @@
 // stays fully offline: the DoT upstream performs TLS over the tunneled TCP
 // connection to a local LoopbackTlsServer instead of a real public endpoint.
 //
+// CONNECT target limitation: the target host is interpreted as an IPv4 literal
+// only (via inet_pton(AF_INET)). Hostname resolution (getaddrinfo) and IPv6
+// literals are intentionally NOT supported: this helper exists solely to tunnel
+// to an in-process loopback server addressed as 127.0.0.1:<port>, and
+// performing DNS resolution would violate the default offline-only test
+// policy. Non-IPv4-literal targets are rejected (the tunnel is closed) rather
+// than resolved.
+//
 // Reuses the cross-platform socket helpers shared by LoopbackDnsServer
 // (detail::open_stream_socket / close_fd / shutdown_socket / send_exact, etc.),
 // so no new platform abstraction is introduced. The relay loop is
@@ -155,6 +163,9 @@ private:
         }
         sockaddr_in taddr{};
         taddr.sin_family = AF_INET;
+        // IPv4-literal targets only: see the CONNECT target limitation note at
+        // the top of this file. Hostnames/IPv6 are rejected (tunnel closed)
+        // rather than resolved, keeping the helper network-free.
         if (inet_pton(AF_INET, host.c_str(), &taddr.sin_addr) != 1) {
             detail::close_fd(target_sock);
             return;

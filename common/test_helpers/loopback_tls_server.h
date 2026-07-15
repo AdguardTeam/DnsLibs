@@ -112,15 +112,42 @@ public:
         }
         SSL_CTX_set_alpn_select_cb(m_ssl_ctx.get(), detail::alpn_select_dot_cb, nullptr);
 
+        // Fail fast on socket/bind/listen failures instead of starting an
+        // accept thread on an invalid/unbound socket (which leaves m_port == 0
+        // and causes hard-to-diagnose flakes). ADD_FAILURE (not ASSERT_*) for
+        // the same coroutine-safety reason documented above, then early-return
+        // so the accept thread is never started. stop()/destruction remain
+        // safe: m_running stays false, so no thread is ever joined.
         m_tcp_sock = detail::open_stream_socket();
+        if (m_tcp_sock == detail::invalid_socket()) {
+            ADD_FAILURE() << "LoopbackTlsServer: socket() failed";
+            return;
+        }
         detail::set_reuseaddr(m_tcp_sock);
         sockaddr_in addr{};
         addr.sin_family = AF_INET;
         addr.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
         addr.sin_port = 0;
-        (void) ::bind(m_tcp_sock, reinterpret_cast<sockaddr *>(&addr), sizeof(addr));
+        if (::bind(m_tcp_sock, reinterpret_cast<sockaddr *>(&addr), sizeof(addr)) != 0) {
+            ADD_FAILURE() << "LoopbackTlsServer: bind() failed";
+            detail::close_fd(m_tcp_sock);
+            m_tcp_sock = detail::invalid_socket();
+            return;
+        }
         m_port = detail::get_port(m_tcp_sock);
-        (void) ::listen(m_tcp_sock, SOMAXCONN);
+        if (::listen(m_tcp_sock, SOMAXCONN) != 0) {
+            ADD_FAILURE() << "LoopbackTlsServer: listen() failed";
+            detail::close_fd(m_tcp_sock);
+            m_tcp_sock = detail::invalid_socket();
+            m_port = 0;
+            return;
+        }
+        if (m_port == 0) {
+            ADD_FAILURE() << "LoopbackTlsServer: bound port resolved to 0";
+            detail::close_fd(m_tcp_sock);
+            m_tcp_sock = detail::invalid_socket();
+            return;
+        }
         m_running.store(true);
         m_thread = std::thread([this] {
             tls_loop();

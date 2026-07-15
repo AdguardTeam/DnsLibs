@@ -150,6 +150,13 @@ timestamp manipulation (`utimensat`/`SetFileTime`) instead.
     - `UPPER_CASE`: constants, `constexpr` locals, static constants
     - Private/protected members prefixed with `m_`, globals with `g_`
 - Use `libc++` (not `libstdc++`)
+- **Never capture in a coroutine lambda; pass everything as a parameter.**
+  A lambda coroutine's captures live in the temporary closure object, destroyed
+  at the end of the full expression that creates it — before the coroutine
+  resumes after its first `co_await`. Any capture read after that is a
+  use-after-free. Coroutine parameters, by contrast, are moved/copied into the
+  heap-allocated coroutine frame and survive every suspension/resume. This
+  applies to `coro::run_detached(...)` and `coro::to_future(...)` wrappers too.
 
 ### Markdown
 

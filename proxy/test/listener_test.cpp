@@ -308,20 +308,37 @@ TEST(ListenerTest, ManyRequestsPending) {
     ldns_buffer_ptr buffer{ldns_buffer_new(REQUEST_BUFFER_INITIAL_CAPACITY)};
     ldns_pkt2buffer_wire(buffer.get(), reqpkt.get());
 
-    // Launch 10 000 fire-and-forget requests and deterministically await all of
-    // them via parallel::all_of instead of sleeping for a fixed 10 s.
-    auto all = parallel::all_of<bool>();
-    for (int i = 0; i < 10000; i++) {
-        all.add([&buffer](DnsProxy &proxy) -> coro::Task<bool> {
-            co_await proxy.handle_message(
-                    {ldns_buffer_at(buffer.get(), 0), ldns_buffer_position(buffer.get())}, nullptr);
-            co_return true;
-        }(proxy));
+    // Launch the 10 000-request "many pending" storm as fire-and-forget
+    // coroutines, awaited via an atomic counter + condition_variable barrier
+    // instead of sleep(). Pass buffer/counter/cv as parameters, not captures.
+    constexpr int TOTAL_REQUESTS = 10000;
+    std::mutex storm_mtx;
+    std::condition_variable storm_cv;
+    std::atomic<int> storm_pending{TOTAL_REQUESTS};
+
+    for (int i = 0; i < TOTAL_REQUESTS; ++i) {
+        ag::coro::run_detached([](DnsProxy &proxy, ldns_buffer *buffer, std::atomic<int> &pending,
+                                       std::condition_variable &cv) -> ag::coro::Task<void> {
+            co_await proxy.handle_message({ldns_buffer_at(buffer, 0), ldns_buffer_position(buffer)}, nullptr);
+            if (pending.fetch_sub(1, std::memory_order_acq_rel) == 1) {
+                cv.notify_one();
+            }
+            co_return;
+        }(proxy, buffer.get(), std::ref(storm_pending), std::ref(storm_cv)));
     }
-    coro::to_future([&all]() -> coro::Task<void> {
-        (void) co_await all;
-    }())
-            .get();
+
+    // Bounded wait: a regression that never completes surfaces as an
+    // ASSERT failure here instead of hanging the test binary. The predicate
+    // guards against lost wakeups: the last worker sets pending to 0 before
+    // calling notify_one(), so a notify that races ahead of the wait is still
+    // observed via the re-checked predicate on entry.
+    {
+        std::unique_lock<std::mutex> lk(storm_mtx);
+        storm_cv.wait_for(lk, 30s, [&] {
+            return storm_pending.load() == 0;
+        });
+    }
+    ASSERT_EQ(storm_pending.load(), 0) << "not all " << TOTAL_REQUESTS << " storm requests completed in time";
 
     // Send a new request after the storm and await its result directly instead
     // of sleeping for a fixed 3 s. This is race-free: the storm above has
@@ -332,10 +349,10 @@ TEST(ListenerTest, ManyRequestsPending) {
     buffer.reset(ldns_buffer_new(REQUEST_BUFFER_INITIAL_CAPACITY));
     ldns_pkt2buffer_wire(buffer.get(), reqpkt2.get());
 
-    Uint8Vector last_reply_res = coro::to_future([&buffer](DnsProxy &proxy) -> coro::Task<Uint8Vector> {
-        co_return co_await proxy.handle_message(
-                {ldns_buffer_at(buffer.get(), 0), ldns_buffer_position(buffer.get())}, nullptr);
-    }(proxy))
+    // Pass `buffer` as a by-value parameter, not a capture.
+    Uint8Vector last_reply_res = coro::to_future([](DnsProxy &proxy, ldns_buffer *buffer) -> coro::Task<Uint8Vector> {
+        co_return co_await proxy.handle_message({ldns_buffer_at(buffer, 0), ldns_buffer_position(buffer)}, nullptr);
+    }(proxy, buffer.get()))
                                          .get();
 
     // check if last request got correct response
