@@ -13,6 +13,8 @@
 #include <thread>
 #include <vector>
 
+#include <gtest/gtest.h>
+
 #include <ldns/ldns.h>
 
 #include "common/net_utils.h"
@@ -214,6 +216,12 @@ public:
 
     // Binds 127.0.0.1:0, starts the worker thread(s). Blocks until the
     // ephemeral port is assigned, so address()/port() are usable on return.
+    // Fail-fast: any socket()/bind()/listen() failure (or a port that resolves
+    // to 0) records a test failure via ADD_FAILURE (not ASSERT_*: those expand to
+    // `co_return` and would turn this void method into a coroutine), resets the
+    // partially-opened sockets, and returns without starting any worker thread
+    // or flipping m_running — so stop()/destruction never join a non-existent
+    // thread. Mirrors the defensive pattern in LoopbackTlsServer::start().
     void start() {
         if (m_running.load()) {
             return;
@@ -222,31 +230,71 @@ public:
 
         if (m_udp) {
             m_udp_sock = detail::open_dgram_socket();
+            if (m_udp_sock == detail::invalid_socket()) {
+                ADD_FAILURE() << "LoopbackDnsServer: UDP socket() failed";
+                reset_start_state();
+                return;
+            }
             sockaddr_in addr{};
             addr.sin_family = AF_INET;
             addr.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
             addr.sin_port = 0;
-            (void) ::bind(m_udp_sock, reinterpret_cast<sockaddr *>(&addr), sizeof(addr));
+            if (::bind(m_udp_sock, reinterpret_cast<sockaddr *>(&addr), sizeof(addr)) != 0) {
+                ADD_FAILURE() << "LoopbackDnsServer: UDP bind() failed";
+                reset_start_state();
+                return;
+            }
             m_port = detail::get_port(m_udp_sock);
-            m_running.store(true);
-            m_udp_thread = std::thread([this] {
-                udp_loop();
-            });
+            if (m_port == 0) {
+                ADD_FAILURE() << "LoopbackDnsServer: UDP bound port resolved to 0";
+                reset_start_state();
+                return;
+            }
         }
 
         if (m_tcp) {
             m_tcp_sock = detail::open_stream_socket();
+            if (m_tcp_sock == detail::invalid_socket()) {
+                ADD_FAILURE() << "LoopbackDnsServer: TCP socket() failed";
+                reset_start_state();
+                return;
+            }
             detail::set_reuseaddr(m_tcp_sock);
             sockaddr_in addr{};
             addr.sin_family = AF_INET;
             addr.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
             addr.sin_port = htons(m_port);
-            (void) ::bind(m_tcp_sock, reinterpret_cast<sockaddr *>(&addr), sizeof(addr));
+            if (::bind(m_tcp_sock, reinterpret_cast<sockaddr *>(&addr), sizeof(addr)) != 0) {
+                ADD_FAILURE() << "LoopbackDnsServer: TCP bind() failed";
+                reset_start_state();
+                return;
+            }
             if (m_port == 0) {
                 m_port = detail::get_port(m_tcp_sock);
             }
-            (void) ::listen(m_tcp_sock, SOMAXCONN);
-            m_running.store(true);
+            if (::listen(m_tcp_sock, SOMAXCONN) != 0) {
+                ADD_FAILURE() << "LoopbackDnsServer: TCP listen() failed";
+                reset_start_state();
+                return;
+            }
+            if (m_port == 0) {
+                ADD_FAILURE() << "LoopbackDnsServer: TCP bound port resolved to 0";
+                reset_start_state();
+                return;
+            }
+        }
+
+        // All socket setup succeeded: flip m_running and start the worker
+        // thread(s) only now, so a setup failure never leaves the server running
+        // on an invalid/unbound socket (and never leaves one transport running
+        // while the other failed).
+        m_running.store(true);
+        if (m_udp) {
+            m_udp_thread = std::thread([this] {
+                udp_loop();
+            });
+        }
+        if (m_tcp) {
             m_tcp_thread = std::thread([this] {
                 tcp_loop();
             });
@@ -287,6 +335,18 @@ private:
     // parse → handler → serialize path is identical to LoopbackTlsServer.
     std::optional<std::vector<uint8_t>> build_reply_raw(const uint8_t *req_data, size_t req_len) {
         return detail::build_dns_reply(m_handler, req_data, req_len);
+    }
+
+    // Closes any sockets opened by start() and resets port bookkeeping. Used
+    // only by start()'s fail-fast branches so the server is never left
+    // half-initialized (one transport up, the other down). Idempotent: closing
+    // an invalid_socket() is a no-op.
+    void reset_start_state() {
+        detail::close_fd(m_udp_sock);
+        detail::close_fd(m_tcp_sock);
+        m_udp_sock = detail::invalid_socket();
+        m_tcp_sock = detail::invalid_socket();
+        m_port = 0;
     }
 
     void udp_loop() {

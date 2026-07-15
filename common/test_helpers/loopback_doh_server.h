@@ -203,14 +203,35 @@ public:
         SSL_CTX_set_alpn_select_cb(m_ssl_ctx.get(), alpn_select_cb, &m_alpn);
 
         m_tcp_sock = detail::open_stream_socket();
+        if (m_tcp_sock == detail::invalid_socket()) {
+            ADD_FAILURE() << "LoopbackDohServer: socket() failed";
+            return;
+        }
         detail::set_reuseaddr(m_tcp_sock);
         sockaddr_in addr{};
         addr.sin_family = AF_INET;
         addr.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
         addr.sin_port = 0;
-        (void) ::bind(m_tcp_sock, reinterpret_cast<sockaddr *>(&addr), sizeof(addr));
+        if (::bind(m_tcp_sock, reinterpret_cast<sockaddr *>(&addr), sizeof(addr)) != 0) {
+            ADD_FAILURE() << "LoopbackDohServer: bind() failed";
+            detail::close_fd(m_tcp_sock);
+            m_tcp_sock = detail::invalid_socket();
+            return;
+        }
         m_port = detail::get_port(m_tcp_sock);
-        (void) ::listen(m_tcp_sock, SOMAXCONN);
+        if (::listen(m_tcp_sock, SOMAXCONN) != 0) {
+            ADD_FAILURE() << "LoopbackDohServer: listen() failed";
+            detail::close_fd(m_tcp_sock);
+            m_tcp_sock = detail::invalid_socket();
+            m_port = 0;
+            return;
+        }
+        if (m_port == 0) {
+            ADD_FAILURE() << "LoopbackDohServer: bound port resolved to 0";
+            detail::close_fd(m_tcp_sock);
+            m_tcp_sock = detail::invalid_socket();
+            return;
+        }
         m_running.store(true);
         m_thread = std::thread([this] {
             doh_loop();

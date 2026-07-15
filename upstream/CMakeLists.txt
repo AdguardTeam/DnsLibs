@@ -111,13 +111,25 @@ if (ANDROID)
 else()
     add_unit_test(test_upstream "${TEST_DIR}" "${DNSLIBS_DIR}/dnscrypt/src;${AG_TEST_HELPERS}" TRUE TRUE)
 endif()
+# Validation cases (TEST_P): wrong options + invalid fingerprints. EXPAND_GTEST=FALSE.
+if (ANDROID)
+    add_unit_test(test_upstream_validation "${TEST_DIR}" "${DNSLIBS_DIR}/dnscrypt/src;${DNSLIBS_DIR}/platform/android/dnsproxy/lib/src/main/cpp;${AG_TEST_HELPERS}" TRUE FALSE)
+else()
+    add_unit_test(test_upstream_validation "${TEST_DIR}" "${DNSLIBS_DIR}/dnscrypt/src;${AG_TEST_HELPERS}" TRUE FALSE)
+endif()
+# Integration cases (TEST_P): real-network exchanges + dead-proxy failures. EXPAND_GTEST=FALSE.
+if (ANDROID)
+    add_unit_test(test_upstream_integration "${TEST_DIR}" "${DNSLIBS_DIR}/dnscrypt/src;${DNSLIBS_DIR}/platform/android/dnsproxy/lib/src/main/cpp;${AG_TEST_HELPERS}" TRUE FALSE)
+else()
+    add_unit_test(test_upstream_integration "${TEST_DIR}" "${DNSLIBS_DIR}/dnscrypt/src;${AG_TEST_HELPERS}" TRUE FALSE)
+endif()
 add_unit_test(test_upstream_utils "${TEST_DIR}" "${AG_TEST_HELPERS}" TRUE TRUE)
 if (APPLE)
     add_unit_test(test_system_resolver "${TEST_DIR}" "${AG_TEST_HELPERS}" TRUE TRUE)
 endif ()
 add_unit_test(test_dot_invalid_address "${TEST_DIR}" "${DNSLIBS_DIR}/upstream/src;${AG_TEST_HELPERS}" TRUE TRUE)
 add_unit_test(test_bootstrapper "${TEST_DIR}" "${DNSLIBS_DIR}/upstream/src;${AG_TEST_HELPERS}" TRUE TRUE)
-add_unit_test(test_doh_credentials "${TEST_DIR}" "${DNSLIBS_DIR}/upstream/src;${AG_TEST_HELPERS}" TRUE TRUE)
+add_unit_test(test_doh_credentials "${TEST_DIR}" "${DNSLIBS_DIR}/upstream/src;${AG_TEST_HELPERS}" TRUE FALSE) # TEST_P (DohUpstreamParamTest): FALSE per cmake/add_unit_test.cmake
 # Shared test infrastructure (loopback DNS server, MockUpstream, integration
 # guard) lives in common/test_helpers (header-only); the test itself is built
 # here because MockUpstream derives from dns::Upstream and the round-trip tests

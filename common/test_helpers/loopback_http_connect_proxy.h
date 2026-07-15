@@ -24,6 +24,7 @@
 #include <algorithm>
 #include <atomic>
 #include <cstdint>
+#include <gtest/gtest.h>
 #include <mutex>
 #include <string>
 #include <string_view>
@@ -50,20 +51,47 @@ public:
 
     // Binds 127.0.0.1:0, listens, starts the accept thread. Blocks until the
     // ephemeral port is assigned, so port() is usable on return.
+    // Fail-fast: any socket()/bind()/listen() failure (or a port that resolves
+    // to 0) records a test failure via ADD_FAILURE (not ASSERT_*: those expand to
+    // `co_return` and would turn this void method into a coroutine), resets the
+    // partially-opened socket, and returns without starting the accept thread or
+    // flipping m_running — so stop()/destruction never join a non-existent
+    // thread. Mirrors the defensive pattern in LoopbackTlsServer::start().
     void start() {
         if (m_running.load()) {
             return;
         }
         detail::ensure_winsock();
         m_listen_sock = detail::open_stream_socket();
+        if (m_listen_sock == detail::invalid_socket()) {
+            ADD_FAILURE() << "LoopbackHttpConnectProxy: socket() failed";
+            return;
+        }
         detail::set_reuseaddr(m_listen_sock);
         sockaddr_in addr{};
         addr.sin_family = AF_INET;
         addr.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
         addr.sin_port = 0;
-        (void) ::bind(m_listen_sock, reinterpret_cast<sockaddr *>(&addr), sizeof(addr));
+        if (::bind(m_listen_sock, reinterpret_cast<sockaddr *>(&addr), sizeof(addr)) != 0) {
+            ADD_FAILURE() << "LoopbackHttpConnectProxy: bind() failed";
+            detail::close_fd(m_listen_sock);
+            m_listen_sock = detail::invalid_socket();
+            return;
+        }
         m_port = detail::get_port(m_listen_sock);
-        (void) ::listen(m_listen_sock, SOMAXCONN);
+        if (::listen(m_listen_sock, SOMAXCONN) != 0) {
+            ADD_FAILURE() << "LoopbackHttpConnectProxy: listen() failed";
+            detail::close_fd(m_listen_sock);
+            m_listen_sock = detail::invalid_socket();
+            m_port = 0;
+            return;
+        }
+        if (m_port == 0) {
+            ADD_FAILURE() << "LoopbackHttpConnectProxy: bound port resolved to 0";
+            detail::close_fd(m_listen_sock);
+            m_listen_sock = detail::invalid_socket();
+            return;
+        }
         m_running.store(true);
         m_thread = std::thread([this] {
             accept_loop();
