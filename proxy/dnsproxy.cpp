@@ -85,13 +85,7 @@ static const DnsProxySettings DEFAULT_PROXY_SETTINGS = {.upstreams = {},
         .outbound_proxy = std::nullopt,
         .block_ipv6 = false,
         .ipv6_available = true,
-#ifdef _WIN32
-        // On Windows, a funky RCODE leads to issues with the system resolver
-        // trying other servers and AdGuard VPN blocking those requests.
         .adblock_rules_blocking_mode = DnsProxyBlockingMode::UNSPECIFIED_ADDRESS,
-#else
-        .adblock_rules_blocking_mode = DnsProxyBlockingMode::REFUSED,
-#endif
         .hosts_rules_blocking_mode = DnsProxyBlockingMode::ADDRESS,
         .dns_cache_size = 1000,
         .optimistic_cache = true,
