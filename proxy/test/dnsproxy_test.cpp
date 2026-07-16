@@ -1152,8 +1152,8 @@ TEST_F(DnsProxyCacheTest, CacheKeyTest) {
 }
 
 TEST_F(DnsProxyTest, BlockingModeDefault) {
-    DnsProxySettings settings = DnsProxySettings::get_default();
-    settings.upstreams = {{.address = "8.8.8.8"}};
+    DnsProxySettings settings = make_dnsproxy_settings();
+    settings.adblock_rules_blocking_mode = DnsProxyBlockingMode::UNSPECIFIED_ADDRESS;
     settings.filter_params = {{{1, "blocking_modes_test_filter.txt"}}};
 
     ASSERT_EQ(DnsProxyBlockingMode::UNSPECIFIED_ADDRESS, settings.adblock_rules_blocking_mode);
