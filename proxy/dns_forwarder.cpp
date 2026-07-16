@@ -93,18 +93,18 @@ static void log_packet(
         return;
     }
 
-    ldns_buffer *str_dns = ldns_buffer_new(LDNS_MAX_PACKETLEN);
-    ldns_status status = ldns_pkt2buffer_str(str_dns, packet);
+    ldns_buffer_ptr str_dns{ldns_buffer_new(LDNS_MAX_PACKETLEN)};
+    ldns_status status = ldns_pkt2buffer_str(str_dns.get(), packet);
     if (status != LDNS_STATUS_OK) {
         dbglog_id(log, packet, "Failed to print {}: {} ({})", pkt_name, ldns_get_errorstr_by_id(status),
                 magic_enum::enum_name(status));
     } else if (info) {
         dbglog_id(log, packet, "{} from {} over {}:\n{}", pkt_name, info->peername.str(),
-                magic_enum::enum_name<utils::TransportProtocol>(info->proto), (char *) ldns_buffer_begin(str_dns));
+                magic_enum::enum_name<utils::TransportProtocol>(info->proto),
+                (char *) ldns_buffer_begin(str_dns.get()));
     } else {
-        dbglog_id(log, packet, "{}:\n{}", pkt_name, (char *) ldns_buffer_begin(str_dns));
+        dbglog_id(log, packet, "{}:\n{}", pkt_name, (char *) ldns_buffer_begin(str_dns.get()));
     }
-    ldns_buffer_free(str_dns);
 }
 #else
 static void log_packet(
@@ -309,12 +309,12 @@ coro::Task<ldns_pkt_ptr> DnsForwarder::try_dns64_aaaa_synthesis(Upstream *upstre
 }
 
 static Uint8Vector transform_response_to_raw_data(const ldns_pkt *response) {
-    ldns_buffer *buffer = ldns_buffer_new(LDNS_MAX_PACKETLEN);
-    ldns_status status = ldns_pkt2buffer_wire(buffer, response);
+    ldns_buffer_ptr buffer{ldns_buffer_new(LDNS_MAX_PACKETLEN)};
+    ldns_status status = ldns_pkt2buffer_wire(buffer.get(), response);
     assert(status == LDNS_STATUS_OK);
     // @todo: custom allocator will allow to avoid data copy
-    Uint8Vector data = {ldns_buffer_at(buffer, 0), ldns_buffer_at(buffer, 0) + ldns_buffer_position(buffer)};
-    ldns_buffer_free(buffer);
+    Uint8Vector data = {
+            ldns_buffer_at(buffer.get(), 0), ldns_buffer_at(buffer.get(), 0) + ldns_buffer_position(buffer.get())};
     return data;
 }
 

@@ -182,6 +182,15 @@ timestamp manipulation (`utimensat`/`SetFileTime`) instead.
   use-after-free. Coroutine parameters, by contrast, are moved/copied into the
   heap-allocated coroutine frame and survive every suspension/resume. This
   applies to `coro::run_detached(...)` and `coro::to_future(...)` wrappers too.
+- **Wrap every raw owning pointer returned by a C-FFI allocator (ldns,
+  libsodium, etc.) in an RAII guard at the point of creation; never hold a raw
+  owning pointer across a call that can fail.** Use `ag::AllocatedPtr<T>` (a
+  `std::unique_ptr` with `std::free` as the deleter, from `common/defs.h`) for
+  `malloc`/`strdup`-style `char *` returns like `ldns_rdf2str` /
+  `ldns_rr_type2str`, and `ag::UniquePtr<T, &free_fn>` for a custom deallocator
+  (e.g. `ag::UniquePtr<ldns_rdf, &ldns_rdf_deep_free>`). The deleter then fires
+  on every exit — including an early `return nullptr` on a *later* FFI call that
+  fails without adopting ownership — making the leak structurally impossible.
 
 ### Markdown
 

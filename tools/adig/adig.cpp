@@ -139,9 +139,10 @@ void apply_force_tcp(std::string &server) {
 // upstream module's system DNS functionality (SystemUpstream, scheme
 // "system://") on the platforms where it is available, mirroring `dig` which
 // queries the OS-configured resolver by default. On platforms where the
-// upstream library has no system resolver, fall back to DEFAULT_SERVER. The
-// caller skips this entirely for +trace, which seeds from the root hints and
-// never reads opts.server.
+// upstream library has no system resolver, fall back to DEFAULT_SERVER. Applied
+// for every code path, including +trace: run_trace() seeds its first hop (`.`
+// NS) from opts.server and only falls back to the root hints if that hop yields
+// no servers.
 std::string default_server() {
 #if defined(__APPLE__) || defined(__ANDROID__)
     // Matches SystemUpstream::SYSTEM_SCHEME (upstream/upstream_system.h). The
@@ -526,9 +527,12 @@ int main(int argc, char *argv[]) {
     // When no @server was given, query the system's configured DNS server
     // (mirrors `dig`), reusing the upstream module's system resolver
     // (system://) where available and falling back to DEFAULT_SERVER elsewhere.
-    // +trace seeds from the root hints and never reads opts.server, so it is
-    // skipped.
-    if (opts.server.empty() && !opts.trace) {
+    // This is applied unconditionally — including for +trace: run_trace() seeds
+    // its first hop (a recursive `.` NS query) from opts.server, mirroring
+    // `dig +trace` which always starts by querying the configured resolver and
+    // only falls back to the checked-in root hints if that hop yields no
+    // servers.
+    if (opts.server.empty()) {
         opts.server = default_server();
     }
 

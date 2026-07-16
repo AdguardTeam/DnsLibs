@@ -317,6 +317,10 @@ ldns_pkt_ptr make_query(const std::string &name, ldns_rr_type type, bool recurse
     }
     ldns_pkt *pkt = ldns_pkt_query_new(dname, type, LDNS_RR_CLASS_IN, recurse ? LDNS_RD : 0);
     if (pkt == nullptr) {
+        // ldns_pkt_query_new did not consume `dname` on failure, so it must be
+        // freed here to avoid a leak (mirrors the explicit free on this error
+        // path in other call sites, e.g. dnscrypt/dns_crypt_ldns.cpp).
+        ldns_rdf_deep_free(dname);
         return {nullptr};
     }
     ldns_pkt_set_random_id(pkt);
@@ -487,7 +491,12 @@ std::string format_packet_dig(
 
     // Stats trailer (query time, server, message size).
     if (flags.stats) {
-        out += fmt::format(";; Query time: {} msec\n", query_time.count());
+        // A zero query_time (e.g. the `+qr` query echo, which has not been sent
+        // yet) omits the line, matching the documented contract and `dig +qr`
+        // (which prints only `;; MSG SIZE  sent:` for the query packet).
+        if (query_time.count() != 0) {
+            out += fmt::format(";; Query time: {} msec\n", query_time.count());
+        }
         if (!server.empty()) {
             out += fmt::format(";; SERVER: {}\n", server);
         }

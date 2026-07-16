@@ -161,9 +161,9 @@ TEST_P(ListenerTest, ListensAndResponds) {
                                 && (!ldns_pkt_tc(resp.get()) || listener_settings.protocol == ag::utils::TP_UDP)) {
                             ++successful_requests;
                         } else {
-                            char *str = ldns_pkt2str(resp.get());
-                            errlog(logger, "[id={}] Invalid response:\n{}", ldns_pkt_id(req.get()), str);
-                            std::free(str); // NOLINT(cppcoreguidelines-no-malloc,hicpp-no-malloc)
+                            AllocatedPtr<char> str{ldns_pkt2str(resp.get())};
+                            errlog(logger, "[id={}] Invalid response:\n{}", ldns_pkt_id(req.get()),
+                                    (str != nullptr) ? str.get() : "");
                         }
                     }
                 }(successful_requests, listener_settings, address, i, params, loop))};
@@ -357,10 +357,10 @@ TEST(ListenerTest, ManyRequestsPending) {
 
     // check if last request got correct response
     ASSERT_FALSE(last_reply_res.empty());
-    ldns_pkt *reply_pkt = nullptr;
-    auto status = ldns_wire2pkt(&reply_pkt, last_reply_res.data(), last_reply_res.size());
+    ldns_pkt *raw = nullptr;
+    auto status = ldns_wire2pkt(&raw, last_reply_res.data(), last_reply_res.size());
+    ldns_pkt_ptr reply_pkt{raw};
     ASSERT_EQ(LDNS_STATUS_OK, status) << ldns_get_errorstr_by_id(status);
-    ldns_pkt_free(reply_pkt);
 
     // Signal the proxy thread to stop. Guard the shared flag with the same mutex
     // its wait predicate reads under, then notify.

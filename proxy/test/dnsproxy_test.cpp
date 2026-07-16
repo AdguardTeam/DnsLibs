@@ -1010,16 +1010,16 @@ TEST(DnsProxyTestStatic, CnameFormatting) {
             0x00, 0x19, 0x06, 0x65, 0x31, 0x33, 0x36, 0x37, 0x38, 0x04, 0x64, 0x73, 0x70, 0x62, 0x0a, 0x61, 0x6b, 0x61,
             0x6d, 0x61, 0x69, 0x65, 0x64, 0x67, 0x65, 0xc0, 0x4d, 0xc0, 0xa1, 0x00, 0x01, 0x00, 0x01, 0x00, 0x00, 0x00,
             0x13, 0x00, 0x04, 0x02, 0x15, 0xc6, 0xe5};
-    ldns_pkt *pkt = nullptr;
-    ldns_wire2pkt(&pkt, packet, sizeof(packet));
-    ASSERT_NE(pkt, nullptr);
-    std::string answer = DnsForwarderUtils::rr_list_to_string(ldns_pkt_answer(pkt));
+    ldns_pkt *raw = nullptr;
+    ldns_wire2pkt(&raw, packet, sizeof(packet));
+    ldns_pkt_ptr pkt{raw};
+    ASSERT_NE(pkt.get(), nullptr);
+    std::string answer = DnsForwarderUtils::rr_list_to_string(ldns_pkt_answer(pkt.get()));
     std::string expected_answer = "CNAME, www.microsoft.com-c-3.edgekey.net.\n"
                                   "CNAME, www.microsoft.com-c-3.edgekey.net.globalredir.akadns.net.\n"
                                   "CNAME, e13678.dspb.akamaiedge.net.\n"
                                   "A, 2.21.198.229\n";
     ASSERT_EQ(answer, expected_answer);
-    ldns_pkt_free(pkt);
 }
 
 class DnsProxyCacheTest : public ::testing::Test {

@@ -50,9 +50,11 @@ back to `1.1.1.1` on platforms where no system resolver is available.
 ### `+trace`
 
 Iterative resolution from the root, mirroring `dig +trace`. The first hop
-queries `@server` for `.` NS records with the RD bit set; subsequent hops
-query each delegating authoritative server directly (RD=0). Output is
-dig-compatible:
+queries `@server` for `.` NS records with the RD bit set; when `@server` is
+omitted it defaults to the system resolver (`system://` on Apple/Android, else
+`1.1.1.1`) — the same default as a non-trace query, since `dig +trace` always
+starts by querying the configured resolver. Subsequent hops query each
+delegating authoritative server directly (RD=0). Output is dig-compatible:
 
 ```text
 adig @1.1.1.1 example.com +trace

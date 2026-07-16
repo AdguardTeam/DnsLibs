@@ -9,6 +9,7 @@
 
 #include <gtest/gtest.h>
 
+#include <iterator>
 #include <memory>
 #include <string>
 #include <vector>
@@ -612,6 +613,20 @@ TEST(FormatPacketDig, QuerySaysSending) {
     std::string out = format_packet_dig(q.get(), {}, true, Millis{0}, "");
     EXPECT_TRUE(contains(out, ";; Sending:"));
     EXPECT_TRUE(contains(out, "MSG SIZE  sent:"));
+}
+
+TEST(FormatPacketDig, QueryEchoOmitsQueryTimeAndServer) {
+    // `+qr` echoes the query packet before it is sent: there is no round-trip
+    // yet, so the stats trailer must omit the ";; Query time:" line (and, since
+    // the caller passes an empty server for the echo, the ";; SERVER:" line
+    // too), leaving only ";; MSG SIZE  sent:". Mirrors `dig +qr`, which prints
+    // just the size for the query packet. Previously a spurious
+    // ";; Query time: 0 msec" was emitted here.
+    ldns_pkt_ptr q = make_test_query();
+    std::string out = format_packet_dig(q.get(), {}, true, Millis{0}, "");
+    EXPECT_TRUE(contains(out, ";; MSG SIZE  sent:"));
+    EXPECT_FALSE(contains(out, "Query time:"));
+    EXPECT_FALSE(contains(out, "SERVER:"));
 }
 
 TEST(FormatPacketDig, ResponseSaysGotAnswer) {
