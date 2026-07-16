@@ -10,6 +10,7 @@
 #include <charconv>
 #include <cstdint>
 #include <cstdlib>
+#include <map>
 #include <memory>
 #include <optional>
 #include <string>
@@ -399,6 +400,47 @@ void apply_dns_flags(ldns_pkt *pkt, const CliOptions &opts) {
             }
         }
     }
+}
+
+std::map<std::string, GlueAddress> additional_glue(const ldns_pkt *pkt) {
+    std::map<std::string, GlueAddress> glue;
+    if (pkt == nullptr) {
+        return glue;
+    }
+    const ldns_rr_list *additional = ldns_pkt_additional(pkt);
+    if (additional == nullptr) {
+        return glue;
+    }
+    for (size_t i = 0; i < ldns_rr_list_rr_count(additional); ++i) {
+        const ldns_rr *rr = ldns_rr_list_rr(additional, i);
+        ldns_rr_type type = ldns_rr_get_type(rr);
+        if (type != LDNS_RR_TYPE_A && type != LDNS_RR_TYPE_AAAA) {
+            continue;
+        }
+        AllocatedPtr<char> owner(ldns_rdf2str(ldns_rr_owner(rr)));
+        AllocatedPtr<char> addr(ldns_rdf2str(ldns_rr_rdf(rr, 0)));
+        if (owner == nullptr || addr == nullptr) {
+            continue;
+        }
+        // Prefer A over AAAA: an A record always wins (overwriting any prior
+        // AAAA for the same owner), and an AAAA is kept only when no A was seen
+        // for that owner. This prevents a later AAAA from displacing an earlier
+        // A in the ADDITIONAL section, so +trace neither prefers IPv6 when IPv4
+        // glue is present nor makes the chosen address depend on RR ordering.
+        if (type == LDNS_RR_TYPE_A) {
+            glue.insert_or_assign(owner.get(), GlueAddress{addr.get(), false});
+        } else {
+            glue.try_emplace(owner.get(), GlueAddress{addr.get(), true});
+        }
+    }
+    return glue;
+}
+
+bool glue_address_usable(const GlueAddress &glue, bool ipv4_only) {
+    // -4 (ipv4_only) suppresses IPv6 so a literal IPv6 address is never passed
+    // to trace_exchange() (ipv6_available only governs AAAA bootstrapping, not
+    // dialing a literal IPv6 peer).
+    return !(ipv4_only && glue.ipv6);
 }
 
 std::string format_packet_dig(

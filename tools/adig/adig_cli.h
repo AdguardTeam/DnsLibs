@@ -10,6 +10,7 @@
 #pragma once
 
 #include <cstdint>
+#include <map>
 #include <optional>
 #include <string>
 #include <string_view>
@@ -127,6 +128,33 @@ std::vector<uint8_t> encode_ecs_option(std::string_view addr, uint8_t src_prefix
 // the CD bit when `opts.cd` is set, and the ECS option when `opts.subnet` is
 // set. RD is not touched here; it is set at construction time by make_query().
 void apply_dns_flags(ldns_pkt *pkt, const CliOptions &opts);
+
+// A glue address extracted from a referral response's ADDITIONAL section, tagged
+// with its address family so +trace can honor -4 (skip IPv6 glue).
+struct GlueAddress {
+    std::string address;
+    bool ipv6 = false;
+};
+
+// Extract A/AAAA glue from a referral response's ADDITIONAL section, keyed by
+// owner name (as ldns renders it: fully-qualified, with a trailing dot, matching
+// the NS target names produced alongside in adig.cpp's extract_ns_names).
+// Prefers A (IPv4) over AAAA (IPv6): when both are present for an owner the IPv4
+// address wins (an A always overwrites any prior AAAA, and an AAAA is stored
+// only when no A was seen for that owner). This prevents a later AAAA from
+// displacing an earlier A, so +trace neither prefers IPv6 when IPv4 glue is
+// present nor makes the chosen address depend on ADDITIONAL RR ordering. Exposed
+// in the pure layer so the preference is unit-testable without an event loop.
+std::map<std::string, GlueAddress> additional_glue(const ldns_pkt *pkt);
+
+// Whether `glue` may be used to contact the next +trace hop given the -4
+// (ipv4_only) flag. IPv6 glue is suppressed under -4 so a literal IPv6 address
+// is never handed to trace_exchange() — which would otherwise connect to it
+// regardless of the upstream factory's ipv6_available=false, since that flag
+// only governs AAAA bootstrapping/resolution, not dialing a literal IPv6 peer.
+// Mirrors the cmd_banner_enabled pattern of keeping a small decision rule
+// unit-testable in the pure layer.
+bool glue_address_usable(const GlueAddress &glue, bool ipv4_only);
 
 // Format a DNS packet as dig-style text. Honors the per-section toggles in
 // `flags` (comments, question, answer, authority, additional, stats). When

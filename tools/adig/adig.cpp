@@ -290,27 +290,6 @@ std::vector<std::string> extract_ns_names(const ldns_pkt *pkt) {
     return names;
 }
 
-std::map<std::string, std::string> additional_glue(const ldns_pkt *pkt) {
-    std::map<std::string, std::string> glue;
-    const ldns_rr_list *additional = ldns_pkt_additional(pkt);
-    if (additional == nullptr) {
-        return glue;
-    }
-    for (size_t i = 0; i < ldns_rr_list_rr_count(additional); ++i) {
-        const ldns_rr *rr = ldns_rr_list_rr(additional, i);
-        ldns_rr_type type = ldns_rr_get_type(rr);
-        if (type != LDNS_RR_TYPE_A && type != LDNS_RR_TYPE_AAAA) {
-            continue;
-        }
-        AllocatedPtr<char> owner(ldns_rdf2str(ldns_rr_owner(rr)));
-        AllocatedPtr<char> addr(ldns_rdf2str(ldns_rr_rdf(rr, 0)));
-        if (owner != nullptr && addr != nullptr) {
-            glue[owner.get()] = addr.get();
-        }
-    }
-    return glue;
-}
-
 // Resolves an NS hostname (for glueless referrals) using the first bootstrap
 // server (or the system resolver when none was given). Returns the first A
 // record found, or nullopt on failure.
@@ -408,8 +387,11 @@ Task<TraceExchangeResult> trace_exchange(EventLoop &loop, SocketFactory &socket_
 
 // Extracts the next hop's authoritative servers from a referral / cached
 // response: NS target names from ANSWER or AUTHORITY paired with their A/AAAA
-// glue addresses from ADDITIONAL. Glueless NS hostnames are resolved via the
-// bootstrap resolver. Returns at least one entry on success.
+// glue addresses from ADDITIONAL (A preferred over AAAA; IPv6 glue skipped under
+// -4 via glue_address_usable). Glueless NS hostnames — and NS hostnames whose
+// only glue is IPv6 under -4 — are resolved via the bootstrap resolver (which
+// queries A only, so an IPv6-only NS yields no address under -4). Returns at
+// least one entry on success.
 Task<std::vector<TraceServer>> next_trace_servers(
         EventLoop &loop, SocketFactory &socket_factory, const ldns_pkt *response, const CliOptions &opts) {
     co_await loop.co_submit();
@@ -418,13 +400,17 @@ Task<std::vector<TraceServer>> next_trace_servers(
         co_return next;
     }
     std::vector<std::string> ns_names = extract_ns_names(response);
-    std::map<std::string, std::string> glue = additional_glue(response);
+    std::map<std::string, GlueAddress> glue = additional_glue(response);
     for (const std::string &ns : ns_names) {
         std::string display_name = strip_trailing_dot(ns);
-        if (auto it = glue.find(ns); it != glue.end()) {
-            next.push_back({it->second, display_name});
+        if (auto it = glue.find(ns); it != glue.end() && glue_address_usable(it->second, opts.ipv4_only)) {
+            next.push_back({it->second.address, display_name});
             continue;
         }
+        // Glueless referral, or IPv6 glue suppressed by -4: resolve the NS
+        // hostname's A record via the bootstrap resolver so the trace can
+        // continue. resolve_ns_via_bootstrap only queries A (IPv4), so under -4
+        // an IPv6-only NS yields no address and is dropped.
         auto resolved = co_await resolve_ns_via_bootstrap(loop, socket_factory, ns, opts);
         if (resolved.has_value()) {
             next.push_back({*resolved, display_name});

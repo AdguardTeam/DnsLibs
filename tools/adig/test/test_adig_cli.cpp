@@ -976,4 +976,116 @@ TEST(FormatTracePacketDig, CommentsEnabledShowsSectionHeaders) {
     EXPECT_FALSE(contains(out, "Query time:"));
 }
 
+// --- additional_glue (A preferred over AAAA; family tagging) ----------------
+//
+// +trace pairs NS target names with their ADDITIONAL-section glue. A later AAAA
+// must not displace an earlier A for the same owner (so +trace doesn't prefer
+// IPv6 when IPv4 glue is present and the chosen address is order-independent),
+// and each entry must be tagged with its family so -4 can skip IPv6 glue.
+
+namespace {
+
+// Build a packet whose ADDITIONAL section carries the given RRs (presentation
+// strings, e.g. "ns1.example.net. 300 IN A 1.2.3.4"). Each RR is parsed with
+// ldns_rr_new_frm_str; a parse failure skips that RR. The packet takes ownership
+// of every pushed RR.
+ldns_pkt_ptr make_glue_pkt(std::vector<std::string> rrs) {
+    ldns_pkt_ptr pkt{ldns_pkt_new()};
+    for (const std::string &rr_str : rrs) {
+        ldns_rr *rr = nullptr;
+        if (ldns_rr_new_frm_str(&rr, rr_str.c_str(), 0, nullptr, nullptr) == LDNS_STATUS_OK && rr != nullptr) {
+            ldns_pkt_push_rr(pkt.get(), LDNS_SECTION_ADDITIONAL, rr);
+        }
+    }
+    return pkt;
+}
+
+// Render `ip` the way ldns renders an A/AAAA RDATA atom, so glue-address
+// expectations don't depend on ldns's canonical-form choices.
+std::string render_ip(ldns_rdf_type type, std::string_view ip) {
+    std::unique_ptr<ldns_rdf, void (*)(ldns_rdf *)> rdf(
+            ldns_rdf_new_frm_str(type, std::string(ip).c_str()), &ldns_rdf_deep_free);
+    if (rdf == nullptr) {
+        return "<invalid>";
+    }
+    AllocatedPtr<char> s(ldns_rdf2str(rdf.get()));
+    return (s != nullptr) ? std::string(s.get()) : "<invalid>";
+}
+
+} // namespace
+
+TEST(AdditionalGlue, PrefersAOverAaaaRegardlessOfOrder) {
+    const std::string owner = "ns1.example.net.";
+    // Both orderings: the A record must win over the AAAA for the same owner.
+    for (int order = 0; order < 2; ++order) {
+        const char *a_rr = "ns1.example.net. 300 IN A 1.2.3.4";
+        const char *aaaa_rr = "ns1.example.net. 300 IN AAAA 2001:db8::1";
+        ldns_pkt_ptr pkt = make_glue_pkt({order == 0 ? a_rr : aaaa_rr, order == 0 ? aaaa_rr : a_rr});
+        auto glue = additional_glue(pkt.get());
+        ASSERT_EQ(1u, glue.size()) << "order=" << order;
+        auto it = glue.find(owner);
+        ASSERT_NE(it, glue.end()) << "order=" << order;
+        EXPECT_EQ("1.2.3.4", it->second.address) << "order=" << order;
+        EXPECT_FALSE(it->second.ipv6) << "order=" << order;
+    }
+}
+
+TEST(AdditionalGlue, KeepsARecord) {
+    ldns_pkt_ptr pkt = make_glue_pkt({"ns3.example.net. 300 IN A 9.9.9.9"});
+    auto glue = additional_glue(pkt.get());
+    ASSERT_EQ(1u, glue.size());
+    auto it = glue.find("ns3.example.net.");
+    ASSERT_NE(it, glue.end());
+    EXPECT_EQ("9.9.9.9", it->second.address);
+    EXPECT_FALSE(it->second.ipv6);
+}
+
+TEST(AdditionalGlue, KeepsAaaaWhenNoA) {
+    // No A for this owner, so the AAAA is kept (and tagged IPv6).
+    ldns_pkt_ptr pkt = make_glue_pkt({"ns2.example.net. 300 IN AAAA 2001:db8::1"});
+    auto glue = additional_glue(pkt.get());
+    ASSERT_EQ(1u, glue.size());
+    auto it = glue.find("ns2.example.net.");
+    ASSERT_NE(it, glue.end());
+    EXPECT_EQ(render_ip(LDNS_RDF_TYPE_AAAA, "2001:db8::1"), it->second.address);
+    EXPECT_TRUE(it->second.ipv6);
+}
+
+TEST(AdditionalGlue, IgnoresNonGlueAndKeepsMultipleOwners) {
+    // Only A/AAAA glue is extracted; NS/TXT (and any other) ADDITIONAL RRs are
+    // ignored. Multiple owners each get their own entry.
+    ldns_pkt_ptr pkt = make_glue_pkt({
+            "ns1.example.net. 300 IN A 1.1.1.1",
+            "ns2.example.net. 300 IN AAAA 2001:db8::2",
+            "example.net. 300 IN NS ns1.example.net.", // NS in ADDITIONAL: ignored
+            "example.net. 300 IN TXT \"not-glue\"",    // TXT: ignored
+    });
+    auto glue = additional_glue(pkt.get());
+    EXPECT_EQ(2u, glue.size());
+    EXPECT_EQ("1.1.1.1", glue["ns1.example.net."].address);
+    EXPECT_FALSE(glue["ns1.example.net."].ipv6);
+    EXPECT_TRUE(glue["ns2.example.net."].ipv6);
+}
+
+TEST(AdditionalGlue, NullAndEmptyPackets) {
+    EXPECT_TRUE(additional_glue(nullptr).empty());
+    ldns_pkt_ptr empty{ldns_pkt_new()};
+    ASSERT_NE(nullptr, empty.get());
+    EXPECT_TRUE(additional_glue(empty.get()).empty());
+}
+
+// --- glue_address_usable (-4 suppresses IPv6 glue) -------------------------
+
+TEST(GlueAddressUsable, Ipv4AlwaysUsable) {
+    GlueAddress a{.address = "1.2.3.4", .ipv6 = false};
+    EXPECT_TRUE(glue_address_usable(a, false));
+    EXPECT_TRUE(glue_address_usable(a, true)); // -4 does not suppress IPv4
+}
+
+TEST(GlueAddressUsable, Ipv6SuppressedUnderIpv4Only) {
+    GlueAddress aaaa{.address = "2001:db8::1", .ipv6 = true};
+    EXPECT_TRUE(glue_address_usable(aaaa, false)); // no -4: IPv6 is fine
+    EXPECT_FALSE(glue_address_usable(aaaa, true)); // -4: IPv6 suppressed
+}
+
 } // namespace ag::adig::test
