@@ -15,8 +15,6 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
     - Previously, only Windows used `UNSPECIFIED_ADDRESS` to avoid issues with the system resolver trying other servers and AdGuard VPN blocking those requests.
     - On other platforms, responding with `REFUSED` caused some applications to endlessly retry blocked requests, leading to increased CPU and battery consumption.
 
->>>>>>> 1ce69bcda1e245f7b576a2ad19c1f18a0f810653
-
 ### Deprecated
 
 ### Removed
