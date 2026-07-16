@@ -57,6 +57,7 @@ inline constexpr Secs DEFAULT_TIMEOUT(10);
 // Only used on the integration path (real servers, rate-limited). The offline
 // path (loopback) needs no delay between requests.
 inline constexpr Millis DELAY_BETWEEN_REQUESTS{500};
+inline constexpr int INTEGRATION_MAX_ATTEMPTS = 3;
 
 using TestError = std::optional<std::string>;
 
@@ -288,13 +289,13 @@ protected:
     // Iterates `test_data` sequentially, creating an upstream and exchanging
     // one query per entry. `delay_between` is only honored on the integration
     // path (real servers are rate-limited); the offline loopback path passes 0.
-    coro::Task<void> sequential_test(std::span<const UpstreamTestData> test_data, Millis delay_between = Millis{0}) {
+    // `max_attempts` retries a failed exchange with a fresh upstream/connection
+    // so a transient real-server failure doesn't fail the suite; the offline
+    // path leaves it at 1 so a genuine local regression fails immediately.
+    coro::Task<void> sequential_test(
+            std::span<const UpstreamTestData> test_data, Millis delay_between = Millis{0}, int max_attempts = 1) {
         for (const UpstreamTestData &data : test_data) {
             infolog(logger, "Testing upstream: {}", data.address);
-            if (delay_between.count() > 0) {
-                std::this_thread::sleep_for(delay_between);
-            }
-            auto upstream_res = create_upstream({data.address, data.bootstrap, data.server_ip});
 
 #ifdef __ANDROID__
             // Skip system:// tests if Android API is not available
@@ -306,9 +307,25 @@ protected:
             }
 #endif
 
-            ASSERT_FALSE(upstream_res.has_error()) << AG_FMT(
-                    "Failed to generate upstream from address {}: {}", data.address, upstream_res.error()->str());
-            auto error = coro::to_future(check_upstream_internal(std::move(upstream_res.value()), data.address)).get();
+            TestError error;
+            for (int attempt = 1; attempt <= max_attempts; ++attempt) {
+                // Delay before each attempt (including retries) to respect the
+                // real servers' rate limits; no-op on the offline path.
+                if (delay_between.count() > 0) {
+                    std::this_thread::sleep_for(delay_between);
+                }
+                auto upstream_res = create_upstream({data.address, data.bootstrap, data.server_ip});
+                ASSERT_FALSE(upstream_res.has_error()) << AG_FMT(
+                        "Failed to generate upstream from address {}: {}", data.address, upstream_res.error()->str());
+                error = coro::to_future(check_upstream_internal(std::move(upstream_res.value()), data.address)).get();
+                if (!error) {
+                    break;
+                }
+                if (attempt < max_attempts) {
+                    infolog(logger, "Upstream {} attempt {}/{} failed, retrying: {}", data.address, attempt,
+                            max_attempts, *error);
+                }
+            }
             ASSERT_FALSE(error) << *error;
         }
     }
