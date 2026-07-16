@@ -242,16 +242,29 @@ public:
     // Unlike the one-exchange-then-close DoT server, this DoH server keeps each
     // connection alive (HTTP keep-alive / H2 stream multiplexing) so the
     // client's trailing ALPN/SETTINGS acks are absorbed rather than RST'd on
-    // close. stop() therefore also shuts down the active connection's socket
-    // to interrupt a worker blocked on SSL_read, keeping the join deadlock-free.
+    // close. That means a worker is typically parked in a blocking SSL_read on
+    // the live connection when stop() runs, so stop() must interrupt it.
+    //
+    // POSIX shutdown() wakes a thread blocked in recv()/SSL_read, but on Windows
+    // only closesocket() does - there, shutdown() leaves the parked SSL_read
+    // blocked, deadlocking join(). And because the test body runs on the event
+    // loop thread, a blocked join() also freezes the client that would otherwise
+    // close the connection, so nothing breaks the deadlock until a kernel TCP
+    // timeout fires. So close (not just shut down) the connection
+    // socket here. claim_active_conn() hands the fd to exactly one of stop()/the
+    // worker, so closing it out from under the worker cannot double-close it or
+    // race a reuse of its value.
     void stop() {
         if (!m_running.exchange(false)) {
             return;
         }
         detail::shutdown_socket(m_tcp_sock);
-        detail::shutdown_socket(m_active_conn.load());
         detail::close_fd(m_tcp_sock);
         m_tcp_sock = detail::invalid_socket();
+        if (detail::socket_type conn = claim_active_conn(); conn != detail::invalid_socket()) {
+            detail::shutdown_socket(conn);
+            detail::close_fd(conn);
+        }
         if (m_thread.joinable()) {
             m_thread.join();
         }
@@ -411,6 +424,16 @@ private:
         (void) srv->flush();
     }
 
+    // Atomically claims ownership of the active connection fd, returning it (or
+    // invalid_socket() if stop() or the worker already claimed it). The winner
+    // is responsible for closing the fd exactly once. This coordinates the
+    // worker (which owns the fd for the connection's lifetime) with stop()
+    // (which closes it out from under a parked SSL_read to interrupt the
+    // worker), so the fd is never double-closed nor its value reused mid-close.
+    detail::socket_type claim_active_conn() {
+        return m_active_conn.exchange(detail::invalid_socket());
+    }
+
     // Handles a single TLS connection: reads the negotiated ALPN, dispatches to
     // the matching HTTP server, feeds decrypted bytes via SSL_read -> input(),
     // and writes response bytes via on_output -> SSL_write. The connection is
@@ -422,15 +445,17 @@ private:
 
         ag::UniquePtr<SSL, &SSL_free> ssl{SSL_new(m_ssl_ctx.get())};
         if (ssl == nullptr) {
-            detail::close_fd(conn);
-            m_active_conn.store(detail::invalid_socket());
+            if (claim_active_conn() != detail::invalid_socket()) {
+                detail::close_fd(conn);
+            }
             return;
         }
         SSL_set_fd(ssl.get(), static_cast<int>(conn));
         SSL_set_accept_state(ssl.get());
         if (SSL_accept(ssl.get()) <= 0) {
-            detail::close_fd(conn);
-            m_active_conn.store(detail::invalid_socket());
+            if (claim_active_conn() != detail::invalid_socket()) {
+                detail::close_fd(conn);
+            }
             return;
         }
 
@@ -450,9 +475,13 @@ private:
             serve_h1(ssl.get(), ctx);
         }
 
-        (void) SSL_shutdown(ssl.get());
-        detail::close_fd(conn);
-        m_active_conn.store(detail::invalid_socket());
+        // Close the connection unless stop() already claimed the fd to interrupt
+        // us (in which case it owns the shutdown/close). Guarding SSL_shutdown
+        // behind the same claim avoids operating on an fd stop() has closed.
+        if (claim_active_conn() != detail::invalid_socket()) {
+            (void) SSL_shutdown(ssl.get());
+            detail::close_fd(conn);
+        }
     }
 
     // HTTP/1.1 keep-alive exchange loop. on_output writes synchronously during
