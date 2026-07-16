@@ -724,6 +724,13 @@ ParseResult parse_args(int argc, char *argv[]) {
                     result.error = fmt::format("option '+{}' does not support '+no' form", key);
                     return result;
                 }
+                // The documented syntax is `+timeout=N`; a bare `+timeout` or
+                // `+timeout=` would otherwise fall through to std::from_chars
+                // and yield a non-actionable "invalid timeout: " message.
+                if (value.empty()) {
+                    result.error = "option '+timeout' requires a value: +timeout=N";
+                    return result;
+                }
                 int seconds = 0;
                 const auto [ptr, ec] = std::from_chars(value.data(), value.data() + value.size(), seconds);
                 if (ec != std::errc{} || ptr != value.data() + value.size() || seconds <= 0) {

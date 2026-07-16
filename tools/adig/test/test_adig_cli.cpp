@@ -438,6 +438,43 @@ TEST(EncodeEcsOption, InvalidAddressOrPrefixReturnsEmpty) {
     EXPECT_TRUE(encode_ecs_option("::1", 200).empty());    // prefix > 128
 }
 
+// --- +timeout= parsing ----------------------------------------------------
+
+TEST(ParseTimeout, ValidValue) {
+    ParseResult r = parse({"adig", "example.com", "+timeout=9"});
+    ASSERT_TRUE(r.error.empty()) << r.error;
+    EXPECT_EQ(Millis{9000}, r.opts.timeout);
+}
+
+TEST(ParseTimeout, BareOptionRequiresValue) {
+    // A bare `+timeout` (no `=N`) must yield an actionable error instead of
+    // the generic "invalid timeout: " fallback.
+    ParseResult r = parse({"adig", "example.com", "+timeout"});
+    EXPECT_FALSE(r.error.empty());
+    EXPECT_NE(std::string::npos, r.error.find("requires a value"));
+    EXPECT_NE(std::string::npos, r.error.find("+timeout=N"));
+}
+
+TEST(ParseTimeout, EmptyValueRequiresValue) {
+    // `+timeout=` (empty value) must yield the same actionable error.
+    ParseResult r = parse({"adig", "example.com", "+timeout="});
+    EXPECT_FALSE(r.error.empty());
+    EXPECT_NE(std::string::npos, r.error.find("requires a value"));
+    EXPECT_NE(std::string::npos, r.error.find("+timeout=N"));
+}
+
+TEST(ParseTimeout, NonNumericValueRejected) {
+    ParseResult r = parse({"adig", "example.com", "+timeout=abc"});
+    EXPECT_FALSE(r.error.empty());
+    EXPECT_NE(std::string::npos, r.error.find("invalid timeout"));
+}
+
+TEST(ParseTimeout, ZeroValueRejected) {
+    ParseResult r = parse({"adig", "example.com", "+timeout=0"});
+    EXPECT_FALSE(r.error.empty());
+    EXPECT_NE(std::string::npos, r.error.find("invalid timeout"));
+}
+
 // --- +subnet= parsing -----------------------------------------------------
 
 TEST(ParseSubnet, AddrPrefix) {
