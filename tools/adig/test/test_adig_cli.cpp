@@ -1286,4 +1286,71 @@ TEST(GlueAddressUsable, Ipv6SuppressedUnderIpv4Only) {
     EXPECT_FALSE(glue_address_usable(aaaa, true)); // -4: IPv6 suppressed
 }
 
+// --- apply_force_tcp (+tcp scheme rewrite) ---------------------------------
+
+TEST(ApplyForceTcp, BareHostIsPrefixedWithTcp) {
+    std::string server = "1.1.1.1";
+    apply_force_tcp(server);
+    EXPECT_EQ("tcp://1.1.1.1", server);
+}
+
+TEST(ApplyForceTcp, BareHostnameIsPrefixedWithTcp) {
+    std::string server = "dns.adguard.com";
+    apply_force_tcp(server);
+    EXPECT_EQ("tcp://dns.adguard.com", server);
+}
+
+TEST(ApplyForceTcp, UdpSchemeBecomesTcp) {
+    // Regression: replacing 4 chars dropped the colon, yielding "tcp//...".
+    std::string server = "udp://1.1.1.1";
+    apply_force_tcp(server);
+    EXPECT_EQ("tcp://1.1.1.1", server);
+}
+
+TEST(ApplyForceTcp, UdpSchemeWithHostBecomesTcp) {
+    std::string server = "udp://dns.adguard.com";
+    apply_force_tcp(server);
+    EXPECT_EQ("tcp://dns.adguard.com", server);
+}
+
+TEST(ApplyForceTcp, DnsSchemeBecomesTcp) {
+    std::string server = "dns://1.1.1.1";
+    apply_force_tcp(server);
+    EXPECT_EQ("tcp://1.1.1.1", server);
+}
+
+TEST(ApplyForceTcp, BareUdpLiteralIsPrefixedNotMangled) {
+    // "udp" has no "://" separator, so it is treated as a bare host: the whole
+    // string is prefixed (dig's `@udp` is a hostname, not a scheme).
+    std::string server = "udp";
+    apply_force_tcp(server);
+    EXPECT_EQ("tcp://udp", server);
+}
+
+TEST(ApplyForceTcp, AlreadyTcpUnchanged) {
+    std::string server = "tcp://1.1.1.1";
+    apply_force_tcp(server);
+    EXPECT_EQ("tcp://1.1.1.1", server);
+}
+
+TEST(ApplyForceTcp, EncryptedSchemesLeftUntouched) {
+    for (std::string s : {
+                 "tls://dns.adguard.com",
+                 "https://dns.adguard.com/dns-query",
+                 "quic://dns.adguard.com",
+                 "sdns://AQMAAAAAAAAAFDE3Ni4xMDMuMTMwLjEzMDo1NDQz",
+                 "system://",
+         }) {
+        std::string server = s;
+        apply_force_tcp(server);
+        EXPECT_EQ(s, server) << "encrypted scheme should be left untouched";
+    }
+}
+
+TEST(ApplyForceTcp, EmptyStringGetsSchemePrefix) {
+    std::string server;
+    apply_force_tcp(server);
+    EXPECT_EQ("tcp://", server);
+}
+
 } // namespace ag::adig::test

@@ -217,7 +217,7 @@ test: test-cpp
 .PHONY: test-cpp
 test-cpp: build_libs
 	cmake --build $(BUILD_DIR) --target tests
-	ctest --test-dir $(BUILD_DIR) -j$(TEST_JOBS)
+	ctest --test-dir $(BUILD_DIR) -j $(TEST_JOBS)
 
 ## Run the full test suite including real-network integration tests.
 ## Sets DNSLIBS_INTEGRATION_TESTS=1, so tests that dial public DNS servers
@@ -225,7 +225,7 @@ test-cpp: build_libs
 .PHONY: test-integration
 test-integration: build_libs
 	cmake --build $(BUILD_DIR) --target tests
-	DNSLIBS_INTEGRATION_TESTS=1 ctest --test-dir $(BUILD_DIR) -j$(TEST_JOBS)
+	DNSLIBS_INTEGRATION_TESTS=1 ctest --test-dir $(BUILD_DIR) -j $(TEST_JOBS)
 
 # Path to the JUnit XML report written by the CI test target below. The CI
 # workflow uploads this file as the test-results artifact.
@@ -259,6 +259,6 @@ JUNIT_XML ?= $(BUILD_DIR)/junit.xml
 .PHONY: test-ci
 test-ci: build_libs
 	cmake --build $(BUILD_DIR) --target tests
-	DNSLIBS_INTEGRATION_TESTS=1 ctest --test-dir $(BUILD_DIR) -j$(TEST_JOBS) \
+	DNSLIBS_INTEGRATION_TESTS=1 ctest --test-dir $(BUILD_DIR) -j $(TEST_JOBS) \
 		--output-junit $(abspath $(JUNIT_XML)) \
 		-D ExperimentalTest --no-compress-output

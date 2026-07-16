@@ -124,19 +124,6 @@ std::vector<std::string> effective_bootstrap(const std::vector<std::string> &boo
     return bootstrap;
 }
 
-// Replaces `udp://`/`dns://` schemes with `tcp://` and prefixes bare domains
-// with `tcp://` so that `+tcp` takes effect for plain DNS. Encrypted schemes
-// are left untouched.
-void apply_force_tcp(std::string &server) {
-    if (server.find("://") == std::string::npos) {
-        server = "tcp://" + server;
-    } else if (server.starts_with("udp://")) {
-        server.replace(0, 4, "tcp");
-    } else if (server.starts_with("dns://")) {
-        server.replace(0, 3, "tcp");
-    }
-}
-
 // Returns the server to query when the user did not pass @server. Reuses the
 // upstream module's system DNS functionality (SystemUpstream, scheme
 // "system://") on the platforms where it is available, mirroring `dig` which

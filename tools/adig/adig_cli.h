@@ -189,6 +189,14 @@ void apply_trace_display_defaults(DisplayFlags &flags);
 // loop.
 bool cmd_banner_enabled(const CliOptions &opts);
 
+// Rewrite `server` so that `+tcp` takes effect for plain DNS: `udp://` and
+// `dns://` schemes become `tcp://`, and a bare host (no `://`) is prefixed with
+// `tcp://`. Encrypted schemes (tls://, https://, quic://, sdns://, system://,
+// an explicit tcp://, ...) are left untouched. Mutates `server` in place.
+// Exposed in the pure layer so the scheme rewrite (notably preserving the
+// `://` separator) is unit-testable without an event loop.
+void apply_force_tcp(std::string &server);
+
 // Format one `dig +trace` hop as dig-compatible text. The body is produced by
 // `format_packet_dig` with the standard stats block suppressed. The footer is
 // then either:

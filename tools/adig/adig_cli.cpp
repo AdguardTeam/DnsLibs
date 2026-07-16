@@ -242,6 +242,22 @@ bool cmd_banner_enabled(const CliOptions &opts) {
     return opts.display.cmd && !opts.short_output;
 }
 
+void apply_force_tcp(std::string &server) {
+    // Replaces `udp://`/`dns://` schemes with `tcp://` and prefixes bare domains
+    // with `tcp://` so that `+tcp` takes effect for plain DNS. Encrypted schemes
+    // are left untouched.
+    if (server.find("://") == std::string::npos) {
+        server = "tcp://" + server;
+    } else if (server.starts_with("udp://")) {
+        // Replace only the 3-char scheme name (`udp` -> `tcp`), preserving the
+        // `://` separator. Replacing 4 chars would drop the colon and yield an
+        // invalid `tcp//` URI.
+        server.replace(0, 3, "tcp");
+    } else if (server.starts_with("dns://")) {
+        server.replace(0, 3, "tcp");
+    }
+}
+
 KeywordMatch match_plus_keyword(std::string_view key) {
     // Explicit aliases that are not prefix-matchable (their target canonical
     // does not start with the alias text).
