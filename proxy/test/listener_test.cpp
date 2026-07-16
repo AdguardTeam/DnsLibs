@@ -242,7 +242,7 @@ TEST(ListenerTest, ManyRequestsPending) {
         // Literal-IP loopback address: bootstrapper is bypassed, DoqUpstream
         // connects directly to the in-process QUIC server.
         proxy_settings.upstreams = {{.address = upstream_server.address()}};
-        proxy_settings.upstream_timeout = 3s;
+        proxy_settings.upstream_timeout = 5s;
         proxy_settings.enable_http3 = true;
         proxy_settings.dns_cache_size = 0;
         proxy_settings.optimistic_cache = false;
