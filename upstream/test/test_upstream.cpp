@@ -236,7 +236,8 @@ static const UpstreamTestData upstream_dot_bootstrap_integration_data[]{
 
 TEST_F(UpstreamTest, TestUpstreamDotBootstrap) {
     REQUIRE_INTEGRATION();
-    ASSERT_NO_FATAL_FAILURE(co_await sequential_test(upstream_dot_bootstrap_integration_data));
+    ASSERT_NO_FATAL_FAILURE(co_await sequential_test(
+            upstream_dot_bootstrap_integration_data, DELAY_BETWEEN_REQUESTS, INTEGRATION_MAX_ATTEMPTS));
 }
 
 // Always-on: DoT upstream bootstrapped via loopback resolvers (plain DNS and
