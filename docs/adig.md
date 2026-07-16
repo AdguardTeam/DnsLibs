@@ -99,6 +99,11 @@ Notable options (each `dig`-compatible):
 - `+tcp` — use TCP for plain DNS
 - `+timeout=N` — query timeout in seconds (default 5)
 - `+recurse` / `+norecurse` — set or clear the RD bit (default on)
+- `+edns[=N]` / `+noedns` — send an OPT RR (default on, matching `dig`). `+edns`
+  is equivalent to `+edns=0`; `+edns=N` advertises EDNS version `N` (0..255).
+  `+noedns` suppresses the default OPT RR. `+dnssec` (the DO bit) and `+subnet`
+  (the ECS option) still attach an OPT RR even under `+noedns`, since they live
+  inside the OPT record
 - `+dnssec` / `+do` — set the EDNS DO bit and a 4096-byte UDP payload
 - `+cdflag` / `+cd` — set the CD (checking disabled) bit
 - `+subnet=ADDR[/PREFIX]` — send EDNS Client Subnet (RFC 7871)
@@ -119,6 +124,8 @@ adig @1.0.0.1 example.com MX
 adig @tls://dns.adguard.com example.com +short
 adig @sdns://... example.com +trace +bootstrap=1.1.1.1
 adig @1.1.1.1 example.com +dnssec +recurse
+adig @1.1.1.1 example.com +noedns
+adig @1.1.1.1 example.com +edns=1
 adig -x 8.8.8.8
 adig @1.1.1.1 example.com +subnet=1.2.3.4/24
 adig @1.1.1.1 example.com +noall +answer

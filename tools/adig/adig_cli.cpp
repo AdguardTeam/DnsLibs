@@ -50,6 +50,7 @@ constexpr KeywordDef KEYWORDS[] = {
         {"tcp", KeywordKind::BOOL_CLI},
         {"trace", KeywordKind::BOOL_CLI},
         {"recurse", KeywordKind::BOOL_CLI},
+        {"edns", KeywordKind::BOOL_CLI},
         {"dnssec", KeywordKind::BOOL_CLI},
         {"cdflag", KeywordKind::BOOL_CLI},
         {"qr", KeywordKind::BOOL_CLI},
@@ -374,11 +375,24 @@ void apply_dns_flags(ldns_pkt *pkt, const CliOptions &opts) {
     if (pkt == nullptr) {
         return;
     }
-    // Any EDNS-bearing option needs an OPT RR on the wire; advertising a
-    // 4096-byte UDP payload size is what makes ldns synthesize one.
-    if (opts.dnssec || opts.subnet.enabled) {
-        ldns_pkt_set_edns_udp_size(pkt, static_cast<uint16_t>(dns::UDP_RECV_BUF_SIZE));
+    // Determine whether an OPT RR must be present. `+edns` (the default) and
+    // `+dnssec` / `+subnet` all require one. `+noedns` (opts.edns == false)
+    // suppresses the default OPT only when no EDNS-bearing option forces it —
+    // mirroring `dig`, where `+dnssec`/`+subnet` still attach an OPT RR under
+    // `+noedns` (the DO bit / ECS option live in the OPT record).
+    const bool want_edns = opts.edns || opts.dnssec || opts.subnet.enabled;
+    if (!want_edns) {
+        // Only the header-level CD bit (below) may still apply.
+        if (opts.cd) {
+            ldns_pkt_set_cd(pkt, true);
+        }
+        return;
     }
+    // Advertising a >0 EDNS UDP payload size is what makes ldns synthesize the
+    // OPT pseudo-RR on the wire (ldns_pkt_edns() returns true once the UDP
+    // size is non-zero).
+    ldns_pkt_set_edns_udp_size(pkt, static_cast<uint16_t>(dns::UDP_RECV_BUF_SIZE));
+    ldns_pkt_set_edns_version(pkt, opts.edns_version);
     if (opts.dnssec) {
         // RFC 3225: set the DO bit so the upstream returns DNSSEC records
         // (RRSIG etc.). Mirrors the proxy's DnssecHelpers::set_do_bit.
@@ -713,6 +727,33 @@ ParseResult parse_args(int argc, char *argv[]) {
                 }
             } else if (canon == "recurse") {
                 opts.recurse = !negate;
+            } else if (canon == "edns") {
+                // dig `+edns[=N]` / `+noedns`: toggle the OPT RR. `+edns`
+                // (no value) and `+edns=0` both enable EDNS version 0 (the
+                // default); `+edns=N` advertises version N (0..255).
+                // `+noedns` disables the default OPT RR. Note: `+dnssec` and
+                // `+subnet` still force an OPT RR even under `+noedns` (the DO
+                // bit / ECS option live in the OPT record), mirroring `dig`.
+                if (negate) {
+                    if (!value.empty()) {
+                        result.error = fmt::format("option '+{}' does not take a value", key);
+                        return result;
+                    }
+                    opts.edns = false;
+                } else {
+                    opts.edns = true;
+                    if (!value.empty()) {
+                        unsigned ver = 0;
+                        const auto [ptr, ec] = std::from_chars(value.data(), value.data() + value.size(), ver);
+                        if (ec != std::errc{} || ptr != value.data() + value.size() || ver > 255) {
+                            result.error = fmt::format("invalid EDNS version: {}", value);
+                            return result;
+                        }
+                        opts.edns_version = static_cast<uint8_t>(ver);
+                    } else {
+                        opts.edns_version = 0;
+                    }
+                }
             } else if (canon == "dnssec") {
                 opts.dnssec = !negate;
             } else if (canon == "cdflag") {

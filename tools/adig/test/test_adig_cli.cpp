@@ -20,6 +20,9 @@
 namespace ag::adig::test {
 
 namespace {
+// Byte vector alias used by the EDNS/ECS byte-exact tests below.
+using Bytes = std::vector<uint8_t>;
+
 // Helper: parse a argv vector and return the result.
 ParseResult parse(std::vector<std::string> args) {
     // Keep the strings alive and mutable so we can hand `char *` pointers to
@@ -312,6 +315,168 @@ TEST(ParseDnssec, KeywordAliasAndNoForm) {
     EXPECT_FALSE(parse({"adig", "example.com", "+nodo"}).opts.dnssec);
 }
 
+// --- +edns / +noedns (EDNS OPT RR) ---------------------------------------
+//
+// `dig` sends EDNS by default (an OPT RR carrying version 0 and a UDP payload
+// size). `+edns[=N]` explicitly enables it (optionally advertising version N,
+// 0..255); `+noedns` disables the default OPT RR. `+dnssec` (DO bit) and
+// `+subnet` (ECS option) still force an OPT RR even under `+noedns`, since
+// those live inside the OPT record — verified against `dig 9.20` via its
+// `+qr` query echo.
+
+TEST(MatchPlusKeyword, EdnsKeyword) {
+    EXPECT_EQ("edns", match_plus_keyword("edns").canonical);
+    EXPECT_EQ("edns", match_plus_keyword("ed").canonical);  // unambiguous prefix
+    EXPECT_EQ("edns", match_plus_keyword("edn").canonical); // unambiguous prefix
+}
+
+TEST(ParseEdns, DefaultsOn) {
+    // No +edns on the command line: EDNS is on by default with version 0,
+    // matching `dig` (a plain `dig example.com` sends an OPT RR).
+    ParseResult r = parse({"adig", "example.com"});
+    ASSERT_TRUE(r.error.empty()) << r.error;
+    EXPECT_TRUE(r.opts.edns);
+    EXPECT_EQ(0u, r.opts.edns_version);
+}
+
+TEST(ParseEdns, BareEdnsEnablesVersion0) {
+    ParseResult r = parse({"adig", "example.com", "+edns"});
+    ASSERT_TRUE(r.error.empty()) << r.error;
+    EXPECT_TRUE(r.opts.edns);
+    EXPECT_EQ(0u, r.opts.edns_version);
+}
+
+TEST(ParseEdns, EdnsVersion0Explicit) {
+    // `+edns=0` is equivalent to `+edns` (the dig default).
+    ParseResult r = parse({"adig", "example.com", "+edns=0"});
+    ASSERT_TRUE(r.error.empty()) << r.error;
+    EXPECT_TRUE(r.opts.edns);
+    EXPECT_EQ(0u, r.opts.edns_version);
+}
+
+TEST(ParseEdns, EdnsVersionN) {
+    EXPECT_EQ(1u, parse({"adig", "example.com", "+edns=1"}).opts.edns_version);
+    EXPECT_EQ(255u, parse({"adig", "example.com", "+edns=255"}).opts.edns_version);
+}
+
+TEST(ParseEdns, EdnsVersionEnablesEdns) {
+    // `+edns=N` must also turn EDNS on (not just set the version).
+    EXPECT_TRUE(parse({"adig", "example.com", "+edns=1"}).opts.edns);
+}
+
+TEST(ParseEdns, NoEdnsDisables) {
+    ParseResult r = parse({"adig", "example.com", "+noedns"});
+    ASSERT_TRUE(r.error.empty()) << r.error;
+    EXPECT_FALSE(r.opts.edns);
+}
+
+TEST(ParseEdns, NoEdnsRejectsValue) {
+    // `+noedns` does not take a value (it is a pure toggle).
+    EXPECT_FALSE(parse({"adig", "example.com", "+noedns=0"}).error.empty());
+    EXPECT_FALSE(parse({"adig", "example.com", "+noedns=1"}).error.empty());
+}
+
+TEST(ParseEdns, InvalidVersionRejected) {
+    EXPECT_FALSE(parse({"adig", "example.com", "+edns=256"}).error.empty());
+    EXPECT_FALSE(parse({"adig", "example.com", "+edns=abc"}).error.empty());
+    EXPECT_FALSE(parse({"adig", "example.com", "+edns=-1"}).error.empty());
+    EXPECT_FALSE(parse({"adig", "example.com", "+edns=0x0"}).error.empty());
+}
+
+TEST(ParseEdns, AbbreviationResolves) {
+    EXPECT_TRUE(parse({"adig", "example.com", "+ed"}).opts.edns);
+    EXPECT_FALSE(parse({"adig", "example.com", "+noed"}).opts.edns);
+}
+
+TEST(ParseEdns, OrderSensitiveToggle) {
+    // Mirrors dig's order-sensitive semantics: the last +edns/+noedns wins.
+    EXPECT_FALSE(parse({"adig", "example.com", "+edns", "+noedns"}).opts.edns);
+    EXPECT_TRUE(parse({"adig", "example.com", "+noedns", "+edns"}).opts.edns);
+    // A later +edns=N after +noedns re-enables EDNS with version N.
+    ParseResult r = parse({"adig", "example.com", "+noedns", "+edns=1"});
+    ASSERT_TRUE(r.error.empty()) << r.error;
+    EXPECT_TRUE(r.opts.edns);
+    EXPECT_EQ(1u, r.opts.edns_version);
+}
+
+TEST(ApplyDnsFlags, DefaultOptsAttachOptRecord) {
+    // Default CliOptions (edns on, version 0): a plain adig query carries an
+    // OPT RR with a >=4096 UDP payload size and no DO bit, matching `dig`.
+    ldns_pkt_ptr q = make_query("example.com", LDNS_RR_TYPE_A, true);
+    ASSERT_NE(nullptr, q.get());
+    CliOptions opts; // edns == true (default)
+    apply_dns_flags(q.get(), opts);
+    EXPECT_TRUE(ldns_pkt_edns(q.get()));
+    EXPECT_GE(ldns_pkt_edns_udp_size(q.get()), 4096u);
+    EXPECT_EQ(0u, ldns_pkt_edns_version(q.get()));
+    EXPECT_FALSE(ldns_pkt_edns_do(q.get()));
+}
+
+TEST(ApplyDnsFlags, NoEdnsSuppressesOptRecord) {
+    ldns_pkt_ptr q = make_query("example.com", LDNS_RR_TYPE_A, true);
+    ASSERT_NE(nullptr, q.get());
+    CliOptions opts;
+    opts.edns = false; // +noedns, nothing else
+    apply_dns_flags(q.get(), opts);
+    EXPECT_FALSE(ldns_pkt_edns(q.get()));
+    EXPECT_FALSE(ldns_pkt_edns_do(q.get()));
+}
+
+TEST(ApplyDnsFlags, NoEdnsWithDnssecStillAttachesOpt) {
+    // `+noedns +dnssec`: the DO bit lives in the OPT record, so EDNS is forced
+    // on regardless of +noedns (verified against `dig +noedns +dnssec +qr`).
+    ldns_pkt_ptr q = make_query("example.com", LDNS_RR_TYPE_A, true);
+    ASSERT_NE(nullptr, q.get());
+    CliOptions opts;
+    opts.edns = false;
+    opts.dnssec = true;
+    apply_dns_flags(q.get(), opts);
+    EXPECT_TRUE(ldns_pkt_edns(q.get()));
+    EXPECT_TRUE(ldns_pkt_edns_do(q.get()));
+}
+
+TEST(ApplyDnsFlags, NoEdnsWithSubnetStillAttachesOpt) {
+    // `+noedns +subnet`: ECS is an EDNS option, so EDNS is forced on regardless
+    // of +noedns (verified against `dig +noedns +subnet=... +qr`).
+    ldns_pkt_ptr q = make_query("example.com", LDNS_RR_TYPE_A, true);
+    ASSERT_NE(nullptr, q.get());
+    CliOptions opts;
+    opts.edns = false;
+    opts.subnet = {.enabled = true, .addr = "1.2.3.4", .src_prefix = 24};
+    apply_dns_flags(q.get(), opts);
+    EXPECT_TRUE(ldns_pkt_edns(q.get()));
+    ldns_rdf *data = ldns_pkt_edns_data(q.get());
+    ASSERT_NE(nullptr, data);
+    const uint8_t *bytes = ldns_rdf_data(data);
+    size_t sz = ldns_rdf_size(data);
+    Bytes actual(bytes, bytes + sz);
+    EXPECT_EQ((Bytes{0x00, 0x08, 0x00, 0x07, 0x00, 0x01, 0x18, 0x00, 0x01, 0x02, 0x03}), actual);
+}
+
+TEST(ApplyDnsFlags, EdnsVersionPropagated) {
+    // `+edns=1` advertises EDNS version 1 in the OPT RR.
+    ldns_pkt_ptr q = make_query("example.com", LDNS_RR_TYPE_A, true);
+    ASSERT_NE(nullptr, q.get());
+    CliOptions opts;
+    opts.edns_version = 1;
+    apply_dns_flags(q.get(), opts);
+    EXPECT_TRUE(ldns_pkt_edns(q.get()));
+    EXPECT_EQ(1u, ldns_pkt_edns_version(q.get()));
+}
+
+TEST(ApplyDnsFlags, NoEdnsWithCdSetsHeaderBitOnly) {
+    // CD is a DNS header flag, not an EDNS extension: +noedns +cdflag must set
+    // CD without attaching an OPT RR (verified against `dig +noedns +cd +qr`).
+    ldns_pkt_ptr q = make_query("example.com", LDNS_RR_TYPE_A, true);
+    ASSERT_NE(nullptr, q.get());
+    CliOptions opts;
+    opts.edns = false;
+    opts.cd = true;
+    apply_dns_flags(q.get(), opts);
+    EXPECT_TRUE(ldns_pkt_cd(q.get()));
+    EXPECT_FALSE(ldns_pkt_edns(q.get()));
+}
+
 // --- +cdflag / +cd (Checking Disabled) -----------------------------------
 
 TEST(MatchPlusKeyword, ExplicitAliasCd) {
@@ -394,10 +559,6 @@ TEST(ParseVersion, FlagsRequestVersion) {
 }
 
 // --- encode_ecs_option (RFC 7871, byte-exact) ----------------------------
-
-namespace {
-using Bytes = std::vector<uint8_t>;
-} // namespace
 
 TEST(EncodeEcsOption, Ipv4Prefix24) {
     // code=8, len=7, family=1, src=24(0x18), scope=0, addr=01 02 03

@@ -75,7 +75,9 @@ struct CliOptions {
     bool trace = false;
     bool ipv4_only = false;   // -4: suppress IPv6 bootstrap (sets ipv6_available=false)
     bool recurse = true;      // +recurse (default on) / +norecurse — sets the RD bit
-    bool dnssec = false;      // +dnssec / +do — sets the EDNS DO bit (and 4096 UDP size)
+    bool edns = true;         // +edns (default on) / +noedns — send an OPT RR (RFC 6891)
+    uint8_t edns_version = 0; // +edns[=N] — EDNS version to advertise (0..255, default 0)
+    bool dnssec = false;      // +dnssec / +do — sets the EDNS DO bit (forces an OPT RR)
     bool cd = false;          // +cdflag / +cd — sets the CD (Checking Disabled) bit
     bool reverse = false;     // set by `-x addr`: name is a reverse-lookup PTR
     bool print_query = false; // +qr — print the query packet before sending
@@ -109,8 +111,8 @@ std::optional<std::string> make_reverse_name(std::string_view addr);
 
 // Build a DNS query packet for `name`/`type`. When `recurse` is false the RD
 // flag is cleared (used by `+trace` to query authoritative servers directly).
-// The EDNS-layer flags (+dnssec DO bit, +cdflag, +subnet) are applied
-// separately by apply_dns_flags() so they can be toggled independently.
+// The EDNS-layer flags (+edns/+noedns, +dnssec DO bit, +cdflag, +subnet) are
+// applied separately by apply_dns_flags() so they can be toggled independently.
 ldns_pkt_ptr make_query(const std::string &name, ldns_rr_type type, bool recurse);
 
 // Encode the EDNS Client Subnet option (RFC 7871, option code 8) as the raw
@@ -123,10 +125,14 @@ ldns_pkt_ptr make_query(const std::string &name, ldns_rr_type type, bool recurse
 // stores in the packet's EDNS data and writes verbatim as OPT RDATA.
 std::vector<uint8_t> encode_ecs_option(std::string_view addr, uint8_t src_prefix);
 
-// Apply the EDNS-layer CLI flags to an already-built query packet: the DO bit
-// and a 4096-byte EDNS UDP payload size when `opts.dnssec` is set (RFC 3225),
-// the CD bit when `opts.cd` is set, and the ECS option when `opts.subnet` is
-// set. RD is not touched here; it is set at construction time by make_query().
+// Apply the EDNS-layer CLI flags to an already-built query packet. `+edns`
+// (the default, opts.edns) attaches an OPT RR carrying a 4096-byte EDNS UDP
+// payload size and the version from opts.edns_version; `+noedns` (opts.edns ==
+// false) suppresses it. `+dnssec` sets the DO bit and always forces an OPT RR
+// (the DO bit lives in the OPT record, so it cannot be sent without EDNS even
+// under `+noedns`, mirroring `dig`). `+cdflag` sets the CD bit. `+subnet`
+// attaches the ECS option and always forces an OPT RR (it is an EDNS option).
+// RD is not touched here; it is set at construction time by make_query().
 void apply_dns_flags(ldns_pkt *pkt, const CliOptions &opts);
 
 // A glue address extracted from a referral response's ADDITIONAL section, tagged

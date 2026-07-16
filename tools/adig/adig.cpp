@@ -73,6 +73,8 @@ int print_usage(const char *prog) {
             "                    (defaults to the system resolver when omitted)\n"
             "  +recurse          set the RD (recursion desired) bit (default)\n"
             "  +norecurse        clear the RD bit\n"
+            "  +edns[=N]         send an OPT RR, optionally with EDNS version N (default on)\n"
+            "  +noedns           do not send an OPT RR\n"
             "  +dnssec / +do     set the EDNS DO bit (request DNSSEC records)\n"
             "  +cdflag / +cd     set the CD (checking disabled) bit\n"
             "  +subnet=ADDR[/P]  send EDNS Client Subnet (RFC 7871)\n"
