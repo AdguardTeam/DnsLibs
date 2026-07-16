@@ -67,9 +67,12 @@ This is equivalent to `make test-cpp`, which builds the `tests` target and runs 
 Tests run in parallel by default, using one ctest slot per logical CPU. This is
 safe because the in-process loopback servers
 (`common/test_helpers/loopback_*`) bind ephemeral ports, and the proxy listener
-tests register ephemeral (`port 0`) listeners whose actual port is resolved at
-`init()` time. To control the parallelism level, override `TEST_JOBS`, for
-example to force serial execution on a memory-constrained machine:
+tests configure `port 0` so that `init()` binds an ephemeral port and stores
+the actual port back in the listener settings (read via `get_settings()` after
+`init()`); the single deliberate-bind-failure test never binds successfully, so
+concurrent test processes never collide on a listener port. To control the
+parallelism level, override `TEST_JOBS`, for example to force serial execution
+on a memory-constrained machine:
 
 ```shell
 make test TEST_JOBS=1

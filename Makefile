@@ -30,8 +30,10 @@ endif
 # with e.g. `make test TEST_JOBS=1` to force serial execution, or lower it on a
 # memory-constrained machine. Tests are parallel-safe: the in-process loopback
 # servers (`common/test_helpers/loopback_*`) all bind ephemeral ports, and the
-# proxy listener tests register ephemeral (port 0) listeners whose actual port
-# is resolved by the proxy at init() time.
+# proxy listener tests configure port 0 so DnsProxy::init() binds an ephemeral
+# port and stores the actual port back in the listener settings (read via
+# get_settings() after init); the one deliberate-bind-failure test never binds,
+# so concurrent test processes never collide on a listener port.
 TEST_JOBS ?= $(NPROC)
 
 # Whether to build with AddressSanitizer. CI enables this on Linux. Maps to

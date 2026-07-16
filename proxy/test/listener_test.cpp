@@ -38,6 +38,11 @@ TEST_P(ListenerTest, ListensAndResponds) {
     std::condition_variable proxy_cond;
     std::atomic_bool proxy_initialized{false};
     std::atomic_bool proxy_init_result{false};
+    // Filled in by the proxy thread with the OS-assigned (ephemeral) port the
+    // listener actually bound to, so the client threads can dial the resolver
+    // without relying on a fixed port (which would collide under parallel
+    // ctest). init() writes the resolved port back into the listener settings.
+    std::atomic<uint16_t> resolved_port{0};
 
     const auto &params = GetParam();
     const auto listener_settings = params.settings;
@@ -69,6 +74,11 @@ TEST_P(ListenerTest, ListensAndResponds) {
         DnsProxy proxy;
         auto [ret, err] = proxy.init(settings, {});
         proxy_init_result = ret;
+        if (ret) {
+            // init() rewrote the port-0 listener's port to the OS-assigned
+            // ephemeral port; expose it to the client threads.
+            resolved_port = proxy.get_settings().listeners[0].port;
+        }
         proxy_initialized = true;
         proxy_cond.notify_all();
         if (!proxy_init_result) {
@@ -125,7 +135,7 @@ TEST_P(ListenerTest, ListensAndResponds) {
     std::vector<Worker> workers;
 
     const auto address = fmt::format("{}[{}]:{}", listener_settings.protocol == ag::utils::TP_TCP ? "tcp://" : "",
-            params.request_addr, listener_settings.port);
+            params.request_addr, resolved_port.load());
 
     for (size_t i = 0; i < params.n_threads; ++i) {
         EventLoopPtr loop = EventLoop::create();
@@ -219,7 +229,11 @@ TEST(ListenerTest, ManyRequestsPending) {
     bool proxy_initialized = false;
 
     constexpr auto address = "::";
-    constexpr auto port = 5321;
+    // Port 0 (ephemeral): the 10k-request storm below goes through the
+    // in-process handle_message() path, which bypasses the listener, so no
+    // client ever dials this port; binding an ephemeral port keeps the test
+    // parallel-safe alongside the other listener tests.
+    constexpr auto port = 0;
     DnsProxy proxy;
     std::thread proxy_thread([&]() {
         auto proxy_settings = DnsProxySettings::get_default();
@@ -375,11 +389,11 @@ TEST(ListenerTest, ManyRequestsPending) {
 }
 
 INSTANTIATE_TEST_SUITE_P(ListenerLogic, ListenerTest,
-        ::testing::Values(TestParams{ListenerSettings{.address = "::1", .port = 1234, .protocol = ag::utils::TP_UDP}},
+        ::testing::Values(TestParams{ListenerSettings{.address = "::1", .port = 0, .protocol = ag::utils::TP_UDP}},
                 TestParams{ListenerSettings{
-                        .address = "::1", .port = 1234, .protocol = ag::utils::TP_TCP, .persistent = false}},
+                        .address = "::1", .port = 0, .protocol = ag::utils::TP_TCP, .persistent = false}},
                 TestParams{ListenerSettings{.address = "::1",
-                        .port = 1234,
+                        .port = 0,
                         .protocol = ag::utils::TP_TCP,
                         .persistent = true,
                         .idle_timeout = 1000ms}}),
