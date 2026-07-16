@@ -236,9 +236,14 @@ static ldns_pkt_ptr dnssec_upstream_handler(const ldns_pkt &req) {
 
 static DnsProxySettings make_dnsproxy_settings_with_listeners() {
     auto settings = make_dnsproxy_settings();
+    // Use port 0 (ephemeral) so concurrent test processes never collide on a
+    // fixed port under parallel ctest (-j). DnsProxy::init() rewrites each
+    // listener's port to the OS-assigned value; tests that assert on the
+    // resolved listeners must therefore snapshot them from get_settings()
+    // *after* init() rather than comparing against this configured value.
     settings.listeners = {
-            {.address = "127.0.0.1", .port = 5354, .protocol = utils::TP_UDP},
-            {.address = "127.0.0.1", .port = 5355, .protocol = utils::TP_TCP, .persistent = true},
+            {.address = "127.0.0.1", .port = 0, .protocol = utils::TP_UDP},
+            {.address = "127.0.0.1", .port = 0, .protocol = utils::TP_TCP, .persistent = true},
     };
     return settings;
 }
@@ -2953,6 +2958,10 @@ TEST_F(DnsProxyTest, TestReapplySettingsRoSettingsPreservesListenersAndFilters) 
     auto [ret, err] = m_proxy->init(settings, {});
     ASSERT_TRUE(ret) << err->str();
 
+    // Snapshot the listeners with their OS-assigned (ephemeral) ports; these are
+    // what reapply_settings(..., RO_SETTINGS) must preserve.
+    auto expected_listeners = m_proxy->get_settings().listeners;
+
     // Reapply with RO_SETTINGS — listeners and filter_params must be preserved
     DnsProxySettings new_settings = make_dnsproxy_settings();
     new_settings.upstreams = {{g_upstream->address(ag::utils::TP_UDP)}};
@@ -2963,7 +2972,7 @@ TEST_F(DnsProxyTest, TestReapplySettingsRoSettingsPreservesListenersAndFilters) 
     ASSERT_TRUE(ret2) << (err2 ? err2->str() : "");
 
     const auto &current = m_proxy->get_settings();
-    ASSERT_NO_FATAL_FAILURE(check_listeners(current, settings.listeners));
+    ASSERT_NO_FATAL_FAILURE(check_listeners(current, expected_listeners));
     ASSERT_NO_FATAL_FAILURE(check_filter_params(current, settings.filter_params));
     // Other settings should be updated to new_settings values
     DnsProxySettings expected_other = new_settings;
@@ -2988,6 +2997,10 @@ TEST_F(DnsProxyTest, TestReapplySettingsRoFiltersPreservesListenersAndOtherSetti
     auto [ret, err] = m_proxy->init(settings, {});
     ASSERT_TRUE(ret) << err->str();
 
+    // Snapshot the listeners (ephemeral ports resolved by init) that RO_FILTERS
+    // must preserve alongside the other settings.
+    auto expected_listeners = m_proxy->get_settings().listeners;
+
     // Reapply with RO_FILTERS only
     DnsProxySettings new_settings = make_dnsproxy_settings();
     new_settings.blocked_response_ttl_secs = 9999;          // Should be ignored
@@ -2998,7 +3011,7 @@ TEST_F(DnsProxyTest, TestReapplySettingsRoFiltersPreservesListenersAndOtherSetti
     ASSERT_TRUE(ret2) << (err2 ? err2->str() : "");
 
     const auto &current = m_proxy->get_settings();
-    ASSERT_NO_FATAL_FAILURE(check_listeners(current, settings.listeners));
+    ASSERT_NO_FATAL_FAILURE(check_listeners(current, expected_listeners));
     ASSERT_NO_FATAL_FAILURE(check_filter_params(current, new_settings.filter_params));
     ASSERT_NO_FATAL_FAILURE(check_other_settings(current, settings));
 
@@ -3022,6 +3035,10 @@ TEST_F(DnsProxyTest, TestReapplySettingsFullUpdatePreservesListeners) {
     auto [ret, err] = m_proxy->init(settings, {});
     ASSERT_TRUE(ret) << err->str();
 
+    // Snapshot the listeners (ephemeral ports resolved by init) that the full
+    // reapply (RO_SETTINGS | RO_FILTERS) must preserve.
+    auto expected_listeners = m_proxy->get_settings().listeners;
+
     // Reapply with both flags
     DnsProxySettings new_settings = make_dnsproxy_settings();
     new_settings.upstreams = {{g_upstream->address(ag::utils::TP_UDP)}};
@@ -3031,7 +3048,7 @@ TEST_F(DnsProxyTest, TestReapplySettingsFullUpdatePreservesListeners) {
     ASSERT_TRUE(ret2) << (err2 ? err2->str() : "");
 
     const auto &current = m_proxy->get_settings();
-    ASSERT_NO_FATAL_FAILURE(check_listeners(current, settings.listeners));
+    ASSERT_NO_FATAL_FAILURE(check_listeners(current, expected_listeners));
     ASSERT_NO_FATAL_FAILURE(check_filter_params(current, new_settings.filter_params));
     ASSERT_NO_FATAL_FAILURE(check_other_settings(current, new_settings));
 
@@ -3055,6 +3072,10 @@ TEST_F(DnsProxyTest, TestReapplySettingsNoOpPreservesEverything) {
     auto [ret, err] = m_proxy->init(settings, {});
     ASSERT_TRUE(ret) << err->str();
 
+    // Snapshot the listeners (ephemeral ports resolved by init) that RO_NONE
+    // must preserve, along with everything else.
+    auto expected_listeners = m_proxy->get_settings().listeners;
+
     // Reapply with RO_NONE — everything must be preserved
     DnsProxySettings new_settings = make_dnsproxy_settings();
     new_settings.upstreams = {{g_upstream->address(ag::utils::TP_UDP)}}; // Should be ignored
@@ -3064,7 +3085,7 @@ TEST_F(DnsProxyTest, TestReapplySettingsNoOpPreservesEverything) {
     ASSERT_TRUE(ret2) << (err2 ? err2->str() : "");
 
     const auto &current = m_proxy->get_settings();
-    ASSERT_NO_FATAL_FAILURE(check_listeners(current, settings.listeners));
+    ASSERT_NO_FATAL_FAILURE(check_listeners(current, expected_listeners));
     ASSERT_NO_FATAL_FAILURE(check_filter_params(current, settings.filter_params));
     ASSERT_NO_FATAL_FAILURE(check_other_settings(current, settings));
 }

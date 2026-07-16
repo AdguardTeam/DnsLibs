@@ -75,7 +75,10 @@ TEST(MatchPlusKeyword, UnknownIsError) {
 
 // --- display-flag toggling via parse_args --------------------------------
 
-TEST(ParseDisplayFlags, NoAllClearsEveryFlag) {
+TEST(ParseDisplayFlags, NoAllClearsEverySectionFlag) {
+    // `dig +noall` toggles only the section-level flags; the field-level flags
+    // (ttlid / cls) keep their defaults (on), and multiline stays off (its
+    // default). Verified against `dig 9.20`.
     ParseResult r = parse({"adig", "example.com", "+noall"});
     ASSERT_TRUE(r.error.empty()) << r.error;
     const DisplayFlags &d = r.opts.display;
@@ -87,13 +90,15 @@ TEST(ParseDisplayFlags, NoAllClearsEveryFlag) {
     EXPECT_FALSE(d.additional);
     EXPECT_FALSE(d.stats);
     EXPECT_FALSE(d.multiline);
-    EXPECT_FALSE(d.ttlid);
-    EXPECT_FALSE(d.cls);
+    // Field-level flags are NOT part of `+all`/`+noall`: they keep defaults.
+    EXPECT_TRUE(d.ttlid);
+    EXPECT_TRUE(d.cls);
 }
 
-TEST(ParseDisplayFlags, AllSetsEveryFlag) {
-    // +noall then +all: every flag ends up true, including the ones that
-    // default to false (multiline).
+TEST(ParseDisplayFlags, AllSetsEverySectionFlag) {
+    // +noall then +all: every section flag ends up true. The field-level flags
+    // (ttlid / cls) keep their (default-on) values; multiline keeps its
+    // (default-off) value — `dig +all` does not enable multiline.
     ParseResult r = parse({"adig", "example.com", "+noall", "+all"});
     ASSERT_TRUE(r.error.empty()) << r.error;
     const DisplayFlags &d = r.opts.display;
@@ -104,7 +109,7 @@ TEST(ParseDisplayFlags, AllSetsEveryFlag) {
     EXPECT_TRUE(d.authority);
     EXPECT_TRUE(d.additional);
     EXPECT_TRUE(d.stats);
-    EXPECT_TRUE(d.multiline);
+    EXPECT_FALSE(d.multiline);
     EXPECT_TRUE(d.ttlid);
     EXPECT_TRUE(d.cls);
 }
@@ -139,6 +144,69 @@ TEST(ParseDisplayFlags, NoAllThenSelectiveReenable) {
     EXPECT_FALSE(d.stats);
     EXPECT_FALSE(d.additional);
     EXPECT_FALSE(d.multiline);
+}
+
+TEST(ParseDisplayFlags, NoAllAnswerKeepsTtlAndClass) {
+    // Regression: `+noall` must not toggle the field-level flags, so
+    // `+noall +answer` still shows TTL and class (matching `dig`). Previously
+    // `+noall` cleared `ttlid`/`cls` and `+answer` did not restore them, so the
+    // printed RRs lost both fields.
+    ParseResult r = parse({"adig", "example.com", "+noall", "+answer"});
+    ASSERT_TRUE(r.error.empty()) << r.error;
+    const DisplayFlags &d = r.opts.display;
+    EXPECT_TRUE(d.answer);
+    EXPECT_TRUE(d.ttlid);
+    EXPECT_TRUE(d.cls);
+}
+
+TEST(ParseDisplayFlags, NoAllPreservesExplicitlyClearedFieldFlags) {
+    // `dig +nottlid +noall +answer` omits the TTL: `+nottlid` clears it and
+    // `+noall` does not restore it. Symmetric check for `+noclass`.
+    EXPECT_FALSE(parse({"adig", "example.com", "+nottlid", "+noall", "+answer"}).opts.display.ttlid);
+    EXPECT_TRUE(parse({"adig", "example.com", "+nottlid", "+noall", "+answer"}).opts.display.cls);
+    EXPECT_TRUE(parse({"adig", "example.com", "+noclass", "+noall", "+answer"}).opts.display.ttlid);
+    EXPECT_FALSE(parse({"adig", "example.com", "+noclass", "+noall", "+answer"}).opts.display.cls);
+}
+
+TEST(ParseDisplayFlags, AllDoesNotTouchFieldFlags) {
+    // `dig +nottlid +all` still omits the TTL, and `dig +noclass +all` still
+    // omits the class: `+all` does not toggle the field-level flags.
+    EXPECT_FALSE(parse({"adig", "example.com", "+nottlid", "+all"}).opts.display.ttlid);
+    EXPECT_FALSE(parse({"adig", "example.com", "+noclass", "+all"}).opts.display.cls);
+    // `+all` does not enable multiline either (mirrors `dig +all`).
+    EXPECT_FALSE(parse({"adig", "example.com", "+all"}).opts.display.multiline);
+    EXPECT_TRUE(parse({"adig", "example.com", "+multiline", "+all"}).opts.display.multiline);
+}
+
+// --- cmd_banner_enabled (+short suppresses the +cmd banner) ----------------
+//
+// `dig`'s `; <<>> DiG ... <<>>` / `;; global options: +cmd` banner is gated on
+// `+cmd`, but `+short` suppresses it unconditionally — even `+short +cmd`
+// prints no banner — so short output is RDATA-only. Verified against `dig 9.20`.
+
+TEST(CmdBannerEnabled, DefaultOn) {
+    CliOptions opts;
+    EXPECT_TRUE(cmd_banner_enabled(opts));
+}
+
+TEST(CmdBannerEnabled, ShortSuppressesBanner) {
+    CliOptions opts;
+    opts.short_output = true;
+    EXPECT_FALSE(cmd_banner_enabled(opts));
+}
+
+TEST(CmdBannerEnabled, ShortWinsOverCmd) {
+    // `+short +cmd`: short wins, no banner (mirrors `dig +short +cmd`).
+    CliOptions opts;
+    opts.short_output = true;
+    opts.display.cmd = true; // explicitly enabled by +cmd
+    EXPECT_FALSE(cmd_banner_enabled(opts));
+}
+
+TEST(CmdBannerEnabled, NoCmdSuppressesBanner) {
+    CliOptions opts;
+    opts.display.cmd = false; // +nocmd
+    EXPECT_FALSE(cmd_banner_enabled(opts));
 }
 
 // --- existing boolean options through the new mechanism -------------------
@@ -779,7 +847,10 @@ TEST(ParseTrace, AllAfterTraceReenablesEverything) {
     ParseResult r = parse({"adig", "example.com", "+trace", "+all"});
     ASSERT_TRUE(r.error.empty()) << r.error;
     EXPECT_TRUE(r.opts.trace);
-    // +all wins: every display flag ends up on (including the trace defaults).
+    // +all wins: every section-level flag ends up on (re-enabling the trace
+    // defaults comments/question/stats). The field-level flags (multiline /
+    // ttlid / cls) are NOT part of `+all`: multiline keeps its default (off),
+    // and ttlid/cls keep their defaults (on) — matching `dig +trace +all`.
     const DisplayFlags &d = r.opts.display;
     EXPECT_TRUE(d.comments);
     EXPECT_TRUE(d.question);
@@ -787,7 +858,9 @@ TEST(ParseTrace, AllAfterTraceReenablesEverything) {
     EXPECT_TRUE(d.answer);
     EXPECT_TRUE(d.authority);
     EXPECT_TRUE(d.additional);
-    EXPECT_TRUE(d.multiline);
+    EXPECT_FALSE(d.multiline);
+    EXPECT_TRUE(d.ttlid);
+    EXPECT_TRUE(d.cls);
 }
 
 // --- format_trace_received_line -------------------------------------------

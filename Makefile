@@ -26,6 +26,14 @@ else
 NPROC ?= $(shell (nproc 2>/dev/null || sysctl -n hw.ncpu 2>/dev/null || echo 8) | tr -d '\n')
 endif
 
+# Parallelism level for ctest. Defaults to the number of logical CPUs. Override
+# with e.g. `make test TEST_JOBS=1` to force serial execution, or lower it on a
+# memory-constrained machine. Tests are parallel-safe: the in-process loopback
+# servers (`common/test_helpers/loopback_*`) all bind ephemeral ports, and the
+# proxy listener tests register ephemeral (port 0) listeners whose actual port
+# is resolved by the proxy at init() time.
+TEST_JOBS ?= $(NPROC)
+
 # Whether to build with AddressSanitizer. CI enables this on Linux. Maps to
 # the -DSANITIZE=yes CMake option (see proxy/CMakeLists.txt), which adds
 # -fsanitize=address to the dnsproxy target's compile and link flags.
@@ -207,7 +215,7 @@ test: test-cpp
 .PHONY: test-cpp
 test-cpp: build_libs
 	cmake --build $(BUILD_DIR) --target tests
-	ctest --test-dir $(BUILD_DIR)
+	ctest --test-dir $(BUILD_DIR) -j$(TEST_JOBS)
 
 ## Run the full test suite including real-network integration tests.
 ## Sets DNSLIBS_INTEGRATION_TESTS=1, so tests that dial public DNS servers
@@ -215,7 +223,7 @@ test-cpp: build_libs
 .PHONY: test-integration
 test-integration: build_libs
 	cmake --build $(BUILD_DIR) --target tests
-	DNSLIBS_INTEGRATION_TESTS=1 ctest --test-dir $(BUILD_DIR)
+	DNSLIBS_INTEGRATION_TESTS=1 ctest --test-dir $(BUILD_DIR) -j$(TEST_JOBS)
 
 # Path to the JUnit XML report written by the CI test target below. The CI
 # workflow uploads this file as the test-results artifact.
@@ -249,6 +257,6 @@ JUNIT_XML ?= $(BUILD_DIR)/junit.xml
 .PHONY: test-ci
 test-ci: build_libs
 	cmake --build $(BUILD_DIR) --target tests
-	DNSLIBS_INTEGRATION_TESTS=1 ctest --test-dir $(BUILD_DIR) \
+	DNSLIBS_INTEGRATION_TESTS=1 ctest --test-dir $(BUILD_DIR) -j$(TEST_JOBS) \
 		--output-junit $(abspath $(JUNIT_XML)) \
 		-D ExperimentalTest --no-compress-output

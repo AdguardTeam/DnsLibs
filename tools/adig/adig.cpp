@@ -537,8 +537,9 @@ int main(int argc, char *argv[]) {
     }
 
     // +cmd: echo the command line (mirrors `dig`'s `; <<>> DiG ... <<>>` banner)
-    // before any query/response output.
-    if (opts.display.cmd) {
+    // before any query/response output. `+short` suppresses this unconditionally
+    // (even with `+cmd`), matching `dig`'s RDATA-only short output.
+    if (cmd_banner_enabled(opts)) {
         std::string cmd = fmt::format("; <<>> adig {} <<>>", AG_DNSLIBS_VERSION);
         for (int i = 1; i < argc; ++i) {
             cmd += ' ';

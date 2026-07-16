@@ -64,6 +64,20 @@ make test
 
 This is equivalent to `make test-cpp`, which builds the `tests` target and runs `ctest`.
 
+Tests run in parallel by default, using one ctest slot per logical CPU. This is
+safe because the in-process loopback servers
+(`common/test_helpers/loopback_*`) bind ephemeral ports, and the proxy listener
+tests register ephemeral (`port 0`) listeners whose actual port is resolved at
+`init()` time. To control the parallelism level, override `TEST_JOBS`, for
+example to force serial execution on a memory-constrained machine:
+
+```shell
+make test TEST_JOBS=1
+```
+
+`make test-integration` and `make test-ci` likewise run `ctest` in parallel with
+`TEST_JOBS`.
+
 ### Linting
 
 The following `make` targets are available for linting:

@@ -147,6 +147,14 @@ std::string format_packet_dig(
 // order-sensitive precedence.
 void apply_trace_display_defaults(DisplayFlags &flags);
 
+// Whether the dig-style `; <<>> adig ... <<>>` / `;; global options: +cmd`
+// banner should be printed. Mirrors `dig`: the banner is gated on `+cmd`, but
+// `+short` suppresses it unconditionally (a later `+cmd` does not bring it
+// back), so `+short` always yields RDATA-only output. Public so main() can
+// delegate the decision and the rule remains unit-testable without an event
+// loop.
+bool cmd_banner_enabled(const CliOptions &opts);
+
 // Format one `dig +trace` hop as dig-compatible text. The body is produced by
 // `format_packet_dig` with the standard stats block suppressed. The footer is
 // then either:

@@ -98,6 +98,13 @@ bool apply_display_flag(DisplayFlags &df, std::string_view canonical, bool value
 }
 
 void set_all_display_flags(DisplayFlags &df, bool value) {
+    // `dig +all` / `+noall` toggle only the section-level display flags (cmd,
+    // comments, question, answer, authority, additional, stats). The
+    // field-level flags `multiline`, `ttlid` and `cls` are NOT part of the
+    // `+all` set: a `+nottlid` / `+noclass` set before `+all` / `+noall` is
+    // preserved, and `+noall +answer` still shows TTL and class. Verified
+    // against `dig 9.20` (`dig +nottlid +noall +answer` omits the TTL;
+    // `dig +noall +answer` keeps it).
     df.cmd = value;
     df.comments = value;
     df.question = value;
@@ -105,9 +112,6 @@ void set_all_display_flags(DisplayFlags &df, bool value) {
     df.authority = value;
     df.additional = value;
     df.stats = value;
-    df.multiline = value;
-    df.ttlid = value;
-    df.cls = value;
 }
 
 // Parse an IPv4/IPv6 literal into its EDNS family code (1 / 2) and address
@@ -227,6 +231,14 @@ std::string format_rr_dig(const ldns_rr *rr, bool with_ttl, bool with_class, boo
 }
 
 } // namespace
+
+bool cmd_banner_enabled(const CliOptions &opts) {
+    // `dig`'s `; <<>> DiG ... <<>>` / `;; global options: +cmd` banner is gated
+    // on `+cmd`, but `+short` suppresses it unconditionally — even a later
+    // `+cmd` does not bring it back — so `+short` always produces RDATA-only
+    // output. Verified against `dig 9.20` (`dig +short +cmd` prints no banner).
+    return opts.display.cmd && !opts.short_output;
+}
 
 KeywordMatch match_plus_keyword(std::string_view key) {
     // Explicit aliases that are not prefix-matchable (their target canonical
