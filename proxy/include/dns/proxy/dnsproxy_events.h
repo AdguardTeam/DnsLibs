@@ -76,6 +76,20 @@ struct DnsProxyEvents {
      *  - if returns an error, the connection will fail
      */
     std::function<Error<SocketError>(evutil_socket_t, const SocketAddress &)> on_protect_socket;
+    /**
+     * Fired once DNS64 prefix discovery completes (whether prefixes were found or not),
+     * carrying the discovered prefixes (empty on failure). Default: no-op.
+     * Used by tests to await completion deterministically instead of sleeping.
+     */
+    std::function<void(const std::vector<Uint8Vector> &)> on_dns64_discovered;
+    /**
+     * Fired after the optimistic-cache background refetch updates the cache entry for a domain
+     * (whether the refetch succeeded and put a fresh entry, or removed a stale entry).
+     * Carries the normalized domain name as an owning std::string, so handlers may safely
+     * retain it beyond the callback (the producer passes it by value/move). Default: no-op.
+     * Used by tests to await completion deterministically instead of sleeping.
+     */
+    std::function<void(std::string)> on_cache_updated;
 };
 
 } // namespace ag::dns

@@ -324,7 +324,7 @@ DnsForwarder::~DnsForwarder() = default;
 
 static coro::Task<void> discover_dns64_prefixes(std::vector<UpstreamOptions> uss, Millis timeout,
         std::shared_ptr<SocketFactory> socket_factory, dns64::StatePtr state, EventLoop &loop, uint32_t max_tries,
-        Millis wait_time, std::weak_ptr<bool> shutdown_guard);
+        Millis wait_time, std::weak_ptr<bool> shutdown_guard, const DnsProxyEvents *events);
 
 Error<DnsProxyInitError> DnsForwarder::init(EventLoopPtr loop, const DnsProxySettings &settings,
         const DnsProxyEvents &events, std::shared_ptr<DnsFilterManager> filter_manager) {
@@ -420,7 +420,8 @@ Error<DnsProxyInitError> DnsForwarder::init(EventLoopPtr loop, const DnsProxySet
     if (settings.dns64.has_value()) {
         infolog(m_log, "DNS64 discovery is enabled");
         coro::run_detached(discover_dns64_prefixes(settings.dns64->upstreams, settings.dns64->timeout, m_socket_factory,
-                m_dns64_state, *m_loop, settings.dns64->max_tries, settings.dns64->wait_time, m_shutdown_guard));
+                m_dns64_state, *m_loop, settings.dns64->max_tries, settings.dns64->wait_time, m_shutdown_guard,
+                m_events));
     }
 
     m_response_cache.set_capacity(m_settings->dns_cache_size);
@@ -433,8 +434,17 @@ Error<DnsProxyInitError> DnsForwarder::init(EventLoopPtr loop, const DnsProxySet
 
 static coro::Task<void> discover_dns64_prefixes(std::vector<UpstreamOptions> uss, Millis timeout,
         std::shared_ptr<SocketFactory> socket_factory, dns64::StatePtr state, EventLoop &loop, uint32_t max_tries,
-        Millis wait_time, std::weak_ptr<bool> shutdown_guard) {
+        Millis wait_time, std::weak_ptr<bool> shutdown_guard, const DnsProxyEvents *events) {
     static ag::Logger logger{"DNS64"};
+    // Fire the discovery-completion callback on every natural exit (success or
+    // exhaustion of retries). Not fired on the shutdown-guard early exits: by
+    // then the proxy is being torn down and calling into a test's promise would
+    // be unsafe.
+    auto fire_done = [&] {
+        if (events != nullptr && events->on_dns64_discovered) {
+            events->on_dns64_discovered(state->prefixes);
+        }
+    };
     co_await loop.co_submit();
     if (shutdown_guard.expired()) {
         co_return;
@@ -474,11 +484,13 @@ static coro::Task<void> discover_dns64_prefixes(std::vector<UpstreamOptions> uss
             state->prefixes = std::move(result.value());
 
             infolog(logger, "Prefixes discovered: {}", state->prefixes.size());
+            fire_done();
             co_return;
         }
     }
 
     dbglog(logger, "Failed to discover any prefixes");
+    fire_done();
 }
 
 void DnsForwarder::update_filter_manager(std::shared_ptr<DnsFilterManager> filter_manager) {
@@ -1220,6 +1232,9 @@ coro::Task<void> DnsForwarder::optimistic_cache_background_resolve(ldns_pkt_ptr 
     } else {
         log_packet(m_log, res->get(), "Async upstream exchange result");
         m_response_cache.put(req.get(), std::move(res.value()), upstream->options().id);
+    }
+    if (m_events != nullptr && m_events->on_cache_updated) {
+        m_events->on_cache_updated(std::move(normalized_domain));
     }
     co_return;
 }

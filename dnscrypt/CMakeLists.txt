@@ -41,4 +41,17 @@ include(${CMAKE_CURRENT_SOURCE_DIR}/../cmake/add_unit_test.cmake)
 link_libraries(dnscrypt)
 set(TEST_DIR ${CMAKE_CURRENT_SOURCE_DIR}/test)
 
-add_unit_test(dns_crypt_test "${TEST_DIR}" "${CMAKE_CURRENT_SOURCE_DIR}/src" TRUE FALSE)
+# Resolved relative to this module so the include is correct regardless of which
+# CMakeLists.txt is the top-level project (e.g. on Windows the build is driven
+# from platform/windows/capi, so CMAKE_SOURCE_DIR is not the repo root).
+set(AG_TEST_HELPERS ${DNSLIBS_DIR}/common/test_helpers)
+
+add_unit_test(dns_crypt_test "${TEST_DIR}"
+        "${CMAKE_CURRENT_SOURCE_DIR}/src;${AG_TEST_HELPERS}" TRUE FALSE)
+
+# The LoopbackDnscryptServer (header-only DNSCrypt responder on 127.0.0.1)
+# lives in common/test_helpers but requires the real dnscrypt::Client + libsodium
+# to exercise. Built here because the dnscrypt lib already links them. Registered
+# with EXPAND_GTEST=FALSE (like dns_crypt_test) so `ctest -R
+# loopback_dnscrypt_server_test` selects the whole suite.
+add_unit_test(loopback_dnscrypt_server_test "${TEST_DIR}" "${AG_TEST_HELPERS}" TRUE FALSE)
