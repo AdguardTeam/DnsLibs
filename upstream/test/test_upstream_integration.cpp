@@ -83,7 +83,8 @@ TEST_F(UpstreamTest, TestUpstreamsIntegration) {
 #ifdef __linux__
     int fd_count_before = count_open_fds();
 #endif
-    ASSERT_NO_FATAL_FAILURE(co_await sequential_test(real_upstreams_data, DELAY_BETWEEN_REQUESTS));
+    ASSERT_NO_FATAL_FAILURE(
+            co_await sequential_test(real_upstreams_data, DELAY_BETWEEN_REQUESTS, INTEGRATION_MAX_ATTEMPTS));
 #ifdef __linux__
     co_await wait_for_fds_to_stabilize(*m_loop, fd_count_before);
     int fd_count_after = count_open_fds();
