@@ -542,11 +542,11 @@ jobs:
       # add_subdirectory(tools/adig). A separate build-adig/ dir is used so it
       # does not collide with the capi build dirs. The root project's Windows
       # toolchain (cl.exe + Ninja, matching the Makefile's Windows path) is
-      # configured directly; the Conan CMake provider
-      # (CMAKE_PROJECT_TOP_LEVEL_INCLUDES, from cmake/conan_bootstrap.cmake)
-      # auto-syncs the MSVC runtime between the project targets and the Conan
-      # packages, so no /MT forcing is needed (unlike the capi CMakeLists, which
-      # forces /MT for its DLL).
+      # configured directly. The root CMakeLists.txt forces the static MSVC
+      # runtime (/MT, CMAKE_MSVC_RUNTIME_LIBRARY=MultiThreaded) so the project
+      # objects match the Conan-built /MT dependencies (the Conan profile
+      # conan/profiles/windows-msvc.jinja sets compiler.runtime=static); without
+      # it the link fails with LNK2038 RuntimeLibrary mismatches.
       - name: Build adig
         shell: powershell
         run: |
