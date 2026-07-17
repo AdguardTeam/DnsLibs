@@ -460,6 +460,152 @@ TEST(ApplyDnsFlags, NoEdnsSuppressesCookie) {
     EXPECT_TRUE(ldns_pkt_ad(q.get()));
 }
 
+// --- validate_edns_option_sizes -------------------------------------------
+//
+// The OPT record's RDLEN is a 16-bit field, so the concatenated EDNS option blob
+// may not exceed 65535 bytes; each option's option-length is likewise 16-bit, so
+// a single option's data may not exceed 65535 bytes (encode_edns_option would
+// otherwise truncate it to uint16_t). validate_edns_option_sizes mirrors
+// apply_dns_flags's assembly to catch an oversized request up front. The byte
+// arithmetic below is worked out from the TLV layout (4-byte header + data):
+//   cookie = 4 + 8 = 12, NSID = 4 + 0 = 4, ECS 1.2.3.4/24 = 4 + 4 + 3 = 11.
+
+TEST(ValidateEdnsOptionSizes, EmptyWhenNoOptRecord) {
+    // +noedns with no EDNS-bearing option -> no OPT RR -> nothing to validate.
+    CliOptions opts;
+    opts.edns = false;
+    opts.cookie = false;
+    EXPECT_TRUE(validate_edns_option_sizes(opts).empty());
+}
+
+TEST(ValidateEdnsOptionSizes, DefaultsAreSafe) {
+    // Default opts carry only the 8-byte client cookie (12 bytes on the wire).
+    CliOptions opts; // edns=true, cookie=true by default
+    EXPECT_TRUE(validate_edns_option_sizes(opts).empty());
+}
+
+TEST(ValidateEdnsOptionSizes, PaddingFitsAloneAtLimit) {
+    // +nocookie +padding=65531 -> 4 + 65531 = 65535 (exactly the RDLEN max).
+    CliOptions opts;
+    opts.cookie = false;
+    opts.padding = 65531;
+    EXPECT_TRUE(validate_edns_option_sizes(opts).empty());
+}
+
+TEST(ValidateEdnsOptionSizes, PaddingAloneOverLimitRejected) {
+    // 4 + 65532 = 65536 > 65535 -> combined overflow (cookie off).
+    CliOptions opts;
+    opts.cookie = false;
+    opts.padding = 65532;
+    std::string e = validate_edns_option_sizes(opts);
+    EXPECT_FALSE(e.empty());
+    EXPECT_NE(std::string::npos, e.find("combined"));
+    EXPECT_NE(std::string::npos, e.find("exceeds 65535"));
+}
+
+TEST(ValidateEdnsOptionSizes, PaddingMaxValueRejected) {
+    // +padding=65535 (the parse-time uint16 cap) alone is 65539 bytes on the
+    // wire -> combined overflow even with the cookie suppressed.
+    CliOptions opts;
+    opts.cookie = false;
+    opts.padding = 65535;
+    EXPECT_FALSE(validate_edns_option_sizes(opts).empty());
+}
+
+TEST(ValidateEdnsOptionSizes, CookiePlusPaddingRejected) {
+    // The exact case from the review: the default +cookie (12) plus
+    // +padding=65535 (65539) = 65551 > 65535 -> a malformed OPT RDLEN.
+    CliOptions opts; // cookie=true by default
+    opts.padding = 65535;
+    std::string e = validate_edns_option_sizes(opts);
+    EXPECT_FALSE(e.empty());
+    EXPECT_NE(std::string::npos, e.find("combined"));
+    EXPECT_NE(std::string::npos, e.find("65551")); // 12 + 65539
+}
+
+TEST(ValidateEdnsOptionSizes, CookiePlusPaddingAtLimit) {
+    // 12 + (4 + 65519) = 65535 -> the largest padding that still fits with the
+    // default cookie.
+    CliOptions opts; // cookie=true by default
+    opts.padding = 65519;
+    EXPECT_TRUE(validate_edns_option_sizes(opts).empty());
+}
+
+TEST(ValidateEdnsOptionSizes, EdnsoptPayloadFitsAtOptionLimit) {
+    // A single option carrying 65531 data bytes -> 4 + 65531 = 65535 (OK).
+    CliOptions opts;
+    opts.cookie = false;
+    opts.ednsopts.push_back({.code = 100, .data = Bytes(65531, 0xAA)});
+    EXPECT_TRUE(validate_edns_option_sizes(opts).empty());
+}
+
+TEST(ValidateEdnsOptionSizes, EdnsoptPayloadExceedsOptionLimit) {
+    // A single option carrying > 65535 data bytes would have its option-length
+    // truncated to uint16_t by encode_edns_option -> rejected per-option.
+    CliOptions opts;
+    opts.cookie = false;
+    opts.ednsopts.push_back({.code = 100, .data = Bytes(65536, 0xAA)});
+    std::string e = validate_edns_option_sizes(opts);
+    EXPECT_FALSE(e.empty());
+    EXPECT_NE(std::string::npos, e.find("payload"));
+    EXPECT_NE(std::string::npos, e.find("exceeds 65535"));
+    EXPECT_NE(std::string::npos, e.find("65536"));
+}
+
+TEST(ValidateEdnsOptionSizes, MultipleEdnsoptsExceedCombined) {
+    // Two 33000-byte options each fit the per-option limit (33000 <= 65535) but
+    // together exceed the combined RDLEN: 2 * (4 + 33000) = 66008 > 65535.
+    CliOptions opts;
+    opts.cookie = false;
+    opts.ednsopts.push_back({.code = 100, .data = Bytes(33000, 0x01)});
+    opts.ednsopts.push_back({.code = 101, .data = Bytes(33000, 0x02)});
+    std::string e = validate_edns_option_sizes(opts);
+    EXPECT_FALSE(e.empty());
+    EXPECT_NE(std::string::npos, e.find("combined"));
+    EXPECT_NE(std::string::npos, e.find("66008"));
+}
+
+TEST(ValidateEdnsOptionSizes, EcsCountedAgainstCombined) {
+    // ECS 1.2.3.4/24 = 11 bytes; + 4 + 65521 = 65536 > 65535 -> overflow, but
+    // with padding one byte smaller (65520) it fits exactly (65535).
+    CliOptions opts;
+    opts.cookie = false;
+    opts.subnet = {.enabled = true, .addr = "1.2.3.4", .src_prefix = 24};
+    opts.padding = 65521;
+    EXPECT_FALSE(validate_edns_option_sizes(opts).empty());
+    opts.padding = 65520; // 11 + (4 + 65520) = 65535
+    EXPECT_TRUE(validate_edns_option_sizes(opts).empty());
+}
+
+TEST(ValidateEdnsOptionSizes, ForcingOptionKeepsCookieCounted) {
+    // Under `+noedns` a forcing option (+padding) still attaches an OPT RR, so
+    // the default cookie is still counted: 12 + 65539 = 65551 > 65535.
+    CliOptions opts;
+    opts.edns = false;    // +noedns
+    opts.cookie = true;   // still on by default
+    opts.padding = 65535; // forces an OPT RR
+    EXPECT_FALSE(validate_edns_option_sizes(opts).empty());
+}
+
+TEST(ValidateEdnsOptionSizes, HeaderFieldsNotCounted) {
+    // DO/Z-field bits and the UDP payload size live in the OPT RR header, not in
+    // the RDATA blob, so they contribute zero bytes here.
+    CliOptions opts;
+    opts.cookie = false;
+    opts.dnssec = true;       // DO bit (header)
+    opts.edns_flags = 0x8000; // raw Z bits (header)
+    opts.edns_bufsize = 4096; // UDP payload size (header)
+    EXPECT_TRUE(validate_edns_option_sizes(opts).empty());
+}
+
+TEST(ValidateEdnsOptionSizes, NsidAccounted) {
+    // +nocookie +nsid -> 4 bytes (within the limit).
+    CliOptions opts;
+    opts.cookie = false;
+    opts.nsid = true;
+    EXPECT_TRUE(validate_edns_option_sizes(opts).empty());
+}
+
 // --- make_query (transaction ID seeded) -------------------------------------
 
 TEST(MakeQuery, TransactionIdVariesAfterSeeding) {

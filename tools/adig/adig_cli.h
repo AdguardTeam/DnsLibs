@@ -261,6 +261,22 @@ std::string format_dig_when(std::time_t when);
 // construction time by make_query().
 void apply_dns_flags(ldns_pkt *pkt, const CliOptions &opts);
 
+// Validate that the EDNS options configured in `opts` fit the wire before the
+// OPT RR is built: each EDNS option's option-data length is a 16-bit field
+// (<= 65535, since encode_edns_option truncates a larger length to uint16_t),
+// and the concatenated EDNS option blob — all options that apply_dns_flags()
+// would attach, in its build order — must fit the OPT record's 16-bit RDLEN
+// (<= 65535). Returns an empty string when the configuration is safe, or a
+// human-readable error (without an "Error: " prefix) describing the first
+// violation. Mirrors apply_dns_flags()'s option assembly and `want_edns` gate
+// so the accounting stays in lockstep with the bytes actually written: when no
+// OPT RR is present there is nothing to validate and an empty string is
+// returned (the cookie is suppressed along with the OPT). Called by parse_args()
+// as a post-parse check so an oversized request yields a clear error instead of
+// a malformed packet / encode-time truncation. Exposed in the pure layer so the
+// accounting is unit-testable without an event loop.
+std::string validate_edns_option_sizes(const CliOptions &opts);
+
 // A glue address extracted from a referral response's ADDITIONAL section, tagged
 // with its address family so +trace can honor -4 (skip IPv6 glue).
 struct GlueAddress {

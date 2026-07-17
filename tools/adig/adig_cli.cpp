@@ -648,6 +648,15 @@ ParseResult parse_args(int argc, char *argv[]) {
             }
         }
     }
+    // Post-parse validation: the OPT record's RDLEN and each EDNS option's
+    // option-length are both 16-bit fields, so a request like `+cookie
+    // +padding=65535` (or a huge `+ednsopt` hex payload) would otherwise build
+    // an EDNS blob > 65535 bytes, yielding a malformed packet / encode-time
+    // truncation. Catch it up front with a clear error instead.
+    if (std::string e = validate_edns_option_sizes(opts); !e.empty()) {
+        result.error = std::move(e);
+        return result;
+    }
     return result;
 }
 

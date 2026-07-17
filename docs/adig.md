@@ -137,6 +137,11 @@ Notable options (each `dig`-compatible):
   `+padding`, matching `dig`'s build order. `+noednsopt` clears the list (any
   value is ignored). Each entry forces an OPT RR, so it attaches even under
   `+noedns` (it is an EDNS option)
+- The combined EDNS option blob (`+cookie`/`+subnet`/`+nsid`/`+ednsopt`/
+  `+padding`) must fit the OPT record's 16-bit RDLEN (≤ 65535 bytes) and each
+  option's data must fit its 16-bit option-length; adig enforces this at parse
+  time and reports a clear error otherwise (e.g. `+cookie +padding=65535` is
+  rejected instead of producing a malformed packet)
 - `+opcode=NAME` — set the opcode (`QUERY`/`IQUERY`/`STATUS`/`NOTIFY`/`UPDATE`,
   or a numeric opcode); `+noopcode` clears the override
 - `+qr` — print the query packet before sending

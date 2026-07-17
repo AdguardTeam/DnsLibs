@@ -520,6 +520,76 @@ void apply_dns_flags(ldns_pkt *pkt, const CliOptions &opts) {
     }
 }
 
+std::string validate_edns_option_sizes(const CliOptions &opts) {
+    // Same gate as apply_dns_flags(): when no OPT RR is attached, no option
+    // bytes are written either (the cookie is suppressed along with the OPT).
+    const bool want_edns = opts.edns || opts.dnssec || opts.subnet.enabled || opts.nsid || opts.padding != 0
+            || opts.edns_flags.has_value() || !opts.ednsopts.empty();
+    if (!want_edns) {
+        return {};
+    }
+    // The OPT record's RDLEN is a 16-bit field, so the concatenated EDNS option
+    // blob may not exceed 65535 bytes; each option's option-length is likewise a
+    // 16-bit field, so a single option's data may not exceed 65535 bytes
+    // (encode_edns_option would otherwise truncate it to uint16_t, emitting a
+    // TLV whose header length disagrees with its body — a malformed packet).
+    constexpr size_t MAX = 65535;
+    constexpr size_t TLV_HEADER = 4; // option-code(2 BE) + option-length(2 BE)
+    size_t total = 0;
+    // Returns a non-empty error string when `data_len` exceeds the per-option
+    // limit; otherwise accumulates the option's full TLV size (4 + data_len)
+    // into `total`. Mirrors encode_edns_option's on-wire size exactly so the
+    // accounting stays in lockstep with the bytes apply_dns_flags() writes.
+    auto add_option = [&total](size_t data_len) -> std::string {
+        if (data_len > MAX) {
+            return fmt::format("EDNS option payload exceeds 65535 bytes: {}", data_len);
+        }
+        total += TLV_HEADER + data_len;
+        return {};
+    };
+    // Mirror apply_dns_flags's assembly order exactly: cookie, ECS, NSID, the
+    // +ednsopt list, then padding last.
+    if (opts.cookie) {
+        // RFC 7873: an 8-byte client cookie (no server cookie on the first query).
+        if (std::string e = add_option(8); !e.empty()) {
+            return e;
+        }
+    }
+    if (opts.subnet.enabled) {
+        // The ECS TLV is produced by encode_ecs_option; its full size is taken
+        // verbatim (an empty result means an invalid addr/prefix, rejected at
+        // parse time — defended here so the accounting never over-credits a
+        // dropped option). option-data = full TLV - the 4-byte header.
+        std::vector<uint8_t> ecs = encode_ecs_option(opts.subnet.addr, opts.subnet.src_prefix);
+        if (!ecs.empty()) {
+            if (std::string e = add_option(ecs.size() - TLV_HEADER); !e.empty()) {
+                return e;
+            }
+        }
+    }
+    if (opts.nsid) {
+        // RFC 5001: NSID option (code 3), empty data from the client.
+        if (std::string e = add_option(0); !e.empty()) {
+            return e;
+        }
+    }
+    for (const EdnsOption &opt : opts.ednsopts) {
+        if (std::string e = add_option(opt.data.size()); !e.empty()) {
+            return e;
+        }
+    }
+    if (opts.padding != 0) {
+        // RFC 7830: Padding option (code 12), opts.padding zero bytes.
+        if (std::string e = add_option(opts.padding); !e.empty()) {
+            return e;
+        }
+    }
+    if (total > MAX) {
+        return fmt::format("combined EDNS option data exceeds 65535 bytes: {}", total);
+    }
+    return {};
+}
+
 std::map<std::string, GlueAddress> additional_glue(const ldns_pkt *pkt) {
     std::map<std::string, GlueAddress> glue;
     if (pkt == nullptr) {

@@ -1104,4 +1104,62 @@ TEST(ParseEdnsopt, InvalidPayloadRejected) {
     EXPECT_FALSE(parse({"adig", "example.com", "+ednsopt=3:414"}).error.empty());
 }
 
+// --- EDNS option-size validation (post-parse) ------------------------------
+//
+// parse_args() runs validate_edns_option_sizes() after collecting every EDNS
+// option, so a request whose combined OPT RDATA would overflow the 16-bit
+// RDLEN (or a single option whose data overflows the 16-bit option-length)
+// yields a clear error instead of a malformed packet.
+
+TEST(ParseEdnsOptionSizes, PaddingMaxWithDefaultCookieIsError) {
+    // The review's case: the default +cookie (12 bytes) plus +padding=65535
+    // (65539 bytes) = 65551 > 65535.
+    ParseResult r = parse({"adig", "example.com", "+padding=65535"});
+    EXPECT_FALSE(r.error.empty());
+    EXPECT_NE(std::string::npos, r.error.find("exceeds 65535"));
+}
+
+TEST(ParseEdnsOptionSizes, PaddingFittingWithNoCookie) {
+    // +nocookie +padding=65531 -> 4 + 65531 = 65535 (exactly the limit).
+    ParseResult r = parse({"adig", "example.com", "+nocookie", "+padding=65531"});
+    ASSERT_TRUE(r.error.empty()) << r.error;
+    EXPECT_EQ(65531u, r.opts.padding);
+}
+
+TEST(ParseEdnsOptionSizes, PaddingOverWithNoCookie) {
+    // +nocookie +padding=65532 -> 65536 > 65535.
+    EXPECT_FALSE(parse({"adig", "example.com", "+nocookie", "+padding=65532"}).error.empty());
+}
+
+TEST(ParseEdnsOptionSizes, SmallPaddingIsFine) {
+    // Sanity: a modest padding value parses cleanly under the default cookie.
+    ParseResult r = parse({"adig", "example.com", "+padding=128"});
+    ASSERT_TRUE(r.error.empty()) << r.error;
+    EXPECT_EQ(128u, r.opts.padding);
+}
+
+TEST(ParseEdnsOptionSizes, EdnsoptHugePayloadIsError) {
+    // A 65536-byte option-data payload (131072 hex digits) exceeds the per-option
+    // 16-bit option-length, so it is rejected up front.
+    const std::string hex(131072, 'a'); // 65536 bytes when decoded
+    ParseResult r = parse({"adig", "example.com", "+nocookie", "+ednsopt=3:" + hex});
+    EXPECT_FALSE(r.error.empty());
+    EXPECT_NE(std::string::npos, r.error.find("exceeds 65535"));
+}
+
+TEST(ParseEdnsOptionSizes, EdnsoptPayloadAtOptionLimitOk) {
+    // A 65531-byte payload -> 4 + 65531 = 65535 (exactly the limit, cookie off).
+    const std::string hex(131062, 'a'); // 65531 bytes when decoded
+    ParseResult r = parse({"adig", "example.com", "+nocookie", "+ednsopt=3:" + hex});
+    ASSERT_TRUE(r.error.empty()) << r.error;
+    ASSERT_EQ(1u, r.opts.ednsopts.size());
+    EXPECT_EQ(65531u, r.opts.ednsopts[0].data.size());
+}
+
+TEST(ParseEdnsOptionSizes, NoEdnsOptsValid) {
+    // Without any oversized EDNS configuration, parsing succeeds.
+    ParseResult r = parse({"adig", "example.com", "+nsid", "+subnet=1.2.3.4/24", "+padding=100"});
+    ASSERT_TRUE(r.error.empty()) << r.error;
+}
+
 } // namespace ag::adig::test
