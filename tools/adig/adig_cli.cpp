@@ -1,33 +1,31 @@
-// adig_cli — implementation of the pure (event-loop-free) adig CLI logic.
+// adig_cli — argument parsing & CLI transforms for the pure adig CLI logic.
 //
-// See adig_cli.h for the interface description.
+// This translation unit holds the `+option` keyword table, the dig-compatible
+// display-flag helpers and the parse_args() command-line parser (plus the small
+// pure decision/rewrite helpers cmd_banner_enabled / apply_force_tcp /
+// apply_port). See adig_cli.h for the public interface; the EDNS/IP helpers
+// live in adig_cli_edns.cpp and the packet/formatting logic in
+// adig_cli_packet.cpp.
 
 #include "adig_cli.h"
 
 #include <algorithm>
-#include <array>
 #include <cctype>
 #include <charconv>
 #include <cstdint>
-#include <cstdlib>
-#include <map>
-#include <memory>
 #include <optional>
 #include <string>
 #include <string_view>
 #include <system_error>
+#include <vector>
 
 #include <fmt/format.h>
 #include <ldns/ldns.h>
 
-#include "dns/common/net_consts.h"
+#include "adig_cli_internal.h"
 
 namespace ag::adig {
 namespace {
-
-// RAII wrapper for ldns malloc'd strings (char pointers returned by
-// ldns_rdf2str, ldns_rr_type2str, etc.) — they must be freed with free().
-using ag::AllocatedPtr;
 
 // The kind of a `+option` keyword, driving how parse_args dispatches a matched
 // canonical name.
@@ -54,9 +52,25 @@ constexpr KeywordDef KEYWORDS[] = {
         {"dnssec", KeywordKind::BOOL_CLI},
         {"cdflag", KeywordKind::BOOL_CLI},
         {"qr", KeywordKind::BOOL_CLI},
+        {"nsid", KeywordKind::BOOL_CLI},
+        {"adflag", KeywordKind::BOOL_CLI},
+        {"cookie", KeywordKind::BOOL_CLI},
+        // dig-compat no-op toggles (+aaflag/+defname/+showsearch): dig
+        // scripts sprinkle them everywhere; adig accepts them to avoid
+        // `unknown option` errors while performing no behavior change (mirrors
+        // `dig`, where they are only meaningful with options adig does not
+        // implement, e.g. a resolver search list).
+        {"aaflag", KeywordKind::BOOL_CLI},
+        {"defname", KeywordKind::BOOL_CLI},
+        {"showsearch", KeywordKind::BOOL_CLI},
         {"timeout", KeywordKind::VALUE},
         {"bootstrap", KeywordKind::VALUE},
         {"subnet", KeywordKind::VALUE},
+        {"bufsize", KeywordKind::VALUE},
+        {"padding", KeywordKind::VALUE},
+        {"ednsflags", KeywordKind::VALUE},
+        {"ednsopt", KeywordKind::VALUE},
+        {"opcode", KeywordKind::VALUE},
         {"cmd", KeywordKind::BOOL_DISPLAY},
         {"comments", KeywordKind::BOOL_DISPLAY},
         {"question", KeywordKind::BOOL_DISPLAY},
@@ -67,6 +81,9 @@ constexpr KeywordDef KEYWORDS[] = {
         {"multiline", KeywordKind::BOOL_DISPLAY},
         {"ttlid", KeywordKind::BOOL_DISPLAY},
         {"class", KeywordKind::BOOL_DISPLAY},
+        {"header-only", KeywordKind::BOOL_CLI},
+        {"onesoa", KeywordKind::BOOL_DISPLAY},
+        {"ttlunits", KeywordKind::BOOL_DISPLAY},
         {"all", KeywordKind::META_ALL},
 };
 
@@ -93,6 +110,10 @@ bool apply_display_flag(DisplayFlags &df, std::string_view canonical, bool value
         df.ttlid = value;
     } else if (canonical == "class") {
         df.cls = value;
+    } else if (canonical == "onesoa") {
+        df.one_soa = value;
+    } else if (canonical == "ttlunits") {
+        df.ttl_units = value;
     } else {
         return false;
     }
@@ -116,123 +137,29 @@ void set_all_display_flags(DisplayFlags &df, bool value) {
     df.stats = value;
 }
 
-// Parse an IPv4/IPv6 literal into its EDNS family code (1 / 2) and address
-// bytes. Returns nullopt for anything that is not a valid address literal.
-// Used by both make_reverse_name (reverse-DNS name) and encode_ecs_option
-// (ECS option) so the IP-parsing logic lives in exactly one place.
-struct ParsedAddr {
-    uint16_t family = 0;             // 1 = IPv4, 2 = IPv6
-    std::array<uint8_t, 16> bytes{}; // first `len` bytes hold the address
-    size_t len = 0;                  // 4 for IPv4, 16 for IPv6
-};
+} // namespace
 
-std::optional<ParsedAddr> parse_ip_addr(std::string_view addr) {
-    if (addr.empty()) {
+std::optional<uint16_t> split_plain_host_port(std::string_view &host) {
+    const size_t colon = host.rfind(':');
+    if (colon == std::string_view::npos || colon == 0) {
+        return std::nullopt; // no colon, or an empty host before it
+    }
+    // A single colon separates host from port; two or more colons mean a bare
+    // IPv6 literal (`::1`, `fe80::1`, …), which must not be mis-split on one of
+    // its own colons. Only treat the host as `host:port` when the first and last
+    // colon coincide (exactly one colon in the string).
+    if (host.find(':') != colon) {
         return std::nullopt;
     }
-    const std::string s(addr); // ldns requires a null-terminated C string
-    std::unique_ptr<ldns_rdf, void (*)(ldns_rdf *)> rdf(
-            ldns_rdf_new_frm_str(LDNS_RDF_TYPE_A, s.c_str()), &ldns_rdf_deep_free);
-    if (rdf != nullptr) {
-        ParsedAddr p{.family = 1, .len = 4};
-        std::copy_n(ldns_rdf_data(rdf.get()), 4, p.bytes.begin());
-        return p;
+    const std::string_view pstr = host.substr(colon + 1);
+    unsigned p = 0;
+    const auto [e, ec] = std::from_chars(pstr.data(), pstr.data() + pstr.size(), p);
+    if (ec != std::errc{} || e != pstr.data() + pstr.size() || p == 0 || p > 65535) {
+        return std::nullopt;
     }
-    rdf.reset(ldns_rdf_new_frm_str(LDNS_RDF_TYPE_AAAA, s.c_str()));
-    if (rdf != nullptr) {
-        ParsedAddr p{.family = 2, .len = 16};
-        std::copy_n(ldns_rdf_data(rdf.get()), 16, p.bytes.begin());
-        return p;
-    }
-    return std::nullopt;
+    host = host.substr(0, colon);
+    return static_cast<uint16_t>(p);
 }
-
-// Compute the wire-format size of a packet. ldns caches the size only for
-// packets parsed from wire bytes; freshly-built query packets report 0, so we
-// force a round-trip through ldns_pkt2wire in that case.
-size_t wire_pkt_size(const ldns_pkt *pkt) {
-    if (pkt == nullptr) {
-        return 0;
-    }
-    size_t cached = ldns_pkt_size(pkt);
-    if (cached != 0) {
-        return cached;
-    }
-    uint8_t *wire = nullptr;
-    size_t sz = 0;
-    if (ldns_pkt2wire(&wire, pkt, &sz) == LDNS_STATUS_OK) {
-        AllocatedPtr<uint8_t> owned(wire);
-        (void) owned;
-        return sz;
-    }
-    return 0;
-}
-
-// Build the lowercase flag string dig prints in the header, e.g. "qr rd ra".
-// The DO bit is shown in the OPT PSEUDOSECTION, not in the header flags.
-std::string pkt_flags_str(const ldns_pkt *pkt) {
-    std::string s;
-    if (ldns_pkt_qr(pkt)) {
-        s += " qr";
-    }
-    if (ldns_pkt_aa(pkt)) {
-        s += " aa";
-    }
-    if (ldns_pkt_tc(pkt)) {
-        s += " tc";
-    }
-    if (ldns_pkt_rd(pkt)) {
-        s += " rd";
-    }
-    if (ldns_pkt_ra(pkt)) {
-        s += " ra";
-    }
-    if (ldns_pkt_ad(pkt)) {
-        s += " ad";
-    }
-    if (ldns_pkt_cd(pkt)) {
-        s += " cd";
-    }
-    return s;
-}
-
-// Format a single RR in dig-compatible text. When `with_ttl` is false the TTL
-// field is omitted (dig +nottlid); when `with_class` is false the class field
-// is omitted (dig +noclass). Question-section RRs are always printed without
-// TTL/RDATA and are prefixed with ';' (dig convention).
-std::string format_rr_dig(const ldns_rr *rr, bool with_ttl, bool with_class, bool is_question) {
-    std::string out;
-    if (is_question) {
-        out += ';';
-    }
-    AllocatedPtr<char> owner(ldns_rdf2str(ldns_rr_owner(rr)));
-    out += (owner != nullptr) ? owner.get() : "";
-    out += '\t';
-    if (with_ttl && !is_question) {
-        out += fmt::format("{}\t", ldns_rr_ttl(rr));
-    }
-    if (with_class) {
-        AllocatedPtr<char> cls(ldns_rr_class2str(ldns_rr_get_class(rr)));
-        out += (cls != nullptr) ? cls.get() : "IN";
-        out += '\t';
-    }
-    AllocatedPtr<char> type(ldns_rr_type2str(ldns_rr_get_type(rr)));
-    out += (type != nullptr) ? type.get() : "";
-    if (!is_question) {
-        size_t rd_count = ldns_rr_rd_count(rr);
-        for (size_t i = 0; i < rd_count; ++i) {
-            AllocatedPtr<char> rdf_str(ldns_rdf2str(ldns_rr_rdf(rr, i)));
-            if (rdf_str != nullptr) {
-                out += '\t';
-                out += rdf_str.get();
-            }
-        }
-    }
-    out += '\n';
-    return out;
-}
-
-} // namespace
 
 bool cmd_banner_enabled(const CliOptions &opts) {
     // `dig`'s `; <<>> DiG ... <<>>` / `;; global options: +cmd` banner is gated
@@ -258,6 +185,20 @@ void apply_force_tcp(std::string &server) {
     }
 }
 
+void apply_port(std::string &server, std::optional<uint16_t> port) {
+    if (!port.has_value() || server.find("://") != std::string::npos) {
+        return;
+    }
+    // Strip an existing explicit `host:port` (only a single `host:port` colon;
+    // a bare IPv6 literal — two or more colons — is left alone so it is not
+    // mis-split on one of its own colons). This also handles a dot-less hostname
+    // carrying an explicit port (e.g. `localhost:53` -> `localhost`), which the
+    // old dot-guard skipped, producing an invalid `localhost:53:<port>`.
+    std::string_view host = server;
+    (void) split_plain_host_port(host); // shortens `host` to the host portion
+    server = fmt::format("{}:{}", host, *port);
+}
+
 KeywordMatch match_plus_keyword(std::string_view key) {
     // Explicit aliases that are not prefix-matchable (their target canonical
     // does not start with the alias text).
@@ -269,6 +210,11 @@ KeywordMatch match_plus_keyword(std::string_view key) {
     }
     if (key == "cd") {
         return {.canonical = "cdflag"};
+    }
+    // `+rd` / `+rdflag` are dig's aliases for `+recurse` (RD). They are not
+    // prefix-matchable because `recurse` does not begin with `rd`.
+    if (key == "rd" || key == "rdflag") {
+        return {.canonical = "recurse"};
     }
     // Exact canonical match.
     for (const KeywordDef &kw : KEYWORDS) {
@@ -298,353 +244,6 @@ KeywordMatch match_plus_keyword(std::string_view key) {
         joined += candidates[i];
     }
     return {.error = fmt::format("ambiguous option '+{}', candidates: {}", key, joined)};
-}
-
-std::optional<std::string> make_reverse_name(std::string_view addr) {
-    auto parsed = parse_ip_addr(addr);
-    if (!parsed.has_value()) {
-        return std::nullopt;
-    }
-    if (parsed->family == 1) {
-        return fmt::format(
-                "{}.{}.{}.{}.in-addr.arpa.", parsed->bytes[3], parsed->bytes[2], parsed->bytes[1], parsed->bytes[0]);
-    }
-    // IPv6: 16 address bytes -> 32 reversed nibbles, dot-separated.
-    static constexpr char HEX[] = "0123456789abcdef";
-    std::string out;
-    out.reserve(2 * 32 + static_cast<size_t>(sizeof("ip6.arpa.")));
-    for (int i = 15; i >= 0; --i) {
-        uint8_t b = parsed->bytes[i];
-        out += HEX[b & 0x0F];
-        out += '.';
-        out += HEX[(b >> 4) & 0x0F];
-        out += '.';
-    }
-    out += "ip6.arpa.";
-    return out;
-}
-
-ldns_pkt_ptr make_query(const std::string &name, ldns_rr_type type, bool recurse) {
-    std::string fqdn = name;
-    if (!fqdn.empty() && fqdn.back() != '.') {
-        fqdn += '.';
-    }
-    ldns_rdf *dname = ldns_dname_new_frm_str(fqdn.c_str());
-    if (dname == nullptr) {
-        return {nullptr};
-    }
-    ldns_pkt *pkt = ldns_pkt_query_new(dname, type, LDNS_RR_CLASS_IN, recurse ? LDNS_RD : 0);
-    if (pkt == nullptr) {
-        // ldns_pkt_query_new did not consume `dname` on failure, so it must be
-        // freed here to avoid a leak (mirrors the explicit free on this error
-        // path in other call sites, e.g. dnscrypt/dns_crypt_ldns.cpp).
-        ldns_rdf_deep_free(dname);
-        return {nullptr};
-    }
-    ldns_pkt_set_random_id(pkt);
-    return ldns_pkt_ptr(pkt);
-}
-
-std::vector<uint8_t> encode_ecs_option(std::string_view addr, uint8_t src_prefix) {
-    auto parsed = parse_ip_addr(addr);
-    if (!parsed.has_value()) {
-        return {};
-    }
-    const uint8_t max_prefix = (parsed->family == 1) ? 32 : 128;
-    if (src_prefix > max_prefix) {
-        return {};
-    }
-    // option-data = family(2 BE) + source-prefix-len(1) + scope-prefix-len(1=0)
-    //               + address (ceil(src_prefix/8) bytes, bits past the prefix
-    //               in the last byte cleared).
-    const size_t addr_len = static_cast<size_t>((src_prefix + 7) / 8);
-    const uint8_t remainder = static_cast<uint8_t>(src_prefix % 8);
-    std::vector<uint8_t> data;
-    data.reserve(4 + addr_len);
-    data.push_back(static_cast<uint8_t>((parsed->family >> 8) & 0xFF));
-    data.push_back(static_cast<uint8_t>(parsed->family & 0xFF));
-    data.push_back(src_prefix);
-    data.push_back(0); // scope prefix-length (client->server: always 0)
-    for (size_t i = 0; i < addr_len; ++i) {
-        uint8_t b = parsed->bytes[i];
-        if (i + 1 == addr_len && remainder != 0) {
-            // Keep only the top `remainder` bits of the last address byte.
-            b &= static_cast<uint8_t>(0xFF << (8 - remainder));
-        }
-        data.push_back(b);
-    }
-    // Full EDNS option TLV: option-code(2 BE) + option-length(2 BE) + option-data.
-    // This is exactly the bytes ldns stores as the packet's EDNS data and writes
-    // verbatim as the OPT RR's RDATA.
-    std::vector<uint8_t> tlv;
-    tlv.reserve(4 + data.size());
-    tlv.push_back(0x00);
-    tlv.push_back(0x08); // option code 8 = Client Subnet (RFC 7871)
-    const uint16_t len = static_cast<uint16_t>(data.size());
-    tlv.push_back(static_cast<uint8_t>((len >> 8) & 0xFF));
-    tlv.push_back(static_cast<uint8_t>(len & 0xFF));
-    tlv.insert(tlv.end(), data.begin(), data.end());
-    return tlv;
-}
-
-void apply_dns_flags(ldns_pkt *pkt, const CliOptions &opts) {
-    if (pkt == nullptr) {
-        return;
-    }
-    // Determine whether an OPT RR must be present. `+edns` (the default) and
-    // `+dnssec` / `+subnet` all require one. `+noedns` (opts.edns == false)
-    // suppresses the default OPT only when no EDNS-bearing option forces it —
-    // mirroring `dig`, where `+dnssec`/`+subnet` still attach an OPT RR under
-    // `+noedns` (the DO bit / ECS option live in the OPT record).
-    const bool want_edns = opts.edns || opts.dnssec || opts.subnet.enabled;
-    if (!want_edns) {
-        // Only the header-level CD bit (below) may still apply.
-        if (opts.cd) {
-            ldns_pkt_set_cd(pkt, true);
-        }
-        return;
-    }
-    // Advertising a >0 EDNS UDP payload size is what makes ldns synthesize the
-    // OPT pseudo-RR on the wire (ldns_pkt_edns() returns true once the UDP
-    // size is non-zero).
-    ldns_pkt_set_edns_udp_size(pkt, static_cast<uint16_t>(dns::UDP_RECV_BUF_SIZE));
-    ldns_pkt_set_edns_version(pkt, opts.edns_version);
-    if (opts.dnssec) {
-        // RFC 3225: set the DO bit so the upstream returns DNSSEC records
-        // (RRSIG etc.). Mirrors the proxy's DnssecHelpers::set_do_bit.
-        ldns_pkt_set_edns_do(pkt, true);
-    }
-    if (opts.cd) {
-        // Checking Disabled: ask the upstream to skip DNSSEC validation.
-        ldns_pkt_set_cd(pkt, true);
-    }
-    if (opts.subnet.enabled) {
-        // Attach the ECS option as the OPT RR's RDATA. ldns writes the rdf bytes
-        // verbatim (LDNS_RDF_TYPE_NONE is a direct copy on both encode/decode).
-        std::vector<uint8_t> tlv = encode_ecs_option(opts.subnet.addr, opts.subnet.src_prefix);
-        if (!tlv.empty()) {
-            ldns_rdf *rdf = ldns_rdf_new_frm_data(LDNS_RDF_TYPE_NONE, tlv.size(), tlv.data());
-            if (rdf != nullptr) {
-                // The packet takes ownership of `rdf` (it is freed with the pkt).
-                ldns_pkt_set_edns_data(pkt, rdf);
-            }
-        }
-    }
-}
-
-std::map<std::string, GlueAddress> additional_glue(const ldns_pkt *pkt) {
-    std::map<std::string, GlueAddress> glue;
-    if (pkt == nullptr) {
-        return glue;
-    }
-    const ldns_rr_list *additional = ldns_pkt_additional(pkt);
-    if (additional == nullptr) {
-        return glue;
-    }
-    for (size_t i = 0; i < ldns_rr_list_rr_count(additional); ++i) {
-        const ldns_rr *rr = ldns_rr_list_rr(additional, i);
-        ldns_rr_type type = ldns_rr_get_type(rr);
-        if (type != LDNS_RR_TYPE_A && type != LDNS_RR_TYPE_AAAA) {
-            continue;
-        }
-        AllocatedPtr<char> owner(ldns_rdf2str(ldns_rr_owner(rr)));
-        AllocatedPtr<char> addr(ldns_rdf2str(ldns_rr_rdf(rr, 0)));
-        if (owner == nullptr || addr == nullptr) {
-            continue;
-        }
-        // Prefer A over AAAA: an A record always wins (overwriting any prior
-        // AAAA for the same owner), and an AAAA is kept only when no A was seen
-        // for that owner. This prevents a later AAAA from displacing an earlier
-        // A in the ADDITIONAL section, so +trace neither prefers IPv6 when IPv4
-        // glue is present nor makes the chosen address depend on RR ordering.
-        if (type == LDNS_RR_TYPE_A) {
-            glue.insert_or_assign(owner.get(), GlueAddress{addr.get(), false});
-        } else {
-            glue.try_emplace(owner.get(), GlueAddress{addr.get(), true});
-        }
-    }
-    return glue;
-}
-
-bool glue_address_usable(const GlueAddress &glue, bool ipv4_only) {
-    // -4 (ipv4_only) suppresses IPv6 so a literal IPv6 address is never passed
-    // to trace_exchange() (ipv6_available only governs AAAA bootstrapping, not
-    // dialing a literal IPv6 peer).
-    return !(ipv4_only && glue.ipv6);
-}
-
-std::string format_packet_dig(
-        const ldns_pkt *pkt, const DisplayFlags &flags, bool is_query, Millis query_time, std::string_view server) {
-    if (pkt == nullptr) {
-        return {};
-    }
-    std::string out;
-
-    // Header (opcode, status, id, flags, counts).
-    if (flags.comments) {
-        out += is_query ? ";; Sending:\n" : ";; Got answer:\n";
-        AllocatedPtr<char> opcode(ldns_pkt_opcode2str(ldns_pkt_get_opcode(pkt)));
-        AllocatedPtr<char> rcode(ldns_pkt_rcode2str(ldns_pkt_get_rcode(pkt)));
-        out += fmt::format(";; ->>HEADER<<- opcode: {}, status: {}, id: {}\n", (opcode != nullptr) ? opcode.get() : "",
-                (rcode != nullptr) ? rcode.get() : "", ldns_pkt_id(pkt));
-        // dig counts the OPT RR in ADDITIONAL; ldns stores it separately.
-        size_t arcount = ldns_pkt_arcount(pkt);
-        if (ldns_pkt_edns(pkt)) {
-            ++arcount;
-        }
-        std::string fstr = pkt_flags_str(pkt);
-        out += fmt::format(";; flags:{}; QUERY: {}, ANSWER: {}, AUTHORITY: {}, ADDITIONAL: {}\n\n",
-                fstr.empty() ? "" : fstr, ldns_pkt_qdcount(pkt), ldns_pkt_ancount(pkt), ldns_pkt_nscount(pkt), arcount);
-    }
-
-    // OPT PSEUDOSECTION (shown before QUESTION in dig, gated on +additional
-    // and +comments — dig's trace default suppresses it entirely).
-    if (flags.comments && flags.additional && ldns_pkt_edns(pkt)) {
-        out += ";; OPT PSEUDOSECTION:\n";
-        std::string edns_flags;
-        if (ldns_pkt_edns_do(pkt)) {
-            edns_flags = " do";
-        }
-        out += fmt::format("; EDNS: version: {}, flags:{}; udp: {}\n", ldns_pkt_edns_version(pkt), edns_flags,
-                ldns_pkt_edns_udp_size(pkt));
-        // Show EDNS option data (e.g. ECS) as a hex dump when present.
-        ldns_rdf *data = ldns_pkt_edns_data(pkt);
-        if (data != nullptr) {
-            const uint8_t *bytes = ldns_rdf_data(data);
-            size_t sz = ldns_rdf_size(data);
-            out += fmt::format("; DATA: \\# {} ", sz);
-            for (size_t i = 0; i < sz; ++i) {
-                out += fmt::format("{:02x}", bytes[i]);
-            }
-            out += '\n';
-        }
-        out += '\n';
-    }
-
-    // QUESTION / ANSWER / AUTHORITY / ADDITIONAL sections.
-    auto print_section = [&](const char *title, const ldns_rr_list *list, bool is_question) {
-        if (list == nullptr || ldns_rr_list_rr_count(list) == 0) {
-            // dig suppresses empty-section output entirely (no header, no
-            // following blank line) — including the `* SECTION:` titles even
-            // when `+comments` is on.
-            return;
-        }
-        // Section headers (and the trailing blank line that follows) are
-        // `comments`. `dig +nocomments` / the trace-mode default emit just the
-        // RRs concatenated; section toggles (`+answer` etc.) gate the RRs.
-        if (flags.comments) {
-            out += fmt::format(";; {} SECTION:\n", title);
-        }
-        for (size_t i = 0; i < ldns_rr_list_rr_count(list); ++i) {
-            const ldns_rr *rr = ldns_rr_list_rr(list, i);
-            // OPT is shown in OPT PSEUDOSECTION, not ADDITIONAL.
-            if (ldns_rr_get_type(rr) == LDNS_RR_TYPE_OPT) {
-                continue;
-            }
-            out += format_rr_dig(rr, flags.ttlid, flags.cls, is_question);
-        }
-        if (flags.comments) {
-            out += '\n';
-        }
-    };
-
-    if (flags.question) {
-        print_section("QUESTION", ldns_pkt_question(pkt), true);
-    }
-    if (flags.answer) {
-        print_section("ANSWER", ldns_pkt_answer(pkt), false);
-    }
-    if (flags.authority) {
-        print_section("AUTHORITY", ldns_pkt_authority(pkt), false);
-    }
-    if (flags.additional) {
-        print_section("ADDITIONAL", ldns_pkt_additional(pkt), false);
-    }
-
-    // Stats trailer (query time, server, message size).
-    if (flags.stats) {
-        // A zero query_time (e.g. the `+qr` query echo, which has not been sent
-        // yet) omits the line, matching the documented contract and `dig +qr`
-        // (which prints only `;; MSG SIZE  sent:` for the query packet).
-        if (query_time.count() != 0) {
-            out += fmt::format(";; Query time: {} msec\n", query_time.count());
-        }
-        if (!server.empty()) {
-            out += fmt::format(";; SERVER: {}\n", server);
-        }
-        size_t sz = wire_pkt_size(pkt);
-        out += fmt::format(";; MSG SIZE  {}: {}\n", is_query ? "sent" : "rcvd", sz);
-    }
-
-    return out;
-}
-
-void apply_trace_display_defaults(DisplayFlags &flags) {
-    // `dig +trace` clears `comments`, `question`, and `stats`. The other
-    // section toggles are left at their default (on), so the per-hop body
-    // becomes just the answer/authority/additional RRs without section
-    // headers. The trace-specific "Received ... bytes from ..." footer is
-    // emitted by `format_trace_packet_dig` in place of the standard stats
-    // block. See `setup_trace` in dig's dighost.c (the order-sensitive
-    // semantics mirror dig exactly: a `+comments` *after* `+trace` still
-    // re-enables comments).
-    flags.comments = false;
-    flags.question = false;
-    flags.stats = false;
-    // These stay on (dig prints ANSWER/AUTHORITY/ADDITIONAL RRs in trace):
-    flags.cmd = true;
-    flags.answer = true;
-    flags.authority = true;
-    flags.additional = true;
-    // Multiline / ttlid / cls are untouched (their defaults apply).
-}
-
-std::string format_trace_received_line(
-        Millis query_time, size_t bytes, std::string_view server_ip, std::string_view server_name) {
-    // Mirrors dig's ";; Received <n> bytes from <IP>#53(<NAME>) in <ms> ms".
-    // When the peer has no resolvable name dig repeats the IP inside parens.
-    std::string name(server_name);
-    if (name.empty()) {
-        name = std::string(server_ip);
-    }
-    if (server_ip.empty()) {
-        // Degenerate input (no server recorded); fall back to name only to
-        // avoid producing a malformed `#53()` fragment.
-        return fmt::format(";; Received {} bytes from {}#53 in {} ms\n", bytes, name, query_time.count());
-    }
-    return fmt::format(";; Received {} bytes from {}#53({}) in {} ms\n", bytes, server_ip, name, query_time.count());
-}
-
-std::string format_trace_packet_dig(const ldns_pkt *pkt, const DisplayFlags &flags, Millis query_time,
-        std::string_view server_ip, std::string_view server_name) {
-    if (pkt == nullptr) {
-        return {};
-    }
-    // Build the per-hop body using `format_packet_dig` with the standard stats
-    // block suppressed (we emit either the trace `Received` line or a
-    // trace-flavored stats footer ourselves below). An empty `server` keeps
-    // `format_packet_dig` from emitting its own `;; SERVER:` line.
-    DisplayFlags body_flags = flags;
-    body_flags.stats = false;
-    std::string out = format_packet_dig(pkt, body_flags, false, Millis{0}, "");
-
-    size_t sz = wire_pkt_size(pkt);
-    if (flags.stats) {
-        // User asked for stats: emit a dig-style stats footer using the
-        // trace-mode `IP#53(name) (UDP)` SERVER formatting.
-        std::string name(server_name);
-        if (name.empty()) {
-            name = std::string(server_ip);
-        }
-        out += fmt::format(";; Query time: {} msec\n", query_time.count());
-        out += fmt::format(";; SERVER: {}#53({}) (UDP)\n", server_ip, name);
-        out += fmt::format(";; MSG SIZE  rcvd: {}\n", sz);
-    } else {
-        out += format_trace_received_line(query_time, sz, server_ip, server_name);
-    }
-    // Blank line separator between hops (dig prints one after each Received).
-    out += '\n';
-    return out;
 }
 
 ParseResult parse_args(int argc, char *argv[]) {
@@ -696,6 +295,22 @@ ParseResult parse_args(int argc, char *argv[]) {
             result.error = "option -6 is not supported (use -4 for IPv4-only queries)";
             return result;
         }
+        if (arg == "-p") {
+            // -p PORT: override the plain-DNS port without `@IP:PORT` syntax.
+            if (i + 1 >= argc) {
+                result.error = "option -p requires a port";
+                return result;
+            }
+            std::string_view pstr = argv[++i];
+            unsigned port = 0;
+            const auto [e, ec] = std::from_chars(pstr.data(), pstr.data() + pstr.size(), port);
+            if (ec != std::errc{} || e != pstr.data() + pstr.size() || port == 0 || port > 65535) {
+                result.error = fmt::format("invalid port: {}", pstr);
+                return result;
+            }
+            opts.port = static_cast<uint16_t>(port);
+            continue;
+        }
         if (arg.starts_with('@')) {
             if (arg.size() == 1) {
                 result.error = "empty server after '@'";
@@ -740,6 +355,11 @@ ParseResult parse_args(int argc, char *argv[]) {
                     // `+all` will still take effect (mirrors dig's order-sensitive
                     // precedence).
                     apply_trace_display_defaults(opts.display);
+                    // dig's `+trace` also sets `dnssec = true` (the DO bit) —
+                    // per-iteration authoritative queries request DNSSEC records
+                    // so the trace can show RRSIG/NSEC where present. A later
+                    // `+nodnssec` still wins (mirrors `dig +trace +nodnssec`).
+                    opts.dnssec = true;
                 }
             } else if (canon == "recurse") {
                 opts.recurse = !negate;
@@ -776,6 +396,35 @@ ParseResult parse_args(int argc, char *argv[]) {
                 opts.cd = !negate;
             } else if (canon == "qr") {
                 opts.print_query = !negate;
+            } else if (canon == "nsid") {
+                // +nsid attaches an EDNS NSID option (RFC 5001) to the query;
+                // the server echoes its identity, which adig prints verbatim.
+                opts.nsid = !negate;
+            } else if (canon == "adflag") {
+                // +adflag (default on) / +noadflag: set/clear the AD
+                // (Authenticated Data) bit in the query, mirroring `dig` which
+                // sets AD by default to request authenticated-data responses.
+                opts.ad = !negate;
+            } else if (canon == "cookie") {
+                // +cookie (default on) / +nocookie: send/suppress a DNS COOKIE
+                // EDNS option (RFC 7873, an 8-byte random client cookie),
+                // mirroring `dig` which sends one by default. The cookie is
+                // only attached when an OPT RR is present (so `+noedns`
+                // suppresses it along with the OPT, matching `dig`).
+                opts.cookie = !negate;
+            } else if (canon == "header-only") {
+                // +header-only: send a spec-compliant header-only query
+                // (QDCOUNT=0, no question section), mirroring `dig` which
+                // sends a question-less query to probe the server's
+                // capabilities. Applied in apply_dns_flags when the query is
+                // built; the response is printed normally (per the display
+                // flags).
+                opts.header_only = !negate;
+            } else if (canon == "aaflag" || canon == "defname" || canon == "showsearch") {
+                // dig-compat no-op: accepted so common `dig` scripts don't
+                // error; adig performs no behavior change (a resolver search
+                // list / AA-set query is not implemented). Negation is
+                // likewise accepted and ignored, mirroring `dig`.
             } else if (canon == "timeout") {
                 if (negate) {
                     result.error = fmt::format("option '+{}' does not support '+no' form", key);
@@ -843,6 +492,121 @@ ParseResult parse_args(int argc, char *argv[]) {
                     return result;
                 }
                 opts.subnet = {.enabled = true, .addr = subnet_addr, .src_prefix = prefix};
+            } else if (canon == "bufsize") {
+                if (negate) {
+                    result.error = fmt::format("option '+{}' does not support '+no' form", key);
+                    return result;
+                }
+                if (value.empty()) {
+                    result.error = "option '+bufsize' requires a value: +bufsize=N";
+                    return result;
+                }
+                unsigned bs = 0;
+                const auto [ptr, ec2] = std::from_chars(value.data(), value.data() + value.size(), bs);
+                if (ec2 != std::errc{} || ptr != value.data() + value.size() || bs == 0 || bs > 65535) {
+                    result.error = fmt::format("invalid EDNS buffer size: {}", value);
+                    return result;
+                }
+                opts.edns_bufsize = static_cast<uint16_t>(bs);
+            } else if (canon == "padding") {
+                if (negate) {
+                    result.error = fmt::format("option '+{}' does not support '+no' form", key);
+                    return result;
+                }
+                if (value.empty()) {
+                    result.error = "option '+padding' requires a value: +padding=N";
+                    return result;
+                }
+                unsigned pd = 0;
+                const auto [ptr, ec2] = std::from_chars(value.data(), value.data() + value.size(), pd);
+                if (ec2 != std::errc{} || ptr != value.data() + value.size() || pd > 65535) {
+                    result.error = fmt::format("invalid padding length: {}", value);
+                    return result;
+                }
+                opts.padding = static_cast<uint16_t>(pd);
+            } else if (canon == "ednsflags") {
+                // `+noednsflags` clears the override (dig accepts it); a bare
+                // value requires `+ednsflags=0xHH`.
+                if (negate) {
+                    opts.edns_flags.reset();
+                    continue;
+                }
+                if (value.empty()) {
+                    result.error = "option '+ednsflags' requires a value: +ednsflags=0xHH";
+                    return result;
+                }
+                // Accept `0x..`/`0X..` (hex) or a decimal number.
+                std::string_view fstr = value;
+                int base = 10;
+                if (fstr.size() > 2 && fstr[0] == '0' && (fstr[1] == 'x' || fstr[1] == 'X')) {
+                    fstr.remove_prefix(2);
+                    base = 16;
+                }
+                unsigned fl = 0;
+                const auto [ptr, ec2] = std::from_chars(fstr.data(), fstr.data() + fstr.size(), fl, base);
+                if (ec2 != std::errc{} || ptr != fstr.data() + fstr.size() || fl > 0xFFFF) {
+                    result.error = fmt::format("invalid EDNS flags: {}", value);
+                    return result;
+                }
+                opts.edns_flags = static_cast<uint16_t>(fl);
+            } else if (canon == "ednsopt") {
+                // `+ednsopt=CODE[:hexvalue]` (RFC 6891), repeatable. CODE is an
+                // EDNS option code — a case-insensitive mnemonic (NSID/ECS/PAD/
+                // COOKIE/...) or a decimal number (0..65535); the optional
+                // `:hexvalue` is the option-data payload decoded as hex. A bare
+                // `+ednsopt` has no code and is an error (dig: "ednsopt no code
+                // point specified"). `+noednsopt` clears the list (dig ignores
+                // any value, accepts the form unconditionally).
+                if (negate) {
+                    opts.ednsopts.clear();
+                    continue;
+                }
+                if (value.empty()) {
+                    result.error = "option '+ednsopt' requires a code: +ednsopt=CODE[:value]";
+                    return result;
+                }
+                // Split on the FIRST ':' — only the code vs. payload boundary;
+                // a ':' inside the payload would be non-hex and is rejected at
+                // decode time (dig likewise splits only on the first ':').
+                std::string code_str;
+                std::string hex_str;
+                if (const size_t colon = value.find(':'); colon != std::string::npos) {
+                    code_str = value.substr(0, colon);
+                    hex_str = value.substr(colon + 1);
+                } else {
+                    code_str = value;
+                }
+                const auto opt_code = parse_ednsopt_code(code_str);
+                if (!opt_code.has_value()) {
+                    result.error = fmt::format("invalid EDNS option code: {}", code_str);
+                    return result;
+                }
+                EdnsOption ednsopt{.code = *opt_code, .data = {}};
+                if (!hex_str.empty()) {
+                    auto decoded = decode_hex_string(hex_str);
+                    if (!decoded.has_value()) {
+                        result.error = fmt::format("invalid EDNS option value: {}", hex_str);
+                        return result;
+                    }
+                    ednsopt.data = std::move(*decoded);
+                }
+                opts.ednsopts.push_back(std::move(ednsopt));
+            } else if (canon == "opcode") {
+                // `+noopcode` clears the override (dig accepts it).
+                if (negate) {
+                    opts.opcode.reset();
+                    continue;
+                }
+                if (value.empty()) {
+                    result.error = "option '+opcode' requires a value: +opcode=NAME";
+                    return result;
+                }
+                auto op = parse_opcode_name(value);
+                if (!op.has_value()) {
+                    result.error = fmt::format("invalid opcode: {}", value);
+                    return result;
+                }
+                opts.opcode = op;
             } else if (apply_display_flag(opts.display, canon, !negate)) {
                 // display flag toggled above
             } else {

@@ -10,6 +10,7 @@
 #pragma once
 
 #include <cstdint>
+#include <ctime>
 #include <map>
 #include <optional>
 #include <string>
@@ -37,7 +38,11 @@ constexpr std::string_view DEFAULT_SERVER = "1.1.1.1";
 
 // Toggles for dig-compatible packet display. Defaults match `dig`'s defaults:
 // `+cmd +comments +question +answer +authority +additional +stats +ttlid
-// +class` (and `+nomultiline`). `+all`/`+noall` bulk-toggle every member.
+// +class` (and `+nomultiline`). `+all`/`+noall` bulk-toggle the section-level
+// members (the first seven below); the field-level flags (multiline, ttlid,
+// cls, one_soa, ttl_units) are NOT part of `+all` (mirrors `dig` 9.20), so a
+// `+nofoo` set before `+all` is preserved and `+noall +answer` still shows
+// TTL/class.
 struct DisplayFlags {
     bool cmd = true;
     bool comments = true;
@@ -49,6 +54,11 @@ struct DisplayFlags {
     bool multiline = false;
     bool ttlid = true;
     bool cls = true;
+    // Field/display-level flags (not toggled by `+all`). `one_soa` prints only
+    // the first SOA of each section for `ANY`-style queries; `ttl_units` renders
+    // the TTL as dig's human units (e.g. `5m`, `1h30m`).
+    bool one_soa = false;
+    bool ttl_units = false;
 };
 
 // An EDNS Client Subnet option (`+subnet=ADDR[/PREFIX]`, RFC 7871). `addr` is
@@ -58,6 +68,15 @@ struct SubnetOpt {
     bool enabled = false;
     std::string addr;
     uint8_t src_prefix = 0;
+};
+
+// A generic EDNS option attached via `+ednsopt=CODE[:value]` (RFC 6891). `code`
+// is the resolved EDNS option code (a mnemonic like `NSID`/`ECS`/`PAD`, or a
+// decimal number, resolved at parse time by parse_ednsopt_code); `data` is the
+// decoded hex payload (empty when no `:value` was given).
+struct EdnsOption {
+    uint16_t code = 0;
+    std::vector<uint8_t> data;
 };
 
 // Command-line options for adig. Populated by parse_args().
@@ -81,7 +100,28 @@ struct CliOptions {
     bool cd = false;          // +cdflag / +cd — sets the CD (Checking Disabled) bit
     bool reverse = false;     // set by `-x addr`: name is a reverse-lookup PTR
     bool print_query = false; // +qr — print the query packet before sending
+    bool header_only = false; // +header-only — send a QDCOUNT=0 query (no question section), mirroring `dig`
+    bool ad = true;           // +adflag (default on) — set the AD (Authenticated Data) bit
+    bool cookie = true;       // +cookie (default on) — send a DNS COOKIE EDNS option (RFC 7873)
     SubnetOpt subnet;         // +subnet=ADDR[/PREFIX] (RFC 7871 ECS)
+    // EDNS-layer extensions (+bufsize / +nsid / +padding / +ednsflags /
+    // +ednsopt) and the opcode override (+opcode). +bufsize is 0 when unset
+    // (apply_dns_flags then uses the default UDP payload size). These all imply
+    // an OPT RR (so they force EDNS on even under +noedns, exactly like
+    // +dnssec/+subnet); the opcode is applied last so a NOTIFY/UPDATE still
+    // carries the requested EDNS options.
+    uint16_t edns_bufsize = 0;          // +bufsize=N (EDNS UDP payload size)
+    bool nsid = false;                  // +nsid (RFC 5001, EDNS option 3)
+    uint16_t padding = 0;               // +padding=N (RFC 7830, EDNS option 12)
+    std::optional<uint16_t> edns_flags; // +ednsflags=0xHH (raw EDNS Z-field bits)
+    // +ednsopt=CODE[:hexvalue] (RFC 6891): generic EDNS options, attached in the
+    // order given (repeatable); `+noednsopt` clears the list. Each entry is an
+    // EDNS option, so it forces an OPT RR even under `+noedns`. The options are
+    // appended after the named options (ECS/NSID) and before Padding, mirroring
+    // `dig` (which builds the list after +nsid/+subnet and before +padding).
+    std::vector<EdnsOption> ednsopts;
+    std::optional<ldns_pkt_opcode> opcode; // +opcode=NAME (overwrite the opcode)
+    std::optional<uint16_t> port;          // -p PORT (overwrite the plain-DNS port)
     DisplayFlags display;
 };
 
@@ -98,7 +138,9 @@ struct KeywordMatch {
 // `no` prefix) to its canonical name. Matching is dig-style: an exact canonical
 // or explicit-alias match wins; otherwise an unambiguous canonical prefix
 // matches; multiple prefix matches are reported as ambiguous. The bare aliases
-// `vc`->tcp are recognized in addition to prefixes.
+// `vc`->tcp, `do`->dnssec, `cd`->cdflag, `rd`/`rdflag`->recurse are recognized
+// in addition to prefixes (`rd`/`rdflag` are not prefix-matchable since
+// `recurse` does not start with `rd`).
 KeywordMatch match_plus_keyword(std::string_view key);
 
 // Build the in-addr.arpa / ip6.arpa reverse-lookup name for an IPv4 or IPv6
@@ -125,14 +167,98 @@ ldns_pkt_ptr make_query(const std::string &name, ldns_rr_type type, bool recurse
 // stores in the packet's EDNS data and writes verbatim as OPT RDATA.
 std::vector<uint8_t> encode_ecs_option(std::string_view addr, uint8_t src_prefix);
 
+// Encode a generic EDNS option as the wire TLV (option-code(2 BE) +
+// option-length(2 BE) + option-data) that ldns writes verbatim into the OPT
+// RR's RDATA. This is the shared building block for every EDNS option adig
+// attaches (ECS, NSID, Padding, …), exposed so each option's encoding stays
+// byte-exact and unit-testable without an event loop.
+std::vector<uint8_t> encode_edns_option(uint16_t code, const uint8_t *data, size_t len);
+
+// Resolve an `+ednsopt=CODE` argument to an EDNS option code (RFC 6891).
+// Accepts a case-insensitive mnemonic mapped to its RFC code — mirroring
+// `dig`'s `optnames` table (NSID->3, ECS->8, PAD/PADDING->12, COOKIE->10,
+// EDE->15, KEEPALIVE->11, EXPIRE->9, CHAIN->13, KEY-TAG->14, CLIENT-TAG->16,
+// SERVER-TAG->17, RC/REPORT-CHANNEL->18, ZONEVERSION->19, LLQ->1, UL->2,
+// DAU->5, DHU->6, N3U->7, DEVICEID->26946) — or a decimal numeric code
+// (0..65535). Returns nullopt for an unrecognized mnemonic / an out-of-range
+// number. Exposed so the mnemonic resolution stays unit-testable.
+std::optional<uint16_t> parse_ednsopt_code(std::string_view code);
+
+// Decode a hexadecimal string (case-insensitive; ASCII whitespace ignored) to
+// its raw bytes, the way `dig +ednsopt=CODE:value` decodes the option payload.
+// Returns nullopt for non-hex characters or an odd number of hex digits
+// (mirrors ISC's `isc_hex_decodestring`, which rejects both). Exposed so the
+// hex decoding stays unit-testable.
+std::optional<std::vector<uint8_t>> decode_hex_string(std::string_view hex);
+
+// Resolve an `+opcode=NAME` argument to a DNS opcode. Accepts the standard
+// names (case-insensitive: QUERY, IQUERY, STATUS, NOTIFY, UPDATE) and a raw
+// numeric opcode (0..15). Returns nullopt for an unrecognized name / an
+// out-of-range number.
+std::optional<ldns_pkt_opcode> parse_opcode_name(std::string_view name);
+
+// Format a TTL using `dig`'s human-readable units (+ttlunits): a value like
+// `300` becomes `5m`, `5400` becomes `1h30m`, `86400` becomes `1d`. Each
+// non-zero week/day/hour/minute/second unit is emitted in turn, with leading
+// and trailing zero units suppressed (so 0 itself prints as `0`). Mirrors
+// `dig 9.20` (verified: `dig +ttlunits` renders an 86400-second TTL as `1d`).
+std::string format_dns_ttl_units(uint32_t ttl);
+
+// Format a TTL using the verbose form dig puts in `+multiline` SOA comments:
+// each non-zero week/day/hour/minute/second unit is spelled out in full
+// (singular when N==1, plural otherwise), space-separated; trailing zero units
+// are suppressed; a 0 TTL prints as `0 seconds`. Matches BIND's
+// `dns_ttl_totext(num, true, true)` as called by `soa_6.c` for the SOA
+// refresh/retry/expire/minimum comments (e.g. `; refresh (15 minutes)`,
+// `; expire (1 week)`, `; refresh (2 hours 46 minutes 40 seconds)`). The TTL
+// column value itself (e.g. `5m` from `+ttlunits`) is unaffected — this is
+// only the verbose wording inside the SOA RDATA parenthetical.
+std::string format_dns_ttl_verbose(uint32_t ttl);
+
+// Format the response OPT-RDATA options as dig-compatible `; <NAME>: ...`
+// lines (one per option), decoding the common ones (CLIENT-SUBNET per RFC
+// 7871, NSID per RFC 5001, EDE per RFC 8914). Unknown options fall back to
+// dig's generic `; \# N <hex>`. Each returned line already ends with `\n`.
+// Exposed so the option-decoding stays unit-testable without a packet.
+std::string format_edns_option_text(uint16_t code, const uint8_t *data, size_t len);
+
+// Format `server` as dig's `;; SERVER:` value. For a plain IP / bare host it
+// yields `host#port(host) (UDP)` (or `(TCP)` when `tcp` is true). adig's `+tcp`
+// rewrite (apply_force_tcp) prefixes a bare host with `tcp://` (and rewrites
+// `udp://`/`dns://` to `tcp://`) *before* formatting, so a leading plain-DNS
+// scheme (`tcp://`/`udp://`/`dns://`, matched case-insensitively) is stripped
+// here and the protocol is taken from the scheme (so `+tcp` renders `(TCP)`).
+// Encrypted schemes (`tls://`, `https://`, `h3://`, `quic://`, `sdns://`,
+// `system://`, …) are returned unchanged, mirroring `dig` (dig's SERVER
+// formatting only applies to plain DNS). `port` is the `-p PORT` override; when
+// unset the port is taken from an explicit `host:port` in `server`, else 53.
+std::string format_dig_server(std::string_view server, std::optional<uint16_t> port, bool tcp);
+
+// Format a wall-clock timestamp as dig's `WHEN:` value, e.g.
+// `Thu Jul 16 17:11:43 EEST 2026`, using the local timezone. Returns an empty
+// string when `when` is 0 so callers can omit the line (e.g. the `+qr` query
+// echo has no answer time to report).
+std::string format_dig_when(std::time_t when);
+
 // Apply the EDNS-layer CLI flags to an already-built query packet. `+edns`
-// (the default, opts.edns) attaches an OPT RR carrying a 4096-byte EDNS UDP
-// payload size and the version from opts.edns_version; `+noedns` (opts.edns ==
-// false) suppresses it. `+dnssec` sets the DO bit and always forces an OPT RR
-// (the DO bit lives in the OPT record, so it cannot be sent without EDNS even
-// under `+noedns`, mirroring `dig`). `+cdflag` sets the CD bit. `+subnet`
-// attaches the ECS option and always forces an OPT RR (it is an EDNS option).
-// RD is not touched here; it is set at construction time by make_query().
+// (the default, opts.edns) attaches an OPT RR carrying the configured UDP
+// payload size (+bufsize, default 4096) and the version from opts.edns_version;
+// `+noedns` (opts.edns == false) suppresses it. `+dnssec` sets the DO bit and
+// always forces an OPT RR (the DO bit lives in the OPT record, so it cannot be
+// sent without EDNS even under `+noedns`, mirroring `dig`). `+cdflag` sets the
+// CD bit. `+adflag` (default on) sets the AD (Authenticated Data) header bit.
+// `+cookie` (default on) attaches a DNS COOKIE EDNS option (RFC 7873, a random
+// 8-byte client cookie) — only when an OPT RR is present (so `+noedns`
+// suppresses the cookie along with the OPT, matching `dig`). `+header-only`
+// strips the question section (QDCOUNT=0), mirroring `dig +header-only`.
+// `+subnet` attaches the ECS option and always forces an OPT RR (it is
+// an EDNS option). `+nsid`, `+padding` and `+ednsflags` likewise attach their
+// EDNS data / set the Z-field bits and force an OPT RR. `+ednsopt` appends its
+// generic EDNS options after `+subnet`/`+nsid` and before `+padding` (matching
+// `dig`'s build order) and likewise forces an OPT RR, since each entry is an
+// EDNS option. `+opcode`, when set, is applied last via
+// `ldns_pkt_set_opcode`. RD is not touched here; it is set at
+// construction time by make_query().
 void apply_dns_flags(ldns_pkt *pkt, const CliOptions &opts);
 
 // A glue address extracted from a referral response's ADDITIONAL section, tagged
@@ -163,14 +289,16 @@ std::map<std::string, GlueAddress> additional_glue(const ldns_pkt *pkt);
 bool glue_address_usable(const GlueAddress &glue, bool ipv4_only);
 
 // Format a DNS packet as dig-style text. Honors the per-section toggles in
-// `flags` (comments, question, answer, authority, additional, stats). When
-// `is_query` is true (the +qr query echo), the preamble says "Sending:"
+// `flags` (comments, question, answer, authority, additional, stats) plus the
+// field-level flags (multiline, ttlid, cls, one_soa, ttl_units).
+// When `is_query` is true (the +qr query echo), the preamble says "Sending:"
 // instead of "Got answer:" and the size line says "sent" rather than "rcvd".
-// `query_time` populates the ";; Query time:" line and `server` populates the
-// ";; SERVER:" line when `flags.stats` is on; either may be left as zero /
-// empty to omit the corresponding line.
-std::string format_packet_dig(
-        const ldns_pkt *pkt, const DisplayFlags &flags, bool is_query, Millis query_time, std::string_view server);
+// `query_time` populates the ";; Query time:" line, `server` populates the
+// ";; SERVER:" line (already formatted as dig's `IP#port(host) (proto)` by the
+// caller via format_dig_server), and `when` populates `;; WHEN:`; each may be
+// left as zero / empty to omit the corresponding line.
+std::string format_packet_dig(const ldns_pkt *pkt, const DisplayFlags &flags, bool is_query, Millis query_time,
+        std::string_view server, std::time_t when = 0);
 
 // Apply `dig +trace`'s display-flag defaults to `flags`: turn off `comments`,
 // `question` and `stats` (so only the answer/authority/additional RRs are
@@ -196,6 +324,16 @@ bool cmd_banner_enabled(const CliOptions &opts);
 // Exposed in the pure layer so the scheme rewrite (notably preserving the
 // `://` separator) is unit-testable without an event loop.
 void apply_force_tcp(std::string &server);
+
+// Apply `-p PORT` to a plain-DNS server: when `port` is set and `server` has
+// no scheme, the port is overridden — any explicit `host:port` is stripped first
+// (only a single host/port colon is treated as a separator, so a bare IPv6
+// literal — two or more colons — is left alone and not mis-split). Schemed
+// upstreams are left untouched (dig's -p applies to plain DNS only). `+tcp`'s
+// scheme-rewrite (apply_force_tcp) runs afterwards and preserves the port
+// (`1.1.1.1:5353` -> `tcp://1.1.1.1:5353`). Mutates `server` in place; exposed
+// in the pure layer so it is unit-testable without an event loop.
+void apply_port(std::string &server, std::optional<uint16_t> port);
 
 // Format one `dig +trace` hop as dig-compatible text. The body is produced by
 // `format_packet_dig` with the standard stats block suppressed. The footer is

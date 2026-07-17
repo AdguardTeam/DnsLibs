@@ -89,6 +89,11 @@ order-sensitive, exactly like `dig`:
 referral returns NS targets without glue). `+tcp` switches each per-hop query
 to TCP.
 
+`+trace` sets the EDNS DNSSEC OK (DO) bit, matching `dig +trace` (which
+unconditionally enables `lookup->dnssec`). A later `+nodnssec` clears it
+again; an earlier `+dnssec` is overridden by the trace default but can be
+re-asserted after `+trace`.
+
 ### Other options
 
 Notable options (each `dig`-compatible):
@@ -98,23 +103,75 @@ Notable options (each `dig`-compatible):
   [`+trace`](#trace) above)
 - `+tcp` — use TCP for plain DNS
 - `+timeout=N` — query timeout in seconds (default 5)
-- `+recurse` / `+norecurse` — set or clear the RD bit (default on)
+- `+recurse` / `+norecurse` — set or clear the RD bit (default on). `+rd` /
+  `+rdflag` are dig aliases for `+recurse` (and `+nord` / `+nordflag` for its
+  negation)
 - `+edns[=N]` / `+noedns` — send an OPT RR (default on, matching `dig`). `+edns`
   is equivalent to `+edns=0`; `+edns=N` advertises EDNS version `N` (0..255).
-  `+noedns` suppresses the default OPT RR. `+dnssec` (the DO bit) and `+subnet`
-  (the ECS option) still attach an OPT RR even under `+noedns`, since they live
-  inside the OPT record
+  `+noedns` suppresses the default OPT RR. `+dnssec` (the DO bit), `+subnet`
+  (the ECS option), `+nsid`, `+padding`, `+ednsflags` and `+ednsopt` still
+  attach an OPT RR even under `+noedns`, since they live inside the OPT record
 - `+dnssec` / `+do` — set the EDNS DO bit and a 4096-byte UDP payload
 - `+cdflag` / `+cd` — set the CD (checking disabled) bit
+- `+adflag` / `+noadflag` — set or clear the AD (Authenticated Data) bit
+  (default on, matching `dig`). AD is a DNS header flag (not an EDNS option),
+  so it is set even under `+noedns`
+- `+cookie` / `+nocookie` — send or suppress a DNS COOKIE EDNS option (RFC 7873,
+  default on, matching `dig`). The cookie is an 8-byte random client cookie,
+  only attached when an OPT RR is present (so `+noedns` suppresses it too)
 - `+subnet=ADDR[/PREFIX]` — send EDNS Client Subnet (RFC 7871)
+- `+bufsize=N` — EDNS UDP payload size (default 4096)
+- `+nsid` — send the EDNS NSID option (RFC 5001)
+- `+padding=N` — send the EDNS Padding option, `N` zero bytes (RFC 7830)
+- `+ednsflags=0xHH` — set raw EDNS header flags (Z) bits (decimal or `0x`-hex);
+  `+noednsflags` clears them
+- `+ednsopt=CODE[:value]` — send a generic EDNS option (RFC 6891), repeatable.
+  `CODE` is a case-insensitive mnemonic (`NSID`, `ECS`, `PADDING`/`PAD`,
+  `COOKIE`, `EDE`, `KEEPALIVE`, `EXPIRE`, `CHAIN`, `KEY-TAG`, `CLIENT-TAG`,
+  `SERVER-TAG`, `REPORT-CHANNEL`/`RC`, `ZONEVERSION`, `LLQ`, `UL`/`UPDATE-LEASE`,
+  `DAU`, `DHU`, `N3U`, `DEVICEID`) or a decimal number (0..65535); the optional
+  `:value` is the option-data payload as a hex string (whitespace ignored). The
+  options are appended after the named options (`+subnet`/`+nsid`) and before
+  `+padding`, matching `dig`'s build order. `+noednsopt` clears the list (any
+  value is ignored). Each entry forces an OPT RR, so it attaches even under
+  `+noedns` (it is an EDNS option)
+- `+opcode=NAME` — set the opcode (`QUERY`/`IQUERY`/`STATUS`/`NOTIFY`/`UPDATE`,
+  or a numeric opcode); `+noopcode` clears the override
 - `+qr` — print the query packet before sending
+- `+header-only` — send a header-only query (QDCOUNT=0, no question section),
+  mirroring `dig +header-only` which probes server capabilities without sending
+  a question record
+- `+aaflag` / `+defname` / `+showsearch` — accepted as dig-compatibility no-ops
+  (they relate to resolver behaviors adig does not implement), so common `dig`
+  scripts do not error
 - `-4` — use IPv4 only (suppress IPv6)
+- `-p PORT` — override the plain-DNS port (default 53)
 - `-x addr` — reverse lookup (PTR for the given IPv4/IPv6 address)
 - `-v`, `--version` — print version and exit
 
 Display flags (`+cmd`, `+comments`, `+question`, `+answer`, `+authority`,
 `+additional`, `+stats`, `+ttlid`, `+class`) toggle per-section output and
-each supports a `+no` prefix; `+all` / `+noall` toggle all sections at once.
+each supports a `+no` prefix; `+all` / `+noall` toggle the section-level flags
+at once (the field-level flags below are not part of `+all`). Additional
+dig-compatible display flags:
+
+- `+multiline` — render long records inside a `( ... )` block with aligned
+  columns and a four-tab continuation indent. The column layout is byte-exact
+  with `dig` (three-branch tab-stop table from `dig.c`: default 24/32/40/48,
+  `+nottlid` or `+noclass` shift to 24/24/32/40, `+nottlid +noclass` to
+  24/24/24/32; the QUESTION section always preserves an empty TTL column).
+  SOA records use `dig`'s `soa_6.c` multiline format (`%-10lu` per field,
+  `; serial` / `; refresh (1 hour)` verbose-TTL comments, `(` and `)` on
+  their own lines). Only `DS`, `KEY`, `RRSIG`, and `SSHFP` records are
+  candidates for `( ... )` wrapping; `TXT` and other types are never wrapped
+- `+ttlunits` — show TTLs as dig's human units (e.g. `5m`, `1h30m`, `1d`)
+- `+onesoa` — print only the first SOA of the response (useful for `ANY`)
+
+The standard stats block is dig-compatible: `;; Query time:`,
+`;; SERVER: <ip>#<port>(<host>) (UDP|TCP)`, `;; WHEN: <date>` and
+`;; MSG SIZE  rcvd: <n>` (the `WHEN:` and dig-formatted `SERVER:` lines appear
+on real responses; the `+qr` query echo omits them and labels the size
+`;; QUERY SIZE: <n>` instead of `;; MSG SIZE  sent:`).
 
 ## Examples
 
@@ -128,9 +185,16 @@ adig @1.1.1.1 example.com +noedns
 adig @1.1.1.1 example.com +edns=1
 adig -x 8.8.8.8
 adig @1.1.1.1 example.com +subnet=1.2.3.4/24
+adig @1.1.1.1 example.com +ednsopt=nsid
+adig @1.1.1.1 example.com +ednsopt=10:01020304
 adig @1.1.1.1 example.com +noall +answer
 ```
 
 Command-line parsing is implemented in
 [`tools/adig/adig_cli.cpp`](../tools/adig/adig_cli.cpp) (interface:
-[`tools/adig/adig_cli.h`](../tools/adig/adig_cli.h)).
+[`tools/adig/adig_cli.h`](../tools/adig/adig_cli.h)). The pure logic is split by
+concern across three translation units, all sharing the `adig_cli.h` interface:
+argument parsing & CLI transforms (`adig_cli.cpp`), the EDNS/IP helpers
+(`adig_cli_edns.cpp`) and the packet construction & dig-compatible formatting
+(`adig_cli_packet.cpp`). The few internal helpers shared across the units live
+in `adig_cli_internal.h` (not part of the public interface).

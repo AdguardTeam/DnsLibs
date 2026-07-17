@@ -37,7 +37,7 @@ See [README.md](README.md) for full product details.
 | `scripts/` | Build helpers, Conan export, version increment, git hooks |
 | `cmake/` | CMake modules: unit test helper, Conan bootstrapping/provider |
 | `docs/` | Developer and platform-specific documentation |
-| `bamboo-specs/` | CI/CD pipeline definitions (Bamboo) |
+| `.github/workflows/` | CI/CD pipeline definitions (GitHub Actions) |
 
 ### Module Dependency Flow
 

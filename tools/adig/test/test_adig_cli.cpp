@@ -1,42 +1,24 @@
-// Unit tests for adig's pure CLI layer (adig_cli).
+// Unit tests for adig's pure CLI layer — argument parsing & CLI transforms.
 //
-// This file is the test target registered in tools/adig/CMakeLists.txt. The
-// pure functions under test live in adig_cli.{h,cpp}; the event-loop-dependent
-// coroutine logic in adig.cpp is not covered here.
-//
-// Tests are added incrementally alongside each feature task; the placeholder
-// suite was replaced as soon as the parser gained testable behavior.
+// This is one of the split test translation units registered in
+// tools/adig/CMakeLists.txt. It covers parse_args(), match_plus_keyword(), the
+// display-flag helpers and the small pure decision/rewrite helpers
+// (cmd_banner_enabled / apply_force_tcp / apply_port /
+// apply_trace_display_defaults). The EDNS/IP tests live in
+// test_adig_cli_edns.cpp and the packet/format tests in
+// test_adig_cli_packet.cpp. Shared helpers are in
+// test_adig_cli_helpers.h.
 
 #include <gtest/gtest.h>
 
-#include <iterator>
-#include <memory>
 #include <string>
 #include <vector>
 
 #include "adig_cli.h"
 #include "root_servers.h"
+#include "test_adig_cli_helpers.h"
 
 namespace ag::adig::test {
-
-namespace {
-// Byte vector alias used by the EDNS/ECS byte-exact tests below.
-using Bytes = std::vector<uint8_t>;
-
-// Helper: parse a argv vector and return the result.
-ParseResult parse(std::vector<std::string> args) {
-    // Keep the strings alive and mutable so we can hand `char *` pointers to
-    // parse_args (which takes `char *argv[]`, not `const char *`) without a
-    // const_cast.
-    std::vector<std::string> owned = std::move(args);
-    std::vector<char *> argv;
-    argv.reserve(owned.size());
-    for (std::string &a : owned) {
-        argv.push_back(a.data());
-    }
-    return parse_args(static_cast<int>(argv.size()), argv.data());
-}
-} // namespace
 
 // --- match_plus_keyword --------------------------------------------------
 
@@ -49,7 +31,9 @@ TEST(MatchPlusKeyword, ExactCanonical) {
 
 TEST(MatchPlusKeyword, UnambiguousPrefix) {
     EXPECT_EQ("answer", match_plus_keyword("ans").canonical);
-    EXPECT_EQ("short", match_plus_keyword("sh").canonical);
+    // `+sh` would be ambiguous now (short vs showsearch) — verified against
+    // `dig 9.20` (`dig +sh` -> "Invalid option: +sh"). Use `+shor` instead.
+    EXPECT_EQ("short", match_plus_keyword("shor").canonical);
     EXPECT_EQ("additional", match_plus_keyword("add").canonical);
     EXPECT_EQ("authority", match_plus_keyword("auth").canonical);
 }
@@ -75,6 +59,63 @@ TEST(MatchPlusKeyword, UnknownIsError) {
     EXPECT_TRUE(m.canonical.empty());
     EXPECT_NE(std::string::npos, m.error.find("unknown option"));
     EXPECT_NE(std::string::npos, m.error.find("xyz"));
+}
+
+TEST(MatchPlusKeyword, ExplicitAliasDo) {
+    EXPECT_EQ("dnssec", match_plus_keyword("do").canonical);
+    EXPECT_EQ("dnssec", match_plus_keyword("dnssec").canonical);
+    EXPECT_EQ("dnssec", match_plus_keyword("dn").canonical); // unambiguous prefix
+}
+
+TEST(MatchPlusKeyword, EdnsKeyword) {
+    EXPECT_EQ("edns", match_plus_keyword("edns").canonical);
+    // `+ed` / `+edn` are now ambiguous (edns vs ednsflags), verified against
+    // `dig 9.20` (`dig +ed` -> "Invalid option: +ed"). `+ednsf` resolves to
+    // ednsflags instead.
+    EXPECT_TRUE(match_plus_keyword("ed").canonical.empty());
+    EXPECT_NE(std::string::npos, match_plus_keyword("ed").error.find("edns"));
+    EXPECT_NE(std::string::npos, match_plus_keyword("ed").error.find("ednsflags"));
+    EXPECT_TRUE(match_plus_keyword("edn").canonical.empty());
+    EXPECT_EQ("ednsflags", match_plus_keyword("ednsf").canonical);
+}
+
+TEST(MatchPlusKeyword, ExplicitAliasCd) {
+    EXPECT_EQ("cdflag", match_plus_keyword("cd").canonical);
+    EXPECT_EQ("cdflag", match_plus_keyword("cdflag").canonical);
+    EXPECT_EQ("cdflag", match_plus_keyword("cdf").canonical); // unambiguous prefix
+}
+
+TEST(MatchPlusKeyword, QPrefixIsAmbiguous) {
+    // +q matches both `qr` and `question`.
+    KeywordMatch m = match_plus_keyword("q");
+    EXPECT_TRUE(m.canonical.empty());
+    EXPECT_NE(std::string::npos, m.error.find("qr"));
+    EXPECT_NE(std::string::npos, m.error.find("question"));
+}
+
+TEST(MatchPlusKeyword, ExplicitAliasRd) {
+    EXPECT_EQ("recurse", match_plus_keyword("rd").canonical);
+    EXPECT_EQ("recurse", match_plus_keyword("rdflag").canonical);
+    EXPECT_EQ("recurse", match_plus_keyword("recurse").canonical);
+}
+
+TEST(MatchPlusKeyword, EdnsoptKeyword) {
+    EXPECT_EQ("ednsopt", match_plus_keyword("ednsopt").canonical);
+    // `+ednso` is the shortest unambiguous prefix for `ednsopt`.
+    EXPECT_EQ("ednsopt", match_plus_keyword("ednso").canonical);
+    // `+ednsf` still resolves to `ednsflags` (only candidate).
+    EXPECT_EQ("ednsflags", match_plus_keyword("ednsf").canonical);
+}
+
+TEST(MatchPlusKeyword, EdnsPrefixStillAmbiguous) {
+    // Adding `ednsopt` keeps `+ed` / `+edn` ambiguous (edns / ednsflags /
+    // ednsopt) — verified against the existing EdnsKeyword expectations.
+    KeywordMatch m = match_plus_keyword("ed");
+    EXPECT_TRUE(m.canonical.empty());
+    EXPECT_NE(std::string::npos, m.error.find("edns"));
+    EXPECT_NE(std::string::npos, m.error.find("ednsflags"));
+    EXPECT_NE(std::string::npos, m.error.find("ednsopt"));
+    EXPECT_TRUE(match_plus_keyword("edn").canonical.empty());
 }
 
 // --- display-flag toggling via parse_args --------------------------------
@@ -216,9 +257,12 @@ TEST(CmdBannerEnabled, NoCmdSuppressesBanner) {
 // --- existing boolean options through the new mechanism -------------------
 
 TEST(ParseArgs, AbbreviatedShortResolves) {
+    // `+sh` is ambiguous now (short vs showsearch), so it must error — verified
+    // against `dig 9.20` (`dig +sh` -> "Invalid option: +sh"). `+shor` is the
+    // shortest unambiguous prefix for `+short`.
     ParseResult r = parse({"adig", "example.com", "+sh"});
-    ASSERT_TRUE(r.error.empty()) << r.error;
-    EXPECT_TRUE(r.opts.short_output);
+    EXPECT_FALSE(r.error.empty());
+    EXPECT_TRUE(parse({"adig", "example.com", "+shor"}).opts.short_output);
 }
 
 TEST(ParseArgs, NoTcpClearsForceTcp) {
@@ -252,61 +296,14 @@ TEST(ParseRecurse, AbbreviationResolves) {
     EXPECT_FALSE(parse({"adig", "example.com", "+norec"}).opts.recurse);
 }
 
-// --- make_query (query construction is pure) ------------------------------
-
-TEST(MakeQuery, RdBitReflectsRecurse) {
-    ldns_pkt_ptr no_rd = make_query("example.com", LDNS_RR_TYPE_A, false);
-    ASSERT_NE(nullptr, no_rd.get());
-    EXPECT_FALSE(ldns_pkt_rd(no_rd.get()));
-    ldns_pkt_ptr with_rd = make_query("example.com", LDNS_RR_TYPE_A, true);
-    ASSERT_NE(nullptr, with_rd.get());
-    EXPECT_TRUE(ldns_pkt_rd(with_rd.get()));
-}
-
-TEST(MakeQuery, AppendsRootLabel) {
-    ldns_pkt_ptr q = make_query("example.com", LDNS_RR_TYPE_A, true);
-    ASSERT_NE(nullptr, q.get());
-    const ldns_rr_list *question = ldns_pkt_question(q.get());
-    ASSERT_NE(nullptr, question);
-    ASSERT_EQ(1u, ldns_rr_list_rr_count(question));
-    AllocatedPtr<char> owner(ldns_rdf2str(ldns_rr_owner(ldns_rr_list_rr(question, 0))));
-    ASSERT_NE(nullptr, owner.get());
-    EXPECT_TRUE(std::string(owner.get()).ends_with("."));
-}
-
-TEST(MakeQuery, InvalidNameReturnsNull) {
-    // A label with a stray dot-terminator inside an impossible name; ldns
-    // rejects it. (This guards the null-return path callers check.)
-    EXPECT_EQ(nullptr, make_query("", LDNS_RR_TYPE_A, true).get());
-}
-
-// --- apply_dns_flags (DNSSEC DO bit) --------------------------------------
-
-TEST(ApplyDnsFlags, DnssecSetsDoBitAndUdpSize) {
-    ldns_pkt_ptr q = make_query("example.com", LDNS_RR_TYPE_A, true);
-    ASSERT_NE(nullptr, q.get());
-    CliOptions opts;
-    opts.dnssec = true;
-    apply_dns_flags(q.get(), opts);
-    EXPECT_TRUE(ldns_pkt_edns_do(q.get()));
-    EXPECT_GE(ldns_pkt_edns_udp_size(q.get()), 4096u);
-}
-
-TEST(ApplyDnsFlags, NoDnssecLeavesDoUnset) {
-    ldns_pkt_ptr q = make_query("example.com", LDNS_RR_TYPE_A, true);
-    ASSERT_NE(nullptr, q.get());
-    CliOptions opts; // dnssec == false
-    apply_dns_flags(q.get(), opts);
-    EXPECT_FALSE(ldns_pkt_edns_do(q.get()));
+TEST(ParseRecurse, RdAliasAndNoForm) {
+    EXPECT_TRUE(parse({"adig", "example.com", "+rd"}).opts.recurse);
+    EXPECT_TRUE(parse({"adig", "example.com", "+rdflag"}).opts.recurse);
+    EXPECT_FALSE(parse({"adig", "example.com", "+nord"}).opts.recurse);
+    EXPECT_FALSE(parse({"adig", "example.com", "+nordflag"}).opts.recurse);
 }
 
 // --- +dnssec / +do parsing ------------------------------------------------
-
-TEST(MatchPlusKeyword, ExplicitAliasDo) {
-    EXPECT_EQ("dnssec", match_plus_keyword("do").canonical);
-    EXPECT_EQ("dnssec", match_plus_keyword("dnssec").canonical);
-    EXPECT_EQ("dnssec", match_plus_keyword("dn").canonical); // unambiguous prefix
-}
 
 TEST(ParseDnssec, KeywordAliasAndNoForm) {
     EXPECT_TRUE(parse({"adig", "example.com", "+dnssec"}).opts.dnssec);
@@ -323,12 +320,6 @@ TEST(ParseDnssec, KeywordAliasAndNoForm) {
 // `+subnet` (ECS option) still force an OPT RR even under `+noedns`, since
 // those live inside the OPT record — verified against `dig 9.20` via its
 // `+qr` query echo.
-
-TEST(MatchPlusKeyword, EdnsKeyword) {
-    EXPECT_EQ("edns", match_plus_keyword("edns").canonical);
-    EXPECT_EQ("edns", match_plus_keyword("ed").canonical);  // unambiguous prefix
-    EXPECT_EQ("edns", match_plus_keyword("edn").canonical); // unambiguous prefix
-}
 
 TEST(ParseEdns, DefaultsOn) {
     // No +edns on the command line: EDNS is on by default with version 0,
@@ -384,8 +375,12 @@ TEST(ParseEdns, InvalidVersionRejected) {
 }
 
 TEST(ParseEdns, AbbreviationResolves) {
-    EXPECT_TRUE(parse({"adig", "example.com", "+ed"}).opts.edns);
-    EXPECT_FALSE(parse({"adig", "example.com", "+noed"}).opts.edns);
+    // `+ed` / `+noed` are ambiguous now (edns vs ednsflags) — verified against
+    // `dig 9.20` (`dig +ed` / `dig +noed` both error). Use the full forms.
+    EXPECT_TRUE(parse({"adig", "example.com", "+edns"}).opts.edns);
+    EXPECT_FALSE(parse({"adig", "example.com", "+noedns"}).opts.edns);
+    EXPECT_FALSE(parse({"adig", "example.com", "+ed"}).error.empty());
+    EXPECT_FALSE(parse({"adig", "example.com", "+noed"}).error.empty());
 }
 
 TEST(ParseEdns, OrderSensitiveToggle) {
@@ -399,119 +394,13 @@ TEST(ParseEdns, OrderSensitiveToggle) {
     EXPECT_EQ(1u, r.opts.edns_version);
 }
 
-TEST(ApplyDnsFlags, DefaultOptsAttachOptRecord) {
-    // Default CliOptions (edns on, version 0): a plain adig query carries an
-    // OPT RR with a >=4096 UDP payload size and no DO bit, matching `dig`.
-    ldns_pkt_ptr q = make_query("example.com", LDNS_RR_TYPE_A, true);
-    ASSERT_NE(nullptr, q.get());
-    CliOptions opts; // edns == true (default)
-    apply_dns_flags(q.get(), opts);
-    EXPECT_TRUE(ldns_pkt_edns(q.get()));
-    EXPECT_GE(ldns_pkt_edns_udp_size(q.get()), 4096u);
-    EXPECT_EQ(0u, ldns_pkt_edns_version(q.get()));
-    EXPECT_FALSE(ldns_pkt_edns_do(q.get()));
-}
-
-TEST(ApplyDnsFlags, NoEdnsSuppressesOptRecord) {
-    ldns_pkt_ptr q = make_query("example.com", LDNS_RR_TYPE_A, true);
-    ASSERT_NE(nullptr, q.get());
-    CliOptions opts;
-    opts.edns = false; // +noedns, nothing else
-    apply_dns_flags(q.get(), opts);
-    EXPECT_FALSE(ldns_pkt_edns(q.get()));
-    EXPECT_FALSE(ldns_pkt_edns_do(q.get()));
-}
-
-TEST(ApplyDnsFlags, NoEdnsWithDnssecStillAttachesOpt) {
-    // `+noedns +dnssec`: the DO bit lives in the OPT record, so EDNS is forced
-    // on regardless of +noedns (verified against `dig +noedns +dnssec +qr`).
-    ldns_pkt_ptr q = make_query("example.com", LDNS_RR_TYPE_A, true);
-    ASSERT_NE(nullptr, q.get());
-    CliOptions opts;
-    opts.edns = false;
-    opts.dnssec = true;
-    apply_dns_flags(q.get(), opts);
-    EXPECT_TRUE(ldns_pkt_edns(q.get()));
-    EXPECT_TRUE(ldns_pkt_edns_do(q.get()));
-}
-
-TEST(ApplyDnsFlags, NoEdnsWithSubnetStillAttachesOpt) {
-    // `+noedns +subnet`: ECS is an EDNS option, so EDNS is forced on regardless
-    // of +noedns (verified against `dig +noedns +subnet=... +qr`).
-    ldns_pkt_ptr q = make_query("example.com", LDNS_RR_TYPE_A, true);
-    ASSERT_NE(nullptr, q.get());
-    CliOptions opts;
-    opts.edns = false;
-    opts.subnet = {.enabled = true, .addr = "1.2.3.4", .src_prefix = 24};
-    apply_dns_flags(q.get(), opts);
-    EXPECT_TRUE(ldns_pkt_edns(q.get()));
-    ldns_rdf *data = ldns_pkt_edns_data(q.get());
-    ASSERT_NE(nullptr, data);
-    const uint8_t *bytes = ldns_rdf_data(data);
-    size_t sz = ldns_rdf_size(data);
-    Bytes actual(bytes, bytes + sz);
-    EXPECT_EQ((Bytes{0x00, 0x08, 0x00, 0x07, 0x00, 0x01, 0x18, 0x00, 0x01, 0x02, 0x03}), actual);
-}
-
-TEST(ApplyDnsFlags, EdnsVersionPropagated) {
-    // `+edns=1` advertises EDNS version 1 in the OPT RR.
-    ldns_pkt_ptr q = make_query("example.com", LDNS_RR_TYPE_A, true);
-    ASSERT_NE(nullptr, q.get());
-    CliOptions opts;
-    opts.edns_version = 1;
-    apply_dns_flags(q.get(), opts);
-    EXPECT_TRUE(ldns_pkt_edns(q.get()));
-    EXPECT_EQ(1u, ldns_pkt_edns_version(q.get()));
-}
-
-TEST(ApplyDnsFlags, NoEdnsWithCdSetsHeaderBitOnly) {
-    // CD is a DNS header flag, not an EDNS extension: +noedns +cdflag must set
-    // CD without attaching an OPT RR (verified against `dig +noedns +cd +qr`).
-    ldns_pkt_ptr q = make_query("example.com", LDNS_RR_TYPE_A, true);
-    ASSERT_NE(nullptr, q.get());
-    CliOptions opts;
-    opts.edns = false;
-    opts.cd = true;
-    apply_dns_flags(q.get(), opts);
-    EXPECT_TRUE(ldns_pkt_cd(q.get()));
-    EXPECT_FALSE(ldns_pkt_edns(q.get()));
-}
-
 // --- +cdflag / +cd (Checking Disabled) -----------------------------------
-
-TEST(MatchPlusKeyword, ExplicitAliasCd) {
-    EXPECT_EQ("cdflag", match_plus_keyword("cd").canonical);
-    EXPECT_EQ("cdflag", match_plus_keyword("cdflag").canonical);
-    EXPECT_EQ("cdflag", match_plus_keyword("cdf").canonical); // unambiguous prefix
-}
 
 TEST(ParseCdflag, KeywordAliasAndNoForm) {
     EXPECT_TRUE(parse({"adig", "example.com", "+cdflag"}).opts.cd);
     EXPECT_TRUE(parse({"adig", "example.com", "+cd"}).opts.cd);
     EXPECT_FALSE(parse({"adig", "example.com", "+nocdflag"}).opts.cd);
     EXPECT_FALSE(parse({"adig", "example.com", "+nocd"}).opts.cd);
-}
-
-TEST(ApplyDnsFlags, CdSetsCheckingDisabled) {
-    ldns_pkt_ptr q = make_query("example.com", LDNS_RR_TYPE_A, true);
-    ASSERT_NE(nullptr, q.get());
-    CliOptions opts;
-    opts.cd = true;
-    apply_dns_flags(q.get(), opts);
-    EXPECT_TRUE(ldns_pkt_cd(q.get()));
-}
-
-TEST(ApplyDnsFlags, CombinedDnssecCdAndNorecurse) {
-    // norecurse is handled by make_query (RD bit); dnssec+cd by apply_dns_flags.
-    ldns_pkt_ptr q = make_query("example.com", LDNS_RR_TYPE_A, false);
-    ASSERT_NE(nullptr, q.get());
-    CliOptions opts;
-    opts.dnssec = true;
-    opts.cd = true;
-    apply_dns_flags(q.get(), opts);
-    EXPECT_FALSE(ldns_pkt_rd(q.get()));     // norecurse honored
-    EXPECT_TRUE(ldns_pkt_edns_do(q.get())); // dnssec DO set
-    EXPECT_TRUE(ldns_pkt_cd(q.get()));      // checking disabled set
 }
 
 // --- -4 / -6 (IPv4-only) --------------------------------------------------
@@ -542,61 +431,12 @@ TEST(ParseQr, FlagToggles) {
     EXPECT_FALSE(parse({"adig", "example.com", "+noqr"}).opts.print_query);
 }
 
-TEST(MatchPlusKeyword, QPrefixIsAmbiguous) {
-    // +q matches both `qr` and `question`.
-    KeywordMatch m = match_plus_keyword("q");
-    EXPECT_TRUE(m.canonical.empty());
-    EXPECT_NE(std::string::npos, m.error.find("qr"));
-    EXPECT_NE(std::string::npos, m.error.find("question"));
-}
-
 // --- -v / --version -------------------------------------------------------
 
 TEST(ParseVersion, FlagsRequestVersion) {
     EXPECT_TRUE(parse({"adig", "-v"}).version_requested);
     EXPECT_TRUE(parse({"adig", "--version"}).version_requested);
     EXPECT_FALSE(parse({"adig", "example.com"}).version_requested);
-}
-
-// --- encode_ecs_option (RFC 7871, byte-exact) ----------------------------
-
-TEST(EncodeEcsOption, Ipv4Prefix24) {
-    // code=8, len=7, family=1, src=24(0x18), scope=0, addr=01 02 03
-    EXPECT_EQ((Bytes{0x00, 0x08, 0x00, 0x07, 0x00, 0x01, 0x18, 0x00, 0x01, 0x02, 0x03}),
-            encode_ecs_option("1.2.3.4", 24));
-}
-
-TEST(EncodeEcsOption, Ipv4Prefix8And16) {
-    EXPECT_EQ((Bytes{0x00, 0x08, 0x00, 0x05, 0x00, 0x01, 0x08, 0x00, 0x01}), encode_ecs_option("1.2.3.4", 8));
-    EXPECT_EQ((Bytes{0x00, 0x08, 0x00, 0x06, 0x00, 0x01, 0x10, 0x00, 0x01, 0x02}), encode_ecs_option("1.2.3.4", 16));
-}
-
-TEST(EncodeEcsOption, Ipv4Prefix17MasksTrailingBits) {
-    // prefix=17 -> 3 bytes, last byte keeps only the top 1 bit; 0x03 & 0x80 = 0x00
-    EXPECT_EQ((Bytes{0x00, 0x08, 0x00, 0x07, 0x00, 0x01, 0x11, 0x00, 0x01, 0x02, 0x00}),
-            encode_ecs_option("1.2.3.4", 17));
-}
-
-TEST(EncodeEcsOption, Ipv4ZeroPrefixSentinel) {
-    // 0.0.0.0/0 -> family 1, prefix 0, empty address
-    EXPECT_EQ((Bytes{0x00, 0x08, 0x00, 0x04, 0x00, 0x01, 0x00, 0x00}), encode_ecs_option("0.0.0.0", 0));
-}
-
-TEST(EncodeEcsOption, Ipv6Prefix64) {
-    // 2001:db8::1 -> first 8 bytes = 20 01 0d b8 00 00 00 00; family=2, src=64(0x40)
-    EXPECT_EQ((Bytes{0x00, 0x08, 0x00, 0x0C, 0x00, 0x02, 0x40, 0x00, 0x20, 0x01, 0x0D, 0xB8, 0x00, 0x00, 0x00, 0x00}),
-            encode_ecs_option("2001:db8::1", 64));
-}
-
-TEST(EncodeEcsOption, Ipv6ZeroPrefixSentinel) {
-    EXPECT_EQ((Bytes{0x00, 0x08, 0x00, 0x04, 0x00, 0x02, 0x00, 0x00}), encode_ecs_option("::", 0));
-}
-
-TEST(EncodeEcsOption, InvalidAddressOrPrefixReturnsEmpty) {
-    EXPECT_TRUE(encode_ecs_option("example.com", 24).empty());
-    EXPECT_TRUE(encode_ecs_option("999.1.1.1", 24).empty());
-    EXPECT_TRUE(encode_ecs_option("1.2.3.4", 40).empty()); // prefix > 32
-    EXPECT_TRUE(encode_ecs_option("::1", 200).empty());    // prefix > 128
 }
 
 // --- +timeout= parsing ----------------------------------------------------
@@ -672,47 +512,6 @@ TEST(ParseSubnet, InvalidAddress) {
     EXPECT_FALSE(parse({"adig", "example.com", "+subnet=example.com/24"}).error.empty());
 }
 
-TEST(ApplyDnsFlags, SubnetAttachesEcsOption) {
-    ldns_pkt_ptr q = make_query("example.com", LDNS_RR_TYPE_A, true);
-    ASSERT_NE(nullptr, q.get());
-    CliOptions opts;
-    opts.subnet = {.enabled = true, .addr = "1.2.3.4", .src_prefix = 24};
-    apply_dns_flags(q.get(), opts);
-    ldns_rdf *data = ldns_pkt_edns_data(q.get());
-    ASSERT_NE(nullptr, data);
-    const uint8_t *bytes = ldns_rdf_data(data);
-    size_t sz = ldns_rdf_size(data);
-    Bytes actual(bytes, bytes + sz);
-    EXPECT_EQ((Bytes{0x00, 0x08, 0x00, 0x07, 0x00, 0x01, 0x18, 0x00, 0x01, 0x02, 0x03}), actual);
-}
-
-// --- make_reverse_name ----------------------------------------------------
-
-TEST(MakeReverseName, Ipv4) {
-    EXPECT_EQ("4.3.2.1.in-addr.arpa.", make_reverse_name("1.2.3.4").value_or(""));
-    EXPECT_EQ("8.8.8.8.in-addr.arpa.", make_reverse_name("8.8.8.8").value_or(""));
-    // Full IPv4 with a trailing component.
-    EXPECT_EQ("10.0.0.1.in-addr.arpa.", make_reverse_name("1.0.0.10").value_or(""));
-}
-
-TEST(MakeReverseName, Ipv6) {
-    EXPECT_EQ("1.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.ip6.arpa.",
-            make_reverse_name("::1").value_or(""));
-    // 2001:db8::1 -> reversed nibbles end with 8.b.d.0.1.0.0.2.ip6.arpa.
-    std::string v6 = make_reverse_name("2001:db8::1").value_or("");
-    EXPECT_EQ(std::string::npos, v6.find_first_not_of("0123456789abcdef.ip6arpa."));
-    EXPECT_TRUE(v6.ends_with("8.b.d.0.1.0.0.2.ip6.arpa."));
-    EXPECT_TRUE(v6.starts_with("1.0."));
-}
-
-TEST(MakeReverseName, InvalidReturnsNullopt) {
-    EXPECT_FALSE(make_reverse_name("").has_value());
-    EXPECT_FALSE(make_reverse_name("example.com").has_value());
-    EXPECT_FALSE(make_reverse_name("999.1.1.1").has_value());
-    EXPECT_FALSE(make_reverse_name("1.2.3").has_value());
-    EXPECT_FALSE(make_reverse_name("::g").has_value());
-}
-
 // --- -x reverse-lookup flow -----------------------------------------------
 
 TEST(ParseReverse, SetsNameTypeAndFlag) {
@@ -772,171 +571,6 @@ TEST(ParseArgs, ExplicitServerIsKept) {
     ParseResult r = parse({"adig", "@8.8.8.8", "example.com"});
     ASSERT_TRUE(r.error.empty()) << r.error;
     EXPECT_EQ("8.8.8.8", r.opts.server);
-}
-
-// --- format_packet_dig (dig-style output) --------------------------------
-
-namespace {
-
-// Build a simple A query for format_packet_dig tests.
-ldns_pkt_ptr make_test_query() {
-    return make_query("example.com", LDNS_RR_TYPE_A, true);
-}
-
-// Check that `haystack` contains `needle`.
-bool contains(std::string_view haystack, std::string_view needle) {
-    return haystack.find(needle) != std::string::npos;
-}
-
-} // namespace
-
-TEST(FormatPacketDig, UsesStatusCodeInsteadOfRcode) {
-    ldns_pkt_ptr q = make_test_query();
-    std::string out = format_packet_dig(q.get(), {}, false, Millis{0}, "");
-    EXPECT_TRUE(contains(out, "status: NOERROR"));
-    EXPECT_FALSE(contains(out, "rcode:"));
-}
-
-TEST(FormatPacketDig, HasFlagLine) {
-    ldns_pkt_ptr q = make_test_query();
-    std::string out = format_packet_dig(q.get(), {}, false, Millis{0}, "");
-    // RD is set by make_query(..., recurse=true)
-    EXPECT_TRUE(contains(out, "flags:"));
-    EXPECT_TRUE(contains(out, " rd"));
-    EXPECT_TRUE(contains(out, "QUERY: 1"));
-}
-
-TEST(FormatPacketDig, QuerySaysSending) {
-    ldns_pkt_ptr q = make_test_query();
-    std::string out = format_packet_dig(q.get(), {}, true, Millis{0}, "");
-    EXPECT_TRUE(contains(out, ";; Sending:"));
-    EXPECT_TRUE(contains(out, "MSG SIZE  sent:"));
-}
-
-TEST(FormatPacketDig, QueryEchoOmitsQueryTimeAndServer) {
-    // `+qr` echoes the query packet before it is sent: there is no round-trip
-    // yet, so the stats trailer must omit the ";; Query time:" line (and, since
-    // the caller passes an empty server for the echo, the ";; SERVER:" line
-    // too), leaving only ";; MSG SIZE  sent:". Mirrors `dig +qr`, which prints
-    // just the size for the query packet. Previously a spurious
-    // ";; Query time: 0 msec" was emitted here.
-    ldns_pkt_ptr q = make_test_query();
-    std::string out = format_packet_dig(q.get(), {}, true, Millis{0}, "");
-    EXPECT_TRUE(contains(out, ";; MSG SIZE  sent:"));
-    EXPECT_FALSE(contains(out, "Query time:"));
-    EXPECT_FALSE(contains(out, "SERVER:"));
-}
-
-TEST(FormatPacketDig, ResponseSaysGotAnswer) {
-    ldns_pkt_ptr q = make_test_query();
-    std::string out = format_packet_dig(q.get(), {}, false, Millis{0}, "");
-    EXPECT_TRUE(contains(out, ";; Got answer:"));
-    EXPECT_TRUE(contains(out, "MSG SIZE  rcvd:"));
-}
-
-TEST(FormatPacketDig, QuestionSectionHasSemicolonPrefix) {
-    ldns_pkt_ptr q = make_test_query();
-    std::string out = format_packet_dig(q.get(), {}, false, Millis{0}, "");
-    EXPECT_TRUE(contains(out, ";; QUESTION SECTION:"));
-    EXPECT_TRUE(contains(out, ";example.com.\tIN\tA"));
-}
-
-TEST(FormatPacketDig, NoQuestionSuppressed) {
-    ldns_pkt_ptr q = make_test_query();
-    DisplayFlags df;
-    df.question = false;
-    std::string out = format_packet_dig(q.get(), df, false, Millis{0}, "");
-    EXPECT_FALSE(contains(out, "QUESTION SECTION"));
-}
-
-TEST(FormatPacketDig, NoCommentsSuppressesHeader) {
-    ldns_pkt_ptr q = make_test_query();
-    DisplayFlags df;
-    df.comments = false;
-    std::string out = format_packet_dig(q.get(), df, false, Millis{0}, "");
-    EXPECT_FALSE(contains(out, "HEADER"));
-    EXPECT_FALSE(contains(out, "Got answer:"));
-    // Section headers are themselves comments; with +nocomments dig (and now
-    // adig) emits just the RRs without the `;; ... SECTION:` headers.
-    EXPECT_FALSE(contains(out, "QUESTION SECTION:"));
-    EXPECT_FALSE(contains(out, "ANSWER SECTION:"));
-    // The question RR is still present (gated by +question, not +comments).
-    EXPECT_TRUE(contains(out, ";example.com.\tIN\tA"));
-}
-
-TEST(FormatPacketDig, NoStatsSuppressesStats) {
-    ldns_pkt_ptr q = make_test_query();
-    DisplayFlags df;
-    df.stats = false;
-    std::string out = format_packet_dig(q.get(), df, false, Millis{0}, "");
-    EXPECT_FALSE(contains(out, "Query time:"));
-    EXPECT_FALSE(contains(out, "MSG SIZE"));
-}
-
-TEST(FormatPacketDig, NoAllSuppressesEverything) {
-    ldns_pkt_ptr q = make_test_query();
-    DisplayFlags df;
-    df.cmd = false;
-    df.comments = false;
-    df.question = false;
-    df.answer = false;
-    df.authority = false;
-    df.additional = false;
-    df.stats = false;
-    df.multiline = false;
-    df.ttlid = false;
-    df.cls = false;
-    std::string out = format_packet_dig(q.get(), df, false, Millis{0}, "");
-    EXPECT_TRUE(out.empty());
-}
-
-TEST(FormatPacketDig, EdnsOptPseudosectionWhenDnssec) {
-    ldns_pkt_ptr q = make_test_query();
-    CliOptions opts;
-    opts.dnssec = true;
-    apply_dns_flags(q.get(), opts);
-    std::string out = format_packet_dig(q.get(), {}, false, Millis{0}, "");
-    EXPECT_TRUE(contains(out, "OPT PSEUDOSECTION:"));
-    EXPECT_TRUE(contains(out, "; EDNS: version: 0"));
-    EXPECT_TRUE(contains(out, "flags: do"));
-    EXPECT_TRUE(contains(out, "udp: 4096"));
-    // ADDITIONAL count should include the OPT RR
-    EXPECT_TRUE(contains(out, "ADDITIONAL: 1"));
-}
-
-TEST(FormatPacketDig, NoEdnsNoPseudosection) {
-    ldns_pkt_ptr q = make_test_query();
-    std::string out = format_packet_dig(q.get(), {}, false, Millis{0}, "");
-    EXPECT_FALSE(contains(out, "OPT PSEUDOSECTION:"));
-    EXPECT_TRUE(contains(out, "ADDITIONAL: 0"));
-}
-
-TEST(FormatPacketDig, QueryTimeInStats) {
-    ldns_pkt_ptr q = make_test_query();
-    std::string out = format_packet_dig(q.get(), {}, false, Millis{42}, "");
-    EXPECT_TRUE(contains(out, ";; Query time: 42 msec"));
-}
-
-TEST(FormatPacketDig, ServerLineWhenProvided) {
-    ldns_pkt_ptr q = make_test_query();
-    std::string out = format_packet_dig(q.get(), {}, false, Millis{0}, "1.1.1.1");
-    EXPECT_TRUE(contains(out, ";; SERVER: 1.1.1.1"));
-}
-
-TEST(FormatPacketDig, NoServerLineWhenEmpty) {
-    ldns_pkt_ptr q = make_test_query();
-    std::string out = format_packet_dig(q.get(), {}, false, Millis{0}, "");
-    EXPECT_FALSE(contains(out, "SERVER:"));
-}
-
-TEST(FormatPacketDig, NoTtlidOmitsTtl) {
-    ldns_pkt_ptr q = make_test_query();
-    DisplayFlags df;
-    df.ttlid = false;
-    std::string out = format_packet_dig(q.get(), df, false, Millis{0}, "");
-    // Question section never has TTL, so just verify the flag doesn't crash
-    // and the question section still appears.
-    EXPECT_TRUE(contains(out, "QUESTION SECTION"));
 }
 
 // --- root_servers.h (generated IANA root hints) ---------------------------
@@ -1014,6 +648,38 @@ TEST(ParseTrace, SetsTraceAndAppliesDefaults) {
     EXPECT_FALSE(r.opts.display.stats);
 }
 
+// --- bug #12: +trace sets the DNSSEC DO bit ----------------------------------
+
+TEST(ParseTrace, SetsDnssecDoBit) {
+    // dig's `+trace` sets `lookup->dnssec = true` (dig.c case 'a': trace)
+    // so each iterative authoritative query requests DNSSEC records. Verified
+    // against `dig +trace +qr` (the OPT PSEUDOSECTION in the first hop shows
+    // `flags: do; udp: ...`). A later `+nodnssec` still wins (mirrors dig).
+    ParseResult r = parse({"adig", "example.com", "+trace"});
+    ASSERT_TRUE(r.error.empty()) << r.error;
+    EXPECT_TRUE(r.opts.trace);
+    EXPECT_TRUE(r.opts.dnssec);
+}
+
+TEST(ParseTrace, LaterNoDnssecOverridesTraceDnssec) {
+    // `+trace +nodnssec`: like `+trace +stats`, the explicit later flag wins
+    // over the trace-applied default (dig's order-sensitive precedence).
+    ParseResult r = parse({"adig", "example.com", "+trace", "+nodnssec"});
+    ASSERT_TRUE(r.error.empty()) << r.error;
+    EXPECT_TRUE(r.opts.trace);
+    EXPECT_FALSE(r.opts.dnssec);
+}
+
+TEST(ParseTrace, EarlierDnssecOverriddenByTrace) {
+    // `+dnssec +trace`: +dnssec sets dnssec=true first, then +trace sets it
+    // again to true (idempotent); the trailing trace-applied default is
+    // `dnssec=true`, so the final value is true either way.
+    ParseResult r = parse({"adig", "example.com", "+dnssec", "+trace"});
+    ASSERT_TRUE(r.error.empty()) << r.error;
+    EXPECT_TRUE(r.opts.trace);
+    EXPECT_TRUE(r.opts.dnssec);
+}
+
 TEST(ParseTrace, DefaultsOffAndAbbreviationMatch) {
     ParseResult r = parse({"adig", "example.com"});
     ASSERT_TRUE(r.error.empty()) << r.error;
@@ -1074,216 +740,6 @@ TEST(ParseTrace, AllAfterTraceReenablesEverything) {
     EXPECT_FALSE(d.multiline);
     EXPECT_TRUE(d.ttlid);
     EXPECT_TRUE(d.cls);
-}
-
-// --- format_trace_received_line -------------------------------------------
-//
-// Mirrors dig's `;; Received N bytes from IP#53(NAME) in Y ms`. The NAME in
-// parens repeats the IP when no hostname is known (mirroring dig when the
-// peer has no resolvable reverse-DNS name).
-
-TEST(FormatTraceReceivedLine, WithServerName) {
-    std::string line = format_trace_received_line(Millis{42}, 239, "198.41.0.4", "a.root-servers.net");
-    EXPECT_EQ(line, ";; Received 239 bytes from 198.41.0.4#53(a.root-servers.net) in 42 ms\n");
-}
-
-TEST(FormatTraceReceivedLine, EmptyNameRepeatsIp) {
-    std::string line = format_trace_received_line(Millis{5}, 72, "1.1.1.1", "");
-    EXPECT_EQ(line, ";; Received 72 bytes from 1.1.1.1#53(1.1.1.1) in 5 ms\n");
-}
-
-TEST(FormatTraceReceivedLine, NonZeroTimePrintedAsCount) {
-    std::string line = format_trace_received_line(Millis{1000}, 1, "1.2.3.4", "ns.example.");
-    EXPECT_TRUE(contains(line, "in 1000 ms"));
-}
-
-// --- format_trace_packet_dig (per-hop trace output) ----------------------
-//
-// dig's default `+trace` output is: per-hop RRs (no section headers, no
-// QUESTION, no stats block) followed by the `Received ... bytes from ...`
-// footer. With `+stats` the footer is replaced by the standard
-// `Query time / SERVER (as IP#53(name) (UDP)) / MSG SIZE` block.
-
-TEST(FormatTracePacketDig, DefaultEmitsReceivedFooter) {
-    // Mirror the trace-default display state (+trace clears comments,
-    // question, stats in parse_args): use apply_trace_display_defaults so the
-    // test and the parse_args-driven main() see the same flags.
-    ldns_pkt_ptr q = make_test_query();
-    DisplayFlags df;
-    apply_trace_display_defaults(df);
-    std::string out = format_trace_packet_dig(q.get(), df, Millis{42}, "198.41.0.4", "a.root-servers.net");
-    // Trace default body: no comments, no question, no stats — RRs only.
-    EXPECT_FALSE(contains(out, "Got answer:"));
-    EXPECT_FALSE(contains(out, "HEADER"));
-    EXPECT_FALSE(contains(out, "QUESTION SECTION:"));
-    EXPECT_FALSE(contains(out, "ANSWER SECTION:"));
-    EXPECT_FALSE(contains(out, "Query time:"));
-    EXPECT_FALSE(contains(out, "SERVER:"));
-    EXPECT_FALSE(contains(out, "MSG SIZE"));
-    // ... and the trace-specific Received footer using the dig IP#53(name) form.
-    EXPECT_TRUE(contains(out, "Received "));
-    EXPECT_TRUE(contains(out, "bytes from 198.41.0.4#53(a.root-servers.net) in 42 ms"));
-    // Trailing blank line separates this hop from the next.
-    EXPECT_TRUE(out.ends_with("\n\n"));
-}
-
-TEST(FormatTracePacketDig, EmptyNameFallsBackToIpInFooter) {
-    ldns_pkt_ptr q = make_test_query();
-    DisplayFlags df;
-    apply_trace_display_defaults(df);
-    std::string out = format_trace_packet_dig(q.get(), df, Millis{1}, "1.1.1.1", "");
-    EXPECT_TRUE(contains(out, "1.1.1.1#53(1.1.1.1)"));
-}
-
-TEST(FormatTracePacketDig, StatsEnabledEmitsStandardFooter) {
-    // When +stats / +all re-enables the stats block (overriding the trace
-    // default), the trace footer is replaced by the standard stats trailer
-    // using the dig server formatting (IP#53(name) (UDP)) rather than the
-    // bare `opts.server`.
-    ldns_pkt_ptr q = make_test_query();
-    DisplayFlags df;
-    apply_trace_display_defaults(df);
-    df.stats = true; // mirror `+trace +stats` / `+trace +all`
-    std::string out = format_trace_packet_dig(q.get(), df, Millis{87}, "192.5.5.241", "f.root-servers.net");
-    EXPECT_FALSE(contains(out, "Received")); // No Received footer with +stats.
-    EXPECT_TRUE(contains(out, ";; Query time: 87 msec"));
-    EXPECT_TRUE(contains(out, ";; SERVER: 192.5.5.241#53(f.root-servers.net) (UDP)"));
-    EXPECT_TRUE(contains(out, ";; MSG SIZE  rcvd:"));
-    EXPECT_TRUE(out.ends_with("\n\n"));
-}
-
-TEST(FormatTracePacketDig, CommentsEnabledShowsSectionHeaders) {
-    // `+trace +comments` re-enables only the comments toggle; the trace-default
-    // toggles for `question` and `stats` are still off, so the body shows the
-    // `Got answer:` header (and any populated section header) above the
-    // per-hop RRs but no QUESTION section / no stats trailer. Mirrors
-    // `dig +trace +comments`.
-    ldns_pkt_ptr q = make_test_query();
-    DisplayFlags df;
-    apply_trace_display_defaults(df);
-    df.comments = true;
-    std::string out = format_trace_packet_dig(q.get(), df, Millis{1}, "1.1.1.1", "");
-    // comments re-enabled: header (over the is_query=false body) appears.
-    EXPECT_TRUE(contains(out, "Got answer:"));
-    EXPECT_TRUE(contains(out, "HEADER"));
-    // question still off (trace default), so the QUESTION section is gone.
-    EXPECT_FALSE(contains(out, "QUESTION SECTION:"));
-    // stats is still off (trace default), so the Received footer is emitted
-    // and the standard Query time / SERVER block is not.
-    EXPECT_TRUE(contains(out, "Received "));
-    EXPECT_FALSE(contains(out, "Query time:"));
-}
-
-// --- additional_glue (A preferred over AAAA; family tagging) ----------------
-//
-// +trace pairs NS target names with their ADDITIONAL-section glue. A later AAAA
-// must not displace an earlier A for the same owner (so +trace doesn't prefer
-// IPv6 when IPv4 glue is present and the chosen address is order-independent),
-// and each entry must be tagged with its family so -4 can skip IPv6 glue.
-
-namespace {
-
-// Build a packet whose ADDITIONAL section carries the given RRs (presentation
-// strings, e.g. "ns1.example.net. 300 IN A 1.2.3.4"). Each RR is parsed with
-// ldns_rr_new_frm_str; a parse failure skips that RR. The packet takes ownership
-// of every pushed RR.
-ldns_pkt_ptr make_glue_pkt(std::vector<std::string> rrs) {
-    ldns_pkt_ptr pkt{ldns_pkt_new()};
-    for (const std::string &rr_str : rrs) {
-        ldns_rr *rr = nullptr;
-        if (ldns_rr_new_frm_str(&rr, rr_str.c_str(), 0, nullptr, nullptr) == LDNS_STATUS_OK && rr != nullptr) {
-            ldns_pkt_push_rr(pkt.get(), LDNS_SECTION_ADDITIONAL, rr);
-        }
-    }
-    return pkt;
-}
-
-// Render `ip` the way ldns renders an A/AAAA RDATA atom, so glue-address
-// expectations don't depend on ldns's canonical-form choices.
-std::string render_ip(ldns_rdf_type type, std::string_view ip) {
-    std::unique_ptr<ldns_rdf, void (*)(ldns_rdf *)> rdf(
-            ldns_rdf_new_frm_str(type, std::string(ip).c_str()), &ldns_rdf_deep_free);
-    if (rdf == nullptr) {
-        return "<invalid>";
-    }
-    AllocatedPtr<char> s(ldns_rdf2str(rdf.get()));
-    return (s != nullptr) ? std::string(s.get()) : "<invalid>";
-}
-
-} // namespace
-
-TEST(AdditionalGlue, PrefersAOverAaaaRegardlessOfOrder) {
-    const std::string owner = "ns1.example.net.";
-    // Both orderings: the A record must win over the AAAA for the same owner.
-    for (int order = 0; order < 2; ++order) {
-        const char *a_rr = "ns1.example.net. 300 IN A 1.2.3.4";
-        const char *aaaa_rr = "ns1.example.net. 300 IN AAAA 2001:db8::1";
-        ldns_pkt_ptr pkt = make_glue_pkt({order == 0 ? a_rr : aaaa_rr, order == 0 ? aaaa_rr : a_rr});
-        auto glue = additional_glue(pkt.get());
-        ASSERT_EQ(1u, glue.size()) << "order=" << order;
-        auto it = glue.find(owner);
-        ASSERT_NE(it, glue.end()) << "order=" << order;
-        EXPECT_EQ("1.2.3.4", it->second.address) << "order=" << order;
-        EXPECT_FALSE(it->second.ipv6) << "order=" << order;
-    }
-}
-
-TEST(AdditionalGlue, KeepsARecord) {
-    ldns_pkt_ptr pkt = make_glue_pkt({"ns3.example.net. 300 IN A 9.9.9.9"});
-    auto glue = additional_glue(pkt.get());
-    ASSERT_EQ(1u, glue.size());
-    auto it = glue.find("ns3.example.net.");
-    ASSERT_NE(it, glue.end());
-    EXPECT_EQ("9.9.9.9", it->second.address);
-    EXPECT_FALSE(it->second.ipv6);
-}
-
-TEST(AdditionalGlue, KeepsAaaaWhenNoA) {
-    // No A for this owner, so the AAAA is kept (and tagged IPv6).
-    ldns_pkt_ptr pkt = make_glue_pkt({"ns2.example.net. 300 IN AAAA 2001:db8::1"});
-    auto glue = additional_glue(pkt.get());
-    ASSERT_EQ(1u, glue.size());
-    auto it = glue.find("ns2.example.net.");
-    ASSERT_NE(it, glue.end());
-    EXPECT_EQ(render_ip(LDNS_RDF_TYPE_AAAA, "2001:db8::1"), it->second.address);
-    EXPECT_TRUE(it->second.ipv6);
-}
-
-TEST(AdditionalGlue, IgnoresNonGlueAndKeepsMultipleOwners) {
-    // Only A/AAAA glue is extracted; NS/TXT (and any other) ADDITIONAL RRs are
-    // ignored. Multiple owners each get their own entry.
-    ldns_pkt_ptr pkt = make_glue_pkt({
-            "ns1.example.net. 300 IN A 1.1.1.1",
-            "ns2.example.net. 300 IN AAAA 2001:db8::2",
-            "example.net. 300 IN NS ns1.example.net.", // NS in ADDITIONAL: ignored
-            "example.net. 300 IN TXT \"not-glue\"",    // TXT: ignored
-    });
-    auto glue = additional_glue(pkt.get());
-    EXPECT_EQ(2u, glue.size());
-    EXPECT_EQ("1.1.1.1", glue["ns1.example.net."].address);
-    EXPECT_FALSE(glue["ns1.example.net."].ipv6);
-    EXPECT_TRUE(glue["ns2.example.net."].ipv6);
-}
-
-TEST(AdditionalGlue, NullAndEmptyPackets) {
-    EXPECT_TRUE(additional_glue(nullptr).empty());
-    ldns_pkt_ptr empty{ldns_pkt_new()};
-    ASSERT_NE(nullptr, empty.get());
-    EXPECT_TRUE(additional_glue(empty.get()).empty());
-}
-
-// --- glue_address_usable (-4 suppresses IPv6 glue) -------------------------
-
-TEST(GlueAddressUsable, Ipv4AlwaysUsable) {
-    GlueAddress a{.address = "1.2.3.4", .ipv6 = false};
-    EXPECT_TRUE(glue_address_usable(a, false));
-    EXPECT_TRUE(glue_address_usable(a, true)); // -4 does not suppress IPv4
-}
-
-TEST(GlueAddressUsable, Ipv6SuppressedUnderIpv4Only) {
-    GlueAddress aaaa{.address = "2001:db8::1", .ipv6 = true};
-    EXPECT_TRUE(glue_address_usable(aaaa, false)); // no -4: IPv6 is fine
-    EXPECT_FALSE(glue_address_usable(aaaa, true)); // -4: IPv6 suppressed
 }
 
 // --- apply_force_tcp (+tcp scheme rewrite) ---------------------------------
@@ -1351,6 +807,284 @@ TEST(ApplyForceTcp, EmptyStringGetsSchemePrefix) {
     std::string server;
     apply_force_tcp(server);
     EXPECT_EQ("tcp://", server);
+}
+
+// --- dig-compat no-op flags (accepted, no behavior change) ------------------
+
+TEST(ParseNoopFlags, AcceptedWithoutError) {
+    for (const char *opt : {"+aaflag", "+defname", "+showsearch", "+noaaflag", "+nodefname", "+noshowsearch"}) {
+        ParseResult r = parse({"adig", "example.com", opt});
+        EXPECT_TRUE(r.error.empty()) << opt << ": " << r.error;
+    }
+}
+
+TEST(ParseNoopFlags, CombinationsDoNotError) {
+    ParseResult r = parse({"adig", "example.com", "+showsearch", "+defname", "+aaflag", "+short"});
+    ASSERT_TRUE(r.error.empty()) << r.error;
+    EXPECT_TRUE(r.opts.short_output);
+}
+
+// --- +adflag / +cookie (functional CLI flags) ------------------------------
+
+TEST(ParseAdFlag, DefaultsOn) {
+    ParseResult r = parse({"adig", "example.com"});
+    ASSERT_TRUE(r.error.empty());
+    EXPECT_TRUE(r.opts.ad); // AD flag on by default (mirrors dig)
+}
+
+TEST(ParseAdFlag, NoAdFlagClears) {
+    ParseResult r = parse({"adig", "example.com", "+noadflag"});
+    ASSERT_TRUE(r.error.empty());
+    EXPECT_FALSE(r.opts.ad);
+}
+
+TEST(ParseAdFlag, AdFlagSets) {
+    ParseResult r = parse({"adig", "example.com", "+adflag"});
+    ASSERT_TRUE(r.error.empty());
+    EXPECT_TRUE(r.opts.ad); // +adflag is a no-op (default on) but accepted
+}
+
+TEST(ParseCookie, DefaultsOn) {
+    ParseResult r = parse({"adig", "example.com"});
+    ASSERT_TRUE(r.error.empty());
+    EXPECT_TRUE(r.opts.cookie); // COOKIE on by default (mirrors dig)
+}
+
+TEST(ParseCookie, NoCookieClears) {
+    ParseResult r = parse({"adig", "example.com", "+nocookie"});
+    ASSERT_TRUE(r.error.empty());
+    EXPECT_FALSE(r.opts.cookie);
+}
+
+TEST(ParseCookie, CookieSets) {
+    ParseResult r = parse({"adig", "example.com", "+cookie"});
+    ASSERT_TRUE(r.error.empty());
+    EXPECT_TRUE(r.opts.cookie); // +cookie is a no-op (default on) but accepted
+}
+
+// --- +header-only (query construction flag) --------------------------------
+
+TEST(ParseHeaderOnly, SetsFlag) {
+    ParseResult r = parse({"adig", "example.com", "+header-only"});
+    ASSERT_TRUE(r.error.empty());
+    EXPECT_TRUE(r.opts.header_only);
+}
+
+TEST(ParseHeaderOnly, DefaultsOff) {
+    ParseResult r = parse({"adig", "example.com"});
+    ASSERT_TRUE(r.error.empty());
+    EXPECT_FALSE(r.opts.header_only);
+}
+
+// --- -p PORT ----------------------------------------------------------------
+
+TEST(ParsePort, ValidValue) {
+    EXPECT_EQ(5353u, parse({"adig", "example.com", "-p", "5353"}).opts.port.value_or(0));
+    EXPECT_EQ(53u, parse({"adig", "example.com", "-p", "53"}).opts.port.value_or(0));
+}
+
+TEST(ParsePort, MissingArgIsError) {
+    ParseResult r = parse({"adig", "example.com", "-p"});
+    EXPECT_FALSE(r.error.empty());
+    EXPECT_NE(std::string::npos, r.error.find("port"));
+}
+
+TEST(ParsePort, InvalidValueRejected) {
+    EXPECT_FALSE(parse({"adig", "example.com", "-p", "0"}).error.empty());
+    EXPECT_FALSE(parse({"adig", "example.com", "-p", "65536"}).error.empty());
+    EXPECT_FALSE(parse({"adig", "example.com", "-p", "abc"}).error.empty());
+}
+
+TEST(ApplyPort, AppendsToBareHost) {
+    std::string s = "1.1.1.1";
+    apply_port(s, 5353);
+    EXPECT_EQ("1.1.1.1:5353", s);
+}
+
+TEST(ApplyPort, OverridesExplicitPort) {
+    std::string s = "1.1.1.1:53";
+    apply_port(s, 5353);
+    EXPECT_EQ("1.1.1.1:5353", s);
+}
+
+TEST(ApplyPort, UnsetLeavesServer) {
+    std::string s = "1.1.1.1";
+    apply_port(s, std::nullopt);
+    EXPECT_EQ("1.1.1.1", s);
+}
+
+TEST(ApplyPort, SchemedServerLeftUntouched) {
+    std::string s = "tls://dns.adguard.com";
+    apply_port(s, 5353);
+    EXPECT_EQ("tls://dns.adguard.com", s);
+}
+
+TEST(ApplyPort, HostnameWithoutDot) {
+    std::string s = "localhost";
+    apply_port(s, 5353);
+    EXPECT_EQ("localhost:5353", s);
+}
+
+TEST(ApplyPort, HostnameWithoutDotButExplicitPort) {
+    // Regression: a dot-less hostname with its own `:port` was previously left
+    // unsplit (the old dot-guard skipped it), producing an invalid
+    // `localhost:53:5353`. The single-colon split now strips the explicit port.
+    std::string s = "localhost:53";
+    apply_port(s, 5353);
+    EXPECT_EQ("localhost:5353", s);
+}
+
+TEST(ApplyPort, BareIpv6LiteralLeftAlone) {
+    // A bare IPv6 literal carries two or more colons and must not be mis-split
+    // on one of its own colons; the port is appended (mirroring the prior
+    // behavior, since parsing a bare IPv6 + port is not otherwise supported).
+    std::string s = "::1";
+    apply_port(s, 5353);
+    EXPECT_EQ("::1:5353", s);
+}
+
+// --- +bufsize / +ednsflags / +opcode (parsing) -----------------------------
+//
+// The apply_dns_flags behavior for these (DO bit, EDNS Z field, opcode applied
+// last) is covered in test_adig_cli_packet.cpp; here only the parse_args
+// plumbing is exercised.
+
+TEST(ParseBufsize, ValuePropagates) {
+    EXPECT_EQ(512u, parse({"adig", "example.com", "+bufsize=512"}).opts.edns_bufsize);
+    EXPECT_EQ(1232u, parse({"adig", "example.com", "+bufsize=1232"}).opts.edns_bufsize);
+    EXPECT_EQ(0u, parse({"adig", "example.com"}).opts.edns_bufsize); // unset -> default 4096
+}
+
+TEST(ParseBufsize, InvalidRejected) {
+    EXPECT_FALSE(parse({"adig", "example.com", "+bufsize"}).error.empty());
+    EXPECT_FALSE(parse({"adig", "example.com", "+bufsize=0"}).error.empty());
+    EXPECT_FALSE(parse({"adig", "example.com", "+bufsize=70000"}).error.empty());
+    EXPECT_FALSE(parse({"adig", "example.com", "+nobufsize=512"}).error.empty());
+}
+
+TEST(ParseEdnsFlags, ValueParsed) {
+    EXPECT_EQ(0x80u, parse({"adig", "example.com", "+ednsflags=0x80"}).opts.edns_flags.value_or(0));
+    EXPECT_EQ(0x80u, parse({"adig", "example.com", "+ednsflags=128"}).opts.edns_flags.value_or(0));
+    EXPECT_EQ(0xFFFFu, parse({"adig", "example.com", "+ednsflags=0xffff"}).opts.edns_flags.value_or(0));
+    EXPECT_FALSE(parse({"adig", "example.com", "+noednsflags"}).opts.edns_flags.has_value());
+}
+
+TEST(ParseEdnsFlags, InvalidRejected) {
+    EXPECT_FALSE(parse({"adig", "example.com", "+ednsflags"}).error.empty());
+    EXPECT_FALSE(parse({"adig", "example.com", "+ednsflags=0xZZ"}).error.empty());
+    EXPECT_FALSE(parse({"adig", "example.com", "+ednsflags=65536"}).error.empty());
+}
+
+TEST(ParseOpcode, NamesAndNumeric) {
+    EXPECT_EQ(LDNS_PACKET_NOTIFY, parse_opcode_name("NOTIFY").value_or(LDNS_PACKET_QUERY));
+    EXPECT_EQ(LDNS_PACKET_UPDATE, parse_opcode_name("update").value_or(LDNS_PACKET_QUERY));
+    EXPECT_EQ(LDNS_PACKET_QUERY, parse_opcode_name("QUERY").value_or(LDNS_PACKET_NOTIFY));
+    EXPECT_EQ(LDNS_PACKET_STATUS, parse_opcode_name("status").value_or(LDNS_PACKET_QUERY));
+    EXPECT_EQ(LDNS_PACKET_NOTIFY, parse_opcode_name("4").value_or(LDNS_PACKET_QUERY)); // numeric
+    EXPECT_EQ(LDNS_PACKET_UPDATE, parse_opcode_name("5").value_or(LDNS_PACKET_QUERY));
+    EXPECT_FALSE(parse_opcode_name("BOGUS").has_value());
+    EXPECT_FALSE(parse_opcode_name("16").has_value()); // out of range
+    EXPECT_FALSE(parse_opcode_name("").has_value());
+}
+
+TEST(ParseOpcode, ValuePropagates) {
+    EXPECT_EQ(LDNS_PACKET_NOTIFY,
+            parse({"adig", "example.com", "+opcode=NOTIFY"}).opts.opcode.value_or(LDNS_PACKET_QUERY));
+    EXPECT_FALSE(parse({"adig", "example.com", "+noopcode"}).opts.opcode.has_value());
+    EXPECT_FALSE(parse({"adig", "example.com", "+opcode=BOGUS"}).error.empty());
+    EXPECT_FALSE(parse({"adig", "example.com", "+opcode"}).error.empty());
+}
+
+// --- +ednsopt (generic EDNS option, RFC 6891) ------------------------------
+//
+// `dig +ednsopt=CODE[:hexvalue]`: CODE is a case-insensitive mnemonic
+// (mirroring dig's `optnames`) or a decimal number (0..65535); the optional
+// `:hexvalue` is the option-data payload decoded as hex (whitespace ignored,
+// odd-length / non-hex rejected). Repeatable; `+noednsopt` clears the list.
+
+TEST(ParseEdnsopt, MnemonicAndNumericCode) {
+    ParseResult r = parse({"adig", "example.com", "+ednsopt=nsid"});
+    ASSERT_TRUE(r.error.empty()) << r.error;
+    ASSERT_EQ(1u, r.opts.ednsopts.size());
+    EXPECT_EQ(3u, r.opts.ednsopts[0].code);
+    EXPECT_TRUE(r.opts.ednsopts[0].data.empty());
+    // Decimal numeric code is equivalent to its mnemonic.
+    EXPECT_EQ(3u, parse({"adig", "example.com", "+ednsopt=3"}).opts.ednsopts[0].code);
+}
+
+TEST(ParseEdnsopt, HexPayloadDecoded) {
+    ParseResult r = parse({"adig", "example.com", "+ednsopt=3:414243"});
+    ASSERT_TRUE(r.error.empty()) << r.error;
+    ASSERT_EQ(1u, r.opts.ednsopts.size());
+    EXPECT_EQ(3u, r.opts.ednsopts[0].code);
+    EXPECT_EQ((Bytes{0x41, 0x42, 0x43}), r.opts.ednsopts[0].data);
+}
+
+TEST(ParseEdnsopt, MnemonicCaseInsensitiveWithPayload) {
+    ParseResult r = parse({"adig", "example.com", "+ednsopt=NSID:abcd"});
+    ASSERT_TRUE(r.error.empty()) << r.error;
+    ASSERT_EQ(1u, r.opts.ednsopts.size());
+    EXPECT_EQ(3u, r.opts.ednsopts[0].code);
+    EXPECT_EQ((Bytes{0xab, 0xcd}), r.opts.ednsopts[0].data);
+}
+
+TEST(ParseEdnsopt, WhitespaceInPayload) {
+    // Mirrors ISC's hex decoder, which skips ASCII whitespace.
+    ParseResult r = parse({"adig", "example.com", "+ednsopt=3:41 42"});
+    ASSERT_TRUE(r.error.empty()) << r.error;
+    EXPECT_EQ((Bytes{0x41, 0x42}), r.opts.ednsopts[0].data);
+}
+
+TEST(ParseEdnsopt, Repeatable) {
+    ParseResult r = parse({"adig", "example.com", "+ednsopt=3", "+ednsopt=12:0000"});
+    ASSERT_TRUE(r.error.empty()) << r.error;
+    ASSERT_EQ(2u, r.opts.ednsopts.size());
+    EXPECT_EQ(3u, r.opts.ednsopts[0].code);
+    EXPECT_TRUE(r.opts.ednsopts[0].data.empty());
+    EXPECT_EQ(12u, r.opts.ednsopts[1].code);
+    EXPECT_EQ((Bytes{0x00, 0x00}), r.opts.ednsopts[1].data);
+}
+
+TEST(ParseEdnsopt, NoEdnsoptClearsList) {
+    // `+noednsopt` clears the previously-added options (dig ignores any value).
+    ParseResult r = parse({"adig", "example.com", "+ednsopt=3", "+ednsopt=12", "+noednsopt"});
+    ASSERT_TRUE(r.error.empty()) << r.error;
+    EXPECT_TRUE(r.opts.ednsopts.empty());
+    // A later `+ednsopt` after `+noednsopt` adds fresh.
+    r = parse({"adig", "example.com", "+noednsopt", "+ednsopt=3"});
+    ASSERT_TRUE(r.error.empty()) << r.error;
+    ASSERT_EQ(1u, r.opts.ednsopts.size());
+    EXPECT_EQ(3u, r.opts.ednsopts[0].code);
+}
+
+TEST(ParseEdnsopt, NoEdnsoptIgnoresValue) {
+    // `+noednsopt=anything` clears and is accepted (dig likewise ignores the value).
+    ParseResult r = parse({"adig", "example.com", "+ednsopt=3", "+noednsopt=99"});
+    ASSERT_TRUE(r.error.empty()) << r.error;
+    EXPECT_TRUE(r.opts.ednsopts.empty());
+}
+
+TEST(ParseEdnsopt, BareOptionRequiresCode) {
+    // A bare `+ednsopt` (no `=CODE`) is an error, mirroring dig's
+    // "ednsopt no code point specified".
+    ParseResult r = parse({"adig", "example.com", "+ednsopt"});
+    EXPECT_FALSE(r.error.empty());
+    EXPECT_NE(std::string::npos, r.error.find("requires a code"));
+    // `+ednsopt=` (empty code) likewise.
+    EXPECT_FALSE(parse({"adig", "example.com", "+ednsopt="}).error.empty());
+}
+
+TEST(ParseEdnsopt, InvalidCodeRejected) {
+    EXPECT_FALSE(parse({"adig", "example.com", "+ednsopt=bogus"}).error.empty());
+    EXPECT_FALSE(parse({"adig", "example.com", "+ednsopt=65536"}).error.empty()); // out of range
+    // Empty code before a payload (`+ednsopt=:4142`) is invalid.
+    EXPECT_FALSE(parse({"adig", "example.com", "+ednsopt=:4142"}).error.empty());
+}
+
+TEST(ParseEdnsopt, InvalidPayloadRejected) {
+    // Non-hex or odd-length payloads are rejected.
+    EXPECT_FALSE(parse({"adig", "example.com", "+ednsopt=3:gg"}).error.empty());
+    EXPECT_FALSE(parse({"adig", "example.com", "+ednsopt=3:414"}).error.empty());
 }
 
 } // namespace ag::adig::test

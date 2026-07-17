@@ -71,15 +71,27 @@ int print_usage(const char *prog) {
             "  +trace            iterative resolution from the root servers\n"
             "  +bootstrap=IP     bootstrap server to resolve the server name (repeatable)\n"
             "                    (defaults to the system resolver when omitted)\n"
-            "  +recurse          set the RD (recursion desired) bit (default)\n"
-            "  +norecurse        clear the RD bit\n"
+            "  +recurse / +rd    set the RD (recursion desired) bit (default)\n"
+            "  +norecurse / +nord  clear the RD bit\n"
             "  +edns[=N]         send an OPT RR, optionally with EDNS version N (default on)\n"
             "  +noedns           do not send an OPT RR\n"
             "  +dnssec / +do     set the EDNS DO bit (request DNSSEC records)\n"
             "  +cdflag / +cd     set the CD (checking disabled) bit\n"
             "  +subnet=ADDR[/P]  send EDNS Client Subnet (RFC 7871)\n"
+            "  +bufsize=N        EDNS UDP payload size (default 4096)\n"
+            "  +nsid             send EDNS NSID option (RFC 5001)\n"
+            "  +padding=N        send EDNS Padding option, N zero bytes (RFC 7830)\n"
+            "  +ednsflags=0xHH   set raw EDNS header flags (Z) bits\n"
+            "  +ednsopt=CODE[:v] send a generic EDNS option (RFC 6891); CODE is a\n"
+            "                    mnemonic (NSID/ECS/PAD/COOKIE/...) or a decimal code,\n"
+            "                    :v is a hex payload (repeatable; +noednsopt clears)\n"
+            "  +opcode=NAME      set the opcode (QUERY/IQUERY/STATUS/NOTIFY/UPDATE)\n"
             "  +qr               print the query packet before sending\n"
+            "  +adflag / +noadflag  set/clear the AD (Authenticated Data) bit (default on)\n"
+            "  +cookie / +nocookie  send/suppress a DNS COOKIE EDNS option (RFC 7873, default on)\n"
+            "  +aaflag +defname +showsearch  accepted (dig-compat no-ops)\n"
             "  -4                use IPv4 only (suppress IPv6)\n"
+            "  -p PORT           override the plain-DNS port (default 53)\n"
             "  -x addr           reverse lookup (PTR for IPv4/IPv6 address)\n"
             "  -v, --version     print version and exit\n"
             "\n"
@@ -87,6 +99,10 @@ int print_usage(const char *prog) {
             "  +cmd +comments +question +answer +authority +additional +stats\n"
             "  +all / +noall     toggle all sections at once\n"
             "  +ttlid / +class   show/hide TTL / class in RRs\n"
+            "  +multiline        wrap long records into `( ... )` with aligned columns\n"
+            "  +ttlunits         show TTL as dig's human units (e.g. 5m, 1h30m)\n"
+            "  +header-only      send a header-only query (QDCOUNT=0, no question)\n"
+            "  +onesoa           print only the first SOA of the response\n"
             "\n"
             "Server may be a plain IP, tcp://IP, tls://host, https://host/path, "
             "quic://host, sdns://... or system://\n"
@@ -146,14 +162,20 @@ std::string default_server() {
 
 void print_packet_dig(const ldns_pkt *pkt, const CliOptions &opts, bool is_query, Millis query_time) {
     std::string server;
+    std::time_t when = 0;
     if (!is_query) {
-        // dig formats SERVER as `IP#53(IP)`. For non-plain-DNS schemes just pass
-        // the raw address — the important dig-compatible parts are section
-        // layout and stats, not this client-side cosmetic detail.
-        server = opts.server;
+        // dig formats SERVER as `IP#port(host) (proto)` for plain DNS; for
+        // schemed upstreams the raw address is shown. `when` populates the
+        // `;; WHEN:` line (a zero time omits it, matching the +qr query echo).
+        server = format_dig_server(opts.server, opts.port, opts.force_tcp);
+        when = std::time(nullptr);
     }
-    std::string text = format_packet_dig(pkt, opts.display, is_query, query_time, server);
+    std::string text = format_packet_dig(pkt, opts.display, is_query, query_time, server, when);
     std::fputs(text.c_str(), stdout);
+    // Keep the display in sync with any stderr error that follows (e.g. the
+    // "exchange failed" path) so a merged stdout+stderr stream shows them in
+    // the right order, mirroring `dig` (banner + answer, then errors).
+    std::fflush(stdout);
 }
 
 // One server queried during a `+trace` pass. `ip` is the address actually
@@ -177,6 +199,16 @@ struct TraceServer {
 void print_trace_packet_dig(const ldns_pkt *pkt, const CliOptions &opts, Millis query_time, const TraceServer &server) {
     std::string text = format_trace_packet_dig(pkt, opts.display, query_time, server.ip, server.name);
     std::fputs(text.c_str(), stdout);
+    // Keep the per-hop display in sync with any stderr error that follows
+    // (e.g. the "could not resolve any authoritative servers" final error, or
+    // an "exchange failed" hop): without this flush the buffered stdout output
+    // can land after the stderr error in a merged stream, mirroring the same
+    // fflush discipline `print_packet_dig` already uses above. This is the
+    // trace-mode fix for the spurious `Error: ... before the first hop's
+    // output` mis-ordering: the trace's stdout is line-buffered when connected
+    // to a terminal but fully buffered when piped, so stderr (unbuffered)
+    // wins the race without an explicit flush here.
+    std::fflush(stdout);
 }
 
 // Strip the trailing root-label dot (`a.root-servers.net.` -> `a.root-servers.net`).
@@ -479,6 +511,18 @@ Task<TraceOutcome> run_trace(EventLoop &loop, const CliOptions &opts) {
 } // namespace
 
 int main(int argc, char *argv[]) {
+    // Seed ldns's PRNG so query transaction IDs are unpredictable.
+    // ldns_get_random() (called via ldns_pkt_set_random_id in make_query) uses
+    // POSIX random() when HAVE_SSL is undefined (the case in this ldns build).
+    // Without ldns_init_random(), random() defaults to seed 1 and the first
+    // ldns_get_random() truncation to 16 bits always yields 0x4567 = 17767,
+    // making every transaction ID identical across runs — a classic cache-
+    // poisoning / spoofing vulnerability (CVE-2008-1447 / Kaminsky attack).
+    // ldns_init_random() reads from /dev/urandom and calls srandom(), which is
+    // exactly the initialization ldns documents as mandatory when OpenSSL is
+    // unavailable (see the comment on ldns_init_random in ldns/util.c).
+    (void) ldns_init_random(nullptr, 0);
+
     ag::adig::ParseResult parsed = ag::adig::parse_args(argc, argv);
     if (parsed.help_requested) {
         return print_usage(argv[0]);
@@ -511,20 +555,30 @@ int main(int argc, char *argv[]) {
         opts.server = default_server();
     }
 
+    // `-p PORT` overrides the plain-DNS port (applied before +tcp's scheme
+    // rewrite so the port survives: `1.1.1.1:5353` -> `tcp://1.1.1.1:5353`).
+    // +trace dials literal per-hop IPs directly, so -p is a no-op there.
+    if (opts.port.has_value() && !opts.trace) {
+        apply_port(opts.server, opts.port);
+    }
     if (opts.force_tcp && !opts.trace) {
         apply_force_tcp(opts.server);
     }
 
-    // +cmd: echo the command line (mirrors `dig`'s `; <<>> DiG ... <<>>` banner)
-    // before any query/response output. `+short` suppresses this unconditionally
-    // (even with `+cmd`), matching `dig`'s RDATA-only short output.
+    // +cmd: echo the command line (mirrors `dig`'s banner). `dig` starts with a
+    // leading blank line, then `; <<>> DiG ... <<>>`, then `; (1 server found)`
+    // (adig always queries exactly one server), then `;; global options: +cmd`.
+    // `+short` suppresses the whole banner unconditionally (even with `+cmd`),
+    // matching `dig`'s RDATA-only short output. Stdout is flushed so a later
+    // stderr error lands after the banner in a merged stream, mirroring `dig`.
     if (cmd_banner_enabled(opts)) {
         std::string cmd = fmt::format("; <<>> adig {} <<>>", AG_DNSLIBS_VERSION);
         for (int i = 1; i < argc; ++i) {
             cmd += ' ';
             cmd += argv[i];
         }
-        fmt::print("{}\n;; global options: +cmd\n", cmd);
+        fmt::print("\n{}\n; (1 server found)\n;; global options: +cmd\n", cmd);
+        std::fflush(stdout);
     }
 
     EventLoopPtr loop = EventLoop::create();
