@@ -204,7 +204,7 @@ TEST(ListenerTest, ShutsDownIfCouldNotInitialize) {
     ASSERT_FALSE(ret);
 }
 
-// Many pending requests against a local DoQ upstream. The proxy forwards 10 000
+// Many pending requests against a local DoQ upstream. The proxy forwards 1 000
 // fire-and-forget queries through a LoopbackQuicServer (DoQ mode) and a final
 // query whose reply is checked. Fully offline: the server is bound to
 // 127.0.0.1 (literal IP, bootstrapper bypassed), and
@@ -229,7 +229,7 @@ TEST(ListenerTest, ManyRequestsPending) {
     bool proxy_initialized = false;
 
     constexpr auto address = "::";
-    // Port 0 (ephemeral): the 10k-request storm below goes through the
+    // Port 0 (ephemeral): the 1k-request storm below goes through the
     // in-process handle_message() path, which bypasses the listener, so no
     // client ever dials this port; binding an ephemeral port keeps the test
     // parallel-safe alongside the other listener tests.
@@ -263,7 +263,7 @@ TEST(ListenerTest, ManyRequestsPending) {
         proxy_cond.notify_all();
 
         // Seed two fire-and-forget queries so there are in-flight requests
-        // when the main thread launches the 10 000-query storm below.
+        // when the main thread launches the 1 000-query storm below.
         //
         // handle_message is a coroutine: it captures its Uint8View argument,
         // suspends on `co_await m_loop->co_submit()` and only reads the view
@@ -322,10 +322,19 @@ TEST(ListenerTest, ManyRequestsPending) {
     ldns_buffer_ptr buffer{ldns_buffer_new(REQUEST_BUFFER_INITIAL_CAPACITY)};
     ldns_pkt2buffer_wire(buffer.get(), reqpkt.get());
 
-    // Launch the 10 000-request "many pending" storm as fire-and-forget
-    // coroutines, awaited via an atomic counter + condition_variable barrier
-    // instead of sleep(). Pass buffer/counter/cv as parameters, not captures.
-    constexpr int TOTAL_REQUESTS = 10000;
+    // Launch the "many pending" storm as fire-and-forget coroutines, awaited
+    // via an atomic counter + condition_variable barrier instead of sleep().
+    // Pass buffer/counter/cv as parameters, not captures.
+    //
+    // Capped at 1 000 (not higher) on purpose: each fire-and-forget query is
+    // forwarded to the DoQ upstream, and the storm's QUIC source ports plus the
+    // other listener tests' ephemeral ports can otherwise exhaust the platform's
+    // ephemeral port range (macOS: ~16 000 ports), which then makes the *next*
+    // test's LoopbackDnsServer TCP bind(0) fail with EADDRINUSE. 1 000 still
+    // exercises hundreds of concurrent in-flight handle_message coroutines
+    // (the regression this test guards against) without saturating the port
+    // range.
+    constexpr int TOTAL_REQUESTS = 1000;
     std::mutex storm_mtx;
     std::condition_variable storm_cv;
     std::atomic<int> storm_pending{TOTAL_REQUESTS};
