@@ -77,7 +77,9 @@ footer followed by a blank line. Re-enabling dig-style output is
 order-sensitive, exactly like `dig`:
 
 - `+trace +stats` swaps the `Received` footer for the standard
-  `Query time` / `SERVER` (`IP#53(name) (UDP)`) / `MSG SIZE` block.
+  `Query time` / `SERVER` (`IP#53(name) (proto)`) / `MSG SIZE` block, where
+  `proto` is the hop transport — `UDP` by default, `TCP` under `+tcp` (which
+  rewrites each hop to `tcp://`).
 - `+trace +comments` re-enables the `;; Got answer:` header and section titles
   above the RRs.
 - `+trace +all` enables every display flag (full per-hop output).

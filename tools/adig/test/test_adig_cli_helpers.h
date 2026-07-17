@@ -74,7 +74,10 @@ inline std::string render_ip(ldns_rdf_type type, std::string_view ip) {
     if (rdf == nullptr) {
         return "<invalid>";
     }
-    AllocatedPtr<char> s(ldns_rdf2str(rdf.get()));
+    // `AllocatedPtr` lives in `ag::` (from common/defs.h, included via adig_cli.h).
+    // Qualify it explicitly rather than relying on `ag` being an enclosing
+    // namespace of `ag::adig::test`.
+    ag::AllocatedPtr<char> s(ldns_rdf2str(rdf.get()));
     return (s != nullptr) ? std::string(s.get()) : "<invalid>";
 }
 

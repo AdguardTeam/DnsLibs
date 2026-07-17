@@ -823,7 +823,7 @@ std::string format_trace_received_line(
 }
 
 std::string format_trace_packet_dig(const ldns_pkt *pkt, const DisplayFlags &flags, Millis query_time,
-        std::string_view server_ip, std::string_view server_name) {
+        std::string_view server_ip, std::string_view server_name, bool tcp) {
     if (pkt == nullptr) {
         return {};
     }
@@ -838,13 +838,16 @@ std::string format_trace_packet_dig(const ldns_pkt *pkt, const DisplayFlags &fla
     size_t sz = wire_pkt_size(pkt);
     if (flags.stats) {
         // User asked for stats: emit a dig-style stats footer using the
-        // trace-mode `IP#53(name) (UDP)` SERVER formatting.
+        // trace-mode `IP#53(name) (proto)` SERVER formatting. The transport
+        // reflects the hop's actual transport (UDP by default, TCP under `+tcp`,
+        // which rewrites each hop to `tcp://` in run_trace) rather than being
+        // hardcoded to UDP.
         std::string name(server_name);
         if (name.empty()) {
             name = std::string(server_ip);
         }
         out += fmt::format(";; Query time: {} msec\n", query_time.count());
-        out += fmt::format(";; SERVER: {}#53({}) (UDP)\n", server_ip, name);
+        out += fmt::format(";; SERVER: {}#53({}) ({})\n", server_ip, name, tcp ? "TCP" : "UDP");
         out += fmt::format(";; MSG SIZE  rcvd: {}\n", sz);
     } else {
         out += format_trace_received_line(query_time, sz, server_ip, server_name);

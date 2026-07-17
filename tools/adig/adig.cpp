@@ -194,10 +194,13 @@ struct TraceServer {
 //   - default (`+stats` off, the trace mode default): the
 //     `;; Received N bytes from IP#53(name) in Y ms` line;
 //   - when `+stats` is on: the standard `Query time` / `SERVER`
-//     (formatted `IP#53(name) (UDP)`) / `MSG SIZE` block.
+//     (formatted `IP#53(name) (proto)`, where proto is TCP under `+tcp` and
+//     UDP otherwise) / `MSG SIZE` block.
 // A trailing blank line separates the hop from the next one.
 void print_trace_packet_dig(const ldns_pkt *pkt, const CliOptions &opts, Millis query_time, const TraceServer &server) {
-    std::string text = format_trace_packet_dig(pkt, opts.display, query_time, server.ip, server.name);
+    // `+tcp` rewrites every trace hop to `tcp://` (see run_trace), so the
+    // transport rendered in the stats footer is driven by opts.force_tcp.
+    std::string text = format_trace_packet_dig(pkt, opts.display, query_time, server.ip, server.name, opts.force_tcp);
     std::fputs(text.c_str(), stdout);
     // Keep the per-hop display in sync with any stderr error that follows
     // (e.g. the "could not resolve any authoritative servers" final error, or

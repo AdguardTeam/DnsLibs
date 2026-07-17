@@ -340,13 +340,15 @@ void apply_port(std::string &server, std::optional<uint16_t> port);
 // then either:
 //   - the trace-specific `;; Received <N> bytes from <ip>#53(<name>) in <ms> ms`
 //     line (when `flags.stats` is off, the default in trace mode);
-//   - a dig-style standard stats footer using `IP#53(name) (UDP)` formatting
+//   - a dig-style standard stats footer using `IP#53(name) (proto)` formatting
 //     for `SERVER` (when `flags.stats` is on, e.g. via `+stats` / `+all`).
 // `server_ip` is the IP literally contacted for this hop; `server_name` is its
 // hostname if known (e.g. `a.root-servers.net`), or empty to repeat the IP.
-// A trailing blank line separates this hop from the next.
+// `tcp` selects the transport rendered in the stats footer's `(proto)` — true
+// for `+tcp` (which forces `tcp://` hops in `run_trace`), false for the default
+// UDP trace. A trailing blank line separates this hop from the next.
 std::string format_trace_packet_dig(const ldns_pkt *pkt, const DisplayFlags &flags, Millis query_time,
-        std::string_view server_ip, std::string_view server_name);
+        std::string_view server_ip, std::string_view server_name, bool tcp = false);
 
 // Format the dig-style "Received ... bytes from ... in ... ms" line emitted at
 // the end of every `dig +trace` hop when `stats` is off. Exposed so the trace

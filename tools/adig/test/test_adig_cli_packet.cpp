@@ -1265,7 +1265,8 @@ TEST(FormatTraceReceivedLine, NonZeroTimePrintedAsCount) {
 // dig's default `+trace` output is: per-hop RRs (no section headers, no
 // QUESTION, no stats block) followed by the `Received ... bytes from ...`
 // footer. With `+stats` the footer is replaced by the standard
-// `Query time / SERVER (as IP#53(name) (UDP)) / MSG SIZE` block.
+// `Query time / SERVER (as IP#53(name) (proto)) / MSG SIZE` block, where `proto`
+// reflects the `tcp` argument (UDP by default; TCP under `+tcp`).
 
 TEST(FormatTracePacketDig, DefaultEmitsReceivedFooter) {
     // Mirror the trace-default display state (+trace clears comments,
@@ -1313,6 +1314,36 @@ TEST(FormatTracePacketDig, StatsEnabledEmitsStandardFooter) {
     EXPECT_TRUE(contains(out, ";; SERVER: 192.5.5.241#53(f.root-servers.net) (UDP)"));
     EXPECT_TRUE(contains(out, ";; MSG SIZE  rcvd:"));
     EXPECT_TRUE(out.ends_with("\n\n"));
+}
+
+TEST(FormatTracePacketDig, StatsFooterTcpRendersTcpTransport) {
+    // Regression: `+trace +tcp +stats` rewrites every hop to `tcp://` in
+    // run_trace (opts.force_tcp), so the stats footer's `;; SERVER:` line must
+    // render `(TCP)` — not the hardcoded `(UDP)` — for those hops. Mirrors the
+    // scheme-driven transport in format_dig_server.
+    ldns_pkt_ptr q = make_test_query();
+    DisplayFlags df;
+    apply_trace_display_defaults(df);
+    df.stats = true; // mirror `+trace +tcp +stats`
+    std::string out = format_trace_packet_dig(q.get(), df, Millis{12}, "198.41.0.4", "a.root-servers.net", true);
+    EXPECT_FALSE(contains(out, "(UDP)"));
+    EXPECT_TRUE(contains(out, ";; SERVER: 198.41.0.4#53(a.root-servers.net) (TCP)"));
+    EXPECT_TRUE(contains(out, ";; Query time: 12 msec"));
+    EXPECT_TRUE(contains(out, ";; MSG SIZE  rcvd:"));
+    EXPECT_TRUE(out.ends_with("\n\n"));
+}
+
+TEST(FormatTracePacketDig, StatsFooterTcpFalseRendersUdpTransport) {
+    // The default `tcp=false` (the trace default) renders `(UDP)` in the stats
+    // footer even when an empty name falls back to the IP, so the transport is
+    // driven by the `tcp` argument rather than assumed.
+    ldns_pkt_ptr q = make_test_query();
+    DisplayFlags df;
+    apply_trace_display_defaults(df);
+    df.stats = true;
+    std::string out = format_trace_packet_dig(q.get(), df, Millis{3}, "1.1.1.1", "");
+    EXPECT_FALSE(contains(out, "(TCP)"));
+    EXPECT_TRUE(contains(out, ";; SERVER: 1.1.1.1#53(1.1.1.1) (UDP)"));
 }
 
 TEST(FormatTracePacketDig, CommentsEnabledShowsSectionHeaders) {
