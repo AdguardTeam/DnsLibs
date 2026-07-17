@@ -119,14 +119,26 @@ std::vector<uint8_t> encode_edns_option(uint16_t code, const uint8_t *data, size
     // option-code(2 BE) + option-length(2 BE) + option-data. This is exactly
     // the bytes ldns stores as the packet's EDNS data and writes verbatim as
     // the OPT RR's RDATA (LDNS_RDF_TYPE_NONE round-trips it untouched).
+    // Treat the input as real option-data only when `data != nullptr` *and*
+    // `len != 0`. Computing the option-length from how many bytes are actually
+    // carried keeps the TLV internally consistent, and — crucially — avoids
+    // `std::vector::insert`'s `data + len` pointer arithmetic when `data ==
+    // nullptr` (several zero-length EDNS options like NSID pass exactly that:
+    // `nullptr` with `len == 0`, for which `nullptr + 0` is undefined
+    // behavior). A stray (data == nullptr, len != 0) call is a programming
+    // error; it degrades to an empty body instead of dereferencing the null
+    // pointer or reporting a body length that is not actually carried.
+    const size_t real_len = (data != nullptr) ? len : 0;
     std::vector<uint8_t> tlv;
-    tlv.reserve(4 + len);
+    tlv.reserve(4 + real_len);
     tlv.push_back(static_cast<uint8_t>((code >> 8) & 0xFF));
     tlv.push_back(static_cast<uint8_t>(code & 0xFF));
-    const uint16_t opt_len = static_cast<uint16_t>(len);
+    const uint16_t opt_len = static_cast<uint16_t>(real_len);
     tlv.push_back(static_cast<uint8_t>((opt_len >> 8) & 0xFF));
     tlv.push_back(static_cast<uint8_t>(opt_len & 0xFF));
-    tlv.insert(tlv.end(), data, data + len);
+    if (real_len != 0) {
+        tlv.insert(tlv.end(), data, data + real_len);
+    }
     return tlv;
 }
 

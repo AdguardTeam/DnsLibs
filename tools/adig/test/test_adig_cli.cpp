@@ -775,6 +775,23 @@ TEST(ApplyForceTcp, DnsSchemeBecomesTcp) {
     EXPECT_EQ("tcp://1.1.1.1", server);
 }
 
+TEST(ApplyForceTcp, SchemeMatchingIsCaseInsensitive) {
+    // `+tcp` must take effect for uppercase/mixed-case scheme inputs too — the
+    // plain-DNS scheme is otherwise treated case-insensitively elsewhere
+    // (format_dig_server), so a `UDP://` / `Dns://` rewrite must keep parity.
+    std::string udp_upper = "UDP://1.1.1.1";
+    apply_force_tcp(udp_upper);
+    EXPECT_EQ("tcp://1.1.1.1", udp_upper);
+
+    std::string dns_mixed = "Dns://dns.adguard.com";
+    apply_force_tcp(dns_mixed);
+    EXPECT_EQ("tcp://dns.adguard.com", dns_mixed);
+
+    std::string udp_mixed = "UdP://1.1.1.1:5353";
+    apply_force_tcp(udp_mixed);
+    EXPECT_EQ("tcp://1.1.1.1:5353", udp_mixed);
+}
+
 TEST(ApplyForceTcp, BareUdpLiteralIsPrefixedNotMangled) {
     // "udp" has no "://" separator, so it is treated as a bare host: the whole
     // string is prefixed (dig's `@udp` is a hostname, not a scheme).

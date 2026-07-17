@@ -173,14 +173,23 @@ void apply_force_tcp(std::string &server) {
     // Replaces `udp://`/`dns://` schemes with `tcp://` and prefixes bare domains
     // with `tcp://` so that `+tcp` takes effect for plain DNS. Encrypted schemes
     // are left untouched.
+    // Scheme matching is case-insensitive (mirroring format_dig_server and the
+    // upstream library's `utils::istarts_with`) so `UDP://1.1.1.1` / `Dns://…`
+    // are rewritten just like their lowercase forms — otherwise `+tcp` would be
+    // silently ignored for uppercase-scheme inputs.
+    auto ci_starts_with = [](std::string_view s, std::string_view prefix) {
+        return s.size() >= prefix.size() && std::equal(prefix.begin(), prefix.end(), s.begin(), [](char a, char b) {
+            return std::tolower(static_cast<unsigned char>(a)) == std::tolower(static_cast<unsigned char>(b));
+        });
+    };
     if (server.find("://") == std::string::npos) {
         server = "tcp://" + server;
-    } else if (server.starts_with("udp://")) {
+    } else if (ci_starts_with(server, "udp://")) {
         // Replace only the 3-char scheme name (`udp` -> `tcp`), preserving the
         // `://` separator. Replacing 4 chars would drop the colon and yield an
         // invalid `tcp//` URI.
         server.replace(0, 3, "tcp");
-    } else if (server.starts_with("dns://")) {
+    } else if (ci_starts_with(server, "dns://")) {
         server.replace(0, 3, "tcp");
     }
 }

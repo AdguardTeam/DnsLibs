@@ -96,6 +96,19 @@ TEST(EncodeEdnsOption, GenericTlv) {
     EXPECT_EQ((Bytes{0x01, 0x02, 0x00, 0x00}), encode_edns_option(0x0102, nullptr, 0));
 }
 
+TEST(EncodeEdnsOption, NullDataIsSafeAndWellFormed) {
+    // The common zero-length-option path (NSID, an empty body, …) passes
+    // `data == nullptr` with `len == 0`. The encoder must neither perform
+    // `nullptr + 0` pointer arithmetic nor report a non-zero option length.
+    EXPECT_EQ((Bytes{0x00, 0x03, 0x00, 0x00}), encode_edns_option(0x03, nullptr, 0));
+    // A stray (nullptr, len != 0) call is a programming error; degrade to a
+    // well-formed empty-body TLV rather than dereferencing the null pointer.
+    EXPECT_EQ((Bytes{0x00, 0x03, 0x00, 0x00}), encode_edns_option(0x03, nullptr, 5));
+    // A non-null pointer with len == 0 is likewise an empty option.
+    const uint8_t unused = 0xFF;
+    EXPECT_EQ((Bytes{0x00, 0x0A, 0x00, 0x00}), encode_edns_option(0x0A, &unused, 0));
+}
+
 // --- +ednsopt=CODE resolution (parse_ednsopt_code) -------------------------
 //
 // `dig +ednsopt=CODE[:hexvalue]`: CODE is a case-insensitive mnemonic mapped
