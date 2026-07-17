@@ -18,6 +18,33 @@ namespace ag::dns::proxy::test {
 
 using namespace std::chrono_literals;
 
+// Build a wire-format A query for `name` into an ldns buffer. Returns nullptr
+// if any ldns step fails (dname parse, query construction, buffer allocation,
+// or wire encoding) so callers ASSERT() rather than dereference a null pointer
+// inside ldns. The dname is freed on the ldns_pkt_query_new failure path —
+// ldns_pkt_query_new adopts the dname only on success — mirroring make_query()
+// in adig_cli_packet.cpp and the AGENTS.md C-FFI RAII guideline.
+static ldns_buffer_ptr make_wire_a_query_buffer(const char *name) {
+    ldns_rdf *dname = ldns_dname_new_frm_str(name);
+    if (dname == nullptr) {
+        return {nullptr};
+    }
+    ldns_pkt_ptr pkt{ldns_pkt_query_new(dname, LDNS_RR_TYPE_A, LDNS_RR_CLASS_IN, LDNS_RD)};
+    if (pkt == nullptr) {
+        // ldns_pkt_query_new did not consume `dname` on failure.
+        ldns_rdf_deep_free(dname);
+        return {nullptr};
+    }
+    ldns_buffer_ptr buffer{ldns_buffer_new(REQUEST_BUFFER_INITIAL_CAPACITY)};
+    if (buffer == nullptr) {
+        return {nullptr};
+    }
+    if (ldns_pkt2buffer_wire(buffer.get(), pkt.get()) != LDNS_STATUS_OK) {
+        return {nullptr};
+    }
+    return buffer;
+}
+
 struct TestParams {
     ListenerSettings settings;
     size_t n_threads{1};
@@ -283,10 +310,12 @@ TEST(ListenerTest, ManyRequestsPending) {
         // destroyed as soon as run_detached() returns — dangling the data the
         // still-suspended handle_message references.)
         auto fire_forget = [](DnsProxy &proxy, const char *name) {
-            ldns_pkt_ptr reqpkt(
-                    ldns_pkt_query_new(ldns_dname_new_frm_str(name), LDNS_RR_TYPE_A, LDNS_RR_CLASS_IN, LDNS_RD));
-            ldns_buffer_ptr buf{ldns_buffer_new(REQUEST_BUFFER_INITIAL_CAPACITY)};
-            ldns_pkt2buffer_wire(buf.get(), reqpkt.get());
+            ldns_buffer_ptr buf = make_wire_a_query_buffer(name);
+            if (buf == nullptr) {
+                // Skip this seed query rather than dereferencing a null ldns
+                // handle inside ldns_pkt2buffer_wire if construction failed.
+                return;
+            }
             const uint8_t *base = ldns_buffer_at(buf.get(), 0);
             Uint8Vector data{base, base + ldns_buffer_position(buf.get())};
             ag::coro::run_detached([](DnsProxy &proxy, Uint8Vector data) -> ag::coro::Task<void> {
@@ -318,9 +347,8 @@ TEST(ListenerTest, ManyRequestsPending) {
     }
     ASSERT_TRUE(proxy_init_result_local);
 
-    ldns_pkt_ptr reqpkt(ldns_pkt_query_new(ldns_dname_new_frm_str("g.co"), LDNS_RR_TYPE_A, LDNS_RR_CLASS_IN, LDNS_RD));
-    ldns_buffer_ptr buffer{ldns_buffer_new(REQUEST_BUFFER_INITIAL_CAPACITY)};
-    ldns_pkt2buffer_wire(buffer.get(), reqpkt.get());
+    ldns_buffer_ptr buffer = make_wire_a_query_buffer("g.co");
+    ASSERT_NE(nullptr, buffer.get());
 
     // Launch the "many pending" storm as fire-and-forget coroutines, awaited
     // via an atomic counter + condition_variable barrier instead of sleep().
@@ -366,11 +394,8 @@ TEST(ListenerTest, ManyRequestsPending) {
     // Send a new request after the storm and await its result directly instead
     // of sleeping for a fixed 3 s. This is race-free: the storm above has
     // fully resolved before the buffer is reused.
-    ldns_pkt_ptr reqpkt2(
-            ldns_pkt_query_new(ldns_dname_new_frm_str("google.com"), LDNS_RR_TYPE_A, LDNS_RR_CLASS_IN, LDNS_RD));
-
-    buffer.reset(ldns_buffer_new(REQUEST_BUFFER_INITIAL_CAPACITY));
-    ldns_pkt2buffer_wire(buffer.get(), reqpkt2.get());
+    buffer = make_wire_a_query_buffer("google.com");
+    ASSERT_NE(nullptr, buffer.get());
 
     // Pass `buffer` as a by-value parameter, not a capture.
     Uint8Vector last_reply_res = coro::to_future([](DnsProxy &proxy, ldns_buffer *buffer) -> coro::Task<Uint8Vector> {

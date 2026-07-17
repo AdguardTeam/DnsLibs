@@ -57,6 +57,11 @@ inline bool contains(std::string_view haystack, std::string_view needle) {
 // of every pushed RR.
 inline ldns_pkt_ptr make_glue_pkt(std::vector<std::string> rrs) {
     ldns_pkt_ptr pkt{ldns_pkt_new()};
+    if (pkt == nullptr) {
+        // ldns_pkt_new() can return nullptr under memory pressure; bail out
+        // instead of dereferencing it inside ldns_pkt_push_rr.
+        return pkt;
+    }
     for (const std::string &rr_str : rrs) {
         ldns_rr *rr = nullptr;
         if (ldns_rr_new_frm_str(&rr, rr_str.c_str(), 0, nullptr, nullptr) == LDNS_STATUS_OK && rr != nullptr) {
@@ -98,6 +103,11 @@ inline size_t count_of(std::string_view haystack, std::string_view needle) {
 // Build a packet whose ANSWER section carries the given presentation RRs.
 inline ldns_pkt_ptr make_answer_pkt(std::vector<std::string> rrs) {
     ldns_pkt_ptr pkt{ldns_pkt_new()};
+    if (pkt == nullptr) {
+        // ldns_pkt_new() can return nullptr under memory pressure; bail out
+        // instead of dereferencing it inside ldns_pkt_push_rr.
+        return pkt;
+    }
     for (const std::string &rr_str : rrs) {
         ldns_rr *rr = nullptr;
         if (ldns_rr_new_frm_str(&rr, rr_str.c_str(), 0, nullptr, nullptr) == LDNS_STATUS_OK && rr != nullptr) {
@@ -127,8 +137,18 @@ inline std::vector<uint8_t> edns_data_bytes(const ldns_pkt *pkt) {
     if (data == nullptr) {
         return {};
     }
+    // Guard the zero-size / null-data case explicitly: `ldns_rdf_data(data)`
+    // may be null for an empty rdf, and `nullptr + 0` pointer arithmetic is
+    // undefined behavior even when the size is zero.
+    size_t size = ldns_rdf_size(data);
+    if (size == 0) {
+        return {};
+    }
     const uint8_t *b = ldns_rdf_data(data);
-    return {b, b + ldns_rdf_size(data)};
+    if (b == nullptr) {
+        return {};
+    }
+    return {b, b + size};
 }
 
 } // namespace ag::adig::test
