@@ -36,6 +36,15 @@ endif
 # so concurrent test processes never collide on a listener port.
 TEST_JOBS ?= $(NPROC)
 
+# Stream every failing test's captured stdout/stderr into the invoking shell.
+# Equivalent to passing --output-on-failure to each ctest invocation, but set
+# once here via `export` so it applies to ALL ctest runs in this Makefile
+# (test-cpp, test-integration, test-ci) and any future target, without having
+# to remember the flag per-call. Without this, failed-test output lands only in
+# build/Testing/Temporary/LastTest.log on the runner, which CI may not upload,
+# making one-off flakes impossible to diagnose.
+export CTEST_OUTPUT_ON_FAILURE=1
+
 # Whether to build with AddressSanitizer. CI enables this on Linux. Maps to
 # the -DSANITIZE=yes CMake option (see proxy/CMakeLists.txt), which adds
 # -fsanitize=address to the dnsproxy target's compile and link flags.

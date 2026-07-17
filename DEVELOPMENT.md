@@ -81,6 +81,12 @@ make test TEST_JOBS=1
 `make test-integration` and `make test-ci` likewise run `ctest` in parallel with
 `TEST_JOBS`.
 
+All `ctest` invocations stream the captured stdout/stderr of every failing test
+into the shell: the Makefile exports `CTEST_OUTPUT_ON_FAILURE=1` (equivalent to
+`ctest --output-on-failure`), so a one-off failure is diagnosable without
+digging into `build/Testing/Temporary/LastTest.log`. This is especially relevant
+in CI, where that log file is not uploaded as an artifact.
+
 ### Linting
 
 The following `make` targets are available for linting:
