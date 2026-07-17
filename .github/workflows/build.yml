@@ -328,7 +328,7 @@ jobs:
         uses: actions/upload-artifact@v7
         with:
           name: adig-macos
-          path: build/adig
+          path: build/tools/adig/adig
           if-no-files-found: error
           retention-days: 7
 
@@ -575,7 +575,7 @@ jobs:
         uses: actions/upload-artifact@v7
         with:
           name: adig-windows
-          path: build-adig/adig.exe
+          path: build-adig/tools/adig/adig.exe
           if-no-files-found: error
           retention-days: 7
 
@@ -622,7 +622,7 @@ jobs:
         uses: actions/upload-artifact@v7
         with:
           name: adig-linux
-          path: build/adig
+          path: build/tools/adig/adig
           if-no-files-found: error
           retention-days: 7
 
