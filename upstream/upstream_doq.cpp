@@ -412,7 +412,9 @@ coro::Task<Upstream::ExchangeResult> DoqUpstream::exchange(const ldns_pkt *reque
     // allocation and the transfer to req.request_buffer).
     ldns_buffer_ptr buffer{ldns_buffer_new(REQUEST_BUFFER_INITIAL_CAPACITY)};
     uint16_t original_req_id = ldns_pkt_id(request);
-    ldns_status status = ldns_pkt2buffer_wire(buffer.get(), request);
+    // ldns_buffer_new can return nullptr under memory pressure; without this
+    // guard ldns_pkt2buffer_wire would dereference it inside ldns and crash.
+    ldns_status status = (buffer == nullptr) ? LDNS_STATUS_MEM_ERR : ldns_pkt2buffer_wire(buffer.get(), request);
     if (status != LDNS_STATUS_OK) {
         assert(0);
         co_return make_error(DnsError::AE_ENCODE_ERROR, ldns_get_errorstr_by_id(status));
