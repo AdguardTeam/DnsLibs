@@ -45,6 +45,26 @@ static ldns_buffer_ptr make_wire_a_query_buffer(const char *name) {
     return buffer;
 }
 
+// Build a parsed ldns_pkt query for `name`. Returns nullptr if any ldns step
+// fails (dname parse, query construction) so callers skip the iteration rather
+// than dereference a null pointer inside ldns_pkt_set_id /
+// ldns_rdf2buffer_str / the exchange. The dname is freed on the
+// ldns_pkt_query_new failure path — ldns_pkt_query_new adopts the dname only
+// on success — mirroring make_wire_a_query_buffer above, make_query() in
+// adyg_cli_packet.cpp, and the AGENTS.md C-FFI RAII guideline.
+static ldns_pkt_ptr make_test_query_pkt(const char *name, ldns_rr_type type, bool recurse) {
+    ldns_rdf *dname = ldns_dname_new_frm_str(name);
+    if (dname == nullptr) {
+        return {nullptr};
+    }
+    ldns_pkt *pkt = ldns_pkt_query_new(dname, type, LDNS_RR_CLASS_IN, recurse ? LDNS_RD : 0);
+    if (pkt == nullptr) {
+        ldns_rdf_deep_free(dname);
+        return {nullptr};
+    }
+    return ldns_pkt_ptr(pkt);
+}
+
 struct TestParams {
     ListenerSettings settings;
     size_t n_threads{1};
@@ -182,8 +202,13 @@ TEST_P(ListenerTest, ListensAndResponds) {
                     }
 
                     for (size_t j = 0; j < params.requests_per_thread; ++j) {
-                        ldns_pkt_ptr req(ldns_pkt_query_new(
-                                ldns_dname_new_frm_str(params.query), LDNS_RR_TYPE_AAAA, LDNS_RR_CLASS_IN, LDNS_RD));
+                        ldns_pkt_ptr req = make_test_query_pkt(params.query, LDNS_RR_TYPE_AAAA, true);
+                        if (req == nullptr) {
+                            // Skip this iteration rather than dereference a null
+                            // ldns handle inside ldns_pkt_set_id (or the exchange)
+                            // if dname parsing or query construction failed.
+                            continue;
+                        }
                         ldns_pkt_set_id(req.get(), ++request_id);
 
                         auto res = co_await upstream_res.value()->exchange(req.get());
