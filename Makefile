@@ -77,6 +77,29 @@ CMAKE_FLAGS = -DCMAKE_BUILD_TYPE=$(CMAKE_BUILD_TYPE) \
 	-GNinja
 endif
 
+# A "configure signature" recording the CMake input flags that affect the
+# CMake-Conan cache layout (CMAKE_BUILD_TYPE drives build/conan/build/
+# <build_type>/generators; SANITIZE=yes adds -fsanitize=address). The
+# CMake-Conan provider caches find_package() results (e.g., libevent_DIR)
+# as absolute paths inside conan/build/<build_type>/generators in
+# CMakeCache.txt. When the build type changes between runs in the SAME
+# build directory, these *_DIR entries are NOT invalidated, so
+# find_package(libevent) reads from the stale <old-build_type>/generators
+# directory and the build fails with "fatal error: 'event2/event.h' file
+# not found" (the libevent headers are only installed under the new
+# <new-build_type>/generators path). To avoid this, $(CONFIGURE_STAMP)
+# records the current signature on each successful configure, and both
+# setup_cmake and compile_commands wipe $(BUILD_DIR)/ before re-running
+# cmake when the previously-recorded signature differs from the current
+# one. A missing stamp on a pre-existing CMakeCache.txt (e.g. a build
+# directory created before this guard was added) is treated as a mismatch
+# so upgrade is safe — the cost is one fresh reconfigure for the first
+# invocation against such an upgraded directory. (See build.yml's
+# `rm -rf build` between lint-cpp and test-ci for the same workaround done
+# manually.)
+CMAKE_CONFIGURE_SIGNATURE = $(CMAKE_BUILD_TYPE)|$(SANITIZE)
+CONFIGURE_STAMP = $(BUILD_DIR)/.cmake_configure_signature
+
 .PHONY: init
 ## Initialize the development environment (git hooks, etc.)
 init:
@@ -112,14 +135,30 @@ setup_cmake:
 else
 setup_cmake: bootstrap_deps
 endif
-	mkdir -p $(BUILD_DIR) && cmake -S . -B $(BUILD_DIR) $(CMAKE_FLAGS)
+	@mkdir -p $(BUILD_DIR); \
+	if [ -f $(BUILD_DIR)/CMakeCache.txt ] \
+		&& { [ ! -f $(CONFIGURE_STAMP) ] \
+			|| [ "$$(cat $(CONFIGURE_STAMP) 2>/dev/null)" != "$(CMAKE_CONFIGURE_SIGNATURE)" ]; }; then \
+		echo "==> CMake configuration changed; wiping $(BUILD_DIR)/ to avoid stale Conan cache entries."; \
+		rm -rf $(BUILD_DIR) && mkdir -p $(BUILD_DIR); \
+	fi
+	cmake -S . -B $(BUILD_DIR) $(CMAKE_FLAGS)
+	@mkdir -p $(BUILD_DIR) && printf '%s' '$(CMAKE_CONFIGURE_SIGNATURE)' > $(CONFIGURE_STAMP)
 
 .PHONY: compile_commands
 ## Generate compile_commands.json
 compile_commands:
-	mkdir -p $(BUILD_DIR) && cmake -S . -B $(BUILD_DIR) \
+	@mkdir -p $(BUILD_DIR); \
+	if [ -f $(BUILD_DIR)/CMakeCache.txt ] \
+		&& { [ ! -f $(CONFIGURE_STAMP) ] \
+			|| [ "$$(cat $(CONFIGURE_STAMP) 2>/dev/null)" != "$(CMAKE_CONFIGURE_SIGNATURE)" ]; }; then \
+		echo "==> CMake configuration changed; wiping $(BUILD_DIR)/ to avoid stale Conan cache entries."; \
+		rm -rf $(BUILD_DIR) && mkdir -p $(BUILD_DIR); \
+	fi
+	cmake -S . -B $(BUILD_DIR) \
 		$(CMAKE_FLAGS) \
 		-DCMAKE_EXPORT_COMPILE_COMMANDS=ON
+	@mkdir -p $(BUILD_DIR) && printf '%s' '$(CMAKE_CONFIGURE_SIGNATURE)' > $(CONFIGURE_STAMP)
 
 .PHONY: build_libs
 ## Build the libraries

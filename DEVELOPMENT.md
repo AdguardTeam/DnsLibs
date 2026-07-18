@@ -54,6 +54,18 @@ BUILD_TYPE=debug make build_libs
 
 This bootstraps Conan dependencies, configures CMake, and builds the `dnsproxy` target.
 
+Switching between configurations (e.g. `release` ↔ `debug`, or toggling
+`SANITIZE=yes`) in the same `build/` directory is safe: the Makefile
+records a "configure signature" (`build/.cmake_configure_signature`) on
+each successful configure and wipes `build/` before re-running CMake when
+the signature changes. This avoids stale Conan `find_package()` cache
+entries (e.g. `libevent_DIR` pointing at the previous build type's
+`build/conan/build/<build_type>/generators/` directory) that would
+otherwise break the build with `fatal error: 'event2/event.h' file not
+found` after the switch. The same wipe also fires the first time a
+pre-existing `build/` directory (created before this guard existed) is
+reconfigured, so upgrading is safe at the cost of one fresh rebuild.
+
 ### Testing
 
 To build and run the C++ unit tests:
