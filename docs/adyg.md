@@ -122,12 +122,15 @@ example.com.            81      IN      A       104.20.23.154
 `+trace` collapses the per-hop display to plain RRs (no `;; Got answer:` /
 `;; ->>HEADER<<-` / `;; QUESTION SECTION:` headers, no standard
 `;; Query time:` / `;; SERVER:` / `;; MSG SIZE:` block) and ends each hop with
-the trace-specific `;; Received <N> bytes from <ip>#53(<name>) in <ms> ms`
-footer followed by a blank line. Re-enabling dig-style output is
-order-sensitive, exactly like `dig`:
+the trace-specific `;; Received <N> bytes from <ip>#<port>(<name>) in <ms> ms`
+footer followed by a blank line. `<port>` is the actual peer port (extracted
+from the seeded hop's `@server`, defaulting to `53` for the bare-glue iteration
+hops), so `@1.1.1.1:5353 +trace` reports `1.1.1.1#5353(...)` rather than a
+hardcoded `#53`. Re-enabling dig-style output is order-sensitive, exactly like
+`dig`:
 
 - `+trace +stats` swaps the `Received` footer for the standard
-  `Query time` / `SERVER` (`IP#53(name) (proto)`) / `MSG SIZE` block, where
+  `Query time` / `SERVER` (`IP#<port>(name) (proto)`) / `MSG SIZE` block, where
   `proto` is the hop transport — `UDP` by default, `TCP` under `+tcp` (which
   rewrites each hop to `tcp://`).
 - `+trace +comments` re-enables the `;; Got answer:` header and section titles

@@ -1724,4 +1724,217 @@ TEST(FormatDigWhen, TwoDigitDayNotPadded) {
     EXPECT_NE(std::string::npos, s.find("12:00:00"));
 }
 
+// --- split_trace_server_addr -----------------------------------------------
+//
+// Extracts the bare display host + port from a `+trace` hop's `server_ip` so
+// the trace footers render the actual `#<port>` instead of a hardcoded `#53`
+// (review feedback on PR #46). Mirrors `format_dig_server`'s scheme/port
+// extraction: a plain-DNS scheme (`tcp://`/`udp://`/`dns://`, case-insensitive)
+// is stripped, an explicit `host:port` (incl. the bracketed `[v6]:port` form)
+// is split, IPv6 brackets are removed for dig-style display, and an encrypted
+// scheme (`tls://`, `https://`, `system://`, …) is returned verbatim with port
+// 53 (its port lives in the URL, not as `host:port`).
+
+TEST(SplitTraceServerAddr, BareIpDefaultsToPort53) {
+    auto r = split_trace_server_addr("1.1.1.1");
+    EXPECT_EQ("1.1.1.1", r.host);
+    EXPECT_EQ(53u, r.port);
+}
+
+TEST(SplitTraceServerAddr, ExplicitHostPortExtracted) {
+    // Regression for `@1.1.1.1:5353 +trace`: previously the footer hardcoded
+    // `#53`, so the seeded hop to a non-53 resolver reported the wrong port.
+    auto r = split_trace_server_addr("1.1.1.1:5353");
+    EXPECT_EQ("1.1.1.1", r.host);
+    EXPECT_EQ(5353u, r.port);
+}
+
+TEST(SplitTraceServerAddr, TcpSchemeStripped) {
+    // `+tcp` rewrites `opts.server` to `tcp://...` before run_trace dials it;
+    // `format_trace_*` then receives the scheme-prefixed string as `server_ip`.
+    auto r = split_trace_server_addr("tcp://1.1.1.1:5353");
+    EXPECT_EQ("1.1.1.1", r.host);
+    EXPECT_EQ(5353u, r.port);
+}
+
+TEST(SplitTraceServerAddr, UdpAndDnsSchemesStrippedCaseInsensitive) {
+    // Mirrors `format_dig_server`'s case-insensitive scheme matching so an
+    // uppercase `UDP://` / `Dns://` is also stripped (parity with apply_force_tcp).
+    auto udp = split_trace_server_addr("UDP://1.1.1.1");
+    EXPECT_EQ("1.1.1.1", udp.host);
+    EXPECT_EQ(53u, udp.port);
+    auto dns = split_trace_server_addr("Dns://1.1.1.1:5353");
+    EXPECT_EQ("1.1.1.1", dns.host);
+    EXPECT_EQ(5353u, dns.port);
+}
+
+TEST(SplitTraceServerAddr, BracketedIpv6WithPort) {
+    // The documented `@server` form `[::1]:53` (docs/adyg.md) must be split —
+    // previously the literal would be mis-rendered as `[::1]:53#53(...)` in the
+    // trace footer (the port was never extracted, the brackets were never
+    // stripped, and the hardcoded `#53` was appended on top of the existing
+    // `:53`).
+    auto r = split_trace_server_addr("[::1]:5353");
+    EXPECT_EQ("::1", r.host);
+    EXPECT_EQ(5353u, r.port);
+}
+
+TEST(SplitTraceServerAddr, BracketedIpv6WithoutPortDefaultsTo53) {
+    auto r = split_trace_server_addr("[::1]");
+    EXPECT_EQ("::1", r.host);
+    EXPECT_EQ(53u, r.port);
+}
+
+TEST(SplitTraceServerAddr, BareIpv6LiteralLeftUntouched) {
+    // A bare IPv6 literal (`::1`, `fe80::1`, … — two or more colons) is not
+    // mis-split on one of its own colons (mirrors `split_plain_host_port`);
+    // port defaults to 53.
+    auto r = split_trace_server_addr("::1");
+    EXPECT_EQ("::1", r.host);
+    EXPECT_EQ(53u, r.port);
+    auto r2 = split_trace_server_addr("tcp://2001:db8::1");
+    EXPECT_EQ("2001:db8::1", r2.host);
+    EXPECT_EQ(53u, r2.port);
+}
+
+TEST(SplitTraceServerAddr, EncryptedSchemeReturnedVerbatimWithPort53) {
+    // Mirrors `format_dig_server`: an encrypted scheme is left verbatim in
+    // `host` (its port lives in the URL, not as `host:port`) and `port` defaults
+    // to 53 — the trace footer does not attempt to re-format encrypted schemes.
+    auto r = split_trace_server_addr("tls://dns.adguard.com");
+    EXPECT_EQ("tls://dns.adguard.com", r.host);
+    EXPECT_EQ(53u, r.port);
+    auto s = split_trace_server_addr("system://");
+    EXPECT_EQ("system://", s.host);
+    EXPECT_EQ(53u, s.port);
+}
+
+TEST(SplitTraceServerAddr, EmptyInputYieldsEmptyHostPort53) {
+    auto r = split_trace_server_addr("");
+    EXPECT_EQ("", r.host);
+    EXPECT_EQ(53u, r.port);
+}
+
+// --- format_trace_received_line: port rendering ----------------------------
+//
+// The trace `Received` footer now renders `#<port>` (extracted from
+// `server_ip`) instead of a hardcoded `#53`, so a seeded hop to a non-53
+// resolver (e.g. `@1.1.1.1:5353 +trace`) reports the real port.
+
+TEST(FormatTraceReceivedLine, ExplicitHostPortRenderedNotHardcoded53) {
+    // Regression: `@1.1.1.1:5353 +trace` previously produced the misleading
+    // `1.1.1.1:5353#53(...)`; it now yields `1.1.1.1#5353(...)`.
+    std::string line = format_trace_received_line(Millis{7}, 239, "1.1.1.1:5353", "");
+    EXPECT_EQ(line, ";; Received 239 bytes from 1.1.1.1#5353(1.1.1.1) in 7 ms\n");
+}
+
+TEST(FormatTraceReceivedLine, BareIpFallsBackToPort53) {
+    // A bare glue A record (the trace-iteration hops) carries no explicit port,
+    // so the footer renders `#53`.
+    std::string line = format_trace_received_line(Millis{42}, 239, "198.41.0.4", "a.root-servers.net");
+    EXPECT_EQ(line, ";; Received 239 bytes from 198.41.0.4#53(a.root-servers.net) in 42 ms\n");
+}
+
+TEST(FormatTraceReceivedLine, EmptyNameRepeatsExtractedHostNotRawServerIp) {
+    // The fallback `(NAME)` was previously `std::string(server_ip)`, which for
+    // `1.1.1.1:5353` would have echoed `1.1.1.1:5353` into the parens. It now
+    // echoes the bare extracted host.
+    std::string line = format_trace_received_line(Millis{5}, 72, "1.1.1.1:5353", "");
+    EXPECT_EQ(line, ";; Received 72 bytes from 1.1.1.1#5353(1.1.1.1) in 5 ms\n");
+}
+
+TEST(FormatTraceReceivedLine, TcpSchemeStrippedFromFooter) {
+    // `@tcp://1.1.1.1:5353 +trace` (or `@1.1.1.1:5353 +trace +tcp`): the scheme
+    // is stripped so the footer renders the bare `1.1.1.1` host with the real
+    // port.
+    std::string line = format_trace_received_line(Millis{3}, 100, "tcp://1.1.1.1:5353", "");
+    EXPECT_EQ(line, ";; Received 100 bytes from 1.1.1.1#5353(1.1.1.1) in 3 ms\n");
+}
+
+TEST(FormatTraceReceivedLine, BracketedIpv6LiteralPort) {
+    std::string line = format_trace_received_line(Millis{1}, 50, "[::1]:5353", "");
+    EXPECT_EQ(line, ";; Received 50 bytes from ::1#5353(::1) in 1 ms\n");
+}
+
+TEST(FormatTraceReceivedLine, EncryptedSchemeLeftVerbatim) {
+    // An encrypted seed (e.g. `@tls://dns.adguard.com +trace`) is rendered
+    // verbatim in the host slot (mirrors `format_dig_server`); the port stays
+    // at 53 because the scheme's port lives in the URL, not as `host:port`.
+    std::string line = format_trace_received_line(Millis{9}, 80, "tls://dns.adguard.com", "");
+    EXPECT_EQ(line, ";; Received 80 bytes from tls://dns.adguard.com#53(tls://dns.adguard.com) in 9 ms\n");
+}
+
+// --- format_trace_packet_dig: stats footer port rendering -------------------
+//
+// The `+trace +stats` `;; SERVER:` footer mirrors the non-stats `Received`
+// footer's port extraction (review feedback: it previously hardcoded `#53`,
+// so `@1.1.1.1:5353 +trace +stats` reported the wrong port).
+
+TEST(FormatTracePacketDig, StatsFooterRendersExtractedPort) {
+    // Regression: `@1.1.1.1:5353 +trace +stats` previously rendered the hardcoded
+    // `;; SERVER: 1.1.1.1:5353#53(1.1.1.1) (UDP)` / mis-prefixed form; it now
+    // yields `1.1.1.1#5353(...)`.
+    ldns_pkt_ptr q = make_test_query();
+    DisplayFlags df;
+    apply_trace_display_defaults(df);
+    df.stats = true; // mirror `+trace +stats` / `+trace +all`
+    std::string out = format_trace_packet_dig(q.get(), df, Millis{87}, "1.1.1.1:5353", "");
+    EXPECT_FALSE(contains(out, "Received "));
+    EXPECT_TRUE(contains(out, ";; Query time: 87 msec"));
+    EXPECT_TRUE(contains(out, ";; SERVER: 1.1.1.1#5353(1.1.1.1) (UDP)"));
+    EXPECT_FALSE(contains(out, "#53("));
+    EXPECT_TRUE(contains(out, ";; MSG SIZE  rcvd:"));
+    EXPECT_TRUE(out.ends_with("\n\n"));
+}
+
+TEST(FormatTracePacketDig, StatsFooterBareIpDefaultsToPort53) {
+    // A bare glue A record (the trace-iteration hops) still renders `#53`.
+    ldns_pkt_ptr q = make_test_query();
+    DisplayFlags df;
+    apply_trace_display_defaults(df);
+    df.stats = true;
+    std::string out = format_trace_packet_dig(q.get(), df, Millis{12}, "192.5.5.241", "f.root-servers.net");
+    EXPECT_TRUE(contains(out, ";; SERVER: 192.5.5.241#53(f.root-servers.net) (UDP)"));
+}
+
+TEST(FormatTracePacketDig, StatsFooterTcpWithCustomPort) {
+    // `@tcp://1.1.1.1:5353 +trace +tcp +stats`: the `tcp://` scheme is stripped
+    // (host `1.1.1.1`), the explicit port `5353` is rendered, and the transport
+    // is `(TCP)` (driven by the `tcp` argument / `opts.force_tcp`).
+    ldns_pkt_ptr q = make_test_query();
+    DisplayFlags df;
+    apply_trace_display_defaults(df);
+    df.stats = true;
+    std::string out = format_trace_packet_dig(q.get(), df, Millis{12}, "tcp://1.1.1.1:5353", "", true);
+    EXPECT_FALSE(contains(out, "(UDP)"));
+    EXPECT_TRUE(contains(out, ";; SERVER: 1.1.1.1#5353(1.1.1.1) (TCP)"));
+    EXPECT_FALSE(contains(out, "#53("));
+}
+
+TEST(FormatTracePacketDig, StatsFooterBracketedIpv6CustomPort) {
+    // The bracketed `[v6]:port` form is split for the stats footer too (mirrors
+    // `format_dig_server`).
+    ldns_pkt_ptr q = make_test_query();
+    DisplayFlags df;
+    apply_trace_display_defaults(df);
+    df.stats = true;
+    std::string out = format_trace_packet_dig(q.get(), df, Millis{4}, "[::1]:5353", "");
+    EXPECT_TRUE(contains(out, ";; SERVER: ::1#5353(::1) (UDP)"));
+}
+
+TEST(FormatTracePacketDig, ReceivedFooterRendersExtractedPort) {
+    // The default (`+stats` off) footer also uses the extracted port — the
+    // regression from the first review comment.
+    ldns_pkt_ptr q = make_test_query();
+    DisplayFlags df;
+    apply_trace_display_defaults(df);
+    std::string out = format_trace_packet_dig(q.get(), df, Millis{7}, "1.1.1.1:5353", "");
+    // The footer renders the bare host with the extracted port (not the
+    // hardcoded `#53`, and not the raw `1.1.1.1:5353#53(...)` of the old code).
+    EXPECT_TRUE(contains(out, "1.1.1.1#5353(1.1.1.1)"));
+    EXPECT_FALSE(contains(out, "#53("));
+    EXPECT_FALSE(contains(out, "1.1.1.1:5353#"));
+    EXPECT_TRUE(out.ends_with("\n\n"));
+}
+
 } // namespace ag::adyg::test

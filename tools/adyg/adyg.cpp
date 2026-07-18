@@ -186,10 +186,13 @@ void print_packet_dig(const ldns_pkt *pkt, const CliOptions &opts, bool is_query
 
 // One server queried during a `+trace` pass. `ip` is the address actually
 // contacted (a bare IP for the iteration hops; `opts.server` verbatim for the
-// initial seeded hop to the user's resolver). `name` is the hostname shown
-// inside the `(NAME)` of dig's `Received ... bytes from IP#53(NAME)` footer;
-// empty falls back to repeating the IP (mirroring `dig` when the peer has no
-// resolvable name).
+// initial seeded hop to the user's resolver — possibly carrying a `host:port`
+// or a plain-DNS scheme, both of which `split_trace_server_addr` strips when
+// formatting the footer). `name` is the hostname shown inside the `(NAME)` of
+// dig's `Received ... bytes from IP#<port>(NAME)` footer; empty falls back to
+// the bare host extracted from `ip` (mirroring `dig` when the peer has no
+// resolvable name — and avoiding the raw `opts.server` being echoed into the
+// parens, where it would otherwise leak a stale `:port` / scheme prefix).
 struct TraceServer {
     std::string ip;
     std::string name;
@@ -198,11 +201,13 @@ struct TraceServer {
 // Per-hop trace output. Builds a dig-compatible body (RRs from the active
 // display sections) followed by the trace-specific footer:
 //   - default (`+stats` off, the trace mode default): the
-//     `;; Received N bytes from IP#53(name) in Y ms` line;
+//     `;; Received N bytes from IP#<port>(name) in Y ms` line;
 //   - when `+stats` is on: the standard `Query time` / `SERVER`
-//     (formatted `IP#53(name) (proto)`, where proto is TCP under `+tcp` and
+//     (formatted `IP#<port>(name) (proto)`, where proto is TCP under `+tcp` and
 //     UDP otherwise) / `MSG SIZE` block.
-// A trailing blank line separates the hop from the next one.
+// `<port>` is extracted from `server.ip` (`#53` by default for the iteration
+// hops, which carry bare glue A records). A trailing blank line separates this
+// hop from the next one.
 void print_trace_packet_dig(const ldns_pkt *pkt, const CliOptions &opts, Millis query_time, const TraceServer &server) {
     // `+tcp` rewrites every trace hop to `tcp://` (see run_trace), so the
     // transport rendered in the stats footer is driven by opts.force_tcp.
@@ -466,8 +471,12 @@ Task<TraceOutcome> run_trace(EventLoop &loop, const CliOptions &opts) {
     std::vector<TraceServer> servers;
     {
         TraceServer server;
+        // `server.name` is left empty so the footer falls back to the bare host
+        // extracted from `opts.server` (via `split_trace_server_addr`) rather
+        // than echoing the raw `@server` value into the `(NAME)` parens —
+        // which would leak a stale `:port` / scheme prefix (e.g. `1.1.1.1:5353`
+        // or `tcp://1.1.1.1`) into the dig-style `IP#<port>(NAME)` footer.
         server.ip = opts.server;
-        server.name = opts.server;
         std::string initial_address = opts.server;
         if (opts.force_tcp) {
             apply_force_tcp(initial_address);

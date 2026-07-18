@@ -885,20 +885,85 @@ void apply_trace_display_defaults(DisplayFlags &flags) {
     // Multiline / ttlid / cls are untouched (their defaults apply).
 }
 
+TraceServerAddr split_trace_server_addr(std::string_view server_ip) {
+    TraceServerAddr out;
+    if (server_ip.empty()) {
+        return out; // host="" port=53 (a degenerate, typically unreachable, path)
+    }
+    // Strip a leading plain-DNS scheme case-insensitively, mirroring
+    // `format_dig_server`. `+tcp`'s `apply_force_tcp` (and an explicit
+    // `@tcp://...`) leaves the seed hop's `server_ip` scheme-prefixed, so
+    // without this strip the trace footer would echo `tcp://1.1.1.1:5353` as the
+    // host instead of the bare `1.1.1.1`.
+    struct PlainScheme {
+        std::string_view prefix;
+    };
+    static constexpr PlainScheme PLAIN_SCHEMES[] = {
+            {"tcp://"},
+            {"udp://"},
+            {"dns://"},
+    };
+    for (const PlainScheme &s : PLAIN_SCHEMES) {
+        if (server_ip.size() > s.prefix.size()
+                && std::equal(s.prefix.begin(), s.prefix.end(), server_ip.begin(), [](char a, char b) {
+                       return std::tolower(static_cast<unsigned char>(a))
+                               == std::tolower(static_cast<unsigned char>(b));
+                   })) {
+            server_ip.remove_prefix(s.prefix.size());
+            break;
+        }
+    }
+    // Any remaining `://` is an encrypted upstream: leave it verbatim (mirrors
+    // `format_dig_server`'s encrypted-scheme fallback). Port 53 is preserved —
+    // an encrypted scheme carries its port in the URL, not as `host:port`, so
+    // there is nothing extractable for the trace footer here.
+    if (server_ip.find("://") != std::string_view::npos) {
+        out.host = std::string(server_ip);
+        return out;
+    }
+    // Split an explicit `host:port` (incl. the bracketed `[v6]:port` form). A
+    // bare IPv6 literal (`::1`, `fe80::1`, …) has two or more colons and is left
+    // untouched by `split_plain_host_port` so it is not mis-split on one of its
+    // own colons. Port defaults to 53 (the trace-iteration hops, which carry bare
+    // glue A records, take this path).
+    std::string_view host = server_ip;
+    uint16_t port = 53;
+    if (auto p = split_plain_host_port(host)) {
+        port = *p;
+    }
+    // dig renders the IPv6 literal without its brackets — `1.2.3.4#53(...)`
+    // / `::1#53(::1)` (the brackets are only an input convention kept by
+    // `split_plain_host_port` so the literal stays unambiguous). Strip them
+    // here purely for dig-style display.
+    if (host.size() >= 2 && host.front() == '[' && host.back() == ']') {
+        host = host.substr(1, host.size() - 2);
+    }
+    out.host = std::string(host);
+    out.port = port;
+    return out;
+}
+
 std::string format_trace_received_line(
         Millis query_time, size_t bytes, std::string_view server_ip, std::string_view server_name) {
-    // Mirrors dig's ";; Received <n> bytes from <IP>#53(<NAME>) in <ms> ms".
-    // When the peer has no resolvable name dig repeats the IP inside parens.
+    // Mirrors dig's ";; Received <n> bytes from <IP>#<port>(<NAME>) in <ms> ms".
+    // `<port>` is extracted from `server_ip` (so a seeded hop to a non-53
+    // resolver — e.g. `@1.1.1.1:5353 +trace` — reports the real port rather than
+    // a hardcoded `#53`); `<IP>` is the bare host stripped of any plain-DNS
+    // scheme and IPv6 brackets. When the peer has no resolvable name dig repeats
+    // the host inside parens — falling back to the *extracted* host (not the raw
+    // `server_ip`) so the name does not echo a stale `:port` / scheme prefix.
+    auto [host, port] = split_trace_server_addr(server_ip);
     std::string name(server_name);
     if (name.empty()) {
-        name = std::string(server_ip);
+        name = host;
     }
-    if (server_ip.empty()) {
+    if (host.empty()) {
         // Degenerate input (no server recorded); fall back to name only to
-        // avoid producing a malformed `#53()` fragment.
+        // avoid producing a malformed `#53()` fragment. The hardcoded `#53` is
+        // retained because there is no `server_ip` to extract a port from.
         return fmt::format(";; Received {} bytes from {}#53 in {} ms\n", bytes, name, query_time.count());
     }
-    return fmt::format(";; Received {} bytes from {}#53({}) in {} ms\n", bytes, server_ip, name, query_time.count());
+    return fmt::format(";; Received {} bytes from {}#{}({}) in {} ms\n", bytes, host, port, name, query_time.count());
 }
 
 std::string format_trace_packet_dig(const ldns_pkt *pkt, const DisplayFlags &flags, Millis query_time,
@@ -917,16 +982,27 @@ std::string format_trace_packet_dig(const ldns_pkt *pkt, const DisplayFlags &fla
     size_t sz = wire_pkt_size(pkt);
     if (flags.stats) {
         // User asked for stats: emit a dig-style stats footer using the
-        // trace-mode `IP#53(name) (proto)` SERVER formatting. The transport
-        // reflects the hop's actual transport (UDP by default, TCP under `+tcp`,
-        // which rewrites each hop to `tcp://` in run_trace) rather than being
-        // hardcoded to UDP.
+        // trace-mode `IP#<port>(name) (proto)` SERVER formatting. The port is
+        // extracted from `server_ip` (so a seeded hop to a non-53 resolver —
+        // e.g. `@1.1.1.1:5353 +trace +stats` — renders `#5353` rather than a
+        // hardcoded `#53`), and the bare host (plain-DNS scheme + IPv6 brackets
+        // stripped) is rendered as `IP`. The transport reflects the hop's actual
+        // transport (UDP by default, TCP under `+tcp`, which rewrites each hop
+        // to `tcp://` in run_trace) rather than being hardcoded to UDP.
+        auto [host, port] = split_trace_server_addr(server_ip);
         std::string name(server_name);
         if (name.empty()) {
-            name = std::string(server_ip);
+            name = host;
         }
         out += fmt::format(";; Query time: {} msec\n", query_time.count());
-        out += fmt::format(";; SERVER: {}#53({}) ({})\n", server_ip, name, tcp ? "TCP" : "UDP");
+        if (host.empty()) {
+            // Degenerate input (no server recorded): keep `#53` (there is no
+            // `server_ip` to extract a port from) and `name` (already computed)
+            // rather than a malformed `#53()` fragment.
+            out += fmt::format(";; SERVER: {}#53 ({})\n", name, tcp ? "TCP" : "UDP");
+        } else {
+            out += fmt::format(";; SERVER: {}#{}({}) ({})\n", host, port, name, tcp ? "TCP" : "UDP");
+        }
         out += fmt::format(";; MSG SIZE  rcvd: {}\n", sz);
     } else {
         out += format_trace_received_line(query_time, sz, server_ip, server_name);

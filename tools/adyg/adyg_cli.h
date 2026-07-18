@@ -222,6 +222,26 @@ std::string format_dns_ttl_verbose(uint32_t ttl);
 // Exposed so the option-decoding stays unit-testable without a packet.
 std::string format_edns_option_text(uint16_t code, const uint8_t *data, size_t len);
 
+// The plain-DNS display host and port extracted from a `+trace` hop's
+// `server_ip` (the address run_trace passes to the trace footers). Mirrors
+// `format_dig_server`'s scheme/port extraction so the trace footers render the
+// actual `#<port>` instead of a hardcoded `#53`. `host` has its plain-DNS scheme
+// (`tcp://`/`udp://`/`dns://`, matched case-insensitively) stripped and IPv6
+// brackets removed (dig renders the bare literal); `port` defaults to 53 and is
+// taken from an explicit `host:port` (incl. the bracketed `[v6]:port` form
+// handled by `split_plain_host_port`) when one is present. Encrypted schemes
+// (`tls://`, `https://`, `h3://`, `quic://`, `sdns://`, `system://`, …) are
+// returned verbatim in `host` with port 53 — mirroring `format_dig_server`'s
+// "leave verbatim" fallback for non-plain DNS. Exposed in the pure layer so the
+// trace footer's port extraction is unit-testable without an event loop (and
+// reuses the same extraction in both the `Received` and the `+stats` `SERVER:`
+// footers, per the review feedback).
+struct TraceServerAddr {
+    std::string host;
+    uint16_t port = 53;
+};
+TraceServerAddr split_trace_server_addr(std::string_view server_ip);
+
 // Format `server` as dig's `;; SERVER:` value. For a plain IP / bare host it
 // yields `host#port(host) (UDP)` (or `(TCP)` when `tcp` is true). adyg's `+tcp`
 // rewrite (apply_force_tcp) prefixes a bare host with `tcp://` (and rewrites
