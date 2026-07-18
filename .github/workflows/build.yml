@@ -92,7 +92,7 @@ jobs:
         set -e
         set -x
 
-        python3 -m pip install conan --upgrade
+        python3 -m pip install conan
         conan remote add --index 0 art ${{ vars.CONAN_REPO_URL }} || true
 
         # TODO: run `make lint` instead of `make lint-cpp` once the builds
@@ -181,7 +181,7 @@ jobs:
           python3 -m venv venv
           source ./venv/bin/activate
 
-          python3 -m pip install conan --upgrade
+          python3 -m pip install conan
           conan remote add --index 0 art ${{ vars.CONAN_REPO_URL }} || true
 
       - name: Run native tests
@@ -367,7 +367,7 @@ jobs:
           set -e
           set -x
 
-          python3 -m pip install conan --upgrade
+          python3 -m pip install conan
           conan remote add --index 0 art ${{ vars.CONAN_REPO_URL }} || true
 
           touch local.properties
@@ -609,7 +609,7 @@ jobs:
           set -e
           set -x
 
-          python3 -m pip install conan --upgrade
+          python3 -m pip install conan
           conan remote add --index 0 art ${{ vars.CONAN_REPO_URL }} || true
 
           # `make build_adyg` configures the root CMake project and builds the
