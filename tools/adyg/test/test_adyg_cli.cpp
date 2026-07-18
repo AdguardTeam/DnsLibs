@@ -764,6 +764,27 @@ TEST(ParseArgs, ExplicitServerIsKept) {
     EXPECT_EQ("8.8.8.8", r.opts.server);
 }
 
+TEST(ParseArgs, RejectsMultipleServer) {
+    // `@server` may be given only once: a second `@server` is rejected with
+    // an error naming both tokens, rather than silently overwriting the first
+    // (the docs state "only one server may be given"; adyg does not currently
+    // support multiple servers, unlike `dig` which silently uses the last).
+    ParseResult r = parse({"adyg", "@8.8.8.8", "@1.1.1.1", "example.com"});
+    EXPECT_FALSE(r.error.empty());
+    EXPECT_NE(std::string::npos, r.error.find("@8.8.8.8"));
+    EXPECT_NE(std::string::npos, r.error.find("@1.1.1.1"));
+}
+
+TEST(ParseArgs, RejectsMultipleServerRegardlessOfPosition) {
+    // The second `@server` is rejected whether it appears before or after the
+    // positional name — only the argv position changes, the duplicate is still
+    // a duplicate.
+    ParseResult r = parse({"adyg", "example.com", "@8.8.8.8", "@1.1.1.1"});
+    EXPECT_FALSE(r.error.empty());
+    EXPECT_NE(std::string::npos, r.error.find("@8.8.8.8"));
+    EXPECT_NE(std::string::npos, r.error.find("@1.1.1.1"));
+}
+
 // --- root_servers.h (generated IANA root hints) ---------------------------
 //
 // These tests guard the checked-in generated table (see

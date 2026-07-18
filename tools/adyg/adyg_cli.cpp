@@ -374,6 +374,15 @@ ParseResult parse_args(int argc, char *argv[]) {
                 result.error = "empty server after '@'";
                 return result;
             }
+            // Only one @server is accepted: a second @server is an error
+            // (naming both tokens) rather than silently overwriting the first.
+            // Multiple servers are not currently supported; they may be added
+            // later for dig-style multi-query behavior. docs/adyg.md states
+            // "only one server may be given" — the parser now enforces it.
+            if (!opts.server.empty()) {
+                result.error = fmt::format("multiple @server not supported: {} after @{}", arg, opts.server);
+                return result;
+            }
             opts.server = arg.substr(1);
         } else if (arg.starts_with('+')) {
             std::string opt = arg.substr(1);

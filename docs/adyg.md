@@ -56,8 +56,9 @@ is the substring after `@` (so `@1.1.1.1` ⟶ server `1.1.1.1`); the `@` is
 the optional-position marker and does not form part of the server string.
 
 `@server` may be placed anywhere in the argv stream relative to the
-positional `name` / `type` and the `+options` — only one server may be given.
-When omitted, the default is used (see [`Usage`](#usage) above).
+positional `name` / `type` and the `+options` — only one server may be given
+(a second `@server` is an error, since multiple servers are not currently
+supported). When omitted, the default is used (see [`Usage`](#usage) above).
 
 `server` is handed verbatim to the `upstream` library, which accepts any of
 the following forms:
@@ -223,7 +224,7 @@ dig-compatible display flags:
   `; serial` / `; refresh (1 hour)` verbose-TTL comments, `(` and `)` on
   their own lines). Only `DS`, `KEY`, `RRSIG`, and `SSHFP` records are
   candidates for `( ... )` wrapping; `TXT` and other types are never wrapped
-- `+ttlUnits` — show TTLs as dig's human units (e.g. `5m`, `1h30m`, `1d`)
+- `+ttlunits` — show TTLs as dig's human units (e.g. `5m`, `1h30m`, `1d`)
 - `+onesoa` — print only the first SOA of the response (useful for `ANY`)
 
 The standard stats block is dig-compatible: `;; Query time:`,
