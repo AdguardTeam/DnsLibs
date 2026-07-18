@@ -36,11 +36,11 @@ endif
 # so concurrent test processes never collide on a listener port.
 TEST_JOBS ?= $(NPROC)
 
-# Parallelism level for clangd-tidy. Capped at half the CPU count (not NPROC)
-# because each clangd worker can consume hundreds of MB to over 1 GB of RSS;
-# running one per CPU can exhaust memory on the CI Linux runner (12 GB / 8
-# CPUs), OOM-killing clangd mid-analysis. Override per-invocation, e.g.
-# `make clangd-tidy CLANGD_TIDY_JOBS=8`.
+# Parallelism level for clangd-tidy. Capped at half the CPU count (NPROC / 2,
+# not the full NPROC) because each clangd worker can consume hundreds of MB to
+# over 1 GB of RSS; running one per CPU can exhaust memory on the CI Linux
+# runner (12 GB / 8 CPUs), OOM-killing clangd mid-analysis. Override per-
+# invocation, e.g. `make clangd-tidy CLANGD_TIDY_JOBS=8`.
 CLANGD_TIDY_JOBS ?= $(shell echo $$(( $(NPROC) / 2 > 0 ? $(NPROC) / 2 : 1 )))
 
 # Stream every failing test's captured stdout/stderr into the invoking shell.

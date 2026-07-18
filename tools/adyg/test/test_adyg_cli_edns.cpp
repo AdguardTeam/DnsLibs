@@ -317,7 +317,7 @@ TEST(FormatEdnsOptionText, CookieTooShortFallsBack) {
     EXPECT_EQ("; \\# 2 1234\n", format_edns_option_text(10, data.data(), data.size()));
 }
 
-TEST(FormatEdnsOptionText, UnknownfallsBack) {
+TEST(FormatEdnsOptionText, UnknownFallsBack) {
     Bytes data{0xAB};
     EXPECT_EQ("; \\# 1 ab\n", format_edns_option_text(99, data.data(), data.size()));
     EXPECT_EQ("; \\# 0 \n", format_edns_option_text(99, nullptr, 0));
