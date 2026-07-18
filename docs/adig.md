@@ -8,20 +8,43 @@ configurations during development.
 See the main [README.md](../README.md) for an overview of the whole project,
 and [DEVELOPMENT.md](../DEVELOPMENT.md) for general build and test workflow.
 
-## Supported protocols
+## Name collision with c-ares' `adig`
 
-The `@server` argument may be any address scheme supported by the `upstream`
-library:
+c-ares (the C resolver library) ships its **own** `adig` example program that
+shares the name with this project's `adig`. The two are completely unrelated
+implementations with **different** command-line behavior — most visibly, the
+c-ares version rejects the URI-scheme `@server` form this project documents
+(e.g. `@tls://1.1.1.1`) with an error like:
 
-| Server form | Protocol |
-| --- | --- |
-| `1.1.1.1` / `1.1.1.1:53` | Plain DNS over UDP |
-| `tcp://IP` | Plain DNS over TCP |
-| `tls://host` | DNS-over-TLS (DoT) |
-| `https://host/…` | DNS-over-HTTPS (DoH) |
-| `quic://host` | DNS-over-QUIC (DoQ) |
-| `sdns://…` | A DNS Stamp (any of the above, plus DNSCrypt) |
-| `system://` | The OS-configured resolver (Apple/Android only); also the default when `@server` is omitted on those platforms |
+```text
+ares_set_servers_ports_csv: Misformatted string: tls://1.1.1.1
+```
+
+If you see that error (or any other prefixed with `ares_`), you are running
+c-ares' `adig`, not the one built from this repository. Common ways this
+happens:
+
+- Homebrew installs c-ares' `adig` at `/opt/homebrew/bin/adig` (or
+  `/usr/local/bin/adig` on Intel macs) via `brew install c-ares`. On Apple
+  Silicon `/opt/homebrew/bin` precedes `/usr/local/bin` on the default
+  `PATH`, so `adig` resolves to c-ares' binary even when our project's
+  build was copied into `/usr/local/bin`.
+- Linux distributions that ship c-ares (e.g. `libc-ares-dev` / `c-ares-devel`)
+  install their example `adig` into `/usr/bin/adig`.
+
+Build and invoke our `adig` by its full path (see [Building](#building)) to
+guarantee you are running this project's binary:
+
+```sh
+make build_adig
+./build/tools/adig/adig --version        # → `adig <AG_DNSLIBS_VERSION>`
+./build/tools/adig/adig -t mx serveroid.com @tls://1.1.1.1
+```
+
+`./build/tools/adig/adig --version` is the fastest way to confirm the right
+binary is on the end of the command line: this project prints
+`adig <AG_DNSLIBS_VERSION>` (e.g. `adig 2.8.58`); c-ares prints
+`adig version <c-ares-release>` (e.g. `adig version 1.34.8`).
 
 ## Building
 
@@ -29,23 +52,82 @@ library:
 make build_adig
 ```
 
-This produces the `adig` executable in the CMake build directory. The `+trace`
-option iterates the delegation chain from the root, seeding the first hop from
-a `.` NS query to `@server` (mirroring `dig +trace`); if `@server` is
-unreachable, it falls back to the IANA root hints checked into the repo as
-`tools/adig/root_servers.h`. Regenerate that header with
+This produces the `adig` executable in the CMake build directory at
+`build/tools/adig/adig` (i.e. invoke it as `./build/tools/adig/adig`). It is
+**not** installed onto `PATH` — see [Name collision with c-ares'
+`adig`](#name-collision-with-c-ares-adig) above for why running `adig`
+bare from the shell may pick up a different binary.
+
+The `+trace` option iterates the delegation chain from the root, seeding the
+first hop from a `.` NS query to `@server` (mirroring `dig +trace`); if
+`@server` is unreachable, it falls back to the IANA root hints checked into
+the repo as `tools/adig/root_servers.h`. Regenerate that header with
 `make generate_root_hints` (requires network access).
 
 ## Usage
 
 ```text
-adig [@server] name [type] [options]
+adig [@server] [-t type] [-x addr] name [type] [options]
 ```
 
 Sends a DNS query to `server` for `name` (default RR type `A`) and prints the
 reply. When `server` is omitted, `adig` queries the system default DNS via the
 upstream library's `SystemUpstream` (`system://`) on Apple/Android, falling
 back to `1.1.1.1` on platforms where no system resolver is available.
+
+The RR type may be given either positionally (`adig name type`, mirroring
+`dig`) or via the dig-compatible `-t TYPE` short option (`adig -t TYPE name`).
+Both forms are accepted in any position relative to `@server`, `name` and
+the `+options`; the last one wins when both forms are given — matching
+`dig example.com A -t AAAA`, which warns "extra type option" and queries
+AAAA. `-t` is mutually exclusive with `-x` (which fixes the type to PTR).
+
+### Server argument (`@server`)
+
+The optional `@server` argument selects the upstream DNS server to query. It
+is the substring after `@` (so `@1.1.1.1` ⟶ server `1.1.1.1`); the `@` is
+the optional-position marker and does not form part of the server string.
+
+`@server` may be placed anywhere in the argv stream relative to the
+positional `name` / `type` and the `+options` — only one server may be given.
+When omitted, the default is used (see [`Usage`](#usage) above).
+
+`server` is handed verbatim to the `upstream` library, which accepts any of
+the following forms:
+
+| Server form | Protocol | Notes |
+| --- | --- | --- |
+| `1.1.1.1` | Plain DNS over UDP (default port 53) | Bare IPv4 / hostname |
+| `1.1.1.1:53` | Plain DNS over UDP | IPv4 with explicit port |
+| `[::1]:53` / `[::1]` | Plain DNS (IPv6 literal) | Brackets keep the IPv6 literal from being mis-split on `:` |
+| `tcp://IP[:port]` | Plain DNS over TCP | `tcp://` forces TCP transport |
+| `udp://IP[:port]` | Plain DNS over UDP | Synonym for the bare form (our `adig` recognizes both) |
+| `dns://IP[:port]` | Plain DNS over UDP | dig-compat scheme (rarely used) |
+| `tls://host[:port]` | DNS-over-TLS (DoT) | Default port 853; the host part is verified against the TLS cert (so `tls://1.1.1.1` works because Cloudflare's cert carries the IP SAN; for self-signed setups use a `sdns://` stamp) |
+| `https://host/path` | DNS-over-HTTPS (DoH) | Default port 443; the path is the DoH endpoint (commonly `/dns-query`) |
+| `h3://host/path` | DNS-over-HTTP/3 | HTTP/3 (QUIC) variant of DoH |
+| `quic://host[:port]` | DNS-over-QUIC (DoQ) | Default port 853 |
+| `sdns://...` | Any of the above plus DNSCrypt | A [DNS Stamp](https://dnscrypt.info/stamps/) encodes scheme, address, port, hash and transport |
+| `system://` | The OS-configured resolver (Apple/Android only) | Also the default when `@server` is omitted on those platforms |
+
+A few things to keep in mind about `@server`:
+
+- The scheme prefix (e.g. `tls://`) and the host are matched as a single
+  argv token — write `@tls://1.1.1.1`, not `@ tls://1.1.1.1`.
+- Scheme matching is case-insensitive (so `@TLS://1.1.1.1` is equivalent to
+  the lowercase form).
+- `-p PORT` overrides the port for plain-DNS forms (`@1.1.1.1`,
+  `@tcp://1.1.1.1`, …); schemed upstreams ignore `-p` (their port is part
+  of the URL). Use an explicit `host:port` for plain DNS or `+bootstrap=IP`
+  for the GLUE resolver.
+- `+tcp` rewrites a bare host / `udp://` / `dns://` form to `tcp://` so
+  plain-DNS queries are sent over TCP. Encrypted schemes (`tls://`,
+  `https://`, `quic://`, `sdns://`, `system://`) are left untouched.
+- `+bootstrap=IP` selects the resolver used to look up the host portion of
+  an encrypted upstream (e.g. to resolve `dns.adguard.com` in
+  `tls://dns.adguard.com`). Defaults to `system://` on Apple/Android, and
+  to nothing on other platforms (where a hostname-bearing scheme without
+  `+bootstrap=` surfaces `AE_EMPTY_BOOTSTRAP`).
 
 ### `+trace`
 
@@ -152,8 +234,11 @@ Notable options (each `dig`-compatible):
   (they relate to resolver behaviors adig does not implement), so common `dig`
   scripts do not error
 - `-4` — use IPv4 only (suppress IPv6)
+- `-t TYPE` — dig short-form RR type (A/AAAA/MX/TXT/ANY/...); equivalent to the
+  positional `name type` form (see [Usage](#usage))
 - `-p PORT` — override the plain-DNS port (default 53)
-- `-x addr` — reverse lookup (PTR for the given IPv4/IPv6 address)
+- `-x addr` — reverse lookup (PTR for the given IPv4/IPv6 address); mutually
+  exclusive with `-t` and the positional `type`
 - `-v`, `--version` — print version and exit
 
 Display flags (`+cmd`, `+comments`, `+question`, `+answer`, `+authority`,
@@ -185,6 +270,10 @@ on real responses; the `+qr` query echo omits them and labels the size
 ```sh
 adig example.com
 adig @1.0.0.1 example.com MX
+# -t is the dig short form for the type, equivalent to the positional above:
+adig -t MX @1.0.0.1 example.com
+# the user's reported case from the issue — a plain `-t TYPE` form on DoT:
+adig -t mx serveroid.com @tls://1.1.1.1
 adig @tls://dns.adguard.com example.com +short
 adig @sdns://... example.com +trace +bootstrap=1.1.1.1
 adig @1.1.1.1 example.com +dnssec +recurse

@@ -271,9 +271,17 @@ ParseResult parse_args(int argc, char *argv[]) {
         }
         if (arg == "-x") {
             // -x <addr>: reverse lookup. Consumes the next argv token as the
-            // address and is mutually exclusive with a positional name/type.
-            if (!opts.name.empty() || type_set) {
-                result.error = "-x cannot be combined with a positional name or type";
+            // address and is mutually exclusive with both a positional
+            // name/type and the dig-style `-t TYPE` short option (both
+            // express the RR type, conflicting with -x fixing it to PTR).
+            // `type_set` covers the positional-type AND the `-t TYPE` cases
+            // since both set it via the parser below.
+            if (type_set) {
+                result.error = "-x cannot be combined with a type (positional or -t)";
+                return result;
+            }
+            if (!opts.name.empty()) {
+                result.error = "-x cannot be combined with a positional name";
                 return result;
             }
             if (i + 1 >= argc) {
@@ -318,6 +326,47 @@ ParseResult parse_args(int argc, char *argv[]) {
                 return result;
             }
             opts.port = static_cast<uint16_t>(port);
+            continue;
+        }
+        if (arg == "-t") {
+            // -t TYPE: dig/BIND-style short form for the RR type, equivalent
+            // to the positional `adig name type` form (mirrors `dig`). Consumes
+            // the next argv token as a case-insensitive RR-type mnemonic
+            // resolved via ldns_get_rr_type_by_name (A, AAAA, MX, TXT, ANY,
+            // ...). A `-t TYPE` placed AFTER a positional type overrides it
+            // (mirrors `dig example.com A -t AAAA` which queries AAAA — dig
+            // also prints an "extra type option" warning that adig suppresses,
+            // since it is gated on dig's multi-query feature which adig does
+            // not implement). A `-t TYPE` placed BEFORE a positional `type`
+            // instead yields an "unexpected argument" error: adig treats any
+            // token after `name type` as erroneous rather than emulating
+            // dig's behavior of issuing each subsequent `name [type]` as a
+            // separate query.
+            if (i + 1 >= argc) {
+                result.error = "option -t requires a type";
+                return result;
+            }
+            if (opts.reverse) {
+                // A prior -x has already set the query name to the
+                // .in-addr.arpa / .ip6.arpa reverse-lookup domain and the
+                // type to PTR; a -t would override the type to a meaningless
+                // value (e.g. an MX query on a .in-addr.arpa name). Reject
+                // the combination rather than silently discarding either.
+                result.error = "-t cannot be combined with -x";
+                return result;
+            }
+            std::string type_str = argv[++i];
+            std::string type_upper = type_str;
+            for (char &c : type_upper) {
+                c = static_cast<char>(std::toupper(static_cast<unsigned char>(c)));
+            }
+            ldns_rr_type type = ldns_get_rr_type_by_name(type_upper.c_str());
+            if (type == 0) {
+                result.error = fmt::format("unknown RR type: {}", type_str);
+                return result;
+            }
+            opts.rr_type = type;
+            type_set = true;
             continue;
         }
         if (arg.starts_with('@')) {

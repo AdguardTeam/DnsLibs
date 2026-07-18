@@ -439,6 +439,41 @@ TEST(ParseVersion, FlagsRequestVersion) {
     EXPECT_FALSE(parse({"adig", "example.com"}).version_requested);
 }
 
+// --- -h / --help ----------------------------------------------------------
+//
+// `-h` / `--help` mirror `-v` / `--version`: parse_args short-circuits on the
+// flag (remaining args ignored) and asks main() to print usage and exit 0. The
+// flag is checked before `-v` so `-h` wins when both are passed (mirrors `dig`
+// where `-h` is the higher-precedence help short-circuit).
+
+TEST(ParseHelp, FlagsRequestHelp) {
+    EXPECT_TRUE(parse({"adig", "-h"}).help_requested);
+    EXPECT_TRUE(parse({"adig", "--help"}).help_requested);
+    EXPECT_FALSE(parse({"adig", "example.com"}).help_requested);
+}
+
+TEST(ParseHelp, ShortCircuitsRemainingArgs) {
+    // `-h` returns from parse_args immediately, so a positional name / @server
+    // that would otherwise populate opts is never touched (mirrors `dig -h`,
+    // which prints usage regardless of any trailing arguments).
+    ParseResult r = parse({"adig", "-h", "example.com", "@1.1.1.1", "+short"});
+    EXPECT_TRUE(r.help_requested);
+    EXPECT_TRUE(r.error.empty());
+    EXPECT_TRUE(r.opts.name.empty());
+    EXPECT_TRUE(r.opts.server.empty());
+    EXPECT_FALSE(r.opts.short_output);
+}
+
+TEST(ParseHelp, TakesPrecedenceOverVersion) {
+    // `-h` is checked before `-v` in parse_args, so `-h -v` requests help (mirrors
+    // `dig`, where `-h` is the help short-circuit). The symmetric `-v -h` instead
+    // requests version: parse_args returns on the first flag it sees.
+    EXPECT_TRUE(parse({"adig", "-h", "-v"}).help_requested);
+    EXPECT_FALSE(parse({"adig", "-h", "-v"}).version_requested);
+    EXPECT_TRUE(parse({"adig", "-v", "-h"}).version_requested);
+    EXPECT_FALSE(parse({"adig", "-v", "-h"}).help_requested);
+}
+
 // --- +timeout= parsing ----------------------------------------------------
 
 TEST(ParseTimeout, ValidValue) {
@@ -510,6 +545,166 @@ TEST(ParseSubnet, InvalidPrefixOutOfRange) {
 
 TEST(ParseSubnet, InvalidAddress) {
     EXPECT_FALSE(parse({"adig", "example.com", "+subnet=example.com/24"}).error.empty());
+}
+
+// --- -t TYPE (dig/BIND-style short form) -----------------------------------
+//
+// Mirrors `dig -t TYPE name` and c-ares `adig -t type name`: the RR type may
+// be given either as the dig-standard positional `name type` argument or as
+// the `-t TYPE` short option. Both forms are accepted in any position
+// (relative to `name` / `@server` / `+option`), and dig's "last wins"
+// semantics apply when both forms are used.
+
+TEST(ParseTypeShort, SetsTypeAndName) {
+    // `adig -t MX example.com` is the canonical dig-style form: the type
+    // is expressed via -t and the name positionally. This is the exact form
+    // worded in the issue (`adig -t mx serveroid.com @tls://1.1.1.1`), and
+    // was previously rejected with `unexpected argument: serveroid.com`
+    // because `-t` was not a recognized option.
+    ParseResult r = parse({"adig", "-t", "MX", "example.com"});
+    ASSERT_TRUE(r.error.empty()) << r.error;
+    EXPECT_EQ(LDNS_RR_TYPE_MX, r.opts.rr_type);
+    EXPECT_EQ("example.com", r.opts.name);
+}
+
+TEST(ParseTypeShort, CaseInsensitiveMnemonic) {
+    // ldns_get_rr_type_by_name parses the upper-cased form (the positional
+    // parser already upper-cases; -t mirrors that), so `mx`, `Mx` and `MX`
+    // all resolve to LDNS_RR_TYPE_MX (mirrors `dig -t mx`).
+    EXPECT_EQ(LDNS_RR_TYPE_MX, parse({"adig", "-t", "mx", "example.com"}).opts.rr_type);
+    EXPECT_EQ(LDNS_RR_TYPE_MX, parse({"adig", "-t", "Mx", "example.com"}).opts.rr_type);
+    EXPECT_EQ(LDNS_RR_TYPE_MX, parse({"adig", "-t", "MX", "example.com"}).opts.rr_type);
+}
+
+TEST(ParseTypeShort, AcceptedInAnyPosition) {
+    // -t may appear before or after the positional name and the @server —
+    // mirrors `dig`, where the short options and positional arguments can
+    // be freely interleaved.
+    ParseResult r = parse({"adig", "@1.1.1.1", "-t", "MX", "example.com"});
+    ASSERT_TRUE(r.error.empty()) << r.error;
+    EXPECT_EQ(LDNS_RR_TYPE_MX, r.opts.rr_type);
+    EXPECT_EQ("example.com", r.opts.name);
+    EXPECT_EQ("1.1.1.1", r.opts.server);
+
+    ParseResult r2 = parse({"adig", "example.com", "-t", "MX", "@tls://1.1.1.1"});
+    ASSERT_TRUE(r2.error.empty()) << r2.error;
+    EXPECT_EQ(LDNS_RR_TYPE_MX, r2.opts.rr_type);
+    EXPECT_EQ("example.com", r2.opts.name);
+    EXPECT_EQ("tls://1.1.1.1", r2.opts.server);
+}
+
+TEST(ParseTypeShort, UserIssueRegression) {
+    // The exact command from the issue — `adig -t mx serveroid.com @tls://1.1.1.1`
+    // — was rejected by c-ares' `adig` (a name collision: c-ares ships its own
+    // `adig` that lacks the URI scheme form). Our project's `adig` DID accept
+    // the syntax but only after this change: previously `-t` was an unknown
+    // short option and `mx` was mis-parsed as the type with `serveroid.com`
+    // then flagged as an "unexpected argument". With -t supported the user's
+    // command parses cleanly (the actual exchange is not part of this unit
+    // test — it is exercised only via end-to-end runs).
+    ParseResult r = parse({"adig", "-t", "mx", "serveroid.com", "@tls://1.1.1.1"});
+    ASSERT_TRUE(r.error.empty()) << r.error;
+    EXPECT_EQ(LDNS_RR_TYPE_MX, r.opts.rr_type);
+    EXPECT_EQ("serveroid.com", r.opts.name);
+    EXPECT_EQ("tls://1.1.1.1", r.opts.server);
+}
+
+TEST(ParseTypeShort, MissingArgIsError) {
+    // A bare `-t` (no following token) yields an actionable error instead
+    // of consuming the next positional as the type (the parser consumes one
+    // argv token strictly after -t, mirroring `dig -t`).
+    ParseResult r = parse({"adig", "-t"});
+    EXPECT_FALSE(r.error.empty());
+    EXPECT_NE(std::string::npos, r.error.find("-t"));
+    EXPECT_NE(std::string::npos, r.error.find("requires a type"));
+}
+
+TEST(ParseTypeShort, UnknownTypeRejected) {
+    // ldns_get_rr_type_by_name returns 0 for unknown mnemonics; adig
+    // reports a clear "unknown RR type" error (mirrors the positional-type
+    // error path).
+    ParseResult r = parse({"adig", "-t", "BOGUS", "example.com"});
+    EXPECT_FALSE(r.error.empty());
+    EXPECT_NE(std::string::npos, r.error.find("unknown RR type"));
+    EXPECT_NE(std::string::npos, r.error.find("BOGUS"));
+}
+
+TEST(ParseTypeShort, EmptyValueRejected) {
+    // `-t ""` is rejected like any other unknown-type mnemonic; ldns parses
+    // an empty string as type 0, so adig reports an "unknown RR type" error.
+    EXPECT_FALSE(parse({"adig", "-t", "", "example.com"}).error.empty());
+}
+
+TEST(ParseTypeShort, NumericTypeRejected) {
+    // ldns_get_rr_type_by_name only resolves textual mnemonics (not numeric
+    // codes), so `-t 15` is rejected with the same "unknown RR type" error
+    // that the positional form already reports for `adig example.com 15`.
+    EXPECT_FALSE(parse({"adig", "-t", "15", "example.com"}).error.empty());
+}
+
+TEST(ParseTypeShort, LaterMinusTOverridesEarlierMinusT) {
+    // `adig -t MX -t AAAA example.com`: the later -t overrides the earlier
+    // one (last wins, mirroring `dig -t MX -t AAAA`).
+    ParseResult r = parse({"adig", "-t", "MX", "-t", "AAAA", "example.com"});
+    ASSERT_TRUE(r.error.empty()) << r.error;
+    EXPECT_EQ(LDNS_RR_TYPE_AAAA, r.opts.rr_type);
+    EXPECT_EQ("example.com", r.opts.name);
+}
+
+TEST(ParseTypeShort, MinusTOverridesPositionalType) {
+    // `adig example.com A -t AAAA`: -t wins over the positional type
+    // (mirrors `dig example.com A -t AAAA` which warns "extra type option"
+    // and queries AAAA — adig accepts without a warning since the dig
+    // warning is suppressed in the absence of multiple-query support).
+    ParseResult r = parse({"adig", "example.com", "A", "-t", "AAAA"});
+    ASSERT_TRUE(r.error.empty()) << r.error;
+    EXPECT_EQ(LDNS_RR_TYPE_AAAA, r.opts.rr_type);
+    EXPECT_EQ("example.com", r.opts.name);
+}
+
+TEST(ParseTypeShort, PositionalTypeAfterMinusTIsError) {
+    // `adig -t MX example.com A`: with -t already locking the type, the
+    // positional `A` is an unexpected argument — adig does not implement
+    // `dig`'s multi-query feature (where `example.com A` would be a separate
+    // additional lookup), so the second positional is rejected rather than
+    // silently dropped. The error names the offending token so the user
+    // sees what to delete.
+    ParseResult r = parse({"adig", "-t", "MX", "example.com", "A"});
+    EXPECT_FALSE(r.error.empty());
+    EXPECT_NE(std::string::npos, r.error.find("unexpected argument"));
+    EXPECT_NE(std::string::npos, r.error.find('A'));
+}
+
+TEST(ParseTypeShort, RejectsMinusTAfterMinusX) {
+    // `-x` fixes the type to PTR and the name to the reverse-lookup domain,
+    // so a later `-t` is contradictory — rejected rather than silently
+    // override the PTR (mirrors c-ares adig: only one of -t / -x is
+    // accepted).
+    ParseResult r = parse({"adig", "-x", "8.8.8.8", "-t", "MX"});
+    EXPECT_FALSE(r.error.empty());
+    EXPECT_NE(std::string::npos, r.error.find("-t"));
+    EXPECT_NE(std::string::npos, r.error.find("-x"));
+}
+
+TEST(ParseTypeShort, RejectsMinusXAfterMinusT) {
+    // Symmetric: -t already fixed the type, so a later -x is rejected via
+    // the -x handler's mutual-exclusion check. The error mentions both -x
+    // and -t so the user can see the conflict at a glance.
+    ParseResult r = parse({"adig", "-t", "MX", "-x", "8.8.8.8"});
+    EXPECT_FALSE(r.error.empty());
+    EXPECT_NE(std::string::npos, r.error.find("-x"));
+    EXPECT_NE(std::string::npos, r.error.find("-t"));
+}
+
+TEST(ParseTypeShort, DoesNotConflictWithServerOrOptions) {
+    // -t composes freely with @server and +options (the typical dig form
+    // `dig -t MX example.com @1.1.1.1 +short`).
+    ParseResult r = parse({"adig", "-t", "MX", "@1.1.1.1", "example.com", "+short"});
+    ASSERT_TRUE(r.error.empty()) << r.error;
+    EXPECT_EQ(LDNS_RR_TYPE_MX, r.opts.rr_type);
+    EXPECT_EQ("example.com", r.opts.name);
+    EXPECT_EQ("1.1.1.1", r.opts.server);
+    EXPECT_TRUE(r.opts.short_output);
 }
 
 // --- -x reverse-lookup flow -----------------------------------------------

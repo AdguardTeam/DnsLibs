@@ -60,9 +60,12 @@ struct TraceOutcome {
 
 int print_usage(const char *prog) {
     fmt::print(stderr,
-            "Usage: {} [@server] name [type] [options]\n"
+            "Usage: {} [@server] [-t type] [-x addr] name [type] [options]\n"
             "\n"
             "Send a DNS query to a server and print the response.\n"
+            "\n"
+            "The RR type may be given either positionally (`name type`) or via\n"
+            "-t TYPE; both forms are dig-compatible.\n"
             "\n"
             "Options:\n"
             "  +short            terse output (RDATA only)\n"
@@ -92,7 +95,10 @@ int print_usage(const char *prog) {
             "  +aaflag +defname +showsearch  accepted (dig-compat no-ops)\n"
             "  -4                use IPv4 only (suppress IPv6)\n"
             "  -p PORT           override the plain-DNS port (default 53)\n"
+            "  -t TYPE           RR type mnemonic (A/AAAA/MX/TXT/ANY/...; dig short form,\n"
+            "                    equivalent to the positional `name type` argument)\n"
             "  -x addr           reverse lookup (PTR for IPv4/IPv6 address)\n"
+            "  -h, --help        print this help and exit\n"
             "  -v, --version     print version and exit\n"
             "\n"
             "Display flags (dig-compatible, each supports +no prefix):\n"
