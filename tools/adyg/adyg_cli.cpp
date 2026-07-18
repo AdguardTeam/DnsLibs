@@ -87,8 +87,11 @@ constexpr KeywordDef KEYWORDS[] = {
         {"all", KeywordKind::META_ALL},
 };
 
-// Returns the KeywordDef for a canonical name, or nullptr if `canonical` is not
-// a display flag (callers only use this for display dispatch).
+// Applies a display flag by canonical name: sets the corresponding field in `df`
+// to `value` and returns true when `canonical` is a recognized display flag
+// (cmd/comments/question/answer/authority/additional/stats/multiline/ttlid/
+// class/onesoa/ttlunits), false otherwise (callers use the return value for
+// display dispatch).
 bool apply_display_flag(DisplayFlags &df, std::string_view canonical, bool value) {
     if (canonical == "cmd") {
         df.cmd = value;

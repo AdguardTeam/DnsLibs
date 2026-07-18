@@ -121,6 +121,13 @@ inline ldns_pkt_ptr make_answer_pkt(std::vector<std::string> rrs) {
 // given raw EDNS option bytes as edns_data — so the OPT PSEUDOSECTION decoder
 // can be exercised without a live server.
 inline void attach_edns(ldns_pkt *pkt, uint16_t udp_size, const std::vector<uint8_t> &opt_tlv) {
+    if (pkt == nullptr) {
+        // Guard against a null packet (e.g. if make_answer_pkt() returned
+        // nullptr under memory pressure) so the helper fails gracefully like
+        // make_glue_pkt()/make_answer_pkt() rather than dereferencing it
+        // inside ldns_pkt_set_edns_udp_size.
+        return;
+    }
     ldns_pkt_set_edns_udp_size(pkt, udp_size);
     ldns_pkt_set_edns_version(pkt, 0);
     if (!opt_tlv.empty()) {
