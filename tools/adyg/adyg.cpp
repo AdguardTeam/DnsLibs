@@ -22,7 +22,6 @@
 #include "dns/common/dns_defs.h"
 #include "dns/common/event_loop.h"
 #include "dns/common/version.h"
-#include "dns/net/application_verifier.h"
 #include "dns/net/default_verifier.h"
 #include "dns/net/socket.h"
 #include "dns/upstream/upstream.h"
@@ -111,20 +110,25 @@ int print_usage(const char *prog) {
             "  +onesoa           print only the first SOA of the response\n"
             "\n"
             "Server may be a plain IP, tcp://IP, tls://host, https://host/path, "
-            "quic://host, sdns://... or system://\n"
+            "h3://host/path, quic://host, sdns://... or system://\n"
             "Defaults: server=system DNS (system://, fallback 1.1.1.1), type=A\n",
             prog);
     return 0;
 }
 
 std::unique_ptr<CertificateVerifier> make_verifier() {
-#ifndef _WIN32
+    // DefaultVerifier performs full X.509 chain validation against the system
+    // CA store (X509_STORE_set_default_paths, which works with BoringSSL on
+    // every platform — Linux, macOS, Windows, Android — as confirmed by
+    // upstream_utils.cpp / dns_forwarder.cpp / proxy_bootstrapper.h, all of
+    // which fall back to DefaultVerifier unconditionally with no _WIN32 guard).
+    // The earlier #ifdef _WIN32 branch used ApplicationVerifier with a no-op
+    // callback that returned std::nullopt (accept-all), which made encrypted
+    // upstreams (tls://, https://, quic://) insecure on Windows by silently
+    // trusting any certificate whose hostname matched. DefaultVerifier now fails
+    // closed when trust roots aren't available, matching the rest of the
+    // codebase.
     return std::make_unique<DefaultVerifier>();
-#else
-    return std::make_unique<ag::dns::ApplicationVerifier>([](const ag::dns::CertificateVerificationEvent &) {
-        return std::nullopt;
-    });
-#endif
 }
 
 // Returns the bootstrap servers to use. When the user did not pass any
