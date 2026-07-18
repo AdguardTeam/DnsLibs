@@ -19,6 +19,6 @@ if(MSVC)
 endif()
 
 add_subdirectory(proxy)
-add_subdirectory(tools/adig)
+add_subdirectory(tools/adyg)
 
 enable_testing()

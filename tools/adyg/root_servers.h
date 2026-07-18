@@ -5,14 +5,14 @@
 // [1]: https://www.internic.net/domain/named.root
 //
 // IPv4 glue addresses of the 13 DNS root name servers
-// (a.root-servers.net through m.root-servers.net). `adig +trace` uses these
+// (a.root-servers.net through m.root-servers.net). `adyg +trace` uses these
 // to seed iterative resolution from the root. The root-zone addresses change
 // very rarely; regenerate after a root-zone renumbering.
 #pragma once
 
 #include <string_view>
 
-namespace ag::adig::root_hints {
+namespace ag::adyg::root_hints {
 
 struct RootServer {
     char id;             // single-letter identifier ('a'..'m')
@@ -35,4 +35,4 @@ inline constexpr RootServer ROOT_SERVERS[] = {
         {'m', "202.12.27.33"},
 };
 
-} // namespace ag::adig::root_hints
+} // namespace ag::adyg::root_hints

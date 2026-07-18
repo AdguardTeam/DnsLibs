@@ -1,12 +1,12 @@
-// adig_cli — packet construction & dig-compatible formatting for the pure adig
+// adyg_cli — packet construction & dig-compatible formatting for the pure adyg
 // CLI logic.
 //
 // This translation unit holds the query builder (make_query), the EDNS-layer
 // flag applier (apply_dns_flags), the ADDITIONAL-glue extractor (+trace) and the
-// dig-style packet/trace/server/when formatters. See adig_cli.h for the public
-// interface and adig_cli.cpp for argument parsing.
+// dig-style packet/trace/server/when formatters. See adyg_cli.h for the public
+// interface and adyg_cli.cpp for argument parsing.
 
-#include "adig_cli.h"
+#include "adyg_cli.h"
 
 #include <algorithm>
 #include <array>
@@ -21,10 +21,10 @@
 #include <fmt/format.h>
 #include <ldns/ldns.h>
 
-#include "adig_cli_internal.h"
+#include "adyg_cli_internal.h"
 #include "dns/common/net_consts.h"
 
-namespace ag::adig {
+namespace ag::adyg {
 namespace {
 
 // RAII wrapper for ldns malloc'd strings (char pointers returned by
@@ -285,7 +285,7 @@ std::string format_rr_dig(const ldns_rr *rr, const DisplayFlags &flags, bool is_
     // against `dig example.com DS`). The leading three fields (key tag,
     // algorithm, digest type) are decimal integers, so case does not apply.
     // Other hex-bearing types (SSHFP/TLSA/...) also use uppercase in dig, but
-    // adig's RRSIG base64 wrapping and the multiline `(` placement for DS /
+    // adyg's RRSIG base64 wrapping and the multiline `(` placement for DS /
     // RRSIG are not yet byte-exact (see the note below on the generic wrapping
     // path), so this targeted fix addresses only the reported DS discrepancy.
     if (rr_type == LDNS_RR_TYPE_DS || rr_type == LDNS_RR_TYPE_CDS) {
@@ -318,7 +318,7 @@ std::string format_rr_dig(const ldns_rr *rr, const DisplayFlags &flags, bool is_
 
     if (!flags.multiline || !is_wrappable() || rdfs.empty()) {
         // Single line: RDATA fields joined with single spaces (matches dig's
-        // per-type formatters for the common types adig handles).
+        // per-type formatters for the common types adyg handles).
         for (size_t i = 0; i < rdfs.size(); ++i) {
             if (i != 0) {
                 out += ' ';
@@ -421,7 +421,7 @@ void apply_dns_flags(ldns_pkt *pkt, const CliOptions &opts) {
     // `+dnssec` / `+subnet` / `+nsid` / `+padding` / `+ednsflags` still attach
     // an OPT RR under `+noedns` (they all live inside the OPT record). Each
     // `+ednsopt` entry is likewise an EDNS option, so it forces an OPT RR here
-    // for consistency (dig only attaches it when EDNS is otherwise enabled; adig
+    // for consistency (dig only attaches it when EDNS is otherwise enabled; adyg
     // attaches it unconditionally, matching its +nsid/+subnet/+padding policy).
     const bool want_edns = opts.edns || opts.dnssec || opts.subnet.enabled || opts.nsid || opts.padding != 0
             || opts.edns_flags.has_value() || !opts.ednsopts.empty();
@@ -635,7 +635,7 @@ std::string format_dig_server(std::string_view server, std::optional<uint16_t> p
     if (server.empty()) {
         return {};
     }
-    // adig's `+tcp` rewrite (apply_force_tcp) prefixes a bare host with `tcp://`
+    // adyg's `+tcp` rewrite (apply_force_tcp) prefixes a bare host with `tcp://`
     // — and rewrites `udp://`/`dns://` to `tcp://` — *before* this function is
     // called, so a SERVER string built afterwards still carries the plain-DNS
     // scheme. Strip it (case-insensitively, mirroring the upstream library's
@@ -927,4 +927,4 @@ std::string format_trace_packet_dig(const ldns_pkt *pkt, const DisplayFlags &fla
     return out;
 }
 
-} // namespace ag::adig
+} // namespace ag::adyg

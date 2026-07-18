@@ -1,9 +1,9 @@
-// adig_cli — internal helpers shared across the adig_cli*.cpp translation units.
+// adyg_cli — internal helpers shared across the adyg_cli*.cpp translation units.
 //
-// This header is NOT part of the public interface (adig_cli.h); it exposes the
+// This header is NOT part of the public interface (adyg_cli.h); it exposes the
 // few file-local helpers that more than one split translation unit needs, so the
 // pure CLI layer could be split by concern without duplicating IP-parsing logic.
-// Include only from adig_cli*.cpp.
+// Include only from adyg_cli*.cpp.
 
 #pragma once
 
@@ -12,7 +12,7 @@
 #include <optional>
 #include <string_view>
 
-namespace ag::adig {
+namespace ag::adyg {
 
 // A parsed IPv4/IPv6 literal: its EDNS family code (1 / 2), the raw address
 // bytes (zero-padded to 16), and the number of significant bytes (4 / 16).
@@ -40,4 +40,4 @@ std::optional<ParsedAddr> parse_ip_addr(std::string_view addr);
 // hostnames carrying an explicit port (e.g. `localhost:53`).
 std::optional<uint16_t> split_plain_host_port(std::string_view &host);
 
-} // namespace ag::adig
+} // namespace ag::adyg

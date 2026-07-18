@@ -1,24 +1,24 @@
-// Unit tests for adig's pure CLI layer — argument parsing & CLI transforms.
+// Unit tests for adyg's pure CLI layer — argument parsing & CLI transforms.
 //
 // This is one of the split test translation units registered in
-// tools/adig/CMakeLists.txt. It covers parse_args(), match_plus_keyword(), the
+// tools/adyg/CMakeLists.txt. It covers parse_args(), match_plus_keyword(), the
 // display-flag helpers and the small pure decision/rewrite helpers
 // (cmd_banner_enabled / apply_force_tcp / apply_port /
 // apply_trace_display_defaults). The EDNS/IP tests live in
-// test_adig_cli_edns.cpp and the packet/format tests in
-// test_adig_cli_packet.cpp. Shared helpers are in
-// test_adig_cli_helpers.h.
+// test_adyg_cli_edns.cpp and the packet/format tests in
+// test_adyg_cli_packet.cpp. Shared helpers are in
+// test_adyg_cli_helpers.h.
 
 #include <gtest/gtest.h>
 
 #include <string>
 #include <vector>
 
-#include "adig_cli.h"
+#include "adyg_cli.h"
 #include "root_servers.h"
-#include "test_adig_cli_helpers.h"
+#include "test_adyg_cli_helpers.h"
 
-namespace ag::adig::test {
+namespace ag::adyg::test {
 
 // --- match_plus_keyword --------------------------------------------------
 
@@ -124,7 +124,7 @@ TEST(ParseDisplayFlags, NoAllClearsEverySectionFlag) {
     // `dig +noall` toggles only the section-level flags; the field-level flags
     // (ttlid / cls) keep their defaults (on), and multiline stays off (its
     // default). Verified against `dig 9.20`.
-    ParseResult r = parse({"adig", "example.com", "+noall"});
+    ParseResult r = parse({"adyg", "example.com", "+noall"});
     ASSERT_TRUE(r.error.empty()) << r.error;
     const DisplayFlags &d = r.opts.display;
     EXPECT_FALSE(d.cmd);
@@ -144,7 +144,7 @@ TEST(ParseDisplayFlags, AllSetsEverySectionFlag) {
     // +noall then +all: every section flag ends up true. The field-level flags
     // (ttlid / cls) keep their (default-on) values; multiline keeps its
     // (default-off) value — `dig +all` does not enable multiline.
-    ParseResult r = parse({"adig", "example.com", "+noall", "+all"});
+    ParseResult r = parse({"adyg", "example.com", "+noall", "+all"});
     ASSERT_TRUE(r.error.empty()) << r.error;
     const DisplayFlags &d = r.opts.display;
     EXPECT_TRUE(d.cmd);
@@ -160,7 +160,7 @@ TEST(ParseDisplayFlags, AllSetsEverySectionFlag) {
 }
 
 TEST(ParseDisplayFlags, NoAnswerOnlyClearsAnswer) {
-    ParseResult r = parse({"adig", "example.com", "+noanswer"});
+    ParseResult r = parse({"adyg", "example.com", "+noanswer"});
     ASSERT_TRUE(r.error.empty()) << r.error;
     const DisplayFlags &d = r.opts.display;
     EXPECT_FALSE(d.answer);
@@ -172,14 +172,14 @@ TEST(ParseDisplayFlags, NoAnswerOnlyClearsAnswer) {
 }
 
 TEST(ParseDisplayFlags, NoCmdOnlyClearsCmd) {
-    ParseResult r = parse({"adig", "example.com", "+nocmd"});
+    ParseResult r = parse({"adyg", "example.com", "+nocmd"});
     ASSERT_TRUE(r.error.empty()) << r.error;
     EXPECT_FALSE(r.opts.display.cmd);
     EXPECT_TRUE(r.opts.display.answer);
 }
 
 TEST(ParseDisplayFlags, NoAllThenSelectiveReenable) {
-    ParseResult r = parse({"adig", "example.com", "+noall", "+answer", "+authority"});
+    ParseResult r = parse({"adyg", "example.com", "+noall", "+answer", "+authority"});
     ASSERT_TRUE(r.error.empty()) << r.error;
     const DisplayFlags &d = r.opts.display;
     EXPECT_TRUE(d.answer);
@@ -196,7 +196,7 @@ TEST(ParseDisplayFlags, NoAllAnswerKeepsTtlAndClass) {
     // `+noall +answer` still shows TTL and class (matching `dig`). Previously
     // `+noall` cleared `ttlid`/`cls` and `+answer` did not restore them, so the
     // printed RRs lost both fields.
-    ParseResult r = parse({"adig", "example.com", "+noall", "+answer"});
+    ParseResult r = parse({"adyg", "example.com", "+noall", "+answer"});
     ASSERT_TRUE(r.error.empty()) << r.error;
     const DisplayFlags &d = r.opts.display;
     EXPECT_TRUE(d.answer);
@@ -207,20 +207,20 @@ TEST(ParseDisplayFlags, NoAllAnswerKeepsTtlAndClass) {
 TEST(ParseDisplayFlags, NoAllPreservesExplicitlyClearedFieldFlags) {
     // `dig +nottlid +noall +answer` omits the TTL: `+nottlid` clears it and
     // `+noall` does not restore it. Symmetric check for `+noclass`.
-    EXPECT_FALSE(parse({"adig", "example.com", "+nottlid", "+noall", "+answer"}).opts.display.ttlid);
-    EXPECT_TRUE(parse({"adig", "example.com", "+nottlid", "+noall", "+answer"}).opts.display.cls);
-    EXPECT_TRUE(parse({"adig", "example.com", "+noclass", "+noall", "+answer"}).opts.display.ttlid);
-    EXPECT_FALSE(parse({"adig", "example.com", "+noclass", "+noall", "+answer"}).opts.display.cls);
+    EXPECT_FALSE(parse({"adyg", "example.com", "+nottlid", "+noall", "+answer"}).opts.display.ttlid);
+    EXPECT_TRUE(parse({"adyg", "example.com", "+nottlid", "+noall", "+answer"}).opts.display.cls);
+    EXPECT_TRUE(parse({"adyg", "example.com", "+noclass", "+noall", "+answer"}).opts.display.ttlid);
+    EXPECT_FALSE(parse({"adyg", "example.com", "+noclass", "+noall", "+answer"}).opts.display.cls);
 }
 
 TEST(ParseDisplayFlags, AllDoesNotTouchFieldFlags) {
     // `dig +nottlid +all` still omits the TTL, and `dig +noclass +all` still
     // omits the class: `+all` does not toggle the field-level flags.
-    EXPECT_FALSE(parse({"adig", "example.com", "+nottlid", "+all"}).opts.display.ttlid);
-    EXPECT_FALSE(parse({"adig", "example.com", "+noclass", "+all"}).opts.display.cls);
+    EXPECT_FALSE(parse({"adyg", "example.com", "+nottlid", "+all"}).opts.display.ttlid);
+    EXPECT_FALSE(parse({"adyg", "example.com", "+noclass", "+all"}).opts.display.cls);
     // `+all` does not enable multiline either (mirrors `dig +all`).
-    EXPECT_FALSE(parse({"adig", "example.com", "+all"}).opts.display.multiline);
-    EXPECT_TRUE(parse({"adig", "example.com", "+multiline", "+all"}).opts.display.multiline);
+    EXPECT_FALSE(parse({"adyg", "example.com", "+all"}).opts.display.multiline);
+    EXPECT_TRUE(parse({"adyg", "example.com", "+multiline", "+all"}).opts.display.multiline);
 }
 
 // --- cmd_banner_enabled (+short suppresses the +cmd banner) ----------------
@@ -260,19 +260,19 @@ TEST(ParseArgs, AbbreviatedShortResolves) {
     // `+sh` is ambiguous now (short vs showsearch), so it must error — verified
     // against `dig 9.20` (`dig +sh` -> "Invalid option: +sh"). `+shor` is the
     // shortest unambiguous prefix for `+short`.
-    ParseResult r = parse({"adig", "example.com", "+sh"});
+    ParseResult r = parse({"adyg", "example.com", "+sh"});
     EXPECT_FALSE(r.error.empty());
-    EXPECT_TRUE(parse({"adig", "example.com", "+shor"}).opts.short_output);
+    EXPECT_TRUE(parse({"adyg", "example.com", "+shor"}).opts.short_output);
 }
 
 TEST(ParseArgs, NoTcpClearsForceTcp) {
-    ParseResult r = parse({"adig", "example.com", "+notcp"});
+    ParseResult r = parse({"adyg", "example.com", "+notcp"});
     ASSERT_TRUE(r.error.empty()) << r.error;
     EXPECT_FALSE(r.opts.force_tcp);
 }
 
 TEST(ParseArgs, ValueOptionDoesNotSupportNoForm) {
-    ParseResult r = parse({"adig", "example.com", "+notimeout=5"});
+    ParseResult r = parse({"adyg", "example.com", "+notimeout=5"});
     EXPECT_FALSE(r.error.empty());
     EXPECT_NE(std::string::npos, r.error.find("no"));
 }
@@ -280,36 +280,36 @@ TEST(ParseArgs, ValueOptionDoesNotSupportNoForm) {
 // --- +recurse / +norecurse ------------------------------------------------
 
 TEST(ParseRecurse, DefaultsOn) {
-    ParseResult r = parse({"adig", "example.com"});
+    ParseResult r = parse({"adyg", "example.com"});
     ASSERT_TRUE(r.error.empty()) << r.error;
     EXPECT_TRUE(r.opts.recurse);
 }
 
 TEST(ParseRecurse, NoRecurseClears) {
-    ParseResult r = parse({"adig", "example.com", "+norecurse"});
+    ParseResult r = parse({"adyg", "example.com", "+norecurse"});
     ASSERT_TRUE(r.error.empty()) << r.error;
     EXPECT_FALSE(r.opts.recurse);
 }
 
 TEST(ParseRecurse, AbbreviationResolves) {
-    EXPECT_TRUE(parse({"adig", "example.com", "+rec"}).opts.recurse);
-    EXPECT_FALSE(parse({"adig", "example.com", "+norec"}).opts.recurse);
+    EXPECT_TRUE(parse({"adyg", "example.com", "+rec"}).opts.recurse);
+    EXPECT_FALSE(parse({"adyg", "example.com", "+norec"}).opts.recurse);
 }
 
 TEST(ParseRecurse, RdAliasAndNoForm) {
-    EXPECT_TRUE(parse({"adig", "example.com", "+rd"}).opts.recurse);
-    EXPECT_TRUE(parse({"adig", "example.com", "+rdflag"}).opts.recurse);
-    EXPECT_FALSE(parse({"adig", "example.com", "+nord"}).opts.recurse);
-    EXPECT_FALSE(parse({"adig", "example.com", "+nordflag"}).opts.recurse);
+    EXPECT_TRUE(parse({"adyg", "example.com", "+rd"}).opts.recurse);
+    EXPECT_TRUE(parse({"adyg", "example.com", "+rdflag"}).opts.recurse);
+    EXPECT_FALSE(parse({"adyg", "example.com", "+nord"}).opts.recurse);
+    EXPECT_FALSE(parse({"adyg", "example.com", "+nordflag"}).opts.recurse);
 }
 
 // --- +dnssec / +do parsing ------------------------------------------------
 
 TEST(ParseDnssec, KeywordAliasAndNoForm) {
-    EXPECT_TRUE(parse({"adig", "example.com", "+dnssec"}).opts.dnssec);
-    EXPECT_TRUE(parse({"adig", "example.com", "+do"}).opts.dnssec);
-    EXPECT_FALSE(parse({"adig", "example.com", "+nodnssec"}).opts.dnssec);
-    EXPECT_FALSE(parse({"adig", "example.com", "+nodo"}).opts.dnssec);
+    EXPECT_TRUE(parse({"adyg", "example.com", "+dnssec"}).opts.dnssec);
+    EXPECT_TRUE(parse({"adyg", "example.com", "+do"}).opts.dnssec);
+    EXPECT_FALSE(parse({"adyg", "example.com", "+nodnssec"}).opts.dnssec);
+    EXPECT_FALSE(parse({"adyg", "example.com", "+nodo"}).opts.dnssec);
 }
 
 // --- +edns / +noedns (EDNS OPT RR) ---------------------------------------
@@ -324,14 +324,14 @@ TEST(ParseDnssec, KeywordAliasAndNoForm) {
 TEST(ParseEdns, DefaultsOn) {
     // No +edns on the command line: EDNS is on by default with version 0,
     // matching `dig` (a plain `dig example.com` sends an OPT RR).
-    ParseResult r = parse({"adig", "example.com"});
+    ParseResult r = parse({"adyg", "example.com"});
     ASSERT_TRUE(r.error.empty()) << r.error;
     EXPECT_TRUE(r.opts.edns);
     EXPECT_EQ(0u, r.opts.edns_version);
 }
 
 TEST(ParseEdns, BareEdnsEnablesVersion0) {
-    ParseResult r = parse({"adig", "example.com", "+edns"});
+    ParseResult r = parse({"adyg", "example.com", "+edns"});
     ASSERT_TRUE(r.error.empty()) << r.error;
     EXPECT_TRUE(r.opts.edns);
     EXPECT_EQ(0u, r.opts.edns_version);
@@ -339,56 +339,56 @@ TEST(ParseEdns, BareEdnsEnablesVersion0) {
 
 TEST(ParseEdns, EdnsVersion0Explicit) {
     // `+edns=0` is equivalent to `+edns` (the dig default).
-    ParseResult r = parse({"adig", "example.com", "+edns=0"});
+    ParseResult r = parse({"adyg", "example.com", "+edns=0"});
     ASSERT_TRUE(r.error.empty()) << r.error;
     EXPECT_TRUE(r.opts.edns);
     EXPECT_EQ(0u, r.opts.edns_version);
 }
 
 TEST(ParseEdns, EdnsVersionN) {
-    EXPECT_EQ(1u, parse({"adig", "example.com", "+edns=1"}).opts.edns_version);
-    EXPECT_EQ(255u, parse({"adig", "example.com", "+edns=255"}).opts.edns_version);
+    EXPECT_EQ(1u, parse({"adyg", "example.com", "+edns=1"}).opts.edns_version);
+    EXPECT_EQ(255u, parse({"adyg", "example.com", "+edns=255"}).opts.edns_version);
 }
 
 TEST(ParseEdns, EdnsVersionEnablesEdns) {
     // `+edns=N` must also turn EDNS on (not just set the version).
-    EXPECT_TRUE(parse({"adig", "example.com", "+edns=1"}).opts.edns);
+    EXPECT_TRUE(parse({"adyg", "example.com", "+edns=1"}).opts.edns);
 }
 
 TEST(ParseEdns, NoEdnsDisables) {
-    ParseResult r = parse({"adig", "example.com", "+noedns"});
+    ParseResult r = parse({"adyg", "example.com", "+noedns"});
     ASSERT_TRUE(r.error.empty()) << r.error;
     EXPECT_FALSE(r.opts.edns);
 }
 
 TEST(ParseEdns, NoEdnsRejectsValue) {
     // `+noedns` does not take a value (it is a pure toggle).
-    EXPECT_FALSE(parse({"adig", "example.com", "+noedns=0"}).error.empty());
-    EXPECT_FALSE(parse({"adig", "example.com", "+noedns=1"}).error.empty());
+    EXPECT_FALSE(parse({"adyg", "example.com", "+noedns=0"}).error.empty());
+    EXPECT_FALSE(parse({"adyg", "example.com", "+noedns=1"}).error.empty());
 }
 
 TEST(ParseEdns, InvalidVersionRejected) {
-    EXPECT_FALSE(parse({"adig", "example.com", "+edns=256"}).error.empty());
-    EXPECT_FALSE(parse({"adig", "example.com", "+edns=abc"}).error.empty());
-    EXPECT_FALSE(parse({"adig", "example.com", "+edns=-1"}).error.empty());
-    EXPECT_FALSE(parse({"adig", "example.com", "+edns=0x0"}).error.empty());
+    EXPECT_FALSE(parse({"adyg", "example.com", "+edns=256"}).error.empty());
+    EXPECT_FALSE(parse({"adyg", "example.com", "+edns=abc"}).error.empty());
+    EXPECT_FALSE(parse({"adyg", "example.com", "+edns=-1"}).error.empty());
+    EXPECT_FALSE(parse({"adyg", "example.com", "+edns=0x0"}).error.empty());
 }
 
 TEST(ParseEdns, AbbreviationResolves) {
     // `+ed` / `+noed` are ambiguous now (edns vs ednsflags) — verified against
     // `dig 9.20` (`dig +ed` / `dig +noed` both error). Use the full forms.
-    EXPECT_TRUE(parse({"adig", "example.com", "+edns"}).opts.edns);
-    EXPECT_FALSE(parse({"adig", "example.com", "+noedns"}).opts.edns);
-    EXPECT_FALSE(parse({"adig", "example.com", "+ed"}).error.empty());
-    EXPECT_FALSE(parse({"adig", "example.com", "+noed"}).error.empty());
+    EXPECT_TRUE(parse({"adyg", "example.com", "+edns"}).opts.edns);
+    EXPECT_FALSE(parse({"adyg", "example.com", "+noedns"}).opts.edns);
+    EXPECT_FALSE(parse({"adyg", "example.com", "+ed"}).error.empty());
+    EXPECT_FALSE(parse({"adyg", "example.com", "+noed"}).error.empty());
 }
 
 TEST(ParseEdns, OrderSensitiveToggle) {
     // Mirrors dig's order-sensitive semantics: the last +edns/+noedns wins.
-    EXPECT_FALSE(parse({"adig", "example.com", "+edns", "+noedns"}).opts.edns);
-    EXPECT_TRUE(parse({"adig", "example.com", "+noedns", "+edns"}).opts.edns);
+    EXPECT_FALSE(parse({"adyg", "example.com", "+edns", "+noedns"}).opts.edns);
+    EXPECT_TRUE(parse({"adyg", "example.com", "+noedns", "+edns"}).opts.edns);
     // A later +edns=N after +noedns re-enables EDNS with version N.
-    ParseResult r = parse({"adig", "example.com", "+noedns", "+edns=1"});
+    ParseResult r = parse({"adyg", "example.com", "+noedns", "+edns=1"});
     ASSERT_TRUE(r.error.empty()) << r.error;
     EXPECT_TRUE(r.opts.edns);
     EXPECT_EQ(1u, r.opts.edns_version);
@@ -397,28 +397,28 @@ TEST(ParseEdns, OrderSensitiveToggle) {
 // --- +cdflag / +cd (Checking Disabled) -----------------------------------
 
 TEST(ParseCdflag, KeywordAliasAndNoForm) {
-    EXPECT_TRUE(parse({"adig", "example.com", "+cdflag"}).opts.cd);
-    EXPECT_TRUE(parse({"adig", "example.com", "+cd"}).opts.cd);
-    EXPECT_FALSE(parse({"adig", "example.com", "+nocdflag"}).opts.cd);
-    EXPECT_FALSE(parse({"adig", "example.com", "+nocd"}).opts.cd);
+    EXPECT_TRUE(parse({"adyg", "example.com", "+cdflag"}).opts.cd);
+    EXPECT_TRUE(parse({"adyg", "example.com", "+cd"}).opts.cd);
+    EXPECT_FALSE(parse({"adyg", "example.com", "+nocdflag"}).opts.cd);
+    EXPECT_FALSE(parse({"adyg", "example.com", "+nocd"}).opts.cd);
 }
 
 // --- -4 / -6 (IPv4-only) --------------------------------------------------
 
 TEST(ParseIpv4Only, DefaultsFalse) {
-    ParseResult r = parse({"adig", "example.com"});
+    ParseResult r = parse({"adyg", "example.com"});
     ASSERT_TRUE(r.error.empty()) << r.error;
     EXPECT_FALSE(r.opts.ipv4_only);
 }
 
 TEST(ParseIpv4Only, FlagSets) {
-    ParseResult r = parse({"adig", "example.com", "-4"});
+    ParseResult r = parse({"adyg", "example.com", "-4"});
     ASSERT_TRUE(r.error.empty()) << r.error;
     EXPECT_TRUE(r.opts.ipv4_only);
 }
 
 TEST(ParseIpv4Only, SixIsUnsupported) {
-    ParseResult r = parse({"adig", "example.com", "-6"});
+    ParseResult r = parse({"adyg", "example.com", "-6"});
     EXPECT_FALSE(r.error.empty());
     EXPECT_NE(std::string::npos, r.error.find("-6"));
 }
@@ -426,17 +426,17 @@ TEST(ParseIpv4Only, SixIsUnsupported) {
 // --- +qr (print query) / prefix ambiguity with question -------------------
 
 TEST(ParseQr, FlagToggles) {
-    EXPECT_FALSE(parse({"adig", "example.com"}).opts.print_query);
-    EXPECT_TRUE(parse({"adig", "example.com", "+qr"}).opts.print_query);
-    EXPECT_FALSE(parse({"adig", "example.com", "+noqr"}).opts.print_query);
+    EXPECT_FALSE(parse({"adyg", "example.com"}).opts.print_query);
+    EXPECT_TRUE(parse({"adyg", "example.com", "+qr"}).opts.print_query);
+    EXPECT_FALSE(parse({"adyg", "example.com", "+noqr"}).opts.print_query);
 }
 
 // --- -v / --version -------------------------------------------------------
 
 TEST(ParseVersion, FlagsRequestVersion) {
-    EXPECT_TRUE(parse({"adig", "-v"}).version_requested);
-    EXPECT_TRUE(parse({"adig", "--version"}).version_requested);
-    EXPECT_FALSE(parse({"adig", "example.com"}).version_requested);
+    EXPECT_TRUE(parse({"adyg", "-v"}).version_requested);
+    EXPECT_TRUE(parse({"adyg", "--version"}).version_requested);
+    EXPECT_FALSE(parse({"adyg", "example.com"}).version_requested);
 }
 
 // --- -h / --help ----------------------------------------------------------
@@ -447,16 +447,16 @@ TEST(ParseVersion, FlagsRequestVersion) {
 // where `-h` is the higher-precedence help short-circuit).
 
 TEST(ParseHelp, FlagsRequestHelp) {
-    EXPECT_TRUE(parse({"adig", "-h"}).help_requested);
-    EXPECT_TRUE(parse({"adig", "--help"}).help_requested);
-    EXPECT_FALSE(parse({"adig", "example.com"}).help_requested);
+    EXPECT_TRUE(parse({"adyg", "-h"}).help_requested);
+    EXPECT_TRUE(parse({"adyg", "--help"}).help_requested);
+    EXPECT_FALSE(parse({"adyg", "example.com"}).help_requested);
 }
 
 TEST(ParseHelp, ShortCircuitsRemainingArgs) {
     // `-h` returns from parse_args immediately, so a positional name / @server
     // that would otherwise populate opts is never touched (mirrors `dig -h`,
     // which prints usage regardless of any trailing arguments).
-    ParseResult r = parse({"adig", "-h", "example.com", "@1.1.1.1", "+short"});
+    ParseResult r = parse({"adyg", "-h", "example.com", "@1.1.1.1", "+short"});
     EXPECT_TRUE(r.help_requested);
     EXPECT_TRUE(r.error.empty());
     EXPECT_TRUE(r.opts.name.empty());
@@ -468,16 +468,16 @@ TEST(ParseHelp, TakesPrecedenceOverVersion) {
     // `-h` is checked before `-v` in parse_args, so `-h -v` requests help (mirrors
     // `dig`, where `-h` is the help short-circuit). The symmetric `-v -h` instead
     // requests version: parse_args returns on the first flag it sees.
-    EXPECT_TRUE(parse({"adig", "-h", "-v"}).help_requested);
-    EXPECT_FALSE(parse({"adig", "-h", "-v"}).version_requested);
-    EXPECT_TRUE(parse({"adig", "-v", "-h"}).version_requested);
-    EXPECT_FALSE(parse({"adig", "-v", "-h"}).help_requested);
+    EXPECT_TRUE(parse({"adyg", "-h", "-v"}).help_requested);
+    EXPECT_FALSE(parse({"adyg", "-h", "-v"}).version_requested);
+    EXPECT_TRUE(parse({"adyg", "-v", "-h"}).version_requested);
+    EXPECT_FALSE(parse({"adyg", "-v", "-h"}).help_requested);
 }
 
 // --- +timeout= parsing ----------------------------------------------------
 
 TEST(ParseTimeout, ValidValue) {
-    ParseResult r = parse({"adig", "example.com", "+timeout=9"});
+    ParseResult r = parse({"adyg", "example.com", "+timeout=9"});
     ASSERT_TRUE(r.error.empty()) << r.error;
     EXPECT_EQ(Millis{9000}, r.opts.timeout);
 }
@@ -485,7 +485,7 @@ TEST(ParseTimeout, ValidValue) {
 TEST(ParseTimeout, BareOptionRequiresValue) {
     // A bare `+timeout` (no `=N`) must yield an actionable error instead of
     // the generic "invalid timeout: " fallback.
-    ParseResult r = parse({"adig", "example.com", "+timeout"});
+    ParseResult r = parse({"adyg", "example.com", "+timeout"});
     EXPECT_FALSE(r.error.empty());
     EXPECT_NE(std::string::npos, r.error.find("requires a value"));
     EXPECT_NE(std::string::npos, r.error.find("+timeout=N"));
@@ -493,20 +493,20 @@ TEST(ParseTimeout, BareOptionRequiresValue) {
 
 TEST(ParseTimeout, EmptyValueRequiresValue) {
     // `+timeout=` (empty value) must yield the same actionable error.
-    ParseResult r = parse({"adig", "example.com", "+timeout="});
+    ParseResult r = parse({"adyg", "example.com", "+timeout="});
     EXPECT_FALSE(r.error.empty());
     EXPECT_NE(std::string::npos, r.error.find("requires a value"));
     EXPECT_NE(std::string::npos, r.error.find("+timeout=N"));
 }
 
 TEST(ParseTimeout, NonNumericValueRejected) {
-    ParseResult r = parse({"adig", "example.com", "+timeout=abc"});
+    ParseResult r = parse({"adyg", "example.com", "+timeout=abc"});
     EXPECT_FALSE(r.error.empty());
     EXPECT_NE(std::string::npos, r.error.find("invalid timeout"));
 }
 
 TEST(ParseTimeout, ZeroValueRejected) {
-    ParseResult r = parse({"adig", "example.com", "+timeout=0"});
+    ParseResult r = parse({"adyg", "example.com", "+timeout=0"});
     EXPECT_FALSE(r.error.empty());
     EXPECT_NE(std::string::npos, r.error.find("invalid timeout"));
 }
@@ -514,7 +514,7 @@ TEST(ParseTimeout, ZeroValueRejected) {
 // --- +subnet= parsing -----------------------------------------------------
 
 TEST(ParseSubnet, AddrPrefix) {
-    ParseResult r = parse({"adig", "example.com", "+subnet=1.2.3.4/24"});
+    ParseResult r = parse({"adyg", "example.com", "+subnet=1.2.3.4/24"});
     ASSERT_TRUE(r.error.empty()) << r.error;
     EXPECT_TRUE(r.opts.subnet.enabled);
     EXPECT_EQ("1.2.3.4", r.opts.subnet.addr);
@@ -522,46 +522,46 @@ TEST(ParseSubnet, AddrPrefix) {
 }
 
 TEST(ParseSubnet, Ipv6Prefix) {
-    ParseResult r = parse({"adig", "example.com", "+subnet=::1/64"});
+    ParseResult r = parse({"adyg", "example.com", "+subnet=::1/64"});
     ASSERT_TRUE(r.error.empty()) << r.error;
     EXPECT_EQ("::1", r.opts.subnet.addr);
     EXPECT_EQ(64u, r.opts.subnet.src_prefix);
 }
 
 TEST(ParseSubnet, ZeroPrefixSentinel) {
-    ParseResult r = parse({"adig", "example.com", "+subnet=0.0.0.0/0"});
+    ParseResult r = parse({"adyg", "example.com", "+subnet=0.0.0.0/0"});
     ASSERT_TRUE(r.error.empty()) << r.error;
     EXPECT_EQ(0u, r.opts.subnet.src_prefix);
 }
 
 TEST(ParseSubnet, BareIpDefaultsToFullPrefix) {
-    EXPECT_EQ(32u, parse({"adig", "example.com", "+subnet=1.2.3.4"}).opts.subnet.src_prefix);
-    EXPECT_EQ(128u, parse({"adig", "example.com", "+subnet=::1"}).opts.subnet.src_prefix);
+    EXPECT_EQ(32u, parse({"adyg", "example.com", "+subnet=1.2.3.4"}).opts.subnet.src_prefix);
+    EXPECT_EQ(128u, parse({"adyg", "example.com", "+subnet=::1"}).opts.subnet.src_prefix);
 }
 
 TEST(ParseSubnet, InvalidPrefixOutOfRange) {
-    EXPECT_FALSE(parse({"adig", "example.com", "+subnet=1.2.3.4/40"}).error.empty());
+    EXPECT_FALSE(parse({"adyg", "example.com", "+subnet=1.2.3.4/40"}).error.empty());
 }
 
 TEST(ParseSubnet, InvalidAddress) {
-    EXPECT_FALSE(parse({"adig", "example.com", "+subnet=example.com/24"}).error.empty());
+    EXPECT_FALSE(parse({"adyg", "example.com", "+subnet=example.com/24"}).error.empty());
 }
 
 // --- -t TYPE (dig/BIND-style short form) -----------------------------------
 //
-// Mirrors `dig -t TYPE name` and c-ares `adig -t type name`: the RR type may
-// be given either as the dig-standard positional `name type` argument or as
-// the `-t TYPE` short option. Both forms are accepted in any position
-// (relative to `name` / `@server` / `+option`), and dig's "last wins"
-// semantics apply when both forms are used.
+// Mirrors `dig -t TYPE name`: the RR type may be given either as the
+// dig-standard positional `name type` argument or as the `-t TYPE` short
+// option. Both forms are accepted in any position (relative to `name` /
+// `@server` / `+option`), and dig's "last wins" semantics apply when both
+// forms are used.
 
 TEST(ParseTypeShort, SetsTypeAndName) {
-    // `adig -t MX example.com` is the canonical dig-style form: the type
+    // `adyg -t MX example.com` is the canonical dig-style form: the type
     // is expressed via -t and the name positionally. This is the exact form
-    // worded in the issue (`adig -t mx serveroid.com @tls://1.1.1.1`), and
+    // worded in the issue (`adyg -t mx serveroid.com @tls://1.1.1.1`), and
     // was previously rejected with `unexpected argument: serveroid.com`
     // because `-t` was not a recognized option.
-    ParseResult r = parse({"adig", "-t", "MX", "example.com"});
+    ParseResult r = parse({"adyg", "-t", "MX", "example.com"});
     ASSERT_TRUE(r.error.empty()) << r.error;
     EXPECT_EQ(LDNS_RR_TYPE_MX, r.opts.rr_type);
     EXPECT_EQ("example.com", r.opts.name);
@@ -571,22 +571,22 @@ TEST(ParseTypeShort, CaseInsensitiveMnemonic) {
     // ldns_get_rr_type_by_name parses the upper-cased form (the positional
     // parser already upper-cases; -t mirrors that), so `mx`, `Mx` and `MX`
     // all resolve to LDNS_RR_TYPE_MX (mirrors `dig -t mx`).
-    EXPECT_EQ(LDNS_RR_TYPE_MX, parse({"adig", "-t", "mx", "example.com"}).opts.rr_type);
-    EXPECT_EQ(LDNS_RR_TYPE_MX, parse({"adig", "-t", "Mx", "example.com"}).opts.rr_type);
-    EXPECT_EQ(LDNS_RR_TYPE_MX, parse({"adig", "-t", "MX", "example.com"}).opts.rr_type);
+    EXPECT_EQ(LDNS_RR_TYPE_MX, parse({"adyg", "-t", "mx", "example.com"}).opts.rr_type);
+    EXPECT_EQ(LDNS_RR_TYPE_MX, parse({"adyg", "-t", "Mx", "example.com"}).opts.rr_type);
+    EXPECT_EQ(LDNS_RR_TYPE_MX, parse({"adyg", "-t", "MX", "example.com"}).opts.rr_type);
 }
 
 TEST(ParseTypeShort, AcceptedInAnyPosition) {
     // -t may appear before or after the positional name and the @server —
     // mirrors `dig`, where the short options and positional arguments can
     // be freely interleaved.
-    ParseResult r = parse({"adig", "@1.1.1.1", "-t", "MX", "example.com"});
+    ParseResult r = parse({"adyg", "@1.1.1.1", "-t", "MX", "example.com"});
     ASSERT_TRUE(r.error.empty()) << r.error;
     EXPECT_EQ(LDNS_RR_TYPE_MX, r.opts.rr_type);
     EXPECT_EQ("example.com", r.opts.name);
     EXPECT_EQ("1.1.1.1", r.opts.server);
 
-    ParseResult r2 = parse({"adig", "example.com", "-t", "MX", "@tls://1.1.1.1"});
+    ParseResult r2 = parse({"adyg", "example.com", "-t", "MX", "@tls://1.1.1.1"});
     ASSERT_TRUE(r2.error.empty()) << r2.error;
     EXPECT_EQ(LDNS_RR_TYPE_MX, r2.opts.rr_type);
     EXPECT_EQ("example.com", r2.opts.name);
@@ -594,15 +594,12 @@ TEST(ParseTypeShort, AcceptedInAnyPosition) {
 }
 
 TEST(ParseTypeShort, UserIssueRegression) {
-    // The exact command from the issue — `adig -t mx serveroid.com @tls://1.1.1.1`
-    // — was rejected by c-ares' `adig` (a name collision: c-ares ships its own
-    // `adig` that lacks the URI scheme form). Our project's `adig` DID accept
-    // the syntax but only after this change: previously `-t` was an unknown
-    // short option and `mx` was mis-parsed as the type with `serveroid.com`
-    // then flagged as an "unexpected argument". With -t supported the user's
-    // command parses cleanly (the actual exchange is not part of this unit
-    // test — it is exercised only via end-to-end runs).
-    ParseResult r = parse({"adig", "-t", "mx", "serveroid.com", "@tls://1.1.1.1"});
+    // Regression for a user-reported `-t TYPE` command: previously `-t` was an
+    // unknown short option, so `mx` was mis-parsed as the type and the trailing
+    // `serveroid.com` was flagged as an "unexpected argument". With -t
+    // supported the command parses cleanly (the actual exchange is not part of
+    // this unit test — it is exercised only via end-to-end runs).
+    ParseResult r = parse({"adyg", "-t", "mx", "serveroid.com", "@tls://1.1.1.1"});
     ASSERT_TRUE(r.error.empty()) << r.error;
     EXPECT_EQ(LDNS_RR_TYPE_MX, r.opts.rr_type);
     EXPECT_EQ("serveroid.com", r.opts.name);
@@ -613,17 +610,17 @@ TEST(ParseTypeShort, MissingArgIsError) {
     // A bare `-t` (no following token) yields an actionable error instead
     // of consuming the next positional as the type (the parser consumes one
     // argv token strictly after -t, mirroring `dig -t`).
-    ParseResult r = parse({"adig", "-t"});
+    ParseResult r = parse({"adyg", "-t"});
     EXPECT_FALSE(r.error.empty());
     EXPECT_NE(std::string::npos, r.error.find("-t"));
     EXPECT_NE(std::string::npos, r.error.find("requires a type"));
 }
 
 TEST(ParseTypeShort, UnknownTypeRejected) {
-    // ldns_get_rr_type_by_name returns 0 for unknown mnemonics; adig
+    // ldns_get_rr_type_by_name returns 0 for unknown mnemonics; adyg
     // reports a clear "unknown RR type" error (mirrors the positional-type
     // error path).
-    ParseResult r = parse({"adig", "-t", "BOGUS", "example.com"});
+    ParseResult r = parse({"adyg", "-t", "BOGUS", "example.com"});
     EXPECT_FALSE(r.error.empty());
     EXPECT_NE(std::string::npos, r.error.find("unknown RR type"));
     EXPECT_NE(std::string::npos, r.error.find("BOGUS"));
@@ -631,45 +628,45 @@ TEST(ParseTypeShort, UnknownTypeRejected) {
 
 TEST(ParseTypeShort, EmptyValueRejected) {
     // `-t ""` is rejected like any other unknown-type mnemonic; ldns parses
-    // an empty string as type 0, so adig reports an "unknown RR type" error.
-    EXPECT_FALSE(parse({"adig", "-t", "", "example.com"}).error.empty());
+    // an empty string as type 0, so adyg reports an "unknown RR type" error.
+    EXPECT_FALSE(parse({"adyg", "-t", "", "example.com"}).error.empty());
 }
 
 TEST(ParseTypeShort, NumericTypeRejected) {
     // ldns_get_rr_type_by_name only resolves textual mnemonics (not numeric
     // codes), so `-t 15` is rejected with the same "unknown RR type" error
-    // that the positional form already reports for `adig example.com 15`.
-    EXPECT_FALSE(parse({"adig", "-t", "15", "example.com"}).error.empty());
+    // that the positional form already reports for `adyg example.com 15`.
+    EXPECT_FALSE(parse({"adyg", "-t", "15", "example.com"}).error.empty());
 }
 
 TEST(ParseTypeShort, LaterMinusTOverridesEarlierMinusT) {
-    // `adig -t MX -t AAAA example.com`: the later -t overrides the earlier
+    // `adyg -t MX -t AAAA example.com`: the later -t overrides the earlier
     // one (last wins, mirroring `dig -t MX -t AAAA`).
-    ParseResult r = parse({"adig", "-t", "MX", "-t", "AAAA", "example.com"});
+    ParseResult r = parse({"adyg", "-t", "MX", "-t", "AAAA", "example.com"});
     ASSERT_TRUE(r.error.empty()) << r.error;
     EXPECT_EQ(LDNS_RR_TYPE_AAAA, r.opts.rr_type);
     EXPECT_EQ("example.com", r.opts.name);
 }
 
 TEST(ParseTypeShort, MinusTOverridesPositionalType) {
-    // `adig example.com A -t AAAA`: -t wins over the positional type
+    // `adyg example.com A -t AAAA`: -t wins over the positional type
     // (mirrors `dig example.com A -t AAAA` which warns "extra type option"
-    // and queries AAAA — adig accepts without a warning since the dig
+    // and queries AAAA — adyg accepts without a warning since the dig
     // warning is suppressed in the absence of multiple-query support).
-    ParseResult r = parse({"adig", "example.com", "A", "-t", "AAAA"});
+    ParseResult r = parse({"adyg", "example.com", "A", "-t", "AAAA"});
     ASSERT_TRUE(r.error.empty()) << r.error;
     EXPECT_EQ(LDNS_RR_TYPE_AAAA, r.opts.rr_type);
     EXPECT_EQ("example.com", r.opts.name);
 }
 
 TEST(ParseTypeShort, PositionalTypeAfterMinusTIsError) {
-    // `adig -t MX example.com A`: with -t already locking the type, the
-    // positional `A` is an unexpected argument — adig does not implement
+    // `adyg -t MX example.com A`: with -t already locking the type, the
+    // positional `A` is an unexpected argument — adyg does not implement
     // `dig`'s multi-query feature (where `example.com A` would be a separate
     // additional lookup), so the second positional is rejected rather than
     // silently dropped. The error names the offending token so the user
     // sees what to delete.
-    ParseResult r = parse({"adig", "-t", "MX", "example.com", "A"});
+    ParseResult r = parse({"adyg", "-t", "MX", "example.com", "A"});
     EXPECT_FALSE(r.error.empty());
     EXPECT_NE(std::string::npos, r.error.find("unexpected argument"));
     EXPECT_NE(std::string::npos, r.error.find('A'));
@@ -678,9 +675,8 @@ TEST(ParseTypeShort, PositionalTypeAfterMinusTIsError) {
 TEST(ParseTypeShort, RejectsMinusTAfterMinusX) {
     // `-x` fixes the type to PTR and the name to the reverse-lookup domain,
     // so a later `-t` is contradictory — rejected rather than silently
-    // override the PTR (mirrors c-ares adig: only one of -t / -x is
-    // accepted).
-    ParseResult r = parse({"adig", "-x", "8.8.8.8", "-t", "MX"});
+    // overriding the PTR (only one of -t / -x is accepted).
+    ParseResult r = parse({"adyg", "-x", "8.8.8.8", "-t", "MX"});
     EXPECT_FALSE(r.error.empty());
     EXPECT_NE(std::string::npos, r.error.find("-t"));
     EXPECT_NE(std::string::npos, r.error.find("-x"));
@@ -690,7 +686,7 @@ TEST(ParseTypeShort, RejectsMinusXAfterMinusT) {
     // Symmetric: -t already fixed the type, so a later -x is rejected via
     // the -x handler's mutual-exclusion check. The error mentions both -x
     // and -t so the user can see the conflict at a glance.
-    ParseResult r = parse({"adig", "-t", "MX", "-x", "8.8.8.8"});
+    ParseResult r = parse({"adyg", "-t", "MX", "-x", "8.8.8.8"});
     EXPECT_FALSE(r.error.empty());
     EXPECT_NE(std::string::npos, r.error.find("-x"));
     EXPECT_NE(std::string::npos, r.error.find("-t"));
@@ -699,7 +695,7 @@ TEST(ParseTypeShort, RejectsMinusXAfterMinusT) {
 TEST(ParseTypeShort, DoesNotConflictWithServerOrOptions) {
     // -t composes freely with @server and +options (the typical dig form
     // `dig -t MX example.com @1.1.1.1 +short`).
-    ParseResult r = parse({"adig", "-t", "MX", "@1.1.1.1", "example.com", "+short"});
+    ParseResult r = parse({"adyg", "-t", "MX", "@1.1.1.1", "example.com", "+short"});
     ASSERT_TRUE(r.error.empty()) << r.error;
     EXPECT_EQ(LDNS_RR_TYPE_MX, r.opts.rr_type);
     EXPECT_EQ("example.com", r.opts.name);
@@ -710,7 +706,7 @@ TEST(ParseTypeShort, DoesNotConflictWithServerOrOptions) {
 // --- -x reverse-lookup flow -----------------------------------------------
 
 TEST(ParseReverse, SetsNameTypeAndFlag) {
-    ParseResult r = parse({"adig", "-x", "8.8.8.8"});
+    ParseResult r = parse({"adyg", "-x", "8.8.8.8"});
     ASSERT_TRUE(r.error.empty()) << r.error;
     EXPECT_EQ("8.8.8.8.in-addr.arpa.", r.opts.name);
     EXPECT_EQ(LDNS_RR_TYPE_PTR, r.opts.rr_type);
@@ -718,31 +714,31 @@ TEST(ParseReverse, SetsNameTypeAndFlag) {
 }
 
 TEST(ParseReverse, MissingAddressIsError) {
-    ParseResult r = parse({"adig", "-x"});
+    ParseResult r = parse({"adyg", "-x"});
     EXPECT_FALSE(r.error.empty());
     EXPECT_NE(std::string::npos, r.error.find("address"));
 }
 
 TEST(ParseReverse, InvalidAddressIsError) {
-    ParseResult r = parse({"adig", "-x", "999.1.1.1"});
+    ParseResult r = parse({"adyg", "-x", "999.1.1.1"});
     EXPECT_FALSE(r.error.empty());
     EXPECT_NE(std::string::npos, r.error.find("invalid address"));
 }
 
 TEST(ParseReverse, RejectsPositionalAfterX) {
-    ParseResult r = parse({"adig", "-x", "8.8.8.8", "example.com"});
+    ParseResult r = parse({"adyg", "-x", "8.8.8.8", "example.com"});
     EXPECT_FALSE(r.error.empty());
     EXPECT_NE(std::string::npos, r.error.find("-x"));
 }
 
 TEST(ParseReverse, RejectsXAfterPositionalName) {
-    ParseResult r = parse({"adig", "example.com", "-x", "8.8.8.8"});
+    ParseResult r = parse({"adyg", "example.com", "-x", "8.8.8.8"});
     EXPECT_FALSE(r.error.empty());
     EXPECT_NE(std::string::npos, r.error.find("-x"));
 }
 
 TEST(ParseReverse, RejectsXWithType) {
-    ParseResult r = parse({"adig", "example.com", "A", "-x", "8.8.8.8"});
+    ParseResult r = parse({"adyg", "example.com", "A", "-x", "8.8.8.8"});
     EXPECT_FALSE(r.error.empty());
     EXPECT_NE(std::string::npos, r.error.find("-x"));
 }
@@ -752,18 +748,18 @@ TEST(ParseReverse, RejectsXWithType) {
 // The pure parser must NOT invent a default @server: an empty opts.server
 // signals main() to resolve the system default DNS via the upstream module's
 // SystemUpstream (system://) on Apple/Android, else DEFAULT_SERVER. The
-// actual default resolution lives in adig.cpp (alongside run_query/run_trace,
+// actual default resolution lives in adyg.cpp (alongside run_query/run_trace,
 // which are not unit-tested here); here we only guard the contract that the
 // default is applied outside the pure layer.
 
 TEST(ParseArgs, NoServerLeavesServerEmpty) {
-    ParseResult r = parse({"adig", "example.com"});
+    ParseResult r = parse({"adyg", "example.com"});
     ASSERT_TRUE(r.error.empty()) << r.error;
     EXPECT_TRUE(r.opts.server.empty());
 }
 
 TEST(ParseArgs, ExplicitServerIsKept) {
-    ParseResult r = parse({"adig", "@8.8.8.8", "example.com"});
+    ParseResult r = parse({"adyg", "@8.8.8.8", "example.com"});
     ASSERT_TRUE(r.error.empty()) << r.error;
     EXPECT_EQ("8.8.8.8", r.opts.server);
 }
@@ -835,7 +831,7 @@ TEST(ApplyTraceDisplayDefaults, DoesNotTouchMultilineTtlidClass) {
 // by the trace defaults.
 
 TEST(ParseTrace, SetsTraceAndAppliesDefaults) {
-    ParseResult r = parse({"adig", "example.com", "+trace"});
+    ParseResult r = parse({"adyg", "example.com", "+trace"});
     ASSERT_TRUE(r.error.empty()) << r.error;
     EXPECT_TRUE(r.opts.trace);
     EXPECT_FALSE(r.opts.display.comments);
@@ -850,7 +846,7 @@ TEST(ParseTrace, SetsDnssecDoBit) {
     // so each iterative authoritative query requests DNSSEC records. Verified
     // against `dig +trace +qr` (the OPT PSEUDOSECTION in the first hop shows
     // `flags: do; udp: ...`). A later `+nodnssec` still wins (mirrors dig).
-    ParseResult r = parse({"adig", "example.com", "+trace"});
+    ParseResult r = parse({"adyg", "example.com", "+trace"});
     ASSERT_TRUE(r.error.empty()) << r.error;
     EXPECT_TRUE(r.opts.trace);
     EXPECT_TRUE(r.opts.dnssec);
@@ -859,7 +855,7 @@ TEST(ParseTrace, SetsDnssecDoBit) {
 TEST(ParseTrace, LaterNoDnssecOverridesTraceDnssec) {
     // `+trace +nodnssec`: like `+trace +stats`, the explicit later flag wins
     // over the trace-applied default (dig's order-sensitive precedence).
-    ParseResult r = parse({"adig", "example.com", "+trace", "+nodnssec"});
+    ParseResult r = parse({"adyg", "example.com", "+trace", "+nodnssec"});
     ASSERT_TRUE(r.error.empty()) << r.error;
     EXPECT_TRUE(r.opts.trace);
     EXPECT_FALSE(r.opts.dnssec);
@@ -869,26 +865,26 @@ TEST(ParseTrace, EarlierDnssecOverriddenByTrace) {
     // `+dnssec +trace`: +dnssec sets dnssec=true first, then +trace sets it
     // again to true (idempotent); the trailing trace-applied default is
     // `dnssec=true`, so the final value is true either way.
-    ParseResult r = parse({"adig", "example.com", "+dnssec", "+trace"});
+    ParseResult r = parse({"adyg", "example.com", "+dnssec", "+trace"});
     ASSERT_TRUE(r.error.empty()) << r.error;
     EXPECT_TRUE(r.opts.trace);
     EXPECT_TRUE(r.opts.dnssec);
 }
 
 TEST(ParseTrace, DefaultsOffAndAbbreviationMatch) {
-    ParseResult r = parse({"adig", "example.com"});
+    ParseResult r = parse({"adyg", "example.com"});
     ASSERT_TRUE(r.error.empty()) << r.error;
     EXPECT_FALSE(r.opts.trace);
     // +tra / +tr should resolve to the unambiguous +trace prefix.
-    EXPECT_TRUE(parse({"adig", "example.com", "+tra"}).opts.trace);
-    EXPECT_TRUE(parse({"adig", "example.com", "+tr"}).opts.trace);
-    EXPECT_FALSE(parse({"adig", "example.com", "+notrace"}).opts.trace);
+    EXPECT_TRUE(parse({"adyg", "example.com", "+tra"}).opts.trace);
+    EXPECT_TRUE(parse({"adyg", "example.com", "+tr"}).opts.trace);
+    EXPECT_FALSE(parse({"adyg", "example.com", "+notrace"}).opts.trace);
 }
 
 TEST(ParseTrace, LaterCommentsOverridesTraceDefault) {
     // `+trace +comments`: trace defaults apply (comments=false), then the
     // later `+comments` re-enables comments.
-    ParseResult r = parse({"adig", "example.com", "+trace", "+comments"});
+    ParseResult r = parse({"adyg", "example.com", "+trace", "+comments"});
     ASSERT_TRUE(r.error.empty()) << r.error;
     EXPECT_TRUE(r.opts.trace);
     EXPECT_TRUE(r.opts.display.comments);
@@ -900,7 +896,7 @@ TEST(ParseTrace, LaterCommentsOverridesTraceDefault) {
 TEST(ParseTrace, EarlierCommentsOverriddenByTrace) {
     // `+comments +trace`: comments=true is set first, then +trace's defaults
     // overwrite it back to false (mirrors dig's order-sensitive semantics).
-    ParseResult r = parse({"adig", "example.com", "+comments", "+trace"});
+    ParseResult r = parse({"adyg", "example.com", "+comments", "+trace"});
     ASSERT_TRUE(r.error.empty()) << r.error;
     EXPECT_TRUE(r.opts.trace);
     EXPECT_FALSE(r.opts.display.comments);
@@ -908,7 +904,7 @@ TEST(ParseTrace, EarlierCommentsOverriddenByTrace) {
 }
 
 TEST(ParseTrace, LaterStatsOverridesTraceDefault) {
-    ParseResult r = parse({"adig", "example.com", "+trace", "+stats"});
+    ParseResult r = parse({"adyg", "example.com", "+trace", "+stats"});
     ASSERT_TRUE(r.error.empty()) << r.error;
     EXPECT_TRUE(r.opts.trace);
     EXPECT_TRUE(r.opts.display.stats);
@@ -918,7 +914,7 @@ TEST(ParseTrace, LaterStatsOverridesTraceDefault) {
 }
 
 TEST(ParseTrace, AllAfterTraceReenablesEverything) {
-    ParseResult r = parse({"adig", "example.com", "+trace", "+all"});
+    ParseResult r = parse({"adyg", "example.com", "+trace", "+all"});
     ASSERT_TRUE(r.error.empty()) << r.error;
     EXPECT_TRUE(r.opts.trace);
     // +all wins: every section-level flag ends up on (re-enabling the trace
@@ -1025,13 +1021,13 @@ TEST(ApplyForceTcp, EmptyStringGetsSchemePrefix) {
 
 TEST(ParseNoopFlags, AcceptedWithoutError) {
     for (const char *opt : {"+aaflag", "+defname", "+showsearch", "+noaaflag", "+nodefname", "+noshowsearch"}) {
-        ParseResult r = parse({"adig", "example.com", opt});
+        ParseResult r = parse({"adyg", "example.com", opt});
         EXPECT_TRUE(r.error.empty()) << opt << ": " << r.error;
     }
 }
 
 TEST(ParseNoopFlags, CombinationsDoNotError) {
-    ParseResult r = parse({"adig", "example.com", "+showsearch", "+defname", "+aaflag", "+short"});
+    ParseResult r = parse({"adyg", "example.com", "+showsearch", "+defname", "+aaflag", "+short"});
     ASSERT_TRUE(r.error.empty()) << r.error;
     EXPECT_TRUE(r.opts.short_output);
 }
@@ -1039,37 +1035,37 @@ TEST(ParseNoopFlags, CombinationsDoNotError) {
 // --- +adflag / +cookie (functional CLI flags) ------------------------------
 
 TEST(ParseAdFlag, DefaultsOn) {
-    ParseResult r = parse({"adig", "example.com"});
+    ParseResult r = parse({"adyg", "example.com"});
     ASSERT_TRUE(r.error.empty());
     EXPECT_TRUE(r.opts.ad); // AD flag on by default (mirrors dig)
 }
 
 TEST(ParseAdFlag, NoAdFlagClears) {
-    ParseResult r = parse({"adig", "example.com", "+noadflag"});
+    ParseResult r = parse({"adyg", "example.com", "+noadflag"});
     ASSERT_TRUE(r.error.empty());
     EXPECT_FALSE(r.opts.ad);
 }
 
 TEST(ParseAdFlag, AdFlagSets) {
-    ParseResult r = parse({"adig", "example.com", "+adflag"});
+    ParseResult r = parse({"adyg", "example.com", "+adflag"});
     ASSERT_TRUE(r.error.empty());
     EXPECT_TRUE(r.opts.ad); // +adflag is a no-op (default on) but accepted
 }
 
 TEST(ParseCookie, DefaultsOn) {
-    ParseResult r = parse({"adig", "example.com"});
+    ParseResult r = parse({"adyg", "example.com"});
     ASSERT_TRUE(r.error.empty());
     EXPECT_TRUE(r.opts.cookie); // COOKIE on by default (mirrors dig)
 }
 
 TEST(ParseCookie, NoCookieClears) {
-    ParseResult r = parse({"adig", "example.com", "+nocookie"});
+    ParseResult r = parse({"adyg", "example.com", "+nocookie"});
     ASSERT_TRUE(r.error.empty());
     EXPECT_FALSE(r.opts.cookie);
 }
 
 TEST(ParseCookie, CookieSets) {
-    ParseResult r = parse({"adig", "example.com", "+cookie"});
+    ParseResult r = parse({"adyg", "example.com", "+cookie"});
     ASSERT_TRUE(r.error.empty());
     EXPECT_TRUE(r.opts.cookie); // +cookie is a no-op (default on) but accepted
 }
@@ -1077,13 +1073,13 @@ TEST(ParseCookie, CookieSets) {
 // --- +header-only (query construction flag) --------------------------------
 
 TEST(ParseHeaderOnly, SetsFlag) {
-    ParseResult r = parse({"adig", "example.com", "+header-only"});
+    ParseResult r = parse({"adyg", "example.com", "+header-only"});
     ASSERT_TRUE(r.error.empty());
     EXPECT_TRUE(r.opts.header_only);
 }
 
 TEST(ParseHeaderOnly, DefaultsOff) {
-    ParseResult r = parse({"adig", "example.com"});
+    ParseResult r = parse({"adyg", "example.com"});
     ASSERT_TRUE(r.error.empty());
     EXPECT_FALSE(r.opts.header_only);
 }
@@ -1091,20 +1087,20 @@ TEST(ParseHeaderOnly, DefaultsOff) {
 // --- -p PORT ----------------------------------------------------------------
 
 TEST(ParsePort, ValidValue) {
-    EXPECT_EQ(5353u, parse({"adig", "example.com", "-p", "5353"}).opts.port.value_or(0));
-    EXPECT_EQ(53u, parse({"adig", "example.com", "-p", "53"}).opts.port.value_or(0));
+    EXPECT_EQ(5353u, parse({"adyg", "example.com", "-p", "5353"}).opts.port.value_or(0));
+    EXPECT_EQ(53u, parse({"adyg", "example.com", "-p", "53"}).opts.port.value_or(0));
 }
 
 TEST(ParsePort, MissingArgIsError) {
-    ParseResult r = parse({"adig", "example.com", "-p"});
+    ParseResult r = parse({"adyg", "example.com", "-p"});
     EXPECT_FALSE(r.error.empty());
     EXPECT_NE(std::string::npos, r.error.find("port"));
 }
 
 TEST(ParsePort, InvalidValueRejected) {
-    EXPECT_FALSE(parse({"adig", "example.com", "-p", "0"}).error.empty());
-    EXPECT_FALSE(parse({"adig", "example.com", "-p", "65536"}).error.empty());
-    EXPECT_FALSE(parse({"adig", "example.com", "-p", "abc"}).error.empty());
+    EXPECT_FALSE(parse({"adyg", "example.com", "-p", "0"}).error.empty());
+    EXPECT_FALSE(parse({"adyg", "example.com", "-p", "65536"}).error.empty());
+    EXPECT_FALSE(parse({"adyg", "example.com", "-p", "abc"}).error.empty());
 }
 
 TEST(ApplyPort, AppendsToBareHost) {
@@ -1158,33 +1154,33 @@ TEST(ApplyPort, BareIpv6LiteralLeftAlone) {
 // --- +bufsize / +ednsflags / +opcode (parsing) -----------------------------
 //
 // The apply_dns_flags behavior for these (DO bit, EDNS Z field, opcode applied
-// last) is covered in test_adig_cli_packet.cpp; here only the parse_args
+// last) is covered in test_adyg_cli_packet.cpp; here only the parse_args
 // plumbing is exercised.
 
 TEST(ParseBufsize, ValuePropagates) {
-    EXPECT_EQ(512u, parse({"adig", "example.com", "+bufsize=512"}).opts.edns_bufsize);
-    EXPECT_EQ(1232u, parse({"adig", "example.com", "+bufsize=1232"}).opts.edns_bufsize);
-    EXPECT_EQ(0u, parse({"adig", "example.com"}).opts.edns_bufsize); // unset -> default 4096
+    EXPECT_EQ(512u, parse({"adyg", "example.com", "+bufsize=512"}).opts.edns_bufsize);
+    EXPECT_EQ(1232u, parse({"adyg", "example.com", "+bufsize=1232"}).opts.edns_bufsize);
+    EXPECT_EQ(0u, parse({"adyg", "example.com"}).opts.edns_bufsize); // unset -> default 4096
 }
 
 TEST(ParseBufsize, InvalidRejected) {
-    EXPECT_FALSE(parse({"adig", "example.com", "+bufsize"}).error.empty());
-    EXPECT_FALSE(parse({"adig", "example.com", "+bufsize=0"}).error.empty());
-    EXPECT_FALSE(parse({"adig", "example.com", "+bufsize=70000"}).error.empty());
-    EXPECT_FALSE(parse({"adig", "example.com", "+nobufsize=512"}).error.empty());
+    EXPECT_FALSE(parse({"adyg", "example.com", "+bufsize"}).error.empty());
+    EXPECT_FALSE(parse({"adyg", "example.com", "+bufsize=0"}).error.empty());
+    EXPECT_FALSE(parse({"adyg", "example.com", "+bufsize=70000"}).error.empty());
+    EXPECT_FALSE(parse({"adyg", "example.com", "+nobufsize=512"}).error.empty());
 }
 
 TEST(ParseEdnsFlags, ValueParsed) {
-    EXPECT_EQ(0x80u, parse({"adig", "example.com", "+ednsflags=0x80"}).opts.edns_flags.value_or(0));
-    EXPECT_EQ(0x80u, parse({"adig", "example.com", "+ednsflags=128"}).opts.edns_flags.value_or(0));
-    EXPECT_EQ(0xFFFFu, parse({"adig", "example.com", "+ednsflags=0xffff"}).opts.edns_flags.value_or(0));
-    EXPECT_FALSE(parse({"adig", "example.com", "+noednsflags"}).opts.edns_flags.has_value());
+    EXPECT_EQ(0x80u, parse({"adyg", "example.com", "+ednsflags=0x80"}).opts.edns_flags.value_or(0));
+    EXPECT_EQ(0x80u, parse({"adyg", "example.com", "+ednsflags=128"}).opts.edns_flags.value_or(0));
+    EXPECT_EQ(0xFFFFu, parse({"adyg", "example.com", "+ednsflags=0xffff"}).opts.edns_flags.value_or(0));
+    EXPECT_FALSE(parse({"adyg", "example.com", "+noednsflags"}).opts.edns_flags.has_value());
 }
 
 TEST(ParseEdnsFlags, InvalidRejected) {
-    EXPECT_FALSE(parse({"adig", "example.com", "+ednsflags"}).error.empty());
-    EXPECT_FALSE(parse({"adig", "example.com", "+ednsflags=0xZZ"}).error.empty());
-    EXPECT_FALSE(parse({"adig", "example.com", "+ednsflags=65536"}).error.empty());
+    EXPECT_FALSE(parse({"adyg", "example.com", "+ednsflags"}).error.empty());
+    EXPECT_FALSE(parse({"adyg", "example.com", "+ednsflags=0xZZ"}).error.empty());
+    EXPECT_FALSE(parse({"adyg", "example.com", "+ednsflags=65536"}).error.empty());
 }
 
 TEST(ParseOpcode, NamesAndNumeric) {
@@ -1201,10 +1197,10 @@ TEST(ParseOpcode, NamesAndNumeric) {
 
 TEST(ParseOpcode, ValuePropagates) {
     EXPECT_EQ(LDNS_PACKET_NOTIFY,
-            parse({"adig", "example.com", "+opcode=NOTIFY"}).opts.opcode.value_or(LDNS_PACKET_QUERY));
-    EXPECT_FALSE(parse({"adig", "example.com", "+noopcode"}).opts.opcode.has_value());
-    EXPECT_FALSE(parse({"adig", "example.com", "+opcode=BOGUS"}).error.empty());
-    EXPECT_FALSE(parse({"adig", "example.com", "+opcode"}).error.empty());
+            parse({"adyg", "example.com", "+opcode=NOTIFY"}).opts.opcode.value_or(LDNS_PACKET_QUERY));
+    EXPECT_FALSE(parse({"adyg", "example.com", "+noopcode"}).opts.opcode.has_value());
+    EXPECT_FALSE(parse({"adyg", "example.com", "+opcode=BOGUS"}).error.empty());
+    EXPECT_FALSE(parse({"adyg", "example.com", "+opcode"}).error.empty());
 }
 
 // --- +ednsopt (generic EDNS option, RFC 6891) ------------------------------
@@ -1215,17 +1211,17 @@ TEST(ParseOpcode, ValuePropagates) {
 // odd-length / non-hex rejected). Repeatable; `+noednsopt` clears the list.
 
 TEST(ParseEdnsopt, MnemonicAndNumericCode) {
-    ParseResult r = parse({"adig", "example.com", "+ednsopt=nsid"});
+    ParseResult r = parse({"adyg", "example.com", "+ednsopt=nsid"});
     ASSERT_TRUE(r.error.empty()) << r.error;
     ASSERT_EQ(1u, r.opts.ednsopts.size());
     EXPECT_EQ(3u, r.opts.ednsopts[0].code);
     EXPECT_TRUE(r.opts.ednsopts[0].data.empty());
     // Decimal numeric code is equivalent to its mnemonic.
-    EXPECT_EQ(3u, parse({"adig", "example.com", "+ednsopt=3"}).opts.ednsopts[0].code);
+    EXPECT_EQ(3u, parse({"adyg", "example.com", "+ednsopt=3"}).opts.ednsopts[0].code);
 }
 
 TEST(ParseEdnsopt, HexPayloadDecoded) {
-    ParseResult r = parse({"adig", "example.com", "+ednsopt=3:414243"});
+    ParseResult r = parse({"adyg", "example.com", "+ednsopt=3:414243"});
     ASSERT_TRUE(r.error.empty()) << r.error;
     ASSERT_EQ(1u, r.opts.ednsopts.size());
     EXPECT_EQ(3u, r.opts.ednsopts[0].code);
@@ -1233,7 +1229,7 @@ TEST(ParseEdnsopt, HexPayloadDecoded) {
 }
 
 TEST(ParseEdnsopt, MnemonicCaseInsensitiveWithPayload) {
-    ParseResult r = parse({"adig", "example.com", "+ednsopt=NSID:abcd"});
+    ParseResult r = parse({"adyg", "example.com", "+ednsopt=NSID:abcd"});
     ASSERT_TRUE(r.error.empty()) << r.error;
     ASSERT_EQ(1u, r.opts.ednsopts.size());
     EXPECT_EQ(3u, r.opts.ednsopts[0].code);
@@ -1242,13 +1238,13 @@ TEST(ParseEdnsopt, MnemonicCaseInsensitiveWithPayload) {
 
 TEST(ParseEdnsopt, WhitespaceInPayload) {
     // Mirrors ISC's hex decoder, which skips ASCII whitespace.
-    ParseResult r = parse({"adig", "example.com", "+ednsopt=3:41 42"});
+    ParseResult r = parse({"adyg", "example.com", "+ednsopt=3:41 42"});
     ASSERT_TRUE(r.error.empty()) << r.error;
     EXPECT_EQ((Bytes{0x41, 0x42}), r.opts.ednsopts[0].data);
 }
 
 TEST(ParseEdnsopt, Repeatable) {
-    ParseResult r = parse({"adig", "example.com", "+ednsopt=3", "+ednsopt=12:0000"});
+    ParseResult r = parse({"adyg", "example.com", "+ednsopt=3", "+ednsopt=12:0000"});
     ASSERT_TRUE(r.error.empty()) << r.error;
     ASSERT_EQ(2u, r.opts.ednsopts.size());
     EXPECT_EQ(3u, r.opts.ednsopts[0].code);
@@ -1259,11 +1255,11 @@ TEST(ParseEdnsopt, Repeatable) {
 
 TEST(ParseEdnsopt, NoEdnsoptClearsList) {
     // `+noednsopt` clears the previously-added options (dig ignores any value).
-    ParseResult r = parse({"adig", "example.com", "+ednsopt=3", "+ednsopt=12", "+noednsopt"});
+    ParseResult r = parse({"adyg", "example.com", "+ednsopt=3", "+ednsopt=12", "+noednsopt"});
     ASSERT_TRUE(r.error.empty()) << r.error;
     EXPECT_TRUE(r.opts.ednsopts.empty());
     // A later `+ednsopt` after `+noednsopt` adds fresh.
-    r = parse({"adig", "example.com", "+noednsopt", "+ednsopt=3"});
+    r = parse({"adyg", "example.com", "+noednsopt", "+ednsopt=3"});
     ASSERT_TRUE(r.error.empty()) << r.error;
     ASSERT_EQ(1u, r.opts.ednsopts.size());
     EXPECT_EQ(3u, r.opts.ednsopts[0].code);
@@ -1271,7 +1267,7 @@ TEST(ParseEdnsopt, NoEdnsoptClearsList) {
 
 TEST(ParseEdnsopt, NoEdnsoptIgnoresValue) {
     // `+noednsopt=anything` clears and is accepted (dig likewise ignores the value).
-    ParseResult r = parse({"adig", "example.com", "+ednsopt=3", "+noednsopt=99"});
+    ParseResult r = parse({"adyg", "example.com", "+ednsopt=3", "+noednsopt=99"});
     ASSERT_TRUE(r.error.empty()) << r.error;
     EXPECT_TRUE(r.opts.ednsopts.empty());
 }
@@ -1279,24 +1275,24 @@ TEST(ParseEdnsopt, NoEdnsoptIgnoresValue) {
 TEST(ParseEdnsopt, BareOptionRequiresCode) {
     // A bare `+ednsopt` (no `=CODE`) is an error, mirroring dig's
     // "ednsopt no code point specified".
-    ParseResult r = parse({"adig", "example.com", "+ednsopt"});
+    ParseResult r = parse({"adyg", "example.com", "+ednsopt"});
     EXPECT_FALSE(r.error.empty());
     EXPECT_NE(std::string::npos, r.error.find("requires a code"));
     // `+ednsopt=` (empty code) likewise.
-    EXPECT_FALSE(parse({"adig", "example.com", "+ednsopt="}).error.empty());
+    EXPECT_FALSE(parse({"adyg", "example.com", "+ednsopt="}).error.empty());
 }
 
 TEST(ParseEdnsopt, InvalidCodeRejected) {
-    EXPECT_FALSE(parse({"adig", "example.com", "+ednsopt=bogus"}).error.empty());
-    EXPECT_FALSE(parse({"adig", "example.com", "+ednsopt=65536"}).error.empty()); // out of range
+    EXPECT_FALSE(parse({"adyg", "example.com", "+ednsopt=bogus"}).error.empty());
+    EXPECT_FALSE(parse({"adyg", "example.com", "+ednsopt=65536"}).error.empty()); // out of range
     // Empty code before a payload (`+ednsopt=:4142`) is invalid.
-    EXPECT_FALSE(parse({"adig", "example.com", "+ednsopt=:4142"}).error.empty());
+    EXPECT_FALSE(parse({"adyg", "example.com", "+ednsopt=:4142"}).error.empty());
 }
 
 TEST(ParseEdnsopt, InvalidPayloadRejected) {
     // Non-hex or odd-length payloads are rejected.
-    EXPECT_FALSE(parse({"adig", "example.com", "+ednsopt=3:gg"}).error.empty());
-    EXPECT_FALSE(parse({"adig", "example.com", "+ednsopt=3:414"}).error.empty());
+    EXPECT_FALSE(parse({"adyg", "example.com", "+ednsopt=3:gg"}).error.empty());
+    EXPECT_FALSE(parse({"adyg", "example.com", "+ednsopt=3:414"}).error.empty());
 }
 
 // --- EDNS option-size validation (post-parse) ------------------------------
@@ -1309,26 +1305,26 @@ TEST(ParseEdnsopt, InvalidPayloadRejected) {
 TEST(ParseEdnsOptionSizes, PaddingMaxWithDefaultCookieIsError) {
     // The review's case: the default +cookie (12 bytes) plus +padding=65535
     // (65539 bytes) = 65551 > 65535.
-    ParseResult r = parse({"adig", "example.com", "+padding=65535"});
+    ParseResult r = parse({"adyg", "example.com", "+padding=65535"});
     EXPECT_FALSE(r.error.empty());
     EXPECT_NE(std::string::npos, r.error.find("exceeds 65535"));
 }
 
 TEST(ParseEdnsOptionSizes, PaddingFittingWithNoCookie) {
     // +nocookie +padding=65531 -> 4 + 65531 = 65535 (exactly the limit).
-    ParseResult r = parse({"adig", "example.com", "+nocookie", "+padding=65531"});
+    ParseResult r = parse({"adyg", "example.com", "+nocookie", "+padding=65531"});
     ASSERT_TRUE(r.error.empty()) << r.error;
     EXPECT_EQ(65531u, r.opts.padding);
 }
 
 TEST(ParseEdnsOptionSizes, PaddingOverWithNoCookie) {
     // +nocookie +padding=65532 -> 65536 > 65535.
-    EXPECT_FALSE(parse({"adig", "example.com", "+nocookie", "+padding=65532"}).error.empty());
+    EXPECT_FALSE(parse({"adyg", "example.com", "+nocookie", "+padding=65532"}).error.empty());
 }
 
 TEST(ParseEdnsOptionSizes, SmallPaddingIsFine) {
     // Sanity: a modest padding value parses cleanly under the default cookie.
-    ParseResult r = parse({"adig", "example.com", "+padding=128"});
+    ParseResult r = parse({"adyg", "example.com", "+padding=128"});
     ASSERT_TRUE(r.error.empty()) << r.error;
     EXPECT_EQ(128u, r.opts.padding);
 }
@@ -1337,7 +1333,7 @@ TEST(ParseEdnsOptionSizes, EdnsoptHugePayloadIsError) {
     // A 65536-byte option-data payload (131072 hex digits) exceeds the per-option
     // 16-bit option-length, so it is rejected up front.
     const std::string hex(131072, 'a'); // 65536 bytes when decoded
-    ParseResult r = parse({"adig", "example.com", "+nocookie", "+ednsopt=3:" + hex});
+    ParseResult r = parse({"adyg", "example.com", "+nocookie", "+ednsopt=3:" + hex});
     EXPECT_FALSE(r.error.empty());
     EXPECT_NE(std::string::npos, r.error.find("exceeds 65535"));
 }
@@ -1345,7 +1341,7 @@ TEST(ParseEdnsOptionSizes, EdnsoptHugePayloadIsError) {
 TEST(ParseEdnsOptionSizes, EdnsoptPayloadAtOptionLimitOk) {
     // A 65531-byte payload -> 4 + 65531 = 65535 (exactly the limit, cookie off).
     const std::string hex(131062, 'a'); // 65531 bytes when decoded
-    ParseResult r = parse({"adig", "example.com", "+nocookie", "+ednsopt=3:" + hex});
+    ParseResult r = parse({"adyg", "example.com", "+nocookie", "+ednsopt=3:" + hex});
     ASSERT_TRUE(r.error.empty()) << r.error;
     ASSERT_EQ(1u, r.opts.ednsopts.size());
     EXPECT_EQ(65531u, r.opts.ednsopts[0].data.size());
@@ -1353,8 +1349,8 @@ TEST(ParseEdnsOptionSizes, EdnsoptPayloadAtOptionLimitOk) {
 
 TEST(ParseEdnsOptionSizes, NoEdnsOptsValid) {
     // Without any oversized EDNS configuration, parsing succeeds.
-    ParseResult r = parse({"adig", "example.com", "+nsid", "+subnet=1.2.3.4/24", "+padding=100"});
+    ParseResult r = parse({"adyg", "example.com", "+nsid", "+subnet=1.2.3.4/24", "+padding=100"});
     ASSERT_TRUE(r.error.empty()) << r.error;
 }
 
-} // namespace ag::adig::test
+} // namespace ag::adyg::test

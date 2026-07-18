@@ -1,22 +1,22 @@
-// Unit tests for adig's pure CLI layer — EDNS/IP helpers.
+// Unit tests for adyg's pure CLI layer — EDNS/IP helpers.
 //
 // One of the split test translation units registered in
-// tools/adig/CMakeLists.txt. It covers the functions implemented in
-// adig_cli_edns.cpp: encode_ecs_option / encode_edns_option, the
+// tools/adyg/CMakeLists.txt. It covers the functions implemented in
+// adyg_cli_edns.cpp: encode_ecs_option / encode_edns_option, the
 // parse_ednsopt_code mnemonic table, decode_hex_string, make_reverse_name,
 // parse_opcode_name, format_dns_ttl_units and format_edns_option_text.
-// Parsing tests live in test_adig_cli.cpp and packet/format tests in
-// test_adig_cli_packet.cpp. Shared helpers are in test_adig_cli_helpers.h.
+// Parsing tests live in test_adyg_cli.cpp and packet/format tests in
+// test_adyg_cli_packet.cpp. Shared helpers are in test_adyg_cli_helpers.h.
 
 #include <gtest/gtest.h>
 
 #include <string>
 #include <vector>
 
-#include "adig_cli.h"
-#include "test_adig_cli_helpers.h"
+#include "adyg_cli.h"
+#include "test_adyg_cli_helpers.h"
 
-namespace ag::adig::test {
+namespace ag::adyg::test {
 
 // --- encode_ecs_option (RFC 7871, byte-exact) ----------------------------
 
@@ -323,4 +323,4 @@ TEST(FormatEdnsOptionText, UnknownfallsBack) {
     EXPECT_EQ("; \\# 0 \n", format_edns_option_text(99, nullptr, 0));
 }
 
-} // namespace ag::adig::test
+} // namespace ag::adyg::test

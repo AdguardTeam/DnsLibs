@@ -1,13 +1,13 @@
 #!/usr/bin/env python3
 
 """
-Regenerate tools/adig/root_servers.h from the IANA root hints.
+Regenerate tools/adyg/root_servers.h from the IANA root hints.
 
 The DNS root name servers' addresses are published by IANA in the "root
 hints" file (a.k.a. named.cache / named.root) [1]. This script fetches that
 file, extracts the IPv4 (A) glue records for the 13 root servers
 (a.root-servers.net .. m.root-servers.net) and writes them as a constexpr
-data table into tools/adig/root_servers.h.
+data table into tools/adyg/root_servers.h.
 
 The generated header is checked into the repository so that ordinary builds
 and tests never need network access. Run this script (via
@@ -31,7 +31,7 @@ import urllib.request
 
 WORK_DIR = os.path.dirname(os.path.realpath(__file__))
 PROJECT_DIR = os.path.dirname(WORK_DIR)
-HEADER_PATH = os.path.join(PROJECT_DIR, "tools", "adig", "root_servers.h")
+HEADER_PATH = os.path.join(PROJECT_DIR, "tools", "adyg", "root_servers.h")
 ROOT_HINTS_URL = "https://www.internic.net/domain/named.root"
 ROOT_SERVER_IDS = "abcdefghijklm"
 FETCH_TIMEOUT = 30
@@ -51,14 +51,14 @@ HEADER_PREFIX = """\
 // [1]: https://www.internic.net/domain/named.root
 //
 // IPv4 glue addresses of the 13 DNS root name servers
-// (a.root-servers.net through m.root-servers.net). `adig +trace` uses these
+// (a.root-servers.net through m.root-servers.net). `adyg +trace` uses these
 // to seed iterative resolution from the root. The root-zone addresses change
 // very rarely; regenerate after a root-zone renumbering.
 #pragma once
 
 #include <string_view>
 
-namespace ag::adig::root_hints {
+namespace ag::adyg::root_hints {
 
 struct RootServer {
     char id;             // single-letter identifier ('a'..'m')
@@ -68,7 +68,7 @@ struct RootServer {
 inline constexpr RootServer ROOT_SERVERS[] = {
 """
 
-HEADER_SUFFIX = "};\n\n} // namespace ag::adig::root_hints\n"
+HEADER_SUFFIX = "};\n\n} // namespace ag::adyg::root_hints\n"
 
 
 def parse_root_hints(text):

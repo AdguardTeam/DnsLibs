@@ -1,10 +1,10 @@
-// adig_cli — pure (event-loop-free) command-line logic for the adig tool.
+// adyg_cli — pure (event-loop-free) command-line logic for the adyg tool.
 //
-// This header declares the parts of adig's argument handling that do not depend
+// This header declares the parts of adyg's argument handling that do not depend
 // on the upstream library's event loop, so they can be unit-tested in
-// isolation. The coroutine-based query/trace logic lives in adig.cpp.
+// isolation. The coroutine-based query/trace logic lives in adyg.cpp.
 //
-// See docs/adig.md for the authoritative description of adig's command-line
+// See docs/adyg.md for the authoritative description of adyg's command-line
 // interface.
 
 #pragma once
@@ -22,7 +22,7 @@
 #include "common/defs.h"
 #include "dns/common/dns_defs.h"
 
-namespace ag::adig {
+namespace ag::adyg {
 
 // ldns smart-pointer alias (UniquePtr<ldns_pkt, &ldns_pkt_free>) lives in the
 // ag::dns namespace; re-expose it here so the pure layer can name it directly.
@@ -32,7 +32,7 @@ using ag::dns::ldns_pkt_ptr;
 constexpr Millis DEFAULT_TIMEOUT{5000};
 
 // Fallback server used when no @server is given on platforms where the upstream
-// module has no system resolver (i.e. not Apple/Android). Public so adig.cpp's
+// module has no system resolver (i.e. not Apple/Android). Public so adyg.cpp's
 // default_server() can reference it.
 constexpr std::string_view DEFAULT_SERVER = "1.1.1.1";
 
@@ -79,10 +79,10 @@ struct EdnsOption {
     std::vector<uint8_t> data;
 };
 
-// Command-line options for adig. Populated by parse_args().
+// Command-line options for adyg. Populated by parse_args().
 struct CliOptions {
     // Empty when no @server was given; main() fills it with the system default
-    // DNS (see default_server in adig.cpp — system:// on Apple/Android, else
+    // DNS (see default_server in adyg.cpp — system:// on Apple/Android, else
     // DEFAULT_SERVER) before any query is sent.
     std::string server;
     std::string name;
@@ -125,7 +125,7 @@ struct CliOptions {
     DisplayFlags display;
 };
 
-// Result of resolving a `+option` keyword against adig's keyword table.
+// Result of resolving a `+option` keyword against adyg's keyword table.
 // `canonical` is the resolved canonical option name on success; `error` is
 // non-empty (and `canonical` empty) when the keyword is unknown or its prefix
 // is ambiguous.
@@ -169,7 +169,7 @@ std::vector<uint8_t> encode_ecs_option(std::string_view addr, uint8_t src_prefix
 
 // Encode a generic EDNS option as the wire TLV (option-code(2 BE) +
 // option-length(2 BE) + option-data) that ldns writes verbatim into the OPT
-// RR's RDATA. This is the shared building block for every EDNS option adig
+// RR's RDATA. This is the shared building block for every EDNS option adyg
 // attaches (ECS, NSID, Padding, …), exposed so each option's encoding stays
 // byte-exact and unit-testable without an event loop.
 std::vector<uint8_t> encode_edns_option(uint16_t code, const uint8_t *data, size_t len);
@@ -223,7 +223,7 @@ std::string format_dns_ttl_verbose(uint32_t ttl);
 std::string format_edns_option_text(uint16_t code, const uint8_t *data, size_t len);
 
 // Format `server` as dig's `;; SERVER:` value. For a plain IP / bare host it
-// yields `host#port(host) (UDP)` (or `(TCP)` when `tcp` is true). adig's `+tcp`
+// yields `host#port(host) (UDP)` (or `(TCP)` when `tcp` is true). adyg's `+tcp`
 // rewrite (apply_force_tcp) prefixes a bare host with `tcp://` (and rewrites
 // `udp://`/`dns://` to `tcp://`) *before* formatting, so a leading plain-DNS
 // scheme (`tcp://`/`udp://`/`dns://`, matched case-insensitively) is stripped
@@ -286,7 +286,7 @@ struct GlueAddress {
 
 // Extract A/AAAA glue from a referral response's ADDITIONAL section, keyed by
 // owner name (as ldns renders it: fully-qualified, with a trailing dot, matching
-// the NS target names produced alongside in adig.cpp's extract_ns_names).
+// the NS target names produced alongside in adyg.cpp's extract_ns_names).
 // Prefers A (IPv4) over AAAA (IPv6): when both are present for an owner the IPv4
 // address wins (an A always overwrites any prior AAAA, and an AAAA is stored
 // only when no A was seen for that owner). This prevents a later AAAA from
@@ -325,7 +325,7 @@ std::string format_packet_dig(const ldns_pkt *pkt, const DisplayFlags &flags, bo
 // order-sensitive precedence.
 void apply_trace_display_defaults(DisplayFlags &flags);
 
-// Whether the dig-style `; <<>> adig ... <<>>` / `;; global options: +cmd`
+// Whether the dig-style `; <<>> adyg ... <<>>` / `;; global options: +cmd`
 // banner should be printed. Mirrors `dig`: the banner is gated on `+cmd`, but
 // `+short` suppresses it unconditionally (a later `+cmd` does not bring it
 // back), so `+short` always yields RDATA-only output. Public so main() can
@@ -386,9 +386,9 @@ struct ParseResult {
     CliOptions opts;
 };
 
-// Parse adig command-line arguments into a CliOptions. Does not print to stderr
+// Parse adyg command-line arguments into a CliOptions. Does not print to stderr
 // nor exit; the caller is responsible for reporting `error` (prefixed with
 // "Error: ") and for honoring `help_requested`.
 ParseResult parse_args(int argc, char *argv[]);
 
-} // namespace ag::adig
+} // namespace ag::adyg

@@ -1,7 +1,7 @@
-// adig — a small dig-like DNS query command-line tool built on the upstream
+// adyg — a small dig-like DNS query command-line tool built on the upstream
 // library.
 //
-// Usage, options, and examples are documented in docs/adig.md. See README.md
+// Usage, options, and examples are documented in docs/adyg.md. See README.md
 // for general build instructions.
 //
 
@@ -16,7 +16,7 @@
 #include <fmt/format.h>
 #include <ldns/ldns.h>
 
-#include "adig_cli.h"
+#include "adyg_cli.h"
 #include "common/coro.h"
 #include "common/defs.h"
 #include "dns/common/dns_defs.h"
@@ -44,7 +44,7 @@ using ag::dns::UpstreamFactory;
 using ag::dns::UpstreamOptions;
 using ag::dns::UpstreamPtr;
 
-using namespace ag::adig;
+using namespace ag::adyg;
 
 constexpr size_t MAX_TRACE_ITERATIONS = 20;
 
@@ -532,12 +532,12 @@ int main(int argc, char *argv[]) {
     // unavailable (see the comment on ldns_init_random in ldns/util.c).
     (void) ldns_init_random(nullptr, 0);
 
-    ag::adig::ParseResult parsed = ag::adig::parse_args(argc, argv);
+    ag::adyg::ParseResult parsed = ag::adyg::parse_args(argc, argv);
     if (parsed.help_requested) {
         return print_usage(argv[0]);
     }
     if (parsed.version_requested) {
-        fmt::print("adig {}\n", AG_DNSLIBS_VERSION);
+        fmt::print("adyg {}\n", AG_DNSLIBS_VERSION);
         return 0;
     }
     if (!parsed.error.empty()) {
@@ -576,12 +576,12 @@ int main(int argc, char *argv[]) {
 
     // +cmd: echo the command line (mirrors `dig`'s banner). `dig` starts with a
     // leading blank line, then `; <<>> DiG ... <<>>`, then `; (1 server found)`
-    // (adig always queries exactly one server), then `;; global options: +cmd`.
+    // (adyg always queries exactly one server), then `;; global options: +cmd`.
     // `+short` suppresses the whole banner unconditionally (even with `+cmd`),
     // matching `dig`'s RDATA-only short output. Stdout is flushed so a later
     // stderr error lands after the banner in a merged stream, mirroring `dig`.
     if (cmd_banner_enabled(opts)) {
-        std::string cmd = fmt::format("; <<>> adig {} <<>>", AG_DNSLIBS_VERSION);
+        std::string cmd = fmt::format("; <<>> adyg {} <<>>", AG_DNSLIBS_VERSION);
         for (int i = 1; i < argc; ++i) {
             cmd += ' ';
             cmd += argv[i];

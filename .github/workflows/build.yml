@@ -152,7 +152,7 @@ jobs:
       # for 5 slices: macos-x86_64, macos-arm64, ios-arm64, iphonesimulator-x86_64,
       # iphonesimulator-arm64 via build_dnsproxy_framework.sh) and the
       # xcframework/podspec/SwiftPM artifacts, and additionally runs the native
-      # C++ ctest suite (incl. test_adig_cli) and builds the adig CLI binary.
+      # C++ ctest suite (incl. test_adyg_cli) and builds the adyg CLI binary.
       #
       # Tests run FIRST (before the framework cross-compilation) as a fast gating
       # step: a test failure fails the job before spending time on the five-slice
@@ -166,7 +166,7 @@ jobs:
       # `ninja AGDnsProxy` runs per framework slice.
 
       # Create a single Python venv with Conan and the `art` remote once and
-      # reuse it across the native test run, the xcframework build, the adig
+      # reuse it across the native test run, the xcframework build, the adyg
       # build and the final Conan upload. Each `run:` step re-activates the
       # venv (GitHub Actions starts a fresh shell per step); the venv directory
       # itself persists in the workspace. The Conan package cache (~/.conan2)
@@ -308,27 +308,27 @@ jobs:
           if-no-files-found: error
           retention-days: 7
 
-      # Build the adig CLI binary as a step separate from the test run. The
-      # "Run native tests" step above already built `adig` (the `tests` target
+      # Build the adyg CLI binary as a step separate from the test run. The
+      # "Run native tests" step above already built `adyg` (the `tests` target
       # depends on it) in release mode in the root build/ dir, so this is just a
-      # fast incremental rebuild that exists to make "build adig" a distinct,
+      # fast incremental rebuild that exists to make "build adyg" a distinct,
       # loggable step from "run tests". Release build (default BUILD_TYPE=release
-      # -> RelWithDebInfo) so the uploaded binary matches the Linux adig artifact.
+      # -> RelWithDebInfo) so the uploaded binary matches the Linux adyg artifact.
       # Reuses the shared venv created by the "Set up Conan venv" step.
-      - name: Build adig
+      - name: Build adyg
         run: |
           set -e
           set -x
 
           source ./venv/bin/activate
 
-          SKIP_BOOTSTRAP=1 make build_adig
+          SKIP_BOOTSTRAP=1 make build_adyg
 
-      - name: Upload adig binary
+      - name: Upload adyg binary
         uses: actions/upload-artifact@v7
         with:
-          name: adig-macos
-          path: build/tools/adig/adig
+          name: adyg-macos
+          path: build/tools/adyg/adyg
           if-no-files-found: error
           retention-days: 7
 
@@ -536,10 +536,10 @@ jobs:
           if-no-files-found: error
           retention-days: 7
 
-      # Build adig as a step of the Windows job. The capi subproject built
-      # above (platform/windows/capi) does not add tools/adig (it only adds
-      # proxy), so adig must be built from the root CMake project, which does
-      # add_subdirectory(tools/adig). A separate build-adig/ dir is used so it
+      # Build adyg as a step of the Windows job. The capi subproject built
+      # above (platform/windows/capi) does not add tools/adyg (it only adds
+      # proxy), so adyg must be built from the root CMake project, which does
+      # add_subdirectory(tools/adyg). A separate build-adyg/ dir is used so it
       # does not collide with the capi build dirs. The root project's Windows
       # toolchain (cl.exe + Ninja, matching the Makefile's Windows path) is
       # configured directly. The root CMakeLists.txt forces the static MSVC
@@ -547,7 +547,7 @@ jobs:
       # objects match the Conan-built /MT dependencies (the Conan profile
       # conan/profiles/windows-msvc.jinja sets compiler.runtime=static); without
       # it the link fails with LNK2038 RuntimeLibrary mismatches.
-      - name: Build adig
+      - name: Build adyg
         shell: powershell
         run: |
           $ErrorActionPreference = 'Stop'
@@ -562,20 +562,20 @@ jobs:
           }
           $vcvars64 | foreach { setvar $_ }
 
-          & cmake -S . -B build-adig -DCMAKE_BUILD_TYPE=RelWithDebInfo `
+          & cmake -S . -B build-adyg -DCMAKE_BUILD_TYPE=RelWithDebInfo `
             -DCMAKE_USE_OPENSSL=ON `
             -DCMAKE_C_COMPILER="cl.exe" `
             -DCMAKE_CXX_COMPILER="cl.exe" `
             -G Ninja
           if (!$?) { exit 1 }
-          & cmake --build build-adig --target adig
+          & cmake --build build-adyg --target adyg
           if (!$?) { exit 1 }
 
-      - name: Upload adig binary
+      - name: Upload adyg binary
         uses: actions/upload-artifact@v7
         with:
-          name: adig-windows
-          path: build-adig/tools/adig/adig.exe
+          name: adyg-windows
+          path: build-adyg/tools/adyg/adyg.exe
           if-no-files-found: error
           retention-days: 7
 
@@ -587,8 +587,8 @@ jobs:
           & conan remote login art "${{ secrets.ARTIFACTORY_USER }}" --password "${{ secrets.ARTIFACTORY_API_KEY }}"
           & conan upload -r art -c "*" 2>&1 | Select-String "Uploading" -SimpleMatch
 
-  linux-adig:
-    name: Linux adig build
+  linux-adyg:
+    name: Linux adyg build
     if: github.repository == 'AdGuardSoftwareLimited/dns-libs'
     needs: [resolve-images]
     runs-on:
@@ -604,7 +604,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v6
 
-      - name: Build adig
+      - name: Build adyg
         run: |
           set -e
           set -x
@@ -612,17 +612,17 @@ jobs:
           python3 -m pip install conan --upgrade
           conan remote add --index 0 art ${{ vars.CONAN_REPO_URL }} || true
 
-          # `make build_adig` configures the root CMake project and builds the
-          # `adig` target (dig-like DNS query tool: plain DNS, DoT, DoH, DoQ,
+          # `make build_adyg` configures the root CMake project and builds the
+          # `adyg` target (dig-like DNS query tool: plain DNS, DoT, DoH, DoQ,
           # DNSCrypt). Release build (default BUILD_TYPE=release ->
           # RelWithDebInfo): the produced binary is uploaded as an artifact.
-          SKIP_BOOTSTRAP=1 make build_adig
+          SKIP_BOOTSTRAP=1 make build_adyg
 
-      - name: Upload adig binary
+      - name: Upload adyg binary
         uses: actions/upload-artifact@v7
         with:
-          name: adig-linux
-          path: build/tools/adig/adig
+          name: adyg-linux
+          path: build/tools/adyg/adyg
           if-no-files-found: error
           retention-days: 7
 

@@ -1,6 +1,6 @@
-# `adig` command-line tool
+# `adyg` command-line tool
 
-`adig` is a small `dig`-like DNS query command-line tool built directly on the
+`adyg` is a small `dig`-like DNS query command-line tool built directly on the
 `upstream` library. It is a standalone executable (it does not link the full
 DNS proxy) and is handy for ad-hoc DNS lookups and for exercising upstream
 configurations during development.
@@ -8,75 +8,42 @@ configurations during development.
 See the main [README.md](../README.md) for an overview of the whole project,
 and [DEVELOPMENT.md](../DEVELOPMENT.md) for general build and test workflow.
 
-## Name collision with c-ares' `adig`
+## Name
 
-c-ares (the C resolver library) ships its **own** `adig` example program that
-shares the name with this project's `adig`. The two are completely unrelated
-implementations with **different** command-line behavior — most visibly, the
-c-ares version rejects the URI-scheme `@server` form this project documents
-(e.g. `@tls://1.1.1.1`) with an error like:
-
-```text
-ares_set_servers_ports_csv: Misformatted string: tls://1.1.1.1
-```
-
-If you see that error (or any other prefixed with `ares_`), you are running
-c-ares' `adig`, not the one built from this repository. Common ways this
-happens:
-
-- Homebrew installs c-ares' `adig` at `/opt/homebrew/bin/adig` (or
-  `/usr/local/bin/adig` on Intel macs) via `brew install c-ares`. On Apple
-  Silicon `/opt/homebrew/bin` precedes `/usr/local/bin` on the default
-  `PATH`, so `adig` resolves to c-ares' binary even when our project's
-  build was copied into `/usr/local/bin`.
-- Linux distributions that ship c-ares (e.g. `libc-ares-dev` / `c-ares-devel`)
-  install their example `adig` into `/usr/bin/adig`.
-
-Build and invoke our `adig` by its full path (see [Building](#building)) to
-guarantee you are running this project's binary:
-
-```sh
-make build_adig
-./build/tools/adig/adig --version        # → `adig <AG_DNSLIBS_VERSION>`
-./build/tools/adig/adig -t mx serveroid.com @tls://1.1.1.1
-```
-
-`./build/tools/adig/adig --version` is the fastest way to confirm the right
-binary is on the end of the command line: this project prints
-`adig <AG_DNSLIBS_VERSION>` (e.g. `adig 2.8.58`); c-ares prints
-`adig version <c-ares-release>` (e.g. `adig version 1.34.8`).
+`adyg` reads like "адыг" in Cyrillic. The name was chosen just for fun: it is
+kind of close to how some people in the company nicknamed AdGuard, and it is
+also hard to pronounce properly.
 
 ## Building
 
 ```sh
-make build_adig
+make build_adyg
 ```
 
-This produces the `adig` executable in the CMake build directory at
-`build/tools/adig/adig` (i.e. invoke it as `./build/tools/adig/adig`). It is
-**not** installed onto `PATH` — see [Name collision with c-ares'
-`adig`](#name-collision-with-c-ares-adig) above for why running `adig`
-bare from the shell may pick up a different binary.
+This produces the `adyg` executable in the CMake build directory at
+`build/tools/adyg/adyg` (i.e. invoke it as `./build/tools/adyg/adyg`). It is
+**not** installed onto `PATH` — invoke it by its full build path so the right
+binary is used.
 
 The `+trace` option iterates the delegation chain from the root, seeding the
 first hop from a `.` NS query to `@server` (mirroring `dig +trace`); if
 `@server` is unreachable, it falls back to the IANA root hints checked into
-the repo as `tools/adig/root_servers.h`. Regenerate that header with
+the repo as `tools/adyg/root_servers.h`. Regenerate that header with
 `make generate_root_hints` (requires network access).
 
 ## Usage
 
 ```text
-adig [@server] [-t type] [-x addr] name [type] [options]
+adyg [@server] [-t type] [-x addr] name [type] [options]
 ```
 
 Sends a DNS query to `server` for `name` (default RR type `A`) and prints the
-reply. When `server` is omitted, `adig` queries the system default DNS via the
+reply. When `server` is omitted, `adyg` queries the system default DNS via the
 upstream library's `SystemUpstream` (`system://`) on Apple/Android, falling
 back to `1.1.1.1` on platforms where no system resolver is available.
 
-The RR type may be given either positionally (`adig name type`, mirroring
-`dig`) or via the dig-compatible `-t TYPE` short option (`adig -t TYPE name`).
+The RR type may be given either positionally (`adyg name type`, mirroring
+`dig`) or via the dig-compatible `-t TYPE` short option (`adyg -t TYPE name`).
 Both forms are accepted in any position relative to `@server`, `name` and
 the `+options`; the last one wins when both forms are given — matching
 `dig example.com A -t AAAA`, which warns "extra type option" and queries
@@ -101,7 +68,7 @@ the following forms:
 | `1.1.1.1:53` | Plain DNS over UDP | IPv4 with explicit port |
 | `[::1]:53` / `[::1]` | Plain DNS (IPv6 literal) | Brackets keep the IPv6 literal from being mis-split on `:` |
 | `tcp://IP[:port]` | Plain DNS over TCP | `tcp://` forces TCP transport |
-| `udp://IP[:port]` | Plain DNS over UDP | Synonym for the bare form (our `adig` recognizes both) |
+| `udp://IP[:port]` | Plain DNS over UDP | Synonym for the bare form (our `adyg` recognizes both) |
 | `dns://IP[:port]` | Plain DNS over UDP | dig-compat scheme (rarely used) |
 | `tls://host[:port]` | DNS-over-TLS (DoT) | Default port 853; the host part is verified against the TLS cert (so `tls://1.1.1.1` works because Cloudflare's cert carries the IP SAN; for self-signed setups use a `sdns://` stamp) |
 | `https://host/path` | DNS-over-HTTPS (DoH) | Default port 443; the path is the DoH endpoint (commonly `/dns-query`) |
@@ -139,8 +106,8 @@ starts by querying the configured resolver. Subsequent hops query each
 delegating authoritative server directly (RD=0). Output is dig-compatible:
 
 ```text
-adig @1.1.1.1 example.com +trace
-; <<>> adig <version> <<>> @1.1.1.1 example.com +trace
+adyg @1.1.1.1 example.com +trace
+; <<>> adyg <version> <<>> @1.1.1.1 example.com +trace
 ;; global options: +cmd
 .                       49625   IN      NS      c.root-servers.net.
 ... (root NS records)
@@ -221,7 +188,7 @@ Notable options (each `dig`-compatible):
   `+noedns` (it is an EDNS option)
 - The combined EDNS option blob (`+cookie`/`+subnet`/`+nsid`/`+ednsopt`/
   `+padding`) must fit the OPT record's 16-bit RDLEN (≤ 65535 bytes) and each
-  option's data must fit its 16-bit option-length; adig enforces this at parse
+  option's data must fit its 16-bit option-length; adyg enforces this at parse
   time and reports a clear error otherwise (e.g. `+cookie +padding=65535` is
   rejected instead of producing a malformed packet)
 - `+opcode=NAME` — set the opcode (`QUERY`/`IQUERY`/`STATUS`/`NOTIFY`/`UPDATE`,
@@ -231,7 +198,7 @@ Notable options (each `dig`-compatible):
   mirroring `dig +header-only` which probes server capabilities without sending
   a question record
 - `+aaflag` / `+defname` / `+showsearch` — accepted as dig-compatibility no-ops
-  (they relate to resolver behaviors adig does not implement), so common `dig`
+  (they relate to resolver behaviors adyg does not implement), so common `dig`
   scripts do not error
 - `-4` — use IPv4 only (suppress IPv6)
 - `-t TYPE` — dig short-form RR type (A/AAAA/MX/TXT/ANY/...); equivalent to the
@@ -256,7 +223,7 @@ dig-compatible display flags:
   `; serial` / `; refresh (1 hour)` verbose-TTL comments, `(` and `)` on
   their own lines). Only `DS`, `KEY`, `RRSIG`, and `SSHFP` records are
   candidates for `( ... )` wrapping; `TXT` and other types are never wrapped
-- `+ttlunits` — show TTLs as dig's human units (e.g. `5m`, `1h30m`, `1d`)
+- `+ttlUnits` — show TTLs as dig's human units (e.g. `5m`, `1h30m`, `1d`)
 - `+onesoa` — print only the first SOA of the response (useful for `ANY`)
 
 The standard stats block is dig-compatible: `;; Query time:`,
@@ -268,29 +235,29 @@ on real responses; the `+qr` query echo omits them and labels the size
 ## Examples
 
 ```sh
-adig example.com
-adig @1.0.0.1 example.com MX
+adyg example.com
+adyg @1.0.0.1 example.com MX
 # -t is the dig short form for the type, equivalent to the positional above:
-adig -t MX @1.0.0.1 example.com
+adyg -t MX @1.0.0.1 example.com
 # the user's reported case from the issue — a plain `-t TYPE` form on DoT:
-adig -t mx serveroid.com @tls://1.1.1.1
-adig @tls://dns.adguard.com example.com +short
-adig @sdns://... example.com +trace +bootstrap=1.1.1.1
-adig @1.1.1.1 example.com +dnssec +recurse
-adig @1.1.1.1 example.com +noedns
-adig @1.1.1.1 example.com +edns=1
-adig -x 8.8.8.8
-adig @1.1.1.1 example.com +subnet=1.2.3.4/24
-adig @1.1.1.1 example.com +ednsopt=nsid
-adig @1.1.1.1 example.com +ednsopt=10:01020304
-adig @1.1.1.1 example.com +noall +answer
+adyg -t mx serveroid.com @tls://1.1.1.1
+adyg @tls://dns.adguard.com example.com +short
+adyg @sdns://... example.com +trace +bootstrap=1.1.1.1
+adyg @1.1.1.1 example.com +dnssec +recurse
+adyg @1.1.1.1 example.com +noedns
+adyg @1.1.1.1 example.com +edns=1
+adyg -x 8.8.8.8
+adyg @1.1.1.1 example.com +subnet=1.2.3.4/24
+adyg @1.1.1.1 example.com +ednsopt=nsid
+adyg @1.1.1.1 example.com +ednsopt=10:01020304
+adyg @1.1.1.1 example.com +noall +answer
 ```
 
 Command-line parsing is implemented in
-[`tools/adig/adig_cli.cpp`](../tools/adig/adig_cli.cpp) (interface:
-[`tools/adig/adig_cli.h`](../tools/adig/adig_cli.h)). The pure logic is split by
-concern across three translation units, all sharing the `adig_cli.h` interface:
-argument parsing & CLI transforms (`adig_cli.cpp`), the EDNS/IP helpers
-(`adig_cli_edns.cpp`) and the packet construction & dig-compatible formatting
-(`adig_cli_packet.cpp`). The few internal helpers shared across the units live
-in `adig_cli_internal.h` (not part of the public interface).
+[`tools/adyg/adyg_cli.cpp`](../tools/adyg/adyg_cli.cpp) (interface:
+[`tools/adyg/adyg_cli.h`](../tools/adyg/adyg_cli.h)). The pure logic is split by
+concern across three translation units, all sharing the `adyg_cli.h` interface:
+argument parsing & CLI transforms (`adyg_cli.cpp`), the EDNS/IP helpers
+(`adyg_cli_edns.cpp`) and the packet construction & dig-compatible formatting
+(`adyg_cli_packet.cpp`). The few internal helpers shared across the units live
+in `adyg_cli_internal.h` (not part of the public interface).

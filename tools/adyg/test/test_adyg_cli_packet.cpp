@@ -1,12 +1,12 @@
-// Unit tests for adig's pure CLI layer — packet construction & formatting.
+// Unit tests for adyg's pure CLI layer — packet construction & formatting.
 //
 // One of the split test translation units registered in
-// tools/adig/CMakeLists.txt. It covers the functions implemented in
-// adig_cli_packet.cpp: make_query, apply_dns_flags, additional_glue /
+// tools/adyg/CMakeLists.txt. It covers the functions implemented in
+// adyg_cli_packet.cpp: make_query, apply_dns_flags, additional_glue /
 // glue_address_usable, format_packet_dig / format_trace_packet_dig /
 // format_trace_received_line, and format_dig_server / format_dig_when.
-// Parsing tests live in test_adig_cli.cpp and EDNS/IP tests in
-// test_adig_cli_edns.cpp. Shared helpers are in test_adig_cli_helpers.h.
+// Parsing tests live in test_adyg_cli.cpp and EDNS/IP tests in
+// test_adyg_cli_edns.cpp. Shared helpers are in test_adyg_cli_helpers.h.
 
 #include <gtest/gtest.h>
 
@@ -16,10 +16,10 @@
 
 #include <fmt/format.h>
 
-#include "adig_cli.h"
-#include "test_adig_cli_helpers.h"
+#include "adyg_cli.h"
+#include "test_adyg_cli_helpers.h"
 
-namespace ag::adig::test {
+namespace ag::adyg::test {
 
 // --- make_query (query construction is pure) ------------------------------
 
@@ -76,7 +76,7 @@ TEST(ApplyDnsFlags, NoDnssecLeavesDoUnset) {
 }
 
 TEST(ApplyDnsFlags, DefaultOptsAttachOptRecord) {
-    // Default CliOptions (edns on, version 0, AD on, COOKIE on): a plain adig
+    // Default CliOptions (edns on, version 0, AD on, COOKIE on): a plain adyg
     // query carries an OPT RR with a >=4096 UDP payload size, no DO bit, the AD
     // flag set, and a DNS COOKIE EDNS option — matching `dig`'s defaults.
     ldns_pkt_ptr q = make_query("example.com", LDNS_RR_TYPE_A, true);
@@ -355,9 +355,9 @@ TEST(ApplyDnsFlags, EdnsoptWithPayload) {
 
 TEST(ApplyDnsFlags, NoEdnsWithEdnsoptStillAttachesOpt) {
     // A generic EDNS option forces an OPT RR even under `+noedns`, mirroring
-    // adig's `+nsid` / `+subnet` / `+padding` / `+ednsflags` policy (each lives
+    // adyg's `+nsid` / `+subnet` / `+padding` / `+ednsflags` policy (each lives
     // inside the OPT record). dig itself only attaches it when EDNS is enabled;
-    // adig attaches it unconditionally for consistency.
+    // adyg attaches it unconditionally for consistency.
     ldns_pkt_ptr q = make_query("example.com", LDNS_RR_TYPE_A, true);
     ASSERT_NE(nullptr, q.get());
     CliOptions opts;
@@ -703,7 +703,7 @@ TEST(FormatPacketDig, NoCommentsSuppressesHeader) {
     EXPECT_FALSE(contains(out, "HEADER"));
     EXPECT_FALSE(contains(out, "Got answer:"));
     // Section headers are themselves comments; with +nocomments dig (and now
-    // adig) emits just the RRs without the `;; ... SECTION:` headers.
+    // adyg) emits just the RRs without the `;; ... SECTION:` headers.
     EXPECT_FALSE(contains(out, "QUESTION SECTION:"));
     EXPECT_FALSE(contains(out, "ANSWER SECTION:"));
     // The question RR is still present (gated by +question, not +comments).
@@ -761,7 +761,7 @@ TEST(FormatPacketDig, NoEdnsNoPseudosection) {
 
 TEST(FormatPacketDig, OptPseudosectionWithCommentsOnlyNoAdditional) {
     // dig 9.20 verified: `dig +noall +comments` (additional OFF) still prints
-    // the OPT PSEUDOSECTION. The historic adig code gated it on both
+    // the OPT PSEUDOSECTION. The historic adyg code gated it on both
     // `+comments AND +additional`, suppressing it (wrongly) when +additional
     // was off. Now OPT PSEUDOSECTION is gated solely on +comments.
     ldns_pkt_ptr q = make_test_query();
@@ -1116,7 +1116,7 @@ TEST(FormatPacketDig, MultilineTxtNeverWraps) {
     // dig 9.20: a single 200-char TXT string or a 4-string TXT record both
     // stay on one line under +multiline. Only SOA / base64-or-hex-bearing
     // types (DS / KEY / RRSIG / SSHFP) get the `( ... )` wrapping treatment
-    // in dig's per-type formatters. Previously adig applied a generic
+    // in dig's per-type formatters. Previously adyg applied a generic
     // width-based parenthesization to every long RR type, which wrapped TXT
     // (incorrect) — verified dig never does. Two over-long TXT strings that
     // *would* have triggered the old wrapping now produce a single line.
@@ -1146,7 +1146,7 @@ TEST(FormatPacketDig, DsDigestUppercased) {
     // field) in UPPERCASE; ldns's ldns_rdf2str renders hex as lowercase by
     // default. Verified against `dig example.com DS`:
     //   dig:  8ACBB0CD28F41250A80A491389424D341522D946B0DA0C0291F2D3D771D7805A
-    //   adig: 8acbb0cd28f41250a80a491389424d341522d946b0da0c0291f2d3d771d7805a
+    //   adyg: 8acbb0cd28f41250a80a491389424d341522d946b0da0c0291f2d3d771d7805a
     // ldns's presentation parser lowercases the digest on input normalization
     // (the input case is irrelevant to ldns's storage), so the test works
     // regardless of the input case of the RR string.
@@ -1363,7 +1363,7 @@ TEST(FormatPacketDig, QueryEchoStatsTrailingBlankLine) {
     // time:` / `;; SERVER:` / ...). Verified against `dig +qr +noall +stats`:
     // the query echo ends with `;; QUERY SIZE: N\n` followed by a blank line,
     // so the response's `;; Query time:` is separated by exactly one empty
-    // line. Previously adig omitted this blank line, yielding consecutive
+    // line. Previously adyg omitted this blank line, yielding consecutive
     // `QUERY SIZE:` / `Query time:` lines with no separator.
     ldns_pkt_ptr q = make_test_query();
     // +qr +noall +stats: only the stats block is on; sections/comments off.
@@ -1698,4 +1698,4 @@ TEST(FormatDigWhen, TwoDigitDayNotPadded) {
     EXPECT_NE(std::string::npos, s.find("12:00:00"));
 }
 
-} // namespace ag::adig::test
+} // namespace ag::adyg::test

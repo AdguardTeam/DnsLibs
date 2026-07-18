@@ -1,13 +1,13 @@
-// adig_cli — argument parsing & CLI transforms for the pure adig CLI logic.
+// adyg_cli — argument parsing & CLI transforms for the pure adyg CLI logic.
 //
 // This translation unit holds the `+option` keyword table, the dig-compatible
 // display-flag helpers and the parse_args() command-line parser (plus the small
 // pure decision/rewrite helpers cmd_banner_enabled / apply_force_tcp /
-// apply_port). See adig_cli.h for the public interface; the EDNS/IP helpers
-// live in adig_cli_edns.cpp and the packet/formatting logic in
-// adig_cli_packet.cpp.
+// apply_port). See adyg_cli.h for the public interface; the EDNS/IP helpers
+// live in adyg_cli_edns.cpp and the packet/formatting logic in
+// adyg_cli_packet.cpp.
 
-#include "adig_cli.h"
+#include "adyg_cli.h"
 
 #include <algorithm>
 #include <cctype>
@@ -22,9 +22,9 @@
 #include <fmt/format.h>
 #include <ldns/ldns.h>
 
-#include "adig_cli_internal.h"
+#include "adyg_cli_internal.h"
 
-namespace ag::adig {
+namespace ag::adyg {
 namespace {
 
 // The kind of a `+option` keyword, driving how parse_args dispatches a matched
@@ -41,7 +41,7 @@ struct KeywordDef {
     KeywordKind kind;
 };
 
-// adig's canonical `+option` table. Order only affects candidate listing in
+// adyg's canonical `+option` table. Order only affects candidate listing in
 // ambiguity errors (parse_args sorts candidates before reporting).
 constexpr KeywordDef KEYWORDS[] = {
         {"short", KeywordKind::BOOL_CLI},
@@ -56,9 +56,9 @@ constexpr KeywordDef KEYWORDS[] = {
         {"adflag", KeywordKind::BOOL_CLI},
         {"cookie", KeywordKind::BOOL_CLI},
         // dig-compat no-op toggles (+aaflag/+defname/+showsearch): dig
-        // scripts sprinkle them everywhere; adig accepts them to avoid
+        // scripts sprinkle them everywhere; adyg accepts them to avoid
         // `unknown option` errors while performing no behavior change (mirrors
-        // `dig`, where they are only meaningful with options adig does not
+        // `dig`, where they are only meaningful with options adyg does not
         // implement, e.g. a resolver search list).
         {"aaflag", KeywordKind::BOOL_CLI},
         {"defname", KeywordKind::BOOL_CLI},
@@ -330,15 +330,15 @@ ParseResult parse_args(int argc, char *argv[]) {
         }
         if (arg == "-t") {
             // -t TYPE: dig/BIND-style short form for the RR type, equivalent
-            // to the positional `adig name type` form (mirrors `dig`). Consumes
+            // to the positional `adyg name type` form (mirrors `dig`). Consumes
             // the next argv token as a case-insensitive RR-type mnemonic
             // resolved via ldns_get_rr_type_by_name (A, AAAA, MX, TXT, ANY,
             // ...). A `-t TYPE` placed AFTER a positional type overrides it
             // (mirrors `dig example.com A -t AAAA` which queries AAAA — dig
-            // also prints an "extra type option" warning that adig suppresses,
-            // since it is gated on dig's multi-query feature which adig does
+            // also prints an "extra type option" warning that adyg suppresses,
+            // since it is gated on dig's multi-query feature which adyg does
             // not implement). A `-t TYPE` placed BEFORE a positional `type`
-            // instead yields an "unexpected argument" error: adig treats any
+            // instead yields an "unexpected argument" error: adyg treats any
             // token after `name type` as erroneous rather than emulating
             // dig's behavior of issuing each subsequent `name [type]` as a
             // separate query.
@@ -456,7 +456,7 @@ ParseResult parse_args(int argc, char *argv[]) {
                 opts.print_query = !negate;
             } else if (canon == "nsid") {
                 // +nsid attaches an EDNS NSID option (RFC 5001) to the query;
-                // the server echoes its identity, which adig prints verbatim.
+                // the server echoes its identity, which adyg prints verbatim.
                 opts.nsid = !negate;
             } else if (canon == "adflag") {
                 // +adflag (default on) / +noadflag: set/clear the AD
@@ -480,7 +480,7 @@ ParseResult parse_args(int argc, char *argv[]) {
                 opts.header_only = !negate;
             } else if (canon == "aaflag" || canon == "defname" || canon == "showsearch") {
                 // dig-compat no-op: accepted so common `dig` scripts don't
-                // error; adig performs no behavior change (a resolver search
+                // error; adyg performs no behavior change (a resolver search
                 // list / AA-set query is not implemented). Negation is
                 // likewise accepted and ignored, mirroring `dig`.
             } else if (canon == "timeout") {
@@ -709,4 +709,4 @@ ParseResult parse_args(int argc, char *argv[]) {
     return result;
 }
 
-} // namespace ag::adig
+} // namespace ag::adyg

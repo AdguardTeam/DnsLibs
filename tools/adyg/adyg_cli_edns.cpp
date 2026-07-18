@@ -1,11 +1,11 @@
-// adig_cli — EDNS-layer & IP-address helpers for the pure adig CLI logic.
+// adyg_cli — EDNS-layer & IP-address helpers for the pure adyg CLI logic.
 //
 // This translation unit holds the EDNS option encoding/decoding, the EDNS
 // option-text formatter, the reverse-DNS / opcode / TTL helpers and the shared
-// parse_ip_addr IP-literal parser (declared in adig_cli_internal.h). See
-// adig_cli.h for the public interface and adig_cli.cpp for argument parsing.
+// parse_ip_addr IP-literal parser (declared in adyg_cli_internal.h). See
+// adyg_cli.h for the public interface and adyg_cli.cpp for argument parsing.
 
-#include "adig_cli.h"
+#include "adyg_cli.h"
 
 #include <algorithm>
 #include <array>
@@ -22,9 +22,9 @@
 #include <fmt/format.h>
 #include <ldns/ldns.h>
 
-#include "adig_cli_internal.h"
+#include "adyg_cli_internal.h"
 
-namespace ag::adig {
+namespace ag::adyg {
 namespace {
 
 // RAII wrapper for ldns malloc'd strings (char pointers returned by
@@ -246,7 +246,7 @@ std::optional<std::vector<uint8_t>> decode_hex_string(std::string_view hex) {
 
 // Render a CLIENT-SUBNET option-data address (family + raw bytes, zero-padded
 // to the family's full width) the way ldns renders an A/AAA RDATA atom, so the
-// displayed address matches adig's own RR rendering. Returns "<invalid>" on a
+// displayed address matches adyg's own RR rendering. Returns "<invalid>" on a
 // malformed family/length combination.
 static std::string format_ecs_address(uint16_t family, const uint8_t *bytes, size_t len) {
     ldns_rdf_type type = (family == 1) ? LDNS_RDF_TYPE_A : (family == 2) ? LDNS_RDF_TYPE_AAAA : LDNS_RDF_TYPE_NONE;
@@ -530,4 +530,4 @@ std::string format_dns_ttl_verbose(uint32_t ttl) {
     return out;
 }
 
-} // namespace ag::adig
+} // namespace ag::adyg

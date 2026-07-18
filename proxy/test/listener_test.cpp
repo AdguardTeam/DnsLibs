@@ -23,7 +23,7 @@ using namespace std::chrono_literals;
 // or wire encoding) so callers ASSERT() rather than dereference a null pointer
 // inside ldns. The dname is freed on the ldns_pkt_query_new failure path —
 // ldns_pkt_query_new adopts the dname only on success — mirroring make_query()
-// in adig_cli_packet.cpp and the AGENTS.md C-FFI RAII guideline.
+// in adyg_cli_packet.cpp and the AGENTS.md C-FFI RAII guideline.
 static ldns_buffer_ptr make_wire_a_query_buffer(const char *name) {
     ldns_rdf *dname = ldns_dname_new_frm_str(name);
     if (dname == nullptr) {

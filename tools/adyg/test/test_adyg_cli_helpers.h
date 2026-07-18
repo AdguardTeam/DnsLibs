@@ -1,7 +1,7 @@
-// Shared inline helpers for the split adig_cli unit tests.
+// Shared inline helpers for the split adyg_cli unit tests.
 //
-// The pure CLI tests are split across test_adig_cli.cpp (parsing),
-// test_adig_cli_edns.cpp (EDNS/IP) and test_adig_cli_packet.cpp
+// The pure CLI tests are split across test_adyg_cli.cpp (parsing),
+// test_adyg_cli_edns.cpp (EDNS/IP) and test_adyg_cli_packet.cpp
 // (packet/formatting), mirroring the source split. The helpers below were
 // previously file-local (anonymous-namespace) in the single test file; they
 // are `inline` here so each translation unit that includes this header gets a
@@ -21,9 +21,9 @@
 
 #include <ldns/ldns.h>
 
-#include "adig_cli.h"
+#include "adyg_cli.h"
 
-namespace ag::adig::test {
+namespace ag::adyg::test {
 
 // Byte vector alias used by the EDNS/ECS byte-exact tests below.
 using Bytes = std::vector<uint8_t>;
@@ -79,9 +79,9 @@ inline std::string render_ip(ldns_rdf_type type, std::string_view ip) {
     if (rdf == nullptr) {
         return "<invalid>";
     }
-    // `AllocatedPtr` lives in `ag::` (from common/defs.h, included via adig_cli.h).
+    // `AllocatedPtr` lives in `ag::` (from common/defs.h, included via adyg_cli.h).
     // Qualify it explicitly rather than relying on `ag` being an enclosing
-    // namespace of `ag::adig::test`.
+    // namespace of `ag::adyg::test`.
     ag::AllocatedPtr<char> s(ldns_rdf2str(rdf.get()));
     return (s != nullptr) ? std::string(s.get()) : "<invalid>";
 }
@@ -151,4 +151,4 @@ inline std::vector<uint8_t> edns_data_bytes(const ldns_pkt *pkt) {
     return {b, b + size};
 }
 
-} // namespace ag::adig::test
+} // namespace ag::adyg::test
