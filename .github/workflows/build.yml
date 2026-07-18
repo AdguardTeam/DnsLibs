@@ -544,9 +544,13 @@ jobs:
       # toolchain (cl.exe + Ninja, matching the Makefile's Windows path) is
       # configured directly. The root CMakeLists.txt forces the static MSVC
       # runtime (/MT, CMAKE_MSVC_RUNTIME_LIBRARY=MultiThreaded) so the project
-      # objects match the Conan-built /MT dependencies (the Conan profile
-      # conan/profiles/windows-msvc.jinja sets compiler.runtime=static); without
-      # it the link fails with LNK2038 RuntimeLibrary mismatches.
+      # objects match the Conan-built /MT dependencies (the Conan profile /
+      # toolchain shipped with the NativeLibsCommon conanfiles sets
+      # compiler.runtime=static — downloaded at configure time by
+      # cmake/conan_bootstrap.cmake into the build tree's conan/ directory, not
+      # checked into this repo, so no conan/profiles/windows-msvc.jinja path
+      # exists here); without it the link fails with LNK2038 RuntimeLibrary
+      # mismatches.
       - name: Build adyg
         shell: powershell
         run: |
