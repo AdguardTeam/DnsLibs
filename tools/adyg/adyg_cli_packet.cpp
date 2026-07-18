@@ -671,11 +671,20 @@ std::string format_dig_server(std::string_view server, std::optional<uint16_t> p
         return std::string(server);
     }
     // Split an explicit `host:port` (a single host/port colon; a bare IPv6
-    // literal — two or more colons — is left untouched).
+    // literal — two or more colons — is left untouched; a bracketed `[v6]:port`
+    // form is split by split_plain_host_port, leaving `[v6]` as the host).
     std::string_view host = server;
     uint16_t explicit_port = 53;
     if (auto p = split_plain_host_port(host)) {
         explicit_port = *p;
+    }
+    // dig renders the IPv6 literal without its brackets in the SERVER line —
+    // `;; SERVER: ::1#53(::1) (UDP)` — since the brackets are only an input
+    // convention (split_plain_host_port keeps them so the address stays
+    // unambiguous for apply_port / the upstream library). Strip a leading `[`
+    // and trailing `]` purely for display.
+    if (host.size() >= 2 && host.front() == '[' && host.back() == ']') {
+        host = host.substr(1, host.size() - 2);
     }
     const uint16_t use_port = port.value_or(explicit_port);
     // dig renders `IP#port(IP) (proto)` for plain DNS (the IP and the

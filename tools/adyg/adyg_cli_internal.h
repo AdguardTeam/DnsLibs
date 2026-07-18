@@ -38,6 +38,16 @@ std::optional<ParsedAddr> parse_ip_addr(std::string_view addr);
 // (0 or >65535) port suffix is likewise not treated as a port. This supersedes
 // the earlier dot-guard, which — by requiring a dot — also skipped dot-less
 // hostnames carrying an explicit port (e.g. `localhost:53`).
+//
+// The bracketed IPv6 literal form `[v6]:port` (and a bare `[v6]`) is handled
+// explicitly: the port candidate is the `:port` right after the closing
+// bracket, and on success `host` keeps the brackets (`[v6]`) so the result
+// stays an unambiguous IPv6 literal for callers that pass it on (apply_port
+// re-appends the port as `[v6]:<port>`; format_dig_server strips the brackets
+// for dig display). Without this the bracketed form has 2+ colons and would be
+// refused by the single-colon path — the documented `@server` forms
+// `[::1]:53` / `[::1]` in docs/adyg.md would then mis-compose with `-p` /
+// `format_dig_server`.
 std::optional<uint16_t> split_plain_host_port(std::string_view &host);
 
 } // namespace ag::adyg

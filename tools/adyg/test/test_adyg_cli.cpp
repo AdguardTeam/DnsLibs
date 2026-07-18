@@ -1038,6 +1038,16 @@ TEST(ApplyForceTcp, EmptyStringGetsSchemePrefix) {
     EXPECT_EQ("tcp://", server);
 }
 
+TEST(ApplyForceTcp, BracketedIpv6LiteralGetsTcpScheme) {
+    // A bracketed IPv6 literal is a scheme-less bare host, so `+tcp` prefixes
+    // `tcp://`. The brackets (and any explicit `:port`) are preserved so the
+    // resulting URI stays an unambiguous IPv6 literal (`tcp://[::1]:5353`) —
+    // this is the form `apply_port` produces for `@[::1]:53 -p 5353 +tcp`.
+    std::string server = "[::1]:5353";
+    apply_force_tcp(server);
+    EXPECT_EQ("tcp://[::1]:5353", server);
+}
+
 // --- dig-compat no-op flags (accepted, no behavior change) ------------------
 
 TEST(ParseNoopFlags, AcceptedWithoutError) {
@@ -1170,6 +1180,42 @@ TEST(ApplyPort, BareIpv6LiteralLeftAlone) {
     std::string s = "::1";
     apply_port(s, 5353);
     EXPECT_EQ("::1:5353", s);
+}
+
+TEST(ApplyPort, BracketedIpv6WithPortStripsExisting) {
+    // Regression: `[::1]:53` has 2+ colons, so the single-colon path did not
+    // strip the existing port and `-p` produced an invalid `[::1]:53:5353`. The
+    // bracketed `[v6]:port` form is now split explicitly, the existing port is
+    // stripped and the brackets are preserved so the result stays an
+    // unambiguous IPv6 literal.
+    std::string s = "[::1]:53";
+    apply_port(s, 5353);
+    EXPECT_EQ("[::1]:5353", s);
+}
+
+TEST(ApplyPort, BracketedIpv6WithoutPortAppendsPort) {
+    // A bare `[v6]` (no `:port`) carries no port to strip; the new port is
+    // appended after the closing bracket, preserving the unambiguous form.
+    std::string s = "[::1]";
+    apply_port(s, 5353);
+    EXPECT_EQ("[::1]:5353", s);
+}
+
+TEST(ApplyPort, BracketedIpv6InvalidPortLeftUntouched) {
+    // A non-numeric `:port` after the closing bracket is not a port — the host
+    // is left untouched (nullopt) and the `-p` port is appended verbatim, so a
+    // malformed input degrades rather than silently dropping the suffix.
+    std::string s = "[::1]:abc";
+    apply_port(s, 5353);
+    EXPECT_EQ("[::1]:abc:5353", s);
+}
+
+TEST(ApplyPort, BracketedIpv6OutdatedPortStripsExisting) {
+    // A bracketed full IPv6 literal with an explicit port, same as the `::1`
+    // case — `-p` strips the existing port and keeps the brackets.
+    std::string s = "[2001:db8::1]:53";
+    apply_port(s, 5353);
+    EXPECT_EQ("[2001:db8::1]:5353", s);
 }
 
 // --- +bufsize / +ednsflags / +opcode (parsing) -----------------------------

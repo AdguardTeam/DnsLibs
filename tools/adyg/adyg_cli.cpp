@@ -140,6 +140,36 @@ void set_all_display_flags(DisplayFlags &df, bool value) {
 } // namespace
 
 std::optional<uint16_t> split_plain_host_port(std::string_view &host) {
+    // Bracketed IPv6 literal form: `[v6]` or `[v6]:port` (the documented form in
+    // docs/adyg.md). The brackets protect the IPv6 literal from being mis-split
+    // on one of its own colons, so the only port candidate is the `:port` right
+    // after the closing bracket. A bare `[v6]` (no `:port`) yields nullopt and
+    // leaves `host` as `[v6]`; on success `host` keeps the brackets so the
+    // result is a still-unambiguous IPv6 literal for whichever caller needs it
+    // (apply_port -> `[v6]:<newport>`, format_dig_server strips the brackets for
+    // dig display). Without this branch the bracketed form has 2+ colons and the
+    // single-colon path below would refuse to strip the port — see the
+    // `[::1]:53:5353` regression in `ApplyPort.BracketedIpv6WithPort*`.
+    if (host.starts_with('[')) {
+        const size_t close = host.find(']');
+        if (close == std::string_view::npos || close == 1) {
+            return std::nullopt; // no closing bracket, or `[]` — not a [v6] literal
+        }
+        if (close + 1 == host.size()) {
+            return std::nullopt; // bare `[v6]`, no port
+        }
+        if (host[close + 1] != ':') {
+            return std::nullopt; // garbage after `]` (e.g. `[::1]foo`); leave untouched
+        }
+        const std::string_view pstr = host.substr(close + 2);
+        unsigned p = 0;
+        const auto [e, ec] = std::from_chars(pstr.data(), pstr.data() + pstr.size(), p);
+        if (ec != std::errc{} || e != pstr.data() + pstr.size() || p == 0 || p > 65535) {
+            return std::nullopt;
+        }
+        host = host.substr(0, close + 1); // keep the brackets (`[v6]`)
+        return static_cast<uint16_t>(p);
+    }
     const size_t colon = host.rfind(':');
     if (colon == std::string_view::npos || colon == 0) {
         return std::nullopt; // no colon, or an empty host before it
@@ -147,7 +177,8 @@ std::optional<uint16_t> split_plain_host_port(std::string_view &host) {
     // A single colon separates host from port; two or more colons mean a bare
     // IPv6 literal (`::1`, `fe80::1`, …), which must not be mis-split on one of
     // its own colons. Only treat the host as `host:port` when the first and last
-    // colon coincide (exactly one colon in the string).
+    // colon coincide (exactly one colon in the string). The bracketed `[v6]:port`
+    // form is handled by the branch above.
     if (host.find(':') != colon) {
         return std::nullopt;
     }

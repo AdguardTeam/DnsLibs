@@ -1614,6 +1614,22 @@ TEST(FormatDigServer, ExplicitPortInServer) {
     EXPECT_EQ("1.1.1.1#5353(1.1.1.1) (UDP)", format_dig_server("1.1.1.1:53", 5353, false));
 }
 
+TEST(FormatDigServer, BracketedIpv6WithPort) {
+    // Regression: `[::1]:53` has 2+ colons, so the single-colon path did not
+    // split the explicit port — the SERVER line showed the raw `[::1]:53` rather
+    // than `::1#53(::1) (UDP)`. split_plain_host_port now handles the
+    // `[v6]:port` form (extracting port 53, leaving `[::1]` as the host), and
+    // format_dig_server strips the brackets for dig-compatible display (dig
+    // renders `::1`, not `[::1]`). A `-p` override now also takes effect.
+    EXPECT_EQ("::1#53(::1) (UDP)", format_dig_server("[::1]:53", std::nullopt, false));
+    EXPECT_EQ("::1#5353(::1) (UDP)", format_dig_server("[::1]:53", 5353, false));
+    EXPECT_EQ("::1#53(::1) (UDP)", format_dig_server("[::1]", std::nullopt, false));
+    EXPECT_EQ("::1#5353(::1) (UDP)", format_dig_server("[::1]", 5353, false));
+    // Full IPv6 literal and TCP transport.
+    EXPECT_EQ("2001:db8::1#53(2001:db8::1) (UDP)", format_dig_server("[2001:db8::1]", std::nullopt, false));
+    EXPECT_EQ("::1#53(::1) (TCP)", format_dig_server("[::1]", std::nullopt, true));
+}
+
 TEST(FormatDigServer, HostnameWithoutDotExplicitPort) {
     // Regression: the old dot-guard skipped the port split for a dot-less host,
     // yielding `localhost:53#53(localhost:53) (UDP)`. The single-colon split now
@@ -1640,6 +1656,16 @@ TEST(FormatDigServer, PlainDnsSchemeStripped) {
     EXPECT_EQ("1.1.1.1#53(1.1.1.1) (UDP)", format_dig_server("dns://1.1.1.1", std::nullopt, true));
     // The scheme match is case-insensitive (mirrors upstream scheme parsing).
     EXPECT_EQ("1.1.1.1#53(1.1.1.1) (TCP)", format_dig_server("TCP://1.1.1.1", std::nullopt, false));
+}
+
+TEST(FormatDigServer, BracketedIpv6AfterForceTcp) {
+    // End-to-end: `@[::1]:53 -p 5353 +tcp` -> apply_port keeps the brackets
+    // (`[::1]:5353`), apply_force_tcp prefixes `tcp://` (`tcp://[::1]:5353`),
+    // and format_dig_server strips the scheme and the brackets for dig-style
+    // `::1#5353(::1) (TCP)`. Without the bracket handling, the explicit port
+    // could not be overridden and the SERVER line would show `[::1]:53`.
+    EXPECT_EQ("::1#5353(::1) (TCP)", format_dig_server("tcp://[::1]:5353", std::nullopt, false));
+    EXPECT_EQ("::1#53(::1) (TCP)", format_dig_server("tcp://[::1]", std::nullopt, false));
 }
 
 TEST(FormatDigServer, EmptyReturnsEmpty) {

@@ -344,11 +344,14 @@ void apply_force_tcp(std::string &server);
 // Apply `-p PORT` to a plain-DNS server: when `port` is set and `server` has
 // no scheme, the port is overridden — any explicit `host:port` is stripped first
 // (only a single host/port colon is treated as a separator, so a bare IPv6
-// literal — two or more colons — is left alone and not mis-split). Schemed
-// upstreams are left untouched (dig's -p applies to plain DNS only). `+tcp`'s
-// scheme-rewrite (apply_force_tcp) runs afterwards and preserves the port
-// (`1.1.1.1:5353` -> `tcp://1.1.1.1:5353`). Mutates `server` in place; exposed
-// in the pure layer so it is unit-testable without an event loop.
+// literal — two or more colons — is left alone and not mis-split; the bracketed
+// `[v6]:port` form is handled explicitly and keeps its brackets so the result
+// is a still-unambiguous `[v6]:<port>`). Schemed upstreams are left untouched
+// (dig's -p applies to plain DNS only). `+tcp`'s scheme-rewrite
+// (apply_force_tcp) runs afterwards and preserves the port
+// (`1.1.1.1:5353` -> `tcp://1.1.1.1:5353`; `[::1]:5353` -> `tcp://[::1]:5353`).
+// Mutates `server` in place; exposed in the pure layer so it is unit-testable
+// without an event loop.
 void apply_port(std::string &server, std::optional<uint16_t> port);
 
 // Format one `dig +trace` hop as dig-compatible text. The body is produced by
