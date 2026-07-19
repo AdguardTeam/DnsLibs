@@ -1218,6 +1218,78 @@ TEST(ApplyPort, BracketedIpv6OutdatedPortStripsExisting) {
     EXPECT_EQ("[2001:db8::1]:5353", s);
 }
 
+// `split_plain_host_port` (exercised via `apply_port`) delegates the host:port
+// split to `ag::utils::split_host_port` but still validates the port itself — a
+// zero, out-of-range (uint16), or non-purely-numeric port suffix is rejected
+// (returns nullopt, `host` left untouched), so the `-p` port is appended after
+// the original raw `host:port` input. The bracketed `[v6]:port` form is
+// likewise rejected for the same port-shaped failures, plus for the missing
+// right-bracket / trailing-garbage / empty-host cases that the local contract
+// rejects but `ag::utils::split_host_port` may report as success in its lenient
+// default mode.
+TEST(ApplyPort, RejectsInvalidPlainHostPort) {
+    // Port = 0 (out of the 1..65535 valid range).
+    std::string s1 = "1.1.1.1:0";
+    apply_port(s1, 5353);
+    EXPECT_EQ("1.1.1.1:0:5353", s1);
+    // Port > 65535 (overflows uint16_t).
+    std::string s2 = "1.1.1.1:99999";
+    apply_port(s2, 5353);
+    EXPECT_EQ("1.1.1.1:99999:5353", s2);
+    // Partial-numeric port (digits followed by garbage): `std::from_chars`
+    // requires the whole suffix to be numeric — `53` parses but `extra` is left,
+    // so the parse is rejected (matching the local impl's `e != end` guard).
+    std::string s3 = "1.1.1.1:53extra";
+    apply_port(s3, 5353);
+    EXPECT_EQ("1.1.1.1:53extra:5353", s3);
+    // Empty host before the colon: `ag::utils::split_host_port` accepts
+    // `(":53" -> "", "53")` in its lenient default mode — adyg's contract
+    // rejects the empty host explicitly so a port-only input is not split.
+    std::string s4 = ":53";
+    apply_port(s4, 5353);
+    EXPECT_EQ(":53:5353", s4);
+    // A bare IPv4 (no `:port`) is the no-op success-of-nullopt path; the `-p`
+    // port is simply appended after the host.
+    std::string s5 = "1.1.1.1";
+    apply_port(s5, 5353);
+    EXPECT_EQ("1.1.1.1:5353", s5);
+}
+
+TEST(ApplyPort, RejectsInvalidBracketedIpv6HostPort) {
+    // Each failure path returns nullopt and leaves `host` untouched, so
+    // `apply_port` then appends `-p`'s port after the original raw input.
+    // Port = 0 on a bracketed literal.
+    std::string s1 = "[::1]:0";
+    apply_port(s1, 5353);
+    EXPECT_EQ("[::1]:0:5353", s1);
+    // Port > 65535 on a bracketed literal.
+    std::string s2 = "[::1]:99999";
+    apply_port(s2, 5353);
+    EXPECT_EQ("[::1]:99999:5353", s2);
+    // Partial-numeric port on a bracketed literal (`5353extra` parses `5353`
+    // but leaves the trailing `extra`; `e != end` is rejected).
+    std::string s3 = "[::1]:5353extra";
+    apply_port(s3, 5353);
+    EXPECT_EQ("[::1]:5353extra:5353", s3);
+    // Empty IPv6 inside the brackets plus a port: `ag::utils::split_host_port`
+    // returns `("", "53")` for `[]:53` (a `]:` was found, host slice is empty)
+    // — adyg's `h.empty() && !pstr.empty()` guard rejects it.
+    std::string s4 = "[]:53";
+    apply_port(s4, 5353);
+    EXPECT_EQ("[]:53:5353", s4);
+    // Incomplete bracketed literal (no closing `]`): `ag::utils::split_host_port`
+    // reports AE_IPV6_MISSING_RIGHT_BRACKET, which adyg surfaces as nullopt.
+    std::string s5 = "[::1";
+    apply_port(s5, 5353);
+    EXPECT_EQ("[::1:5353", s5);
+    // Trailing garbage after the closing `]` (no `:port` to extract):
+    // `ag::utils::split_host_port` reports AE_IPV6_MISSING_RIGHT_BRACKET (the
+    // string does not end with `]`); adyg surfaces as nullopt.
+    std::string s6 = "[::1]foo";
+    apply_port(s6, 5353);
+    EXPECT_EQ("[::1]foo:5353", s6);
+}
+
 // --- +bufsize / +ednsflags / +opcode (parsing) -----------------------------
 //
 // The apply_dns_flags behavior for these (DO bit, EDNS Z field, opcode applied

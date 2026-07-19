@@ -23,6 +23,7 @@
 #include <ldns/ldns.h>
 
 #include "adyg_cli_internal.h"
+#include "common/net_utils.h"
 
 namespace ag::adyg {
 namespace {
@@ -143,55 +144,68 @@ void set_all_display_flags(DisplayFlags &df, bool value) {
 } // namespace
 
 std::optional<uint16_t> split_plain_host_port(std::string_view &host) {
-    // Bracketed IPv6 literal form: `[v6]` or `[v6]:port` (the documented form in
-    // docs/adyg.md). The brackets protect the IPv6 literal from being mis-split
-    // on one of its own colons, so the only port candidate is the `:port` right
-    // after the closing bracket. A bare `[v6]` (no `:port`) yields nullopt and
-    // leaves `host` as `[v6]`; on success `host` keeps the brackets so the
-    // result is a still-unambiguous IPv6 literal for whichever caller needs it
-    // (apply_port -> `[v6]:<newport>`, format_dig_server strips the brackets for
-    // dig display). Without this branch the bracketed form has 2+ colons and the
-    // single-colon path below would refuse to strip the port — see the
-    // `[::1]:53:5353` regression in `ApplyPort.BracketedIpv6WithPort*`.
-    if (host.starts_with('[')) {
-        const size_t close = host.find(']');
-        if (close == std::string_view::npos || close == 1) {
-            return std::nullopt; // no closing bracket, or `[]` — not a [v6] literal
-        }
-        if (close + 1 == host.size()) {
-            return std::nullopt; // bare `[v6]`, no port
-        }
-        if (host[close + 1] != ':') {
-            return std::nullopt; // garbage after `]` (e.g. `[::1]foo`); leave untouched
-        }
-        const std::string_view pstr = host.substr(close + 2);
-        unsigned p = 0;
-        const auto [e, ec] = std::from_chars(pstr.data(), pstr.data() + pstr.size(), p);
-        if (ec != std::errc{} || e != pstr.data() + pstr.size() || p == 0 || p > 65535) {
-            return std::nullopt;
-        }
-        host = host.substr(0, close + 1); // keep the brackets (`[v6]`)
-        return static_cast<uint16_t>(p);
-    }
-    const size_t colon = host.rfind(':');
-    if (colon == std::string_view::npos || colon == 0) {
-        return std::nullopt; // no colon, or an empty host before it
-    }
-    // A single colon separates host from port; two or more colons mean a bare
-    // IPv6 literal (`::1`, `fe80::1`, …), which must not be mis-split on one of
-    // its own colons. Only treat the host as `host:port` when the first and last
-    // colon coincide (exactly one colon in the string). The bracketed `[v6]:port`
-    // form is handled by the branch above.
-    if (host.find(':') != colon) {
+    // Delegate the host:port / `[v6]:port` split to `ag::utils::split_host_port`
+    // (from native-libs-common) instead of re-implementing the schema here.
+    // adyg wraps the shared helper with two thin concerns on top:
+    //
+    //   (1) Port validation + conversion: `ag::utils::split_host_port` returns
+    //       the port as a `string_view` (it accepts any non-colon suffix), so
+    //       adyg still has to verify it is a non-empty numeric value in
+    //       1..65535 and convert to `uint16_t` — the format adyg callers
+    //       (`apply_port`, `format_dig_server`, `split_trace_server_addr`)
+    //       expect.
+    //   (2) Bracket preservation: in the `[v6]:port` form,
+    //       `ag::utils::split_host_port` strips the brackets off the host —
+    //       adyg keeps them on the returned `host` so the downstream callers
+    //       get an unambiguous IPv6 literal (`apply_port` -> `[v6]:<port>`,
+    //       `apply_force_tcp` -> `tcp://[v6]:<port>`, `format_dig_server`
+    //       strips the brackets again for dig display).
+    //
+    // The full adyg-side contract (returns nullopt and leaves `host` untouched
+    // on every failure path — bare `[v6]` (no `:port`), a non-numeric /
+    // out-of-range / partial port suffix, a bare IPv6 literal, an empty host
+    // before the colon, …) is preserved.
+    if (host.empty()) {
         return std::nullopt;
     }
-    const std::string_view pstr = host.substr(colon + 1);
+    const bool had_brackets = host.front() == '[';
+    auto split = ag::utils::split_host_port(host);
+    if (split.has_error()) {
+        // Includes the bracket-starts-but-no-right-bracket form (`[v1`) and
+        // the bracketed-with-trailing-garbage form (`[v6]foo`), both rejected
+        // by `ag::utils::split_host_port` with AE_IPV6_MISSING_RIGHT_BRACKET —
+        // matching the local implementation's own rejection of those inputs.
+        return std::nullopt;
+    }
+    auto [h, pstr] = split.value();
+    // `ag::utils::split_host_port` in its default (lenient) mode accepts an
+    // empty host before the port (`:53` -> `("", "53")`) and reports it as
+    // success — adyg's contract rejects this case (an empty host is not a
+    // useful `host:port` to split).
+    if (h.empty() && !pstr.empty()) {
+        return std::nullopt;
+    }
+    if (pstr.empty()) {
+        return std::nullopt; // bare host (or bare `[v6]` after bracket strip); nothing to split
+    }
     unsigned p = 0;
     const auto [e, ec] = std::from_chars(pstr.data(), pstr.data() + pstr.size(), p);
     if (ec != std::errc{} || e != pstr.data() + pstr.size() || p == 0 || p > 65535) {
         return std::nullopt;
     }
-    host = host.substr(0, colon);
+    if (had_brackets) {
+        // The input was `[v6]:port`. `ag::utils::split_host_port` returned
+        // `h = v6` (brackets stripped); rebuild `host` as `[v6]` so the
+        // result stays an unambiguous IPv6 literal for whichever adyg caller
+        // consumes it (`apply_port` -> `[v6]:<port>`, `apply_force_tcp` ->
+        // `tcp://[v6]:<port>`; `format_dig_server` strips the brackets again
+        // for dig display). The slice is taken from the input view so the
+        // returned view stays pointer-stable into the same buffer.
+        size_t close = host.find(']');
+        host = host.substr(0, close + 1);
+    } else {
+        host = h;
+    }
     return static_cast<uint16_t>(p);
 }
 
