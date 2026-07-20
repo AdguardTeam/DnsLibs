@@ -407,20 +407,25 @@ coro::Task<Upstream::ExchangeResult> DoqUpstream::exchange(const ldns_pkt *reque
         m_server_addresses.assign(bootstrapper_res.addresses.begin(), bootstrapper_res.addresses.end());
     }
 
-    ldns_buffer *buffer = ldns_buffer_new(REQUEST_BUFFER_INITIAL_CAPACITY);
+    // Owned by an RAII guard from creation so the encode-failure co_return below
+    // cannot leak it (ldns_pkt2buffer_wire is the call that can fail between
+    // allocation and the transfer to req.request_buffer).
+    ldns_buffer_ptr buffer{ldns_buffer_new(REQUEST_BUFFER_INITIAL_CAPACITY)};
     uint16_t original_req_id = ldns_pkt_id(request);
-    ldns_status status = ldns_pkt2buffer_wire(buffer, request);
+    // ldns_buffer_new can return nullptr under memory pressure; without this
+    // guard ldns_pkt2buffer_wire would dereference it inside ldns and crash.
+    ldns_status status = (buffer == nullptr) ? LDNS_STATUS_MEM_ERR : ldns_pkt2buffer_wire(buffer.get(), request);
     if (status != LDNS_STATUS_OK) {
         assert(0);
         co_return make_error(DnsError::AE_ENCODE_ERROR, ldns_get_errorstr_by_id(status));
     }
-    ldns_buffer_flip(buffer);
-    memset(ldns_buffer_current(buffer), '\0', sizeof(original_req_id));
+    ldns_buffer_flip(buffer.get());
+    memset(ldns_buffer_current(buffer.get()), '\0', sizeof(original_req_id));
 
     int64_t request_id = m_next_request_id++;
     Request &req = m_requests[request_id];
     req.request_id = request_id;
-    req.request_buffer.reset(buffer);
+    req.request_buffer = std::move(buffer);
     tracelog_id(m_log, request, "Creation new request, id: {}, connection state: {}", request_id,
             magic_enum::enum_name(m_state.load()));
 

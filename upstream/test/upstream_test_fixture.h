@@ -105,8 +105,12 @@ inline ldns_pkt_ptr create_test_message() {
     }
     ldns_rr *first_rr = ldns_rr_list_rr(ldns_pkt_answer(&reply), 0);
     if (ldns_rr_get_type(first_rr) != LDNS_RR_TYPE_A) {
+        // ldns_rr_type2str returns a malloc'd char*; hold it in an RAII guard so
+        // it is freed (the AG_FMT below would otherwise leak one string per
+        // failed assertion).
+        ag::AllocatedPtr<char> type_str{ldns_rr_type2str(ldns_rr_get_type(first_rr))};
         return AG_FMT("DNS upstream returned wrong answer type instead of A: {}",
-                ldns_rr_type2str(ldns_rr_get_type(first_rr)));
+                (type_str != nullptr) ? type_str.get() : "");
     }
     ldns_rdf *rdf = ldns_rr_rdf(first_rr, 0);
     static constexpr std::array<uint8_t, 4> ip8888 = {8, 8, 8, 8};

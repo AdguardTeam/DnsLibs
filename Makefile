@@ -26,6 +26,32 @@ else
 NPROC ?= $(shell (nproc 2>/dev/null || sysctl -n hw.ncpu 2>/dev/null || echo 8) | tr -d '\n')
 endif
 
+# Parallelism level for ctest. Defaults to the number of logical CPUs. Override
+# with e.g. `make test TEST_JOBS=1` to force serial execution, or lower it on a
+# memory-constrained machine. Tests are parallel-safe: the in-process loopback
+# servers (`common/test_helpers/loopback_*`) all bind ephemeral ports, and the
+# proxy listener tests configure port 0 so DnsProxy::init() binds an ephemeral
+# port and stores the actual port back in the listener settings (read via
+# get_settings() after init); the one deliberate-bind-failure test never binds,
+# so concurrent test processes never collide on a listener port.
+TEST_JOBS ?= $(NPROC)
+
+# Parallelism level for clangd-tidy. Capped at half the CPU count (NPROC / 2,
+# not the full NPROC) because each clangd worker can consume hundreds of MB to
+# over 1 GB of RSS; running one per CPU can exhaust memory on the CI Linux
+# runner (12 GB / 8 CPUs), OOM-killing clangd mid-analysis. Override per-
+# invocation, e.g. `make clangd-tidy CLANGD_TIDY_JOBS=8`.
+CLANGD_TIDY_JOBS ?= $(shell echo $$(( $(NPROC) / 2 > 0 ? $(NPROC) / 2 : 1 )))
+
+# Stream every failing test's captured stdout/stderr into the invoking shell.
+# Equivalent to passing --output-on-failure to each ctest invocation, but set
+# once here via `export` so it applies to ALL ctest runs in this Makefile
+# (test-cpp, test-integration, test-ci) and any future target, without having
+# to remember the flag per-call. Without this, failed-test output lands only in
+# build/Testing/Temporary/LastTest.log on the runner, which CI may not upload,
+# making one-off flakes impossible to diagnose.
+export CTEST_OUTPUT_ON_FAILURE=1
+
 # Whether to build with AddressSanitizer. CI enables this on Linux. Maps to
 # the -DSANITIZE=yes CMake option (see proxy/CMakeLists.txt), which adds
 # -fsanitize=address to the dnsproxy target's compile and link flags.
@@ -50,6 +76,29 @@ CMAKE_FLAGS = -DCMAKE_BUILD_TYPE=$(CMAKE_BUILD_TYPE) \
 	$(SANITIZE_FLAGS) \
 	-GNinja
 endif
+
+# A "configure signature" recording the CMake input flags that affect the
+# CMake-Conan cache layout (CMAKE_BUILD_TYPE drives build/conan/build/
+# <build_type>/generators; SANITIZE=yes adds -fsanitize=address). The
+# CMake-Conan provider caches find_package() results (e.g., libevent_DIR)
+# as absolute paths inside conan/build/<build_type>/generators in
+# CMakeCache.txt. When the build type changes between runs in the SAME
+# build directory, these *_DIR entries are NOT invalidated, so
+# find_package(libevent) reads from the stale <old-build_type>/generators
+# directory and the build fails with "fatal error: 'event2/event.h' file
+# not found" (the libevent headers are only installed under the new
+# <new-build_type>/generators path). To avoid this, $(CONFIGURE_STAMP)
+# records the current signature on each successful configure, and both
+# setup_cmake and compile_commands wipe $(BUILD_DIR)/ before re-running
+# cmake when the previously-recorded signature differs from the current
+# one. A missing stamp on a pre-existing CMakeCache.txt (e.g. a build
+# directory created before this guard was added) is treated as a mismatch
+# so upgrade is safe — the cost is one fresh reconfigure for the first
+# invocation against such an upgraded directory. (See build.yml's
+# `rm -rf build` between lint-cpp and test-ci for the same workaround done
+# manually.)
+CMAKE_CONFIGURE_SIGNATURE = $(CMAKE_BUILD_TYPE)|$(SANITIZE)
+CONFIGURE_STAMP = $(BUILD_DIR)/.cmake_configure_signature
 
 .PHONY: init
 ## Initialize the development environment (git hooks, etc.)
@@ -86,19 +135,46 @@ setup_cmake:
 else
 setup_cmake: bootstrap_deps
 endif
-	mkdir -p $(BUILD_DIR) && cmake -S . -B $(BUILD_DIR) $(CMAKE_FLAGS)
+	@mkdir -p $(BUILD_DIR); \
+	if [ -f $(BUILD_DIR)/CMakeCache.txt ] \
+		&& { [ ! -f $(CONFIGURE_STAMP) ] \
+			|| [ "$$(cat $(CONFIGURE_STAMP) 2>/dev/null)" != "$(CMAKE_CONFIGURE_SIGNATURE)" ]; }; then \
+		echo "==> CMake configuration changed; wiping $(BUILD_DIR)/ to avoid stale Conan cache entries."; \
+		rm -rf $(BUILD_DIR) && mkdir -p $(BUILD_DIR); \
+	fi
+	cmake -S . -B $(BUILD_DIR) $(CMAKE_FLAGS)
+	@mkdir -p $(BUILD_DIR) && printf '%s' '$(CMAKE_CONFIGURE_SIGNATURE)' > $(CONFIGURE_STAMP)
 
 .PHONY: compile_commands
 ## Generate compile_commands.json
 compile_commands:
-	mkdir -p $(BUILD_DIR) && cmake -S . -B $(BUILD_DIR) \
+	@mkdir -p $(BUILD_DIR); \
+	if [ -f $(BUILD_DIR)/CMakeCache.txt ] \
+		&& { [ ! -f $(CONFIGURE_STAMP) ] \
+			|| [ "$$(cat $(CONFIGURE_STAMP) 2>/dev/null)" != "$(CMAKE_CONFIGURE_SIGNATURE)" ]; }; then \
+		echo "==> CMake configuration changed; wiping $(BUILD_DIR)/ to avoid stale Conan cache entries."; \
+		rm -rf $(BUILD_DIR) && mkdir -p $(BUILD_DIR); \
+	fi
+	cmake -S . -B $(BUILD_DIR) \
 		$(CMAKE_FLAGS) \
 		-DCMAKE_EXPORT_COMPILE_COMMANDS=ON
+	@mkdir -p $(BUILD_DIR) && printf '%s' '$(CMAKE_CONFIGURE_SIGNATURE)' > $(CONFIGURE_STAMP)
 
 .PHONY: build_libs
 ## Build the libraries
 build_libs: setup_cmake
 	cmake --build $(BUILD_DIR) --target dnsproxy
+
+.PHONY: build_adyg
+## Build the adyg CLI tool
+build_adyg: setup_cmake
+	cmake --build $(BUILD_DIR) --target adyg
+
+.PHONY: generate_root_hints
+## Regenerate tools/adyg/root_servers.h from the IANA root hints.
+## Requires network access; ordinary builds/tests use the checked-in header.
+generate_root_hints:
+	python3 scripts/generate_root_hints.py
 
 .PHONY: clean
 ## Clean the project
@@ -143,7 +219,7 @@ ifeq ($(SKIP_VENV),1)
 	jq -r '.[] | select(.file | endswith(".cpp")) | .file' $(COMPILE_COMMANDS) \
 		| grep -vE '(^|/)(third-party)(/|$$)' \
 		| sort -u \
-		| xargs clangd-tidy -p $(BUILD_DIR) --tqdm -j$(NPROC)
+		| xargs clangd-tidy -p $(BUILD_DIR) --tqdm -j$(CLANGD_TIDY_JOBS)
 else
 	python3 -m venv env && \
 	. env/bin/activate && \
@@ -151,7 +227,7 @@ else
 	jq -r '.[] | select(.file | endswith(".cpp")) | .file' $(COMPILE_COMMANDS) \
 		| grep -vE '(^|/)(third-party)(/|$$)' \
 		| sort -u \
-		| xargs clangd-tidy -p $(BUILD_DIR) --tqdm -j$(NPROC)
+		| xargs clangd-tidy -p $(BUILD_DIR) --tqdm -j$(CLANGD_TIDY_JOBS)
 endif
 
 ## Lint markdown files.
@@ -196,7 +272,7 @@ test: test-cpp
 .PHONY: test-cpp
 test-cpp: build_libs
 	cmake --build $(BUILD_DIR) --target tests
-	ctest --test-dir $(BUILD_DIR)
+	ctest --test-dir $(BUILD_DIR) -j $(TEST_JOBS)
 
 ## Run the full test suite including real-network integration tests.
 ## Sets DNSLIBS_INTEGRATION_TESTS=1, so tests that dial public DNS servers
@@ -204,7 +280,7 @@ test-cpp: build_libs
 .PHONY: test-integration
 test-integration: build_libs
 	cmake --build $(BUILD_DIR) --target tests
-	DNSLIBS_INTEGRATION_TESTS=1 ctest --test-dir $(BUILD_DIR)
+	DNSLIBS_INTEGRATION_TESTS=1 ctest --test-dir $(BUILD_DIR) -j $(TEST_JOBS)
 
 # Path to the JUnit XML report written by the CI test target below. The CI
 # workflow uploads this file as the test-results artifact.
@@ -238,6 +314,6 @@ JUNIT_XML ?= $(BUILD_DIR)/junit.xml
 .PHONY: test-ci
 test-ci: build_libs
 	cmake --build $(BUILD_DIR) --target tests
-	DNSLIBS_INTEGRATION_TESTS=1 ctest --test-dir $(BUILD_DIR) \
+	DNSLIBS_INTEGRATION_TESTS=1 ctest --test-dir $(BUILD_DIR) -j $(TEST_JOBS) \
 		--output-junit $(abspath $(JUNIT_XML)) \
 		-D ExperimentalTest --no-compress-output

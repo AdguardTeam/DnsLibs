@@ -24,7 +24,10 @@ static X509_STORE *create_ca_store() {
 
 static X509_STORE *create_ca_store() {
     Logger log{"System CA Store"};
-    X509_STORE *store = X509_STORE_new();
+    // Owned by an RAII guard from creation so the early return below (when
+    // SecTrustCopyAnchorCertificates fails) cannot leak the store; ownership is
+    // released to the caller only on the success path.
+    ag::UniquePtr<X509_STORE, &X509_STORE_free> store{X509_STORE_new()};
     if (store == nullptr) {
         warnlog(log, "Cannot initialize OpenSSL certificate store");
         return nullptr;
@@ -50,7 +53,7 @@ static X509_STORE *create_ca_store() {
         const uint8_t *ptr = CFDataGetBytePtr(cert_data);
         d2i_X509(&xcert, &ptr, CFDataGetLength(cert_data));
         if (xcert != nullptr) {
-            if (0 == X509_STORE_add_cert(store, xcert)) {
+            if (0 == X509_STORE_add_cert(store.get(), xcert)) {
                 warnlog(log, "Failed to add ca_cert to OpenSSL certificate store");
             }
             X509_free(xcert);
@@ -61,7 +64,7 @@ static X509_STORE *create_ca_store() {
 
     CFRelease(anchors);
 
-    return store;
+    return store.release();
 }
 
 #else

@@ -92,7 +92,7 @@ jobs:
         set -e
         set -x
 
-        python3 -m pip install conan --upgrade
+        python3 -m pip install conan
         conan remote add --index 0 art ${{ vars.CONAN_REPO_URL }} || true
 
         # TODO: run `make lint` instead of `make lint-cpp` once the builds
@@ -148,23 +148,31 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v6
 
-      # This job only produces the deployable AGDnsProxy.xcframework: it
-      # cross-compiles the framework for 5 slices (macos-x86_64, macos-arm64,
-      # ios-arm64, iphonesimulator-x86_64, iphonesimulator-arm64) via
-      # build_dnsproxy_framework.sh and packages the xcframework/podspec/SwiftPM
-      # artifacts. Unlike the Linux and Windows jobs, it runs NO tests — not the
-      # native C++ ctest suite (which Linux/Windows run via `make test-ci` /
-      # `ctest`), and not the Obj-C framework `test_*.mm` tests defined in
-      # platform/mac/framework/CMakeLists.txt (gated on TARGET_OS=macos, and
-      # never built here since only `ninja AGDnsProxy` runs per slice).
+      # This job produces the deployable AGDnsProxy.xcframework (cross-compiled
+      # for 5 slices: macos-x86_64, macos-arm64, ios-arm64, iphonesimulator-x86_64,
+      # iphonesimulator-arm64 via build_dnsproxy_framework.sh) and the
+      # xcframework/podspec/SwiftPM artifacts, and additionally runs the native
+      # C++ ctest suite (incl. test_adyg_cli) and builds the adyg CLI binary.
       #
-      # TODO(mac-tests): consider running a native macOS `make test-ci` (root
-      # CMake project, `DNSLIBS_INTEGRATION_TESTS=1`) and/or the Obj-C framework
-      # tests as a separate mac-test job. The real-network integration tests are
-      # better suited to a scheduled build — see the matching TODO(scheduled-
-      # builds) comments in the Linux/Windows jobs and the Makefile `test-ci`
-      # target.
-      - name: Build xcframework
+      # Tests run FIRST (before the framework cross-compilation) as a fast gating
+      # step: a test failure fails the job before spending time on the five-slice
+      # framework build. The native suite runs offline via `make test` (= test-cpp,
+      # no DNSLIBS_INTEGRATION_TESTS), so the real-network integration tests stay
+      # Linux-only and this step is non-flaky; see the TODO(scheduled-builds)
+      # comments elsewhere.
+      #
+      # The Obj-C framework `test_*.mm` tests (platform/mac/framework/
+      # CMakeLists.txt, gated on TARGET_OS=macos) are still NOT run here — only
+      # `ninja AGDnsProxy` runs per framework slice.
+
+      # Create a single Python venv with Conan and the `art` remote once and
+      # reuse it across the native test run, the xcframework build, the adyg
+      # build and the final Conan upload. Each `run:` step re-activates the
+      # venv (GitHub Actions starts a fresh shell per step); the venv directory
+      # itself persists in the workspace. The Conan package cache (~/.conan2)
+      # is shared across all of these regardless of the active venv, so there
+      # is no need for the later steps to recreate it.
+      - name: Set up Conan venv
         run: |
           set -e
           set -x
@@ -175,6 +183,39 @@ jobs:
 
           python3 -m pip install conan
           conan remote add --index 0 art ${{ vars.CONAN_REPO_URL }} || true
+
+      - name: Run native tests
+        run: |
+          set -e
+          set -x
+
+          # Reuse the venv (Conan + `art` remote) created by the "Set up Conan
+          # venv" step. The conan CMake provider fetches the root CMake project's
+          # dependencies during configure.
+          source ./venv/bin/activate
+
+          # Builds the `tests` target in build/ (default BUILD_DIR), then runs
+          # ctest. build/ is separate from the framework's platform/mac/build/,
+          # so the two builds never collide.
+          #
+          # Uses `make test` (= test-cpp), not `make test-ci`: the latter turns
+          # on the real-network integration tests (DNSLIBS_INTEGRATION_TESTS=1),
+          # kept Linux-only so this step stays non-flaky (see the step-level
+          # note above); it also writes a JUnit report and submits to CDash,
+          # which only the Linux junit-tests workflow consumes (this is a plain
+          # runs-on job), and is meant to pair with the Linux sanitized Debug
+          # build (BUILD_TYPE=debug SANITIZE=yes).
+          SKIP_BOOTSTRAP=1 make test
+
+      - name: Build xcframework
+        run: |
+          set -e
+          set -x
+
+          # Reuse the venv (Conan + `art` remote) created by the "Set up Conan
+          # venv" step. The framework script runs `cmake` per slice, and the
+          # conan CMake provider fetches each slice's dependencies on configure.
+          source ./venv/bin/activate
 
           export DNS_LIBS_DIR="${PWD}"
           cd platform/mac
@@ -267,6 +308,30 @@ jobs:
           if-no-files-found: error
           retention-days: 7
 
+      # Build the adyg CLI binary as a step separate from the test run. The
+      # "Run native tests" step above already built `adyg` (the `tests` target
+      # depends on it) in release mode in the root build/ dir, so this is just a
+      # fast incremental rebuild that exists to make "build adyg" a distinct,
+      # loggable step from "run tests". Release build (default BUILD_TYPE=release
+      # -> RelWithDebInfo) so the uploaded binary matches the Linux adyg artifact.
+      # Reuses the shared venv created by the "Set up Conan venv" step.
+      - name: Build adyg
+        run: |
+          set -e
+          set -x
+
+          source ./venv/bin/activate
+
+          SKIP_BOOTSTRAP=1 make build_adyg
+
+      - name: Upload adyg binary
+        uses: actions/upload-artifact@v7
+        with:
+          name: adyg-macos
+          path: build/tools/adyg/adyg
+          if-no-files-found: error
+          retention-days: 7
+
       - name: Upload to Conan
         if: always()
         run: |
@@ -302,7 +367,7 @@ jobs:
           set -e
           set -x
 
-          python3 -m pip install conan --upgrade
+          python3 -m pip install conan
           conan remote add --index 0 art ${{ vars.CONAN_REPO_URL }} || true
 
           touch local.properties
@@ -455,33 +520,6 @@ jobs:
           path: '**/Testing/*/*.xml'
           retention-days: 7
 
-      # The CDash XML above carries per-test pass/fail but not the gtest
-      # stdout/stderr; `ctest -D ExperimentalTest` writes that to LastTest.log
-      # on the runner. Mirror it into the step log + run summary and upload it
-      # so a failure (even on a cancelled run) can be diagnosed without SSH to
-      # the runner.
-      - name: Publish C++ test failure output
-        if: always()
-        shell: powershell
-        run: |
-          $logs = Get-ChildItem -Path . -Recurse -Filter 'LastTest.log' -ErrorAction SilentlyContinue
-          foreach ($log in $logs) {
-            Write-Host "::group::LastTest.log ($($log.FullName))"
-            Get-Content $log.FullName -Tail 4000
-            Write-Host "::endgroup::"
-            $tail = (Get-Content $log.FullName -Tail 800) -join "`n"
-            Add-Content -Path $env:GITHUB_STEP_SUMMARY -Value "## C++ test output ($($log.FullName))`n`n`````n$tail`n`````n"
-          }
-
-      - name: Upload C++ test logs
-        uses: actions/upload-artifact@v7
-        if: always()
-        with:
-          name: test-logs-windows
-          path: '**/Testing/Temporary/LastTest.log'
-          if-no-files-found: warn
-          retention-days: 7
-
       - name: Upload C# test results
         uses: actions/upload-artifact@v7
         if: always()
@@ -498,6 +536,53 @@ jobs:
           if-no-files-found: error
           retention-days: 7
 
+      # Build adyg as a step of the Windows job. The capi subproject built
+      # above (platform/windows/capi) does not add tools/adyg (it only adds
+      # proxy), so adyg must be built from the root CMake project, which does
+      # add_subdirectory(tools/adyg). A separate build-adyg/ dir is used so it
+      # does not collide with the capi build dirs. The root project's Windows
+      # toolchain (cl.exe + Ninja, matching the Makefile's Windows path) is
+      # configured directly. The root CMakeLists.txt forces the static MSVC
+      # runtime (/MT, CMAKE_MSVC_RUNTIME_LIBRARY=MultiThreaded) so the project
+      # objects match the Conan-built /MT dependencies (the Conan profile /
+      # toolchain shipped with the NativeLibsCommon conanfiles sets
+      # compiler.runtime=static — downloaded at configure time by
+      # cmake/conan_bootstrap.cmake into the build tree's conan/ directory, not
+      # checked into this repo, so no conan/profiles/windows-msvc.jinja path
+      # exists here); without it the link fails with LNK2038 RuntimeLibrary
+      # mismatches.
+      - name: Build adyg
+        shell: powershell
+        run: |
+          $ErrorActionPreference = 'Stop'
+
+          & conan remote add --index 0 art ${{ vars.CONAN_REPO_URL }}
+
+          $vcvars64 = cmd /c "vcvars64 & set"
+          function setvar($_) {
+            if ($_ -match "=") {
+              $v = $_.split("="); set-item -force -path "ENV:\$($v[0])"  -value "$($v[1])"
+            }
+          }
+          $vcvars64 | foreach { setvar $_ }
+
+          & cmake -S . -B build-adyg -DCMAKE_BUILD_TYPE=RelWithDebInfo `
+            -DCMAKE_USE_OPENSSL=ON `
+            -DCMAKE_C_COMPILER="cl.exe" `
+            -DCMAKE_CXX_COMPILER="cl.exe" `
+            -G Ninja
+          if (!$?) { exit 1 }
+          & cmake --build build-adyg --target adyg
+          if (!$?) { exit 1 }
+
+      - name: Upload adyg binary
+        uses: actions/upload-artifact@v7
+        with:
+          name: adyg-windows
+          path: build-adyg/tools/adyg/adyg.exe
+          if-no-files-found: error
+          retention-days: 7
+
       - name: Upload to Conan
         if: always()
         shell: powershell
@@ -505,3 +590,43 @@ jobs:
           $ErrorActionPreference = 'Continue'
           & conan remote login art "${{ secrets.ARTIFACTORY_USER }}" --password "${{ secrets.ARTIFACTORY_API_KEY }}"
           & conan upload -r art -c "*" 2>&1 | Select-String "Uploading" -SimpleMatch
+
+  linux-adyg:
+    name: Linux adyg build
+    if: github.repository == 'AdGuardSoftwareLimited/dns-libs'
+    needs: [resolve-images]
+    runs-on:
+      - ephemeral
+      - ephemeral-linux
+      - ${{ needs.resolve-images.outputs.corelibs-builder }}
+      - ephemeral-limit-memory-6144
+      - ephemeral-limit-cpu-4
+      - ephemeral-run-id-${{ github.run_id }}
+    container:
+      image: adguard/core-libs:2.11
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Build adyg
+        run: |
+          set -e
+          set -x
+
+          python3 -m pip install conan
+          conan remote add --index 0 art ${{ vars.CONAN_REPO_URL }} || true
+
+          # `make build_adyg` configures the root CMake project and builds the
+          # `adyg` target (dig-like DNS query tool: plain DNS, DoT, DoH, DoQ,
+          # DNSCrypt). Release build (default BUILD_TYPE=release ->
+          # RelWithDebInfo): the produced binary is uploaded as an artifact.
+          SKIP_BOOTSTRAP=1 make build_adyg
+
+      - name: Upload adyg binary
+        uses: actions/upload-artifact@v7
+        with:
+          name: adyg-linux
+          path: build/tools/adyg/adyg
+          if-no-files-found: error
+          retention-days: 7
+

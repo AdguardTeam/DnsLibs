@@ -8,6 +8,21 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- Added `adyg`, a standalone dig-like DNS query command-line tool built directly
+  on the `upstream` library.
+    - Supports all existing DNS protocols: plain DNS (UDP/TCP), DNS-over-TLS,
+      DNS-over-HTTPS, DNS-over-QUIC, and DNSCrypt (via `sdns://` stamps).
+    - Dig-compatible options include `+short`, `+trace` (iterative resolution
+      seeded from the IANA root hints), `+dnssec`/`+do`, `+recurse`/`+norecurse`,
+      `+cdflag`/`+cd`, `+subnet=ADDR[/PREFIX]` (EDNS Client Subnet, RFC 7871),
+      `+qr`, `+timeout=N`, `+bootstrap=IP`, `-4` (IPv4 only), `-x addr` (reverse
+      PTR lookup), and the per-section display toggles
+      (`+cmd`/`+comments`/`+question`/`+answer`/`+authority`/`+additional`/
+      `+stats`/`+ttlid`/`+class`, plus `+all`/`+noall`).
+    - Build with `make build_adyg`; regenerate the checked-in root-servers header
+      with `make generate_root_hints` (needs network access).
+    - See `tools/adyg/`.
+
 ### Changed
 
 - Updated NLC to 8.1.44.

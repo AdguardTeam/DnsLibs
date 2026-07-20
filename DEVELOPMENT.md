@@ -54,6 +54,18 @@ BUILD_TYPE=debug make build_libs
 
 This bootstraps Conan dependencies, configures CMake, and builds the `dnsproxy` target.
 
+Switching between configurations (e.g. `release` ↔ `debug`, or toggling
+`SANITIZE=yes`) in the same `build/` directory is safe: the Makefile
+records a "configure signature" (`build/.cmake_configure_signature`) on
+each successful configure and wipes `build/` before re-running CMake when
+the signature changes. This avoids stale Conan `find_package()` cache
+entries (e.g. `libevent_DIR` pointing at the previous build type's
+`build/conan/build/<build_type>/generators/` directory) that would
+otherwise break the build with `fatal error: 'event2/event.h' file not
+found` after the switch. The same wipe also fires the first time a
+pre-existing `build/` directory (created before this guard existed) is
+reconfigured, so upgrading is safe at the cost of one fresh rebuild.
+
 ### Testing
 
 To build and run the C++ unit tests:
@@ -63,6 +75,29 @@ make test
 ```
 
 This is equivalent to `make test-cpp`, which builds the `tests` target and runs `ctest`.
+
+Tests run in parallel by default, using one ctest slot per logical CPU. This is
+safe because the in-process loopback servers
+(`common/test_helpers/loopback_*`) bind ephemeral ports, and the proxy listener
+tests configure `port 0` so that `init()` binds an ephemeral port and stores
+the actual port back in the listener settings (read via `get_settings()` after
+`init()`); the single deliberate-bind-failure test never binds successfully, so
+concurrent test processes never collide on a listener port. To control the
+parallelism level, override `TEST_JOBS`, for example to force serial execution
+on a memory-constrained machine:
+
+```shell
+make test TEST_JOBS=1
+```
+
+`make test-integration` and `make test-ci` likewise run `ctest` in parallel with
+`TEST_JOBS`.
+
+All `ctest` invocations stream the captured stdout/stderr of every failing test
+into the shell: the Makefile exports `CTEST_OUTPUT_ON_FAILURE=1` (equivalent to
+`ctest --output-on-failure`), so a one-off failure is diagnosable without
+digging into `build/Testing/Temporary/LastTest.log`. This is especially relevant
+in CI, where that log file is not uploaded as an artifact.
 
 ### Linting
 

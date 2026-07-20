@@ -17,9 +17,13 @@ ldns_pkt_ptr create_request_ldns_pkt(ldns_rr_type rr_type, ldns_rr_class rr_clas
     if (!dname) {
         return nullptr;
     }
+    // ldns_pkt_query_new adopts `dname` only on success. On failure it must be
+    // freed by the caller with ldns_rdf_deep_free (NOT std::free): the ldns_rdf
+    // struct and its _data are separately allocated, so std::free would leak the
+    // dname wire data.
     ldns_pkt_ptr pkt(ldns_pkt_query_new(dname, rr_type, rr_class, flags));
     if (!pkt) {
-        std::free(dname); // NOLINT(cppcoreguidelines-no-malloc,hicpp-no-malloc)
+        ldns_rdf_deep_free(dname);
         return nullptr;
     }
     if (size_opt) {
