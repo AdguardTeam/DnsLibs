@@ -216,89 +216,64 @@ public:
 
     // Binds 127.0.0.1:0, starts the worker thread(s). Blocks until the
     // ephemeral port is assigned, so address()/port() are usable on return.
-    // Fail-fast: any socket()/bind()/listen() failure (or a port that resolves
-    // to 0) records a test failure via ADD_FAILURE (not ASSERT_*: those expand to
-    // `co_return` and would turn this void method into a coroutine), resets the
-    // partially-opened sockets, and returns without starting any worker thread
+    //
+    // The UDP and TCP listeners must share one ephemeral port: start() asks the
+    // OS for a port by binding UDP to :0, then binds TCP to that same port. A
+    // concurrent test server (or a lingering TIME_WAIT socket) can grab the TCP
+    // port in the gap between the two binds, making the TCP bind() fail with
+    // EADDRINUSE. Instead of failing the test outright, start() re-rolls the
+    // ephemeral port a bounded number of times — this is the exact flake
+    // documented in proxy/test/listener_test.cpp (the "many pending" storm is
+    // capped at 1 000 to avoid exhausting the ephemeral range), and the retry
+    // makes the bind structurally immune to it.
+    //
+    // Fail-fast still applies to non-retryable failures (socket()/UDP bind()
+    // failed — system-level resource exhaustion no port re-roll can fix): these
+    // record a test failure via ADD_FAILURE (not ASSERT_*: those expand to
+    // `co_return` and would turn this void method into a coroutine), reset the
+    // partially-opened sockets, and return without starting any worker thread
     // or flipping m_running — so stop()/destruction never join a non-existent
-    // thread. Mirrors the defensive pattern in LoopbackTlsServer::start().
+    // thread. Mirrors the defensive pattern in LoopbackTlsServer::start(), with
+    // the added retry for the racy two-transport shared-port bind.
+    static constexpr int MAX_BIND_ATTEMPTS = 16;
+
     void start() {
         if (m_running.load()) {
             return;
         }
         detail::ensure_winsock();
 
-        if (m_udp) {
-            m_udp_sock = detail::open_dgram_socket();
-            if (m_udp_sock == detail::invalid_socket()) {
-                ADD_FAILURE() << "LoopbackDnsServer: UDP socket() failed";
-                reset_start_state();
+        for (int attempt = 0; attempt < MAX_BIND_ATTEMPTS; ++attempt) {
+            BindAttempt result = bind_once();
+            if (result == BindAttempt::SUCCESS) {
+                // All socket setup succeeded: flip m_running and start the
+                // worker thread(s) only now, so a setup failure never leaves
+                // the server running on an invalid/unbound socket (and never
+                // leaves one transport running while the other failed).
+                m_running.store(true);
+                if (m_udp) {
+                    m_udp_thread = std::thread([this] {
+                        udp_loop();
+                    });
+                }
+                if (m_tcp) {
+                    m_tcp_thread = std::thread([this] {
+                        tcp_loop();
+                    });
+                }
                 return;
             }
-            sockaddr_in addr{};
-            addr.sin_family = AF_INET;
-            addr.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
-            addr.sin_port = 0;
-            if (::bind(m_udp_sock, reinterpret_cast<sockaddr *>(&addr), sizeof(addr)) != 0) {
-                ADD_FAILURE() << "LoopbackDnsServer: UDP bind() failed";
-                reset_start_state();
+            // Close the partially-opened sockets (and clear m_port) before
+            // either retrying with a fresh ephemeral port or returning.
+            reset_start_state();
+            if (result == BindAttempt::FATAL) {
+                // bind_once() already recorded the reason via ADD_FAILURE.
                 return;
             }
-            m_port = detail::get_port(m_udp_sock);
-            if (m_port == 0) {
-                ADD_FAILURE() << "LoopbackDnsServer: UDP bound port resolved to 0";
-                reset_start_state();
-                return;
-            }
+            // RETRY: the TCP port lost an ephemeral-port race — re-roll and
+            // try again.
         }
-
-        if (m_tcp) {
-            m_tcp_sock = detail::open_stream_socket();
-            if (m_tcp_sock == detail::invalid_socket()) {
-                ADD_FAILURE() << "LoopbackDnsServer: TCP socket() failed";
-                reset_start_state();
-                return;
-            }
-            detail::set_reuseaddr(m_tcp_sock);
-            sockaddr_in addr{};
-            addr.sin_family = AF_INET;
-            addr.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
-            addr.sin_port = htons(m_port);
-            if (::bind(m_tcp_sock, reinterpret_cast<sockaddr *>(&addr), sizeof(addr)) != 0) {
-                ADD_FAILURE() << "LoopbackDnsServer: TCP bind() failed";
-                reset_start_state();
-                return;
-            }
-            if (m_port == 0) {
-                m_port = detail::get_port(m_tcp_sock);
-            }
-            if (::listen(m_tcp_sock, SOMAXCONN) != 0) {
-                ADD_FAILURE() << "LoopbackDnsServer: TCP listen() failed";
-                reset_start_state();
-                return;
-            }
-            if (m_port == 0) {
-                ADD_FAILURE() << "LoopbackDnsServer: TCP bound port resolved to 0";
-                reset_start_state();
-                return;
-            }
-        }
-
-        // All socket setup succeeded: flip m_running and start the worker
-        // thread(s) only now, so a setup failure never leaves the server running
-        // on an invalid/unbound socket (and never leaves one transport running
-        // while the other failed).
-        m_running.store(true);
-        if (m_udp) {
-            m_udp_thread = std::thread([this] {
-                udp_loop();
-            });
-        }
-        if (m_tcp) {
-            m_tcp_thread = std::thread([this] {
-                tcp_loop();
-            });
-        }
+        ADD_FAILURE() << "LoopbackDnsServer: bind() failed after " << MAX_BIND_ATTEMPTS << " attempts";
     }
 
     // Stops the worker thread(s) and closes the socket(s). Idempotent.
@@ -337,8 +312,82 @@ private:
         return detail::build_dns_reply(m_handler, req_data, req_len);
     }
 
+    // Outcome of one bind attempt in start(). SUCCESS means both transports are
+    // bound and m_port is usable; RETRY means the TCP side lost an
+    // ephemeral-port race (close + re-roll the port); FATAL means a
+    // non-retryable socket()/UDP-bind() failure (ADD_FAILURE already recorded).
+    enum class BindAttempt {
+        SUCCESS,
+        RETRY,
+        FATAL,
+    };
+
+    // One bind attempt for the configured transports. Shares one ephemeral
+    // port between UDP and TCP: binds UDP to :0 (the OS assigns P), then binds
+    // TCP to P. Returns SUCCESS when both listeners are bound and m_port is
+    // non-zero; RETRY when the TCP bind() to P collided with a concurrent test
+    // server / lingering socket (start() then re-rolls P); FATAL on a
+    // non-retryable failure (recorded via ADD_FAILURE for the same
+    // coroutine-safety reason documented on start()).
+    BindAttempt bind_once() {
+        if (m_udp) {
+            m_udp_sock = detail::open_dgram_socket();
+            if (m_udp_sock == detail::invalid_socket()) {
+                ADD_FAILURE() << "LoopbackDnsServer: UDP socket() failed";
+                return BindAttempt::FATAL;
+            }
+            sockaddr_in addr{};
+            addr.sin_family = AF_INET;
+            addr.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
+            addr.sin_port = 0;
+            if (::bind(m_udp_sock, reinterpret_cast<sockaddr *>(&addr), sizeof(addr)) != 0) {
+                ADD_FAILURE() << "LoopbackDnsServer: UDP bind() failed";
+                return BindAttempt::FATAL;
+            }
+            m_port = detail::get_port(m_udp_sock);
+            if (m_port == 0) {
+                ADD_FAILURE() << "LoopbackDnsServer: UDP bound port resolved to 0";
+                return BindAttempt::FATAL;
+            }
+        }
+
+        if (m_tcp) {
+            m_tcp_sock = detail::open_stream_socket();
+            if (m_tcp_sock == detail::invalid_socket()) {
+                ADD_FAILURE() << "LoopbackDnsServer: TCP socket() failed";
+                return BindAttempt::FATAL;
+            }
+            detail::set_reuseaddr(m_tcp_sock);
+            sockaddr_in addr{};
+            addr.sin_family = AF_INET;
+            addr.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
+            addr.sin_port = htons(m_port);
+            if (::bind(m_tcp_sock, reinterpret_cast<sockaddr *>(&addr), sizeof(addr)) != 0) {
+                // The TCP port lost a race with a concurrent test server or a
+                // lingering TIME_WAIT socket. Re-roll the ephemeral port
+                // (start() closes the partial sockets and loops). The "TCP
+                // bind() failed" reason surfaces only if every attempt loses
+                // the race.
+                return BindAttempt::RETRY;
+            }
+            if (m_port == 0) {
+                m_port = detail::get_port(m_tcp_sock);
+            }
+            if (::listen(m_tcp_sock, SOMAXCONN) != 0) {
+                ADD_FAILURE() << "LoopbackDnsServer: TCP listen() failed";
+                return BindAttempt::FATAL;
+            }
+            if (m_port == 0) {
+                ADD_FAILURE() << "LoopbackDnsServer: TCP bound port resolved to 0";
+                return BindAttempt::FATAL;
+            }
+        }
+
+        return BindAttempt::SUCCESS;
+    }
+
     // Closes any sockets opened by start() and resets port bookkeeping. Used
-    // only by start()'s fail-fast branches so the server is never left
+    // only by start()'s fail-fast / retry branches so the server is never left
     // half-initialized (one transport up, the other down). Idempotent: closing
     // an invalid_socket() is a no-op.
     void reset_start_state() {

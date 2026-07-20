@@ -16,6 +16,7 @@
 #include <ldns/ldns.h>
 #include <memory>
 #include <string>
+#include <vector>
 
 #include "common/gtest_coro.h"
 #include "dns/common/event_loop.h"
@@ -208,6 +209,43 @@ TEST_F(TestHelpersTest, LoopbackServerDropsReturnNoReply) {
     auto reply_res = co_await upstream_res.value()->exchange(req.get());
     ASSERT_TRUE(reply_res.has_error());
     server.stop();
+}
+
+TEST_F(TestHelpersTest, LoopbackServerStartSurvivesPortContention) {
+    // Regression for the CI flake where LoopbackDnsServer::start() lost the
+    // ephemeral-port race: start() binds UDP to :0 (the OS assigns port P) and
+    // then binds TCP to the same P, but a sibling test server or a lingering
+    // TIME_WAIT socket can grab TCP port P in the gap, failing the TCP bind()
+    // with EADDRINUSE and leaving m_port == 0 (so the upstream is constructed
+    // as udp://127.0.0.1:0, the query times out, and the assertion below
+    // fails — observed on the Linux/Windows CI runners under `ctest -j`).
+    // start() now re-rolls the ephemeral port on this race; holding many
+    // servers alive at once is the exact contention scenario, so every server
+    // must end up on a usable non-zero port and the round-trip below must
+    // succeed.
+    co_await m_loop->co_submit();
+    constexpr int SERVERS = 24;
+    std::vector<std::unique_ptr<ag::test::LoopbackDnsServer>> servers;
+    servers.reserve(SERVERS);
+    for (int i = 0; i < SERVERS; ++i) {
+        servers.emplace_back(std::make_unique<ag::test::LoopbackDnsServer>([](const ldns_pkt &request) {
+            return make_canned_a_reply(request);
+        }));
+        servers.back()->start();
+        ASSERT_NE(0u, servers.back()->port()) << "server " << i << " failed to bind";
+    }
+    // Round-trip one query on the last server to confirm the retry left it in
+    // a working state (not just m_port != 0 with a dead listener).
+    UpstreamFactory factory({.loop = *m_loop, .socket_factory = m_socket_factory.get(), .timeout = Millis{1000}});
+    auto upstream_res = factory.create_upstream({.address = servers.back()->address(ag::utils::TP_TCP)});
+    ASSERT_FALSE(upstream_res.has_error()) << upstream_res.error()->str();
+    ldns_pkt_ptr req = make_query("example.com.", LDNS_RR_TYPE_A);
+    auto reply_res = co_await upstream_res.value()->exchange(req.get());
+    ASSERT_FALSE(reply_res.has_error()) << reply_res.error()->str();
+    ASSERT_TRUE(check_canned_a_reply(*reply_res.value()).empty());
+    for (auto &s : servers) {
+        s->stop();
+    }
 }
 
 } // namespace ag::dns::upstream::test
