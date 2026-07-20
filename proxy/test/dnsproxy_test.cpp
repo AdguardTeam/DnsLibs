@@ -1153,9 +1153,10 @@ TEST_F(DnsProxyCacheTest, CacheKeyTest) {
 
 TEST_F(DnsProxyTest, BlockingModeDefault) {
     DnsProxySettings settings = make_dnsproxy_settings();
+    settings.adblock_rules_blocking_mode = DnsProxyBlockingMode::UNSPECIFIED_ADDRESS;
     settings.filter_params = {{{1, "blocking_modes_test_filter.txt"}}};
 
-    ASSERT_EQ(DnsProxyBlockingMode::REFUSED, settings.adblock_rules_blocking_mode);
+    ASSERT_EQ(DnsProxyBlockingMode::UNSPECIFIED_ADDRESS, settings.adblock_rules_blocking_mode);
     ASSERT_EQ(DnsProxyBlockingMode::ADDRESS, settings.hosts_rules_blocking_mode);
 
     auto [ret, err] = m_proxy->init(settings, {});
@@ -1164,11 +1165,13 @@ TEST_F(DnsProxyTest, BlockingModeDefault) {
     ldns_pkt_ptr res;
 
     ASSERT_NO_FATAL_FAILURE(perform_request(*m_proxy, create_request("adb-style.com", LDNS_RR_TYPE_A, LDNS_RD), res));
-    ASSERT_EQ(LDNS_RCODE_REFUSED, ldns_pkt_get_rcode(res.get()));
+    ASSERT_EQ(LDNS_RCODE_NOERROR, ldns_pkt_get_rcode(res.get()));
+    ASSERT_STREQ("0.0.0.0", make_rr_answer_string(res.get()).get());
 
     ASSERT_NO_FATAL_FAILURE(
             perform_request(*m_proxy, create_request("adb-style.com", LDNS_RR_TYPE_AAAA, LDNS_RD), res));
-    ASSERT_EQ(LDNS_RCODE_REFUSED, ldns_pkt_get_rcode(res.get()));
+    ASSERT_EQ(LDNS_RCODE_NOERROR, ldns_pkt_get_rcode(res.get()));
+    ASSERT_STREQ("::", make_rr_answer_string(res.get()).get());
 
     ASSERT_NO_FATAL_FAILURE(
             perform_request(*m_proxy, create_request("hosts-style-unspec.com", LDNS_RR_TYPE_A, LDNS_RD), res));

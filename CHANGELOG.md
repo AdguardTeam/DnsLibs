@@ -11,6 +11,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ### Changed
 
 - Updated NLC to 8.1.44.
+- Changed the default `adblock_rules_blocking_mode` from `REFUSED` to `UNSPECIFIED_ADDRESS` for all platforms.
+    - Previously, only Windows used `UNSPECIFIED_ADDRESS` to avoid issues with the system resolver trying other servers and AdGuard VPN blocking those requests.
+    - On other platforms, responding with `REFUSED` caused some applications to endlessly retry blocked requests, leading to increased CPU and battery consumption.
 
 ### Deprecated
 
