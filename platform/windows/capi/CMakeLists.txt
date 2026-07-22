@@ -51,8 +51,16 @@ if (MSVC)
         string(REPLACE "/EHsc" "" ${CompilerFlag} "${${CompilerFlag}}")
     endforeach ()
 
-    set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} /MT /Zi /EHs-c-")
-    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /MT /Zi /EHs-c-")
+    # Route cl.exe through sccache when a compiler launcher is configured
+    # (CI passes -DCMAKE_*_COMPILER_LAUNCHER=sccache). The shared module
+    # switches MSVC's debug info from /Zi to /Z7 to avoid C1041 PDB
+    # contention under parallel ninja and exposes AG_MSVC_DEBUG_INFO_FORMAT
+    # for the explicit flag lines below. See cmake/sccache_msvc.cmake for
+    # the full rationale.
+    include(${CMAKE_CURRENT_SOURCE_DIR}/../../../cmake/sccache_msvc.cmake)
+
+    set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} /MT ${AG_MSVC_DEBUG_INFO_FORMAT} /EHs-c-")
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /MT ${AG_MSVC_DEBUG_INFO_FORMAT} /EHs-c-")
 else ()
     set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -fno-strict-aliasing -fno-exceptions")
     set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fno-strict-aliasing -fno-exceptions")

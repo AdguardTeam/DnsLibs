@@ -7,6 +7,11 @@
 
 namespace ag::dns::upstream::test {
 
+// Shorter timeout for the "must fail at exchange time" tests below: the
+// assertion is only `has_error()`, so a 2 s cap is enough to confirm the
+// failure without spending the full 10 s DEFAULT_TIMEOUT per black-hole row.
+inline constexpr Millis VALIDATION_TIMEOUT{2000};
+
 TEST_F(UpstreamTest, CreateUpstreamWithWrongOptions) {
     co_await m_loop->co_submit();
     static const UpstreamOptions OPTIONS[] = {
@@ -79,7 +84,7 @@ TEST_F(UpstreamTest, UseUpstreamWithWrongDohOptions) {
     };
 
     for (const UpstreamOptions &options : OPTIONS) {
-        auto upstream_res = create_upstream(options);
+        auto upstream_res = create_upstream(options, VALIDATION_TIMEOUT);
         ASSERT_FALSE(upstream_res.has_error()) << upstream_res.error()->str();
 
         ldns_pkt_ptr msg = create_test_message();
@@ -102,7 +107,7 @@ TEST_F(UpstreamTest, UseUpstreamWithWrongDotOptions) {
     };
 
     for (const UpstreamOptions &options : OPTIONS) {
-        auto upstream_res = create_upstream(options);
+        auto upstream_res = create_upstream(options, VALIDATION_TIMEOUT);
         ASSERT_FALSE(upstream_res.has_error()) << upstream_res.error()->str();
 
         ldns_pkt_ptr msg = create_test_message();
@@ -140,7 +145,7 @@ TEST_F(UpstreamTest, UseUpstreamWithWrongOptions) {
     // networks, hence the private-subnet choice.
 
     for (const UpstreamOptions &options : OPTIONS) {
-        auto upstream_res = create_upstream(options);
+        auto upstream_res = create_upstream(options, VALIDATION_TIMEOUT);
         ASSERT_FALSE(upstream_res.has_error()) << upstream_res.error()->str();
 
         ldns_pkt_ptr msg = create_test_message();

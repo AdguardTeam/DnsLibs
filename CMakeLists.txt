@@ -18,6 +18,15 @@ project(agdns C CXX)
 # capi DLL build.
 if(MSVC)
     set(CMAKE_MSVC_RUNTIME_LIBRARY MultiThreaded)
+
+    # When a compiler launcher (CI: sccache) is configured, switch MSVC's
+    # debug info from /Zi to /Z7 so cl.exe does not write a shared per-target
+    # PDB (which fails with C1041 under parallel ninja because sccache
+    # discards /FS). This is what lets the "Build adyg" CI step reuse sccache
+    # cache entries instead of recompiling the whole dnsproxy library every
+    # run. See cmake/sccache_msvc.cmake for the full rationale; the capi build
+    # (platform/windows/capi/CMakeLists.txt) includes the same module.
+    include(${CMAKE_CURRENT_LIST_DIR}/cmake/sccache_msvc.cmake)
 endif()
 
 add_subdirectory(proxy)

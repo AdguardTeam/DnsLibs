@@ -73,6 +73,8 @@ jobs:
     if: github.repository == 'AdGuardSoftwareLimited/dns-libs'
     uses: AdGuardSoftwareLimited/native-libs-common/.github/workflows/resolve-images.yml@master
 
+  # Builds the libraries, runs the full test suite (including integration tests),
+  # and uploads the dns-libs Conan binary package to Artifactory.
   linux-build:
     name: Linux build and tests
     if: github.repository == 'AdGuardSoftwareLimited/dns-libs'
@@ -80,54 +82,169 @@ jobs:
     permissions:
       contents: read
       id-token: write
-    secrets:
-      test-env: |
-        ARTIFACTORY_USER=${{ secrets.ARTIFACTORY_USER }}
-        ARTIFACTORY_API_KEY=${{ secrets.ARTIFACTORY_API_KEY }}
-    uses: AdGuardSoftwareLimited/actions/.github/workflows/junit-tests.yml@master
-    with:
-      runs-on: '["ephemeral","ephemeral-linux","${{ needs.resolve-images.outputs.corelibs-builder }}","ephemeral-limit-memory-12288","ephemeral-limit-cpu-8","ephemeral-run-id-${{ github.run_id }}"]'
-      container-image: 'adguard/core-libs:2.11'
-      test-command: |
-        set -e
-        set -x
+    runs-on:
+      - ephemeral
+      - ephemeral-linux
+      - ${{ needs.resolve-images.outputs.corelibs-builder }}
+      - ephemeral-limit-memory-12288
+      - ephemeral-limit-cpu-8
+      - ephemeral-run-id-${{ github.run_id }}
+    container:
+      image: adguard/core-libs:2.11
+    env:
+      # sccache local-disk store, snapshotted across runs by the registry-cache
+      # action. 512M caps the store (and thus the per-key OCI blob) so a
+      # force-save (when cache_writes > 0) stays bounded. Current stores are
+      # 98–289MB; sccache LRU-evicts stale entries when it fills.
+      SCCACHE_DIR: ${{ github.workspace }}/.sccache
+      SCCACHE_CACHE_SIZE: 512M
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
 
-        python3 -m pip install conan
-        conan remote add --index 0 art ${{ vars.CONAN_REPO_URL }} || true
+      # sccache wraps clang/clang++ so both the Debug+ASan test build and the
+      # Release conan package build reuse compiled objects across runs.
+      # CMAKE_LAUNCHER=sccache forwards to -DCMAKE_*_COMPILER_LAUNCHER for
+      # the `make test-ci` build; the conan create step injects the same
+      # launchers via tools.cmake.cmaketoolchain:extra_variables.
+      - name: Configure sccache
+        uses: AdguardTeam/sccache-action@main
 
-        # TODO: run `make lint` instead of `make lint-cpp` once the builds
-        # are switched to a local Dockerfile, where the dependency layers
-        # (including Node.js/npm, needed to run `npx -y markdownlint-cli2`
-        # used by the `lint-md` target) can be cached.
-        make lint-cpp
-        rm -rf build
+      - name: Restore sccache store
+        uses: AdGuardSoftwareLimited/actions/actions/registry-cache/restore@master
+        with:
+          config: ${{ secrets.REGISTRY_CACHE_AUTH }}
+          # Per-job prefix + conanfile.py hash so the store resets when the
+          # dependency graph changes. sccache is content-addressed, so
+          # source-only changes accumulate without invalidating the key.
+          key: sccache-linux-${{ hashFiles('conanfile.py') }}
+          path: ${{ env.SCCACHE_DIR }}
 
-        # Run the full test suite (including the real-network integration
-        # tests) in the sanitized Debug CI configuration via the `test-ci`
-        # Makefile target, which builds the tests and runs ctest with
-        # DNSLIBS_INTEGRATION_TESTS=1, a JUnit XML report at build/junit.xml
-        # and the CDash ExperimentalTest step.
-        #
-        # lld keeps link times reasonable under AddressSanitizer; the
-        # container-overflow detection is disabled to avoid false positives
-        # from libc++ allocations in the CI container.
-        #
-        # TODO(scheduled-builds): running the real-network integration tests
-        # on every push and pull request is wasteful and prone to flakes
-        # caused by transient public-DNS failures. Consider moving
-        # `make test-ci` to a scheduled (cron) build and running the offline
-        # `make test` target on push and pull request events instead.
-        export LDFLAGS=-fuse-ld=lld
-        export ASAN_OPTIONS=detect_container_overflow=0
-        BUILD_TYPE=debug SANITIZE=yes SKIP_BOOTSTRAP=1 make test-ci
-      finally-script: |
-        set -e
-        set -x
+      - name: Set up Conan
+        run: |
+          set -e
+          set -x
 
-        conan remote login art "$ARTIFACTORY_USER" --password "$ARTIFACTORY_API_KEY"
-        conan upload -r art -c "*" 2>&1 | grep --line-buffered "Uploading"
-      results-path: 'build/junit.xml'
-      artifact-name: 'test-results-linux'
+          # Conan is pre-installed in the adguard/core-libs image (2.24.0 at
+          # /usr/local/bin/conan), so it is not pip-installed here -- doing so
+          # would either be a no-op or silently upgrade conan past the image's
+          # pinned version, drifting CI from local `make` builds. Only the
+          # Artifactory `art` remote is added.
+          conan remote add --index 0 art ${{ vars.CONAN_REPO_URL }} || true
+
+      # Restore the Python venv created by `make clangd-tidy` (via `make lint`
+      # -> `lint-cpp` -> `clangd-tidy`) so the three pip packages in
+      # requirements.txt (pyyaml, clangd-tidy, tqdm) are not re-downloaded and
+      # re-installed from PyPI on every run. Keyed on requirements.txt hash so
+      # the cache resets when the Python deps change. On a cache hit the venv
+      # already exists; `make clangd-tidy` still runs `python3 -m venv env`
+      # (updates the existing venv in place) and `pip install -r requirements.txt`
+      # (reports "already satisfied"), so correctness is preserved -- the savings
+      # are in network I/O and package installation time.
+      - name: Restore Python venv
+        uses: AdGuardSoftwareLimited/actions/actions/registry-cache/restore@master
+        with:
+          config: ${{ secrets.REGISTRY_CACHE_AUTH }}
+          key: python-env-linux-${{ hashFiles('requirements.txt') }}
+          path: env
+
+      # Node.js is preinstalled in the adguard/core-libs image (node, npm, npx),
+      # so no setup-node step is needed for `make lint-md` (markdownlint-cli2
+      # via npx). Adding actions/setup-node is also blocked by the enterprise
+      # action allow-list.
+      - name: Lint and run tests
+        run: |
+          set -e
+          set -x
+
+          make lint
+          rm -rf build
+
+          # Build and run the full test suite (incl. real-network integration
+          # tests) in the sanitized Debug CI configuration. lld keeps link
+          # times reasonable under AddressSanitizer; container-overflow
+          # detection is disabled to avoid false positives from libc++
+          # allocations in the CI container.
+          #
+          # CMAKE_LAUNCHER=sccache routes clang/clang++ through sccache.
+          #
+          # TODO(scheduled-builds): running the real-network integration tests
+          # on every push and pull request is wasteful and prone to flakes.
+          # Consider moving `make test-ci` to a scheduled build and running
+          # the offline `make test` target on push/PR events instead.
+          export LDFLAGS=-fuse-ld=lld
+          export ASAN_OPTIONS=detect_container_overflow=0
+          BUILD_TYPE=debug SANITIZE=yes SKIP_BOOTSTRAP=1 CMAKE_LAUNCHER=sccache make test-ci
+
+      # Save the Python venv after `make lint` has created it. `if: always()`
+      # so the venv is still saved when a later step (test-ci, Conan package
+      # build) fails -- the venv is created before clangd-tidy runs, so even a
+      # lint failure leaves a valid, cacheable venv. The registry-cache save
+      # action's HEAD-existence check makes re-runs with the same key a no-op
+      # (same behavior as the sccache save below).
+      - name: Save Python venv
+        if: always()
+        uses: AdGuardSoftwareLimited/actions/actions/registry-cache/save@master
+        with:
+          config: ${{ secrets.REGISTRY_CACHE_AUTH }}
+          key: python-env-linux-${{ hashFiles('requirements.txt') }}
+          path: env
+
+      # Upload the Conan packages from the local cache to Artifactory.
+      # `make test-ci` builds missing dependencies (--build=missing) into the
+      # local cache via the CMake-Conan provider; uploading `*` pushes those
+      # dependency binaries back to Artifactory for reuse by the mac/android/
+      # windows jobs and later runs. The dns-libs recipe itself is exported and
+      # uploaded with a real version by the publish-snapshot/publish-release
+      # workflows (scripts/export_conan.sh), so it is not built or uploaded
+      # here.
+      - name: Upload to Conan
+        if: always()
+        run: |
+          conan remote login art "${{ secrets.ARTIFACTORY_USER }}" --password "${{ secrets.ARTIFACTORY_API_KEY }}"
+          conan upload -r art -c "*" 2>&1 | grep --line-buffered "Uploading"
+
+      # Print sccache counters and decide whether to force-save the store.
+      # The registry-cache save action skips upload when the key already
+      # exists (HEAD-existence check), so after the first run the store is
+      # frozen unless force=true. Here we set force=true when sccache wrote
+      # new entries to the local store this run (cache_writes > 0), so
+      # source-only changes accumulate. When every compile was a cache hit
+      # (cache_writes == 0) the local store is unchanged and the save no-ops.
+      # `|| true` ignores a non-zero exit (e.g. daemon already exited). Runs
+      # `if: always()` so stats still print on failure.
+      - name: sccache stats
+        id: sccache-stats
+        if: always()
+        run: |
+          sccache --show-stats || true
+          cache_writes=$(sccache --show-stats --stats-format=json 2>/dev/null \
+            | grep -o '"cache_writes":[0-9]*' | grep -o '[0-9]*' || echo 0)
+          if [ "$cache_writes" -gt 0 ] 2>/dev/null; then
+            echo "force=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "force=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Save sccache store
+        if: always()
+        uses: AdGuardSoftwareLimited/actions/actions/registry-cache/save@master
+        with:
+          config: ${{ secrets.REGISTRY_CACHE_AUTH }}
+          key: sccache-linux-${{ hashFiles('conanfile.py') }}
+          path: ${{ env.SCCACHE_DIR }}
+          force: ${{ steps.sccache-stats.outputs.force }}
+
+      # Upload the JUnit XML from `make test-ci`. `if-no-files-found: warn`
+      # because a build failure (before ctest runs) leaves no junit.xml.
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: test-results-linux
+          path: build/junit.xml
+          if-no-files-found: warn
+          retention-days: 7
 
   mac-build:
     name: Apple framework build
@@ -144,9 +261,40 @@ jobs:
       # Resolved once; the framework CMake build reads it via cmake/version.cmake
       # (env fallback) for both the version.h header and the Mach-O VERSION.
       DNS_LIBS_VERSION: ${{ needs.version.outputs.value }}
+      # sccache local-disk store, restored/saved across runs by the
+      # registry-cache action
+      # (AdGuardSoftwareLimited/actions/actions/registry-cache) as an OCI
+      # registry blob. sccache uses its local filesystem cache at SCCACHE_DIR;
+      # SCCACHE_CACHE_SIZE caps the on-disk store (and thus the per-key OCI
+      # blob) so a force-save stays bounded.
+      SCCACHE_DIR: ${{ github.workspace }}/.sccache
+      SCCACHE_CACHE_SIZE: 512M
     steps:
       - name: Checkout
         uses: actions/checkout@v6
+
+      # sccache wraps Apple Clang so the 5 framework slices built by
+      # build_dnsproxy_framework.sh (platform/mac/framework/) reuse compiled
+      # objects across runs. The sccache binary is installed by
+      # AdguardTeam/sccache-action (binary only); the local SCCACHE_DIR store
+      # is restored/saved around the build by the registry-cache action below.
+      # The CMAKE_C/CXX_COMPILER_LAUNCHER=sccache flags are added to every
+      # slice's cmake invocation inside build_dnsproxy_framework.sh (gated on
+      # USE_SCCACHE=1).
+      - name: Configure sccache
+        uses: AdguardTeam/sccache-action@main
+
+      - name: Restore sccache store
+        uses: AdGuardSoftwareLimited/actions/actions/registry-cache/restore@master
+        with:
+          config: ${{ secrets.REGISTRY_CACHE_AUTH }}
+          # Per-job prefix (not the repo name -- registry-cache already
+          # namespaces by repo via GITHUB_REPOSITORY) + conanfile.py hash so
+          # the store resets when the dependency graph changes. sccache is
+          # internally content-addressed, so source-only changes accumulate
+          # inside a key without invalidating it.
+          key: sccache-mac-${{ hashFiles('conanfile.py') }}
+          path: ${{ env.SCCACHE_DIR }}
 
       # This job produces the deployable AGDnsProxy.xcframework (cross-compiled
       # for 5 slices: macos-x86_64, macos-arm64, ios-arm64, iphonesimulator-x86_64,
@@ -165,6 +313,22 @@ jobs:
       # CMakeLists.txt, gated on TARGET_OS=macos) are still NOT run here — only
       # `ninja AGDnsProxy` runs per framework slice.
 
+      # Restore the Conan venv (created below) so Conan is not re-downloaded
+      # and re-installed from PyPI on every run. macOS runners do not ship
+      # Conan, so without this cache the `pip install conan` below hits PyPI
+      # every time. On a cache hit the venv already exists; the "Set up Conan
+      # venv" step below skips creation and `pip install conan` reports "already
+      # satisfied" (no network I/O). Conan is installed unpinned (latest 2.x);
+      # the key includes the conanfile.py hash so any dependency-graph change
+      # invalidates the venv and pulls a fresh Conan. To force a manual upgrade,
+      # bump the key suffix.
+      - name: Restore Conan venv
+        uses: AdGuardSoftwareLimited/actions/actions/registry-cache/restore@master
+        with:
+          config: ${{ secrets.REGISTRY_CACHE_AUTH }}
+          key: python-venv-mac-conan-${{ hashFiles('conanfile.py') }}
+          path: venv
+
       # Create a single Python venv with Conan and the `art` remote once and
       # reuse it across the native test run, the xcframework build, the adyg
       # build and the final Conan upload. Each `run:` step re-activates the
@@ -177,12 +341,37 @@ jobs:
           set -e
           set -x
 
-          rm -rf venv
-          python3 -m venv venv
+          # Create the venv only if it was not restored by the registry-cache
+          # step above -- checking for the activate script (the venv marker)
+          # rather than just the directory, so that an empty `venv/` left
+          # behind by a cache-miss restore still triggers creation. `python3
+          # -m venv` is also safe on an existing venv (it preserves installed
+          # packages), but the explicit check makes the cache-hit path obvious
+          # and avoids the venv module rewriting the interpreter/pip symlinks
+          # unnecessarily.
+          if [ ! -f venv/bin/activate ]; then
+            python3 -m venv venv
+          fi
           source ./venv/bin/activate
 
+          # Install Conan into the venv. macOS runners do not ship Conan, so
+          # this is a real PyPI download on a cache miss and a no-op ("already
+          # satisfied", no network I/O) on a cache hit.
           python3 -m pip install conan
           conan remote add --index 0 art ${{ vars.CONAN_REPO_URL }} || true
+
+      # Save the Conan venv right after it is created. `if: always()` so the
+      # venv is still saved when a later step (native tests, xcframework build)
+      # fails -- the venv is complete at this point regardless. The
+      # registry-cache save action's HEAD-existence check makes re-runs with
+      # the same key a no-op.
+      - name: Save Conan venv
+        if: always()
+        uses: AdGuardSoftwareLimited/actions/actions/registry-cache/save@master
+        with:
+          config: ${{ secrets.REGISTRY_CACHE_AUTH }}
+          key: python-venv-mac-conan-${{ hashFiles('conanfile.py') }}
+          path: venv
 
       - name: Run native tests
         run: |
@@ -202,12 +391,14 @@ jobs:
           # on the real-network integration tests (DNSLIBS_INTEGRATION_TESTS=1),
           # kept Linux-only so this step stays non-flaky (see the step-level
           # note above); it also writes a JUnit report and submits to CDash,
-          # which only the Linux junit-tests workflow consumes (this is a plain
+          # which only the Linux build job consumes (this is a plain
           # runs-on job), and is meant to pair with the Linux sanitized Debug
           # build (BUILD_TYPE=debug SANITIZE=yes).
           SKIP_BOOTSTRAP=1 make test
 
       - name: Build xcframework
+        env:
+          USE_SCCACHE: "1"
         run: |
           set -e
           set -x
@@ -225,6 +416,34 @@ jobs:
 
           ../framework/build_dnsproxy_framework.sh --os all
           deactivate
+
+      # Print sccache counters and decide whether to force-save the store.
+      # See the linux-build job for the full rationale: force=true when
+      # cache_writes > 0 (new entries written this run), force=false
+      # otherwise (all cache hits, local store unchanged, save no-ops).
+      # The later "Build adyg" and "Upload to Conan" steps don't use
+      # sccache, so saving right here captures the complete store.
+      - name: sccache stats
+        id: sccache-stats
+        if: always()
+        run: |
+          sccache --show-stats || true
+          cache_writes=$(sccache --show-stats --stats-format=json 2>/dev/null \
+            | grep -o '"cache_writes":[0-9]*' | grep -o '[0-9]*' || echo 0)
+          if [ "$cache_writes" -gt 0 ] 2>/dev/null; then
+            echo "force=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "force=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Save sccache store
+        if: always()
+        uses: AdGuardSoftwareLimited/actions/actions/registry-cache/save@master
+        with:
+          config: ${{ secrets.REGISTRY_CACHE_AUTH }}
+          key: sccache-mac-${{ hashFiles('conanfile.py') }}
+          path: ${{ env.SCCACHE_DIR }}
+          force: ${{ steps.sccache-stats.outputs.force }}
 
       # Build the three deploy-ready payloads. The directory layout inside each
       # artifact is the remote path the AK deploy workflows publish to verbatim,
@@ -357,17 +576,63 @@ jobs:
       # Read by build.gradle (resolveDnsLibsVersion) and forwarded to the native
       # CMake build as -DDNS_LIBS_VERSION.
       DNS_LIBS_VERSION: ${{ needs.version.outputs.value }}
+      # sccache local-disk store, restored/saved across runs by the
+      # registry-cache action
+      # (AdGuardSoftwareLimited/actions/actions/registry-cache) as an OCI
+      # registry blob. SCCACHE_DIR lives under the workspace so it's on the
+      # container's writable volume.
+      SCCACHE_DIR: ${{ github.workspace }}/.sccache
+      SCCACHE_CACHE_SIZE: 512M
     steps:
       - name: Checkout
         uses: actions/checkout@v6
 
+      # sccache wraps the NDK clang invoked by Gradle's externalNativeBuild so
+      # the JNI native libraries (platform/android/dnsproxy/lib) reuse compiled
+      # objects across runs and across the 4 ABIs (arm64-v8a, armeabi-v7a, x86,
+      # x86_64). The sccache binary is installed by AdguardTeam/sccache-action
+      # (binary only); the local SCCACHE_DIR store is restored/saved around the
+      # build by the registry-cache action below. The
+      # CMAKE_C/CXX_COMPILER_LAUNCHER=sccache flags are appended to the cmake
+      # arguments in lib/build.gradle (gated on USE_SCCACHE=1) and so reach
+      # every ABI's configure. Note: this job runs in the
+      # adguard/core-libs container, so the sccache binary installed above must
+      # land on the container PATH (the action writes GITHUB_PATH, which is
+      # applied to container steps) -- verify on the first run that sccache is
+      # found.
+      - name: Configure sccache
+        uses: AdguardTeam/sccache-action@main
+
+      - name: Restore sccache store
+        uses: AdGuardSoftwareLimited/actions/actions/registry-cache/restore@master
+        with:
+          config: ${{ secrets.REGISTRY_CACHE_AUTH }}
+          # Per-job prefix (not the repo name -- registry-cache already
+          # namespaces by repo via GITHUB_REPOSITORY). android runs on Linux
+          # (runner.os == "Linux") but uses the NDK clang, so a distinct
+          # "sccache-android" prefix keeps it from colliding with the Linux
+          # store (the linux-build job's sccache store is keyed
+          # "sccache-linux-<conanfile.py hash>" via its own registry-cache
+          # restore/save steps -- see linux-build) even though both hash
+          # conanfile.py identically. NDK clang and the Linux system clang are
+          # different toolchains, so a cache hit on one would still miss the
+          # other's store.
+          key: sccache-android-${{ hashFiles('conanfile.py') }}
+          path: ${{ env.SCCACHE_DIR }}
+
       - name: Build AAR and publish to local Maven
         working-directory: platform/android/dnsproxy
+        env:
+          USE_SCCACHE: "1"
         run: |
           set -e
           set -x
 
-          python3 -m pip install conan
+          # Conan is pre-installed in the adguard/core-libs image (2.24.0 at
+          # /usr/local/bin/conan), so it is not pip-installed here -- doing so
+          # would either be a no-op or silently upgrade conan past the image's
+          # pinned version, drifting CI from local `make` builds. Only the
+          # Artifactory `art` remote is added.
           conan remote add --index 0 art ${{ vars.CONAN_REPO_URL }} || true
 
           touch local.properties
@@ -378,6 +643,34 @@ jobs:
               -Dmaven.repo.local="$M2_LOCAL_REPO"
 
           find "$M2_LOCAL_REPO" -name 'maven-metadata-local.xml' -delete
+
+      # Print sccache counters and decide whether to force-save the store.
+      # See the linux-build job for the full rationale: force=true when
+      # cache_writes > 0 (new entries written this run), force=false
+      # otherwise (all cache hits, local store unchanged, save no-ops).
+      # The native build is the only sccache-using step in this job, so
+      # saving right here captures the complete store.
+      - name: sccache stats
+        id: sccache-stats
+        if: always()
+        run: |
+          sccache --show-stats || true
+          cache_writes=$(sccache --show-stats --stats-format=json 2>/dev/null \
+            | grep -o '"cache_writes":[0-9]*' | grep -o '[0-9]*' || echo 0)
+          if [ "$cache_writes" -gt 0 ] 2>/dev/null; then
+            echo "force=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "force=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Save sccache store
+        if: always()
+        uses: AdGuardSoftwareLimited/actions/actions/registry-cache/save@master
+        with:
+          config: ${{ secrets.REGISTRY_CACHE_AUTH }}
+          key: sccache-android-${{ hashFiles('conanfile.py') }}
+          path: ${{ env.SCCACHE_DIR }}
+          force: ${{ steps.sccache-stats.outputs.force }}
 
       - name: Upload Android artifactory payload
         uses: actions/upload-artifact@v7
@@ -408,9 +701,44 @@ jobs:
       # Read by cmake/version.cmake (the RC resource) and by
       # Directory.Build.targets (the C# assembly version attributes).
       DNS_LIBS_VERSION: ${{ needs.version.outputs.value }}
+      # sccache local-disk store, restored/saved across runs by the
+      # registry-cache action
+      # (AdGuardSoftwareLimited/actions/actions/registry-cache) as an OCI
+      # registry blob. One SCCACHE_DIR is shared by both sccache-using steps
+      # ("Build C and C# library" and "Build adyg") since they run on the same
+      # runner with the same cl.exe, so a single restore/save pair wraps both.
+      SCCACHE_DIR: ${{ github.workspace }}/.sccache
+      SCCACHE_CACHE_SIZE: 512M
     steps:
       - name: Checkout
         uses: actions/checkout@v6
+
+      # sccache wraps cl.exe so the core libraries (common, net, dnscrypt,
+      # dnsstamp, upstream, dnsproxy) are reused across runs instead of being
+      # recompiled from scratch on every push -- this dominates the ~7 min of
+      # per-architecture MSVC recompilation across the three build directories
+      # (build, build64, buildarm64). The sccache binary is installed by
+      # AdguardTeam/sccache-action (binary only); the local SCCACHE_DIR store
+      # is restored once before the builds and saved once after the final build
+      # (adyg) by the registry-cache action below. The
+      # CMAKE_C/CXX_COMPILER_LAUNCHER=sccache flags below route cl.exe through
+      # sccache in each cmake invocation.
+      - name: Configure sccache
+        uses: AdguardTeam/sccache-action@main
+
+      - name: Restore sccache store
+        uses: AdGuardSoftwareLimited/actions/actions/registry-cache/restore@master
+        with:
+          config: ${{ secrets.REGISTRY_CACHE_AUTH }}
+          # Per-job prefix (not the repo name -- registry-cache already
+          # namespaces by repo via GITHUB_REPOSITORY) + conanfile.py hash so
+          # the store resets when the dependency graph changes. Shared by the
+          # capi build below and the adyg build further down (same cl.exe, same
+          # sccache daemon, same SCCACHE_DIR). The -z7 suffix busts the store
+          # after adding CMAKE_MSVC_DEBUG_INFORMATION_FORMAT=Embedded, so the
+          # first run repopulates and uploads a fresh store.
+          key: sccache-windows-${{ hashFiles('conanfile.py') }}
+          path: ${{ env.SCCACHE_DIR }}
 
       - name: Build C and C# library and run tests
         shell: powershell
@@ -438,6 +766,9 @@ jobs:
               -DCMAKE_USE_OPENSSL=ON `
               -DCMAKE_C_COMPILER="cl.exe" `
               -DCMAKE_CXX_COMPILER="cl.exe" `
+              -DCMAKE_C_COMPILER_LAUNCHER=sccache `
+              -DCMAKE_CXX_COMPILER_LAUNCHER=sccache `
+              -DCMAKE_MSVC_DEBUG_INFORMATION_FORMAT=Embedded `
               -G Ninja ..
             if (!$?) { exit 1 }
             & ninja AdguardDns
@@ -471,6 +802,9 @@ jobs:
               -DCMAKE_USE_OPENSSL=ON `
               -DCMAKE_C_COMPILER="cl.exe" `
               -DCMAKE_CXX_COMPILER="cl.exe" `
+              -DCMAKE_C_COMPILER_LAUNCHER=sccache `
+              -DCMAKE_CXX_COMPILER_LAUNCHER=sccache `
+              -DCMAKE_MSVC_DEBUG_INFORMATION_FORMAT=Embedded `
               -G Ninja ..
             if (!$?) { exit 1 }
             & ninja AdguardDns64
@@ -485,6 +819,9 @@ jobs:
               -DCMAKE_USE_OPENSSL=ON `
               -DCMAKE_C_COMPILER="cl.exe" `
               -DCMAKE_CXX_COMPILER="cl.exe" `
+              -DCMAKE_C_COMPILER_LAUNCHER=sccache `
+              -DCMAKE_CXX_COMPILER_LAUNCHER=sccache `
+              -DCMAKE_MSVC_DEBUG_INFORMATION_FORMAT=Embedded `
               -DCMAKE_SYSTEM_NAME=Windows `
               -DCMAKE_SYSTEM_PROCESSOR=ARM64 `
               -G Ninja ..
@@ -536,21 +873,11 @@ jobs:
           if-no-files-found: error
           retention-days: 7
 
-      # Build adyg as a step of the Windows job. The capi subproject built
-      # above (platform/windows/capi) does not add tools/adyg (it only adds
-      # proxy), so adyg must be built from the root CMake project, which does
-      # add_subdirectory(tools/adyg). A separate build-adyg/ dir is used so it
-      # does not collide with the capi build dirs. The root project's Windows
-      # toolchain (cl.exe + Ninja, matching the Makefile's Windows path) is
-      # configured directly. The root CMakeLists.txt forces the static MSVC
-      # runtime (/MT, CMAKE_MSVC_RUNTIME_LIBRARY=MultiThreaded) so the project
-      # objects match the Conan-built /MT dependencies (the Conan profile /
-      # toolchain shipped with the NativeLibsCommon conanfiles sets
-      # compiler.runtime=static — downloaded at configure time by
-      # cmake/conan_bootstrap.cmake into the build tree's conan/ directory, not
-      # checked into this repo, so no conan/profiles/windows-msvc.jinja path
-      # exists here); without it the link fails with LNK2038 RuntimeLibrary
-      # mismatches.
+      # Build adyg from the root CMake project (capi only adds proxy) into a
+      # separate build-adyg/ dir, routing cl.exe through sccache. This is the
+      # second sccache-using step in this job; it shares the SCCACHE_DIR and
+      # the running sccache daemon with the capi build above, so the store
+      # accumulates entries from both builds before the single save below.
       - name: Build adyg
         shell: powershell
         run: |
@@ -570,10 +897,50 @@ jobs:
             -DCMAKE_USE_OPENSSL=ON `
             -DCMAKE_C_COMPILER="cl.exe" `
             -DCMAKE_CXX_COMPILER="cl.exe" `
+            -DCMAKE_C_COMPILER_LAUNCHER=sccache `
+            -DCMAKE_CXX_COMPILER_LAUNCHER=sccache `
+            -DCMAKE_MSVC_DEBUG_INFORMATION_FORMAT=Embedded `
             -G Ninja
           if (!$?) { exit 1 }
           & cmake --build build-adyg --target adyg
           if (!$?) { exit 1 }
+
+      # Print sccache counters and decide whether to force-save the store.
+      # See the linux-build job for the full rationale: force=true when
+      # cache_writes > 0 (new entries written this run), force=false
+      # otherwise (all cache hits, local store unchanged, save no-ops).
+      # This is the only save in this job -- it captures the shared store
+      # after both sccache-using steps (capi build + adyg).
+      # $LASTEXITCODE = 0 ignores a non-zero exit (e.g. daemon already
+      # exited). Runs `if: always()` so stats still print on failure.
+      - name: sccache stats
+        id: sccache-stats
+        if: always()
+        shell: powershell
+        run: |
+          & sccache --show-stats
+          $LASTEXITCODE = 0
+          $json = (& sccache --show-stats --stats-format=json) 2>$null
+          if ($json) {
+            $stats = $json | ConvertFrom-Json
+            $cacheWrites = [int]$stats.stats.cache_writes
+          } else {
+            $cacheWrites = 0
+          }
+          if ($cacheWrites -gt 0) {
+            echo "force=true" >> $env:GITHUB_OUTPUT
+          } else {
+            echo "force=false" >> $env:GITHUB_OUTPUT
+          }
+
+      - name: Save sccache store
+        if: always()
+        uses: AdGuardSoftwareLimited/actions/actions/registry-cache/save@master
+        with:
+          config: ${{ secrets.REGISTRY_CACHE_AUTH }}
+          key: sccache-windows-${{ hashFiles('conanfile.py') }}
+          path: ${{ env.SCCACHE_DIR }}
+          force: ${{ steps.sccache-stats.outputs.force }}
 
       - name: Upload adyg binary
         uses: actions/upload-artifact@v7
@@ -613,7 +980,11 @@ jobs:
           set -e
           set -x
 
-          python3 -m pip install conan
+          # Conan is pre-installed in the adguard/core-libs image (2.24.0 at
+          # /usr/local/bin/conan), so it is not pip-installed here -- doing so
+          # would either be a no-op or silently upgrade conan past the image's
+          # pinned version, drifting CI from local `make` builds. Only the
+          # Artifactory `art` remote is added.
           conan remote add --index 0 art ${{ vars.CONAN_REPO_URL }} || true
 
           # `make build_adyg` configures the root CMake project and builds the

@@ -125,6 +125,20 @@ function build_target() {
     echo "target_os=${target_os}"
 
     cmake_opt="-DCMAKE_BUILD_TYPE=${BUILD_TYPE} -GNinja"
+    # Route Apple Clang through sccache when USE_SCCACHE is set (any non-empty
+    # value; CI exports USE_SCCACHE=1, local devs can opt in the same way).
+    # Explicit opt-in instead of auto-detecting sccache on PATH so the build is
+    # controllable: sccache can be installed but unused (default), and forcing
+    # it off is just `unset USE_SCCACHE`. sccache still needs its own cache
+    # backend configured (CI uses the local-disk backend at SCCACHE_DIR,
+    # snapshotted across runs by the registry-cache action).
+    # Cover all four languages enabled by the framework project
+    # (C, CXX, OBJC, OBJCXX); without the OBJC/OBJCXX launchers the .m/.mm
+    # sources (AGDnsProxy.mm etc.) would recompile on every run.
+    if [ -n "${USE_SCCACHE:-}" ]; then
+        cmake_opt="${cmake_opt} -DCMAKE_C_COMPILER_LAUNCHER=sccache -DCMAKE_CXX_COMPILER_LAUNCHER=sccache"
+        cmake_opt="${cmake_opt} -DCMAKE_OBJC_COMPILER_LAUNCHER=sccache -DCMAKE_OBJCXX_COMPILER_LAUNCHER=sccache"
+    fi
     cmake_opt="${cmake_opt} -DCMAKE_XCODE_ATTRIBUTE_DEBUG_INFORMATION_FORMAT=\"dwarf-with-dsym\""
     cmake_opt="${cmake_opt} -DCMAKE_CXX_FLAGS=\"-stdlib=libc++\""
     cmake_opt="${cmake_opt} -DTARGET_OS:STRING=${target_os} -DCMAKE_OSX_ARCHITECTURES=${target_arch}"

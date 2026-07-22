@@ -49,12 +49,21 @@ android {
         // Expose USE_INTERFACE_NAMES_IN_SYSTEM_UPSTREAM to Java code
         buildConfigField "boolean", "USE_INTERFACE_NAMES_IN_SYSTEM_UPSTREAM", "false"
 
+        // Route NDK clang through sccache when USE_SCCACHE is set (any non-empty
+        // value; CI exports USE_SCCACHE=1, local devs can opt in the same way).
+        // Explicit opt-in instead of auto-detecting, so the build is
+        // controllable. sccache still needs its own cache backend configured
+        // (CI uses the local-disk backend at SCCACHE_DIR, snapshotted across
+        // runs by the registry-cache action, not by this file).
+        def sccacheArgs = System.getenv("USE_SCCACHE") ? ["-DCMAKE_C_COMPILER_LAUNCHER=sccache", "-DCMAKE_CXX_COMPILER_LAUNCHER=sccache"] : []
+
         externalNativeBuild {
             cmake {
                 targets "adguard-dns"
                 arguments "-DANDROID_STL=c++_static",
                         "-DCMAKE_BUILD_TYPE=RelWithDebInfo",
-                        "-DDNS_LIBS_VERSION=${project.version}".toString()
+                        "-DDNS_LIBS_VERSION=${project.version}".toString(),
+                        *sccacheArgs
             }
         }
     }
