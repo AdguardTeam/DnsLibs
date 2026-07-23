@@ -20,10 +20,15 @@ also hard to pronounce properly.
 make build_adyg
 ```
 
-This produces the `adyg` executable in the CMake build directory at
-`build/tools/adyg/adyg` (i.e. invoke it as `./build/tools/adyg/adyg`). It is
+This produces the `adyg` executable in the CMake build directory of the active
+preset, `cmake-build-clang-relwithdebinfo/tools/adyg/adyg` by default (i.e.
+invoke it as `./cmake-build-clang-relwithdebinfo/tools/adyg/adyg`). It is
 **not** installed onto `PATH` — invoke it by its full build path so the right
 binary is used.
+
+Release binaries for Linux (`x86_64`, `aarch64`, `armv7`, `mips`, `mipsel`),
+macOS (universal) and Windows (`x86_64`, `i686`, `aarch64`) are built, signed
+and attached to the GitHub Release by `.github/workflows/build-adyg.yml`.
 
 The `+trace` option iterates the delegation chain from the root, seeding the
 first hop from a `.` NS query to `@server` (mirroring `dig +trace`); if

@@ -54,17 +54,30 @@ BUILD_TYPE=debug make build_libs
 
 This bootstraps Conan dependencies, configures CMake, and builds the `dnsproxy` target.
 
-Switching between configurations (e.g. `release` ↔ `debug`, or toggling
-`SANITIZE=yes`) in the same `build/` directory is safe: the Makefile
-records a "configure signature" (`build/.cmake_configure_signature`) on
-each successful configure and wipes `build/` before re-running CMake when
-the signature changes. This avoids stale Conan `find_package()` cache
-entries (e.g. `libevent_DIR` pointing at the previous build type's
-`build/conan/build/<build_type>/generators/` directory) that would
-otherwise break the build with `fatal error: 'event2/event.h' file not
-found` after the switch. The same wipe also fires the first time a
-pre-existing `build/` directory (created before this guard existed) is
-reconfigured, so upgrading is safe at the cost of one fresh rebuild.
+#### CMake presets
+
+Builds are driven by the CMake presets in `CMakePresets.json`. The Makefile
+picks one from `COMPILER` (`clang` on Unix, `msvc` on Windows) and `BUILD_TYPE`,
+but any preset can be selected directly with `PRESET`:
+
+```shell
+make PRESET=clang-debug-sanitizer test-ci
+make PRESET=musl-cross-aarch64-relwithdebinfo build_adyg
+```
+
+Available presets: `clang-relwithdebinfo`, `clang-debug`,
+`clang-debug-sanitizer`, `clang-relwithdebinfo-sanitizer`,
+`msvc-relwithdebinfo`, `msvc-debug`, and the zig-based
+`musl-cross-<arch>-{relwithdebinfo,debug}` cross presets (`x86_64`, `aarch64`,
+`armv7`, `mips`, `mipsel`) used to build the release `adyg` binaries.
+
+Each preset configures into its own `cmake-build-<preset name>/` directory, so
+switching between configurations never leaves stale Conan `find_package()`
+cache entries behind. Override `BUILD_DIR` to configure the same preset into
+several directories (the macOS universal `adyg` build does this, one directory
+per architecture), and pass extra CMake flags with `CMAKE_ARGS`; run
+`make reconfigure` to apply changed `CMAKE_ARGS` to an already-configured
+tree.
 
 ### Testing
 
@@ -96,7 +109,7 @@ make test TEST_JOBS=1
 All `ctest` invocations stream the captured stdout/stderr of every failing test
 into the shell: the Makefile exports `CTEST_OUTPUT_ON_FAILURE=1` (equivalent to
 `ctest --output-on-failure`), so a one-off failure is diagnosable without
-digging into `build/Testing/Temporary/LastTest.log`. This is especially relevant
+digging into `<build dir>/Testing/Temporary/LastTest.log`. This is especially relevant
 in CI, where that log file is not uploaded as an artifact.
 
 ### Linting

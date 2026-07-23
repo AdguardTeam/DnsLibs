@@ -1,12 +1,56 @@
 {
-    "version": 8,
+    "version": 4,
+    "cmakeMinimumRequired": {
+        "major": 3,
+        "minor": 24,
+        "patch": 0
+    },
     "configurePresets": [
         {
-            "name": "cmake-build-debug",
-            "displayName": "Debug",
-            "description": "Sets Ninja generator, build and install directory",
+            "name": "msvc-relwithdebinfo",
+            "displayName": "MSVC (RelWithDebInfo)",
+            "description": "Default Windows build with optimizations and debug info. The static MSVC runtime (/MT) is forced by the top-level CMakeLists.txt, so it is not set here.",
             "generator": "Ninja",
-            "binaryDir": "${sourceDir}/cmake-build-debug",
+            "binaryDir": "${sourceDir}/cmake-build-${presetName}",
+            "cacheVariables": {
+                "CMAKE_BUILD_TYPE": "RelWithDebInfo",
+                "CMAKE_C_COMPILER": "cl.exe",
+                "CMAKE_CXX_COMPILER": "cl.exe",
+                "CMAKE_USE_OPENSSL": "ON"
+            }
+        },
+        {
+            "name": "msvc-debug",
+            "displayName": "MSVC (Debug)",
+            "description": "Unoptimized Windows build for interactive debugging.",
+            "generator": "Ninja",
+            "binaryDir": "${sourceDir}/cmake-build-${presetName}",
+            "cacheVariables": {
+                "CMAKE_BUILD_TYPE": "Debug",
+                "CMAKE_C_COMPILER": "cl.exe",
+                "CMAKE_CXX_COMPILER": "cl.exe",
+                "CMAKE_USE_OPENSSL": "ON"
+            }
+        },
+        {
+            "name": "clang-relwithdebinfo",
+            "displayName": "Clang (RelWithDebInfo, libc++)",
+            "description": "Default macOS/Linux build with optimizations and debug info.",
+            "generator": "Ninja",
+            "binaryDir": "${sourceDir}/cmake-build-${presetName}",
+            "cacheVariables": {
+                "CMAKE_BUILD_TYPE": "RelWithDebInfo",
+                "CMAKE_C_COMPILER": "clang",
+                "CMAKE_CXX_COMPILER": "clang++",
+                "CMAKE_CXX_FLAGS": "-stdlib=libc++"
+            }
+        },
+        {
+            "name": "clang-debug",
+            "displayName": "Clang (Debug, libc++)",
+            "description": "Unoptimized build for interactive debugging.",
+            "generator": "Ninja",
+            "binaryDir": "${sourceDir}/cmake-build-${presetName}",
             "cacheVariables": {
                 "CMAKE_BUILD_TYPE": "Debug",
                 "CMAKE_C_COMPILER": "clang",
@@ -15,16 +59,155 @@
             }
         },
         {
-            "name": "cmake-build-relwithdebinfo",
-            "displayName": "RelWithDebInfo",
-            "description": "Sets Ninja generator, build and install directory",
+            "name": "clang-debug-sanitizer",
+            "displayName": "Clang (Debug, libc++, AddressSanitizer)",
+            "description": "The unit-test configuration used by the Linux CI job. SANITIZE=yes is the project's own option (see proxy/CMakeLists.txt); it adds -fsanitize=address to the dnsproxy target.",
             "generator": "Ninja",
-            "binaryDir": "${sourceDir}/cmake-build-relwithdebinfo",
+            "binaryDir": "${sourceDir}/cmake-build-${presetName}",
+            "cacheVariables": {
+                "CMAKE_BUILD_TYPE": "Debug",
+                "CMAKE_C_COMPILER": "clang",
+                "CMAKE_CXX_COMPILER": "clang++",
+                "CMAKE_CXX_FLAGS": "-stdlib=libc++",
+                "SANITIZE": "yes"
+            }
+        },
+        {
+            "name": "clang-relwithdebinfo-sanitizer",
+            "displayName": "Clang (RelWithDebInfo, libc++, AddressSanitizer)",
+            "description": "Optimized build with AddressSanitizer, for reproducing sanitizer findings without the Debug slowdown.",
+            "generator": "Ninja",
+            "binaryDir": "${sourceDir}/cmake-build-${presetName}",
             "cacheVariables": {
                 "CMAKE_BUILD_TYPE": "RelWithDebInfo",
                 "CMAKE_C_COMPILER": "clang",
                 "CMAKE_CXX_COMPILER": "clang++",
-                "CMAKE_CXX_FLAGS": "-stdlib=libc++"
+                "CMAKE_CXX_FLAGS": "-stdlib=libc++",
+                "SANITIZE": "yes"
+            }
+        },
+        {
+            "name": "musl-cross-base",
+            "hidden": true,
+            "description": "Shared settings for zig-based musl cross presets. zig cc / c++ is a self-contained cross toolchain; the concrete presets add -target <triple> and the matching CMAKE_SYSTEM_PROCESSOR (the only source for the Conan arch).",
+            "generator": "Ninja",
+            "binaryDir": "${sourceDir}/cmake-build-${presetName}",
+            "cacheVariables": {
+                "CMAKE_SYSTEM_NAME": "Linux",
+                "CMAKE_CROSSCOMPILING": "ON"
+            }
+        },
+        {
+            "name": "musl-cross-x86_64-relwithdebinfo",
+            "displayName": "musl cross x86_64 (RelWithDebInfo)",
+            "description": "Portable, statically linked Linux x86_64 build — the adyg release configuration.",
+            "inherits": "musl-cross-base",
+            "cacheVariables": {
+                "CMAKE_BUILD_TYPE": "RelWithDebInfo",
+                "CMAKE_C_COMPILER": "zig;cc;-target;x86_64-linux-musl",
+                "CMAKE_CXX_COMPILER": "zig;c++;-target;x86_64-linux-musl",
+                "CMAKE_SYSTEM_PROCESSOR": "x86_64"
+            }
+        },
+        {
+            "name": "musl-cross-x86_64-debug",
+            "displayName": "musl cross x86_64 (Debug)",
+            "inherits": "musl-cross-base",
+            "cacheVariables": {
+                "CMAKE_BUILD_TYPE": "Debug",
+                "CMAKE_C_COMPILER": "zig;cc;-target;x86_64-linux-musl",
+                "CMAKE_CXX_COMPILER": "zig;c++;-target;x86_64-linux-musl",
+                "CMAKE_SYSTEM_PROCESSOR": "x86_64"
+            }
+        },
+        {
+            "name": "musl-cross-aarch64-relwithdebinfo",
+            "displayName": "musl cross aarch64 (RelWithDebInfo)",
+            "inherits": "musl-cross-base",
+            "cacheVariables": {
+                "CMAKE_BUILD_TYPE": "RelWithDebInfo",
+                "CMAKE_C_COMPILER": "zig;cc;-target;aarch64-linux-musl",
+                "CMAKE_CXX_COMPILER": "zig;c++;-target;aarch64-linux-musl",
+                "CMAKE_SYSTEM_PROCESSOR": "aarch64"
+            }
+        },
+        {
+            "name": "musl-cross-aarch64-debug",
+            "displayName": "musl cross aarch64 (Debug)",
+            "inherits": "musl-cross-base",
+            "cacheVariables": {
+                "CMAKE_BUILD_TYPE": "Debug",
+                "CMAKE_C_COMPILER": "zig;cc;-target;aarch64-linux-musl",
+                "CMAKE_CXX_COMPILER": "zig;c++;-target;aarch64-linux-musl",
+                "CMAKE_SYSTEM_PROCESSOR": "aarch64"
+            }
+        },
+        {
+            "name": "musl-cross-armv7-relwithdebinfo",
+            "displayName": "musl cross armv7 (RelWithDebInfo)",
+            "inherits": "musl-cross-base",
+            "cacheVariables": {
+                "CMAKE_BUILD_TYPE": "RelWithDebInfo",
+                "CMAKE_C_COMPILER": "zig;cc;-target;arm-linux-musleabi;-mfloat-abi=soft",
+                "CMAKE_CXX_COMPILER": "zig;c++;-target;arm-linux-musleabi;-mfloat-abi=soft",
+                "CMAKE_SYSTEM_PROCESSOR": "armv7"
+            }
+        },
+        {
+            "name": "musl-cross-armv7-debug",
+            "displayName": "musl cross armv7 (Debug)",
+            "inherits": "musl-cross-base",
+            "cacheVariables": {
+                "CMAKE_BUILD_TYPE": "Debug",
+                "CMAKE_C_COMPILER": "zig;cc;-target;arm-linux-musleabi;-mfloat-abi=soft",
+                "CMAKE_CXX_COMPILER": "zig;c++;-target;arm-linux-musleabi;-mfloat-abi=soft",
+                "CMAKE_SYSTEM_PROCESSOR": "armv7"
+            }
+        },
+        {
+            "name": "musl-cross-mips-relwithdebinfo",
+            "displayName": "musl cross mips (RelWithDebInfo)",
+            "description": "-mips-tail-calls=1 re-enables the sibling-call optimisation LLVM disables by default on MIPS. C++20 coroutine symmetric transfer (returning a coroutine_handle from await_suspend) relies on it, so without the flag a deep Task chain grows the stack unboundedly. It is unsafe only across shared-object boundaries, and the mips build links statically.",
+            "inherits": "musl-cross-base",
+            "cacheVariables": {
+                "CMAKE_BUILD_TYPE": "RelWithDebInfo",
+                "CMAKE_C_COMPILER": "zig;cc;-target;mips-linux-musleabi;-mllvm;-mips-tail-calls=1",
+                "CMAKE_CXX_COMPILER": "zig;c++;-target;mips-linux-musleabi;-mllvm;-mips-tail-calls=1",
+                "CMAKE_SYSTEM_PROCESSOR": "mips"
+            }
+        },
+        {
+            "name": "musl-cross-mips-debug",
+            "displayName": "musl cross mips (Debug)",
+            "inherits": "musl-cross-base",
+            "cacheVariables": {
+                "CMAKE_BUILD_TYPE": "Debug",
+                "CMAKE_C_COMPILER": "zig;cc;-target;mips-linux-musleabi;-mllvm;-mips-tail-calls=1",
+                "CMAKE_CXX_COMPILER": "zig;c++;-target;mips-linux-musleabi;-mllvm;-mips-tail-calls=1",
+                "CMAKE_SYSTEM_PROCESSOR": "mips"
+            }
+        },
+        {
+            "name": "musl-cross-mipsel-relwithdebinfo",
+            "displayName": "musl cross mipsel (RelWithDebInfo)",
+            "description": "See musl-cross-mips-relwithdebinfo for why -mips-tail-calls=1 is needed.",
+            "inherits": "musl-cross-base",
+            "cacheVariables": {
+                "CMAKE_BUILD_TYPE": "RelWithDebInfo",
+                "CMAKE_C_COMPILER": "zig;cc;-target;mipsel-linux-musleabi;-mllvm;-mips-tail-calls=1",
+                "CMAKE_CXX_COMPILER": "zig;c++;-target;mipsel-linux-musleabi;-mllvm;-mips-tail-calls=1",
+                "CMAKE_SYSTEM_PROCESSOR": "mipsel"
+            }
+        },
+        {
+            "name": "musl-cross-mipsel-debug",
+            "displayName": "musl cross mipsel (Debug)",
+            "inherits": "musl-cross-base",
+            "cacheVariables": {
+                "CMAKE_BUILD_TYPE": "Debug",
+                "CMAKE_C_COMPILER": "zig;cc;-target;mipsel-linux-musleabi;-mllvm;-mips-tail-calls=1",
+                "CMAKE_CXX_COMPILER": "zig;c++;-target;mipsel-linux-musleabi;-mllvm;-mips-tail-calls=1",
+                "CMAKE_SYSTEM_PROCESSOR": "mipsel"
             }
         }
     ]

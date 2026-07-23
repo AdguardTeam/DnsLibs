@@ -61,14 +61,16 @@ Run `make init` once after cloning to set up git hooks.
 
 | Command | What It Does |
 | --- | --- |
+| `make help` | List the documented targets (default target) |
 | `make init` | Configure git hooks path to `./scripts/hooks` |
+| `make all` | Build the libraries (alias for `build_libs`) |
 | `make build_libs` | Bootstrap Conan deps → CMake configure → build `dnsproxy` |
 | `make build_adyg` | Build the `adyg` dig-like DNS query CLI tool |
 | `make generate_root_hints` | Regenerate `tools/adyg/root_servers.h` from the IANA root hints (needs network) |
 | `make test` | Run all tests (`test-cpp`) |
 | `make test-cpp` | Build libs → build test targets → run `ctest` |
 | `make test-integration` | Build libs → run `ctest` with `DNSLIBS_INTEGRATION_TESTS=1` (real-network tests enabled; requires internet) |
-| `make test-ci` | CI target: build libs → build test targets → run `ctest` with `DNSLIBS_INTEGRATION_TESTS=1`, `--output-junit`, and the CDash `ExperimentalTest` step. Pair with `BUILD_TYPE=debug SANITIZE=yes` on Linux to match the sanitized CI build. Note: the real-network integration tests are better suited to a scheduled build (see TODO in `Makefile`) |
+| `make test-ci` | CI target: build libs → build test targets → run `ctest` with `DNSLIBS_INTEGRATION_TESTS=1`, `--output-junit`, and the CDash `ExperimentalTest` step. Pair with `PRESET=clang-debug-sanitizer` on Linux to match the sanitized CI build. Note: the real-network integration tests are better suited to a scheduled build (see TODO in `Makefile`) |
 | `make lint` | Run all linters (`lint-md` + `lint-cpp`) |
 | `make lint-cpp` | `clang-format` check + `clangd-tidy` |
 | `make lint-md` | Lint Markdown with `npx -y markdownlint-cli2@0.23.0` |
@@ -77,7 +79,10 @@ Run `make init` once after cloning to set up git hooks.
 | `make clean` | Clean build artifacts |
 
 Set `BUILD_TYPE=debug` for debug builds (default is `release` →
-`RelWithDebInfo`).
+`RelWithDebInfo`), or select any preset from `CMakePresets.json` directly with
+`PRESET=` (e.g. `PRESET=clang-debug-sanitizer`,
+`PRESET=musl-cross-aarch64-relwithdebinfo`). Each preset builds in its own
+`cmake-build-<preset name>/` directory.
 
 ## Mandatory Task Rules
 

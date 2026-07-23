@@ -124,6 +124,13 @@ class DnsLibsConan(ConanFile):
             version = (self.conan_data or {}).get("local_version") or version
         if version and version != "local":
             tc.cache_variables["DNS_LIBS_VERSION"] = version
+        # Do not write CMakeUserPresets.json into the source tree. Builds are
+        # driven by the presets in CMakePresets.json (see the Makefile), and the
+        # generated file only gets in the way: it adds one include per build
+        # directory, so two directories with the same build type yield two
+        # presets both named `conan-<build type>` and CMake then refuses to read
+        # the file at all.
+        tc.user_presets_path = False
         tc.generate()
 
     def layout(self):

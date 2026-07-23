@@ -35,13 +35,21 @@ else()
     endif()
 endif()
 
-set(DNS_LIBS_VERSION_FULL "${_dnslibs_version}")
+# The three outputs are published as internal cache entries rather than plain
+# variables: include_guard(GLOBAL) turns every include after the first into a
+# no-op, so a directory scope that includes this file second (tools/adyg, which
+# is added after common) would otherwise see nothing. Cache entries are visible
+# in every scope, and the unconditional set() rewrites them on each configure,
+# so the version never goes stale.
+set(DNS_LIBS_VERSION_FULL "${_dnslibs_version}" CACHE INTERNAL "DNS libs version, full string")
 
 # Numeric core = leading X.Y.Z of the full version.
-string(REGEX MATCH "^[0-9]+\\.[0-9]+\\.[0-9]+" DNS_LIBS_VERSION_CORE "${DNS_LIBS_VERSION_FULL}")
-if("${DNS_LIBS_VERSION_CORE}" STREQUAL "")
+string(REGEX MATCH "^[0-9]+\\.[0-9]+\\.[0-9]+" _dnslibs_version_core "${DNS_LIBS_VERSION_FULL}")
+if("${_dnslibs_version_core}" STREQUAL "")
     message(FATAL_ERROR "DNS_LIBS: cannot parse a core X.Y.Z from '${DNS_LIBS_VERSION_FULL}'")
 endif()
-string(REPLACE "." "," DNS_LIBS_VERSION_COMMAS "${DNS_LIBS_VERSION_CORE}")
+set(DNS_LIBS_VERSION_CORE "${_dnslibs_version_core}" CACHE INTERNAL "DNS libs version, core X.Y.Z")
+string(REPLACE "." "," _dnslibs_version_commas "${DNS_LIBS_VERSION_CORE}")
+set(DNS_LIBS_VERSION_COMMAS "${_dnslibs_version_commas}" CACHE INTERNAL "DNS libs version, core with commas")
 
 message(STATUS "DNS_LIBS version: ${DNS_LIBS_VERSION_FULL} (core ${DNS_LIBS_VERSION_CORE})")

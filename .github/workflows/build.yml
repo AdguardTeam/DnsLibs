@@ -110,6 +110,13 @@ jobs:
       - name: Configure sccache
         uses: AdguardTeam/sccache-action@main
 
+      # The sccache stores stay on the explicit restore + save pair rather than
+      # the combined registry-cache action (whose post step saves by itself, as
+      # the venv caches above use): the combined action never re-uploads after a
+      # restore, which would freeze the store on the first run. This store has to
+      # keep growing, so the save below re-uploads with force=true whenever
+      # sccache wrote new entries -- and force on the combined action would also
+      # skip the restore.
       - name: Restore sccache store
         uses: AdGuardSoftwareLimited/actions/actions/registry-cache/restore@master
         with:
@@ -132,7 +139,7 @@ jobs:
           # Artifactory `art` remote is added.
           conan remote add --index 0 art ${{ vars.CONAN_REPO_URL }} || true
 
-      # Restore the Python venv created by `make clangd-tidy` (via `make lint`
+      # Cache the Python venv created by `make clangd-tidy` (via `make lint`
       # -> `lint-cpp` -> `clangd-tidy`) so the three pip packages in
       # requirements.txt (pyyaml, clangd-tidy, tqdm) are not re-downloaded and
       # re-installed from PyPI on every run. Keyed on requirements.txt hash so
@@ -141,12 +148,18 @@ jobs:
       # (updates the existing venv in place) and `pip install -r requirements.txt`
       # (reports "already satisfied"), so correctness is preserved -- the savings
       # are in network I/O and package installation time.
-      - name: Restore Python venv
-        uses: AdGuardSoftwareLimited/actions/actions/registry-cache/restore@master
+      #
+      # The save runs as this action's post step. save-always keeps it running
+      # when the job fails: the venv is created before clangd-tidy runs, so even
+      # a lint or test failure leaves a valid, cacheable venv. A restored cache
+      # is never re-uploaded.
+      - name: Cache Python venv
+        uses: AdGuardSoftwareLimited/actions/actions/registry-cache@master
         with:
           config: ${{ secrets.REGISTRY_CACHE_AUTH }}
           key: python-env-linux-${{ hashFiles('requirements.txt') }}
           path: env
+          save-always: 'true'
 
       # Node.js is preinstalled in the adguard/core-libs image (node, npm, npx),
       # so no setup-node step is needed for `make lint-md` (markdownlint-cli2
@@ -158,7 +171,6 @@ jobs:
           set -x
 
           make lint
-          rm -rf build
 
           # Build and run the full test suite (incl. real-network integration
           # tests) in the sanitized Debug CI configuration. lld keeps link
@@ -174,21 +186,7 @@ jobs:
           # the offline `make test` target on push/PR events instead.
           export LDFLAGS=-fuse-ld=lld
           export ASAN_OPTIONS=detect_container_overflow=0
-          BUILD_TYPE=debug SANITIZE=yes SKIP_BOOTSTRAP=1 CMAKE_LAUNCHER=sccache make test-ci
-
-      # Save the Python venv after `make lint` has created it. `if: always()`
-      # so the venv is still saved when a later step (test-ci, Conan package
-      # build) fails -- the venv is created before clangd-tidy runs, so even a
-      # lint failure leaves a valid, cacheable venv. The registry-cache save
-      # action's HEAD-existence check makes re-runs with the same key a no-op
-      # (same behavior as the sccache save below).
-      - name: Save Python venv
-        if: always()
-        uses: AdGuardSoftwareLimited/actions/actions/registry-cache/save@master
-        with:
-          config: ${{ secrets.REGISTRY_CACHE_AUTH }}
-          key: python-env-linux-${{ hashFiles('requirements.txt') }}
-          path: env
+          PRESET=clang-debug-sanitizer SKIP_BOOTSTRAP=1 CMAKE_LAUNCHER=sccache make test-ci
 
       # Upload the Conan packages from the local cache to Artifactory.
       # `make test-ci` builds missing dependencies (--build=missing) into the
@@ -242,7 +240,9 @@ jobs:
         uses: actions/upload-artifact@v7
         with:
           name: test-results-linux
-          path: build/junit.xml
+          # `make test-ci` runs the clang-debug-sanitizer preset, which
+          # configures into cmake-build-<preset name>/ (see CMakePresets.json).
+          path: cmake-build-clang-debug-sanitizer/junit.xml
           if-no-files-found: warn
           retention-days: 7
 
@@ -313,7 +313,7 @@ jobs:
       # CMakeLists.txt, gated on TARGET_OS=macos) are still NOT run here — only
       # `ninja AGDnsProxy` runs per framework slice.
 
-      # Restore the Conan venv (created below) so Conan is not re-downloaded
+      # Cache the Conan venv (created below) so Conan is not re-downloaded
       # and re-installed from PyPI on every run. macOS runners do not ship
       # Conan, so without this cache the `pip install conan` below hits PyPI
       # every time. On a cache hit the venv already exists; the "Set up Conan
@@ -322,12 +322,17 @@ jobs:
       # the key includes the conanfile.py hash so any dependency-graph change
       # invalidates the venv and pulls a fresh Conan. To force a manual upgrade,
       # bump the key suffix.
-      - name: Restore Conan venv
-        uses: AdGuardSoftwareLimited/actions/actions/registry-cache/restore@master
+      #
+      # The save runs as this action's post step. save-always keeps it running
+      # when the job fails: the venv is complete once the setup step below has
+      # run, whatever the native tests or the xcframework build do afterwards.
+      - name: Cache Conan venv
+        uses: AdGuardSoftwareLimited/actions/actions/registry-cache@master
         with:
           config: ${{ secrets.REGISTRY_CACHE_AUTH }}
           key: python-venv-mac-conan-${{ hashFiles('conanfile.py') }}
           path: venv
+          save-always: 'true'
 
       # Create a single Python venv with Conan and the `art` remote once and
       # reuse it across the native test run, the xcframework build, the adyg
@@ -360,19 +365,6 @@ jobs:
           python3 -m pip install conan
           conan remote add --index 0 art ${{ vars.CONAN_REPO_URL }} || true
 
-      # Save the Conan venv right after it is created. `if: always()` so the
-      # venv is still saved when a later step (native tests, xcframework build)
-      # fails -- the venv is complete at this point regardless. The
-      # registry-cache save action's HEAD-existence check makes re-runs with
-      # the same key a no-op.
-      - name: Save Conan venv
-        if: always()
-        uses: AdGuardSoftwareLimited/actions/actions/registry-cache/save@master
-        with:
-          config: ${{ secrets.REGISTRY_CACHE_AUTH }}
-          key: python-venv-mac-conan-${{ hashFiles('conanfile.py') }}
-          path: venv
-
       - name: Run native tests
         run: |
           set -e
@@ -383,9 +375,10 @@ jobs:
           # dependencies during configure.
           source ./venv/bin/activate
 
-          # Builds the `tests` target in build/ (default BUILD_DIR), then runs
-          # ctest. build/ is separate from the framework's platform/mac/build/,
-          # so the two builds never collide.
+          # Builds the `tests` target with the default preset
+          # (clang-relwithdebinfo), i.e. in cmake-build-clang-relwithdebinfo/,
+          # then runs ctest. That directory is separate from the framework's
+          # platform/mac/build/, so the two builds never collide.
           #
           # Uses `make test` (= test-cpp), not `make test-ci`: the latter turns
           # on the real-network integration tests (DNSLIBS_INTEGRATION_TESTS=1),
@@ -393,7 +386,7 @@ jobs:
           # note above); it also writes a JUnit report and submits to CDash,
           # which only the Linux build job consumes (this is a plain
           # runs-on job), and is meant to pair with the Linux sanitized Debug
-          # build (BUILD_TYPE=debug SANITIZE=yes).
+          # build (PRESET=clang-debug-sanitizer).
           SKIP_BOOTSTRAP=1 make test
 
       - name: Build xcframework
@@ -529,7 +522,7 @@ jobs:
 
       # Build the adyg CLI binary as a step separate from the test run. The
       # "Run native tests" step above already built `adyg` (the `tests` target
-      # depends on it) in release mode in the root build/ dir, so this is just a
+      # depends on it) in release mode in the same preset build dir, so this is just a
       # fast incremental rebuild that exists to make "build adyg" a distinct,
       # loggable step from "run tests". Release build (default BUILD_TYPE=release
       # -> RelWithDebInfo) so the uploaded binary matches the Linux adyg artifact.
@@ -547,7 +540,7 @@ jobs:
         uses: actions/upload-artifact@v7
         with:
           name: adyg-macos
-          path: build/tools/adyg/adyg
+          path: cmake-build-clang-relwithdebinfo/tools/adyg/adyg
           if-no-files-found: error
           retention-days: 7
 
@@ -893,14 +886,14 @@ jobs:
           }
           $vcvars64 | foreach { setvar $_ }
 
-          & cmake -S . -B build-adyg -DCMAKE_BUILD_TYPE=RelWithDebInfo `
-            -DCMAKE_USE_OPENSSL=ON `
-            -DCMAKE_C_COMPILER="cl.exe" `
-            -DCMAKE_CXX_COMPILER="cl.exe" `
+          # The msvc-relwithdebinfo preset (CMakePresets.json) carries the
+          # compiler, generator, build type and CMAKE_USE_OPENSSL; only the
+          # CI-specific sccache flags are added here. -B overrides the preset's
+          # default binary directory so the capi build and this one stay apart.
+          & cmake --preset msvc-relwithdebinfo -B build-adyg `
             -DCMAKE_C_COMPILER_LAUNCHER=sccache `
             -DCMAKE_CXX_COMPILER_LAUNCHER=sccache `
-            -DCMAKE_MSVC_DEBUG_INFORMATION_FORMAT=Embedded `
-            -G Ninja
+            -DCMAKE_MSVC_DEBUG_INFORMATION_FORMAT=Embedded
           if (!$?) { exit 1 }
           & cmake --build build-adyg --target adyg
           if (!$?) { exit 1 }
@@ -997,7 +990,7 @@ jobs:
         uses: actions/upload-artifact@v7
         with:
           name: adyg-linux
-          path: build/tools/adyg/adyg
+          path: cmake-build-clang-relwithdebinfo/tools/adyg/adyg
           if-no-files-found: error
           retention-days: 7
 

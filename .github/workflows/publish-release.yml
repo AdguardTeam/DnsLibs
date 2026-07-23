@@ -7,8 +7,12 @@ name: Publish release
 #   2. Resolves the version and the originating Build run from that tag.
 #   3. Deploys the pre-built Android, Apple and Windows artifacts to Artifactory.
 #   4. Exports and uploads the Conan recipes to Artifactory.
+#   5. Builds, signs and notarizes the `adyg` CLI tool for every platform
+#      (build-adyg.yml) and attaches the archives to the GitHub Release.
 #
-# No GitHub release is published here: this is a private repository.
+# The GitHub Release itself is created in the public mirror (AdguardTeam/DnsLibs):
+# this is a private repository. The library binaries live in Artifactory /
+# Artifact Keeper; only the adyg archives are attached as release assets.
 
 on:
   pull_request_target:
@@ -217,13 +221,30 @@ jobs:
           artifactory_user: ${{ secrets.ARTIFACTORY_USER }}
           artifactory_api_key: ${{ secrets.ARTIFACTORY_API_KEY }}
 
-  # 5. Once every platform is published, mirror the tag to the public repository
+  # 5. Build the adyg CLI tool for every platform from the release tag, sign and
+  # notarize it, and collect the per-platform archives into the
+  # `release-artifacts` artifact of this run. mirror-and-release (below)
+  # publishes that artifact's files as the GitHub Release assets, so this must
+  # run in the same workflow run as the release job.
+  build-adyg:
+    name: Build adyg
+    needs: tag
+    permissions:
+      contents: read
+      id-token: write
+    uses: ./.github/workflows/build-adyg.yml
+    with:
+      ref: ${{ needs.tag.outputs.tag }}
+    secrets: inherit
+
+  # 6. Once every platform is published, mirror the tag to the public repository
   # AdguardTeam/DnsLibs and cut the GitHub Release there. This is a private
   # repository, so the release is published to the public mirror; mirroring runs
   # first so the tag exists in the target before the release is created. The
-  # binaries live in Artifactory / Artifact Keeper, so no assets are attached --
-  # this is just the tag + changelog notes. Pre-release tags (v...-beta.N, -rc.N)
-  # are marked as pre-releases.
+  # library binaries live in Artifactory / Artifact Keeper and are not attached;
+  # the assets are the adyg archives from the `release-artifacts` artifact built
+  # by the build-adyg job above. Pre-release tags (v...-beta.N, -rc.N) are marked
+  # as pre-releases.
   mirror-and-release:
     name: Mirror and create GitHub release
     needs:
@@ -234,12 +255,14 @@ jobs:
       - apple-deploy-swiftpm
       - windows-deploy
       - conan-deploy
+      - build-adyg
     uses: AdGuardSoftwareLimited/actions/.github/workflows/mirror-and-release.yml@master
     with:
       team: corelibs
       target_repo: AdguardTeam/DnsLibs
       tag: ${{ needs.tag.outputs.tag }}
       changelog: ${{ needs.tag.outputs.changelog }}
+      artifact_name: release-artifacts
       prerelease: ${{ contains(needs.tag.outputs.tag, '-') }}
     secrets: inherit
 

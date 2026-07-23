@@ -1,20 +1,28 @@
+# Builds are driven by the CMake presets in CMakePresets.json. The active
+# preset is selected from COMPILER (clang/msvc) and BUILD_TYPE (release/debug),
+# but PRESET can be set directly to use any preset, e.g.
+#   make PRESET=clang-debug-sanitizer test-ci
+#   make PRESET=musl-cross-aarch64-relwithdebinfo build_adyg
 BUILD_TYPE ?= release
-ifeq ($(BUILD_TYPE), release)
-	CMAKE_BUILD_TYPE = RelWithDebInfo
+
+ifeq ($(OS), Windows_NT)
+COMPILER ?= msvc
 else
-	CMAKE_BUILD_TYPE = Debug
+COMPILER ?= clang
 endif
-MSVC_VER ?= 17
-ifeq ($(origin MSVC_YEAR), undefined)
-	ifeq ($(MSVC_VER), 16)
-		MSVC_YEAR = 2019
-	else ifeq ($(MSVC_VER), 17)
-		MSVC_YEAR = 2022
-	endif
+
+ifeq ($(BUILD_TYPE), release)
+PRESET ?= $(COMPILER)-relwithdebinfo
+else
+PRESET ?= $(COMPILER)-debug
 endif
-BUILD_DIR = build
+
+# Each preset configures into ${sourceDir}/cmake-build-${presetName}. Override
+# BUILD_DIR to configure the same preset into several directories, e.g. when
+# building one architecture per directory for a macOS universal binary.
+BUILD_DIR ?= cmake-build-$(PRESET)
 COMPILE_COMMANDS = $(BUILD_DIR)/compile_commands.json
-EXPORT_DIR ?= bin
+
 # The exact version of markdownlint-cli2 to run via `npx -y`. Pinning the
 # version keeps linting results reproducible across environments.
 MARKDOWNLINT_VERSION := 0.23.0
@@ -24,6 +32,24 @@ ifeq ($(OS), Windows_NT)
 NPROC ?= $(or $(NUMBER_OF_PROCESSORS),8)
 else
 NPROC ?= $(shell (nproc 2>/dev/null || sysctl -n hw.ncpu 2>/dev/null || echo 8) | tr -d '\n')
+UNAME_S := $(shell uname -s)
+endif
+
+# On macOS CMake would otherwise build for whatever architecture the toolchain
+# defaults to, so pin it to the host. Override with ARCH, which also takes a
+# semicolon-separated list for a universal binary, e.g.
+#   make ARCH=x86_64 build_adyg
+#   make ARCH='arm64;x86_64' build_adyg
+# Not applied to the cross-compiling presets, which don't target Apple.
+# 10.15 matches the deployment target of the Apple framework build
+# (platform/mac/framework/CMakeLists.txt).
+MACOS_DEPLOYMENT_TARGET ?= 10.15
+ifeq ($(UNAME_S), Darwin)
+ifeq ($(findstring cross,$(PRESET)),)
+ARCH ?= $(shell uname -m)
+OSX_ARCH_ARGS = -DCMAKE_OSX_ARCHITECTURES="$(ARCH)" \
+	-DCMAKE_OSX_DEPLOYMENT_TARGET="$(MACOS_DEPLOYMENT_TARGET)"
+endif
 endif
 
 # Parallelism level for ctest. Defaults to the number of logical CPUs. Override
@@ -48,27 +74,17 @@ CLANGD_TIDY_JOBS ?= $(shell echo $$(( $(NPROC) / 2 > 0 ? $(NPROC) / 2 : 1 )))
 # once here via `export` so it applies to ALL ctest runs in this Makefile
 # (test-cpp, test-integration, test-ci) and any future target, without having
 # to remember the flag per-call. Without this, failed-test output lands only in
-# build/Testing/Temporary/LastTest.log on the runner, which CI may not upload,
+# $(BUILD_DIR)/Testing/Temporary/LastTest.log on the runner, which CI may not upload,
 # making one-off flakes impossible to diagnose.
 export CTEST_OUTPUT_ON_FAILURE=1
-
-# Whether to build with AddressSanitizer. CI enables this on Linux. Maps to
-# the -DSANITIZE=yes CMake option (see proxy/CMakeLists.txt), which adds
-# -fsanitize=address to the dnsproxy target's compile and link flags.
-SANITIZE ?= no
-ifeq ($(SANITIZE),yes)
-	SANITIZE_FLAGS = -DSANITIZE=yes
-else
-	SANITIZE_FLAGS =
-endif
 
 # Optional compiler launcher (e.g. sccache) for the C and C++ compilers.
 # Set on the make command line like `make build_libs CMAKE_LAUNCHER=sccache`
 # -- the Linux CI job does this to avoid recompiling the dnsproxy library on
 # every push. When non-empty, the matching -DCMAKE_*_COMPILER_LAUNCHER=...
-# flags are appended to CMAKE_FLAGS so every cmake configure (re)uses the
-# launcher. Empty by default, so local builds are unaffected. The Windows CI
-# passes the same flags on its own cmake command line (see
+# flags are appended to the configure command line so every cmake configure
+# (re)uses the launcher. Empty by default, so local builds are unaffected. The
+# Windows CI passes the same flags on its own cmake command line (see
 # .github/workflows/build.yml), and cmake/sccache_msvc.cmake (included by the
 # root CMakeLists.txt) handles the /Zi->/Z7 switch for MSVC when a launcher is
 # set.
@@ -79,45 +95,18 @@ else
 CMAKE_LAUNCHER_FLAGS =
 endif
 
-# Common CMake flags
-ifeq ($(OS), Windows_NT)
-CMAKE_FLAGS = -DCMAKE_BUILD_TYPE=RelWithDebInfo \
-	-DCMAKE_C_COMPILER="cl.exe" \
-	-DCMAKE_CXX_COMPILER="cl.exe" \
-	$(CMAKE_LAUNCHER_FLAGS) \
-	-G "Ninja"
-else
-CMAKE_FLAGS = -DCMAKE_BUILD_TYPE=$(CMAKE_BUILD_TYPE) \
-	-DCMAKE_C_COMPILER="clang" \
-	-DCMAKE_CXX_COMPILER="clang++" \
-	-DCMAKE_CXX_FLAGS="-stdlib=libc++" \
-	$(SANITIZE_FLAGS) \
-	$(CMAKE_LAUNCHER_FLAGS) \
-	-GNinja
-endif
+.PHONY: help
+## Show this help.
+help:
+	@awk 'BEGIN {FS = ":"} \
+		/^## / {doc = doc substr($$0, 4) " "; next} \
+		/^\.PHONY/ {next} \
+		/^[a-zA-Z0-9_-]+:/ {if (doc != "") {printf "  \033[36m%-28s\033[0m %s\n", $$1, doc}} \
+		{doc = ""}' $(MAKEFILE_LIST)
 
-# A "configure signature" recording the CMake input flags that affect the
-# CMake-Conan cache layout (CMAKE_BUILD_TYPE drives build/conan/build/
-# <build_type>/generators; SANITIZE=yes adds -fsanitize=address). The
-# CMake-Conan provider caches find_package() results (e.g., libevent_DIR)
-# as absolute paths inside conan/build/<build_type>/generators in
-# CMakeCache.txt. When the build type changes between runs in the SAME
-# build directory, these *_DIR entries are NOT invalidated, so
-# find_package(libevent) reads from the stale <old-build_type>/generators
-# directory and the build fails with "fatal error: 'event2/event.h' file
-# not found" (the libevent headers are only installed under the new
-# <new-build_type>/generators path). To avoid this, $(CONFIGURE_STAMP)
-# records the current signature on each successful configure, and both
-# setup_cmake and compile_commands wipe $(BUILD_DIR)/ before re-running
-# cmake when the previously-recorded signature differs from the current
-# one. A missing stamp on a pre-existing CMakeCache.txt (e.g. a build
-# directory created before this guard was added) is treated as a mismatch
-# so upgrade is safe — the cost is one fresh reconfigure for the first
-# invocation against such an upgraded directory. (See build.yml's
-# `rm -rf build` between lint-cpp and test-ci for the same workaround done
-# manually.)
-CMAKE_CONFIGURE_SIGNATURE = $(CMAKE_BUILD_TYPE)|$(SANITIZE)
-CONFIGURE_STAMP = $(BUILD_DIR)/.cmake_configure_signature
+.PHONY: all
+## Build the libraries (default target).
+all: build_libs
 
 .PHONY: init
 ## Initialize the development environment (git hooks, etc.)
@@ -147,47 +136,60 @@ do_bootstrap_deps:
 endif
 
 .PHONY: setup_cmake
-## Setup CMake
-## Set SKIP_BOOTSTRAP=1 to skip bootstrapping dependencies
+## Configure the project with the selected CMake preset (resolves Conan deps).
+## Extra CMake flags can be passed via CMAKE_ARGS, e.g.
+##   make CMAKE_ARGS=-DDNSLIBS_ENABLE_TCPIP=OFF build_libs
+## Set SKIP_BOOTSTRAP=1 to skip bootstrapping dependencies.
+## Run `make reconfigure` to apply changed CMAKE_ARGS to a configured tree.
+setup_cmake: $(BUILD_DIR)/build.ninja
+
+# The stamp is build.ninja, not CMakeCache.txt: cmake writes the cache before
+# the configure step can fail (e.g. in cmake/version.cmake), so keying on the
+# cache would leave a half-configured directory that `make` then considers
+# ready and `ninja` immediately fails to build. build.ninja appears only on a
+# successful configure. Every preset uses the Ninja generator.
+#
+# Configure only when the build directory has no build file yet. Re-running
+# `cmake --preset` over an existing cache breaks the musl cross presets: their
+# compiler is a list (`zig;cc;-target;...`), which CMake stores split into
+# CMAKE_C_COMPILER plus CMAKE_C_COMPILER_ARG1 and then reports as changed,
+# wiping the cache and re-testing `zig` without its arguments. Ninja still
+# regenerates by itself when CMakeLists.txt changes.
+# bootstrap_deps is order-only: it is phony, and a normal prerequisite would
+# make the cache look out of date on every run.
+#
+# Each preset has its own build directory, so switching build type or
+# sanitizer no longer needs the old "wipe the shared build/ dir" dance: the
+# CMake-Conan provider's cached absolute paths into
+# <build dir>/conan/build/<build type>/generators can never go stale.
 ifeq ($(SKIP_BOOTSTRAP),1)
-setup_cmake:
+$(BUILD_DIR)/build.ninja:
 else
-setup_cmake: bootstrap_deps
+$(BUILD_DIR)/build.ninja: | bootstrap_deps
 endif
-	@mkdir -p $(BUILD_DIR); \
-	if [ -f $(BUILD_DIR)/CMakeCache.txt ] \
-		&& { [ ! -f $(CONFIGURE_STAMP) ] \
-			|| [ "$$(cat $(CONFIGURE_STAMP) 2>/dev/null)" != "$(CMAKE_CONFIGURE_SIGNATURE)" ]; }; then \
-		echo "==> CMake configuration changed; wiping $(BUILD_DIR)/ to avoid stale Conan cache entries."; \
-		rm -rf $(BUILD_DIR) && mkdir -p $(BUILD_DIR); \
-	fi
-	cmake -S . -B $(BUILD_DIR) $(CMAKE_FLAGS)
-	@mkdir -p $(BUILD_DIR) && printf '%s' '$(CMAKE_CONFIGURE_SIGNATURE)' > $(CONFIGURE_STAMP)
+	cmake --preset $(PRESET) -B $(BUILD_DIR) $(OSX_ARCH_ARGS) $(CMAKE_LAUNCHER_FLAGS) $(CMAKE_ARGS)
+
+.PHONY: reconfigure
+## Re-run the CMake configure step from scratch, e.g. after changing CMAKE_ARGS.
+reconfigure:
+	rm -f $(BUILD_DIR)/CMakeCache.txt $(BUILD_DIR)/build.ninja
+	$(MAKE) setup_cmake
 
 .PHONY: compile_commands
-## Generate compile_commands.json
+## Generate compile_commands.json for IDE / clang-tidy integration.
 compile_commands:
-	@mkdir -p $(BUILD_DIR); \
-	if [ -f $(BUILD_DIR)/CMakeCache.txt ] \
-		&& { [ ! -f $(CONFIGURE_STAMP) ] \
-			|| [ "$$(cat $(CONFIGURE_STAMP) 2>/dev/null)" != "$(CMAKE_CONFIGURE_SIGNATURE)" ]; }; then \
-		echo "==> CMake configuration changed; wiping $(BUILD_DIR)/ to avoid stale Conan cache entries."; \
-		rm -rf $(BUILD_DIR) && mkdir -p $(BUILD_DIR); \
-	fi
-	cmake -S . -B $(BUILD_DIR) \
-		$(CMAKE_FLAGS) \
+	cmake --preset $(PRESET) -B $(BUILD_DIR) $(OSX_ARCH_ARGS) $(CMAKE_LAUNCHER_FLAGS) $(CMAKE_ARGS) \
 		-DCMAKE_EXPORT_COMPILE_COMMANDS=ON
-	@mkdir -p $(BUILD_DIR) && printf '%s' '$(CMAKE_CONFIGURE_SIGNATURE)' > $(CONFIGURE_STAMP)
 
 .PHONY: build_libs
 ## Build the libraries
 build_libs: setup_cmake
-	cmake --build $(BUILD_DIR) --target dnsproxy
+	cmake --build $(BUILD_DIR) --target dnsproxy -j$(NPROC)
 
 .PHONY: build_adyg
 ## Build the adyg CLI tool
 build_adyg: setup_cmake
-	cmake --build $(BUILD_DIR) --target adyg
+	cmake --build $(BUILD_DIR) --target adyg -j$(NPROC)
 
 .PHONY: generate_root_hints
 ## Regenerate tools/adyg/root_servers.h from the IANA root hints.
@@ -290,7 +292,7 @@ test: test-cpp
 
 .PHONY: test-cpp
 test-cpp: build_libs
-	cmake --build $(BUILD_DIR) --target tests
+	cmake --build $(BUILD_DIR) --target tests -j$(NPROC)
 	ctest --test-dir $(BUILD_DIR) -j $(TEST_JOBS)
 
 ## Run the full test suite including real-network integration tests.
@@ -298,32 +300,27 @@ test-cpp: build_libs
 ## (DoT/DoH/DoQ/DNSCrypt) are executed instead of skipped. Requires internet.
 .PHONY: test-integration
 test-integration: build_libs
-	cmake --build $(BUILD_DIR) --target tests
+	cmake --build $(BUILD_DIR) --target tests -j$(NPROC)
 	DNSLIBS_INTEGRATION_TESTS=1 ctest --test-dir $(BUILD_DIR) -j $(TEST_JOBS)
 
-# Path to the JUnit XML report written by the CI test target below. The CI
-# workflow uploads this file as the test-results artifact.
-#
-# `ctest --test-dir <build> --output-junit <path>` resolves <path> relative
-# to the --test-dir (the build directory), not relative to the current
-# working directory. Passing `$(JUNIT_XML)` (= build/junit.xml) as-is would
-# therefore write the report to build/build/junit.xml and the CI artifact
-# upload at build/junit.xml would find nothing. The ctest invocation below
-# passes the absolute path via `$(abspath ...)` to avoid this.
-JUNIT_XML ?= $(BUILD_DIR)/junit.xml
+# Name of the JUnit XML report written by the CI test target below; the CI
+# workflow uploads $(BUILD_DIR)/$(JUNIT_XML) as the test-results artifact.
+# `ctest --test-dir <build> --output-junit <path>` resolves <path> relative to
+# the --test-dir (the build directory), so this is a bare file name.
+JUNIT_XML ?= junit.xml
 
 ## Run the full test suite in the CI configuration, i.e. the way the CI
 ## builds need it to run:
 ##   - Real-network integration tests enabled (DNSLIBS_INTEGRATION_TESTS=1),
 ##     so tests that dial public DNS servers (DoT/DoH/DoQ/DNSCrypt) run
 ##     instead of being skipped.
-##   - JUnit XML report written to $(JUNIT_XML) for the CI test-results
-##     artifact upload.
+##   - JUnit XML report written to $(BUILD_DIR)/$(JUNIT_XML) for the CI
+##     test-results artifact upload.
 ##   - Results submitted to CDash via the ExperimentalTest step.
 ##
 ## To reproduce the sanitized Linux CI build, also export
 ## LDFLAGS=-fuse-ld=lld and ASAN_OPTIONS=detect_container_overflow=0, and
-## pass BUILD_TYPE=debug SANITIZE=yes.
+## pass PRESET=clang-debug-sanitizer.
 ##
 ## TODO(scheduled-builds): Running the real-network integration tests on
 ## every push and pull request is wasteful and prone to flakes caused by
@@ -332,7 +329,7 @@ JUNIT_XML ?= $(BUILD_DIR)/junit.xml
 ## push and pull request events instead.
 .PHONY: test-ci
 test-ci: build_libs
-	cmake --build $(BUILD_DIR) --target tests
+	cmake --build $(BUILD_DIR) --target tests -j$(NPROC)
 	DNSLIBS_INTEGRATION_TESTS=1 ctest --test-dir $(BUILD_DIR) -j $(TEST_JOBS) \
-		--output-junit $(abspath $(JUNIT_XML)) \
+		--output-junit $(JUNIT_XML) \
 		-D ExperimentalTest --no-compress-output

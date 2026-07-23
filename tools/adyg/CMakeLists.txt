@@ -45,6 +45,22 @@ add_executable(adyg EXCLUDE_FROM_ALL adyg.cpp)
 target_link_libraries(adyg PRIVATE adyg_cli)
 add_dependencies(tests adyg)
 
+# Win32 version resource, so the shipped adyg.exe carries the same version as
+# `adyg --version` (AG_DNSLIBS_VERSION) in its VERSIONINFO block: Explorer's
+# Details tab, the signing pipeline and support requests all read it from there.
+# cmake/version.cmake resolves the version once per CMake run and publishes
+# DNS_LIBS_VERSION_* as internal cache entries, so the values are readable here
+# even though `common` (configured earlier) tripped its include guard first.
+# FILETYPE is VFT_APP (0x1L), unlike the capi DLL's VFT_DLL (0x2L).
+if(WIN32)
+    include(${DNSLIBS_DIR}/cmake/version.cmake)
+    configure_file(
+            ${CMAKE_CURRENT_SOURCE_DIR}/adyg.rc.in
+            ${CMAKE_CURRENT_BINARY_DIR}/gen/adyg.rc
+            @ONLY)
+    target_sources(adyg PRIVATE ${CMAKE_CURRENT_BINARY_DIR}/gen/adyg.rc)
+endif()
+
 # Unit tests for the pure CLI layer (adyg_cli). `link_libraries(adyg_cli)`
 # applies to subsequently-defined targets in this directory (the test
 # executable created by add_unit_test), so it inherits adyg_cli and, via its
