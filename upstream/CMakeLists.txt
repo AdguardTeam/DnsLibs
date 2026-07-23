@@ -20,17 +20,22 @@ add_library(upstream EXCLUDE_FROM_ALL
         resolver.h resolver.cpp
         upstream_utils.cpp
 )
-# Platform-specific system resolver implementations
+# Platform-specific system upstream implementations
 if (APPLE OR ANDROID)
     target_sources(upstream PRIVATE
             upstream_system.h upstream_system.cpp
-            system_resolver.h
     )
     if (APPLE)
-        target_sources(upstream PRIVATE system_resolver_apple.cpp)
+        # Apple's system resolver (dns-sd) doesn't provide the raw reply, so the reply
+        # is assembled from the individual records reported by SystemResolver.
+        target_sources(upstream PRIVATE
+            upstream_system_apple.cpp
+            system_resolver.h system_resolver_apple.cpp
+        )
     elseif (ANDROID)
-        target_sources(upstream PRIVATE 
-            system_resolver_android.cpp
+        # android_res_* returns the raw reply, which is passed through as is.
+        target_sources(upstream PRIVATE
+            upstream_system_android.cpp
             android_res_api.h android_res_api.cpp
         )
         if (USE_INTERFACE_NAMES_IN_SYSTEM_UPSTREAM)

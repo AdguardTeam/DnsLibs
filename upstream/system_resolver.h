@@ -4,10 +4,6 @@
 #include <ldns/ldns.h>
 #include <string_view>
 
-#ifdef __ANDROID__
-#include <android/multinetwork.h>
-#endif
-
 #include "common/coro.h"
 #include "common/defs.h"
 #include "common/error.h"
@@ -28,7 +24,10 @@ enum class SystemResolverError {
 
 /**
  * The SystemResolver class is used for resolving DNS records using the system resolver.
- * Platform-specific implementations are provided for Apple (DNSService) and Android (android_res_*).
+ *
+ * It is essentially a DNSService (dns-sd) wrapper, and is therefore Apple-only: dns-sd
+ * reports individual records rather than the raw reply, so a caller has to assemble the
+ * reply itself. Platforms whose system API returns the raw reply (Android) don't need it.
  */
 class SystemResolver {
     struct ConstructorAccess {};
@@ -39,16 +38,6 @@ public:
      */
     using LdnsRrListPtr = ag::UniquePtr<ldns_rr_list, &ldns_rr_list_deep_free>;
 
-#ifdef __ANDROID__
-    /**
-     * Constructs a SystemResolver for a specific Android network.
-     * @param network_handle Android network handle (default is NETWORK_UNSPECIFIED).
-     */
-    SystemResolver(
-            ConstructorAccess, EventLoop *loop, Millis timeout, net_handle_t network_handle = NETWORK_UNSPECIFIED);
-    static Result<std::unique_ptr<SystemResolver>, SystemResolverError> create(
-            EventLoop *loop, Millis timeout, net_handle_t network_handle);
-#else
     /**
      * Constructs a SystemResolver for a specific network interface.
      * @param if_index Index of the network interface (default is 0, which means any interface).
@@ -56,7 +45,6 @@ public:
     SystemResolver(ConstructorAccess, EventLoop *loop, Millis timeout, uint32_t if_index = 0);
     static Result<std::unique_ptr<SystemResolver>, SystemResolverError> create(
             EventLoop *loop, Millis timeout, uint32_t if_index);
-#endif
 
     ~SystemResolver();
 

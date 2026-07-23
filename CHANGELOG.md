@@ -25,6 +25,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Changed
 
+- The `system://` upstream on Android now returns the reply from `android_res_nsend()`
+  as is, instead of extracting the records from it and assembling a new reply around
+  them: the authority and additional sections, the flags and the response code of the
+  original reply are no longer lost.
+    - `SystemResolver` is now Apple-only. It is a dns-sd (`DNSService`) wrapper, which
+      reports individual records rather than the raw reply, so only Apple needs the
+      reply to be assembled by hand.
 - Updated NLC to 8.1.44.
 - Changed the default `adblock_rules_blocking_mode` from `REFUSED` to `UNSPECIFIED_ADDRESS` for all platforms.
     - Previously, only Windows used `UNSPECIFIED_ADDRESS` to avoid issues with the system resolver trying other servers and AdGuard VPN blocking those requests.
