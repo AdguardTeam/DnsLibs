@@ -513,9 +513,8 @@ jobs:
               if (!$?) { exit 1 }
             }
 
-            # Collect the unsigned executables; they are signed by the reusable
-            # sign-by-signer.yml workflow (sign-windows job) and packaged by
-            # package-windows.
+            # Collect the executables; they are Authenticode-signed in place by
+            # the sign-by-signer action below and packaged by package-windows.
             New-Item -ItemType Directory -Force -Path "unsigned\$ArchName" | Out-Null
             Copy-Item -Force "$BuildDir\tools\adyg\adyg.exe" "unsigned\$ArchName\adyg.exe"
           }
@@ -557,10 +556,19 @@ jobs:
           path: ${{ env.SCCACHE_DIR }}
           force: ${{ steps.sccache-stats.outputs.force }}
 
-      - name: Upload unsigned executables
+      # Authenticode-sign the freshly built executables in place via the signer
+      # service (OIDC audience `signer`); node24 action, so it runs on the
+      # Windows runner without bash.
+      - name: Sign executables
+        uses: AdGuardSoftwareLimited/actions/actions/sign-by-signer@feature/AG-55098-sign-by-signer-action
+        with:
+          path: unsigned
+          files: '**/*.exe'
+
+      - name: Upload signed executables
         uses: actions/upload-artifact@v7
         with:
-          name: adyg-windows-exe-unsigned
+          name: adyg-windows-exe-signed
           path: unsigned/
           if-no-files-found: error
           retention-days: 7
@@ -573,38 +581,9 @@ jobs:
           & conan remote login art "${{ secrets.ARTIFACTORY_USER }}" --password "${{ secrets.ARTIFACTORY_API_KEY }}"
           & conan upload -r art -c "*" 2>&1 | Select-String "Uploading" -SimpleMatch
 
-  sign-windows:
-    name: Sign Windows binaries
-    needs: build-windows
-    if: github.repository == 'AdGuardSoftwareLimited/dns-libs'
-    runs-on: [team-corelibs]
-    permissions:
-      contents: read
-      id-token: write
-    steps:
-      - name: Download unsigned executables
-        uses: actions/download-artifact@v8
-        with:
-          name: adyg-windows-exe-unsigned
-          path: ctx
-
-      - name: Sign files
-        uses: AdGuardSoftwareLimited/actions/actions/sign-by-signer@feature/AG-55098-sign-by-signer-action
-        with:
-          path: ctx
-          files: '**/*.exe'
-
-      - name: Upload signed executables
-        uses: actions/upload-artifact@v7
-        with:
-          name: adyg-windows-exe-signed
-          path: ctx/
-          if-no-files-found: error
-          overwrite: true
-
   package-windows:
     name: Package Windows release
-    needs: [sign-windows, version]
+    needs: [build-windows, version]
     if: github.repository == 'AdGuardSoftwareLimited/dns-libs'
     runs-on: [team-corelibs]
     permissions:
