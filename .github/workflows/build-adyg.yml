@@ -492,7 +492,7 @@ jobs:
             }
           }
 
-          New-Item -ItemType Directory -Force -Path unsigned | Out-Null
+          New-Item -ItemType Directory -Force -Path dist | Out-Null
 
           function Build([string]$BuildDir, $VcvarsEnv, [string]$ArchName) {
             & {
@@ -513,11 +513,10 @@ jobs:
               if (!$?) { exit 1 }
             }
 
-            # Collect the unsigned executables; they are signed by the reusable
-            # sign-by-signer.yml workflow (sign-windows job) and packaged by
-            # package-windows.
-            New-Item -ItemType Directory -Force -Path "unsigned\$ArchName" | Out-Null
-            Copy-Item -Force "$BuildDir\tools\adyg\adyg.exe" "unsigned\$ArchName\adyg.exe"
+            # Collect the executables; they are Authenticode-signed in place by
+            # the sign-by-signer action below and packaged by package-windows.
+            New-Item -ItemType Directory -Force -Path "dist\$ArchName" | Out-Null
+            Copy-Item -Force "$BuildDir\tools\adyg\adyg.exe" "dist\$ArchName\adyg.exe"
           }
 
           Build "build64" $vcvars64 "x86_64"
@@ -557,11 +556,20 @@ jobs:
           path: ${{ env.SCCACHE_DIR }}
           force: ${{ steps.sccache-stats.outputs.force }}
 
-      - name: Upload unsigned executables
+      # Authenticode-sign the freshly built executables in place via the signer
+      # service (OIDC audience `signer`); node24 action, so it runs on the
+      # Windows runner without bash.
+      - name: Sign executables
+        uses: AdGuardSoftwareLimited/actions/actions/sign-by-signer@feature/AG-55098-sign-by-signer-action
+        with:
+          path: dist
+          files: '**/*.exe'
+
+      - name: Upload signed executables
         uses: actions/upload-artifact@v7
         with:
-          name: adyg-windows-exe-unsigned
-          path: unsigned/
+          name: adyg-windows-exe-signed
+          path: dist/
           if-no-files-found: error
           retention-days: 7
 
@@ -573,23 +581,9 @@ jobs:
           & conan remote login art "${{ secrets.ARTIFACTORY_USER }}" --password "${{ secrets.ARTIFACTORY_API_KEY }}"
           & conan upload -r art -c "*" 2>&1 | Select-String "Uploading" -SimpleMatch
 
-  sign-windows:
-    name: Sign Windows binaries
-    needs: build-windows
-    if: github.repository == 'AdGuardSoftwareLimited/dns-libs'
-    permissions:
-      contents: read
-      id-token: write
-    uses: AdGuardSoftwareLimited/actions/.github/workflows/sign-by-signer.yml@master
-    with:
-      team: corelibs
-      artifact-name: adyg-windows-exe-unsigned
-      files: '**/*.exe'
-      signed-artifact-name: adyg-windows-exe-signed
-
   package-windows:
     name: Package Windows release
-    needs: [sign-windows, version]
+    needs: [build-windows, version]
     if: github.repository == 'AdGuardSoftwareLimited/dns-libs'
     runs-on: [team-corelibs]
     permissions:
