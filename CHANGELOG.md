@@ -8,6 +8,20 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+### Changed
+
+### Deprecated
+
+### Removed
+
+### Fixed
+
+### Security
+
+## [2.10.0] - 2026-07-24
+
+### Added
+
 - Added `adyg`, a standalone dig-like DNS query command-line tool built directly
   on the `upstream` library.
     - Supports all existing DNS protocols: plain DNS (UDP/TCP), DNS-over-TLS,
@@ -19,28 +33,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
       PTR lookup), and the per-section display toggles
       (`+cmd`/`+comments`/`+question`/`+answer`/`+authority`/`+additional`/
       `+stats`/`+ttlid`/`+class`, plus `+all`/`+noall`).
-    - Build with `make build_adyg`; regenerate the checked-in root-servers header
-      with `make generate_root_hints` (needs network access).
-    - On Windows the executable carries a VERSIONINFO resource
-      (`tools/adyg/adyg.rc.in`) stamped with the same version as
-      `adyg --version`.
     - See `tools/adyg/`.
-- Signed `adyg` binaries are now attached to each GitHub Release: Linux
-  (`x86_64`, `aarch64`, `armv7`, `mips`, `mipsel`), macOS (universal, notarized)
-  and Windows (`x86_64`, `i686`, `aarch64`). Every binary is GPG-signed with
-  `devteam@adguard.com`, and the detached signature ships inside the archive.
 
 ### Changed
 
-- Builds are now driven by the CMake presets in `CMakePresets.json`, in sync with
-  NativeLibsCommon, vpn-libs and trusttunnel-client. The Makefile selects a preset
-  from `COMPILER`/`BUILD_TYPE`, or takes one directly via `PRESET=` (including the
-  zig-based `musl-cross-*` cross presets). Each preset builds in its own
-  `cmake-build-<preset name>/` directory instead of the shared `build/`.
-    - The Conan toolchain no longer writes `CMakeUserPresets.json` into the
-      source tree (`tc.user_presets_path = False`). Delete any stale copy left
-      by an earlier build once: CMake refuses to read it when it includes build
-      directories that no longer exist.
 - The `system://` upstream on Android now returns the reply from `android_res_nsend()`
   as is, instead of extracting the records from it and assembling a new reply around
   them: the authority and additional sections, the flags and the response code of the
@@ -52,14 +48,6 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - Changed the default `adblock_rules_blocking_mode` from `REFUSED` to `UNSPECIFIED_ADDRESS` for all platforms.
     - Previously, only Windows used `UNSPECIFIED_ADDRESS` to avoid issues with the system resolver trying other servers and AdGuard VPN blocking those requests.
     - On other platforms, responding with `REFUSED` caused some applications to endlessly retry blocked requests, leading to increased CPU and battery consumption.
-
-### Deprecated
-
-### Removed
-
-### Fixed
-
-### Security
 
 ## [2.8.58] - 2026-06-29
 
@@ -370,7 +358,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - API change: allow in-memory filters. See `ag::dnsfilter::FilterParams`.
 - Optimistic DNS caching. See `ag::DnsProxySettings::optimistic_cache`.
 
-[Unreleased]: https://github.com/AdguardTeam/DnsLibs/compare/v2.8.58...HEAD
+[Unreleased]: https://github.com/AdguardTeam/DnsLibs/compare/v2.10.0...HEAD
+[2.10.0]: https://github.com/AdguardTeam/DnsLibs/compare/v2.8.58...v2.10.0
 [2.8.58]: https://github.com/AdguardTeam/DnsLibs/compare/v2.8.57...v2.8.58
 [2.8.57]: https://github.com/AdguardTeam/DnsLibs/compare/v2.8.56...v2.8.57
 [2.8.56]: https://github.com/AdguardTeam/DnsLibs/compare/v2.8.55...v2.8.56
