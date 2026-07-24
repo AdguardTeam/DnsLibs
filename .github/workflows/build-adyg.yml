@@ -577,15 +577,30 @@ jobs:
     name: Sign Windows binaries
     needs: build-windows
     if: github.repository == 'AdGuardSoftwareLimited/dns-libs'
+    runs-on: [team-corelibs]
     permissions:
       contents: read
       id-token: write
-    uses: AdGuardSoftwareLimited/actions/.github/workflows/sign-by-signer.yml@master
-    with:
-      team: corelibs
-      artifact-name: adyg-windows-exe-unsigned
-      files: '**/*.exe'
-      signed-artifact-name: adyg-windows-exe-signed
+    steps:
+      - name: Download unsigned executables
+        uses: actions/download-artifact@v8
+        with:
+          name: adyg-windows-exe-unsigned
+          path: ctx
+
+      - name: Sign files
+        uses: AdGuardSoftwareLimited/actions/actions/sign-by-signer@feature/AG-55098-sign-by-signer-action
+        with:
+          path: ctx
+          files: '**/*.exe'
+
+      - name: Upload signed executables
+        uses: actions/upload-artifact@v7
+        with:
+          name: adyg-windows-exe-signed
+          path: ctx/
+          if-no-files-found: error
+          overwrite: true
 
   package-windows:
     name: Package Windows release
