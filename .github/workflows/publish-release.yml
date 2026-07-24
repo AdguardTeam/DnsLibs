@@ -288,8 +288,9 @@ jobs:
       targets: |
         [
           {"repo": "AdguardTeam/AdguardForAndroid", "assignee": "artemiv4nov", "platform": "Android"},
-          {"repo": "AdguardTeam/AdguardForWindows", "assignee": "adbuker", "platform": "Windows"},
-          {"repo": "AdguardTeam/AdguardForMac", "assignee": "vityevato", "platform": "Mac"}
+          {"repo": "AdguardTeam/AdguardForiOS", "assignee": "artemiv4nov", "platform": "iOS"},
+          {"repo": "AdguardTeam/AdguardForMac", "assignee": "vityevato", "platform": "Mac"},
+          {"repo": "AdguardTeam/AdguardForWindows", "assignee": "adbuker", "platform": "Windows"}
         ]
       team: corelibs
     secrets: inherit
