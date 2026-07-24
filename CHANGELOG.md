@@ -8,6 +8,20 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+### Changed
+
+### Deprecated
+
+### Removed
+
+### Fixed
+
+### Security
+
+## [2.10.0] - 2026-07-24
+
+### Added
+
 - Added `adyg`, a standalone dig-like DNS query command-line tool built directly
   on the `upstream` library.
     - Supports all existing DNS protocols: plain DNS (UDP/TCP), DNS-over-TLS,
@@ -52,14 +66,6 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - Changed the default `adblock_rules_blocking_mode` from `REFUSED` to `UNSPECIFIED_ADDRESS` for all platforms.
     - Previously, only Windows used `UNSPECIFIED_ADDRESS` to avoid issues with the system resolver trying other servers and AdGuard VPN blocking those requests.
     - On other platforms, responding with `REFUSED` caused some applications to endlessly retry blocked requests, leading to increased CPU and battery consumption.
-
-### Deprecated
-
-### Removed
-
-### Fixed
-
-### Security
 
 ## [2.8.58] - 2026-06-29
 
@@ -370,7 +376,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - API change: allow in-memory filters. See `ag::dnsfilter::FilterParams`.
 - Optimistic DNS caching. See `ag::DnsProxySettings::optimistic_cache`.
 
-[Unreleased]: https://github.com/AdguardTeam/DnsLibs/compare/v2.8.58...HEAD
+[Unreleased]: https://github.com/AdguardTeam/DnsLibs/compare/v2.10.0...HEAD
+[2.10.0]: https://github.com/AdguardTeam/DnsLibs/compare/v2.8.58...v2.10.0
 [2.8.58]: https://github.com/AdguardTeam/DnsLibs/compare/v2.8.57...v2.8.58
 [2.8.57]: https://github.com/AdguardTeam/DnsLibs/compare/v2.8.56...v2.8.57
 [2.8.56]: https://github.com/AdguardTeam/DnsLibs/compare/v2.8.55...v2.8.56
