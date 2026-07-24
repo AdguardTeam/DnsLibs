@@ -492,7 +492,7 @@ jobs:
             }
           }
 
-          New-Item -ItemType Directory -Force -Path unsigned | Out-Null
+          New-Item -ItemType Directory -Force -Path dist | Out-Null
 
           function Build([string]$BuildDir, $VcvarsEnv, [string]$ArchName) {
             & {
@@ -515,8 +515,8 @@ jobs:
 
             # Collect the executables; they are Authenticode-signed in place by
             # the sign-by-signer action below and packaged by package-windows.
-            New-Item -ItemType Directory -Force -Path "unsigned\$ArchName" | Out-Null
-            Copy-Item -Force "$BuildDir\tools\adyg\adyg.exe" "unsigned\$ArchName\adyg.exe"
+            New-Item -ItemType Directory -Force -Path "dist\$ArchName" | Out-Null
+            Copy-Item -Force "$BuildDir\tools\adyg\adyg.exe" "dist\$ArchName\adyg.exe"
           }
 
           Build "build64" $vcvars64 "x86_64"
@@ -562,14 +562,14 @@ jobs:
       - name: Sign executables
         uses: AdGuardSoftwareLimited/actions/actions/sign-by-signer@feature/AG-55098-sign-by-signer-action
         with:
-          path: unsigned
+          path: dist
           files: '**/*.exe'
 
       - name: Upload signed executables
         uses: actions/upload-artifact@v7
         with:
           name: adyg-windows-exe-signed
-          path: unsigned/
+          path: dist/
           if-no-files-found: error
           retention-days: 7
 
