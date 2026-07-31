@@ -90,6 +90,7 @@ if (NOT TARGET dnsproxy)
 endif ()
 
 set(SOURCE_FILES
+        src/throw_hook.cpp
         src/ag_dns.cpp)
 
 configure_file(
