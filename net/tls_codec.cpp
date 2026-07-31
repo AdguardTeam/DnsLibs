@@ -1,7 +1,8 @@
 #include <cstring>
 #include <numeric>
+#include <variant>
 
-#include "common/socket_address.h"
+#include "common/tls/make_ssl.h"
 #include "tls_codec.h"
 
 namespace ag::dns {
@@ -33,53 +34,34 @@ TlsCodec::TlsCodec(const CertificateVerifier *cert_verifier, TlsSessionCache *se
 }
 
 Error<TlsCodec::TlsError> TlsCodec::connect(const std::string &sni, std::vector<std::string> alpn, bool enable_pq) {
-    ag::UniquePtr<SSL_CTX, &SSL_CTX_free> ctx{SSL_CTX_new(TLS_client_method())};
-    SSL_CTX_set_verify(ctx.get(), SSL_VERIFY_PEER, nullptr);
-    SSL_CTX_set_cert_verify_callback(ctx.get(), ssl_verify_callback, this);
-#ifdef OPENSSL_IS_BORINGSSL
-    SSL_CTX_set_permute_extensions(ctx.get(), true);
-#endif // OPENSSL_IS_BORINGSSL
-    TlsSessionCache::prepare_ssl_ctx(ctx.get());
-
-    m_ssl.reset(SSL_new(ctx.get()));
     m_server_name = sni;
 
-    if (!m_server_name.empty() && !SocketAddress(m_server_name, 0).valid()) {
-        SSL_set_tlsext_host_name(m_ssl.get(), sni.c_str());
-    }
+    Uint8Vector serialized_alpn = make_alpn(alpn);
+    // The session is consumed by `make_ssl()`, which up-refs it.
+    SslSessionPtr session = m_session_cache->get_session();
 
-#ifdef OPENSSL_IS_BORINGSSL
-    if (enable_pq) {
-        static constexpr uint16_t PQ_GROUPS[] = {
-                SSL_GROUP_X25519_MLKEM768,
-                SSL_GROUP_X25519,
-                SSL_GROUP_SECP256R1,
-                SSL_GROUP_SECP384R1,
-        };
-        if (!SSL_set1_group_ids(m_ssl.get(), PQ_GROUPS, std::size(PQ_GROUPS))) {
-            warnlog(m_log, "Failed to set post-quantum groups, continuing with defaults");
-        } else {
-            tracelog(m_log, "Post-quantum cryptography enabled (ML-KEM-768)");
-        }
+    // Imitate Chrome's ClientHello so that our TLS fingerprint is not distinguishable from a
+    // browser's. `make_ssl()` also takes care of the SNI,
+    // the ALPN list, the key share groups and putting the connection into the client state.
+    std::variant<tls::SslPtr, std::string> ssl = tls::make_ssl({
+            .profile = tls::TlsClientProfile::CHROME,
+            .protocol = tls::SslProtocol::TLS,
+            .alpn_protos = {serialized_alpn.data(), serialized_alpn.size()},
+            .sni = m_server_name.empty() ? nullptr : m_server_name.c_str(),
+            .verify_callback = ssl_verify_callback,
+            .verify_arg = this,
+            .post_quantum = enable_pq,
+            .new_session_cb = TlsSessionCache::session_new_cb,
+            .resume_session = session.get(),
+    });
+    if (const auto *error = std::get_if<std::string>(&ssl)) {
+        dbglog(m_log, "Failed to create SSL: {}", *error);
+        return make_error(TlsError::AE_SSL_INIT_FAILED, *error);
     }
-#endif // OPENSSL_IS_BORINGSSL
-
-    if (!alpn.empty()) {
-        Uint8Vector serialized = make_alpn(alpn);
-        int r = SSL_set_alpn_protos(m_ssl.get(), serialized.data(), serialized.size());
-        if (r != 0) {
-            return make_error(TlsError::AE_ALPN_SET_FAILED);
-        }
-    }
+    m_ssl = std::move(std::get<tls::SslPtr>(ssl));
 
     m_session_cache->prepare_ssl(m_ssl.get());
-
-    if (SslSessionPtr session = m_session_cache->get_session()) {
-        SSL_set_session(m_ssl.get(), session.get()); // UpRefs the session
-    }
-
     SSL_set_bio(m_ssl.get(), BIO_new(BIO_s_mem()), BIO_new(BIO_s_mem()));
-    SSL_set_connect_state(m_ssl.get());
 
     return this->proceed_handshake();
 }
