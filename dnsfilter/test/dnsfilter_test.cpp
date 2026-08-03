@@ -1284,6 +1284,58 @@ TEST_F(DnsfilterTest, MultipleFilters) {
     std::remove(file_by_filter_name(TEST_FILTER_NAME + "2").c_str());
 }
 
+TEST_F(DnsfilterTest, BadfilterCrossFilter) {
+    struct TestData {
+        std::vector<std::string> rules1; // filter 0
+        std::vector<std::string> rules2; // filter 1
+        std::string domain;
+    };
+
+    const std::vector<TestData> TEST_DATA = {
+            // badfilter in first filter, blocking rule in second
+            {{"example1.org$badfilter"}, {"example1.org"}, "example1.org"},
+            // blocking rule in first filter, badfilter in second
+            {{"example2.org"}, {"example2.org$badfilter"}, "example2.org"},
+            // badfilter with modifiers in first filter, blocking rule with modifiers in second
+            {{"example3.org$important,badfilter"}, {"example3.org$important"}, "example3.org"},
+            // blocking rule with modifiers in first filter, badfilter with modifiers in second
+            {{"example4.org$dnstype=a"}, {"example4.org$badfilter,dnstype=a"}, "example4.org"},
+    };
+
+    for (size_t i = 0; i < TEST_DATA.size(); ++i) {
+        std::string file1 = file_by_filter_name(TEST_FILTER_NAME + "1_" + std::to_string(i));
+        std::string file2 = file_by_filter_name(TEST_FILTER_NAME + "2_" + std::to_string(i));
+
+        ag::file::Handle f1 = ag::file::open(file1, ag::file::CREAT);
+        ag::file::close(f1);
+        ag::file::Handle f2 = ag::file::open(file2, ag::file::CREAT);
+        ag::file::close(f2);
+
+        const TestData &entry = TEST_DATA[i];
+        for (const std::string &rule : entry.rules1) {
+            ASSERT_NO_FATAL_FAILURE(add_rule_in_filter(file1, rule));
+        }
+        for (const std::string &rule : entry.rules2) {
+            ASSERT_NO_FATAL_FAILURE(add_rule_in_filter(file2, rule));
+        }
+
+        DnsFilter::EngineParams params = {{{0, file1}, {1, file2}}};
+        auto [handle, err_or_warn] = filter.create(params);
+        ASSERT_TRUE(handle) << err_or_warn->str();
+
+        infolog(log, "testing {} (case {})", entry.domain, i);
+        std::vector<DnsFilter::Rule> rules = filter.match(handle, {entry.domain, LDNS_RR_TYPE_A});
+        ASSERT_EQ(rules.size(), 2) << "Expected both blocking and badfilter rules to be matched";
+        DnsFilter::EffectiveRules effective_rules = DnsFilter::get_effective_rules(rules);
+        ASSERT_EQ(effective_rules.leftovers.size(), 0) << "Expected no effective blocking rules";
+
+        filter.destroy(handle);
+
+        std::remove(file1.c_str());
+        std::remove(file2.c_str());
+    }
+}
+
 TEST_F(DnsfilterTest, RuleSelection) {
     struct TestData {
         std::vector<std::string> rules;
