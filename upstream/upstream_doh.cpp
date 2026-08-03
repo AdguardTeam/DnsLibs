@@ -12,13 +12,6 @@
 #include <ada/unicode.h>
 #include <fmt/std.h>
 #include <magic_enum/magic_enum.hpp>
-#include <openssl/err.h>
-
-#ifdef OPENSSL_IS_BORINGSSL
-#include <ngtcp2/ngtcp2_crypto_boringssl.h>
-#else
-#include <ngtcp2/ngtcp2_crypto_quictls.h>
-#endif
 
 #include "common/base64.h"
 #include "common/http/http1.h"
@@ -27,6 +20,7 @@
 #include "common/http/util.h"
 #include "common/logger.h"
 #include "common/parallel.h"
+#include "common/tls/make_ssl.h"
 #include "common/utils.h"
 #include "dns/net/outbound_proxy_settings.h"
 
@@ -1140,40 +1134,34 @@ ag::coro::Task<ag::Error<ag::dns::DnsError>> ag::dns::DohUpstream::Http3Connecti
         co_return make_error(DnsError::AE_INTERNAL_ERROR, "Unreachable");
     }
 
-    ag::UniquePtr<SSL_CTX, &SSL_CTX_free> ssl_ctx{SSL_CTX_new(TLS_client_method())};
-    if (ssl_ctx == nullptr) {
-        co_return make_error(DnsError::AE_INTERNAL_ERROR, ERR_error_string(ERR_get_error(), nullptr));
-    }
-    SSL_CTX_set_min_proto_version(ssl_ctx.get(), TLS1_3_VERSION);
-    SSL_CTX_set_max_proto_version(ssl_ctx.get(), TLS1_3_VERSION);
-    SSL_CTX_set_verify(ssl_ctx.get(), SSL_VERIFY_NONE, nullptr);
-    SSL_CTX_set_cert_verify_callback(ssl_ctx.get(), on_certificate_verify, this);
-    TlsSessionCache::prepare_ssl_ctx(ssl_ctx.get());
-#ifdef OPENSSL_IS_BORINGSSL
-    SSL_CTX_set_permute_extensions(ssl_ctx.get(), true);
-    if (0 != ngtcp2_crypto_boringssl_configure_client_context(ssl_ctx.get()))
-#else
-    if (0 != ngtcp2_crypto_quictls_configure_client_context(ssl_ctx.get()))
-#endif
-    {
-        co_return make_error(DnsError::AE_INTERNAL_ERROR, "Couldn't configure SSL object for QUIC");
-    }
-
-    ag::UniquePtr<SSL, &SSL_free> ssl(SSL_new(ssl_ctx.get()));
     static constexpr std::string_view ALPN = NGHTTP3_ALPN_H3;
-    if (0 != SSL_set_alpn_protos(ssl.get(), (uint8_t *) ALPN.data(), ALPN.size())) {
-        co_return make_error(DnsError::AE_INTERNAL_ERROR, "Couldn't configure ALPN");
-    }
 
-    SSL_set_tlsext_host_name(ssl.get(), hostname.c_str());
-    parent->m_tls_session_cache.prepare_ssl(ssl.get());
-    if (SslSessionPtr ssl_session = parent->m_tls_session_cache.get_session()) {
+    // The session is consumed by `make_ssl()`, which up-refs it.
+    SslSessionPtr ssl_session = parent->m_tls_session_cache.get_session();
+    if (ssl_session != nullptr) {
         log_hconn(dbg, this, "Using a cached TLS session");
-        SSL_set_session(ssl.get(), ssl_session.get()); // UpRefs the session
     } else {
         log_hconn(trace, this, "No cached TLS sessions available");
     }
-    SSL_set_connect_state(ssl.get());
+
+    // Imitate Chrome's ClientHello so that our TLS fingerprint is not distinguishable from a
+    // browser's. `make_ssl()` also configures the SSL object for QUIC.
+    std::variant<tls::SslPtr, std::string> ssl_result = tls::make_ssl({
+            .profile = tls::TlsClientProfile::CHROME,
+            .protocol = tls::SslProtocol::NGTCP2,
+            .alpn_protos = {(const uint8_t *) ALPN.data(), ALPN.size()},
+            .sni = hostname.c_str(),
+            .verify_callback = on_certificate_verify,
+            .verify_arg = this,
+            .post_quantum = parent->m_options.enable_post_quantum_cryptography,
+            .new_session_cb = TlsSessionCache::session_new_cb,
+            .resume_session = ssl_session.get(),
+    });
+    if (const auto *error = std::get_if<std::string>(&ssl_result)) {
+        co_return make_error(DnsError::AE_INTERNAL_ERROR, *error);
+    }
+    tls::SslPtr ssl = std::move(std::get<tls::SslPtr>(ssl_result));
+    parent->m_tls_session_cache.prepare_ssl(ssl.get());
 
     if (Error<DnsError> error = co_await connect_socket(std::move(hostname), *peer_saddr); error != nullptr) {
         co_return error;

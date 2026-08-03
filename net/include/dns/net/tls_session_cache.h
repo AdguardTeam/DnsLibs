@@ -29,11 +29,13 @@ private:
     static const int SSL_EX_DATA_IDX;
 
     static int save_session(SSL *ssl, SSL_SESSION *session);
-    static int session_new_cb(SSL *ssl, SSL_SESSION *session);
 
 public:
-    /** Set the session cache mode and the new session callback. */
-    static void prepare_ssl_ctx(SSL_CTX *ctx);
+    /**
+     * `SSL_CTX_sess_set_new_cb()`-compatible callback saving the established session in the cache
+     * the SSL object was associated with by `prepare_ssl()`.
+     */
+    static int session_new_cb(SSL *ssl, SSL_SESSION *session);
 
     /** Open the cache for the specified URL. */
     explicit TlsSessionCache(std::string url);

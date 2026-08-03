@@ -24,7 +24,7 @@ public:
     enum class TlsError {
         AE_INVALID_STATE,
         AE_UNEXPECTED_EOF,
-        AE_ALPN_SET_FAILED,
+        AE_SSL_INIT_FAILED,
         AE_BUFFER_ERROR,
         AE_WRITE_ERROR,
         AE_READ_ERROR,
@@ -136,8 +136,8 @@ struct ErrorCodeToString<dns::TlsCodec::TlsError> {
             return "Invalid state";
         case decltype(e)::AE_UNEXPECTED_EOF:
             return "Remote server unexpectedly closed TLS connection";
-        case decltype(e)::AE_ALPN_SET_FAILED:
-            return "Failed to set ALPN protocols";
+        case decltype(e)::AE_SSL_INIT_FAILED:
+            return "Failed to create the SSL object";
         case decltype(e)::AE_BUFFER_ERROR:
             return "Failed to get buffered data";
         case decltype(e)::AE_WRITE_ERROR:

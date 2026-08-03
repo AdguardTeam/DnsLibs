@@ -51,22 +51,6 @@ int TlsSessionCache::session_new_cb(SSL *ssl, SSL_SESSION *session) {
     return save_session(ssl, session);
 }
 
-void TlsSessionCache::prepare_ssl_ctx(SSL_CTX *ctx) {
-#if 0
-    if (char *ssl_keylog_file = getenv("SSLKEYLOGFILE")) {
-        static UniquePtr<std::FILE, &std::fclose> handle{std::fopen(ssl_keylog_file, "a")};
-        SSL_CTX_set_keylog_callback(ctx,
-                [] (const SSL *, const char *line) {
-                    fprintf(handle.get(), "%s\n", line);
-                    fflush(handle.get());
-                });
-    }
-#endif
-
-    SSL_CTX_set_session_cache_mode(ctx, SSL_SESS_CACHE_CLIENT);
-    SSL_CTX_sess_set_new_cb(ctx, session_new_cb);
-}
-
 void TlsSessionCache::prepare_ssl(SSL *ssl) {
     int ret = SSL_set_ex_data(ssl, SSL_EX_DATA_IDX, this);
     assert(ret == 1);
