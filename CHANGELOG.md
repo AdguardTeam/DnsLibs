@@ -10,12 +10,6 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Changed
 
-- The ClientHello of every encrypted upstream — DNS-over-TLS, DNS-over-HTTPS (both HTTP/2 and
-  HTTP/3) and DNS-over-QUIC — is now built by NativeLibsCommon's `ag::tls::make_ssl()` with the
-  `CHROME` profile, so it reproduces Chrome 150's TLS fingerprint.
-
-- Updated NLC to 8.1.48.
-
 ### Deprecated
 
 ### Removed
@@ -23,6 +17,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ### Fixed
 
 ### Security
+
+## [2.10.1] - 2026-08-04
+
+### Changed
+
+- The ClientHello of every encrypted upstream — DNS-over-TLS, DNS-over-HTTPS (both HTTP/2 and
+  HTTP/3) and DNS-over-QUIC — is now built by NativeLibsCommon's `ag::tls::make_ssl()` with the
+  `CHROME` profile, so it reproduces Chrome 150's TLS fingerprint.
+- Updated NLC to 8.1.48.
 
 ## [2.10.0] - 2026-07-24
 
@@ -364,7 +367,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - API change: allow in-memory filters. See `ag::dnsfilter::FilterParams`.
 - Optimistic DNS caching. See `ag::DnsProxySettings::optimistic_cache`.
 
-[Unreleased]: https://github.com/AdguardTeam/DnsLibs/compare/v2.10.0...HEAD
+[Unreleased]: https://github.com/AdguardTeam/DnsLibs/compare/v2.10.1...HEAD
+[2.10.1]: https://github.com/AdguardTeam/DnsLibs/compare/v2.10.0...v2.10.1
 [2.10.0]: https://github.com/AdguardTeam/DnsLibs/compare/v2.8.58...v2.10.0
 [2.8.58]: https://github.com/AdguardTeam/DnsLibs/compare/v2.8.57...v2.8.58
 [2.8.57]: https://github.com/AdguardTeam/DnsLibs/compare/v2.8.56...v2.8.57
