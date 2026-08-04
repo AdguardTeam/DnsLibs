@@ -1,4 +1,6 @@
 #include <cassert>
+#include <variant>
+
 #include <magic_enum/magic_enum.hpp>
 #include <openssl/rand.h>
 #include <openssl/x509.h>
@@ -21,6 +23,7 @@
 #pragma optimize("", on)
 #endif
 #include "common/time_utils.h"
+#include "common/tls/make_ssl.h"
 #include "dns/upstream/upstream.h"
 
 #include "upstream_doq.h"
@@ -384,10 +387,6 @@ Error<Upstream::InitError> DoqUpstream::init() {
     };
 
     m_remote_addr_empty = SocketAddress("::", m_port);
-
-    if (int ret = init_ssl_ctx(); ret != 0) {
-        return make_error(InitError::AE_SSL_CONTEXT_INIT_FAILED);
-    }
 
     return {};
 }
@@ -875,52 +874,7 @@ int DoqUpstream::init_quic_conn(const Socket *connected_socket) {
     return NETWORK_ERR_OK;
 }
 
-int DoqUpstream::init_ssl_ctx() {
-    m_ssl_ctx.reset(SSL_CTX_new(TLS_client_method()));
-    if (m_ssl_ctx == nullptr) {
-        return 1;
-    }
-    SSL_CTX_set_min_proto_version(m_ssl_ctx.get(), TLS1_3_VERSION);
-    SSL_CTX_set_max_proto_version(m_ssl_ctx.get(), TLS1_3_VERSION);
-    SSL_CTX_set_quic_method(m_ssl_ctx.get(), &quic_method);
-    // setup our verifier
-    SSL_CTX_set_verify(m_ssl_ctx.get(), SSL_VERIFY_PEER, nullptr);
-    SSL_CTX_set_cert_verify_callback(m_ssl_ctx.get(), DoqUpstream::ssl_verify_callback, nullptr);
-#ifdef OPENSSL_IS_BORINGSSL
-    SSL_CTX_set_permute_extensions(m_ssl_ctx.get(), true);
-#endif // OPENSSL_IS_BORINGSSL
-    TlsSessionCache::prepare_ssl_ctx(m_ssl_ctx.get());
-    return 0;
-}
-
 int DoqUpstream::init_ssl() {
-    m_ssl.reset(SSL_new(m_ssl_ctx.get()));
-    if (m_ssl == nullptr) {
-        return 1;
-    }
-    SSL_set_app_data(m_ssl.get(), this);
-    if (!SocketAddress(m_url.get_hostname(), 0).valid()) {
-        SSL_set_tlsext_host_name(m_ssl.get(), std::string{m_url.get_hostname()}.c_str());
-    }
-    SSL_set_connect_state(m_ssl.get());
-    SSL_set_quic_use_legacy_codepoint(m_ssl.get(), m_quic_version != NGTCP2_PROTO_VER_V1);
-
-#ifdef OPENSSL_IS_BORINGSSL
-    if (m_options.enable_post_quantum_cryptography) {
-        static constexpr uint16_t PQ_GROUPS[] = {
-                SSL_GROUP_X25519_MLKEM768,
-                SSL_GROUP_X25519,
-                SSL_GROUP_SECP256R1,
-                SSL_GROUP_SECP384R1,
-        };
-        if (!SSL_set1_group_ids(m_ssl.get(), PQ_GROUPS, std::size(PQ_GROUPS))) {
-            warnlog(m_log, "Failed to set post-quantum groups, continuing with defaults");
-        } else {
-            tracelog(m_log, "Post-quantum cryptography enabled (ML-KEM-768)");
-        }
-    }
-#endif // OPENSSL_IS_BORINGSSL
-
     std::string alpn;
     std::string printable;
     for (auto &dq_alpn : DQ_ALPNS) {
@@ -930,16 +884,42 @@ int DoqUpstream::init_ssl() {
         printable.append(dq_alpn);
     }
     dbglog(m_log, "Advertised ALPNs:{}", printable);
-    SSL_set_alpn_protos(m_ssl.get(), (uint8_t *) alpn.data(), alpn.size());
 
-    m_tls_session_cache.prepare_ssl(m_ssl.get());
-
-    if (SslSessionPtr session = m_tls_session_cache.get_session()) {
+    std::string hostname{m_url.get_hostname()};
+    // The session is consumed by `make_ssl()`, which up-refs it.
+    SslSessionPtr session = m_tls_session_cache.get_session();
+    if (session != nullptr) {
         dbglog(m_log, "Using a cached TLS session");
-        SSL_set_session(m_ssl.get(), session.get()); // UpRefs the session
     } else {
         dbglog(m_log, "No cached TLS sessions available");
     }
+
+    // Imitate Chrome's ClientHello so that our TLS fingerprint is not distinguishable from a
+    // browser's. `make_ssl()` also takes care of the SNI,
+    // the ALPN list, the key share groups and putting the connection into the client state.
+    std::variant<tls::SslPtr, std::string> ssl = tls::make_ssl({
+            .profile = tls::TlsClientProfile::CHROME,
+            .protocol = tls::SslProtocol::NGTCP2,
+            .alpn_protos = {(const uint8_t *) alpn.data(), alpn.size()},
+            .sni = hostname.c_str(),
+            .verify_callback = DoqUpstream::ssl_verify_callback,
+            .verify_arg = this,
+            .post_quantum = m_options.enable_post_quantum_cryptography,
+            .new_session_cb = TlsSessionCache::session_new_cb,
+            .resume_session = session.get(),
+    });
+    if (const auto *error = std::get_if<std::string>(&ssl)) {
+        errlog(m_log, "Failed to create SSL: {}", *error);
+        return 1;
+    }
+    m_ssl = std::move(std::get<tls::SslPtr>(ssl));
+
+    // `make_ssl()` installs ngtcp2's own `SSL_QUIC_METHOD`; we drive ngtcp2 ourselves, so put
+    // our hooks back. In particular, ours turns a TLS alert into an ngtcp2 connection error.
+    SSL_set_quic_method(m_ssl.get(), &quic_method);
+    SSL_set_app_data(m_ssl.get(), this);
+    SSL_set_quic_use_legacy_codepoint(m_ssl.get(), m_quic_version != NGTCP2_PROTO_VER_V1);
+    m_tls_session_cache.prepare_ssl(m_ssl.get());
 
     return 0;
 }

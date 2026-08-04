@@ -190,7 +190,6 @@ private:
     static void on_socket_close(void *arg, Error<SocketError> error);
 
     int init_quic_conn(const Socket *connected_socket);
-    int init_ssl_ctx();
     int init_ssl();
     int on_write();
     int write_streams();
@@ -226,7 +225,6 @@ private:
     size_t m_max_pktlen;
     uint32_t m_quic_version;
     Buffer m_send_buf;
-    ag::UniquePtr<SSL_CTX, &SSL_CTX_free> m_ssl_ctx;
     ag::UniquePtr<SSL, &SSL_free> m_ssl;
     ngtcp2_conn *m_conn{nullptr};
     Crypto m_crypto[3];
