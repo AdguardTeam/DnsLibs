@@ -25,6 +25,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - The ClientHello of every encrypted upstream — DNS-over-TLS, DNS-over-HTTPS (both HTTP/2 and
   HTTP/3) and DNS-over-QUIC — is now built by NativeLibsCommon's `ag::tls::make_ssl()` with the
   `CHROME` profile, so it reproduces Chrome 150's TLS fingerprint.
+- Fixed `$badfilter` rules not applying to rules from other filters. (AdguardTeam/DnsLibs#284)
 - Updated NLC to 8.1.48.
 
 ## [2.10.0] - 2026-07-24
