@@ -160,6 +160,14 @@ std::vector<DnsFilter::Rule> DnsFilter::match(Handle obj, MatchParam param) {
         }
     }
 
+    // Search for $badfilter rules across all filters after all matching is done.
+    {
+        std::shared_lock read_lock(e->m_filters_mtx);
+        for (dnsfilter::Filter &f : e->m_filters) {
+            f.search_badfilter_rules(context);
+        }
+    }
+
     tracelog(e->m_log, "Matched {} rules", context.matched_rules.size());
 
     return std::move(context.matched_rules);

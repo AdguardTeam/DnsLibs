@@ -777,7 +777,6 @@ bool Filter::match(MatchContext &ctx) {
         m_pimpl->search_in_cidrs(m);
     }
     m_pimpl->search_in_leftovers(m);
-    m_pimpl->search_badfilter_rules(m);
 
     for (; matched_rule_pos < m.ctx.matched_rules.size(); ++matched_rule_pos) {
         m.ctx.matched_rules[matched_rule_pos].filter_id = this->params.id;
@@ -786,6 +785,20 @@ bool Filter::match(MatchContext &ctx) {
     file::close(m.file);
 
     return !m.outdated;
+}
+
+void Filter::search_badfilter_rules(MatchContext &ctx) {
+    MatchArg m = {ctx, *this, file::INVALID_HANDLE, false};
+
+    size_t matched_rule_pos = m.ctx.matched_rules.size();
+
+    m_pimpl->search_badfilter_rules(m);
+
+    for (; matched_rule_pos < m.ctx.matched_rules.size(); ++matched_rule_pos) {
+        m.ctx.matched_rules[matched_rule_pos].filter_id = this->params.id;
+    }
+
+    file::close(m.file);
 }
 
 void Filter::update(std::atomic_size_t &mem_limit) {

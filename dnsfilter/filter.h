@@ -61,6 +61,14 @@ public:
     bool match(MatchContext &ctx);
 
     /**
+     * Search for $badfilter rules that disable already matched rules.
+     * Called at the engine level after all filters have matched, so that
+     * $badfilter rules from one filter can disable rules found in another.
+     * @param  ctx  match context with accumulated matched rules
+     */
+    void search_badfilter_rules(MatchContext &ctx);
+
+    /**
      * Update filter
      * @param   mem_limit    engine memory limit
      */
