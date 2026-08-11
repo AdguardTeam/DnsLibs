@@ -104,6 +104,14 @@ Error<Upstream::InitError> PlainUpstream::init() {
         m_address = SocketAddress(split_host, port);
     }
 
+    // Normalize port 0 to the default before selecting the resolved-IP, numeric,
+    // or bootstrap path, so a `host:0` upstream behaves like the pre-existing
+    // plain-IP path (which treated zero as the default port) in every branch --
+    // including resolved_server_ip and the bootstrap address string.
+    if (port == 0) {
+        port = DEFAULT_PLAIN_PORT;
+    }
+
     if (!std::holds_alternative<std::monostate>(m_options.resolved_server_ip)) {
         // resolved_server_ip takes precedence; the bootstrapper is not used.
         m_address = SocketAddress(m_options.resolved_server_ip, port);
@@ -170,6 +178,19 @@ coro::Task<Upstream::ExchangeResult> PlainUpstream::exchange(const ldns_pkt *req
                         return addr.is_ipv4();
                     });
             peer = it != resolve_result.addresses.end() ? *it : resolve_result.addresses.front();
+        }
+
+        // The bootstrap lookup may consume most of the configured timeout, so
+        // deduct it from the budget before starting the connect; the deduction
+        // after connect() below then accounts only for the connect itself,
+        // keeping a single exchange within the total timeout this function
+        // otherwise enforces.
+        if (m_bootstrapper) {
+            timeout -= timer.elapsed<decltype(timeout)>();
+            if (timeout.count() <= 0) {
+                co_return make_error(DnsError::AE_TIMED_OUT, "Timed out while resolving the upstream address");
+            }
+            timer.reset();
         }
 
         // Drop the chosen peer from the bootstrap cache on any failure so the
