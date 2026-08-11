@@ -85,12 +85,16 @@ The most interesting fields are:
     - `std::string address` — DNSLibs supports UDP DNS, TCP DNS, DoH, DoT, DNSCrypt, and DoQ protocols.
       Examples:
         - `8.8.8.8:53` plain DNS.
+        - `dns.adguard.com:53` plain DNS, resolves the hostname via `bootstrap`.
         - `tcp://8.8.8.8:53` plain DNS over TCP.
+        - `tcp://dns.adguard.com:53` plain DNS over TCP, resolves the hostname via `bootstrap`.
+        - `udp://dns.adguard.com:53` plain DNS over UDP, resolves the hostname via `bootstrap`.
         - `tls://1.1.1.1` DNS-over-TLS.
         - `https://dns.adguard.com/dns-query` DNS-over-HTTPS.
         - `quic://dns.adguard.com:853` DNS-over-QUIC.
         - `sdns://...` DNS stamp (see [DNSCrypt specifications](https://dnscrypt.info/stamps-specifications)).
-    - `std::vector<std::string> bootstrap` — list of plain DNS servers used to resolve the hostnames in the upstream addresses.
+    - `std::vector<std::string> bootstrap` — list of plain DNS servers used to resolve the hostnames in the upstream
+      addresses (both encrypted and plain-DNS upstreams).
     - `int32_t id` — user-provided upstream identifier.
     - `std::vector<std::string> fingerprints` — optional SPKI fingerprints for TLS certificate pinning.
     - `bool ignore_proxy_settings` — if true, the outbound proxy is not used for this upstream.

@@ -6,12 +6,14 @@
 #include <event2/event.h>
 #include <ldns/net.h>
 
+#include "dns/upstream/bootstrapper.h"
 #include "dns/upstream/upstream.h"
 
 #include "dns_framed.h"
 
 namespace ag::dns {
 
+class PlainFramedConnection;
 class PlainUpstream;
 
 /**
@@ -36,7 +38,7 @@ private:
 
     Logger m_log;
 
-    friend class TcpPool;
+    friend class PlainFramedConnection;
 
     /** Prefer TCP */
     bool m_prefer_tcp;
@@ -46,6 +48,8 @@ private:
     ConnectionPoolPtr m_pool;
     /** Socket address */
     SocketAddress m_address;
+    /** Bootstrapper */
+    BootstrapperPtr m_bootstrapper;
     /** Use of deleted *this prevention */
     std::shared_ptr<bool> m_shutdown_guard;
 };

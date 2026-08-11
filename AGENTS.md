@@ -133,6 +133,12 @@ You MUST follow the following rules for EVERY task that you perform:
       (`platform/windows/cs/Adguard.Dns`).
     - `docs/dns-proxy-provider.md` — `NEDNSProxyProvider` integration.
 
+- User-facing changes must be added to `CHANGELOG.md` under the
+  `## [Unreleased]` section, in the matching `### Added` / `### Changed` /
+  `### Deprecated` / `### Removed` / `### Fixed` / `### Security` subsection.
+  Follow the style of existing entries: one bullet per change, verb-prefixed,
+  referencing the issue/PR (e.g. `(AdguardTeam/DnsLibs#123)`) when applicable.
+
 - If the prompt essentially asks you to refactor or improve existing code, check
   if you can phrase it as a code guideline. If it's possible, add it to
   the relevant Code Guidelines section in `AGENTS.md`.
@@ -216,6 +222,10 @@ timestamp manipulation (`utimensat`/`SetFileTime`) instead.
 
 ### General
 
+- Public classes and functions should have a doc comment explaining what they do,
+  especially exported public-API headers (`upstream/include/**`,
+  `platform/*/capi`, etc.); also document new internal classes with public
+  members.
 - Prefer existing patterns over inventing new ones
 - Keep changes minimal and focused
 - Tests live in `test/` subdirectories alongside the module they cover

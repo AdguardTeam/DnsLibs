@@ -15,6 +15,7 @@ add_library(upstream EXCLUDE_FROM_ALL
         upstream_plain.h upstream_plain.cpp
         connection.h connection.cpp
         dns_framed.h dns_framed.cpp
+        bootstrapped_connection.h bootstrapped_connection.cpp
         bootstrapper.cpp
         upstream_dnscrypt.h upstream_dnscrypt.cpp
         resolver.h resolver.cpp

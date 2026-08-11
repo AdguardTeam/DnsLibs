@@ -8,7 +8,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- Added support for hostname addresses in plain DNS upstreams: `dns.adguard.com:53`, `udp://dns.adguard.com:53`, and
+  `tcp://dns.adguard.com:53` now resolve the hostname via the upstream's `bootstrap` servers instead of requiring a literal
+  IP address. (AG-57422)
+
 ### Changed
+
+- Changed plain DNS upstreams to honor `resolved_server_ip` when it is set, connecting directly to the given IP instead of
+  ignoring it, matching the behavior of DoT, DoH, and DoQ upstreams. (AG-57422)
+- Changed plain DNS upstreams with a hostname address and an empty `bootstrap` list to fail at initialization with an
+  `AE_EMPTY_BOOTSTRAP` error instead of treating the hostname as an address. (AG-57422)
 
 ### Deprecated
 

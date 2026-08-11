@@ -47,7 +47,10 @@ struct UpstreamOptions {
     /**
      * Server address, one of the following kinds:
      *     8.8.8.8:53 -- plain DNS
+     *     dns.adguard.com -- plain DNS, the hostname is resolved via `bootstrap`
      *     tcp://8.8.8.8:53 -- plain DNS over TCP
+     *     tcp://dns.adguard.com:53 -- plain DNS over TCP (hostname resolved via `bootstrap`)
+     *     udp://dns.adguard.com:53 -- plain DNS over UDP (hostname resolved via `bootstrap`)
      *     tls://1.1.1.1 -- DNS-over-TLS
      *     https://dns.adguard.com/dns-query -- DNS-over-HTTPS
      *     sdns://... -- DNS stamp (see https://dnscrypt.info/stamps-specifications)
