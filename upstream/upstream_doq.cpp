@@ -501,9 +501,23 @@ void DoqUpstream::on_socket_connected(void *arg) {
     }
 
     info->last_connected_socket = ctx;
+    // Multi-address Happy Eyeballs: when the Initial flight was already written
+    // on an earlier socket and the server has not responded yet, replay the
+    // cached flight on this newly connected socket. Otherwise a dead first
+    // address (e.g. an IPv6 black hole) costs a full PTO (~500ms) before a
+    // working address is tried.
+    bool had_initial_flight = !self->m_initial_flight.empty();
     if (int r = self->on_write(); r != NETWORK_ERR_OK) {
         dbglog(self->m_log, "Failed to send packet to {}: {}", peer.str(), r);
         goto fail;
+    }
+    if (had_initial_flight) {
+        for (const auto &pkt : self->m_initial_flight) {
+            if (int r = self->send_packet(ctx->socket.get(), Uint8View(pkt.data(), pkt.size())); r != NETWORK_ERR_OK) {
+                dbglog(self->m_log, "Failed to replay initial flight to {}: {}", peer.str(), r);
+                goto fail;
+            }
+        }
     }
 
     return;
@@ -734,6 +748,11 @@ int DoqUpstream::write_streams() {
         }
 
         m_send_buf.push(nwrite);
+        if (m_initial_flight_pending) {
+            // Keep the Initial datagrams for multi-address replay; the buffer
+            // is reset by send_packet() below, so copy the bytes first.
+            m_initial_flight.emplace_back(m_send_buf.rpos(), m_send_buf.rpos() + nwrite);
+        }
 
         if (auto rv = send_packet(); rv != NETWORK_ERR_OK) {
             return rv;
@@ -836,11 +855,9 @@ int DoqUpstream::init_quic_conn(const Socket *connected_socket) {
 
     ngtcp2_settings settings;
     ngtcp2_settings_default(&settings);
-#if 0
     if (ag::Logger::get_log_level() == LOG_LEVEL_TRACE) {
         settings.log_printf = log_quic_packets;
     }
-#endif
 
     ngtcp2_transport_params txparams;
     ngtcp2_transport_params_default(&txparams);
@@ -928,6 +945,11 @@ void DoqUpstream::write_client_handshake(ngtcp2_encryption_level level, const ui
     if (!m_conn) {
         return;
     }
+    if (level == NGTCP2_ENCRYPTION_LEVEL_INITIAL) {
+        // The Initial flight is now being produced; cache it for replay on
+        // sockets that connect after the first one (see on_socket_connected).
+        m_initial_flight_pending = true;
+    }
     auto &crypto = m_crypto[level];
     crypto.data.emplace_back(data, datalen);
     auto &buf = crypto.data.back();
@@ -945,11 +967,13 @@ int DoqUpstream::feed_data(Uint8View data) {
 
     ngtcp2_pkt_info pi{};
     auto rv = ngtcp2_conn_read_pkt(m_conn, &path, &pi, data.data(), data.size(), initial_ts);
-
-    if (rv != 0 && rv != NGTCP2_ERR_RECV_VERSION_NEGOTIATION) {
-        if (rv != NGTCP2_ERR_CALLBACK_FAILURE) {
-            dbglog(m_log, "ngtcp2_conn_read_pkt: {}", ngtcp2_strerror(rv));
-        }
+    if (rv == 0 || rv == NGTCP2_ERR_RECV_VERSION_NEGOTIATION) {
+        // A valid server packet proves this path works; the Initial flight no
+        // longer needs replaying on other sockets.
+        m_initial_flight.clear();
+        m_initial_flight_pending = false;
+    } else if (rv != NGTCP2_ERR_CALLBACK_FAILURE) {
+        dbglog(m_log, "ngtcp2_conn_read_pkt: {}", ngtcp2_strerror(rv));
     }
 
     return rv;
@@ -1228,6 +1252,8 @@ void DoqUpstream::disconnect(std::string_view reason) {
 
     dbglog(m_log, "Disconnect reason: {}", reason);
     ngtcp2_conn_del(std::exchange(m_conn, nullptr));
+    m_initial_flight.clear();
+    m_initial_flight_pending = false;
     uv_timer_stop(m_handshake_timer->raw());
     uv_timer_stop(m_req_idle_timer->raw());
     uv_timer_stop(m_retransmit_timer->raw());
