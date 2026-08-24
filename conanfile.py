@@ -46,7 +46,7 @@ class DnsLibsConan(ConanFile):
         if "mips" in str(self.settings.arch):
             self.requires("openssl/3.1.5-quic1@adguard/oss", transitive_headers=True, force=True)
         else:
-            self.requires("openssl/boring-2024-09-13@adguard/oss", transitive_headers=True)
+            self.requires("openssl/boring-2026-05-08@adguard/oss", transitive_headers=True)
         self.requires("ada/2.7.4", transitive_headers=True)
         if self.settings.os == "Windows":
             self.requires("detours/2021-04-14@adguard/oss", transitive_headers=True)
