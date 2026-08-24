@@ -15,6 +15,7 @@ add_library(upstream EXCLUDE_FROM_ALL
         upstream_plain.h upstream_plain.cpp
         connection.h connection.cpp
         dns_framed.h dns_framed.cpp
+        bootstrapped_connection.h bootstrapped_connection.cpp
         bootstrapper.cpp
         upstream_dnscrypt.h upstream_dnscrypt.cpp
         resolver.h resolver.cpp
@@ -133,6 +134,8 @@ if (APPLE)
     add_unit_test(test_system_resolver "${TEST_DIR}" "${AG_TEST_HELPERS}" TRUE TRUE)
 endif ()
 add_unit_test(test_dot_invalid_address "${TEST_DIR}" "${DNSLIBS_DIR}/upstream/src;${AG_TEST_HELPERS}" TRUE TRUE)
+# Plain-DNS hostname peer-eviction/rotation (mock Bootstrapper, loopback DNS)
+add_unit_test(test_upstream_plain_eviction "${TEST_DIR}" "${DNSLIBS_DIR}/upstream/src;${AG_TEST_HELPERS}" TRUE TRUE)
 add_unit_test(test_bootstrapper "${TEST_DIR}" "${DNSLIBS_DIR}/upstream/src;${AG_TEST_HELPERS}" TRUE TRUE)
 add_unit_test(test_doh_credentials "${TEST_DIR}" "${DNSLIBS_DIR}/upstream/src;${AG_TEST_HELPERS}" TRUE FALSE) # TEST_P (DohUpstreamParamTest): FALSE per cmake/add_unit_test.cmake
 # Shared test infrastructure (loopback DNS server, MockUpstream, integration

@@ -391,6 +391,161 @@ TEST_F(UpstreamTest, TestUpstreamsDoqInvalidBootstrapLocal) {
     ASSERT_NO_FATAL_FAILURE(co_await sequential_test(local_data));
 }
 
+// Plain DNS hostname upstreams (bare, UDP, and TCP) bootstrapped via a loopback
+// resolver that resolves the upstream hostname (localhost) to 127.0.0.1, so the
+// exchange lands on the in-process m_loopback responder. The upstream address
+// is a hostname (not a literal IP), so the bootstrapper is genuinely
+// exercised. No public internet.
+TEST_F(UpstreamTest, TestUpstreamPlainHostnameLocal) {
+    ag::test::LoopbackDnsServer bootstrap{[](const ldns_pkt &req) {
+        return make_loopback_a_reply(req, "127.0.0.1");
+    }};
+    bootstrap.start();
+
+    const std::string bootstrap_addr = AG_FMT("127.0.0.1:{}", bootstrap.port());
+    const std::vector<UpstreamTestData> local_data = {
+            {AG_FMT("localhost:{}", m_loopback.port()), {bootstrap_addr}},       // bare, UDP-first
+            {AG_FMT("udp://localhost:{}", m_loopback.port()), {bootstrap_addr}}, // plain DNS over UDP
+            {AG_FMT("tcp://localhost:{}", m_loopback.port()), {bootstrap_addr}}, // plain DNS over TCP
+    };
+    ASSERT_NO_FATAL_FAILURE(co_await sequential_test(local_data));
+}
+
+// Plain DNS hostname upstream with two bootstraps (only one is valid),
+// reproduced against loopback so the suite stays offline. The bootstrapper runs
+// both resolvers in parallel and takes the first success; the dead loopback
+// address fails fast while the good loopback resolver resolves localhost ->
+// 127.0.0.1, landing the exchange on m_loopback.
+TEST_F(UpstreamTest, TestUpstreamsPlainInvalidBootstrapLocal) {
+    ag::test::LoopbackDnsServer good_bootstrap{[](const ldns_pkt &req) {
+        return make_loopback_a_reply(req, "127.0.0.1");
+    }};
+    good_bootstrap.start();
+
+    const std::string upstream_addr = AG_FMT("localhost:{}", m_loopback.port());
+    const std::string good_addr = AG_FMT("127.0.0.1:{}", good_bootstrap.port());
+    const std::vector<UpstreamTestData> local_data = {
+            {upstream_addr, {"127.0.0.1:1", good_addr}},
+    };
+    ASSERT_NO_FATAL_FAILURE(co_await sequential_test(local_data));
+}
+
+// Truncated-reply behavior with a plain hostname upstream. The loopback server
+// returns a truncated reply (TC=1) over UDP, forcing PlainUpstream to retry
+// over TCP, where the server returns a non-truncated reply (TC=0) — the plain
+// hostname is resolved via a loopback bootstrap. Proves the UDP->TCP fallback
+// works with a bootstrapped hostname, offline.
+TEST_F(UpstreamTest, TestUpstreamPlainHostnameTruncatedLocal) {
+    co_await m_loop->co_submit();
+    auto tc_call = std::make_shared<std::atomic<int>>(0);
+    ag::test::LoopbackDnsServer server([tc_call](const ldns_pkt &req) -> ldns_pkt_ptr {
+        ldns_pkt_ptr reply = ag::test::make_base_reply(req);
+        // First call (the UDP attempt) is truncated; the TCP retry is not.
+        int n = tc_call->fetch_add(1);
+        ldns_pkt_set_tc(reply.get(), n == 0);
+        return reply;
+    });
+    server.start();
+    ag::test::LoopbackDnsServer bootstrap{[](const ldns_pkt &req) {
+        return make_loopback_a_reply(req, "127.0.0.1");
+    }};
+    bootstrap.start();
+
+    auto upstream_res = create_upstream(
+            {AG_FMT("localhost:{}", server.port()), {AG_FMT("127.0.0.1:{}", bootstrap.port())}}, Secs(5));
+    ASSERT_FALSE(upstream_res.has_error()) << "Error while creating an upstream: " << upstream_res.error()->str();
+    auto request = dnscrypt::create_request_ldns_pkt(
+            LDNS_RR_TYPE_TXT, LDNS_RR_CLASS_IN, LDNS_RD, "unit-test-truncated.example.", std::nullopt);
+    ldns_pkt_set_random_id(request.get());
+    auto res = co_await upstream_res.value()->exchange(request.get());
+    ASSERT_FALSE(res.has_error()) << "Error while making a request: " << res.error()->str();
+    ASSERT_FALSE(ldns_pkt_tc(res->get())) << "Response must NOT be truncated";
+    server.stop();
+    bootstrap.stop();
+}
+
+// Plain hostname upstream with a resolved server IP, reproduced against
+// loopback. With resolved_server_ip set, the bootstrapper is bypassed and
+// PlainUpstream connects directly to 127.0.0.1:<port> (m_loopback), so the dead
+// bootstrap is never used. (Previously resolved_server_ip was ignored for plain
+// upstreams; now it takes precedence, matching DoT/DoH/DoQ.)
+TEST_F(UpstreamTest, TestUpstreamsPlainWithServerIpLocal) {
+    const std::string upstream_addr = AG_FMT("localhost:{}", m_loopback.port());
+    const std::vector<UpstreamTestData> local_data = {
+            {upstream_addr, {"127.0.0.1:1"}, Ipv4Address{127, 0, 0, 1}},
+    };
+    ASSERT_NO_FATAL_FAILURE(co_await sequential_test(local_data));
+}
+
+// A plain hostname upstream without a bootstrap must fail at create_upstream()
+// time (with AE_EMPTY_BOOTSTRAP), with no network I/O. The hostnames are
+// non-routable (loopback / *.invalid) so the test cannot reach the public
+// internet even if the AE_EMPTY_BOOTSTRAP check were ever deferred past the
+// point where a bootstrap would resolve them.
+TEST_F(UpstreamTest, TestUpstreamPlainHostnameEmptyBootstrapLocal) {
+    co_await m_loop->co_submit();
+    const std::vector<std::string> hostnames = {AG_FMT("localhost:{}", m_loopback.port()), "dns.adguard.com.invalid:53",
+            "tcp://dns.adguard.com.invalid", "udp://localhost:53"};
+    for (const std::string &address : hostnames) {
+        auto upstream_res = create_upstream({address, {}});
+        // Non-fatal EXPECT_* so every form is exercised in a single run: a
+        // regression affecting only one address form (bare via split_host_port,
+        // tcp://udp:// via URL parsing) must not hide the others.
+        EXPECT_TRUE(upstream_res.has_error())
+                << "Plain hostname upstream without a bootstrap must fail to create: " << address;
+        if (!upstream_res.has_error()) {
+            continue;
+        }
+        // The factory wraps the upstream init() error in AE_INIT_FAILED; check
+        // the outer code and the wrapped cause so a regression that fails at a
+        // different stage (e.g. address parsing) would be caught here.
+        EXPECT_EQ(upstream_res.error()->value(), UpstreamFactory::UpstreamCreateError::AE_INIT_FAILED)
+                << "Unexpected upstream creation error for: " << address;
+        const auto *init_error =
+                dynamic_cast<const ErrorImpl<Upstream::InitError> *>(upstream_res.error()->next().get());
+        EXPECT_NE(init_error, nullptr) << "Expected the wrapped init() error for: " << address;
+        if (init_error != nullptr) {
+            EXPECT_EQ(init_error->value(), Upstream::InitError::AE_EMPTY_BOOTSTRAP)
+                    << "Plain hostname upstream without a bootstrap must fail with AE_EMPTY_BOOTSTRAP: " << address;
+        }
+    }
+}
+
+// A plain hostname upstream whose (only) bootstrap server accepts the query but
+// never replies, forcing the bootstrapper to genuinely time out (the same "no
+// reply" trick as TestBootstrapTimeout, which only covers DoT). The exchange
+// must fail with an error within the configured timeout window — no sleep(), no
+// public internet. Covers the bare/UDP and TCP plain upstreams.
+TEST_F(UpstreamTest, TestUpstreamPlainBootstrapTimeoutLocal) {
+    using namespace std::chrono_literals;
+    static constexpr auto timeout = 100ms;
+    co_await m_loop->co_submit();
+    // Non-responding loopback DNS bootstrap: accepts the packet but never
+    // replies, so the resolver genuinely times out.
+    ag::test::LoopbackDnsServer dead_bootstrap{[](const ldns_pkt &) -> ldns_pkt_ptr {
+        return nullptr;
+    }};
+    dead_bootstrap.start();
+    const std::string dead_bootstrap_addr = AG_FMT("127.0.0.1:{}", dead_bootstrap.port());
+
+    const std::vector<std::string> hostnames = {
+            AG_FMT("localhost:{}", m_loopback.port()),       // bare, UDP-first
+            AG_FMT("udp://localhost:{}", m_loopback.port()), // plain DNS over UDP
+            AG_FMT("tcp://localhost:{}", m_loopback.port()), // plain DNS over TCP
+    };
+    for (const std::string &address : hostnames) {
+        auto upstream_res = create_upstream({address, {dead_bootstrap_addr}}, timeout);
+        ASSERT_FALSE(upstream_res.has_error()) << "Failed to create upstream: " << upstream_res.error()->str();
+        ag::utils::Timer timer;
+        auto reply_res = co_await upstream_res.value()->exchange(create_test_message().get());
+        ASSERT_TRUE(reply_res.has_error()) << "The exchange must fail when the bootstrap times out: " << address;
+        auto elapsed = timer.elapsed<Millis>();
+        ASSERT_LT(elapsed, 2 * timeout) << AG_FMT(
+                "Exchange took more time than the configured timeout: {} (for {})", elapsed, address);
+    }
+    dead_bootstrap.stop();
+}
+
 // Use invalid bootstrap to make sure it fails if tries to use it
 static const std::initializer_list<std::string> invalid_bootstrap{"1.2.3.4:55"};
 
