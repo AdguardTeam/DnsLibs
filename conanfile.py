@@ -39,14 +39,14 @@ class DnsLibsConan(ConanFile):
         self.requires("klib/2021-04-06@adguard/oss", transitive_headers=True)
         self.requires("ldns/2021-03-29@adguard/oss", transitive_headers=True)
         self.requires("magic_enum/0.9.5", transitive_headers=True)
-        self.requires("native_libs_common/8.1.49@adguard/oss", transitive_headers=True)
+        self.requires("native_libs_common/8.1.50@adguard/oss", transitive_headers=True)
         self.requires("ngtcp2/1.22.1@adguard/oss", transitive_headers=True)
         self.requires("pcre2/10.37@adguard/oss", transitive_headers=True)
         self.requires("tldregistry/2022-12-26@adguard/oss", transitive_headers=True)
         if "mips" in str(self.settings.arch):
             self.requires("openssl/3.1.5-quic1@adguard/oss", transitive_headers=True, force=True)
         else:
-            self.requires("openssl/boring-2024-09-13@adguard/oss", transitive_headers=True)
+            self.requires("openssl/boring-2026-05-08@adguard/oss", transitive_headers=True)
         self.requires("ada/2.7.4", transitive_headers=True)
         if self.settings.os == "Windows":
             self.requires("detours/2021-04-14@adguard/oss", transitive_headers=True)
