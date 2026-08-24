@@ -855,9 +855,11 @@ int DoqUpstream::init_quic_conn(const Socket *connected_socket) {
 
     ngtcp2_settings settings;
     ngtcp2_settings_default(&settings);
+#if 0
     if (ag::Logger::get_log_level() == LOG_LEVEL_TRACE) {
         settings.log_printf = log_quic_packets;
     }
+#endif
 
     ngtcp2_transport_params txparams;
     ngtcp2_transport_params_default(&txparams);
