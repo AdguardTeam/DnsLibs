@@ -483,7 +483,10 @@ void DoqUpstream::on_socket_connected(void *arg) {
     auto *ctx = (SocketContext *) arg;
     DoqUpstream *self = ctx->upstream;
 
-    const SocketAddress &peer = ctx->socket->get_peer();
+    // Copy the peer: a synchronous UdpSocket::send() failure below can destroy
+    // the socket (via on_socket_close()) before the fail path runs, so a
+    // reference into ctx->socket would dangle.
+    SocketAddress peer = ctx->socket->get_peer();
     tracelog(self->m_log, "{}(): {}", __func__, peer.str());
 
     auto *info = std::get_if<ConnectionHandshakeInitialInfo>(&self->m_conn_state.info);
@@ -523,11 +526,22 @@ void DoqUpstream::on_socket_connected(void *arg) {
     return;
 
 fail:
+    // UdpSocket::send() can fail synchronously: on error it invokes
+    // on_socket_close() before returning, which may extract (and destroy) `ctx`
+    // and even call disconnect() (invalidating the `info` captured above).
+    // Revalidate the connection state before touching either.
+    auto *cur_info = std::get_if<ConnectionHandshakeInitialInfo>(&self->m_conn_state.info);
+    if (cur_info == nullptr) {
+        return; // Already disconnected by the synchronous on_socket_close().
+    }
+    auto dropped = self->m_conn_state.extract_socket(ctx);
+    if (dropped == nullptr) {
+        return; // ctx was already extracted by the synchronous on_socket_close().
+    }
     self->disqualify_server_address(peer);
-    auto drop = self->m_conn_state.extract_socket(ctx);
     // if the peer is not yet selected and we have some pending endpoints,
     // do not disconnect immediately - wait for other ones
-    if (info->sockets.empty()) {
+    if (cur_info->sockets.empty()) {
         self->disconnect("Failed to handshake with any peer");
     }
 }

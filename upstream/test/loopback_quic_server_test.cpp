@@ -143,11 +143,22 @@ TEST_F(LoopbackQuicServerTest, DoqUpstreamExchangesQueryOffline) {
 // unroutable documentation address behind a blackhole route), the client must
 // immediately replay the cached Initial flight on the IPv4 socket instead of
 // burning a full PTO (~500ms) waiting for a retransmission, so the exchange
-// must complete well below one PTO interval. On hosts without IPv6 at all the
-// IPv6 connect() fails fast and the test passes trivially — it only exercises
-// the fix where a dead-but-connectable IPv6 route exists.
+// must complete well below one PTO interval.
 TEST_F(LoopbackQuicServerTest, DoqUpstreamSkipsDeadIpv6PathWithoutPto) {
     co_await m_loop->co_submit();
+
+    // The replay branch requires a connectable IPv6 candidate: the client
+    // always races IPv6 first, and on a host without IPv6 sockets the IPv6
+    // connect() fails fast, degrading this test to an ordinary IPv4-only pass
+    // that never exercises the replay. Probe IPv6 socket creation and skip
+    // explicitly instead of silently passing.
+    ag::test::detail::ensure_winsock();
+    auto ipv6_probe = ag::test::detail::open_dgram_socket6();
+    if (ipv6_probe == ag::test::detail::invalid_socket()) {
+        GTEST_SKIP() << "Host has no IPv6 sockets; the dead-IPv6 Initial-flight replay path cannot be exercised";
+    }
+    ag::test::detail::close_fd(ipv6_probe);
+
     ag::test::LoopbackQuicServer server([](const ldns_pkt &request) {
         return make_canned_a_reply(request);
     });
