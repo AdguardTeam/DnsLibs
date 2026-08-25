@@ -623,13 +623,43 @@ void DoqUpstream::on_socket_close(void *arg, Error<SocketError> error) {
         self->m_fatal_error = nullptr;
     }
 
-    auto drop = self->m_conn_state.extract_socket(ctx);
-    // if the peer is not yet selected and we have some pending endpoints,
-    // do not disconnect immediately - wait for other ones
-    if (const ConnectionHandshakeInitialInfo *info; self->m_conn_state.is_peer_selected()
-            || nullptr == (info = std::get_if<ConnectionHandshakeInitialInfo>(&self->m_conn_state.info))
-            || info->sockets.empty()) {
+    auto dropped = self->m_conn_state.extract_socket(ctx);
+
+    // An established connection is torn down by any socket close.
+    if (self->m_conn_state.is_peer_selected()) {
         self->disconnect("Connection is closed");
+        return;
+    }
+
+    auto *info = std::get_if<ConnectionHandshakeInitialInfo>(&self->m_conn_state.info);
+    if (info == nullptr) {
+        // Already disconnected (e.g. by a synchronous failure in a nested call).
+        return;
+    }
+
+    if (info->sockets.empty()) {
+        // No candidates left; tear down so the exchange fails instead of hanging.
+        self->disconnect("Connection is closed");
+        return;
+    }
+
+    // Handshake phase with surviving candidates. If the closed socket was the
+    // one carrying the Initial flight (extract_socket cleared
+    // last_connected_socket), promote a surviving candidate and replay the
+    // cached flight on it; otherwise retransmissions would have no socket to
+    // send on (send_packet() would assert) and the handshake would wait for
+    // the timeout instead of falling back.
+    if (info->last_connected_socket == nullptr) {
+        info->last_connected_socket = info->sockets.front().get();
+        for (const auto &pkt : self->m_initial_flight) {
+            if (int r = self->send_packet(info->last_connected_socket->socket.get(), Uint8View(pkt.data(), pkt.size()));
+                    r != NETWORK_ERR_OK) {
+                // A synchronous send failure re-enters on_socket_close() for the
+                // promoted socket, which performs the extraction/teardown; do
+                // not touch `info` afterwards.
+                return;
+            }
+        }
     }
 }
 

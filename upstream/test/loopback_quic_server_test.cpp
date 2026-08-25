@@ -194,16 +194,30 @@ TEST_F(LoopbackQuicServerTest, DoqUpstreamSkipsDeadIpv6PathWithoutPto) {
     ldns_pkt_ptr req = make_query("example.com.", LDNS_RR_TYPE_A);
     auto start = std::chrono::steady_clock::now();
     auto reply_res = co_await upstream_res.value()->exchange(req.get());
-    auto elapsed_ms = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() - start);
+    auto reply_elapsed =
+            std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() - start);
     ASSERT_FALSE(reply_res.has_error()) << reply_res.error()->str();
 
     std::string err = check_canned_a_reply(*reply_res.value());
     ASSERT_TRUE(err.empty()) << err;
 
-    // Without the Initial-flight replay the dead IPv6 path costs a full PTO
-    // (~500ms) before the IPv4 socket is tried; with the fix the exchange
-    // completes in a couple of loopback RTTs.
-    ASSERT_LT(elapsed_ms.count(), 400) << "DoQ init waited for a PTO retransmission on the dead IPv6 path";
+    // Deterministic replay check: the IPv4 loopback server must receive the
+    // client's Initial well before the first PTO. DoqUpstream halves ngtcp2's
+    // default initial RTT (333 ms -> 166 ms), so the first PTO is ~500 ms
+    // (166 + 4*83); without the Initial-flight replay the IPv4 server gets its
+    // first packet only via that PTO retransmission, while with the fix the
+    // replayed flight arrives in a few ms. A 250 ms bound separates the two
+    // with a wide margin for loaded CI hosts (a wall-clock exchange bound is
+    // not used: it is flaky in both directions).
+    auto first_pkt = server.first_packet_at();
+    ASSERT_TRUE(first_pkt.has_value()) << "IPv4 server never received any datagram";
+    auto first_pkt_elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(*first_pkt - start);
+    ASSERT_LT(first_pkt_elapsed.count(), 250)
+            << "IPv4 server received the Initial only after the first PTO (no Initial-flight replay?)";
+
+    // Sanity bound only: guards against a total stall; the first-packet
+    // assertion above is the replay proof.
+    ASSERT_LT(reply_elapsed.count(), 1000);
 
     server.stop();
 }
