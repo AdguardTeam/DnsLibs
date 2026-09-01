@@ -156,7 +156,14 @@ jobs:
             export LDFLAGS=-fuse-ld=lld
             export ASAN_OPTIONS=detect_container_overflow=0
 
-            { make lint CLANGD_TIDY_JOBS=2 && \
+            # clangd-tidy is the memory hog of `make lint`: each of its clangd
+            # workers can take 100s of MB to 1 GB RSS. The old container job
+            # ran on a 12 GB ephemeral runner; this docker build runs on the
+            # remote buildkit with --resource memory=6g, so the default
+            # CLANGD_TIDY_JOBS (= NPROC/2 = 8) OOM-killed clangd mid-analysis
+            # ("Invalid header end"), and even 2 workers still died. Drop to a
+            # single worker: it is slower (~4-5 min) but fits the 6 GB limit.
+            { make lint CLANGD_TIDY_JOBS=1 && \
               PRESET=clang-debug-sanitizer SKIP_BOOTSTRAP=1 CMAKE_LAUNCHER=sccache make test-ci; } || test_status=$?
 
             # Upload whatever was built, then report the test result.
