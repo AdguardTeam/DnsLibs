@@ -122,19 +122,24 @@ jobs:
             FROM adguard/core-libs:2.11 AS tests
 
             WORKDIR /src
-            COPY . .
 
             # sccache caches the C/C++ compilations; the pinned binary is
-            # installed once (this layer is not affected by CACHEBUST). The
-            # store itself lives in the context (restored on the runner into
-            # .sccache, carried by COPY . . below) and is exported back after
-            # the build.
+            # installed before COPY . . so this layer depends only on the base
+            # image and stays cached across source changes (and is not affected
+            # by CACHEBUST). The store itself lives in the context (restored on
+            # the runner into .sccache, carried by COPY . . below) and is
+            # exported back after the build.
             ENV SCCACHE_CACHE_SIZE=512M
             RUN curl -fsSL https://github.com/mozilla/sccache/releases/download/v0.8.2/sccache-v0.8.2-x86_64-unknown-linux-musl.tar.gz \
                 | tar -xz -C /usr/local/bin --strip-components=1
 
+            COPY . .
+
             # Changes on every run so the tests are never served from the cache.
+            # The ENV layer bakes the build-arg value into the layer history, so
+            # changing CACHEBUST invalidates everything below it.
             ARG CACHEBUST
+            ENV CACHEBUST=$CACHEBUST
 
             RUN --mount=type=secret,id=CONAN_REPO_URL,required=true \
                 --mount=type=secret,id=ARTIFACTORY_USER \
@@ -156,8 +161,15 @@ jobs:
 
             # Upload whatever was built, then report the test result.
             conan remote login art "$(cat /run/secrets/ARTIFACTORY_USER)" \
-                --password "$(cat /run/secrets/ARTIFACTORY_API_KEY)"
-            conan upload -r art -c "*" 2>&1 | grep --line-buffered "Uploading" || true
+                --password "$(cat /run/secrets/ARTIFACTORY_API_KEY)" || true
+            conan upload -r art -c "*" > /tmp/conan-upload.log 2>&1 || upload_status=$?
+            grep --line-buffered "Uploading" /tmp/conan-upload.log || true
+            if [ "${upload_status:-0}" -ne 0 ]; then
+                cat /tmp/conan-upload.log || true
+                if [ "${test_status:-0}" -eq 0 ]; then
+                    test_status="${upload_status}"
+                fi
+            fi
 
             # Capture the sccache counters where the compilations happened: the
             # runner-side daemon has no knowledge of them (and its binary may be
@@ -533,7 +545,14 @@ jobs:
         run: |
           source ./venv/bin/activate
           conan remote login art "${{ secrets.ARTIFACTORY_USER }}" --password "${{ secrets.ARTIFACTORY_API_KEY }}"
-          conan upload -r art -c "*" 2>&1 | grep --line-buffered "Uploading"
+
+          # The upload output is captured so its exit code is not masked by the grep filter
+          conan upload -r art -c "*" > /tmp/conan-upload.log 2>&1 || upload_status=$?
+          grep --line-buffered "Uploading" /tmp/conan-upload.log || true
+          if [ "${upload_status:-0}" -ne 0 ]; then
+              cat /tmp/conan-upload.log || true
+              exit "${upload_status}"
+          fi
 
   android-build:
     name: Android library build
@@ -661,7 +680,14 @@ jobs:
         if: always()
         run: |
           conan remote login art "${{ secrets.ARTIFACTORY_USER }}" --password "${{ secrets.ARTIFACTORY_API_KEY }}"
-          conan upload -r art -c "*" 2>&1 | grep --line-buffered "Uploading"
+
+          # The upload output is captured so its exit code is not masked by the grep filter
+          conan upload -r art -c "*" > /tmp/conan-upload.log 2>&1 || upload_status=$?
+          grep --line-buffered "Uploading" /tmp/conan-upload.log || true
+          if [ "${upload_status:-0}" -ne 0 ]; then
+              cat /tmp/conan-upload.log || true
+              exit "${upload_status}"
+          fi
 
   windows-build:
     name: Windows build, tests and nuget pack
@@ -973,19 +999,24 @@ jobs:
             FROM adguard/core-libs:2.11 AS build
 
             WORKDIR /src
-            COPY . .
 
             # sccache caches the C/C++ compilations of the adyg build; the
-            # pinned binary is installed once (this layer is not affected by
-            # CACHEBUST). The store lives in the context (restored on the
-            # runner into .sccache, carried by COPY . . below) and is exported
-            # back after the build.
+            # pinned binary is installed before COPY . . so this layer depends
+            # only on the base image and stays cached across source changes
+            # (and is not affected by CACHEBUST). The store lives in the
+            # context (restored on the runner into .sccache, carried by COPY
+            # . . below) and is exported back after the build.
             ENV SCCACHE_CACHE_SIZE=512M
             RUN curl -fsSL https://github.com/mozilla/sccache/releases/download/v0.8.2/sccache-v0.8.2-x86_64-unknown-linux-musl.tar.gz \
                 | tar -xz -C /usr/local/bin --strip-components=1
 
+            COPY . .
+
             # Changes on every run so the build is never served from the cache.
+            # The ENV layer bakes the build-arg value into the layer history, so
+            # changing CACHEBUST invalidates everything below it.
             ARG CACHEBUST
+            ENV CACHEBUST=$CACHEBUST
 
             RUN --mount=type=secret,id=CONAN_REPO_URL,required=true <<'END'
             set -eux
@@ -1008,13 +1039,15 @@ jobs:
             # runner reads this file to decide whether to force-save the store.
             SCCACHE_DIR=/src/.sccache sccache --show-stats --stats-format=json > /src/sccache-stats.json 2>/dev/null || true
 
-            # Drop the build outputs before the layer is committed.
+            # Stash the binary OUTSIDE the build dir, then drop the build
+            # outputs before the layer is committed
+            cp cmake-build-clang-relwithdebinfo/tools/adyg/adyg /src/adyg
             make clean || true
             END
 
             FROM scratch AS results
 
-            COPY --from=build /src/cmake-build-clang-relwithdebinfo/tools/adyg/adyg /adyg
+            COPY --from=build /src/adyg /adyg
             COPY --from=build /src/sccache-stats.json /sccache-stats.json
             COPY --from=build /src/.sccache /sccache
 
