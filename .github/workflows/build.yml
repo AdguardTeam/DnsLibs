@@ -130,7 +130,7 @@ jobs:
             # the runner into .sccache, carried by COPY . . below) and is
             # exported back after the build.
             ENV SCCACHE_CACHE_SIZE=512M
-            RUN curl -fsSL https://github.com/mozilla/sccache/releases/download/v0.8.2/sccache-v0.8.2-x86_64-unknown-linux-musl.tar.gz \
+            RUN curl -fsSL https://github.com/mozilla/sccache/releases/download/v0.17.0/sccache-v0.17.0-x86_64-unknown-linux-musl.tar.gz \
                 | tar -xz -C /usr/local/bin --strip-components=1
 
             COPY . .
@@ -155,13 +155,6 @@ jobs:
             export SCCACHE_DIR=/src/.sccache
             export LDFLAGS=-fuse-ld=lld
             export ASAN_OPTIONS=detect_container_overflow=0
-
-            # TEMP DIAGNOSTICS: sccache fails to spawn the clang++ preprocessor
-            # ("No such file or directory (os error 2)") on the real amd64
-            # buildkit, which does not reproduce under qemu locally. Trace
-            # logging shows the exact path sccache cannot open. Remove once the
-            # root cause is found.
-            export SCCACHE_LOG=trace
 
             # clangd-tidy is deliberately NOT run here: each clangd worker can
             # take 100s of MB to 1 GB RSS, and this docker build runs on the
@@ -1053,7 +1046,7 @@ jobs:
             # context (restored on the runner into .sccache, carried by COPY
             # . . below) and is exported back after the build.
             ENV SCCACHE_CACHE_SIZE=512M
-            RUN curl -fsSL https://github.com/mozilla/sccache/releases/download/v0.8.2/sccache-v0.8.2-x86_64-unknown-linux-musl.tar.gz \
+            RUN curl -fsSL https://github.com/mozilla/sccache/releases/download/v0.17.0/sccache-v0.17.0-x86_64-unknown-linux-musl.tar.gz \
                 | tar -xz -C /usr/local/bin --strip-components=1
 
             COPY . .
