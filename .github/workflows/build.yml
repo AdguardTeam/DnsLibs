@@ -156,14 +156,14 @@ jobs:
             export LDFLAGS=-fuse-ld=lld
             export ASAN_OPTIONS=detect_container_overflow=0
 
-            # clangd-tidy is the memory hog of `make lint`: each of its clangd
-            # workers can take 100s of MB to 1 GB RSS. The old container job
-            # ran on a 12 GB ephemeral runner; this docker build runs on the
-            # remote buildkit with --resource memory=6g, so the default
-            # CLANGD_TIDY_JOBS (= NPROC/2 = 8) OOM-killed clangd mid-analysis
-            # ("Invalid header end"), and even 2 workers still died. Drop to a
-            # single worker: it is slower (~4-5 min) but fits the 6 GB limit.
-            { make lint CLANGD_TIDY_JOBS=1 && \
+            # clangd-tidy is deliberately NOT run here: each clangd worker can
+            # take 100s of MB to 1 GB RSS, and this docker build runs on the
+            # remote buildkit with --resource memory=6g, which OOM-kills clangd
+            # mid-analysis ("Invalid header end") regardless of
+            # CLANGD_TIDY_JOBS. clangd-tidy runs in the dedicated `lint` job
+            # on a 12 GB ephemeral runner instead. Only the cheap linters
+            # (markdownlint + clang-format) run here alongside the tests.
+            { make lint-md clang-format && \
               PRESET=clang-debug-sanitizer SKIP_BOOTSTRAP=1 CMAKE_LAUNCHER=sccache make test-ci; } || test_status=$?
 
             # Upload whatever was built, then report the test result.
@@ -248,6 +248,38 @@ jobs:
           path: build/junit.xml
           if-no-files-found: warn
           retention-days: 7
+
+  # clangd-tidy is the only lint step that needs more memory than the 'team-corelibs' runner have available
+  lint:
+    name: Lint (clangd-tidy)
+    if: github.repository == 'AdGuardSoftwareLimited/dns-libs'
+    needs: [resolve-images]
+    permissions:
+      contents: read
+      id-token: write
+    runs-on:
+      - ephemeral
+      - ephemeral-linux
+      - ${{ needs.resolve-images.outputs.corelibs-builder }}
+      - ephemeral-limit-memory-12288
+      - ephemeral-limit-cpu-8
+    container:
+      image: adguard/core-libs:2.11
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Set up Conan
+        run: |
+          set -e
+          set -x
+          conan remote add --index 0 art ${{ vars.CONAN_REPO_URL }} || true
+
+      - name: Run clangd-tidy
+        run: |
+          set -e
+          set -x
+          SKIP_BOOTSTRAP=1 make clangd-tidy
 
   mac-build:
     name: Apple framework build
