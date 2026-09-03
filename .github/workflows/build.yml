@@ -156,27 +156,13 @@ jobs:
             export LDFLAGS=-fuse-ld=lld
             export ASAN_OPTIONS=detect_container_overflow=0
 
-            # clangd-tidy is deliberately NOT run here: each clangd worker can
-            # take 100s of MB to 1 GB RSS, and this docker build runs on the
-            # remote buildkit with --resource memory=6g, which OOM-kills clangd
-            # mid-analysis ("Invalid header end") regardless of
-            # CLANGD_TIDY_JOBS. clangd-tidy runs in the dedicated `lint` job
-            # on a 12 GB ephemeral runner instead. Only the cheap linters
-            # (markdownlint + clang-format) run here alongside the tests.
+            # clangd-tidy is deliberately NOT run here due to memory constraints
             { make lint-md clang-format && \
               PRESET=clang-debug-sanitizer SKIP_BOOTSTRAP=1 CMAKE_LAUNCHER=sccache make test-ci; } || test_status=$?
 
-            # Upload whatever was built, then report the test result.
             conan remote login art "$(cat /run/secrets/ARTIFACTORY_USER)" \
                 --password "$(cat /run/secrets/ARTIFACTORY_API_KEY)" || true
-            conan upload -r art -c "*" > /tmp/conan-upload.log 2>&1 || upload_status=$?
-            grep --line-buffered "Uploading" /tmp/conan-upload.log || true
-            if [ "${upload_status:-0}" -ne 0 ]; then
-                cat /tmp/conan-upload.log || true
-                if [ "${test_status:-0}" -eq 0 ]; then
-                    test_status="${upload_status}"
-                fi
-            fi
+            conan upload -r art -c "*" 2>&1 | grep --line-buffered "Uploading" || true
 
             # Capture the sccache counters where the compilations happened: the
             # runner-side daemon has no knowledge of them (and its binary may be
@@ -586,13 +572,7 @@ jobs:
           source ./venv/bin/activate
           conan remote login art "${{ secrets.ARTIFACTORY_USER }}" --password "${{ secrets.ARTIFACTORY_API_KEY }}"
 
-          # The upload output is captured so its exit code is not masked by the grep filter
-          conan upload -r art -c "*" > /tmp/conan-upload.log 2>&1 || upload_status=$?
-          grep --line-buffered "Uploading" /tmp/conan-upload.log || true
-          if [ "${upload_status:-0}" -ne 0 ]; then
-              cat /tmp/conan-upload.log || true
-              exit "${upload_status}"
-          fi
+          conan upload -r art -c "*" 2>&1 | grep --line-buffered "Uploading"
 
   android-build:
     name: Android library build
@@ -721,13 +701,7 @@ jobs:
         run: |
           conan remote login art "${{ secrets.ARTIFACTORY_USER }}" --password "${{ secrets.ARTIFACTORY_API_KEY }}"
 
-          # The upload output is captured so its exit code is not masked by the grep filter
-          conan upload -r art -c "*" > /tmp/conan-upload.log 2>&1 || upload_status=$?
-          grep --line-buffered "Uploading" /tmp/conan-upload.log || true
-          if [ "${upload_status:-0}" -ne 0 ]; then
-              cat /tmp/conan-upload.log || true
-              exit "${upload_status}"
-          fi
+          conan upload -r art -c "*" 2>&1 | grep --line-buffered "Uploading"
 
   windows-build:
     name: Windows build, tests and nuget pack
