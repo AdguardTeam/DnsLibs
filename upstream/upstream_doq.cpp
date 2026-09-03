@@ -483,7 +483,10 @@ void DoqUpstream::on_socket_connected(void *arg) {
     auto *ctx = (SocketContext *) arg;
     DoqUpstream *self = ctx->upstream;
 
-    const SocketAddress &peer = ctx->socket->get_peer();
+    // Copy the peer: a synchronous UdpSocket::send() failure below can destroy
+    // the socket (via on_socket_close()) before the fail path runs, so a
+    // reference into ctx->socket would dangle.
+    SocketAddress peer = ctx->socket->get_peer();
     tracelog(self->m_log, "{}(): {}", __func__, peer.str());
 
     auto *info = std::get_if<ConnectionHandshakeInitialInfo>(&self->m_conn_state.info);
@@ -501,19 +504,44 @@ void DoqUpstream::on_socket_connected(void *arg) {
     }
 
     info->last_connected_socket = ctx;
+    // Multi-address Happy Eyeballs: when the Initial flight was already written
+    // on an earlier socket and the server has not responded yet, replay the
+    // cached flight on this newly connected socket. Otherwise a dead first
+    // address (e.g. an IPv6 black hole) costs a full PTO (~500ms) before a
+    // working address is tried.
+    bool had_initial_flight = !self->m_initial_flight.empty();
     if (int r = self->on_write(); r != NETWORK_ERR_OK) {
         dbglog(self->m_log, "Failed to send packet to {}: {}", peer.str(), r);
         goto fail;
+    }
+    if (had_initial_flight) {
+        for (const auto &pkt : self->m_initial_flight) {
+            if (int r = self->send_packet(ctx->socket.get(), Uint8View(pkt.data(), pkt.size())); r != NETWORK_ERR_OK) {
+                dbglog(self->m_log, "Failed to replay initial flight to {}: {}", peer.str(), r);
+                goto fail;
+            }
+        }
     }
 
     return;
 
 fail:
+    // UdpSocket::send() can fail synchronously: on error it invokes
+    // on_socket_close() before returning, which may extract (and destroy) `ctx`
+    // and even call disconnect() (invalidating the `info` captured above).
+    // Revalidate the connection state before touching either.
+    auto *cur_info = std::get_if<ConnectionHandshakeInitialInfo>(&self->m_conn_state.info);
+    if (cur_info == nullptr) {
+        return; // Already disconnected by the synchronous on_socket_close().
+    }
+    auto dropped = self->m_conn_state.extract_socket(ctx);
+    if (dropped == nullptr) {
+        return; // ctx was already extracted by the synchronous on_socket_close().
+    }
     self->disqualify_server_address(peer);
-    auto drop = self->m_conn_state.extract_socket(ctx);
     // if the peer is not yet selected and we have some pending endpoints,
     // do not disconnect immediately - wait for other ones
-    if (info->sockets.empty()) {
+    if (cur_info->sockets.empty()) {
         self->disconnect("Failed to handshake with any peer");
     }
 }
@@ -595,13 +623,43 @@ void DoqUpstream::on_socket_close(void *arg, Error<SocketError> error) {
         self->m_fatal_error = nullptr;
     }
 
-    auto drop = self->m_conn_state.extract_socket(ctx);
-    // if the peer is not yet selected and we have some pending endpoints,
-    // do not disconnect immediately - wait for other ones
-    if (const ConnectionHandshakeInitialInfo *info; self->m_conn_state.is_peer_selected()
-            || nullptr == (info = std::get_if<ConnectionHandshakeInitialInfo>(&self->m_conn_state.info))
-            || info->sockets.empty()) {
+    auto dropped = self->m_conn_state.extract_socket(ctx);
+
+    // An established connection is torn down by any socket close.
+    if (self->m_conn_state.is_peer_selected()) {
         self->disconnect("Connection is closed");
+        return;
+    }
+
+    auto *info = std::get_if<ConnectionHandshakeInitialInfo>(&self->m_conn_state.info);
+    if (info == nullptr) {
+        // Already disconnected (e.g. by a synchronous failure in a nested call).
+        return;
+    }
+
+    if (info->sockets.empty()) {
+        // No candidates left; tear down so the exchange fails instead of hanging.
+        self->disconnect("Connection is closed");
+        return;
+    }
+
+    // Handshake phase with surviving candidates. If the closed socket was the
+    // one carrying the Initial flight (extract_socket cleared
+    // last_connected_socket), promote a surviving candidate and replay the
+    // cached flight on it; otherwise retransmissions would have no socket to
+    // send on (send_packet() would assert) and the handshake would wait for
+    // the timeout instead of falling back.
+    if (info->last_connected_socket == nullptr) {
+        info->last_connected_socket = info->sockets.front().get();
+        for (const auto &pkt : self->m_initial_flight) {
+            if (int r = self->send_packet(info->last_connected_socket->socket.get(), Uint8View(pkt.data(), pkt.size()));
+                    r != NETWORK_ERR_OK) {
+                // A synchronous send failure re-enters on_socket_close() for the
+                // promoted socket, which performs the extraction/teardown; do
+                // not touch `info` afterwards.
+                return;
+            }
+        }
     }
 }
 
@@ -734,6 +792,11 @@ int DoqUpstream::write_streams() {
         }
 
         m_send_buf.push(nwrite);
+        if (m_initial_flight_pending) {
+            // Keep the Initial datagrams for multi-address replay; the buffer
+            // is reset by send_packet() below, so copy the bytes first.
+            m_initial_flight.emplace_back(m_send_buf.rpos(), m_send_buf.rpos() + nwrite);
+        }
 
         if (auto rv = send_packet(); rv != NETWORK_ERR_OK) {
             return rv;
@@ -928,6 +991,11 @@ void DoqUpstream::write_client_handshake(ngtcp2_encryption_level level, const ui
     if (!m_conn) {
         return;
     }
+    if (level == NGTCP2_ENCRYPTION_LEVEL_INITIAL) {
+        // The Initial flight is now being produced; cache it for replay on
+        // sockets that connect after the first one (see on_socket_connected).
+        m_initial_flight_pending = true;
+    }
     auto &crypto = m_crypto[level];
     crypto.data.emplace_back(data, datalen);
     auto &buf = crypto.data.back();
@@ -945,11 +1013,13 @@ int DoqUpstream::feed_data(Uint8View data) {
 
     ngtcp2_pkt_info pi{};
     auto rv = ngtcp2_conn_read_pkt(m_conn, &path, &pi, data.data(), data.size(), initial_ts);
-
-    if (rv != 0 && rv != NGTCP2_ERR_RECV_VERSION_NEGOTIATION) {
-        if (rv != NGTCP2_ERR_CALLBACK_FAILURE) {
-            dbglog(m_log, "ngtcp2_conn_read_pkt: {}", ngtcp2_strerror(rv));
-        }
+    if (rv == 0 || rv == NGTCP2_ERR_RECV_VERSION_NEGOTIATION) {
+        // A valid server packet proves this path works; the Initial flight no
+        // longer needs replaying on other sockets.
+        m_initial_flight.clear();
+        m_initial_flight_pending = false;
+    } else if (rv != NGTCP2_ERR_CALLBACK_FAILURE) {
+        dbglog(m_log, "ngtcp2_conn_read_pkt: {}", ngtcp2_strerror(rv));
     }
 
     return rv;
@@ -1228,6 +1298,8 @@ void DoqUpstream::disconnect(std::string_view reason) {
 
     dbglog(m_log, "Disconnect reason: {}", reason);
     ngtcp2_conn_del(std::exchange(m_conn, nullptr));
+    m_initial_flight.clear();
+    m_initial_flight_pending = false;
     uv_timer_stop(m_handshake_timer->raw());
     uv_timer_stop(m_req_idle_timer->raw());
     uv_timer_stop(m_retransmit_timer->raw());

@@ -18,6 +18,7 @@
 // common/test_helpers/ for reuse by every consuming test target.
 
 #include <array>
+#include <chrono>
 #include <cstdint>
 #include <cstring>
 #include <ldns/ldns.h>
@@ -28,6 +29,7 @@
 #include "dns/upstream/upstream.h"
 
 #include "dns_test_helpers.h"
+#include "loopback_dns_server.h"
 #include "loopback_quic_server.h"
 #include "test_certificates.h"
 
@@ -131,6 +133,91 @@ TEST_F(LoopbackQuicServerTest, DoqUpstreamExchangesQueryOffline) {
 
     std::string err = check_canned_a_reply(*reply_res.value());
     ASSERT_TRUE(err.empty()) << err;
+
+    server.stop();
+}
+
+// Regression test for the multi-address Initial-flight replay in DoqUpstream:
+// the client races one IPv6 + one IPv4 address (see reinit()), and the IPv6
+// socket is always created first. When that IPv6 path is dead (e.g. an
+// unroutable documentation address behind a blackhole route), the client must
+// immediately replay the cached Initial flight on the IPv4 socket instead of
+// burning a full PTO (~500ms) waiting for a retransmission, so the exchange
+// must complete well below one PTO interval.
+TEST_F(LoopbackQuicServerTest, DoqUpstreamSkipsDeadIpv6PathWithoutPto) {
+    co_await m_loop->co_submit();
+
+    // The replay branch requires a connectable IPv6 candidate: the client
+    // always races IPv6 first, and on a host without IPv6 sockets the IPv6
+    // connect() fails fast, degrading this test to an ordinary IPv4-only pass
+    // that never exercises the replay. Probe IPv6 socket creation and skip
+    // explicitly instead of silently passing.
+    ag::test::detail::ensure_winsock();
+    auto ipv6_probe = ag::test::detail::open_dgram_socket6();
+    if (ipv6_probe == ag::test::detail::invalid_socket()) {
+        GTEST_SKIP() << "Host has no IPv6 sockets; the dead-IPv6 Initial-flight replay path cannot be exercised";
+    }
+    ag::test::detail::close_fd(ipv6_probe);
+
+    ag::test::LoopbackQuicServer server([](const ldns_pkt &request) {
+        return make_canned_a_reply(request);
+    });
+    server.start();
+
+    // Resolves "quic.test" to a documentation-only (unroutable) IPv6 address
+    // first, then the loopback DoQ server's address.
+    ag::test::LoopbackDnsServer dns([](const ldns_pkt &request) {
+        ldns_pkt_ptr reply = ag::test::make_base_reply(request);
+        const ldns_rr *question = ldns_rr_list_rr(ldns_pkt_question(&request), 0);
+        if (question == nullptr) {
+            return reply;
+        }
+        if (ldns_rr_get_type(question) == LDNS_RR_TYPE_AAAA) {
+            ag::test::add_rr_from_str(reply.get(), "quic.test. 300 IN AAAA 2001:db8::1");
+        } else {
+            ag::test::add_rr_from_str(reply.get(), "quic.test. 300 IN A 127.0.0.1");
+        }
+        return reply;
+    });
+    dns.start();
+
+    SocketFactory sf{{
+            .loop = *m_loop,
+            .verifier = std::make_unique<ag::test::TestCertificateVerifier>(
+                    ag::test::TestCertificateVerifier::Mode::ACCEPT_ALL),
+    }};
+    UpstreamFactory factory({.loop = *m_loop, .socket_factory = &sf, .timeout = Millis{10000}});
+    auto upstream_res = factory.create_upstream({.address = AG_FMT("quic://quic.test:{}", server.port()),
+            .bootstrap = {AG_FMT("127.0.0.1:{}", dns.port())}});
+    ASSERT_FALSE(upstream_res.has_error()) << upstream_res.error()->str();
+
+    ldns_pkt_ptr req = make_query("example.com.", LDNS_RR_TYPE_A);
+    auto start = std::chrono::steady_clock::now();
+    auto reply_res = co_await upstream_res.value()->exchange(req.get());
+    auto reply_elapsed =
+            std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() - start);
+    ASSERT_FALSE(reply_res.has_error()) << reply_res.error()->str();
+
+    std::string err = check_canned_a_reply(*reply_res.value());
+    ASSERT_TRUE(err.empty()) << err;
+
+    // Deterministic replay check: the IPv4 loopback server must receive the
+    // client's Initial well before the first PTO. DoqUpstream halves ngtcp2's
+    // default initial RTT (333 ms -> 166 ms), so the first PTO is ~500 ms
+    // (166 + 4*83); without the Initial-flight replay the IPv4 server gets its
+    // first packet only via that PTO retransmission, while with the fix the
+    // replayed flight arrives in a few ms. A 250 ms bound separates the two
+    // with a wide margin for loaded CI hosts (a wall-clock exchange bound is
+    // not used: it is flaky in both directions).
+    auto first_pkt = server.first_packet_at();
+    ASSERT_TRUE(first_pkt.has_value()) << "IPv4 server never received any datagram";
+    auto first_pkt_elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(*first_pkt - start);
+    ASSERT_LT(first_pkt_elapsed.count(), 250)
+            << "IPv4 server received the Initial only after the first PTO (no Initial-flight replay?)";
+
+    // Sanity bound only: guards against a total stall; the first-packet
+    // assertion above is the replay proof.
+    ASSERT_LT(reply_elapsed.count(), 1000);
 
     server.stop();
 }
