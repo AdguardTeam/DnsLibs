@@ -15,6 +15,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ### Changed
 
 - Updated NLC to 8.1.49.
+- Updated NLC to 8.1.50 (OpenSSL/BoringSSL bumped to `boring-2026-05-08`).
 - Changed plain DNS upstreams to honor `resolved_server_ip` when it is set, connecting directly to the given IP instead of
   ignoring it, matching the behavior of DoT, DoH, and DoQ upstreams. (AG-57422)
 - Changed plain DNS upstreams with a hostname address and an empty `bootstrap` list to fail at initialization with an
@@ -25,6 +26,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ### Removed
 
 ### Fixed
+
+- Fixed slow DNS-over-QUIC connection initialization when the first resolved server address is unreachable (e.g. a dead
+  IPv6 route): the client now replays the QUIC Initial flight on every candidate socket instead of waiting for a PTO
+  retransmission timeout (~500 ms). (AdguardTeam/DnsLibs#283)
 
 ### Security
 

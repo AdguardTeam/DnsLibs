@@ -68,6 +68,14 @@ inline socket_type open_dgram_socket() {
     return ::socket(AF_INET, SOCK_DGRAM, 0);
 }
 
+// IPv6 variant of open_dgram_socket(). Tests use it to probe whether the host
+// can create IPv6 sockets at all (see e.g. the dead-IPv6 DoQ regression test):
+// on hosts without IPv6 this fails with EAFNOSUPPORT and the test can skip
+// explicitly instead of silently degrading to an IPv4-only pass.
+inline socket_type open_dgram_socket6() {
+    return ::socket(AF_INET6, SOCK_DGRAM, 0);
+}
+
 inline socket_type open_stream_socket() {
     return ::socket(AF_INET, SOCK_STREAM, 0);
 }

@@ -282,6 +282,15 @@ public:
         return m_port;
     }
 
+    // Steady-clock time point of the first datagram the server ever received.
+    // The server binds 127.0.0.1 (IPv4 only), so this is the moment the client's
+    // first IPv4 packet arrived — for multi-address client tests, the replayed
+    // Initial flight (or, without replay, the first PTO retransmission). Tests
+    // use it to assert the Initial reached IPv4 well before the first PTO.
+    std::optional<std::chrono::steady_clock::time_point> first_packet_at() const {
+        return m_first_packet_at;
+    }
+
 private:
     // Per-peer QUIC connection state. Allocated on the first datagram from a
     // peer; destroyed when the connection errors out or the server stops.
@@ -424,6 +433,9 @@ private:
 
     // Look up or create the session for `peer`, then feed the datagram.
     void on_packet(const ag::SocketAddress &peer, Uint8View packet) {
+        if (!m_first_packet_at.has_value()) {
+            m_first_packet_at = std::chrono::steady_clock::now();
+        }
         auto it = m_sessions.find(peer);
         if (it == m_sessions.end()) {
             QuicSession *session = register_session(peer, packet);
@@ -997,6 +1009,7 @@ private:
 
     std::unordered_map<ag::SocketAddress, std::unique_ptr<QuicSession>> m_sessions;
     std::vector<ag::SocketAddress> m_dead_peers;
+    std::optional<std::chrono::steady_clock::time_point> m_first_packet_at;
 };
 
 } // namespace ag::test
