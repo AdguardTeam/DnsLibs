@@ -187,6 +187,7 @@ jobs:
             # Drop the build outputs before the layer is committed; junit.xml,
             # which the next stage copies out, is not a build artifact.
             make PRESET=clang-debug-sanitizer clean || true
+            cp -a cmake-build-clang-debug-sanitizer/junit.xml /src/junit.xml 2>/dev/null || true
 
             # Record the test status; the stage exits 0 so the output stage is
             # still exported on failure, and the workflow fails the job via the
@@ -197,7 +198,7 @@ jobs:
 
             FROM scratch AS results
 
-            COPY --from=tests /src/cmake-build-clang-debug-sanitizer/junit.xml /junit.xml
+            COPY --from=tests /src/junit.xml /junit.xml
             COPY --from=tests /src/sccache-stats.json /sccache-stats.json
             COPY --from=tests /src/.sccache /sccache
             COPY --from=tests /src/test-status /test-status
