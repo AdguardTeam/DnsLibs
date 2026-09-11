@@ -25,6 +25,9 @@
 #   2. Replaces "/Zi" with "/Z7" in CMake's standard C/CXX flag variables so
 #      compiler-identification defaults (and any inherited /Zi) do not
 #      reintroduce a shared PDB after this module runs.
+#   3. Sets CMAKE_MSVC_DEBUG_INFORMATION_FORMAT to "Embedded" so that CMake
+#      itself emits /Z7 instead of the /Zi it appends on its own for Debug and
+#      RelWithDebInfo once CMP0141 is NEW (cmake_minimum_required(3.25+)).
 #
 # Usage: include() this after project() (so the compiler-identification
 # flags that populate CMAKE_C_FLAGS etc. are already in place) and before any
@@ -38,6 +41,17 @@ endif ()
 
 if (CMAKE_C_COMPILER_LAUNCHER OR CMAKE_CXX_COMPILER_LAUNCHER)
     set(AG_MSVC_DEBUG_INFO_FORMAT "/Z7")
+
+    # With CMP0141 NEW (cmake_minimum_required(3.25+)) CMake stops putting /Zi
+    # into the flag variables and instead appends the debug-information option
+    # itself, right after the flags, from the MSVC_DEBUG_INFORMATION_FORMAT
+    # target property - ProgramDatabase (/Zi) for Debug and RelWithDebInfo.
+    # That trailing /Zi overrides the /Z7 below (cl warns "overriding '/Z7' with
+    # '/Zi'") and brings the shared per-target .pdb back, so the flag rewrites
+    # alone are not enough. Embedded makes CMake pass /Z7 itself and skip the
+    # .pdb, which is what the launcher needs. Under the old policy the variable
+    # is honored as well, so this is safe on every CMake >= 3.25.
+    set(CMAKE_MSVC_DEBUG_INFORMATION_FORMAT Embedded)
 
     # CMake populates CMAKE_<LANG>_FLAGS_<CONFIG> with /Zi for Debug and
     # RelWithDebInfo by default; replace every occurrence in every standard
