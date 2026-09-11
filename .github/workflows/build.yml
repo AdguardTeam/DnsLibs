@@ -142,8 +142,8 @@ jobs:
             ENV CACHEBUST=$CACHEBUST
 
             RUN --mount=type=secret,id=CONAN_REPO_URL,required=true \
-                --mount=type=secret,id=ARTIFACTORY_USER \
-                --mount=type=secret,id=ARTIFACTORY_API_KEY <<'END'
+                --mount=type=secret,id=ARTIFACTORY_USER,required=true \
+                --mount=type=secret,id=ARTIFACTORY_API_KEY,required=true <<'END'
             set -eux
 
             # Conan is pre-installed in the adguard/core-libs image (2.24.0 at
@@ -166,14 +166,23 @@ jobs:
 
             # Capture the sccache counters where the compilations happened: the
             # runner-side daemon has no knowledge of them (and its binary may be
-            # a different version). The runner reads this file to decide whether
-            # to force-save the store.
+            # a different version). The .txt is printed by the sccache-stats
+            # step, the .json drives the force-save decision.
+            SCCACHE_DIR=/src/.sccache sccache --show-stats > /src/sccache-stats.txt 2>&1 || true
             SCCACHE_DIR=/src/.sccache sccache --show-stats --stats-format=json > /src/sccache-stats.json 2>/dev/null || true
 
             # Drop the build outputs before the layer is committed; junit.xml,
             # which the next stage copies out, is not a build artifact.
             make PRESET=clang-debug-sanitizer clean || true
             cp -a cmake-build-clang-debug-sanitizer/junit.xml /src/junit.xml 2>/dev/null || true
+
+            # The output stage copies junit.xml and the sccache store
+            # unconditionally, so make sure they exist even when the build
+            # failed before ctest ran or sccache did not create the store (a
+            # transient sccache failure on the first run): the runner then
+            # uploads whatever exists and the job still fails via test-status.
+            touch /src/junit.xml
+            mkdir -p /src/.sccache
 
             # Record the test status; the stage exits 0 so the output stage is
             # still exported on failure, and the workflow fails the job via the
@@ -186,6 +195,7 @@ jobs:
 
             COPY --from=tests /src/junit.xml /junit.xml
             COPY --from=tests /src/sccache-stats.json /sccache-stats.json
+            COPY --from=tests /src/sccache-stats.txt /sccache-stats.txt
             COPY --from=tests /src/.sccache /sccache
             COPY --from=tests /src/test-status /test-status
 
@@ -208,6 +218,9 @@ jobs:
         id: sccache-stats
         if: always()
         run: |
+          # Print the counters captured inside the build container; the
+          # runner-side daemon has no knowledge of those compilations.
+          cat build/sccache-stats.txt 2>/dev/null || true
           cache_writes=$(grep -o '"cache_writes":[0-9]*' build/sccache-stats.json 2>/dev/null \
             | grep -o '[0-9]*' || echo 0)
           if [ "$cache_writes" -gt 0 ] 2>/dev/null; then
@@ -236,7 +249,7 @@ jobs:
           if-no-files-found: warn
           retention-days: 7
 
-  # clangd-tidy is the only lint step that needs more memory than the 'team-corelibs' runner have available
+  # clangd-tidy is the only lint step that needs more memory than the 'team-corelibs' runner has available
   lint:
     name: Lint (clangd-tidy)
     if: github.repository == 'AdGuardSoftwareLimited/dns-libs'
@@ -1063,6 +1076,7 @@ jobs:
 
             COPY --from=build /src/adyg /adyg
             COPY --from=build /src/sccache-stats.json /sccache-stats.json
+            COPY --from=build /src/sccache-stats.txt /sccache-stats.txt
             COPY --from=build /src/.sccache /sccache
 
       # Print sccache counters and decide whether to force-save the store; see
@@ -1071,6 +1085,9 @@ jobs:
         id: sccache-stats
         if: always()
         run: |
+          # Print the counters captured inside the build container; the
+          # runner-side daemon has no knowledge of those compilations.
+          cat build/sccache-stats.txt 2>/dev/null || true
           cache_writes=$(grep -o '"cache_writes":[0-9]*' build/sccache-stats.json 2>/dev/null \
             | grep -o '[0-9]*' || echo 0)
           if [ "$cache_writes" -gt 0 ] 2>/dev/null; then
