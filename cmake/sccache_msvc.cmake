@@ -49,8 +49,9 @@ if (CMAKE_C_COMPILER_LAUNCHER OR CMAKE_CXX_COMPILER_LAUNCHER)
     # That trailing /Zi overrides the /Z7 below (cl warns "overriding '/Z7' with
     # '/Zi'") and brings the shared per-target .pdb back, so the flag rewrites
     # alone are not enough. Embedded makes CMake pass /Z7 itself and skip the
-    # .pdb, which is what the launcher needs. Under the old policy the variable
-    # is honored as well, so this is safe on every CMake >= 3.25.
+    # .pdb, which is what the launcher needs. Under the old policy CMake does not
+    # read this variable at all (its /Zi sits in the configuration variables,
+    # which the loop below rewrites), so the line is a no-op on CMake 3.24.
     set(CMAKE_MSVC_DEBUG_INFORMATION_FORMAT Embedded)
 
     # CMake populates CMAKE_<LANG>_FLAGS_<CONFIG> with /Zi for Debug and
