@@ -78,22 +78,16 @@ CLANGD_TIDY_JOBS ?= $(shell echo $$(( $(NPROC) / 2 > 0 ? $(NPROC) / 2 : 1 )))
 # making one-off flakes impossible to diagnose.
 export CTEST_OUTPUT_ON_FAILURE=1
 
-# Optional compiler launcher (e.g. sccache) for the C and C++ compilers.
-# Set on the make command line like `make build_libs CMAKE_LAUNCHER=sccache`
-# -- the Linux CI job does this to avoid recompiling the dnsproxy library on
-# every push. When non-empty, the matching -DCMAKE_*_COMPILER_LAUNCHER=...
-# flags are appended to the configure command line so every cmake configure
-# (re)uses the launcher. Empty by default, so local builds are unaffected. The
-# Windows CI passes the same flags on its own cmake command line (see
-# .github/workflows/build.yml), and cmake/sccache_msvc.cmake (included by the
-# root CMakeLists.txt) handles the /Zi->/Z7 switch for MSVC when a launcher is
-# set.
-CMAKE_LAUNCHER ?=
-ifneq ($(CMAKE_LAUNCHER),)
-CMAKE_LAUNCHER_FLAGS = -DCMAKE_C_COMPILER_LAUNCHER=$(CMAKE_LAUNCHER) -DCMAKE_CXX_COMPILER_LAUNCHER=$(CMAKE_LAUNCHER)
-else
-CMAKE_LAUNCHER_FLAGS =
+# Optional compiler launcher (e.g. sccache). Set on the make command line
+# like `make test CMAKE_LAUNCHER=sccache`; environment values are ignored so a
+# stray exported variable cannot enable it for local builds. The Windows CI
+# passes the same flags itself (see .github/workflows/build.yml), with the
+# /Zi->/Z7 switch handled by cmake/sccache_msvc.cmake.
+ifeq ($(origin CMAKE_LAUNCHER),environment)
+CMAKE_LAUNCHER :=
 endif
+CMAKE_LAUNCHER ?=
+CMAKE_LAUNCHER_FLAGS = $(if $(CMAKE_LAUNCHER),-DCMAKE_C_COMPILER_LAUNCHER=$(CMAKE_LAUNCHER) -DCMAKE_CXX_COMPILER_LAUNCHER=$(CMAKE_LAUNCHER))
 
 .PHONY: help
 ## Show this help.
