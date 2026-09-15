@@ -1057,7 +1057,9 @@ jobs:
             SKIP_BOOTSTRAP=1 make build_adyg CMAKE_LAUNCHER=sccache
 
             # Capture the sccache counters where the compilations happened; the
-            # runner reads this file to decide whether to force-save the store.
+            # runner prints the .txt into the log and reads the .json to decide
+            # whether to force-save the store.
+            SCCACHE_DIR=/src/.sccache sccache --show-stats > /src/sccache-stats.txt 2>&1 || true
             SCCACHE_DIR=/src/.sccache sccache --show-stats --stats-format=json > /src/sccache-stats.json 2>/dev/null || true
 
             # Stash the binary OUTSIDE the build dir, then drop the build
