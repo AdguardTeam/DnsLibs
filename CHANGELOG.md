@@ -20,6 +20,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   ignoring it, matching the behavior of DoT, DoH, and DoQ upstreams. (AG-57422)
 - Changed plain DNS upstreams with a hostname address and an empty `bootstrap` list to fail at initialization with an
   `AE_EMPTY_BOOTSTRAP` error instead of treating the hostname as an address. (AG-57422)
+- Raised the minimum OS versions of the Apple framework to macOS 12.0 and iOS 15.0 (from 10.15 and 13.0). The CocoaPods
+  podspec and the SwiftPM manifest declare the same minimums. (AG-59174)
 
 ### Deprecated
 
