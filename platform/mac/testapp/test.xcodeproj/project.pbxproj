@@ -493,7 +493,7 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/sh;
-			shellScript = "# Builds the AGDnsProxy framework for the destination being built and puts it\n# at ${PROJECT_DIR}/framework/build/${PLATFORM_NAME}/AGdnsProxy.framework,\n# where this project links and embeds it from.\nexec \"${SRCROOT}/../framework/build_framework_for_xcode.sh\"\n";
+			shellScript = "# Builds the AGDnsProxy framework for the destination being built and puts it\n# at ${PROJECT_DIR}/framework/build/${PLATFORM_NAME}/AGDnsProxy.framework,\n# where this project links and embeds it from.\nexec \"${SRCROOT}/../framework/build_framework_for_xcode.sh\"\n";
 		};
 		C4423FD12379559D00FD1D4C /* Embed AGDnsProxy framework */ = {
 			isa = PBXShellScriptBuildPhase;
@@ -512,7 +512,7 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/sh;
-			shellScript = "# Copies the AGDnsProxy framework built by the \"Build AGDnsProxy framework\"\n# phase into the bundle and signs it, the way Xcode does it for frameworks\n# referenced by the project.\nset -e\n\nframework=\"${PROJECT_DIR}/framework/build/${PLATFORM_NAME}/AGdnsProxy.framework\"\ndestination=\"${TARGET_BUILD_DIR}/${FRAMEWORKS_FOLDER_PATH}/AGdnsProxy.framework\"\n\nrm -rf \"${destination}\"\nmkdir -p \"$(dirname \"${destination}\")\"\ncp -R \"${framework}\" \"${destination}\"\n# Headers and modules are only needed to build against the framework.\nrm -rf \"${destination}/Headers\" \"${destination}/Modules\"\nrm -rf \"${destination}/Versions/A/Headers\" \"${destination}/Versions/A/Modules\"\n\nif [ -n \"${EXPANDED_CODE_SIGN_IDENTITY:-}\" ]; then\n    sign_options=\"\"\n    if [ \"${ENABLE_HARDENED_RUNTIME:-}\" = \"YES\" ]; then\n        sign_options=\"-o runtime\"\n    fi\n    # shellcheck disable=SC2086\n    codesign --force --sign \"${EXPANDED_CODE_SIGN_IDENTITY}\" ${sign_options} --timestamp=none \"${destination}\"\nfi\n";
+			shellScript = "# Copies the AGDnsProxy framework built by the \"Build AGDnsProxy framework\"\n# phase into the bundle and signs it, the way Xcode does it for frameworks\n# referenced by the project.\nset -e\n\nframework=\"${PROJECT_DIR}/framework/build/${PLATFORM_NAME}/AGDnsProxy.framework\"\ndestination=\"${TARGET_BUILD_DIR}/${FRAMEWORKS_FOLDER_PATH}/AGDnsProxy.framework\"\n\nrm -rf \"${destination}\"\nmkdir -p \"$(dirname \"${destination}\")\"\ncp -R \"${framework}\" \"${destination}\"\n# Headers and modules are only needed to build against the framework.\nrm -rf \"${destination}/Headers\" \"${destination}/Modules\"\nrm -rf \"${destination}/Versions/A/Headers\" \"${destination}/Versions/A/Modules\"\n\nif [ -n \"${EXPANDED_CODE_SIGN_IDENTITY:-}\" ]; then\n    sign_options=\"\"\n    if [ \"${ENABLE_HARDENED_RUNTIME:-}\" = \"YES\" ]; then\n        sign_options=\"-o runtime\"\n    fi\n    # shellcheck disable=SC2086\n    codesign --force --sign \"${EXPANDED_CODE_SIGN_IDENTITY}\" ${sign_options} --timestamp=none \"${destination}\"\nfi\n";
 		};
 		C4423FD22379559D00FD1D4C /* Build AGDnsProxy framework */ = {
 			isa = PBXShellScriptBuildPhase;
@@ -531,7 +531,7 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/sh;
-			shellScript = "# Builds the AGDnsProxy framework for the destination being built and puts it\n# at ${PROJECT_DIR}/framework/build/${PLATFORM_NAME}/AGdnsProxy.framework,\n# where this project links and embeds it from.\nexec \"${SRCROOT}/../framework/build_framework_for_xcode.sh\"\n";
+			shellScript = "# Builds the AGDnsProxy framework for the destination being built and puts it\n# at ${PROJECT_DIR}/framework/build/${PLATFORM_NAME}/AGDnsProxy.framework,\n# where this project links and embeds it from.\nexec \"${SRCROOT}/../framework/build_framework_for_xcode.sh\"\n";
 		};
 		C4423FD32379559D00FD1D4C /* Embed AGDnsProxy framework */ = {
 			isa = PBXShellScriptBuildPhase;
@@ -550,7 +550,7 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/sh;
-			shellScript = "# Copies the AGDnsProxy framework built by the \"Build AGDnsProxy framework\"\n# phase into the bundle and signs it, the way Xcode does it for frameworks\n# referenced by the project.\nset -e\n\nframework=\"${PROJECT_DIR}/framework/build/${PLATFORM_NAME}/AGdnsProxy.framework\"\ndestination=\"${TARGET_BUILD_DIR}/${FRAMEWORKS_FOLDER_PATH}/AGdnsProxy.framework\"\n\nrm -rf \"${destination}\"\nmkdir -p \"$(dirname \"${destination}\")\"\ncp -R \"${framework}\" \"${destination}\"\n# Headers and modules are only needed to build against the framework.\nrm -rf \"${destination}/Headers\" \"${destination}/Modules\"\nrm -rf \"${destination}/Versions/A/Headers\" \"${destination}/Versions/A/Modules\"\n\nif [ -n \"${EXPANDED_CODE_SIGN_IDENTITY:-}\" ]; then\n    sign_options=\"\"\n    if [ \"${ENABLE_HARDENED_RUNTIME:-}\" = \"YES\" ]; then\n        sign_options=\"-o runtime\"\n    fi\n    # shellcheck disable=SC2086\n    codesign --force --sign \"${EXPANDED_CODE_SIGN_IDENTITY}\" ${sign_options} --timestamp=none \"${destination}\"\nfi\n";
+			shellScript = "# Copies the AGDnsProxy framework built by the \"Build AGDnsProxy framework\"\n# phase into the bundle and signs it, the way Xcode does it for frameworks\n# referenced by the project.\nset -e\n\nframework=\"${PROJECT_DIR}/framework/build/${PLATFORM_NAME}/AGDnsProxy.framework\"\ndestination=\"${TARGET_BUILD_DIR}/${FRAMEWORKS_FOLDER_PATH}/AGDnsProxy.framework\"\n\nrm -rf \"${destination}\"\nmkdir -p \"$(dirname \"${destination}\")\"\ncp -R \"${framework}\" \"${destination}\"\n# Headers and modules are only needed to build against the framework.\nrm -rf \"${destination}/Headers\" \"${destination}/Modules\"\nrm -rf \"${destination}/Versions/A/Headers\" \"${destination}/Versions/A/Modules\"\n\nif [ -n \"${EXPANDED_CODE_SIGN_IDENTITY:-}\" ]; then\n    sign_options=\"\"\n    if [ \"${ENABLE_HARDENED_RUNTIME:-}\" = \"YES\" ]; then\n        sign_options=\"-o runtime\"\n    fi\n    # shellcheck disable=SC2086\n    codesign --force --sign \"${EXPANDED_CODE_SIGN_IDENTITY}\" ${sign_options} --timestamp=none \"${destination}\"\nfi\n";
 		};
 		C4423FD42379559D00FD1D4C /* Build AGDnsProxy framework */ = {
 			isa = PBXShellScriptBuildPhase;
@@ -569,7 +569,7 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/sh;
-			shellScript = "# Builds the AGDnsProxy framework for the destination being built and puts it\n# at ${PROJECT_DIR}/framework/build/${PLATFORM_NAME}/AGdnsProxy.framework,\n# where this project links and embeds it from.\nexec \"${SRCROOT}/../framework/build_framework_for_xcode.sh\"\n";
+			shellScript = "# Builds the AGDnsProxy framework for the destination being built and puts it\n# at ${PROJECT_DIR}/framework/build/${PLATFORM_NAME}/AGDnsProxy.framework,\n# where this project links and embeds it from.\nexec \"${SRCROOT}/../framework/build_framework_for_xcode.sh\"\n";
 		};
 		C4423FD52379559D00FD1D4C /* Embed AGDnsProxy framework */ = {
 			isa = PBXShellScriptBuildPhase;
@@ -588,7 +588,7 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/sh;
-			shellScript = "# Copies the AGDnsProxy framework built by the \"Build AGDnsProxy framework\"\n# phase into the bundle and signs it, the way Xcode does it for frameworks\n# referenced by the project.\nset -e\n\nframework=\"${PROJECT_DIR}/framework/build/${PLATFORM_NAME}/AGdnsProxy.framework\"\ndestination=\"${TARGET_BUILD_DIR}/${FRAMEWORKS_FOLDER_PATH}/AGdnsProxy.framework\"\n\nrm -rf \"${destination}\"\nmkdir -p \"$(dirname \"${destination}\")\"\ncp -R \"${framework}\" \"${destination}\"\n# Headers and modules are only needed to build against the framework.\nrm -rf \"${destination}/Headers\" \"${destination}/Modules\"\nrm -rf \"${destination}/Versions/A/Headers\" \"${destination}/Versions/A/Modules\"\n\nif [ -n \"${EXPANDED_CODE_SIGN_IDENTITY:-}\" ]; then\n    sign_options=\"\"\n    if [ \"${ENABLE_HARDENED_RUNTIME:-}\" = \"YES\" ]; then\n        sign_options=\"-o runtime\"\n    fi\n    # shellcheck disable=SC2086\n    codesign --force --sign \"${EXPANDED_CODE_SIGN_IDENTITY}\" ${sign_options} --timestamp=none \"${destination}\"\nfi\n";
+			shellScript = "# Copies the AGDnsProxy framework built by the \"Build AGDnsProxy framework\"\n# phase into the bundle and signs it, the way Xcode does it for frameworks\n# referenced by the project.\nset -e\n\nframework=\"${PROJECT_DIR}/framework/build/${PLATFORM_NAME}/AGDnsProxy.framework\"\ndestination=\"${TARGET_BUILD_DIR}/${FRAMEWORKS_FOLDER_PATH}/AGDnsProxy.framework\"\n\nrm -rf \"${destination}\"\nmkdir -p \"$(dirname \"${destination}\")\"\ncp -R \"${framework}\" \"${destination}\"\n# Headers and modules are only needed to build against the framework.\nrm -rf \"${destination}/Headers\" \"${destination}/Modules\"\nrm -rf \"${destination}/Versions/A/Headers\" \"${destination}/Versions/A/Modules\"\n\nif [ -n \"${EXPANDED_CODE_SIGN_IDENTITY:-}\" ]; then\n    sign_options=\"\"\n    if [ \"${ENABLE_HARDENED_RUNTIME:-}\" = \"YES\" ]; then\n        sign_options=\"-o runtime\"\n    fi\n    # shellcheck disable=SC2086\n    codesign --force --sign \"${EXPANDED_CODE_SIGN_IDENTITY}\" ${sign_options} --timestamp=none \"${destination}\"\nfi\n";
 		};
 		C4423FD62379559D00FD1D4C /* Build AGDnsProxy framework */ = {
 			isa = PBXShellScriptBuildPhase;
@@ -607,7 +607,7 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/sh;
-			shellScript = "# Builds the AGDnsProxy framework for the destination being built and puts it\n# at ${PROJECT_DIR}/framework/build/${PLATFORM_NAME}/AGdnsProxy.framework,\n# where this project links and embeds it from.\nexec \"${SRCROOT}/../framework/build_framework_for_xcode.sh\"\n";
+			shellScript = "# Builds the AGDnsProxy framework for the destination being built and puts it\n# at ${PROJECT_DIR}/framework/build/${PLATFORM_NAME}/AGDnsProxy.framework,\n# where this project links and embeds it from.\nexec \"${SRCROOT}/../framework/build_framework_for_xcode.sh\"\n";
 		};
 		C4423FD72379559D00FD1D4C /* Embed AGDnsProxy framework */ = {
 			isa = PBXShellScriptBuildPhase;
@@ -626,7 +626,7 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/sh;
-			shellScript = "# Copies the AGDnsProxy framework built by the \"Build AGDnsProxy framework\"\n# phase into the bundle and signs it, the way Xcode does it for frameworks\n# referenced by the project.\nset -e\n\nframework=\"${PROJECT_DIR}/framework/build/${PLATFORM_NAME}/AGdnsProxy.framework\"\ndestination=\"${TARGET_BUILD_DIR}/${FRAMEWORKS_FOLDER_PATH}/AGdnsProxy.framework\"\n\nrm -rf \"${destination}\"\nmkdir -p \"$(dirname \"${destination}\")\"\ncp -R \"${framework}\" \"${destination}\"\n# Headers and modules are only needed to build against the framework.\nrm -rf \"${destination}/Headers\" \"${destination}/Modules\"\nrm -rf \"${destination}/Versions/A/Headers\" \"${destination}/Versions/A/Modules\"\n\nif [ -n \"${EXPANDED_CODE_SIGN_IDENTITY:-}\" ]; then\n    sign_options=\"\"\n    if [ \"${ENABLE_HARDENED_RUNTIME:-}\" = \"YES\" ]; then\n        sign_options=\"-o runtime\"\n    fi\n    # shellcheck disable=SC2086\n    codesign --force --sign \"${EXPANDED_CODE_SIGN_IDENTITY}\" ${sign_options} --timestamp=none \"${destination}\"\nfi\n";
+			shellScript = "# Copies the AGDnsProxy framework built by the \"Build AGDnsProxy framework\"\n# phase into the bundle and signs it, the way Xcode does it for frameworks\n# referenced by the project.\nset -e\n\nframework=\"${PROJECT_DIR}/framework/build/${PLATFORM_NAME}/AGDnsProxy.framework\"\ndestination=\"${TARGET_BUILD_DIR}/${FRAMEWORKS_FOLDER_PATH}/AGDnsProxy.framework\"\n\nrm -rf \"${destination}\"\nmkdir -p \"$(dirname \"${destination}\")\"\ncp -R \"${framework}\" \"${destination}\"\n# Headers and modules are only needed to build against the framework.\nrm -rf \"${destination}/Headers\" \"${destination}/Modules\"\nrm -rf \"${destination}/Versions/A/Headers\" \"${destination}/Versions/A/Modules\"\n\nif [ -n \"${EXPANDED_CODE_SIGN_IDENTITY:-}\" ]; then\n    sign_options=\"\"\n    if [ \"${ENABLE_HARDENED_RUNTIME:-}\" = \"YES\" ]; then\n        sign_options=\"-o runtime\"\n    fi\n    # shellcheck disable=SC2086\n    codesign --force --sign \"${EXPANDED_CODE_SIGN_IDENTITY}\" ${sign_options} --timestamp=none \"${destination}\"\nfi\n";
 		};
 /* End PBXShellScriptBuildPhase section */
 
@@ -740,7 +740,7 @@
 				OTHER_LDFLAGS = (
 					"$(inherited)",
 					"-framework",
-					AGdnsProxy,
+					AGDnsProxy,
 				);
 				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
 				MTL_FAST_MATH = YES;
@@ -780,7 +780,7 @@
 				OTHER_LDFLAGS = (
 					"$(inherited)",
 					"-framework",
-					AGdnsProxy,
+					AGDnsProxy,
 				);
 				MTL_FAST_MATH = YES;
 				PRODUCT_BUNDLE_IDENTIFIER = "com.adguard.dnsproxy-ios2.ext";
@@ -817,7 +817,7 @@
 				OTHER_LDFLAGS = (
 					"$(inherited)",
 					"-framework",
-					AGdnsProxy,
+					AGDnsProxy,
 				);
 				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
 				MTL_FAST_MATH = YES;
@@ -852,7 +852,7 @@
 				OTHER_LDFLAGS = (
 					"$(inherited)",
 					"-framework",
-					AGdnsProxy,
+					AGDnsProxy,
 				);
 				MTL_FAST_MATH = YES;
 				PRODUCT_BUNDLE_IDENTIFIER = "com.adguard.dnsproxy-ios2";
@@ -886,7 +886,7 @@
 				OTHER_LDFLAGS = (
 					"$(inherited)",
 					"-framework",
-					AGdnsProxy,
+					AGDnsProxy,
 				);
 				LIBRARY_SEARCH_PATHS = "";
 				ONLY_ACTIVE_ARCH = YES;
@@ -921,7 +921,7 @@
 				OTHER_LDFLAGS = (
 					"$(inherited)",
 					"-framework",
-					AGdnsProxy,
+					AGDnsProxy,
 				);
 				LIBRARY_SEARCH_PATHS = "";
 				ONLY_ACTIVE_ARCH = YES;
@@ -1067,7 +1067,7 @@
 				OTHER_LDFLAGS = (
 					"$(inherited)",
 					"-framework",
-					AGdnsProxy,
+					AGDnsProxy,
 				);
 				LIBRARY_SEARCH_PATHS = "";
 				OTHER_LDFLAGS = "";
@@ -1102,7 +1102,7 @@
 				OTHER_LDFLAGS = (
 					"$(inherited)",
 					"-framework",
-					AGdnsProxy,
+					AGDnsProxy,
 				);
 				LIBRARY_SEARCH_PATHS = "";
 				OTHER_LDFLAGS = "";

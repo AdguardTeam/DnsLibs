@@ -7,9 +7,9 @@ This document describes the macOS and iOS sample apps of this repository:
 - `platform/mac/testapp` — the old sample app (Objective-C). It is **deprecated** and kept for reference only.
 
 Both apps use the `AGDnsProxy` framework built from this repository. The framework is not referenced by the Xcode
-projects as a file: every target runs `platform/mac/framework/build_framework_for_xcode.sh` from a "Build AGDnsProxy
-framework" build phase, links it with `-framework AGdnsProxy`, and embeds it from an "Embed AGDnsProxy framework" build
-phase. See [macOS/iOS framework](macos-framework.md) for the framework itself.
+projects as a file: every target that needs it runs `platform/mac/framework/build_framework_for_xcode.sh` from a
+"Build AGDnsProxy framework" build phase, links it with `-framework AGDnsProxy`, and embeds it from an
+"Embed AGDnsProxy framework" build phase. See [macOS/iOS framework](macos-framework.md) for the framework itself.
 
 Both apps are configured for automatic signing with the `TC3Q7MAJXF` team and require access to it (or changing
 `DEVELOPMENT_TEAM` to a team of your own) to build for a device.
@@ -50,8 +50,10 @@ elsewhere, set `DNSLIBS_TOOL_PATH` to their directory (or to a colon-separated l
 3. Select a destination: **My Mac** for macOS, or an iOS device or simulator.
 4. Press `Command+B` to build, `Command+R` to run.
 
-The `DnsProxy` and `PacketTunnel` schemes build the app together with the corresponding extension and run the app. The
-`SystemExtension` target is built as a dependency of the app on macOS and has a scheme of its own for building it alone.
+The shared schemes checked into the repository are `DnsLibsTestApp`, `DnsProxy`, and `PacketTunnel`; the latter two
+build the app together with the corresponding extension and run the app. The `SystemExtension` target is built as a
+dependency of the app on macOS; to build it alone, use the scheme Xcode autocreates for it (it is not shared) or
+`xcodebuild -target SystemExtension`.
 
 The first build takes a while: the "Build AGDnsProxy framework" phase builds the `AGDnsProxy` framework and, on a clean
 Conan cache, its dependencies. Later builds only rebuild what changed, and switching between macOS and iOS builds the

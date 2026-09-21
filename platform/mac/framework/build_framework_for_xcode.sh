@@ -3,11 +3,11 @@
 # Builds the AGDnsProxy framework for the platform and architecture Xcode is
 # currently targeting and puts it at
 #
-#     ${PROJECT_DIR}/framework/build/${PLATFORM_NAME}/AGdnsProxy.framework
+#     ${PROJECT_DIR}/framework/build/${PLATFORM_NAME}/AGDnsProxy.framework
 #
 # which is the directory the sample Xcode projects (`platform/mac/DnsLibsTestApp`
 # and `platform/mac/testapp`) look for the framework in (FRAMEWORK_SEARCH_PATHS).
-# The projects link the framework with `-framework AGdnsProxy` and embed it with
+# The projects link the framework with `-framework AGDnsProxy` and embed it with
 # their own build phases instead of referencing it as a file, because Xcode
 # resolves and enumerates referenced frameworks while planning a build, i.e.
 # before any build phase has a chance to build them.
@@ -234,8 +234,8 @@ CONFIGURATION="${BUILD_TYPE}" \
 # Publish the framework where the Xcode projects look for it.
 rm -rf "${OUT_DIR}.tmp"
 mkdir -p "${OUT_DIR}.tmp"
-cp -R "${SLICE_DIR}/AGdnsProxy.framework" "${OUT_DIR}.tmp"
+cp -R "${SLICE_DIR}/AGDnsProxy.framework" "${OUT_DIR}.tmp"
 rm -rf "${OUT_DIR}"
 mv "${OUT_DIR}.tmp" "${OUT_DIR}"
 
-echo "AGDnsProxy for ${PLATFORM} (${SLICE}) is available at ${OUT_DIR}/AGdnsProxy.framework"
+echo "AGDnsProxy for ${PLATFORM} (${SLICE}) is available at ${OUT_DIR}/AGDnsProxy.framework"
