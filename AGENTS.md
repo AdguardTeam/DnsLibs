@@ -127,7 +127,8 @@ You MUST follow the following rules for EVERY task that you perform:
       `DnsProxySettings` fields/defaults, filtering.
     - `docs/android.md` — `platform/android` build/prereqs/TUN test app.
     - `docs/macos-framework.md` — `AGDnsProxy` XCFramework (`platform/mac`).
-    - `docs/macos-testapp.md` — macOS/iOS sample app (`platform/mac/testapp`).
+    - `docs/macos-testapp.md` — macOS/iOS sample apps (`platform/mac/DnsLibsTestApp`,
+      `platform/mac/testapp`).
     - `docs/windows-capi.md` — `AdguardDns*` DLL (`platform/windows/capi`).
     - `docs/windows-testapp.md` — Windows C# test app
       (`platform/windows/cs/Adguard.Dns`).

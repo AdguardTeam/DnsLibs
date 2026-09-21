@@ -44,9 +44,9 @@
 {
     NSLog(@"startTunnelWithOptions");
 
-    [AGLogger setLevel: AGLL_TRACE];
-    [AGLogger setCallback:
-        ^(AGLogLevel lvl, const char *msg, int length) {
+    [AGDnsLogger setLevel: AGDLLTrace];
+    [AGDnsLogger setCallback:
+        ^(AGDnsLogLevel lvl, const char *msg, int length) {
             NSLog(@"%.*s", (int)length, msg);
         }];
 
@@ -133,7 +133,6 @@
     AGDnsProxyConfig *cfg = [AGDnsProxyConfig getDefault];
     AGDnsUpstream *upstream = [[AGDnsUpstream alloc] init];
     upstream.address = @"tls://94.140.14.14";
-    upstream.timeoutMs = 10000;
     upstream.id = 42;
     cfg.upstreams = @[upstream];
 

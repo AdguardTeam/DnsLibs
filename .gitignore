@@ -8,8 +8,9 @@ CMakeUserPresets.json
 # Incremental specs
 .sdd
 
-# mac/ios test app
+# mac/ios test apps
 platform/mac/testapp/framework/
+platform/mac/DnsLibsTestApp/framework/
 
 # OS X
 .DS_Store

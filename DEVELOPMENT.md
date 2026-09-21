@@ -149,7 +149,7 @@ requests to `8.8.8.8:53` or `8.8.4.4:53`. You can change the port, timeout, and 
 Platform-specific build instructions are kept in the `docs` folder:
 
 - [macOS/iOS framework](docs/macos-framework.md)
-- [macOS DNS proxy sample app](docs/macos-testapp.md)
+- [macOS/iOS sample apps](docs/macos-testapp.md)
 - [Android platform adapter](docs/android.md)
 - [Windows C API DLL](docs/windows-capi.md)
 - [Windows C# test application](docs/windows-testapp.md)

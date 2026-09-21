@@ -13,12 +13,6 @@
 		A5D69C6E2F16C97400E56032 /* PacketTunnel.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = A5D69C652F16C97400E56032 /* PacketTunnel.appex */; platformFilter = ios; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		A5D69C782F16C98D00E56032 /* NetworkExtension.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = A5D69C402F16C8EC00E56032 /* NetworkExtension.framework */; };
 		A5D69C822F16C98D00E56032 /* com.adguard.dns.DnsLibsTestApp.SystemExtension.systemextension in Embed System Extensions */ = {isa = PBXBuildFile; fileRef = A5D69C772F16C98D00E56032 /* com.adguard.dns.DnsLibsTestApp.SystemExtension.systemextension */; platformFilters = (macos, ); settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
-		A5D69CE12F1EB0B400E56032 /* AGDnsProxy.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = A5D69CDC2F1EA98500E56032 /* AGDnsProxy.framework */; };
-		A5D69CE22F1EB0B400E56032 /* AGDnsProxy.framework in Embed Frameworks */ = {isa = PBXBuildFile; fileRef = A5D69CDC2F1EA98500E56032 /* AGDnsProxy.framework */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
-		A5D69CE42F1EB0B800E56032 /* AGDnsProxy.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = A5D69CDC2F1EA98500E56032 /* AGDnsProxy.framework */; };
-		A5D69CE52F1EB0B800E56032 /* AGDnsProxy.framework in Embed Frameworks */ = {isa = PBXBuildFile; fileRef = A5D69CDC2F1EA98500E56032 /* AGDnsProxy.framework */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
-		A5D69CE72F1EB0BC00E56032 /* AGDnsProxy.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = A5D69CDC2F1EA98500E56032 /* AGDnsProxy.framework */; };
-		A5D69CE82F1EB0BC00E56032 /* AGDnsProxy.framework in Embed Frameworks */ = {isa = PBXBuildFile; fileRef = A5D69CDC2F1EA98500E56032 /* AGDnsProxy.framework */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -69,39 +63,6 @@
 			name = "Embed System Extensions";
 			runOnlyForDeploymentPostprocessing = 0;
 		};
-		A5D69CE32F1EB0B400E56032 /* Embed Frameworks */ = {
-			isa = PBXCopyFilesBuildPhase;
-			buildActionMask = 2147483647;
-			dstPath = "";
-			dstSubfolderSpec = 10;
-			files = (
-				A5D69CE22F1EB0B400E56032 /* AGDnsProxy.framework in Embed Frameworks */,
-			);
-			name = "Embed Frameworks";
-			runOnlyForDeploymentPostprocessing = 0;
-		};
-		A5D69CE62F1EB0B800E56032 /* Embed Frameworks */ = {
-			isa = PBXCopyFilesBuildPhase;
-			buildActionMask = 2147483647;
-			dstPath = "";
-			dstSubfolderSpec = 10;
-			files = (
-				A5D69CE52F1EB0B800E56032 /* AGDnsProxy.framework in Embed Frameworks */,
-			);
-			name = "Embed Frameworks";
-			runOnlyForDeploymentPostprocessing = 0;
-		};
-		A5D69CE92F1EB0BC00E56032 /* Embed Frameworks */ = {
-			isa = PBXCopyFilesBuildPhase;
-			buildActionMask = 2147483647;
-			dstPath = "";
-			dstSubfolderSpec = 10;
-			files = (
-				A5D69CE82F1EB0BC00E56032 /* AGDnsProxy.framework in Embed Frameworks */,
-			);
-			name = "Embed Frameworks";
-			runOnlyForDeploymentPostprocessing = 0;
-		};
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
@@ -110,7 +71,6 @@
 		A5D69C532F16C96000E56032 /* DnsProxy.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = DnsProxy.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 		A5D69C652F16C97400E56032 /* PacketTunnel.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = PacketTunnel.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 		A5D69C772F16C98D00E56032 /* com.adguard.dns.DnsLibsTestApp.SystemExtension.systemextension */ = {isa = PBXFileReference; explicitFileType = "wrapper.system-extension"; includeInIndex = 0; path = com.adguard.dns.DnsLibsTestApp.SystemExtension.systemextension; sourceTree = BUILT_PRODUCTS_DIR; };
-		A5D69CDC2F1EA98500E56032 /* AGDnsProxy.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = AGDnsProxy.framework; path = framework/AGDnsProxy.framework; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
@@ -232,7 +192,6 @@
 			buildActionMask = 2147483647;
 			files = (
 				A5D69C542F16C96000E56032 /* NetworkExtension.framework in Frameworks */,
-				A5D69CE72F1EB0BC00E56032 /* AGDnsProxy.framework in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -241,7 +200,6 @@
 			buildActionMask = 2147483647;
 			files = (
 				A5D69C662F16C97400E56032 /* NetworkExtension.framework in Frameworks */,
-				A5D69CE42F1EB0B800E56032 /* AGDnsProxy.framework in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -250,7 +208,6 @@
 			buildActionMask = 2147483647;
 			files = (
 				A5D69C782F16C98D00E56032 /* NetworkExtension.framework in Frameworks */,
-				A5D69CE12F1EB0B400E56032 /* AGDnsProxy.framework in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -283,7 +240,6 @@
 		A5D69C3F2F16C8EC00E56032 /* Frameworks */ = {
 			isa = PBXGroup;
 			children = (
-				A5D69CDC2F1EA98500E56032 /* AGDnsProxy.framework */,
 				A5D69C402F16C8EC00E56032 /* NetworkExtension.framework */,
 			);
 			name = Frameworks;
@@ -296,7 +252,6 @@
 			isa = PBXNativeTarget;
 			buildConfigurationList = A5D69C372F16878300E56032 /* Build configuration list for PBXNativeTarget "DnsLibsTestApp" */;
 			buildPhases = (
-				A5D69CDB2F1E9A4F00E56032 /* Run Script */,
 				A5D69C242F16878200E56032 /* Sources */,
 				A5D69C252F16878200E56032 /* Frameworks */,
 				A5D69C262F16878200E56032 /* Resources */,
@@ -324,10 +279,11 @@
 			isa = PBXNativeTarget;
 			buildConfigurationList = A5D69C5E2F16C96000E56032 /* Build configuration list for PBXNativeTarget "DnsProxy" */;
 			buildPhases = (
+				A5D69CDB2F1E9A4F00E56032 /* Build AGDnsProxy framework */,
 				A5D69C4F2F16C96000E56032 /* Sources */,
 				A5D69C502F16C96000E56032 /* Frameworks */,
 				A5D69C512F16C96000E56032 /* Resources */,
-				A5D69CE92F1EB0BC00E56032 /* Embed Frameworks */,
+				A5D69D022F1F2A6B00E56032 /* Embed AGDnsProxy framework */,
 			);
 			buildRules = (
 			);
@@ -347,10 +303,11 @@
 			isa = PBXNativeTarget;
 			buildConfigurationList = A5D69C702F16C97400E56032 /* Build configuration list for PBXNativeTarget "PacketTunnel" */;
 			buildPhases = (
+				A5D69D012F1F2A6B00E56032 /* Build AGDnsProxy framework */,
 				A5D69C612F16C97400E56032 /* Sources */,
 				A5D69C622F16C97400E56032 /* Frameworks */,
 				A5D69C632F16C97400E56032 /* Resources */,
-				A5D69CE62F1EB0B800E56032 /* Embed Frameworks */,
+				A5D69D032F1F2A6B00E56032 /* Embed AGDnsProxy framework */,
 			);
 			buildRules = (
 			);
@@ -370,11 +327,11 @@
 			isa = PBXNativeTarget;
 			buildConfigurationList = A5D69C842F16C98D00E56032 /* Build configuration list for PBXNativeTarget "SystemExtension" */;
 			buildPhases = (
-				A5D69CE02F1EB01300E56032 /* ShellScript */,
+				A5D69CE02F1EB01300E56032 /* Build AGDnsProxy framework */,
 				A5D69C732F16C98D00E56032 /* Sources */,
 				A5D69C742F16C98D00E56032 /* Frameworks */,
 				A5D69C752F16C98D00E56032 /* Resources */,
-				A5D69CE32F1EB0B400E56032 /* Embed Frameworks */,
+				A5D69D042F1F2A6B00E56032 /* Embed AGDnsProxy framework */,
 			);
 			buildRules = (
 			);
@@ -468,8 +425,9 @@
 /* End PBXResourcesBuildPhase section */
 
 /* Begin PBXShellScriptBuildPhase section */
-		A5D69CDB2F1E9A4F00E56032 /* Run Script */ = {
+		A5D69CDB2F1E9A4F00E56032 /* Build AGDnsProxy framework */ = {
 			isa = PBXShellScriptBuildPhase;
+			alwaysOutOfDate = 1;
 			buildActionMask = 2147483647;
 			files = (
 			);
@@ -477,18 +435,18 @@
 			);
 			inputPaths = (
 			);
-			name = "Run Script";
+			name = "Build AGDnsProxy framework";
 			outputFileListPaths = (
 			);
 			outputPaths = (
-				"",
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/sh;
-			shellScript = "# Type a script or drag a script file from your workspace to insert its path.\nexport PATH=/opt/homebrew/bin:$PATH\n\nif [ \"$PLATFORM_NAME\" == macosx ]; then\nOS=macos-arm64\nEXTRA_ARGS=\nelse\nOS=ios\nEXTRA_ARGS=--iosv 13.0\nfi\n\nexec ../framework/build_dnsproxy_framework.sh --os $OS --tn AGDnsProxy $EXTRA_ARGS\n";
+			shellScript = "# Builds the AGDnsProxy framework for the destination being built and puts it\n# at ${PROJECT_DIR}/framework/build/${PLATFORM_NAME}/AGdnsProxy.framework,\n# where this project links and embeds it from.\nexec \"${SRCROOT}/../framework/build_framework_for_xcode.sh\"\n";
 		};
-		A5D69CE02F1EB01300E56032 /* ShellScript */ = {
+		A5D69CE02F1EB01300E56032 /* Build AGDnsProxy framework */ = {
 			isa = PBXShellScriptBuildPhase;
+			alwaysOutOfDate = 1;
 			buildActionMask = 2147483647;
 			files = (
 			);
@@ -496,13 +454,90 @@
 			);
 			inputPaths = (
 			);
+			name = "Build AGDnsProxy framework";
 			outputFileListPaths = (
 			);
 			outputPaths = (
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/sh;
-			shellScript = "# Type a script or drag a script file from your workspace to insert its path.\nexport PATH=/opt/homebrew/bin:$PATH\n\nif [ \"$PLATFORM_NAME\" == macosx ]; then\nOS=macos-arm64\nEXTRA_ARGS=\nelse\nOS=ios\nEXTRA_ARGS=--iosv 13.0\nfi\n\nexec ../framework/build_dnsproxy_framework.sh --os $OS --tn AGDnsProxy $EXTRA_ARGS\n";
+			shellScript = "# Builds the AGDnsProxy framework for the destination being built and puts it\n# at ${PROJECT_DIR}/framework/build/${PLATFORM_NAME}/AGdnsProxy.framework,\n# where this project links and embeds it from.\nexec \"${SRCROOT}/../framework/build_framework_for_xcode.sh\"\n";
+		};
+		A5D69D012F1F2A6B00E56032 /* Build AGDnsProxy framework */ = {
+			isa = PBXShellScriptBuildPhase;
+			alwaysOutOfDate = 1;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputFileListPaths = (
+			);
+			inputPaths = (
+			);
+			name = "Build AGDnsProxy framework";
+			outputFileListPaths = (
+			);
+			outputPaths = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "# Builds the AGDnsProxy framework for the destination being built and puts it\n# at ${PROJECT_DIR}/framework/build/${PLATFORM_NAME}/AGdnsProxy.framework,\n# where this project links and embeds it from.\nexec \"${SRCROOT}/../framework/build_framework_for_xcode.sh\"\n";
+		};
+		A5D69D022F1F2A6B00E56032 /* Embed AGDnsProxy framework */ = {
+			isa = PBXShellScriptBuildPhase;
+			alwaysOutOfDate = 1;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputFileListPaths = (
+			);
+			inputPaths = (
+			);
+			name = "Embed AGDnsProxy framework";
+			outputFileListPaths = (
+			);
+			outputPaths = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "# Copies the AGDnsProxy framework built by the \"Build AGDnsProxy framework\"\n# phase into the bundle and signs it, the way Xcode does it for frameworks\n# referenced by the project.\nset -e\n\nframework=\"${PROJECT_DIR}/framework/build/${PLATFORM_NAME}/AGdnsProxy.framework\"\ndestination=\"${TARGET_BUILD_DIR}/${FRAMEWORKS_FOLDER_PATH}/AGdnsProxy.framework\"\n\nrm -rf \"${destination}\"\nmkdir -p \"$(dirname \"${destination}\")\"\ncp -R \"${framework}\" \"${destination}\"\n# Headers and modules are only needed to build against the framework.\nrm -rf \"${destination}/Headers\" \"${destination}/Modules\"\nrm -rf \"${destination}/Versions/A/Headers\" \"${destination}/Versions/A/Modules\"\n\nif [ -n \"${EXPANDED_CODE_SIGN_IDENTITY:-}\" ]; then\n    sign_options=\"\"\n    if [ \"${ENABLE_HARDENED_RUNTIME:-}\" = \"YES\" ]; then\n        sign_options=\"-o runtime\"\n    fi\n    # shellcheck disable=SC2086\n    codesign --force --sign \"${EXPANDED_CODE_SIGN_IDENTITY}\" ${sign_options} --timestamp=none \"${destination}\"\nfi\n";
+		};
+		A5D69D032F1F2A6B00E56032 /* Embed AGDnsProxy framework */ = {
+			isa = PBXShellScriptBuildPhase;
+			alwaysOutOfDate = 1;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputFileListPaths = (
+			);
+			inputPaths = (
+			);
+			name = "Embed AGDnsProxy framework";
+			outputFileListPaths = (
+			);
+			outputPaths = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "# Copies the AGDnsProxy framework built by the \"Build AGDnsProxy framework\"\n# phase into the bundle and signs it, the way Xcode does it for frameworks\n# referenced by the project.\nset -e\n\nframework=\"${PROJECT_DIR}/framework/build/${PLATFORM_NAME}/AGdnsProxy.framework\"\ndestination=\"${TARGET_BUILD_DIR}/${FRAMEWORKS_FOLDER_PATH}/AGdnsProxy.framework\"\n\nrm -rf \"${destination}\"\nmkdir -p \"$(dirname \"${destination}\")\"\ncp -R \"${framework}\" \"${destination}\"\n# Headers and modules are only needed to build against the framework.\nrm -rf \"${destination}/Headers\" \"${destination}/Modules\"\nrm -rf \"${destination}/Versions/A/Headers\" \"${destination}/Versions/A/Modules\"\n\nif [ -n \"${EXPANDED_CODE_SIGN_IDENTITY:-}\" ]; then\n    sign_options=\"\"\n    if [ \"${ENABLE_HARDENED_RUNTIME:-}\" = \"YES\" ]; then\n        sign_options=\"-o runtime\"\n    fi\n    # shellcheck disable=SC2086\n    codesign --force --sign \"${EXPANDED_CODE_SIGN_IDENTITY}\" ${sign_options} --timestamp=none \"${destination}\"\nfi\n";
+		};
+		A5D69D042F1F2A6B00E56032 /* Embed AGDnsProxy framework */ = {
+			isa = PBXShellScriptBuildPhase;
+			alwaysOutOfDate = 1;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputFileListPaths = (
+			);
+			inputPaths = (
+			);
+			name = "Embed AGDnsProxy framework";
+			outputFileListPaths = (
+			);
+			outputPaths = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "# Copies the AGDnsProxy framework built by the \"Build AGDnsProxy framework\"\n# phase into the bundle and signs it, the way Xcode does it for frameworks\n# referenced by the project.\nset -e\n\nframework=\"${PROJECT_DIR}/framework/build/${PLATFORM_NAME}/AGdnsProxy.framework\"\ndestination=\"${TARGET_BUILD_DIR}/${FRAMEWORKS_FOLDER_PATH}/AGdnsProxy.framework\"\n\nrm -rf \"${destination}\"\nmkdir -p \"$(dirname \"${destination}\")\"\ncp -R \"${framework}\" \"${destination}\"\n# Headers and modules are only needed to build against the framework.\nrm -rf \"${destination}/Headers\" \"${destination}/Modules\"\nrm -rf \"${destination}/Versions/A/Headers\" \"${destination}/Versions/A/Modules\"\n\nif [ -n \"${EXPANDED_CODE_SIGN_IDENTITY:-}\" ]; then\n    sign_options=\"\"\n    if [ \"${ENABLE_HARDENED_RUNTIME:-}\" = \"YES\" ]; then\n        sign_options=\"-o runtime\"\n    fi\n    # shellcheck disable=SC2086\n    codesign --force --sign \"${EXPANDED_CODE_SIGN_IDENTITY}\" ${sign_options} --timestamp=none \"${destination}\"\nfi\n";
 		};
 /* End PBXShellScriptBuildPhase section */
 
@@ -561,7 +596,226 @@
 /* End PBXTargetDependency section */
 
 /* Begin XCBuildConfiguration section */
-		A5D69C352F16878300E56032 /* Debug iOS */ = {
+		A5D69C362F16878300E56032 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++20";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				ENABLE_NS_ASSERTIONS = NO;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = NO;
+				GCC_C_LANGUAGE_STANDARD = gnu17;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				LOCALIZATION_PREFERS_STRING_CATALOGS = YES;
+				MTL_ENABLE_DEBUG_INFO = NO;
+				MTL_FAST_MATH = YES;
+				ONLY_ACTIVE_ARCH = YES;
+				SWIFT_COMPILATION_MODE = wholemodule;
+			};
+			name = Release;
+		};
+		A5D69C392F16878300E56032 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_ENTITLEMENTS = DnsLibsTestApp/DnsLibsTestApp.ios.entitlements;
+				"CODE_SIGN_ENTITLEMENTS[sdk=macosx*]" = DnsLibsTestApp/DnsLibsTestApp.macos.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_ASSET_PATHS = "\"DnsLibsTestApp/Preview Content\"";
+				DEVELOPMENT_TEAM = TC3Q7MAJXF;
+				ENABLE_HARDENED_RUNTIME = YES;
+				ENABLE_PREVIEWS = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_CFBundleDisplayName = "DnsLibs Test App";
+				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.utilities";
+				"INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=iphoneos*]" = YES;
+				"INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=iphonesimulator*]" = YES;
+				"INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents[sdk=iphoneos*]" = YES;
+				"INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents[sdk=iphonesimulator*]" = YES;
+				"INFOPLIST_KEY_UILaunchScreen_Generation[sdk=iphoneos*]" = YES;
+				"INFOPLIST_KEY_UILaunchScreen_Generation[sdk=iphonesimulator*]" = YES;
+				"INFOPLIST_KEY_UIStatusBarStyle[sdk=iphoneos*]" = UIStatusBarStyleDefault;
+				"INFOPLIST_KEY_UIStatusBarStyle[sdk=iphonesimulator*]" = UIStatusBarStyleDefault;
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				IPHONEOS_DEPLOYMENT_TARGET = 15.0;
+				LD_RUNPATH_SEARCH_PATHS = "@executable_path/Frameworks";
+				"LD_RUNPATH_SEARCH_PATHS[sdk=macosx*]" = "@executable_path/../Frameworks";
+				MACOSX_DEPLOYMENT_TARGET = 12.0;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.adguard.dns.DnsLibsTestApp;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				REGISTER_APP_GROUPS = NO;
+				SDKROOT = auto;
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator macosx";
+				SUPPORTS_MACCATALYST = NO;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				XROS_DEPLOYMENT_TARGET = 2.0;
+			};
+			name = Release;
+		};
+		A5D69C602F16C96000E56032 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_ENTITLEMENTS = DnsProxy/DnsProxy.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = TC3Q7MAJXF;
+				FRAMEWORK_SEARCH_PATHS = (
+					"$(inherited)",
+					"$(PROJECT_DIR)/framework/build/$(PLATFORM_NAME)",
+				);
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = DnsProxy/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = DnsProxy;
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				IPHONEOS_DEPLOYMENT_TARGET = 15.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				OTHER_LDFLAGS = (
+					"$(inherited)",
+					"-framework",
+					AGdnsProxy,
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.adguard.dns.DnsLibsTestApp.DnsProxy;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SKIP_INSTALL = YES;
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SUPPORTS_MACCATALYST = NO;
+				SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD = NO;
+				SUPPORTS_XR_DESIGNED_FOR_IPHONE_IPAD = NO;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				VALIDATE_PRODUCT = YES;
+			};
+			name = Release;
+		};
+		A5D69C722F16C97400E56032 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_ENTITLEMENTS = PacketTunnel/PacketTunnel.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = TC3Q7MAJXF;
+				FRAMEWORK_SEARCH_PATHS = (
+					"$(inherited)",
+					"$(PROJECT_DIR)/framework/build/$(PLATFORM_NAME)",
+				);
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = PacketTunnel/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = PacketTunnel;
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				IPHONEOS_DEPLOYMENT_TARGET = 15.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				OTHER_LDFLAGS = (
+					"$(inherited)",
+					"-framework",
+					AGdnsProxy,
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.adguard.dns.DnsLibsTestApp.PacketTunnel;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SKIP_INSTALL = YES;
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SUPPORTS_MACCATALYST = NO;
+				SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD = NO;
+				SUPPORTS_XR_DESIGNED_FOR_IPHONE_IPAD = NO;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				VALIDATE_PRODUCT = YES;
+			};
+			name = Release;
+		};
+		A5D69C862F16C98D00E56032 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_ENTITLEMENTS = SystemExtension/SystemExtension.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = TC3Q7MAJXF;
+				ENABLE_HARDENED_RUNTIME = YES;
+				FRAMEWORK_SEARCH_PATHS = (
+					"$(inherited)",
+					"$(PROJECT_DIR)/framework/build/$(PLATFORM_NAME)",
+				);
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = SystemExtension/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = SystemExtension;
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+					"@executable_path/../../../../Frameworks",
+				);
+				MACOSX_DEPLOYMENT_TARGET = 12.0;
+				MARKETING_VERSION = 1.0;
+				OTHER_LDFLAGS = (
+					"$(inherited)",
+					"-framework",
+					AGdnsProxy,
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.adguard.dns.DnsLibsTestApp.SystemExtension;
+				PRODUCT_NAME = "$(inherited)";
+				SDKROOT = macosx;
+				SKIP_INSTALL = YES;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+			};
+			name = Release;
+		};
+		A5D69CA62F16CDB400E56032 /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ALWAYS_SEARCH_USER_PATHS = NO;
@@ -620,68 +874,15 @@
 				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "DEBUG $(inherited)";
 				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
 			};
-			name = "Debug iOS";
+			name = Debug;
 		};
-		A5D69C362F16878300E56032 /* Release macOS */ = {
-			isa = XCBuildConfiguration;
-			buildSettings = {
-				ALWAYS_SEARCH_USER_PATHS = NO;
-				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
-				CLANG_ANALYZER_NONNULL = YES;
-				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
-				CLANG_CXX_LANGUAGE_STANDARD = "gnu++20";
-				CLANG_ENABLE_MODULES = YES;
-				CLANG_ENABLE_OBJC_ARC = YES;
-				CLANG_ENABLE_OBJC_WEAK = YES;
-				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
-				CLANG_WARN_BOOL_CONVERSION = YES;
-				CLANG_WARN_COMMA = YES;
-				CLANG_WARN_CONSTANT_CONVERSION = YES;
-				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
-				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
-				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
-				CLANG_WARN_EMPTY_BODY = YES;
-				CLANG_WARN_ENUM_CONVERSION = YES;
-				CLANG_WARN_INFINITE_RECURSION = YES;
-				CLANG_WARN_INT_CONVERSION = YES;
-				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
-				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
-				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
-				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
-				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
-				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
-				CLANG_WARN_STRICT_PROTOTYPES = YES;
-				CLANG_WARN_SUSPICIOUS_MOVE = YES;
-				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
-				CLANG_WARN_UNREACHABLE_CODE = YES;
-				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
-				COPY_PHASE_STRIP = NO;
-				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
-				ENABLE_NS_ASSERTIONS = NO;
-				ENABLE_STRICT_OBJC_MSGSEND = YES;
-				ENABLE_USER_SCRIPT_SANDBOXING = NO;
-				GCC_C_LANGUAGE_STANDARD = gnu17;
-				GCC_NO_COMMON_BLOCKS = YES;
-				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
-				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
-				GCC_WARN_UNDECLARED_SELECTOR = YES;
-				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
-				GCC_WARN_UNUSED_FUNCTION = YES;
-				GCC_WARN_UNUSED_VARIABLE = YES;
-				LOCALIZATION_PREFERS_STRING_CATALOGS = YES;
-				MTL_ENABLE_DEBUG_INFO = NO;
-				MTL_FAST_MATH = YES;
-				SWIFT_COMPILATION_MODE = wholemodule;
-			};
-			name = "Release macOS";
-		};
-		A5D69C382F16878300E56032 /* Debug iOS */ = {
+		A5D69CA72F16CDB400E56032 /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_ENTITLEMENTS = DnsLibsTestApp/DnsLibsTestApp.ios.entitlements;
-				CODE_SIGN_IDENTITY = "Apple Development";
+				"CODE_SIGN_ENTITLEMENTS[sdk=macosx*]" = DnsLibsTestApp/DnsLibsTestApp.macos.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_ASSET_PATHS = "\"DnsLibsTestApp/Preview Content\"";
@@ -701,69 +902,25 @@
 				"INFOPLIST_KEY_UIStatusBarStyle[sdk=iphonesimulator*]" = UIStatusBarStyleDefault;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
-				IPHONEOS_DEPLOYMENT_TARGET = 15.6;
+				IPHONEOS_DEPLOYMENT_TARGET = 15.0;
 				LD_RUNPATH_SEARCH_PATHS = "@executable_path/Frameworks";
 				"LD_RUNPATH_SEARCH_PATHS[sdk=macosx*]" = "@executable_path/../Frameworks";
-				MACOSX_DEPLOYMENT_TARGET = 13.5;
+				MACOSX_DEPLOYMENT_TARGET = 12.0;
 				MARKETING_VERSION = 1.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.adguard.dns.DnsLibsTestApp;
 				PRODUCT_NAME = "$(TARGET_NAME)";
-				PROVISIONING_PROFILE_SPECIFIER = "";
 				REGISTER_APP_GROUPS = NO;
 				SDKROOT = auto;
-				SUPPORTED_PLATFORMS = "iphonesimulator iphoneos";
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator macosx";
 				SUPPORTS_MACCATALYST = NO;
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_VERSION = 5.0;
 				TARGETED_DEVICE_FAMILY = "1,2";
 				XROS_DEPLOYMENT_TARGET = 2.0;
 			};
-			name = "Debug iOS";
+			name = Debug;
 		};
-		A5D69C392F16878300E56032 /* Release macOS */ = {
-			isa = XCBuildConfiguration;
-			buildSettings = {
-				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
-				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
-				CODE_SIGN_ENTITLEMENTS = DnsLibsTestApp/DnsLibsTestApp.macos.entitlements;
-				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 1;
-				DEVELOPMENT_ASSET_PATHS = "\"DnsLibsTestApp/Preview Content\"";
-				DEVELOPMENT_TEAM = TC3Q7MAJXF;
-				ENABLE_HARDENED_RUNTIME = YES;
-				ENABLE_PREVIEWS = YES;
-				GENERATE_INFOPLIST_FILE = YES;
-				INFOPLIST_KEY_CFBundleDisplayName = "DnsLibs Test App";
-				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.utilities";
-				"INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=iphoneos*]" = YES;
-				"INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=iphonesimulator*]" = YES;
-				"INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents[sdk=iphoneos*]" = YES;
-				"INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents[sdk=iphonesimulator*]" = YES;
-				"INFOPLIST_KEY_UILaunchScreen_Generation[sdk=iphoneos*]" = YES;
-				"INFOPLIST_KEY_UILaunchScreen_Generation[sdk=iphonesimulator*]" = YES;
-				"INFOPLIST_KEY_UIStatusBarStyle[sdk=iphoneos*]" = UIStatusBarStyleDefault;
-				"INFOPLIST_KEY_UIStatusBarStyle[sdk=iphonesimulator*]" = UIStatusBarStyleDefault;
-				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
-				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
-				IPHONEOS_DEPLOYMENT_TARGET = 15.6;
-				LD_RUNPATH_SEARCH_PATHS = "@executable_path/Frameworks";
-				"LD_RUNPATH_SEARCH_PATHS[sdk=macosx*]" = "@executable_path/../Frameworks";
-				MACOSX_DEPLOYMENT_TARGET = 13.5;
-				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = com.adguard.dns.DnsLibsTestApp;
-				PRODUCT_NAME = "$(TARGET_NAME)";
-				REGISTER_APP_GROUPS = NO;
-				SDKROOT = auto;
-				SUPPORTED_PLATFORMS = macosx;
-				SUPPORTS_MACCATALYST = NO;
-				SWIFT_EMIT_LOC_STRINGS = YES;
-				SWIFT_VERSION = 5.0;
-				TARGETED_DEVICE_FAMILY = "1,2";
-				XROS_DEPLOYMENT_TARGET = 2.0;
-			};
-			name = "Release macOS";
-		};
-		A5D69C5F2F16C96000E56032 /* Debug iOS */ = {
+		A5D69CA82F16CDB400E56032 /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				CODE_SIGN_ENTITLEMENTS = DnsProxy/DnsProxy.entitlements;
@@ -772,19 +929,24 @@
 				DEVELOPMENT_TEAM = TC3Q7MAJXF;
 				FRAMEWORK_SEARCH_PATHS = (
 					"$(inherited)",
-					"$(PROJECT_DIR)/framework",
+					"$(PROJECT_DIR)/framework/build/$(PLATFORM_NAME)",
 				);
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = DnsProxy/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = DnsProxy;
 				INFOPLIST_KEY_NSHumanReadableCopyright = "";
-				IPHONEOS_DEPLOYMENT_TARGET = 15.6;
+				IPHONEOS_DEPLOYMENT_TARGET = 15.0;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
 					"@executable_path/../../Frameworks",
 				);
 				MARKETING_VERSION = 1.0;
+				OTHER_LDFLAGS = (
+					"$(inherited)",
+					"-framework",
+					AGdnsProxy,
+				);
 				PRODUCT_BUNDLE_IDENTIFIER = com.adguard.dns.DnsLibsTestApp.DnsProxy;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = iphoneos;
@@ -797,46 +959,9 @@
 				SWIFT_VERSION = 5.0;
 				TARGETED_DEVICE_FAMILY = "1,2";
 			};
-			name = "Debug iOS";
+			name = Debug;
 		};
-		A5D69C602F16C96000E56032 /* Release macOS */ = {
-			isa = XCBuildConfiguration;
-			buildSettings = {
-				CODE_SIGN_ENTITLEMENTS = DnsProxy/DnsProxy.entitlements;
-				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 1;
-				DEVELOPMENT_TEAM = TC3Q7MAJXF;
-				FRAMEWORK_SEARCH_PATHS = (
-					"$(inherited)",
-					"$(PROJECT_DIR)/framework",
-				);
-				GENERATE_INFOPLIST_FILE = YES;
-				INFOPLIST_FILE = DnsProxy/Info.plist;
-				INFOPLIST_KEY_CFBundleDisplayName = DnsProxy;
-				INFOPLIST_KEY_NSHumanReadableCopyright = "";
-				IPHONEOS_DEPLOYMENT_TARGET = 15.6;
-				LD_RUNPATH_SEARCH_PATHS = (
-					"$(inherited)",
-					"@executable_path/Frameworks",
-					"@executable_path/../../Frameworks",
-				);
-				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = com.adguard.dns.DnsLibsTestApp.DnsProxy;
-				PRODUCT_NAME = "$(TARGET_NAME)";
-				SDKROOT = iphoneos;
-				SKIP_INSTALL = YES;
-				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
-				SUPPORTS_MACCATALYST = NO;
-				SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD = NO;
-				SUPPORTS_XR_DESIGNED_FOR_IPHONE_IPAD = NO;
-				SWIFT_EMIT_LOC_STRINGS = YES;
-				SWIFT_VERSION = 5.0;
-				TARGETED_DEVICE_FAMILY = "1,2";
-				VALIDATE_PRODUCT = YES;
-			};
-			name = "Release macOS";
-		};
-		A5D69C712F16C97400E56032 /* Debug iOS */ = {
+		A5D69CA92F16CDB400E56032 /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				CODE_SIGN_ENTITLEMENTS = PacketTunnel/PacketTunnel.entitlements;
@@ -845,19 +970,24 @@
 				DEVELOPMENT_TEAM = TC3Q7MAJXF;
 				FRAMEWORK_SEARCH_PATHS = (
 					"$(inherited)",
-					"$(PROJECT_DIR)/framework",
+					"$(PROJECT_DIR)/framework/build/$(PLATFORM_NAME)",
 				);
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = PacketTunnel/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = PacketTunnel;
 				INFOPLIST_KEY_NSHumanReadableCopyright = "";
-				IPHONEOS_DEPLOYMENT_TARGET = 15.6;
+				IPHONEOS_DEPLOYMENT_TARGET = 15.0;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
 					"@executable_path/../../Frameworks",
 				);
 				MARKETING_VERSION = 1.0;
+				OTHER_LDFLAGS = (
+					"$(inherited)",
+					"-framework",
+					AGdnsProxy,
+				);
 				PRODUCT_BUNDLE_IDENTIFIER = com.adguard.dns.DnsLibsTestApp.PacketTunnel;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = iphoneos;
@@ -870,46 +1000,9 @@
 				SWIFT_VERSION = 5.0;
 				TARGETED_DEVICE_FAMILY = "1,2";
 			};
-			name = "Debug iOS";
+			name = Debug;
 		};
-		A5D69C722F16C97400E56032 /* Release macOS */ = {
-			isa = XCBuildConfiguration;
-			buildSettings = {
-				CODE_SIGN_ENTITLEMENTS = PacketTunnel/PacketTunnel.entitlements;
-				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 1;
-				DEVELOPMENT_TEAM = TC3Q7MAJXF;
-				FRAMEWORK_SEARCH_PATHS = (
-					"$(inherited)",
-					"$(PROJECT_DIR)/framework",
-				);
-				GENERATE_INFOPLIST_FILE = YES;
-				INFOPLIST_FILE = PacketTunnel/Info.plist;
-				INFOPLIST_KEY_CFBundleDisplayName = PacketTunnel;
-				INFOPLIST_KEY_NSHumanReadableCopyright = "";
-				IPHONEOS_DEPLOYMENT_TARGET = 15.6;
-				LD_RUNPATH_SEARCH_PATHS = (
-					"$(inherited)",
-					"@executable_path/Frameworks",
-					"@executable_path/../../Frameworks",
-				);
-				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = com.adguard.dns.DnsLibsTestApp.PacketTunnel;
-				PRODUCT_NAME = "$(TARGET_NAME)";
-				SDKROOT = iphoneos;
-				SKIP_INSTALL = YES;
-				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
-				SUPPORTS_MACCATALYST = NO;
-				SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD = NO;
-				SUPPORTS_XR_DESIGNED_FOR_IPHONE_IPAD = NO;
-				SWIFT_EMIT_LOC_STRINGS = YES;
-				SWIFT_VERSION = 5.0;
-				TARGETED_DEVICE_FAMILY = "1,2";
-				VALIDATE_PRODUCT = YES;
-			};
-			name = "Release macOS";
-		};
-		A5D69C852F16C98D00E56032 /* Debug iOS */ = {
+		A5D69CAA2F16CDB400E56032 /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				CODE_SIGN_ENTITLEMENTS = SystemExtension/SystemExtension.entitlements;
@@ -919,7 +1012,7 @@
 				ENABLE_HARDENED_RUNTIME = YES;
 				FRAMEWORK_SEARCH_PATHS = (
 					"$(inherited)",
-					"$(PROJECT_DIR)/framework",
+					"$(PROJECT_DIR)/framework/build/$(PLATFORM_NAME)",
 				);
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = SystemExtension/Info.plist;
@@ -930,8 +1023,13 @@
 					"@executable_path/../Frameworks",
 					"@executable_path/../../../../Frameworks",
 				);
-				MACOSX_DEPLOYMENT_TARGET = 15.0;
+				MACOSX_DEPLOYMENT_TARGET = 12.0;
 				MARKETING_VERSION = 1.0;
+				OTHER_LDFLAGS = (
+					"$(inherited)",
+					"-framework",
+					AGdnsProxy,
+				);
 				PRODUCT_BUNDLE_IDENTIFIER = com.adguard.dns.DnsLibsTestApp.SystemExtension;
 				PRODUCT_NAME = "$(inherited)";
 				SDKROOT = macosx;
@@ -939,462 +1037,7 @@
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_VERSION = 5.0;
 			};
-			name = "Debug iOS";
-		};
-		A5D69C862F16C98D00E56032 /* Release macOS */ = {
-			isa = XCBuildConfiguration;
-			buildSettings = {
-				CODE_SIGN_ENTITLEMENTS = SystemExtension/SystemExtension.entitlements;
-				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 1;
-				DEVELOPMENT_TEAM = TC3Q7MAJXF;
-				ENABLE_HARDENED_RUNTIME = YES;
-				FRAMEWORK_SEARCH_PATHS = (
-					"$(inherited)",
-					"$(PROJECT_DIR)/framework",
-				);
-				GENERATE_INFOPLIST_FILE = YES;
-				INFOPLIST_FILE = SystemExtension/Info.plist;
-				INFOPLIST_KEY_CFBundleDisplayName = SystemExtension;
-				INFOPLIST_KEY_NSHumanReadableCopyright = "";
-				LD_RUNPATH_SEARCH_PATHS = (
-					"$(inherited)",
-					"@executable_path/../Frameworks",
-					"@executable_path/../../../../Frameworks",
-				);
-				MACOSX_DEPLOYMENT_TARGET = 15.0;
-				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = com.adguard.dns.DnsLibsTestApp.SystemExtension;
-				PRODUCT_NAME = "$(inherited)";
-				SDKROOT = macosx;
-				SKIP_INSTALL = YES;
-				SWIFT_EMIT_LOC_STRINGS = YES;
-				SWIFT_VERSION = 5.0;
-			};
-			name = "Release macOS";
-		};
-		A5D69CA62F16CDB400E56032 /* Debug macOS */ = {
-			isa = XCBuildConfiguration;
-			buildSettings = {
-				ALWAYS_SEARCH_USER_PATHS = NO;
-				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
-				CLANG_ANALYZER_NONNULL = YES;
-				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
-				CLANG_CXX_LANGUAGE_STANDARD = "gnu++20";
-				CLANG_ENABLE_MODULES = YES;
-				CLANG_ENABLE_OBJC_ARC = YES;
-				CLANG_ENABLE_OBJC_WEAK = YES;
-				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
-				CLANG_WARN_BOOL_CONVERSION = YES;
-				CLANG_WARN_COMMA = YES;
-				CLANG_WARN_CONSTANT_CONVERSION = YES;
-				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
-				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
-				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
-				CLANG_WARN_EMPTY_BODY = YES;
-				CLANG_WARN_ENUM_CONVERSION = YES;
-				CLANG_WARN_INFINITE_RECURSION = YES;
-				CLANG_WARN_INT_CONVERSION = YES;
-				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
-				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
-				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
-				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
-				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
-				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
-				CLANG_WARN_STRICT_PROTOTYPES = YES;
-				CLANG_WARN_SUSPICIOUS_MOVE = YES;
-				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
-				CLANG_WARN_UNREACHABLE_CODE = YES;
-				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
-				COPY_PHASE_STRIP = NO;
-				DEBUG_INFORMATION_FORMAT = dwarf;
-				ENABLE_STRICT_OBJC_MSGSEND = YES;
-				ENABLE_TESTABILITY = YES;
-				ENABLE_USER_SCRIPT_SANDBOXING = NO;
-				GCC_C_LANGUAGE_STANDARD = gnu17;
-				GCC_DYNAMIC_NO_PIC = NO;
-				GCC_NO_COMMON_BLOCKS = YES;
-				GCC_OPTIMIZATION_LEVEL = 0;
-				GCC_PREPROCESSOR_DEFINITIONS = (
-					"DEBUG=1",
-					"$(inherited)",
-				);
-				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
-				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
-				GCC_WARN_UNDECLARED_SELECTOR = YES;
-				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
-				GCC_WARN_UNUSED_FUNCTION = YES;
-				GCC_WARN_UNUSED_VARIABLE = YES;
-				LOCALIZATION_PREFERS_STRING_CATALOGS = YES;
-				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
-				MTL_FAST_MATH = YES;
-				ONLY_ACTIVE_ARCH = YES;
-				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "DEBUG $(inherited)";
-				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
-			};
-			name = "Debug macOS";
-		};
-		A5D69CA72F16CDB400E56032 /* Debug macOS */ = {
-			isa = XCBuildConfiguration;
-			buildSettings = {
-				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
-				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
-				CODE_SIGN_ENTITLEMENTS = DnsLibsTestApp/DnsLibsTestApp.macos.entitlements;
-				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 1;
-				DEVELOPMENT_ASSET_PATHS = "\"DnsLibsTestApp/Preview Content\"";
-				DEVELOPMENT_TEAM = TC3Q7MAJXF;
-				ENABLE_HARDENED_RUNTIME = YES;
-				ENABLE_PREVIEWS = YES;
-				GENERATE_INFOPLIST_FILE = YES;
-				INFOPLIST_KEY_CFBundleDisplayName = "DnsLibs Test App";
-				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.utilities";
-				"INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=iphoneos*]" = YES;
-				"INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=iphonesimulator*]" = YES;
-				"INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents[sdk=iphoneos*]" = YES;
-				"INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents[sdk=iphonesimulator*]" = YES;
-				"INFOPLIST_KEY_UILaunchScreen_Generation[sdk=iphoneos*]" = YES;
-				"INFOPLIST_KEY_UILaunchScreen_Generation[sdk=iphonesimulator*]" = YES;
-				"INFOPLIST_KEY_UIStatusBarStyle[sdk=iphoneos*]" = UIStatusBarStyleDefault;
-				"INFOPLIST_KEY_UIStatusBarStyle[sdk=iphonesimulator*]" = UIStatusBarStyleDefault;
-				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
-				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
-				IPHONEOS_DEPLOYMENT_TARGET = 15.6;
-				LD_RUNPATH_SEARCH_PATHS = "@executable_path/Frameworks";
-				"LD_RUNPATH_SEARCH_PATHS[sdk=macosx*]" = "@executable_path/../Frameworks";
-				MACOSX_DEPLOYMENT_TARGET = 13.5;
-				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = com.adguard.dns.DnsLibsTestApp;
-				PRODUCT_NAME = "$(TARGET_NAME)";
-				REGISTER_APP_GROUPS = NO;
-				SDKROOT = auto;
-				SUPPORTED_PLATFORMS = macosx;
-				SUPPORTS_MACCATALYST = NO;
-				SWIFT_EMIT_LOC_STRINGS = YES;
-				SWIFT_VERSION = 5.0;
-				TARGETED_DEVICE_FAMILY = "1,2";
-				XROS_DEPLOYMENT_TARGET = 2.0;
-			};
-			name = "Debug macOS";
-		};
-		A5D69CA82F16CDB400E56032 /* Debug macOS */ = {
-			isa = XCBuildConfiguration;
-			buildSettings = {
-				CODE_SIGN_ENTITLEMENTS = DnsProxy/DnsProxy.entitlements;
-				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 1;
-				DEVELOPMENT_TEAM = TC3Q7MAJXF;
-				FRAMEWORK_SEARCH_PATHS = (
-					"$(inherited)",
-					"$(PROJECT_DIR)/framework",
-				);
-				GENERATE_INFOPLIST_FILE = YES;
-				INFOPLIST_FILE = DnsProxy/Info.plist;
-				INFOPLIST_KEY_CFBundleDisplayName = DnsProxy;
-				INFOPLIST_KEY_NSHumanReadableCopyright = "";
-				IPHONEOS_DEPLOYMENT_TARGET = 15.6;
-				LD_RUNPATH_SEARCH_PATHS = (
-					"$(inherited)",
-					"@executable_path/Frameworks",
-					"@executable_path/../../Frameworks",
-				);
-				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = com.adguard.dns.DnsLibsTestApp.DnsProxy;
-				PRODUCT_NAME = "$(TARGET_NAME)";
-				SDKROOT = iphoneos;
-				SKIP_INSTALL = YES;
-				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
-				SUPPORTS_MACCATALYST = NO;
-				SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD = NO;
-				SUPPORTS_XR_DESIGNED_FOR_IPHONE_IPAD = NO;
-				SWIFT_EMIT_LOC_STRINGS = YES;
-				SWIFT_VERSION = 5.0;
-				TARGETED_DEVICE_FAMILY = "1,2";
-			};
-			name = "Debug macOS";
-		};
-		A5D69CA92F16CDB400E56032 /* Debug macOS */ = {
-			isa = XCBuildConfiguration;
-			buildSettings = {
-				CODE_SIGN_ENTITLEMENTS = PacketTunnel/PacketTunnel.entitlements;
-				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 1;
-				DEVELOPMENT_TEAM = TC3Q7MAJXF;
-				FRAMEWORK_SEARCH_PATHS = (
-					"$(inherited)",
-					"$(PROJECT_DIR)/framework",
-				);
-				GENERATE_INFOPLIST_FILE = YES;
-				INFOPLIST_FILE = PacketTunnel/Info.plist;
-				INFOPLIST_KEY_CFBundleDisplayName = PacketTunnel;
-				INFOPLIST_KEY_NSHumanReadableCopyright = "";
-				IPHONEOS_DEPLOYMENT_TARGET = 15.6;
-				LD_RUNPATH_SEARCH_PATHS = (
-					"$(inherited)",
-					"@executable_path/Frameworks",
-					"@executable_path/../../Frameworks",
-				);
-				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = com.adguard.dns.DnsLibsTestApp.PacketTunnel;
-				PRODUCT_NAME = "$(TARGET_NAME)";
-				SDKROOT = iphoneos;
-				SKIP_INSTALL = YES;
-				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
-				SUPPORTS_MACCATALYST = NO;
-				SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD = NO;
-				SUPPORTS_XR_DESIGNED_FOR_IPHONE_IPAD = NO;
-				SWIFT_EMIT_LOC_STRINGS = YES;
-				SWIFT_VERSION = 5.0;
-				TARGETED_DEVICE_FAMILY = "1,2";
-			};
-			name = "Debug macOS";
-		};
-		A5D69CAA2F16CDB400E56032 /* Debug macOS */ = {
-			isa = XCBuildConfiguration;
-			buildSettings = {
-				CODE_SIGN_ENTITLEMENTS = SystemExtension/SystemExtension.entitlements;
-				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 1;
-				DEVELOPMENT_TEAM = TC3Q7MAJXF;
-				ENABLE_HARDENED_RUNTIME = YES;
-				FRAMEWORK_SEARCH_PATHS = (
-					"$(inherited)",
-					"$(PROJECT_DIR)/framework",
-				);
-				GENERATE_INFOPLIST_FILE = YES;
-				INFOPLIST_FILE = SystemExtension/Info.plist;
-				INFOPLIST_KEY_CFBundleDisplayName = SystemExtension;
-				INFOPLIST_KEY_NSHumanReadableCopyright = "";
-				LD_RUNPATH_SEARCH_PATHS = (
-					"$(inherited)",
-					"@executable_path/../Frameworks",
-					"@executable_path/../../../../Frameworks",
-				);
-				MACOSX_DEPLOYMENT_TARGET = 15.0;
-				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = com.adguard.dns.DnsLibsTestApp.SystemExtension;
-				PRODUCT_NAME = "$(inherited)";
-				SDKROOT = macosx;
-				SKIP_INSTALL = YES;
-				SWIFT_EMIT_LOC_STRINGS = YES;
-				SWIFT_VERSION = 5.0;
-			};
-			name = "Debug macOS";
-		};
-		A5D69CAB2F16CDCA00E56032 /* Release iOS */ = {
-			isa = XCBuildConfiguration;
-			buildSettings = {
-				ALWAYS_SEARCH_USER_PATHS = NO;
-				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
-				CLANG_ANALYZER_NONNULL = YES;
-				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
-				CLANG_CXX_LANGUAGE_STANDARD = "gnu++20";
-				CLANG_ENABLE_MODULES = YES;
-				CLANG_ENABLE_OBJC_ARC = YES;
-				CLANG_ENABLE_OBJC_WEAK = YES;
-				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
-				CLANG_WARN_BOOL_CONVERSION = YES;
-				CLANG_WARN_COMMA = YES;
-				CLANG_WARN_CONSTANT_CONVERSION = YES;
-				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
-				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
-				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
-				CLANG_WARN_EMPTY_BODY = YES;
-				CLANG_WARN_ENUM_CONVERSION = YES;
-				CLANG_WARN_INFINITE_RECURSION = YES;
-				CLANG_WARN_INT_CONVERSION = YES;
-				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
-				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
-				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
-				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
-				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
-				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
-				CLANG_WARN_STRICT_PROTOTYPES = YES;
-				CLANG_WARN_SUSPICIOUS_MOVE = YES;
-				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
-				CLANG_WARN_UNREACHABLE_CODE = YES;
-				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
-				COPY_PHASE_STRIP = NO;
-				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
-				ENABLE_NS_ASSERTIONS = NO;
-				ENABLE_STRICT_OBJC_MSGSEND = YES;
-				ENABLE_USER_SCRIPT_SANDBOXING = NO;
-				GCC_C_LANGUAGE_STANDARD = gnu17;
-				GCC_NO_COMMON_BLOCKS = YES;
-				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
-				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
-				GCC_WARN_UNDECLARED_SELECTOR = YES;
-				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
-				GCC_WARN_UNUSED_FUNCTION = YES;
-				GCC_WARN_UNUSED_VARIABLE = YES;
-				LOCALIZATION_PREFERS_STRING_CATALOGS = YES;
-				MTL_ENABLE_DEBUG_INFO = NO;
-				MTL_FAST_MATH = YES;
-				SWIFT_COMPILATION_MODE = wholemodule;
-			};
-			name = "Release iOS";
-		};
-		A5D69CAC2F16CDCA00E56032 /* Release iOS */ = {
-			isa = XCBuildConfiguration;
-			buildSettings = {
-				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
-				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
-				CODE_SIGN_ENTITLEMENTS = DnsLibsTestApp/DnsLibsTestApp.ios.entitlements;
-				CODE_SIGN_IDENTITY = "Apple Development";
-				"CODE_SIGN_IDENTITY[sdk=iphoneos*]" = "iPhone Distribution";
-				CODE_SIGN_STYLE = Manual;
-				CURRENT_PROJECT_VERSION = 1;
-				DEVELOPMENT_ASSET_PATHS = "\"DnsLibsTestApp/Preview Content\"";
-				DEVELOPMENT_TEAM = "";
-				"DEVELOPMENT_TEAM[sdk=iphoneos*]" = TC3Q7MAJXF;
-				ENABLE_HARDENED_RUNTIME = YES;
-				ENABLE_PREVIEWS = YES;
-				GENERATE_INFOPLIST_FILE = YES;
-				INFOPLIST_KEY_CFBundleDisplayName = "DnsLibs Test App";
-				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.utilities";
-				"INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=iphoneos*]" = YES;
-				"INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=iphonesimulator*]" = YES;
-				"INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents[sdk=iphoneos*]" = YES;
-				"INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents[sdk=iphonesimulator*]" = YES;
-				"INFOPLIST_KEY_UILaunchScreen_Generation[sdk=iphoneos*]" = YES;
-				"INFOPLIST_KEY_UILaunchScreen_Generation[sdk=iphonesimulator*]" = YES;
-				"INFOPLIST_KEY_UIStatusBarStyle[sdk=iphoneos*]" = UIStatusBarStyleDefault;
-				"INFOPLIST_KEY_UIStatusBarStyle[sdk=iphonesimulator*]" = UIStatusBarStyleDefault;
-				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
-				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
-				IPHONEOS_DEPLOYMENT_TARGET = 15.6;
-				LD_RUNPATH_SEARCH_PATHS = "@executable_path/Frameworks";
-				"LD_RUNPATH_SEARCH_PATHS[sdk=macosx*]" = "@executable_path/../Frameworks";
-				MACOSX_DEPLOYMENT_TARGET = 13.5;
-				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = com.adguard.dns.DnsLibsTestApp;
-				PRODUCT_NAME = "$(TARGET_NAME)";
-				PROVISIONING_PROFILE_SPECIFIER = "";
-				"PROVISIONING_PROFILE_SPECIFIER[sdk=iphoneos*]" = "DnsLibs test app main";
-				REGISTER_APP_GROUPS = NO;
-				SDKROOT = auto;
-				SUPPORTED_PLATFORMS = "iphonesimulator iphoneos";
-				SUPPORTS_MACCATALYST = NO;
-				SWIFT_EMIT_LOC_STRINGS = YES;
-				SWIFT_VERSION = 5.0;
-				TARGETED_DEVICE_FAMILY = "1,2";
-				XROS_DEPLOYMENT_TARGET = 2.0;
-			};
-			name = "Release iOS";
-		};
-		A5D69CAD2F16CDCA00E56032 /* Release iOS */ = {
-			isa = XCBuildConfiguration;
-			buildSettings = {
-				CODE_SIGN_ENTITLEMENTS = DnsProxy/DnsProxy.entitlements;
-				"CODE_SIGN_IDENTITY[sdk=iphoneos*]" = "iPhone Distribution";
-				CODE_SIGN_STYLE = Manual;
-				CURRENT_PROJECT_VERSION = 1;
-				DEVELOPMENT_TEAM = "";
-				"DEVELOPMENT_TEAM[sdk=iphoneos*]" = TC3Q7MAJXF;
-				FRAMEWORK_SEARCH_PATHS = (
-					"$(inherited)",
-					"$(PROJECT_DIR)/framework",
-				);
-				GENERATE_INFOPLIST_FILE = YES;
-				INFOPLIST_FILE = DnsProxy/Info.plist;
-				INFOPLIST_KEY_CFBundleDisplayName = DnsProxy;
-				INFOPLIST_KEY_NSHumanReadableCopyright = "";
-				IPHONEOS_DEPLOYMENT_TARGET = 15.6;
-				LD_RUNPATH_SEARCH_PATHS = (
-					"$(inherited)",
-					"@executable_path/Frameworks",
-					"@executable_path/../../Frameworks",
-				);
-				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = com.adguard.dns.DnsLibsTestApp.DnsProxy;
-				PRODUCT_NAME = "$(TARGET_NAME)";
-				PROVISIONING_PROFILE_SPECIFIER = "";
-				"PROVISIONING_PROFILE_SPECIFIER[sdk=iphoneos*]" = "DnsLibs test app dns proxy";
-				SDKROOT = iphoneos;
-				SKIP_INSTALL = YES;
-				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
-				SUPPORTS_MACCATALYST = NO;
-				SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD = NO;
-				SUPPORTS_XR_DESIGNED_FOR_IPHONE_IPAD = NO;
-				SWIFT_EMIT_LOC_STRINGS = YES;
-				SWIFT_VERSION = 5.0;
-				TARGETED_DEVICE_FAMILY = "1,2";
-				VALIDATE_PRODUCT = YES;
-			};
-			name = "Release iOS";
-		};
-		A5D69CAE2F16CDCA00E56032 /* Release iOS */ = {
-			isa = XCBuildConfiguration;
-			buildSettings = {
-				CODE_SIGN_ENTITLEMENTS = PacketTunnel/PacketTunnel.entitlements;
-				"CODE_SIGN_IDENTITY[sdk=iphoneos*]" = "iPhone Distribution";
-				CODE_SIGN_STYLE = Manual;
-				CURRENT_PROJECT_VERSION = 1;
-				DEVELOPMENT_TEAM = "";
-				"DEVELOPMENT_TEAM[sdk=iphoneos*]" = TC3Q7MAJXF;
-				FRAMEWORK_SEARCH_PATHS = (
-					"$(inherited)",
-					"$(PROJECT_DIR)/framework",
-				);
-				GENERATE_INFOPLIST_FILE = YES;
-				INFOPLIST_FILE = PacketTunnel/Info.plist;
-				INFOPLIST_KEY_CFBundleDisplayName = PacketTunnel;
-				INFOPLIST_KEY_NSHumanReadableCopyright = "";
-				IPHONEOS_DEPLOYMENT_TARGET = 15.6;
-				LD_RUNPATH_SEARCH_PATHS = (
-					"$(inherited)",
-					"@executable_path/Frameworks",
-					"@executable_path/../../Frameworks",
-				);
-				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = com.adguard.dns.DnsLibsTestApp.PacketTunnel;
-				PRODUCT_NAME = "$(TARGET_NAME)";
-				PROVISIONING_PROFILE_SPECIFIER = "";
-				"PROVISIONING_PROFILE_SPECIFIER[sdk=iphoneos*]" = "DnsLibs test app packet tunnel";
-				SDKROOT = iphoneos;
-				SKIP_INSTALL = YES;
-				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
-				SUPPORTS_MACCATALYST = NO;
-				SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD = NO;
-				SUPPORTS_XR_DESIGNED_FOR_IPHONE_IPAD = NO;
-				SWIFT_EMIT_LOC_STRINGS = YES;
-				SWIFT_VERSION = 5.0;
-				TARGETED_DEVICE_FAMILY = "1,2";
-				VALIDATE_PRODUCT = YES;
-			};
-			name = "Release iOS";
-		};
-		A5D69CAF2F16CDCA00E56032 /* Release iOS */ = {
-			isa = XCBuildConfiguration;
-			buildSettings = {
-				CODE_SIGN_ENTITLEMENTS = SystemExtension/SystemExtension.entitlements;
-				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 1;
-				DEVELOPMENT_TEAM = TC3Q7MAJXF;
-				ENABLE_HARDENED_RUNTIME = YES;
-				FRAMEWORK_SEARCH_PATHS = (
-					"$(inherited)",
-					"$(PROJECT_DIR)/framework",
-				);
-				GENERATE_INFOPLIST_FILE = YES;
-				INFOPLIST_FILE = SystemExtension/Info.plist;
-				INFOPLIST_KEY_CFBundleDisplayName = SystemExtension;
-				INFOPLIST_KEY_NSHumanReadableCopyright = "";
-				LD_RUNPATH_SEARCH_PATHS = (
-					"$(inherited)",
-					"@executable_path/../Frameworks",
-					"@executable_path/../../../../Frameworks",
-				);
-				MACOSX_DEPLOYMENT_TARGET = 15.0;
-				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = com.adguard.dns.DnsLibsTestApp.SystemExtension;
-				PRODUCT_NAME = "$(inherited)";
-				SDKROOT = macosx;
-				SKIP_INSTALL = YES;
-				SWIFT_EMIT_LOC_STRINGS = YES;
-				SWIFT_VERSION = 5.0;
-			};
-			name = "Release iOS";
+			name = Debug;
 		};
 /* End XCBuildConfiguration section */
 
@@ -1402,57 +1045,47 @@
 		A5D69C232F16878200E56032 /* Build configuration list for PBXProject "DnsLibsTestApp" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
-				A5D69C352F16878300E56032 /* Debug iOS */,
-				A5D69CA62F16CDB400E56032 /* Debug macOS */,
-				A5D69C362F16878300E56032 /* Release macOS */,
-				A5D69CAB2F16CDCA00E56032 /* Release iOS */,
+				A5D69CA62F16CDB400E56032 /* Debug */,
+				A5D69C362F16878300E56032 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
-			defaultConfigurationName = "Release iOS";
+			defaultConfigurationName = Release;
 		};
 		A5D69C372F16878300E56032 /* Build configuration list for PBXNativeTarget "DnsLibsTestApp" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
-				A5D69C382F16878300E56032 /* Debug iOS */,
-				A5D69CA72F16CDB400E56032 /* Debug macOS */,
-				A5D69C392F16878300E56032 /* Release macOS */,
-				A5D69CAC2F16CDCA00E56032 /* Release iOS */,
+				A5D69CA72F16CDB400E56032 /* Debug */,
+				A5D69C392F16878300E56032 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
-			defaultConfigurationName = "Release iOS";
+			defaultConfigurationName = Release;
 		};
 		A5D69C5E2F16C96000E56032 /* Build configuration list for PBXNativeTarget "DnsProxy" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
-				A5D69C5F2F16C96000E56032 /* Debug iOS */,
-				A5D69CA82F16CDB400E56032 /* Debug macOS */,
-				A5D69C602F16C96000E56032 /* Release macOS */,
-				A5D69CAD2F16CDCA00E56032 /* Release iOS */,
+				A5D69CA82F16CDB400E56032 /* Debug */,
+				A5D69C602F16C96000E56032 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
-			defaultConfigurationName = "Release iOS";
+			defaultConfigurationName = Release;
 		};
 		A5D69C702F16C97400E56032 /* Build configuration list for PBXNativeTarget "PacketTunnel" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
-				A5D69C712F16C97400E56032 /* Debug iOS */,
-				A5D69CA92F16CDB400E56032 /* Debug macOS */,
-				A5D69C722F16C97400E56032 /* Release macOS */,
-				A5D69CAE2F16CDCA00E56032 /* Release iOS */,
+				A5D69CA92F16CDB400E56032 /* Debug */,
+				A5D69C722F16C97400E56032 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
-			defaultConfigurationName = "Release iOS";
+			defaultConfigurationName = Release;
 		};
 		A5D69C842F16C98D00E56032 /* Build configuration list for PBXNativeTarget "SystemExtension" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
-				A5D69C852F16C98D00E56032 /* Debug iOS */,
-				A5D69CAA2F16CDB400E56032 /* Debug macOS */,
-				A5D69C862F16C98D00E56032 /* Release macOS */,
-				A5D69CAF2F16CDCA00E56032 /* Release iOS */,
+				A5D69CAA2F16CDB400E56032 /* Debug */,
+				A5D69C862F16C98D00E56032 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
-			defaultConfigurationName = "Release iOS";
+			defaultConfigurationName = Release;
 		};
 /* End XCConfigurationList section */
 	};

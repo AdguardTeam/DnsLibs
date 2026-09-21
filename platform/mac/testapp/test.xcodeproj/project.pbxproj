@@ -18,12 +18,8 @@
 		C44240122379BB2F00FD1D4C /* main.m in Sources */ = {isa = PBXBuildFile; fileRef = C4423F9B2379559D00FD1D4C /* main.m */; };
 		C44240132379BB3800FD1D4C /* SceneDelegate.m in Sources */ = {isa = PBXBuildFile; fileRef = C4423F8D2379559900FD1D4C /* SceneDelegate.m */; };
 		C48B7D68239AAB4E004DDDC8 /* filter.txt in Resources */ = {isa = PBXBuildFile; fileRef = C4FAE4A2237BE77800ECE0B2 /* filter.txt */; };
-		C4AEED15237AC8A10021E53F /* AGDnsProxy.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = C4AEED14237AC8A10021E53F /* AGDnsProxy.framework */; };
-		C4AEED16237AC90C0021E53F /* AGDnsProxy.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = C4AEED14237AC8A10021E53F /* AGDnsProxy.framework */; };
-		C4AEED17237AC9100021E53F /* AGDnsProxy.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = C4AEED14237AC8A10021E53F /* AGDnsProxy.framework */; };
 		C4AEED18237AC9140021E53F /* AGDnsProxy.framework in Embed Frameworks */ = {isa = PBXBuildFile; fileRef = C4AEED14237AC8A10021E53F /* AGDnsProxy.framework */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
 		C4AEED19237AC9170021E53F /* AGDnsProxy.framework in Embed Frameworks */ = {isa = PBXBuildFile; fileRef = C4AEED14237AC8A10021E53F /* AGDnsProxy.framework */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
-		C4AEED1A237AC9260021E53F /* AGDnsProxy.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = C4AEED14237AC8A10021E53F /* AGDnsProxy.framework */; };
 		C4B58FDB237184390044CE54 /* NetworkExtension.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = F4D5969A1F7C01BD00538851 /* NetworkExtension.framework */; };
 		C4FAE493237BE37100ECE0B2 /* AGDnsProxy.framework in Embed Frameworks */ = {isa = PBXBuildFile; fileRef = C4AEED14237AC8A10021E53F /* AGDnsProxy.framework */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
 		C4FAE494237BE37600ECE0B2 /* AGDnsProxy.framework in Embed Frameworks */ = {isa = PBXBuildFile; fileRef = C4AEED14237AC8A10021E53F /* AGDnsProxy.framework */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
@@ -45,26 +41,12 @@
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
-		C41BB40D2379C1B40068C106 /* PBXContainerItemProxy */ = {
-			isa = PBXContainerItemProxy;
-			containerPortal = F4AF33801F696BEE00CA0E84 /* Project object */;
-			proxyType = 1;
-			remoteGlobalIDString = C41BB4092379C19B0068C106;
-			remoteInfo = "AGDnsProxy-ios";
-		};
 		C4423FA4237955FC00FD1D4C /* PBXContainerItemProxy */ = {
 			isa = PBXContainerItemProxy;
 			containerPortal = F4AF33801F696BEE00CA0E84 /* Project object */;
 			proxyType = 1;
 			remoteGlobalIDString = C4423F6F23794EA900FD1D4C;
 			remoteInfo = "test-ios";
-		};
-		C4B58FE1237189310044CE54 /* PBXContainerItemProxy */ = {
-			isa = PBXContainerItemProxy;
-			containerPortal = F4AF33801F696BEE00CA0E84 /* Project object */;
-			proxyType = 1;
-			remoteGlobalIDString = C4B58FDC237188E50044CE54;
-			remoteInfo = DnsProxy;
 		};
 		F499C4501F6A9D0D00FB55F8 /* PBXContainerItemProxy */ = {
 			isa = PBXContainerItemProxy;
@@ -76,39 +58,6 @@
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXCopyFilesBuildPhase section */
-		652D5A0C20E15E1700B3E0F1 /* Embed Frameworks */ = {
-			isa = PBXCopyFilesBuildPhase;
-			buildActionMask = 2147483647;
-			dstPath = "";
-			dstSubfolderSpec = 10;
-			files = (
-				C4FAE493237BE37100ECE0B2 /* AGDnsProxy.framework in Embed Frameworks */,
-			);
-			name = "Embed Frameworks";
-			runOnlyForDeploymentPostprocessing = 0;
-		};
-		C4423F7C23794F2F00FD1D4C /* Embed Frameworks */ = {
-			isa = PBXCopyFilesBuildPhase;
-			buildActionMask = 2147483647;
-			dstPath = "";
-			dstSubfolderSpec = 10;
-			files = (
-				C4AEED19237AC9170021E53F /* AGDnsProxy.framework in Embed Frameworks */,
-			);
-			name = "Embed Frameworks";
-			runOnlyForDeploymentPostprocessing = 0;
-		};
-		C4423FA2237955B000FD1D4C /* Embed Frameworks */ = {
-			isa = PBXCopyFilesBuildPhase;
-			buildActionMask = 2147483647;
-			dstPath = "";
-			dstSubfolderSpec = 10;
-			files = (
-				C4FAE494237BE37600ECE0B2 /* AGDnsProxy.framework in Embed Frameworks */,
-			);
-			name = "Embed Frameworks";
-			runOnlyForDeploymentPostprocessing = 0;
-		};
 		C44240072379B26E00FD1D4C /* Embed App Extensions */ = {
 			isa = PBXCopyFilesBuildPhase;
 			buildActionMask = 2147483647;
@@ -118,17 +67,6 @@
 				C4FAE495237BE41A00ECE0B2 /* ext-ios.appex in Embed App Extensions */,
 			);
 			name = "Embed App Extensions";
-			runOnlyForDeploymentPostprocessing = 0;
-		};
-		C4B58FF523719CDF0044CE54 /* Embed Frameworks */ = {
-			isa = PBXCopyFilesBuildPhase;
-			buildActionMask = 2147483647;
-			dstPath = "";
-			dstSubfolderSpec = 10;
-			files = (
-				C4AEED18237AC9140021E53F /* AGDnsProxy.framework in Embed Frameworks */,
-			);
-			name = "Embed Frameworks";
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 		F499C4561F6A9D0D00FB55F8 /* Embed App Extensions */ = {
@@ -162,7 +100,6 @@
 		C4423F982379559D00FD1D4C /* Base */ = {isa = PBXFileReference; lastKnownFileType = file.storyboard; name = Base; path = Base.lproj/LaunchScreen.storyboard; sourceTree = "<group>"; };
 		C4423F9A2379559D00FD1D4C /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		C4423F9B2379559D00FD1D4C /* main.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = main.m; sourceTree = "<group>"; };
-		C4AEED14237AC8A10021E53F /* AGDnsProxy.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = AGDnsProxy.framework; path = framework/AGDnsProxy.framework; sourceTree = "<group>"; };
 		C4FAE49F237BE77800ECE0B2 /* vpn.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = vpn.m; sourceTree = "<group>"; };
 		C4FAE4A0237BE77800ECE0B2 /* PacketTunnelProvider.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = PacketTunnelProvider.h; sourceTree = "<group>"; };
 		C4FAE4A1237BE77800ECE0B2 /* vpn.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = vpn.h; sourceTree = "<group>"; };
@@ -192,7 +129,6 @@
 			files = (
 				C4423F7D23794F3200FD1D4C /* NetworkExtension.framework in Frameworks */,
 				1DECADC829197A6400BB60DE /* SystemConfiguration.framework in Frameworks */,
-				C4AEED16237AC90C0021E53F /* AGDnsProxy.framework in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -201,7 +137,6 @@
 			buildActionMask = 2147483647;
 			files = (
 				C4423FA3237955C400FD1D4C /* NetworkExtension.framework in Frameworks */,
-				C4AEED1A237AC9260021E53F /* AGDnsProxy.framework in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -211,7 +146,6 @@
 			files = (
 				F499C4461F6A9D0D00FB55F8 /* Cocoa.framework in Frameworks */,
 				C4B58FDB237184390044CE54 /* NetworkExtension.framework in Frameworks */,
-				C4AEED17237AC9100021E53F /* AGDnsProxy.framework in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -220,7 +154,6 @@
 			buildActionMask = 2147483647;
 			files = (
 				F40E749C206D1D6B000F5A41 /* Cocoa.framework in Frameworks */,
-				C4AEED15237AC8A10021E53F /* AGDnsProxy.framework in Frameworks */,
 				F4D5969B1F7C01BD00538851 /* NetworkExtension.framework in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -272,7 +205,6 @@
 			isa = PBXGroup;
 			children = (
 				1DECADC729197A6400BB60DE /* SystemConfiguration.framework */,
-				C4AEED14237AC8A10021E53F /* AGDnsProxy.framework */,
 				F4D5969A1F7C01BD00538851 /* NetworkExtension.framework */,
 				F499C4451F6A9D0D00FB55F8 /* Cocoa.framework */,
 			);
@@ -339,48 +271,6 @@
 /* End PBXGroup section */
 
 /* Begin PBXLegacyTarget section */
-		C41BB4092379C19B0068C106 /* AGDnsProxy-ios */ = {
-			isa = PBXLegacyTarget;
-			buildArgumentsString = "$(SRCROOT)/../framework/build_dnsproxy_framework.sh $(ACTION) --os ios-arm64 --iosv 13.1";
-			buildConfigurationList = C41BB40C2379C19B0068C106 /* Build configuration list for PBXLegacyTarget "AGDnsProxy-ios" */;
-			buildPhases = (
-			);
-			buildToolPath = /bin/sh;
-			buildWorkingDirectory = "$(SRCROOT)/ext-ios";
-			dependencies = (
-			);
-			name = "AGDnsProxy-ios";
-			passBuildSettingsInEnvironment = 1;
-			productName = "AGDnsProxy-ios";
-		};
-		C42068AE23B0D0B800DA1B77 /* AGDnsProxy */ = {
-			isa = PBXLegacyTarget;
-			buildArgumentsString = "$(SRCROOT)/../framework/build_dnsproxy_framework.sh $(ACTION) --iosv 13.0";
-			buildConfigurationList = C42068B123B0D0B800DA1B77 /* Build configuration list for PBXLegacyTarget "AGDnsProxy" */;
-			buildPhases = (
-			);
-			buildToolPath = /bin/sh;
-			buildWorkingDirectory = "$(SRCROOT)/";
-			dependencies = (
-			);
-			name = AGDnsProxy;
-			passBuildSettingsInEnvironment = 1;
-			productName = AGDnsProxy;
-		};
-		C4B58FDC237188E50044CE54 /* AGDnsProxy-macos */ = {
-			isa = PBXLegacyTarget;
-			buildArgumentsString = "$(SRCROOT)/../framework/build_dnsproxy_framework.sh $(ACTION) --os macos-x86_64";
-			buildConfigurationList = C4B58FDD237188E50044CE54 /* Build configuration list for PBXLegacyTarget "AGDnsProxy-macos" */;
-			buildPhases = (
-			);
-			buildToolPath = /bin/sh;
-			buildWorkingDirectory = "$(SRCROOT)/ext-macos";
-			dependencies = (
-			);
-			name = "AGDnsProxy-macos";
-			passBuildSettingsInEnvironment = 1;
-			productName = DnsProxy;
-		};
 /* End PBXLegacyTarget section */
 
 /* Begin PBXNativeTarget section */
@@ -388,10 +278,11 @@
 			isa = PBXNativeTarget;
 			buildConfigurationList = C4423F7723794EA900FD1D4C /* Build configuration list for PBXNativeTarget "ext-ios" */;
 			buildPhases = (
+				C4423FD42379559D00FD1D4C /* Build AGDnsProxy framework */,
 				C4423F6C23794EA900FD1D4C /* Sources */,
 				C4423F6D23794EA900FD1D4C /* Frameworks */,
 				C4423F6E23794EA900FD1D4C /* Resources */,
-				C4423F7C23794F2F00FD1D4C /* Embed Frameworks */,
+				C4423FD52379559D00FD1D4C /* Embed AGDnsProxy framework */,
 			);
 			buildRules = (
 			);
@@ -407,11 +298,12 @@
 			isa = PBXNativeTarget;
 			buildConfigurationList = C4423F9D2379559D00FD1D4C /* Build configuration list for PBXNativeTarget "test-ios" */;
 			buildPhases = (
+				C4423FD02379559D00FD1D4C /* Build AGDnsProxy framework */,
 				C4423F832379559900FD1D4C /* Sources */,
 				C4423F842379559900FD1D4C /* Frameworks */,
 				C4423F852379559900FD1D4C /* Resources */,
 				C44240072379B26E00FD1D4C /* Embed App Extensions */,
-				C4423FA2237955B000FD1D4C /* Embed Frameworks */,
+				C4423FD12379559D00FD1D4C /* Embed AGDnsProxy framework */,
 			);
 			buildRules = (
 			);
@@ -427,10 +319,11 @@
 			isa = PBXNativeTarget;
 			buildConfigurationList = F499C4531F6A9D0D00FB55F8 /* Build configuration list for PBXNativeTarget "ext-macos" */;
 			buildPhases = (
+				C4423FD62379559D00FD1D4C /* Build AGDnsProxy framework */,
 				F499C4401F6A9D0D00FB55F8 /* Sources */,
 				F499C4411F6A9D0D00FB55F8 /* Frameworks */,
 				F499C4421F6A9D0D00FB55F8 /* Resources */,
-				C4B58FF523719CDF0044CE54 /* Embed Frameworks */,
+				C4423FD72379559D00FD1D4C /* Embed AGDnsProxy framework */,
 			);
 			buildRules = (
 			);
@@ -446,11 +339,12 @@
 			isa = PBXNativeTarget;
 			buildConfigurationList = F4AF339C1F696BEE00CA0E84 /* Build configuration list for PBXNativeTarget "test-macos" */;
 			buildPhases = (
+				C4423FD22379559D00FD1D4C /* Build AGDnsProxy framework */,
 				F4AF33841F696BEE00CA0E84 /* Sources */,
 				F4AF33851F696BEE00CA0E84 /* Frameworks */,
 				F4AF33861F696BEE00CA0E84 /* Resources */,
 				F499C4561F6A9D0D00FB55F8 /* Embed App Extensions */,
-				652D5A0C20E15E1700B3E0F1 /* Embed Frameworks */,
+				C4423FD32379559D00FD1D4C /* Embed AGDnsProxy framework */,
 			);
 			buildRules = (
 			);
@@ -539,9 +433,6 @@
 				C4423F862379559900FD1D4C /* test-ios */,
 				F499C4431F6A9D0D00FB55F8 /* ext-macos */,
 				C4423F6F23794EA900FD1D4C /* ext-ios */,
-				C4B58FDC237188E50044CE54 /* AGDnsProxy-macos */,
-				C41BB4092379C19B0068C106 /* AGDnsProxy-ios */,
-				C42068AE23B0D0B800DA1B77 /* AGDnsProxy */,
 			);
 		};
 /* End PBXProject section */
@@ -583,6 +474,161 @@
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXResourcesBuildPhase section */
+
+/* Begin PBXShellScriptBuildPhase section */
+		C4423FD02379559D00FD1D4C /* Build AGDnsProxy framework */ = {
+			isa = PBXShellScriptBuildPhase;
+			alwaysOutOfDate = 1;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputFileListPaths = (
+			);
+			inputPaths = (
+			);
+			name = "Build AGDnsProxy framework";
+			outputFileListPaths = (
+			);
+			outputPaths = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "# Builds the AGDnsProxy framework for the destination being built and puts it\n# at ${PROJECT_DIR}/framework/build/${PLATFORM_NAME}/AGdnsProxy.framework,\n# where this project links and embeds it from.\nexec \"${SRCROOT}/../framework/build_framework_for_xcode.sh\"\n";
+		};
+		C4423FD12379559D00FD1D4C /* Embed AGDnsProxy framework */ = {
+			isa = PBXShellScriptBuildPhase;
+			alwaysOutOfDate = 1;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputFileListPaths = (
+			);
+			inputPaths = (
+			);
+			name = "Embed AGDnsProxy framework";
+			outputFileListPaths = (
+			);
+			outputPaths = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "# Copies the AGDnsProxy framework built by the \"Build AGDnsProxy framework\"\n# phase into the bundle and signs it, the way Xcode does it for frameworks\n# referenced by the project.\nset -e\n\nframework=\"${PROJECT_DIR}/framework/build/${PLATFORM_NAME}/AGdnsProxy.framework\"\ndestination=\"${TARGET_BUILD_DIR}/${FRAMEWORKS_FOLDER_PATH}/AGdnsProxy.framework\"\n\nrm -rf \"${destination}\"\nmkdir -p \"$(dirname \"${destination}\")\"\ncp -R \"${framework}\" \"${destination}\"\n# Headers and modules are only needed to build against the framework.\nrm -rf \"${destination}/Headers\" \"${destination}/Modules\"\nrm -rf \"${destination}/Versions/A/Headers\" \"${destination}/Versions/A/Modules\"\n\nif [ -n \"${EXPANDED_CODE_SIGN_IDENTITY:-}\" ]; then\n    sign_options=\"\"\n    if [ \"${ENABLE_HARDENED_RUNTIME:-}\" = \"YES\" ]; then\n        sign_options=\"-o runtime\"\n    fi\n    # shellcheck disable=SC2086\n    codesign --force --sign \"${EXPANDED_CODE_SIGN_IDENTITY}\" ${sign_options} --timestamp=none \"${destination}\"\nfi\n";
+		};
+		C4423FD22379559D00FD1D4C /* Build AGDnsProxy framework */ = {
+			isa = PBXShellScriptBuildPhase;
+			alwaysOutOfDate = 1;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputFileListPaths = (
+			);
+			inputPaths = (
+			);
+			name = "Build AGDnsProxy framework";
+			outputFileListPaths = (
+			);
+			outputPaths = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "# Builds the AGDnsProxy framework for the destination being built and puts it\n# at ${PROJECT_DIR}/framework/build/${PLATFORM_NAME}/AGdnsProxy.framework,\n# where this project links and embeds it from.\nexec \"${SRCROOT}/../framework/build_framework_for_xcode.sh\"\n";
+		};
+		C4423FD32379559D00FD1D4C /* Embed AGDnsProxy framework */ = {
+			isa = PBXShellScriptBuildPhase;
+			alwaysOutOfDate = 1;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputFileListPaths = (
+			);
+			inputPaths = (
+			);
+			name = "Embed AGDnsProxy framework";
+			outputFileListPaths = (
+			);
+			outputPaths = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "# Copies the AGDnsProxy framework built by the \"Build AGDnsProxy framework\"\n# phase into the bundle and signs it, the way Xcode does it for frameworks\n# referenced by the project.\nset -e\n\nframework=\"${PROJECT_DIR}/framework/build/${PLATFORM_NAME}/AGdnsProxy.framework\"\ndestination=\"${TARGET_BUILD_DIR}/${FRAMEWORKS_FOLDER_PATH}/AGdnsProxy.framework\"\n\nrm -rf \"${destination}\"\nmkdir -p \"$(dirname \"${destination}\")\"\ncp -R \"${framework}\" \"${destination}\"\n# Headers and modules are only needed to build against the framework.\nrm -rf \"${destination}/Headers\" \"${destination}/Modules\"\nrm -rf \"${destination}/Versions/A/Headers\" \"${destination}/Versions/A/Modules\"\n\nif [ -n \"${EXPANDED_CODE_SIGN_IDENTITY:-}\" ]; then\n    sign_options=\"\"\n    if [ \"${ENABLE_HARDENED_RUNTIME:-}\" = \"YES\" ]; then\n        sign_options=\"-o runtime\"\n    fi\n    # shellcheck disable=SC2086\n    codesign --force --sign \"${EXPANDED_CODE_SIGN_IDENTITY}\" ${sign_options} --timestamp=none \"${destination}\"\nfi\n";
+		};
+		C4423FD42379559D00FD1D4C /* Build AGDnsProxy framework */ = {
+			isa = PBXShellScriptBuildPhase;
+			alwaysOutOfDate = 1;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputFileListPaths = (
+			);
+			inputPaths = (
+			);
+			name = "Build AGDnsProxy framework";
+			outputFileListPaths = (
+			);
+			outputPaths = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "# Builds the AGDnsProxy framework for the destination being built and puts it\n# at ${PROJECT_DIR}/framework/build/${PLATFORM_NAME}/AGdnsProxy.framework,\n# where this project links and embeds it from.\nexec \"${SRCROOT}/../framework/build_framework_for_xcode.sh\"\n";
+		};
+		C4423FD52379559D00FD1D4C /* Embed AGDnsProxy framework */ = {
+			isa = PBXShellScriptBuildPhase;
+			alwaysOutOfDate = 1;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputFileListPaths = (
+			);
+			inputPaths = (
+			);
+			name = "Embed AGDnsProxy framework";
+			outputFileListPaths = (
+			);
+			outputPaths = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "# Copies the AGDnsProxy framework built by the \"Build AGDnsProxy framework\"\n# phase into the bundle and signs it, the way Xcode does it for frameworks\n# referenced by the project.\nset -e\n\nframework=\"${PROJECT_DIR}/framework/build/${PLATFORM_NAME}/AGdnsProxy.framework\"\ndestination=\"${TARGET_BUILD_DIR}/${FRAMEWORKS_FOLDER_PATH}/AGdnsProxy.framework\"\n\nrm -rf \"${destination}\"\nmkdir -p \"$(dirname \"${destination}\")\"\ncp -R \"${framework}\" \"${destination}\"\n# Headers and modules are only needed to build against the framework.\nrm -rf \"${destination}/Headers\" \"${destination}/Modules\"\nrm -rf \"${destination}/Versions/A/Headers\" \"${destination}/Versions/A/Modules\"\n\nif [ -n \"${EXPANDED_CODE_SIGN_IDENTITY:-}\" ]; then\n    sign_options=\"\"\n    if [ \"${ENABLE_HARDENED_RUNTIME:-}\" = \"YES\" ]; then\n        sign_options=\"-o runtime\"\n    fi\n    # shellcheck disable=SC2086\n    codesign --force --sign \"${EXPANDED_CODE_SIGN_IDENTITY}\" ${sign_options} --timestamp=none \"${destination}\"\nfi\n";
+		};
+		C4423FD62379559D00FD1D4C /* Build AGDnsProxy framework */ = {
+			isa = PBXShellScriptBuildPhase;
+			alwaysOutOfDate = 1;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputFileListPaths = (
+			);
+			inputPaths = (
+			);
+			name = "Build AGDnsProxy framework";
+			outputFileListPaths = (
+			);
+			outputPaths = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "# Builds the AGDnsProxy framework for the destination being built and puts it\n# at ${PROJECT_DIR}/framework/build/${PLATFORM_NAME}/AGdnsProxy.framework,\n# where this project links and embeds it from.\nexec \"${SRCROOT}/../framework/build_framework_for_xcode.sh\"\n";
+		};
+		C4423FD72379559D00FD1D4C /* Embed AGDnsProxy framework */ = {
+			isa = PBXShellScriptBuildPhase;
+			alwaysOutOfDate = 1;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputFileListPaths = (
+			);
+			inputPaths = (
+			);
+			name = "Embed AGDnsProxy framework";
+			outputFileListPaths = (
+			);
+			outputPaths = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "# Copies the AGDnsProxy framework built by the \"Build AGDnsProxy framework\"\n# phase into the bundle and signs it, the way Xcode does it for frameworks\n# referenced by the project.\nset -e\n\nframework=\"${PROJECT_DIR}/framework/build/${PLATFORM_NAME}/AGdnsProxy.framework\"\ndestination=\"${TARGET_BUILD_DIR}/${FRAMEWORKS_FOLDER_PATH}/AGdnsProxy.framework\"\n\nrm -rf \"${destination}\"\nmkdir -p \"$(dirname \"${destination}\")\"\ncp -R \"${framework}\" \"${destination}\"\n# Headers and modules are only needed to build against the framework.\nrm -rf \"${destination}/Headers\" \"${destination}/Modules\"\nrm -rf \"${destination}/Versions/A/Headers\" \"${destination}/Versions/A/Modules\"\n\nif [ -n \"${EXPANDED_CODE_SIGN_IDENTITY:-}\" ]; then\n    sign_options=\"\"\n    if [ \"${ENABLE_HARDENED_RUNTIME:-}\" = \"YES\" ]; then\n        sign_options=\"-o runtime\"\n    fi\n    # shellcheck disable=SC2086\n    codesign --force --sign \"${EXPANDED_CODE_SIGN_IDENTITY}\" ${sign_options} --timestamp=none \"${destination}\"\nfi\n";
+		};
+/* End PBXShellScriptBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
 		C4423F6C23794EA900FD1D4C /* Sources */ = {
@@ -627,20 +673,10 @@
 /* End PBXSourcesBuildPhase section */
 
 /* Begin PBXTargetDependency section */
-		C41BB40E2379C1B40068C106 /* PBXTargetDependency */ = {
-			isa = PBXTargetDependency;
-			target = C41BB4092379C19B0068C106 /* AGDnsProxy-ios */;
-			targetProxy = C41BB40D2379C1B40068C106 /* PBXContainerItemProxy */;
-		};
 		C4423FA5237955FC00FD1D4C /* PBXTargetDependency */ = {
 			isa = PBXTargetDependency;
 			target = C4423F6F23794EA900FD1D4C /* ext-ios */;
 			targetProxy = C4423FA4237955FC00FD1D4C /* PBXContainerItemProxy */;
-		};
-		C4B58FE2237189310044CE54 /* PBXTargetDependency */ = {
-			isa = PBXTargetDependency;
-			target = C4B58FDC237188E50044CE54 /* AGDnsProxy-macos */;
-			targetProxy = C4B58FE1237189310044CE54 /* PBXContainerItemProxy */;
 		};
 		F499C4511F6A9D0D00FB55F8 /* PBXTargetDependency */ = {
 			isa = PBXTargetDependency;
@@ -677,98 +713,13 @@
 /* End PBXVariantGroup section */
 
 /* Begin XCBuildConfiguration section */
-		C41BB40A2379C19B0068C106 /* Debug */ = {
-			isa = XCBuildConfiguration;
-			buildSettings = {
-				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
-				CLANG_ENABLE_OBJC_WEAK = YES;
-				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
-				CODE_SIGN_STYLE = Automatic;
-				DEBUGGING_SYMBOLS = YES;
-				DEBUG_INFORMATION_FORMAT = dwarf;
-				DEVELOPMENT_TEAM = N33TQXN8C7;
-				GCC_C_LANGUAGE_STANDARD = gnu11;
-				GCC_GENERATE_DEBUGGING_SYMBOLS = YES;
-				GCC_OPTIMIZATION_LEVEL = 0;
-				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
-				MTL_FAST_MATH = YES;
-				OTHER_CFLAGS = "";
-				OTHER_LDFLAGS = "";
-				PRODUCT_NAME = "$(TARGET_NAME)";
-				SDKROOT = iphoneos;
-			};
-			name = Debug;
-		};
-		C41BB40B2379C19B0068C106 /* Release */ = {
-			isa = XCBuildConfiguration;
-			buildSettings = {
-				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
-				CLANG_ENABLE_OBJC_WEAK = YES;
-				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
-				CODE_SIGN_STYLE = Automatic;
-				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
-				DEVELOPMENT_TEAM = N33TQXN8C7;
-				GCC_C_LANGUAGE_STANDARD = gnu11;
-				MTL_FAST_MATH = YES;
-				OTHER_CFLAGS = "";
-				OTHER_LDFLAGS = "";
-				PRODUCT_NAME = "$(TARGET_NAME)";
-				SDKROOT = iphoneos;
-			};
-			name = Release;
-		};
-		C42068AF23B0D0B800DA1B77 /* Debug */ = {
-			isa = XCBuildConfiguration;
-			buildSettings = {
-				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
-				CLANG_ENABLE_OBJC_WEAK = YES;
-				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
-				CODE_SIGN_STYLE = Automatic;
-				DEBUGGING_SYMBOLS = YES;
-				DEBUG_INFORMATION_FORMAT = dwarf;
-				DEVELOPMENT_TEAM = N33TQXN8C7;
-				GCC_C_LANGUAGE_STANDARD = gnu11;
-				GCC_GENERATE_DEBUGGING_SYMBOLS = YES;
-				GCC_OPTIMIZATION_LEVEL = 0;
-				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
-				MTL_FAST_MATH = YES;
-				OTHER_CFLAGS = "";
-				OTHER_LDFLAGS = "";
-				PRODUCT_NAME = "$(TARGET_NAME)";
-			};
-			name = Debug;
-		};
-		C42068B023B0D0B800DA1B77 /* Release */ = {
-			isa = XCBuildConfiguration;
-			buildSettings = {
-				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
-				CLANG_ENABLE_OBJC_WEAK = YES;
-				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
-				CODE_SIGN_STYLE = Automatic;
-				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
-				DEVELOPMENT_TEAM = N33TQXN8C7;
-				GCC_C_LANGUAGE_STANDARD = gnu11;
-				MTL_FAST_MATH = YES;
-				OTHER_CFLAGS = "";
-				OTHER_LDFLAGS = "";
-				PRODUCT_NAME = "$(TARGET_NAME)";
-			};
-			name = Release;
-		};
 		C4423F7823794EA900FD1D4C /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
-				ARCHS = (
-					"$(ARCHS_STANDARD_INCLUDING_64_BIT)",
-					arm64,
-					i386,
-					x86_64,
-				);
 				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
 				CLANG_ENABLE_OBJC_WEAK = YES;
 				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
 				CODE_SIGN_ENTITLEMENTS = "ext-ios/ext_ios.entitlements";
-				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
 				DEVELOPMENT_TEAM = TC3Q7MAJXF;
 				ENABLE_BITCODE = NO;
@@ -777,15 +728,19 @@
 					"$(DEVELOPER_FRAMEWORKS_DIR)",
 					"$(DEVELOPER_LIBRARY_DIR)/Frameworks",
 					"$(SDKROOT)/Developer/Library/Frameworks",
-					"$(PROJECT_DIR)/framework",
+					"$(PROJECT_DIR)/framework/build/$(PLATFORM_NAME)",
 				);
 				GCC_C_LANGUAGE_STANDARD = gnu11;
 				INFOPLIST_FILE = "ext-ios/Info.plist";
-				IPHONEOS_DEPLOYMENT_TARGET = 13.1;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
 					"@executable_path/../../Frameworks",
+				);
+				OTHER_LDFLAGS = (
+					"$(inherited)",
+					"-framework",
+					AGdnsProxy,
 				);
 				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
 				MTL_FAST_MATH = YES;
@@ -801,17 +756,10 @@
 		C4423F7923794EA900FD1D4C /* Release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
-				ARCHS = (
-					"$(ARCHS_STANDARD_INCLUDING_64_BIT)",
-					arm64,
-					i386,
-					x86_64,
-				);
 				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
 				CLANG_ENABLE_OBJC_WEAK = YES;
 				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
 				CODE_SIGN_ENTITLEMENTS = "ext-ios/ext_ios.entitlements";
-				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
 				DEVELOPMENT_TEAM = TC3Q7MAJXF;
 				ENABLE_BITCODE = NO;
@@ -820,15 +768,19 @@
 					"$(DEVELOPER_FRAMEWORKS_DIR)",
 					"$(DEVELOPER_LIBRARY_DIR)/Frameworks",
 					"$(SDKROOT)/Developer/Library/Frameworks",
-					"$(PROJECT_DIR)/framework",
+					"$(PROJECT_DIR)/framework/build/$(PLATFORM_NAME)",
 				);
 				GCC_C_LANGUAGE_STANDARD = gnu11;
 				INFOPLIST_FILE = "ext-ios/Info.plist";
-				IPHONEOS_DEPLOYMENT_TARGET = 13.1;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
 					"@executable_path/../../Frameworks",
+				);
+				OTHER_LDFLAGS = (
+					"$(inherited)",
+					"-framework",
+					AGdnsProxy,
 				);
 				MTL_FAST_MATH = YES;
 				PRODUCT_BUNDLE_IDENTIFIER = "com.adguard.dnsproxy-ios2.ext";
@@ -844,31 +796,28 @@
 		C4423F9E2379559D00FD1D4C /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
-				ARCHS = (
-					"$(ARCHS_STANDARD_INCLUDING_64_BIT)",
-					arm64,
-					x86_64,
-					i386,
-				);
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
 				CLANG_ENABLE_OBJC_WEAK = YES;
 				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
 				CODE_SIGN_ENTITLEMENTS = "test-ios/test-ios.entitlements";
-				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
 				DEVELOPMENT_TEAM = TC3Q7MAJXF;
 				ENABLE_BITCODE = NO;
 				FRAMEWORK_SEARCH_PATHS = (
 					"$(inherited)",
-					"$(PROJECT_DIR)/framework",
+					"$(PROJECT_DIR)/framework/build/$(PLATFORM_NAME)",
 				);
 				GCC_C_LANGUAGE_STANDARD = gnu11;
 				INFOPLIST_FILE = "test-ios/Info.plist";
-				IPHONEOS_DEPLOYMENT_TARGET = 13.1;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
+				);
+				OTHER_LDFLAGS = (
+					"$(inherited)",
+					"-framework",
+					AGdnsProxy,
 				);
 				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
 				MTL_FAST_MATH = YES;
@@ -882,31 +831,28 @@
 		C4423F9F2379559D00FD1D4C /* Release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
-				ARCHS = (
-					"$(ARCHS_STANDARD_INCLUDING_64_BIT)",
-					arm64,
-					x86_64,
-					i386,
-				);
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
 				CLANG_ENABLE_OBJC_WEAK = YES;
 				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
 				CODE_SIGN_ENTITLEMENTS = "test-ios/test-ios.entitlements";
-				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
 				DEVELOPMENT_TEAM = TC3Q7MAJXF;
 				ENABLE_BITCODE = NO;
 				FRAMEWORK_SEARCH_PATHS = (
 					"$(inherited)",
-					"$(PROJECT_DIR)/framework",
+					"$(PROJECT_DIR)/framework/build/$(PLATFORM_NAME)",
 				);
 				GCC_C_LANGUAGE_STANDARD = gnu11;
 				INFOPLIST_FILE = "test-ios/Info.plist";
-				IPHONEOS_DEPLOYMENT_TARGET = 13.1;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
+				);
+				OTHER_LDFLAGS = (
+					"$(inherited)",
+					"-framework",
+					AGdnsProxy,
 				);
 				MTL_FAST_MATH = YES;
 				PRODUCT_BUNDLE_IDENTIFIER = "com.adguard.dnsproxy-ios2";
@@ -917,57 +863,17 @@
 			};
 			name = Release;
 		};
-		C4B58FDE237188E50044CE54 /* Debug */ = {
-			isa = XCBuildConfiguration;
-			buildSettings = {
-				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
-				CLANG_ENABLE_OBJC_WEAK = YES;
-				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
-				CODE_SIGN_STYLE = Automatic;
-				DEBUGGING_SYMBOLS = YES;
-				DEBUG_INFORMATION_FORMAT = dwarf;
-				DEVELOPMENT_TEAM = N33TQXN8C7;
-				GCC_C_LANGUAGE_STANDARD = gnu11;
-				GCC_GENERATE_DEBUGGING_SYMBOLS = YES;
-				GCC_OPTIMIZATION_LEVEL = 0;
-				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
-				MTL_FAST_MATH = YES;
-				OTHER_CFLAGS = "";
-				OTHER_LDFLAGS = "";
-				PRODUCT_NAME = "$(TARGET_NAME)";
-				SDKROOT = macosx;
-			};
-			name = Debug;
-		};
-		C4B58FDF237188E50044CE54 /* Release */ = {
-			isa = XCBuildConfiguration;
-			buildSettings = {
-				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
-				CLANG_ENABLE_OBJC_WEAK = YES;
-				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
-				CODE_SIGN_STYLE = Automatic;
-				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
-				DEVELOPMENT_TEAM = N33TQXN8C7;
-				GCC_C_LANGUAGE_STANDARD = gnu11;
-				MTL_FAST_MATH = YES;
-				OTHER_CFLAGS = "";
-				OTHER_LDFLAGS = "";
-				PRODUCT_NAME = "$(TARGET_NAME)";
-				SDKROOT = macosx;
-			};
-			name = Release;
-		};
 		F499C4541F6A9D0D00FB55F8 /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				CLANG_CXX_LANGUAGE_STANDARD = "c++17";
 				CODE_SIGN_ENTITLEMENTS = "ext-macos/ext.entitlements";
-				CODE_SIGN_IDENTITY = "Apple Development";
 				DEVELOPMENT_TEAM = TC3Q7MAJXF;
+				CODE_SIGN_STYLE = Automatic;
 				ENABLE_HARDENED_RUNTIME = YES;
 				FRAMEWORK_SEARCH_PATHS = (
 					"$(inherited)",
-					"$(PROJECT_DIR)/framework",
+					"$(PROJECT_DIR)/framework/build/$(PLATFORM_NAME)",
 				);
 				GCC_C_LANGUAGE_STANDARD = c11;
 				HEADER_SEARCH_PATHS = "";
@@ -976,6 +882,11 @@
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 					"@executable_path/../../../../Frameworks",
+				);
+				OTHER_LDFLAGS = (
+					"$(inherited)",
+					"-framework",
+					AGdnsProxy,
 				);
 				LIBRARY_SEARCH_PATHS = "";
 				ONLY_ACTIVE_ARCH = YES;
@@ -992,12 +903,12 @@
 			buildSettings = {
 				CLANG_CXX_LANGUAGE_STANDARD = "c++17";
 				CODE_SIGN_ENTITLEMENTS = "ext-macos/ext.entitlements";
-				CODE_SIGN_IDENTITY = "Apple Development";
 				DEVELOPMENT_TEAM = TC3Q7MAJXF;
+				CODE_SIGN_STYLE = Automatic;
 				ENABLE_HARDENED_RUNTIME = YES;
 				FRAMEWORK_SEARCH_PATHS = (
 					"$(inherited)",
-					"$(PROJECT_DIR)/framework",
+					"$(PROJECT_DIR)/framework/build/$(PLATFORM_NAME)",
 				);
 				GCC_C_LANGUAGE_STANDARD = c11;
 				HEADER_SEARCH_PATHS = "";
@@ -1006,6 +917,11 @@
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 					"@executable_path/../../../../Frameworks",
+				);
+				OTHER_LDFLAGS = (
+					"$(inherited)",
+					"-framework",
+					AGdnsProxy,
 				);
 				LIBRARY_SEARCH_PATHS = "";
 				ONLY_ACTIVE_ARCH = YES;
@@ -1047,7 +963,10 @@
 				CLANG_WARN_SUSPICIOUS_MOVE = YES;
 				CLANG_WARN_UNREACHABLE_CODE = YES;
 				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
-				CODE_SIGN_IDENTITY = "-";
+				CODE_SIGN_STYLE = Automatic;
+				DEVELOPMENT_TEAM = TC3Q7MAJXF;
+				IPHONEOS_DEPLOYMENT_TARGET = 15.0;
+				MACOSX_DEPLOYMENT_TARGET = 12.0;
 				COPY_PHASE_STRIP = NO;
 				DEBUG_INFORMATION_FORMAT = dwarf;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
@@ -1102,10 +1021,14 @@
 				CLANG_WARN_SUSPICIOUS_MOVE = YES;
 				CLANG_WARN_UNREACHABLE_CODE = YES;
 				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
-				CODE_SIGN_IDENTITY = "-";
+				CODE_SIGN_STYLE = Automatic;
+				DEVELOPMENT_TEAM = TC3Q7MAJXF;
+				IPHONEOS_DEPLOYMENT_TARGET = 15.0;
+				MACOSX_DEPLOYMENT_TARGET = 12.0;
 				COPY_PHASE_STRIP = NO;
 				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
 				ENABLE_NS_ASSERTIONS = NO;
+				ONLY_ACTIVE_ARCH = YES;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
 				GCC_C_LANGUAGE_STANDARD = gnu99;
 				GCC_NO_COMMON_BLOCKS = YES;
@@ -1126,13 +1049,13 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CLANG_CXX_LANGUAGE_STANDARD = "c++17";
 				CODE_SIGN_ENTITLEMENTS = "test-macos/test.entitlements";
-				CODE_SIGN_IDENTITY = "Mac Developer";
 				COMBINE_HIDPI_IMAGES = YES;
 				DEVELOPMENT_TEAM = TC3Q7MAJXF;
+				CODE_SIGN_STYLE = Automatic;
 				ENABLE_HARDENED_RUNTIME = YES;
 				FRAMEWORK_SEARCH_PATHS = (
 					"$(inherited)",
-					"$(PROJECT_DIR)/framework",
+					"$(PROJECT_DIR)/framework/build/$(PLATFORM_NAME)",
 				);
 				GCC_C_LANGUAGE_STANDARD = c11;
 				HEADER_SEARCH_PATHS = "";
@@ -1140,6 +1063,11 @@
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/../Frameworks",
+				);
+				OTHER_LDFLAGS = (
+					"$(inherited)",
+					"-framework",
+					AGdnsProxy,
 				);
 				LIBRARY_SEARCH_PATHS = "";
 				OTHER_LDFLAGS = "";
@@ -1156,13 +1084,13 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CLANG_CXX_LANGUAGE_STANDARD = "c++17";
 				CODE_SIGN_ENTITLEMENTS = "test-macos/test.entitlements";
-				CODE_SIGN_IDENTITY = "Mac Developer";
 				COMBINE_HIDPI_IMAGES = YES;
 				DEVELOPMENT_TEAM = TC3Q7MAJXF;
+				CODE_SIGN_STYLE = Automatic;
 				ENABLE_HARDENED_RUNTIME = YES;
 				FRAMEWORK_SEARCH_PATHS = (
 					"$(inherited)",
-					"$(PROJECT_DIR)/framework",
+					"$(PROJECT_DIR)/framework/build/$(PLATFORM_NAME)",
 				);
 				GCC_C_LANGUAGE_STANDARD = c11;
 				HEADER_SEARCH_PATHS = "";
@@ -1170,6 +1098,11 @@
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/../Frameworks",
+				);
+				OTHER_LDFLAGS = (
+					"$(inherited)",
+					"-framework",
+					AGdnsProxy,
 				);
 				LIBRARY_SEARCH_PATHS = "";
 				OTHER_LDFLAGS = "";
@@ -1183,24 +1116,6 @@
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
-		C41BB40C2379C19B0068C106 /* Build configuration list for PBXLegacyTarget "AGDnsProxy-ios" */ = {
-			isa = XCConfigurationList;
-			buildConfigurations = (
-				C41BB40A2379C19B0068C106 /* Debug */,
-				C41BB40B2379C19B0068C106 /* Release */,
-			);
-			defaultConfigurationIsVisible = 0;
-			defaultConfigurationName = Release;
-		};
-		C42068B123B0D0B800DA1B77 /* Build configuration list for PBXLegacyTarget "AGDnsProxy" */ = {
-			isa = XCConfigurationList;
-			buildConfigurations = (
-				C42068AF23B0D0B800DA1B77 /* Debug */,
-				C42068B023B0D0B800DA1B77 /* Release */,
-			);
-			defaultConfigurationIsVisible = 0;
-			defaultConfigurationName = Release;
-		};
 		C4423F7723794EA900FD1D4C /* Build configuration list for PBXNativeTarget "ext-ios" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
@@ -1215,15 +1130,6 @@
 			buildConfigurations = (
 				C4423F9E2379559D00FD1D4C /* Debug */,
 				C4423F9F2379559D00FD1D4C /* Release */,
-			);
-			defaultConfigurationIsVisible = 0;
-			defaultConfigurationName = Release;
-		};
-		C4B58FDD237188E50044CE54 /* Build configuration list for PBXLegacyTarget "AGDnsProxy-macos" */ = {
-			isa = XCConfigurationList;
-			buildConfigurations = (
-				C4B58FDE237188E50044CE54 /* Debug */,
-				C4B58FDF237188E50044CE54 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
