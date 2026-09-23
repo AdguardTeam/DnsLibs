@@ -8,18 +8,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
-- Added support for hostname addresses in plain DNS upstreams: `dns.adguard.com:53`, `udp://dns.adguard.com:53`, and
-  `tcp://dns.adguard.com:53` now resolve the hostname via the upstream's `bootstrap` servers instead of requiring a literal
-  IP address. (AG-57422)
-
 ### Changed
 
-- Updated NLC to 8.1.49.
-- Updated NLC to 8.1.50 (OpenSSL/BoringSSL bumped to `boring-2026-05-08`).
-- Changed plain DNS upstreams to honor `resolved_server_ip` when it is set, connecting directly to the given IP instead of
-  ignoring it, matching the behavior of DoT, DoH, and DoQ upstreams. (AG-57422)
-- Changed plain DNS upstreams with a hostname address and an empty `bootstrap` list to fail at initialization with an
-  `AE_EMPTY_BOOTSTRAP` error instead of treating the hostname as an address. (AG-57422)
 - Raised the minimum OS versions of the Apple framework to macOS 12.0 and iOS 15.0 (from 10.15 and 13.0). The CocoaPods
   podspec and the SwiftPM manifest declare the same minimums. (AG-59174)
 
@@ -31,11 +21,31 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Fixed
 
+### Security
+
+## [2.10.2] - 2026-09-23
+
+### Added
+
+- Added support for hostname addresses in plain DNS upstreams: `dns.adguard.com:53`, `udp://dns.adguard.com:53`, and
+  `tcp://dns.adguard.com:53` now resolve the hostname via the upstream's `bootstrap` servers instead of requiring a literal
+  IP address. (AG-57422)
+
+### Changed
+
+- Updated NLC to 8.1.52.
+- Updated NLC to 8.1.49.
+- Updated NLC to 8.1.50 (OpenSSL/BoringSSL bumped to `boring-2026-05-08`).
+- Changed plain DNS upstreams to honor `resolved_server_ip` when it is set, connecting directly to the given IP instead of
+  ignoring it, matching the behavior of DoT, DoH, and DoQ upstreams. (AG-57422)
+- Changed plain DNS upstreams with a hostname address and an empty `bootstrap` list to fail at initialization with an
+  `AE_EMPTY_BOOTSTRAP` error instead of treating the hostname as an address. (AG-57422)
+
+### Fixed
+
 - Fixed slow DNS-over-QUIC connection initialization when the first resolved server address is unreachable (e.g. a dead
   IPv6 route): the client now replays the QUIC Initial flight on every candidate socket instead of waiting for a PTO
   retransmission timeout (~500 ms). (AdguardTeam/DnsLibs#283)
-
-### Security
 
 ## [2.10.1] - 2026-08-04
 
@@ -387,7 +397,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - API change: allow in-memory filters. See `ag::dnsfilter::FilterParams`.
 - Optimistic DNS caching. See `ag::DnsProxySettings::optimistic_cache`.
 
-[Unreleased]: https://github.com/AdguardTeam/DnsLibs/compare/v2.10.1...HEAD
+[Unreleased]: https://github.com/AdguardTeam/DnsLibs/compare/v2.10.2...HEAD
+[2.10.2]: https://github.com/AdguardTeam/DnsLibs/compare/v2.10.1...v2.10.2
 [2.10.1]: https://github.com/AdguardTeam/DnsLibs/compare/v2.10.0...v2.10.1
 [2.10.0]: https://github.com/AdguardTeam/DnsLibs/compare/v2.8.58...v2.10.0
 [2.8.58]: https://github.com/AdguardTeam/DnsLibs/compare/v2.8.57...v2.8.58
