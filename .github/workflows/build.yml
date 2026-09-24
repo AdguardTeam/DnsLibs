@@ -117,6 +117,7 @@ jobs:
             CONAN_REPO_URL=${{ vars.CONAN_REPO_URL }}
             ARTIFACTORY_USER=${{ secrets.ARTIFACTORY_USER }}
             ARTIFACTORY_API_KEY=${{ secrets.ARTIFACTORY_API_KEY }}
+            GITHUB_TOKEN=${{ github.token }}
           content: |
             # syntax=docker/dockerfile:1
             FROM adguard/core-libs:2.11 AS tests
@@ -130,7 +131,11 @@ jobs:
             # the runner into .sccache, carried by COPY . . below) and is
             # exported back after the build.
             ENV SCCACHE_CACHE_SIZE=512M
-            RUN curl -fsSL https://github.com/mozilla/sccache/releases/download/v0.17.0/sccache-v0.17.0-x86_64-unknown-linux-musl.tar.gz \
+            # The GitHub token is passed as a secret, so the download is not
+            # rate-limited and the token is not kept in the image.
+            RUN --mount=type=secret,id=GITHUB_TOKEN,required=true \
+                curl -fsSL -H "Authorization: Bearer $(cat /run/secrets/GITHUB_TOKEN)" \
+                    https://github.com/mozilla/sccache/releases/download/v0.17.0/sccache-v0.17.0-x86_64-unknown-linux-musl.tar.gz \
                 | tar -xz -C /usr/local/bin --strip-components=1
 
             COPY . .
@@ -1013,6 +1018,7 @@ jobs:
             CACHEBUST=${{ github.run_id }}-${{ github.run_attempt }}
           secrets: |
             CONAN_REPO_URL=${{ vars.CONAN_REPO_URL }}
+            GITHUB_TOKEN=${{ github.token }}
           content: |
             # syntax=docker/dockerfile:1
             FROM adguard/core-libs:2.11 AS build
@@ -1026,7 +1032,11 @@ jobs:
             # context (restored on the runner into .sccache, carried by COPY
             # . . below) and is exported back after the build.
             ENV SCCACHE_CACHE_SIZE=512M
-            RUN curl -fsSL https://github.com/mozilla/sccache/releases/download/v0.17.0/sccache-v0.17.0-x86_64-unknown-linux-musl.tar.gz \
+            # The GitHub token is passed as a secret, so the download is not
+            # rate-limited and the token is not kept in the image.
+            RUN --mount=type=secret,id=GITHUB_TOKEN,required=true \
+                curl -fsSL -H "Authorization: Bearer $(cat /run/secrets/GITHUB_TOKEN)" \
+                    https://github.com/mozilla/sccache/releases/download/v0.17.0/sccache-v0.17.0-x86_64-unknown-linux-musl.tar.gz \
                 | tar -xz -C /usr/local/bin --strip-components=1
 
             COPY . .
