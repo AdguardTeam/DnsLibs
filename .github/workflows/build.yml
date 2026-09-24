@@ -153,6 +153,12 @@ jobs:
             # The store was restored into .sccache and copied here by COPY . .;
             # CMAKE_LAUNCHER makes cmake use sccache for C/C++ compilations.
             export SCCACHE_DIR=/src/.sccache
+            # The sccache client and server talk over a Unix socket in this
+            # container. The default TCP port (127.0.0.1:4226) is shared by
+            # concurrent builds on the same host, so a client can connect to the
+            # server of a different container. That server does not have this
+            # build tree and fails with "No such file or directory".
+            export SCCACHE_SERVER_UDS=/tmp/sccache.sock
             export LDFLAGS=-fuse-ld=lld
             export ASAN_OPTIONS=detect_container_overflow=0
 
@@ -186,7 +192,7 @@ jobs:
 
             COPY --from=tests /src/junit.xml /junit.xml
             COPY --from=tests /src/sccache-stats.json /sccache-stats.json
-            COPY --from=tests /src/.sccache /sccache
+            COPY --from=tests /src/.sccache /.sccache
             COPY --from=tests /src/test-status /test-status
 
       # Fail the job with the test status; the output stage is already exported
@@ -222,7 +228,7 @@ jobs:
         with:
           config: ${{ secrets.REGISTRY_CACHE_AUTH }}
           key: sccache-linux-${{ hashFiles('conanfile.py') }}
-          path: build/sccache
+          path: build/.sccache
           force: ${{ steps.sccache-stats.outputs.force }}
 
       # Upload the JUnit XML from `make test-ci`. `if-no-files-found: warn`
@@ -1047,6 +1053,12 @@ jobs:
             # The store was restored into .sccache and copied here by COPY . .;
             # CMAKE_LAUNCHER makes cmake use sccache for C/C++ compilations.
             export SCCACHE_DIR=/src/.sccache
+            # The sccache client and server talk over a Unix socket in this
+            # container. The default TCP port (127.0.0.1:4226) is shared by
+            # concurrent builds on the same host, so a client can connect to the
+            # server of a different container. That server does not have this
+            # build tree and fails with "No such file or directory".
+            export SCCACHE_SERVER_UDS=/tmp/sccache.sock
 
             # `make build_adyg` configures the root CMake project and builds the
             # `adyg` target (dig-like DNS query tool: plain DNS, DoT, DoH, DoQ,
@@ -1068,7 +1080,7 @@ jobs:
 
             COPY --from=build /src/adyg /adyg
             COPY --from=build /src/sccache-stats.json /sccache-stats.json
-            COPY --from=build /src/.sccache /sccache
+            COPY --from=build /src/.sccache /.sccache
 
       # Print sccache counters and decide whether to force-save the store; see
       # the linux-build job for the full rationale.
@@ -1090,7 +1102,7 @@ jobs:
         with:
           config: ${{ secrets.REGISTRY_CACHE_AUTH }}
           key: sccache-linux-adyg-${{ hashFiles('conanfile.py') }}
-          path: build/sccache
+          path: build/.sccache
           force: ${{ steps.sccache-stats.outputs.force }}
 
       - name: Upload adyg binary
