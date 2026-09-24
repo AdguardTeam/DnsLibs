@@ -251,6 +251,7 @@ jobs:
       - ephemeral-limit-memory-12288
       - ephemeral-limit-cpu-8
       - ephemeral-run-id-${{ github.run_id }}
+      - ephemeral-job-key-${{ github.run_id }}-${{ github.job }}-${{ strategy.job-index || 0 }}
     container:
       image: adguard/core-libs:2.11
     steps:
@@ -280,6 +281,7 @@ jobs:
       - ephemeral-limit-memory-6144
       - ephemeral-limit-cpu-4
       - ephemeral-run-id-${{ github.run_id }}
+      - ephemeral-job-key-${{ github.run_id }}-${{ github.job }}-${{ strategy.job-index || 0 }}
     env:
       # Resolved once; the framework CMake build reads it via cmake/version.cmake
       # (env fallback) for both the version.h header and the Mach-O VERSION.
@@ -586,6 +588,7 @@ jobs:
       - ephemeral-limit-memory-8192
       - ephemeral-limit-cpu-8
       - ephemeral-run-id-${{ github.run_id }}
+      - ephemeral-job-key-${{ github.run_id }}-${{ github.job }}-${{ strategy.job-index || 0 }}
     container:
       image: adguard/core-libs:2.11
     env:
@@ -715,6 +718,7 @@ jobs:
       - ephemeral-limit-memory-6144
       - ephemeral-limit-cpu-4
       - ephemeral-run-id-${{ github.run_id }}
+      - ephemeral-job-key-${{ github.run_id }}-${{ github.job }}-${{ strategy.job-index || 0 }}
     env:
       # Read by cmake/version.cmake (the RC resource) and by
       # Directory.Build.targets (the C# assembly version attributes).
