@@ -45,7 +45,7 @@ See [`docs/adyg.md`](docs/adyg.md) for build instructions, usage, and options.
 - [Developer documentation](DEVELOPMENT.md) — how to build, test, and develop the library.
 - Platform-specific build and integration guides:
     - [macOS/iOS framework](docs/macos-framework.md)
-    - [macOS/iOS sample apps](docs/macos-testapp.md)
+    - [macOS/iOS sample app](docs/macos-testapp.md)
     - [Android platform adapter](docs/android.md)
     - [Windows C API DLL](docs/windows-capi.md)
     - [Windows C# test application](docs/windows-testapp.md)

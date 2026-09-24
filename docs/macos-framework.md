@@ -74,8 +74,8 @@ The script assembles the output in `<build_path>`:
 
 `platform/mac/framework/build_framework_for_xcode.sh` is a thin wrapper around `build_dnsproxy_framework.sh` that
 builds exactly one slice — the platform and architecture Xcode is currently targeting — and publishes it at
-`<output_dir>/build/<PLATFORM_NAME>/AGDnsProxy.framework`, which is where the sample Xcode projects look for it. It is
-what the "Build AGDnsProxy framework" build phase of the [sample apps](macos-testapp.md) runs, and it takes its
+`<output_dir>/build/<PLATFORM_NAME>/AGDnsProxy.framework`, which is where the sample Xcode project looks for it. It is
+what the "Build AGDnsProxy framework" build phase of the [sample app](macos-testapp.md) runs, and it takes its
 defaults from the Xcode environment (`PLATFORM_NAME`, `ARCHS`, `PROJECT_DIR`, `ACTION`).
 
 Each slice gets its own CMake build directory, so switching destinations in Xcode does not invalidate the cache of the
@@ -93,7 +93,7 @@ bash platform/mac/framework/build_framework_for_xcode.sh \
 
 - `--platform <name>` — `macosx`, `iphoneos`, or `iphonesimulator`; defaults to `${PLATFORM_NAME}`.
 - `--arch <name>` — a single architecture; defaults to `${ARCHS}` or to the host architecture. The framework cannot be
-  built for several architectures at once, so the sample projects set `ONLY_ACTIVE_ARCH = YES`.
+  built for several architectures at once, so the sample project sets `ONLY_ACTIVE_ARCH = YES`.
 - `--bp <path>` — output directory; defaults to `${PROJECT_DIR}/framework`.
 - `--debug` — build `Debug` instead of the default `RelWithDebInfo`. This also needs `Debug` builds of the Conan
   dependencies, which the other workflows do not put into the local Conan cache.

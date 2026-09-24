@@ -5,10 +5,10 @@
 #
 #     ${PROJECT_DIR}/framework/build/${PLATFORM_NAME}/AGDnsProxy.framework
 #
-# which is the directory the sample Xcode projects (`platform/mac/DnsLibsTestApp`
-# and `platform/mac/testapp`) look for the framework in (FRAMEWORK_SEARCH_PATHS).
-# The projects link the framework with `-framework AGDnsProxy` and embed it with
-# their own build phases instead of referencing it as a file, because Xcode
+# which is the directory the sample Xcode project (`platform/mac/DnsLibsTestApp`)
+# looks for the framework in (FRAMEWORK_SEARCH_PATHS).
+# The project links the framework with `-framework AGdnsProxy` and embeds it
+# with its own build phases instead of referencing it as a file, because Xcode
 # resolves and enumerates referenced frameworks while planning a build, i.e.
 # before any build phase has a chance to build them.
 #
@@ -46,8 +46,8 @@ PROJECT_DIR="${PROJECT_DIR:-}"
 PLATFORM="${PLATFORM_NAME:-}"
 ARCH="$(echo "${ARCHS:-}" | xargs)"
 BUILD_DIR=""
-# The framework is a dependency of the sample apps, and its configuration is
-# deliberately independent from theirs: the app is built in Debug by default,
+# The framework is a dependency of the sample app, and its configuration is
+# deliberately independent from the app's: the app is built in Debug by default,
 # while a Debug framework would require building all Conan dependencies from
 # source. RelWithDebInfo carries debug information anyway, so the framework
 # stays debuggable from the app.
@@ -107,7 +107,7 @@ fi
 
 # Conan dependencies are built for a single architecture, and a framework that
 # combines several of them into a universal one cannot be signed with the
-# current Xcode, so the sample projects build for the active architecture only.
+# current Xcode, so the sample project builds for the active architecture only.
 if [ "$(echo "${ARCH}" | wc -w | xargs)" -ne 1 ]; then
     echo "error: the AGDnsProxy framework can only be built for one architecture, got '${ARCH}'" >&2
     echo "Build the sample app for the active architecture (ONLY_ACTIVE_ARCH=YES)." >&2
@@ -231,7 +231,7 @@ CONFIGURATION="${BUILD_TYPE}" \
     --bp "${SLICE_DIR}" \
     --fwp "${FRAMEWORK_DIR}"
 
-# Publish the framework where the Xcode projects look for it.
+# Publish the framework where the Xcode project looks for it.
 rm -rf "${OUT_DIR}.tmp"
 mkdir -p "${OUT_DIR}.tmp"
 cp -R "${SLICE_DIR}/AGDnsProxy.framework" "${OUT_DIR}.tmp"
