@@ -41,9 +41,9 @@ endif
 #   make ARCH=x86_64 build_adyg
 #   make ARCH='arm64;x86_64' build_adyg
 # Not applied to the cross-compiling presets, which don't target Apple.
-# 10.15 matches the deployment target of the Apple framework build
+# 12.0 matches the deployment target of the Apple framework build
 # (platform/mac/framework/CMakeLists.txt).
-MACOS_DEPLOYMENT_TARGET ?= 10.15
+MACOS_DEPLOYMENT_TARGET ?= 12.0
 ifeq ($(UNAME_S), Darwin)
 ifeq ($(findstring cross,$(PRESET)),)
 ARCH ?= $(shell uname -m)

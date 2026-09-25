@@ -127,7 +127,7 @@ You MUST follow the following rules for EVERY task that you perform:
       `DnsProxySettings` fields/defaults, filtering.
     - `docs/android.md` — `platform/android` build/prereqs/TUN test app.
     - `docs/macos-framework.md` — `AGDnsProxy` XCFramework (`platform/mac`).
-    - `docs/macos-testapp.md` — macOS/iOS sample app (`platform/mac/testapp`).
+    - `docs/macos-testapp.md` — macOS/iOS sample app (`platform/mac/DnsLibsTestApp`).
     - `docs/windows-capi.md` — `AdguardDns*` DLL (`platform/windows/capi`).
     - `docs/windows-testapp.md` — Windows C# test app
       (`platform/windows/cs/Adguard.Dns`).
@@ -167,6 +167,14 @@ make test-integration
 Tests must not depend on `sleep()` for correctness — use condition variables,
 `coro::to_future(...).get()`, `parallel::all_of`, or explicit filesystem
 timestamp manipulation (`utimensat`/`SetFileTime`) instead.
+
+Test code must also compile with exceptions disabled: the macOS framework build
+(`platform/mac/framework/CMakeLists.txt`) and the Windows C API build
+(`platform/windows/capi/CMakeLists.txt`) apply `-fno-exceptions` to their whole
+tree, including the module unit tests pulled in via `add_subdirectory(proxy)`.
+Do not use `EXPECT_NO_THROW`/`EXPECT_THROW` or `try`/`catch` in tests, and parse
+numbers with `ag::utils::to_integer<T>()` (from `common/utils.h`) instead of
+`std::stoi`/`std::stoul`.
 
 ## Code Style
 

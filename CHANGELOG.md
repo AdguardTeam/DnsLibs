@@ -10,9 +10,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Changed
 
+- Raised the minimum OS versions of the Apple framework to macOS 12.0 and iOS 15.0 (from 10.15 and 13.0). The CocoaPods
+  podspec and the SwiftPM manifest declare the same minimums. (AG-59174)
+
 ### Deprecated
 
 ### Removed
+
+- Removed the old sample app at `platform/mac/testapp`; use `platform/mac/DnsLibsTestApp` instead.
 
 ### Fixed
 
