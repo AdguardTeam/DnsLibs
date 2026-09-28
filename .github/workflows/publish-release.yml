@@ -179,6 +179,7 @@ jobs:
       - ephemeral-limit-memory-2048
       - ephemeral-limit-cpu-2
       - ephemeral-run-id-${{ github.run_id }}
+      - ephemeral-job-key-${{ github.run_id }}-${{ github.job }}-${{ strategy.job-index || 0 }}
     environment: windows-artifactory
     steps:
       - name: Download nuget package from Build run

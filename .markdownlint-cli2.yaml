@@ -23,4 +23,5 @@ config:
 ignores:
   - third-party/**
   - env/**
+  - .venv/**
   - LICENSE.md

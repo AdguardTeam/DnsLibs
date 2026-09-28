@@ -26,12 +26,14 @@
 #include <cstdint>
 #include <gtest/gtest.h>
 #include <mutex>
+#include <optional>
 #include <string>
 #include <string_view>
 #include <thread>
 #include <vector>
 
 #include "common/net_utils.h"
+#include "common/utils.h"
 #include "dns/common/dns_defs.h"
 
 #include "loopback_dns_server.h" // detail:: socket helpers
@@ -178,10 +180,11 @@ private:
             return;
         }
         std::string host = target.substr(0, colon);
-        uint16_t target_port = 0;
-        try {
-            target_port = static_cast<uint16_t>(std::stoi(target.substr(colon + 1)));
-        } catch (...) {
+        // Parsed without exceptions: this helper is also built with exceptions
+        // disabled (the macOS framework build). Unlike std::stoi, to_integer
+        // rejects out-of-range ports instead of truncating them.
+        std::optional<uint16_t> target_port = ag::utils::to_integer<uint16_t>(target.substr(colon + 1));
+        if (!target_port) {
             return;
         }
 
@@ -198,7 +201,7 @@ private:
             detail::close_fd(target_sock);
             return;
         }
-        taddr.sin_port = htons(target_port);
+        taddr.sin_port = htons(*target_port);
         if (::connect(target_sock, reinterpret_cast<sockaddr *>(&taddr), sizeof(taddr)) != 0) {
             detail::close_fd(target_sock);
             return;
