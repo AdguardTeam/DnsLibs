@@ -139,12 +139,15 @@ inline ServerMaterial generate_server_material() {
     }
 
     // Subject name with CN=localhost; issuer == subject (self-signed).
-    X509_NAME *name = X509_get_subject_name(cert.get());
+    // OpenSSL 4.0 made X509_get_subject_name const-correct (returns
+    // const X509_NAME *), while BoringSSL still returns a mutable pointer;
+    // hold const and cast only for the mutator below.
+    const X509_NAME *name = X509_get_subject_name(cert.get());
     if (name == nullptr) {
         return m;
     }
-    if (X509_NAME_add_entry_by_txt(name, "CN", MBSTRING_ASC, reinterpret_cast<const unsigned char *>(HOST_NAME.data()),
-                static_cast<int>(HOST_NAME.size()), -1, 0)
+    if (X509_NAME_add_entry_by_txt(const_cast<X509_NAME *>(name), "CN", MBSTRING_ASC,
+                reinterpret_cast<const unsigned char *>(HOST_NAME.data()), static_cast<int>(HOST_NAME.size()), -1, 0)
             != 1) {
         return m;
     }
@@ -213,9 +216,9 @@ inline ServerMaterial generate_server_material() {
             && X509_gmtime_adj(X509_get_notBefore(chain_cert.get()), 0) != nullptr
             && X509_gmtime_adj(X509_get_notAfter(chain_cert.get()), CERT_VALIDITY_SECS) != nullptr
             && X509_set_pubkey(chain_cert.get(), chain_pkey_raw) == 1) {
-        X509_NAME *cname = X509_get_subject_name(chain_cert.get());
+        const X509_NAME *cname = X509_get_subject_name(chain_cert.get());
         if (cname != nullptr
-                && X509_NAME_add_entry_by_txt(cname, "CN", MBSTRING_ASC,
+                && X509_NAME_add_entry_by_txt(const_cast<X509_NAME *>(cname), "CN", MBSTRING_ASC,
                            reinterpret_cast<const unsigned char *>(CHAIN_HOST_NAME.data()),
                            static_cast<int>(CHAIN_HOST_NAME.size()), -1, 0)
                         == 1

@@ -103,12 +103,24 @@ DoqUpstream::~DoqUpstream() {
     disconnect("Destructor");
 }
 
-static ngtcp2_encryption_level from_ssl_encryption_level(enum ssl_encryption_level_t ossl_level) {
+/// Returns the upstream that owns `ssl`. With the BoringSSL backend the SSL
+/// application data is the upstream itself; with the ossl backend it is the
+/// connection reference that the backend gets the connection from.
+static DoqUpstream *doq_from_ssl(SSL *ssl) {
 #ifdef OPENSSL_IS_BORINGSSL
-    return ngtcp2_crypto_boringssl_from_ssl_encryption_level(ossl_level);
+    return static_cast<DoqUpstream *>(SSL_get_app_data(ssl));
 #else
-    return ngtcp2_crypto_quictls_from_ossl_encryption_level(ossl_level);
+    auto *ref = static_cast<ngtcp2_crypto_conn_ref *>(SSL_get_app_data(ssl));
+    return static_cast<DoqUpstream *>(ref->user_data);
 #endif
+}
+
+#ifdef OPENSSL_IS_BORINGSSL
+// The quictls-style TLS callbacks below are only used with the BoringSSL
+// backend; with upstream OpenSSL, `make_ssl()` installs the ossl backend's
+// callbacks on the session.
+static ngtcp2_encryption_level from_ssl_encryption_level(enum ssl_encryption_level_t ossl_level) {
+    return ngtcp2_crypto_boringssl_from_ssl_encryption_level(ossl_level);
 }
 
 #if BORINGSSL_API_VERSION < 10
@@ -235,6 +247,7 @@ static auto quic_method = SSL_QUIC_METHOD{
         DoqUpstream::flush_flight,
         DoqUpstream::send_alert,
 };
+#endif // OPENSSL_IS_BORINGSSL
 
 void DoqUpstream::retransmit_cb(uv_timer_t *timer) {
     auto doq = static_cast<DoqUpstream *>(Uv<uv_timer_t>::parent_from_data(timer->data));
@@ -932,7 +945,21 @@ int DoqUpstream::init_quic_conn(const Socket *connected_socket) {
         errlog(m_log, "Failed to create SSL");
         return -1;
     }
+#ifdef OPENSSL_IS_BORINGSSL
     ngtcp2_conn_set_tls_native_handle(m_conn, m_ssl.get());
+#else
+    ngtcp2_crypto_ossl_ctx *ossl_ctx = nullptr;
+    if (ngtcp2_crypto_ossl_ctx_new(&ossl_ctx, m_ssl.get()) != 0) {
+        errlog(m_log, "Failed to create ngtcp2 ossl context");
+        return -1;
+    }
+    m_ossl_ctx.reset(ossl_ctx);
+    ngtcp2_conn_set_tls_native_handle(m_conn, m_ossl_ctx.get());
+    // With the ossl backend the ClientHello is produced inside the backend, so
+    // `write_client_handshake()` no longer sees it. Cache the Initial datagrams for
+    // multi-address replay from the start of the handshake instead (see on_socket_connected).
+    m_initial_flight_pending = true;
+#endif
 
     return NETWORK_ERR_OK;
 }
@@ -977,16 +1004,27 @@ int DoqUpstream::init_ssl() {
     }
     m_ssl = std::move(std::get<tls::SslPtr>(ssl));
 
+#ifdef OPENSSL_IS_BORINGSSL
     // `make_ssl()` installs ngtcp2's own `SSL_QUIC_METHOD`; we drive ngtcp2 ourselves, so put
     // our hooks back. In particular, ours turns a TLS alert into an ngtcp2 connection error.
     SSL_set_quic_method(m_ssl.get(), &quic_method);
     SSL_set_app_data(m_ssl.get(), this);
     SSL_set_quic_use_legacy_codepoint(m_ssl.get(), m_quic_version != NGTCP2_PROTO_VER_V1);
+#else
+    // `make_ssl()` already installed the ossl backend's TLS callbacks on the session. The
+    // backend gets the connection from this reference, which is its application data.
+    m_conn_ref.get_conn = [](ngtcp2_crypto_conn_ref *ref) -> ngtcp2_conn * {
+        return static_cast<DoqUpstream *>(ref->user_data)->m_conn;
+    };
+    m_conn_ref.user_data = this;
+    SSL_set_app_data(m_ssl.get(), &m_conn_ref);
+#endif
     m_tls_session_cache.prepare_ssl(m_ssl.get());
 
     return 0;
 }
 
+#ifdef OPENSSL_IS_BORINGSSL
 void DoqUpstream::write_client_handshake(ngtcp2_encryption_level level, const uint8_t *data, size_t datalen) {
     if (!m_conn) {
         return;
@@ -1001,6 +1039,7 @@ void DoqUpstream::write_client_handshake(ngtcp2_encryption_level level, const ui
     auto &buf = crypto.data.back();
     ngtcp2_conn_submit_crypto_data(m_conn, level, buf.rpos(), buf.size());
 }
+#endif // OPENSSL_IS_BORINGSSL
 
 int DoqUpstream::feed_data(Uint8View data) {
     if (!m_conn) {
@@ -1066,6 +1105,7 @@ int DoqUpstream::recv_crypto_data(ngtcp2_conn *conn, ngtcp2_encryption_level cry
     return 0;
 }
 
+#ifdef OPENSSL_IS_BORINGSSL
 int DoqUpstream::on_key(
         ngtcp2_encryption_level level, const uint8_t *rx_secret, const uint8_t *tx_secret, size_t secretlen) {
     std::array<uint8_t, 64> rx_key{};
@@ -1098,6 +1138,7 @@ int DoqUpstream::on_key(
 
     return 0;
 }
+#endif // OPENSSL_IS_BORINGSSL
 
 int DoqUpstream::update_key(ngtcp2_conn *conn, uint8_t *rx_secret, uint8_t *tx_secret,
         ngtcp2_crypto_aead_ctx *rx_aead_ctx, uint8_t *rx_iv, ngtcp2_crypto_aead_ctx *tx_aead_ctx, uint8_t *tx_iv,
@@ -1298,6 +1339,9 @@ void DoqUpstream::disconnect(std::string_view reason) {
 
     dbglog(m_log, "Disconnect reason: {}", reason);
     ngtcp2_conn_del(std::exchange(m_conn, nullptr));
+#ifndef OPENSSL_IS_BORINGSSL
+    m_ossl_ctx.reset();
+#endif
     m_initial_flight.clear();
     m_initial_flight_pending = false;
     uv_timer_stop(m_handshake_timer->raw());
@@ -1353,7 +1397,7 @@ void DoqUpstream::schedule_retransmit() {
 int DoqUpstream::ssl_verify_callback(X509_STORE_CTX *ctx, void * /*arg*/) {
 
     SSL *ssl = (SSL *) X509_STORE_CTX_get_ex_data(ctx, SSL_get_ex_data_X509_STORE_CTX_idx());
-    auto doq = (DoqUpstream *) SSL_get_app_data(ssl);
+    auto doq = doq_from_ssl(ssl);
 
     const CertificateVerifier *verifier = doq->m_config.socket_factory->get_certificate_verifier();
     if (verifier == nullptr) {

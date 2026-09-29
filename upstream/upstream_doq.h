@@ -16,7 +16,7 @@
 #ifdef OPENSSL_IS_BORINGSSL
 #include <ngtcp2/ngtcp2_crypto_boringssl.h>
 #else
-#include <ngtcp2/ngtcp2_crypto_quictls.h>
+#include <ngtcp2/ngtcp2_crypto_ossl.h>
 #endif
 
 #include <event2/buffer.h>
@@ -51,6 +51,9 @@ public:
             std::vector<CertFingerprint> fingerprints);
     ~DoqUpstream() override;
 
+#ifdef OPENSSL_IS_BORINGSSL
+    // These quictls-style callbacks are only used with the BoringSSL backend.
+    // With upstream OpenSSL, `make_ssl()` installs the ossl backend's callbacks.
 #if BORINGSSL_API_VERSION < 10
     static int set_encryption_secrets(SSL *ssl, enum ssl_encryption_level_t ossl_level, const uint8_t *read_secret,
             const uint8_t *write_secret, size_t secret_len);
@@ -65,6 +68,7 @@ public:
 
     static int flush_flight(SSL *ssl);
     static int send_alert(SSL *ssl, enum ssl_encryption_level_t level, uint8_t alert);
+#endif // OPENSSL_IS_BORINGSSL
 
 private:
     enum NetworkError {
@@ -207,8 +211,10 @@ private:
     void disqualify_server_address(const ag::SocketAddress &server_address);
     void update_req_idle_timer();
 
+#ifdef OPENSSL_IS_BORINGSSL
     void write_client_handshake(ngtcp2_encryption_level level, const uint8_t *data, size_t datalen);
     int on_key(ngtcp2_encryption_level level, const uint8_t *rx_secret, const uint8_t *tx_secret, size_t secretlen);
+#endif
     static void on_rand(uint8_t *dest, size_t destlen, const ngtcp2_rand_ctx *rand_ctx);
 
     int connect_to_peers(const std::vector<ag::SocketAddress> &current_addresses);
@@ -236,7 +242,16 @@ private:
     bool m_initial_flight_pending = false;
     ag::UniquePtr<SSL, &SSL_free> m_ssl;
     ngtcp2_conn *m_conn{nullptr};
+#ifdef OPENSSL_IS_BORINGSSL
     Crypto m_crypto[3];
+#else
+    /// ngtcp2's ossl backend gets the connection from this reference, which must
+    /// be set as the SSL application data.
+    ngtcp2_crypto_conn_ref m_conn_ref{};
+    /// Per-connection state of ngtcp2's ossl backend; it is set as the
+    /// connection's TLS native handle.
+    ag::UniquePtr<ngtcp2_crypto_ossl_ctx, &ngtcp2_crypto_ossl_ctx_del> m_ossl_ctx;
+#endif
     std::list<int64_t> m_stream_send_queue;
     std::unordered_map<int64_t, Stream> m_streams;
     std::unordered_map<int64_t, Request> m_requests;
