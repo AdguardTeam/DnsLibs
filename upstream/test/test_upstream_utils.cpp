@@ -111,4 +111,43 @@ TEST_F(UpstreamUtilsTest, ValidUpstreamMixedCase) {
     ASSERT_FALSE(err) << "Cannot fail: " << err->str();
 }
 
+TEST_F(UpstreamUtilsTest, PrivateNetworkAddress) {
+    const std::vector<std::pair<std::string_view, bool>> cases = {
+            // RFC 1918 private networks
+            {"10.0.0.0", true},
+            {"10.255.255.255", true},
+            {"172.16.0.1", true},
+            {"172.31.255.255", true},
+            {"192.168.0.1", true},
+            {"192.168.255.255", true},
+            // Link-local addresses
+            {"169.254.1.1", true},
+            // Unique local and link-local IPv6
+            {"fc00::1", true},
+            {"fd12:3456:789a::1", true},
+            {"fe80::1", true},
+            // IPv4-mapped IPv6
+            {"::ffff:192.168.1.1", true},
+            {"::ffff:10.0.0.1", true},
+            // Loopback addresses are not private networks
+            {"127.0.0.1", false},
+            {"127.255.255.255", false},
+            {"::1", false},
+            {"::ffff:127.0.0.1", false},
+            // Globally routable addresses
+            {"8.8.8.8", false},
+            {"1.1.1.1", false},
+            {"172.15.255.255", false},
+            {"172.32.0.0", false},
+            {"192.169.0.1", false},
+            {"2001:4860:4860::8888", false},
+            {"::ffff:8.8.8.8", false},
+    };
+    for (const auto &[address, expected] : cases) {
+        EXPECT_EQ(is_private_network_address(SocketAddress{address, 53}), expected) << address;
+    }
+    // An address that is not an IP address at all is not in a private network either.
+    EXPECT_FALSE(is_private_network_address(SocketAddress{}));
+}
+
 } // namespace ag::dns::upstream::test

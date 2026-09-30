@@ -21,6 +21,9 @@ static id <AGDnsProxyXPC> gDnsProxyXPC;
         exit(0);
     }];
 }
+
+- (void)onCheckLocalNetworkPermission:(const AGDnsCheckLocalNetworkPermissionEvent *)event {
+}
 @end
 
 @interface Delegate : NSObject <NSXPCListenerDelegate>

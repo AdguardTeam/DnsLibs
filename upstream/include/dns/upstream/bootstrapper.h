@@ -37,6 +37,9 @@ public:
         AE_RESOLVE_FAILED,
         AE_TEMPORARY_DISABLED,
         AE_SHUTTING_DOWN,
+#ifdef __APPLE__
+        AE_LOCAL_NETWORK_PERMISSION_MAYBE_MISSING,
+#endif // __APPLE__
     };
 
     /**
@@ -153,9 +156,31 @@ struct ErrorCodeToString<dns::Bootstrapper::BootstrapperError> {
             return "Bootstrapping this server is temporary disabled due to many failures";
         case decltype(e)::AE_SHUTTING_DOWN:
             return "Shutting down";
+#ifdef __APPLE__
+        case decltype(e)::AE_LOCAL_NETWORK_PERMISSION_MAYBE_MISSING:
+            return "Possibly missing the Local Network permission";
+#endif // __APPLE__
         }
     }
 };
 // clang format on
+
+namespace dns {
+
+/**
+ * Make the error that an upstream reports for an exchange that failed because the upstream's
+ * bootstrapping failed with `error`. Keeps the reason of a possibly missing Local Network permission
+ * visible to the caller of the upstream, so that it can raise the corresponding event.
+ */
+inline Error<DnsError> make_bootstrap_error(Error<Bootstrapper::BootstrapperError> error) {
+#ifdef __APPLE__
+    if (error->value() == Bootstrapper::BootstrapperError::AE_LOCAL_NETWORK_PERMISSION_MAYBE_MISSING) {
+        return make_error(DnsError::AE_BOOTSTRAP_LOCAL_NETWORK_PERMISSION_MAYBE_MISSING, std::move(error));
+    }
+#endif // __APPLE__
+    return make_error(DnsError::AE_BOOTSTRAP_ERROR, std::move(error));
+}
+
+} // namespace dns
 
 } // namespace ag

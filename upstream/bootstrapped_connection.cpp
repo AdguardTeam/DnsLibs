@@ -59,7 +59,7 @@ coro::Task<void> BootstrappedFramedConnection::co_connect() {
         if (result.error) {
             auto &err = *result.error;
             log_conn(m_log, err, this, "Failed to bootstrap: {}", err.str());
-            this->on_close(make_error(DnsError::AE_BOOTSTRAP_ERROR, result.error));
+            this->on_close(make_bootstrap_error(result.error));
             co_return;
         }
         if (result.addresses.empty()) {

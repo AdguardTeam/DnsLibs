@@ -36,6 +36,29 @@
 @end
 
 /**
+ * @interface AGDnsCheckLocalNetworkPermissionEvent
+ * Local Network permission check event. Raised when a DNS request fails in a way
+ * that may indicate that the application is missing the Local Network permission.
+ */
+@interface AGDnsCheckLocalNetworkPermissionEvent : AGDnsXPCObject <NSSecureCoding>
+/** ID of the upstream whose exchange failed (see `AGDnsUpstream.id`). */
+@property(nonatomic) NSInteger upstreamId;
+/**
+ * If YES, the exchange failed because bootstrapping the upstream's hostname failed, i.e., it is one of
+ * the upstream's bootstrap resolvers (see `AGDnsUpstream.bootstrap`) that may be in the local network.
+ * If NO, the query to the upstream itself failed, i.e., it is the upstream that may be in the local network.
+ */
+@property(nonatomic) BOOL bootstrapFailed;
+
+- (instancetype)initWithCoder:(NSCoder *)coder;
+
+- (void)encodeWithCoder:(NSCoder *)coder;
+
+- (NSString *)description;
+
+@end
+
+/**
  * @interface AGDnsProxyEvents
  * Set of DNS proxy events.
  */
@@ -47,4 +70,9 @@
  * fires the event - i.e., several events will be raised for the request.
  */
 @property(nonatomic, copy) void (^onRequestProcessed)(const AGDnsRequestProcessedEvent *event);
+/**
+ * Raised when a DNS request fails in a way that may indicate that the application is
+ * missing the Local Network permission.
+ */
+@property(nonatomic, copy) void (^onCheckLocalNetworkPermission)(const AGDnsCheckLocalNetworkPermissionEvent *event);
 @end

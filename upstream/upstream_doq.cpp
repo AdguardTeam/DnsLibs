@@ -413,7 +413,7 @@ coro::Task<Upstream::ExchangeResult> DoqUpstream::exchange(const ldns_pkt *reque
         }
         if (bootstrapper_res.error) {
             warnlog(m_log, "Bootstrapper hasn't results");
-            co_return make_error(DnsError::AE_BOOTSTRAP_ERROR, bootstrapper_res.error);
+            co_return make_bootstrap_error(bootstrapper_res.error);
         }
 
         m_server_addresses.assign(bootstrapper_res.addresses.begin(), bootstrapper_res.addresses.end());

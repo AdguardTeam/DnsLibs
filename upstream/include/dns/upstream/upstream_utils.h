@@ -4,6 +4,7 @@
 
 #include "common/defs.h"
 #include "common/error.h"
+#include "common/socket_address.h"
 
 #include "dns/dnsstamp/dns_stamp.h"
 #include "dns/net/application_verifier.h"
@@ -29,6 +30,12 @@ enum class UpstreamUtilsError {
  */
 Error<UpstreamUtilsError> test_upstream(const UpstreamOptions &opts, Millis timeout, bool ipv6_available,
         const OnCertificateVerificationFn &on_certificate_verification, bool offline);
+
+/**
+ * Return `true` if `address` is private or link-local.
+ * Return `false` otherwise.
+ */
+bool is_private_network_address(const SocketAddress &address);
 
 } // namespace dns
 

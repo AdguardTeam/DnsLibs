@@ -3,6 +3,7 @@
 #include <ldns/ldns.h>
 #include <memory>
 
+#include "common/cidr_range.h"
 #include "common/error.h"
 
 #include "dns/net/application_verifier.h"
@@ -12,6 +13,24 @@
 #include "upstream_plain.h"
 
 namespace ag::dns {
+
+bool is_private_network_address(const SocketAddress &address) {
+    if (!address.valid()) {
+        return false;
+    }
+    static const std::vector<CidrRange> PRIVATE_NETWORKS = {
+            CidrRange{"10.0.0.0", 8},     // RFC 1918 private network
+            CidrRange{"172.16.0.0", 12},  // RFC 1918 private network
+            CidrRange{"192.168.0.0", 16}, // RFC 1918 private network
+            CidrRange{"169.254.0.0", 16}, // RFC 3927 link-local
+            CidrRange{"fc00::", 7},       // RFC 4193 unique local
+            CidrRange{"fe80::", 10},      // RFC 4291 link-local
+    };
+    Uint8View addr = address.addr_unmapped();
+    return std::ranges::any_of(PRIVATE_NETWORKS, [addr](const CidrRange &range) {
+        return range.contains(addr);
+    });
+}
 
 static ldns_pkt_ptr create_message() {
     ldns_pkt *pkt =

@@ -46,6 +46,7 @@ enum class SocketError {
     AE_IN_PROGRESS,
     AE_BIND_TO_IF_ERROR,
     AE_INVALID_ARGUMENT,
+    AE_BROKEN_PIPE,
 };
 
 class SocketFactory {
@@ -335,6 +336,8 @@ struct ErrorCodeToString<dns::SocketError> {
             return "Failed to bind socket to interface";
         case decltype(e)::AE_INVALID_ARGUMENT:
             return "Invalid socket parameters";
+        case decltype(e)::AE_BROKEN_PIPE:
+            return "Broken pipe";
         }
     }
 };

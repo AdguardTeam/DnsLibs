@@ -185,6 +185,17 @@ coro::Task<Resolver::Result> Resolver::resolve(std::string_view host, int port, 
             log_ip(m_log, dbg, mask_password(m_upstream_options.address),
                     "Failed to talk to upstream for host '{}' (elapsed:{}):\n{}", host, timer.elapsed<Millis>(),
                     reply.error()->str());
+#ifdef __APPLE__
+            if (reply.error()->value() == DnsError::AE_LOCAL_NETWORK_PERMISSION_MAYBE_MISSING) {
+                last_error = make_error(ResolverError::AE_LOCAL_NETWORK_PERMISSION_MAYBE_MISSING,
+                        AG_FMT("Could not resolve {}", host), reply.error());
+                continue;
+            }
+            // Don't let an unrelated failure of the other query hide a possibly missing permission
+            if (last_error && last_error->value() == ResolverError::AE_LOCAL_NETWORK_PERMISSION_MAYBE_MISSING) {
+                continue;
+            }
+#endif // __APPLE__
             last_error =
                     make_error(ResolverError::AE_EXCHANGE_FAILED, AG_FMT("Could not resolve {}", host), reply.error());
             continue;

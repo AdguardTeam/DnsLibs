@@ -1022,6 +1022,36 @@ coro::Task<ldns_pkt_ptr> DnsForwarder::apply_filter(FilterContext &ctx) {
     co_return response;
 }
 
+#ifdef __APPLE__
+void DnsForwarder::check_local_network_permission(const Upstream &upstream, const Error<DnsError> &error) {
+    bool bootstrap_failed = false;
+    switch (error->value()) {
+    case DnsError::AE_LOCAL_NETWORK_PERMISSION_MAYBE_MISSING:
+        break;
+    case DnsError::AE_BOOTSTRAP_LOCAL_NETWORK_PERMISSION_MAYBE_MISSING:
+        bootstrap_failed = true;
+        break;
+    default:
+        return;
+    }
+    if (m_events == nullptr || !m_events->check_local_network_permission) {
+        return;
+    }
+    SteadyClock::time_point now = SteadyClock::now();
+    if (m_last_local_network_permission_check.has_value()
+            && now - m_last_local_network_permission_check.value() < LOCAL_NETWORK_PERMISSION_CHECK_INTERVAL) {
+        return;
+    }
+    m_last_local_network_permission_check = now;
+    infolog(m_log, "Upstream [{}] ({}) may be unreachable because of the missing Local Network permission: {}",
+            upstream.options().id, mask_password(upstream.options().address), error->str());
+    m_events->check_local_network_permission(CheckLocalNetworkPermissionEvent{
+            .upstream_id = upstream.options().id,
+            .bootstrap_failed = bootstrap_failed,
+    });
+}
+#endif // __APPLE__
+
 #ifdef ANDROID
 [[clang::optnone]]
 #endif
@@ -1061,6 +1091,12 @@ coro::Task<UpstreamExchangeResult> DnsForwarder::do_upstream_exchange(
         dbglog_id(m_log, request, "Upstream [{}] ({}) exchange timed out", upstream->options().id,
                 mask_password(upstream->options().address));
     }
+
+#ifdef __APPLE__
+    if (result.has_error()) {
+        this->check_local_network_permission(*upstream, result.error());
+    }
+#endif // __APPLE__
 
     if (result.has_error()) {
         upstream->update_rtt_estimate(error_rtt + elapsed);

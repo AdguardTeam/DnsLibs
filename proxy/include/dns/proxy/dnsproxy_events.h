@@ -49,6 +49,19 @@ struct DnsRequestProcessedEvent {
     DnsBlockingReason blocking_reason = DnsBlockingReason::DBR_NONE; /**< Dns blocking reason */
 };
 
+#ifdef __APPLE__
+struct CheckLocalNetworkPermissionEvent {
+    /** ID of the upstream whose exchange failed (see `UpstreamOptions::id`) */
+    int32_t upstream_id = 0;
+    /**
+     * If true, the exchange failed because bootstrapping the upstream's hostname failed, i.e., it is one of
+     * the upstream's bootstrap resolvers (see `UpstreamOptions::bootstrap`) that may be in the local network.
+     * If false, the query to the upstream itself failed, i.e., it is the upstream that may be in the local network.
+     */
+    bool bootstrap_failed = false;
+};
+#endif // __APPLE__
+
 /**
  * Set of DNS proxy events
  */
@@ -90,6 +103,14 @@ struct DnsProxyEvents {
      * Used by tests to await completion deterministically instead of sleeping.
      */
     std::function<void(std::string)> on_cache_updated;
+#ifdef __APPLE__
+    /**
+     * Raised when a query fails in a way that may indicate that the application is missing
+     * the Local Network permission. The application should guide the user through the permission
+     * process and explain why it is required.
+     */
+    std::function<void(const CheckLocalNetworkPermissionEvent &)> check_local_network_permission;
+#endif // __APPLE__
 };
 
 } // namespace ag::dns

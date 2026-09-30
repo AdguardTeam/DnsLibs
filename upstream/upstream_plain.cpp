@@ -8,6 +8,7 @@
 #include "common/utils.h"
 #include "dns/net/aio_socket.h"
 #include "dns/net/utils.h"
+#include "dns/upstream/upstream_utils.h"
 
 #include "bootstrapped_connection.h"
 
@@ -140,6 +141,13 @@ Error<Upstream::InitError> PlainUpstream::init() {
     return {};
 }
 
+#ifdef __APPLE__
+static bool is_local_network_permission_error(const Error<SocketError> &error, const AddressVariant &peer) {
+    const auto *address = std::get_if<SocketAddress>(&peer);
+    return address != nullptr && error->value() == SocketError::AE_BROKEN_PIPE && is_private_network_address(*address);
+}
+#endif // __APPLE__
+
 coro::Task<Upstream::ExchangeResult> PlainUpstream::exchange(const ldns_pkt *request_pkt, const DnsMessageInfo *info) {
     std::weak_ptr<bool> guard = m_shutdown_guard;
 
@@ -167,7 +175,7 @@ coro::Task<Upstream::ExchangeResult> PlainUpstream::exchange(const ldns_pkt *req
                 co_return make_error(DnsError::AE_SHUTTING_DOWN);
             }
             if (resolve_result.error) {
-                co_return make_error(DnsError::AE_BOOTSTRAP_ERROR, resolve_result.error);
+                co_return make_bootstrap_error(resolve_result.error);
             }
             if (resolve_result.addresses.empty()) {
                 co_return make_error(DnsError::AE_BOOTSTRAP_ERROR, "Bootstrapper returned an empty address list");
@@ -227,6 +235,11 @@ coro::Task<Upstream::ExchangeResult> PlainUpstream::exchange(const ldns_pkt *req
         if (auto err = send_dns_packet(
                     &socket, {(uint8_t *) ldns_buffer_begin(buffer.get()), ldns_buffer_position(buffer.get())})) {
             evict_peer();
+#ifdef __APPLE__
+            if (is_local_network_permission_error(err, peer)) {
+                co_return make_error(DnsError::AE_LOCAL_NETWORK_PERMISSION_MAYBE_MISSING, err);
+            }
+#endif
             co_return make_error(DnsError::AE_SOCKET_ERROR, err);
         }
 
@@ -246,6 +259,11 @@ coro::Task<Upstream::ExchangeResult> PlainUpstream::exchange(const ldns_pkt *req
         }
         if (r.has_error()) {
             evict_peer();
+#ifdef __APPLE__
+            if (is_local_network_permission_error(r.error(), peer)) {
+                co_return make_error(DnsError::AE_LOCAL_NETWORK_PERMISSION_MAYBE_MISSING, r.error());
+            }
+#endif
             co_return (r.error()->value() == SocketError::AE_TIMED_OUT) // To cancel second retry of exchange
                     ? make_error(DnsError::AE_TIMED_OUT, "Timed out while waiting for DNS reply via UDP")
                     : make_error(DnsError::AE_SOCKET_ERROR, r.error());

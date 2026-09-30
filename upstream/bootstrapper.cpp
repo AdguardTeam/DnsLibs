@@ -17,6 +17,23 @@
 
 namespace ag::dns {
 
+static Error<Bootstrapper::BootstrapperError> make_bootstrapper_error(const Error<Resolver::ResolverError> &error) {
+    using BootstrapperError = Bootstrapper::BootstrapperError;
+    if (!error) {
+        return nullptr;
+    }
+    switch (error->value()) {
+    case Resolver::ResolverError::AE_SHUTTING_DOWN:
+        return make_error(BootstrapperError::AE_SHUTTING_DOWN, error);
+#ifdef __APPLE__
+    case Resolver::ResolverError::AE_LOCAL_NETWORK_PERMISSION_MAYBE_MISSING:
+        return make_error(BootstrapperError::AE_LOCAL_NETWORK_PERMISSION_MAYBE_MISSING, error);
+#endif // __APPLE__
+    default:
+        return make_error(BootstrapperError::AE_RESOLVE_FAILED, error);
+    }
+}
+
 // For each resolver a half of time out is given for a try. If one fails, it's moved to the end
 // of the list to give it a chance in the future.
 //
@@ -30,6 +47,12 @@ coro::Task<void> Bootstrapper::do_resolve() {
             [log = m_log, server_name = m_server_name, &error](const Resolver::Result &result) {
                 if (result.has_error()) {
                     log_addr(log, dbg, server_name, "Failed to resolve host: {}", result.error()->str());
+#ifdef __APPLE__
+                    // Don't let an unrelated failure of another resolver hide a possibly missing permission
+                    if (error && error->value() == Resolver::ResolverError::AE_LOCAL_NETWORK_PERMISSION_MAYBE_MISSING) {
+                        return false;
+                    }
+#endif // __APPLE__
                     error = result.error();
                     return false;
                 }
@@ -55,11 +78,7 @@ coro::Task<void> Bootstrapper::do_resolve() {
     }
 
     std::vector<SocketAddress> addresses(std::move_iterator(addrs.begin()), std::move_iterator(addrs.end()));
-    complete_resolve({std::move(addresses), m_server_name, {},
-            error ? error->value() == Resolver::ResolverError::AE_SHUTTING_DOWN
-                            ? make_error(BootstrapperError::AE_SHUTTING_DOWN, error)
-                            : make_error(BootstrapperError::AE_RESOLVE_FAILED, error)
-                  : nullptr});
+    complete_resolve({std::move(addresses), m_server_name, {}, make_bootstrapper_error(error)});
 }
 
 std::optional<Bootstrapper::ResolveResult> Bootstrapper::try_get_ready_result() {
