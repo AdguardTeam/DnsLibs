@@ -30,6 +30,14 @@ enum class UpstreamUtilsError {
 Error<UpstreamUtilsError> test_upstream(const UpstreamOptions &opts, Millis timeout, bool ipv6_available,
         const OnCertificateVerificationFn &on_certificate_verification, bool offline);
 
+/**
+ * Creates a SOA record for the authority section of a negative response, based on the
+ * question of `request`.
+ * @param request The request packet to take the owner name from.
+ * @return A newly allocated SOA record, or nullptr if the request has no question.
+ */
+ldns_rr *create_negative_soa(const ldns_pkt *request);
+
 } // namespace dns
 
 // clang format off
