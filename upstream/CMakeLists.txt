@@ -20,6 +20,7 @@ add_library(upstream EXCLUDE_FROM_ALL
         upstream_dnscrypt.h upstream_dnscrypt.cpp
         resolver.h resolver.cpp
         upstream_utils.cpp
+        mdns_client.h mdns_client.cpp
 )
 # Platform-specific system upstream implementations
 if (APPLE OR ANDROID)
