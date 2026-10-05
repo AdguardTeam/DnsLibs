@@ -5,6 +5,11 @@ name: Build adyg
 # notarizes it, and collects every platform archive into a single
 # `release-artifacts` artifact for the caller to attach to a GitHub Release.
 #
+# macOS: build-macos builds the universal binary without signing material and
+# packs it as a build contract (xcodebuild action); sign-macos signs it with the
+# Developer ID identity (sign-apple action, material from match-sync);
+# notarize-macos notarizes, GPG-signs and packages it.
+#
 # Produced files (VERSION = git describe --tags, without the leading "v"):
 #   adyg-v${VERSION}-linux-<arch>.tar.gz    (x86_64, aarch64, armv7, mips, mipsel)
 #   adyg-v${VERSION}-macos-universal.tar.gz (x86_64 + arm64 lipo, notarized)
@@ -251,9 +256,11 @@ jobs:
       - ephemeral-mac
       - ${{ needs.resolve-images.outputs.macos }}
       - ephemeral-job-key-${{ github.run_id }}-${{ github.job }}-${{ strategy.job-index || 0 }}
+    # The build never gets signing material: without id-token it cannot read it from Vault.
     permissions:
       contents: read
-      id-token: write
+    outputs:
+      sha256: ${{ steps.unsigned.outputs.sha256 }}
     env:
       # sccache local-disk store, restored/saved across runs by the
       # registry-cache action as an OCI registry blob. SCCACHE_CACHE_SIZE caps
@@ -287,36 +294,12 @@ jobs:
           key: sccache-adyg-mac-${{ hashFiles('conanfile.py') }}
           path: ${{ env.SCCACHE_DIR }}
 
-      - name: Retrieve GPG signing secrets
-        uses: hashicorp/vault-action@v4
-        with:
-          url: ${{ vars.VAULT_URL }}
-          method: jwt
-          role: gpg-signing
-          secrets: |
-            secret/data/ci-secrets/gpg-signing gpgSecretKey | GPG_SECRET_KEY ;
-            secret/data/ci-secrets/gpg-signing gpgPassword | GPG_PASSWORD
-
       - name: Configure environment
         run: |
           python3 -m venv venv
           source ./venv/bin/activate
           pip install conan
           conan remote add --index 0 art ${{ vars.CONAN_REPO_URL }} || true
-
-      - name: Import GPG key
-        run: |
-          echo "${GPG_SECRET_KEY}" | sed -e 'N;s/\(BEGIN PGP PRIVATE KEY BLOCK-----\n\)\(.\)/\1\n\2/' | gpg --import --batch --yes
-
-      - name: Sync signing certificates
-        uses: AdGuardSoftwareLimited/apple-devices/.github/actions/match-sync@master
-        with:
-          type: developer_id
-          app_id: com.adguard.dnslibs.adyg
-          keychain_name: ${{ runner.temp }}/adyg-signing.keychain-db
-          platform: macos
-          skip_profiles: "true"
-          vault_url: ${{ vars.VAULT_URL }}
 
       - name: Build universal binary
         env:
@@ -347,39 +330,25 @@ jobs:
             strip adyg
           popd
 
-      - name: Code sign binary
-        env:
-          CODESIGN_IDENTITY: "Developer ID Application: Adguard Software Limited (TC3Q7MAJXF)"
-          CODESIGN_IDENTIFIER: "com.adguard.dnslibs.adyg"
-          KEYCHAIN_PATH: ${{ runner.temp }}/adyg-signing.keychain-db
-        run: |
-          set -x -e
-          security unlock-keychain -p "" "${KEYCHAIN_PATH}"
-          codesign -s "${CODESIGN_IDENTITY}" -i "${CODESIGN_IDENTIFIER}" \
-            --keychain "${KEYCHAIN_PATH}" --options=runtime build_universal/adyg
-
-      - name: Notarize adyg
-        uses: AdGuardSoftwareLimited/actions/actions/notarize-macos-app@master
+      # Signed in sign-macos with the identifier and hardened runtime used so far.
+      - name: Pack the unsigned binary
+        id: unsigned
+        uses: AdGuardSoftwareLimited/actions/actions/xcodebuild@master
         with:
-          bundle_path: ${{ github.workspace }}/build_universal/adyg
-          vault_url: ${{ vars.VAULT_URL }}
+          signing: deferred
+          binaries-dir: build_universal
+          binaries: adyg com.adguard.dnslibs.adyg
+          team-id: TC3Q7MAJXF
+          output-path: ${{ runner.temp }}/adyg-macos-unsigned-build.zip
 
-      - name: GPG sign and package
-        env:
-          VERSION: ${{ needs.version.outputs.value }}
-          GPG_KEY: devteam@adguard.com
-        run: |
-          set -x -e
-          pushd build_universal
-            gpg --default-key "${GPG_KEY}" --detach-sig \
-                --passphrase "${GPG_PASSWORD}" --pinentry-mode loopback \
-                adyg
-            cp ../LICENSE.md .
-
-            NAME=adyg-v${VERSION}-macos-universal
-            tar zcf ${NAME}.tar.gz -s ",^,${NAME}/," \
-              adyg adyg.sig LICENSE.md
-          popd
+      # Uploaded as-is (archive: false), so the artifact is named after the file.
+      - name: Upload the unsigned binary
+        uses: actions/upload-artifact@v7
+        with:
+          path: ${{ runner.temp }}/adyg-macos-unsigned-build.zip
+          archive: false
+          retention-days: 7
+          if-no-files-found: error
 
       # Print sccache counters and decide whether to force-save the store: the
       # save action skips the upload when the key already exists, so the store
@@ -408,14 +377,6 @@ jobs:
           path: ${{ env.SCCACHE_DIR }}
           force: ${{ steps.sccache-stats.outputs.force }}
 
-      - name: Upload artifacts
-        uses: actions/upload-artifact@v7
-        with:
-          name: release-macos
-          path: build_universal/adyg-*.tar.gz
-          if-no-files-found: error
-          retention-days: 7
-
       - name: Upload to Conan and cleanup
         if: always()
         env:
@@ -426,6 +387,134 @@ jobs:
           source ./venv/bin/activate
           conan remote login art "$ARTIFACTORY_USER" --password "$ARTIFACTORY_API_KEY" || true
           conan upload -r art -c "*" 2>&1 | grep --line-buffered "Uploading" || true
+
+  sign-macos:
+    name: Mac adyg signing
+    if: github.repository == 'AdGuardSoftwareLimited/dns-libs'
+    needs: [resolve-images, build-macos]
+    runs-on:
+      - ephemeral
+      - ephemeral-mac
+      - ${{ needs.resolve-images.outputs.macos }}
+      - ephemeral-job-key-${{ github.run_id }}-${{ github.job }}-${{ strategy.job-index || 0 }}
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - name: Download the unsigned binary
+        uses: actions/download-artifact@v8
+        with:
+          name: adyg-macos-unsigned-build.zip
+          path: ${{ runner.temp }}/unsigned
+          # A raw .zip artifact would otherwise be extracted on download.
+          skip-decompress: true
+
+      - name: Sign
+        id: sign
+        uses: AdGuardSoftwareLimited/actions/actions/sign-apple@master
+        with:
+          input: ${{ runner.temp }}/unsigned/adyg-macos-unsigned-build.zip
+          sha256: ${{ needs.build-macos.outputs.sha256 }}
+          method: developer_id
+          vault-url: ${{ vars.VAULT_URL }}
+
+      - name: Keep the signed binary for notarization
+        env:
+          SIGNED_DIR: ${{ steps.sign.outputs.output-dir }}
+        run: ditto -c -k "$SIGNED_DIR" "$RUNNER_TEMP/adyg-macos-signed.zip"
+
+      - name: Upload the signed binary
+        uses: actions/upload-artifact@v7
+        with:
+          path: ${{ runner.temp }}/adyg-macos-signed.zip
+          archive: false
+          retention-days: 7
+          if-no-files-found: error
+
+      - name: Upload the signing report
+        if: always() && steps.sign.outputs.report-dir != ''
+        uses: actions/upload-artifact@v7
+        with:
+          name: adyg-macos-signing-report
+          path: ${{ steps.sign.outputs.report-dir }}
+          if-no-files-found: ignore
+
+  notarize-macos:
+    name: Mac adyg notarization and packaging
+    if: github.repository == 'AdGuardSoftwareLimited/dns-libs'
+    needs: [resolve-images, version, sign-macos]
+    runs-on:
+      - ephemeral
+      - ephemeral-mac
+      - ${{ needs.resolve-images.outputs.macos }}
+      - ephemeral-job-key-${{ github.run_id }}-${{ github.job }}-${{ strategy.job-index || 0 }}
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ inputs.ref }}
+
+      - name: Download the signed binary
+        uses: actions/download-artifact@v8
+        with:
+          name: adyg-macos-signed.zip
+          path: ${{ runner.temp }}/signed
+          # A raw .zip artifact would otherwise be extracted on download.
+          skip-decompress: true
+
+      - name: Restore the signed binary
+        run: |
+          set -x -e
+          mkdir -p build_universal
+          ditto -x -k "$RUNNER_TEMP/signed/adyg-macos-signed.zip" build_universal
+
+      - name: Retrieve GPG signing secrets
+        uses: hashicorp/vault-action@v4
+        with:
+          url: ${{ vars.VAULT_URL }}
+          method: jwt
+          role: gpg-signing
+          secrets: |
+            secret/data/ci-secrets/gpg-signing gpgSecretKey | GPG_SECRET_KEY ;
+            secret/data/ci-secrets/gpg-signing gpgPassword | GPG_PASSWORD
+
+      - name: Import GPG key
+        run: |
+          echo "${GPG_SECRET_KEY}" | sed -e 'N;s/\(BEGIN PGP PRIVATE KEY BLOCK-----\n\)\(.\)/\1\n\2/' | gpg --import --batch --yes
+
+      - name: Notarize adyg
+        uses: AdGuardSoftwareLimited/actions/actions/notarize-macos-app@master
+        with:
+          bundle_path: ${{ github.workspace }}/build_universal/adyg
+          vault_url: ${{ vars.VAULT_URL }}
+
+      - name: GPG sign and package
+        env:
+          VERSION: ${{ needs.version.outputs.value }}
+          GPG_KEY: devteam@adguard.com
+        run: |
+          set -x -e
+          pushd build_universal
+            gpg --default-key "${GPG_KEY}" --detach-sig \
+                --passphrase "${GPG_PASSWORD}" --pinentry-mode loopback \
+                adyg
+            cp ../LICENSE.md .
+
+            NAME=adyg-v${VERSION}-macos-universal
+            tar zcf ${NAME}.tar.gz -s ",^,${NAME}/," \
+              adyg adyg.sig LICENSE.md
+          popd
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v7
+        with:
+          name: release-macos
+          path: build_universal/adyg-*.tar.gz
+          if-no-files-found: error
+          retention-days: 7
 
   build-windows:
     name: Windows adyg build
@@ -671,7 +760,7 @@ jobs:
 
   collect:
     name: Collect release artifacts
-    needs: [build-linux, build-macos, package-windows]
+    needs: [build-linux, notarize-macos, package-windows]
     if: github.repository == 'AdGuardSoftwareLimited/dns-libs'
     runs-on: [team-corelibs]
     permissions:
