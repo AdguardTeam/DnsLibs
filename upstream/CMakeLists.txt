@@ -131,6 +131,10 @@ else()
     add_unit_test(test_upstream_integration "${TEST_DIR}" "${DNSLIBS_DIR}/dnscrypt/src;${AG_TEST_HELPERS}" TRUE FALSE)
 endif()
 add_unit_test(test_upstream_utils "${TEST_DIR}" "${AG_TEST_HELPERS}" TRUE TRUE)
+# The built-in mDNS client is exercised against an in-process loopback responder, so the
+# suite runs offline on every platform (the SystemUpstream integration is Android-only).
+# The proxy include is needed by the response-cache integration case (header-only ResponseCache).
+add_unit_test(test_mdns "${TEST_DIR}" "${DNSLIBS_DIR}/upstream;${DNSLIBS_DIR}/proxy;${AG_TEST_HELPERS}" TRUE TRUE)
 if (APPLE)
     add_unit_test(test_system_resolver "${TEST_DIR}" "${AG_TEST_HELPERS}" TRUE TRUE)
 endif ()
