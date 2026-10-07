@@ -2,6 +2,8 @@
 
 #include <android/multinetwork.h>
 
+#include <atomic>
+
 #include "android_context_manager.h"
 #include "common/logger.h"
 
@@ -12,6 +14,11 @@ namespace ag::dns {
 static ag::Logger g_log{"AndroidContextManager"};
 static JavaVM *g_java_vm = nullptr;
 static ag::jni::GlobalRef<jobject> g_app_context;
+// The GlobalRef is only accessed from the MdnsClient event loop thread; the atomics mirror
+// it so test/diagnostic hooks can safely observe the state from another thread.
+static ag::jni::GlobalRef<jobject> g_multicast_lock;
+static std::atomic<bool> g_multicast_lock_held{false};
+static std::atomic<net_handle_t> g_last_bound_network_handle{0};
 
 void AndroidContextManager::initialize(JavaVM *vm) {
     g_java_vm = vm;
@@ -27,7 +34,7 @@ void AndroidContextManager::set_application_context(jobject context) {
     }
 }
 
-ag::jni::GlobalRef<jobject> AndroidContextManager::get_connectivity_manager() {
+ag::jni::GlobalRef<jobject> AndroidContextManager::get_system_service(const char *name) {
     if (!g_java_vm) {
         errlog(g_log, "AndroidContextManager not initialized");
         return {};
@@ -38,48 +45,50 @@ ag::jni::GlobalRef<jobject> AndroidContextManager::get_connectivity_manager() {
         return {};
     }
 
-    ag::jni::ScopedJniEnv env(g_java_vm, 16);
+    ag::jni::ScopedJniEnv env(g_java_vm, 8);
 
     jobject context = g_app_context.get();
 
-    ag::jni::LocalRef<jclass> contextClass{env.get(), env->GetObjectClass(context)};
-    if (!contextClass) {
+    ag::jni::LocalRef<jclass> context_class{env.get(), env->GetObjectClass(context)};
+    if (!context_class) {
         errlog(g_log, "Failed to get Context class");
         return {};
     }
 
-    jmethodID getSystemServiceMethod =
-            env->GetMethodID(contextClass.get(), "getSystemService", "(Ljava/lang/String;)Ljava/lang/Object;");
-    if (!getSystemServiceMethod) {
+    jmethodID get_system_service_method =
+            env->GetMethodID(context_class.get(), "getSystemService", "(Ljava/lang/String;)Ljava/lang/Object;");
+    if (!get_system_service_method) {
         errlog(g_log, "Failed to get getSystemService method");
         return {};
     }
 
-    ag::jni::LocalRef<jstring> connectivityServiceStr{env.get(), env->NewStringUTF("connectivity")};
-    if (!connectivityServiceStr) {
-        errlog(g_log, "Failed to create connectivity service string");
+    ag::jni::LocalRef<jstring> service_str{env.get(), env->NewStringUTF(name)};
+    if (!service_str) {
+        errlog(g_log, "Failed to create the {} service string", name);
         if (env->ExceptionCheck()) {
             env->ExceptionClear();
         }
         return {};
     }
 
-    ag::jni::LocalRef<jobject> connectivityManager{
-            env.get(), env->CallObjectMethod(context, getSystemServiceMethod, connectivityServiceStr.get())};
-
+    ag::jni::LocalRef<jobject> service{
+            env.get(), env->CallObjectMethod(context, get_system_service_method, service_str.get())};
     if (env->ExceptionCheck()) {
         env->ExceptionClear();
-        errlog(g_log, "Exception while calling getSystemService");
+        errlog(g_log, "Exception while calling getSystemService({})", name);
+        return {};
+    }
+    if (!service) {
+        errlog(g_log, "Failed to get the {} service", name);
         return {};
     }
 
-    if (!connectivityManager) {
-        errlog(g_log, "Failed to get ConnectivityManager");
-        return {};
-    }
+    tracelog(g_log, "Successfully obtained the {} service", name);
+    return ag::jni::GlobalRef<jobject>(g_java_vm, service.get());
+}
 
-    tracelog(g_log, "Successfully obtained ConnectivityManager");
-    return ag::jni::GlobalRef<jobject>(g_java_vm, connectivityManager.get());
+ag::jni::GlobalRef<jobject> AndroidContextManager::get_connectivity_manager() {
+    return get_system_service("connectivity");
 }
 
 std::optional<net_handle_t> AndroidContextManager::get_network_handle_from_connectivity_manager(
@@ -223,6 +232,102 @@ std::optional<net_handle_t> AndroidContextManager::get_network_handle_for_interf
 
     warnlog(g_log, "Unknown interface '{}', no network handle available", interface_name);
     return std::nullopt;
+}
+
+void AndroidContextManager::set_multicast_lock_enabled(bool enabled) {
+    if (!g_java_vm || !g_app_context) {
+        return;
+    }
+
+    // Only ever called from the MdnsClient event loop thread.
+    if (enabled == static_cast<bool>(g_multicast_lock)) {
+        return;
+    }
+
+    ag::jni::ScopedJniEnv env(g_java_vm, 16);
+
+    if (!enabled) {
+        ag::jni::LocalRef<jclass> lock_class{env.get(), env->GetObjectClass(g_multicast_lock.get())};
+        if (lock_class) {
+            jmethodID release = env->GetMethodID(lock_class.get(), "release", "()V");
+            if (release) {
+                env->CallVoidMethod(g_multicast_lock.get(), release);
+            }
+        }
+        if (env->ExceptionCheck()) {
+            env->ExceptionClear();
+        }
+        g_multicast_lock = {};
+        g_multicast_lock_held.store(false);
+        infolog(g_log, "Released WifiManager.MulticastLock for mDNS");
+        return;
+    }
+
+    auto wifi_manager = get_system_service("wifi");
+    if (!wifi_manager) {
+        infolog(g_log, "WifiManager is not available, mDNS multicast lock not acquired");
+        return;
+    }
+
+    ag::jni::LocalRef<jclass> wifi_class{env.get(), env->GetObjectClass(wifi_manager.get())};
+    if (!wifi_class) {
+        return;
+    }
+    jmethodID create_lock = env->GetMethodID(wifi_class.get(), "createMulticastLock",
+            "(Ljava/lang/String;)Landroid/net/wifi/WifiManager$MulticastLock;");
+    if (!create_lock) {
+        return;
+    }
+
+    ag::jni::LocalRef<jstring> tag{env.get(), env->NewStringUTF("dns-libs-mdns")};
+    if (!tag) {
+        if (env->ExceptionCheck()) {
+            env->ExceptionClear();
+        }
+        return;
+    }
+
+    ag::jni::LocalRef<jobject> lock{env.get(), env->CallObjectMethod(wifi_manager.get(), create_lock, tag.get())};
+    if (env->ExceptionCheck()) {
+        env->ExceptionClear();
+        return;
+    }
+    if (!lock) {
+        return;
+    }
+
+    ag::jni::LocalRef<jclass> lock_class{env.get(), env->GetObjectClass(lock.get())};
+    if (!lock_class) {
+        return;
+    }
+    jmethodID set_reference_counted = env->GetMethodID(lock_class.get(), "setReferenceCounted", "(Z)V");
+    jmethodID acquire = env->GetMethodID(lock_class.get(), "acquire", "()V");
+    if (!set_reference_counted || !acquire) {
+        return;
+    }
+
+    env->CallVoidMethod(lock.get(), set_reference_counted, JNI_FALSE);
+    env->CallVoidMethod(lock.get(), acquire);
+    if (env->ExceptionCheck()) {
+        env->ExceptionClear();
+        return;
+    }
+
+    g_multicast_lock = ag::jni::GlobalRef<jobject>(g_java_vm, lock.get());
+    g_multicast_lock_held.store(true);
+    infolog(g_log, "Acquired WifiManager.MulticastLock for mDNS");
+}
+
+bool AndroidContextManager::is_multicast_lock_held() {
+    return g_multicast_lock_held.load();
+}
+
+net_handle_t AndroidContextManager::get_last_bound_network_handle() {
+    return g_last_bound_network_handle.load();
+}
+
+void AndroidContextManager::record_bound_network_handle(net_handle_t handle) {
+    g_last_bound_network_handle.store(handle);
 }
 
 } // namespace ag::dns
