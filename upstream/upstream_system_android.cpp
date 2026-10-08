@@ -1,3 +1,4 @@
+#include <algorithm>
 #include <cerrno>
 #include <cstring>
 #include <fcntl.h>
@@ -8,12 +9,10 @@
 #include "common/logger.h"
 #include "dns/common/event_loop.h"
 
-#include "android_res_api.h"
-#include "upstream_system.h"
-
-#ifdef USE_INTERFACE_NAMES_IN_SYSTEM_UPSTREAM
 #include "android_context_manager.h"
-#endif
+#include "android_res_api.h"
+#include "mdns_client.h"
+#include "upstream_system.h"
 
 namespace ag::dns {
 
@@ -22,6 +21,19 @@ static ag::Logger g_log{"SystemUpstream"};
 static constexpr int INVALID_FD = -1;
 static constexpr int MIN_VALID_FD = 0;
 static constexpr size_t DNS_PACKET_BUFFER_SIZE = 4096;
+
+/**
+ * Returns true if the request's single question is in the mDNS `.local` domain.
+ */
+static bool is_local_query(const ldns_pkt *request) {
+    const ldns_rr_list *questions = ldns_pkt_question(request);
+    if (questions == nullptr || ldns_rr_list_rr_count(questions) != 1) {
+        return false;
+    }
+    const ldns_rr *question = ldns_rr_list_rr(questions, 0);
+    AllocatedPtr<char> name{ldns_rdf2str(ldns_rr_owner(question))};
+    return name != nullptr && MdnsClient::is_local_name(name.get());
+}
 
 /**
  * Sends DNS queries via `android_res_nsend()` and returns the raw replies.
@@ -282,10 +294,39 @@ Error<Upstream::InitError> SystemUpstream::init() {
     }
 
     m_pimpl = std::make_unique<Impl>(&config().loop, config().timeout, network_handle);
+
+    // netd's resolver is unicast-only and cannot answer `.local` queries (Android's mDNS
+    // stack is only reachable via NsdManager), so they are resolved over multicast DNS here.
+    // Sockets stay off the VPN through the socket factory's protect callback;
+    // `system://<interface>` additionally binds them to that network handle when enabled.
+    m_mdns_client = MdnsClient::create(MdnsClient::Config{
+            .loop = &config().loop,
+            .socket_factory = config().socket_factory,
+            .timeout = std::min(config().timeout, MdnsClient::DEFAULT_TIMEOUT),
+            .configure_socket = [network_handle](evutil_socket_t fd) -> Error<DnsError> {
+                if (network_handle != NETWORK_UNSPECIFIED) {
+                    if (0 == android_setsocknetwork(network_handle, fd)) {
+                        AndroidContextManager::record_bound_network_handle(network_handle);
+                    } else {
+                        warnlog(g_log, "Failed to bind mDNS socket {} to network {}: {}", fd, network_handle,
+                                strerror(errno));
+                    }
+                }
+                return {};
+            },
+            .set_multicast_enabled =
+                    [](bool enabled) {
+                        AndroidContextManager::set_multicast_lock_enabled(enabled);
+                    },
+    });
     return {};
 }
 
 coro::Task<Upstream::ExchangeResult> SystemUpstream::exchange(const ldns_pkt *request_pkt, const DnsMessageInfo *info) {
+    if (m_mdns_client != nullptr && is_local_query(request_pkt)) {
+        co_return co_await m_mdns_client->exchange(request_pkt);
+    }
+
     uint8_t *wire_data = nullptr;
     size_t wire_size = 0;
     ldns_status status = ldns_pkt2wire(&wire_data, request_pkt, &wire_size);

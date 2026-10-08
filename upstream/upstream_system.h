@@ -14,6 +14,10 @@
 
 namespace ag::dns {
 
+#ifdef __ANDROID__
+class MdnsClient;
+#endif
+
 /**
  * The SystemUpstream class is used for resolving DNS queries using the system resolver.
  * It supports specifying a network interface for the DNS resolution.
@@ -22,7 +26,8 @@ namespace ag::dns {
  * - Apple: `upstream_system_apple.cpp`, on top of SystemResolver (a DNSService wrapper,
  *   which only yields individual records, so the reply has to be assembled by hand);
  * - Android: `upstream_system_android.cpp`, on top of `android_res_*`, which returns
- *   the raw wire reply, so it is passed through as is.
+ *   the raw wire reply, so it is passed through as is. `.local` queries are resolved over
+ *   multicast DNS by MdnsClient instead, because netd's resolver cannot answer them.
  */
 class SystemUpstream : public Upstream {
 public:
@@ -77,7 +82,8 @@ private:
     std::string m_interface; ///< The network interface used by this upstream.
 #ifdef __ANDROID__
     class Impl;
-    std::unique_ptr<Impl> m_pimpl; ///< The `android_res_*` query engine used by this upstream.
+    std::unique_ptr<Impl> m_pimpl;             ///< The `android_res_*` query engine used by this upstream.
+    std::unique_ptr<MdnsClient> m_mdns_client; ///< Resolves `.local` queries over multicast DNS.
 #else
     std::unique_ptr<SystemResolver> m_resolver; ///< The system resolver used by this upstream.
 #endif

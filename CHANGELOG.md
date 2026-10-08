@@ -11,6 +11,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - Added support for hostname addresses in plain DNS upstreams: `dns.adguard.com:53`, `udp://dns.adguard.com:53`, and
   `tcp://dns.adguard.com:53` now resolve the hostname via the upstream's `bootstrap` servers instead of requiring a literal
   IP address. (AG-57422)
+- Added a built-in Multicast DNS (RFC 6762) client. On Android, the `system://` upstream now resolves `.local` names over
+  mDNS instead of forwarding them to netd, whose unicast resolver cannot answer them. The client sends one-shot QU queries
+  to `224.0.0.251`, joins the mDNS group on port 5353 to receive multicast answers, and holds a
+  `WifiManager.MulticastLock` while multicast is in use. IPv6 transport (`ff02::fb`, per link-local interface) is opt-in
+  via `MdnsClient::Config::enable_ipv6`; mDNS sockets stay off the VPN through the socket protect callback, and
+  `system://<interface>` additionally binds them to that network handle when interface names are enabled. (AG-58879)
 
 ### Changed
 
@@ -27,6 +33,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Fixed
 
+- Fixed `.local` (mDNS) name resolution failing with the `system://` upstream on Android: such queries are now sent to the
+  mDNS multicast group and the collected records are returned as a regular DNS reply, so the proxy response cache can
+  serve repeated queries. (AG-58879)
 - Fixed slow DNS-over-QUIC connection initialization when the first resolved server address is unreachable (e.g. a dead
   IPv6 route): the client now replays the QUIC Initial flight on every candidate socket instead of waiting for a PTO
   retransmission timeout (~500 ms). (AdguardTeam/DnsLibs#283)

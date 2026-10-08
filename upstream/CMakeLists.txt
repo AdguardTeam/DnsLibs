@@ -36,17 +36,17 @@ if (APPLE OR ANDROID)
         )
     elseif (ANDROID)
         # android_res_* returns the raw reply, which is passed through as is.
+        # AndroidContextManager is always needed: the mDNS client uses it to hold a
+        # WifiManager.MulticastLock and to bind sockets for system://<interface>.
         target_sources(upstream PRIVATE
             upstream_system_android.cpp
             android_res_api.h android_res_api.cpp
+            ${DNSLIBS_DIR}/platform/android/dnsproxy/lib/src/main/cpp/android_context_manager.cpp
+        )
+        target_include_directories(upstream PRIVATE
+            ${DNSLIBS_DIR}/platform/android/dnsproxy/lib/src/main/cpp
         )
         if (USE_INTERFACE_NAMES_IN_SYSTEM_UPSTREAM)
-            target_sources(upstream PRIVATE
-                ${DNSLIBS_DIR}/platform/android/dnsproxy/lib/src/main/cpp/android_context_manager.cpp
-            )
-            target_include_directories(upstream PRIVATE
-                ${DNSLIBS_DIR}/platform/android/dnsproxy/lib/src/main/cpp
-            )
             target_compile_definitions(upstream PRIVATE USE_INTERFACE_NAMES_IN_SYSTEM_UPSTREAM)
         endif()
     endif()
