@@ -75,7 +75,7 @@
 #ifdef OPENSSL_IS_BORINGSSL
 #include <ngtcp2/ngtcp2_crypto_boringssl.h>
 #else
-#include <ngtcp2/ngtcp2_crypto_quictls.h>
+#include <ngtcp2/ngtcp2_crypto_ossl.h>
 #endif
 
 #include "common/http/headers.h"
@@ -192,14 +192,14 @@ public:
             return;
         }
 #ifdef OPENSSL_IS_BORINGSSL
+        // With upstream OpenSSL the ossl backend configures the SSL session in
+        // `create_session()` instead of the SSL_CTX.
         if (ngtcp2_crypto_boringssl_configure_server_context(m_ssl_ctx.get()) != 0) {
-#else
-        if (ngtcp2_crypto_quictls_configure_server_context(m_ssl_ctx.get()) != 0) {
-#endif
             errlog(m_log, "Failed to configure QUIC TLS server context");
             m_ssl_ctx.reset();
             return;
         }
+#endif
         if (m_mode == QuicMode::DOQ) {
             SSL_CTX_set_alpn_select_cb(m_ssl_ctx.get(), alpn_select_doq_cb, nullptr);
         } else {
@@ -302,6 +302,10 @@ private:
         // must run while the SSL object is still alive).
         ag::UniquePtr<SSL, &SSL_free> ssl;
         ngtcp2_crypto_conn_ref conn_ref;
+#ifndef OPENSSL_IS_BORINGSSL
+        // Per-connection state of ngtcp2's ossl backend; set as the TLS native handle.
+        ag::UniquePtr<ngtcp2_crypto_ossl_ctx, &ngtcp2_crypto_ossl_ctx_del> ossl_ctx;
+#endif
         std::array<uint8_t, 32> static_secret{};
         bool handshake_completed = false;
 
@@ -547,9 +551,25 @@ private:
             errlog(m_log, "[{}] SSL_new failed", peer.str());
             return nullptr;
         }
+#ifdef OPENSSL_IS_BORINGSSL
         SSL_set_app_data(sp->ssl.get(), &sp->conn_ref);
         SSL_set_accept_state(sp->ssl.get());
         ngtcp2_conn_set_tls_native_handle(sp->conn.get(), sp->ssl.get());
+#else
+        if (ngtcp2_crypto_ossl_configure_server_session(sp->ssl.get()) != 0) {
+            errlog(m_log, "[{}] Failed to configure QUIC TLS session", peer.str());
+            return nullptr;
+        }
+        ngtcp2_crypto_ossl_ctx *ossl_ctx = nullptr;
+        if (ngtcp2_crypto_ossl_ctx_new(&ossl_ctx, sp->ssl.get()) != 0) {
+            errlog(m_log, "[{}] Failed to create ngtcp2 ossl context", peer.str());
+            return nullptr;
+        }
+        sp->ossl_ctx.reset(ossl_ctx);
+        SSL_set_app_data(sp->ssl.get(), &sp->conn_ref);
+        SSL_set_accept_state(sp->ssl.get());
+        ngtcp2_conn_set_tls_native_handle(sp->conn.get(), sp->ossl_ctx.get());
+#endif
 
         m_sessions.emplace(peer, std::move(session));
         tracelog(m_log, "[{}] new session (version {:#x})", peer.str(), hd.version);

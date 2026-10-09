@@ -34,9 +34,11 @@ TEST(TunListenerTest, InvalidParameters) {
 TEST(TunListenerTest, MultipleDeinitSafe) {
     TunListener listener;
 
-    // Deinit without init should be safe
-    EXPECT_NO_THROW(listener.deinit());
-    EXPECT_NO_THROW(listener.deinit());
+    // Deinit without init should be safe. Plain calls instead of
+    // EXPECT_NO_THROW: this suite is also built with exceptions disabled (the
+    // macOS framework build), where that macro does not compile.
+    listener.deinit();
+    listener.deinit();
 }
 
 TEST(TunListenerTest, DefaultMTU) {

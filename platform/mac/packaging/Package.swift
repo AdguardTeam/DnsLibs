@@ -7,7 +7,7 @@ import PackageDescription
 let package = Package(
   name: "AGDnsProxy",
   platforms: [
-    .iOS("11.2"), .macOS("10.13")
+    .iOS("15.0"), .macOS("12.0")
   ],
   products: [
     .library(name: "AGDnsProxy", targets: ["AGDnsProxy"]),
