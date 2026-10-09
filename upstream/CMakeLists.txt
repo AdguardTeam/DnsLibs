@@ -20,8 +20,14 @@ add_library(upstream EXCLUDE_FROM_ALL
         upstream_dnscrypt.h upstream_dnscrypt.cpp
         resolver.h resolver.cpp
         upstream_utils.cpp
-        mdns_client.h mdns_client.cpp
 )
+# The mDNS client is integrated on Android; Apple is kept for offline unit-test coverage.
+# Other platforms are not supported yet, so keep it out of their builds.
+if (ANDROID OR APPLE)
+    target_sources(upstream PRIVATE
+            mdns_client.h mdns_client.cpp
+    )
+endif ()
 # Platform-specific system upstream implementations
 if (APPLE OR ANDROID)
     target_sources(upstream PRIVATE
@@ -132,9 +138,11 @@ else()
 endif()
 add_unit_test(test_upstream_utils "${TEST_DIR}" "${AG_TEST_HELPERS}" TRUE TRUE)
 # The built-in mDNS client is exercised against an in-process loopback responder, so the
-# suite runs offline on every platform (the SystemUpstream integration is Android-only).
-# The proxy include is needed by the response-cache integration case (header-only ResponseCache).
-add_unit_test(test_mdns "${TEST_DIR}" "${DNSLIBS_DIR}/upstream;${DNSLIBS_DIR}/proxy;${AG_TEST_HELPERS}" TRUE TRUE)
+# suite runs offline on supported platforms. The proxy include is needed by the
+# response-cache integration case (header-only ResponseCache).
+if (ANDROID OR APPLE)
+    add_unit_test(test_mdns "${TEST_DIR}" "${DNSLIBS_DIR}/upstream;${DNSLIBS_DIR}/proxy;${AG_TEST_HELPERS}" TRUE TRUE)
+endif ()
 if (APPLE)
     add_unit_test(test_system_resolver "${TEST_DIR}" "${AG_TEST_HELPERS}" TRUE TRUE)
 endif ()
