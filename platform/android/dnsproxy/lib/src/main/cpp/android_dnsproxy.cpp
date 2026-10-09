@@ -1138,3 +1138,16 @@ extern "C" JNIEXPORT void JNICALL Java_com_adguard_dnslibs_proxy_DnsProxy_log(
     logger.log((ag::LogLevel) level, "{}", message_utf_chars);
     env->ReleaseStringUTFChars(message, message_utf_chars);
 }
+
+// Test/diagnostic hooks for the instrumentation tests (MdnsTestHooks.java). They live in the
+// production JNI layer so that the `upstream` static library does not duplicate them; the
+// AndroidContextManager state they expose is the copy compiled into this library.
+extern "C" JNIEXPORT jboolean JNICALL Java_com_adguard_dnslibs_proxy_MdnsTestHooks_isMulticastLockHeld(
+        JNIEnv * /*env*/, jclass /*clazz*/) {
+    return ag::dns::AndroidContextManager::is_multicast_lock_held() ? JNI_TRUE : JNI_FALSE;
+}
+
+extern "C" JNIEXPORT jlong JNICALL Java_com_adguard_dnslibs_proxy_MdnsTestHooks_getLastBoundNetworkHandle(
+        JNIEnv * /*env*/, jclass /*clazz*/) {
+    return static_cast<jlong>(ag::dns::AndroidContextManager::get_last_bound_network_handle());
+}

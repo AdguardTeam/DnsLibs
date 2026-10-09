@@ -756,7 +756,7 @@ public class DnsProxyTest {
                 fail("Expected DnsProxyInitException when reapplying with invalid filter");
             } catch (DnsProxyInitException e) {
                 // Expected exception
-                assertFalse("Filter error should result in failure", e.getResult().success);
+                assertFalse("Filter error should result in failure", e.getCode() == DnsProxy.InitErrorCode.OK);
             }
         }
     }
