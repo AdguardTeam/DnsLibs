@@ -57,6 +57,13 @@ enum class DnsError {
 
     AE_SHUTTING_DOWN,
     AE_EXCHANGE_ERROR,
+
+#ifdef __APPLE__
+    /** The query to the upstream failed, possibly due to the missing Local Network permission */
+    AE_LOCAL_NETWORK_PERMISSION_MAYBE_MISSING,
+    /** Bootstrapping the upstream failed, possibly due to the missing Local Network permission */
+    AE_BOOTSTRAP_LOCAL_NETWORK_PERMISSION_MAYBE_MISSING,
+#endif // __APPLE__
 };
 
 /**
@@ -127,6 +134,12 @@ struct ErrorCodeToString<dns::DnsError> {
             return "Upstream exchange error";
         case decltype(e)::AE_RETRY_CONNECTION:
             return "Connection should be retried";
+#ifdef __APPLE__
+        case decltype(e)::AE_LOCAL_NETWORK_PERMISSION_MAYBE_MISSING:
+            return "Possibly missing the Local Network permission";
+        case decltype(e)::AE_BOOTSTRAP_LOCAL_NETWORK_PERMISSION_MAYBE_MISSING:
+            return "Bootstrapping failed, possibly missing the Local Network permission";
+#endif // __APPLE__
         }
     };
 };

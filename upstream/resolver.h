@@ -24,6 +24,9 @@ public:
         AE_EXCHANGE_FAILED,
         AE_EMPTY_ADDRS,
         AE_SHUTTING_DOWN,
+#ifdef __APPLE__
+        AE_LOCAL_NETWORK_PERMISSION_MAYBE_MISSING,
+#endif // __APPLE__
     };
 
     using Result = ag::Result<std::vector<SocketAddress>, ResolverError>;
@@ -80,6 +83,10 @@ struct ErrorCodeToString<dns::Resolver::ResolverError> {
             return "No addresses received for host";
         case decltype(e)::AE_SHUTTING_DOWN:
             return "Shutting down";
+#ifdef __APPLE__
+        case decltype(e)::AE_LOCAL_NETWORK_PERMISSION_MAYBE_MISSING:
+            return "Possibly missing the Local Network permission";
+#endif // __APPLE__
         }
     }
 };

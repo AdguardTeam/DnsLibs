@@ -22,6 +22,9 @@ static ag::Logger gLogger{"AGDnsProxyXPCImpl"};
         dnsEvents.onRequestProcessed = ^(const AGDnsRequestProcessedEvent *event) {
             [events onRequestProcessed:event];
         };
+        dnsEvents.onCheckLocalNetworkPermission = ^(const AGDnsCheckLocalNetworkPermissionEvent *event) {
+            [events onCheckLocalNetworkPermission:event];
+        };
         _events = dnsEvents;
         _proxy = [[AGDnsProxy alloc] initWithConfig:config handler:_events error:error];
         if (!_proxy) {

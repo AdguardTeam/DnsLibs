@@ -1,5 +1,6 @@
 #include <algorithm>
 #include <atomic>
+#include <cerrno>
 #include <chrono>
 #include <cstring>
 #include <functional>
@@ -13,6 +14,10 @@
 #include <thread>
 #include <utility>
 #include <vector>
+
+#ifdef __APPLE__
+#include <sys/socket.h>
+#endif // __APPLE__
 
 #include "common/clock.h"
 #include "common/file.h"
@@ -3197,5 +3202,175 @@ TEST_F(DnsProxyTest, RegressCache2) {
     ASSERT_NO_FATAL_FAILURE(perform_request(*m_proxy, pkt, res, &info));
     ASSERT_TRUE(SvcbHttpsHelpers::remove_ech_svcparam(res.get()));
 }
+
+#ifdef __APPLE__
+// On Apple platforms a connected UDP socket reports EPIPE when the application is missing the Local Network permission.
+// Reproduce it deterministically: turn the outbound descriptor into a connected socket whose write
+// side is shut down before libuv connects it, so that the DNS send on it fails with EPIPE.
+static Error<SocketError> emulate_blocked_local_network(evutil_socket_t fd, const SocketAddress &peer) {
+    if (::connect(fd, peer.c_sockaddr(), peer.c_socklen()) != 0) {
+        return make_error(SocketError::AE_SOCK_ERROR, AG_FMT("Failed to connect the test socket: {}", errno));
+    }
+    if (::shutdown(fd, SHUT_WR) != 0) {
+        return make_error(SocketError::AE_SOCK_ERROR, AG_FMT("Failed to shut down the test socket: {}", errno));
+    }
+    return {};
+}
+
+// (upstream_id, bootstrap_failed) of a raised Local Network permission check event.
+using ReportedLocalNetworkEvent = std::pair<int32_t, bool>;
+
+// Restores the global steady clock time shift when it goes out of scope.
+class TimeShiftGuard {
+public:
+    ~TimeShiftGuard() {
+        SteadyClock::add_time_shift(m_shift - SteadyClock::get_time_shift());
+    }
+
+private:
+    SteadyClock::duration m_shift = SteadyClock::get_time_shift();
+};
+
+TEST_F(DnsProxyTest, TestCheckLocalNetworkPermissionEvent) {
+    DnsProxySettings settings = DnsProxySettings::get_default();
+    settings.upstreams = {{.address = "192.168.1.1:53", .id = 42}};
+    // Respond with SERVFAIL, so that a failed exchange still produces a response to parse.
+    settings.enable_servfail_on_upstreams_failure = true;
+
+    std::vector<ReportedLocalNetworkEvent> reported_events;
+    DnsProxyEvents events{
+            .on_protect_socket = emulate_blocked_local_network,
+            .check_local_network_permission =
+                    [&reported_events](const CheckLocalNetworkPermissionEvent &event) {
+                        reported_events.emplace_back(event.upstream_id, event.bootstrap_failed);
+                    },
+    };
+
+    auto [ret, err] = m_proxy->init(settings, events);
+    ASSERT_TRUE(ret) << err->str();
+
+    ldns_pkt_ptr pkt = create_request("example.com.", LDNS_RR_TYPE_A, LDNS_RD);
+    ldns_pkt_ptr res;
+
+    // The exchange fails with EPIPE, which is reported as a possibly missing Local Network permission.
+    ASSERT_NO_FATAL_FAILURE(perform_request(*m_proxy, pkt, res));
+    ASSERT_EQ(ldns_pkt_get_rcode(res.get()), LDNS_RCODE_SERVFAIL);
+    // The query to the upstream itself failed, not its bootstrapping.
+    ASSERT_EQ(reported_events, (std::vector<ReportedLocalNetworkEvent>{{42, false}}));
+
+    // The event must not be raised again within 30 seconds of the previous one.
+    res.reset();
+    ASSERT_NO_FATAL_FAILURE(perform_request(*m_proxy, pkt, res));
+    ASSERT_EQ(reported_events.size(), 1u);
+
+    TimeShiftGuard time_shift_guard;
+    SteadyClock::add_time_shift(Secs{30});
+
+    res.reset();
+    ASSERT_NO_FATAL_FAILURE(perform_request(*m_proxy, pkt, res));
+    ASSERT_EQ(reported_events.size(), 2u);
+}
+
+TEST_F(DnsProxyTest, TestCheckLocalNetworkPermissionEventNotRaisedOnOtherErrors) {
+    DnsProxySettings settings = DnsProxySettings::get_default();
+    settings.upstreams = {{.address = "192.168.1.1:53"}};
+    settings.enable_servfail_on_upstreams_failure = true;
+
+    std::vector<ReportedLocalNetworkEvent> reported_events;
+    DnsProxyEvents events{
+            .on_protect_socket = [](evutil_socket_t, const SocketAddress &) -> Error<SocketError> {
+                // Fail the socket preparation: the exchange fails, but not in the way that
+                // suggests a missing Local Network permission.
+                return make_error(SocketError::AE_PREPARE_ERROR, "Test failure");
+            },
+            .check_local_network_permission =
+                    [&reported_events](const CheckLocalNetworkPermissionEvent &event) {
+                        reported_events.emplace_back(event.upstream_id, event.bootstrap_failed);
+                    },
+    };
+
+    auto [ret, err] = m_proxy->init(settings, events);
+    ASSERT_TRUE(ret) << err->str();
+
+    ldns_pkt_ptr pkt = create_request("example.com.", LDNS_RR_TYPE_A, LDNS_RD);
+    ldns_pkt_ptr res;
+    ASSERT_NO_FATAL_FAILURE(perform_request(*m_proxy, pkt, res));
+    ASSERT_EQ(ldns_pkt_get_rcode(res.get()), LDNS_RCODE_SERVFAIL);
+    ASSERT_TRUE(reported_events.empty());
+}
+
+TEST_F(DnsProxyTest, TestCheckLocalNetworkPermissionEventNotRaisedForPublicResolver) {
+    DnsProxySettings settings = DnsProxySettings::get_default();
+    settings.upstreams = {{.address = "8.8.8.8:53"}};
+    settings.enable_servfail_on_upstreams_failure = true;
+
+    DnsRequestProcessedEvent last_event{};
+    std::vector<ReportedLocalNetworkEvent> reported_events;
+    DnsProxyEvents events{
+            .on_request_processed =
+                    [&last_event](const DnsRequestProcessedEvent &event) {
+                        last_event = event;
+                    },
+            .on_protect_socket = emulate_blocked_local_network,
+            .check_local_network_permission =
+                    [&reported_events](const CheckLocalNetworkPermissionEvent &event) {
+                        reported_events.emplace_back(event.upstream_id, event.bootstrap_failed);
+                    },
+    };
+
+    auto [ret, err] = m_proxy->init(settings, events);
+    ASSERT_TRUE(ret) << err->str();
+
+    ldns_pkt_ptr pkt = create_request("example.com.", LDNS_RR_TYPE_A, LDNS_RD);
+    ldns_pkt_ptr res;
+    ASSERT_NO_FATAL_FAILURE(perform_request(*m_proxy, pkt, res));
+    ASSERT_EQ(ldns_pkt_get_rcode(res.get()), LDNS_RCODE_SERVFAIL);
+    // The exchange failed with EPIPE, but the resolver is not in the private network,
+    // so the Local Network permission cannot be the reason.
+    ASSERT_NE(last_event.error.find("Broken pipe"), std::string::npos) << last_event.error;
+    ASSERT_TRUE(reported_events.empty());
+}
+
+TEST_F(DnsProxyTest, TestCheckLocalNetworkPermissionEventOnBootstrapFailure) {
+    // Every upstream kind that bootstraps its hostname must report a possibly missing
+    // Local Network permission if the bootstrap resolver is located in the local network.
+    const std::vector<std::string> upstream_addresses = {
+            "dns.example:53",
+            "tcp://dns.example",
+            "tls://dns.example",
+            "https://dns.example/dns-query",
+            "quic://dns.example",
+    };
+    for (const std::string &upstream_address : upstream_addresses) {
+        SCOPED_TRACE(upstream_address);
+        m_proxy = std::make_unique<DnsProxy>();
+
+        DnsProxySettings settings = DnsProxySettings::get_default();
+        settings.upstreams = {{.address = upstream_address, .bootstrap = {"192.168.1.1:53"}, .id = 42}};
+        settings.enable_servfail_on_upstreams_failure = true;
+
+        std::vector<ReportedLocalNetworkEvent> reported_events;
+        DnsProxyEvents events{
+                .on_protect_socket = emulate_blocked_local_network,
+                .check_local_network_permission =
+                        [&reported_events](const CheckLocalNetworkPermissionEvent &event) {
+                            reported_events.emplace_back(event.upstream_id, event.bootstrap_failed);
+                        },
+        };
+
+        auto [ret, err] = m_proxy->init(settings, events);
+        ASSERT_TRUE(ret) << err->str();
+
+        ldns_pkt_ptr pkt = create_request("example.com.", LDNS_RR_TYPE_A, LDNS_RD);
+        ldns_pkt_ptr res;
+        ASSERT_NO_FATAL_FAILURE(perform_request(*m_proxy, pkt, res));
+        ASSERT_EQ(ldns_pkt_get_rcode(res.get()), LDNS_RCODE_SERVFAIL);
+        ASSERT_EQ(reported_events, (std::vector<ReportedLocalNetworkEvent>{{42, true}}));
+
+        m_proxy->deinit();
+        m_proxy.reset();
+    }
+}
+#endif // __APPLE__
 
 } // namespace ag::dns::proxy::test

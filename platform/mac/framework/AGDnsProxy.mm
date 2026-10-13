@@ -963,6 +963,41 @@ static ServerStamp convert_stamp(AGDnsStamp *stamp) {
 
 @end
 
+@implementation AGDnsCheckLocalNetworkPermissionEvent
+
++ (BOOL)supportsSecureCoding {
+    return YES;
+}
+
+- (instancetype) init: (const CheckLocalNetworkPermissionEvent &)event
+{
+    _upstreamId = event.upstream_id;
+    _bootstrapFailed = event.bootstrap_failed;
+    return self;
+}
+
+- (instancetype)initWithCoder:(NSCoder *)coder {
+    self = [super init];
+    if (self) {
+        _upstreamId = [coder decodeIntegerForKey:@"_upstreamId"];
+        _bootstrapFailed = [coder decodeBoolForKey:@"_bootstrapFailed"];
+    }
+
+    return self;
+}
+
+- (void)encodeWithCoder:(NSCoder *)coder {
+    [coder encodeInteger:self.upstreamId forKey:@"_upstreamId"];
+    [coder encodeBool:self.bootstrapFailed forKey:@"_bootstrapFailed"];
+}
+
+- (NSString*)description {
+    return [NSString stringWithFormat:@"[(%p)AGDnsCheckLocalNetworkPermissionEvent: upstreamId=%ld, bootstrapFailed=%@]",
+            self, (long)_upstreamId, _bootstrapFailed ? @"YES" : @"NO"];
+}
+
+@end
+
 @implementation AGDnsProxyEvents
 @end
 
@@ -1444,6 +1479,23 @@ static DnsProxySettings convertConfig(AGDnsProxyConfig *config, const Logger &lo
                 return [AGDnsProxy verifyCertificate: &event log: *sself->log];
             }
         };
+
+    if (handler != nil && handler.onCheckLocalNetworkPermission != nil) {
+        native_events.check_local_network_permission =
+            [obj] (const CheckLocalNetworkPermissionEvent &event) {
+                auto *sself = (__bridge AGDnsProxy *)obj;
+                @autoreleasepool {
+                    auto *objCEvent = [[AGDnsCheckLocalNetworkPermissionEvent alloc] init: event];
+                    __weak AGDnsProxyEvents *weakObjCEvents = sself->events;
+                    dispatch_async(sself->queue, ^{
+                        __strong AGDnsProxyEvents *objCEvents = weakObjCEvents;
+                        if (objCEvents) {
+                            objCEvents.onCheckLocalNetworkPermission(objCEvent);
+                        }
+                    });
+                }
+            };
+    }
 
     std::vector<std::shared_ptr<void>> closefds; // Close fds on return
     if (config.listeners != nil) {

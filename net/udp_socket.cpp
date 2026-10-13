@@ -13,6 +13,10 @@ namespace ag::dns {
 
 #define log_sock(s_, lvl_, fmt_, ...) lvl_##log((s_)->m_log, "[id={}] {}(): " fmt_, (s_)->m_id, __func__, ##__VA_ARGS__)
 
+static SocketError convert_send_error(int status) {
+    return status == UV_EPIPE ? SocketError::AE_BROKEN_PIPE : SocketError::AE_SOCK_ERROR;
+}
+
 UdpSocket::UdpSocket(SocketFactory::SocketParameters p, PrepareFdCallback prepare_fd)
         : Socket(__func__, std::move(p), prepare_fd) {
 }
@@ -105,7 +109,7 @@ Error<SocketError> UdpSocket::send(Uint8View data) {
                 if (auto uv_udp = w->uv_udp.lock()) {
                     auto *socket = (UdpSocket *) uv_udp->parent();
                     socket->m_callbacks.on_close(socket->m_callbacks.arg,
-                            make_error(SocketError::AE_SOCK_ERROR,
+                            make_error(convert_send_error(status),
                                     AG_FMT("uv_udp_send status: ({}) {}", status, uv_strerror(status))));
                 }
             }
@@ -118,7 +122,7 @@ Error<SocketError> UdpSocket::send(Uint8View data) {
     if (int err = uv_udp_send(&wr->req, m_udp->raw(), &uv_buf, 1, nullptr, &Write::on_write)) {
         Write::on_write(&wr->req, err);
         auto error = make_error(uv_errno_t(err));
-        return make_error(SocketError::AE_SOCK_ERROR, error);
+        return make_error(convert_send_error(err), error);
     }
     return {};
 }

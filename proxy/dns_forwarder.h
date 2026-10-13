@@ -102,6 +102,16 @@ private:
 
     bool finalize_dnssec_log_logic(ldns_pkt *response, bool is_our_do_bit);
 
+#ifdef __APPLE__
+    /**
+     * Raise the local network permission check event if the exchange error indicates a possibly missing
+     * Local Network permission, unless the event was raised recently.
+     * @param upstream the upstream whose exchange failed
+     * @param error the exchange error
+     */
+    void check_local_network_permission(const Upstream &upstream, const Error<DnsError> &error);
+#endif // __APPLE__
+
     Logger m_log{"dns_forwarder"};
     EventLoopPtr m_loop;
     const DnsProxySettings *m_settings = nullptr;
@@ -115,6 +125,12 @@ private:
     ResponseCache m_response_cache;
     RetransmissionDetector m_retransmission_detector;
     std::default_random_engine m_random_engine;
+#ifdef __APPLE__
+    /** Minimal interval between the local network permission check events */
+    static constexpr auto LOCAL_NETWORK_PERMISSION_CHECK_INTERVAL = Secs{30};
+    /** Time of the last raised local network permission check event, if any */
+    std::optional<SteadyClock::time_point> m_last_local_network_permission_check;
+#endif // __APPLE__
 
     coro::Task<void> optimistic_cache_background_resolve(ldns_pkt_ptr req, std::string normalized_domain);
 };

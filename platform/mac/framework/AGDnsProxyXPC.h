@@ -11,6 +11,11 @@
 /** Invoked after a DNS request is processed. */
 - (void)onRequestProcessed:(const AGDnsRequestProcessedEvent *)event;
 
+/**
+ * Invoked when the application may be missing the Local Network permission.
+ */
+- (void)onCheckLocalNetworkPermission:(const AGDnsCheckLocalNetworkPermissionEvent *)event;
+
 @end
 
 /**

@@ -429,7 +429,7 @@ ag::coro::Task<void> ag::dns::DohUpstream::drive_connection(Millis handshake_tim
             co_return;
         }
         if (resolved.error) {
-            close_connection(make_error(DnsError::AE_BOOTSTRAP_ERROR, resolved.error));
+            close_connection(make_bootstrap_error(resolved.error));
             co_return;
         }
         if (resolved.addresses.empty()) {

@@ -8,8 +8,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- Added an Apple-specific `check_local_network_permission` proxy event, exposed as `onCheckLocalNetworkPermission`
+  in the `AGDnsProxyEvents` Objective-C API. The proxy raises it when it suspects that a DNS request failed due to
+  a missing Local Network permission. Applications should handle the event by guiding the user through the
+  Local Network permission request and explaining why the permission is required. (AG-59533)
+
 ### Changed
 
+- Changed the `AGDnsProxyEventsXPC` protocol by adding the required `onCheckLocalNetworkPermission:` method. This is
+  a breaking change: existing implementations must add the method, and an XPC client built against an older version
+  crashes with an unrecognized selector when the service raises the event. (AG-59533)
 - Raised the minimum OS versions of the Apple framework to macOS 12.0 and iOS 15.0 (from 10.15 and 13.0). The CocoaPods
   podspec and the SwiftPM manifest declare the same minimums. (AG-59174)
 
