@@ -15,16 +15,22 @@ namespace Adguard.Dns.Api.DnsProxyServer.Configs
         public AGDnsApi.ag_stamp_proto_type ProtoType { get; set; }
 
         /// <summary>
-        /// IP address and/or port
+        /// Server address/hostname and/or port
         /// </summary>
         public string ServerAddress { get; set; }
 
         /// <summary>
-        /// Provider name
-        /// Provider means different things depending on the stamp type
-        /// DNSCrypt: the DNSCrypt provider name
-        /// DOH and DOT: server's hostname
-        /// Plain DNS: not specified
+        /// Provider means different things depending on the stamp type:
+        ///
+        /// DNSCrypt: the DNSCrypt provider name.
+        ///
+        /// DOH/DOT/DOQ: the server's hostname + optional port. AdGuard slightly deviates from the DNSStamp spec
+        /// here:
+        /// 1. We also allow the port to be specified in the <see cref="ServerAddress"/> field. Specifying both
+        ///    will result in an unusable stamp.
+        /// 2. The hostname must be specified for this stamp to be usable.
+        ///
+        /// Plain DNS: undefined.
         /// </summary>
         public string ProviderName { get; set; }
 

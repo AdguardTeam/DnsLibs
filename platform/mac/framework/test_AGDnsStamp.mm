@@ -10,7 +10,9 @@ int main() {
     assert(error);
 
     error = nil;
-    auto *doh_str = @"sdns://AgMAAAAAAAAADDk0LjE0MC4xNC4xNITK_rq-BN6tvu8PZG5zLmFkZ3VhcmQuY29tCi9kbnMtcXVlcnk";
+    auto *doh_str =
+            @"sdns://AgMAAAAAAAAADDk0LjE0MC4xNC4xNKDK_rq-yv66vsr-ur7K_rq-yv66vsr-ur7K_rq-yv66viDerb7v3q2-796tvu_"
+             "erb7v3q2-796tvu_erb7v3q2-7w9kbnMuYWRndWFyZC5jb20KL2Rucy1xdWVyeQ";
     stamp = [AGDnsStamp stampWithString:doh_str error:&error];
     assert(stamp);
     assert(!error);

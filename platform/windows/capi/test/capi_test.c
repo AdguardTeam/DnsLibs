@@ -305,7 +305,9 @@ static void test_dnsstamp() {
     ASSERT(error);
 
     error = NULL;
-    const char *doh_str = "sdns://AgMAAAAAAAAADDk0LjE0MC4xNC4xNITK_rq-BN6tvu8PZG5zLmFkZ3VhcmQuY29tCi9kbnMtcXVlcnk";
+    const char *doh_str =
+            "sdns://AgMAAAAAAAAADDk0LjE0MC4xNC4xNKDK_rq-yv66vsr-ur7K_rq-yv66vsr-ur7K_rq-yv66viDerb7v3q2-796tvu_"
+            "erb7v3q2-796tvu_erb7v3q2-7w9kbnMuYWRndWFyZC5jb20KL2Rucy1xdWVyeQ";
     stamp = ag_dns_stamp_from_str(doh_str, &error);
     ASSERT(stamp);
     ASSERT(!error);

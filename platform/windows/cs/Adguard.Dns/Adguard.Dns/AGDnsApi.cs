@@ -22,7 +22,7 @@ namespace Adguard.Dns
 		/// <summary>
 		/// The current API version hash with which the ProxyServer was tested
 		/// </summary>
-        private const string API_VERSION_HASH = "318280e660e933360e2bdf95f263a87341e68f83ae2006124f180879c23cb64c";
+        private const string API_VERSION_HASH = "e4de2e5b9a2cee1f70694315405048efa36a554596ff63ca2a9a1b045ae39760";
 
         #endregion
 
@@ -1004,17 +1004,24 @@ namespace Adguard.Dns
             internal ag_stamp_proto_type ProtoType;
 
             /// <summary>
-            /// Server address
+            /// Server address/hostname and/or port
             /// </summary>
             [ManualMarshalPtrToString]
             [NativeName("server_addr")]
             internal IntPtr ServerAddress;
 
             /// <summary>
-            /// Provider means different things depending on the stamp type
-            /// DNSCrypt: the DNSCrypt provider name
-            /// DOH and DOT: server's hostname
-            /// Plain DNS: not specified
+            /// Provider means different things depending on the stamp type:
+            ///
+            /// DNSCrypt: the DNSCrypt provider name.
+            ///
+            /// DOH/DOT/DOQ: the server's hostname + optional port. AdGuard slightly deviates from the DNSStamp spec
+            /// here:
+            /// 1. We also allow the port to be specified in the <see cref="ServerAddress"/> field. Specifying both
+            ///    will result in an unusable stamp.
+            /// 2. The hostname must be specified for this stamp to be usable.
+            ///
+            /// Plain DNS: undefined.
             /// </summary>
             [ManualMarshalPtrToString]
             [NativeName("provider_name")]

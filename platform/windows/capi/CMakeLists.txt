@@ -125,8 +125,9 @@ if (WIN32)
     target_link_libraries(${LIBRARY_NAME} detours::detours)
 endif()
 
+find_package(Python3 COMPONENTS Interpreter)
 add_custom_target(generate_api_hash)
-add_custom_command(TARGET generate_api_hash COMMAND ${CMAKE_CURRENT_SOURCE_DIR}/generate_api_hash.py)
+add_custom_command(TARGET generate_api_hash COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/generate_api_hash.py)
 add_dependencies(${LIBRARY_NAME} generate_api_hash)
 
 set(OUTPUT_LIB_DIR ${CMAKE_CURRENT_SOURCE_DIR}/../cs/Adguard.Dns/Adguard.Dns)

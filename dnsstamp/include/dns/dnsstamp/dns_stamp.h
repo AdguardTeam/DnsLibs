@@ -92,7 +92,7 @@ struct ServerStamp {
      */
     void set_server_properties(ServerInformalProperties properties);
 
-    /** Server address with port */
+    /** Server address and/or port */
     std::string server_addr_str;
 
     /** The DNSCrypt provider’s Ed25519 public key, as 32 raw bytes. Empty for other types. */
@@ -104,10 +104,16 @@ struct ServerStamp {
     std::vector<Uint8Vector> hashes;
 
     /**
-     * Provider means different things depending on the stamp type
-     * DNSCrypt: the DNSCrypt provider name
-     * DOH and DOT: server's hostname
-     * Plain DNS: not specified
+     * Provider means different things depending on the stamp type:
+     *
+     * DNSCrypt: the DNSCrypt provider name.
+     *
+     * DOH/DOT/DOQ: the server's hostname + optional port. AdGuard slightly deviates from the DNSStamp spec here:
+     * 1. We also allow the port to be specified in the `server_addr_str` field. Specifying both will result in an
+     *    unusable stamp.
+     * 2. The hostname must be specified for this stamp to be usable.
+     *
+     * Plain DNS: undefined.
      */
     std::string provider_name;
 

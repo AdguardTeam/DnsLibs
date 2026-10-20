@@ -338,7 +338,7 @@ Error<Upstream::InitError> DoqUpstream::init() {
     }
 
     if (!std::holds_alternative<std::monostate>(m_options.resolved_server_ip)) {
-        m_server_addresses.emplace_back(m_options.resolved_server_ip, DEFAULT_DOQ_PORT);
+        m_server_addresses.emplace_back(m_options.resolved_server_ip, m_port);
     }
 
     if (m_server_addresses.empty()) {

@@ -610,13 +610,19 @@ typedef enum {
 typedef struct {
     /** Protocol */
     ag_stamp_proto_type proto;
-    /** IP address and/or port */
+    /** Server address/hostname and/or port */
     const char *server_addr;
     /**
-     * Provider means different things depending on the stamp type
-     * DNSCrypt: the DNSCrypt provider name
-     * DOH and DOT: server's hostname
-     * Plain DNS: not specified
+     * Provider means different things depending on the stamp type:
+     *
+     * DNSCrypt: the DNSCrypt provider name.
+     *
+     * DOH/DOT/DOQ: the server's hostname + optional port. AdGuard slightly deviates from the DNSStamp spec here:
+     * 1. We also allow the port to be specified in the `server_addr` field. Specifying both will result in an
+     *    unusable stamp.
+     * 2. The hostname must be specified for this stamp to be usable.
+     *
+     * Plain DNS: undefined.
      */
     const char *provider_name;
     /** (For DoH) absolute URI path, such as /dns-query */

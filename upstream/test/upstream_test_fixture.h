@@ -392,11 +392,8 @@ protected:
         return m_loopback_doh3.address();
     }
     // DoQ stamp (sdns://) encoding the port with a literal-IP provider_name,
-    // so the stamp-parsing code path in the upstream factory is exercised. The
-    // server_addr_str is port-only (":<port>") so resolved_server_ip is NOT
-    // set (which would force DEFAULT_DOQ_PORT); instead the bootstrapper
-    // short-circuits on the literal IP and uses the correct port. Replaces the
-    // former real AdGuard DoQ stamp.
+    // so the stamp-parsing code path in the upstream factory is exercised.
+    // Replaces the former real AdGuard DoQ stamp.
     std::string local_doq_stamp() const {
         ServerStamp stamp{};
         stamp.proto = StampProtoType::DOQ;

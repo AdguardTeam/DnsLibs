@@ -147,14 +147,11 @@ static const DnscryptStampParse test_dnscrypt_stamp_parse_data[]{
          "AQIAAAAAAAAAFVsyYTAwOjVhNjA6OmFkMjowZmZdOiCB0ALTakylDEc7dHllD-EuArMhy2E4ViogjkA9_"
          "cVelCIyLmRuc2NyeXB0LmRlZmF1bHQubnMxLmFkZ3VhcmQuY29t",
                 nullptr},
-        // Good only port address (:5443)
-        {
-                "sdns://"
-                "AQIAAAAAAAAABTo1NDQzIIHQAtNqTKUMRzt0eWUP4S4CsyHLYThWKiCOQD39xV6UIjIuZG5zY3J5cHQuZGVmYXVsdC5uczEuYWRndW"
-                "FyZC5jb20",
-                ":5443" // TODO Addresses with only port not allowed in DNSCrypt stamps (but allowed for DoH, DoT
-                        // stamps)
-        },
+        // Bad only port address (:5443): DNSCrypt stamps require a server address
+        {"sdns://"
+         "AQIAAAAAAAAABTo1NDQzIIHQAtNqTKUMRzt0eWUP4S4CsyHLYThWKiCOQD39xV6UIjIuZG5zY3J5cHQuZGVmYXVsdC5uczEuYWRndW"
+         "FyZC5jb20",
+                nullptr},
 };
 
 struct DnscryptStampParseTest : DnsstampParamTest<DnscryptStampParse> {};
@@ -463,6 +460,245 @@ TEST_F(DnsstampTest, TestInvalids) {
     for (const auto &tc : test_cases) {
         SCOPED_TRACE("Testing input: " + std::string(tc));
         test_server_stamp_parse(tc.data(), nullptr);
+    }
+}
+
+static void expect_from_string_error(std::string_view input, ServerStamp::FromStringError expected) {
+    SCOPED_TRACE("Testing input: " + std::string(input));
+    auto result = ServerStamp::from_string(input);
+    ASSERT_TRUE(result.has_error());
+    ASSERT_EQ(expected, result.error()->value());
+}
+
+TEST_F(DnsstampTest, TestUrlWithoutHostRejected) {
+    static constexpr std::string_view test_cases[] = {
+            "tls://",
+            "quic://",
+            "h3://",
+            "h3:///dns-query",
+            "tls:///dns-query",
+            "udp://",
+            "tcp://",
+    };
+    for (const auto &tc : test_cases) {
+        expect_from_string_error(tc, ServerStamp::FromStringError::AE_INVALID_HOST_PORT_FORMAT);
+    }
+}
+
+struct AddrHostname {
+    std::string_view server_addr;
+    std::string_view provider_name;
+};
+
+static ServerStamp make_stamp(StampProtoType proto, const AddrHostname &fields, const Uint8Vector &pk) {
+    ServerStamp stamp{};
+    stamp.proto = proto;
+    stamp.props = ServerInformalProperties{};
+    stamp.server_addr_str = fields.server_addr;
+    stamp.provider_name = fields.provider_name;
+    if (proto == StampProtoType::DNSCRYPT) {
+        stamp.server_pk = pk;
+    } else {
+        stamp.hashes = {pk};
+    }
+    if (proto == StampProtoType::DOH) {
+        stamp.path = "/dns-query";
+    }
+    return stamp;
+}
+
+TEST_F(DnsstampWithPk1Test, TestDnscryptStampWithoutAddressOrProviderNameRejected) {
+    static constexpr AddrHostname test_cases[] = {
+            {"", "2.dnscrypt-cert.example.com"},
+            {":5443", "2.dnscrypt-cert.example.com"},
+            // The addresses are long enough for the stamp to pass the minimum size check
+            {"[2001:db8:1234:5678::abcd]", ""},
+            {"[2001:db8:1234:5678::abcd]:5443", ""},
+            {"[2001:db8:1234:5678::abcd]:5443", ":443"},
+            // Port in both the address and the provider name
+            {"1.2.3.4:5443", "2.dnscrypt-cert.example.com:443"},
+    };
+    for (const auto &tc : test_cases) {
+        SCOPED_TRACE(AG_FMT("addr='{}' provider='{}'", tc.server_addr, tc.provider_name));
+        expect_from_string_error(
+                make_stamp(StampProtoType::DNSCRYPT, tc, pk1).str(), ServerStamp::FromStringError::AE_INVALID_STAMP);
+    }
+}
+
+TEST_F(DnsstampWithPk1Test, TestEncryptedStampWithoutHostnameRejected) {
+    static constexpr AddrHostname test_cases[] = {
+            {"", ""},
+            {"127.0.0.1", ""},
+            {"127.0.0.1:853", ""},
+            {":853", ""},
+            {"", ":853"},
+            {"127.0.0.1", ":853"},
+    };
+    for (auto proto : {StampProtoType::DOH, StampProtoType::TLS, StampProtoType::DOQ}) {
+        for (const auto &tc : test_cases) {
+            SCOPED_TRACE(AG_FMT("proto={} addr='{}' hostname='{}'", (int) proto, tc.server_addr, tc.provider_name));
+            expect_from_string_error(make_stamp(proto, tc, pk1).str(), ServerStamp::FromStringError::AE_INVALID_STAMP);
+        }
+    }
+}
+
+TEST_F(DnsstampWithPk1Test, TestEncryptedStampWithPortInBothFieldsRejected) {
+    static constexpr AddrHostname test_cases[] = {
+            {":853", "example.com:853"},
+            {"127.0.0.1:853", "example.com:853"},
+            {"127.0.0.1:853", "example.com:5443"},
+            {"[::1]:853", "[::1]:853"},
+    };
+    for (auto proto : {StampProtoType::DOH, StampProtoType::TLS, StampProtoType::DOQ}) {
+        for (const auto &tc : test_cases) {
+            SCOPED_TRACE(AG_FMT("proto={} addr='{}' hostname='{}'", (int) proto, tc.server_addr, tc.provider_name));
+            expect_from_string_error(make_stamp(proto, tc, pk1).str(), ServerStamp::FromStringError::AE_INVALID_STAMP);
+        }
+    }
+}
+
+TEST_F(DnsstampWithPk1Test, TestDnscryptProviderNameWithPortRejected) {
+    static constexpr AddrHostname test_cases[] = {
+            {"1.2.3.4", "2.dnscrypt-cert.example.com:443"},
+            {"1.2.3.4:5443", "2.dnscrypt-cert.example.com:443"},
+            {"[2001:db8::1]", "2.dnscrypt-cert.example.com:abc"},
+    };
+    for (const auto &tc : test_cases) {
+        SCOPED_TRACE(AG_FMT("addr='{}' provider='{}'", tc.server_addr, tc.provider_name));
+        expect_from_string_error(
+                make_stamp(StampProtoType::DNSCRYPT, tc, pk1).str(), ServerStamp::FromStringError::AE_INVALID_STAMP);
+    }
+}
+
+static constexpr std::string_view INVALID_PORTS[] = {"0", "00", "abc", "53a", "65536", "-1", "+53", " 53", "0x35"};
+
+TEST_F(DnsstampWithPk1Test, TestInvalidHostnamePortRejected) {
+    for (std::string_view port : INVALID_PORTS) {
+        std::string hostname_with_port = AG_FMT("example.com:{}", port);
+        for (auto proto : {StampProtoType::DOH, StampProtoType::TLS, StampProtoType::DOQ}) {
+            for (const AddrHostname &tc :
+                    {AddrHostname{"1.2.3.4", hostname_with_port}, AddrHostname{"", hostname_with_port}}) {
+                SCOPED_TRACE(AG_FMT("proto={} addr='{}' hostname='{}'", (int) proto, tc.server_addr, tc.provider_name));
+                expect_from_string_error(
+                        make_stamp(proto, tc, pk1).str(), ServerStamp::FromStringError::AE_INVALID_PORT);
+            }
+        }
+    }
+}
+
+TEST_F(DnsstampWithPk1Test, TestInvalidAddressPortRejected) {
+    for (std::string_view port : INVALID_PORTS) {
+        for (std::string addr : {AG_FMT("1.2.3.4:{}", port), AG_FMT(":{}", port)}) {
+            for (auto proto : {StampProtoType::DOH, StampProtoType::TLS, StampProtoType::DOQ, StampProtoType::PLAIN,
+                         StampProtoType::DNSCRYPT}) {
+                if (addr.front() == ':' && (proto == StampProtoType::PLAIN || proto == StampProtoType::DNSCRYPT)) {
+                    continue; // Already rejected for the missing address
+                }
+                std::string_view hostname =
+                        (proto == StampProtoType::DNSCRYPT) ? "2.dnscrypt-cert.example.com" : "example.com";
+                SCOPED_TRACE(AG_FMT("proto={} addr='{}' hostname='{}'", (int) proto, addr, hostname));
+                expect_from_string_error(
+                        make_stamp(proto, {addr, hostname}, pk1).str(), ServerStamp::FromStringError::AE_INVALID_PORT);
+            }
+        }
+    }
+}
+
+TEST_F(DnsstampWithPk1Test, TestBoundaryPortsAccepted) {
+    for (std::string_view port : {"1", "65535"}) {
+        std::string addr_with_port = AG_FMT("1.2.3.4:{}", port);
+        std::string hostname_with_port = AG_FMT("example.com:{}", port);
+        for (auto proto : {StampProtoType::DOH, StampProtoType::TLS, StampProtoType::DOQ}) {
+            for (const AddrHostname &tc :
+                    {AddrHostname{addr_with_port, "example.com"}, AddrHostname{"1.2.3.4", hostname_with_port}}) {
+                SCOPED_TRACE(AG_FMT("proto={} addr='{}' hostname='{}'", (int) proto, tc.server_addr, tc.provider_name));
+                auto result = ServerStamp::from_string(make_stamp(proto, tc, pk1).str());
+                ASSERT_FALSE(result.has_error()) << result.error()->str();
+            }
+        }
+        for (auto proto : {StampProtoType::PLAIN, StampProtoType::DNSCRYPT}) {
+            SCOPED_TRACE(AG_FMT("proto={} addr='{}'", (int) proto, addr_with_port));
+            auto result = ServerStamp::from_string(
+                    make_stamp(proto, {addr_with_port, "2.dnscrypt-cert.example.com"}, pk1).str());
+            ASSERT_FALSE(result.has_error()) << result.error()->str();
+        }
+    }
+}
+
+// The port may come from either the address or the hostname, and the pretty URL uses it.
+TEST_F(DnsstampWithPk1Test, TestEncryptedStampHostnameAndPortAccepted) {
+    struct TestCase {
+        AddrHostname fields;
+        std::string_view expected_host_port;
+    };
+    static constexpr TestCase test_cases[] = {
+            {{"", "example.com"}, "example.com"},
+            {{"127.0.0.1", "example.com"}, "example.com"},
+            {{"127.0.0.1:5443", "example.com"}, "example.com:5443"},
+            {{":5443", "example.com"}, "example.com:5443"},
+            {{"", "example.com:5443"}, "example.com:5443"},
+            {{"127.0.0.1", "example.com:5443"}, "example.com:5443"},
+            {{"[::1]", "[::1]:5443"}, "[::1]:5443"},
+    };
+    for (auto proto : {StampProtoType::DOH, StampProtoType::TLS, StampProtoType::DOQ}) {
+        std::string_view scheme = (proto == StampProtoType::DOH) ? "https://"
+                : (proto == StampProtoType::TLS)                 ? "tls://"
+                                                                 : "quic://";
+        std::string_view path = (proto == StampProtoType::DOH) ? "/dns-query" : "";
+        for (const auto &tc : test_cases) {
+            SCOPED_TRACE(AG_FMT(
+                    "proto={} addr='{}' hostname='{}'", (int) proto, tc.fields.server_addr, tc.fields.provider_name));
+            ServerStamp stamp = make_stamp(proto, tc.fields, pk1);
+            auto result = ServerStamp::from_string(stamp.str());
+            ASSERT_FALSE(result.has_error()) << result.error()->str();
+            ASSERT_EQ(stamp.str(), result->str());
+            ASSERT_EQ(AG_FMT("{}{}{}", scheme, tc.expected_host_port, path), result->pretty_url(true));
+        }
+    }
+}
+
+// Certificate hashes must be exactly SHA256_DIGEST_LENGTH bytes long: shorter
+// ones used to be read out of bounds when building the upstream fingerprints.
+TEST_F(DnsstampWithPk1Test, TestInvalidHashLengthRejected) {
+    const Uint8Vector valid_hash(32, 0xab);
+    const std::vector<std::vector<Uint8Vector>> test_cases = {
+            {Uint8Vector(1, 0xab)},
+            {Uint8Vector(4, 0xab)},
+            {Uint8Vector(31, 0xab)},
+            {Uint8Vector(33, 0xab)},
+            {Uint8Vector(64, 0xab)},
+            {valid_hash, Uint8Vector(4, 0xab)},
+            {Uint8Vector(4, 0xab), valid_hash},
+    };
+    for (auto proto : {StampProtoType::DOH, StampProtoType::TLS, StampProtoType::DOQ}) {
+        for (const auto &hashes : test_cases) {
+            ServerStamp stamp = make_stamp(proto, {"127.0.0.1", "example.com"}, pk1);
+            stamp.hashes = hashes;
+            std::string sizes;
+            for (const auto &hash : hashes) {
+                sizes += AG_FMT("{} ", hash.size());
+            }
+            SCOPED_TRACE(AG_FMT("proto={} hash sizes: {}", (int) proto, sizes));
+            expect_from_string_error(stamp.str(), ServerStamp::FromStringError::AE_INVALID_STAMP);
+        }
+    }
+}
+
+TEST_F(DnsstampWithPk1Test, TestValidHashLengthAccepted) {
+    const std::vector<std::vector<Uint8Vector>> test_cases = {
+            {},
+            {Uint8Vector(32, 0xab)},
+            {Uint8Vector(32, 0xab), Uint8Vector(32, 0xcd)},
+    };
+    for (auto proto : {StampProtoType::DOH, StampProtoType::TLS, StampProtoType::DOQ}) {
+        for (const auto &hashes : test_cases) {
+            ServerStamp stamp = make_stamp(proto, {"127.0.0.1", "example.com"}, pk1);
+            stamp.hashes = hashes;
+            SCOPED_TRACE(AG_FMT("proto={} hash count: {}", (int) proto, hashes.size()));
+            auto result = ServerStamp::from_string(stamp.str());
+            ASSERT_FALSE(result.has_error()) << result.error()->str();
+            ASSERT_EQ(hashes, result->hashes);
+        }
     }
 }
 

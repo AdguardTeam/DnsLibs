@@ -856,17 +856,20 @@ typedef NS_ENUM(NSInteger, AGServerInformalProperties) {
  */
 @property(nonatomic) AGStampProtoType proto;
 /**
- * Server numerical IP address, represented as a string.
+ * Server address/hostname and/or port, represented as a string.
  */
 @property(nonatomic) NSString *serverAddr;
 /**
- * Optional provider name (i.e. hostname in case of DoH/DoQ)
- * and optional port (written as ":<PortNumber>").
- * The grammar is something like this:
- * ```
- * providerName := [(ProviderName | Hostname)] [":" PortNumber]
- * PortNumber := DIGIT+
- * ```
+ * Provider means different things depending on the stamp type:
+ *
+ * DNSCrypt: the DNSCrypt provider name.
+ *
+ * DOH/DOT/DOQ: the server's hostname + optional port. AdGuard slightly deviates from the DNSStamp spec here:
+ * 1. We also allow the port to be specified in the `serverAddr` field. Specifying both will result in an
+ *    unusable stamp.
+ * 2. The hostname must be specified for this stamp to be usable.
+ *
+ * Plain DNS: undefined.
  */
 @property(nonatomic) NSString *providerName;
 /**

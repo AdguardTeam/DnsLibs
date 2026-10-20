@@ -61,9 +61,21 @@ public class DnsStamp {
 
     /** Protocol */
     private ProtoType proto;
-    /** Server address */
+    /** Server address and/or port */
     private String serverAddr;
-    /** Provider name */
+    /**
+     * Provider means different things depending on the stamp type:
+     * <p>
+     * DNSCrypt: the DNSCrypt provider name.
+     * <p>
+     * DOH/DOT/DOQ: the server's hostname + optional port. AdGuard slightly deviates from the DNSStamp spec here:
+     * <ol>
+     * <li>We also allow the port to be specified in the {@code serverAddr} field. Specifying both will result in an
+     * unusable stamp.</li>
+     * <li>The hostname must be specified for this stamp to be usable.</li>
+     * </ol>
+     * Plain DNS: undefined.
+     */
     private String providerName;
     /** Path (for DOH) */
     private String path;

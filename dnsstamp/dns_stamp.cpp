@@ -14,6 +14,8 @@
 #include <ws2tcpip.h>
 #endif
 
+#include <openssl/sha2.h>
+
 #include "common/base64.h"
 #include "common/net_utils.h"
 #include "common/socket_address.h"
@@ -229,6 +231,61 @@ static StampError check_garbage_after_end([[maybe_unused]] ServerStamp &stamp, s
     return {};
 }
 
+static bool is_valid_port(std::string_view port) {
+    auto port_num = ag::utils::to_integer<uint16_t>(port);
+    return port_num.has_value() && port_num.value() != 0;
+}
+
+// DoH/DoT/DoQ: `provider_name` must contain the server hostname, `server_addr_str` is optional.
+// Plain: `server_addr_str` is required, `provider_name` is ignored.
+// DNSCrypt: both `server_addr_str` and `provider_name` are required (connection can not be made otherwise),
+// and `provider_name` must not contain a port.
+// The port may be specified either in `server_addr_str` or in `provider_name`, but not in both,
+// and must be a valid decimal port number in the range [1, 65535].
+static StampError validate_stamp_fields(ServerStamp &stamp, size_t /*pos*/, const Uint8Vector & /*value*/) {
+    auto host_port = utils::split_host_port(stamp.provider_name);
+    auto addr_port = utils::split_host_port(stamp.server_addr_str);
+    switch (stamp.proto) {
+    case StampProtoType::DOH:
+    case StampProtoType::TLS:
+    case StampProtoType::DOQ:
+        if (!host_port.has_value() || host_port->first.empty()) {
+            return make_error(ServerStamp::FromStringError::AE_INVALID_STAMP, "Server hostname is required");
+        }
+        break;
+    case StampProtoType::PLAIN:
+        if (!addr_port.has_value() || addr_port->first.empty()) {
+            return make_error(ServerStamp::FromStringError::AE_INVALID_STAMP, "Server address is required");
+        }
+        break;
+    case StampProtoType::DNSCRYPT:
+        if (!host_port.has_value() || host_port->first.empty() || !addr_port.has_value() || addr_port->first.empty()) {
+            return make_error(ServerStamp::FromStringError::AE_INVALID_STAMP,
+                    "Both the server address and provider name are required");
+        }
+        if (!host_port->second.empty()) {
+            return make_error(ServerStamp::FromStringError::AE_INVALID_STAMP, "Invalid DNSCrypt provider name");
+        }
+        break;
+    }
+    if (addr_port.has_value() && !addr_port->second.empty() && host_port.has_value() && !host_port->second.empty()) {
+        return make_error(
+                ServerStamp::FromStringError::AE_INVALID_STAMP, "Port specified in both address and hostname");
+    }
+    if (addr_port.has_value() && !addr_port->second.empty() && !is_valid_port(addr_port->second)) {
+        return make_error(ServerStamp::FromStringError::AE_INVALID_PORT, "Invalid port specified in address field");
+    }
+    if (host_port.has_value() && !host_port->second.empty() && !is_valid_port(host_port->second)) {
+        return make_error(ServerStamp::FromStringError::AE_INVALID_PORT, "Invalid port specified in hostname field");
+    }
+    if (std::ranges::any_of(stamp.hashes, [](const auto &hash) {
+            return hash.size() != SHA256_DIGEST_LENGTH;
+        })) {
+        return make_error(ServerStamp::FromStringError::AE_INVALID_STAMP, "Invalid certificate hash length");
+    }
+    return {};
+}
+
 static ServerStamp::FromStringResult new_server_stamp_basic(
         const Uint8Vector &bin, const std::list<ReadStampPartFunction> &fs) {
     ServerStamp result{};
@@ -248,6 +305,7 @@ static ServerStamp::FromStringResult new_server_stamp(const Uint8Vector &bin, St
         return read_stamp_proto_props_server_addr_str(stamp, pos, value, proto, min_value_size, port);
     });
     fs.emplace_back(check_garbage_after_end);
+    fs.emplace_back(validate_stamp_fields);
     return new_server_stamp_basic(bin, fs);
 }
 
@@ -402,6 +460,9 @@ ServerStamp::FromStringResult ServerStamp::from_string(std::string_view url) {
     auto parsed_url = ada::parse(valid_url);
     if (!parsed_url) {
         return make_error(FromStringError::AE_NO_STAMP_URL_PREFIX);
+    }
+    if (parsed_url->get_hostname().empty()) {
+        return make_error(FromStringError::AE_INVALID_HOST_PORT_FORMAT, "Server hostname is not specified");
     }
     stamp.server_addr_str = parsed_url->get_hostname();
     if (!parsed_url->get_port().empty()) {

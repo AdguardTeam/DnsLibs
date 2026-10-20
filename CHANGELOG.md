@@ -29,6 +29,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Fixed
 
+- Fixed `ServerStamp::from_string` accepting some URLs and stamps that can not be used to build upstream settings.
+  (AG-60512)
+- Fixed DoQ upstreams ignoring the URL port and always connecting to port 853 when the server IP address is known in
+  advance (e.g. from the address field of a DNS stamp). (AG-60512)
+
 ### Security
 
 ## [2.10.2] - 2026-09-23

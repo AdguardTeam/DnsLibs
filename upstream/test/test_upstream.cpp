@@ -594,20 +594,108 @@ TEST_F(UpstreamTest, TestUpstreamsDohWithServerIpLocal) {
     ASSERT_NO_FATAL_FAILURE(co_await sequential_test(local_data));
 }
 
-// DoQ upstream with a resolved server IP, reproduced against loopback. A
-// literal-IP loopback URL makes the bootstrapper short-circuit (no DNS lookup)
-// so the dead bootstrap is never contacted, landing the exchange directly on
-// m_loopback_doq. This replaces the former real
-// quic://dns.adguard-dns.com row, which used resolved_server_ip to bypass
-// DNS. (DoqUpstream::init hardcodes DEFAULT_DOQ_PORT when resolved_server_ip
-// is set, so a literal-IP URL + dead bootstrap is the offline equivalent that
-// preserves the bypass-bootstrap intent without requiring a fixed port.)
+// DoQ upstream with a resolved server IP, reproduced against loopback. With
+// resolved_server_ip set, the bootstrapper is bypassed and DoqUpstream connects
+// directly to 127.0.0.1 on the URL port. The literal-IP URL row makes the
+// bootstrapper short-circuit instead. In both cases the dead bootstrap is never
+// contacted.
 TEST_F(UpstreamTest, TestUpstreamsDoqWithServerIpLocal) {
-    const std::string upstream_addr = AG_FMT("quic://127.0.0.1:{}", m_loopback_doq.port());
     const std::vector<UpstreamTestData> local_data = {
-            {upstream_addr, {"127.0.0.1:1"}, {}},
+            {AG_FMT("quic://localhost:{}", m_loopback_doq.port()), {"127.0.0.1:1"}, Ipv4Address{127, 0, 0, 1}},
+            {AG_FMT("quic://127.0.0.1:{}", m_loopback_doq.port()), {"127.0.0.1:1"}, {}},
     };
     ASSERT_NO_FATAL_FAILURE(co_await sequential_test(local_data));
+}
+
+// DoH/DoT/DoQ stamps: the port may be specified either in the server address
+// or in the hostname (`hostname[:port]`, as per the DNS stamp spec). When the
+// server address contains an IP, it's used to connect (bypassing the dead
+// bootstrap), but the port still comes from whichever field has it.
+TEST_F(UpstreamTest, TestStampAddressAndHostnamePortLocal) {
+    struct TestCase {
+        StampProtoType proto;
+        uint16_t port;
+    };
+    const TestCase protos[] = {
+            {StampProtoType::TLS, m_loopback_tls.port()},
+            {StampProtoType::DOH, m_loopback_doh.port()},
+            {StampProtoType::DOQ, m_loopback_doq.port()},
+    };
+    for (const auto &[proto, port] : protos) {
+        const std::pair<std::string, std::string> fields[] = {
+                {AG_FMT("127.0.0.1:{}", port), "localhost"},
+                {AG_FMT(":{}", port), "127.0.0.1"},
+                {"127.0.0.1", AG_FMT("localhost:{}", port)},
+                {"", AG_FMT("127.0.0.1:{}", port)},
+        };
+        for (const auto &[addr, hostname] : fields) {
+            ServerStamp stamp{};
+            stamp.proto = proto;
+            stamp.props = ServerInformalProperties{};
+            stamp.server_addr_str = addr;
+            stamp.provider_name = hostname;
+            if (proto == StampProtoType::DOH) {
+                stamp.path = "/dns-query";
+            }
+            const std::vector<UpstreamTestData> data = {{stamp.str(), {"127.0.0.1:1"}, {}}};
+            SCOPED_TRACE(AG_FMT("addr='{}' hostname='{}' stamp={}", addr, hostname, data.front().address));
+            ASSERT_NO_FATAL_FAILURE(co_await sequential_test(data));
+        }
+    }
+}
+
+// DoH/DoT/DoQ stamps without a hostname, with the port in both the server
+// address and the hostname, or with an invalid port, are rejected when the
+// upstream is created.
+TEST_F(UpstreamTest, TestUnusableStampsRejected) {
+    for (auto proto : {StampProtoType::TLS, StampProtoType::DOH, StampProtoType::DOQ}) {
+        const std::pair<std::string_view, std::string_view> fields[] = {
+                {"127.0.0.1:853", ""},
+                {"127.0.0.1", ":853"},
+                {"127.0.0.1:853", "localhost:853"},
+                {":853", "localhost:853"},
+                {"127.0.0.1:65536", "localhost"},
+                {":abc", "localhost"},
+                {"127.0.0.1", "localhost:65536"},
+                {"127.0.0.1", "localhost:abc"},
+        };
+        for (const auto &[addr, hostname] : fields) {
+            ServerStamp stamp{};
+            stamp.proto = proto;
+            stamp.props = ServerInformalProperties{};
+            stamp.server_addr_str = addr;
+            stamp.provider_name = hostname;
+            if (proto == StampProtoType::DOH) {
+                stamp.path = "/dns-query";
+            }
+            SCOPED_TRACE(AG_FMT("addr='{}' hostname='{}'", addr, hostname));
+            auto upstream_res = create_upstream({.address = stamp.str(), .bootstrap = {"127.0.0.1:1"}});
+            ASSERT_TRUE(upstream_res.has_error());
+            ASSERT_EQ(UpstreamFactory::UpstreamCreateError::AE_INVALID_STAMP, upstream_res.error()->value());
+        }
+    }
+}
+
+// Stamps with certificate hashes of the wrong length are rejected instead of
+// being read out of bounds while building the certificate fingerprints.
+TEST_F(UpstreamTest, TestStampWithInvalidHashLengthRejected) {
+    for (auto proto : {StampProtoType::TLS, StampProtoType::DOH, StampProtoType::DOQ}) {
+        for (size_t hash_size : {1, 4, SHA256_DIGEST_LENGTH - 1, SHA256_DIGEST_LENGTH + 1}) {
+            ServerStamp stamp{};
+            stamp.proto = proto;
+            stamp.props = ServerInformalProperties{};
+            stamp.server_addr_str = "127.0.0.1";
+            stamp.provider_name = "localhost";
+            stamp.hashes = {Uint8Vector(hash_size, 0xab)};
+            if (proto == StampProtoType::DOH) {
+                stamp.path = "/dns-query";
+            }
+            SCOPED_TRACE(AG_FMT("proto={} hash_size={}", (int) proto, hash_size));
+            auto upstream_res = create_upstream({.address = stamp.str(), .bootstrap = {"127.0.0.1:1"}});
+            ASSERT_TRUE(upstream_res.has_error());
+            ASSERT_EQ(UpstreamFactory::UpstreamCreateError::AE_INVALID_STAMP, upstream_res.error()->value());
+        }
+    }
 }
 
 // Disabled: a stress test against real servers. Kept disabled (so it never

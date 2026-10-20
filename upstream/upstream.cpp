@@ -152,6 +152,10 @@ static CreateResult create_upstream_sdns(const UpstreamOptions &local_opts, cons
     }
 
     for (auto &hash : stamp.hashes) {
+        if (hash.size() != SHA256_DIGEST_LENGTH) {
+            return make_error(UpstreamFactory::UpstreamCreateError::AE_INVALID_STAMP,
+                    AG_FMT("Invalid certificate hash: {}", ag::utils::encode_to_hex({hash.data(), hash.size()})));
+        }
         TbsCertSha256Digest &cert_digest = fingerprints.emplace_back().emplace<TbsCertSha256Digest>();
         std::copy_n(hash.begin(), SHA256_DIGEST_LENGTH, cert_digest.data.begin());
     }
