@@ -300,8 +300,10 @@ TEST_F(UpstreamTest, DoqKeepaliveWindowClosesIdleConnection) {
 }
 
 // The keep-alive window is wall-clock based, while the uv_timer that triggers
-// the close stops during suspend. Verify the timestamp check that the exchange
-// and retransmit paths use to detect a window that expired while asleep.
+// the close stops during suspend. A real suspend cannot be simulated in a unit
+// test, so this covers the wall-clock window math used by the exchange() and
+// retransmit_cb() checks; the awake-case close/reconnect is covered by
+// DoqKeepaliveWindowClosesIdleConnection.
 TEST_F(UpstreamTest, DoqKeepaliveWindowUsesWallClock) {
     co_await m_loop->co_submit();
     auto upstream_res = create_upstream({.address = local_doq()});

@@ -296,10 +296,10 @@ void DoqUpstream::keepalive_window_cb(uv_timer_t *timer) {
     if (doq == nullptr || doq->m_state != RUN || !doq->m_requests.empty()) {
         return;
     }
-    if (!doq->is_keepalive_window_expired()) {
-        doq->update_keepalive_window_timer();
-        return;
-    }
+    // The timer was armed for the whole window after the last DNS activity, so
+    // reaching this callback means the window has expired. The timestamp
+    // checks in exchange()/retransmit_cb() cover the suspend case where this
+    // timer does not run.
     doq->disconnect("Keep-alive window expired");
 }
 
@@ -1523,7 +1523,7 @@ bool DoqUpstream::is_keepalive_window_expired() const {
     }
     const ngtcp2_tstamp now = get_tstamp();
     const auto window = static_cast<ngtcp2_tstamp>(duration_cast<Nanos>(m_keepalive_window).count());
-    return now > m_last_dns_activity_ts && now - m_last_dns_activity_ts > window;
+    return now >= m_last_dns_activity_ts && now - m_last_dns_activity_ts >= window;
 }
 
 void DoqUpstream::on_rand(uint8_t *dest, size_t destlen, const ngtcp2_rand_ctx *rand_ctx) {
