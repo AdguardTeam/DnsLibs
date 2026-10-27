@@ -36,7 +36,7 @@ jobs:
     uses: AdGuardSoftwareLimited/actions/.github/workflows/tag-from-changelog.yml@master
     with:
       ref: ${{ inputs.ref || github.event.pull_request.merge_commit_sha || github.ref_name }}
-      team: corelibs
+      team: libs
 
   # 2. Resolve the version and locate the Build run that produced the artifacts.
   # The tag job above created the release tag; the matching Build run (build.yml)
@@ -44,7 +44,7 @@ jobs:
   prepare:
     name: Prepare deploy
     needs: tag
-    runs-on: [team-corelibs]
+    runs-on: [team-libs]
     outputs:
       build_run_id: ${{ steps.resolve.outputs.build_run_id }}
     steps:
@@ -61,7 +61,7 @@ jobs:
   android-prepare-payload:
     name: Deploy library / Android (prepare payload)
     needs: prepare
-    runs-on: [team-corelibs]
+    runs-on: [team-libs]
     steps:
       - name: Download Android artifactory payload from Build run
         uses: actions/download-artifact@v8
@@ -84,7 +84,7 @@ jobs:
     needs: android-prepare-payload
     uses: AdGuardSoftwareLimited/actions/.github/workflows/deploy-to-ak-maven.yml@master
     with:
-      team: corelibs
+      team: libs
       environment: android-artifact-keeper
       ak-repo: maven-internal
     secrets: inherit
@@ -97,7 +97,7 @@ jobs:
   apple-prepare-payload:
     name: Deploy library / Apple (prepare payload)
     needs: prepare
-    runs-on: [team-corelibs]
+    runs-on: [team-libs]
     steps:
       - name: Download Apple artifacts from Build run
         uses: actions/download-artifact@v8
@@ -138,7 +138,7 @@ jobs:
     needs: apple-prepare-payload
     uses: AdGuardSoftwareLimited/actions/.github/workflows/deploy-to-ak-generic.yml@master
     with:
-      team: corelibs
+      team: libs
       artifact-pattern: apple-xcframework
       ak-repo: apple-bin
     secrets: inherit
@@ -148,7 +148,7 @@ jobs:
     needs: apple-deploy-xcframework
     uses: AdGuardSoftwareLimited/actions/.github/workflows/deploy-to-ak-generic.yml@master
     with:
-      team: corelibs
+      team: libs
       environment: apple-artifact-keeper-podspec
       artifact-pattern: apple-podspec
       ak-repo: pods
@@ -159,7 +159,7 @@ jobs:
     needs: apple-deploy-xcframework
     uses: AdGuardSoftwareLimited/actions/.github/workflows/deploy-to-ak-swift.yml@master
     with:
-      team: corelibs
+      team: libs
       environment: apple-artifact-keeper-swiftpm
       artifact-pattern: apple-swiftpm
       ak-repo: swift-pkgs
@@ -206,7 +206,7 @@ jobs:
   conan-deploy:
     needs: tag
     environment: conan-artifactory
-    runs-on: team-corelibs
+    runs-on: team-libs
     steps:
       - name: Checkout
         uses: actions/checkout@v6
@@ -259,7 +259,7 @@ jobs:
       - build-adyg
     uses: AdGuardSoftwareLimited/actions/.github/workflows/mirror-and-release.yml@master
     with:
-      team: corelibs
+      team: libs
       target_repo: AdguardTeam/DnsLibs
       tag: ${{ needs.tag.outputs.tag }}
       changelog: ${{ needs.tag.outputs.changelog }}
@@ -293,5 +293,5 @@ jobs:
           {"repo": "AdguardTeam/AdguardForMac", "assignee": "vityevato", "platform": "Mac"},
           {"repo": "AdguardTeam/AdguardForWindows", "assignee": "adbuker", "platform": "Windows"}
         ]
-      team: corelibs
+      team: libs
     secrets: inherit

@@ -23,7 +23,7 @@ jobs:
   version:
     name: Resolve version
     if: github.repository == 'AdGuardSoftwareLimited/dns-libs'
-    runs-on: [team-corelibs]
+    runs-on: [team-libs]
     outputs:
       value: ${{ steps.resolve.outputs.value }}
     steps:
@@ -78,7 +78,7 @@ jobs:
   linux-build:
     name: Linux build and tests
     if: github.repository == 'AdGuardSoftwareLimited/dns-libs'
-    runs-on: team-corelibs
+    runs-on: team-libs
     permissions:
       contents: read
       id-token: write
@@ -245,7 +245,7 @@ jobs:
           if-no-files-found: warn
           retention-days: 7
 
-  # clangd-tidy is the only lint step that needs more memory than the 'team-corelibs' runner has available
+  # clangd-tidy is the only lint step that needs more memory than the 'team-libs' runner has available
   lint:
     name: Lint (clangd-tidy)
     if: github.repository == 'AdGuardSoftwareLimited/dns-libs'
@@ -992,7 +992,7 @@ jobs:
   linux-adyg:
     name: Linux adyg build
     if: github.repository == 'AdGuardSoftwareLimited/dns-libs'
-    runs-on: team-corelibs
+    runs-on: team-libs
     env:
       # sccache local-disk store, snapshotted across runs by the registry-cache
       # action. Shared key prefix with linux-build would collide across the

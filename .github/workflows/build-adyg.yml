@@ -52,7 +52,7 @@ jobs:
   version:
     name: Resolve version
     if: github.repository == 'AdGuardSoftwareLimited/dns-libs'
-    runs-on: [team-corelibs]
+    runs-on: [team-libs]
     outputs:
       value: ${{ steps.version.outputs.version }}
     steps:
@@ -585,7 +585,7 @@ jobs:
       id-token: write
     uses: AdGuardSoftwareLimited/actions/.github/workflows/sign-by-signer.yml@master
     with:
-      team: corelibs
+      team: libs
       artifact-name: adyg-windows-exe-unsigned
       files: '**/*.exe'
       signed-artifact-name: adyg-windows-exe-signed
@@ -594,7 +594,7 @@ jobs:
     name: Package Windows release
     needs: [sign-windows, version]
     if: github.repository == 'AdGuardSoftwareLimited/dns-libs'
-    runs-on: [team-corelibs]
+    runs-on: [team-libs]
     permissions:
       contents: read
       id-token: write
@@ -673,7 +673,7 @@ jobs:
     name: Collect release artifacts
     needs: [build-linux, build-macos, package-windows]
     if: github.repository == 'AdGuardSoftwareLimited/dns-libs'
-    runs-on: [team-corelibs]
+    runs-on: [team-libs]
     permissions:
       contents: read
     steps:
