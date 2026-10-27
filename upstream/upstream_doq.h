@@ -212,8 +212,10 @@ private:
     void schedule_retransmit();
     static ngtcp2_tstamp get_tstamp();
     void disqualify_server_address(const ag::SocketAddress &server_address);
+    void start_req_idle_timer();
     void update_req_idle_timer();
     void update_keepalive_window_timer();
+    bool is_keepalive_window_expired() const;
 
 #ifdef OPENSSL_IS_BORINGSSL
     void write_client_handshake(ngtcp2_encryption_level level, const uint8_t *data, size_t datalen);
@@ -263,6 +265,13 @@ private:
     UvPtr<uv_timer_t> m_handshake_timer;
     UvPtr<uv_timer_t> m_retransmit_timer;       // This is also the idle timer.
     UvPtr<uv_timer_t> m_keepalive_window_timer; // See `update_keepalive_window_timer()`.
+    /// How often ngtcp2 sends a keep-alive PING while the connection is alive.
+    Millis m_keepalive_interval{30'000};
+    /// How long the connection is kept alive after the last DNS activity.
+    /// Zero keeps it alive indefinitely, as before this window was introduced.
+    Millis m_keepalive_window{120'000};
+    /// Timestamp of the last DNS activity, in the same clock as `get_tstamp()`.
+    ngtcp2_tstamp m_last_dns_activity_ts{0};
     static std::atomic_int64_t m_next_request_id;
     std::array<uint8_t, 32> m_static_secret;
     TlsSessionCache m_tls_session_cache;

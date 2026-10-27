@@ -3,15 +3,18 @@
 // a few gated real-network counterparts. Shared infrastructure comes from
 // upstream_test_fixture.h.
 
+#include <limits>
+
 #include "upstream_test_fixture.h"
 
 #include "../upstream_doq.h"
 
 namespace ag::dns {
 
-// Test-only access to the DoQ request map. The short-timeout regression test
+// Test-only access to the DoQ internals. The short-timeout regression test
 // needs a permanently in-flight request so the timer is not stopped between
-// real queries.
+// real queries; the keepalive-window test needs short intervals so it does not
+// have to wait for the production 30 s / 120 s values.
 struct DoqUpstreamTestAccess {
     static void add_in_flight_request(DoqUpstream &upstream, int64_t id) {
         upstream.m_requests[id].is_onfly = true;
@@ -19,6 +22,26 @@ struct DoqUpstreamTestAccess {
 
     static void remove_request(DoqUpstream &upstream, int64_t id) {
         upstream.m_requests.erase(id);
+    }
+
+    static void set_keepalive_window(DoqUpstream &upstream, Millis window) {
+        upstream.m_keepalive_window = window;
+    }
+
+    static void set_keepalive_interval(DoqUpstream &upstream, Millis interval) {
+        upstream.m_keepalive_interval = interval;
+    }
+
+    static ngtcp2_tstamp now() {
+        return DoqUpstream::get_tstamp();
+    }
+
+    static void set_last_dns_activity_ts(DoqUpstream &upstream, ngtcp2_tstamp ts) {
+        upstream.m_last_dns_activity_ts = ts;
+    }
+
+    static bool is_keepalive_window_expired(const DoqUpstream &upstream) {
+        return upstream.is_keepalive_window_expired();
     }
 };
 
@@ -237,12 +260,15 @@ TEST_F(UpstreamTest, TestUpstreamsDoqDoh3Local) {
 // dnsproxy #260).
 TEST_F(UpstreamTest, DoqKeepaliveWindowClosesIdleConnection) {
     co_await m_loop->co_submit();
-    auto upstream_res = create_upstream({
-            .address = local_doq(),
-            .keepalive_window = Millis{300},
-    });
+    auto upstream_res = create_upstream({.address = local_doq()});
     ASSERT_FALSE(upstream_res.has_error()) << upstream_res.error()->str();
-    auto upstream = std::move(upstream_res.value());
+    UpstreamPtr upstream = std::move(upstream_res.value());
+    auto doq = std::dynamic_pointer_cast<DoqUpstream>(upstream);
+    ASSERT_NE(doq, nullptr);
+    // Keep the test fast: production defaults are 30 s keepalive and 120 s
+    // window.
+    DoqUpstreamTestAccess::set_keepalive_interval(*doq, Millis{50});
+    DoqUpstreamTestAccess::set_keepalive_window(*doq, Millis{250});
 
     auto req = create_test_message();
     auto reply = co_await upstream->exchange(req.get());
@@ -250,13 +276,18 @@ TEST_F(UpstreamTest, DoqKeepaliveWindowClosesIdleConnection) {
     auto reply_err = assert_response(*reply.value());
     ASSERT_FALSE(reply_err.has_value()) << (reply_err ? *reply_err : "");
 
-    // Wait for the keepalive window to close the session, then make sure the
-    // server receives nothing afterwards. The snapshot is taken after the
-    // window so post-reply ACKs cannot be mistaken for post-close traffic.
-    co_await m_loop->co_sleep(Millis{500});
+    // Let the post-reply ACKs settle, then verify that keepalive PINGs are
+    // still sent during the window.
+    co_await m_loop->co_sleep(Millis{20});
+    size_t packets_before = m_loopback_doq.received_packets();
+    co_await m_loop->co_sleep(Millis{150});
+    ASSERT_GT(m_loopback_doq.received_packets(), packets_before);
+
+    // The window closes at 250 ms; after that the client must go silent.
+    co_await m_loop->co_sleep(Millis{200});
     size_t packets_after_close = m_loopback_doq.received_packets();
     size_t sessions_before_reconnect = m_loopback_doq.sessions_started();
-    co_await m_loop->co_sleep(Millis{200});
+    co_await m_loop->co_sleep(Millis{150});
     ASSERT_EQ(m_loopback_doq.received_packets(), packets_after_close);
 
     // The next query must reconnect rather than reuse the closed session.
@@ -266,6 +297,28 @@ TEST_F(UpstreamTest, DoqKeepaliveWindowClosesIdleConnection) {
     auto reply2_err = assert_response(*reply2.value());
     ASSERT_FALSE(reply2_err.has_value()) << (reply2_err ? *reply2_err : "");
     ASSERT_GT(m_loopback_doq.sessions_started(), sessions_before_reconnect);
+}
+
+// The keep-alive window is wall-clock based, while the uv_timer that triggers
+// the close stops during suspend. Verify the timestamp check that the exchange
+// and retransmit paths use to detect a window that expired while asleep.
+TEST_F(UpstreamTest, DoqKeepaliveWindowUsesWallClock) {
+    co_await m_loop->co_submit();
+    auto upstream_res = create_upstream({.address = local_doq()});
+    ASSERT_FALSE(upstream_res.has_error()) << upstream_res.error()->str();
+    UpstreamPtr upstream = std::move(upstream_res.value());
+    auto doq = std::dynamic_pointer_cast<DoqUpstream>(upstream);
+    ASSERT_NE(doq, nullptr);
+    DoqUpstreamTestAccess::set_keepalive_window(*doq, Millis{100});
+
+    const auto now = DoqUpstreamTestAccess::now();
+    const auto old =
+            now - static_cast<ngtcp2_tstamp>(std::chrono::duration_cast<std::chrono::nanoseconds>(Millis{200}).count());
+    DoqUpstreamTestAccess::set_last_dns_activity_ts(*doq, old);
+    ASSERT_TRUE(DoqUpstreamTestAccess::is_keepalive_window_expired(*doq));
+
+    DoqUpstreamTestAccess::set_last_dns_activity_ts(*doq, now);
+    ASSERT_FALSE(DoqUpstreamTestAccess::is_keepalive_window_expired(*doq));
 }
 
 // A healthy DoQ connection must survive sustained request/reply traffic. The
@@ -291,7 +344,8 @@ TEST_F(UpstreamTest, DoqShortTimeoutTimerResetsOnReplies) {
     // between the real queries below. The short timeout is 2 * 200ms = 400ms;
     // send real queries for longer than that. Every real reply must reset the
     // timer, otherwise it fires at 400ms and tears down the connection.
-    DoqUpstreamTestAccess::add_in_flight_request(*doq, 1);
+    static constexpr int64_t FAKE_REQUEST_ID = std::numeric_limits<int64_t>::max();
+    DoqUpstreamTestAccess::add_in_flight_request(*doq, FAKE_REQUEST_ID);
     for (size_t i = 0; i < 12; ++i) {
         auto req = create_test_message();
         auto reply = co_await upstream->exchange(req.get());
@@ -300,9 +354,40 @@ TEST_F(UpstreamTest, DoqShortTimeoutTimerResetsOnReplies) {
         ASSERT_FALSE(reply_err.has_value()) << (reply_err ? *reply_err : "");
         co_await m_loop->co_sleep(Millis{50});
     }
-    DoqUpstreamTestAccess::remove_request(*doq, 1);
+    DoqUpstreamTestAccess::remove_request(*doq, FAKE_REQUEST_ID);
 
     ASSERT_EQ(m_loopback_doq.sessions_started(), sessions_before);
+}
+
+// Sending new requests must not postpone the short timeout: only replies prove
+// that the connection is alive. The server drops every query, so the timer must
+// fire after 2 * timeout and the next query must reconnect.
+TEST_F(UpstreamTest, DoqShortTimeoutTimerFiresWithoutReplies) {
+    co_await m_loop->co_submit();
+    ag::test::LoopbackQuicServer dropping_server([](const ldns_pkt &) -> ldns_pkt_ptr {
+        return {};
+    });
+    dropping_server.start();
+
+    auto upstream_res = create_upstream({.address = dropping_server.address()}, Millis{100});
+    ASSERT_FALSE(upstream_res.has_error()) << upstream_res.error()->str();
+    UpstreamPtr upstream = std::move(upstream_res.value());
+    size_t sessions_before = dropping_server.sessions_started();
+
+    // The short timeout is 2 * 100ms = 200ms. Keep sending queries every 50ms
+    // for 400ms; the timer must not be reset by the sends.
+    for (size_t i = 0; i < 8; ++i) {
+        auto req = create_test_message();
+        (void) co_await upstream->exchange(req.get());
+        co_await m_loop->co_sleep(Millis{50});
+    }
+
+    upstream.reset();
+    dropping_server.stop();
+
+    // One session from the first query and at least one reconnect after the
+    // timeout fired.
+    ASSERT_GT(dropping_server.sessions_started(), sessions_before + 1);
 }
 
 // DoT upstream bootstrapped via encrypted-DNS resolvers that still require real
