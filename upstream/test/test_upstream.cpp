@@ -212,6 +212,43 @@ TEST_F(UpstreamTest, TestUpstreamsDoqDoh3Local) {
     ASSERT_NO_FATAL_FAILURE(co_await sequential_test(local_data));
 }
 
+// DoQ closes an idle connection after the keepalive window expires, so the
+// next query creates a fresh NAT mapping instead of reusing a possibly stale
+// one. Keepalive PINGs are only sent during the window (see DnsLibs #159 and
+// dnsproxy #260).
+TEST_F(UpstreamTest, DoqKeepaliveWindowClosesIdleConnection) {
+    co_await m_loop->co_submit();
+    auto upstream_res = create_upstream({
+            .address = local_doq(),
+            .keepalive_window = Millis{300},
+    });
+    ASSERT_FALSE(upstream_res.has_error()) << upstream_res.error()->str();
+    auto upstream = std::move(upstream_res.value());
+
+    auto req = create_test_message();
+    auto reply = co_await upstream->exchange(req.get());
+    ASSERT_FALSE(reply.has_error()) << reply.error()->str();
+    auto reply_err = assert_response(*reply.value());
+    ASSERT_FALSE(reply_err.has_value()) << (reply_err ? *reply_err : "");
+
+    // Wait for the keepalive window to close the session, then make sure the
+    // server receives nothing afterwards. The snapshot is taken after the
+    // window so post-reply ACKs cannot be mistaken for post-close traffic.
+    co_await m_loop->co_sleep(Millis{500});
+    size_t packets_after_close = m_loopback_doq.received_packets();
+    size_t sessions_before_reconnect = m_loopback_doq.sessions_started();
+    co_await m_loop->co_sleep(Millis{200});
+    ASSERT_EQ(m_loopback_doq.received_packets(), packets_after_close);
+
+    // The next query must reconnect rather than reuse the closed session.
+    auto req2 = create_test_message();
+    auto reply2 = co_await upstream->exchange(req2.get());
+    ASSERT_FALSE(reply2.has_error()) << reply2.error()->str();
+    auto reply2_err = assert_response(*reply2.value());
+    ASSERT_FALSE(reply2_err.has_value()) << (reply2_err ? *reply2_err : "");
+    ASSERT_GT(m_loopback_doq.sessions_started(), sessions_before_reconnect);
+}
+
 // DoT upstream bootstrapped via encrypted-DNS resolvers that still require real
 // servers: a DoH bootstrap and DNSCrypt/DoT-stamp bootstraps. These cannot be
 // reproduced against loopback until the DoH (Task 6) and DNSCrypt (Task 8)

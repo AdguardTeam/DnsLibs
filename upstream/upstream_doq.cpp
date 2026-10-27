@@ -90,6 +90,7 @@ DoqUpstream::DoqUpstream(
         , m_req_idle_timer{Uv<uv_timer_t>::create_with_parent(this)}
         , m_handshake_timer(Uv<uv_timer_t>::create_with_parent(this))
         , m_retransmit_timer(Uv<uv_timer_t>::create_with_parent(this))
+        , m_keepalive_window_timer{Uv<uv_timer_t>::create_with_parent(this)}
         , m_static_secret{0}
         , m_tls_session_cache(opts.address)
         , m_shutdown_guard{std::make_shared<bool>(true)}
@@ -97,6 +98,7 @@ DoqUpstream::DoqUpstream(
     uv_timer_init(config.loop.handle(), m_req_idle_timer->raw());
     uv_timer_init(config.loop.handle(), m_handshake_timer->raw());
     uv_timer_init(config.loop.handle(), m_retransmit_timer->raw());
+    uv_timer_init(config.loop.handle(), m_keepalive_window_timer->raw());
 }
 
 DoqUpstream::~DoqUpstream() {
@@ -281,6 +283,14 @@ void DoqUpstream::short_timeout_timer_cb(uv_timer_t *timer) {
     doq->disconnect("Short timeout timer expired");
 }
 
+void DoqUpstream::keepalive_window_cb(uv_timer_t *timer) {
+    auto doq = static_cast<DoqUpstream *>(Uv<uv_timer_t>::parent_from_data(timer->data));
+    if (doq == nullptr || doq->m_state != RUN || !doq->m_requests.empty()) {
+        return;
+    }
+    doq->disconnect("Keep-alive window expired");
+}
+
 void DoqUpstream::handshake_timer_cb(uv_timer_t *timer) {
     auto doq = static_cast<DoqUpstream *>(Uv<uv_timer_t>::parent_from_data(timer->data));
     if (doq == nullptr) {
@@ -328,6 +338,7 @@ void DoqUpstream::send_requests() {
     }
 
     update_req_idle_timer();
+    update_keepalive_window_timer();
 }
 
 Error<Upstream::InitError> DoqUpstream::init() {
@@ -1315,6 +1326,7 @@ void DoqUpstream::process_reply(int64_t request_id, Uint8View reply) {
     auto node = m_requests.extract(request_id);
 
     update_req_idle_timer();
+    update_keepalive_window_timer();
 
     if (node.empty()) {
         return;
@@ -1347,6 +1359,7 @@ void DoqUpstream::disconnect(std::string_view reason) {
     uv_timer_stop(m_handshake_timer->raw());
     uv_timer_stop(m_req_idle_timer->raw());
     uv_timer_stop(m_retransmit_timer->raw());
+    uv_timer_stop(m_keepalive_window_timer->raw());
 
     m_conn_state.info.emplace<std::monostate>();
 
@@ -1443,6 +1456,21 @@ void DoqUpstream::update_req_idle_timer() {
     Millis value = m_config.timeout * 2;
     uv_timer_start(m_req_idle_timer->raw(), short_timeout_timer_cb, value.count(), 0);
     dbglog(m_log, "Short timeout timer set to {}", value);
+}
+
+// Keep the connection alive for a bounded window after the last DNS activity.
+// The keep-alive PINGs keep NAT mappings alive while the connection is in use,
+// but an indefinitely alive connection would keep waking the device even when
+// it is idle. Closing the connection when the window expires makes the next
+// query create a fresh NAT mapping (see DnsLibs #159 and dnsproxy #260).
+void DoqUpstream::update_keepalive_window_timer() {
+    if (m_state != RUN || !m_requests.empty() || m_options.keepalive_window <= Millis{0}) {
+        uv_timer_stop(m_keepalive_window_timer->raw());
+        return;
+    }
+    uv_timer_stop(m_keepalive_window_timer->raw());
+    uv_timer_start(m_keepalive_window_timer->raw(), keepalive_window_cb, m_options.keepalive_window.count(), 0);
+    tracelog(m_log, "Keep-alive window timer set to {}", m_options.keepalive_window);
 }
 
 void DoqUpstream::on_rand(uint8_t *dest, size_t destlen, const ngtcp2_rand_ctx *rand_ctx) {

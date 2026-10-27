@@ -188,6 +188,7 @@ private:
     static void short_timeout_timer_cb(uv_timer_t *timer);
     static void handshake_timer_cb(uv_timer_t *timer);
     static void retransmit_cb(uv_timer_t *timer);
+    static void keepalive_window_cb(uv_timer_t *timer);
 
     static void on_socket_connected(void *arg);
     static void on_socket_read(void *arg, Uint8View data);
@@ -210,6 +211,7 @@ private:
     static ngtcp2_tstamp get_tstamp();
     void disqualify_server_address(const ag::SocketAddress &server_address);
     void update_req_idle_timer();
+    void update_keepalive_window_timer();
 
 #ifdef OPENSSL_IS_BORINGSSL
     void write_client_handshake(ngtcp2_encryption_level level, const uint8_t *data, size_t datalen);
@@ -257,7 +259,8 @@ private:
     std::unordered_map<int64_t, Request> m_requests;
     UvPtr<uv_timer_t> m_req_idle_timer; // See `update_req_idle_timer()`.
     UvPtr<uv_timer_t> m_handshake_timer;
-    UvPtr<uv_timer_t> m_retransmit_timer; // This is also the idle timer.
+    UvPtr<uv_timer_t> m_retransmit_timer;       // This is also the idle timer.
+    UvPtr<uv_timer_t> m_keepalive_window_timer; // See `update_keepalive_window_timer()`.
     static std::atomic_int64_t m_next_request_id;
     std::array<uint8_t, 32> m_static_secret;
     TlsSessionCache m_tls_session_cache;

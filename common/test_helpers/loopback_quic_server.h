@@ -291,6 +291,16 @@ public:
         return m_first_packet_at;
     }
 
+    // Number of datagrams received from clients since start().
+    size_t received_packets() const {
+        return m_received_packets.load(std::memory_order_relaxed);
+    }
+
+    // Number of QUIC sessions accepted since start().
+    size_t sessions_started() const {
+        return m_sessions_started.load(std::memory_order_relaxed);
+    }
+
 private:
     // Per-peer QUIC connection state. Allocated on the first datagram from a
     // peer; destroyed when the connection errors out or the server stops.
@@ -437,6 +447,7 @@ private:
 
     // Look up or create the session for `peer`, then feed the datagram.
     void on_packet(const ag::SocketAddress &peer, Uint8View packet) {
+        m_received_packets.fetch_add(1, std::memory_order_relaxed);
         if (!m_first_packet_at.has_value()) {
             m_first_packet_at = std::chrono::steady_clock::now();
         }
@@ -446,6 +457,7 @@ private:
             if (session == nullptr) {
                 return; // not a valid Initial; ignore
             }
+            m_sessions_started.fetch_add(1, std::memory_order_relaxed);
             feed_packet(*session, packet);
         } else {
             feed_packet(*it->second, packet);
@@ -1030,6 +1042,8 @@ private:
     std::unordered_map<ag::SocketAddress, std::unique_ptr<QuicSession>> m_sessions;
     std::vector<ag::SocketAddress> m_dead_peers;
     std::optional<std::chrono::steady_clock::time_point> m_first_packet_at;
+    std::atomic<size_t> m_received_packets{0};
+    std::atomic<size_t> m_sessions_started{0};
 };
 
 } // namespace ag::test

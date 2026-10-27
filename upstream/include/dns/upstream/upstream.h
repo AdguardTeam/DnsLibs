@@ -87,6 +87,15 @@ struct UpstreamOptions {
      * Enable post-quantum cryptography (ML-KEM-768) for TLS connections.
      */
     bool enable_post_quantum_cryptography = false;
+
+    /**
+     * DoQ only: how long to keep the connection alive after the last DNS
+     * activity before closing it. Keep-alive PINGs are sent during this window
+     * to keep NAT mappings alive; once it expires the connection is closed so
+     * the next query creates a fresh mapping (see DnsLibs #159, dnsproxy #260).
+     * Set to zero to disable the window.
+     */
+    Millis keepalive_window = Millis{120'000};
 };
 
 /**
