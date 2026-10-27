@@ -71,6 +71,8 @@ public:
 #endif // OPENSSL_IS_BORINGSSL
 
 private:
+    friend struct DoqUpstreamTestAccess;
+
     enum NetworkError {
         NETWORK_ERR_HANDSHAKE_RUN = 1,
         NETWORK_ERR_OK = 0,

@@ -1449,13 +1449,14 @@ void DoqUpstream::update_req_idle_timer() {
         dbglog(m_log, "Short timeout timer stopped");
         return;
     }
-    if (uv_is_active((uv_handle_t *) m_req_idle_timer->raw())) {
-        tracelog(m_log, "Short timeout timer already running");
-        return;
-    }
+    // Reset the timer on every call: `send_requests()` calls this when a
+    // request is sent, and `process_reply()` calls it when a reply arrives.
+    // Keeping an already-running timer would tear down a healthy connection
+    // after the timeout even while replies are flowing.
     Millis value = m_config.timeout * 2;
+    uv_timer_stop(m_req_idle_timer->raw());
     uv_timer_start(m_req_idle_timer->raw(), short_timeout_timer_cb, value.count(), 0);
-    dbglog(m_log, "Short timeout timer set to {}", value);
+    dbglog(m_log, "Short timeout timer reset to {}", value);
 }
 
 // Keep the connection alive for a bounded window after the last DNS activity.

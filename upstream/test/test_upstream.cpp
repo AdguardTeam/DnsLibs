@@ -5,6 +5,25 @@
 
 #include "upstream_test_fixture.h"
 
+#include "../upstream_doq.h"
+
+namespace ag::dns {
+
+// Test-only access to the DoQ request map. The short-timeout regression test
+// needs a permanently in-flight request so the timer is not stopped between
+// real queries.
+struct DoqUpstreamTestAccess {
+    static void add_in_flight_request(DoqUpstream &upstream, int64_t id) {
+        upstream.m_requests[id].is_onfly = true;
+    }
+
+    static void remove_request(DoqUpstream &upstream, int64_t id) {
+        upstream.m_requests.erase(id);
+    }
+};
+
+} // namespace ag::dns
+
 namespace ag::dns::upstream::test {
 
 // Tests DoT bootstrap timeout against a loopback target. The upstream is a
@@ -247,6 +266,43 @@ TEST_F(UpstreamTest, DoqKeepaliveWindowClosesIdleConnection) {
     auto reply2_err = assert_response(*reply2.value());
     ASSERT_FALSE(reply2_err.has_value()) << (reply2_err ? *reply2_err : "");
     ASSERT_GT(m_loopback_doq.sessions_started(), sessions_before_reconnect);
+}
+
+// A healthy DoQ connection must survive sustained request/reply traffic. The
+// short timeout timer is meant to detect a lost connection; it must be reset
+// on every reply instead of tearing down the connection after a fixed 2x
+// upstream timeout from the first request.
+TEST_F(UpstreamTest, DoqShortTimeoutTimerResetsOnReplies) {
+    co_await m_loop->co_submit();
+    auto upstream_res = create_upstream({.address = local_doq()}, Millis{200});
+    ASSERT_FALSE(upstream_res.has_error()) << upstream_res.error()->str();
+    UpstreamPtr upstream = std::move(upstream_res.value());
+    auto doq = std::dynamic_pointer_cast<DoqUpstream>(upstream);
+    ASSERT_NE(doq, nullptr);
+
+    // Warm up the connection and take the session count after the first
+    // handshake, so only an unexpected reconnect can change it.
+    auto warmup_req = create_test_message();
+    auto warmup_reply = co_await upstream->exchange(warmup_req.get());
+    ASSERT_FALSE(warmup_reply.has_error()) << warmup_reply.error()->str();
+    size_t sessions_before = m_loopback_doq.sessions_started();
+
+    // Keep one request permanently in flight so the timer is not stopped
+    // between the real queries below. The short timeout is 2 * 200ms = 400ms;
+    // send real queries for longer than that. Every real reply must reset the
+    // timer, otherwise it fires at 400ms and tears down the connection.
+    DoqUpstreamTestAccess::add_in_flight_request(*doq, 1);
+    for (size_t i = 0; i < 12; ++i) {
+        auto req = create_test_message();
+        auto reply = co_await upstream->exchange(req.get());
+        ASSERT_FALSE(reply.has_error()) << "request " << i << ": " << reply.error()->str();
+        auto reply_err = assert_response(*reply.value());
+        ASSERT_FALSE(reply_err.has_value()) << (reply_err ? *reply_err : "");
+        co_await m_loop->co_sleep(Millis{50});
+    }
+    DoqUpstreamTestAccess::remove_request(*doq, 1);
+
+    ASSERT_EQ(m_loopback_doq.sessions_started(), sessions_before);
 }
 
 // DoT upstream bootstrapped via encrypted-DNS resolvers that still require real

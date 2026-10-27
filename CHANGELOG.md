@@ -32,6 +32,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - DoQ upstreams now stop sending keep-alive pings and close the connection after 120 seconds without DNS activity.
   This keeps NAT mappings alive while the connection is in use, but lets the device sleep when idle instead of
   waking it every 30 seconds. (AG-60967)
+- Fixed the DoQ upstream's short timeout timer not being reset when replies arrive, which could tear down a healthy
+  connection under sustained request traffic. (AG-60967)
 - Fixed `ServerStamp::from_string` accepting some URLs and stamps that can not be used to build upstream settings.
   (AG-60512)
 - Fixed DoQ upstreams ignoring the URL port and always connecting to port 853 when the server IP address is known in
