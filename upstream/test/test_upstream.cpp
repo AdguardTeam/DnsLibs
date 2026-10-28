@@ -385,8 +385,10 @@ TEST_F(UpstreamTest, DoqIdleConnectionNotTornDownByShortTimeout) {
             << "short timeout timer armed with nothing in flight";
 
     // Idle for well over 2 * timeout (200 ms): a wrongly armed timer would
-    // have fired and torn the connection down by now. Bounded poll on the
-    // clock rather than a fixed sleep.
+    // have fired and torn the connection down by now. There is no event to
+    // wait for here, so this is an intentional pause longer than 2 * timeout;
+    // the deterministic check is the is_req_idle_timer_active() assertion
+    // above.
     const auto deadline = std::chrono::steady_clock::now() + std::chrono::milliseconds(400);
     while (std::chrono::steady_clock::now() < deadline) {
         co_await m_loop->co_sleep(Millis{10});

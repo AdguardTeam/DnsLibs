@@ -356,6 +356,12 @@ void DoqUpstream::send_requests() {
     // after a reply (and from handshake_confirmed()), when nothing may be in
     // flight; an idle connection is bounded by the keepalive window, not by
     // the short timeout.
+    //
+    // Note: even if a request timed out and left the short timer armed as a
+    // dead-connection safety net, a later stream close/reset stops it here
+    // (on_close_stream() -> send_requests() with an empty map). That is fine:
+    // the server closing the stream is itself proof that the connection is
+    // alive.
     if (m_requests.empty()) {
         uv_timer_stop(m_req_idle_timer->raw());
     } else {
@@ -1269,6 +1275,12 @@ int DoqUpstream::handshake_confirmed(ngtcp2_conn * /*conn*/, void *data) {
     dbglog(doq->m_log, "Selected ALPN: {}", std::string_view{(char *) buf, len});
 
     doq->m_state = RUN;
+    // A connection's keep-alive window starts when the connection is
+    // established, not at the first DNS activity. Otherwise a connection whose
+    // triggering request timed out during the handshake would keep ts == 0,
+    // and the wall-clock checks in exchange()/retransmit_cb() would never
+    // close it -- only the uv timer would, and it stops during suspend.
+    doq->m_last_dns_activity_ts = get_tstamp();
     doq->send_requests();
     return 0;
 }
