@@ -301,6 +301,13 @@ public:
         return m_sessions_started.load(std::memory_order_relaxed);
     }
 
+    // Number of PING frames received across all sessions since start(). Unlike
+    // received_packets(), this is not satisfied by ACKs, so it can prove that
+    // keepalive PINGs were actually sent.
+    size_t received_pings() const {
+        return m_pings_received.load(std::memory_order_relaxed);
+    }
+
 private:
     // Per-peer QUIC connection state. Allocated on the first datagram from a
     // peer; destroyed when the connection errors out or the server stops.
@@ -329,6 +336,11 @@ private:
         std::unordered_map<int64_t, std::vector<uint8_t>> sent;
         std::unordered_map<int64_t, size_t> write_offset;
         std::deque<int64_t> pending_write;
+
+        // Last `ngtcp2_conn_info.ping_recv` value seen, to accumulate the
+        // delta into the server-wide counter (the field is cumulative per
+        // connection).
+        uint64_t pings_recv = 0;
 
         // DoH3 mode: the HTTP/3 server manages its own ngtcp2_conn + TLS
         // internally. Null in DoQ mode. Allocated in register_session() when
@@ -649,6 +661,13 @@ private:
             m_dead_peers.push_back(s.peer);
             return;
         }
+#if NGTCP2_VERSION_NUM >= 0x011000
+        // Accumulate PING frames received (ping_recv is cumulative per conn).
+        ngtcp2_conn_info info{};
+        ngtcp2_conn_get_conn_info(s.conn.get(), &info);
+        m_pings_received.fetch_add(info.ping_recv - s.pings_recv, std::memory_order_relaxed);
+        s.pings_recv = info.ping_recv;
+#endif
         flush_session(s);
     }
 
@@ -1044,6 +1063,7 @@ private:
     std::optional<std::chrono::steady_clock::time_point> m_first_packet_at;
     std::atomic<size_t> m_received_packets{0};
     std::atomic<size_t> m_sessions_started{0};
+    std::atomic<size_t> m_pings_received{0};
 };
 
 } // namespace ag::test

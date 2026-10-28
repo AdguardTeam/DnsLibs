@@ -296,10 +296,11 @@ void DoqUpstream::keepalive_window_cb(uv_timer_t *timer) {
     if (doq == nullptr || doq->m_state != RUN || !doq->m_requests.empty()) {
         return;
     }
-    // The timer was armed for the whole window after the last DNS activity, so
-    // reaching this callback means the window has expired. The timestamp
-    // checks in exchange()/retransmit_cb() cover the suspend case where this
-    // timer does not run.
+    // The timer is armed for the time remaining in the window after the last
+    // DNS activity, so reaching this callback means the window has expired
+    // (a zero delay is used when it already expired). The timestamp checks in
+    // exchange()/retransmit_cb() cover the suspend case where this timer does
+    // not run.
     doq->disconnect("Keep-alive window expired");
 }
 
@@ -350,7 +351,16 @@ void DoqUpstream::send_requests() {
         m_last_dns_activity_ts = get_tstamp();
     }
 
-    start_req_idle_timer();
+    // A send is not proof of a live connection: only arm the short timeout
+    // while something is outstanding. This is also called from on_close_stream()
+    // after a reply (and from handshake_confirmed()), when nothing may be in
+    // flight; an idle connection is bounded by the keepalive window, not by
+    // the short timeout.
+    if (m_requests.empty()) {
+        uv_timer_stop(m_req_idle_timer->raw());
+    } else {
+        start_req_idle_timer();
+    }
     update_keepalive_window_timer();
 }
 
@@ -1389,6 +1399,9 @@ void DoqUpstream::disconnect(std::string_view reason) {
     uv_timer_stop(m_req_idle_timer->raw());
     uv_timer_stop(m_retransmit_timer->raw());
     uv_timer_stop(m_keepalive_window_timer->raw());
+    // A new connection starts its own keep-alive window; never inherit the
+    // previous one. is_keepalive_window_expired() treats 0 as not expired.
+    m_last_dns_activity_ts = 0;
 
     m_conn_state.info.emplace<std::monostate>();
 
@@ -1508,10 +1521,23 @@ void DoqUpstream::update_keepalive_window_timer() {
         uv_timer_stop(m_keepalive_window_timer->raw());
         return;
     }
+    // Arm the timer for the time remaining in the window, not a full window
+    // from now: this may be called when the last activity timestamp is already
+    // older than the window (e.g. a late reply did not refresh it), and the
+    // callback relies on firing exactly at the window boundary. If the window
+    // has already expired, arm for 0 so keepalive_window_cb() closes the
+    // connection on the next loop iteration -- the callback, not this function,
+    // calls disconnect(), because this may run inside ngtcp2 callbacks.
+    const ngtcp2_tstamp now = get_tstamp();
+    const auto window = static_cast<ngtcp2_tstamp>(duration_cast<Nanos>(m_keepalive_window).count());
+    ngtcp2_tstamp remaining = window;
+    if (m_last_dns_activity_ts != 0 && now > m_last_dns_activity_ts) {
+        remaining = (now - m_last_dns_activity_ts >= window) ? 0 : window - (now - m_last_dns_activity_ts);
+    }
+    const auto ms = static_cast<uint64_t>(ceil<Millis>(Nanos{remaining}).count());
     uv_timer_stop(m_keepalive_window_timer->raw());
-    uv_timer_start(
-            m_keepalive_window_timer->raw(), keepalive_window_cb, static_cast<uint64_t>(m_keepalive_window.count()), 0);
-    tracelog(m_log, "Keep-alive window timer set to {}", m_keepalive_window);
+    uv_timer_start(m_keepalive_window_timer->raw(), keepalive_window_cb, ms, 0);
+    tracelog(m_log, "Keep-alive window timer set to {} ms", ms);
 }
 
 // The keep-alive window is measured in wall-clock time (CLOCK_BOOTTIME on

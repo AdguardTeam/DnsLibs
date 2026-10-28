@@ -43,11 +43,55 @@ struct DoqUpstreamTestAccess {
     static bool is_keepalive_window_expired(const DoqUpstream &upstream) {
         return upstream.is_keepalive_window_expired();
     }
+
+    static bool is_req_idle_timer_active(const DoqUpstream &upstream) {
+        return uv_is_active((uv_handle_t *) upstream.m_req_idle_timer->raw()) != 0;
+    }
+
+    static bool has_open_streams(const DoqUpstream &upstream) {
+        return !upstream.m_streams.empty();
+    }
 };
 
 } // namespace ag::dns
 
 namespace ag::dns::upstream::test {
+
+// Bounded poll: waits until `predicate` holds, checking every 10 ms for up to
+// `attempts` times (default ~1 s). Replaces fixed sleeps: AGENTS.md forbids
+// tests depending on sleep() for correctness, and fixed margins are fragile
+// under loaded CI.
+template <typename Predicate>
+coro::Task<bool> wait_until(EventLoop &loop, Predicate predicate, size_t attempts = 100) {
+    for (size_t i = 0; i < attempts; ++i) {
+        if (predicate()) {
+            co_return true;
+        }
+        co_await loop.co_sleep(Millis{10});
+    }
+    co_return predicate();
+}
+
+// Bounded poll: waits until `counter` has not changed for `quiet` (checked
+// every 10 ms), or `attempts` run out. Used to observe that a connection went
+// silent after its keepalive window expired.
+template <typename Counter>
+coro::Task<bool> wait_until_quiet(EventLoop &loop, Counter counter, Millis quiet, size_t attempts = 300) {
+    const auto quiet_polls = static_cast<size_t>(quiet.count() / 10);
+    size_t last = counter();
+    size_t stable = 0;
+    for (size_t i = 0; i < attempts; ++i) {
+        co_await loop.co_sleep(Millis{10});
+        size_t now = counter();
+        if (now != last) {
+            last = now;
+            stable = 0;
+        } else if (++stable >= quiet_polls) {
+            co_return true;
+        }
+    }
+    co_return false;
+}
 
 // Tests DoT bootstrap timeout against a loopback target. The upstream is a
 // hostname (localhost:<tls port>) bootstrapped via a loopback DNS server that
@@ -276,27 +320,88 @@ TEST_F(UpstreamTest, DoqKeepaliveWindowClosesIdleConnection) {
     auto reply_err = assert_response(*reply.value());
     ASSERT_FALSE(reply_err.has_value()) << (reply_err ? *reply_err : "");
 
-    // Let the post-reply ACKs settle, then verify that keepalive PINGs are
-    // still sent during the window.
-    co_await m_loop->co_sleep(Millis{20});
-    size_t packets_before = m_loopback_doq.received_packets();
-    co_await m_loop->co_sleep(Millis{150});
-    ASSERT_GT(m_loopback_doq.received_packets(), packets_before);
+    // Keepalive PINGs are sent while the connection is idle and the window is
+    // open. Count PING frames, not datagrams: a post-reply ACK would also
+    // satisfy a packet-count assertion.
+    ASSERT_TRUE(co_await wait_until(*m_loop, [&] {
+        return m_loopback_doq.received_pings() > 0;
+    })) << "no keepalive PINGs while the window was open";
 
-    // The window closes at 250 ms; after that the client must go silent.
-    co_await m_loop->co_sleep(Millis{200});
-    size_t packets_after_close = m_loopback_doq.received_packets();
-    size_t sessions_before_reconnect = m_loopback_doq.sessions_started();
-    co_await m_loop->co_sleep(Millis{150});
-    ASSERT_EQ(m_loopback_doq.received_packets(), packets_after_close);
+    // The window closes at 250 ms and the client must go silent. PINGs arrive
+    // every 50 ms while the window is open, so a 150 ms gap can only appear
+    // after the close; poll for it instead of assuming a fixed delay.
+    ASSERT_TRUE(co_await wait_until_quiet(
+            *m_loop,
+            [&] {
+                return m_loopback_doq.received_pings();
+            },
+            Millis{150}, 300))
+            << "client kept sending after the keepalive window expired";
 
     // The next query must reconnect rather than reuse the closed session.
+    size_t sessions_before_reconnect = m_loopback_doq.sessions_started();
     auto req2 = create_test_message();
     auto reply2 = co_await upstream->exchange(req2.get());
     ASSERT_FALSE(reply2.has_error()) << reply2.error()->str();
     auto reply2_err = assert_response(*reply2.value());
     ASSERT_FALSE(reply2_err.has_value()) << (reply2_err ? *reply2_err : "");
     ASSERT_GT(m_loopback_doq.sessions_started(), sessions_before_reconnect);
+}
+
+// An idle connection must not be torn down by the short timeout: only
+// outstanding requests are covered by it; an idle connection is bounded by the
+// keepalive window. Regression for on_close_stream() -> send_requests()
+// re-arming the short timer with nothing in flight.
+TEST_F(UpstreamTest, DoqIdleConnectionNotTornDownByShortTimeout) {
+    co_await m_loop->co_submit();
+    auto upstream_res = create_upstream({.address = local_doq()}, Millis{100});
+    ASSERT_FALSE(upstream_res.has_error()) << upstream_res.error()->str();
+    UpstreamPtr upstream = std::move(upstream_res.value());
+    auto doq = std::dynamic_pointer_cast<DoqUpstream>(upstream);
+    ASSERT_NE(doq, nullptr);
+    // Long window so only the short timeout (2 * 100 ms = 200 ms) could tear
+    // the connection down during the idle period below.
+    DoqUpstreamTestAccess::set_keepalive_window(*doq, Millis{5000});
+    DoqUpstreamTestAccess::set_keepalive_interval(*doq, Millis{50});
+
+    auto req = create_test_message();
+    auto reply = co_await upstream->exchange(req.get());
+    ASSERT_FALSE(reply.has_error()) << reply.error()->str();
+    auto reply_err = assert_response(*reply.value());
+    ASSERT_FALSE(reply_err.has_value()) << (reply_err ? *reply_err : "");
+    size_t sessions_before = m_loopback_doq.sessions_started();
+
+    // Wait until the reply's stream has fully closed: on_close_stream() then
+    // runs send_requests() with an empty request map, which is where the short
+    // timer used to be re-armed. With nothing in flight it must stay stopped.
+    ASSERT_TRUE(co_await wait_until(
+            *m_loop,
+            [&] {
+                return !DoqUpstreamTestAccess::has_open_streams(*doq);
+            },
+            100))
+            << "stream did not close after the reply";
+    ASSERT_FALSE(DoqUpstreamTestAccess::is_req_idle_timer_active(*doq))
+            << "short timeout timer armed with nothing in flight";
+
+    // Idle for well over 2 * timeout (200 ms): a wrongly armed timer would
+    // have fired and torn the connection down by now. Bounded poll on the
+    // clock rather than a fixed sleep.
+    const auto deadline = std::chrono::steady_clock::now() + std::chrono::milliseconds(400);
+    while (std::chrono::steady_clock::now() < deadline) {
+        co_await m_loop->co_sleep(Millis{10});
+    }
+
+    // Keepalive PINGs must still be flowing: the connection is alive.
+    ASSERT_GT(m_loopback_doq.received_pings(), 0);
+
+    // The next query must reuse the connection, not reconnect.
+    auto req2 = create_test_message();
+    auto reply2 = co_await upstream->exchange(req2.get());
+    ASSERT_FALSE(reply2.has_error()) << reply2.error()->str();
+    auto reply2_err = assert_response(*reply2.value());
+    ASSERT_FALSE(reply2_err.has_value()) << (reply2_err ? *reply2_err : "");
+    ASSERT_EQ(m_loopback_doq.sessions_started(), sessions_before);
 }
 
 // The keep-alive window is wall-clock based, while the uv_timer that triggers
@@ -344,18 +449,22 @@ TEST_F(UpstreamTest, DoqShortTimeoutTimerResetsOnReplies) {
 
     // Keep one request permanently in flight so the timer is not stopped
     // between the real queries below. The short timeout is 2 * 200ms = 400ms;
-    // send real queries for longer than that. Every real reply must reset the
+    // keep exchanging for longer than that. Every real reply must reset the
     // timer, otherwise it fires at 400ms and tears down the connection.
     static constexpr int64_t FAKE_REQUEST_ID = std::numeric_limits<int64_t>::max();
     DoqUpstreamTestAccess::add_in_flight_request(*doq, FAKE_REQUEST_ID);
-    for (size_t i = 0; i < 12; ++i) {
+    const auto deadline = std::chrono::steady_clock::now() + std::chrono::milliseconds(700);
+    size_t queries = 0;
+    while (std::chrono::steady_clock::now() < deadline) {
         auto req = create_test_message();
         auto reply = co_await upstream->exchange(req.get());
-        ASSERT_FALSE(reply.has_error()) << "request " << i << ": " << reply.error()->str();
+        ASSERT_FALSE(reply.has_error()) << "request " << queries << ": " << reply.error()->str();
         auto reply_err = assert_response(*reply.value());
         ASSERT_FALSE(reply_err.has_value()) << (reply_err ? *reply_err : "");
-        co_await m_loop->co_sleep(Millis{50});
+        ++queries;
+        co_await m_loop->co_sleep(Millis{10});
     }
+    ASSERT_GT(queries, 1);
     DoqUpstreamTestAccess::remove_request(*doq, FAKE_REQUEST_ID);
 
     ASSERT_EQ(m_loopback_doq.sessions_started(), sessions_before);
@@ -376,12 +485,15 @@ TEST_F(UpstreamTest, DoqShortTimeoutTimerFiresWithoutReplies) {
     UpstreamPtr upstream = std::move(upstream_res.value());
     size_t sessions_before = dropping_server.sessions_started();
 
-    // The short timeout is 2 * 100ms = 200ms. Keep sending queries every 50ms
-    // for 400ms; the timer must not be reset by the sends.
-    for (size_t i = 0; i < 8; ++i) {
+    // The short timeout is 2 * 100ms = 200ms. Keep sending queries until the
+    // server sees a reconnect -- i.e. the timer fired and the next query had
+    // to create a fresh connection.
+    bool reconnected = false;
+    for (size_t i = 0; i < 40 && !reconnected; ++i) {
         auto req = create_test_message();
         (void) co_await upstream->exchange(req.get());
-        co_await m_loop->co_sleep(Millis{50});
+        reconnected = dropping_server.sessions_started() > sessions_before + 1;
+        co_await m_loop->co_sleep(Millis{10});
     }
 
     upstream.reset();
@@ -389,7 +501,7 @@ TEST_F(UpstreamTest, DoqShortTimeoutTimerFiresWithoutReplies) {
 
     // One session from the first query and at least one reconnect after the
     // timeout fired.
-    ASSERT_GT(dropping_server.sessions_started(), sessions_before + 1);
+    ASSERT_TRUE(reconnected);
 }
 
 // DoT upstream bootstrapped via encrypted-DNS resolvers that still require real
