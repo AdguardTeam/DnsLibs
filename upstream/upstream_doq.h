@@ -267,10 +267,13 @@ private:
     UvPtr<uv_timer_t> m_keepalive_window_timer; // See `update_keepalive_window_timer()`.
     /// How often ngtcp2 sends a keep-alive PING while the connection is alive.
     Millis m_keepalive_interval{30'000};
-    /// How long the connection is kept alive after the last DNS activity.
+    /// How long the connection is kept alive after the last DNS activity, or
+    /// after the connection was established if there has been none yet.
     /// Zero keeps it alive indefinitely, as before this window was introduced.
     Millis m_keepalive_window{120'000};
-    /// Timestamp of the last DNS activity, in the same clock as `get_tstamp()`.
+    /// Timestamp of the last DNS activity (or of the handshake, if there has
+    /// been none yet), in the same clock as `get_tstamp()`. Zero only covers
+    /// the pre-handshake state; a RUN connection always has a nonzero value.
     ngtcp2_tstamp m_last_dns_activity_ts{0};
     static std::atomic_int64_t m_next_request_id;
     std::array<uint8_t, 32> m_static_secret;

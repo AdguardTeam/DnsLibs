@@ -530,7 +530,9 @@ coro::Task<Upstream::ExchangeResult> DoqUpstream::exchange(const ldns_pkt *reque
         // A timed out request suggests the connection may be dead, so it is
         // not DNS activity: keep the short timeout timer running (it
         // disconnects unless a reply arrives) and do not arm the keep-alive
-        // window. A late reply resets both timers in process_reply().
+        // window. A late reply only resets the short timeout timer in
+        // process_reply(); the keep-alive window keeps counting from the last
+        // successful activity.
         start_req_idle_timer();
         co_return make_error(DnsError::AE_TIMED_OUT);
     }
