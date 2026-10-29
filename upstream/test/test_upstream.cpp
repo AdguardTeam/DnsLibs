@@ -51,6 +51,25 @@ struct DoqUpstreamTestAccess {
     static bool has_open_streams(const DoqUpstream &upstream) {
         return !upstream.m_streams.empty();
     }
+
+    static void stop_keepalive_window_timer(DoqUpstream &upstream) {
+        uv_timer_stop(upstream.m_keepalive_window_timer->raw());
+    }
+
+    static bool is_running(const DoqUpstream &upstream) {
+        return upstream.m_state == DoqUpstream::RUN;
+    }
+
+    // Simulates a suspend: the keep-alive window uv_timer (CLOCK_MONOTONIC)
+    // would not fire while the device sleeps, and the wall-clock window
+    // (CLOCK_BOOTTIME) has long expired. Only the checks in exchange() and
+    // retransmit_cb() can then close the connection.
+    static void simulate_suspend(DoqUpstream &upstream) {
+        stop_keepalive_window_timer(upstream);
+        const ngtcp2_tstamp now = DoqUpstream::get_tstamp();
+        upstream.m_last_dns_activity_ts = now
+                - static_cast<ngtcp2_tstamp>(std::chrono::duration_cast<std::chrono::nanoseconds>(Secs{10}).count());
+    }
 };
 
 } // namespace ag::dns
@@ -409,8 +428,10 @@ TEST_F(UpstreamTest, DoqIdleConnectionNotTornDownByShortTimeout) {
 // The keep-alive window is wall-clock based, while the uv_timer that triggers
 // the close stops during suspend. A real suspend cannot be simulated in a unit
 // test, so this covers the wall-clock window math used by the exchange() and
-// retransmit_cb() checks; the awake-case close/reconnect is covered by
-// DoqKeepaliveWindowClosesIdleConnection.
+// retransmit_cb() checks; the suspend behavior itself is covered by
+// DoqExchangeDoesNotReuseConnectionAfterSuspend and
+// DoqRetransmitClosesConnectionAfterSuspend. The connection must be in RUN
+// state: is_keepalive_window_expired() asserts that invariant.
 TEST_F(UpstreamTest, DoqKeepaliveWindowUsesWallClock) {
     co_await m_loop->co_submit();
     auto upstream_res = create_upstream({.address = local_doq()});
@@ -418,16 +439,132 @@ TEST_F(UpstreamTest, DoqKeepaliveWindowUsesWallClock) {
     UpstreamPtr upstream = std::move(upstream_res.value());
     auto doq = std::dynamic_pointer_cast<DoqUpstream>(upstream);
     ASSERT_NE(doq, nullptr);
-    DoqUpstreamTestAccess::set_keepalive_window(*doq, Millis{100});
+    DoqUpstreamTestAccess::set_keepalive_window(*doq, Millis{5000});
+
+    // Establish the connection so the upstream is in RUN state.
+    auto req = create_test_message();
+    auto reply = co_await upstream->exchange(req.get());
+    ASSERT_FALSE(reply.has_error()) << reply.error()->str();
+    ASSERT_TRUE(DoqUpstreamTestAccess::is_running(*doq));
 
     const auto now = DoqUpstreamTestAccess::now();
     const auto old =
-            now - static_cast<ngtcp2_tstamp>(std::chrono::duration_cast<std::chrono::nanoseconds>(Millis{200}).count());
+            now - static_cast<ngtcp2_tstamp>(std::chrono::duration_cast<std::chrono::nanoseconds>(Secs{10}).count());
     DoqUpstreamTestAccess::set_last_dns_activity_ts(*doq, old);
     ASSERT_TRUE(DoqUpstreamTestAccess::is_keepalive_window_expired(*doq));
 
     DoqUpstreamTestAccess::set_last_dns_activity_ts(*doq, now);
     ASSERT_FALSE(DoqUpstreamTestAccess::is_keepalive_window_expired(*doq));
+}
+
+// A connection whose wall-clock keep-alive window expired while the device was
+// suspended must not be reused: exchange() checks the timestamp before sending
+// a query on a RUN connection. The window timer is stopped (it would not fire
+// during suspend) and the clock is shifted back, so only the exchange() check
+// can close the connection.
+TEST_F(UpstreamTest, DoqExchangeDoesNotReuseConnectionAfterSuspend) {
+    co_await m_loop->co_submit();
+    auto upstream_res = create_upstream({.address = local_doq()});
+    ASSERT_FALSE(upstream_res.has_error()) << upstream_res.error()->str();
+    UpstreamPtr upstream = std::move(upstream_res.value());
+    auto doq = std::dynamic_pointer_cast<DoqUpstream>(upstream);
+    ASSERT_NE(doq, nullptr);
+    // Long window and the default 30 s keepalive interval: no keepalive PING
+    // and no retransmit_cb() wall-clock check can interfere during the test,
+    // so only the exchange() check can close the connection.
+    DoqUpstreamTestAccess::set_keepalive_window(*doq, Millis{5000});
+
+    auto req = create_test_message();
+    auto reply = co_await upstream->exchange(req.get());
+    ASSERT_FALSE(reply.has_error()) << reply.error()->str();
+    auto reply_err = assert_response(*reply.value());
+    ASSERT_FALSE(reply_err.has_value()) << (reply_err ? *reply_err : "");
+
+    // Wait until the reply's stream has fully closed: on_close_stream() runs
+    // send_requests() and is the last place that could re-arm the window
+    // timer. Only then does the "suspend" below stick.
+    ASSERT_TRUE(co_await wait_until(
+            *m_loop,
+            [&] {
+                return !DoqUpstreamTestAccess::has_open_streams(*doq);
+            },
+            100))
+            << "stream did not close after the reply";
+    ASSERT_TRUE(DoqUpstreamTestAccess::is_running(*doq));
+    size_t sessions_before = m_loopback_doq.sessions_started();
+
+    // Simulate a suspend and issue the next query immediately. co_await on the
+    // coro::Task resumes the exchange() coroutine via symmetric transfer, so
+    // the event loop does not run between these two statements: no timer can
+    // close the connection first, the exchange() check must do it.
+    DoqUpstreamTestAccess::simulate_suspend(*doq);
+    auto req2 = create_test_message();
+    auto reply2 = co_await upstream->exchange(req2.get());
+    ASSERT_FALSE(reply2.has_error()) << reply2.error()->str();
+    auto reply2_err = assert_response(*reply2.value());
+    ASSERT_FALSE(reply2_err.has_value()) << (reply2_err ? *reply2_err : "");
+
+    // The stale connection must not have been reused: the exchange created a
+    // fresh session.
+    ASSERT_GT(m_loopback_doq.sessions_started(), sessions_before);
+}
+
+// The retransmit_cb() wall-clock check must close a connection whose window
+// expired during suspend before it sends another keepalive PING. The window
+// timer is stopped (it would not fire during suspend) and the clock is shifted
+// back, so only the retransmit_cb() check can close the connection.
+TEST_F(UpstreamTest, DoqRetransmitClosesConnectionAfterSuspend) {
+    co_await m_loop->co_submit();
+    auto upstream_res = create_upstream({.address = local_doq()});
+    ASSERT_FALSE(upstream_res.has_error()) << upstream_res.error()->str();
+    UpstreamPtr upstream = std::move(upstream_res.value());
+    auto doq = std::dynamic_pointer_cast<DoqUpstream>(upstream);
+    ASSERT_NE(doq, nullptr);
+    DoqUpstreamTestAccess::set_keepalive_window(*doq, Millis{5000});
+    DoqUpstreamTestAccess::set_keepalive_interval(*doq, Millis{50});
+
+    auto req = create_test_message();
+    auto reply = co_await upstream->exchange(req.get());
+    ASSERT_FALSE(reply.has_error()) << reply.error()->str();
+    auto reply_err = assert_response(*reply.value());
+    ASSERT_FALSE(reply_err.has_value()) << (reply_err ? *reply_err : "");
+
+    // Wait for the stream to close, then observe at least one keepalive PING:
+    // the connection is alive and the keep-alive is active.
+    ASSERT_TRUE(co_await wait_until(
+            *m_loop,
+            [&] {
+                return !DoqUpstreamTestAccess::has_open_streams(*doq);
+            },
+            100))
+            << "stream did not close after the reply";
+    ASSERT_TRUE(co_await wait_until(
+            *m_loop,
+            [&] {
+                return m_loopback_doq.received_pings() > 0;
+            },
+            300))
+            << "no keepalive PINGs while the connection was idle";
+
+    // Simulate a suspend. The next retransmit tick (keepalive every 50 ms)
+    // must close the connection via the wall-clock check.
+    DoqUpstreamTestAccess::simulate_suspend(*doq);
+    ASSERT_TRUE(co_await wait_until(
+            *m_loop,
+            [&] {
+                return !DoqUpstreamTestAccess::is_running(*doq);
+            },
+            100))
+            << "connection not closed after the simulated suspend";
+
+    // PINGs must stop once the connection is closed.
+    ASSERT_TRUE(co_await wait_until_quiet(
+            *m_loop,
+            [&] {
+                return m_loopback_doq.received_pings();
+            },
+            Millis{150}, 100))
+            << "keepalive PINGs continued after the connection closed";
 }
 
 // A healthy DoQ connection must survive sustained request/reply traffic. The
