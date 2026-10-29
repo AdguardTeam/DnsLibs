@@ -67,8 +67,14 @@ struct DoqUpstreamTestAccess {
     static void simulate_suspend(DoqUpstream &upstream) {
         stop_keepalive_window_timer(upstream);
         const ngtcp2_tstamp now = DoqUpstream::get_tstamp();
-        upstream.m_last_dns_activity_ts = now
-                - static_cast<ngtcp2_tstamp>(std::chrono::duration_cast<std::chrono::nanoseconds>(Secs{10}).count());
+        // ngtcp2_tstamp is unsigned; guard the subtraction like the production
+        // code does (schedule_retransmit()). With less than 10 s of uptime
+        // there is nothing to shift back: leave the timestamp at 0 (treated as
+        // not expired), which makes the test fail loudly instead of
+        // overflowing.
+        const auto ten_s =
+                static_cast<ngtcp2_tstamp>(std::chrono::duration_cast<std::chrono::nanoseconds>(Secs{10}).count());
+        upstream.m_last_dns_activity_ts = now > ten_s ? now - ten_s : 0;
     }
 };
 
