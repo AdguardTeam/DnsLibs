@@ -291,18 +291,13 @@ public:
         return m_first_packet_at;
     }
 
-    // Number of datagrams received from clients since start().
-    size_t received_packets() const {
-        return m_received_packets.load(std::memory_order_relaxed);
-    }
-
     // Number of QUIC sessions accepted since start().
     size_t sessions_started() const {
         return m_sessions_started.load(std::memory_order_relaxed);
     }
 
     // Number of PING frames received across all sessions since start(). Unlike
-    // received_packets(), this is not satisfied by ACKs, so it can prove that
+    // a packet count, this is not satisfied by ACKs, so it can prove that
     // keepalive PINGs were actually sent.
     size_t received_pings() const {
         return m_pings_received.load(std::memory_order_relaxed);
@@ -459,7 +454,6 @@ private:
 
     // Look up or create the session for `peer`, then feed the datagram.
     void on_packet(const ag::SocketAddress &peer, Uint8View packet) {
-        m_received_packets.fetch_add(1, std::memory_order_relaxed);
         if (!m_first_packet_at.has_value()) {
             m_first_packet_at = std::chrono::steady_clock::now();
         }
@@ -1061,7 +1055,6 @@ private:
     std::unordered_map<ag::SocketAddress, std::unique_ptr<QuicSession>> m_sessions;
     std::vector<ag::SocketAddress> m_dead_peers;
     std::optional<std::chrono::steady_clock::time_point> m_first_packet_at;
-    std::atomic<size_t> m_received_packets{0};
     std::atomic<size_t> m_sessions_started{0};
     std::atomic<size_t> m_pings_received{0};
 };
