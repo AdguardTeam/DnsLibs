@@ -1561,7 +1561,7 @@ bool DoqUpstream::is_keepalive_window_expired() const {
     // Invariant: a RUN connection always has a nonzero timestamp (it is set in
     // handshake_confirmed()); zero only covers the pre-handshake state. A
     // connection must never reach RUN with an unset clock.
-    assert(m_state == RUN || m_last_dns_activity_ts == 0);
+    assert(m_state != RUN || m_last_dns_activity_ts != 0);
     if (m_keepalive_window <= Millis{0} || m_last_dns_activity_ts == 0) {
         return false;
     }

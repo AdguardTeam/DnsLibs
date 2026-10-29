@@ -430,8 +430,7 @@ TEST_F(UpstreamTest, DoqIdleConnectionNotTornDownByShortTimeout) {
 // test, so this covers the wall-clock window math used by the exchange() and
 // retransmit_cb() checks; the suspend behavior itself is covered by
 // DoqExchangeDoesNotReuseConnectionAfterSuspend and
-// DoqRetransmitClosesConnectionAfterSuspend. The connection must be in RUN
-// state: is_keepalive_window_expired() asserts that invariant.
+// DoqRetransmitClosesConnectionAfterSuspend.
 TEST_F(UpstreamTest, DoqKeepaliveWindowUsesWallClock) {
     co_await m_loop->co_submit();
     auto upstream_res = create_upstream({.address = local_doq()});
@@ -439,17 +438,11 @@ TEST_F(UpstreamTest, DoqKeepaliveWindowUsesWallClock) {
     UpstreamPtr upstream = std::move(upstream_res.value());
     auto doq = std::dynamic_pointer_cast<DoqUpstream>(upstream);
     ASSERT_NE(doq, nullptr);
-    DoqUpstreamTestAccess::set_keepalive_window(*doq, Millis{5000});
-
-    // Establish the connection so the upstream is in RUN state.
-    auto req = create_test_message();
-    auto reply = co_await upstream->exchange(req.get());
-    ASSERT_FALSE(reply.has_error()) << reply.error()->str();
-    ASSERT_TRUE(DoqUpstreamTestAccess::is_running(*doq));
+    DoqUpstreamTestAccess::set_keepalive_window(*doq, Millis{100});
 
     const auto now = DoqUpstreamTestAccess::now();
     const auto old =
-            now - static_cast<ngtcp2_tstamp>(std::chrono::duration_cast<std::chrono::nanoseconds>(Secs{10}).count());
+            now - static_cast<ngtcp2_tstamp>(std::chrono::duration_cast<std::chrono::nanoseconds>(Millis{200}).count());
     DoqUpstreamTestAccess::set_last_dns_activity_ts(*doq, old);
     ASSERT_TRUE(DoqUpstreamTestAccess::is_keepalive_window_expired(*doq));
 
