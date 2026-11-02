@@ -161,16 +161,21 @@ TEST_F(BootstrapperTest, ResolvedAddresses) {
 // Without resolved addresses and bootstrap servers, a hostname cannot be resolved.
 TEST_F(BootstrapperTest, NoResolvedAddressesNoBootstrap) {
     EventLoopPtr loop = EventLoop::create();
-    SocketFactory socket_factory({*loop});
-    const std::vector<std::string> no_bootstrap;
-    Bootstrapper bootstrapper({
-            .address_string = "example.com",
-            .default_port = 853,
-            .bootstrap = no_bootstrap,
-            .timeout = Secs(1),
-            .upstream_config = {*loop, &socket_factory},
-    });
-    ASSERT_TRUE(bootstrapper.init());
+    loop->start();
+    {
+        SocketFactory socket_factory({*loop});
+        const std::vector<std::string> no_bootstrap;
+        Bootstrapper bootstrapper({
+                .address_string = "example.com",
+                .default_port = 853,
+                .bootstrap = no_bootstrap,
+                .timeout = Secs(1),
+                .upstream_config = {*loop, &socket_factory},
+        });
+        EXPECT_TRUE(bootstrapper.init());
+    }
+    loop->stop();
+    loop->join();
 }
 
 } // namespace ag::dns::upstream::test

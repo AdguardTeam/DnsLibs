@@ -270,8 +270,9 @@ namespace Adguard.Dns.Helpers
                 MarshalUtils.StringToPtr,
                 allocatedPointers);
 
+            // The addresses are optional: null means no pre-resolved addresses.
             MarshalUtils.ag_buffer addressesC = MarshalUtils.ListToAgList(
-                upstreamOptions.ResolvedIpAddresses,
+                upstreamOptions.ResolvedIpAddresses ?? new List<IPAddress>(),
                 (address, pointers) =>
                 {
                     MarshalUtils.ag_buffer addressC = MarshalUtils.BytesToAgBuffer(address.GetAddressBytes());
