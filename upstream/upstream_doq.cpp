@@ -33,6 +33,8 @@ using namespace std::chrono;
 namespace ag::dns {
 
 static constexpr std::string_view DQ_ALPNS[] = {DoqUpstream::RFC9250_ALPN};
+static constexpr int KEEPALIVE_INTERVAL_SEC = 30;
+static constexpr int KEEPALIVE_WINDOW_SEC = 120;
 static constexpr int LOCAL_IDLE_TIMEOUT_SEC = 180;
 static constexpr int MAX_PKTLEN_IPV6 = 1232;
 static constexpr size_t QUIC_PACKET_TRACE_BUFSIZE = 2048;
@@ -90,6 +92,8 @@ DoqUpstream::DoqUpstream(
         , m_handshake_timer(Uv<uv_timer_t>::create_with_parent(this))
         , m_retransmit_timer(Uv<uv_timer_t>::create_with_parent(this))
         , m_keepalive_window_timer{Uv<uv_timer_t>::create_with_parent(this)}
+        , m_keepalive_interval{Secs{KEEPALIVE_INTERVAL_SEC}}
+        , m_keepalive_window{Secs{KEEPALIVE_WINDOW_SEC}}
         , m_static_secret{0}
         , m_tls_session_cache(opts.address)
         , m_shutdown_guard{std::make_shared<bool>(true)}
