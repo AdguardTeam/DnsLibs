@@ -113,9 +113,20 @@ Error<Upstream::InitError> PlainUpstream::init() {
         port = DEFAULT_PLAIN_PORT;
     }
 
-    if (!std::holds_alternative<std::monostate>(m_options.resolved_server_ip)) {
-        // resolved_server_ip takes precedence; the bootstrapper is not used.
-        m_address = SocketAddress(m_options.resolved_server_ip, port);
+    if (std::vector<SocketAddress> resolved_addresses = resolved_server_addresses(port); !resolved_addresses.empty()) {
+        // Resolved server IPs take precedence; the bootstrapper only rotates through them and resolves nothing.
+        m_address = resolved_addresses.front();
+        if (resolved_addresses.size() > 1) {
+            m_bootstrapper = std::make_unique<Bootstrapper>(Bootstrapper::Params{
+                    .address_string = m_address.str(),
+                    .default_port = DEFAULT_PLAIN_PORT,
+                    .bootstrap = m_options.bootstrap,
+                    .timeout = m_config.timeout,
+                    .upstream_config = m_config,
+                    .outbound_interface = m_options.outbound_interface,
+                    .resolved_addresses = std::move(resolved_addresses),
+            });
+        }
     } else if (m_address.valid()) {
         if (m_address.port() == 0) {
             // Don't lose the scope ID!

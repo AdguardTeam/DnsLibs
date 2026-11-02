@@ -12,6 +12,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   in the `AGDnsProxyEvents` Objective-C API. The proxy raises it when it suspects that a DNS request failed due to
   a missing Local Network permission. Applications should handle the event by guiding the user through the
   Local Network permission request and explaining why the permission is required. (AG-59533)
+- Added `UpstreamOptions::resolved_server_ips`, a list of the IP addresses of the server. Use it instead of
+  `resolved_server_ip` when the server has more than one address. Plain DNS, DoT, DoH, and DoQ upstreams race or rotate
+  through these addresses and do not use the bootstrap. (AG-61580)
 
 ### Changed
 

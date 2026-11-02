@@ -607,6 +607,37 @@ TEST_F(UpstreamTest, TestUpstreamsDoqWithServerIpLocal) {
     ASSERT_NO_FATAL_FAILURE(co_await sequential_test(local_data));
 }
 
+// IPv6 loopback address. The loopback servers listen on 127.0.0.1 only, so a
+// connection to this address fails.
+static constexpr Ipv6Address IPV6_LOOPBACK{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1};
+
+// Upstreams with several resolved server IPs (resolved_server_ips) against
+// loopback. The bootstrap is dead, so the exchange succeeds only if the
+// upstream uses the resolved IPs. The first IP is not reachable, so the
+// upstream must also try the second IP.
+TEST_F(UpstreamTest, TestUpstreamsWithServerIpsLocal) {
+    const std::vector<IpAddress> server_ips = {IPV6_LOOPBACK, Ipv4Address{127, 0, 0, 1}};
+    const std::vector<UpstreamTestData> local_data = {
+            {AG_FMT("localhost:{}", m_loopback.port()), {"127.0.0.1:1"}, {}, server_ips},
+            {AG_FMT("tcp://localhost:{}", m_loopback.port()), {"127.0.0.1:1"}, {}, server_ips},
+            {AG_FMT("tls://localhost:{}", m_loopback_tls.port()), {"127.0.0.1:1"}, {}, server_ips},
+            {AG_FMT("https://localhost:{}/dns-query", m_loopback_doh.port()), {"127.0.0.1:1"}, {}, server_ips},
+            {AG_FMT("quic://localhost:{}", m_loopback_doq.port()), {"127.0.0.1:1"}, {}, server_ips},
+    };
+    ASSERT_NO_FATAL_FAILURE(co_await sequential_test(local_data));
+}
+
+// resolved_server_ip and resolved_server_ips together: both are used, and the
+// bootstrap is not needed.
+TEST_F(UpstreamTest, TestUpstreamsWithServerIpAndServerIpsLocal) {
+    const std::vector<UpstreamTestData> local_data = {
+            {AG_FMT("tls://localhost:{}", m_loopback_tls.port()), {}, IPV6_LOOPBACK, {Ipv4Address{127, 0, 0, 1}}},
+            {AG_FMT("https://localhost:{}/dns-query", m_loopback_doh.port()), {}, IPV6_LOOPBACK,
+                    {Ipv4Address{127, 0, 0, 1}}},
+    };
+    ASSERT_NO_FATAL_FAILURE(co_await sequential_test(local_data));
+}
+
 // DoH/DoT/DoQ stamps: the port may be specified either in the server address
 // or in the hostname (`hostname[:port]`, as per the DNS stamp spec). When the
 // server address contains an IP, it's used to connect (bypassing the dead

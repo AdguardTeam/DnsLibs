@@ -65,7 +65,10 @@ struct UpstreamOptions {
      */
     std::vector<std::string> bootstrap;
 
-    /** Upstream's IP address. If specified, the bootstrapper is NOT used */
+    /**
+     * Upstream's IP address. If specified, the bootstrapper is NOT used.
+     * Combined with `resolved_server_ips`; this address goes first.
+     */
     IpAddress resolved_server_ip;
 
     /** User-provided ID for this upstream */
@@ -87,6 +90,14 @@ struct UpstreamOptions {
      * Enable post-quantum cryptography (ML-KEM-768) for TLS connections.
      */
     bool enable_post_quantum_cryptography = false;
+
+    /**
+     * Upstream's IP addresses, in the order of preference. If specified, the bootstrapper is NOT used.
+     * Use this field instead of `resolved_server_ip` when the server has more than one address,
+     * e.g. an IPv4 and an IPv6 address. Upstreams race or rotate through these addresses as they do
+     * through the addresses the bootstrapper resolves.
+     */
+    std::vector<IpAddress> resolved_server_ips;
 };
 
 /**
@@ -199,6 +210,15 @@ protected:
     };
 
     Error<InitError> init_url_port(bool allow_creds, bool allow_path, uint16_t default_port, bool host_to_lowercase);
+
+    /**
+     * Combine `resolved_server_ip` and `resolved_server_ips` into a list of socket addresses.
+     * Drops empty and duplicate entries. Drops IPv6 addresses if IPv6 is not available,
+     * unless no other addresses remain.
+     * @param port port of the addresses
+     * @return the addresses, or an empty list if no resolved address is specified
+     */
+    [[nodiscard]] std::vector<SocketAddress> resolved_server_addresses(uint16_t port) const;
 
     /** Upstream options */
     UpstreamOptions m_options;

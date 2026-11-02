@@ -290,29 +290,23 @@ ag::Error<ag::dns::Upstream::InitError> ag::dns::DohUpstream::init() {
         m_http_version = http::HTTP_2_0;
     }
 
+    std::vector<SocketAddress> resolved_addresses = resolved_server_addresses(m_port);
     if (const auto *oproxy_settings = config().socket_factory->get_outbound_proxy_settings(); !oproxy_settings
-            || !oproxy_protocol_supports_hostname(oproxy_settings->protocol)
-            || !std::holds_alternative<std::monostate>(options().resolved_server_ip)
+            || !oproxy_protocol_supports_hostname(oproxy_settings->protocol) || !resolved_addresses.empty()
             || SocketAddress(m_url.get_hostname(), m_port).valid() || m_http_version == http::HTTP_3_0) {
-        if (m_options.bootstrap.empty() && std::holds_alternative<std::monostate>(m_options.resolved_server_ip)
+        if (m_options.bootstrap.empty() && resolved_addresses.empty()
                 && !SocketAddress(m_url.get_hostname(), m_port).valid()) {
             return make_error(InitError::AE_EMPTY_BOOTSTRAP);
         }
 
-        std::string address;
-        if (auto resolved = ag::SocketAddress(m_options.resolved_server_ip, DEFAULT_DOH_PORT); resolved.valid()) {
-            address = resolved.host_str(/*ipv6_brackets*/ true);
-        } else {
-            address = m_url.get_hostname();
-        }
-
         Bootstrapper &bootstrapper = m_bootstrapper.emplace(Bootstrapper::Params{
-                .address_string = address,
+                .address_string = m_url.get_hostname(),
                 .default_port = m_port,
                 .bootstrap = m_options.bootstrap,
                 .timeout = m_config.timeout,
                 .upstream_config = m_config,
                 .outbound_interface = m_options.outbound_interface,
+                .resolved_addresses = std::move(resolved_addresses),
         });
 
         if (Error<Bootstrapper::BootstrapperError> err = bootstrapper.init()) {

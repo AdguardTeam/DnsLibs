@@ -1,3 +1,4 @@
+#include <algorithm>
 #include <cassert>
 #include <chrono>
 #include <functional>
@@ -229,6 +230,28 @@ UpstreamFactory::CreateResult UpstreamFactory::create_upstream(const UpstreamOpt
         }
     }
     return result;
+}
+
+std::vector<SocketAddress> Upstream::resolved_server_addresses(uint16_t port) const {
+    std::vector<SocketAddress> addresses;
+    auto add = [&addresses, port](const IpAddress &ip) {
+        SocketAddress address(ip, port);
+        if (address.valid() && std::find(addresses.begin(), addresses.end(), address) == addresses.end()) {
+            addresses.emplace_back(address);
+        }
+    };
+    add(m_options.resolved_server_ip);
+    for (const IpAddress &ip : m_options.resolved_server_ips) {
+        add(ip);
+    }
+    if (!m_config.ipv6_available && std::any_of(addresses.begin(), addresses.end(), [](const SocketAddress &a) {
+            return a.is_ipv4();
+        })) {
+        std::erase_if(addresses, [](const SocketAddress &a) {
+            return a.is_ipv6();
+        });
+    }
+    return addresses;
 }
 
 Error<Upstream::InitError> Upstream::init_url_port(
