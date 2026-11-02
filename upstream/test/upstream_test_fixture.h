@@ -157,8 +157,7 @@ coro::Task<void> parallel_test_basic_n(EventLoop &loop, size_t count, const F &f
 struct UpstreamTestData {
     std::string address;
     std::vector<std::string> bootstrap;
-    IpAddress server_ip;
-    std::vector<IpAddress> server_ips = {};
+    std::vector<IpAddress> server_ips;
 };
 
 // Builds a canned A reply echoing the request's qname with rdata `ip`, so
@@ -319,9 +318,7 @@ protected:
                 if (delay_between.count() > 0) {
                     std::this_thread::sleep_for(delay_between);
                 }
-                UpstreamOptions opts{data.address, data.bootstrap, data.server_ip};
-                opts.resolved_server_ips = data.server_ips;
-                auto upstream_res = create_upstream(opts);
+                auto upstream_res = create_upstream({data.address, data.bootstrap, data.server_ips});
                 ASSERT_FALSE(upstream_res.has_error()) << AG_FMT(
                         "Failed to generate upstream from address {}: {}", data.address, upstream_res.error()->str());
                 error = coro::to_future(check_upstream_internal(std::move(upstream_res.value()), data.address)).get();

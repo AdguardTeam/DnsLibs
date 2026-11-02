@@ -108,7 +108,7 @@ Error<Upstream::InitError> PlainUpstream::init() {
     // Normalize port 0 to the default before selecting the resolved-IP, numeric,
     // or bootstrap path, so a `host:0` upstream behaves like the pre-existing
     // plain-IP path (which treated zero as the default port) in every branch --
-    // including resolved_server_ip and the bootstrap address string.
+    // including resolved_server_ips and the bootstrap address string.
     if (port == 0) {
         port = DEFAULT_PLAIN_PORT;
     }

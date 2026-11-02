@@ -152,11 +152,11 @@ UpstreamOptions AndroidDnsProxy::marshal_upstream(JNIEnv *env, jobject java_upst
         if (IPV4_ADDRESS_SIZE == len) {
             Ipv4Address ipv4{};
             env->GetByteArrayRegion(server_ip.get(), 0, IPV4_ADDRESS_SIZE, (jbyte *) ipv4.data());
-            upstream.resolved_server_ip = ipv4;
+            upstream.resolved_server_ips = {ipv4};
         } else if (IPV6_ADDRESS_SIZE == len) {
             Ipv6Address ipv6{};
             env->GetByteArrayRegion(server_ip.get(), 0, IPV6_ADDRESS_SIZE, (jbyte *) ipv6.data());
-            upstream.resolved_server_ip = ipv6;
+            upstream.resolved_server_ips = {ipv6};
         }
     }
 
@@ -190,12 +190,15 @@ LocalRef<jobject> AndroidDnsProxy::marshal_upstream(JNIEnv *env, const UpstreamO
     env->SetObjectField(java_upstream, dns_server_field, m_utils.marshal_string(env, settings.address).get());
     env->SetIntField(java_upstream, id_field, settings.id);
 
-    if (std::holds_alternative<Ipv4Address>(settings.resolved_server_ip)) {
-        auto ipv4 = std::get<Ipv4Address>(settings.resolved_server_ip);
+    // The Java API has a single server IP: pass the most preferred one.
+    const IpAddress server_ip =
+            settings.resolved_server_ips.empty() ? IpAddress{} : settings.resolved_server_ips.front();
+    if (std::holds_alternative<Ipv4Address>(server_ip)) {
+        auto ipv4 = std::get<Ipv4Address>(server_ip);
         env->SetObjectField(java_upstream, server_ip_field,
                 m_utils.marshal_uint8_view(env, {ipv4.data(), IPV4_ADDRESS_SIZE}).get());
-    } else if (std::holds_alternative<Ipv6Address>(settings.resolved_server_ip)) {
-        auto ipv6 = std::get<Ipv6Address>(settings.resolved_server_ip);
+    } else if (std::holds_alternative<Ipv6Address>(server_ip)) {
+        auto ipv6 = std::get<Ipv6Address>(server_ip);
         env->SetObjectField(java_upstream, server_ip_field,
                 m_utils.marshal_uint8_view(env, {ipv6.data(), IPV6_ADDRESS_SIZE}).get());
     }

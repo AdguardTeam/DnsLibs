@@ -1117,15 +1117,13 @@ static UpstreamOptions convert_upstream(AGDnsUpstream *upstream) {
             bootstrap.emplace_back([server UTF8String]);
         }
     }
-    IpAddress addr;
+    std::vector<IpAddress> addrs;
     if (upstream.serverIp != nil && [upstream.serverIp length] == 4) {
-        addr.emplace<Uint8Array<4>>();
-        std::memcpy(std::get<Uint8Array<4>>(addr).data(),
-                    [upstream.serverIp bytes], [upstream.serverIp length]);
+        auto &addr = addrs.emplace_back().emplace<Uint8Array<4>>();
+        std::memcpy(addr.data(), [upstream.serverIp bytes], [upstream.serverIp length]);
     } else if (upstream.serverIp != nil && [upstream.serverIp length] == 16) {
-        addr.emplace<Uint8Array<16>>();
-        std::memcpy(std::get<Uint8Array<16>>(addr).data(),
-                    [upstream.serverIp bytes], [upstream.serverIp length]);
+        auto &addr = addrs.emplace_back().emplace<Uint8Array<16>>();
+        std::memcpy(addr.data(), [upstream.serverIp bytes], [upstream.serverIp length]);
     }
     IfIdVariant iface;
     if (upstream.outboundInterfaceName != nil) {
@@ -1140,7 +1138,7 @@ static UpstreamOptions convert_upstream(AGDnsUpstream *upstream) {
     return UpstreamOptions{
             .address = [upstream.address UTF8String],
             .bootstrap = std::move(bootstrap),
-            .resolved_server_ip = std::move(addr),
+            .resolved_server_ips = std::move(addrs),
             .id = (int32_t) upstream.id,
             .outbound_interface = std::move(iface),
             .fingerprints = std::move(fingerprints)};

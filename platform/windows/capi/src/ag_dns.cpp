@@ -117,9 +117,12 @@ static ag_upstream_options marshal_upstream(const UpstreamOptions &upstream) {
     c_upstream.address = marshal_str(upstream.address);
     c_upstream.id = upstream.id;
 
-    if (const Ipv4Address *arr4 = std::get_if<Ipv4Address>(&upstream.resolved_server_ip)) {
+    // The C API has a single server IP: pass the most preferred one.
+    const IpAddress server_ip =
+            upstream.resolved_server_ips.empty() ? IpAddress{} : upstream.resolved_server_ips.front();
+    if (const Ipv4Address *arr4 = std::get_if<Ipv4Address>(&server_ip)) {
         c_upstream.resolved_ip_address = marshal_buffer({arr4->data(), arr4->size()});
-    } else if (const Ipv6Address *arr6 = std::get_if<Ipv6Address>(&upstream.resolved_server_ip)) {
+    } else if (const Ipv6Address *arr6 = std::get_if<Ipv6Address>(&server_ip)) {
         c_upstream.resolved_ip_address = marshal_buffer({arr6->data(), arr6->size()});
     }
 
@@ -381,11 +384,11 @@ static UpstreamOptions marshal_upstream(const ag_upstream_options &c_upstream) {
     if (c_upstream.resolved_ip_address.size == IPV4_ADDRESS_SIZE) {
         Ipv4Address arr4;
         std::memcpy(arr4.data(), c_upstream.resolved_ip_address.data, arr4.size());
-        upstream.resolved_server_ip = arr4;
+        upstream.resolved_server_ips = {arr4};
     } else if (c_upstream.resolved_ip_address.size == IPV6_ADDRESS_SIZE) {
         Ipv6Address arr6;
         std::memcpy(arr6.data(), c_upstream.resolved_ip_address.data, arr6.size());
-        upstream.resolved_server_ip = arr6;
+        upstream.resolved_server_ips = {arr6};
     }
     for (size_t i = 0; i < c_upstream.bootstrap.size; ++i) {
         upstream.bootstrap.emplace_back(c_upstream.bootstrap.data[i]);

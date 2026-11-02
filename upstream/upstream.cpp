@@ -145,7 +145,7 @@ static CreateResult create_upstream_sdns(const UpstreamOptions &local_opts, cons
             port = stamp.server_addr_str;
         } else {
             SocketAddress address = ag::utils::str_to_socket_address(stamp.server_addr_str);
-            opts.resolved_server_ip = address.addr_variant();
+            opts.resolved_server_ips = {address.addr_variant()};
             if (address.port()) {
                 port = AG_FMT(":{}", address.port());
             }
@@ -240,7 +240,6 @@ std::vector<SocketAddress> Upstream::resolved_server_addresses(uint16_t port) co
             addresses.emplace_back(address);
         }
     };
-    add(m_options.resolved_server_ip);
     for (const IpAddress &ip : m_options.resolved_server_ips) {
         add(ip);
     }

@@ -95,11 +95,10 @@ The most interesting fields are:
         - `sdns://...` DNS stamp (see [DNSCrypt specifications](https://dnscrypt.info/stamps-specifications)).
     - `std::vector<std::string> bootstrap` — list of plain DNS servers used to resolve the hostnames in the upstream
       addresses (both encrypted and plain-DNS upstreams).
-    - `IpAddress resolved_server_ip` — the IP address of the server. If set, `bootstrap` is not used.
     - `std::vector<IpAddress> resolved_server_ips` — the IP addresses of the server, in the order of preference. If
       set, `bootstrap` is not used. The upstream races or rotates through these addresses as it does through the
       addresses that `bootstrap` resolves. When `ipv6_available` is `false`, IPv6 addresses are skipped unless all
-      addresses are IPv6. The addresses are combined with `resolved_server_ip`, which goes first.
+      addresses are IPv6.
     - `int32_t id` — user-provided upstream identifier.
     - `std::vector<std::string> fingerprints` — optional SPKI fingerprints for TLS certificate pinning.
     - `bool ignore_proxy_settings` — if true, the outbound proxy is not used for this upstream.
