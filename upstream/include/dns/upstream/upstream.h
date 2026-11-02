@@ -65,8 +65,12 @@ struct UpstreamOptions {
      */
     std::vector<std::string> bootstrap;
 
-    /** Upstream's IP address. If specified, the bootstrapper is NOT used */
-    IpAddress resolved_server_ip;
+    /**
+     * Upstream's IP addresses, in the order of preference. If specified, the bootstrapper is NOT used.
+     * Upstreams race or rotate through these addresses as they do through the addresses
+     * the bootstrapper resolves.
+     */
+    std::vector<IpAddress> resolved_server_ips;
 
     /** User-provided ID for this upstream */
     int32_t id;
@@ -199,6 +203,15 @@ protected:
     };
 
     Error<InitError> init_url_port(bool allow_creds, bool allow_path, uint16_t default_port, bool host_to_lowercase);
+
+    /**
+     * Convert `resolved_server_ips` into a list of socket addresses.
+     * Drops empty and duplicate entries. Drops IPv6 addresses if IPv6 is not available,
+     * unless no other addresses remain.
+     * @param port port of the addresses
+     * @return the addresses, or an empty list if no resolved address is specified
+     */
+    [[nodiscard]] std::vector<SocketAddress> resolved_server_addresses(uint16_t port) const;
 
     /** Upstream options */
     UpstreamOptions m_options;

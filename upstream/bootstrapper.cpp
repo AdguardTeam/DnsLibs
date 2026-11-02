@@ -82,6 +82,13 @@ coro::Task<void> Bootstrapper::do_resolve() {
 }
 
 std::optional<Bootstrapper::ResolveResult> Bootstrapper::try_get_ready_result() {
+    if (!m_resolved_addresses.empty()) {
+        // All addresses failed and were removed: try all of them again.
+        if (m_resolved_cache.empty()) {
+            m_resolved_cache = m_resolved_addresses;
+        }
+        return ResolveResult{m_resolved_cache, m_server_name, Millis(0), {}};
+    }
     if (SocketAddress addr(m_server_name, m_server_port); addr.valid()) {
         return ResolveResult{{addr}, m_server_name, Millis(0), {}};
     }
@@ -140,7 +147,8 @@ static std::vector<ResolverPtr> create_resolvers(const Logger &log, const Bootst
         }
     }
 
-    if (p.bootstrap.empty() && !ag::utils::str_to_socket_address(p.address_string).valid()) {
+    if (p.bootstrap.empty() && p.resolved_addresses.empty()
+            && !ag::utils::str_to_socket_address(p.address_string).valid()) {
         log_addr(log, warn, p.address_string, "Got empty or invalid list of servers for bootstrapping");
     }
 
@@ -150,6 +158,8 @@ static std::vector<ResolverPtr> create_resolvers(const Logger &log, const Bootst
 Bootstrapper::Bootstrapper(const Params &p)
         : m_log(__func__)
         , m_timeout(p.timeout)
+        , m_resolved_addresses(p.resolved_addresses)
+        , m_resolved_cache(p.resolved_addresses)
         , m_resolvers(create_resolvers(m_log, p)) {
     auto split_result = utils::split_host_port(p.address_string);
     if (!split_result.has_error()) {
@@ -168,7 +178,7 @@ Bootstrapper::Bootstrapper(Bootstrapper &&) = default;
 Bootstrapper &Bootstrapper::operator=(Bootstrapper &&) = default;
 
 Error<Bootstrapper::BootstrapperError> Bootstrapper::init() {
-    if (m_resolvers.empty() && !SocketAddress(m_server_name, m_server_port).valid()) {
+    if (m_resolvers.empty() && m_resolved_addresses.empty() && !SocketAddress(m_server_name, m_server_port).valid()) {
         return make_error(BootstrapperError::AE_NO_VALID_RESOLVERS);
     }
 

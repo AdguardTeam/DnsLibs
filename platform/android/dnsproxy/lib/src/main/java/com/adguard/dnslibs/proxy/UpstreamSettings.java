@@ -8,7 +8,7 @@ import java.util.Objects;
 public class UpstreamSettings {
     private String address;
     private List<String> bootstrap = new ArrayList<>();
-    private byte[] serverIp;
+    private List<byte[]> serverIps = new ArrayList<>();
     private int id;
     private String outboundInterfaceName;
     private List<String> fingerprints = new ArrayList<>();
@@ -19,13 +19,14 @@ public class UpstreamSettings {
      * Creates UpstreamSettings
      * @param address   The DNS server's address.
      * @param bootstrap List of plain DNS servers to be used to resolve DOH/DOT hostnames (if any).
-     * @param serverIp  Resolver's IP address. In the case if it's specified, bootstrap DNS servers won't be used at all.
+     * @param serverIps Resolver's IP addresses, in the order of preference. Each address is 4 bytes (IPv4)
+     *                  or 16 bytes (IPv6). In the case if it's specified, bootstrap DNS servers won't be used at all.
      * @param id        User-provided ID
      */
-    public UpstreamSettings(String address, List<String> bootstrap, byte[] serverIp, int id) {
+    public UpstreamSettings(String address, List<String> bootstrap, List<byte[]> serverIps, int id) {
         setAddress(address);
         setBootstrap(bootstrap);
-        setServerIp(serverIp);
+        setServerIps(serverIps);
         setId(id);
     }
 
@@ -62,17 +63,23 @@ public class UpstreamSettings {
     }
 
     /**
-     * @return Resolver's IP address. In the case if it's specified, bootstrap DNS servers won't be used at all.
+     * @return Resolver's IP addresses, in the order of preference.
+     *         In the case if it's specified, bootstrap DNS servers won't be used at all.
      */
-    public byte[] getServerIp() {
-        return serverIp;
+    public List<byte[]> getServerIps() {
+        return serverIps;
     }
 
     /**
-     * @param serverIp Resolver's IP address. In the case if it's specified, bootstrap DNS servers won't be used at all.
+     * @param serverIps Resolver's IP addresses, in the order of preference. Each address is 4 bytes (IPv4)
+     *                  or 16 bytes (IPv6). In the case if it's specified, bootstrap DNS servers won't be used at all.
      */
-    public void setServerIp(byte[] serverIp) {
-        this.serverIp = serverIp;
+    public void setServerIps(List<byte[]> serverIps) {
+        if (null == serverIps) {
+            this.serverIps.clear();
+            return;
+        }
+        this.serverIps = new ArrayList<>(serverIps);
     }
 
     /**
@@ -120,13 +127,29 @@ public class UpstreamSettings {
         return id == that.id &&
                 Objects.equals(address, that.address) &&
                 bootstrap.equals(that.bootstrap) &&
-                Arrays.equals(serverIp, that.serverIp) &&
+                serverIpsEqual(serverIps, that.serverIps) &&
                 Objects.equals(outboundInterfaceName, that.outboundInterfaceName) &&
                 fingerprints.equals(that.fingerprints);
     }
 
     @Override
     public int hashCode() {
-        return Objects.hash(id, address, bootstrap, Arrays.hashCode(serverIp), outboundInterfaceName, fingerprints);
+        int serverIpsHash = 1;
+        for (byte[] ip : serverIps) {
+            serverIpsHash = 31 * serverIpsHash + Arrays.hashCode(ip);
+        }
+        return Objects.hash(id, address, bootstrap, serverIpsHash, outboundInterfaceName, fingerprints);
+    }
+
+    private static boolean serverIpsEqual(List<byte[]> a, List<byte[]> b) {
+        if (a.size() != b.size()) {
+            return false;
+        }
+        for (int i = 0; i < a.size(); i++) {
+            if (!Arrays.equals(a.get(i), b.get(i))) {
+                return false;
+            }
+        }
+        return true;
     }
 }

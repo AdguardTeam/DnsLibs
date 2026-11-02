@@ -11,7 +11,7 @@ namespace Adguard.Dns.Tests.TestUtils
             return Equals(x.Address, y.Address) &&
                    CollectionUtils.CollectionsEquals(x.Bootstrap, y.Bootstrap) &&
                    CollectionUtils.CollectionsEquals(x.Fingerprints, y.Fingerprints) &&
-                   Equals(x.ResolvedIpAddress, y.ResolvedIpAddress) &&
+                   CollectionUtils.CollectionsEquals(x.ResolvedIpAddresses, y.ResolvedIpAddresses) &&
                    x.Id == y.Id &&
                    x.OutboundInterfaceIndex == y.OutboundInterfaceIndex;
         }
@@ -23,7 +23,7 @@ namespace Adguard.Dns.Tests.TestUtils
                 int hashCode = (obj.Address != null ? obj.Address.GetHashCode() : 0);
                 hashCode = (hashCode * 397) ^ (obj.Bootstrap != null ? obj.Bootstrap.Count : 0);
                 hashCode = (hashCode * 397) ^ (obj.Fingerprints != null ? obj.Fingerprints.Count : 0);
-                hashCode = (hashCode * 397) ^ (obj.ResolvedIpAddress != null ? obj.ResolvedIpAddress.GetHashCode() : 0);
+                hashCode = (hashCode * 397) ^ (obj.ResolvedIpAddresses != null ? obj.ResolvedIpAddresses.Count : 0);
                 hashCode = (hashCode * 397) ^ obj.Id.GetHashCode();
                 hashCode = (hashCode * 397) ^ obj.OutboundInterfaceIndex.GetHashCode();
                 return hashCode;

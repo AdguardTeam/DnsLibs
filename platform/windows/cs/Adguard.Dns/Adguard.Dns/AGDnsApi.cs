@@ -22,7 +22,7 @@ namespace Adguard.Dns
 		/// <summary>
 		/// The current API version hash with which the ProxyServer was tested
 		/// </summary>
-        private const string API_VERSION_HASH = "e4de2e5b9a2cee1f70694315405048efa36a554596ff63ca2a9a1b045ae39760";
+        private const string API_VERSION_HASH = "d70d226a64fc22817ec6c8b4698f268de1ab330ed14dea91ee0559469c151964";
 
         #endregion
 
@@ -717,12 +717,13 @@ namespace Adguard.Dns
             internal MarshalUtils.ag_buffer bootstrap;
 
             /// <summary>
-            /// Resolver's IP address.
+            /// Resolver's IP addresses, in the order of preference,
+            /// represented as a <see cref="MarshalUtils.ag_buffer"/> with entries with
+            /// the type <see cref="MarshalUtils.ag_buffer"/> (4 bytes for IPv4, 16 bytes for IPv6).
             /// In the case if it's specified, bootstrap DNS servers won't be used at all.
-            /// (<seealso cref="MarshalUtils.ag_buffer"/>)
             /// </summary>
             [MarshalAs(UnmanagedType.Struct)]
-            internal MarshalUtils.ag_buffer resolved_ip_address;
+            internal MarshalUtils.ag_buffer resolved_ip_addresses;
 
             /// <summary>
             /// User-provided ID for this upstream

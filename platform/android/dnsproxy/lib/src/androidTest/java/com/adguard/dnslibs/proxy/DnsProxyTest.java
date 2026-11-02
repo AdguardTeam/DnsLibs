@@ -244,7 +244,7 @@ public class DnsProxyTest {
         final UpstreamSettings dot = new UpstreamSettings();
         dot.setAddress("tls://dns.adguard.com");
         dot.getBootstrap().add("8.8.8.8");
-        dot.setServerIp(new byte[]{8, 8, 8, 8});
+        dot.setServerIps(Collections.singletonList(new byte[]{8, 8, 8, 8}));
         dot.setId(42);
         dot.setOutboundInterfaceName("whtvr0");
         settings.getUpstreams().add(dot);
@@ -276,7 +276,7 @@ public class DnsProxyTest {
         UpstreamSettings fallbackUpstream = new UpstreamSettings();
         fallbackUpstream.setAddress("https://fall.back/up/stream");
         fallbackUpstream.setBootstrap(Collections.singletonList("1.1.1.1"));
-        fallbackUpstream.setServerIp(new byte[]{8, 8, 8, 8});
+        fallbackUpstream.setServerIps(Collections.singletonList(new byte[]{8, 8, 8, 8}));
         settings.getFallbacks().add(fallbackUpstream);
 
         settings.setUpstreamTimeoutMs(4200);

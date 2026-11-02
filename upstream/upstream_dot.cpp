@@ -62,17 +62,10 @@ private:
 };
 
 static Result<BootstrapperPtr, Upstream::InitError> create_bootstrapper(const UpstreamOptions &opts,
-        const UpstreamFactoryConfig &config, const ada::url_aggregator url, uint16_t port) {
-    std::string address;
-
-    if (auto resolved = SocketAddress(opts.resolved_server_ip, DEFAULT_DOT_PORT); resolved.valid()) {
-        address = resolved.host_str(/*ipv6_brackets*/ true);
-    } else {
-        address = url.get_hostname();
-    }
-
-    return std::make_unique<Bootstrapper>(
-            Bootstrapper::Params{address, port, opts.bootstrap, config.timeout, config, opts.outbound_interface});
+        const UpstreamFactoryConfig &config, const ada::url_aggregator url, uint16_t port,
+        std::vector<SocketAddress> resolved_addresses) {
+    return std::make_unique<Bootstrapper>(Bootstrapper::Params{url.get_hostname(), port, opts.bootstrap, config.timeout,
+            config, opts.outbound_interface, std::move(resolved_addresses)});
 }
 
 DotUpstream::DotUpstream(
@@ -92,12 +85,13 @@ Error<Upstream::InitError> DotUpstream::init() {
 
     if (const auto *oproxy_settings = config().socket_factory->get_outbound_proxy_settings();
             !oproxy_settings || !oproxy_protocol_supports_hostname(oproxy_settings->protocol)) {
-        if (m_options.bootstrap.empty() && std::holds_alternative<std::monostate>(m_options.resolved_server_ip)
+        std::vector<SocketAddress> resolved_addresses = resolved_server_addresses(m_port);
+        if (m_options.bootstrap.empty() && resolved_addresses.empty()
                 && !SocketAddress(m_url.get_hostname(), m_port).valid()) {
             return make_error(InitError::AE_EMPTY_BOOTSTRAP);
         }
 
-        auto create_result = create_bootstrapper(m_options, m_config, m_url, m_port);
+        auto create_result = create_bootstrapper(m_options, m_config, m_url, m_port, std::move(resolved_addresses));
         if (create_result.has_error()) {
             return make_error(InitError::AE_BOOTSTRAPPER_INIT_FAILED, create_result.error());
         }

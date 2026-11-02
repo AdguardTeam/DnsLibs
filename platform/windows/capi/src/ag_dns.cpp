@@ -52,7 +52,10 @@ static void free_upstreams(ag_upstream_options *upstreams, size_t n) {
     for (size_t i = 0; i < n; ++i) {
         ag_upstream_options &o = upstreams[i];
         std::free((void *) o.address);
-        ag_buffer_free(o.resolved_ip_address);
+        for (size_t j = 0; j < o.resolved_ip_addresses.size; ++j) {
+            ag_buffer_free(o.resolved_ip_addresses.data[j]);
+        }
+        std::free(o.resolved_ip_addresses.data);
         for (size_t j = 0; j < o.bootstrap.size; ++j) {
             ag_str_free(o.bootstrap.data[j]);
         }
@@ -117,10 +120,20 @@ static ag_upstream_options marshal_upstream(const UpstreamOptions &upstream) {
     c_upstream.address = marshal_str(upstream.address);
     c_upstream.id = upstream.id;
 
-    if (const Ipv4Address *arr4 = std::get_if<Ipv4Address>(&upstream.resolved_server_ip)) {
-        c_upstream.resolved_ip_address = marshal_buffer({arr4->data(), arr4->size()});
-    } else if (const Ipv6Address *arr6 = std::get_if<Ipv6Address>(&upstream.resolved_server_ip)) {
-        c_upstream.resolved_ip_address = marshal_buffer({arr6->data(), arr6->size()});
+    if (!upstream.resolved_server_ips.empty()) {
+        c_upstream.resolved_ip_addresses.data =
+                (ag_buffer *) std::calloc(upstream.resolved_server_ips.size(), sizeof(ag_buffer));
+        for (const IpAddress &ip : upstream.resolved_server_ips) {
+            ag_buffer &c_ip = c_upstream.resolved_ip_addresses.data[c_upstream.resolved_ip_addresses.size];
+            if (const Ipv4Address *arr4 = std::get_if<Ipv4Address>(&ip)) {
+                c_ip = marshal_buffer({arr4->data(), arr4->size()});
+            } else if (const Ipv6Address *arr6 = std::get_if<Ipv6Address>(&ip)) {
+                c_ip = marshal_buffer({arr6->data(), arr6->size()});
+            } else {
+                continue;
+            }
+            ++c_upstream.resolved_ip_addresses.size;
+        }
     }
 
     c_upstream.bootstrap.size = upstream.bootstrap.size();
@@ -378,14 +391,17 @@ static UpstreamOptions marshal_upstream(const ag_upstream_options &c_upstream) {
         upstream.address.assign(c_upstream.address);
     }
     upstream.id = c_upstream.id;
-    if (c_upstream.resolved_ip_address.size == IPV4_ADDRESS_SIZE) {
-        Ipv4Address arr4;
-        std::memcpy(arr4.data(), c_upstream.resolved_ip_address.data, arr4.size());
-        upstream.resolved_server_ip = arr4;
-    } else if (c_upstream.resolved_ip_address.size == IPV6_ADDRESS_SIZE) {
-        Ipv6Address arr6;
-        std::memcpy(arr6.data(), c_upstream.resolved_ip_address.data, arr6.size());
-        upstream.resolved_server_ip = arr6;
+    for (size_t i = 0; i < c_upstream.resolved_ip_addresses.size; ++i) {
+        const ag_buffer &c_ip = c_upstream.resolved_ip_addresses.data[i];
+        if (c_ip.size == IPV4_ADDRESS_SIZE) {
+            Ipv4Address arr4;
+            std::memcpy(arr4.data(), c_ip.data, arr4.size());
+            upstream.resolved_server_ips.emplace_back(arr4);
+        } else if (c_ip.size == IPV6_ADDRESS_SIZE) {
+            Ipv6Address arr6;
+            std::memcpy(arr6.data(), c_ip.data, arr6.size());
+            upstream.resolved_server_ips.emplace_back(arr6);
+        }
     }
     for (size_t i = 0; i < c_upstream.bootstrap.size; ++i) {
         upstream.bootstrap.emplace_back(c_upstream.bootstrap.data[i]);
