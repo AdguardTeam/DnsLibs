@@ -134,11 +134,11 @@ typedef struct {
     ag_string_array bootstrap;
 
     /**
-     * Upstream's IP address.
-     * Pre-resolved IP address for the upstream server. If this field is specified, the @ref bootstrap
-     * DNS servers won't be used for resolving the upstream's address.
+     * Upstream's IP addresses, in the order of preference.
+     * Pre-resolved IP addresses for the upstream server. Each entry is 4 bytes (IPv4) or 16 bytes (IPv6).
+     * If this field is specified, the @ref bootstrap DNS servers won't be used for resolving the upstream's address.
      */
-    ag_buffer resolved_ip_address;
+    ARRAY_OF(ag_buffer) resolved_ip_addresses;
 
     /** User-provided ID for this upstream */
     int32_t id;

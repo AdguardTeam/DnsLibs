@@ -34,11 +34,11 @@ namespace Adguard.Dns.Api.DnsProxyServer.Configs
         public List<string> Bootstrap { get; set; }
 
         /// <summary>
-        /// Upstream's IP address.
-        /// Pre-resolved IP address for the upstream server. If this field is specified, the @ref bootstrap
+        /// Upstream's IP addresses, in the order of preference.
+        /// Pre-resolved IP addresses for the upstream server. If this field is specified, the @ref bootstrap
         /// DNS servers won't be used for resolving the upstream's address.
         /// </summary>
-        public IPAddress ResolvedIpAddress { get; set; }
+        public List<IPAddress> ResolvedIpAddresses { get; set; }
 
         /// <summary>
         /// User-provided ID for this upstream

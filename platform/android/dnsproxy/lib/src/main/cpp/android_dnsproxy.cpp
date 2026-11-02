@@ -121,7 +121,7 @@ UpstreamOptions AndroidDnsProxy::marshal_upstream(JNIEnv *env, jobject java_upst
 
     auto dns_server_field = env->GetFieldID(clazz, "address", "Ljava/lang/String;");
     auto bootstrap_field = env->GetFieldID(clazz, "bootstrap", "Ljava/util/List;");
-    auto server_ip_field = env->GetFieldID(clazz, "serverIp", "[B");
+    auto server_ips_field = env->GetFieldID(clazz, "serverIps", "Ljava/util/List;");
     auto id_field = env->GetFieldID(clazz, "id", "I");
     auto if_field = env->GetFieldID(clazz, "outboundInterfaceName", "Ljava/lang/String;");
     auto fp_field = env->GetFieldID(clazz, "fingerprints", "Ljava/util/List;");
@@ -143,21 +143,26 @@ UpstreamOptions AndroidDnsProxy::marshal_upstream(JNIEnv *env, jobject java_upst
         });
     }
 
-    if (LocalRef server_ip{env, (jbyteArray) env->GetObjectField(java_upstream_settings, server_ip_field)}) {
+    if (LocalRef server_ips{env, env->GetObjectField(java_upstream_settings, server_ips_field)}) {
+        m_utils.iterate(env, server_ips.get(), [&](LocalRef<jobject> &&java_ip) {
+            if (java_ip.get() == nullptr) {
+                return;
+            }
+            auto server_ip = (jbyteArray) java_ip.get();
+            assert(env->IsInstanceOf(server_ip, env->FindClass("[B")));
 
-        assert(env->IsInstanceOf(server_ip.get(), env->FindClass("[B")));
+            auto len = env->GetArrayLength(server_ip);
 
-        auto len = env->GetArrayLength(server_ip.get());
-
-        if (IPV4_ADDRESS_SIZE == len) {
-            Ipv4Address ipv4{};
-            env->GetByteArrayRegion(server_ip.get(), 0, IPV4_ADDRESS_SIZE, (jbyte *) ipv4.data());
-            upstream.resolved_server_ips = {ipv4};
-        } else if (IPV6_ADDRESS_SIZE == len) {
-            Ipv6Address ipv6{};
-            env->GetByteArrayRegion(server_ip.get(), 0, IPV6_ADDRESS_SIZE, (jbyte *) ipv6.data());
-            upstream.resolved_server_ips = {ipv6};
-        }
+            if (IPV4_ADDRESS_SIZE == len) {
+                Ipv4Address ipv4{};
+                env->GetByteArrayRegion(server_ip, 0, IPV4_ADDRESS_SIZE, (jbyte *) ipv4.data());
+                upstream.resolved_server_ips.emplace_back(ipv4);
+            } else if (IPV6_ADDRESS_SIZE == len) {
+                Ipv6Address ipv6{};
+                env->GetByteArrayRegion(server_ip, 0, IPV6_ADDRESS_SIZE, (jbyte *) ipv6.data());
+                upstream.resolved_server_ips.emplace_back(ipv6);
+            }
+        });
     }
 
     if (LocalRef if_name{env, (jstring) env->GetObjectField(java_upstream_settings, if_field)}) {
@@ -180,7 +185,7 @@ LocalRef<jobject> AndroidDnsProxy::marshal_upstream(JNIEnv *env, const UpstreamO
     auto ctor = env->GetMethodID(clazz, "<init>", "()V");
     auto dns_server_field = env->GetFieldID(clazz, "address", "Ljava/lang/String;");
     auto bootstrap_field = env->GetFieldID(clazz, "bootstrap", "Ljava/util/List;");
-    auto server_ip_field = env->GetFieldID(clazz, "serverIp", "[B");
+    auto server_ips_field = env->GetFieldID(clazz, "serverIps", "Ljava/util/List;");
     auto id_field = env->GetFieldID(clazz, "id", "I");
     auto if_field = env->GetFieldID(clazz, "outboundInterfaceName", "Ljava/lang/String;");
     auto fp_field = env->GetFieldID(clazz, "fingerprints", "Ljava/util/List;");
@@ -190,17 +195,16 @@ LocalRef<jobject> AndroidDnsProxy::marshal_upstream(JNIEnv *env, const UpstreamO
     env->SetObjectField(java_upstream, dns_server_field, m_utils.marshal_string(env, settings.address).get());
     env->SetIntField(java_upstream, id_field, settings.id);
 
-    // The Java API has a single server IP: pass the most preferred one.
-    const IpAddress server_ip =
-            settings.resolved_server_ips.empty() ? IpAddress{} : settings.resolved_server_ips.front();
-    if (std::holds_alternative<Ipv4Address>(server_ip)) {
-        auto ipv4 = std::get<Ipv4Address>(server_ip);
-        env->SetObjectField(java_upstream, server_ip_field,
-                m_utils.marshal_uint8_view(env, {ipv4.data(), IPV4_ADDRESS_SIZE}).get());
-    } else if (std::holds_alternative<Ipv6Address>(server_ip)) {
-        auto ipv6 = std::get<Ipv6Address>(server_ip);
-        env->SetObjectField(java_upstream, server_ip_field,
-                m_utils.marshal_uint8_view(env, {ipv6.data(), IPV6_ADDRESS_SIZE}).get());
+    if (LocalRef server_ips{env, env->GetObjectField(java_upstream, server_ips_field)}) {
+        for (const IpAddress &server_ip : settings.resolved_server_ips) {
+            if (const auto *ipv4 = std::get_if<Ipv4Address>(&server_ip)) {
+                m_utils.collection_add(
+                        env, server_ips.get(), m_utils.marshal_uint8_view(env, {ipv4->data(), ipv4->size()}).get());
+            } else if (const auto *ipv6 = std::get_if<Ipv6Address>(&server_ip)) {
+                m_utils.collection_add(
+                        env, server_ips.get(), m_utils.marshal_uint8_view(env, {ipv6->data(), ipv6->size()}).get());
+            }
+        }
     }
 
     if (LocalRef bootstrap{env, env->GetObjectField(java_upstream, bootstrap_field)}) {

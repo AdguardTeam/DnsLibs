@@ -14,7 +14,7 @@ static int regressTestListenerFailsInit() {
     auto *upstream = [[AGDnsUpstream alloc] init];
     upstream.address = @"1.1.1.1";
     upstream.bootstrap = nil;
-    upstream.serverIp = nil;
+    upstream.serverIps = nil;
     upstream.id = 42;
     upstream.outboundInterfaceName = nil;
 

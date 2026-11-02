@@ -18,7 +18,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - Replaced `UpstreamOptions::resolved_server_ip` with `resolved_server_ips`, a list of the IP addresses of the server
   in the order of preference. Plain DNS, DoT, DoH, and DoQ upstreams race or rotate through these addresses and do not
   use the bootstrap. This is a breaking change: replace `.resolved_server_ip = ip` with `.resolved_server_ips = {ip}`.
-  The Android, Apple, and Windows APIs keep their single server IP. (AG-61580)
+  The platform APIs change in the same way (AG-61580):
+    - Android: `UpstreamSettings.serverIp` (`byte[]`) is replaced with `serverIps` (`List<byte[]>`), also in the
+      constructor.
+    - Apple: `AGDnsUpstream.serverIp` (`NSData`) is replaced with `serverIps` (`NSArray<NSData *>`). The secure coding
+      key changes from `_serverIp` to `_serverIps`, so both sides of an XPC connection must use the same version.
+    - Windows C API: `ag_upstream_options.resolved_ip_address` is replaced with `resolved_ip_addresses`, an array of
+      `ag_buffer`. The C API hash changes.
+    - Windows C#: `UpstreamOptions.ResolvedIpAddress` is replaced with `ResolvedIpAddresses` (`List<IPAddress>`).
 - Changed the `AGDnsProxyEventsXPC` protocol by adding the required `onCheckLocalNetworkPermission:` method. This is
   a breaking change: existing implementations must add the method, and an XPC client built against an older version
   crashes with an unrecognized selector when the service raises the event. (AG-59533)

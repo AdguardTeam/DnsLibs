@@ -283,6 +283,16 @@ static ServerStamp convert_stamp(AGDnsStamp *stamp) {
         [bootstrap addObject: convert_string(server)];
     }
     _bootstrap = bootstrap;
+    NSMutableArray<NSData *> *serverIps =
+            [[NSMutableArray alloc] initWithCapacity: settings->resolved_server_ips.size()];
+    for (const IpAddress &ip : settings->resolved_server_ips) {
+        if (const Ipv4Address *ipv4 = std::get_if<Ipv4Address>(&ip)) {
+            [serverIps addObject: [NSData dataWithBytes: ipv4->data() length: ipv4->size()]];
+        } else if (const Ipv6Address *ipv6 = std::get_if<Ipv6Address>(&ip)) {
+            [serverIps addObject: [NSData dataWithBytes: ipv6->data() length: ipv6->size()]];
+        }
+    }
+    _serverIps = serverIps;
     if (const std::string *name = std::get_if<std::string>(&settings->outbound_interface)) {
         _outboundInterfaceName = convert_string(*name);
     }
@@ -300,7 +310,7 @@ static ServerStamp convert_stamp(AGDnsStamp *stamp) {
     if (self) {
         _address = [coder decodeObjectOfClass:NSString.class forKey:@"_address"];
         _bootstrap = [coder decodeObjectOfClasses:[[NSSet alloc] initWithObjects:NSArray.class, NSString.class, nil] forKey:@"_bootstrap"];
-        _serverIp = [coder decodeObjectOfClass:NSData.class forKey:@"_serverIp"];
+        _serverIps = [coder decodeObjectOfClasses:[[NSSet alloc] initWithObjects:NSArray.class, NSData.class, nil] forKey:@"_serverIps"];
         _id = [coder decodeInt64ForKey:@"_id"];
         _outboundInterfaceName = [coder decodeObjectOfClass:NSString.class forKey:@"_outboundInterfaceName"];
         _fingerprints = [coder decodeObjectOfClasses:[[NSSet alloc] initWithObjects:NSArray.class, NSString.class, nil] forKey:@"_fingerprints"];
@@ -312,7 +322,7 @@ static ServerStamp convert_stamp(AGDnsStamp *stamp) {
 - (void)encodeWithCoder:(NSCoder *)coder {
     [coder encodeObject:self.address forKey:@"_address"];
     [coder encodeObject:self.bootstrap forKey:@"_bootstrap"];
-    [coder encodeObject:self.serverIp forKey:@"_serverIp"];
+    [coder encodeObject:self.serverIps forKey:@"_serverIps"];
     [coder encodeInt64:self.id forKey:@"_id"];
     [coder encodeObject:self.outboundInterfaceName forKey:@"_outboundInterfaceName"];
     [coder encodeObject:self.fingerprints forKey:@"_fingerprints"];
@@ -320,8 +330,8 @@ static ServerStamp convert_stamp(AGDnsStamp *stamp) {
 
 - (NSString*)description {
     return [NSString stringWithFormat:
-            @"[(%p)AGDnsUpstream: address=%@, bootstrap=(%@), serverIp=%@, id=%ld]",
-            self, _address, [_bootstrap componentsJoinedByString:@", "], [[NSString alloc] initWithData:_serverIp encoding:NSUTF8StringEncoding], _id];
+            @"[(%p)AGDnsUpstream: address=%@, bootstrap=(%@), serverIps=(%@), id=%ld]",
+            self, _address, [_bootstrap componentsJoinedByString:@", "], [_serverIps componentsJoinedByString:@", "], _id];
 }
 
 @end
@@ -1118,12 +1128,14 @@ static UpstreamOptions convert_upstream(AGDnsUpstream *upstream) {
         }
     }
     std::vector<IpAddress> addrs;
-    if (upstream.serverIp != nil && [upstream.serverIp length] == 4) {
-        auto &addr = addrs.emplace_back().emplace<Uint8Array<4>>();
-        std::memcpy(addr.data(), [upstream.serverIp bytes], [upstream.serverIp length]);
-    } else if (upstream.serverIp != nil && [upstream.serverIp length] == 16) {
-        auto &addr = addrs.emplace_back().emplace<Uint8Array<16>>();
-        std::memcpy(addr.data(), [upstream.serverIp bytes], [upstream.serverIp length]);
+    for (NSData *serverIp in upstream.serverIps) {
+        if ([serverIp length] == 4) {
+            auto &addr = addrs.emplace_back().emplace<Uint8Array<4>>();
+            std::memcpy(addr.data(), [serverIp bytes], [serverIp length]);
+        } else if ([serverIp length] == 16) {
+            auto &addr = addrs.emplace_back().emplace<Uint8Array<16>>();
+            std::memcpy(addr.data(), [serverIp bytes], [serverIp length]);
+        }
     }
     IfIdVariant iface;
     if (upstream.outboundInterfaceName != nil) {
