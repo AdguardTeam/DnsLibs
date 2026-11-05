@@ -261,7 +261,7 @@ int main(int argc, char *argv[]) {
     settings.upstreams = {{
             .address = "94.140.14.14",
             .bootstrap = {},
-            .resolved_server_ip = std::monostate{},
+            .resolved_server_ips = {},
             .id = 42,
             .outbound_interface = std::monostate{},
             .ignore_proxy_settings = false,

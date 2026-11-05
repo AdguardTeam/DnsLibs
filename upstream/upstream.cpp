@@ -1,3 +1,4 @@
+#include <algorithm>
 #include <cassert>
 #include <chrono>
 #include <functional>
@@ -144,7 +145,7 @@ static CreateResult create_upstream_sdns(const UpstreamOptions &local_opts, cons
             port = stamp.server_addr_str;
         } else {
             SocketAddress address = ag::utils::str_to_socket_address(stamp.server_addr_str);
-            opts.resolved_server_ip = address.addr_variant();
+            opts.resolved_server_ips = {address.addr_variant()};
             if (address.port()) {
                 port = AG_FMT(":{}", address.port());
             }
@@ -229,6 +230,27 @@ UpstreamFactory::CreateResult UpstreamFactory::create_upstream(const UpstreamOpt
         }
     }
     return result;
+}
+
+std::vector<SocketAddress> Upstream::resolved_server_addresses(uint16_t port) const {
+    std::vector<SocketAddress> addresses;
+    auto add = [&addresses, port](const IpAddress &ip) {
+        SocketAddress address(ip, port);
+        if (address.valid() && std::find(addresses.begin(), addresses.end(), address) == addresses.end()) {
+            addresses.emplace_back(address);
+        }
+    };
+    for (const IpAddress &ip : m_options.resolved_server_ips) {
+        add(ip);
+    }
+    if (!m_config.ipv6_available && std::any_of(addresses.begin(), addresses.end(), [](const SocketAddress &a) {
+            return a.is_ipv4();
+        })) {
+        std::erase_if(addresses, [](const SocketAddress &a) {
+            return a.is_ipv6();
+        });
+    }
+    return addresses;
 }
 
 Error<Upstream::InitError> Upstream::init_url_port(

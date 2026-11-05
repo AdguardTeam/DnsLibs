@@ -24,6 +24,11 @@ public:
         const UpstreamFactoryConfig
                 &upstream_config;       // configuration of the upstream factory which creates resolving upstream
         IfIdVariant outbound_interface; // interface to bind sockets to
+        /**
+         * Already resolved addresses of the host. If not empty, the bootstrapper returns them
+         * instead of resolving `address_string`, and `bootstrap` may be empty.
+         */
+        std::vector<SocketAddress> resolved_addresses = {};
     };
 
     explicit Bootstrapper(const Params &p);
@@ -121,6 +126,8 @@ private:
     int m_server_port;
     /** Resolve timeout */
     Millis m_timeout;
+    /** Already resolved addresses from the parameters. Refill the cache when it becomes empty. */
+    std::vector<SocketAddress> m_resolved_addresses;
     /** Resolved addresses cache */
     std::vector<SocketAddress> m_resolved_cache;
     /** List of resolvers to use */

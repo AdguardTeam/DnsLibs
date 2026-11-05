@@ -895,14 +895,14 @@ TEST_F(UpstreamTest, TestUpstreamPlainHostnameTruncatedLocal) {
 }
 
 // Plain hostname upstream with a resolved server IP, reproduced against
-// loopback. With resolved_server_ip set, the bootstrapper is bypassed and
+// loopback. With resolved_server_ips set, the bootstrapper is bypassed and
 // PlainUpstream connects directly to 127.0.0.1:<port> (m_loopback), so the dead
 // bootstrap is never used. (Previously resolved_server_ip was ignored for plain
 // upstreams; now it takes precedence, matching DoT/DoH/DoQ.)
 TEST_F(UpstreamTest, TestUpstreamsPlainWithServerIpLocal) {
     const std::string upstream_addr = AG_FMT("localhost:{}", m_loopback.port());
     const std::vector<UpstreamTestData> local_data = {
-            {upstream_addr, {"127.0.0.1:1"}, Ipv4Address{127, 0, 0, 1}},
+            {upstream_addr, {"127.0.0.1:1"}, {Ipv4Address{127, 0, 0, 1}}},
     };
     ASSERT_NO_FATAL_FAILURE(co_await sequential_test(local_data));
 }
@@ -980,9 +980,9 @@ TEST_F(UpstreamTest, TestUpstreamPlainBootstrapTimeoutLocal) {
 static const std::initializer_list<std::string> invalid_bootstrap{"1.2.3.4:55"};
 
 static const UpstreamTestData test_upstreams_with_server_ip_data[]{
-        {"tls://dns.adguard-dns.com", invalid_bootstrap, Ipv4Address{94, 140, 14, 14}},
-        {"https://dns.adguard-dns.com/dns-query", invalid_bootstrap, Ipv4Address{94, 140, 14, 14}},
-        {"quic://dns.adguard-dns.com", invalid_bootstrap, Ipv4Address{94, 140, 14, 14}},
+        {"tls://dns.adguard-dns.com", invalid_bootstrap, {Ipv4Address{94, 140, 14, 14}}},
+        {"https://dns.adguard-dns.com/dns-query", invalid_bootstrap, {Ipv4Address{94, 140, 14, 14}}},
+        {"quic://dns.adguard-dns.com", invalid_bootstrap, {Ipv4Address{94, 140, 14, 14}}},
         {// AdGuard DNS DOH with the IP address specified
                 "sdns://AgcAAAAAAAAABzEuMC4wLjEAEmRucy5jbG91ZGZsYXJlLmNvbQovZG5zLXF1ZXJ5", invalid_bootstrap, {}},
         {// AdGuard DNS DOT with the IP address specified
@@ -998,19 +998,19 @@ TEST_F(UpstreamTest, TestUpstreamsWithServerIp) {
 }
 
 // DoT upstream with a resolved server IP, reproduced against loopback. With
-// resolved_server_ip set, the bootstrapper is bypassed and DotUpstream connects
+// resolved_server_ips set, the bootstrapper is bypassed and DotUpstream connects
 // directly to 127.0.0.1:<port> (the loopback TLS server), so the dead bootstrap
 // is never used. Replaces the former real tls://dns.adguard-dns.com row.
 TEST_F(UpstreamTest, TestUpstreamsWithServerIpDotLocal) {
     const std::string upstream_addr = AG_FMT("tls://localhost:{}", m_loopback_tls.port());
     const std::vector<UpstreamTestData> local_data = {
-            {upstream_addr, {"127.0.0.1:1"}, Ipv4Address{127, 0, 0, 1}},
+            {upstream_addr, {"127.0.0.1:1"}, {Ipv4Address{127, 0, 0, 1}}},
     };
     ASSERT_NO_FATAL_FAILURE(co_await sequential_test(local_data));
 }
 
 // DoH upstream with a resolved server IP, reproduced against loopback. With
-// resolved_server_ip set, the bootstrapper is bypassed and DohUpstream connects
+// resolved_server_ips set, the bootstrapper is bypassed and DohUpstream connects
 // directly to 127.0.0.1:<port> (the loopback DoH server), so the dead bootstrap
 // is never used. Replaces the former real dns.adguard-dns.com DoH URL/stamp
 // rows. Both a URL-based and a stamp-based DoH upstream are tested (the stamp
@@ -1018,21 +1018,40 @@ TEST_F(UpstreamTest, TestUpstreamsWithServerIpDotLocal) {
 TEST_F(UpstreamTest, TestUpstreamsDohWithServerIpLocal) {
     const std::string upstream_url = AG_FMT("https://localhost:{}/dns-query", m_loopback_doh.port());
     const std::vector<UpstreamTestData> local_data = {
-            {upstream_url, {"127.0.0.1:1"}, Ipv4Address{127, 0, 0, 1}},
+            {upstream_url, {"127.0.0.1:1"}, {Ipv4Address{127, 0, 0, 1}}},
             {local_doh_stamp(), {"127.0.0.1:1"}, {}},
     };
     ASSERT_NO_FATAL_FAILURE(co_await sequential_test(local_data));
 }
 
 // DoQ upstream with a resolved server IP, reproduced against loopback. With
-// resolved_server_ip set, the bootstrapper is bypassed and DoqUpstream connects
+// resolved_server_ips set, the bootstrapper is bypassed and DoqUpstream connects
 // directly to 127.0.0.1 on the URL port. The literal-IP URL row makes the
 // bootstrapper short-circuit instead. In both cases the dead bootstrap is never
 // contacted.
 TEST_F(UpstreamTest, TestUpstreamsDoqWithServerIpLocal) {
     const std::vector<UpstreamTestData> local_data = {
-            {AG_FMT("quic://localhost:{}", m_loopback_doq.port()), {"127.0.0.1:1"}, Ipv4Address{127, 0, 0, 1}},
+            {AG_FMT("quic://localhost:{}", m_loopback_doq.port()), {"127.0.0.1:1"}, {Ipv4Address{127, 0, 0, 1}}},
             {AG_FMT("quic://127.0.0.1:{}", m_loopback_doq.port()), {"127.0.0.1:1"}, {}},
+    };
+    ASSERT_NO_FATAL_FAILURE(co_await sequential_test(local_data));
+}
+
+// IPv6 loopback address. The loopback servers listen on 127.0.0.1 only, so a
+// connection to this address fails.
+static constexpr Ipv6Address IPV6_LOOPBACK{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1};
+
+// Upstreams with several resolved server IPs against loopback. The bootstrap
+// is dead, so the exchange succeeds only if the upstream uses the resolved IPs. The first IP is not reachable, so the
+// upstream must also try the second IP.
+TEST_F(UpstreamTest, TestUpstreamsWithServerIpsLocal) {
+    const std::vector<IpAddress> server_ips = {IPV6_LOOPBACK, Ipv4Address{127, 0, 0, 1}};
+    const std::vector<UpstreamTestData> local_data = {
+            {AG_FMT("localhost:{}", m_loopback.port()), {"127.0.0.1:1"}, server_ips},
+            {AG_FMT("tcp://localhost:{}", m_loopback.port()), {"127.0.0.1:1"}, server_ips},
+            {AG_FMT("tls://localhost:{}", m_loopback_tls.port()), {"127.0.0.1:1"}, server_ips},
+            {AG_FMT("https://localhost:{}/dns-query", m_loopback_doh.port()), {"127.0.0.1:1"}, server_ips},
+            {AG_FMT("quic://localhost:{}", m_loopback_doq.port()), {"127.0.0.1:1"}, server_ips},
     };
     ASSERT_NO_FATAL_FAILURE(co_await sequential_test(local_data));
 }
@@ -1141,8 +1160,8 @@ TEST_F(UpstreamTest, DISABLED_ConcurrentRequests) {
             .address = "https://dns.cloudflare.com/dns-query",
             //        .address = "quic://dns.adguard-dns.com:8853", // Uncomment for test DOQ upstream
             .bootstrap = {"8.8.8.8", "1.1.1.1"},
-            //        .resolved_server_ip = IPV4_ADDRESS_SIZE{104, 19, 199, 29}, // Uncomment for test this server IP
-            //        .resolved_server_ip = IPV6_ADDRESS_SIZE{0x26, 0x06, 0x47, 0x00, 0x30, 0x0a, 0x00, 0x00, 0x00,
+            //        .resolved_server_ips = IPV4_ADDRESS_SIZE{104, 19, 199, 29}, // Uncomment for test this server IP
+            //        .resolved_server_ips = IPV6_ADDRESS_SIZE{0x26, 0x06, 0x47, 0x00, 0x30, 0x0a, 0x00, 0x00, 0x00,
             //        0x00, 0x00, 0x00, 0x68, 0x13, 0xc7, 0x1d},  // Uncomment for test this server IP
     };
     auto upstream_res = create_upstream(opts, 5s);

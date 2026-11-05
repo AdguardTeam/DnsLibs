@@ -62,14 +62,14 @@ int main() {
     auto *upstream = [[AGDnsUpstream alloc] init];
     upstream.address = @"tls://1.1.1.1";
     upstream.bootstrap = @[];
-    upstream.serverIp = nil;
+    upstream.serverIps = nil;
     upstream.id = 42;
     upstream.outboundInterfaceName = nil;
 
     auto *fallback = [[AGDnsUpstream alloc] init];
     fallback.address = @"1.1.1.1";
     fallback.bootstrap = nil;
-    fallback.serverIp = nil;
+    fallback.serverIps = nil;
     fallback.id = 43;
     fallback.outboundInterfaceName = nil;
 

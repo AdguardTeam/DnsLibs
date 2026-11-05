@@ -456,9 +456,9 @@ TEST_F(DnsProxyTest, TestHttpsRR) {
     ASSERT_EQ(ldns_pkt_get_rcode(response.get()), LDNS_RCODE_REFUSED);
 }
 
-// Exercises DnsProxy with a `resolved_server_ip` upstream over a local DoT
+// Exercises DnsProxy with a `resolved_server_ips` upstream over a local DoT
 // server (formerly dialed a real public DoT endpoint). The local
-// LoopbackTlsServer returns a canned A answer; resolved_server_ip=127.0.0.1
+// LoopbackTlsServer returns a canned A answer; resolved_server_ips=127.0.0.1
 // short-circuits the bootstrapper so the proxy connects directly to the
 // loopback server. on_certificate_verification accepts the loopback self-signed
 // cert. Fully offline and deterministic.
@@ -472,7 +472,7 @@ TEST_F(DnsProxyTest, TestResolvedIp) {
     DnsProxySettings settings = make_dnsproxy_settings();
     settings.upstreams = {{
             .address = tls_server.address(),
-            .resolved_server_ip = Ipv4Address{127, 0, 0, 1},
+            .resolved_server_ips = {Ipv4Address{127, 0, 0, 1}},
     }};
     settings.upstream_timeout = 5000ms;
     settings.ipv6_available = false;

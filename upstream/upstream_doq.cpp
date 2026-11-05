@@ -381,8 +381,8 @@ Error<Upstream::InitError> DoqUpstream::init() {
         return error;
     }
 
-    if (!std::holds_alternative<std::monostate>(m_options.resolved_server_ip)) {
-        m_server_addresses.emplace_back(m_options.resolved_server_ip, m_port);
+    for (const SocketAddress &address : resolved_server_addresses(m_port)) {
+        m_server_addresses.emplace_back(address);
     }
 
     if (m_server_addresses.empty()) {

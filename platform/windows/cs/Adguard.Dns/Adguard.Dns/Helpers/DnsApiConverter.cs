@@ -270,18 +270,21 @@ namespace Adguard.Dns.Helpers
                 MarshalUtils.StringToPtr,
                 allocatedPointers);
 
-            byte[] addressBytes = null;
-            if (upstreamOptions.ResolvedIpAddress!= null)
-            {
-                addressBytes = upstreamOptions.ResolvedIpAddress.GetAddressBytes();
-            }
+            // The addresses are optional: null means no pre-resolved addresses.
+            MarshalUtils.ag_buffer addressesC = MarshalUtils.ListToAgList(
+                upstreamOptions.ResolvedIpAddresses ?? new List<IPAddress>(),
+                (address, pointers) =>
+                {
+                    MarshalUtils.ag_buffer addressC = MarshalUtils.BytesToAgBuffer(address.GetAddressBytes());
+                    pointers?.Enqueue(addressC.data);
+                    return addressC;
+                },
+                allocatedPointers);
 
-            MarshalUtils.ag_buffer addressC = MarshalUtils.BytesToAgBuffer(addressBytes);
-            allocatedPointers?.Enqueue(addressC.data);
             AGDnsApi.ag_upstream_options upstreamOptionsC = new AGDnsApi.ag_upstream_options
             {
                 bootstrap = bootstrapC,
-                resolved_ip_address = addressC,
+                resolved_ip_addresses = addressesC,
                 fingerprints = fingerprintsC
             };
 
@@ -486,12 +489,14 @@ namespace Adguard.Dns.Helpers
                 upstreamOptionsC.fingerprints,
                 MarshalUtils.PtrToString);
 
-            IPAddress serverAddress = CreateIpAddress(upstreamOptionsC.resolved_ip_address);
+            List<IPAddress> serverAddresses = MarshalUtils.AgListToList<MarshalUtils.ag_buffer, IPAddress>(
+                upstreamOptionsC.resolved_ip_addresses,
+                CreateIpAddress);
             UpstreamOptions upstreamOptions = new UpstreamOptions
             {
                 Bootstrap = bootstrap,
                 Fingerprints = fingerprints,
-                ResolvedIpAddress = serverAddress
+                ResolvedIpAddresses = serverAddresses
             };
 
             MarshalUtils.CopyFieldsToProperties(upstreamOptionsC, upstreamOptions);

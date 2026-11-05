@@ -221,11 +221,11 @@ typedef void (^logCallback)(AGDnsLogLevel level, const char *msg, int length);
  */
 @property(nonatomic) NSArray<NSString *> *bootstrap;
 /**
- * Upstream's IP address.
- * Pre-resolved IP address for the upstream server. If this field is specified, the @ref bootstrap
- * DNS servers won't be used for resolving the upstream's address.
+ * Upstream's IP addresses, in the order of preference.
+ * Pre-resolved IP addresses for the upstream server. Each address is 4 bytes (IPv4) or 16 bytes (IPv6).
+ * If this field is specified, the @ref bootstrap DNS servers won't be used for resolving the upstream's address.
  */
-@property(nonatomic) NSData *serverIp;
+@property(nonatomic) NSArray<NSData *> *serverIps;
 /**
  * User-provided ID for this upstream
  */

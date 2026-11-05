@@ -45,12 +45,18 @@ namespace Adguard.Dns.Tests.Helpers
                     {
                         Id = 1,
                         Bootstrap = new List<string>(),
+                        ResolvedIpAddresses = new List<IPAddress>(),
                         Fingerprints = new List<string>()
                     },
                     new UpstreamOptions
                     {
                         Id = 2,
                         Bootstrap = new List<string>(),
+                        ResolvedIpAddresses = new List<IPAddress>
+                        {
+                            IPAddress.Parse("8.8.8.8"),
+                            IPAddress.Parse("2001:4860:4860::8888")
+                        },
                         Fingerprints = new List<string>()
                     },
                     new UpstreamOptions
@@ -61,6 +67,7 @@ namespace Adguard.Dns.Tests.Helpers
                             "bootStrapBegin",
                             "bootStrapEnd"
                         },
+                        ResolvedIpAddresses = new List<IPAddress>(),
                         Fingerprints = new List<string>()
                         {
                             "fingerprintsBegin",
@@ -78,6 +85,7 @@ namespace Adguard.Dns.Tests.Helpers
                             "8.8.8.8",
                             "9.9.9.9"
                         },
+                        ResolvedIpAddresses = new List<IPAddress>(),
                         Fingerprints = new List<string>()
                     }
                 },
@@ -94,6 +102,7 @@ namespace Adguard.Dns.Tests.Helpers
                                 "8.8.8.8",
                                 "9.9.9.9"
                             },
+                            ResolvedIpAddresses = new List<IPAddress>(),
                             Fingerprints = new List<string>()
                         }
                     }
@@ -299,6 +308,7 @@ namespace Adguard.Dns.Tests.Helpers
 		        UpstreamOptions upstreamOptions = new UpstreamOptions
 		        {
 			        Bootstrap = new List<string>(),
+			        ResolvedIpAddresses = new List<IPAddress>(),
 			        Fingerprints = new List<string>(),
 			        Address = "8.8.8.8:53",
 		        };

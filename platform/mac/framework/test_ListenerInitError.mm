@@ -21,7 +21,7 @@ int main() {
     auto *upstream = [[AGDnsUpstream alloc] init];
     upstream.address = @"94.140.14.14";
     upstream.bootstrap = nil;
-    upstream.serverIp = nil;
+    upstream.serverIps = nil;
     upstream.id = 42;
     upstream.outboundInterfaceName = nil;
 

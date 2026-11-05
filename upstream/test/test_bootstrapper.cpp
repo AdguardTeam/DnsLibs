@@ -119,4 +119,63 @@ TEST_F(BootstrapperTest, LocalNetworkPermissionMaybeMissing) {
 }
 #endif // __APPLE__
 
+// With resolved addresses, the bootstrapper returns them at once, without any
+// resolver. When all of them are removed, it returns all of them again.
+TEST_F(BootstrapperTest, ResolvedAddresses) {
+    EventLoopPtr loop = EventLoop::create();
+    loop->start();
+    SocketFactory socket_factory({*loop});
+    const std::vector<std::string> no_bootstrap;
+    const std::vector<SocketAddress> resolved = {SocketAddress("127.0.0.1", 853), SocketAddress("::1", 853)};
+    Bootstrapper bootstrapper({
+            .address_string = "example.com",
+            .default_port = 853,
+            .bootstrap = no_bootstrap,
+            .timeout = Secs(1),
+            .upstream_config = {*loop, &socket_factory},
+            .resolved_addresses = resolved,
+    });
+    auto err = bootstrapper.init();
+    ASSERT_FALSE(err) << err->str();
+
+    auto result = bootstrapper.try_get_ready_result();
+    ASSERT_TRUE(result.has_value());
+    ASSERT_FALSE(result->error) << result->error->str();
+    ASSERT_EQ(result->addresses, resolved);
+
+    bootstrapper.remove_resolved(resolved[0]);
+    result = bootstrapper.try_get_ready_result();
+    ASSERT_TRUE(result.has_value());
+    ASSERT_EQ(result->addresses, std::vector<SocketAddress>{resolved[1]});
+
+    bootstrapper.remove_resolved(resolved[1]);
+    result = bootstrapper.try_get_ready_result();
+    ASSERT_TRUE(result.has_value());
+    ASSERT_FALSE(result->error) << result->error->str();
+    ASSERT_EQ(result->addresses, resolved);
+
+    loop->stop();
+    loop->join();
+}
+
+// Without resolved addresses and bootstrap servers, a hostname cannot be resolved.
+TEST_F(BootstrapperTest, NoResolvedAddressesNoBootstrap) {
+    EventLoopPtr loop = EventLoop::create();
+    loop->start();
+    {
+        SocketFactory socket_factory({*loop});
+        const std::vector<std::string> no_bootstrap;
+        Bootstrapper bootstrapper({
+                .address_string = "example.com",
+                .default_port = 853,
+                .bootstrap = no_bootstrap,
+                .timeout = Secs(1),
+                .upstream_config = {*loop, &socket_factory},
+        });
+        EXPECT_TRUE(bootstrapper.init());
+    }
+    loop->stop();
+    loop->join();
+}
+
 } // namespace ag::dns::upstream::test
