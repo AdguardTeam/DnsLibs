@@ -14,7 +14,7 @@
 #include <ws2tcpip.h>
 #endif
 
-#include <openssl/sha2.h>
+#include <openssl/sha.h>
 
 #include "common/base64.h"
 #include "common/net_utils.h"
