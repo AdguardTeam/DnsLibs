@@ -14,7 +14,7 @@ namespace ag::dns {
 // Test-only access to the DoQ internals. The short-timeout regression test
 // needs a permanently in-flight request so the timer is not stopped between
 // real queries; the keepalive-window test needs short intervals so it does not
-// have to wait for the production 30 s / 120 s values.
+// have to wait for the production 30 s / 180 s values.
 struct DoqUpstreamTestAccess {
     static void add_in_flight_request(DoqUpstream &upstream, int64_t id) {
         upstream.m_requests[id].is_onfly = true;
@@ -334,7 +334,7 @@ TEST_F(UpstreamTest, DoqKeepaliveWindowClosesIdleConnection) {
     UpstreamPtr upstream = std::move(upstream_res.value());
     auto doq = std::dynamic_pointer_cast<DoqUpstream>(upstream);
     ASSERT_NE(doq, nullptr);
-    // Keep the test fast: production defaults are 30 s keepalive and 120 s
+    // Keep the test fast: production defaults are 30 s keepalive and 180 s
     // window.
     DoqUpstreamTestAccess::set_keepalive_interval(*doq, Millis{50});
     DoqUpstreamTestAccess::set_keepalive_window(*doq, Millis{250});

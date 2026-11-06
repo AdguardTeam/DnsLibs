@@ -34,8 +34,9 @@ namespace ag::dns {
 
 static constexpr std::string_view DQ_ALPNS[] = {DoqUpstream::RFC9250_ALPN};
 static constexpr int KEEPALIVE_INTERVAL_SEC = 30;
-static constexpr int KEEPALIVE_WINDOW_SEC = 120;
 static constexpr int LOCAL_IDLE_TIMEOUT_SEC = 180;
+// Match the QUIC idle timeout, so both mechanisms use the same bound.
+static constexpr int KEEPALIVE_WINDOW_SEC = LOCAL_IDLE_TIMEOUT_SEC;
 static constexpr int MAX_PKTLEN_IPV6 = 1232;
 static constexpr size_t QUIC_PACKET_TRACE_BUFSIZE = 2048;
 
