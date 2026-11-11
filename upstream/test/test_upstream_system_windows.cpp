@@ -79,15 +79,18 @@ static TestError check_local_reply(const ldns_pkt &reply, ldns_rr_type type, std
     return std::nullopt;
 }
 
-static coro::Task<TestError> resolve_localhost(
-        Upstream &upstream, utils::TransportProtocol proto, ldns_rr_type type = LDNS_RR_TYPE_A) {
+// Queries an IP address literal: the DNS Client answers these itself, without a network query,
+// so the result doesn't depend on the hosts file or the configured resolver.
+static coro::Task<TestError> resolve_address_literal(
+        Upstream &upstream, utils::TransportProtocol proto, std::string_view name, ldns_rr_type type) {
     DnsMessageInfo info{.proto = proto};
-    ldns_pkt_ptr request = create_query("localhost.", type);
+    std::string name_str{name};
+    ldns_pkt_ptr request = create_query(name_str.c_str(), type);
     auto reply = co_await upstream.exchange(request.get(), &info);
     if (reply.has_error()) {
         co_return AG_FMT("proto={}: {}", magic_enum::enum_name(proto), reply.error()->str());
     }
-    TestError error = check_local_reply(*reply.value(), type, (type == LDNS_RR_TYPE_A) ? "127.0.0.1" : "::1");
+    TestError error = check_local_reply(*reply.value(), type, name);
     if (error) {
         co_return AG_FMT("proto={}: {}", magic_enum::enum_name(proto), *error);
     }
@@ -476,15 +479,20 @@ TEST_F(UpstreamTest, SystemUpstreamInitInterfaceIndex) {
     ASSERT_FALSE(upstream_res.has_error()) << upstream_res.error()->str();
 }
 
-// `localhost` is answered by the DNS Client service itself, both over UDP and TCP.
-TEST_F(UpstreamTest, SystemUpstreamResolvesLocalhost) {
+// The DNS Client answers queries for IP address literals itself, both over UDP and TCP, without
+// consulting the hosts file or the resolver, so this test doesn't need a network or a hosts entry.
+TEST_F(UpstreamTest, SystemUpstreamResolvesAddressLiterals) {
     co_await m_loop->co_submit();
     auto upstream_res = create_upstream({"system://"});
     ASSERT_FALSE(upstream_res.has_error()) << upstream_res.error()->str();
 
+    struct Case {
+        const char *name;
+        ldns_rr_type type;
+    };
     for (utils::TransportProtocol proto : {utils::TP_UDP, utils::TP_TCP}) {
-        for (ldns_rr_type type : {LDNS_RR_TYPE_A, LDNS_RR_TYPE_AAAA}) {
-            TestError error = co_await resolve_localhost(*upstream_res.value(), proto, type);
+        for (const Case &c : {Case{"127.0.0.1", LDNS_RR_TYPE_A}, Case{"::1", LDNS_RR_TYPE_AAAA}}) {
+            TestError error = co_await resolve_address_literal(*upstream_res.value(), proto, c.name, c.type);
             ASSERT_FALSE(error) << *error;
         }
     }
@@ -524,8 +532,9 @@ TEST_F(UpstreamTest, SystemUpstreamConcurrentRequests) {
 
     static constexpr size_t COUNT = 32;
     auto errors = co_await parallel_run_n(COUNT, [&upstream](size_t i) {
-        return resolve_localhost(upstream, (i % 2 == 0) ? utils::TP_UDP : utils::TP_TCP,
-                (i % 4 < 2) ? LDNS_RR_TYPE_A : LDNS_RR_TYPE_AAAA);
+        const bool ipv4 = i % 2 == 0;
+        return resolve_address_literal(upstream, (i % 4 < 2) ? utils::TP_UDP : utils::TP_TCP,
+                ipv4 ? "127.0.0.1" : "::1", ipv4 ? LDNS_RR_TYPE_A : LDNS_RR_TYPE_AAAA);
     });
     co_await check_all_results(errors);
 }
@@ -640,7 +649,7 @@ TEST_F(UpstreamTest, SystemUpstreamTimesOut) {
         GTEST_SKIP() << "All the queries have completed within the timeout";
     }
 
-    TestError error = co_await resolve_localhost(upstream, utils::TP_UDP, LDNS_RR_TYPE_A);
+    TestError error = co_await resolve_address_literal(upstream, utils::TP_UDP, "127.0.0.1", LDNS_RR_TYPE_A);
     ASSERT_FALSE(error) << *error;
 }
 
@@ -693,7 +702,7 @@ TEST_F(UpstreamTest, SystemUpstreamMatchesPlainDns) {
                  Case{"gmail.com.", LDNS_RR_TYPE_MX},
                  Case{"gmail.com.", LDNS_RR_TYPE_TXT},
                  Case{"_caldavs._tcp.gmail.com.", LDNS_RR_TYPE_SRV},
-                 Case{"cloudflare.com.", LDNS_RR_TYPE_HTTPS},
+                 Case{"tls-ech.dev.", LDNS_RR_TYPE_HTTPS},
                  Case{"cloudflare.com.", LDNS_RR_TYPE_DNSKEY},
                  Case{"cloudflare.com.", LDNS_RR_TYPE_DS},
          }) {
