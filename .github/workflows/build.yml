@@ -69,10 +69,6 @@ jobs:
           echo "Resolved version: ${value:-(empty)}"
           echo "value=${value}" >> "$GITHUB_OUTPUT"
 
-  resolve-images:
-    if: github.repository == 'AdGuardSoftwareLimited/dns-libs'
-    uses: AdGuardSoftwareLimited/native-libs-common/.github/workflows/resolve-images.yml@master
-
   # Builds the libraries, runs the full test suite (including integration tests),
   # and uploads the dns-libs Conan binary package to Artifactory.
   linux-build:
@@ -249,14 +245,13 @@ jobs:
   lint:
     name: Lint (clangd-tidy)
     if: github.repository == 'AdGuardSoftwareLimited/dns-libs'
-    needs: [resolve-images]
     permissions:
       contents: read
       id-token: write
     runs-on:
       - ephemeral
       - ephemeral-linux
-      - ${{ needs.resolve-images.outputs.corelibs-builder }}
+      - registry.int.agrd.dev/linux/corelibs-builder:@edge
       - ephemeral-limit-memory-12288
       - ephemeral-limit-cpu-8
       - ephemeral-run-id-${{ github.run_id }}
@@ -282,11 +277,11 @@ jobs:
   mac-build:
     name: Apple framework build
     if: github.repository == 'AdGuardSoftwareLimited/dns-libs'
-    needs: [version, resolve-images]
+    needs: [version]
     runs-on:
       - ephemeral
       - ephemeral-mac
-      - ${{ needs.resolve-images.outputs.macos }}
+      - registry.int.agrd.dev/macos/tahoe-github-xcode27-26.11:@edge
       - ephemeral-limit-memory-6144
       - ephemeral-limit-cpu-4
       - ephemeral-run-id-${{ github.run_id }}
@@ -589,11 +584,11 @@ jobs:
   android-build:
     name: Android library build
     if: github.repository == 'AdGuardSoftwareLimited/dns-libs'
-    needs: [version, resolve-images]
+    needs: [version]
     runs-on:
       - ephemeral
       - ephemeral-linux
-      - ${{ needs.resolve-images.outputs.corelibs-builder }}
+      - registry.int.agrd.dev/linux/corelibs-builder:@edge
       - ephemeral-limit-memory-8192
       - ephemeral-limit-cpu-8
       - ephemeral-run-id-${{ github.run_id }}
@@ -719,11 +714,11 @@ jobs:
   windows-build:
     name: Windows build, tests and nuget pack
     if: github.repository == 'AdGuardSoftwareLimited/dns-libs'
-    needs: [version, resolve-images]
+    needs: [version]
     runs-on:
       - ephemeral
       - ephemeral-vmwin
-      - ${{ needs.resolve-images.outputs.windows }}
+      - registry.int.agrd.dev/windows/windows2022-vs2022:@edge
       - ephemeral-limit-memory-6144
       - ephemeral-limit-cpu-4
       - ephemeral-run-id-${{ github.run_id }}
