@@ -61,8 +61,8 @@ static std::vector<std::string> rdata_of_type(const ldns_rr_list *list, ldns_rr_
     return result;
 }
 
-// Checks that the reply contains `expected_addr` in an answer record of `type`.
-static TestError check_local_reply(const ldns_pkt &reply, ldns_rr_type type, std::string_view expected_addr) {
+// Checks that the reply is a NOERROR answer to the request.
+static TestError check_reply_header(const ldns_pkt &reply) {
     if (ldns_pkt_get_rcode(&reply) != LDNS_RCODE_NOERROR) {
         return AG_FMT("Unexpected rcode: {}", (int) ldns_pkt_get_rcode(&reply));
     }
@@ -72,27 +72,37 @@ static TestError check_local_reply(const ldns_pkt &reply, ldns_rr_type type, std
     if (!ldns_pkt_qr(&reply)) {
         return "The reply doesn't have the QR bit set";
     }
-    std::vector<std::string> addrs = rdata_of_type(ldns_pkt_answer(&reply), type);
-    if (std::find(addrs.begin(), addrs.end(), expected_addr) == addrs.end()) {
-        return AG_FMT("No {} in the answer section", expected_addr);
-    }
     return std::nullopt;
 }
 
-// Queries an IP address literal: the DNS Client answers these itself, without a network query,
-// so the result doesn't depend on the hosts file or the configured resolver.
-static coro::Task<TestError> resolve_address_literal(
-        Upstream &upstream, utils::TransportProtocol proto, std::string_view name, ldns_rr_type type) {
+// Returns the local machine name with a trailing dot. A query for the local machine name is one of
+// the queries `DnsQueryEx()` completes itself, without the network, so its answer doesn't depend on
+// the hosts file or the configured resolver.
+static std::string local_machine_name() {
+    wchar_t name[256];
+    DWORD size = sizeof(name) / sizeof(name[0]);
+    if (!GetComputerNameW(name, &size)) {
+        return {};
+    }
+    return AG_FMT("{}.", utils::from_wstring(std::wstring_view{name, size}));
+}
+
+// Queries `name` and checks the reply. With `require_answer`, the answer section must have a record
+// of `type`. The A answer is required, while the AAAA answer may be empty on an IPv4-only machine.
+static coro::Task<TestError> resolve_name(
+        Upstream &upstream, utils::TransportProtocol proto, std::string name, ldns_rr_type type, bool require_answer) {
     DnsMessageInfo info{.proto = proto};
-    std::string name_str{name};
-    ldns_pkt_ptr request = create_query(name_str.c_str(), type);
+    ldns_pkt_ptr request = create_query(name.c_str(), type);
     auto reply = co_await upstream.exchange(request.get(), &info);
     if (reply.has_error()) {
         co_return AG_FMT("proto={}: {}", magic_enum::enum_name(proto), reply.error()->str());
     }
-    TestError error = check_local_reply(*reply.value(), type, name);
-    if (error) {
+    if (TestError error = check_reply_header(*reply.value())) {
         co_return AG_FMT("proto={}: {}", magic_enum::enum_name(proto), *error);
+    }
+    if (require_answer && rdata_of_type(ldns_pkt_answer(reply.value().get()), type).empty()) {
+        co_return AG_FMT(
+                "proto={}: no records of type {} in the answer section", magic_enum::enum_name(proto), (int) type);
     }
     co_return std::nullopt;
 }
@@ -479,22 +489,21 @@ TEST_F(UpstreamTest, SystemUpstreamInitInterfaceIndex) {
     ASSERT_FALSE(upstream_res.has_error()) << upstream_res.error()->str();
 }
 
-// The DNS Client answers queries for IP address literals itself, both over UDP and TCP, without
-// consulting the hosts file or the resolver, so this test doesn't need a network or a hosts entry.
-TEST_F(UpstreamTest, SystemUpstreamResolvesAddressLiterals) {
+// The DNS Client answers a query for the local machine name itself, so this test doesn't depend on
+// the hosts file or the configured resolver, and doesn't send anything over the network.
+TEST_F(UpstreamTest, SystemUpstreamResolvesLocalMachineName) {
     co_await m_loop->co_submit();
+    std::string name = local_machine_name();
+    ASSERT_FALSE(name.empty()) << "Failed to get the local machine name";
     auto upstream_res = create_upstream({"system://"});
     ASSERT_FALSE(upstream_res.has_error()) << upstream_res.error()->str();
 
-    struct Case {
-        const char *name;
-        ldns_rr_type type;
-    };
     for (utils::TransportProtocol proto : {utils::TP_UDP, utils::TP_TCP}) {
-        for (const Case &c : {Case{"127.0.0.1", LDNS_RR_TYPE_A}, Case{"::1", LDNS_RR_TYPE_AAAA}}) {
-            TestError error = co_await resolve_address_literal(*upstream_res.value(), proto, c.name, c.type);
-            ASSERT_FALSE(error) << *error;
-        }
+        TestError error = co_await resolve_name(*upstream_res.value(), proto, name, LDNS_RR_TYPE_A, true);
+        ASSERT_FALSE(error) << *error;
+        // The machine may have no IPv6 addresses, so the AAAA answer may be empty.
+        error = co_await resolve_name(*upstream_res.value(), proto, name, LDNS_RR_TYPE_AAAA, false);
+        ASSERT_FALSE(error) << *error;
     }
 }
 
@@ -526,15 +535,15 @@ TEST_F(UpstreamTest, SystemUpstreamRejectsUnrepresentableName) {
 // Many concurrent requests are all completed, each with its own reply.
 TEST_F(UpstreamTest, SystemUpstreamConcurrentRequests) {
     co_await m_loop->co_submit();
+    std::string name = local_machine_name();
+    ASSERT_FALSE(name.empty()) << "Failed to get the local machine name";
     auto upstream_res = create_upstream({"system://"});
     ASSERT_FALSE(upstream_res.has_error()) << upstream_res.error()->str();
     Upstream &upstream = *upstream_res.value();
 
     static constexpr size_t COUNT = 32;
-    auto errors = co_await parallel_run_n(COUNT, [&upstream](size_t i) {
-        const bool ipv4 = i % 2 == 0;
-        return resolve_address_literal(upstream, (i % 4 < 2) ? utils::TP_UDP : utils::TP_TCP,
-                ipv4 ? "127.0.0.1" : "::1", ipv4 ? LDNS_RR_TYPE_A : LDNS_RR_TYPE_AAAA);
+    auto errors = co_await parallel_run_n(COUNT, [&upstream, &name](size_t i) {
+        return resolve_name(upstream, (i % 2 == 0) ? utils::TP_UDP : utils::TP_TCP, name, LDNS_RR_TYPE_A, true);
     });
     co_await check_all_results(errors);
 }
@@ -649,7 +658,9 @@ TEST_F(UpstreamTest, SystemUpstreamTimesOut) {
         GTEST_SKIP() << "All the queries have completed within the timeout";
     }
 
-    TestError error = co_await resolve_address_literal(upstream, utils::TP_UDP, "127.0.0.1", LDNS_RR_TYPE_A);
+    std::string name = local_machine_name();
+    ASSERT_FALSE(name.empty()) << "Failed to get the local machine name";
+    TestError error = co_await resolve_name(upstream, utils::TP_UDP, name, LDNS_RR_TYPE_A, true);
     ASSERT_FALSE(error) << *error;
 }
 
@@ -713,7 +724,14 @@ TEST_F(UpstreamTest, SystemUpstreamMatchesPlainDns) {
         ASSERT_FALSE(plain_reply.has_error()) << c.name << ": " << plain_reply.error()->str();
         std::vector<std::string> expected = rdata_of_type(ldns_pkt_answer(plain_reply.value().get()), c.type);
         ASSERT_FALSE(expected.empty()) << c.name;
-        ASSERT_EQ(expected, rdata_of_type(ldns_pkt_answer(system_reply.value().get()), c.type)) << c.name;
+        std::vector<std::string> actual = rdata_of_type(ldns_pkt_answer(system_reply.value().get()), c.type);
+        if (actual.empty() && c.type == LDNS_RR_TYPE_HTTPS) {
+            // The system resolver isn't guaranteed to return HTTPS records: it depends on the
+            // configured server (e.g. Windows DNS Server doesn't support SVCB/HTTPS). The conversion
+            // of these types is covered by `SystemUpstreamParsesRealSvcbAndHttpsRecords`.
+            continue;
+        }
+        ASSERT_EQ(expected, actual) << c.name;
     }
 }
 
