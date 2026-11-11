@@ -31,6 +31,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   crashes with an unrecognized selector when the service raises the event. (AG-59533)
 - Raised the minimum OS versions of the Apple framework to macOS 12.0 and iOS 15.0 (from 10.15 and 13.0). The CocoaPods
   podspec and the SwiftPM manifest declare the same minimums. (AG-59174)
+- Updated NLC to 8.2.0. The `CHROME` TLS profile, which all encrypted upstreams (DoT, DoH, DoQ) use, now matches
+  the current Chrome stable ClientHello: it sends the `trust_anchors` extension and a GREASE value at the head of
+  `signature_algorithms`.
 
 ### Deprecated
 
