@@ -20,35 +20,37 @@ add_library(upstream EXCLUDE_FROM_ALL
         upstream_dnscrypt.h upstream_dnscrypt.cpp
         resolver.h resolver.cpp
         upstream_utils.cpp
+        upstream_system.h upstream_system.cpp
 )
 # Platform-specific system upstream implementations
-if (APPLE OR ANDROID)
+if (APPLE)
+    # Apple's system resolver (dns-sd) doesn't provide the raw reply, so the reply
+    # is assembled from the individual records reported by SystemResolver.
     target_sources(upstream PRIVATE
-            upstream_system.h upstream_system.cpp
+        upstream_system_apple.cpp
+        system_resolver.h system_resolver_apple.cpp
     )
-    if (APPLE)
-        # Apple's system resolver (dns-sd) doesn't provide the raw reply, so the reply
-        # is assembled from the individual records reported by SystemResolver.
+elseif (ANDROID)
+    # android_res_* returns the raw reply, which is passed through as is.
+    target_sources(upstream PRIVATE
+        upstream_system_android.cpp
+        android_res_api.h android_res_api.cpp
+    )
+    if (USE_INTERFACE_NAMES_IN_SYSTEM_UPSTREAM)
         target_sources(upstream PRIVATE
-            upstream_system_apple.cpp
-            system_resolver.h system_resolver_apple.cpp
+            ${DNSLIBS_DIR}/platform/android/dnsproxy/lib/src/main/cpp/android_context_manager.cpp
         )
-    elseif (ANDROID)
-        # android_res_* returns the raw reply, which is passed through as is.
-        target_sources(upstream PRIVATE
-            upstream_system_android.cpp
-            android_res_api.h android_res_api.cpp
+        target_include_directories(upstream PRIVATE
+            ${DNSLIBS_DIR}/platform/android/dnsproxy/lib/src/main/cpp
         )
-        if (USE_INTERFACE_NAMES_IN_SYSTEM_UPSTREAM)
-            target_sources(upstream PRIVATE
-                ${DNSLIBS_DIR}/platform/android/dnsproxy/lib/src/main/cpp/android_context_manager.cpp
-            )
-            target_include_directories(upstream PRIVATE
-                ${DNSLIBS_DIR}/platform/android/dnsproxy/lib/src/main/cpp
-            )
-            target_compile_definitions(upstream PRIVATE USE_INTERFACE_NAMES_IN_SYSTEM_UPSTREAM)
-        endif()
+        target_compile_definitions(upstream PRIVATE USE_INTERFACE_NAMES_IN_SYSTEM_UPSTREAM)
     endif()
+elseif (WIN32)
+    # DnsQueryEx() requires Windows 8.
+    # iphlpapi is used to validate the interface index.
+    target_sources(upstream PRIVATE upstream_system_windows.h upstream_system_windows.cpp)
+    target_compile_definitions(upstream PRIVATE _WIN32_WINNT=0x0602) # Windows 8
+    target_link_libraries(upstream iphlpapi dnsapi)
 endif ()
 
 set_target_properties(upstream PROPERTIES POSITION_INDEPENDENT_CODE ON)
@@ -132,6 +134,9 @@ endif()
 add_unit_test(test_upstream_utils "${TEST_DIR}" "${AG_TEST_HELPERS}" TRUE TRUE)
 if (APPLE)
     add_unit_test(test_system_resolver "${TEST_DIR}" "${AG_TEST_HELPERS}" TRUE TRUE)
+endif ()
+if (WIN32)
+    add_unit_test(test_upstream_system_windows "${TEST_DIR}" "${DNSLIBS_DIR}/dnscrypt/src;${AG_TEST_HELPERS}" TRUE TRUE)
 endif ()
 add_unit_test(test_dot_invalid_address "${TEST_DIR}" "${DNSLIBS_DIR}/upstream/src;${AG_TEST_HELPERS}" TRUE TRUE)
 # Plain-DNS hostname peer-eviction/rotation (mock Bootstrapper, loopback DNS)

@@ -747,7 +747,7 @@ TEST(ParseReverse, RejectsXWithType) {
 //
 // The pure parser must NOT invent a default @server: an empty opts.server
 // signals main() to resolve the system default DNS via the upstream module's
-// SystemUpstream (system://) on Apple/Android, else DEFAULT_SERVER. The
+// SystemUpstream (system://) on Apple/Android/Windows, else DEFAULT_SERVER. The
 // actual default resolution lives in adyg.cpp (alongside run_query/run_trace,
 // which are not unit-tested here); here we only guard the contract that the
 // default is applied outside the pure layer.

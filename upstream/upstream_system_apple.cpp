@@ -1,6 +1,8 @@
 #include <net/if.h>
 
 #include "common/logger.h"
+#include "dns/common/dns_utils.h"
+
 #include "upstream_system.h"
 
 namespace ag::dns {

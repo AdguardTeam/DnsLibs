@@ -24,6 +24,9 @@ static const UpstreamTestData real_upstreams_data[]{
         {"system://", {}},
         {"system://eth0", {}},
 #endif
+#ifdef _WIN32
+        {"system://", {}},
+#endif
         {"8.8.8.8:53", {"8.8.8.8:53"}},
         {"1.0.0.1", {}},
         {"1.1.1.1", {"1.0.0.1"}},

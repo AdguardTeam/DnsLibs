@@ -29,6 +29,11 @@ TEST_F(UpstreamTest, CreateUpstreamWithWrongOptions) {
 #ifdef __ANDROID__
             {"system://invalidnetwork"},
 #endif // __ANDROID__
+#ifdef _WIN32
+            {"system://enqwerty"},
+            {"system://-1"},
+            {"system://4294967295"},
+#endif // _WIN32
        // no bootstrapper and resolved server address
             {"https://example.com"},
             {"tls://one.one.one.one"},

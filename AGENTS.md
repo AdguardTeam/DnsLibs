@@ -20,7 +20,7 @@ See [README.md](README.md) for full product details.
 
 | Directory | Purpose |
 | --- | --- |
-| `common/` | Shared utilities: event loop, platform abstractions |
+| `common/` | Shared utilities: event loop, platform abstractions, DNS response helpers |
 | `common/test_helpers/` | Header-only test utilities: loopback encrypted-protocol responders (`LoopbackDnsServer`, `LoopbackDnscryptServer`, `LoopbackTlsServer`, `LoopbackDohServer`, `LoopbackQuicServer`), `LoopbackHttpConnectProxy`, `MockUpstream`, DNS packet helpers (`dns_test_helpers.h`), `REQUIRE_INTEGRATION()` guard, encrypted-protocol cert kit (`test_certificates.h` + `TestCertificateVerifier` + SPKI/TBS pin helpers) |
 | `net/` | Network layer: TLS, sockets, socket factory |
 | `proxy/` | Core DNS proxy logic: forwarder, listener, response cache |
@@ -234,6 +234,9 @@ numbers with `ag::utils::to_integer<T>()` (from `common/utils.h`) instead of
   especially exported public-API headers (`upstream/include/**`,
   `platform/*/capi`, etc.); also document new internal classes with public
   members.
+- The minimum supported Windows version is Windows 8 (`_WIN32_WINNT=0x0602`).
+  Call the Windows APIs available there directly instead of resolving them
+  with `LoadLibrary`/`GetProcAddress` at runtime.
 - Prefer existing patterns over inventing new ones
 - Keep changes minimal and focused
 - Tests live in `test/` subdirectories alongside the module they cover

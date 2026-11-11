@@ -93,6 +93,14 @@ The most interesting fields are:
         - `https://dns.adguard.com/dns-query` DNS-over-HTTPS.
         - `quic://dns.adguard.com:853` DNS-over-QUIC.
         - `sdns://...` DNS stamp (see [DNSCrypt specifications](https://dnscrypt.info/stamps-specifications)).
+        - `system://[<interface>]` the OS resolver (Apple platforms, Android, and Windows). On Windows, `<interface>`
+          is an optional interface index, as shown by `route print` or `netsh interface ipv4 show interfaces`; if it
+          is omitted, the system queries all interfaces. Windows uses `DnsQueryEx()` (Windows 8 and later) over the
+          same transport (UDP or TCP) on which the request was received, and assembles the reply from the returned
+          records. Limitations on Windows: the query goes through the DNS Client (Dnscache) service, which answers
+          from its cache and hosts file, the reply header flags and EDNS options of the upstream reply are not
+          preserved, record types `DnsQueryEx()` can't represent (e.g. `WKS`) are dropped, and a negative answer
+          carries a synthesized `SOA`, since the system doesn't return the upstream one.
     - `std::vector<std::string> bootstrap` — list of plain DNS servers used to resolve the hostnames in the upstream
       addresses (both encrypted and plain-DNS upstreams).
     - `std::vector<IpAddress> resolved_server_ips` — the IP addresses of the server, in the order of preference. If

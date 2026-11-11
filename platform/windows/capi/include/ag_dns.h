@@ -122,6 +122,8 @@ typedef struct {
      * * `sdns://...` -- DNS stamp (see https://dnscrypt.info/stamps-specifications)
      * * `quic://dns.adguard.com:853` -- DNS-over-QUIC
      * * `h3://` -- DNS-over-HTTP/3
+     * * `system://[<interface index>]` -- the system resolver (Windows 8 and later), via all interfaces
+     *   or the one with the specified index (as shown by `route print`)
      */
     const char *address;
 

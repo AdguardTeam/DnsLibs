@@ -55,6 +55,8 @@ struct UpstreamOptions {
      *     https://dns.adguard.com/dns-query -- DNS-over-HTTPS
      *     sdns://... -- DNS stamp (see https://dnscrypt.info/stamps-specifications)
      *     quic://dns.adguard.com:853 -- DNS-over-QUIC
+     *     system://[<interface>] -- the system resolver (Apple platforms, Android and Windows 8+);
+     *         on Windows, `<interface>` is an interface index
      */
     std::string address;
 
@@ -276,7 +278,7 @@ struct ErrorCodeToString<dns::UpstreamFactory::UpstreamCreateError> {
         case decltype(e)::AE_INIT_FAILED:
             return "Error initializing upstream";
         case decltype(e)::AE_NOT_SUPPORTED:
-            return "SystemUpstream is only supported on Apple platforms";
+            return "SystemUpstream is only supported on Apple platforms, Android and Windows";
         }
     }
 };

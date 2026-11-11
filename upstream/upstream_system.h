@@ -3,7 +3,7 @@
 #include "dns/net/aio_socket.h"
 #include "dns/upstream/upstream.h"
 
-#ifndef __ANDROID__
+#if !defined(__ANDROID__) && !defined(_WIN32)
 #include "system_resolver.h"
 #endif
 
@@ -22,7 +22,10 @@ namespace ag::dns {
  * - Apple: `upstream_system_apple.cpp`, on top of SystemResolver (a DNSService wrapper,
  *   which only yields individual records, so the reply has to be assembled by hand);
  * - Android: `upstream_system_android.cpp`, on top of `android_res_*`, which returns
- *   the raw wire reply, so it is passed through as is.
+ *   the raw wire reply, so it is passed through as is;
+ * - Windows: `upstream_system_windows.cpp`, on top of `DnsQueryEx()` (Windows 8 and later),
+ *   which only yields individual records too. The interface is specified by its index,
+ *   e.g. `system://12`.
  */
 class SystemUpstream : public Upstream {
 public:
@@ -52,14 +55,6 @@ private:
     static std::string interface_from_address(std::string_view address);
 
     /**
-     * Creates a SOA record for the authority section of a negative response.
-     * Based on ResponseHelpers::create_soa().
-     * @param request The DNS request packet to take the owner name from.
-     * @return A newly allocated SOA record.
-     */
-    static ldns_rr *create_soa(const ldns_pkt *request);
-
-    /**
      * Initializes the SystemUpstream.
      * @return An error if the initialization fails, otherwise no error.
      */
@@ -75,9 +70,9 @@ private:
 
     Logger m_log;            ///< The logger for this upstream.
     std::string m_interface; ///< The network interface used by this upstream.
-#ifdef __ANDROID__
+#if defined(__ANDROID__) || defined(_WIN32)
     class Impl;
-    std::unique_ptr<Impl> m_pimpl; ///< The `android_res_*` query engine used by this upstream.
+    std::unique_ptr<Impl> m_pimpl; ///< The `android_res_*` / `DnsQueryEx()` query engine used by this upstream.
 #else
     std::unique_ptr<SystemResolver> m_resolver; ///< The system resolver used by this upstream.
 #endif

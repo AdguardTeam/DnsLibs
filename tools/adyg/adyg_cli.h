@@ -32,7 +32,7 @@ using ag::dns::ldns_pkt_ptr;
 constexpr Millis DEFAULT_TIMEOUT{5000};
 
 // Fallback server used when no @server is given on platforms where the upstream
-// module has no system resolver (i.e. not Apple/Android). Public so adyg.cpp's
+// module has no system resolver (i.e. not Apple/Android/Windows). Public so adyg.cpp's
 // default_server() can reference it.
 constexpr std::string_view DEFAULT_SERVER = "1.1.1.1";
 
@@ -82,7 +82,7 @@ struct EdnsOption {
 // Command-line options for adyg. Populated by parse_args().
 struct CliOptions {
     // Empty when no @server was given; main() fills it with the system default
-    // DNS (see default_server in adyg.cpp — system:// on Apple/Android, else
+    // DNS (see default_server in adyg.cpp — system:// on Apple/Android/Windows, else
     // DEFAULT_SERVER) before any query is sent.
     std::string server;
     std::string name;

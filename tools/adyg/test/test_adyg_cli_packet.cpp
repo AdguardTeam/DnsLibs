@@ -1296,8 +1296,8 @@ TEST(FormatPacketDig, MultilineSoaTruncatedDoesNotCrash) {
     // with asserts compiled out in release, dereferences NULL). The +multiline
     // SOA path must therefore stop at the first missing numeric field rather
     // than blindly indexing all five. Presentation parsing rejects short SOAs,
-    // so the truncated RR is built field-by-field (mirrors production
-    // `create_soa` in upstream_system.cpp, but with 4 RDATA fields omitted).
+    // so the truncated RR is built field-by-field (mirrors `create_soa()` in
+    // common/include/dns/common/dns_utils.h, but with 4 RDATA fields omitted).
     ldns_pkt_ptr pkt{ldns_pkt_new()};
     ldns_rr *rr = ldns_rr_new();
     ASSERT_NE(nullptr, rr);

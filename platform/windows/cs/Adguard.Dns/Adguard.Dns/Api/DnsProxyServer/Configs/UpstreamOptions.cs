@@ -21,6 +21,8 @@ namespace Adguard.Dns.Api.DnsProxyServer.Configs
         ///  `tls://dns.adguard.com` -- DNS-over-TLS-HTTPS
         ///  `https://dns.adguard.com/dns-query` -- DNS-over-HTTPS.info/stamps-specifications)
         ///  `sdns://...` -- DNS stamp (see https://dnscrypt.info/stamps-specifications)
+        ///  `system://[interface index]` -- the system resolver (Windows 8 and later), via all interfaces
+        ///  or the one with the specified index (as shown by `route print`)
         /// </summary>
         [ManualMarshalStringToPtr]
         public string Address { get; set; }

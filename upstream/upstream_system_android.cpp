@@ -6,6 +6,7 @@
 #include <android/multinetwork.h>
 
 #include "common/logger.h"
+#include "dns/common/dns_utils.h"
 #include "dns/common/event_loop.h"
 
 #include "android_res_api.h"

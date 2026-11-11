@@ -701,6 +701,7 @@ namespace Adguard.Dns
             /// https://dns.adguard.com/dns-query -- DNS-over-HTTPS
             /// sdns://... -- DNS stamp (see https://dnscrypt.info/stamps-specifications)
             /// quic://dns.adguard.com:8853 -- DNS-over-QUIC
+            /// system://[interface index] -- the system resolver (Windows 8 and later)
             /// (<seealso cref="ManualMarshalPtrToStringAttribute"/>)
             /// </summary>
             [ManualMarshalPtrToString]

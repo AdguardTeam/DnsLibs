@@ -12,6 +12,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   in the `AGDnsProxyEvents` Objective-C API. The proxy raises it when it suspects that a DNS request failed due to
   a missing Local Network permission. Applications should handle the event by guiding the user through the
   Local Network permission request and explaining why the permission is required. (AG-59533)
+- Added the `system://[<interface index>]` upstream on Windows (8 and later). It resolves the request via the OS
+  resolver's `DnsQueryEx()` over the transport (UDP or TCP) on which it was received, and assembles the reply from
+  the returned records. The interface index is optional and matches the one shown by `route print`; if it is
+  omitted, all interfaces are queried. `adyg` on Windows now uses it as the default server and bootstrap.
 
 ### Changed
 

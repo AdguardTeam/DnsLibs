@@ -97,3 +97,6 @@ plain DNS server addresses (loopback addresses may be specified) and prevents DN
 servers. It can also restore the original DNS settings when the process exits. Use it in scripts or launch it
 alongside the DNS proxy. While the helper is running, DNS is restricted to the supplied servers; when the process exits,
 it restores the original settings.
+
+Don't use the `system://` upstream while Windows is configured to send DNS queries to the proxy (e.g. by the helper
+above): `system://` resolves through the Windows DNS client, so the queries would loop back into the proxy.

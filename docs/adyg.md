@@ -44,7 +44,7 @@ adyg [@server] [-t type] [-x addr] name [type] [options]
 
 Sends a DNS query to `server` for `name` (default RR type `A`) and prints the
 reply. When `server` is omitted, `adyg` queries the system default DNS via the
-upstream library's `SystemUpstream` (`system://`) on Apple/Android, falling
+upstream library's `SystemUpstream` (`system://`) on Apple/Android/Windows, falling
 back to `1.1.1.1` on platforms where no system resolver is available.
 
 The RR type may be given either positionally (`adyg name type`, mirroring
@@ -81,7 +81,7 @@ the following forms:
 | `h3://host/path` | DNS-over-HTTP/3 | HTTP/3 (QUIC) variant of DoH |
 | `quic://host[:port]` | DNS-over-QUIC (DoQ) | Default port 853 |
 | `sdns://...` | Any of the above plus DNSCrypt | A [DNS Stamp](https://dnscrypt.info/stamps/) encodes scheme, address, port, hash and transport |
-| `system://` | The OS-configured resolver (Apple/Android only) | Also the default when `@server` is omitted on those platforms |
+| `system://` | The OS-configured resolver (Apple, Android, Windows 8+) | The default when `@server` is omitted on Apple/Android/Windows; on Windows, `system://<interface index>` queries a single interface |
 
 A few things to keep in mind about `@server`:
 
@@ -98,7 +98,7 @@ A few things to keep in mind about `@server`:
   `https://`, `quic://`, `sdns://`, `system://`) are left untouched.
 - `+bootstrap=IP` selects the resolver used to look up the host portion of
   an encrypted upstream (e.g. to resolve `dns.adguard.com` in
-  `tls://dns.adguard.com`). Defaults to `system://` on Apple/Android, and
+  `tls://dns.adguard.com`). Defaults to `system://` on Apple/Android/Windows, and
   to nothing on other platforms (where a hostname-bearing scheme without
   `+bootstrap=` surfaces `AE_EMPTY_BOOTSTRAP`).
 
@@ -106,7 +106,7 @@ A few things to keep in mind about `@server`:
 
 Iterative resolution from the root, mirroring `dig +trace`. The first hop
 queries `@server` for `.` NS records with the RD bit set; when `@server` is
-omitted it defaults to the system resolver (`system://` on Apple/Android, else
+omitted it defaults to the system resolver (`system://` on Apple/Android/Windows, else
 `1.1.1.1`) — the same default as a non-trace query, since `dig +trace` always
 starts by querying the configured resolver. Subsequent hops query each
 delegating authoritative server directly (RD=0). Output is dig-compatible:
