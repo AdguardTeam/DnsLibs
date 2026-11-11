@@ -2,6 +2,12 @@
 
 // The internals of the Windows `system://` upstream (`upstream_system_windows.cpp`)
 // that turn `DnsQueryEx()` requests and results into DNS messages, exposed for unit testing.
+//
+// The records are handled as `DNS_RECORDW`, not as `DNS_RECORD`: `DnsQueryEx()` is Unicode-only
+// (`DNS_QUERY_REQUEST::QueryName` is a `PCWSTR`, and the returned names and strings are `PWSTR`s),
+// while `DNS_RECORD`/`PDNS_RECORD` alias `DNS_RECORDA` unless `UNICODE` is defined, which it isn't
+// in this project. Defining `UNICODE` globally isn't wanted at this time: it would also switch
+// `TCHAR`, `TEXT()` and the `...A`/`...W` aliases of `<windows.h>` for every Windows source file.
 
 // clang-format off
 #include <winsock2.h>
@@ -61,6 +67,10 @@ std::optional<std::wstring> system_query_name(const ldns_pkt *request);
 
 /**
  * Makes the `DnsQueryEx()` query options for a request.
+ * NetBIOS and multicast name resolution (LLMNR, mDNS) are disabled: the DNS Client would stall on
+ * their timeouts, and a DNS proxy isn't a stub resolver, so the requester handles them on its own.
+ * The DNS Client's local answers (its cache, the hosts file, `localhost`) are kept, since they don't
+ * delay the query.
  * @param request The request.
  * @param tcp     Whether the query must be sent over TCP.
  */

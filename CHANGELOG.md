@@ -14,7 +14,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   Local Network permission request and explaining why the permission is required. (AG-59533)
 - Added the `system://[<interface index>]` upstream on Windows (8 and later). It resolves the request via the OS
   resolver's `DnsQueryEx()` over the transport (UDP or TCP) on which it was received, and assembles the reply from
-  the returned records. The interface index is optional and matches the one shown by `route print`; if it is
+  the returned records. NetBIOS and multicast name resolution (LLMNR, mDNS) are disabled, so that the query doesn't
+  stall on their timeouts. The interface index is optional and matches the one shown by `route print`; if it is
   omitted, all interfaces are queried. `adyg` on Windows now uses it as the default server and bootstrap.
 
 ### Changed
@@ -38,6 +39,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - Updated NLC to 8.2.0. The `CHROME` TLS profile, which all encrypted upstreams (DoT, DoH, DoQ) use, now matches
   the current Chrome stable ClientHello: it sends the `trust_anchors` extension and a GREASE value at the head of
   `signature_algorithms`.
+- The minimum supported Windows version is now Windows 8.
 
 ### Deprecated
 

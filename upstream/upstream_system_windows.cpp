@@ -306,7 +306,7 @@ ldns_rr_ptr system_record_to_ldns(const DNS_RECORDW &record) {
     WireWriter w;
     if (!w.name(record.pName)) {
         warnlog(g_log, "Skipping a record of type {} with an invalid name: {}", record.wType,
-                utils::from_wstring(record.pName));
+                (record.pName != nullptr) ? utils::from_wstring(record.pName) : "(null)");
         return nullptr;
     }
     w.u16(record.wType);
@@ -473,7 +473,18 @@ std::optional<std::wstring> system_query_name(const ldns_pkt *request) {
 ULONG64 system_query_options(const ldns_pkt *request, bool tcp) {
     // The name is taken from the question as is: no search suffixes, no IDN conversions
     ULONG64 options = DNS_QUERY_TREAT_AS_FQDN | DNS_QUERY_DISABLE_IDN_ENCODING;
-    options |= tcp ? DNS_QUERY_USE_TCP_ONLY : DNS_QUERY_ACCEPT_TRUNCATED_RESPONSE;
+    // Don't try NetBIOS or multicast name resolution (LLMNR, mDNS): the DNS Client would stall on
+    // their timeouts, while a DNS proxy isn't a stub resolver, so the requester handles multicast
+    // name resolution on its own. The DNS Client's local answers (its cache, the hosts file,
+    // `localhost`) are kept: unlike multicast, they don't delay the query.
+    options |= DNS_QUERY_NO_NETBT | DNS_QUERY_NO_MULTICAST;
+    // `DnsQueryEx()` doesn't expose the TC bit of the response (it returns the records only), so a
+    // truncated UDP answer would silently look complete. Don't accept truncated responses: the DNS
+    // client then retries over TCP and returns the full answer, and `DnsForwarder` truncates it for
+    // the client's UDP size and sets TC.
+    if (tcp) {
+        options |= DNS_QUERY_USE_TCP_ONLY;
+    }
     if (ldns_pkt_edns_do(request)) {
         options |= DNS_QUERY_DNSSEC_OK;
     }

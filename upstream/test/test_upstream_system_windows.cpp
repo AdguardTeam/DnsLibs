@@ -1,11 +1,8 @@
-// Windows `system://` upstream (DnsQueryEx(), Windows 8+) tests. The record and reply conversions are tested
-// with hand-made `DNS_RECORDW`s. The always-on exchange tests only query names which the DNS Client
-// service answers by itself (e.g. `localhost`), or which are never answered in time, so they stay offline.
-// Shared infrastructure comes from upstream_test_fixture.h.
-
 #include <algorithm>
 #include <array>
+#include <cstddef>
 #include <cstring>
+#include <new>
 
 #include <magic_enum/magic_enum.hpp>
 
@@ -436,7 +433,16 @@ TEST(SystemUpstreamQueryTest, Name) {
 TEST(SystemUpstreamQueryTest, Options) {
     ldns_pkt_ptr request = create_query("example.com.", LDNS_RR_TYPE_A);
     ULONG64 udp = system_query_options(request.get(), false);
-    ASSERT_TRUE(udp & DNS_QUERY_ACCEPT_TRUNCATED_RESPONSE);
+    // NetBIOS and multicast name resolution must be off: the DNS Client would stall on their
+    // timeouts. Its local answers (the cache, the hosts file, `localhost`) are kept.
+    ASSERT_TRUE(udp & DNS_QUERY_NO_NETBT);
+    ASSERT_TRUE(udp & DNS_QUERY_NO_MULTICAST);
+    ASSERT_FALSE(udp & DNS_QUERY_NO_LOCAL_NAME);
+    ASSERT_FALSE(udp & DNS_QUERY_NO_HOSTS_FILE);
+    // Truncated answers are not accepted: the TC bit isn't exposed, so a truncated answer would
+    // look complete. `DnsQueryEx()` retries over TCP instead, and `DnsForwarder` truncates the
+    // full answer for the client's UDP size.
+    ASSERT_FALSE(udp & DNS_QUERY_ACCEPT_TRUNCATED_RESPONSE);
     ASSERT_FALSE(udp & DNS_QUERY_USE_TCP_ONLY);
     ASSERT_TRUE(udp & DNS_QUERY_TREAT_AS_FQDN);
     ASSERT_FALSE(udp & DNS_QUERY_DNSSEC_OK);
@@ -445,6 +451,9 @@ TEST(SystemUpstreamQueryTest, Options) {
     ULONG64 tcp = system_query_options(request.get(), true);
     ASSERT_TRUE(tcp & DNS_QUERY_USE_TCP_ONLY);
     ASSERT_FALSE(tcp & DNS_QUERY_ACCEPT_TRUNCATED_RESPONSE);
+    // The multicast and NetBIOS name resolution is disabled on any transport.
+    ASSERT_TRUE(tcp & DNS_QUERY_NO_NETBT);
+    ASSERT_TRUE(tcp & DNS_QUERY_NO_MULTICAST);
 
     ldns_pkt_set_edns_do(request.get(), true);
     ldns_pkt_set_cd(request.get(), true);
@@ -521,8 +530,10 @@ TEST_F(UpstreamTest, SystemUpstreamConcurrentRequests) {
     co_await check_all_results(errors);
 }
 
-// Destroying the upstream completes the requests in flight with an error.
+// Integration-only: destroying the upstream completes the requests in flight with an error. The
+// queries are sent to the configured servers (they must not be answered before the destruction).
 TEST_F(UpstreamTest, SystemUpstreamDestroyedWithRequestsInFlight) {
+    REQUIRE_INTEGRATION();
     co_await m_loop->co_submit();
     auto upstream_res = create_upstream({"system://"});
     ASSERT_FALSE(upstream_res.has_error()) << upstream_res.error()->str();
@@ -554,10 +565,11 @@ TEST_F(UpstreamTest, SystemUpstreamDestroyedWithRequestsInFlight) {
     }
 }
 
-// A coroutine resumed by the destructor may immediately send another request (e.g. a caller that
-// retries on `AE_SHUTTING_DOWN`). Such requests must be rejected instead of modifying the request
-// map while it's being drained.
+// Integration-only: a coroutine resumed by the destructor may immediately send another request (e.g.
+// a caller that retries on `AE_SHUTTING_DOWN`). Such requests must be rejected instead of modifying
+// the request map while it's being drained. The queries are sent to the configured servers.
 TEST_F(UpstreamTest, SystemUpstreamRejectsRequestsSentWhileDestroying) {
+    REQUIRE_INTEGRATION();
     co_await m_loop->co_submit();
     RetryState state;
     auto upstream_res = create_upstream({"system://"});
@@ -603,8 +615,10 @@ TEST_F(UpstreamTest, SystemUpstreamCompletesAddressQueriesSynchronously) {
     ASSERT_NE(nullptr, result.value());
 }
 
-// The requests that take longer than the timeout complete with an error, and the upstream keeps working.
+// Integration-only: the requests that take longer than the timeout complete with an error, and the
+// upstream keeps working. The nonexistent names are sent to the configured servers.
 TEST_F(UpstreamTest, SystemUpstreamTimesOut) {
+    REQUIRE_INTEGRATION();
     co_await m_loop->co_submit();
     auto upstream_res = create_upstream({"system://"}, Millis{1});
     ASSERT_FALSE(upstream_res.has_error()) << upstream_res.error()->str();
@@ -679,6 +693,7 @@ TEST_F(UpstreamTest, SystemUpstreamMatchesPlainDns) {
                  Case{"gmail.com.", LDNS_RR_TYPE_MX},
                  Case{"gmail.com.", LDNS_RR_TYPE_TXT},
                  Case{"_caldavs._tcp.gmail.com.", LDNS_RR_TYPE_SRV},
+                 Case{"cloudflare.com.", LDNS_RR_TYPE_HTTPS},
                  Case{"cloudflare.com.", LDNS_RR_TYPE_DNSKEY},
                  Case{"cloudflare.com.", LDNS_RR_TYPE_DS},
          }) {
@@ -690,6 +705,64 @@ TEST_F(UpstreamTest, SystemUpstreamMatchesPlainDns) {
         std::vector<std::string> expected = rdata_of_type(ldns_pkt_answer(plain_reply.value().get()), c.type);
         ASSERT_FALSE(expected.empty()) << c.name;
         ASSERT_EQ(expected, rdata_of_type(ldns_pkt_answer(system_reply.value().get()), c.type)) << c.name;
+    }
+}
+
+// Integration-only: the system resolver doesn't necessarily return SVCB records, so fetch real
+// SVCB and HTTPS answers from a public resolver and run their raw RDATA (which is what
+// `DnsQueryEx()` returns for these types) through the system upstream's record conversion.
+TEST_F(UpstreamTest, SystemUpstreamParsesRealSvcbAndHttpsRecords) {
+    REQUIRE_INTEGRATION();
+    co_await m_loop->co_submit();
+    auto plain_res = create_upstream({"8.8.8.8"});
+    ASSERT_FALSE(plain_res.has_error()) << plain_res.error()->str();
+
+    struct Case {
+        const char *name;
+        ldns_rr_type type;
+    };
+    for (const Case &c : {
+                 Case{"_dns.resolver.arpa.", LDNS_RR_TYPE_SVCB},
+                 Case{"cloudflare.com.", LDNS_RR_TYPE_HTTPS},
+         }) {
+        ldns_pkt_ptr request = create_query(c.name, c.type);
+        auto reply = co_await plain_res.value()->exchange(request.get());
+        ASSERT_FALSE(reply.has_error()) << c.name << ": " << reply.error()->str();
+
+        const ldns_rr_list *answer = ldns_pkt_answer(reply.value().get());
+        ASSERT_GT(ldns_rr_list_rr_count(answer), 0) << c.name;
+
+        for (size_t i = 0; i < ldns_rr_list_rr_count(answer); ++i) {
+            const ldns_rr *rr = ldns_rr_list_rr(answer, i);
+            ASSERT_EQ(c.type, ldns_rr_get_type(rr)) << c.name;
+
+            // Reassemble the RDATA in wire format: priority, target name, then the SvcParams.
+            std::vector<uint8_t> rdata;
+            for (size_t j = 0; j < ldns_rr_rd_count(rr); ++j) {
+                const ldns_rdf *rdf = ldns_rr_rdf(rr, j);
+                const uint8_t *data = ldns_rdf_data(rdf);
+                rdata.insert(rdata.end(), data, data + ldns_rdf_size(rdf));
+            }
+
+            AllocatedPtr<char> owner_str{ldns_rdf2str(ldns_rr_owner(rr))};
+            ASSERT_NE(nullptr, owner_str) << c.name;
+            std::wstring owner = utils::to_wstring(owner_str.get());
+
+            // Build a `DnsQueryEx()`-shaped record: it occupies `offsetof(Data) + wDataLength` bytes,
+            // with the raw RDATA stored inline at `Data`.
+            size_t record_size = std::max(sizeof(DNS_RECORDW), offsetof(DNS_RECORDW, Data) + rdata.size());
+            std::unique_ptr<uint8_t[]> storage{new uint8_t[record_size]{}};
+            auto *record = new (storage.get()) DNS_RECORDW{};
+            record->pName = owner.data();
+            record->wType = c.type;
+            record->wDataLength = WORD(rdata.size());
+            record->dwTtl = ldns_rr_ttl(rr);
+            std::memcpy(storage.get() + offsetof(DNS_RECORDW, Data), rdata.data(), rdata.size());
+
+            ldns_rr_ptr converted = system_record_to_ldns(*record);
+            ASSERT_NE(nullptr, converted) << c.name << " " << owner_str.get();
+            ASSERT_EQ(rr_to_string(rr), rr_to_string(converted.get())) << c.name << " " << owner_str.get();
+        }
     }
 }
 
