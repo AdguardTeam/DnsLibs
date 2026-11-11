@@ -2,6 +2,7 @@
 #include <cstring>
 #include <fcntl.h>
 #include <map>
+#include <optional>
 
 #include <android/multinetwork.h>
 
@@ -46,11 +47,14 @@ public:
     }
 
     ~Impl() {
-        for (auto it = m_requests.begin(); it != m_requests.end();) {
-            auto next_it = std::next(it);
-            it->second.error = make_error(DnsError::AE_SHUTTING_DOWN);
-            complete_request(it->second); // it removed here
-            it = next_it;
+        // The pending requests are completed by resuming their coroutines below, which may try to
+        // send new requests (e.g. if the caller retries on `AE_SHUTTING_DOWN`). Refuse them, so
+        // that they can't modify `m_requests` while it's being drained.
+        m_destroying = true;
+        while (!m_requests.empty()) {
+            Request &req = m_requests.begin()->second;
+            req.error = make_error(DnsError::AE_SHUTTING_DOWN);
+            complete_request(req);
         }
     }
 
@@ -78,16 +82,14 @@ public:
      * @param query The wire-format query. Must outlive the awaitable.
      */
     auto send(Uint8View query) {
-        uint64_t id = m_next_request_id++;
-        auto &req = m_requests[id];
-        req.id = id;
-        req.parent = this;
-        req.query = query;
-
         struct Awaitable {
-            Request *req;
+            Request *req = nullptr; ///< The request, or null if it was rejected.
+            std::optional<SendResult> result;
 
             auto await_ready() {
+                if (req == nullptr) {
+                    return true;
+                }
                 // 1. Call android_res_nsend, get fd
                 tracelog(g_log, "Calling AndroidResApi::nsend with network handle: {}, wire_size: {}",
                         req->parent->m_network_handle, req->query.size());
@@ -172,6 +174,9 @@ public:
             }
 
             SendResult await_resume() {
+                if (req == nullptr) {
+                    return std::move(result.value());
+                }
                 auto node = req->parent->m_requests.extract(req->id);
                 if (node.mapped().error) {
                     return node.mapped().error;
@@ -179,6 +184,20 @@ public:
                 return std::move(node.mapped().reply);
             }
         };
+
+        // The destructor resumes the coroutines awaiting their results, so they may try to send
+        // new requests. Refuse them, so that they can't modify `m_requests` while it's drained.
+        if (m_destroying) {
+            return Awaitable{.req = nullptr,
+                    .result = make_error(DnsError::AE_SHUTTING_DOWN, "The upstream is being destroyed")};
+        }
+
+        uint64_t id = m_next_request_id++;
+        auto &req = m_requests[id];
+        req.id = id;
+        req.parent = this;
+        req.query = query;
+
         return Awaitable{.req = &req};
     }
 
@@ -248,6 +267,7 @@ public:
 
     EventLoop *m_loop = nullptr;
     net_handle_t m_network_handle = NETWORK_UNSPECIFIED;
+    bool m_destroying = false; ///< Whether the upstream is being destroyed. No new requests are accepted.
     uint64_t m_next_request_id = 0;
     std::map<uint64_t, Request> m_requests;
     Millis m_timeout;

@@ -53,6 +53,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   (AG-60512)
 - Fixed DoQ upstreams ignoring the URL port and always connecting to port 853 when the server IP address is known in
   advance (e.g. from the address field of a DNS stamp). (AG-60512)
+- Fixed a possible crash when the `system://` upstream on Android and Apple platforms is destroyed while requests are
+  in flight: a request sent from a coroutine resumed by the destructor is now rejected with `AE_SHUTTING_DOWN`
+  instead of modifying the request list while it is being drained.
 
 ### Security
 

@@ -50,6 +50,8 @@ public:
 
     /**
      * Resolves a domain to a list of resource records.
+     * If the resolver is being destroyed, the result is an `AE_SHUTTING_DOWN` error instead of a
+     * new request, so that a caller retrying on it can't modify the resolver while it's shutting down.
      * @param domain Domain to resolve.
      * @param rr_type Type of the resource record to resolve.
      * @return A unique pointer to a list of resource records.
