@@ -35,6 +35,8 @@ namespace ag::dns {
 static constexpr std::string_view DQ_ALPNS[] = {DoqUpstream::RFC9250_ALPN};
 static constexpr int KEEPALIVE_INTERVAL_SEC = 30;
 static constexpr int LOCAL_IDLE_TIMEOUT_SEC = 180;
+// Match the QUIC idle timeout, so both mechanisms use the same bound.
+static constexpr int KEEPALIVE_WINDOW_SEC = LOCAL_IDLE_TIMEOUT_SEC;
 static constexpr int MAX_PKTLEN_IPV6 = 1232;
 static constexpr size_t QUIC_PACKET_TRACE_BUFSIZE = 2048;
 
@@ -90,6 +92,9 @@ DoqUpstream::DoqUpstream(
         , m_req_idle_timer{Uv<uv_timer_t>::create_with_parent(this)}
         , m_handshake_timer(Uv<uv_timer_t>::create_with_parent(this))
         , m_retransmit_timer(Uv<uv_timer_t>::create_with_parent(this))
+        , m_keepalive_window_timer{Uv<uv_timer_t>::create_with_parent(this)}
+        , m_keepalive_interval{Secs{KEEPALIVE_INTERVAL_SEC}}
+        , m_keepalive_window{Secs{KEEPALIVE_WINDOW_SEC}}
         , m_static_secret{0}
         , m_tls_session_cache(opts.address)
         , m_shutdown_guard{std::make_shared<bool>(true)}
@@ -97,6 +102,7 @@ DoqUpstream::DoqUpstream(
     uv_timer_init(config.loop.handle(), m_req_idle_timer->raw());
     uv_timer_init(config.loop.handle(), m_handshake_timer->raw());
     uv_timer_init(config.loop.handle(), m_retransmit_timer->raw());
+    uv_timer_init(config.loop.handle(), m_keepalive_window_timer->raw());
 }
 
 DoqUpstream::~DoqUpstream() {
@@ -259,6 +265,15 @@ void DoqUpstream::retransmit_cb(uv_timer_t *timer) {
         return;
     }
 
+    // The keep-alive window is measured in wall-clock time (CLOCK_BOOTTIME on
+    // Linux), while uv_timer uses CLOCK_MONOTONIC and stops during suspend.
+    // Check the wall-clock timestamp before sending another PING so a
+    // connection that outlived its window during sleep is not kept alive.
+    if (doq->m_state == RUN && doq->m_requests.empty() && doq->is_keepalive_window_expired()) {
+        doq->disconnect("Keep-alive window expired");
+        return;
+    }
+
     if (int ret = doq->handle_expiry(); ret != 0) {
         if (ret == NGTCP2_ERR_IDLE_CLOSE) {
             doq->disconnect("Idle timeout");
@@ -279,6 +294,19 @@ void DoqUpstream::short_timeout_timer_cb(uv_timer_t *timer) {
         return;
     }
     doq->disconnect("Short timeout timer expired");
+}
+
+void DoqUpstream::keepalive_window_cb(uv_timer_t *timer) {
+    auto doq = static_cast<DoqUpstream *>(Uv<uv_timer_t>::parent_from_data(timer->data));
+    if (doq == nullptr || doq->m_state != RUN || !doq->m_requests.empty()) {
+        return;
+    }
+    // The timer is armed for the time remaining in the window after the last
+    // DNS activity, so reaching this callback means the window has expired
+    // (a zero delay is used when it already expired). The timestamp checks in
+    // exchange()/retransmit_cb() cover the suspend case where this timer does
+    // not run.
+    doq->disconnect("Keep-alive window expired");
 }
 
 void DoqUpstream::handshake_timer_cb(uv_timer_t *timer) {
@@ -325,9 +353,26 @@ void DoqUpstream::send_requests() {
         }
 
         req.is_onfly = true;
+        m_last_dns_activity_ts = get_tstamp();
     }
 
-    update_req_idle_timer();
+    // A send is not proof of a live connection: only arm the short timeout
+    // while something is outstanding. This is also called from on_close_stream()
+    // after a reply (and from handshake_confirmed()), when nothing may be in
+    // flight; an idle connection is bounded by the keepalive window, not by
+    // the short timeout.
+    //
+    // Note: even if a request timed out and left the short timer armed as a
+    // dead-connection safety net, a later stream close/reset stops it here
+    // (on_close_stream() -> send_requests() with an empty map). That is fine:
+    // the server closing the stream is itself proof that the connection is
+    // alive.
+    if (m_requests.empty()) {
+        uv_timer_stop(m_req_idle_timer->raw());
+    } else {
+        start_req_idle_timer();
+    }
+    update_keepalive_window_timer();
 }
 
 Error<Upstream::InitError> DoqUpstream::init() {
@@ -434,6 +479,12 @@ coro::Task<Upstream::ExchangeResult> DoqUpstream::exchange(const ldns_pkt *reque
     ldns_buffer_flip(buffer.get());
     memset(ldns_buffer_current(buffer.get()), '\0', sizeof(original_req_id));
 
+    // The keep-alive window is wall-clock based; do not reuse a connection
+    // whose NAT mapping may have expired while the device was suspended.
+    if (m_state == RUN && m_requests.empty() && is_keepalive_window_expired()) {
+        disconnect("Keep-alive window expired");
+    }
+
     int64_t request_id = m_next_request_id++;
     Request &req = m_requests[request_id];
     req.request_id = request_id;
@@ -481,6 +532,13 @@ coro::Task<Upstream::ExchangeResult> DoqUpstream::exchange(const ldns_pkt *reque
     m_requests.erase(request_id);
 
     if (timeout == std::cv_status::timeout) {
+        // A timed out request suggests the connection may be dead, so it is
+        // not DNS activity: keep the short timeout timer running (it
+        // disconnects unless a reply arrives) and do not arm the keep-alive
+        // window. A late reply only resets the short timeout timer in
+        // process_reply(); the keep-alive window keeps counting from the last
+        // successful activity.
+        start_req_idle_timer();
         co_return make_error(DnsError::AE_TIMED_OUT);
     }
 
@@ -939,7 +997,8 @@ int DoqUpstream::init_quic_conn(const Socket *connected_socket) {
         errlog(m_log, "Failed to create ngtcp2_conn: {}", ngtcp2_strerror(rv));
         return -1;
     }
-    ngtcp2_conn_set_keep_alive_timeout(m_conn, KEEPALIVE_INTERVAL_SEC * NGTCP2_SECONDS);
+    ngtcp2_conn_set_keep_alive_timeout(
+            m_conn, static_cast<ngtcp2_duration>(duration_cast<Nanos>(m_keepalive_interval).count()));
 
     if (init_ssl() != 0) {
         errlog(m_log, "Failed to create SSL");
@@ -1223,6 +1282,12 @@ int DoqUpstream::handshake_confirmed(ngtcp2_conn * /*conn*/, void *data) {
     dbglog(doq->m_log, "Selected ALPN: {}", std::string_view{(char *) buf, len});
 
     doq->m_state = RUN;
+    // A connection's keep-alive window starts when the connection is
+    // established, not at the first DNS activity. Otherwise a connection whose
+    // triggering request timed out during the handshake would keep ts == 0,
+    // and the wall-clock checks in exchange()/retransmit_cb() would never
+    // close it -- only the uv timer would, and it stops during suspend.
+    doq->m_last_dns_activity_ts = get_tstamp();
     doq->send_requests();
     return 0;
 }
@@ -1314,7 +1379,12 @@ int DoqUpstream::acked_stream_data_offset(ngtcp2_conn * /*conn*/, int64_t stream
 void DoqUpstream::process_reply(int64_t request_id, Uint8View reply) {
     auto node = m_requests.extract(request_id);
 
+    if (!node.empty()) {
+        m_last_dns_activity_ts = get_tstamp();
+    }
+
     update_req_idle_timer();
+    update_keepalive_window_timer();
 
     if (node.empty()) {
         return;
@@ -1347,6 +1417,10 @@ void DoqUpstream::disconnect(std::string_view reason) {
     uv_timer_stop(m_handshake_timer->raw());
     uv_timer_stop(m_req_idle_timer->raw());
     uv_timer_stop(m_retransmit_timer->raw());
+    uv_timer_stop(m_keepalive_window_timer->raw());
+    // A new connection starts its own keep-alive window; never inherit the
+    // previous one. is_keepalive_window_expired() treats 0 as not expired.
+    m_last_dns_activity_ts = 0;
 
     m_conn_state.info.emplace<std::monostate>();
 
@@ -1430,19 +1504,75 @@ void DoqUpstream::disqualify_server_address(const SocketAddress &server_address)
 // 1. Start as soon as there are outstanding requests.
 // 2. Reset each time we receive a reply.
 // 3. Stop when there are no more outstanding requests.
-void DoqUpstream::update_req_idle_timer() {
-    if (m_requests.empty()) {
-        uv_timer_stop(m_req_idle_timer->raw());
-        dbglog(m_log, "Short timeout timer stopped");
-        return;
-    }
-    if (uv_is_active((uv_handle_t *) m_req_idle_timer->raw())) {
-        tracelog(m_log, "Short timeout timer already running");
+//
+// Send path and timeout path: arm the timer only if it is not already running.
+// A reply is what proves the connection is alive, so sending another request
+// must not postpone the timeout.
+void DoqUpstream::start_req_idle_timer() {
+    if (m_state != RUN || uv_is_active((uv_handle_t *) m_req_idle_timer->raw())) {
         return;
     }
     Millis value = m_config.timeout * 2;
     uv_timer_start(m_req_idle_timer->raw(), short_timeout_timer_cb, value.count(), 0);
     dbglog(m_log, "Short timeout timer set to {}", value);
+}
+
+// Reply path: a reply proves the connection is alive, so restart the timer if
+// there are still outstanding requests.
+void DoqUpstream::update_req_idle_timer() {
+    uv_timer_stop(m_req_idle_timer->raw());
+    if (m_requests.empty()) {
+        dbglog(m_log, "Short timeout timer stopped");
+        return;
+    }
+    Millis value = m_config.timeout * 2;
+    uv_timer_start(m_req_idle_timer->raw(), short_timeout_timer_cb, value.count(), 0);
+    dbglog(m_log, "Short timeout timer reset to {}", value);
+}
+
+// Keep the connection alive for a bounded window after the last DNS activity.
+// The keep-alive PINGs keep NAT mappings alive while the connection is in use,
+// but an indefinitely alive connection would keep waking the device even when
+// it is idle. Closing the connection when the window expires makes the next
+// query create a fresh NAT mapping (see DnsLibs #159 and dnsproxy #260).
+void DoqUpstream::update_keepalive_window_timer() {
+    if (m_state != RUN || !m_requests.empty() || m_keepalive_window <= Millis{0}) {
+        uv_timer_stop(m_keepalive_window_timer->raw());
+        return;
+    }
+    // Arm the timer for the time remaining in the window, not a full window
+    // from now: this may be called when the last activity timestamp is already
+    // older than the window (e.g. a late reply did not refresh it), and the
+    // callback relies on firing exactly at the window boundary. If the window
+    // has already expired, arm for 0 so keepalive_window_cb() closes the
+    // connection on the next loop iteration -- the callback, not this function,
+    // calls disconnect(), because this may run inside ngtcp2 callbacks.
+    const ngtcp2_tstamp now = get_tstamp();
+    const auto window = static_cast<ngtcp2_tstamp>(duration_cast<Nanos>(m_keepalive_window).count());
+    ngtcp2_tstamp remaining = window;
+    if (m_last_dns_activity_ts != 0 && now > m_last_dns_activity_ts) {
+        remaining = (now - m_last_dns_activity_ts >= window) ? 0 : window - (now - m_last_dns_activity_ts);
+    }
+    const auto ms = static_cast<uint64_t>(ceil<Millis>(Nanos{remaining}).count());
+    uv_timer_stop(m_keepalive_window_timer->raw());
+    uv_timer_start(m_keepalive_window_timer->raw(), keepalive_window_cb, ms, 0);
+    tracelog(m_log, "Keep-alive window timer set to {} ms", ms);
+}
+
+// The keep-alive window is measured in wall-clock time (CLOCK_BOOTTIME on
+// Linux), unlike the uv_timer used to trigger it. This check is what catches
+// a connection whose window expired while the device was suspended.
+bool DoqUpstream::is_keepalive_window_expired() const {
+    // Invariant: a RUN connection always has a nonzero timestamp (it is set in
+    // handshake_confirmed()); zero only covers the pre-handshake state. A
+    // connection must never reach RUN with an unset clock.
+    assert(m_state != RUN || m_last_dns_activity_ts != 0);
+    if (m_keepalive_window <= Millis{0} || m_last_dns_activity_ts == 0) {
+        return false;
+    }
+    const ngtcp2_tstamp now = get_tstamp();
+    const auto window = static_cast<ngtcp2_tstamp>(duration_cast<Nanos>(m_keepalive_window).count());
+    return now >= m_last_dns_activity_ts && now - m_last_dns_activity_ts >= window;
 }
 
 void DoqUpstream::on_rand(uint8_t *dest, size_t destlen, const ngtcp2_rand_ctx *rand_ctx) {
