@@ -100,3 +100,5 @@ it restores the original settings.
 
 Don't use the `system://` upstream while Windows is configured to send DNS queries to the proxy (e.g. by the helper
 above): `system://` resolves through the Windows DNS client, so the queries would loop back into the proxy.
+
+`system://` requires `DnsQueryRaw()`, which is only available on Windows 11 23H2 and Windows Server 2025 and later.
