@@ -99,10 +99,16 @@ The most interesting fields are:
           same transport (UDP or TCP) on which the request was received, and assembles the reply from the returned
           records. NetBIOS and multicast name resolution (LLMNR, mDNS) are disabled, so that the query doesn't
           stall on their timeouts: a DNS proxy isn't a stub resolver, and the requester handles multicast name
-          resolution on its own. Limitations on Windows: the query goes through the DNS Client (Dnscache) service,
-          which answers from its cache and hosts file, the reply header flags and EDNS options of the upstream reply
-          are not preserved, record types `DnsQueryEx()` can't represent (e.g. `WKS`) are dropped, and a negative
-          answer carries a synthesized `SOA`, since the system doesn't return the upstream one.
+          resolution on its own. Queries with the DO bit bypass the cache of the DNS Client (Dnscache) service, since
+          the cache ignores the DO bit and may hold the answer without signatures. A signed answer cached this way is
+          also returned to queries without the DO bit, so DNSSEC records that weren't asked for (RRSIG, NSEC, NSEC3,
+          DS, DNSKEY) are removed from the replies to them. Limitations on Windows: the query goes through the DNS
+          Client service, which answers from its cache and hosts file, the reply header flags and EDNS options of the
+          upstream reply are not preserved, record types `DnsQueryEx()` can't represent (e.g. `WKS`) are dropped, and
+          a negative answer carries a synthesized `SOA`, since the system doesn't return the upstream one. Before
+          Windows 11, `DnsQueryEx()` loses and leaks the records of the queries it answers locally (e.g. for the
+          machine name, `localhost`, or an IP address literal); the upstream repeats such queries synchronously to
+          get the answer, but the leak can't be avoided.
     - `std::vector<std::string> bootstrap` — list of plain DNS servers used to resolve the hostnames in the upstream
       addresses (both encrypted and plain-DNS upstreams).
     - `std::vector<IpAddress> resolved_server_ips` — the IP addresses of the server, in the order of preference. If

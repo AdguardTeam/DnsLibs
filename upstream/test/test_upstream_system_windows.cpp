@@ -112,8 +112,10 @@ static std::string unique_name(size_t i) {
     return AG_FMT("ag-dnslibs-test-{}-{}.invalid.", i, GetTickCount64());
 }
 
-static coro::Task<Upstream::ExchangeResult> exchange_name(Upstream *upstream, std::string name, ldns_rr_type type) {
+static coro::Task<Upstream::ExchangeResult> exchange_name(
+        Upstream *upstream, std::string name, ldns_rr_type type, bool dnssec_ok = false) {
     ldns_pkt_ptr request = create_query(name.c_str(), type);
+    ldns_pkt_set_edns_do(request.get(), dnssec_ok);
     co_return co_await upstream->exchange(request.get());
 }
 
@@ -404,6 +406,106 @@ TEST(SystemUpstreamReplyTest, MapsErrors) {
     ASSERT_EQ(DnsError::AE_INTERNAL_ERROR, result.error()->value());
 }
 
+// A signed answer, as the DNS Client returns it for a DO query, or from its cache for any query:
+// the A record and its signature in the answer section, and the NSEC record proving that there's
+// no wildcard with its signature in the authority section.
+struct SignedAnswer {
+    std::unique_ptr<TestRecord> a = make_a_record(L"example.com", "1.2.3.4");
+    std::unique_ptr<TestRecord> a_sig = make_rrsig(L"example.com", DNS_TYPE_A, DnsSectionAnswer);
+    std::unique_ptr<TestRecord> nsec = make_record(L"example.com", DNS_TYPE_NSEC, DnsSectionAuthority);
+    std::unique_ptr<TestRecord> nsec_sig = make_rrsig(L"example.com", DNS_TYPE_NSEC, DnsSectionAuthority);
+    std::unique_ptr<TestRecord> ds = make_record(L"example.com", DNS_TYPE_DS, DnsSectionAnswer);
+
+    SignedAnswer() {
+        nsec->record.Data.NSEC.pNextDomainName =
+                const_cast<PWSTR>(L"a.example.com"); // NOLINT(cppcoreguidelines-pro-type-const-cast)
+        // A, RRSIG, NSEC
+        static constexpr uint8_t TYPE_BIT_MAPS[] = {0x00, 0x06, 0x40, 0x00, 0x00, 0x00, 0x00, 0x03};
+        nsec->record.Data.NSEC.wTypeBitMapsLength = sizeof(TYPE_BIT_MAPS);
+        std::memcpy(nsec->record.Data.NSEC.TypeBitMaps, TYPE_BIT_MAPS, sizeof(TYPE_BIT_MAPS));
+        static constexpr uint8_t DIGEST[] = {0xab, 0xcd};
+        ds->record.Data.DS.wKeyTag = 1;
+        ds->record.Data.DS.chAlgorithm = LDNS_RSASHA256;
+        ds->record.Data.DS.chDigestType = LDNS_SHA256;
+        ds->record.Data.DS.wDigestLength = sizeof(DIGEST);
+        std::memcpy(ds->record.Data.DS.Digest, DIGEST, sizeof(DIGEST));
+    }
+
+    static std::unique_ptr<TestRecord> make_rrsig(PCWSTR name, WORD type_covered, DWORD section) {
+        static constexpr uint8_t SIGNATURE[] = {0x01, 0x02, 0x03, 0x04};
+        auto result = make_record(name, DNS_TYPE_RRSIG, section);
+        auto &sig = result->record.Data.SIG;
+        sig.wTypeCovered = type_covered;
+        sig.chAlgorithm = LDNS_RSASHA256;
+        sig.chLabelCount = 2;
+        sig.dwOriginalTtl = TEST_TTL;
+        sig.wKeyTag = 1;
+        sig.pNameSigner = const_cast<PWSTR>(L"example.com"); // NOLINT(cppcoreguidelines-pro-type-const-cast)
+        sig.wSignatureLength = sizeof(SIGNATURE);
+        std::memcpy(sig.Signature, SIGNATURE, sizeof(SIGNATURE));
+        return result;
+    }
+
+    // The records, with a DS record in the answer section, as if the question were for DS.
+    const DNS_RECORDW *records() {
+        a->record.pNext = &a_sig->record;
+        a_sig->record.pNext = &ds->record;
+        ds->record.pNext = &nsec->record;
+        nsec->record.pNext = &nsec_sig->record;
+        return &a->record;
+    }
+};
+
+static std::vector<ldns_rr_type> types_of(const ldns_rr_list *list) {
+    std::vector<ldns_rr_type> result;
+    for (size_t i = 0; i < ldns_rr_list_rr_count(list); ++i) {
+        result.push_back(ldns_rr_get_type(ldns_rr_list_rr(list, i)));
+    }
+    return result;
+}
+
+// The DNS Client caches the answers regardless of the DO bit, so it may return the signed answer
+// to a query without DO. The DNSSEC records that aren't asked for must not be returned then.
+TEST(SystemUpstreamReplyTest, DropsUnrequestedDnssecRecordsWithoutDo) {
+    SignedAnswer answer;
+    ldns_pkt_ptr request = create_query("example.com.", LDNS_RR_TYPE_A);
+    auto result = make_system_reply(request.get(), ERROR_SUCCESS, answer.records());
+    ASSERT_FALSE(result.has_error()) << result.error()->str();
+    const ldns_pkt *reply = result.value().get();
+    ASSERT_EQ(std::vector{LDNS_RR_TYPE_A}, types_of(ldns_pkt_answer(reply)));
+    ASSERT_EQ(std::vector<ldns_rr_type>{}, types_of(ldns_pkt_authority(reply)));
+}
+
+// Without DO, the DNSSEC records of the asked type are still returned, and only them.
+TEST(SystemUpstreamReplyTest, KeepsRequestedDnssecRecordsWithoutDo) {
+    SignedAnswer answer;
+    ldns_pkt_ptr request = create_query("example.com.", LDNS_RR_TYPE_DS);
+    auto result = make_system_reply(request.get(), ERROR_SUCCESS, answer.records());
+    ASSERT_FALSE(result.has_error()) << result.error()->str();
+    const ldns_pkt *reply = result.value().get();
+    ASSERT_EQ((std::vector{LDNS_RR_TYPE_A, LDNS_RR_TYPE_DS}), types_of(ldns_pkt_answer(reply)));
+    ASSERT_EQ(std::vector<ldns_rr_type>{}, types_of(ldns_pkt_authority(reply)));
+
+    ldns_pkt_ptr any_request = create_query("example.com.", LDNS_RR_TYPE_ANY);
+    result = make_system_reply(any_request.get(), ERROR_SUCCESS, answer.records());
+    ASSERT_FALSE(result.has_error()) << result.error()->str();
+    reply = result.value().get();
+    ASSERT_EQ((std::vector{LDNS_RR_TYPE_A, LDNS_RR_TYPE_RRSIG, LDNS_RR_TYPE_DS}), types_of(ldns_pkt_answer(reply)));
+    ASSERT_EQ(std::vector<ldns_rr_type>{}, types_of(ldns_pkt_authority(reply)));
+}
+
+// With DO, all the DNSSEC records are returned.
+TEST(SystemUpstreamReplyTest, KeepsDnssecRecordsWithDo) {
+    SignedAnswer answer;
+    ldns_pkt_ptr request = create_query("example.com.", LDNS_RR_TYPE_A);
+    ldns_pkt_set_edns_do(request.get(), true);
+    auto result = make_system_reply(request.get(), ERROR_SUCCESS, answer.records());
+    ASSERT_FALSE(result.has_error()) << result.error()->str();
+    const ldns_pkt *reply = result.value().get();
+    ASSERT_EQ((std::vector{LDNS_RR_TYPE_A, LDNS_RR_TYPE_RRSIG, LDNS_RR_TYPE_DS}), types_of(ldns_pkt_answer(reply)));
+    ASSERT_EQ((std::vector{LDNS_RR_TYPE_NSEC, LDNS_RR_TYPE_RRSIG}), types_of(ldns_pkt_authority(reply)));
+}
+
 // The EDNS options of the request aren't echoed, while the rest of EDNS is
 TEST(SystemUpstreamReplyTest, DropsEdnsOptions) {
     static constexpr uint16_t UDP_SIZE = 1232;
@@ -460,6 +562,8 @@ TEST(SystemUpstreamQueryTest, Options) {
     ASSERT_TRUE(udp & DNS_QUERY_TREAT_AS_FQDN);
     ASSERT_FALSE(udp & DNS_QUERY_DNSSEC_OK);
     ASSERT_FALSE(udp & DNS_QUERY_DNSSEC_CHECKING_DISABLED);
+    // The cached answers are used unless the DO bit is set
+    ASSERT_FALSE(udp & DNS_QUERY_BYPASS_CACHE);
 
     ULONG64 tcp = system_query_options(request.get(), true);
     ASSERT_TRUE(tcp & DNS_QUERY_USE_TCP_ONLY);
@@ -473,6 +577,18 @@ TEST(SystemUpstreamQueryTest, Options) {
     ULONG64 dnssec = system_query_options(request.get(), false);
     ASSERT_TRUE(dnssec & DNS_QUERY_DNSSEC_OK);
     ASSERT_TRUE(dnssec & DNS_QUERY_DNSSEC_CHECKING_DISABLED);
+    // The DNS Client's cache ignores the DO bit, so it may have the answer without the signatures.
+    ASSERT_TRUE(dnssec & DNS_QUERY_BYPASS_CACHE);
+    // The local answers are still used
+    ASSERT_FALSE(dnssec & DNS_QUERY_NO_LOCAL_NAME);
+    ASSERT_FALSE(dnssec & DNS_QUERY_NO_HOSTS_FILE);
+    ASSERT_FALSE(dnssec & DNS_QUERY_NO_WIRE_QUERY);
+
+    ldns_pkt_set_edns_do(request.get(), false);
+    ULONG64 cd_only = system_query_options(request.get(), false);
+    ASSERT_FALSE(cd_only & DNS_QUERY_DNSSEC_OK);
+    ASSERT_FALSE(cd_only & DNS_QUERY_BYPASS_CACHE);
+    ASSERT_TRUE(cd_only & DNS_QUERY_DNSSEC_CHECKING_DISABLED);
 }
 
 TEST_F(UpstreamTest, SystemUpstreamInitAllInterfaces) {
@@ -615,22 +731,31 @@ TEST_F(UpstreamTest, SystemUpstreamRejectsRequestsSentWhileDestroying) {
 }
 
 // `DnsQueryEx()` completes queries for IP address literals synchronously, without invoking the
-// completion callback. This covers the request completion from `await_ready()`.
+// completion callback. This covers the request completion from `await_ready()`, including the
+// workaround for the `DnsQueryEx()` bug that loses the records of such queries before Windows 11.
+// The DO bit makes the query bypass the cache, which must not affect the local answers.
 TEST_F(UpstreamTest, SystemUpstreamCompletesAddressQueriesSynchronously) {
     co_await m_loop->co_submit();
     auto upstream_res = create_upstream({"system://"});
     ASSERT_FALSE(upstream_res.has_error()) << upstream_res.error()->str();
     UpstreamPtr upstream = std::move(upstream_res.value());
 
-    // The event loop is busy running this test, so an asynchronous query can't complete here.
-    std::future<Upstream::ExchangeResult> completion =
-            coro::to_future(exchange_name(upstream.get(), "1.1.1.1", LDNS_RR_TYPE_A));
-    ASSERT_EQ(std::future_status::ready, completion.wait_for(std::chrono::seconds{0}))
-            << "DnsQueryEx() hasn't completed the address query synchronously";
+    for (bool dnssec_ok : {false, true}) {
+        // The event loop is busy running this test, so an asynchronous query can't complete here.
+        std::future<Upstream::ExchangeResult> completion =
+                coro::to_future(exchange_name(upstream.get(), "1.1.1.1", LDNS_RR_TYPE_A, dnssec_ok));
+        ASSERT_EQ(std::future_status::ready, completion.wait_for(std::chrono::seconds{0}))
+                << "DnsQueryEx() hasn't completed the address query synchronously, DO: " << dnssec_ok;
 
-    Upstream::ExchangeResult result = completion.get();
-    ASSERT_FALSE(result.has_error()) << result.error()->str();
-    ASSERT_NE(nullptr, result.value());
+        Upstream::ExchangeResult result = completion.get();
+        ASSERT_FALSE(result.has_error()) << result.error()->str();
+        ASSERT_NE(nullptr, result.value());
+        TestError error = check_reply_header(*result.value());
+        ASSERT_FALSE(error) << *error;
+        ASSERT_EQ(std::vector<std::string>{"1.1.1.1"},
+                rdata_of_type(ldns_pkt_answer(result.value().get()), LDNS_RR_TYPE_A))
+                << "DO: " << dnssec_ok;
+    }
 }
 
 // Integration-only: the requests that take longer than the timeout complete with an error, and the

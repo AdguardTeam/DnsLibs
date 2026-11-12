@@ -48,7 +48,10 @@ ldns_rr_ptr system_record_to_ldns(const DNS_RECORDW &record);
 
 /**
  * Builds the reply to a request from the result of a `DnsQueryEx()` query.
- * The records of the unsupported types are skipped.
+ * The records of the unsupported types are skipped. If the request doesn't have the DO bit set,
+ * the DNSSEC records (RRSIG, NSEC, NSEC3, DS, DNSKEY) are skipped too, unless they are the answer
+ * to the question (RFC 3225): the DNS Client returns the cached signed answer of a DO query to
+ * the queries without DO.
  * @param request The request.
  * @param status  The query status.
  * @param records The returned records, may be null.
@@ -70,7 +73,8 @@ std::optional<std::wstring> system_query_name(const ldns_pkt *request);
  * NetBIOS and multicast name resolution (LLMNR, mDNS) are disabled: the DNS Client would stall on
  * their timeouts, and a DNS proxy isn't a stub resolver, so the requester handles them on its own.
  * The DNS Client's local answers (its cache, the hosts file, `localhost`) are kept, since they don't
- * delay the query.
+ * delay the query. The queries with the DO bit bypass the cache: it ignores the DO bit, so it may
+ * have the answer without the signatures.
  * @param request The request.
  * @param tcp     Whether the query must be sent over TCP.
  */

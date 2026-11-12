@@ -356,6 +356,39 @@ static bool has_soa(const ldns_rr_list *list) {
     return false;
 }
 
+static bool is_dnssec_type(WORD type) {
+    switch (type) {
+    case LDNS_RR_TYPE_RRSIG:
+    case LDNS_RR_TYPE_NSEC:
+    case LDNS_RR_TYPE_NSEC3:
+    case LDNS_RR_TYPE_DS:
+    case LDNS_RR_TYPE_DNSKEY:
+        return true;
+    default:
+        return false;
+    }
+}
+
+/**
+ * Checks whether a record must be left out of the reply to a request without the DO bit: the DNSSEC
+ * records are returned only if they are asked for (RFC 3225, section 3). The DNS Client caches the
+ * answers regardless of the DO bit, so it returns the signed answer cached for a DO query to the
+ * queries without DO as well.
+ * @param question The question of the request, may be null.
+ * @param section  The section of the reply the record goes to.
+ * @param type     The record type.
+ */
+static bool is_unrequested_dnssec_record(const ldns_rr *question, ldns_pkt_section section, WORD type) {
+    if (!is_dnssec_type(type)) {
+        return false;
+    }
+    if (section != LDNS_SECTION_ANSWER || question == nullptr) {
+        return true;
+    }
+    ldns_rr_type qtype = ldns_rr_get_type(question);
+    return qtype != type && qtype != LDNS_RR_TYPE_ANY;
+}
+
 Upstream::ExchangeResult make_system_reply(const ldns_pkt *request, DNS_STATUS status, const DNS_RECORDW *records) {
     ldns_pkt_rcode rcode = LDNS_RCODE_NOERROR;
     switch (status) {
@@ -398,6 +431,8 @@ Upstream::ExchangeResult make_system_reply(const ldns_pkt *request, DNS_STATUS s
     ldns_rdf_deep_free(ldns_pkt_edns_data(reply.get()));
     ldns_pkt_set_edns_data(reply.get(), nullptr);
 
+    bool dnssec_ok = ldns_pkt_edns_do(request);
+    const ldns_rr *question = ldns_rr_list_rr(ldns_pkt_question(request), 0);
     for (const DNS_RECORDW *record = records; record != nullptr; record = record->pNext) {
         if (record->wType == LDNS_RR_TYPE_OPT) {
             continue;
@@ -413,6 +448,9 @@ Upstream::ExchangeResult make_system_reply(const ldns_pkt *request, DNS_STATUS s
         default:
             // Local answers (e.g. for `localhost`) are in the question section
             break;
+        }
+        if (!dnssec_ok && is_unrequested_dnssec_record(question, section, record->wType)) {
+            continue;
         }
         ldns_rr_ptr rr = system_record_to_ldns(*record);
         if (rr == nullptr) {
@@ -486,7 +524,11 @@ ULONG64 system_query_options(const ldns_pkt *request, bool tcp) {
         options |= DNS_QUERY_USE_TCP_ONLY;
     }
     if (ldns_pkt_edns_do(request)) {
-        options |= DNS_QUERY_DNSSEC_OK;
+        // The DNS Client caches the answers regardless of the DO bit, so a DO query would get the
+        // answer cached for a query without DO, i.e. without the signatures. Get the answer from
+        // the server instead. It replaces the cached one, so the queries without DO may get the
+        // signatures from the cache afterwards: `make_system_reply()` leaves them out.
+        options |= DNS_QUERY_DNSSEC_OK | DNS_QUERY_BYPASS_CACHE;
     }
     if (ldns_pkt_cd(request)) {
         options |= DNS_QUERY_DNSSEC_CHECKING_DISABLED;
@@ -501,7 +543,9 @@ ULONG64 system_query_options(const ldns_pkt *request, bool tcp) {
  * over RPC. The completion callback is therefore called on a dnsapi thread pool thread, and it may
  * be called at any time until it's invoked, including after `DnsCancelQuery()` returns: cancelling
  * doesn't wait for the query to complete. Some queries (e.g. for the local machine name, or IPv4/IPv6
- * address literals) are answered synchronously, without the callback.
+ * address literals) are answered synchronously, without the callback. Before Windows 11, `DnsQueryEx()`
+ * loses (and leaks) the records of such queries, so they are repeated without the callback (see
+ * `Awaitable::await_ready()`).
  */
 class SystemUpstream::Impl {
 public:
@@ -586,8 +630,27 @@ public:
                     // The query has completed synchronously, and the completion callback won't be called.
                     delete (std::shared_ptr<Context> *) request.pQueryContext;
                     RecordsPtr records{(DNS_RECORDW *) std::exchange(ctx.result.pQueryRecords, nullptr)};
+                    if (status == ERROR_SUCCESS && records == nullptr) {
+                        // A Windows bug, fixed in Windows 11 but not in Windows 10 or Windows Server 2022 and
+                        // earlier: if a completion callback is set and the query completes synchronously (e.g. a
+                        // query for the local machine name, `localhost`, or an IP address literal), `DnsQueryEx()`
+                        // returns `ERROR_SUCCESS`, but doesn't copy the records to `pQueryRecords`.
+                        // See https://dblohm7.ca/blog/2022/05/06/dnsqueryex-needs-love/.
+                        // MEMORY LEAK: the records are still allocated, and since the pointer to them is never
+                        // returned, they can't be freed: every such query leaks them. The leak can't be avoided
+                        // without knowing in advance which queries complete synchronously.
+                        // Repeat the query without the callback, which makes `DnsQueryEx()` return the records.
+                        // The query is answered locally again, so this doesn't block the event loop.
+                        dbglog(g_log, "DnsQueryEx completed synchronously without records, repeating the query");
+                        request.pQueryCompletionCallback = nullptr;
+                        request.pQueryContext = nullptr;
+                        ctx.result = {};
+                        ctx.result.Version = DNS_QUERY_RESULTS_VERSION1;
+                        status = DnsQueryEx(&request, &ctx.result, nullptr);
+                        records.reset((DNS_RECORDW *) std::exchange(ctx.result.pQueryRecords, nullptr));
+                    }
                     ctx.completed = true;
-                    tracelog(g_log, "DnsQueryEx completed synchronously with status {}", status);
+                    dbglog(g_log, "DnsQueryEx completed synchronously with status {}", status);
                     set_result(*req, status, records.get());
                     result = impl.remove_request(*req);
                     return true;
@@ -686,7 +749,7 @@ public:
         if (it == ctx->impl->m_requests.end()) {
             return;
         }
-        tracelog(g_log, "DnsQueryEx completed with status {}", status);
+        dbglog(g_log, "DnsQueryEx completed with status {}", status);
         set_result(it->second, status, records.get());
         ctx->impl->complete_request(it->second);
     }
