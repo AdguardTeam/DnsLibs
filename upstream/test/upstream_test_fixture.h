@@ -319,6 +319,15 @@ protected:
                     std::this_thread::sleep_for(delay_between);
                 }
                 auto upstream_res = create_upstream({data.address, data.bootstrap, data.server_ips});
+#ifdef _WIN32
+                // The Windows `system://` upstream requires DnsQueryRaw(), which only Windows 11
+                // 23H2 and Windows Server 2025 and later have.
+                if (data.address.starts_with("system://") && upstream_res.has_error()
+                        && upstream_res.error()->str().find("DnsQueryRaw") != std::string::npos) {
+                    infolog(logger, "Skipping {}: DnsQueryRaw() is not available", data.address);
+                    continue;
+                }
+#endif
                 ASSERT_FALSE(upstream_res.has_error()) << AG_FMT(
                         "Failed to generate upstream from address {}: {}", data.address, upstream_res.error()->str());
                 error = coro::to_future(check_upstream_internal(std::move(upstream_res.value()), data.address)).get();

@@ -46,11 +46,12 @@ elseif (ANDROID)
         target_compile_definitions(upstream PRIVATE USE_INTERFACE_NAMES_IN_SYSTEM_UPSTREAM)
     endif()
 elseif (WIN32)
-    # DnsQueryEx() requires Windows 8.
+    # DnsQueryRaw() requires Windows 11 23H2 or Windows Server 2025;
+    # it is resolved at runtime, so the library itself still supports Windows 8.
     # iphlpapi is used to validate the interface index.
     target_sources(upstream PRIVATE upstream_system_windows.h upstream_system_windows.cpp)
     target_compile_definitions(upstream PRIVATE _WIN32_WINNT=0x0602) # Windows 8
-    target_link_libraries(upstream iphlpapi dnsapi)
+    target_link_libraries(upstream iphlpapi)
 endif ()
 
 set_target_properties(upstream PROPERTIES POSITION_INDEPENDENT_CODE ON)

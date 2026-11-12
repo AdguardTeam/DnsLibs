@@ -23,9 +23,10 @@ namespace ag::dns {
  *   which only yields individual records, so the reply has to be assembled by hand);
  * - Android: `upstream_system_android.cpp`, on top of `android_res_*`, which returns
  *   the raw wire reply, so it is passed through as is;
- * - Windows: `upstream_system_windows.cpp`, on top of `DnsQueryEx()` (Windows 8 and later),
- *   which only yields individual records too. The interface is specified by its index,
- *   e.g. `system://12`.
+ * - Windows: `upstream_system_windows.cpp`, on top of `DnsQueryRaw()` (Windows 11 23H2 and
+ *   Windows Server 2025 and later), which forwards the request packet as is and returns the raw
+ *   wire reply, so both are preserved. The functions are resolved at runtime: on older systems the
+ *   upstream fails to initialize. The interface is specified by its index, e.g. `system://12`.
  */
 class SystemUpstream : public Upstream {
 public:
@@ -72,7 +73,7 @@ private:
     std::string m_interface; ///< The network interface used by this upstream.
 #if defined(__ANDROID__) || defined(_WIN32)
     class Impl;
-    std::unique_ptr<Impl> m_pimpl; ///< The `android_res_*` / `DnsQueryEx()` query engine used by this upstream.
+    std::unique_ptr<Impl> m_pimpl; ///< The `android_res_*` / `DnsQueryRaw()` query engine used by this upstream.
 #else
     std::unique_ptr<SystemResolver> m_resolver; ///< The system resolver used by this upstream.
 #endif

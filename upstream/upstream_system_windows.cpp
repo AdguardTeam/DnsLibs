@@ -1,9 +1,7 @@
-// clang-format off
+﻿// clang-format off
 #include <winsock2.h>
-#include <ws2tcpip.h>
 #include <windows.h>
 #include <iphlpapi.h>
-#include <windns.h>
 // clang-format on
 
 #include <cassert>
@@ -27,24 +25,15 @@ namespace ag::dns {
 static ag::Logger g_log{"SystemUpstream"};
 
 static constexpr size_t ERROR_MESSAGE_BUFFER_SIZE = 256;
-static constexpr size_t MAX_LABEL_LENGTH = 63;
-static constexpr size_t MAX_NAME_LENGTH = 255;
-static constexpr size_t MAX_CHARACTER_STRING_LENGTH = 255;
-static constexpr size_t MAX_RDATA_LENGTH = UINT16_MAX;
-static constexpr uint8_t BYTE_MASK = 0xff;
 static constexpr int BYTE_BITS = 8;
+static constexpr size_t TCP_FRAME_LENGTH_SIZE = 2;
+static constexpr size_t MAX_MESSAGE_LENGTH = 0xFFFF;
 
-static void free_records(DNS_RECORDW *records) {
-    DnsFree(records, DnsFreeRecordList);
-}
-
-using RecordsPtr = UniquePtr<DNS_RECORDW, &free_records>;
-
-static std::string win_error_string(DNS_STATUS code) {
+static std::string win_error_string(DWORD code) {
     char buf[ERROR_MESSAGE_BUFFER_SIZE]{};
     DWORD len =
             FormatMessageA(FORMAT_MESSAGE_FROM_SYSTEM | FORMAT_MESSAGE_IGNORE_INSERTS | FORMAT_MESSAGE_MAX_WIDTH_MASK,
-                    nullptr, (DWORD) code, 0, buf, sizeof(buf), nullptr);
+                    nullptr, code, 0, buf, sizeof(buf), nullptr);
     std::string_view message = ag::utils::trim(std::string_view{buf, len});
     if (message.empty()) {
         return AG_FMT("error {}", code);
@@ -53,310 +42,26 @@ static std::string win_error_string(DNS_STATUS code) {
 }
 
 /**
- * Serializes a resource record in wire format.
+ * Converts a `DnsQueryRaw()` status into an error.
+ * The status of a query that produced a reply is ignored: a negative answer (e.g. NXDOMAIN) comes
+ * with an error status, but the raw reply is valid and has to be returned to the client.
  */
-class WireWriter {
-public:
-    void u8(uint8_t value) {
-        m_data.push_back(value);
-    }
-
-    void u16(uint16_t value) {
-        m_data.push_back(uint8_t(value >> BYTE_BITS));
-        m_data.push_back(uint8_t(value & BYTE_MASK));
-    }
-
-    void u32(uint32_t value) {
-        u16(uint16_t(value >> (2 * BYTE_BITS)));
-        u16(uint16_t(value));
-    }
-
-    void bytes(const void *data, size_t size) {
-        if (size > 0) {
-            m_data.insert(m_data.end(), (const uint8_t *) data, (const uint8_t *) data + size);
-        }
-    }
-
-    /**
-     * Writes an uncompressed domain name.
-     * @return False if the name is null or isn't a valid domain name.
-     */
-    bool name(PCWSTR value) {
-        if (value == nullptr) {
-            return false;
-        }
-        std::string name = utils::from_wstring(value);
-        std::string_view rest = name;
-        if (rest.ends_with('.')) {
-            rest.remove_suffix(1);
-        }
-        size_t length = 1;
-        while (!rest.empty()) {
-            size_t dot = rest.find('.');
-            std::string_view label = rest.substr(0, dot);
-            if (label.empty() || label.size() > MAX_LABEL_LENGTH) {
-                return false;
-            }
-            length += label.size() + 1;
-            if (length > MAX_NAME_LENGTH) {
-                return false;
-            }
-            u8(uint8_t(label.size()));
-            bytes(label.data(), label.size());
-            rest = (dot == std::string_view::npos) ? std::string_view{} : rest.substr(dot + 1);
-            if (dot != std::string_view::npos && rest.empty()) {
-                return false; // An empty label in the middle
-            }
-        }
-        u8(0);
-        return true;
-    }
-
-    /**
-     * Writes a character string.
-     * @return False if the string is null or too long.
-     */
-    bool string(PCWSTR value) {
-        if (value == nullptr) {
-            return false;
-        }
-        std::string str = utils::from_wstring(value);
-        if (str.size() > MAX_CHARACTER_STRING_LENGTH) {
-            return false;
-        }
-        u8(uint8_t(str.size()));
-        bytes(str.data(), str.size());
-        return true;
-    }
-
-    [[nodiscard]] size_t size() const {
-        return m_data.size();
-    }
-
-    void set_u16(size_t pos, uint16_t value) {
-        m_data[pos] = uint8_t(value >> BYTE_BITS);
-        m_data[pos + 1] = uint8_t(value & BYTE_MASK);
-    }
-
-    [[nodiscard]] const Uint8Vector &data() const {
-        return m_data;
-    }
-
-private:
-    Uint8Vector m_data;
-};
-
-/** The result of writing a record's RDATA. */
-enum class RdataWriteResult {
-    OK,               ///< The RDATA has been written.
-    UNSUPPORTED_TYPE, ///< The record type isn't supported.
-    INVALID,          ///< A name or a character string in the RDATA is invalid.
-};
-
-/**
- * Writes the RDATA of a record returned by `DnsQueryEx()`.
- * @return The result of writing the RDATA.
- */
-static RdataWriteResult write_rdata(WireWriter &w, const DNS_RECORDW &record) {
-    const auto &data = record.Data;
-
-    switch (record.wType) {
-    case LDNS_RR_TYPE_A:
-        w.bytes(&data.A.IpAddress, sizeof(data.A.IpAddress));
-        return RdataWriteResult::OK;
-    case LDNS_RR_TYPE_AAAA:
-        w.bytes(&data.AAAA.Ip6Address, sizeof(data.AAAA.Ip6Address));
-        return RdataWriteResult::OK;
-    case LDNS_RR_TYPE_NS:
-    case LDNS_RR_TYPE_MD:
-    case LDNS_RR_TYPE_MF:
-    case LDNS_RR_TYPE_CNAME:
-    case LDNS_RR_TYPE_MB:
-    case LDNS_RR_TYPE_MG:
-    case LDNS_RR_TYPE_MR:
-    case LDNS_RR_TYPE_PTR:
-    case LDNS_RR_TYPE_DNAME:
-        return w.name(data.PTR.pNameHost) ? RdataWriteResult::OK : RdataWriteResult::INVALID;
-    case LDNS_RR_TYPE_SOA:
-        if (!w.name(data.SOA.pNamePrimaryServer) || !w.name(data.SOA.pNameAdministrator)) {
-            return RdataWriteResult::INVALID;
-        }
-        w.u32(data.SOA.dwSerialNo);
-        w.u32(data.SOA.dwRefresh);
-        w.u32(data.SOA.dwRetry);
-        w.u32(data.SOA.dwExpire);
-        w.u32(data.SOA.dwDefaultTtl);
-        return RdataWriteResult::OK;
-    case LDNS_RR_TYPE_MINFO:
-    case LDNS_RR_TYPE_RP:
-        return w.name(data.MINFO.pNameMailbox) && w.name(data.MINFO.pNameErrorsMailbox) ? RdataWriteResult::OK
-                                                                                        : RdataWriteResult::INVALID;
-    case LDNS_RR_TYPE_MX:
-    case LDNS_RR_TYPE_AFSDB:
-    case LDNS_RR_TYPE_RT:
-        w.u16(data.MX.wPreference);
-        return w.name(data.MX.pNameExchange) ? RdataWriteResult::OK : RdataWriteResult::INVALID;
-    case LDNS_RR_TYPE_TXT:
-    case LDNS_RR_TYPE_HINFO:
-    case LDNS_RR_TYPE_ISDN:
-    case LDNS_RR_TYPE_X25:
-        for (DWORD i = 0; i < data.TXT.dwStringCount; ++i) {
-            if (!w.string(data.TXT.pStringArray[i])) {
-                return RdataWriteResult::INVALID;
-            }
-        }
-        return RdataWriteResult::OK;
-    case LDNS_RR_TYPE_NULL:
-        w.bytes(data.Null.Data, data.Null.dwByteCount);
-        return RdataWriteResult::OK;
-    case LDNS_RR_TYPE_KEY:
-    case LDNS_RR_TYPE_DNSKEY:
-        w.u16(data.KEY.wFlags);
-        w.u8(data.KEY.chProtocol);
-        w.u8(data.KEY.chAlgorithm);
-        w.bytes(data.KEY.Key, data.KEY.wKeyLength);
-        return RdataWriteResult::OK;
-    case LDNS_RR_TYPE_SIG:
-    case LDNS_RR_TYPE_RRSIG:
-        w.u16(data.SIG.wTypeCovered);
-        w.u8(data.SIG.chAlgorithm);
-        w.u8(data.SIG.chLabelCount);
-        w.u32(data.SIG.dwOriginalTtl);
-        w.u32(data.SIG.dwExpiration);
-        w.u32(data.SIG.dwTimeSigned);
-        w.u16(data.SIG.wKeyTag);
-        if (!w.name(data.SIG.pNameSigner)) {
-            return RdataWriteResult::INVALID;
-        }
-        w.bytes(data.SIG.Signature, data.SIG.wSignatureLength);
-        return RdataWriteResult::OK;
-    case LDNS_RR_TYPE_SRV:
-        w.u16(data.SRV.wPriority);
-        w.u16(data.SRV.wWeight);
-        w.u16(data.SRV.wPort);
-        return w.name(data.SRV.pNameTarget) ? RdataWriteResult::OK : RdataWriteResult::INVALID;
-    case LDNS_RR_TYPE_NAPTR:
-        w.u16(data.NAPTR.wOrder);
-        w.u16(data.NAPTR.wPreference);
-        return w.string(data.NAPTR.pFlags) && w.string(data.NAPTR.pService) && w.string(data.NAPTR.pRegularExpression)
-                        && w.name(data.NAPTR.pReplacement)
-                ? RdataWriteResult::OK
-                : RdataWriteResult::INVALID;
-    case LDNS_RR_TYPE_DS:
-        w.u16(data.DS.wKeyTag);
-        w.u8(data.DS.chAlgorithm);
-        w.u8(data.DS.chDigestType);
-        w.bytes(data.DS.Digest, data.DS.wDigestLength);
-        return RdataWriteResult::OK;
-    case LDNS_RR_TYPE_NSEC:
-        if (!w.name(data.NSEC.pNextDomainName)) {
-            return RdataWriteResult::INVALID;
-        }
-        w.bytes(data.NSEC.TypeBitMaps, data.NSEC.wTypeBitMapsLength);
-        return RdataWriteResult::OK;
-    case LDNS_RR_TYPE_NSEC3: {
-        // `chData` holds the salt, the next hashed owner name, and the type bit maps
-        const BYTE *salt = data.NSEC3.chData;
-        const BYTE *hash = salt + data.NSEC3.bSaltLength;
-        const BYTE *type_bit_maps = hash + data.NSEC3.bHashLength;
-        w.u8(data.NSEC3.chAlgorithm);
-        w.u8(data.NSEC3.bFlags);
-        w.u16(data.NSEC3.wIterations);
-        w.u8(data.NSEC3.bSaltLength);
-        w.bytes(salt, data.NSEC3.bSaltLength);
-        w.u8(data.NSEC3.bHashLength);
-        w.bytes(hash, data.NSEC3.bHashLength);
-        w.bytes(type_bit_maps, data.NSEC3.wTypeBitMapsLength);
-        return RdataWriteResult::OK;
-    }
-    case LDNS_RR_TYPE_NSEC3PARAM:
-        w.u8(data.NSEC3PARAM.chAlgorithm);
-        w.u8(data.NSEC3PARAM.bFlags);
-        w.u16(data.NSEC3PARAM.wIterations);
-        w.u8(data.NSEC3PARAM.bSaltLength);
-        w.bytes(data.NSEC3PARAM.pbSalt, data.NSEC3PARAM.bSaltLength);
-        return RdataWriteResult::OK;
-    case LDNS_RR_TYPE_TLSA:
-        w.u8(data.TLSA.bCertUsage);
-        w.u8(data.TLSA.bSelector);
-        w.u8(data.TLSA.bMatchingType);
-        w.bytes(data.TLSA.bCertificateAssociationData, data.TLSA.bCertificateAssociationDataLength);
-        return RdataWriteResult::OK;
-    case LDNS_RR_TYPE_DHCID:
-        w.bytes(data.DHCID.DHCID, data.DHCID.dwByteCount);
-        return RdataWriteResult::OK;
-    case LDNS_RR_TYPE_SVCB:
-    case LDNS_RR_TYPE_HTTPS:
-        // `DnsQueryEx()` fills in `DNS_SVCB_DATA` only when `DNS_QUERY_PARSE_ALL_RECORDS` is set
-        // in a `DNS_QUERY_REQUEST3`, which Windows 8 (the minimum supported version) doesn't have.
-        // Without that option, these records are returned as the raw RDATA, which is exactly what
-        // ldns expects. The RDATA is stored inline at `Data`: `Data.pDataPtr` is a `PBYTE` alias of
-        // the buffer, not a pointer to it (its value is the first bytes of the RDATA), and the
-        // record is allocated with `offsetof(DNS_RECORDW, Data) + wDataLength` bytes.
-        w.bytes(&data, record.wDataLength);
-        return RdataWriteResult::OK;
+static Error<DnsError> query_error(DNS_STATUS status) {
+    switch (status) {
+    case ERROR_TIMEOUT:
+    case WSAETIMEDOUT:
+        return make_error(DnsError::AE_TIMED_OUT, win_error_string(status));
+    case ERROR_INVALID_PARAMETER:
+        // The DNS Client couldn't parse the packet (e.g. an opcode other than QUERY, or a name
+        // that isn't valid UTF-8)
+        return make_error(
+                DnsError::AE_ENCODE_ERROR, AG_FMT("DnsQueryRaw() rejected the request: {}", win_error_string(status)));
     default:
-        // The types we don't marshal, e.g. the ones `DnsQueryEx()` returns as raw RDATA (CAA),
-        // or the parsed ones nobody needs anymore (WKS, ATMA, WINS)
-        return RdataWriteResult::UNSUPPORTED_TYPE;
+        return make_error(DnsError::AE_INTERNAL_ERROR, AG_FMT("DnsQueryRaw() failed: {}", win_error_string(status)));
     }
 }
 
-ldns_rr_ptr system_record_to_ldns(const DNS_RECORDW &record) {
-    WireWriter w;
-    if (!w.name(record.pName)) {
-        warnlog(g_log, "Skipping a record of type {} with an invalid name: {}", record.wType,
-                (record.pName != nullptr) ? utils::from_wstring(record.pName) : "(null)");
-        return nullptr;
-    }
-    w.u16(record.wType);
-    w.u16(LDNS_RR_CLASS_IN);
-    w.u32(record.dwTtl);
-    size_t rdlength_pos = w.size();
-    w.u16(0);
-    switch (write_rdata(w, record)) {
-    case RdataWriteResult::OK:
-        break;
-    case RdataWriteResult::UNSUPPORTED_TYPE:
-        warnlog(g_log, "Skipping a record of unsupported type {}", record.wType);
-        return nullptr;
-    case RdataWriteResult::INVALID:
-        warnlog(g_log, "Skipping a record of type {} with invalid RDATA", record.wType);
-        return nullptr;
-    }
-    size_t rdlength = w.size() - rdlength_pos - sizeof(uint16_t);
-    if (rdlength > MAX_RDATA_LENGTH) {
-        warnlog(g_log, "Skipping a record of type {} with an oversized RDATA ({} bytes)", record.wType, rdlength);
-        return nullptr;
-    }
-    w.set_u16(rdlength_pos, uint16_t(rdlength));
-
-    ldns_rr *rr = nullptr;
-    size_t pos = 0;
-    ldns_status status = ldns_wire2rr(&rr, w.data().data(), w.size(), &pos, LDNS_SECTION_ANSWER);
-    if (status != LDNS_STATUS_OK) {
-        warnlog(g_log, "Skipping a record of type {} with malformed RDATA: {}", record.wType,
-                ldns_get_errorstr_by_id(status));
-        return nullptr;
-    }
-    ldns_rr_ptr result{rr};
-    if (pos != w.size()) {
-        warnlog(g_log, "Skipping a record of type {} with trailing bytes after the RDATA", record.wType);
-        return nullptr;
-    }
-    return result;
-}
-
-static bool has_soa(const ldns_rr_list *list) {
-    for (size_t i = 0; i < ldns_rr_list_rr_count(list); ++i) {
-        if (ldns_rr_get_type(ldns_rr_list_rr(list, i)) == LDNS_RR_TYPE_SOA) {
-            return true;
-        }
-    }
-    return false;
-}
-
-static bool is_dnssec_type(WORD type) {
+static bool is_dnssec_type(ldns_rr_type type) {
     switch (type) {
     case LDNS_RR_TYPE_RRSIG:
     case LDNS_RR_TYPE_NSEC:
@@ -371,17 +76,17 @@ static bool is_dnssec_type(WORD type) {
 
 /**
  * Checks whether a record must be left out of the reply to a request without the DO bit: the DNSSEC
- * records are returned only if they are asked for (RFC 3225, section 3). The DNS Client caches the
- * answers regardless of the DO bit, so it returns the signed answer cached for a DO query to the
- * queries without DO as well.
- * @param question The question of the request, may be null.
- * @param section  The section of the reply the record goes to.
- * @param type     The record type.
+ * records are returned only if they are asked for (RFC 3225, section 3). The DNS Client may answer
+ * a query without DO from the cache entry it made for a DO query, which has the signatures.
+ * @param request The request.
+ * @param section The section of the reply the record goes to.
+ * @param type    The record type.
  */
-static bool is_unrequested_dnssec_record(const ldns_rr *question, ldns_pkt_section section, WORD type) {
+static bool is_unrequested_dnssec_record(const ldns_pkt *request, ldns_pkt_section section, ldns_rr_type type) {
     if (!is_dnssec_type(type)) {
         return false;
     }
+    const ldns_rr *question = ldns_rr_list_rr(ldns_pkt_question(request), 0);
     if (section != LDNS_SECTION_ANSWER || question == nullptr) {
         return true;
     }
@@ -389,169 +94,191 @@ static bool is_unrequested_dnssec_record(const ldns_rr *question, ldns_pkt_secti
     return qtype != type && qtype != LDNS_RR_TYPE_ANY;
 }
 
-Upstream::ExchangeResult make_system_reply(const ldns_pkt *request, DNS_STATUS status, const DNS_RECORDW *records) {
-    ldns_pkt_rcode rcode = LDNS_RCODE_NOERROR;
-    switch (status) {
-    case ERROR_SUCCESS:
-    case DNS_INFO_NO_RECORDS:
-        rcode = LDNS_RCODE_NOERROR;
+/**
+ * Replaces a section of a reply with the records that must be kept.
+ */
+static void drop_dnssec_records_from_section(
+        ldns_pkt *reply, ldns_pkt_section section, ldns_rr_list *records, const ldns_pkt *request) {
+    ldns_rr_list *kept = ldns_rr_list_new();
+    for (size_t i = 0; i < ldns_rr_list_rr_count(records); ++i) {
+        const ldns_rr *rr = ldns_rr_list_rr(records, i);
+        if (!is_unrequested_dnssec_record(request, section, ldns_rr_get_type(rr))) {
+            ldns_rr_list_push_rr(kept, ldns_rr_clone(rr));
+        }
+    }
+
+    auto count = uint16_t(ldns_rr_list_rr_count(kept));
+    switch (section) {
+    case LDNS_SECTION_ANSWER:
+        ldns_pkt_set_answer(reply, kept);
+        ldns_pkt_set_ancount(reply, count);
         break;
-    case DNS_ERROR_RCODE_NAME_ERROR:
-        rcode = LDNS_RCODE_NXDOMAIN;
+    case LDNS_SECTION_AUTHORITY:
+        ldns_pkt_set_authority(reply, kept);
+        ldns_pkt_set_nscount(reply, count);
         break;
-    case DNS_ERROR_RCODE_FORMAT_ERROR:
-        rcode = LDNS_RCODE_FORMERR;
+    case LDNS_SECTION_ADDITIONAL:
+        ldns_pkt_set_additional(reply, kept);
+        ldns_pkt_set_arcount(reply, count);
         break;
-    case DNS_ERROR_RCODE_SERVER_FAILURE:
-        rcode = LDNS_RCODE_SERVFAIL;
-        break;
-    case DNS_ERROR_RCODE_NOT_IMPLEMENTED:
-        rcode = LDNS_RCODE_NOTIMPL;
-        break;
-    case DNS_ERROR_RCODE_REFUSED:
-        rcode = LDNS_RCODE_REFUSED;
-        break;
-    case ERROR_TIMEOUT:
-    case WSAETIMEDOUT:
-        return make_error(DnsError::AE_TIMED_OUT, win_error_string(status));
     default:
-        return make_error(DnsError::AE_INTERNAL_ERROR, AG_FMT("DnsQueryEx() failed: {}", win_error_string(status)));
+        assert(false);
+        ldns_rr_list_deep_free(kept);
+        break;
+    }
+    ldns_rr_list_deep_free(records);
+}
+
+/**
+ * Drops the DNSSEC records that the requester didn't ask for (see `is_unrequested_dnssec_record()`).
+ */
+static void drop_unrequested_dnssec_records(ldns_pkt *reply, const ldns_pkt *request) {
+    drop_dnssec_records_from_section(reply, LDNS_SECTION_ANSWER, ldns_pkt_answer(reply), request);
+    drop_dnssec_records_from_section(reply, LDNS_SECTION_AUTHORITY, ldns_pkt_authority(reply), request);
+    drop_dnssec_records_from_section(reply, LDNS_SECTION_ADDITIONAL, ldns_pkt_additional(reply), request);
+}
+
+Upstream::ExchangeResult make_system_reply(const ldns_pkt *request, Uint8View raw_reply, bool tcp) {
+    if (tcp) {
+        if (raw_reply.size() < TCP_FRAME_LENGTH_SIZE) {
+            return make_error(DnsError::AE_DECODE_ERROR, "The TCP-framed reply from DnsQueryRaw() is too short");
+        }
+        size_t length = (size_t(raw_reply[0]) << BYTE_BITS) | raw_reply[1];
+        if (length != raw_reply.size() - TCP_FRAME_LENGTH_SIZE) {
+            return make_error(DnsError::AE_DECODE_ERROR,
+                    AG_FMT("The TCP-framed reply from DnsQueryRaw() declares {} bytes, but has {}", length,
+                            raw_reply.size() - TCP_FRAME_LENGTH_SIZE));
+        }
+        raw_reply.remove_prefix(TCP_FRAME_LENGTH_SIZE);
     }
 
-    // `DnsQueryEx()` gives us the records only, not the raw reply, so the reply has to be assembled by hand.
-    ldns_pkt_ptr reply{ldns_pkt_clone(request)};
-    ldns_pkt_set_qr(reply.get(), true);
-    ldns_pkt_set_aa(reply.get(), false);
-    ldns_pkt_set_rd(reply.get(), true);
-    ldns_pkt_set_ra(reply.get(), true);
-    ldns_pkt_set_ad(reply.get(), false);
-    ldns_pkt_set_cd(reply.get(), false);
-    ldns_pkt_set_rcode(reply.get(), rcode);
-    // Don't echo the EDNS options of the request
-    ldns_rdf_deep_free(ldns_pkt_edns_data(reply.get()));
-    ldns_pkt_set_edns_data(reply.get(), nullptr);
-
-    bool dnssec_ok = ldns_pkt_edns_do(request);
-    const ldns_rr *question = ldns_rr_list_rr(ldns_pkt_question(request), 0);
-    for (const DNS_RECORDW *record = records; record != nullptr; record = record->pNext) {
-        if (record->wType == LDNS_RR_TYPE_OPT) {
-            continue;
-        }
-        ldns_pkt_section section = LDNS_SECTION_ANSWER;
-        switch (record->Flags.S.Section) {
-        case DnsSectionAuthority:
-            section = LDNS_SECTION_AUTHORITY;
-            break;
-        case DnsSectionAddtional:
-            section = LDNS_SECTION_ADDITIONAL;
-            break;
-        default:
-            // Local answers (e.g. for `localhost`) are in the question section
-            break;
-        }
-        if (!dnssec_ok && is_unrequested_dnssec_record(question, section, record->wType)) {
-            continue;
-        }
-        ldns_rr_ptr rr = system_record_to_ldns(*record);
-        if (rr == nullptr) {
-            continue;
-        }
-        ldns_pkt_push_rr(reply.get(), section, rr.release());
+    ldns_pkt *raw_pkt = nullptr;
+    ldns_status status = ldns_wire2pkt(&raw_pkt, raw_reply.data(), raw_reply.size());
+    if (status != LDNS_STATUS_OK) {
+        return make_error(DnsError::AE_DECODE_ERROR,
+                AG_FMT("Failed to parse the reply from DnsQueryRaw(): {}", ldns_get_errorstr_by_id(status)));
     }
+    ldns_pkt_ptr reply{raw_pkt};
 
-    if (ldns_pkt_ancount(reply.get()) == 0 && (rcode == LDNS_RCODE_NOERROR || rcode == LDNS_RCODE_NXDOMAIN)
-            && !has_soa(ldns_pkt_authority(reply.get()))) {
-        ldns_pkt_push_rr(reply.get(), LDNS_SECTION_AUTHORITY, create_soa(request));
+    // The DNS Client may answer from its cache with its own query ID
+    ldns_pkt_set_id(reply.get(), ldns_pkt_id(request));
+
+    if (!ldns_pkt_edns_do(request)) {
+        drop_unrequested_dnssec_records(reply.get(), request);
     }
 
     return std::move(reply);
 }
 
-std::optional<std::wstring> system_query_name(const ldns_pkt *request) {
-    const ldns_rr *question = ldns_rr_list_rr(ldns_pkt_question(request), 0);
-    const ldns_rdf *owner = (question != nullptr) ? ldns_rr_owner(question) : nullptr;
-    if (owner == nullptr || ldns_rdf_get_type(owner) != LDNS_RDF_TYPE_DNAME) {
+std::optional<Uint8Vector> system_query_wire(const ldns_pkt *request, bool tcp) {
+    uint8_t *data = nullptr;
+    size_t size = 0;
+    ldns_status status = ldns_pkt2wire(&data, request, &size);
+    AllocatedPtr<uint8_t> guard{data};
+    if (status != LDNS_STATUS_OK || size == 0) {
         return std::nullopt;
     }
-
-    std::string name;
-    const uint8_t *data = ldns_rdf_data(owner);
-    size_t size = ldns_rdf_size(owner);
-    for (size_t pos = 0; pos < size;) {
-        size_t length = data[pos++];
-        if (length == 0) {
-            break;
-        }
-        if (length > MAX_LABEL_LENGTH || length > size - pos) {
-            return std::nullopt;
-        }
-        std::string_view label{(const char *) data + pos, length};
-        if (label.find_first_of(std::string_view{".\0", 2}) != std::string_view::npos) {
-            return std::nullopt;
-        }
-        if (!name.empty()) {
-            name.push_back('.');
-        }
-        name.append(label);
-        pos += length;
+    if (!tcp) {
+        return Uint8Vector{data, data + size};
     }
-    if (name.empty()) {
-        name = ".";
-    }
-
-    int wide_size = MultiByteToWideChar(CP_UTF8, MB_ERR_INVALID_CHARS, name.data(), int(name.size()), nullptr, 0);
-    if (wide_size <= 0) {
+    if (size > MAX_MESSAGE_LENGTH) {
         return std::nullopt;
     }
-    std::wstring wide(wide_size, L'\0');
-    MultiByteToWideChar(CP_UTF8, MB_ERR_INVALID_CHARS, name.data(), int(name.size()), wide.data(), wide_size);
-    return wide;
+    Uint8Vector framed;
+    framed.reserve(size + TCP_FRAME_LENGTH_SIZE);
+    framed.push_back(uint8_t(size >> BYTE_BITS));
+    framed.push_back(uint8_t(size));
+    framed.insert(framed.end(), data, data + size);
+    return framed;
 }
 
-ULONG64 system_query_options(const ldns_pkt *request, bool tcp) {
-    // The name is taken from the question as is: no search suffixes, no IDN conversions
-    ULONG64 options = DNS_QUERY_TREAT_AS_FQDN | DNS_QUERY_DISABLE_IDN_ENCODING;
+ULONG64 system_query_options(const ldns_pkt *request) {
     // Don't try NetBIOS or multicast name resolution (LLMNR, mDNS): the DNS Client would stall on
     // their timeouts, while a DNS proxy isn't a stub resolver, so the requester handles multicast
-    // name resolution on its own. The DNS Client's local answers (its cache, the hosts file,
-    // `localhost`) are kept: unlike multicast, they don't delay the query.
-    options |= DNS_QUERY_NO_NETBT | DNS_QUERY_NO_MULTICAST;
-    // `DnsQueryEx()` doesn't expose the TC bit of the response (it returns the records only), so a
-    // truncated UDP answer would silently look complete. Don't accept truncated responses: the DNS
-    // client then retries over TCP and returns the full answer, and `DnsForwarder` truncates it for
-    // the client's UDP size and sets TC.
-    if (tcp) {
-        options |= DNS_QUERY_USE_TCP_ONLY;
-    }
+    // name resolution on its own. The DNS Client's local answers (its hosts file, `localhost`) are
+    // kept: unlike multicast, they don't delay the query.
+    ULONG64 options = DNS_QUERY_NO_NETBT | DNS_QUERY_NO_MULTICAST;
     if (ldns_pkt_edns_do(request)) {
-        // The DNS Client caches the answers regardless of the DO bit, so a DO query would get the
-        // answer cached for a query without DO, i.e. without the signatures. Get the answer from
-        // the server instead. It replaces the cached one, so the queries without DO may get the
+        // The DNS Client's cache doesn't distinguish the queries by the DO bit, so a DO query may
+        // get the answer cached for a query without DO, i.e. without the signatures. Get the answer
+        // from the server instead. It replaces the cached one, so the queries without DO may get the
         // signatures from the cache afterwards: `make_system_reply()` leaves them out.
-        options |= DNS_QUERY_DNSSEC_OK | DNS_QUERY_BYPASS_CACHE;
-    }
-    if (ldns_pkt_cd(request)) {
-        options |= DNS_QUERY_DNSSEC_CHECKING_DISABLED;
+        options |= DNS_QUERY_BYPASS_CACHE;
     }
     return options;
 }
 
 /**
- * Sends DNS queries via `DnsQueryEx()` and assembles the replies from the returned records.
+ * The `dnsapi.dll` functions used by the upstream, resolved at runtime because `DnsQueryRaw()` is
+ * only available on Windows 11 23H2 and Windows Server 2025 and later, while the library supports
+ * Windows 8 and later.
+ */
+class DnsApi {
+public:
+    using QueryRaw = decltype(&::DnsQueryRaw);
+    using CancelQueryRaw = decltype(&::DnsCancelQueryRaw);
+    using FreeResult = decltype(&::DnsQueryRawResultFree);
+
+    /**
+     * Returns the API, or null if the system doesn't support `DnsQueryRaw()`.
+     */
+    static const DnsApi *get() {
+        static const DnsApi api;
+        return (api.query_raw != nullptr) ? &api : nullptr;
+    }
+
+    QueryRaw query_raw = nullptr;
+    CancelQueryRaw cancel_query_raw = nullptr;
+    FreeResult free_result = nullptr;
+
+private:
+    DnsApi() {
+        // `LOAD_LIBRARY_SEARCH_SYSTEM32` makes sure a `dnsapi.dll` next to the executable isn't
+        // picked up instead of the system one.
+        HMODULE module = LoadLibraryExW(L"dnsapi.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
+        if (module == nullptr) {
+            dbglog(g_log, "Failed to load dnsapi.dll: {}", win_error_string(GetLastError()));
+            return;
+        }
+
+        query_raw = (QueryRaw) GetProcAddress(module, "DnsQueryRaw");
+        cancel_query_raw = (CancelQueryRaw) GetProcAddress(module, "DnsCancelQueryRaw");
+        free_result = (FreeResult) GetProcAddress(module, "DnsQueryRawResultFree");
+        if (query_raw == nullptr || cancel_query_raw == nullptr || free_result == nullptr) {
+            dbglog(g_log, "DnsQueryRaw() is not exported by dnsapi.dll");
+            query_raw = nullptr;
+            return;
+        }
+
+        // The functions may be present but disabled (e.g. by a feature flag), in which case they
+        // return ERROR_CALL_NOT_IMPLEMENTED. Probe them once, so that the upstream fails to
+        // initialize with a clear error instead of failing every query.
+        if (query_raw(nullptr, nullptr) == ERROR_CALL_NOT_IMPLEMENTED) {
+            dbglog(g_log, "DnsQueryRaw() is disabled on this system");
+            query_raw = nullptr;
+        }
+    }
+};
+
+/**
+ * Sends DNS queries via `DnsQueryRaw()` and returns the replies it gets from the DNS Client.
  *
- * The queries are performed by the DNS Client service (Dnscache), which `DnsQueryEx()` talks to
+ * The queries are performed by the DNS Client service (Dnscache), which `DnsQueryRaw()` talks to
  * over RPC. The completion callback is therefore called on a dnsapi thread pool thread, and it may
- * be called at any time until it's invoked, including after `DnsCancelQuery()` returns: cancelling
- * doesn't wait for the query to complete. Some queries (e.g. for the local machine name, or IPv4/IPv6
- * address literals) are answered synchronously, without the callback. Before Windows 11, `DnsQueryEx()`
- * loses (and leaks) the records of such queries, so they are repeated without the callback (see
- * `Awaitable::await_ready()`).
+ * be called at any time until it's invoked, including after `DnsCancelQueryRaw()` returns:
+ * cancelling doesn't wait for the query to complete.
+ *
+ * The upstream passes the request packet to `DnsQueryRaw()` as is: the DNS Client forwards it
+ * through its usual policy (the configured servers, NRPT rules, local names) and returns the raw
+ * wire reply. This preserves the request's header flags, question class, and EDNS options, which
+ * the name-and-type form would replace with a query built by the DNS Client, and the reply still
+ * contains the records `DnsQueryEx()` couldn't represent (e.g. SVCB and HTTPS).
  */
 class SystemUpstream::Impl {
 public:
     /**
-     * The state shared between the event loop and the `DnsQueryEx()` completion callback.
-     * The callback holds a reference until it's called, so the structures handed to `DnsQueryEx()`
+     * The state shared between the event loop and the `DnsQueryRaw()` completion callback.
+     * The callback holds a reference until it's called, so the structures handed to `DnsQueryRaw()`
      * outlive the query even if the request doesn't wait for the result anymore.
      */
     struct Context {
@@ -559,16 +286,15 @@ public:
         bool detached = false;             ///< The request no longer waits for the result. Guarded by `mutex`.
         bool completed = false;            ///< The query has completed. Guarded by `mutex`.
         DNS_STATUS status = ERROR_SUCCESS; ///< The query status. Guarded by `mutex`.
-        RecordsPtr records;                ///< The returned records. Guarded by `mutex`.
+        Uint8Vector reply;                 ///< The raw reply, empty if the query failed. Guarded by `mutex`.
 
-        Impl *impl = nullptr;                     ///< Valid only while not detached.
-        uint64_t id = 0;                          ///< The request ID in `Impl::m_requests`.
-        const ldns_pkt *request = nullptr;        ///< Valid only while not detached.
-        ldns_rr_type query_type = LDNS_RR_TYPE_A; ///< The type of the question.
-        std::wstring name;
+        Impl *impl = nullptr;              ///< Valid only while not detached.
+        uint64_t id = 0;                   ///< The request ID in `Impl::m_requests`.
+        const ldns_pkt *request = nullptr; ///< Valid until the awaiting coroutine is resumed.
+        Uint8Vector wire;                  ///< The packet to pass to `DnsQueryRaw()`.
         ULONG64 options = 0;
-        DNS_QUERY_RESULT result{};
-        DNS_QUERY_CANCEL cancel_handle{};
+        bool tcp = false;
+        DNS_QUERY_RAW_CANCEL cancel_handle{};
     };
 
     struct Request {
@@ -600,11 +326,12 @@ public:
 
     /**
      * Sends a DNS query and awaits the reply.
+     * @param wire    The packet to pass to `DnsQueryRaw()` (see `system_query_wire()`).
      * @param request The request. Must outlive the returned awaitable.
-     * @param name    The name to query (see `system_query_name()`).
-     * @param tcp     Whether the system resolver should send the query over TCP.
+     * @param options The `DnsQueryRaw()` query options (see `system_query_options()`).
+     * @param tcp     Whether the packet is framed for TCP.
      */
-    auto send(const ldns_pkt *request, std::wstring name, bool tcp) {
+    auto send(Uint8Vector wire, const ldns_pkt *request, ULONG64 options, bool tcp) {
         struct Awaitable {
             Request *req = nullptr; ///< The request, or null if it was rejected.
             std::optional<Upstream::ExchangeResult> result;
@@ -615,43 +342,30 @@ public:
                 }
                 Context &ctx = *req->ctx;
                 Impl &impl = *ctx.impl;
-                DNS_QUERY_REQUEST request{};
-                request.Version = DNS_QUERY_REQUEST_VERSION1;
-                request.QueryName = ctx.name.c_str();
-                request.QueryType = (WORD) ctx.query_type;
-                request.QueryOptions = ctx.options;
-                request.InterfaceIndex = impl.m_interface_index;
-                request.pQueryCompletionCallback = on_query_complete;
-                request.pQueryContext = new std::shared_ptr<Context>(req->ctx);
-                ctx.result.Version = DNS_QUERY_RESULTS_VERSION1;
 
-                DNS_STATUS status = DnsQueryEx(&request, &ctx.result, &ctx.cancel_handle);
+                DNS_QUERY_RAW_REQUEST request{};
+                request.version = DNS_QUERY_RAW_REQUEST_VERSION1;
+                request.resultsVersion = DNS_QUERY_RAW_RESULTS_VERSION1;
+                request.dnsQueryRaw = ctx.wire.data();
+                request.dnsQueryRawSize = (ULONG) ctx.wire.size();
+                request.queryOptions = ctx.options;
+                request.interfaceIndex = impl.m_interface_index;
+                request.queryCompletionCallback = on_query_complete;
+                request.queryContext = new std::shared_ptr<Context>(req->ctx);
+                // `DNS_QUERY_RAW_OPTION_BEST_EFFORT_PARSE` only helps with a packet the DNS Client
+                // can't parse at all, and it may turn the query into a subset of the packet, so it
+                // isn't set: the upstream forwards everything the requester sent.
+                request.queryRawOptions = 0;
+                request.protocol = ctx.tcp ? DNS_PROTOCOL_TCP : DNS_PROTOCOL_UDP;
+
+                const DnsApi *api = DnsApi::get();
+                assert(api != nullptr);
+                DNS_STATUS status = (api != nullptr) ? api->query_raw(&request, &ctx.cancel_handle)
+                                                     : (DNS_STATUS) ERROR_CALL_NOT_IMPLEMENTED;
                 if (status != DNS_REQUEST_PENDING) {
-                    // The query has completed synchronously, and the completion callback won't be called.
-                    delete (std::shared_ptr<Context> *) request.pQueryContext;
-                    RecordsPtr records{(DNS_RECORDW *) std::exchange(ctx.result.pQueryRecords, nullptr)};
-                    if (status == ERROR_SUCCESS && records == nullptr) {
-                        // A Windows bug, fixed in Windows 11 but not in Windows 10 or Windows Server 2022 and
-                        // earlier: if a completion callback is set and the query completes synchronously (e.g. a
-                        // query for the local machine name, `localhost`, or an IP address literal), `DnsQueryEx()`
-                        // returns `ERROR_SUCCESS`, but doesn't copy the records to `pQueryRecords`.
-                        // See https://dblohm7.ca/blog/2022/05/06/dnsqueryex-needs-love/.
-                        // MEMORY LEAK: the records are still allocated, and since the pointer to them is never
-                        // returned, they can't be freed: every such query leaks them. The leak can't be avoided
-                        // without knowing in advance which queries complete synchronously.
-                        // Repeat the query without the callback, which makes `DnsQueryEx()` return the records.
-                        // The query is answered locally again, so this doesn't block the event loop.
-                        dbglog(g_log, "DnsQueryEx completed synchronously without records, repeating the query");
-                        request.pQueryCompletionCallback = nullptr;
-                        request.pQueryContext = nullptr;
-                        ctx.result = {};
-                        ctx.result.Version = DNS_QUERY_RESULTS_VERSION1;
-                        status = DnsQueryEx(&request, &ctx.result, nullptr);
-                        records.reset((DNS_RECORDW *) std::exchange(ctx.result.pQueryRecords, nullptr));
-                    }
-                    ctx.completed = true;
-                    dbglog(g_log, "DnsQueryEx completed synchronously with status {}", status);
-                    set_result(*req, status, records.get());
+                    // The query has completed with an error, and the completion callback won't be called.
+                    delete (std::shared_ptr<Context> *) request.queryContext;
+                    req->error = query_error(status);
                     result = impl.remove_request(*req);
                     return true;
                 }
@@ -704,29 +418,41 @@ public:
         req.ctx->impl = this;
         req.ctx->id = id;
         req.ctx->request = request;
-        req.ctx->query_type = ldns_rr_get_type(ldns_rr_list_rr(ldns_pkt_question(request), 0));
-        req.ctx->name = std::move(name);
-        req.ctx->options = system_query_options(request, tcp);
+        req.ctx->wire = std::move(wire);
+        req.ctx->options = options;
+        req.ctx->tcp = tcp;
 
         return Awaitable{.req = &req};
     }
 
     /**
-     * The `DnsQueryEx()` completion callback. Called on an arbitrary thread.
+     * The `DnsQueryRaw()` completion callback. Called on an arbitrary thread.
      */
-    static VOID WINAPI on_query_complete(PVOID query_context, PDNS_QUERY_RESULT result) {
+    static VOID WINAPI on_query_complete(PVOID query_context, DNS_QUERY_RAW_RESULT *result) {
         std::unique_ptr<std::shared_ptr<Context>> holder{(std::shared_ptr<Context> *) query_context};
         std::shared_ptr<Context> ctx = std::move(*holder);
-        RecordsPtr records{
-                (result != nullptr) ? (DNS_RECORDW *) std::exchange(result->pQueryRecords, nullptr) : nullptr};
+
+        DNS_STATUS status = ERROR_INVALID_DATA;
+        Uint8Vector reply;
+        if (result != nullptr) {
+            status = result->queryStatus;
+            // A negative answer (e.g. NXDOMAIN) comes with an error status, but the raw reply is
+            // valid, so the status alone doesn't tell whether there is anything to return.
+            if (result->queryRawResponse != nullptr && result->queryRawResponseSize > 0) {
+                reply.assign(result->queryRawResponse, result->queryRawResponse + result->queryRawResponseSize);
+            }
+            if (const DnsApi *api = DnsApi::get()) {
+                api->free_result(result);
+            }
+        }
 
         std::scoped_lock l(ctx->mutex);
         ctx->completed = true;
         if (ctx->detached) {
             return;
         }
-        ctx->status = (result != nullptr) ? result->QueryStatus : ERROR_INVALID_DATA;
-        ctx->records = std::move(records);
+        ctx->status = status;
+        ctx->reply = std::move(reply);
         // Submit while holding the lock: the request is detached on the event loop under the same lock
         // before the upstream is destroyed, so the loop is guaranteed to still be running at this point.
         ctx->impl->m_loop->submit([ctx] {
@@ -736,22 +462,34 @@ public:
 
     static void on_query_result(const std::shared_ptr<Context> &ctx) {
         DNS_STATUS status = ERROR_SUCCESS;
-        RecordsPtr records;
+        Uint8Vector reply;
+        bool tcp = false;
         {
             std::scoped_lock l(ctx->mutex);
             if (ctx->detached) {
                 return;
             }
             status = ctx->status;
-            records = std::move(ctx->records);
+            reply = std::move(ctx->reply);
+            tcp = ctx->tcp;
         }
         auto it = ctx->impl->m_requests.find(ctx->id);
         if (it == ctx->impl->m_requests.end()) {
             return;
         }
-        dbglog(g_log, "DnsQueryEx completed with status {}", status);
-        set_result(it->second, status, records.get());
-        ctx->impl->complete_request(it->second);
+        dbglog(g_log, "DnsQueryRaw completed with status {}", status);
+        Request &req = it->second;
+        if (reply.empty()) {
+            req.error = query_error(status);
+        } else {
+            auto result = make_system_reply(req.ctx->request, {reply.data(), reply.size()}, tcp);
+            if (result.has_error()) {
+                req.error = result.error();
+            } else {
+                req.reply = std::move(result.value());
+            }
+        }
+        ctx->impl->complete_request(req);
     }
 
     /**
@@ -769,23 +507,20 @@ public:
             pending = !ctx.completed;
         }
         if (pending) {
-            // The completion callback locks this mutex, and may be invoked by `DnsCancelQuery()` or run
-            // on another thread already, so the lock must not be held here.
-            if (DNS_STATUS status = DnsCancelQuery(&ctx.cancel_handle); ERROR_SUCCESS != status) {
-                AllocatedPtr<char> type{ldns_rr_type2str(ctx.query_type)};
-                warnlog(g_log, "DnsCancelQuery failed for request {} (name: {}, type: {}, options: {:#x}): {}", ctx.id,
-                        utils::from_wstring(ctx.name), (type != nullptr) ? type.get() : "(unknown)", ctx.options,
-                        win_error_string(status));
+            // The completion callback locks this mutex, and may be invoked by `DnsCancelQueryRaw()` or
+            // run on another thread already, so the lock must not be held here.
+            const DnsApi *api = DnsApi::get();
+            DNS_STATUS status = (api != nullptr) ? api->cancel_query_raw(&ctx.cancel_handle)
+                                                 : (DNS_STATUS) ERROR_CALL_NOT_IMPLEMENTED;
+            if (ERROR_SUCCESS != status) {
+                const ldns_rr *question = ldns_rr_list_rr(ldns_pkt_question(ctx.request), 0);
+                AllocatedPtr<char> type{(question != nullptr) ? ldns_rr_type2str(ldns_rr_get_type(question)) : nullptr};
+                AllocatedPtr<char> name{(question != nullptr) ? ldns_rdf2str(ldns_rr_owner(question)) : nullptr};
+                std::string error = win_error_string(status);
+                warnlog(g_log, "DnsCancelQueryRaw failed for request {} (name: {}, type: {}, options: {:#x}): {}",
+                        ctx.id, (name != nullptr) ? utils::trim(name.get()) : std::string_view{"(unknown)"},
+                        (type != nullptr) ? type.get() : "(unknown)", ctx.options, error);
             }
-        }
-    }
-
-    static void set_result(Request &req, DNS_STATUS status, const DNS_RECORDW *records) {
-        auto result = make_system_reply(req.ctx->request, status, records);
-        if (result.has_error()) {
-            req.error = result.error();
-        } else {
-            req.reply = std::move(result.value());
         }
     }
 
@@ -838,6 +573,12 @@ SystemUpstream::SystemUpstream(const UpstreamOptions &opts, const UpstreamFactor
 SystemUpstream::~SystemUpstream() = default;
 
 Error<Upstream::InitError> SystemUpstream::init() {
+    if (DnsApi::get() == nullptr) {
+        return make_error(InitError::AE_SYSTEMRESOLVER_INIT_FAILED,
+                "The system:// upstream is not supported on this system: it requires DnsQueryRaw(), which is "
+                "only available on Windows 11 23H2 and Windows Server 2025 and later");
+    }
+
     ULONG interface_index = 0;
 
     if (!m_interface.empty()) {
@@ -855,26 +596,15 @@ Error<Upstream::InitError> SystemUpstream::init() {
 }
 
 coro::Task<Upstream::ExchangeResult> SystemUpstream::exchange(const ldns_pkt *request_pkt, const DnsMessageInfo *info) {
-    std::optional<std::wstring> name = system_query_name(request_pkt);
-    if (!name.has_value()) {
-        co_return make_error(DnsError::AE_ENCODE_ERROR, "The question name can't be passed to DnsQueryEx()");
-    }
-
-    const ldns_rr *question = ldns_rr_list_rr(ldns_pkt_question(request_pkt), 0);
-    if (ldns_rr_get_class(question) != LDNS_RR_CLASS_IN) {
-        // `DnsQueryEx()` doesn't let one specify the class
-        ldns_pkt_ptr reply{ldns_pkt_clone(request_pkt)};
-        ldns_pkt_set_qr(reply.get(), true);
-        ldns_pkt_set_ra(reply.get(), true);
-        ldns_pkt_set_rcode(reply.get(), LDNS_RCODE_NOTIMPL);
-        co_return std::move(reply);
-    }
-
     bool tcp = info != nullptr && info->proto == utils::TP_TCP;
+    std::optional<Uint8Vector> wire = system_query_wire(request_pkt, tcp);
+    if (!wire.has_value()) {
+        co_return make_error(DnsError::AE_ENCODE_ERROR, "Failed to serialize the request for DnsQueryRaw()");
+    }
 
-    // Nothing below this line may touch `this`: the awaiting request is resumed with
-    // AE_SHUTTING_DOWN from the destructor, i.e. after the upstream itself is gone.
-    co_return co_await m_pimpl->send(request_pkt, std::move(name.value()), tcp);
+    // The upstream may be destroyed while the request is in flight: the destructor resumes it with
+    // AE_SHUTTING_DOWN after the upstream is gone, so don't access `this` after creating the awaitable.
+    co_return co_await m_pimpl->send(std::move(wire.value()), request_pkt, system_query_options(request_pkt), tcp);
 }
 
 } // namespace ag::dns

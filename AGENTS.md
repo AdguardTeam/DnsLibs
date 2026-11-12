@@ -245,7 +245,10 @@ numbers with `ag::utils::to_integer<T>()` (from `common/utils.h`) instead of
   members.
 - The minimum supported Windows version is Windows 8 (`_WIN32_WINNT=0x0602`).
   Call the Windows APIs available there directly instead of resolving them
-  with `LoadLibrary`/`GetProcAddress` at runtime.
+  with `LoadLibrary`/`GetProcAddress` at runtime. APIs that are newer than
+  Windows 8 must be resolved dynamically, and the code that uses them must
+  fail with a clear "unsupported on this system" error when they are missing
+  (see the `system://` upstream, which needs `DnsQueryRaw()`).
 - Prefer existing patterns over inventing new ones
 - Keep changes minimal and focused
 - Tests live in `test/` subdirectories alongside the module they cover

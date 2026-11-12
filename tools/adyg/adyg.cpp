@@ -135,11 +135,11 @@ std::unique_ptr<CertificateVerifier> make_verifier() {
 // `+bootstrap=IP`, fall back to the system resolver (`system://`) so that
 // hostnames in encrypted upstream addresses (e.g. `tls://dns.adguard.com`)
 // can be resolved without making the user supply bootstrap IPs explicitly.
-// Note: `system://` upstreams are only available on Apple/Android/Windows; on
-// other platforms an empty bootstrap list is returned and the error surfaces
-// from upstream init (AE_EMPTY_BOOTSTRAP).
+// Note: `system://` upstreams are only available on Apple/Android; on other
+// platforms an empty bootstrap list is returned and the error surfaces from
+// upstream init (AE_EMPTY_BOOTSTRAP).
 std::vector<std::string> effective_bootstrap(const std::vector<std::string> &bootstrap) {
-#if defined(__APPLE__) || defined(__ANDROID__) || defined(_WIN32)
+#if defined(__APPLE__) || defined(__ANDROID__)
     if (bootstrap.empty()) {
         // Matches SystemUpstream::SYSTEM_SCHEME (upstream/upstream_system.h).
         return {"system://"};
@@ -159,11 +159,11 @@ std::vector<std::string> effective_bootstrap(const std::vector<std::string> &boo
 // NS) from opts.server and only falls back to the root hints if that hop yields
 // no servers.
 std::string default_server() {
-#if defined(__APPLE__) || defined(__ANDROID__) || defined(_WIN32)
+#if defined(__APPLE__) || defined(__ANDROID__)
     // Matches SystemUpstream::SYSTEM_SCHEME (upstream/upstream_system.h). The
     // upstream factory recognizes this scheme and creates a SystemUpstream that
     // resolves via the OS resolver (DNSService on Apple, android_res_* on
-    // Android, DnsQueryEx() on Windows).
+    // Android).
     return "system://";
 #else
     return std::string(DEFAULT_SERVER);

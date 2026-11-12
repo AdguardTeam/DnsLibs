@@ -1,13 +1,7 @@
 #pragma once
 
 // The internals of the Windows `system://` upstream (`upstream_system_windows.cpp`)
-// that turn `DnsQueryEx()` requests and results into DNS messages, exposed for unit testing.
-//
-// The records are handled as `DNS_RECORDW`, not as `DNS_RECORD`: `DnsQueryEx()` is Unicode-only
-// (`DNS_QUERY_REQUEST::QueryName` is a `PCWSTR`, and the returned names and strings are `PWSTR`s),
-// while `DNS_RECORD`/`PDNS_RECORD` alias `DNS_RECORDA` unless `UNICODE` is defined, which it isn't
-// in this project. Defining `UNICODE` globally isn't wanted at this time: it would also switch
-// `TCHAR`, `TEXT()` and the `...A`/`...W` aliases of `<windows.h>` for every Windows source file.
+// that turn `DnsQueryRaw()` requests and results into DNS messages, exposed for unit testing.
 
 // clang-format off
 #include <winsock2.h>
@@ -15,13 +9,67 @@
 #include <windns.h>
 // clang-format on
 
-// Not declared by older Windows SDKs
-#ifndef DNS_QUERY_DNSSEC_OK
-#define DNS_QUERY_DNSSEC_OK 0x01000000
-#endif
-#ifndef DNS_QUERY_DNSSEC_CHECKING_DISABLED
-#define DNS_QUERY_DNSSEC_CHECKING_DISABLED 0x02000000
-#endif
+// `DnsQueryRaw()` and the types it uses were added in Windows 11 23H2 (SDK 10.0.22621.2428),
+// so declare them here when the build uses an older SDK. The functions are resolved at runtime
+// (see `upstream_system_windows.cpp`), so the library still builds and runs on older Windows
+// versions: the upstream just fails to initialize there.
+#ifndef DNS_QUERY_RAW_REQUEST_VERSION1
+
+#define DNS_PROTOCOL_UNSPECIFIED 0
+#define DNS_PROTOCOL_UDP 1
+#define DNS_PROTOCOL_TCP 2
+
+#define DNS_QUERY_RAW_RESULTS_VERSION1 0x1
+#define DNS_QUERY_RAW_REQUEST_VERSION1 0x1
+
+#define DNS_QUERY_RAW_OPTION_BEST_EFFORT_PARSE 0x0000000000000001
+
+typedef struct _DNS_QUERY_RAW_RESULT DNS_QUERY_RAW_RESULT;
+typedef struct _DNS_QUERY_RAW_REQUEST DNS_QUERY_RAW_REQUEST;
+typedef struct DECLSPEC_ALIGN(8) _DNS_QUERY_RAW_CANCEL {
+    CHAR reserved[32];
+} DNS_QUERY_RAW_CANCEL;
+typedef VOID(CALLBACK *DNS_QUERY_RAW_COMPLETION_ROUTINE)(VOID *queryContext, DNS_QUERY_RAW_RESULT *queryResults);
+
+struct _DNS_QUERY_RAW_RESULT {
+    ULONG version;
+    DNS_STATUS queryStatus;
+    ULONG64 queryOptions;
+    ULONG64 queryRawOptions;
+    ULONG64 responseFlags;
+    ULONG queryRawResponseSize;
+    BYTE *queryRawResponse;
+    PDNS_RECORD queryRecords;
+    ULONG protocol;
+    // `SOCKADDR_INET sourceAddr` in the original declaration; the upstream doesn't use it.
+    CHAR maxSa[32];
+};
+
+struct _DNS_QUERY_RAW_REQUEST {
+    ULONG version;
+    ULONG resultsVersion;
+    ULONG dnsQueryRawSize;
+    BYTE *dnsQueryRaw;
+    PWSTR dnsQueryName;
+    USHORT dnsQueryType;
+    ULONG64 queryOptions;
+    ULONG interfaceIndex;
+    DNS_QUERY_RAW_COMPLETION_ROUTINE queryCompletionCallback;
+    VOID *queryContext;
+    ULONG64 queryRawOptions;
+    ULONG customServersSize;
+    // `DNS_CUSTOM_SERVER *customServers` in the original declaration; the upstream doesn't use it.
+    PVOID customServers;
+    ULONG protocol;
+    // `SOCKADDR_INET sourceAddr` in the original declaration; the upstream doesn't use it.
+    CHAR maxSa[32];
+};
+
+DNS_STATUS WINAPI DnsQueryRaw(DNS_QUERY_RAW_REQUEST *queryRequest, DNS_QUERY_RAW_CANCEL *cancelHandle);
+DNS_STATUS WINAPI DnsCancelQueryRaw(DNS_QUERY_RAW_CANCEL *cancelHandle);
+VOID WINAPI DnsQueryRawResultFree(DNS_QUERY_RAW_RESULT *queryResults);
+
+#endif // DNS_QUERY_RAW_REQUEST_VERSION1
 
 #include <optional>
 #include <string>
@@ -33,51 +81,36 @@
 
 namespace ag::dns {
 
-using ldns_rr_ptr = UniquePtr<ldns_rr, &ldns_rr_free>; // NOLINT(readability-identifier-naming)
-
 /**
- * Converts a record returned by `DnsQueryEx()` into an ldns record.
- * If the record can't be converted (e.g. it's of an unsupported type or its data is invalid),
- * a warning describing the reason is logged and null is returned.
- * The names and the character strings (e.g. of TXT records) are converted from UTF-16 to UTF-8,
- * so the character strings that aren't valid UTF-8 can't be restored exactly.
- * @param record The record.
- * @return The converted record, or null if it can't be converted.
- */
-ldns_rr_ptr system_record_to_ldns(const DNS_RECORDW &record);
-
-/**
- * Builds the reply to a request from the result of a `DnsQueryEx()` query.
- * The records of the unsupported types are skipped. If the request doesn't have the DO bit set,
- * the DNSSEC records (RRSIG, NSEC, NSEC3, DS, DNSKEY) are skipped too, unless they are the answer
- * to the question (RFC 3225): the DNS Client returns the cached signed answer of a DO query to
- * the queries without DO.
+ * Serializes a request into the wire format to pass to `DnsQueryRaw()`. The DNS Client forwards
+ * this packet as is, so the request's header flags, question class, and EDNS options are preserved.
  * @param request The request.
- * @param status  The query status.
- * @param records The returned records, may be null.
- * @return The reply, or an error if the status doesn't describe a DNS answer (e.g. the query timed out).
+ * @param tcp     Whether to prepend the 2-byte message length, as `DnsQueryRaw()` expects for
+ *                `DNS_PROTOCOL_TCP`.
+ * @return The wire request, or nullopt if the request can't be serialized (e.g. it doesn't fit in
+ *         a TCP message).
  */
-Upstream::ExchangeResult make_system_reply(const ldns_pkt *request, DNS_STATUS status, const DNS_RECORDW *records);
+std::optional<Uint8Vector> system_query_wire(const ldns_pkt *request, bool tcp);
 
 /**
- * Converts the question name of a request into the name to pass to `DnsQueryEx()`: the labels are
- * taken as is, i.e. they are expected to be UTF-8 and aren't escaped, and the trailing dot is removed.
+ * Makes the `DnsQueryRaw()` query options for a request. The DO and CD bits are carried by the
+ * request packet itself.
  * @param request The request.
- * @return The name, or nullopt if the request has no question or the name can't be represented
- *         (e.g. a label contains a dot, or isn't valid UTF-8).
  */
-std::optional<std::wstring> system_query_name(const ldns_pkt *request);
+ULONG64 system_query_options(const ldns_pkt *request);
 
 /**
- * Makes the `DnsQueryEx()` query options for a request.
- * NetBIOS and multicast name resolution (LLMNR, mDNS) are disabled: the DNS Client would stall on
- * their timeouts, and a DNS proxy isn't a stub resolver, so the requester handles them on its own.
- * The DNS Client's local answers (its cache, the hosts file, `localhost`) are kept, since they don't
- * delay the query. The queries with the DO bit bypass the cache: it ignores the DO bit, so it may
- * have the answer without the signatures.
- * @param request The request.
- * @param tcp     Whether the query must be sent over TCP.
+ * Builds the reply to a request from the raw reply returned by `DnsQueryRaw()`.
+ *
+ * If the request doesn't have the DO bit set, the DNSSEC records (RRSIG, NSEC, NSEC3, DS,
+ * DNSKEY) are dropped unless they are the answer to the question (RFC 3225).
+ *
+ * @param request   The request.
+ * @param raw_reply The raw reply, as returned by `DnsQueryRaw()`. If `tcp` is true, it is prefixed
+ *                  with the 2-byte message length, as `DnsQueryRaw()` returns it for `DNS_PROTOCOL_TCP`.
+ * @param tcp       Whether the reply is TCP-framed.
+ * @return The reply, or an error if the raw reply can't be parsed.
  */
-ULONG64 system_query_options(const ldns_pkt *request, bool tcp);
+Upstream::ExchangeResult make_system_reply(const ldns_pkt *request, Uint8View raw_reply, bool tcp);
 
 } // namespace ag::dns
