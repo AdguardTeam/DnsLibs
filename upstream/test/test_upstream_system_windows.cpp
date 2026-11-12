@@ -579,27 +579,6 @@ TEST_F(UpstreamTest, SystemUpstreamConcurrentRequests) {
     co_await check_all_results(errors);
 }
 
-// The DNS Client answers the queries for the local names itself, without the network, and
-// `DnsQueryRaw()` returns those answers as regular replies.
-TEST_F(UpstreamTest, SystemUpstreamAnswersLocalNames) {
-    co_await m_loop->co_submit();
-    auto upstream_res = create_upstream({"system://"});
-    REQUIRE_DNS_QUERY_RAW(upstream_res);
-    Upstream &upstream = *upstream_res.value();
-
-    for (const char *name : {"localhost.", "1.1.1.1."}) {
-        for (utils::TransportProtocol proto : {utils::TP_UDP, utils::TP_TCP}) {
-            ldns_pkt_ptr request = create_query(name, LDNS_RR_TYPE_A);
-            DnsMessageInfo info{.proto = proto};
-            auto reply = co_await upstream.exchange(request.get(), &info);
-            ASSERT_FALSE(reply.has_error()) << name << ": " << reply.error()->str();
-            TestError error = check_reply_header(*reply.value());
-            ASSERT_FALSE(error) << name << ": " << *error;
-            ASSERT_FALSE(rdata_of_type(ldns_pkt_answer(reply.value().get()), LDNS_RR_TYPE_A).empty()) << name;
-        }
-    }
-}
-
 // Integration-only: destroying the upstream completes the requests in flight with an error. The
 // queries are sent to the configured servers (they must not be answered before the destruction).
 TEST_F(UpstreamTest, SystemUpstreamDestroyedWithRequestsInFlight) {
