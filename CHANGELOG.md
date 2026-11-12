@@ -50,6 +50,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Fixed
 
+- Fixed DoQ upstreams keeping the connection alive indefinitely: keepalive now stops and the connection is closed after
+  180 seconds without DNS activity, so idle devices are not woken every 30 seconds; the short timeout timer is also
+  reset on replies so a healthy connection is not torn down under sustained traffic.
 - Fixed `ServerStamp::from_string` accepting some URLs and stamps that can not be used to build upstream settings.
   (AG-60512)
 - Fixed DoQ upstreams ignoring the URL port and always connecting to port 853 when the server IP address is known in
