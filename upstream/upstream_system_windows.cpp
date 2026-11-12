@@ -363,7 +363,13 @@ public:
                 DNS_STATUS status = (api != nullptr) ? api->query_raw(&request, &ctx.cancel_handle)
                                                      : (DNS_STATUS) ERROR_CALL_NOT_IMPLEMENTED;
                 if (status != DNS_REQUEST_PENDING) {
-                    // The query has completed with an error, and the completion callback won't be called.
+                    // The query has completed with an error, and the completion callback won't be
+                    // called. Mark it completed so that `remove_request()` doesn't cancel it: the
+                    // API hasn't filled `cancel_handle`, and passing a zeroed handle is invalid.
+                    {
+                        std::scoped_lock l(ctx.mutex);
+                        ctx.completed = true;
+                    }
                     delete (std::shared_ptr<Context> *) request.queryContext;
                     req->error = query_error(status);
                     result = impl.remove_request(*req);

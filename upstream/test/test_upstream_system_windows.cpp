@@ -2,6 +2,10 @@
 #include <array>
 #include <cstddef>
 #include <cstring>
+#include <memory>
+#include <mutex>
+#include <string>
+#include <string_view>
 #include <vector>
 
 #include <magic_enum/magic_enum.hpp>
@@ -577,6 +581,41 @@ TEST_F(UpstreamTest, SystemUpstreamConcurrentRequests) {
         return resolve_name(upstream, (i % 2 == 0) ? utils::TP_UDP : utils::TP_TCP, name, LDNS_RR_TYPE_A, true);
     });
     co_await check_all_results(errors);
+}
+
+// A request that `DnsQueryRaw()` rejects synchronously never starts a query, so its cancel handle
+// is never filled and it must not be passed to `DnsCancelQueryRaw()`.
+TEST_F(UpstreamTest, SystemUpstreamSynchronousFailureDoesNotCancel) {
+    co_await m_loop->co_submit();
+    auto upstream_res = create_upstream({"system://"});
+    REQUIRE_DNS_QUERY_RAW(upstream_res);
+
+    struct LogCapture {
+        std::mutex mutex;
+        std::vector<std::string> messages;
+    };
+    auto capture = std::make_shared<LogCapture>();
+    Logger::set_callback([capture](LogLevel, std::string_view message) {
+        std::scoped_lock l(capture->mutex);
+        capture->messages.emplace_back(message);
+    });
+
+    // `DnsQueryRaw()` only accepts QUERY packets; it rejects this one by returning an error
+    // synchronously, without starting the query or filling the cancel handle.
+    ldns_pkt_ptr request = create_query("example.com.", LDNS_RR_TYPE_A);
+    ldns_pkt_set_opcode(request.get(), LDNS_PACKET_NOTIFY);
+    auto reply = co_await upstream_res.value()->exchange(request.get());
+
+    Logger::set_callback(Logger::LOG_TO_STDERR);
+
+    if (!reply.has_error() || reply.error()->value() != DnsError::AE_ENCODE_ERROR) {
+        GTEST_SKIP() << "DnsQueryRaw() didn't reject the request synchronously";
+    }
+
+    std::scoped_lock l(capture->mutex);
+    for (const std::string &message : capture->messages) {
+        ASSERT_EQ(std::string::npos, message.find("DnsCancelQueryRaw failed")) << message;
+    }
 }
 
 // Integration-only: destroying the upstream completes the requests in flight with an error. The
