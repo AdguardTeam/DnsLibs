@@ -253,6 +253,14 @@ std::vector<SocketAddress> Upstream::resolved_server_addresses(uint16_t port) co
     return addresses;
 }
 
+std::string_view Upstream::hostname() const {
+    std::string_view hostname = m_url.get_hostname();
+    if (hostname.size() >= 2 && hostname.front() == '[' && hostname.back() == ']') {
+        hostname = hostname.substr(1, hostname.size() - 2);
+    }
+    return hostname;
+}
+
 Error<Upstream::InitError> Upstream::init_url_port(
         bool allow_creds, bool allow_path, uint16_t default_port, bool host_to_lowercase) {
     auto url = ada::parse<ada::url_aggregator>(m_options.address, nullptr);

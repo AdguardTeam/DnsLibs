@@ -205,6 +205,15 @@ protected:
     Error<InitError> init_url_port(bool allow_creds, bool allow_path, uint16_t default_port, bool host_to_lowercase);
 
     /**
+     * Get the upstream host name without the square brackets that the URL
+     * standard serialization adds around an IPv6 address literal.
+     * Use this for numeric address checks, TLS server names and certificate
+     * verification. Keep `m_url.get_hostname()` for the HTTP authority, where
+     * the brackets are required.
+     */
+    [[nodiscard]] std::string_view hostname() const;
+
+    /**
      * Convert `resolved_server_ips` into a list of socket addresses.
      * Drops empty and duplicate entries. Drops IPv6 addresses if IPv6 is not available,
      * unless no other addresses remain.

@@ -4,6 +4,8 @@
 
 #include "dns_test_helpers.h"
 #include "loopback_dns_server.h"
+#include "loopback_doh_server.h"
+#include "loopback_quic_server.h"
 #include "loopback_tls_server.h"
 #include "test_certificates.h"
 
@@ -12,6 +14,33 @@ using namespace std::chrono_literals;
 static constexpr auto timeout = 500ms;
 
 namespace ag::dns::upstream::test {
+
+namespace {
+
+// The IPv6-literal tests connect over an AF_INET6 socket. On a host without
+// IPv6 sockets the connect fails, so skip explicitly (the same probe as in
+// loopback_quic_server_test.cpp) instead of failing the default suite.
+bool ipv6_stream_sockets_available() {
+    ag::test::detail::ensure_winsock();
+    ag::test::detail::socket_type probe = ag::test::detail::open_stream_socket6();
+    if (probe == ag::test::detail::invalid_socket()) {
+        return false;
+    }
+    ag::test::detail::close_fd(probe);
+    return true;
+}
+
+bool ipv6_dgram_sockets_available() {
+    ag::test::detail::ensure_winsock();
+    ag::test::detail::socket_type probe = ag::test::detail::open_dgram_socket6();
+    if (probe == ag::test::detail::invalid_socket()) {
+        return false;
+    }
+    ag::test::detail::close_fd(probe);
+    return true;
+}
+
+} // namespace
 
 struct UpstreamUtilsTest : ::testing::Test {
 protected:
@@ -109,6 +138,130 @@ TEST_F(UpstreamUtilsTest, ValidUpstreamMixedCase) {
     auto err = dns::test_upstream(
             {"Https://Mixed-Case-Host.Example/dns-query", {"127.0.0.1"}}, timeout, false, nullptr, true);
     ASSERT_FALSE(err) << "Cannot fail: " << err->str();
+}
+
+// An IPv6 address literal in a URL upstream must not be treated as a host name
+// that needs a bootstrap resolver. The WHATWG serialization keeps the square
+// brackets, but the numeric checks and the TLS server name need the bare
+// address. This is the IPv6 counterpart of the working IPv4 literal
+// `https://1.1.1.1/dns-query`. offline=true skips the exchange, so the test
+// needs no network.
+TEST_F(UpstreamUtilsTest, Ipv6LiteralUpstreams) {
+    const std::vector<std::string> addresses = {
+            "https://[2606:4700:4700::1111]/dns-query",
+            "h3://[2606:4700:4700::1111]/dns-query",
+            "tls://[2606:4700:4700::1111]",
+            "quic://[2606:4700:4700::1111]",
+    };
+    for (const std::string &address : addresses) {
+        auto err = dns::test_upstream({address, {}}, timeout, false, nullptr, true);
+        ASSERT_FALSE(err) << address << ": " << err->str();
+    }
+}
+
+// Full DoT exchange with an IPv6 address literal. `::ffff:127.0.0.1` reaches
+// the IPv4 loopback TLS server through the IPv4-mapped IPv6 form, so the test
+// stays offline. This covers the URL init path, the TLS server name and the
+// certificate host name check with the bare (unbracketed) address.
+TEST_F(UpstreamUtilsTest, ValidUpstreamTlsIpv6Literal) {
+    if (!ipv6_stream_sockets_available()) {
+        GTEST_SKIP() << "Host has no IPv6 sockets; the IPv6-literal path cannot be exercised";
+    }
+    ag::test::LoopbackTlsServer tls_server{[](const ldns_pkt &req) -> ldns_pkt_ptr {
+        ldns_pkt_ptr reply = ag::test::make_base_reply(req);
+        if (const ldns_rr *question = ldns_rr_list_rr(ldns_pkt_question(&req), 0); question != nullptr) {
+            ag::test::add_a_answer(reply.get(), question);
+        }
+        return reply;
+    }};
+    tls_server.start();
+    auto err = dns::test_upstream(
+            {AG_FMT("tls://[::ffff:127.0.0.1]:{}", tls_server.port()), {}}, 10 * timeout, true,
+            [](const CertificateVerificationEvent &) {
+                return std::nullopt;
+            },
+            false);
+    ASSERT_FALSE(err) << "Cannot fail: " << err->str();
+    tls_server.stop();
+}
+
+// DoH counterpart of the DoT IPv6-literal test. The `:authority` keeps the
+// brackets, while the certificate host name check uses the bare address.
+TEST_F(UpstreamUtilsTest, ValidUpstreamDohIpv6Literal) {
+    if (!ipv6_stream_sockets_available()) {
+        GTEST_SKIP() << "Host has no IPv6 sockets; the IPv6-literal path cannot be exercised";
+    }
+    ag::test::LoopbackDohServer doh_server{[](const ldns_pkt &req) -> ldns_pkt_ptr {
+        ldns_pkt_ptr reply = ag::test::make_base_reply(req);
+        if (const ldns_rr *question = ldns_rr_list_rr(ldns_pkt_question(&req), 0); question != nullptr) {
+            ag::test::add_a_answer(reply.get(), question);
+        }
+        return reply;
+    }};
+    doh_server.start();
+    auto err = dns::test_upstream(
+            {AG_FMT("https://[::ffff:127.0.0.1]:{}/dns-query", doh_server.port()), {}}, 10 * timeout, true,
+            [](const CertificateVerificationEvent &) {
+                return std::nullopt;
+            },
+            false);
+    ASSERT_FALSE(err) << "Cannot fail: " << err->str();
+    doh_server.stop();
+}
+
+// Real DoQ exchange over an IPv6 address literal. This is the QUIC counterpart
+// of the DoT test: `::ffff:127.0.0.1` reaches the IPv4-bound loopback QUIC
+// server, and the TLS server name and certificate host name check use the bare
+// address. It covers the `DoqUpstream` certificate verification callback, which
+// the DoT/DoH tests do not exercise.
+TEST_F(UpstreamUtilsTest, ValidUpstreamDoqIpv6Literal) {
+    if (!ipv6_dgram_sockets_available()) {
+        GTEST_SKIP() << "Host has no IPv6 sockets; the IPv6-literal path cannot be exercised";
+    }
+    ag::test::LoopbackQuicServer quic_server{[](const ldns_pkt &req) -> ldns_pkt_ptr {
+        ldns_pkt_ptr reply = ag::test::make_base_reply(req);
+        if (const ldns_rr *question = ldns_rr_list_rr(ldns_pkt_question(&req), 0); question != nullptr) {
+            ag::test::add_a_answer(reply.get(), question);
+        }
+        return reply;
+    }};
+    quic_server.start();
+    auto err = dns::test_upstream(
+            {AG_FMT("quic://[::ffff:127.0.0.1]:{}", quic_server.port()), {}}, 10 * timeout, true,
+            [](const CertificateVerificationEvent &) {
+                return std::nullopt;
+            },
+            false);
+    ASSERT_FALSE(err) << "Cannot fail: " << err->str();
+    quic_server.stop();
+}
+
+// Real DoH3 exchange over an IPv6 address literal. Covers the HTTP/3
+// certificate verification callback in `DohUpstream` (a separate path from the
+// HTTP/2 `SecuredSocket` verification used by ValidUpstreamDohIpv6Literal).
+TEST_F(UpstreamUtilsTest, ValidUpstreamDoh3Ipv6Literal) {
+    if (!ipv6_dgram_sockets_available()) {
+        GTEST_SKIP() << "Host has no IPv6 sockets; the IPv6-literal path cannot be exercised";
+    }
+    ag::test::LoopbackQuicServer quic_server{
+            [](const ldns_pkt &req) -> ldns_pkt_ptr {
+                ldns_pkt_ptr reply = ag::test::make_base_reply(req);
+                if (const ldns_rr *question = ldns_rr_list_rr(ldns_pkt_question(&req), 0); question != nullptr) {
+                    ag::test::add_a_answer(reply.get(), question);
+                }
+                return reply;
+            },
+            ag::test::LoopbackQuicServer::QuicMode::DOH3,
+    };
+    quic_server.start();
+    auto err = dns::test_upstream(
+            {AG_FMT("h3://[::ffff:127.0.0.1]:{}/dns-query", quic_server.port()), {}}, 10 * timeout, true,
+            [](const CertificateVerificationEvent &) {
+                return std::nullopt;
+            },
+            false);
+    ASSERT_FALSE(err) << "Cannot fail: " << err->str();
+    quic_server.stop();
 }
 
 TEST_F(UpstreamUtilsTest, PrivateNetworkAddress) {

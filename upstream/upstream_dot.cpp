@@ -44,7 +44,7 @@ private:
         return dot_upstream->make_secured_socket(utils::TP_TCP,
                 SocketFactory::SecureSocketParameters{
                         .session_cache = &dot_upstream->m_tls_session_cache,
-                        .server_name = std::string(dot_upstream->m_url.get_hostname()),
+                        .server_name = std::string(dot_upstream->hostname()),
                         .alpn = {DOT_ALPN},
                         .fingerprints = dot_upstream->m_fingerprints,
                         .enable_post_quantum = dot_upstream->m_options.enable_post_quantum_cryptography,
@@ -57,7 +57,7 @@ private:
 
     AddressVariant no_bootstrap_address(const std::shared_ptr<Upstream> &upstream) override {
         auto dot_upstream = std::static_pointer_cast<DotUpstream>(upstream);
-        return NamePort{std::string(dot_upstream->m_url.get_hostname()), dot_upstream->m_port};
+        return NamePort{std::string(dot_upstream->hostname()), dot_upstream->m_port};
     }
 };
 
@@ -86,8 +86,7 @@ Error<Upstream::InitError> DotUpstream::init() {
     if (const auto *oproxy_settings = config().socket_factory->get_outbound_proxy_settings();
             !oproxy_settings || !oproxy_protocol_supports_hostname(oproxy_settings->protocol)) {
         std::vector<SocketAddress> resolved_addresses = resolved_server_addresses(m_port);
-        if (m_options.bootstrap.empty() && resolved_addresses.empty()
-                && !SocketAddress(m_url.get_hostname(), m_port).valid()) {
+        if (m_options.bootstrap.empty() && resolved_addresses.empty() && !SocketAddress(hostname(), m_port).valid()) {
             return make_error(InitError::AE_EMPTY_BOOTSTRAP);
         }
 

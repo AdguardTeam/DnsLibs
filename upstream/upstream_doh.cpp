@@ -293,9 +293,8 @@ ag::Error<ag::dns::Upstream::InitError> ag::dns::DohUpstream::init() {
     std::vector<SocketAddress> resolved_addresses = resolved_server_addresses(m_port);
     if (const auto *oproxy_settings = config().socket_factory->get_outbound_proxy_settings(); !oproxy_settings
             || !oproxy_protocol_supports_hostname(oproxy_settings->protocol) || !resolved_addresses.empty()
-            || SocketAddress(m_url.get_hostname(), m_port).valid() || m_http_version == http::HTTP_3_0) {
-        if (m_options.bootstrap.empty() && resolved_addresses.empty()
-                && !SocketAddress(m_url.get_hostname(), m_port).valid()) {
+            || SocketAddress(hostname(), m_port).valid() || m_http_version == http::HTTP_3_0) {
+        if (m_options.bootstrap.empty() && resolved_addresses.empty() && !SocketAddress(hostname(), m_port).valid()) {
             return make_error(InitError::AE_EMPTY_BOOTSTRAP);
         }
 
@@ -435,7 +434,7 @@ ag::coro::Task<void> ag::dns::DohUpstream::drive_connection(Millis handshake_tim
             addresses_to_connect.emplace_back(address);
         }
     } else {
-        addresses_to_connect.emplace_back(NamePort{std::string(m_url.get_hostname()), m_port});
+        addresses_to_connect.emplace_back(NamePort{std::string(hostname()), m_port});
     }
 
     m_pending_connections = std::make_shared<decltype(m_pending_connections)::element_type>();
@@ -530,7 +529,7 @@ ag::dns::DohUpstream::establish_connection(HttpConnection *http_conn, AddressVar
     std::weak_ptr<bool> shutdown_guard = http_conn->shutdown_guard;
 
     log_hconn(trace, http_conn, "Connecting to {}...", peer);
-    std::string_view hostname = m_url.get_hostname(); // was validated during initialization
+    std::string_view hostname = this->hostname(); // was validated during initialization
     Error<DnsError> error = co_await http_conn->establish(std::string(hostname), peer);
     if (shutdown_guard.expired()) {
         co_return make_error(DnsError::AE_SHUTTING_DOWN);
@@ -1336,7 +1335,7 @@ int ag::dns::DohUpstream::Http3Connection::on_certificate_verify(X509_STORE_CTX 
         return 0;
     }
 
-    std::string_view hostname = upstream->m_url.get_hostname(); // was validated during initialization
+    std::string_view hostname = upstream->hostname(); // was validated during initialization
     if (auto err = verifier->verify(ctx, hostname, upstream->m_fingerprints)) {
         log_hconn(warn, self, "Failed to verify certificate for '{}': {}", hostname, *err);
         log_hconn(warn, self, "  {}", get_cert_diagnostic_info(ctx));
