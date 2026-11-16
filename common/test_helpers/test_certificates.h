@@ -156,15 +156,17 @@ inline ServerMaterial generate_server_material() {
     }
 
     // SAN: DNS:localhost + IP:127.0.0.1, so hostname verification for the
-    // loopback server's host succeeds. The v3 context lets the extension
-    // resolver resolve relative references (none here, but kept for parity
-    // with the usual generation recipe).
+    // loopback server's host succeeds. IP:::1 and IP:::ffff:127.0.0.1 let
+    // IPv6-literal upstream tests verify the same certificate: the first for a
+    // native IPv6 loopback, the second for an IPv4-mapped loopback. The v3
+    // context lets the extension resolver resolve relative references (none
+    // here, but kept for parity with the usual generation recipe).
     X509V3_CTX v3_ctx{};
     X509V3_set_ctx(&v3_ctx, cert.get(), cert.get(), nullptr, nullptr, 0);
     // BoringSSL does not export X509V3_EXT_conf_nid (only its _nconf_nid
     // counterpart); conf=NULL is documented as allowed for literal SAN values.
-    X509_EXTENSION *san_ext =
-            X509V3_EXT_nconf_nid(nullptr, &v3_ctx, NID_subject_alt_name, "DNS:localhost,IP:127.0.0.1");
+    X509_EXTENSION *san_ext = X509V3_EXT_nconf_nid(
+            nullptr, &v3_ctx, NID_subject_alt_name, "DNS:localhost,IP:127.0.0.1,IP:::1,IP:::ffff:127.0.0.1");
     if (san_ext == nullptr) {
         return m;
     }

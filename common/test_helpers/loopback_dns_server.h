@@ -80,6 +80,12 @@ inline socket_type open_stream_socket() {
     return ::socket(AF_INET, SOCK_STREAM, 0);
 }
 
+// IPv6 variant of open_stream_socket(), used to probe whether the host can
+// create IPv6 stream sockets at all. See open_dgram_socket6().
+inline socket_type open_stream_socket6() {
+    return ::socket(AF_INET6, SOCK_STREAM, 0);
+}
+
 #ifdef _WIN32
 using socklen_type = int;
 #else

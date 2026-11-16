@@ -387,7 +387,7 @@ Error<Upstream::InitError> DoqUpstream::init() {
     }
 
     if (m_server_addresses.empty()) {
-        if (m_options.bootstrap.empty() && !SocketAddress(m_url.get_hostname(), m_port).valid()) {
+        if (m_options.bootstrap.empty() && !SocketAddress(hostname(), m_port).valid()) {
             return make_error(InitError::AE_EMPTY_BOOTSTRAP);
         }
         Bootstrapper::Params bootstrapper_params = {
@@ -1034,7 +1034,7 @@ int DoqUpstream::init_ssl() {
     }
     dbglog(m_log, "Advertised ALPNs:{}", printable);
 
-    std::string hostname{m_url.get_hostname()};
+    std::string hostname{this->hostname()};
     // The session is consumed by `make_ssl()`, which up-refs it.
     SslSessionPtr session = m_tls_session_cache.get_session();
     if (session != nullptr) {
@@ -1475,11 +1475,11 @@ int DoqUpstream::ssl_verify_callback(X509_STORE_CTX *ctx, void * /*arg*/) {
 
     const CertificateVerifier *verifier = doq->m_config.socket_factory->get_certificate_verifier();
     if (verifier == nullptr) {
-        warnlog(doq->m_log, "Cannot verify certificate for '{}' due to verifier is not set", doq->m_url.get_hostname());
+        warnlog(doq->m_log, "Cannot verify certificate for '{}' due to verifier is not set", doq->hostname());
         return 0;
     }
 
-    std::string_view hostname = doq->m_url.get_hostname();
+    std::string_view hostname = doq->hostname();
     if (auto err = verifier->verify(ctx, hostname, doq->m_fingerprints)) {
         warnlog(doq->m_log, "Failed to verify certificate for '{}': {}", hostname, *err);
         warnlog(doq->m_log, "  {}", get_cert_diagnostic_info(ctx));

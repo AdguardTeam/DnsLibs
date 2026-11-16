@@ -141,9 +141,11 @@ TEST(TestCertificatesTest, HostnameOnlyMatchesLocalhost) {
     std::vector<ag::dns::CertFingerprint> fps;
     TestCertificateVerifier verifier{TestCertificateVerifier::Mode::VERIFY_HOSTNAME_ONLY};
 
-    // SAN includes DNS:localhost and IP:127.0.0.1.
+    // SAN includes DNS:localhost and IP:127.0.0.1, plus the IPv6 forms.
     EXPECT_FALSE(verifier.verify(store.get(), "localhost", fps).has_value());
     EXPECT_FALSE(verifier.verify(store.get(), "127.0.0.1", fps).has_value());
+    EXPECT_FALSE(verifier.verify(store.get(), "::1", fps).has_value());
+    EXPECT_FALSE(verifier.verify(store.get(), "::ffff:127.0.0.1", fps).has_value());
     // An unrelated host name must not match.
     EXPECT_TRUE(verifier.verify(store.get(), "evil.example", fps).has_value());
 }
