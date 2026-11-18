@@ -12,6 +12,7 @@
 
 #include "common/defs.h"
 #include "common/utils.h"
+#include "dns/common/dns_utils.h"
 #include "dns/proxy/dnsproxy_settings.h"
 
 #include "svcb.h"
@@ -23,8 +24,6 @@ namespace ag::dns {
  */
 class ResponseHelpers {
 public:
-    using ldns_rdf_ptr = UniquePtr<ldns_rdf, &ldns_rdf_deep_free>; // NOLINT(*-identifier-naming)
-    static constexpr uint32_t SOA_RETRY_DEFAULT = 900;
     struct NeedsResponse {};
     using CreateResponseResult = std::variant<ldns_pkt_ptr, NeedsResponse>;
 
@@ -32,14 +31,16 @@ public:
             const ldns_pkt *request, const DnsProxySettings *settings, uint32_t retry_secs) {
         ldns_pkt *response = create_response_by_request(request);
         ldns_pkt_set_rcode(response, LDNS_RCODE_NOERROR);
-        ldns_pkt_push_rr(response, LDNS_SECTION_AUTHORITY, create_soa(request, settings, retry_secs));
+        ldns_pkt_push_rr(
+                response, LDNS_SECTION_AUTHORITY, create_soa(request, settings->blocked_response_ttl_secs, retry_secs));
         return ldns_pkt_ptr{response};
     }
 
     static CreateResponseResult create_nxdomain_response(const ldns_pkt *request, const DnsProxySettings *settings) {
         ldns_pkt *response = create_response_by_request(request);
         ldns_pkt_set_rcode(response, LDNS_RCODE_NXDOMAIN);
-        ldns_pkt_push_rr(response, LDNS_SECTION_AUTHORITY, create_soa(request, settings, SOA_RETRY_DEFAULT));
+        ldns_pkt_push_rr(response, LDNS_SECTION_AUTHORITY,
+                create_soa(request, settings->blocked_response_ttl_secs, SOA_RETRY_DEFAULT));
         return ldns_pkt_ptr{response};
     }
 
@@ -193,43 +194,6 @@ private:
         ldns_rr_list_deep_free(ldns_pkt_question(response));
         ldns_pkt_set_question(response, ldns_pkt_get_section_clone(request, LDNS_SECTION_QUESTION));
         return response;
-    }
-
-    static ldns_rdf *make_mbox(const ldns_pkt *request) {
-        const ldns_rr *question = ldns_rr_list_rr(ldns_pkt_question(request), 0);
-
-        ldns_rdf *owner = ldns_rr_owner(question);
-
-        ldns_rdf_ptr hostmaster{ldns_dname_new_frm_str("hostmaster.")};
-        ldns_rdf_ptr mbox{ldns_dname_cat_clone(hostmaster.get(), owner)};
-        if (mbox) {
-            if (auto valid = AllocatedPtr<char>{ldns_rdf2str(mbox.get())}) {
-                return mbox.release();
-            }
-        }
-
-        return hostmaster.release();
-    }
-
-    // Taken from AdGuardHome/dnsforward.go/genSOA
-    static ldns_rr *create_soa(const ldns_pkt *request, const DnsProxySettings *settings, uint32_t retry_secs) {
-        const ldns_rr *question = ldns_rr_list_rr(ldns_pkt_question(request), 0);
-
-        ldns_rr *soa = ldns_rr_new();
-        assert(soa != nullptr);
-        ldns_rr_set_owner(soa, ldns_rdf_clone(ldns_rr_owner(question)));
-        ldns_rr_set_ttl(soa, settings->blocked_response_ttl_secs);
-        ldns_rr_set_type(soa, LDNS_RR_TYPE_SOA);
-        ldns_rr_set_class(soa, LDNS_RR_CLASS_IN);
-        // fill soa rdata
-        ldns_rr_push_rdf(soa, ldns_dname_new_frm_str("fake-for-negative-caching.adguard.com."));  // MNAME
-        ldns_rr_push_rdf(soa, make_mbox(request));                                                // RNAME
-        ldns_rr_push_rdf(soa, ldns_native2rdf_int32(LDNS_RDF_TYPE_TIME, time(nullptr) + 100500)); // SERIAL
-        ldns_rr_push_rdf(soa, ldns_native2rdf_int32(LDNS_RDF_TYPE_PERIOD, 1800));                 // REFRESH
-        ldns_rr_push_rdf(soa, ldns_native2rdf_int32(LDNS_RDF_TYPE_PERIOD, retry_secs));           // RETRY
-        ldns_rr_push_rdf(soa, ldns_native2rdf_int32(LDNS_RDF_TYPE_PERIOD, 604800));               // EXPIRE
-        ldns_rr_push_rdf(soa, ldns_native2rdf_int32(LDNS_RDF_TYPE_PERIOD, 86400));                // MINIMUM
-        return soa;
     }
 
     static ldns_pkt_ptr create_arecord_response(

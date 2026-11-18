@@ -65,4 +65,24 @@ TEST(DnsTruncateTest, TruncateWorks) {
     }
 }
 
+// The TC bit must be set on the responses that were truncated for the client, so that the client
+// retries over TCP.
+TEST(DnsTruncateTest, SetsTcBitWhenTruncated) {
+    Uint8View pkt_data = {&BIG_PACKET[0], std::size(BIG_PACKET) - 1};
+
+    ldns_pkt *pkt;
+    ldns_status status = ldns_wire2pkt(&pkt, pkt_data.data(), pkt_data.size());
+    ASSERT_EQ(LDNS_STATUS_OK, status) << ldns_get_errorstr_by_id(status);
+    ldns_pkt_ptr pkt_guard{pkt};
+    ASSERT_FALSE(ldns_pkt_tc(pkt));
+
+    // 512 is the minimum UDP payload size; the packet is 1946 bytes.
+    ASSERT_TRUE(dns::ldns_pkt_truncate(pkt, 512));
+    ASSERT_TRUE(ldns_pkt_tc(pkt));
+
+    // Truncating the already truncated packet keeps the flag set.
+    ASSERT_FALSE(dns::ldns_pkt_truncate(pkt, 512));
+    ASSERT_TRUE(ldns_pkt_tc(pkt));
+}
+
 } // namespace ag::dns::proxy::test

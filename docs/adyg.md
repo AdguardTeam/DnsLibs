@@ -44,8 +44,9 @@ adyg [@server] [-t type] [-x addr] name [type] [options]
 
 Sends a DNS query to `server` for `name` (default RR type `A`) and prints the
 reply. When `server` is omitted, `adyg` queries the system default DNS via the
-upstream library's `SystemUpstream` (`system://`) on Apple/Android, falling
-back to `1.1.1.1` on platforms where no system resolver is available.
+upstream library's `SystemUpstream` (`system://`) on Apple/Android, and uses
+`1.1.1.1` on other platforms, including Windows. On Windows 11 23H2 and Windows
+Server 2025 and later, `system://` can be passed explicitly.
 
 The RR type may be given either positionally (`adyg name type`, mirroring
 `dig`) or via the dig-compatible `-t TYPE` short option (`adyg -t TYPE name`).
@@ -81,7 +82,7 @@ the following forms:
 | `h3://host/path` | DNS-over-HTTP/3 | HTTP/3 (QUIC) variant of DoH |
 | `quic://host[:port]` | DNS-over-QUIC (DoQ) | Default port 853 |
 | `sdns://...` | Any of the above plus DNSCrypt | A [DNS Stamp](https://dnscrypt.info/stamps/) encodes scheme, address, port, hash and transport |
-| `system://` | The OS-configured resolver (Apple/Android only) | Also the default when `@server` is omitted on those platforms |
+| `system://` | The OS-configured resolver (Apple, Android; Windows 11 23H2 / Server 2025 and later when passed explicitly) | The default when `@server` is omitted on Apple/Android; on Windows, `system://<interface index>` queries a single interface |
 
 A few things to keep in mind about `@server`:
 

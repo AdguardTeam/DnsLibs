@@ -1,4 +1,5 @@
 #include <future>
+#include <optional>
 
 #include <fmt/format.h>
 
@@ -19,11 +20,14 @@ public:
     }
 
     ~Impl() {
-        for (auto it = m_requests.begin(); it != m_requests.end();) {
-            auto next_it = std::next(it);
-            it->second.error = make_error(SystemResolverError::AE_SHUTTING_DOWN);
-            complete_request(it->second); // it removed here
-            it = next_it;
+        // The pending requests are completed by resuming their coroutines below, which may try to
+        // resolve more names (e.g. if the caller retries on `AE_SHUTTING_DOWN`). Refuse them, so
+        // that they can't modify `m_requests` while it's being drained.
+        m_destroying = true;
+        while (!m_requests.empty()) {
+            Request &req = m_requests.begin()->second;
+            req.error = make_error(SystemResolverError::AE_SHUTTING_DOWN);
+            complete_request(req);
         }
     }
 
@@ -44,16 +48,14 @@ public:
     };
 
     auto resolve(std::string_view domain, ldns_rr_type rr_type) {
-        uint64_t id = m_next_request_id++;
-        auto &req = m_requests[id];
-        req.id = id;
-        req.parent = this;
-        req.domain = std::string(domain);
-        req.rr_type = rr_type;
         struct Awaitable {
-            Request *req;
+            Request *req = nullptr; ///< The request, or null if it was rejected.
+            std::optional<Result<SystemResolver::LdnsRrListPtr, SystemResolverError>> result;
 
             auto await_ready() {
+                if (req == nullptr) {
+                    return true;
+                }
                 DNSServiceRef service_ref;
 
                 auto error_code = DNSServiceQueryRecord(&service_ref,
@@ -119,6 +121,9 @@ public:
             }
 
             Result<SystemResolver::LdnsRrListPtr, SystemResolverError> await_resume() {
+                if (req == nullptr) {
+                    return std::move(result.value());
+                }
                 auto node = req->parent->m_requests.extract(req->id);
                 if (node.mapped().error) {
                     return node.mapped().error;
@@ -205,6 +210,21 @@ public:
                 tracelog(g_log, "More coming");
             }
         };
+
+        // The destructor resumes the coroutines awaiting their results, so they may try to resolve
+        // more names. Refuse them, so that they can't modify `m_requests` while it's drained.
+        if (m_destroying) {
+            return Awaitable{.req = nullptr,
+                    .result = make_error(SystemResolverError::AE_SHUTTING_DOWN, "The resolver is being destroyed")};
+        }
+
+        uint64_t id = m_next_request_id++;
+        auto &req = m_requests[id];
+        req.id = id;
+        req.parent = this;
+        req.domain = std::string(domain);
+        req.rr_type = rr_type;
+
         return Awaitable{.req = &req};
     }
 
@@ -217,7 +237,8 @@ public:
     }
 
     EventLoop *m_loop = nullptr;
-    uint32_t m_if_index{}; ///< The network interface index.
+    uint32_t m_if_index{};     ///< The network interface index.
+    bool m_destroying = false; ///< Whether the resolver is being destroyed. No new requests are accepted.
     uint64_t m_next_request_id = 0;
     std::map<uint64_t, Request> m_requests;
     Millis m_timeout;

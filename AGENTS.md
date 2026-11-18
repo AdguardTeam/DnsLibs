@@ -20,7 +20,7 @@ See [README.md](README.md) for full product details.
 
 | Directory | Purpose |
 | --- | --- |
-| `common/` | Shared utilities: event loop, platform abstractions |
+| `common/` | Shared utilities: event loop, platform abstractions, DNS response helpers |
 | `common/test_helpers/` | Header-only test utilities: loopback encrypted-protocol responders (`LoopbackDnsServer`, `LoopbackDnscryptServer`, `LoopbackTlsServer`, `LoopbackDohServer`, `LoopbackQuicServer`), `LoopbackHttpConnectProxy`, `MockUpstream`, DNS packet helpers (`dns_test_helpers.h`), `REQUIRE_INTEGRATION()` guard, encrypted-protocol cert kit (`test_certificates.h` + `TestCertificateVerifier` + SPKI/TBS pin helpers) |
 | `net/` | Network layer: TLS, sockets, socket factory |
 | `proxy/` | Core DNS proxy logic: forwarder, listener, response cache |
@@ -201,6 +201,15 @@ numbers with `ag::utils::to_integer<T>()` (from `common/utils.h`) instead of
   use-after-free. Coroutine parameters, by contrast, are moved/copied into the
   heap-allocated coroutine frame and survive every suspension/resume. This
   applies to `coro::run_detached(...)` and `coro::to_future(...)` wrappers too.
+- **A destructor that resumes waiting coroutines must guard against
+  re-entrancy.** For example, a coroutine resumed by the destructor can immediately
+  issue a new request (e.g. if the caller retries on `AE_SHUTTING_DOWN`), which would
+  insert into the request map while it is being drained — the new node is then
+  leaked past the loop and destroyed with live uv handles. Set a `destroying`
+  flag before draining, and make the request-submitting method return an
+  already-ready `AE_SHUTTING_DOWN` result while it is set, instead of touching
+  the map. See `SystemUpstream::Impl` (Windows, Android) and
+  `SystemResolver::Impl` (Apple).
 - **Wrap every raw owning pointer returned by a C-FFI allocator (ldns,
   libsodium, etc.) in an RAII guard at the point of creation; never hold a raw
   owning pointer across a call that can fail.** Use `ag::AllocatedPtr<T>` (a
@@ -234,6 +243,12 @@ numbers with `ag::utils::to_integer<T>()` (from `common/utils.h`) instead of
   especially exported public-API headers (`upstream/include/**`,
   `platform/*/capi`, etc.); also document new internal classes with public
   members.
+- The minimum supported Windows version is Windows 8 (`_WIN32_WINNT=0x0602`).
+  Call the Windows APIs available there directly instead of resolving them
+  with `LoadLibrary`/`GetProcAddress` at runtime. APIs that are newer than
+  Windows 8 must be resolved dynamically, and the code that uses them must
+  fail with a clear "unsupported on this system" error when they are missing
+  (see the `system://` upstream, which needs `DnsQueryRaw()`).
 - Prefer existing patterns over inventing new ones
 - Keep changes minimal and focused
 - Tests live in `test/` subdirectories alongside the module they cover

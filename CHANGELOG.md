@@ -12,6 +12,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   in the `AGDnsProxyEvents` Objective-C API. The proxy raises it when it suspects that a DNS request failed due to
   a missing Local Network permission. Applications should handle the event by guiding the user through the
   Local Network permission request and explaining why the permission is required. (AG-59533)
+- Added the `system://[<interface index>]` upstream on Windows, implemented on top of `DnsQueryRaw()` to avoid
+  `DnsQueryEx()`'s bugs and convoluted API, and to preserve EDNS options.
+    - The interface index is optional and matches the one shown by `route print`; if it is omitted, all interfaces are
+      queried.
+    - `DnsQueryRaw()` is only available on Windows 11 23H2 and Windows Server 2025 and later. The functions are
+      resolved at runtime, and the upstream fails to initialize with an "unsupported" error on older systems.
 
 ### Changed
 
@@ -34,6 +40,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - Updated NLC to 8.2.0. The `CHROME` TLS profile, which all encrypted upstreams (DoT, DoH, DoQ) use, now matches
   the current Chrome stable ClientHello: it sends the `trust_anchors` extension and a GREASE value at the head of
   `signature_algorithms`.
+- The minimum supported Windows version is now Windows 8.
 
 ### Deprecated
 
@@ -53,6 +60,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   (AG-60512)
 - Fixed DoQ upstreams ignoring the URL port and always connecting to port 853 when the server IP address is known in
   advance (e.g. from the address field of a DNS stamp). (AG-60512)
+- Fixed a possible crash when the `system://` upstream on Android and Apple platforms is destroyed while requests are
+  in flight: a request sent from a coroutine resumed by the destructor is now rejected with `AE_SHUTTING_DOWN`
+  instead of modifying the request list while it is being drained.
 
 ### Security
 

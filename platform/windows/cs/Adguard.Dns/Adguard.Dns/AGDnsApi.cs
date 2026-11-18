@@ -22,7 +22,7 @@ namespace Adguard.Dns
 		/// <summary>
 		/// The current API version hash with which the ProxyServer was tested
 		/// </summary>
-        private const string API_VERSION_HASH = "d70d226a64fc22817ec6c8b4698f268de1ab330ed14dea91ee0559469c151964";
+        private const string API_VERSION_HASH = "1f0980aaea1ba2e097be863c87787fea2a16ef5b95d82b83e72c2fa2c9a50318";
 
         #endregion
 
@@ -701,6 +701,8 @@ namespace Adguard.Dns
             /// https://dns.adguard.com/dns-query -- DNS-over-HTTPS
             /// sdns://... -- DNS stamp (see https://dnscrypt.info/stamps-specifications)
             /// quic://dns.adguard.com:8853 -- DNS-over-QUIC
+            /// system://[interface index] -- the system resolver (Windows 11 23H2 and Windows Server 2025
+            /// and later)
             /// (<seealso cref="ManualMarshalPtrToStringAttribute"/>)
             /// </summary>
             [ManualMarshalPtrToString]

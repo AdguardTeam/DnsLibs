@@ -93,6 +93,7 @@ The most interesting fields are:
         - `https://dns.adguard.com/dns-query` DNS-over-HTTPS.
         - `quic://dns.adguard.com:853` DNS-over-QUIC.
         - `sdns://...` DNS stamp (see [DNSCrypt specifications](https://dnscrypt.info/stamps-specifications)).
+        - `system://[<interface>]` the OS resolver (Apple platforms, Android, and Windows 11 23H2+).
     - `std::vector<std::string> bootstrap` — list of plain DNS servers used to resolve the hostnames in the upstream
       addresses (both encrypted and plain-DNS upstreams).
     - `std::vector<IpAddress> resolved_server_ips` — the IP addresses of the server, in the order of preference. If

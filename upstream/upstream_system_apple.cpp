@@ -1,6 +1,8 @@
 #include <net/if.h>
 
 #include "common/logger.h"
+#include "dns/common/dns_utils.h"
+
 #include "upstream_system.h"
 
 namespace ag::dns {
@@ -48,6 +50,9 @@ coro::Task<Upstream::ExchangeResult> SystemUpstream::exchange(const ldns_pkt *re
                 && error->value() != SystemResolverError::AE_RECORD_NOT_FOUND) {
             if (error->value() == SystemResolverError::AE_TIMED_OUT) {
                 co_return make_error(DnsError::AE_TIMED_OUT, ErrorCodeToString<SystemResolverError>{}(error->value()));
+            }
+            if (error->value() == SystemResolverError::AE_SHUTTING_DOWN) {
+                co_return make_error(DnsError::AE_SHUTTING_DOWN, "The upstream is being destroyed");
             }
             co_return make_error(DnsError::AE_INTERNAL_ERROR, ErrorCodeToString<SystemResolverError>{}(error->value()));
         }

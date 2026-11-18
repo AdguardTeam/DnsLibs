@@ -69,8 +69,7 @@ endif ()
 add_definitions(-DFMT_EXCEPTIONS=0)
 
 if (WIN32)
-    # Minimum supported Windows API is 6.1 (Windows 7)
-    add_definitions(-D_WIN32_WINNT=0x0601)
+    add_definitions(-D_WIN32_WINNT=0x0602) # Windows 8
     add_definitions(-D__USE_MINGW_ANSI_STDIO=1 -D_CRT_SECURE_NO_WARNINGS -D_CRT_NONSTDC_NO_DEPRECATE)
     add_definitions(-D_HAS_EXCEPTIONS=0)
 
