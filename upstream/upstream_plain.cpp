@@ -132,6 +132,10 @@ Error<Upstream::InitError> PlainUpstream::init() {
             // Don't lose the scope ID!
             m_address.set_port(DEFAULT_PLAIN_PORT);
         }
+    } else if (host.empty()) {
+        // An empty address is valid only together with resolved server IPs (handled above).
+        // Without them there is nothing to connect to, and the bootstrap has no hostname to resolve.
+        return make_error(InitError::AE_INVALID_ADDRESS, "Server address is empty and no resolved server IPs are set");
     } else if (m_options.bootstrap.empty()) {
         return make_error(InitError::AE_EMPTY_BOOTSTRAP);
     } else {

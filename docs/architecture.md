@@ -99,7 +99,8 @@ The most interesting fields are:
     - `std::vector<IpAddress> resolved_server_ips` — the IP addresses of the server, in the order of preference. If
       set, `bootstrap` is not used. The upstream races or rotates through these addresses as it does through the
       addresses that `bootstrap` resolves. When `ipv6_available` is `false`, IPv6 addresses are skipped unless all
-      addresses are IPv6.
+      addresses are IPv6. A plain DNS upstream can have an empty `address` if `resolved_server_ips` is set; without
+      them, an empty `address` fails to initialize, also when `bootstrap` is set.
     - `int32_t id` — user-provided upstream identifier.
     - `std::vector<std::string> fingerprints` — optional SPKI fingerprints for TLS certificate pinning.
     - `bool ignore_proxy_settings` — if true, the outbound proxy is not used for this upstream.
