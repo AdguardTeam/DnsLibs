@@ -941,6 +941,42 @@ TEST_F(UpstreamTest, TestUpstreamPlainHostnameEmptyBootstrapLocal) {
     }
 }
 
+// A plain upstream with an empty address is valid only when resolved server IPs
+// are set. Without them, it must fail at create_upstream() time with
+// AE_INVALID_ADDRESS, also when a bootstrap is set: there is no hostname for the
+// bootstrap to resolve. No network I/O: creation does not send queries.
+TEST_F(UpstreamTest, TestUpstreamPlainEmptyAddressLocal) {
+    co_await m_loop->co_submit();
+
+    const std::vector<std::vector<std::string>> bootstraps = {{}, {"127.0.0.1:1"}};
+    for (const std::vector<std::string> &bootstrap : bootstraps) {
+        auto upstream_res = create_upstream({.address = "", .bootstrap = bootstrap});
+        EXPECT_TRUE(upstream_res.has_error())
+                << "Empty address without resolved server IPs must fail to create, bootstraps: " << bootstrap.size();
+        if (!upstream_res.has_error()) {
+            continue;
+        }
+        EXPECT_EQ(upstream_res.error()->value(), UpstreamFactory::UpstreamCreateError::AE_INIT_FAILED);
+        const auto *init_error =
+                dynamic_cast<const ErrorImpl<Upstream::InitError> *>(upstream_res.error()->next().get());
+        EXPECT_NE(init_error, nullptr) << "Expected the wrapped init() error, bootstraps: " << bootstrap.size();
+        if (init_error != nullptr) {
+            EXPECT_EQ(init_error->value(), Upstream::InitError::AE_INVALID_ADDRESS)
+                    << "Empty address must fail with AE_INVALID_ADDRESS, bootstraps: " << bootstrap.size();
+        }
+    }
+
+    for (const std::vector<std::string> &bootstrap : bootstraps) {
+        auto upstream_res = create_upstream({
+                .address = "",
+                .bootstrap = bootstrap,
+                .resolved_server_ips = {Ipv4Address{127, 0, 0, 1}},
+        });
+        EXPECT_FALSE(upstream_res.has_error())
+                << "Empty address with resolved server IPs must be accepted: " << upstream_res.error()->str();
+    }
+}
+
 // A plain hostname upstream whose (only) bootstrap server accepts the query but
 // never replies, forcing the bootstrapper to genuinely time out (the same "no
 // reply" trick as TestBootstrapTimeout, which only covers DoT). The exchange

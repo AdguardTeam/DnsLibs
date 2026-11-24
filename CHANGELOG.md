@@ -50,6 +50,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Fixed
 
+- Fixed plain DNS upstreams with an empty address and a bootstrap, but without resolved server IPs, being created and
+  then failing on every query. They now fail to initialize with `AE_INVALID_ADDRESS`. An empty address together with
+  resolved server IPs is still accepted.
 - Fixed DoQ upstreams keeping the connection alive indefinitely: keepalive now stops and the connection is closed after
   180 seconds without DNS activity, so idle devices are not woken every 30 seconds; the short timeout timer is also
   reset on replies so a healthy connection is not torn down under sustained traffic.
