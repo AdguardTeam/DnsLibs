@@ -8,6 +8,20 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+### Changed
+
+### Deprecated
+
+### Removed
+
+### Fixed
+
+### Security
+
+## [2.11.0] - 2026-11-24
+
+### Added
+
 - Added an Apple-specific `check_local_network_permission` proxy event, exposed as `onCheckLocalNetworkPermission`
   in the `AGDnsProxyEvents` Objective-C API. The proxy raises it when it suspects that a DNS request failed due to
   a missing Local Network permission. Applications should handle the event by guiding the user through the
@@ -42,8 +56,6 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   `signature_algorithms`.
 - The minimum supported Windows version is now Windows 8.
 
-### Deprecated
-
 ### Removed
 
 - Removed the old sample app at `platform/mac/testapp`; use `platform/mac/DnsLibsTestApp` instead.
@@ -66,8 +78,6 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - Fixed a possible crash when the `system://` upstream on Android and Apple platforms is destroyed while requests are
   in flight: a request sent from a coroutine resumed by the destructor is now rejected with `AE_SHUTTING_DOWN`
   instead of modifying the request list while it is being drained.
-
-### Security
 
 ## [2.10.2] - 2026-09-23
 
@@ -443,7 +453,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - API change: allow in-memory filters. See `ag::dnsfilter::FilterParams`.
 - Optimistic DNS caching. See `ag::DnsProxySettings::optimistic_cache`.
 
-[Unreleased]: https://github.com/AdguardTeam/DnsLibs/compare/v2.10.2...HEAD
+[Unreleased]: https://github.com/AdguardTeam/DnsLibs/compare/v2.11.0...HEAD
+[2.11.0]: https://github.com/AdguardTeam/DnsLibs/compare/v2.10.2...v2.11.0
 [2.10.2]: https://github.com/AdguardTeam/DnsLibs/compare/v2.10.1...v2.10.2
 [2.10.1]: https://github.com/AdguardTeam/DnsLibs/compare/v2.10.0...v2.10.1
 [2.10.0]: https://github.com/AdguardTeam/DnsLibs/compare/v2.8.58...v2.10.0
